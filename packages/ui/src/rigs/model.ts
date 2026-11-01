@@ -32,7 +32,7 @@ export const isSeatPlaceholder = (id: string): boolean => id.startsWith(SEAT_PLA
 
 const toolOf = (runtime: string): Session['tool'] => (runtime === 'codex' ? 'codex' : 'claude');
 const PHANTOM_STATE: Record<SeatState, Session['state']> = {
-  working: 'working', trust: 'starting', starting: 'starting', ready: 'idle', idle: 'idle',
+  working: 'working', trust: 'starting', attention: 'error', starting: 'starting', ready: 'idle', idle: 'idle',
   crashed: 'error', stopped: 'exited', unreachable: 'idle'
 };
 
@@ -83,7 +83,7 @@ export function rigPlace(rig: Rig, projects: Projects | null): RigPlace {
   return { kind: 'none' };
 }
 
-export const SEAT_ORDER: readonly SeatState[] = ['working', 'trust', 'starting', 'ready', 'idle', 'crashed', 'unreachable', 'stopped'];
+export const SEAT_ORDER: readonly SeatState[] = ['working', 'trust', 'attention', 'starting', 'ready', 'idle', 'crashed', 'unreachable', 'stopped'];
 
 /** Every seat outside the kernels, working first, then by name. */
 export function allSeats(rigs: readonly Rig[]): { rig: Rig; seat: RigSeat }[] {
@@ -100,9 +100,11 @@ export function seatAt(rigs: readonly Rig[], machine: string, rigId: string, who
 /**
  * Whether a session belongs in Projets: false only when a rig of the same machine has a running seat (any seat of a kernel, hidden
  * ones included) paired to this very session id. Everything else stays (no rig, unknown rig, stopped seat, pairing race, seat paired
- * to another session), so a session is never missing from both Projets and Rigs.
+ * to another session), so a session is never missing from both Projets and Rigs. The brain session (`brain: true`) is never standalone.
  */
 export function isStandalone(s: Session, rigs: readonly Rig[]): boolean {
+  // Ledge's own brain (lot 7) is never a session of the user's: no list shows it (C27).
+  if (s.brain) return false;
   const r = s.rig;
   if (!r) return true;
   return !rigs.some(x => x.machine === r.machine && x.seats.some(seat => seat.sessionId === s.id && seat.state !== 'stopped'));
@@ -111,7 +113,7 @@ export function isStandalone(s: Session, rigs: readonly Rig[]): boolean {
 /** A choice of the `@` completion: what the list shows and what the field gets. */
 export interface SeatMention { key: string; label: string; insert: string }
 const MENTION_RIG = new Set<Rig['lifecycle']>(['running', 'partial']);
-const MENTION_DOWN = new Set<SeatState>(['stopped', 'crashed']);
+const MENTION_DOWN = new Set<SeatState>(['stopped', 'crashed', 'attention']);
 /**
  * The `@` completion of the Ledge screen (R19): the seats of this machine's running or partial rigs (kernel aside) whose address starts
  * with `query`, each under the address the daemon resolves (lot 4 task 6): « @build · factory » inserting `@build` when no other live

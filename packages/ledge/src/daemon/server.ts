@@ -1,12 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, type ChatAction, type Autonomy } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf, MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
@@ -71,6 +71,15 @@ import { mandateSummary } from './openrig/seatContext.js';
 import { execGitSlow } from './openrig/workspace.js';
 import { watchRigRepos } from './openrig/repos.js';
 import { createHandovers, heldNames } from './handover.js';
+import { createBrain, brainArgs, brainEnv, localDay } from './brain/session.js';
+import { isBrainTool } from './brain/settings.js';
+import { createMemory } from './brain/memory.js';
+import { DEFAULT_MANDATE, ensureMandate, escalateCategory, parseMandate } from './brain/mandate.js';
+import { createBrainInbox } from './brain/inbox.js';
+import { brainResponder, BRAIN_FIRST_TEXT } from './brain/responder.js';
+import { createDeciding, type Deciding } from './brain/decide.js';
+import { createRevisit } from './brain/revisit.js';
+import { createBrainCommands, parseBrainArgs, NOT_BRAIN_LINE, type RigActMsg, type RigPrepareMsg, type RigResult } from './brain/commands.js';
 import { readContext } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
@@ -172,6 +181,12 @@ export interface ServerHandle {
   port: number; close(): Promise<void>; broadcast(msg: ServerMessage): void;
   /** Remembers a session's terminal preview and broadcasts it; a client that connects later gets it after the snapshot. */
   preview(id: string, lines: string[]): void;
+  /** Whether some client follows this session in color (`session.preview.subscribe`). */
+  colorWanted(id: string): boolean;
+  /** Whether a colored image of this session is held (dropped when no client follows it any more). */
+  colorCached(id: string): boolean;
+  /** Sends the colored preview to the clients that follow `id`, and to them only. */
+  sendColorPreview(id: string, lines: string[]): void;
   /** The OMP processes this daemon owns. */
   omp: OmpHost;
   /** Closes a session cleanly (its exit command, a kill as a last resort); rejects with a Refusal. */
@@ -353,9 +368,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
       replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow, humanRead: bridge.humanRead },
     asks, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
-  /** The daemons of the remote machines (lot 6), dialled through this daemon's own `/ssh/<alias>` once it listens (end of startServer). */
+  let deciding: Deciding | null = null;
   const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
-  /** The local mirror and the remote peers as one view: what every front gets, each rig with its real machine. */
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
   const unsubscribeAggregate = aggregate?.onMessage(m => {
     broadcast(m);
@@ -375,12 +389,73 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (m.type === 'rig.snapshot' || m.type === 'rig.removed') unpairGone(store, bridge.rigs());
     if (m.type === 'rig.snapshot') restorePairs(store, bridge);
     // The bridge sends escalation.updated on every change and again after a reconnect: only an id the thread lacks is new.
-    if (m.type === 'escalation.updated' && !thread.hasEscalation(m.escalation.id)) thread.append({ kind: 'escalation', escalationId: m.escalation.id });
+    if (m.type === 'escalation.updated' && !thread.hasEscalation(m.escalation.id)) {
+      thread.append({ kind: 'escalation', escalationId: m.escalation.id });
+      deciding?.arrived(m.escalation);   // grace when the brain is on (Lot 7)
+    }
     if (m.type === 'rig.exchange') thread.exchange(m.exchange);
   });
   // The relief of a session whose context is nearly full (context handover spec §3.3). `launch` and `closeSession` are hoisted.
-  const handovers = createHandovers({ store, mailbox, launch: req => launch(req), close: s => closeSession(s),
+  // The brain's relief (Lot 7, Task 10) is prepared by the brain, created just below: only called once both exist.
+  const handovers = createHandovers({ store, mailbox, launch: req => launch(req), close: s => closeSession(s), brainRelief: s => brain.relief(s),
     dir: join(paths().dir, 'handovers'), now, ...(opts.handoverBriefMs !== undefined ? { briefMs: opts.handoverBriefMs } : {}) });
+  /** Ledge's memory (rules and decisions), injected into the brain's instructions. */
+  const memory = createMemory({ dir: paths().memoryDir, now });
+  /**
+   * The permanent brain session (Lot 7): launched through `session.launch`'s path with `brain: true`, an exited brain taken up
+   * through `session.resume`'s, closed through `session.close`'s. Started below once the daemon serves, if the user enabled it.
+   */
+  const brain = createBrain({ store, settingsPath: paths().brainSettings, dir: paths().brainDir, memory, env: agentEnv, handovers,
+    mandate: () => ensureMandate(paths().mandate),
+    close: s => closeSession(s),
+    launch: async o => {
+      const key = o.resume ? resumeKey(o.resume) : undefined;
+      if (o.resume && key) {
+        const refused = await respawn(o.resume, key, o.resume.model, o.resume.effort);
+        if (refused) throw new Error(refused);
+        return store.get(o.resume.id) ?? o.resume;
+      }
+      return launch({ tool: o.tool, cwd: o.cwd, name: o.name, id: o.id, env: o.env, brain: true, ...(o.prompt ? { prompt: o.prompt } : {}) });
+    } });
+  /** What the brain is told, typed into its session through the mailbox. */
+  const brainInbox = createBrainInbox({ mailbox, brainId: () => brain.session()?.id });
+  /** The mandate as it reads now: a missing file is the default one (ensureMandate writes it), an unreadable one decides nothing. */
+  const readMandate = () => {
+    const f = paths().mandate;
+    try { return parseMandate(existsSync(f) ? readFileSync(f, 'utf8') : DEFAULT_MANDATE); } catch { return parseMandate(''); }
+  };
+  if (bridge && answers) deciding = createDeciding({ escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
+    answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on' && ['idle', 'working'].includes(brain.session()?.state ?? ''), now: Date.now });
+  /** « Revenir dessus » (Lot 7): a correction while the seat has not taken the reply, a conversation once it has. */
+  const revisits = bridge && answers ? createRevisit({ memory, escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
+    answers, thread, inbox: brainInbox, brainOn: () => brain.status().state === 'on', bridge }) : null;
+  // Ledge's thread is answered by the brain; the one-shot runner serves when there is none (it reads the status itself).
+  ledgeSay.setResponder(brainResponder({ inbox: brainInbox, thread, fallback: ledgeSay.oneShot, status: brain.status, hasSession: () => brain.session() !== undefined, onStatus: brain.onStatus }));
+  // The brain's daily relief, at its first free moment after local midnight (Lot 7, Task 10).
+  const brainDayTimer = setInterval(() => {
+    const s = brain.session();
+    if (s) brain.checkRelief({ today: localDay(), idle: s.state === 'idle' });
+  }, 60_000);
+  brainDayTimer.unref?.();
+  /** mandat.md as clients read it: a missing file is created with the default text. */
+  const mandateText = (): string => {
+    const f = paths().mandate;
+    try { return readFileSync(f, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return ''; }
+    try { writeMandate(DEFAULT_MANDATE); } catch (e) { log(`mandate not created: ${(e as Error).message}`); }
+    return DEFAULT_MANDATE;
+  };
+  const writeMandate = (text: string): void => {
+    const f = paths().mandate; mkdirSync(dirname(f), { recursive: true });
+    const tmp = `${f}.${process.pid}.tmp`; writeFileSync(tmp, text); renameSync(tmp, f);
+  };
+  const mandateMsg = (): ServerMessage => ({ type: 'mandate', text: mandateText(), path: paths().mandate });
+  const rulesMsg = (): ServerMessage => ({ type: 'rules', items: memory.rules() });
+  const decisionsMsg = (): ServerMessage => ({ type: 'decisions', items: memory.decisions({ limit: 200 }) });
+  const unsubscribeMemory = memory.onChange(() => { broadcast(rulesMsg()); broadcast(decisionsMsg()); });
+  const unsubscribeBrain = brain.onStatus(status => {
+    broadcast({ type: 'brain.status', status });
+    if (status.state !== 'on') deciding?.release(`brain ${status.state}`);
+  });
   /** Each session's state last seen: a turn's end (→ idle) is when its context is read again. */
   const lastState = new Map<string, Session['state']>();
   /** Reads a session's context after a turn (§3.1); a session working without asking is relieved by Ledge past the threshold (§3.2). */
@@ -390,6 +465,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const cur = store.get(id);
     if (!context || !cur) return;
     if (cur.context?.used !== context.used || cur.context.window !== context.window) store.upsert({ ...cur, context });
+    // The brain has its own relief, at 70 % and every day (Lot 7, Task 10), never the generic one (ruling C11).
+    if (cur.brain === true) { brain.checkRelief({ context, today: localDay(), idle: cur.state === 'idle' }); return; }
     const h = cur.handover?.state;
     if (contextNear(context, contextPrefs.near) && cur.autonomy === 'auto' && h !== 'briefing' && h !== 'launching' && h !== 'done' && h !== 'failed') {
       const refused = handovers.start(id, { auto: true });
@@ -432,7 +509,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}), ...(aggregate ? { openrigFleet: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(bridge ? { openrig: true } : {}), ...(aggregate ? { openrigFleet: true } : {}), colorPreview: true } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply({ type: 'asks', asks: asks.all().filter(askShown) }); // then the decisions waiting for the user
@@ -442,8 +519,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
-    if (aggregate) for (const m of aggregate.replay()) reply(m); // then the OpenRig mirror of every machine (statuses, rigs, escalations)
+    if (aggregate) for (const m of aggregate.replay()) reply(m);
+    reply({ type: 'brain.status', status: brain.status() });
+    reply(mandateMsg()); reply(rulesMsg()); reply(decisionsMsg());
     reply({ type: 'ledge.thread.history', ...thread.page() }); // last: Ledge's thread, whose items name those escalations
+  };
+  /** The session each local client follows in color (one at most), and the last colored image per followed session. */
+  const colorFollow = new Map<WebSocket, string>();
+  const colorLast = new Map<string, string[]>();
+  const colorWanted = (id: string) => { for (const v of colorFollow.values()) if (v === id) return true; return false; };
+  const colorCached = (id: string) => colorLast.has(id);
+  const sendColorPreview = (id: string, lines: string[]) => {
+    // A capture can finish after its final subscriber leaves. Do not retain that stale frame.
+    if (!colorWanted(id)) return;
+    colorLast.set(id, lines);
+    for (const [ws, followed] of colorFollow) if (followed === id) send(ws, { type: 'session.preview.color', id, lines });
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -740,13 +830,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     { const r = rigManaged(s); if (r) return r.message; }
     if (s.tool === 'omp') return respawnOmp(s, key, model, effort);
     // Marked live before the first await: a second resume arriving while this one spawns is then refused.
-    const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...rest } = s;
-    store.upsert({ ...rest, state: 'starting', source: 'launcher', agentSessionId: key });
+    const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...kept } = s;
+    // A brain never works without asking: an autonomy it carries is dropped (Task 10).
+    const { autonomy: _au, ...rest } = kept;
+    const autonomy = s.brain ? undefined : s.autonomy;
+    store.upsert({ ...rest, ...(autonomy ? { autonomy } : {}), state: 'starting', source: 'launcher', agentSessionId: key });
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
-      const env = await agentEnv();
-      const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : []), ...autonomyArgs(s.tool, s.autonomy)], cwd, tmux, now, env,
-        ...(s.autonomy ? { autonomy: s.autonomy } : {}), taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
+      const base = await agentEnv();
+      // A brain keeps its shims and LEDGE_BRAIN on a resume (C9), and its brain mark.
+      const env = s.brain ? { ...base, ...brainEnv(paths().brainDir, base) } : base;
+      const spawned = await spawnSession({ tool: s.tool, id: s.id, name: s.name, ...(s.brain ? { brain: true as const } : {}), args: [...RESUME_ARGS[s.tool](key), ...(model ? MODEL_ARGS[s.tool](model) : []), ...(effort ? EFFORT_ARGS[s.tool]?.(effort) ?? [] : []), ...(s.brain ? brainArgs(s.tool) : autonomyArgs(s.tool, s.autonomy))], cwd, tmux, now, env,
+        ...(autonomy ? { autonomy } : {}), taken: { names: store.all().filter(o => o.id !== s.id && o.state !== 'exited').map(o => o.name), ids: [] } });
       // Deleted or archived while it spawned: that request wins, the agent just started is stopped and not recorded.
       const cur = store.get(s.id);
       if (!cur || cur.archivedAt !== undefined) {
@@ -923,6 +1018,58 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     await handle(out, m => { if (m.type === 'error') failure ??= m.message; });
     return failure !== undefined ? { failure } : {};
   }
+  /** Whether `key` is the one Ledge gave session `by` (#93), shared by `action.run` and `brain.cmd`. */
+  function verifySessionKey(by: string, key: string | undefined): { ok: true } | { ok: false; reason: string } {
+    // Without a key, the session was most likely launched before Ledge gave one: it is relaunched, not suspected.
+    if (!key) return { ok: false, reason: `la session ${by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur` };
+    const want = sessionKey(by, token);
+    if (!want || !tokenEquals(key, want)) return { ok: false, reason: `la clé ne correspond pas à la session ${by} : lance la commande depuis cette session, telle que Ledge l'a lancée` };
+    return { ok: true };
+  }
+  /** Lifecycle of a rig or a seat, through OpenRig (`rig.act`, and the brain's `rig down|restart|handover`). */
+  async function rigAct(msg: RigActMsg): Promise<RigResult> {
+    if (msg.machine !== 'local') return { ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` };
+    if (!bridge) return { ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" };
+    // Cancelling a launch: forget it first, so a seat turning ready while `down` runs cannot get the goal.
+    if (msg.verb === 'down' && msg.rigId !== undefined && launches?.pending().some(l => l.rigId === msg.rigId)) await launches.cancel(msg.rigId);
+    const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
+      { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
+    return r.ok ? { ok: true } : { ok: false, code: r.code, reason: r.reason };
+  }
+  /** A launch plan (`rig.prepare`, and the brain's check of a launch card); the caller keeps it or not. */
+  async function rigPrepare(msg: RigPrepareMsg, allowStart = true): Promise<RigPlan | { code: RigResultCode; reason: string }> {
+    if (msg.machine !== 'local') return { code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` };
+    if (!bridge) return { code: 'openrig_down', reason: "OpenRig n'est pas branché" };
+    // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
+    const status = allowStart ? await bridge.ensureRunning('launch') : bridge.status();
+    const http = bridge.http();
+    if (!http || status.state !== 'running') return { code: 'openrig_down', reason: status.detail ?? `OpenRig ${status.state}` };
+    try {
+      const plan = await prepareRigPlan({ http, home: paths().dir, projects: () => projects, machine: msg.machine }, msg);
+      return 'refused' in plan ? { code: 'failed', reason: plan.refused } : plan;
+    } catch (e) {
+      log(`openrig: plan not made: ${(e as Error).message}`);
+      return { code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message };
+    }
+  }
+  /** `ledge brain …` (Lot 7): what the brain session may do, once the daemon knows it is the brain. */
+  const brainCommands = createBrainCommands({ deciding, thread, seatSend, memory, rigs: () => bridge?.rigs() ?? [], escalations: () => bridge?.escalations() ?? [],
+    sessions: () => store.all(), projects: () => projects, chat, emit: broadcast, rigAct, rigPrepare: msg => rigPrepare(msg, false),
+    handover: (by, text) => handovers.brief(by, text) });
+  /**
+   * `brain.cmd`: only from the brain session, as its key says; any refusal leaves no trace (no thread item, nothing sent to
+   * OpenRig). Then the args are parsed and the op runs.
+   */
+  async function runBrainCmd(msg: Extract<ClientMessage, { type: 'brain.cmd' }>, reply: Reply): Promise<void> {
+    const answer = (r: { ok: boolean; line: string; code?: Extract<ServerMessage, { type: 'brain.result' }>['code'] }) => reply({ type: 'brain.result', rid: msg.rid, ...r });
+    if (!msg.by || !verifySessionKey(msg.by, msg.key).ok) return answer({ ok: false, code: 'identity', line: NOT_BRAIN_LINE });
+    const s = store.get(msg.by);
+    if (s?.brain !== true || s.state === 'exited' || s.archivedAt !== undefined) return answer({ ok: false, code: 'not_brain', line: NOT_BRAIN_LINE });
+    const parsed = parseBrainArgs(msg.op, msg.args);
+    if (!parsed.ok) return answer({ ok: false, code: 'invalid', line: parsed.usage });
+    try { return answer(await brainCommands.run(parsed.value, msg.by)); }
+    catch (e) { log(`brain: ${msg.op} failed: ${(e as Error).message}`); return answer({ ok: false, code: 'failed', line: `Échec : ${(e as Error).message}` }); }
+  }
   /**
    * `action.run` (#93): an action of the registry outside the chat, resolved and applied as a generic card's row, so the CLI
    * writes no rule of its own. A destructive one asks again (`confirmed`), and the guard decides who may run it at all.
@@ -932,12 +1079,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const parsed = actionById(msg.action)!.args.safeParse(msg.args);
     if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
     // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
-    const want = msg.by === undefined ? undefined : sessionKey(msg.by, token);
-    // Without a key, the session was most likely launched before Ledge gave one: it is relaunched, not suspected.
-    if (msg.by !== undefined && !msg.key)
-      return answer({ reason: `la session ${msg.by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`, code: 'identity' });
-    if (msg.by !== undefined && (!want || !tokenEquals(msg.key!, want)))
-      return answer({ reason: `la clé ne correspond pas à la session ${msg.by} : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
+    if (msg.by !== undefined) { const v = verifySessionKey(msg.by, msg.key); if (!v.ok) return answer({ reason: v.reason, code: 'identity' }); }
     const ctx = { sessions: store.all() };
     const r: Resolved = resolveRun(msg.action, parsed.data, ctx);
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
@@ -958,12 +1100,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const { failure } = await applyRow(r, msg.rid);
     return answer({ row: r, ...(failure !== undefined ? { reason: failure, code: 'failed' } : {}) });
   }
-  type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; autonomy?: Autonomy };
+  type LaunchReq = { tool: Tool; cwd: string; name?: string; prompt?: string; continue?: boolean; dirs?: string[]; model?: string; effort?: string; approval?: OmpApproval; autonomy?: Autonomy;
+    /** The brain's launch (C8): its own id, its env merged over the agents', and the brain mark. Tmux tools only. */
+    id?: string; env?: Record<string, string>; brain?: true };
   /** Spawns the agent as `ledge <tool>` would and records it; throws the reason (bad folder, tmux). */
   async function launch(req: LaunchReq): Promise<Session> {
     const cwd = await resolveFolder(req.cwd, opts.home);
     const filled: LaunchReq = { ...req, cwd };
     if (filled.approval && filled.tool !== 'omp') throw new Error(`launch: ${filled.tool} takes no approval mode`);
+    if ((filled.brain || filled.id || filled.env) && filled.tool === 'omp') throw new Error('launch: OMP cannot be the brain');
     const session = filled.tool === 'omp' ? await launchOmp(filled) : await launchTmux({ ...filled, tool: filled.tool });
     return store.get(session.id) ?? session;
   }
@@ -988,12 +1133,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (req.effort && !EFFORT_ARGS[req.tool]) throw new Error(`launch: ${req.tool} takes its effort in the model id`);
     const cwd = req.cwd;
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
-    const live = store.all();
-    const env = await agentEnv();
+    const all = store.all();
+    // A brain's relief takes « Ledge » from the brain it relieves (ruling C10): brain names are not taken for a brain.
+    const live = req.brain ? all.filter(s => s.brain !== true) : all;
+    const base = await agentEnv();
+    const env = req.env ? { ...base, ...req.env } : base;
     const autonomy = req.autonomy;
-    const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs, autonomy }), name: req.name, cwd, tmux, now, env,
-      ...(autonomy ? { autonomy } : {}),
-      taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: live.map(s => s.id) } });
+    const spawned = await spawnSession({ tool: req.tool, args: [...(req.brain ? brainArgs(req.tool) : []), ...launchArgs({ ...req, dirs, autonomy })], name: req.name, cwd, tmux, now, env,
+      ...(autonomy ? { autonomy } : {}), ...(req.id ? { id: req.id } : {}), ...(req.brain ? { brain: true as const } : {}),
+      taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: all.map(s => s.id) } });
     const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
@@ -1381,13 +1529,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // Lifecycle of a rig or a seat, through OpenRig; to the sender only (the mirror shows the effect by SSE).
       case 'rig.act': return ridMemo.once('rig.act', msg.rid, reply, async reply => {
-        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
-        if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
-        // Cancelling a launch: forget it first, so a seat turning ready while `down` runs cannot get the goal.
-        if (msg.verb === 'down' && msg.rigId !== undefined && launches?.pending().some(l => l.rigId === msg.rigId)) await launches.cancel(msg.rigId);
-        const r = await actOnRig({ http: () => bridge.http(), ensureRunning: why => bridge.ensureRunning(why), operator: HUMAN_ADDRESS },
-          { verb: msg.verb, ...(msg.rigId !== undefined ? { rigId: msg.rigId } : {}), ...(msg.seatRef !== undefined ? { seatRef: msg.seatRef } : {}) });
-        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, reason: r.reason });
+        const r = await rigAct(msg);
+        return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: r.code, ...(r.reason !== undefined ? { reason: r.reason } : {}) });
       });
       // Writing to a seat; to the sender only. The Desktop routes another machine's seats to its own daemon (lot 6).
       case 'rig.send': return ridMemo.once('rig.send', msg.rid, reply, async reply => {
@@ -1398,21 +1541,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply(r.ok ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: r.reason });
       });
       case 'rig.prepare': return ridMemo.once('rig.prepare', msg.rid, reply, async reply => {
-        if (msg.machine !== 'local') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unreachable', reason: `machine ${msg.machine} is not this daemon's` });
-        if (!bridge) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: "OpenRig n'est pas branché" });
-        // Ledge starts OpenRig itself for a launch, and says so in its thread (the bridge's notice); only a start that fails is refused.
-        const status = await bridge.ensureRunning('launch');
-        const http = bridge.http();
-        if (!http || status.state !== 'running') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'openrig_down', reason: status.detail ?? `OpenRig ${status.state}` });
-        try {
-          const plan = await prepareRigPlan({ http, home: paths().dir, projects: () => projects, machine: msg.machine }, msg);
-          if ('refused' in plan) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: plan.refused });
-          rigPlans.put(plan);
-          return reply({ type: 'rig.plan', rid: msg.rid, plan });
-        } catch (e) {
-          log(`openrig: plan not made: ${(e as Error).message}`);
-          return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: e instanceof OpenRigUnreachable ? 'openrig_down' : 'failed', reason: (e as Error).message });
-        }
+        const plan = await rigPrepare(msg);
+        if ('code' in plan) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: plan.code, reason: plan.reason });
+        rigPlans.put(plan);
+        return reply({ type: 'rig.plan', rid: msg.rid, plan });
       });
       // A plan `rig.prepare` made, launched once; to the sender only (the mirror and the thread show the rest).
       case 'rig.launch': return ridMemo.once('rig.launch', msg.rid, reply, async reply => {
@@ -1442,8 +1574,41 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         projects = next; bridge.refresh(); aggregate?.refresh(); broadcast(projectsMsg());
         return result({ ok: true });
       }
-      case 'mandate.update': case 'rule.set': case 'decision.revisit': case 'category.escalate': case 'brain.set':
-        return notYet();
+      case 'brain.cmd': return runBrainCmd(msg, reply);
+      case 'decision.revisit': {
+        if (!revisits) return reply({ type: 'rig.result', rid: msg.rid, ok: false, reason: "OpenRig n'est pas branché" });
+        const r = await revisits.revisit(msg.id, msg.text);
+        return reply({ type: 'rig.result', rid: msg.rid, ok: r.ok, ...(r.reason !== undefined ? { reason: r.reason } : {}) });
+      }
+      case 'mandate.update': {
+        try { writeMandate(msg.text); } catch (e) { return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message }); }
+        broadcast(mandateMsg());
+        return reply({ type: 'rig.result', rid: msg.rid, ok: true, ...(parseMandate(msg.text).readable ? {} : { reason: 'le mandat illisible fait tout remonter à toi' }) });
+      }
+      case 'rule.set': {
+        const r = memory.setRule(msg.id, msg.status);
+        return reply(r ? { type: 'rig.result', rid: msg.rid, ok: true } : { type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: 'règle inconnue' });
+      }
+      case 'category.escalate': {
+        const text = mandateText();
+        if (parseMandate(text).user.includes(msg.category)) return reply({ type: 'rig.result', rid: msg.rid, ok: true });
+        const next = escalateCategory(text, msg.category);
+        if (next === text) return reply({ type: 'rig.result', rid: msg.rid, ok: true }); // not in the first list: nothing to move
+        try { writeMandate(next); } catch (e) { return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message }); }
+        broadcast(mandateMsg());
+        brainInbox.push({ kind: 'state', text: `L'utilisateur se fait remonter ${MANDATE_CATEGORY_LABEL[msg.category].fr} désormais.` });
+        return reply({ type: 'rig.result', rid: msg.rid, ok: true });
+      }
+      case 'brain.set': {
+        if (msg.tool !== undefined && !isBrainTool(msg.tool)) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: `${msg.tool === 'omp' ? 'OMP' : msg.tool} ne peut pas être le cerveau de Ledge : choisis Claude Code, Codex ou Cursor.` });
+        try { await brain.set({ enabled: msg.enabled, ...(msg.tool ? { tool: msg.tool } : {}) }); }
+        catch (e) { return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: (e as Error).message }); }
+        const st = brain.status();
+        if (!msg.enabled && brain.session()) return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: "Le cerveau de Ledge tourne encore : sa fermeture n'a pas abouti." });
+        if (st.state === 'down') return reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', ...(st.reason ? { reason: st.reason } : {}) });
+        if (msg.first && msg.enabled) thread.append({ kind: 'ledge', text: BRAIN_FIRST_TEXT }); // the first activation says what Ledge now does
+        return reply({ type: 'rig.result', rid: msg.rid, ok: true });
+      }
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
       case 'mobile.set': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
       case 'mobile.pairing.approve': case 'mobile.pairing.deny': case 'mobile.device.revoke':
@@ -1460,7 +1625,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     return (rigRouter && isRigCommand(msg) ? rigRouter.route(msg, reply) : handle(msg, reply)).catch(e => {
       if (msg.type === 'document.read') return reply({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
       log(`${msg.type} failed: ${(e as Error).message}`);
-      reply({ type: 'error', ...(msg.type.startsWith('session.') && 'id' in msg ? { id: msg.id } : {}), message: (e as Error).message, request: msg.type, ...(e instanceof Refusal ? { code: e.code } : {}) });
+      reply({ type: 'error', ...(msg.type.startsWith('session.') && 'id' in msg && typeof msg.id === 'string' ? { id: msg.id } : {}), message: (e as Error).message, request: msg.type, ...(e instanceof Refusal ? { code: e.code } : {}) });
     });
   }
 
@@ -1551,7 +1716,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         .catch(e => { send(ws, { type: 'error', message: (e as Error).message }); ws.close(1011); });
       return;
     }
-    localClients.add(ws); ws.once('close', () => localClients.delete(ws));
+    localClients.add(ws);
+    ws.once('close', () => { localClients.delete(ws); colorFollow.delete(ws); for (const id of colorLast.keys()) if (!colorWanted(id)) colorLast.delete(id); });
     const reply: Reply = m => send(ws, m);
     sendSnapshot(reply);
     ws.on('message', data => {
@@ -1567,16 +1733,28 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const named = typeof type === 'string' && type.length <= 64 ? type : undefined;
         return reply({ type: 'error', message: 'invalid message', ...(named?.startsWith('session.') && typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(named ? { request: named } : {}), code: 'invalid' });
       }
+      if (msg.type === 'session.preview.subscribe') {
+        // Per client, so it lives here and not in `dispatch` (which has no socket).
+        if (msg.id === null) colorFollow.delete(ws); else colorFollow.set(ws, msg.id);
+        for (const id of colorLast.keys()) if (!colorWanted(id)) colorLast.delete(id);
+        const last = msg.id === null ? undefined : colorLast.get(msg.id);
+        if (last) reply({ type: 'session.preview.color', id: msg.id!, lines: last });
+        return;
+      }
       void dispatch(msg, reply);
     });
   });
 
-  remote?.setMachines(machines); // last: the peers dial this daemon's own /ssh/<alias>, now handled
+  remote?.setMachines(machines);
+  void brain.start().catch(e => log(`brain not started: ${(e as Error).message}`));
 
   return {
     port,
     broadcast,
     preview,
+    colorWanted,
+    colorCached,
+    sendColorPreview,
     omp,
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
@@ -1584,6 +1762,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); unsubscribe(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

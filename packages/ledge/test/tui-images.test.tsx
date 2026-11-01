@@ -12,10 +12,9 @@ const BACKSPACE = '\u007f';
 const T = (s: number) => new Date(Date.parse('2026-10-09T18:00:00.000Z') + s * 1000).toISOString();
 
 const pasted = (data = 'cGl4ZWxz'): ClipboardImage => ({ image: { mime: 'image/jpeg', data }, width: 1440, height: 900, bytes: 6 });
-/** Bix is idle and replyable: j j then ↵ opens it. */
+/** Bix is idle and replyable: chosen in the home, ↵ opens it. */
 const openBix = async (tui: Awaited<ReturnType<typeof startTui>>) => {
-  await tui.press('j'); await tui.press('j');
-  await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+  await tui.pick('Bix');
   await tui.press('\r');
   await until(() => tui.frame().includes('Rien encore') || tui.frame().includes('Regarde'));
 };
@@ -111,7 +110,7 @@ describe('ledge tui: images in Ask', () => {
     const tui = await startTui({ readImage: async () => pasted() });
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       await tui.press(ALT_V);
       await until(() => tui.frame().includes('▣ capture 1440×900 ✕'));
       await tui.press('Et ça ?');
@@ -126,7 +125,7 @@ describe('ledge tui: images in Ask', () => {
     const tui = await startTui();
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       await tui.press(ALT_V);
       await until(() => tui.frame().includes("Pas d'image dans le presse-papiers"));
     } finally { await tui.cleanup(); }
@@ -139,7 +138,7 @@ describe('ledge tui: images in Ask', () => {
     tui.attachments.set(id, { mime: 'image/jpeg', data: Buffer.from('jpeg bytes').toString('base64') });
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       tui.daemon.push({ type: 'chat.history', turns: [{ qid: 'q1', question: 'Regarde', askedAt: new Date().toISOString(), answeredAt: new Date().toISOString(), answer: 'Vu.', steps: [], attachments: [{ id, mime: 'image/jpeg', width: 800, height: 600, bytes: 90_000, preview: false }] }] });
       await until(() => tui.frame().includes('▣ capture 800×600'));
       await tui.press(ALT_O);
@@ -156,7 +155,7 @@ describe('ledge tui: images in Ask', () => {
     const turn = (qid: string, id: string) => ({ qid, question: 'Regarde', askedAt: new Date().toISOString(), answeredAt: new Date().toISOString(), answer: 'Vu.', steps: [], attachments: [{ id, mime: 'image/jpeg' as const, width: 800, height: 600, bytes: 90_000, preview: false }] });
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       tui.daemon.push({ type: 'chat.history', turns: [turn('q1', a)] });
       await until(() => tui.frame().includes('▣ capture 800×600'));
       await tui.press(ALT_O);
@@ -174,7 +173,7 @@ describe('ledge tui: images in Ask', () => {
     const tui = await startTui({ readImage: async () => { reads++; await new Promise(r => setTimeout(r, 300)); return pasted(); } });
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       await tui.press(ALT_V);
       await tui.press(ALT_V);
       await until(() => tui.frame().includes('▣ capture 1440×900 ✕'));
@@ -187,8 +186,10 @@ describe('ledge tui: images in Ask', () => {
   it('refuses the chip that would push the question past the frame budget', async () => {
     const tui = await startTui({ readImage: async () => pasted('A'.repeat(1_500_000)) });
     try {
+      // Three chips and the reason on the one line the field's chips have, beside the home's left column and Ledge's rail.
+      await tui.resize(200, 24);
       await tui.press('/');
-      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       for (let n = 1; n <= 3; n++) { await tui.press(ALT_V); await until(() => tui.frame().split('▣ capture').length - 1 === n); }
       expect(tui.frame()).toContain('Image trop lourde, même réduite');
       expect(tui.frame().split('Image trop lourde').length - 1).toBe(1);
@@ -199,7 +200,7 @@ describe('ledge tui: images in Ask', () => {
     const tui = await startTui({ readImage: async () => pasted() });
     try {
       await tui.press('/');
-      await until(() => tui.frame().includes('OPÉRATEUR'));
+      await until(() => tui.frame().includes('LEDGE · CONVERSATION'));
       await tui.press(ALT_V);
       await until(() => tui.frame().includes('▣ capture 1440×900 ✕'));
       await tui.press('Et ça ?');

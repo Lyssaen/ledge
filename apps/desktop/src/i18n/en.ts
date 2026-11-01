@@ -10,6 +10,7 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'co
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
   side: {
+    brainStarting: 'Ledge is waiting in its terminal',
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
@@ -73,12 +74,13 @@ export const en: Messages = {
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
-  sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  sections: { general: 'General', ledge: 'Ledge', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent, max context and updates.',
+      ledge: 'Ledge’s brain: thinking continuously, the tool that carries it and its state.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
@@ -91,6 +93,12 @@ export const en: Messages = {
     },
     machineOffline: 'A machine is offline', updateWaiting: 'An update is available',
     mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access',
+    ledge: {
+      title: 'Brain', think: 'Ledge thinks continuously', thinkHint: 'Ledge reads the rigs’ escalations and settles what its mandate allows.',
+      tool: 'Tool', toolHint: 'The change takes effect at the next relief or start.',
+      status: { on: 'Running', context: (pct) => `Running · ${pct} % of context`, starting: 'Starting…', off: 'Stopped', down: (reason) => (reason ? `Down: ${reason}` : 'Down'), restart: 'Restart' },
+      refused: (reason) => `Ledge could not: ${reason}`
+    },
     general: {
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.',
       langs: { fr: 'Français', en: 'English' },
@@ -453,6 +461,7 @@ export const en: Messages = {
     solo,
     tabsLabel: 'Ledge views',
     tabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandate' },
+    brainOffer: { text: 'I can think continuously: I read the rigs’ escalations, I settle what my mandate allows after a minute, and I pass you the rest.', activate: 'Activate', later: 'Later' },
     rigsCount: (n) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
     toAtelier: 'Back to the atelier',
     thread: 'Ledge’s thread', older: 'See older',
@@ -461,7 +470,6 @@ export const en: Messages = {
     footer: 'settles within its mandate · design, architecture and critical calls come back to you',
     mentions: 'Mention', mentionSession: (name: string) => `session ${name}`,
     talkAbout: (summary) => `About « ${summary} »: `,
-    mandat: { title: 'Mandate', body: "Ledge's mandate arrives with its brain." },
     rail: {
       label: 'Ledge rail', yours: (n) => `Your turn · ${n}`, rigs: (n) => `Rigs · ${n}`,
       collapsed: (yours, rigs) => `Your turn · ${yours} · Rigs · ${rigs}`,
@@ -486,7 +494,35 @@ export const en: Messages = {
       missing: (n) => (n === 1 ? '1 exchange no longer available' : `${n} exchanges no longer available`),
       kind: { task: 'task', message: 'message', handoff: 'handover', ledge: 'Ledge' }
     },
-    decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`, revisit: 'Revisit' }
+    decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`,
+      ruleOf: (since) => `Rule from ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revisit' },
+    brain: { stopped: 'Ledge is stopped', start: 'Start' }
+  },
+  mandate: {
+    views: 'Mandate views', settles: 'What Ledge settles', memories: (n) => `Memories · ${n}`, readIn: 'Mandate read from',
+    loading: 'The mandate is on its way from the daemon…',
+    category: (c) => MANDATE_CATEGORY_LABEL[c].en, categoryOf: (label) => `Category ${label}`,
+    selfTitle: 'LEDGE SETTLES ALONE', userTitle: 'ALWAYS COMES BACK TO YOU',
+    week: (n, chosen) => (chosen ? `${n} this week` : `${n}`), pending: (n) => `${n} pending`, none: '—',
+    selfLine: (n) => `Ledge settles alone · ${n} ${pluralEn(n, 'decision', 'decisions')} this week ·`,
+    userLine: (n) => `Always comes back to you · ${n} pending ·`, pill: 'mandate',
+    escalate: 'Escalate it to me from now on',
+    rules: 'Rules kept', noRules: 'No rule kept.',
+    cols: { rule: 'Rule', since: 'Since', from: 'Where it comes from', applied: 'Applied', category: 'Category' },
+    since: (since) => (since ? `${since.slice(8, 10)}/${since.slice(5, 7)}` : 'proposed'),
+    applied: (n) => (n === 0 ? '0' : pluralEn(n, 'once', `${n} times`)),
+    toApprove: 'to approve', ruleMenu: (text) => `Proposed rule: ${text}`, approve: 'Approve', reject: 'Reject',
+    blueWord: 'blue', blueRest: ': a rule Ledge proposes; it only applies once approved.',
+    last: 'Last decisions', noDecisions: 'No decision yet.', yesterday: 'yesterday',
+    ruleOf: (since) => `rule from ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revisit', byYou: 'you',
+    files: { label: 'Files', mandate: 'Mandate', memory: 'Memories',
+      count: (r, d) => `${r} ${pluralEn(r, 'rule', 'rules')}, ${d} ${pluralEn(d, 'decision', 'decisions')}` },
+    open: 'Open',
+    footnote: 'Ledge proposes a rule when you settle the same way twice. Design, architecture and critical never go into « Ledge settles alone ».',
+    source: { twice: 'you settled the same way twice', order: 'your instruction', answerTo: (seat) => `your answer to ${seat}` },
+    editor: { title: 'The mandate', save: 'Save', cancel: 'Cancel', saving: 'Saving…', refused: (reason) => `Not saved: ${reason}` },
+    memoriesTitle: 'Memories', decisions: 'Decisions',
+    filters: { who: 'Who', everyone: 'Everyone', ledge: 'Ledge', you: 'you', category: 'Category', allCategories: 'All', rig: 'Rig', allRigs: 'All' }
   },
   rigsTab: {
     tabs: 'Rig views',
@@ -496,7 +532,7 @@ export const en: Messages = {
     working: (w, n) => `${w}/${n} working`, ready: (r, n) => `${r}/${n} ready`,
     table: 'Table', tableTitle: (name) => `Show ${name} in the atelier`, terminals: 'Terminals', terminalsOf: (name) => `Terminals of ${name}`,
     seatState: { working: 'Working', ready: 'Available', idle: 'Available', starting: 'starting…', trust: 'waits for you to trust the folder',
-      stopped: 'stopped', crashed: 'crashed', unreachable: 'unreachable' },
+      attention: 'needs attention', stopped: 'stopped', crashed: 'crashed', unreachable: 'unreachable' },
     context: (p) => `context ${p} %`, open: (name) => `Open ${name}’s session`,
     kernelWhat: 'the machinery · operator and queue · always on', rest: 'at rest', health: 'Health',
     version: (v) => (v ? `OpenRig ${v}` : 'OpenRig, unknown version'),
@@ -1024,6 +1060,7 @@ export const en: Messages = {
     },
     // #94: the generic card, a row per action, a plan past one (docs/mockups/ledge-action-card.html).
     action: actionCopy.en,
+    rigLaunch: { label: 'Rig to launch', launch: 'Launch this rig' },
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
       repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'

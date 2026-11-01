@@ -1,5 +1,5 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import { hideProposal, type ChatStep, type ChatTurn, type Session, type Tool } from '@ledge/protocol';
+import { hideProposal, type ChatRigLaunch, type ChatStep, type ChatTurn, type Session, type Tool } from '@ledge/protocol';
 import { ResidentMascot } from '../bots/ResidentMascot';
 import { Button } from '../ui/Button';
 import { Icon, ICONS } from '../ui/icons';
@@ -14,6 +14,7 @@ import { LaunchCard } from './LaunchCard';
 import { CloseGroupCard } from './CloseGroupCard';
 import { RelayCard } from './RelayCard';
 import { ProjectCard } from './ProjectCard';
+import { RigLaunchCard } from './RigLaunchCard';
 import { ActionCard, actionRowOf } from './ActionCard';
 import { groupSessions } from '@ledge/fleet';
 import type { DocumentReference } from '../documents/references';
@@ -46,6 +47,8 @@ export interface ChatViewProps {
   /** The project card's « Review the proposal » (lot 11): without it (the island) there is no card, the answer stands alone.
    *  `projectNamed`: the current name of the project an `addTo` designates, or undefined when none exists (then a new project). */
   onProject?: (qid: string) => void; projectNamed?: (name: string) => string | undefined;
+  /** « Lancer ce rig » of a card the brain posted (lot 7): the front opens its launch window prefilled. Without it, or without its copy, no card. */
+  onRigLaunch?: (card: ChatRigLaunch) => void;
   /** The generic card (#94): drawn when the front gives `onAct` and its copy. `actingQid` / `actingRows` the turn and rows being
    *  applied (useActionCards); `onIgnoreCards` « Ignore » the turn's cards, `undo` for « Review ». `onDenyAction` the row's
    *  « Deny », once the daemon gives a permission its deny row. */
@@ -103,7 +106,7 @@ function Answer({ text, sessions, onOpen, onDocument }: { text: string; sessions
  *  the project card. ChatView draws it under each answer; the Ledge screen under the Ledge bubble of that turn (lot 4). */
 export type TurnCardsProps = Pick<ChatViewProps, 'sessions' | 'offline' | 'docked' | 'turnAvailable' | 'onOpenSession' | 'onTerminal' | 'renderModel'
   | 'launchingQid' | 'launchingRows' | 'onLaunchProposal' | 'closingQid' | 'closingRows' | 'onCloseSessions' | 'relayingQid' | 'onRelay' | 'onRelayCancel'
-  | 'onProject' | 'projectNamed' | 'onAct' | 'actingQid' | 'actingRows' | 'onIgnoreCards' | 'onDenyAction' | 'theme' | 'reducedMotion'> & { turn: ChatTurn };
+  | 'onProject' | 'projectNamed' | 'onRigLaunch' | 'onAct' | 'actingQid' | 'actingRows' | 'onIgnoreCards' | 'onDenyAction' | 'theme' | 'reducedMotion'> & { turn: ChatTurn };
 
 export function TurnCards({ turn, ...p }: TurnCardsProps) {
   const t = useChatCopy();
@@ -139,6 +142,9 @@ export function TurnCards({ turn, ...p }: TurnCardsProps) {
       )}
       {turn.answeredAt !== undefined && turn.projectProposal && p.onProject && (
         <ProjectCard proposal={turn.projectProposal} target={turn.projectProposal.addTo === undefined ? undefined : p.projectNamed?.(turn.projectProposal.addTo)} onReview={() => p.onProject!(turn.qid)} />
+      )}
+      {turn.answeredAt !== undefined && turn.rigLaunch && p.onRigLaunch && t.chat.rigLaunch && (
+        <RigLaunchCard card={turn.rigLaunch} disabled={!!turn.ignoredAt} onLaunch={() => p.onRigLaunch!(turn.rigLaunch!)} />
       )}
     </>
   );
@@ -236,7 +242,8 @@ export function ChatView(p: ChatViewProps) {
           {turns.map(turn => (
             <div key={turn.qid} data-turn style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {p.turnImages?.(turn)}
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>
+              {/* A turn Ledge's brain posted on its own (lot 7) has no question: no bubble. */}
+              {turn.question && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span data-chat-question style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>}
               {turn.error === 'cancelled' ? <span data-chat-stopped style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.chat.stopped}</span>
                 : turn.error !== undefined && <span data-chat-error role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--destructive)' }}>{t.chat.error(turn.error)}</span>}
               {turn.error === undefined && (turn.answeredAt !== undefined || turn.steps.length > 0 || live?.qid === turn.qid || running?.qid === turn.qid) && (

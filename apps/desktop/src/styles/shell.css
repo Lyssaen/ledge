@@ -257,7 +257,6 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .home-field textarea { flex: 1; min-width: 0; box-sizing: border-box; padding: 8px 10px; background: var(--well); color: inherit; border: 1px solid var(--input); border-radius: var(--radius-md); font: inherit; font-size: 13px; line-height: 19px; resize: none; }
 .home-field button { width: 34px; height: 34px; }
 .home-footnote { font-size: 11px; color: var(--muted-foreground); }
-.home-placeholder { flex: 1; display: grid; place-items: center; padding: 24px; color: var(--muted-foreground); font-size: 13px; }
 
 /* The Rigs tab of the Ledge screen (spec §8.2, maquettes p-rigs-live / p-rigs-spec): sub-tabs, rig cards, specs, agents. */
 .rigs-tab { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: 12.5px; }
@@ -292,7 +291,7 @@ button.rc-seat-main:hover { background: var(--sidebar-accent); }
 .rc-name { flex: none; font-weight: 600; }
 .rc-state { flex: none; font-size: 11.5px; }
 .rc-working { color: var(--sidebar-foreground); }
-.rc-trust, .rc-starting { color: var(--warning, #d97706); }
+.rc-trust, .rc-attention, .rc-starting { color: var(--warning, #d97706); }
 .rc-crashed { color: var(--destructive); }
 .rc-stopped, .rc-unreachable, .rc-ready, .rc-idle { color: var(--muted-foreground); }
 .rc-rest { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
@@ -344,3 +343,44 @@ span.ra-name { cursor: default; }
 .rc-propose { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; margin: 8px 0 0; padding: 8px 10px; border-radius: var(--radius-md); background: var(--well); }
 .adopt-projects { display: grid; gap: 6px; margin: 0 0 12px; padding: 0; border: 0; }
 .adopt-project { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+
+/* The Mandat tab of the Ledge screen (lot 7, maquette p-ledge-mandat): it borrows the Rigs tab's bar, list and detail (rigs-*, rs-*). */
+.md-read { color: var(--muted-foreground); }
+.md-read code { color: var(--sidebar-foreground); }
+.md-settles { grid-template-columns: minmax(220px, 340px) minmax(0, 1fr); }
+.md-list { display: flex; flex-direction: column; gap: 4px; }
+.md-group { margin: 8px 0 4px; font: 600 10.5px 'Geist Mono', monospace; letter-spacing: .1em; color: var(--muted-foreground); }
+.md-group:first-child { margin-top: 0; }
+.md-cats { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.md-cat strong { font-weight: 600; }
+.md-detail .rs-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.md-pill { padding: 0 5px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-sm); font-size: 10.5px; color: var(--muted-foreground); }
+.ledge-home .st-qa.md-escalate { height: 30px; padding: 0 12px; font-size: 12.5px; }
+.md-rules tr.proposed td { color: var(--info); }
+.md-approve { padding: 0; border: 0; background: none; color: var(--info); font: inherit; cursor: pointer; }
+.md-approve:hover { text-decoration: underline; }
+.md-approve:disabled { opacity: .5; cursor: default; text-decoration: none; }
+.md-note { margin: 6px 0 0; font-size: 11.5px; color: var(--muted-foreground); }
+.md-blue { color: var(--info); }
+.md-decs { list-style: none; margin: 0; padding: 0; }
+.md-dec { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; align-items: baseline; gap: 12px; padding: 8px; border-bottom: 1px solid var(--sidebar-border); }
+.md-dec.revisited { opacity: .6; }
+.md-when { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.md-what { min-width: 0; overflow-wrap: anywhere; }
+.md-what b { font-weight: 600; }
+.md-what small, .md-ruleof { color: var(--muted-foreground); }
+.md-revisit { padding: 0; border: 0; background: none; color: var(--muted-foreground); font: inherit; cursor: pointer; }
+.md-revisit:hover:not(:disabled) { color: var(--sidebar-foreground); text-decoration: underline; }
+.md-revisit:disabled { opacity: .5; cursor: default; }
+.md-files { background: var(--well); }
+.md-foot { margin: 14px 0 0; line-height: 1.6; }
+.md-memories h4 { margin: 14px 0 4px; font-size: 12.5px; font-weight: 600; }
+.md-memories h4:first-child { margin-top: 0; }
+.md-mem-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.md-mem-head h4 { margin: 0; }
+.md-editor-field { display: block; width: 100%; min-height: 320px; box-sizing: border-box; padding: 10px 12px; background: var(--well); color: inherit; border: 1px solid var(--input); border-radius: var(--radius-md); font: 12px/1.6 'Geist Mono', ui-monospace, monospace; resize: vertical; }
+.confirm-content .md-editor-error { margin-top: 10px; color: var(--danger-text); }
+@media (max-width: 760px) { .md-settles { grid-template-columns: 1fr; } .md-dec { grid-template-columns: 52px minmax(0, 1fr); } }
+.home-brain-offer { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.home-brain-offer p { margin: 0; font-size: 13px; line-height: 18px; color: var(--foreground); }
+.home-brain-offer > div { display: flex; gap: 8px; }

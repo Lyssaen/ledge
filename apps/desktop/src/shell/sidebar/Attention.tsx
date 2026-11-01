@@ -112,7 +112,7 @@ export function Attention(p: {
         const who = item.helper?.kind ?? item.session.name;
         const project = p.projectOf(item.session);
         const where = item.helper ? t.side.ofHelper(item.session.name) : (project?.name ?? t.side.unassigned);
-        const ask = item.session.pending?.text || (item.helper?.task ?? taskOf(item.session));
+        const ask = item.kind === 'brainStarting' ? t.side.brainStarting : item.session.pending?.text || (item.helper?.task ?? taskOf(item.session));
         return (
           <div key={item.session.id} className={cls('st-card', p.current === item.session.id && 'sel')}
             onContextMenu={e => { e.preventDefault(); p.onMenu(item.session.id, e); }}>
@@ -133,7 +133,7 @@ export function Attention(p: {
                   <button type="button" className="st-qa" onClick={() => p.onDecide(item.session, false)}>{t.side.deny}</button>
                 </> : <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id)}>{t.side.see}</button>)}
                 {item.kind === 'question' && <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id, 'reply')}>{t.side.reply}</button>}
-                {item.kind === 'error' && <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id)}>{t.side.see}</button>}
+                {(item.kind === 'error' || item.kind === 'brainStarting') && <button type="button" className="st-qa" onClick={() => p.onOpen(item.session.id, item.helper?.id)}>{t.side.see}</button>}
               </div>
             </div>
           </div>

@@ -19,6 +19,12 @@ export function startPoller(opts: {
   store: Store; tmux: Tmux; adapterFor?: typeof defaultAdapterFor;
   intervalMs?: number; deadCheckMs?: number; retireMs?: number; now?: () => string;
   broadcastPreview?: (id: string, lines: string[]) => void;
+  /** Whether a client follows this session in color: only then is it captured with its colors. */
+  colorWanted?: (id: string) => boolean;
+  /** Whether a colored image of `id` is already held for its followers: an unchanged pane then needs no new capture. */
+  colorCached?: (id: string) => boolean;
+  /** The last PREVIEW_CAPTURE_LINES lines of the colored capture, for the clients that follow `id`. */
+  sendColorPreview?: (id: string, lines: string[]) => void;
   gitInfo?: typeof defaultGitInfo;
   /** Retries the resume labels that waited for a Claude process to end. */
   labelExited?: () => void;
@@ -100,6 +106,7 @@ export function startPoller(opts: {
     const h = createHash('sha1').update(full).digest('hex');
     const prev = hashes.get(s.id);
     if (prev === h) {
+      await colorPreview(s, false);
       // Unchanged pane: re-apply a remembered prompt only if nothing is pending (a hook may have
       // shadowed it inside the priority window). The reducer keeps no-ops identical.
       const m = matches.get(s.id);
@@ -114,6 +121,7 @@ export function startPoller(opts: {
     const lines = buildPreview(full, adapter);
     const key = lines.join('\n');
     if (previews.get(s.id) !== key) { previews.set(s.id, key); opts.broadcastPreview?.(s.id, lines); }
+    await colorPreview(s, true);
     if (!adapter) return;
     const title = adapter.paneTitle?.(pane) ?? null;
     if (title && title !== titles.get(s.id)) { titles.set(s.id, title); store.apply(s.id, { name: 'PaneTitle', at: now(), source: 'pane', text: title }); }
@@ -123,6 +131,15 @@ export function startPoller(opts: {
     if (!m) { matches.delete(s.id); rested(s.id, t); return; }
     matches.set(s.id, m);
     store.apply(s.id, { name: 'PanePrompt', at: now(), source: 'pane', kind: m.kind, text: m.text, options: m.options, ...(m.optionDetails ? { optionDetails: m.optionDetails } : {}), ...withBody(s, m) });
+  }
+
+  /** A second, colored capture for the clients that follow this session: on a change of the plain capture, or at once for a new subscription. Prompt detection never reads it. */
+  async function colorPreview(s: Session, changed: boolean): Promise<void> {
+    if (!opts.colorWanted?.(s.id)) return;
+    if (!changed && opts.colorCached?.(s.id)) return;
+    const colored = await tmux.capture(s.tmuxSession!, PREVIEW_CAPTURE_LINES, { color: true });
+    if (colored === null) return;
+    opts.sendColorPreview?.(s.id, colored.split('\n').slice(-PREVIEW_CAPTURE_LINES));
   }
 
   /** A plan read in the pane carries its text when the pane shows it (Cursor); Claude Code's is read from its transcript. */

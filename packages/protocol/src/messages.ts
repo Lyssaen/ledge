@@ -15,7 +15,7 @@ import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
-import { OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, EscalationUpdatedSchema, EscalationRemovedSchema, LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, RigSpecsRequestSchema, RigSpecsSchema, EscalationAnswerSchema, LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema } from './openrig.js';
+import { OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, EscalationUpdatedSchema, EscalationRemovedSchema, LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, BrainResultSchema, RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, RigSpecsRequestSchema, RigSpecsSchema, EscalationAnswerSchema, LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema, BrainCmdSchema } from './openrig.js';
 import { AskAnswerSchema, AskCreateSchema, AskResultSchema, AskUpdatedSchema, AsksMessageSchema } from './asks.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 
@@ -89,7 +89,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Knows `ask.create` / `ask.answer`: a session's decision for the user (`ledge ask`). */ asks: z.boolean().optional(),
   /** Reads OpenRig (rigs, escalations, exchanges) through its local bridge. */ openrig: z.boolean().optional(),
-  /** Relays the rigs of its remote machines (lot 6): a client reading several daemons shows each remote rig once. */ openrigFleet: z.boolean().optional() });
+  /** Takes color-preview subscriptions. */ colorPreview: z.boolean().optional(),
+  /** Relays rigs of remote machines. */ openrigFleet: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -116,6 +117,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
     entries: z.array(z.object({ text: z.string(), attachments: z.array(AttachmentIdSchema).optional() })).optional(), imagesDropped: z.boolean().optional() }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   z.object({ type: z.literal('session.preview'), id: z.string(), lines: z.array(z.string()) }),
+  /** The session's terminal in color (SGR codes kept), sent only to the client that subscribed to it. */
+  z.object({ type: z.literal('session.preview.color'), id: z.string(), lines: z.array(z.string()) }),
   /** A session's thread, on request (spec 2026-10-13 §5); then each created or updated item, broadcast. */
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema) }),
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema }),
@@ -163,7 +166,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   HandoverResultSchema,
   AsksMessageSchema, AskUpdatedSchema, AskResultSchema,
   OpenRigStatusMessageSchema, RigSnapshotSchema, RigUpdatedSchema, RigRemovedSchema, RigExchangeSchema, RigExchangesSchema, RigSpecsSchema, EscalationUpdatedSchema, EscalationRemovedSchema,
-  LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema,
+  LedgeThreadItemMessageSchema, LedgeThreadHistorySchema, DecisionsMessageSchema, RulesMessageSchema, MandateMessageSchema, BrainStatusMessageSchema, RigPlanMessageSchema, RigResultSchema, BrainResultSchema,
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
@@ -252,6 +255,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.delete'), id: z.string() }),
   /** The user names the session's topic from the overlay (500 characters at most, the hook's prompt cap); an empty topic hands back to the automatic sources. */
   z.object({ type: z.literal('session.rename'), id: z.string(), topic: z.string().max(500) }),
+  /** The one session this client follows in color; `id: null` follows none. */
+  z.object({ type: z.literal('session.preview.subscribe'), id: z.string().nullable(), color: z.literal(true) }),
   z.object({ type: z.literal('session.thread'), id: z.string() }),
   z.object({ type: z.literal('session.register'), session: SessionSchema }),
   /** `agent` and `cwd` describe the session when the daemon does not know it yet (a hook from an agent started without ledge). */
@@ -292,7 +297,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   HandoverBriefSchema,
   HandoverShowSchema,
   RigActSchema, RigPrepareSchema, RigLaunchSchema, RigAdoptSchema, RigSendSchema, RigExchangesRequestSchema, RigSpecsRequestSchema, EscalationAnswerSchema,
-  LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema,
+  LedgeSaySchema, LedgeThreadRequestSchema, MandateUpdateSchema, RuleSetSchema, DecisionRevisitSchema, CategoryEscalateSchema, BrainSetSchema, BrainCmdSchema,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 /** The commands of the mobile access service. */

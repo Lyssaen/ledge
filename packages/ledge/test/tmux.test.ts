@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { realTmux, run } from '../src/tmux.js';
 import { killTestServer, testSocketPath } from './helpers.js';
 import { ensureLedgeDir } from '../src/paths.js';
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,6 +28,15 @@ describe('tmux', () => {
     await tmux.newSession({ name: n, cwd: '/tmp', env: { PATH: '/ledge-test-first:/usr/bin:/bin' }, command: ['/bin/sh', '-c', 'echo "P=$PATH"; cat'] });
     await sleep(300);
     expect(await tmux.capture(n, 5)).toContain('P=/ledge-test-first:/usr/bin:/bin');
+    await tmux.killSession(n);
+  });
+  it('starts the real tmux even when the pane PATH denies tmux', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-tmux-shim-'));
+    writeFileSync(join(dir, 'tmux'), '#!/bin/sh\nexit 91\n', { mode: 0o755 });
+    const n = 'ledge-shim';
+    await tmux.newSession({ name: n, cwd: '/tmp', env: { PATH: `${dir}:/usr/bin:/bin` }, command: ['/bin/sh', '-c', 'echo "P=$PATH"; cat'] });
+    await sleep(300);
+    expect(await tmux.capture(n, 5)).toContain(`P=${dir}:/usr/bin:/bin`);
     await tmux.killSession(n);
   });
   it('sets a session option the terminal title can show', async () => {

@@ -28,7 +28,7 @@ function Many({ client, ids, log }: { client: DaemonClient; ids: readonly string
     return <output key={id} data-testid={id}>{shown}</output>;
   })}</>;
 }
-const asked = (d: { received: { type: string; id?: string }[] }, id: string) => d.received.filter(m => m.type === 'session.thread' && m.id === id);
+const asked = (d: { received: { type: string; id?: string | null }[] }, id: string) => d.received.filter(m => m.type === 'session.thread' && m.id === id);
 const daemons: Awaited<ReturnType<typeof createMockDaemon>>[] = [];
 afterEach(async () => { for (const d of daemons.splice(0)) await d.close(); });
 

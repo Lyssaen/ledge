@@ -30,7 +30,11 @@ describe('tui copy', () => {
     if (path === 'en.ask.action.copy') { expect(b).toBeTypeOf('object'); return; }
     expect(typeof b, path).toBe(typeof a);
     if (typeof a === 'string') expect((b as string).length, path).toBeGreaterThan(0);
-    else if (typeof a === 'function') expect(String((b as (...x: unknown[]) => string)('x', 1)).length, path).toBeGreaterThan(0);
+    else if (typeof a === 'function') {
+      // The attention formatter accepts a list of seat names, rather than a scalar.
+      const args = path === 'en.rigLaunch.starting.attention' ? [['build', 'review']] : ['x', 1];
+      expect(String((b as (...x: unknown[]) => string)(...args)).length, path).toBeGreaterThan(0);
+    }
     else if (a && typeof a === 'object') for (const k of Object.keys(a)) same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], `${path}.${k}`);
   }
   it('English has every French string', () => { same(fr, en, 'en'); });

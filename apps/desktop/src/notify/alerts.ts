@@ -37,7 +37,8 @@ export function diffSessions(base: AlertBase, now: readonly Session[]): SessionC
     const m = splitId(s.id)?.machine;
     if (!m || !base.machines.has(m)) continue;
     const c = changeOf(base.sessions.get(s.id), s);
-    if (c) out.push(c);
+    // The brain session (lot 7) is news only when it asks the user something: its turns come and go all day.
+    if (c && (!s.brain || c.kind === 'asked')) out.push(c);
   }
   return out;
 }

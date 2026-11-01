@@ -14,8 +14,10 @@ export interface HandoverDeps {
   store: Pick<Store, 'get' | 'all' | 'upsert' | 'patch' | 'onChange'>;
   /** The request for a brief goes before anything waiting: past the brief's deadline Ledge writes an empty one. */
   mailbox: Pick<Mailbox, 'notify'>;
-  /** Launches the relief as `session.launch` would. */
-  launch(req: { tool: Tool; cwd: string; prompt: string; model?: string; effort?: string; autonomy?: Autonomy }): Promise<Session>;
+  /** Launches the relief as `session.launch` would; a brain's relief with its own id, name, env and the brain mark (C10). */
+  launch(req: { tool: Tool; cwd: string; prompt: string; model?: string; effort?: string; autonomy?: Autonomy; id?: string; name?: string; env?: Record<string, string>; brain?: true }): Promise<Session>;
+  /** Prepares the relief of the brain (Lot 7, Task 10): without it, a brain session is relieved like any other. */
+  brainRelief?(s: Session): Promise<{ id: string; name: string; cwd: string; env: Record<string, string>; instructions: string }>;
   /** Stops the relieved session's agent. */
   close(s: Session): Promise<unknown>;
   /** Where briefs are kept, one `<session id>.md` each. */
@@ -91,8 +93,9 @@ export function createHandovers(d: HandoverDeps): Handovers {
     try { mkdirSync(d.dir, { recursive: true }); writeFileSync(file(id), `${brief.trim()}\n`); }
     catch (e) { log(`brief of ${id} not kept: ${(e as Error).message}`); }
     mark(id, { state: 'launching', ...(auto ? { auto: true } : {}) });
+    const isBrain = s.brain === true && d.brainRelief !== undefined;
     const prompt = [
-      `Tu prends la relève de ${s.name}, dont le contexte était plein. Voici son bilan :`,
+      isBrain ? `Tu prends la relève de ${s.name}, le cerveau de Ledge. Voici son bilan, le résumé de ce qu'il a suivi :` : `Tu prends la relève de ${s.name}, dont le contexte était plein. Voici son bilan :`,
       '',
       quote(brief.trim(), PROMPT_BRIEF_MAX),
       '',
@@ -100,7 +103,13 @@ export function createHandovers(d: HandoverDeps): Handovers {
     ].join('\n');
     let relief: Session;
     try {
-      relief = await d.launch({ tool: s.tool, cwd: s.cwd, prompt, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}), ...(s.autonomy ? { autonomy: s.autonomy } : {}) });
+      const shared = { tool: s.tool, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}) };
+      if (isBrain) {
+        // The brain's relief is the brain again: its id, « Ledge », its folder and env, never an autonomy, and its
+        // instructions read again with the memory of today (Task 10).
+        const b = await d.brainRelief!(s);
+        relief = await d.launch({ ...shared, cwd: b.cwd, prompt: `${prompt}\n\n${b.instructions}`, id: b.id, name: b.name, env: b.env, brain: true });
+      } else relief = await d.launch({ ...shared, cwd: s.cwd, prompt, ...(s.autonomy ? { autonomy: s.autonomy } : {}) });
     } catch (e) {
       const reason = (e as Error).message;
       log(`relief of ${s.name} (${id}) not launched: ${reason}`);
@@ -140,8 +149,12 @@ export function createHandovers(d: HandoverDeps): Handovers {
       if (s.state === 'exited' || isArchived(s)) return `${s.name} est terminée`;
       if (s.tool === 'omp' || !s.tmuxSession) return `${s.name} n'a pas de terminal où demander son bilan`;
       if (waiting.has(id) || s.handover?.state === 'briefing' || s.handover?.state === 'launching') return `la relève de ${s.name} est déjà en cours`;
-      const share = s.context ? ` (${Math.round((s.context.used / s.context.window) * 100)} %)` : '';
-      const asked = d.mailbox.notify(id, `<ledge-handover>Ton contexte est presque plein${share} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ledge handover "<bilan>", avec ces sections : Fait : … En cours : … Suite : … Décisions : … (chacune avec sa raison), puis les pièges et les fichiers clés. Un bilan sans l'une d'elles est refusé. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`, { first: true });
+      const share = s.context && s.context.window > 0 ? ` (${Math.round((s.context.used / s.context.window) * 100)} %)` : '';
+      const brain = s.brain === true && d.brainRelief !== undefined;
+      const why = brain ? `C'est l'heure de ta relève${share}` : `Ton contexte est presque plein${share}`;
+      // The brain acts only through `ledge brain …` (its allowlist, C12): its brief goes through `ledge brain handover` (F-I2).
+      const command = brain ? 'ledge brain handover "<bilan>"' : 'ledge handover "<bilan>"';
+      const asked = d.mailbox.notify(id, `<ledge-handover>${why} : une nouvelle session va prendre ta place. Écris ton bilan de relève en une seule commande : ${command}, avec ces sections : Fait : … En cours : … Suite : … Décisions : … (chacune avec sa raison), puis les pièges et les fichiers clés. Un bilan sans l'une d'elles est refusé. Ne commence rien d'autre ensuite.</ledge-handover>`, `handover:${id}:${now()}`, { first: true });
       if (!asked) return `impossible d'écrire à ${s.name}`;
       const auto = o.auto === true;
       waiting.set(id, { timer: setTimeout(() => finish(id, undefined), briefMs), auto });

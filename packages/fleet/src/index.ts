@@ -11,3 +11,5 @@ export * from './attachments';
 export * from './rigs';
 export * from './specs';
 export * from './ledgeThread';
+export * from './brain';
+export * from './colorPreview';

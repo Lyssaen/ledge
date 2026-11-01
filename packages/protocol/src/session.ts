@@ -97,6 +97,8 @@ export const SessionSchema =z.object({
   machineId: z.string().optional(), machineName: z.string().optional(), repoId: z.string().optional(),
   /** Annotated by the fleet when its machine is unreachable and the last snapshot is kept (keepStale, spec 2026-10-14 §6). */
   offline: z.boolean().optional(),
+  /** The permanent Ledge brain session (Lot 7). */
+  brain: z.literal(true).optional(),
   id: z.string().min(1),
   name: z.string().min(1),
   tool: ToolSchema,

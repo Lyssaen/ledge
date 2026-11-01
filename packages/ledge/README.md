@@ -53,6 +53,14 @@ icon comes only from its profile, so Ledge installs a `Ledge` profile as a fragm
 `~/.ledge/tui.sh`, which each `ledge tui` rewrites with its node and CLI. `ledge tui --here`, tmux, SSH and any other
 terminal keep the TUI where it was started.
 
+The TUI opens on a home with Ledge first: its conversation (decisions to settle with `1`-`9`, `@build` to write to an
+OpenRig agent), then `À toi` (what waits for you), `Projets · sessions seules` (sessions outside a rig, as before) and
+`Rigs` (OpenRig rigs and the OpenRig kernel). `2` opens a rig's room: its seats, their exchanges and a live, colour,
+read-only view of the chosen seat's terminal (`a` attaches to type in it). A session driven by OMP shows its thread
+drawn as a terminal instead. `+` launches a session, or a rig from a rig, the kernel or the Rigs tab (goal, plan, start;
+`ctrl+t` switches between the two). Seats are restarted, stopped and resumed through OpenRig, never killed from Ledge.
+`?` lists every key by screen.
+
 When a Claude it launched exits, Ledge appends a `custom-title` « name - topic » to its transcript, so `claude --resume` lists the conversation that way, unless the user named it (`claude -n`, `/rename`).
 
 `ledge setup` installs `ledge-daemon.service` as a systemd user unit, starts it and enables linger, so the daemon runs from WSL boot and restarts after a crash. Rerun it after a node upgrade or a repository move: the unit is rewritten and the service restarted. Useful commands:

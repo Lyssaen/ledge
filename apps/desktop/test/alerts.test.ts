@@ -23,6 +23,12 @@ describe('diffSessions', () => {
     expect(diffSessions(baselineOf([], []), [asking])).toEqual([]);
     expect(diffSessions(baselineOf([{ ...working, offline: true }], []), [asking])).toEqual([]);
   });
+  it('the brain session alerts only when it asks (lot 7): its turns finishing are not news', () => {
+    const brainAsking = { ...asking, brain: true as const };
+    expect(diffSessions(baselineOf([{ ...working, brain: true }], ['local']), [brainAsking])).toEqual([{ kind: 'asked', id: 'local:a', ask: 'approval' }]);
+    expect(diffSessions(baselineOf([{ ...working, brain: true }], ['local']), [{ ...working, brain: true, state: 'idle' }])).toEqual([]);
+    expect(diffSessions(baselineOf([], ['local']), [{ ...working, brain: true }])).toEqual([]);
+  });
   it('a frozen session changes nothing', () => {
     expect(diffSessions(baselineOf([working], ['local']), [{ ...asking, offline: true }])).toEqual([]);
   });

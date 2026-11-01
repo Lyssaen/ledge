@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ChatActionSchema } from './chat.js';
+import { ToolSchema } from './session.js';
 
 /** Mandate categories (spec §5.3): Ledge may settle the first four alone, never the last three. */
 export const MandateCategorySchema = z.enum(['git', 'tests', 'context', 'code', 'design', 'architecture', 'critical']);
@@ -23,7 +24,7 @@ export const OpenRigStatusSchema = z.object({ machine: z.string(), state: OpenRi
   install: z.string().optional() }); // install command when OpenRig is absent (lot 6)
 export type OpenRigStatus = z.infer<typeof OpenRigStatusSchema>;
 
-export const SeatStateSchema = z.enum(['starting', 'trust', 'ready', 'working', 'idle', 'stopped', 'crashed', 'unreachable']);
+export const SeatStateSchema = z.enum(['starting', 'trust', 'attention', 'ready', 'working', 'idle', 'stopped', 'crashed', 'unreachable']);
 export type SeatState = z.infer<typeof SeatStateSchema>;
 export const RigSeatSchema = z.object({ ref: z.string(), // OpenRig session name: "dev-build@starter"
   address: z.string(), // "@build"
@@ -58,6 +59,7 @@ export const EscalationSchema = z.object({ id: z.string(), // OpenRig qitemId, o
   intent: z.enum(['decision', 'update']), summary: z.string(), detail: z.string().optional(), evidenceRef: z.string().optional(),
   questions: z.array(EscalationQuestionSchema).max(4), replyTo: z.string().optional(), createdAt: z.string().datetime(),
   state: EscalationStateSchema, graceUntil: z.string().datetime().optional(),
+  correcting: z.string().optional(), // id of the decision being corrected (Revenir dessus)
   category: MandateCategorySchema.optional(), advice: z.string().optional(),
   answer: z.object({ by: z.enum(['ledge', 'user']), answers: z.record(z.string()), at: z.string().datetime(), rule: z.string().optional(),
     delivery: z.enum(['queued', 'sent']).optional() }).optional() }); // delivery: answer waiting on an unreachable machine (lot 6)
@@ -75,7 +77,9 @@ export const THREAD_PAGE = 50;
 
 /** Named `Ledge*` because `Decision` / `Rule` already exist in decisions.ts and projects.ts. */
 export const LedgeDecisionSchema = z.object({ id: z.string(), escalationId: z.string(), by: z.enum(['ledge', 'user']),
-  category: MandateCategorySchema, summary: z.string(), answers: z.record(z.string()), rule: z.string().optional(),
+  category: MandateCategorySchema.optional(), // absent: a user answer on an uncategorised escalation (never guessed)
+  summary: z.string(), answers: z.record(z.string()), rule: z.string().optional(),
+  from: z.string().optional(), rigId: z.string().optional(), // the seat and rig the decision was for
   why: z.string().optional(), at: z.string().datetime(), revisitedBy: z.string().optional() });
 export type LedgeDecision = z.infer<typeof LedgeDecisionSchema>;
 export const LedgeRuleSchema = z.object({ id: z.string(), text: z.string(), category: MandateCategorySchema, since: z.string(),
@@ -101,8 +105,10 @@ export const LedgeThreadItemSchema = z.discriminatedUnion('kind', [
 ]);
 export type LedgeThreadItem = z.infer<typeof LedgeThreadItemSchema>;
 
-export const BrainStatusSchema = z.object({ state: z.enum(['off', 'starting', 'on', 'down']), tool: z.string(),
-  contextPct: z.number().optional(), sessionId: z.string().optional() });
+export const BrainStatusSchema = z.object({ state: z.enum(['off', 'starting', 'on', 'down']), tool: ToolSchema,
+  contextPct: z.number().optional(), sessionId: z.string().optional(),
+  enabled: z.boolean().nullable().optional(), // null: the user was never asked
+  restarts: z.number().int().min(0).optional(), reason: z.string().optional() }); // reason: why it is down
 export type BrainStatus = z.infer<typeof BrainStatusSchema>;
 
 export const RigLaunchWhereSchema = z.discriminatedUnion('kind', [
@@ -121,6 +127,20 @@ export const RIG_RESULT_CODES = ['rig_managed', 'already_answered', 'openrig_dow
 export const RigResultCodeSchema = z.enum(RIG_RESULT_CODES);
 export type RigResultCode = z.infer<typeof RigResultCodeSchema>;
 
+/** The commands the brain session may run through `ledge brain <op>` (`handover`: its relief brief, F-I2). */
+export const BRAIN_OPS = ['say', 'decide', 'ask', 'rig', 'send', 'propose', 'remember', 'who', 'rigs', 'escalations', 'rules', 'handover'] as const;
+export type BrainOp = typeof BRAIN_OPS[number];
+/** Codes of a refused or failed `brain.cmd`. */
+export const BRAIN_RESULT_CODES = ['not_brain', 'identity', 'mandate', 'grace', 'invalid', 'refused', 'already_answered', 'failed', 'unreachable', 'openrig_down'] as const;
+export const BrainResultCodeSchema = z.enum(BRAIN_RESULT_CODES);
+export type BrainResultCode = z.infer<typeof BrainResultCodeSchema>;
+/** The thread bubble that tells the brain is stopped (posted by the daemon); the UI renders « Démarrer » on exactly this text. */
+export const BRAIN_STOPPED_TEXT = 'Ledge est arrêté · Démarrer';
+/** The labels shown under each category of the Mandat tab. */
+export const MANDATE_CATEGORY_TAGS: Record<MandateCategory, string[]> = {
+  git: ['merge', 'branches'], tests: ['ciblés', 'relance'], context: ['operator'], code: ['nommage', 'style'],
+  design: ['UI', 'copie'], architecture: ['stockage', 'API'], critical: ['données', 'sécurité', 'suppression', 'coûts'] };
+
 // Server messages.
 export const OpenRigStatusMessageSchema = z.object({ type: z.literal('openrig.status'), status: OpenRigStatusSchema });
 export const RigSnapshotSchema = z.object({ type: z.literal('rig.snapshot'), machine: z.string(), rigs: z.array(RigSchema) });
@@ -137,6 +157,7 @@ export const RulesMessageSchema = z.object({ type: z.literal('rules'), items: z.
 export const MandateMessageSchema = z.object({ type: z.literal('mandate'), text: z.string(), path: z.string() });
 export const BrainStatusMessageSchema = z.object({ type: z.literal('brain.status'), status: BrainStatusSchema });
 export const RigPlanMessageSchema = z.object({ type: z.literal('rig.plan'), rid: z.string(), plan: RigPlanSchema });
+export const BrainResultSchema = z.object({ type: z.literal('brain.result'), rid: z.string(), ok: z.boolean(), line: z.string(), code: BrainResultCodeSchema.optional() });
 export const RigResultSchema = z.object({ type: z.literal('rig.result'), rid: z.string(), ok: z.boolean(), code: RigResultCodeSchema.optional(), reason: z.string().optional() });
 
 // Client messages.
@@ -162,4 +183,7 @@ export const MandateUpdateSchema = z.object({ type: z.literal('mandate.update'),
 export const RuleSetSchema = z.object({ type: z.literal('rule.set'), rid: z.string(), id: z.string(), status: z.enum(['active', 'rejected']) });
 export const DecisionRevisitSchema = z.object({ type: z.literal('decision.revisit'), rid: z.string(), id: z.string(), text: z.string().optional() });
 export const CategoryEscalateSchema = z.object({ type: z.literal('category.escalate'), rid: z.string(), category: MandateCategorySchema });
-export const BrainSetSchema = z.object({ type: z.literal('brain.set'), rid: z.string(), enabled: z.boolean(), tool: z.string().optional() });
+export const BrainSetSchema = z.object({ type: z.literal('brain.set'), rid: z.string(), enabled: z.boolean(), tool: ToolSchema.optional(),
+  first: z.literal(true).optional() }); // first: the user accepted the activation offer
+export const BrainCmdSchema = z.object({ type: z.literal('brain.cmd'), rid: z.string(), by: z.string(), key: z.string(),
+  op: z.enum(BRAIN_OPS), args: z.array(z.string()).max(40) });

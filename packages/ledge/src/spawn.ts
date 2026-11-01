@@ -74,6 +74,8 @@ export interface SpawnOptions {
   id?: string;
   /** The autonomy, as its arguments were built (`autonomyArgs`): kept on the record for a resume. */
   autonomy?: Autonomy;
+  /** The permanent Ledge brain session (Lot 7): put on the record. */
+  brain?: true;
   /** Names and ids already in use, so the new session gets free ones. */
   taken: { names: Iterable<string>; ids: Iterable<string> };
   now?: () => string; env?: NodeJS.ProcessEnv;
@@ -102,5 +104,5 @@ export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, ...(key ? { [SESSION_KEY_VAR]: key } : {}), LEDGE_NAME: name, ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), unset: PARENT_AGENT_VARS, command });
   const at = now();
   return { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...(agentSessionId ? { agentSessionId } : {}), ...(transcriptPath ? { transcriptPath } : {}),
-    ...(opts.autonomy && opts.autonomy !== 'ask' ? { autonomy: opts.autonomy } : {}) };
+    ...(opts.autonomy && opts.autonomy !== 'ask' ? { autonomy: opts.autonomy } : {}), ...(opts.brain ? { brain: true as const } : {}) };
 }

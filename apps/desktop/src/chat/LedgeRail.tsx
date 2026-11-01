@@ -4,7 +4,7 @@ import type { Escalation, LedgeDecision, Rig, Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { seatName } from '@ledge/ui/chat/ledge/threadModel';
 import { rigFilter, seatSession, workingCount } from '@ledge/ui/rigs/model';
-import type { FleetView } from '../fleet/useFleet';
+import { attending, type FleetView } from '../fleet/useFleet';
 import type { Decisions } from '../fleet/decisions';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
@@ -49,7 +49,7 @@ function EscalationItem(p: { client: DaemonClient; escalation: Escalation; rigs:
 
 /**
  * The right rail of the Ledge screen (spec §8.2, `c-A.png`): « À toi · n » (answered in place), « Rigs · n » with who is at work,
- * « Tranché aujourd'hui · n » (only with decisions: the store arrives with lot 7) and « Résumer la journée ». `compact` is the narrow
+ * « Tranché aujourd'hui · n » (Ledge's decisions of the day, with « Revenir »; hidden while none) and « Résumer la journée ». `compact` is the narrow
  * layout: one line « À toi · 3 · Rigs · 2 », expandable.
  */
 export function LedgeRail(p: {
@@ -66,7 +66,8 @@ export function LedgeRail(p: {
   const openrig = useOpenRig(client);
   const rigs = useMemo(() => visibleRigs(allRigs, openrig).filter(r => !r.kernel), [allRigs, openrig]);
   const count = rigsCount(allRigs, openrig);
-  const items = useAttention(client, view.sessions, allRigs, p.waits);
+  const attend = useMemo(() => attending(view), [view.sessions, view.brains]); // eslint-disable-line react-hooks/exhaustive-deps
+  const items = useAttention(client, attend, allRigs, p.waits);
   const paused = p.paused ?? false;
   const settled = (p.settled ?? []).filter(d => d.by === 'ledge');
 

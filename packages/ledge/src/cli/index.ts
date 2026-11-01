@@ -15,6 +15,7 @@ ledge handover "<bilan>" | show                              the relief brief, w
 ledge close <session>… [--json]                              close sessions cleanly (their conversation stays resumable)
 ledge tui [--notify bell|osc9|off] [--here]                  follow and answer the sessions (in a Ledge tab of Windows Terminal unless --here)
 ledge bridge                                                 exchange Ledge messages over SSH stdio
+ledge brain <say|decide|ask|rig|send|propose|remember|who|rigs|escalations|rules> …   only from Ledge's brain session
 ledge --version                                              print the installed version`;
 
 import { removedCommand } from './removed.js';
@@ -59,6 +60,7 @@ async function main(argv: string[]): Promise<number> {
     case 'handover': { const { runHandover } = await import('./handover.js'); const r = await runHandover(rest); console.log(r.line); return r.code; }
     case 'close': { const { runClose } = await import('./action.js'); const r = await runClose(rest); console.log(r.line); return r.code; }
     case 'tui': { const { runTui } = await import('../tui/index.js'); return runTui(rest); }
+    case 'brain': { const { runBrain } = await import('./brain.js'); const r = await runBrain(rest); console.log(r.line); return r.code; }
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest.find(a => !a.startsWith('--')) ?? '', { readOnly: rest.includes('--read-only') }); }

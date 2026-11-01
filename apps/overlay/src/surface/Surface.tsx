@@ -8,8 +8,11 @@ import type { DaemonClient } from '../daemon/client';
 import { useMachines } from '../daemon/machines';
 import type { DocumentOrigin } from '../documents/useDocumentReader';
 import type { ResidentGesture } from '../bots/ResidentMascot';
-import { groupSessions, sayToLedge } from '@ledge/fleet';
+import { groupSessions, sayToLedge, useLedgeDecisions } from '@ledge/fleet';
 import { displayOrder, headersBefore } from './groups';
+
+/** The brain session (lot 7): only its asks reach the notch, never its turns. */
+const isBrain = (s: Session): boolean => !!s.brain;
 import { FILET, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
@@ -118,7 +121,12 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const chosenMachine = machines.find(m => m.id === launchMachine);
   const disconnected = machines.filter(m => !m.ready).map(m => m.label);
   // Everything indexed (digits, J/K, the handle, the coachmark row) follows the order the list displays: grouped by repository.
-  const sessions = useMemo(() => displayOrder(daemonSessions), [daemonSessions]);
+  // Ledge's brain session (lot 7) is the daemon's own, never one of the notch's listed sessions (C27); `attending` keeps it for
+  // what reaches the user (its asks, the handle line, its balloon and peek), where folder trust or a permission must arrive.
+  const attending = useMemo(() => displayOrder(daemonSessions), [daemonSessions]);
+  const sessions = useMemo(() => (attending.some(s => s.brain) ? attending.filter(s => !s.brain) : attending), [attending]);
+  // What Ledge settled, by id: the feed's « décision » lines (lot 4 tf94a73).
+  const ledgeDecisions = useLedgeDecisions();
   const groups = useMemo(() => groupSessions(sessions), [sessions]);
   const { t } = useI18n();
   // One app-level motion preference drives every bot in every layer.
@@ -249,7 +257,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
   const player = useMemo(() => soundPlayer ?? createSilentPlayer(), [soundPlayer]);
   const sounds = useSounds({ player, dnd, status });
-  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble, onChange: (c, info) => {
+  const asks = useDaemonAsks({ sessions: attending, askOnly: isBrain, status, lastError, dnd, dispatch, finishedBubble, onChange: (c, info) => {
     sounds.onChange(c);
     if (c.kind === 'finished' && info.elapsedMs !== undefined) setElapsed(x => ({ ...x, [c.id]: info.elapsedMs! }));
     if (c.kind === 'finished') {
@@ -257,7 +265,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
       if (!looking) setFinishedUnread(x => ({ ...x, [c.id]: `${c.id}:finished:${info.elapsedMs ?? 0}` }));
     }
     if (c.kind === 'failed' && !dnd) {
-      const crashed = sessions.find(s => s.id === c.id);
+      const crashed = attending.find(s => s.id === c.id);
       if (crashed && !crashed.pending) dispatch({ type: 'notice', id: c.id, kind: 'error' });
     }
     if (c.kind === 'asked' || c.kind === 'left' || c.kind === 'failed') setFinishedUnread(x => { if (!(c.id in x)) return x; const { [c.id]: _gone, ...rest } = x; return rest; });
@@ -281,13 +289,13 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => subscribeOpenInLedge((target, outcome) => {
     if (outcome !== 'opening') { setHandoff(t.handoff[outcome]); return; }
-    const name = (id: string) => sessions.find(s => s.id === id)?.name ?? id;
+    const name = (id: string) => attending.find(s => s.id === id)?.name ?? id;
     const line = target.kind === 'session' ? t.handoff.session(name(target.id))
       : target.kind === 'terminal' ? t.handoff.terminal(name(target.id))
       : target.kind === 'document' ? t.handoff.document(target.path)
       : t.handoff[target.kind];
     setHandoff(`${line}…`);
-  }), [sessions, t]);
+  }), [attending, t]);
 
   // A hidden document holds the bubble clock.
   useEffect(() => {
@@ -355,7 +363,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   }, [st.mode, st.selectedId]);
 
   // The closed notch is Ledge alone (lot 4): its line, and the widths it and the trailing slot measure, size it.
-  const line = useHandleLine(client, sessions, t);
+  const line = useHandleLine(client, attending, t);
   const [handleSizes, setHandleSizes] = useState<HandleMeasure>({ line: 0, trailing: 0 });
   const onHandleMeasure = useCallback((m: HandleMeasure) => setHandleSizes(p => (p.line === m.line && p.trailing === m.trailing ? p : m)), []);
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
@@ -577,7 +585,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   useEffect(() => { if (chatClosing && client.fleet && !client.fleet.turnMachine(chatClosing)?.ready) setChatClosing(null); }, [machines, chatClosing, client]);
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
-  for (const s of sessions) {
+  for (const s of attending) {
     const live = sayKindOf(s);
     if (live) sayCandidates.push({ id: s.id, kind: live, seed: `${s.id}:${live}:${s.pending?.text ?? s.state}` });
     else if (finishedUnread[s.id]) sayCandidates.push({ id: s.id, kind: 'finished', seed: finishedUnread[s.id]! });
@@ -792,7 +800,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
               onAsk={ask} onOpenChat={() => dispatch({ type: 'chat' })} onTyping={on => dispatch({ type: 'typing', on })} askDisabled={chatOffline !== null} />
           </div>
           <div aria-hidden={st.mode !== 'chat' || undefined} style={{ position: 'absolute', inset: 0, pointerEvents: st.mode === 'chat' ? 'auto' : 'none', transform: `translateX(${st.mode === 'chat' ? 0 : 12}px)`, transition: transition([['transform', 'grow', 0]]) }}>
-            <LedgeFeed client={client} contentRef={chatRef} sessions={sessions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
+            <LedgeFeed client={client} contentRef={chatRef} sessions={sessions} decisions={ledgeDecisions} visible={st.mode === 'chat'} enterDelay={enter} offline={chatOffline}
               headerExtra={<IslandMenu open={menuOpen && st.mode === 'chat'} dnd={dnd} onToggle={() => setMenuOpen(o => !o)} onClose={() => setMenuOpen(false)} onSettings={() => { setMenuOpen(false); openInLedge({ kind: 'settings' }); }} onDnd={onToggleDnd} onQuit={() => { setMenuOpen(false); void quitApp(); }} />}
               onSettings={() => openInLedge({ kind: 'settings' })} onClose={() => { setMenuOpen(false); dispatch({ type: 'close' }); }} onOpenSession={id => openInLedge({ kind: 'session', id })}
               onDocument={ref => openInLedge({ kind: 'document', path: ref.path })} theme={theme} frozen={unreachable} reducedMotion={reducedMotion}

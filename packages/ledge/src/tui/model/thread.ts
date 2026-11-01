@@ -40,7 +40,7 @@ export function diffCount(diff: string | undefined): { add: number; del: number 
 /** The spinner's frame at `now`: what `ui/Lines.tsx` draws again, alone, each second. */
 export const spin = (now: number): string => SPINNER[Math.floor(now / 1000) % SPINNER.length]!;
 
-function toolLines(it: ToolItem, o: Opts): Line[] {
+export function toolLines(it: ToolItem, o: Opts): Line[] {
   const { t, g, width } = o, now = o.now ?? Date.now();
   const status: Seg = it.status === 'success' ? { text: g.ok, color: C.green } : it.status === 'failed' ? { text: g.fail, color: C.red }
     : it.status === 'running' ? (o.ascii ? { text: g.live, color: C.blue } : { text: spin(now), color: C.blue, live: { spin: true } }) : { text: '·', color: C.faint };
@@ -68,7 +68,7 @@ function toolLines(it: ToolItem, o: Opts): Line[] {
 const more = (): Seg => ({ text: ' …', color: C.faint });
 
 /** `now` only for the line's first value: a running action's spinner and time then tick in `ui/Lines.tsx`. */
-interface Opts { t: Messages; g: Glyphs; now?: number; width: number; diffs: boolean; ascii?: boolean; cap(n: number): number }
+export interface Opts { t: Messages; g: Glyphs; now?: number; width: number; diffs: boolean; ascii?: boolean; cap(n: number): number }
 
 /** Each text's lines, by item: the thread is drawn again at each change, and the store keeps the items that did not change.
  *  Past 500 texts the parser's own cache goes round and would parse them all again. */

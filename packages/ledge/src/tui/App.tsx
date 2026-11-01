@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, useStdout, useWindowSize } from 'ink';
-import { isPending, useDaemon, useMachines, useProjects, useAsks, type DaemonClient, type Fleet } from '@ledge/fleet';
+import { isPending, useDaemon, useEscalations, useLedgeThread, useMachines, useOpenRig, useProjects, useRigs, type DaemonClient, type Fleet } from '@ledge/fleet';
+import { ledgeLine } from '@ledge/ui/rigs/model';
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
 import { readClipboardImage, type ClipboardImage } from './clipboard.js';
 import { openImage } from './openImage.js';
-import { SCREENS, screenSize, TuiContext, type Kept, type KeyHandler, type Screen, type Tui } from './context.js';
+import { useBrain } from './brain.js';
+import { LEDGE_FOCUS, screenSize, TuiContext, type Focus, type Kept, type KeyHandler, type LaunchMode, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
-import { keepSelection, listed, overview } from './model/overview.js';
+import { listed } from './model/overview.js';
+import { focusKey, focusOrder, focusSession, keepFocus, leftRows } from './model/left.js';
 import { asked, notification, title, type NotifyMode } from './notify.js';
-import { Overview } from './screens/Overview.js';
+import { Home } from './screens/Home.js';
 import { SessionScreen } from './screens/Session.js';
-import { Ask } from './screens/Ask.js';
 import { Launch } from './screens/Launch.js';
 import { Settings } from './screens/Settings.js';
 import { Help } from './screens/Help.js';
@@ -61,12 +63,18 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const d = useDaemon();
   const machines = useMachines(client);
   const projects = useProjects(client);
-  const asks = useAsks(client);
+  const rigs = useRigs(client);
+  const escalations = useEscalations(client);
+  const openrig = useOpenRig(client);
+  const thread = useLedgeThread(client).items;
   const fleet = client.fleet as Fleet;
   const t = MESSAGES[lang];
-  const [screen, setScreen] = useState<Screen>('overview');
-  const [back, setBack] = useState<Screen>('overview');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [screen, setScreen] = useState<Screen>('home');
+  const [back, setBack] = useState<Screen>('home');
+  const [launchMode, setLaunchMode] = useState<LaunchMode>('session');
+  const [focus, setFocus] = useState<Focus>({ kind: 'ledge' });
+  const [ledgeFocus, setLedgeFocus] = useState<number>(LEDGE_FOCUS.left);
+  const brain = useBrain(client);
   const [lastToast, setToast] = useState<Toast | null>(null);
   const [editing, setEditingState] = useState(false);
   const keys = useRef<KeyHandler | null>(null);
@@ -82,14 +90,25 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const toast = useCallback((x: Toast) => setToast(x), []);
   const setEditing = useCallback((on: boolean) => setEditingState(on), []);
 
-  // The selection follows its session; the first one waiting for the user is chosen at start.
-  const view = useMemo(() => overview(d.sessions, projects, asks), [d.sessions, projects, asks]);
-  const order = useRef<string[]>([]);
+  // Ledge's row: what waits for the user (the open decisions, their rig), else what Ledge last said. Its count is the decisions
+  // open (pending or in Ledge's grace): the thread keeps no read mark yet.
+  const said = useMemo(() => { const x = [...thread].reverse().find(i => i.kind === 'ledge' && !i.pending); return x && x.kind === 'ledge' ? { text: x.text, at: x.at } : undefined; }, [thread]);
+  const ledge = useMemo(() => {
+    const l = ledgeLine(escalations, rigs, said);
+    const p = l.preview, on = 'rig' in p && p.rig ? ` · ${p.rig}` : '';
+    const preview = p.kind === 'decision' ? t.home.decision(p.count) + on : p.kind === 'grace' ? t.home.grace + on : p.kind === 'said' ? p.text : t.home.calm;
+    return { preview, ...(l.at ? { at: l.at } : {}), unread: l.unread };
+  }, [escalations, rigs, said, t]);
+  const left = useMemo(() => leftRows({ sessions: d.sessions, projects, rigs, escalations, openrig, ledge, t }), [d.sessions, projects, rigs, escalations, openrig, ledge, t]);
+  // The focus follows its row; a row gone, the one now at its place.
+  const order = useMemo(() => focusOrder(left), [left]);
+  const lastOrder = useRef(order);
   useEffect(() => {
-    setSelectedId(cur => cur === null && view.yours[0] ? view.yours[0].id : keepSelection(view.order, cur, order.current));
-    order.current = view.order;
-  }, [view]);
-  const selected = (selectedId ? d.byId.get(selectedId) : undefined) ?? null;
+    setFocus(cur => { const next = keepFocus(order, cur, lastOrder.current); return focusKey(next) === focusKey(cur) ? cur : next; });
+    lastOrder.current = order;
+  }, [order]);
+  const selected = focusSession(focus, left, d.byId);
+  const select = useCallback((id: string | null) => setFocus(id === null ? { kind: 'ledge' } : { kind: 'session', id }), []);
 
   // A new request rings (bell or OSC 9); the title counts who waits.
   const seen = useRef<Map<string, Session> | null>(null);
@@ -104,8 +123,9 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
 
   const actions = useActions({ client, sessions: d.sessions, errors: d.errors, t, toast });
 
-  const go = useCallback((next: Screen) => {
-    setScreen(cur => { if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'overview' : cur); return next; });
+  const go = useCallback((next: Screen, o: { launch?: LaunchMode } = {}) => {
+    if (next === 'launch' && o.launch) setLaunchMode(o.launch);
+    setScreen(cur => { if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'home' : cur); return next; });
   }, []);
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
@@ -138,8 +158,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const size = screenSize(useWindowSize(), env);
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
-    client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, selected, select: setSelectedId,
-    toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, keys, kept,
+    client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, launchMode, setLaunchMode, focus, setFocus, selected, select, left, rigs, escalations, openrig,
+    ledgeFocus, setLedgeFocus, brain, toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, keys, kept,
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
 
@@ -148,7 +168,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
       if (keys.current?.(input, key)) return;
       // A draft is not lost by reflex: the first ctrl+c says so, a second one within 2 s quits. A session gone since takes
       // its draft with it: there is nowhere to send it.
-      const drafts = [...kept.drafts].some(([id, x]) => x.trim() && (id === 'ask' || d.byId.has(id)));
+      const drafts = [...kept.drafts].some(([id, x]) => x.trim() && (id === 'ledge' || d.byId.has(id)));
       if (drafts && Date.now() - armed.current > QUIT_MS) {
         armed.current = Date.now();
         toast({ text: t.toast.draftQuit, tone: 'info', ms: QUIT_MS });
@@ -157,19 +177,30 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
       exit(); return;
     }
     // Too small, the field is not drawn: esc leaves it (the screen keeps the draft), or the screen.
-    if (editing) { if (small && key.escape && !keys.current?.(input, key)) go('overview'); return; }
+    if (editing) { if (small && key.escape && !keys.current?.(input, key)) { setLedgeFocus(LEDGE_FOCUS.left); go('home'); } return; }
     // Too small, the screen is not drawn: y, n, a… would act on a request out of view. esc and q still go.
     if (small && !key.escape && input !== 'q') return;
     if (keys.current?.(input, key)) return;
     if (input === 'q') { exit(); return; }
-    if (key.escape) { go(screen === 'help' || screen === 'settings' ? back : 'overview'); return; }
+    if (key.escape) { go(screen === 'help' || screen === 'settings' ? back : 'home'); return; }
     if (input === '?') { go('help'); return; }
     if (input === ',') { go('settings'); return; }
-    if (input === '/') { go('ask'); return; }
-    if (input === '+') { go('launch'); return; }
-    if (/^[1-5]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
+    // `/` writes to Ledge, from anywhere: the home on Ledge, its field.
+    if (input === '/') { setFocus({ kind: 'ledge' }); setLedgeFocus(LEDGE_FOCUS.field); go('home'); return; }
+    // + launches a session, a rig from the Rigs (a rig, one of its seats, the kernel chosen).
+    if (input === '+') { go('launch', { launch: focus.kind === 'rig' || focus.kind === 'seat' || focus.kind === 'kernel' ? 'rig' : 'session' }); return; }
+    // 1 Ledge, 2 the rig of the selection (else the first), 3 the session chosen.
+    if (input === '1') { setFocus({ kind: 'ledge' }); go('home'); return; }
+    if (input === '2') {
+      const mine = focus.kind === 'rig' || focus.kind === 'seat' ? order.find(f => f.kind === 'rig' && f.machine === focus.machine && f.rigId === focus.rigId)
+        : selected?.rig ? order.find(f => f.kind === 'rig' && f.machine === (selected.machineId ?? 'local') && f.rigId === selected.rig!.rigId) : undefined;
+      const rig = mine ?? order.find(f => f.kind === 'rig');
+      if (rig) { setFocus(rig); go('home'); }
+      return;
+    }
+    if (input === '3') { if (selected) go('session'); return; }
   });
 
-  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, help: Help }[screen];
+  const Body = { home: Home, session: SessionScreen, launch: Launch, settings: Settings, help: Help }[screen];
   return <TuiContext.Provider value={tui}><Body /></TuiContext.Provider>;
 }

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { isArchived, type ChatTurn, type LedgeThreadItem, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
+import { isArchived, type BrainStatus, type ChatTurn, type LedgeDecision, type LedgeRule, type LedgeThreadItem, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 
 /** A daemon `error` reply; `seq` tells two identical messages apart. */
@@ -21,7 +21,9 @@ export interface DaemonState {
   /** The live sessions (archived ones excluded). */
   sessions: Session[];
   /** The archived sessions, most recently archived first. */
-  archived: Session[]; byId: Map<string, Session>; status: DaemonStatus; previews: Map<string, string[]>; lastError: DaemonError | null;
+  archived: Session[]; byId: Map<string, Session>; status: DaemonStatus; previews: Map<string, string[]>;
+  /** The color preview (SGR sequences kept) of the session being followed, by qualified id. */
+  colorPreviews: Map<string, string[]>; lastError: DaemonError | null;
   /** Les ERRORS_KEPT derniers `error`, du plus ancien au plus récent; `lastError` est le dernier. */
   errors: readonly DaemonError[];
   /** Native tracking: the threads received so far, by session (asked for when a session opens). */
@@ -42,12 +44,15 @@ export interface DaemonState {
   ledgeThread: LedgeThreadItem[]; threadBefore?: string; threadLoading: boolean;
   /** The escalation answers sent, by rid, with the daemon's `rig.result` once it came. */
   answering: Map<string, AnswerAttempt>;
+  /** Ledge's brain (lot 7, local daemon only): the mandate file, the rules and the decisions (newest first, as sent), the brain's state.
+   *  Each message replaces what was held; a snapshot keeps them (the daemon sends them again after it on a new connection). */
+  mandate: { text: string; path: string } | undefined; rules: LedgeRule[]; decisions: LedgeDecision[]; brain: BrainStatus | undefined;
   /** The daemon's last update.progress / update.failed message; `seq` tells two identical ones apart. */
   lastUpdate: { msg: Extract<ServerMessage, { type: 'update.progress' | 'update.failed' }>; seq: number } | null;
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, ledgeThread: [], threadLoading: false, answering: new Map(), lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), colorPreviews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, ledgeThread: [], threadLoading: false, answering: new Map(), lastUpdate: null, mandate: undefined, rules: [], decisions: [], brain: undefined });
 const archivedOf = (m: Map<string, Session>) => [...m.values()].filter(isArchived).sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '') || a.id.localeCompare(b.id));
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
@@ -84,6 +89,10 @@ export const daemonStore = {
       const a = state.answering.get(m.rid); if (!a) return;
       state = { ...state, answering: new Map(state.answering).set(m.rid, { ...a, result: { ok: m.ok, ...(m.code ? { code: m.code } : {}), ...(m.reason ? { reason: m.reason } : {}) } }) }; emit(); return;
     }
+    if (m.type === 'mandate') { state = { ...state, mandate: { text: m.text, path: m.path } }; emit(); return; }
+    if (m.type === 'rules') { state = { ...state, rules: m.items }; emit(); return; }
+    if (m.type === 'decisions') { state = { ...state, decisions: m.items }; emit(); return; }
+    if (m.type === 'brain.status') { state = { ...state, brain: m.status }; emit(); return; }
     if (m.type === 'chat.history') { state = { ...state, chat: m.turns, chatLive: null }; emit(); return; }
     if (m.type === 'chat.step' || m.type === 'chat.delta' || m.type === 'chat.done' || m.type === 'chat.error') {
       const chat = state.chat.map(t => t.qid !== m.qid ? t
@@ -101,11 +110,12 @@ export const daemonStore = {
     if (m.type === 'folder.listing') { const { type: _, ...l } = m; state = { ...state, lastListing: { ...l, seq: (state.lastListing?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'update.progress' || m.type === 'update.failed') { state = { ...state, lastUpdate: { msg: m, seq: (state.lastUpdate?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'recents') { state = { ...state, recents: m.recents }; emit(); return; }
-    const byId = new Map(state.byId); const previews = new Map(state.previews); const threads = new Map(state.threads);
+    const byId = new Map(state.byId); const previews = new Map(state.previews); const colorPreviews = new Map(state.colorPreviews); const threads = new Map(state.threads);
     let { recents, launcher, daemon, snapshotSeq } = state;
     switch (m.type) {
       case 'snapshot':
         byId.clear(); for (const s of m.sessions) byId.set(s.id, s); for (const id of previews.keys()) if (!byId.has(id)) previews.delete(id);
+        for (const id of colorPreviews.keys()) if (!byId.has(id)) colorPreviews.delete(id);
         recents = m.recents ?? []; launcher = m.launcher ?? null;
         daemon = m.daemon ?? null; snapshotSeq += 1;
         // A session frozen by keepStale (spec 2026-10-14 §6) keeps the thread already received: its machine cannot be
@@ -113,8 +123,9 @@ export const daemonStore = {
         for (const id of [...threads.keys()]) if (!byId.get(id)?.offline) threads.delete(id);
         break;
       case 'session.updated': byId.set(m.session.id, m.session); break;
-      case 'session.removed': byId.delete(m.id); previews.delete(m.id); threads.delete(m.id); break;
+      case 'session.removed': byId.delete(m.id); previews.delete(m.id); colorPreviews.delete(m.id); threads.delete(m.id); break;
       case 'session.preview': previews.set(m.id, m.lines); break;
+      case 'session.preview.color': colorPreviews.set(m.id, m.lines); break;
       case 'session.thread': threads.set(m.id, m.items); break;
       case 'session.thread.item': {
         const cur = threads.get(m.id);
@@ -124,7 +135,7 @@ export const daemonStore = {
         break;
       }
     }
-    state = { ...state, byId, previews, threads, sessions: sorted(byId), archived: archivedOf(byId), recents, launcher, daemon, snapshotSeq }; emit();
+    state = { ...state, byId, previews, colorPreviews, threads, sessions: sorted(byId), archived: archivedOf(byId), recents, launcher, daemon, snapshotSeq }; emit();
   }
 };
 

@@ -25,6 +25,11 @@ describe('isStandalone', () => {
   it('seat paired to another session: standalone', () => expect(isStandalone(sess('local:other', 'idle', R('local', 'r-s')), [STARTER])).toBe(true));
   it('any seat of a kernel counts, hidden ones included', () => expect(isStandalone(sess('local:adv', 'idle', R('local', 'k')),
     [rig('local', 'k', { kernel: true, seats: [seat('advisor', { sessionId: 'local:adv' })] })])).toBe(false));
+  it('the brain session is never standalone, with or without rigs', () => {
+    const brain = { ...sess('local:brain', 'idle'), brain: true } as Session;
+    expect(isStandalone(brain, [])).toBe(false);
+    expect(isStandalone(brain, [STARTER])).toBe(false);
+  });
 });
 
 describe('rigsModel', () => {

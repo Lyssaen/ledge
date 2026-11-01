@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { isPending, putImage, splitId } from '@ledge/fleet';
+import { isPending, putImage, sayToLedge, splitId, useColorPreview } from '@ledge/fleet';
 import { offers, type Pending, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
@@ -20,6 +20,7 @@ import { Tail } from '../ui/Tail.js';
 import { Field, fieldRows } from '../ui/Field.js';
 import { layout } from '../model/field.js';
 import type { Messages } from '../i18n/lang.js';
+import { OmpBox } from '../ui/OmpBox.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
 type Mode = 'read' | 'reply' | 'note' | 'model';
@@ -32,7 +33,7 @@ export function SessionScreen() {
 }
 
 function SessionView({ s }: { s: Session }) {
-  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone } = useTui();
+  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone, rigs, setFocus, go } = useTui();
   const { columns, rows } = useScreenSize();
   const [mode, setMode] = useState<Mode>('read');
   // The draft outlives the field, the screen and ctrl+c: it is kept by the TUI, by session.
@@ -42,6 +43,7 @@ function SessionView({ s }: { s: Session }) {
   const [diffs, setDiffs] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
   const [terminal, setTerminal] = useState(false);
+  const colored = useColorPreview(client, terminal && s.tool !== 'omp' ? s.id : null);
   // The line at the top of the box once scrolled, as an item and a line in it, so that a resize, a fold or new lines below
   // keep it in place; null follows the bottom of the thread.
   const [anchor, setAnchor] = useState<{ key: string; offset: number } | null>(null);
@@ -74,11 +76,17 @@ function SessionView({ s }: { s: Session }) {
   const openImage = useOpenImage();
 
   const machine = splitId(s.id)?.machine ?? 'local';
+  // A rig seat: written to through Ledge (`@seat@rig`, always the long form), its lifecycle left to OpenRig.
+  const seat = s.rig ? (() => {
+    const r = s.rig!, mine = rigs.find(x => x.machine === r.machine && x.id === r.rigId);
+    const address = mine?.seats.find(x => x.ref === r.seat)?.address ?? `@${r.member}`;
+    return { rigId: r.rigId, rigName: r.rigName, machine: r.machine, address, long: `${address}@${mine?.name ?? r.rigName}`, remote: r.machine !== 'local', label: `${g.rig} ${r.rigName}` };
+  })() : null;
   const canSwitch = machines.find(m => m.id === machine)?.daemon?.modelSwitch === true;
 
   /** false when refused at once: the field keeps the text. */
   const send = (text: string, { fromHistory }: { fromHistory: boolean }): boolean => {
-    const withImages = mode === 'reply' && !fromHistory && chips.items.length > 0;
+    const withImages = mode === 'reply' && !seat && !fromHistory && chips.items.length > 0;
     if (!text.trim() && !withImages) { setMode('read'); return true; }
     // An image still uploading or refused holds the send; a dialog question takes words only, the image waits.
     if (withImages && !chips.ready) return false;
@@ -87,6 +95,15 @@ function SessionView({ s }: { s: Session }) {
     const taken = withImages ? chips.clear() : [];
     const back = (x: string) => { if (!kept.drafts.get(s.id)) setDraft(x); if (taken.length) chips.putBack(taken); };
     const how = taken.length ? { attachments: taken.flatMap(c => (c.id ? [c.id] : [])) } : undefined;
+    if (seat && mode === 'reply') {
+      // The connection may have dropped while the user was typing: retain the draft until Ledge can accept it.
+      if (s.offline || !machines.find(m => m.id === 'local')?.ready) { toast({ text: t.toast.offline(s.name), tone: 'info' }); return false; }
+      sayToLedge(client, `${seat.long} ${text.trim()}`);
+      kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
+      if (!fromHistory) setDraft('');
+      setMode('read');
+      return true;
+    }
     if (!(mode === 'note' ? actions.denyWithNote(s, text.trim(), back) : actions.reply(s, text, back, how))) { if (taken.length) chips.putBack(taken); return false; }
     if (text.trim()) kept.sent.set(s.id, [...(kept.sent.get(s.id) ?? []), text]);
     // An entry of the history sent again leaves the draft as it was.
@@ -101,7 +118,7 @@ function SessionView({ s }: { s: Session }) {
   useInput((input, key) => {
     if (key.meta && input === 'v') paste();
     else if ((key.backspace || key.delete) && draft === '') chips.removeLast();
-  }, { isActive: mode === 'reply' });
+  }, { isActive: mode === 'reply' && !seat });
 
   useScreenKeys((input, key) => {
     if (mode === 'model') return true;
@@ -112,6 +129,9 @@ function SessionView({ s }: { s: Session }) {
       if (key.escape) { leave(); return true; }
       return false;
     }
+    if (key.leftArrow && seat) { setFocus({ kind: 'rig', machine: seat.machine, rigId: seat.rigId }); go('home'); return true; }
+    // The OMP pane (t) scrolls itself.
+    if (terminal && s.tool === 'omp' && (key.pageUp || key.pageDown)) return false;
     if (key.pageUp) { scroll(up + view - 1); return true; }
     if (key.pageDown) { scroll(up - view + 1); return true; }
     if (input === 'k' || key.upArrow) { scroll(up + 1); return true; }
@@ -123,11 +143,14 @@ function SessionView({ s }: { s: Session }) {
     if (input === 'o' && images.length) { openImage(images); return true; }
     if (input === 'a') { attach(s); return true; }
     if (input === 'i') { actions.interrupt(s); return true; }
-    if (input === 'm') {
+    // A rig seat's model is OpenRig's (the daemon refuses session.model with rig_managed): no m.
+    if (input === 'm' && !s.rig) {
       if (!canSwitch) toast({ text: t.toast.modelSwitch, tone: 'info' }); else setMode('model');
       return true;
     }
     if (input === 'r' || key.return) {
+      // The local daemon only resolves its own seats: a remote rig's seat is written to from its own machine.
+      if (seat?.remote && !(p && p.kind !== 'question' && input === 'r' && offers(s.tool, p.kind, 'note'))) { if (!(p && p.kind !== 'question')) toast({ text: t.session.seatRemote, tone: 'info' }); return true; }
       if (s.offline) { toast({ text: t.toast.offline(s.name), tone: 'info' }); return true; }
       if (s.source === 'hook_only') { toast({ text: t.toast.readOnly(s.name), tone: 'info' }); return true; }
       const note = p && p.kind !== 'question' && input === 'r';
@@ -142,14 +165,14 @@ function SessionView({ s }: { s: Session }) {
     return false;
   });
 
-  const title = `${s.name} · ${oneLine(s.topic ?? s.title)} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
+  const title = `${seat ? `${s.name} · ${seat.address} · ${seat.label}` : `${s.name} · ${oneLine(s.topic ?? s.title)}`} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
   const showsThread = mode !== 'model' && !terminal && !!items && lines.length > 0;
   const above = lines.length - view - up;
   const foot = up > 0 ? t.session.scrolled(above, up) : lines.length > view ? t.session.above(lines.length - view) : undefined;
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
     : mode !== 'read' && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
-    : mode !== 'read' ? [['↵', t.keys.sendOnly], ...(mode === 'reply' ? [['alt+v', t.keys.image] as const] : []), ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
-    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
+    : mode !== 'read' ? [['↵', t.keys.sendOnly], ...(mode === 'reply' && !seat ? [['alt+v', t.keys.image] as const] : []), ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
+    : [['esc', t.keys.back], ...(seat ? [['←', seat.label] as const] : []), ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ...(terminal && s.tool === 'omp' ? [] : [['j k', t.keys.scroll] as const]), [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ...(s.rig ? [] : [['m', t.keys.model] as const]), ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
   // The rows, in this order: the request (its keys left out while writing), the field, the thread with what is left, drawn
   // only with room for a line. The request is cut only when even that does not fit.
   const editing = mode === 'reply' || mode === 'note';
@@ -164,12 +187,12 @@ function SessionView({ s }: { s: Session }) {
   const room = body - below - (request ? askRows(request, inner) : 0);
   const drawsThread = mode === 'model' || room >= 3;
   return (
-    <Frame crumb={`${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} crumbShort={s.name} keys={keys} kept={draft !== ''}>
-      {drawsThread ? <TitledBox title={terminal ? t.overview.terminal(paneName(s)) : title} flexGrow={1} minHeight={3} foot={showsThread ? foot : undefined}>
+    <Frame crumb={seat ? `${t.home.rigs} › ${seat.label} › ${seat.address} › ${s.name} · ${machineLabel(s)}` : `${s.repo ?? s.project}${s.branch ? ` › ${g.branch} ${s.branch}` : ''} › ${s.name} · ${machineLabel(s)}`} crumbShort={s.name} keys={keys} kept={draft !== ''}>
+      {drawsThread && terminal && s.tool === 'omp' && mode !== 'model' ? <OmpBox key={s.id} s={s} /> : drawsThread ? <TitledBox title={terminal ? `${t.overview.terminal(paneName(s))}${colored ? ` ${t.overview.inColor}` : ''}` : title} flexGrow={1} minHeight={3} foot={showsThread ? foot : undefined}>
         {mode === 'model'
           ? <ModelPicker machine={machine} tool={s.tool} current={{ model: s.model ?? null, effort: s.effort ?? null }} onCancel={() => setMode('read')}
             onPick={pick => { client.send({ type: 'session.model', id: s.id, model: pick.model, effort: pick.effort }); toast({ text: t.toast.model(s.name, pick.model ?? t.session.defaultModel), tone: 'ok' }); setMode('read'); }} />
-          : terminal ? <Tail lines={d.previews.get(s.id) ?? []} color={C.dim} empty={t.overview.noPreview} emptyColor={C.faint} />
+          : terminal ? <Tail lines={colored ?? d.previews.get(s.id) ?? []} ansi={colored !== undefined} color={C.dim} empty={t.overview.noPreview} emptyColor={C.faint} />
           : !items ? <Text color={C.faint}>{t.session.loading}</Text>
           : lines.length === 0 ? <Text color={C.faint}>{t.session.empty}</Text>
           : <Lines lines={lines} up={up} onHeight={setView} />}
@@ -177,11 +200,11 @@ function SessionView({ s }: { s: Session }) {
       {p && request ? <PendingBox s={s} a={request} /> : null}
       <ChipsLine chips={chips.items} />
       {mode === 'reply' || mode === 'note'
-        ? <Field title={mode === 'note' ? t.session.noteTitle(s.name) : t.session.replyTitle(s.name)} value={draft} onChange={setDraft} onSubmit={send} onEscape={leave}
-          onBrowse={setBrowsing} history={kept.sent.get(s.id) ?? []} active placeholder={mode === 'note' ? t.session.noteFor(s.name) : t.session.replyTo(s.name)} />
+        ? <Field title={mode === 'note' ? t.session.noteTitle(s.name) : seat ? t.session.seatTitle(s.name, seat.address, seat.rigName) : t.session.replyTitle(s.name)} value={draft} onChange={setDraft} onSubmit={send} onEscape={leave}
+          onBrowse={setBrowsing} history={kept.sent.get(s.id) ?? []} active placeholder={mode === 'note' ? t.session.noteFor(s.name) : seat ? t.session.seatPlaceholder(s.name) : t.session.replyTo(s.name)} foot={seat && mode === 'reply' ? t.session.seatFoot : undefined} />
         // Read: the draft kept, its first line dimmed; or what r does.
-        : <TitledBox title={draft ? t.session.writeDraft : t.keys.write} foot={draft ? t.session.draftLines(draft.split('\n').length) : undefined} flexShrink={0}>
-          <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>{draft ? <Text color={C.dim}>{draft.split('\n')[0]}</Text> : <Text color={C.faint}>{t.session.replyTo(s.name)}</Text>}</Text>
+        : <TitledBox title={draft ? t.session.writeDraft : seat && !seat.remote ? t.session.seatTitle(s.name, seat.address, seat.rigName) : t.keys.write} foot={draft ? t.session.draftLines(draft.split('\n').length) : seat && !seat.remote ? t.session.seatFoot : undefined} flexShrink={0}>
+          <Text wrap="truncate"><Text color={C.coral}>{g.cursor} </Text>{draft ? <Text color={C.dim}>{draft.split('\n')[0]}</Text> : <Text color={C.faint}>{seat ? (seat.remote ? t.session.seatRemote : t.session.seatPlaceholder(s.name)) : t.session.replyTo(s.name)}</Text>}</Text>
         </TitledBox>}
     </Frame>
   );

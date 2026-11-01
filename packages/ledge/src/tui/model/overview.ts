@@ -1,16 +1,20 @@
 import { isPending, liveHelpers, splitId } from '@ledge/fleet';
 import type { FleetAsk } from '@ledge/fleet';
-import { askShown, contextNear, projectOf, type Project, type ProjectColor, type Projects, type Session } from '@ledge/protocol';
+import { askShown, contextNear, projectOf, type Escalation, type Project, type ProjectColor, type Projects, type Rig, type Session } from '@ledge/protocol';
+import { isStandalone } from '@ledge/ui/rigs/model';
 
 /** A session row of the tree under its branch. */
 export interface BranchRow { branch: string; sessions: Session[] }
 /** A project of the tree: a project of the daemon's list, or a repository outside any (`color` absent). */
 export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number }
 export interface Overview {
-  /** The sessions waiting for the user, the oldest request first. */
+  /** The standalone sessions waiting for the user, the oldest request first. */
   yours: Session[];
+  /** The escalations waiting for the user or in Ledge's grace (decisions, of every source), the oldest first: « À toi » lists them before the sessions. */
+  escalations: Escalation[];
   /** The decisions waiting for the user (`ledge ask`), oldest first: also items of « À toi ». */
   asks: FleetAsk[];
+  /** The standalone sessions (a session paired to a running rig seat is under its rig, not here). */
   tree: ProjectNode[];
   /** Every session in the order `j`/`k` walks them: the tree's order. */
   order: string[];
@@ -22,10 +26,16 @@ export const listed = (sessions: readonly Session[]): Session[] => sessions.filt
 
 const machineOf = (s: Session): string => s.machineId ?? splitId(s.id)?.machine ?? 'local';
 
+/** The escalations « À toi » lists: decisions still open (pending, or in Ledge's grace), the oldest first. */
+export const openEscalations = (escalations: readonly Escalation[]): Escalation[] =>
+  escalations.filter(e => e.intent === 'decision' && (e.state === 'pending' || e.state === 'grace'))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+
 /** The tree: the daemon's projects in their order, then repositories outside any project in the order their first session
- *  started; inside each, branches in the order their first session started. A session without a branch sits under « - ». */
-export function overview(sessions: readonly Session[], projects: Projects | null, asks: readonly FleetAsk[] = []): Overview {
-  const live = listed(sessions);
+ *  started; inside each, branches in the order their first session started. A session without a branch sits under « - ».
+ *  Only standalone sessions are listed: a seat's session goes under its rig. */
+export function overview(sessions: readonly Session[], projects: Projects | null, asks: readonly FleetAsk[] = [], rigs: readonly Rig[] = [], escalations: readonly Escalation[] = []): Overview {
+  const live = listed(sessions).filter(s => isStandalone(s, rigs));
   const yours = live.filter(isPending).sort((a, b) => a.lastActivityAt.localeCompare(b.lastActivityAt) || a.id.localeCompare(b.id));
   const nodes = new Map<string, ProjectNode>();
   const known = new Map<string, Project>((projects?.projects ?? []).map(p => [p.id, p]));
@@ -42,7 +52,7 @@ export function overview(sessions: readonly Session[], projects: Projects | null
   }
   const tree = [...nodes.values()].filter(n => n.count > 0);
   const order = tree.flatMap(n => n.branches.flatMap(b => b.sessions.map(s => s.id)));
-  return { yours, asks: asks.filter(askShown).sort((a, b) => a.at.localeCompare(b.at)), tree, order, machines: new Set(live.map(machineOf)).size };
+  return { yours, escalations: openEscalations(escalations), asks: asks.filter(askShown).sort((a, b) => a.at.localeCompare(b.at)), tree, order, machines: new Set(live.map(machineOf)).size };
 }
 
 /** The live helpers' count shown as `+n` next to a session. */

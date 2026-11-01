@@ -55,6 +55,9 @@ export interface Bridge {
   /** The reply row noted for an escalation (openrig.json `replyRows`). */
   replyRow(id: string): string | undefined;
   setReplyRow(id: string, row: string): void;
+  /** Whether the seat took the reply row already (Revenir dessus): its row is no longer `pending` in `GET /api/queue/list`. A row
+   *  read as '?', not found, on another machine, or unreadable counts as claimed: a correction is never sent blindly. */
+  replyClaimed(machine: string, replyRowId: string): Promise<boolean>;
   /** Messages to replay after each `snapshot`: openrig.status, rig.snapshot, then one escalation.updated per escalation. */
   replay(): BridgeMessage[];
   /** OpenRig's human queue was read at least once: an id missing from escalations() is not open there (before, it may only be unread). */
@@ -374,7 +377,8 @@ export function createBridge(deps: BridgeDeps): Bridge {
       for (const k of Object.keys(p) as (keyof Escalation)[]) if (p[k] === undefined) delete next[k];
       const b = booked(id);
       if (b && isDeepStrictEqual(b, next)) overlay.delete(id);
-      else if (!b && (next.state === 'pending' || next.state === 'grace') && !next.answer) { overlay.delete(id); emit({ type: 'escalation.removed', id }); return next; }
+      // A card reopened by « Revenir dessus » (`correcting`) keeps its overlay though its row is closed in OpenRig.
+      else if (!b && (next.state === 'pending' || next.state === 'grace') && !next.answer && !next.correcting) { overlay.delete(id); emit({ type: 'escalation.removed', id }); return next; }
       else overlay.set(id, { e: next, at: Date.parse(now()) });
       emit({ type: 'escalation.updated', escalation: next });
       return next;
@@ -382,6 +386,11 @@ export function createBridge(deps: BridgeDeps): Bridge {
     humanRead: () => humanRead,
     replyRow: id => cursorFile().replyRow(id),
     setReplyRow: (id, row) => cursorFile().setReplyRow(id, row),
+    async replyClaimed(m, row) {
+      if (m !== machine || row === '?' || !http) return true;
+      try { const r = (await http.queue({})).find(x => x.qitemId === row); return !r || r.state !== 'pending'; }
+      catch (e) { log(`openrig: reply row ${row} unreadable, taken as claimed: ${(e as Error).message}`); return true; }
+    },
     replay() {
       return [{ type: 'openrig.status', status }, { type: 'rig.snapshot', machine, rigs: rigsNow() },
         ...escalations().map((escalation): BridgeMessage => ({ type: 'escalation.updated', escalation }))];

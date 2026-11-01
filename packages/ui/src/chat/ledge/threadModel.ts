@@ -10,7 +10,7 @@ export type ThreadRow =
   | { kind: 'user'; item: Item<'user'>; to?: string }
   | { kind: 'ledge'; item: Item<'ledge'>; turn?: ChatTurn }
   | { kind: 'escalation'; item: Item<'escalation'>; escalation?: Escalation }
-  /** `to`: the seat the decision answered (the escalation's `from` without its rig), when the escalation is still known. */
+  /** `to`: the seat the decision answered without its rig (the decision's `from`, else its escalation's while still known). */
   | { kind: 'decided'; item: Item<'decided'>; decision?: LedgeDecision; to?: string }
   | { kind: 'exchanges'; item: Item<'exchanges'>; exchanges: Exchange[]; missing: number }
   /** An existing action card (`ChatAction`), drawn by the app. */
@@ -70,7 +70,8 @@ export function threadRows(items: readonly LedgeThreadItem[], ctx: ThreadContext
       }
       case 'decided': {
         const decision = ctx.decisions?.get(item.decisionId);
-        const from = decision ? ctx.escalations.get(decision.escalationId)?.from : undefined;
+        // The seat: the decision's own (lot 7), else its escalation's while it is still known.
+        const from = decision ? decision.from ?? ctx.escalations.get(decision.escalationId)?.from : undefined;
         rows.push({ kind: 'decided', item, ...(decision ? { decision } : {}), ...(from ? { to: seatName(from) } : {}) }); break;
       }
       case 'exchanges': {

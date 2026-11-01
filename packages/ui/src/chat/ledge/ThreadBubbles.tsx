@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { BRAIN_STOPPED_TEXT } from '@ledge/protocol';
 import { useLedgeThreadCopy } from './copy';
 import { hhmm } from './threadModel';
 
@@ -25,6 +26,21 @@ export function UserBubble({ at, text, to }: { at: string; text: string; to?: st
         <div className="lt-bubble" data-author="user">{to && <span className="lt-to mono">{to} </span>}{text}</div>
         <div className="lt-meta"><span>{copy.bubbles.you}</span><span aria-hidden> · </span><time dateTime={at}>{hhmm(at)}</time></div>
       </div>
+    </div>
+  );
+}
+
+/** Whether a Ledge bubble is the daemon's « Ledge est arrêté · Démarrer » (lot 7): the app draws `BrainStopped` instead of the text. */
+export const isBrainStopped = (text: string): boolean => text === BRAIN_STOPPED_TEXT;
+
+/** « Ledge est arrêté » and « Démarrer », which turns the brain on (`onStartBrain` sends `brain.set { enabled: true }`); no button
+ *  without `onStartBrain` (the brain runs), a disabled one while `starting` (sent, no new status yet). */
+export function BrainStopped({ onStartBrain, starting }: { onStartBrain?: () => void; starting?: boolean }) {
+  const copy = useLedgeThreadCopy();
+  return (
+    <div className="lt-brain-stopped">
+      <span>{copy.brain.stopped}</span>
+      {onStartBrain && <button type="button" className="ledge-btn lt-btn" data-variant="outline" disabled={starting} onClick={onStartBrain}>{copy.brain.start}</button>}
     </div>
   );
 }

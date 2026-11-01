@@ -584,3 +584,15 @@ describe('chat.done without team or tasks', () => {
 describe('rig_managed refusal', () => {
   it('RefusalCodeSchema knows rig_managed', () => expect(RefusalCodeSchema.parse('rig_managed')).toBe('rig_managed'));
 });
+
+describe('color preview', () => {
+  it('session.preview.subscribe parses with color true and id null', () => {
+    expect(ClientMessageSchema.parse({ type: 'session.preview.subscribe', id: 's1', color: true })).toEqual({ type: 'session.preview.subscribe', id: 's1', color: true });
+    expect(ClientMessageSchema.parse({ type: 'session.preview.subscribe', id: null, color: true }).type).toBe('session.preview.subscribe');
+    expect(ClientMessageSchema.safeParse({ type: 'session.preview.subscribe', id: 's1', color: false }).success).toBe(false);
+  });
+  it('session.preview.color and the colorPreview flag parse', () => {
+    expect(ServerMessageSchema.parse({ type: 'session.preview.color', id: 's1', lines: ['\x1b[32mok\x1b[0m'] }).type).toBe('session.preview.color');
+    expect(DaemonInfoSchema.parse({ version: '1', install: 'npm', systemd: false, colorPreview: true }).colorPreview).toBe(true);
+  });
+});

@@ -44,6 +44,7 @@ describe('rigs model', () => {
     expect(ph({ state: 'working' }).state).toBe('working');
     expect(ph({ state: 'idle' }).state).toBe('idle');
     expect(ph({ state: 'crashed' }).state).toBe('error');
+    expect(ph({ state: 'attention' }).state).toBe('error');
     expect(ph({ state: 'stopped' }).state).toBe('exited');
     expect(ph({ state: 'unreachable' }).offline).toBe(true);
     expect(ph({ state: 'ready' }).offline).toBeUndefined();
@@ -55,7 +56,7 @@ describe('rigs model', () => {
   });
 
   it('workingCount et readyCount', () => {
-    const r = rig({ seats: [seat('a', { state: 'working' }), seat('b', { state: 'idle' }), seat('c', { state: 'ready' }), seat('d', { state: 'crashed' }), seat('e', { state: 'trust' })] });
+    const r = rig({ seats: [seat('a', { state: 'working' }), seat('b', { state: 'idle' }), seat('c', { state: 'ready' }), seat('d', { state: 'crashed' }), seat('e', { state: 'trust' }), seat('f', { state: 'attention' })] });
     expect(workingCount(r)).toBe(1);
     expect(readyCount(r)).toBe(3);
   });
@@ -68,7 +69,7 @@ describe('rigs model', () => {
   });
 
   it('SEAT_ORDER', () => {
-    expect(SEAT_ORDER).toEqual(['working', 'trust', 'starting', 'ready', 'idle', 'crashed', 'unreachable', 'stopped']);
+    expect(SEAT_ORDER).toEqual(['working', 'trust', 'attention', 'starting', 'ready', 'idle', 'crashed', 'unreachable', 'stopped']);
   });
 
   it('allSeats exclut le noyau et trie au travail d’abord, puis par nom', () => {

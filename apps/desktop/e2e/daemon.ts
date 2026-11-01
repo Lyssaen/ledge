@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { Ask, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, IslandPrefs, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigPlan, RigResultCode, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { Ask, BrainStatus, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, LedgeDecision, LedgeRule, IslandPrefs, MandateCategory, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigPlan, RigResultCode, RigSpecInfo, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -9,6 +9,37 @@ export const T0 = new Date(Date.now() - 5 * 60_000).toISOString();
 export const ROUTING: DaemonInfo = { version: '0.6.0', install: 'npm', systemd: true, routing: true };
 export function session(id: string, extra: Partial<Session> = {}): Session {
   return { id, name: 'Otto', tool: 'claude', cwd: '/w/harness-assistant', project: 'harness-assistant', title: 'Otto · harness-assistant', tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra };
+}
+
+/** The mandate the daemon writes at first start (`~/.ledge/mandat.md`, packages/ledge/src/daemon/brain/mandate.ts). */
+export const DEFAULT_MANDATE = `# Le mandat de Ledge
+
+Ledge tranche seul ce qui est dans la première liste. Tout le reste te revient.
+Une ligne = une catégorie : \`- <id> : <description>\`. Les catégories design, architecture et critique te reviennent toujours, même déplacées.
+
+## Ledge tranche seul
+- git : git et branches
+- tests : tests et relectures
+- context : contexte et relèves
+- code : petits choix de code
+
+## Te revient toujours
+- design : design (UI, copie)
+- architecture : architecture (stockage, API)
+- critical : critique (données, sécurité, suppression, coûts)
+`;
+
+/** Moves the line of `c` from « Ledge tranche seul » to the end of « Te revient toujours », as the daemon's `escalateCategory` does. */
+function escalateLine(text: string, c: MandateCategory): string {
+  const lines = text.split('\n');
+  const at = lines.findIndex(l => new RegExp(`^\\s*[-*]\\s+${c}\\s+:`).test(l));
+  const user = lines.findIndex(l => /^#+\s*te revient toujours/i.test(l.trim()));
+  if (at < 0 || user < 0 || at > user) return text;
+  const [line] = lines.splice(at, 1);
+  let end = user; // the heading moved up by one
+  while (end + 1 < lines.length && /^\s*[-*]\s+/.test(lines[end + 1]!)) end++;
+  lines.splice(end + 1, 0, line!);
+  return lines.join('\n');
 }
 
 /** A folder of the fake daemon's disk: its parent (null at `/`), its subfolders by name, the Git repositories among them with their branch. */
@@ -47,8 +78,15 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  is accepted after `extras.answerDelayMs` (`escalation.updated` answered, `rig.result` ok), a later one gets `rig.result` `already_answered`. A `ledge.say` adds the
  *  user's item (`to` for a leading `@seat`, which is all it does), else plays `extras.chat` as `chat.ask` does (`chat.history` first) and finishes Ledge's bubble.
  *  `pushEscalation`, `pushExchange` and `threadItem` play the later news. Every client message is kept in `received`.
+ *  Ledge's brain (lot 7), only with `extras.brain`: after the escalations, `brain.status`, `mandate` (`extras.brain.mandate`, default DEFAULT_MANDATE,
+ *  at `/home/me/.ledge/mandat.md`), `rules` and `decisions`, then the thread, as the daemon sends them. Each of these is answered `rig.result` ok
+ *  (`invalid` for an unknown rule or decision): `brain.set` broadcasts the new `brain.status` (`on` or `off`; `first` also posts Ledge's activation
+ *  bubble); `category.escalate` moves the category's line to « Te revient toujours » and `mandate.update` replaces the text, both broadcast as
+ *  `mandate`; `rule.set` validates (`active`) or drops (`rejected`) the rule, broadcast as `rules`; `decision.revisit` reopens the decision's
+ *  escalation (`pending`, `correcting` = the decision, no answer) with a new thread item. An answer to a `correcting` escalation records the
+ *  user's decision and marks the old one `revisitedBy` it (`decisions`).
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>>; rigAct?: { ok: false; code: RigResultCode; reason?: string } } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>>; rigAct?: { ok: false; code: RigResultCode; reason?: string }; brain?: { status: BrainStatus; mandate?: string; rules?: LedgeRule[]; decisions?: LedgeDecision[] } } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -66,6 +104,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   const thread: LedgeThreadItem[] = [...(extras.thread ?? [])];
   let says = 0;
   const plans = new Map<string, RigPlan | 'used'>();
+  const brain = extras.brain ? { status: extras.brain.status, mandate: extras.brain.mandate ?? DEFAULT_MANDATE, rules: [...(extras.brain.rules ?? [])], decisions: [...(extras.brain.decisions ?? [])] } : null;
+  let items = 0;
   const turns = new Map<string, ChatTurn>();
   const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>();
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
@@ -81,6 +121,12 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     for (const r of rigs.values()) byMachine.set(r.machine, [...(byMachine.get(r.machine) ?? []), r]);
     for (const [machine, list] of byMachine) ws.send(JSON.stringify({ type: 'rig.snapshot', machine, rigs: list }));
     for (const escalation of escalations.values()) ws.send(JSON.stringify({ type: 'escalation.updated', escalation }));
+    if (brain) {
+      ws.send(JSON.stringify({ type: 'brain.status', status: brain.status }));
+      ws.send(JSON.stringify({ type: 'mandate', text: brain.mandate, path: '/home/me/.ledge/mandat.md' }));
+      ws.send(JSON.stringify({ type: 'rules', items: brain.rules }));
+      ws.send(JSON.stringify({ type: 'decisions', items: brain.decisions }));
+    }
     ws.send(JSON.stringify({ type: 'ledge.thread.history', items: thread }));
     ws.onMessage(m => {
       let msg: ClientMessage;
@@ -201,6 +247,46 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
         setTimeout(() => { try { ws.send(JSON.stringify(answer)); } catch { /* the page is gone */ } }, extras.scanDelayMs ?? 0);
       }
       if (msg.type === 'ledge.thread.request') ws.send(JSON.stringify({ type: 'ledge.thread.history', items: msg.before === undefined ? thread : [], ...(msg.before === undefined ? {} : { before: msg.before }) }));
+      // Lot 7: the brain, the mandate and the memory (only with `extras.brain`).
+      if (brain && (msg.type === 'brain.set' || msg.type === 'category.escalate' || msg.type === 'mandate.update' || msg.type === 'rule.set' || msg.type === 'decision.revisit')) {
+        const b = brain;
+        const result = (ok: boolean, reason?: string) => ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok, ...(ok ? {} : { code: 'invalid' }), ...(reason ? { reason } : {}) }));
+        const at = new Date().toISOString();
+        if (msg.type === 'brain.set') {
+          b.status = { ...b.status, enabled: msg.enabled, state: msg.enabled ? 'on' : 'off', ...(msg.tool ? { tool: msg.tool } : {}) };
+          ws.send(JSON.stringify({ type: 'brain.status', status: b.status }));
+          if (msg.first && msg.enabled) {
+            const item: LedgeThreadItem = { kind: 'ledge', id: `brain-${++items}`, at, text: 'Je pense en continu désormais : je lis les escalades des rigs, je tranche ce que mon mandat permet après une minute, et je te passe le reste.' };
+            thread.push(item);
+            ws.send(JSON.stringify({ type: 'ledge.thread.item', item }));
+          }
+          return result(true);
+        }
+        if (msg.type === 'category.escalate' || msg.type === 'mandate.update') {
+          b.mandate = msg.type === 'mandate.update' ? msg.text : escalateLine(b.mandate, msg.category);
+          ws.send(JSON.stringify({ type: 'mandate', text: b.mandate, path: '/home/me/.ledge/mandat.md' }));
+          return result(true);
+        }
+        if (msg.type === 'rule.set') {
+          if (!b.rules.some(r => r.id === msg.id)) return result(false, 'règle inconnue');
+          b.rules = msg.status === 'rejected' ? b.rules.filter(r => r.id !== msg.id) : b.rules.map(r => (r.id === msg.id ? { ...r, status: 'active' as const } : r));
+          ws.send(JSON.stringify({ type: 'rules', items: b.rules }));
+          return result(true);
+        }
+        const dec = b.decisions.find(d => d.id === msg.id);
+        const e = dec && escalations.get(dec.escalationId);
+        if (!dec || !e) return result(false, `aucune décision ${msg.id}`);
+        if (dec.revisitedBy || e.correcting) return result(false, 'cette décision est déjà en cours de correction');
+        const { answer: _a, graceUntil: _g, ...rest } = e;
+        const reopened: Escalation = { ...rest, state: 'pending', correcting: dec.id };
+        escalations.set(e.id, reopened);
+        answering.delete(e.id);
+        ws.send(JSON.stringify({ type: 'escalation.updated', escalation: reopened }));
+        const item: LedgeThreadItem = { kind: 'escalation', id: `revisit-${++items}`, at, escalationId: e.id };
+        thread.push(item);
+        ws.send(JSON.stringify({ type: 'ledge.thread.item', item }));
+        return result(true);
+      }
       // The first answer to an escalation is accepted after `answerDelayMs`; a later one, or one for a closed escalation, is `already_answered`.
       if (msg.type === 'escalation.answer') {
         const e = escalations.get(msg.id);
@@ -211,10 +297,21 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           setTimeout(() => {
             const now = escalations.get(msg.id)!;
             if (now.state === 'answered') { try { ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: false, code: 'already_answered' })); } catch { /* the page is gone */ } return; }
-            const answered: Escalation = { ...now, state: 'answered', answer: { by: 'user', answers: msg.answers, at: new Date().toISOString() } };
+            const { correcting, ...was } = now;
+            const answered: Escalation = { ...was, state: 'answered', answer: { by: 'user', answers: msg.answers, at: new Date().toISOString() } };
             escalations.set(msg.id, answered);
             try {
               ws.send(JSON.stringify({ type: 'escalation.updated', escalation: answered }));
+              // A correction (Revenir dessus): the user's decision is recorded, the old one points to it.
+              if (brain && correcting) {
+                const old = brain.decisions.find(d => d.id === correcting);
+                const id = `d-${++items}`;
+                if (old) {
+                  const { revisitedBy: _r, rule: _u, ...base } = old;
+                  brain.decisions = [{ ...base, id, by: 'user', answers: msg.answers, at: answered.answer!.at }, ...brain.decisions.map(d => (d.id === correcting ? { ...d, revisitedBy: id } : d))];
+                }
+                ws.send(JSON.stringify({ type: 'decisions', items: brain.decisions }));
+              }
               ws.send(JSON.stringify({ type: 'rig.result', rid: msg.rid, ok: true }));
             } catch { /* the page is gone */ }
           }, extras.answerDelayMs ?? 0);

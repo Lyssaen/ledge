@@ -17,7 +17,9 @@ const tracked = (s: Session) => !!s.pending && (isPending(s) || s.state === 'err
  * decision. Every `error` reply that names a session is shown as that session's failure (the daemon only sends them in
  * answer to this client's commands), and a rejected free-text reply hands its text back through `onReplyRejected`.
  */
-export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; lastError: DaemonError | null; dnd: boolean; dispatch: (e: SurfaceEvent) => void; finishedBubble: boolean; onChange?: (c: SessionChange, info: { elapsedMs?: number }) => void; onReplyRejected?: (id: string, text: string) => void }) {
+export function useDaemonAsks(o: { sessions: Session[];
+  /** Sessions whose asks alone matter (the brain, lot 7): no finished, left or failed cue for them. */
+  askOnly?: (s: Session) => boolean; status: DaemonStatus; lastError: DaemonError | null; dnd: boolean; dispatch: (e: SurfaceEvent) => void; finishedBubble: boolean; onChange?: (c: SessionChange, info: { elapsedMs?: number }) => void; onReplyRejected?: (id: string, text: string) => void }) {
   const { sessions, status, lastError, dnd, dispatch, finishedBubble } = o;
   const { t } = useI18n();
   const msg = useRef(t); msg.current = t;
@@ -56,7 +58,7 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
       // The turn clock starts when a bot sets to work from rest; a permission answered mid-turn, or a new prompt while
       // helpers still work under a resting parent, does not restart it.
       if (s.state === 'working' && (!was || (was.state === 'idle' && !isBusy(was)) || was.state === 'starting')) workingSince.current.set(s.id, Date.now());
-      if (change) {
+      if (change && !(o.askOnly?.(s) && change.kind !== 'asked')) {
         const since = workingSince.current.get(s.id);
         const elapsedMs = change.kind === 'finished' && since !== undefined ? Date.now() - since : undefined;
         if (change.kind === 'finished') workingSince.current.delete(s.id);

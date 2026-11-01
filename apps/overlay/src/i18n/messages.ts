@@ -47,7 +47,9 @@ const fr = {
       missing: (n: number) => (n === 1 ? '1 échange plus disponible' : `${n} échanges plus disponibles`),
       kind: { task: 'tâche', message: 'message', handoff: 'relève', ledge: 'Ledge' } as Record<Exchange['kind'], string>
     },
-    decided: { line: (to: string, summary: string) => `J'ai tranché pour ${to} : ${summary}`, rule: (rule: string) => `Règle ${rule}`, revisit: 'Revenir dessus' }
+    decided: { line: (to: string, summary: string) => `J'ai tranché pour ${to} : ${summary}`, rule: (rule: string) => `Règle ${rule}`,
+      ruleOf: (since: string) => `Règle du ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revenir dessus' },
+    brain: { stopped: 'Ledge est arrêté', start: 'Démarrer' }
   },
   /** The open notch (lot 4, `nn-open.png`): Ledge's mixed feed, its filter and its composer. */
   feed: {
@@ -319,7 +321,9 @@ const en: Messages = {
       missing: (n) => (n === 1 ? '1 exchange no longer available' : `${n} exchanges no longer available`),
       kind: { task: 'task', message: 'message', handoff: 'handover', ledge: 'Ledge' }
     },
-    decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`, revisit: 'Revisit' }
+    decided: { line: (to, summary) => `I settled for ${to}: ${summary}`, rule: (rule) => `Rule ${rule}`,
+      ruleOf: (since) => `Rule from ${since.slice(8, 10)}/${since.slice(5, 7)}`, revisit: 'Revisit' },
+    brain: { stopped: 'Ledge is stopped', start: 'Start' }
   },
   feed: {
     subtitle: (rigs, agents) => `Orchestrates ${rigs} ${plural(rigs, 'rig', 'rigs')} · ${agents} ${plural(agents, 'agent', 'agents')} · settles within its mandate`,

@@ -69,3 +69,6 @@
 .lt-decided-text { color: var(--card-foreground); }
 .lt-decided-rule { color: var(--muted-foreground); }
 .lt-decided .lt-btn { margin-left: auto; }
+.lt-decided-why, .lt-decided-sep { color: var(--muted-foreground); }
+/* « Ledge est arrêté · Démarrer » (lot 7): the text, then its button. */
+.lt-brain-stopped { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; color: var(--card-foreground); }

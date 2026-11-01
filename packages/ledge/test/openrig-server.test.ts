@@ -10,6 +10,8 @@ import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig, type FakeRigCli } from './fakes/openrig.js';
 import { authHeaders, until } from './helpers.js';
+import { createMemory } from '../src/daemon/brain/memory.js';
+import { paths } from '../src/paths.js';
 
 const noTmux = new Proxy({} as Tmux, { get: () => async () => { throw new Error('no tmux in this test'); } });
 const none = { version: 1, projects: [], rules: [] } as unknown as Projects;
@@ -108,6 +110,25 @@ describe('server with the OpenRig bridge', () => {
     c.send({ type: 'ledge.say', rid: 's3', text: '@build lance les tests' });
     await until(() => c.of('ledge.thread.item').some(m => m.item.kind === 'user' && m.item.to === '@build'));
     expect(rigExec!.calls.filter(a => a[0] === 'send').at(-1)).toEqual(['send', 'dev-build@starter', '[Ledge] lance les tests']);
+    await c.close();
+  });
+
+  it('decision.revisit reopens an answered card while the seat has not taken the reply; an unknown decision is not ok', async () => {
+    const { server } = await setup(true);
+    const c = await client(server.port);
+    c.send({ type: 'escalation.answer', rid: 'e1', id: 'E1', answers: { text: 'oui' }, by: 'user' });
+    await until(() => c.of('rig.result').some(r => r.rid === 'e1'));
+    expect(c.of('rig.result').find(r => r.rid === 'e1')).toMatchObject({ ok: true });
+    const dec = createMemory({ dir: paths().memoryDir }).decisions().find(d => d.escalationId === 'E1')!;
+    expect(dec).toBeDefined();
+    c.send({ type: 'decision.revisit', rid: 'v0', id: 'nope' });
+    c.send({ type: 'decision.revisit', rid: 'v1', id: dec.id });
+    await until(() => c.of('rig.result').filter(r => r.rid.startsWith('v')).length === 2);
+    expect(c.of('rig.result').find(r => r.rid === 'v0')).toMatchObject({ ok: false, reason: expect.any(String) });
+    expect(c.of('rig.result').find(r => r.rid === 'v1')).toMatchObject({ ok: true });
+    await until(() => c.of('escalation.updated').some(m => m.escalation.id === 'E1' && m.escalation.correcting === dec.id && m.escalation.state === 'pending'));
+    // The first item for E1 predates this client: the reopened card is a new one.
+    await until(() => c.of('ledge.thread.item').some(m => m.item.kind === 'escalation' && m.item.escalationId === 'E1'));
     await c.close();
   });
 

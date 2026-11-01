@@ -16,16 +16,19 @@ export const deniable = (r: ActionRowView, s: Shown) => r.action === 'session.de
 export const appliable = (s: Shown) => s === 'proposed' || s === 'held' || s === 'failed';
 
 /** The rows « y » confirms: the title and the foot of the box say how many, and how many cannot be undone. */
-export interface ActionBoxProps { turn: ChatTurn; plan?: CardPlan; focused: boolean; busy: boolean; sel: number; confirming: readonly number[] | null }
+export interface ActionBoxProps { turn: ChatTurn; plan?: CardPlan; focused: boolean; busy: boolean; sel: number; confirming: readonly number[] | null;
+  /** The box's width: the screen's by default (a card in a column passes its own). */
+  width?: number }
 
 /**
  * The generic card of an answer (#94, docs/mockups/ledge-action-card.html, view TUI): a coral TitledBox, a row per action, a
  * plan past one (numbered, ↑ ↓ choose the row ▸). Asking to confirm, the box turns red with a double line and lists what
  * « y » applies; ↵ never confirms.
  */
-export function ActionBox({ turn, focused, busy, sel, confirming, plan }: ActionBoxProps) {
+export function ActionBox({ turn, focused, busy, sel, confirming, plan, width }: ActionBoxProps) {
   const { t, g } = useTui();
-  const { columns } = useScreenSize();
+  const screen = useScreenSize();
+  const columns = width ?? screen.columns;
   const a = t.ask.action, c = a.copy;
   const p = plan ?? cardPlan(turn.actions ?? []);
   const many = p.rows.length > 1;

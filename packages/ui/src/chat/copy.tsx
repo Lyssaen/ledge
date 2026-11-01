@@ -35,6 +35,8 @@ export interface ChatCopy {
     /** The generic card (#94): a row per action, a plan past one. `verbs` the button of each action, by its id, `apply`
      *  when the front knows none; `at` a time already put in words (10:42), empty when the daemon gave none. Left out by a front that does not show it yet. */
     action?: ActionCopy;
+    /** The « Lancer ce rig » card the brain posts (lot 7): its accessible name and its button. Left out by a front that cannot open the launch window. */
+    rigLaunch?: { label: string; launch: string };
   };
   machines: { destination: string; local: string; offline: string; choose: Say; clarification: string };
   time: { seconds: (n: number) => string; minutes: (n: number) => string; hours: (n: number) => string; locale: string };

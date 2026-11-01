@@ -11,16 +11,19 @@ export const fr = {
   time: {
     now: 'à l’instant', decimal: ',', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
   },
-  tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
+  tabs: { overview: 'Accueil', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
   bar: {
-    sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: (n: number) => `${n} ${plural(n, 'machine', 'machines')}`,
+    rigs: (n: number) => `${n} ${plural(n, 'rig', 'rigs')}`,
+    agents: (n: number) => `${n} ${plural(n, 'agent', 'agents')}`,
+    solo: (n: number) => `${n} ${plural(n, 'session seule', 'sessions seules')}`,
     waiting: (n: number) => `${n} t’${plural(n, 'attend', 'attendent')}`,
     connecting: 'connexion au daemon…',
     unreachable: 'daemon injoignable, nouvel essai…',
     tokenMissing: 'pas de jeton : lancez une session avec `ledge claude` ou `ledge daemon`'
   },
   keys: {
+    seats: 'sièges', openSeat: 'ouvrir le siège', attachSeat: 'attacher', ledge: 'Ledge',
     image: 'image', openImage: "ouvrir l'image",
     navigate: 'naviguer', open: 'ouvrir', answer: 'répondre', attach: 'attacher (tmux)', ask: 'demander à Ledge', launch: 'nouvelle session',
     settings: 'réglages', help: 'aide', quit: 'quitter', back: 'retour', write: 'écrire', diffs: 'diffs', terminal: 'terminal', model: 'modèle',
@@ -32,10 +35,106 @@ export const fr = {
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
-    openSession: (name: string) => `ouvrir ${name}`
+    openSession: (name: string) => `ouvrir ${name}`,
+    screens: 'Ledge · rig · session',
+    decide: 'trancher', revisit: 'revenir dessus', fold: 'replier', talk: 'en parler', complete: 'compléter',
+    tabs: 'onglets', summarize: 'résumer', point: 'le point', close: 'fermer', mandate: 'le mandat'
   },
+  home: {
+    ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
+    decision: (n: number) => `${n > 1 ? `${n} décisions t’attendent` : 'Une décision t’attend'}`,
+    grace: 'Ledge s’en occupe…', calm: 'Rien à trancher.',
+    projects: 'Projets · sessions seules', rigs: 'Rigs',
+    working: (w: number, n: number) => `${w}/${n} au travail`,
+    inProject: (name: string) => `dans ${name}`, offProject: 'hors projet', onMachine: (m: string) => `sur ${m}`,
+    available: (names: string, n: number) => `${names} · ${plural(n, 'disponible', 'disponibles')}`,
+    kernel: 'Noyau OpenRig',
+    kernelState: { idle: 'au repos', working: 'au travail', absent: 'absent', stopped: 'arrêté', starting: 'démarre', unsupported: 'non pris en charge', error: 'en erreur', unreachable: 'injoignable' } as Record<'idle' | 'working' | 'absent' | 'stopped' | 'starting' | 'unsupported' | 'error' | 'unreachable', string>,
+    noOpenRig: 'OpenRig n’est pas installé · + pour lancer un rig',
+    conversation: 'Ledge · Conversation',
+    noSeat: 'Aucun siège.', seatAlone: 'Ce siège n’a pas de session Ledge : rien à afficher ici pour l’instant.'
+  },
+  /** The home's centre for Ledge: its tabs, and the rail on its right (folded into one line from 100 to 139 columns). */
+  ledgeTabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandat' },
+  rail: {
+    rigs: (n: number) => `Rigs · ${n}`, kernel: 'noyau', room: '2 · la pièce du rig',
+    settled: (n: number) => `Tranché aujourd’hui · ${n}`, revisit: 'u revenir dessus',
+    mandate: 'Mandat', alone: 'Ledge tranche seul :', always: 'Te reviennent toujours :', more: 'm le mandat et ses souvenirs',
+    summary: 'Résumer la journée',
+    summaryAsk: 'Résume ma journée : ce que les rigs ont fait, ce que j\'ai tranché, ce qui m\'attend.',
+    folded: (n: number) => `${n} ${plural(n, 'tranchée', 'tranchées')}`, detail: 'détail',
+    noRig: 'Aucun rig.', spec: (s: string) => `spec ${s}`,
+    coming: 'Le mandat arrive avec le cerveau de Ledge.', rules: 'Règles', toValidate: 'à valider',
+    applied: (n: number) => `appliquée ${n} fois`
+  },
+  /** Ledge's conversation in the home: its thread, the decisions drawn in its messages, the exchanges between agents. */
+  conv: {
+    days: { today: 'Aujourd’hui', yesterday: 'Hier', date: (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}` },
+    age: { now: 'à l’instant', minutes: (n: number) => `${n} min`, hours: (n: number) => `${n} h`, days: (n: number) => `${n} j`, ago: (span: string) => `il y a ${span}` },
+    you: 'toi', ledge: 'Ledge',
+    advice: (text: string) => `Mon avis : ${text}`, talk: 'En parler', seen: 'Vu',
+    by: { user: 'par toi', ledge: 'par Ledge' } as Record<'user' | 'ledge', string>,
+    already: 'Déjà répondu', closed: 'Réglée ailleurs', grace: 'Ledge s’en occupe…', sending: 'envoi…',
+    refused: (code: string, reason?: string) => `Refusé : ${reason ?? code}`,
+    decided: { before: 'J’ai tranché pour ', after: (summary: string) => ` : ${summary.replace(/[.\s]+$/, '')}.` },
+    rule: (rule: string) => `Règle ${rule}`, revisit: 'Revenir dessus',
+    revisitRefused: (reason: string) => `Revenir dessus : ${reason === 'not supported yet' ? 'pas encore possible, le cerveau de Ledge arrive' : reason}`,
+    exchanges: (n: number) => (n === 1 ? '1 échange' : `${n} échanges entre agents`),
+    unfold: '↵ déplier', fold: 'z replier', missing: (n: number) => `${n} ${plural(n, 'échange plus ancien', 'échanges plus anciens')} pas encore chargé${n > 1 ? 's' : ''}`,
+    choose: 'j k pour la choisir, puis 1 2…',
+    about: (summary: string) => `Question · à propos de ${summary}`
+  },
+  /** The field to write to Ledge, its suggestions and its `@` list. */
+  compose: {
+    title: 'Écrire à Ledge', placeholder: 'Écrire à Ledge… (@build pour un agent d’un rig)',
+    foot: 'tranche dans son mandat · design, architecture et critique te reviennent', footShort: 'design, architecture, critique te reviennent',
+    launchRig: 'Lance un rig…', whereIs: (rig: string) => `Où en est ${rig} ?`, decided: 'Qu’as-tu tranché ?', needsMe: 'Qui a besoin de moi ?',
+    alt: (n: number) => `alt+1…${n}`, mentionTitle: '@ un agent d’un rig'
+  },
+  /** A rig seat's state (« Attend Ledge »: an escalation of this seat is open). */
+  /** A rig's room and the OpenRig kernel's (the mockup's « La pièce d’un rig » and « Le noyau »). */
+  room: {
+    rig: 'rig', mark: 'sa pièce, sa table', seats: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`, since: (at: string) => `depuis ${at}`,
+    lead: (seat: string) => `lead ${seat}`, unreachable: 'injoignable',
+    head: { seat: 'SIÈGE', name: 'NOM', state: 'ÉTAT', agent: 'AGENT', context: 'CONTEXTE', on: 'SUR', role: 'RÔLE' },
+    exchanges: (rig: string) => `Échanges · ${rig}`, rigSend: 'rig send', loading: 'Chargement des échanges…',
+    queue: (scope: string) => `File OpenRig · ${scope}`, all: 'tout', emptyQueue: 'File vide.',
+    queueState: { 'en cours': 'en cours', 'à toi': 'à toi', fait: 'fait' } as Record<'en cours' | 'à toi' | 'fait', string>,
+    terminal: (seat: string, where: string) => `Terminal · ${seat} · ${where}`, noTerminal: 'Pas encore de terminal suivi.',
+    kernel: 'Noyau OpenRig · la mécanique', kernelMark: 'toujours allumé', kernelWhere: 'noyau', orders: 'Ordres de Ledge à l’operator',
+    daemon: { running: 'daemon en marche', stopped: 'daemon arrêté', starting: 'daemon qui démarre', error: 'daemon en erreur', unreachable: 'injoignable', absent: 'OpenRig absent', unsupported: 'version non prise en charge' } as Record<'running' | 'stopped' | 'starting' | 'error' | 'unreachable' | 'absent' | 'unsupported', string>,
+    version: (v: string) => `OpenRig ${v}`, human: (address: string) => `humain : ${address}`, noHuman: 'humain non enregistré',
+    tucked: (n: number) => `+${n} ${plural(n, 'rangé', 'rangés')}`, advisor: '(doublon de Ledge)', humanSeat: '(remplacé par Ledge)',
+    roles: { operator: 'fait tourner OpenRig, reçoit les ordres de Ledge', queue: 'range le flux entrant en tâches' } as Record<string, string>,
+    you: 'toi', noTerminalCommand: (seat: string) => `Pas de terminal à attacher pour ${seat}.`
+  },
+  /** A rig's actions through OpenRig (rig.act, rig.adopt): « Arrêter… », « Relancer un siège… », « Reprendre », « Ranger dans un projet… ». */
+  rigAct: {
+    keys: { restart: 'relancer', stop: 'arrêter…', adopt: 'ranger dans un projet…', resume: 'reprendre', choose: 'choisir', confirm: 'confirmer', cancel: 'annuler' },
+    restartSeat: 'Relancer un siège…', stopRig: 'Arrêter le rig…', adoptRig: 'Ranger dans un projet…', resumeRig: 'Reprendre',
+    viaOpenRig: 'Relancer et arrêter passent par OpenRig : un kill côté Ledge serait vu comme un crash.',
+    restartAsk: (seat: string) => `Relancer ${seat} par OpenRig ?`, yes: '↵ oui', no: 'esc non',
+    stopTitle: (rig: string) => `Arrêter ${rig} ?`, stopAll: 'Arrêter le rig', stopSeat: (seat: string) => `Seulement ce siège · ${seat}`,
+    stopBody: (n: number) => `${n > 1 ? `Ses ${n} sièges s’arrêtent` : 'Son siège s’arrête'}. OpenRig garde un instantané pour le reprendre. Les fichiers restent.`,
+    adoptTitle: (rig: string) => `Ranger ${rig} dans un projet ?`, holds: (repos: string) => `contient déjà ${repos}`, leaveOut: 'Laisser hors projet',
+    adoptNote: (rig: string, project: string) => `${rig} garde sa pièce ; sa plaque dira « dans ${project} ». Il ne devient pas une seconde table de ${project}.`,
+    stayNote: (rig: string) => `${rig} garde sa pièce, hors projet.`, adopt: 'Ranger', cancel: 'Annuler',
+    repos: 'Dépôts trouvés en route', how: { cloned: 'cloné par', opened: 'ouvert par', created: 'créé par' } as Record<'cloned' | 'opened' | 'created', string>,
+    found: 'Repérés par les dossiers git de l’espace, puis rattachés au siège qui les a clonés ou ouverts (hooks).',
+    already: (repo: string, project: string) => `${repo} est déjà un dépôt du projet ${project}.`, noRepo: 'Aucun dépôt trouvé pour l’instant.',
+    done: {
+      down: (rig: string) => `${rig} s’arrête`, stop: (seat: string) => `${seat} s’arrête`, restart: (seat: string) => `${seat} redémarre`,
+      up: (rig: string) => `${rig} reprend`, adopted: (rig: string, project: string) => `${rig} rangé dans ${project}`
+    },
+    refused: {
+      rig_managed: 'Ce siège appartient à son rig : arrête-le ou relance-le dans sa pièce.', openrig_down: 'OpenRig ne répond pas.',
+      unreachable: 'Machine injoignable.', failed: 'L’action a échoué.', timeout: 'OpenRig n’a pas répondu (5 s).'
+    } as Record<string, string>
+  },
+  seat: { waitsLedge: 'Attend Ledge', working: 'Au travail', idle: 'Disponible', attention: 'Intervention requise', starting: 'Démarrage', stopped: 'Arrêté', crashed: 'Planté', unreachable: 'Injoignable' },
+  omp: { title: 'fil · OMP', foot: 'piloté par RPC · rien n’est tapé dans un terminal', you: 'toi', writing: 'écrit…', empty: 'Le fil arrive…' },
   overview: {
-    yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
+    yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`, inColor: '· en couleurs',
     nobodyWaits: 'Personne ne t’attend.', noSession: 'Aucune session. + pour en lancer une.', noPreview: 'Pas d’aperçu.', noExchange: 'Aucun échange.',
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`, outside: 'Hors projet', offline: 'hors ligne', readOnly: 'lecture seule',
     wantsToRun: 'Veut exécuter :', asks: 'Demande :', plan: 'Propose un plan :', diff: 'Veut modifier :',
@@ -59,19 +158,21 @@ export const fr = {
     replyTo: (name: string) => `Répondre à ${name}…`, noteFor: (name: string) => `Expliquer le refus à ${name}…`,
     replyTitle: (name: string) => `Répondre à ${name}`, noteTitle: (name: string) => `Refuser en expliquant à ${name}`, writeDraft: 'Écrire · brouillon',
     draftLines: (n: number) => `${n} ${plural(n, 'ligne', 'lignes')} · r pour reprendre`,
-    loading: 'Chargement du fil…', empty: 'Rien encore dans ce fil.', noSession: 'Choisissez une session dans la vue d’ensemble.',
-    model: (m: string) => `modèle : ${m}`, defaultModel: 'par défaut', notice: 'Ledge'
+    loading: 'Chargement du fil…', empty: 'Rien encore dans ce fil.', noSession: 'Choisissez une session dans l’accueil.',
+    model: (m: string) => `modèle : ${m}`, defaultModel: 'par défaut', notice: 'Ledge',
+    seatTitle: (name: string, address: string, rig: string) => `Écrire à ${name} · ${address} · ${rig}`, seatPlaceholder: (name: string) => `Écrire à ${name}…`,
+    seatRemote: 'Ce siège est sur une autre machine : écris-lui depuis là-bas.',
+    seatFoot: 'rig send signé Ledge · l’échange s’affiche aussi dans le fil de Ledge'
   },
   ask: {
     title: (s: number, m: number) => `Ledge · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
-    question: 'Question', read: 'lu', reading: 'Ledge lit…', you: 'vous', empty: 'Posez une question : qui a besoin de moi, où en est une session, que lancer…',
+    read: 'lu', reading: 'Ledge lit…', you: 'vous', empty: 'Posez une question : qui a besoin de moi, où en est une session, que lancer…',
     launchCard: 'Nouvelle session', relayCard: (name: string) => `Relayer à ${name}`, closeCard: 'Fermer des sessions', launch: 'Lancer la session',
     relay: 'Envoyer', cancelRelay: 'Retirer de la file', close: 'Fermer', ignore: 'Ignorer', nothingWithoutYou: 'Ledge ne lance rien sans toi.',
     folder: 'Dossier', agent: 'Agent', instruction: 'Instruction', launched: 'lancée', queued: 'en file', sentAt: 'envoyée', closed: 'fermée',
     offline: 'Le daemon local est hors ligne : la question attendra.',
     steps: { sessions: 'les sessions', pane: (n: string) => `le terminal de ${n}`, reply: (n: string) => `la réponse de ${n}`, git: (n: string) => `l’état git de ${n}`, repo: (p: string) => p },
     operator: (s: number, m: number) => `Ledge · Opérateur · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
-    placeholder: 'Une question pour Ledge…',
     resetTitle: 'Nouvelle conversation ?',
     resetBody: (n: number, since: string) => `La conversation du jour (${n} ${plural(n, 'question', 'questions')}, depuis ${since}) sera effacée.`,
     draftStays: 'Ton brouillon reste.', keep: 'Garder', wipe: 'Effacer et repartir',
@@ -102,10 +203,52 @@ export const fr = {
     missing: { prompt: 'Écrivez une instruction.', machine: 'Aucune machine en ligne.', repos: 'Choisissez un dépôt ou un dossier.' } as Record<'prompt' | 'machine' | 'repos', string>,
     launching: 'Lancement…', launched: (name: string) => `✓ ${name} est lancée`,
   },
+  /** « Nouveau rig » in three steps: the form, Ledge's plan, the start. */
+  rigLaunch: {
+    title: 'Nouveau rig · le but, la spec, où', planTitle: 'Nouveau rig · le plan de Ledge', startTitle: 'Nouveau rig · le démarrage',
+    crumb: 'Lancer › le but · (le plan) · le démarrage', mode: 'Mode', rig: 'rig', session: 'session',
+    goal: 'But', goalHint: 'Ledge s’en sert pour proposer le plan, puis pour trancher en route.',
+    spec: 'Spec', specsLoading: 'lecture des specs…', specsFailed: 'Les specs n’ont pas pu être lues.', noSpec: 'aucune spec', recommended: 'recommandée par Ledge',
+    seatsOf: (n: number, names: string, runtimes: string) => `${n} ${plural(n, 'siège', 'sièges')} : ${names} · ${runtimes}`,
+    where: 'Où', inProject: 'dans un projet', offProject: 'hors projet (nouvel espace)',
+    whereHint: (project: string) => `Le rig aura sa propre pièce, « dans ${project} » sur la plaque.`, offHint: 'Ledge crée un espace vide, nommé d’après le but.',
+    repo: 'Dépôt', noRepo: (project: string, machine: string) => `${project} n’a pas de dépôt sur ${machine}`,
+    branch: 'Branche', newBranch: '(nouvelle)', copyRow: 'Copie', copy: 'Travailler dans une copie', machine: 'Machine',
+    name: 'Nom', nameHint: '(tiré du but · ctrl+r pour un autre)', preview: 'Aperçu',
+    previewLine: (spec: string, where: string, n: number, machine: string) => ` · rig ${spec} · ${where} · ${n} ${plural(n, 'siège', 'sièges')} · ${machine}`,
+    inProjectOf: (project: string) => `dans ${project}`, offPlace: 'hors projet',
+    launch: 'Lancer', seePlan: 'Voir le plan', cancel: 'Annuler', launchRig: 'Lancer le rig', back: 'Retour',
+    planOptional: 'Plan facultatif : le rig écrit dans une copie .worktrees/.', planImposed: 'Le plan est demandé une fois : le rig écrirait dans ton dépôt.',
+    why: {
+      absent: (m: string) => `OpenRig n’est pas installé sur ${m}`, unsupported: (m: string) => `La version d’OpenRig sur ${m} n’est pas prise en charge`,
+      offline: (m: string) => `${m} est hors ligne`, unreachable: (m: string) => `OpenRig est injoignable sur ${m}`
+    },
+    install: 'Pour l’installer :',
+    missing: { goal: 'Donne un but au lead.', spec: 'Choisis une spec.', repo: 'Choisis un dépôt.', branch: 'Nomme la nouvelle branche.', name: 'Nom invalide : minuscules, chiffres et tirets.' } as Record<'goal' | 'spec' | 'repo' | 'branch' | 'name', string>,
+    preparing: 'Ledge prépare le plan…', launching: 'Lancement…', refused: (why: string) => `Refusé : ${why}`, timeout: (s: number) => `pas de réponse après ${s} s`,
+    plan: {
+      intro: 'Voici comment je monterais le rig. Rien n’est lancé.', head: { seat: 'SIÈGE', agent: 'AGENT', autonomy: 'AUTONOMIE' },
+      folder: 'Dossier', writes: 'Ajoute dans le dossier :', command: 'Commande'
+    },
+    starting: {
+      openrig: 'OpenRig', preparing: 'prépare le lancement…', running: 'en marche', copy: 'Copie', folder: 'Dossier', space: 'Espace',
+      human: 'Ledge, humain du rig', humanCommand: 'rig gateway human add ledge', up: (name: string) => `rig up ${name}`,
+      upDetail: (spec: string, n: number) => `spec ${spec} · ${n} ${plural(n, 'siège', 'sièges')}`,
+      seats: 'Sièges', ready: (k: number, n: number) => `${k}/${n} ${plural(k, 'prêt', 'prêts')}`,
+      coming: (names: readonly string[]) => `${names.length > 1 ? `${names.slice(0, -1).join(', ')} et ${names.at(-1)}` : names[0]} ${plural(names.length, 'démarre', 'démarrent')}…`,
+      attention: (names: readonly string[]) => `${names.join(', ')} : intervention requise`,
+      tasks: 'Premières tâches', tasksWait: 'dans la file dès que les sièges sont prêts', tasksSent: (lead: string) => `but donné à ${lead}`
+    },
+    trust: (seat: string) => `${seat} attend ta confiance dans le dossier · ↵ ouvrir l’invite`,
+    openRoom: 'Ouvrir sa pièce', cancelLaunch: 'Annuler le lancement', backToLedge: 'Revenir à Ledge',
+    leave: 'Tu peux partir : Ledge te dira si le démarrage coince.', notNamed: 'Le rig n’est pas encore nommé : rien à annuler pour l’instant.',
+    cancelled: (name: string) => `${name} : lancement annulé`,
+    keys: { mode: 'rig ou session', seePlan: 'voir le plan', openRoom: 'ouvrir sa pièce', trust: 'ouvrir l’invite', cancelLaunch: 'annuler le lancement', ledge: 'Ledge' }
+  },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
-    title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
-    screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    title: 'Aide', global: 'Partout', overview: 'Accueil', ledge: 'Écran Ledge', rig: 'Pièce d’un rig', session: 'Session', launch: 'Lancer', settings: 'Réglages',
+    screens: 'changer d’écran', writeToSeat: 'écrire (rig local)', suggestions: 'suggestions', foldExchanges: 'replier échanges', backNarrow: 'retour (étroit)', launchRig: 'nouveau rig/session', resumeSent: 'reprendre', answerFocus: 'trancher', tabsKeys: 'onglets', rail: 'le point · 100-139', fileIn: 'ranger (hors projet)', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
   field: {

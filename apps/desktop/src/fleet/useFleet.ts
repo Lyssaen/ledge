@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { attachClient, createDaemonClient, createFleetClient, loadMachines, LOCAL_MACHINE, useDaemon, useMachines, type DaemonClient, type DaemonError, type DaemonStatus, type Fleet, type MachineState } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { daemonTokenSource } from '../tauri/bridge';
@@ -21,14 +21,18 @@ let singleton: DaemonClient | null = null;
 const defaultClient = (): DaemonClient => (singleton ??= createDesktopFleet());
 
 export interface FleetView {
-  sessions: Session[]; /** The archived sessions, most recently archived first. */ archived: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean;
+  /** The live sessions, the brain session (lot 7) left out. */ sessions: Session[]; /** The archived sessions, most recently archived first. */ archived: Session[]; machines: MachineState[]; status: DaemonStatus; fleet: Fleet; client: DaemonClient; localDown: boolean;
   /** The daemon's last `error` reply (a refused decision, a machine offline at send), its session id qualified. */
   lastError: DaemonError | null;
   /** The last errors (a refused send, a machine offline at send), oldest first, the session ids qualified. */
   errors: readonly DaemonError[];
   /** The last `session.launched` (its id qualified); `seq` grows with each, so the same id twice is still a new event. */
   lastLaunched: { id: string; seq: number } | null;
+  /** The brain session(s) (lot 7), left out of `sessions` and `archived`; the attention paths add them back (`attending`). */
+  brains?: Session[];
 }
+/** The sessions whose asks reach the user: the listed ones and the brain's. */
+export const attending = (view: Pick<FleetView, 'sessions' | 'brains'>): Session[] => (view.brains?.length ? [...view.sessions, ...view.brains] : view.sessions);
 
 /** One attach/connect per client however many components use it: the first consumer starts it, the last one stops it. */
 const consumers = new WeakMap<DaemonClient, { count: number; detach: () => void }>();
@@ -45,5 +49,12 @@ export function useFleet(client: DaemonClient = defaultClient()): FleetView {
   const machines = useMachines(client);
   // Only a settled failure counts: the first machine starts as 'connecting', which must not flash the notice at boot.
   const localDown = machines[0]?.status === 'unreachable';
-  return { sessions: daemon.sessions, archived: daemon.archived, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError, errors: daemon.errors, lastLaunched: daemon.lastLaunched };
+  // Ledge's brain session is the daemon's, not one of the user's: no Desktop list shows it (C27). It stays in `brains` for the
+  // attention paths (« À toi », alerts, the title bar, its page), where what it asks the user must still arrive.
+  const { sessions, brains } = useMemo(() => {
+    const brains = daemon.sessions.filter(s => s.brain);
+    return { sessions: brains.length ? daemon.sessions.filter(s => !s.brain) : daemon.sessions, brains };
+  }, [daemon.sessions]);
+  const archived = useMemo(() => (daemon.archived.some(s => s.brain) ? daemon.archived.filter(s => !s.brain) : daemon.archived), [daemon.archived]);
+  return { sessions, brains, archived, machines, status: daemon.status, fleet: client.fleet!, client, localDown, lastError: daemon.lastError, errors: daemon.errors, lastLaunched: daemon.lastLaunched };
 }

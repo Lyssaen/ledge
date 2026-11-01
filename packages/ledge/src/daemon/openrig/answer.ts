@@ -15,7 +15,15 @@ export const ANSWER_CODES = ['already_answered', 'openrig_down', 'unreachable', 
 export type AnswerCode = typeof ANSWER_CODES[number];
 export type AnswerResult = { ok: true; escalation: Escalation } | { ok: false; code: AnswerCode; reason: string };
 export interface Answers {
+  /** A user answer to a card reopened by « Revenir dessus » (`correcting` set) goes to `correct`; a Ledge one is refused. */
   answer(id: string, answers: Record<string, string>, by: 'user' | 'ledge', o?: { rule?: string }): Promise<AnswerResult>;
+  /**
+   * « Revenir dessus », reply row not yet claimed: a new reply row « Correction de Ledge : … » to the seat, without approve (the
+   * human row is closed already). Only for an escalation whose `correcting` is set; the first correction wins. `answers` with only
+   * `text` sends that text as is. Listeners see the escalation with `correcting` still set (the decision being corrected), then it
+   * is cleared.
+   */
+  correct(id: string, answers: Record<string, string>): Promise<AnswerResult>;
   /** Called once per successful answer (lot 7 hooks decisions and memory there); returns its unsubscribe. */
   onAnswered(fn: (e: Escalation) => void): () => void;
 }
@@ -41,6 +49,7 @@ export interface AnswersDeps {
 }
 
 const PREFIX = 'Réponse de Ledge : ';
+const CORRECTION = 'Correction de Ledge : ';
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
 const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
 
@@ -65,6 +74,21 @@ function answerSummary(e: Escalation, answers: Record<string, string>): string {
   const parts = e.questions.length ? answeredLines(e, answers) : [];
   if (!blank(answers.text)) parts.push(answers.text!);
   return oneLine(`${PREFIX}${parts.join(' ; ')}`);
+}
+
+/** Only free text (no question answered): the correction text itself. */
+const textOnly = (e: Escalation, answers: Record<string, string>) => !blank(answers.text) && !e.questions.some(q => !blank(answers[q.id]));
+/** « Correction de Ledge : <question> → <label> » per line, or the free text as is after the prefix. */
+function correctionBody(e: Escalation, answers: Record<string, string>): string {
+  if (textOnly(e, answers) || !e.questions.length) return `${CORRECTION}${(answers.text ?? '').trim()}`;
+  const lines = answeredLines(e, answers).map(l => `${CORRECTION}${l}`);
+  if (!blank(answers.text)) lines.push(`${CORRECTION}${answers.text!.trim()}`);
+  return lines.join('\n');
+}
+function correctionSummary(e: Escalation, answers: Record<string, string>): string {
+  const parts = textOnly(e, answers) ? [] : answeredLines(e, answers);
+  if (!blank(answers.text)) parts.push(answers.text!);
+  return oneLine(`${CORRECTION}${parts.join(' ; ')}`);
 }
 
 /** The sheet's « Chemin de réponse : … » line, bare or as a list item; absent → reply-and-approve (logged). */
@@ -144,11 +168,56 @@ export function createAnswers(d: AnswersDeps): Answers {
     return r.code === 'closed' ? refuse('already_answered', r.reason) : refuse('failed', r.reason);
   }
 
+  const notify = (e: Escalation) => {
+    for (const fn of listeners) { try { fn(e); } catch (err) { log(`openrig: onAnswered listener threw: ${(err as Error).message}`); } }
+  };
+
+  /** The correction's reply row; a new one each time (never the replyRow skip), noted as the escalation's latest. */
+  async function correctionRow(e: Escalation, answers: Record<string, string>): Promise<AnswerResult | null> {
+    const dir = await mkdtemp(join(tmpdir(), 'ledge-correct-'));
+    try {
+      const file = join(dir, 'correction.md'); await writeFile(file, correctionBody(e, answers));
+      const r = await d.port.cli().queueCreate({ source: HUMAN_ADDRESS, destination: e.from, summary: correctionSummary(e, answers), bodyFile: file });
+      if (!r.ok) return refuse('failed', r.detail ?? 'rig queue create a échoué');
+      if (!r.qitemId) log(`openrig: correction row for ${e.id} created, its id not read from the output`);
+      d.port.setReplyRow(e.id, r.qitemId ?? '?');
+      return null;
+    } finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
+  }
+
+  async function correct(id: string, answers: Record<string, string>): Promise<AnswerResult> {
+    const e = d.port.escalation(id);
+    if (!e) return refuse('failed', `aucune escalade ${id}`);
+    if (inFlight.has(id)) return refuse('already_answered', 'déjà répondue');
+    if (!e.correcting) return e.state === 'answered' || e.state === 'closed' ? refuse('already_answered', 'déjà répondue') : refuse('invalid', 'rien à corriger');
+    const bad = textOnly(e, answers) ? null : invalid(e, answers); if (bad) return refuse('invalid', bad);
+    if (e.machine !== d.localMachine) return refuse('unreachable', 'réponse à distance : lot 6');
+    if (e.source === 'ask') return refuse('invalid', 'une décision de session ne se corrige pas par OpenRig');
+    if (d.port.status().state !== 'running') return refuse('openrig_down', "OpenRig n'est pas lancé");
+    inFlight.add(id);
+    const before: EscalationPatch = { state: e.state, graceUntil: e.graceUntil, answer: e.answer };
+    d.port.patch(id, { state: 'answered', graceUntil: undefined, answer: { by: 'user', answers, at: now() } });
+    let fail: AnswerResult | null;
+    try { fail = await correctionRow(e, answers); }
+    catch (err) { fail = refuse('failed', (err as Error).message); }
+    finally { inFlight.delete(id); }
+    if (fail) {
+      d.port.patch(id, before);
+      log(`openrig: correction of ${id} not delivered (${!fail.ok ? `${fail.code}: ${fail.reason}` : ''})`);
+      return fail;
+    }
+    notify(d.port.escalation(id) ?? { ...e, state: 'answered' });   // `correcting` still set: the recorder links the decisions
+    const done = d.port.patch(id, { correcting: undefined }) ?? { ...e, state: 'answered' as const, correcting: undefined };
+    return { ok: true, escalation: done };
+  }
+
   return {
+    correct,
     async answer(id, answers, by, o) {
       const e = d.port.escalation(id);
-      // Not read yet (OpenRig's queue failed to load after a restart): the id may well be open, so not a definite « unknown ».
+      // An unread remote queue is not a definite unknown escalation.
       if (!e) return !id.startsWith('ask-') && d.port.humanRead?.() === false ? refuse('openrig_down', "les escalades d'OpenRig ne sont pas encore lues") : refuse('failed', `aucune escalade ${id}`);
+      if (e.correcting) return by === 'user' ? correct(id, answers) : refuse('already_answered', "l'utilisateur revient sur cette décision");
       // Check and mark, synchronously (no await before inFlight.add): the first answer wins, whatever a later one holds.
       if (inFlight.has(id) || e.state === 'answered' || e.state === 'closed') return refuse('already_answered', 'déjà répondue');
       const bad = invalid(e, answers); if (bad) return refuse('invalid', bad);
@@ -169,7 +238,7 @@ export function createAnswers(d: AnswersDeps): Answers {
         return fail;
       }
       const done = d.port.escalation(id) ?? { ...e, state: 'answered' };
-      for (const fn of listeners) { try { fn(done); } catch (err) { log(`openrig: onAnswered listener threw: ${(err as Error).message}`); } }
+      notify(done);
       return { ok: true, escalation: done };
     },
     onAnswered(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },

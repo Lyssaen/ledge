@@ -1123,23 +1123,23 @@ describe('server', () => {
     it('a client that connects later gets the last preview right after the snapshot', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
-      const r = await recorder(); await r.until(9);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs', 'ledge.thread.history']);
+      const r = await recorder(); await r.until(13);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
       expect(r.got[5]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
       r.ws.terminate();
     });
     it('a snapshot.request gets the previews again after the snapshot', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']);
       const r = await recorder(); await r.until(3);
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(18);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs', 'ledge.thread.history', 'snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs', 'ledge.thread.history']);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(26);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history', 'snapshot', 'machines', 'projects', 'asks', 'island', 'session.preview', 'chat.history', 'context.prefs', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
       r.ws.terminate();
     });
     it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
       store.remove('a');
       const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'chat.history', 'context.prefs', 'ledge.thread.history']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'island', 'chat.history', 'context.prefs', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
       store.upsert(mk('a'));
       r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(8); await new Promise(res => setTimeout(res, 50));
       expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);
@@ -1612,7 +1612,7 @@ describe('server', () => {
         proposal: qid => (qid === 'q1' ? proposal : undefined),
         markLaunched(qid, id, emit) { marks.push(['launched', qid, id]); proposal = { ...proposal!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
         markFailed(qid, message, emit) { marks.push(['failed', qid, message]); proposal = { ...proposal!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+        relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
       };
       return { chat, marks };
     }
@@ -1685,7 +1685,7 @@ describe('server', () => {
           proposal: (qid, row = 0) => (qid === 'q1' ? rows[row] : undefined),
           markLaunched(_qid, id, emit, row = 0) { marks.push(['launched', row, id]); rows[row] = { ...rows[row]!, launchedId: id }; emit({ type: 'chat.history', turns: [] }); },
           markFailed(_qid, message, emit, row = 0) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+          relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
         };
         return { chat, marks };
       }
@@ -1739,7 +1739,7 @@ describe('server', () => {
         relay: qid => (qid === 'q1' ? r : undefined),
         markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
         queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+        close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
       };
       return { chat, current: () => r };
     }
@@ -2080,7 +2080,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, asks: true, colorPreview: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2754,7 +2754,7 @@ describe('close a session', () => {
         close: (qid, row) => (qid === 'q1' ? rows[row] : undefined),
         markClosed(_qid, row, how, emit) { marks.push(['closed', row, how]); rows[row] = { ...rows[row]!, closedAt: new Date().toISOString(), how }; emit({ type: 'chat.history', turns: [] }); },
         markCloseFailed(_qid, row, message, emit) { marks.push(['failed', row, message]); rows[row] = { ...rows[row]!, error: message }; emit({ type: 'chat.history', turns: [] }); },
-        idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+        idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
       };
       return { chat, marks };
     }
@@ -2929,7 +2929,7 @@ describe('close a session', () => {
       relay: qid => (qid === 'q1' ? r : undefined),
       markRelay(_qid, patch, emit) { const { id, name, tool, text } = r!; r = { id, name, tool, text, ...patch }; emit({ type: 'chat.history', turns: [] }); },
       queuedRelays: () => (r?.status === 'queued' ? [{ qid: 'q1', relay: r, askedAt: '2026-10-12T08:00:00.000Z' }] : []),
-      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false
+      close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false, post() {}
     };
     const history = new History({ dir: tmpDir() });
     await closing({ 'ledge-a': ['Running…'] }, { history, chat });

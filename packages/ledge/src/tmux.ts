@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { accessSync, constants, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths } from './paths.js';
 import { log } from './log.js';
@@ -10,7 +10,7 @@ export interface Tmux {
   sendText(name: string, text: string): Promise<void>;
   sendKeys(name: string, keys: string[]): Promise<void>;
   /** Last `lines` lines, or null when the capture failed (distinct from an empty pane). */
-  capture(name: string, lines: number): Promise<string | null>;
+  capture(name: string, lines: number, o?: { color?: boolean }): Promise<string | null>;
   /** The pane's width in columns, or null when tmux cannot tell. */
   width?(name: string): Promise<number | null>;
   hasSession(name: string): Promise<boolean>;
@@ -34,6 +34,16 @@ export function runFile(file: string, args: string[], env?: NodeJS.ProcessEnv, o
 }
 
 export const run = (args: string[], env?: NodeJS.ProcessEnv) => runFile('tmux', args, env);
+
+/** Resolve with the daemon's PATH before giving tmux the pane's PATH (which can intentionally contain a tmux shim). */
+function daemonTmux(): string {
+  for (const dir of (process.env.PATH ?? '').split(':')) {
+    if (!dir) continue;
+    const candidate = join(dir, 'tmux');
+    try { accessSync(candidate, constants.X_OK); return candidate; } catch { /* next PATH entry */ }
+  }
+  return 'tmux';
+}
 
 /** The user manager answers on this socket: present when WSL runs systemd (`systemd=true`). */
 export function systemdAvailable(env: NodeJS.ProcessEnv = process.env, exists: (p: string) => boolean = existsSync): boolean {
@@ -65,9 +75,12 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
       const serverUp = (await t(['list-sessions'])).code === 0;
       const scoped = !serverUp && await scope();
       const { file, args: argv } = newSessionCommand(args, scoped, `ledge-tmux-${Date.now()}`);
-      let r = await runFile(file, argv, clientEnv);
+      const binary = daemonTmux();
+      const executable = file === 'tmux' ? binary : file;
+      const commandArgs = file === 'systemd-run' ? argv.map((a, i) => a === 'tmux' && argv[i - 1] === '--' ? binary : a) : argv;
+      let r = await runFile(executable, commandArgs, clientEnv);
       // No scope is no reason to refuse an agent: start tmux plain (update/guard.ts then refuses updates for this server).
-      if (r.code !== 0 && scoped) { log(`tmux: scoped start failed (${r.stderr.trim()}), starting unscoped`); r = await runFile('tmux', args, clientEnv); }
+      if (r.code !== 0 && scoped) { log(`tmux: scoped start failed (${r.stderr.trim()}), starting unscoped`); r = await runFile(binary, args, clientEnv); }
       if (r.code !== 0) throw new Error(`tmux new-session failed: ${r.stderr.trim()}`);
     },
     async sendText(name, text) {
@@ -81,9 +94,9 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
       const r = await t(['send-keys', '-t', `=${name}:`, ...keys]);
       if (r.code !== 0) throw new Error(`tmux send-keys failed: ${r.stderr.trim()}`);
     },
-    async capture(name, lines) {
-      // History included, then trimmed to exactly the last `lines` lines.
-      const r = await t(['capture-pane', '-p', '-J', '-t', `=${name}:`, '-S', String(-lines)]);
+    async capture(name, lines, o) {
+      // History included, then trimmed to exactly the last `lines` lines. `color` keeps the SGR codes (-e).
+      const r = await t(['capture-pane', '-p', '-J', ...(o?.color ? ['-e'] : []), '-t', `=${name}:`, '-S', String(-lines)]);
       if (r.code !== 0) return null;
       return r.stdout.replace(/\s+$/g, '').split('\n').slice(-lines).join('\n');
     },

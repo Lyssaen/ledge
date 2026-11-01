@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { until } from './helpers.js';
-import { startTui } from './tui-fixture.js';
+import type { ThreadItem } from '@ledge/protocol';
+import { mockupSessions, startTui } from './tui-fixture.js';
 import { PROJECT_COLORS } from '@ledge/protocol';
 import { PALETTES } from '../src/tui/theme.js';
 
@@ -87,6 +88,38 @@ describe('ledge tui: the theme (#95 lot D)', () => {
       expect(f).toContain(fgOf(PALETTES.light.coral));
       expect(f).toContain(bgOf(PALETTES.light.code));
       expect(f).toContain(fgOf(PALETTES.light.blue));
+    } finally { await tui.cleanup(); }
+  });
+
+  /** What a light frame must not carry: a colour only the dark palette has (a hard-coded dark tone would show). */
+  const darkOnly = () => {
+    const lightValues = new Set<string>(Object.values(PALETTES.light));
+    return Object.entries(PALETTES.dark).filter(([, v]) => !lightValues.has(v));
+  };
+  const noDark = (f: string) => {
+    for (const [k, v] of darkOnly()) { expect(f, `dark ${k}`).not.toContain(fgOf(v)); expect(f, `dark ${k} bg`).not.toContain(bgOf(v)); }
+  };
+
+  it('the new screens render in the light theme: home, a rig room, the OMP pane', async () => {
+    const omp = { ...mockupSessions()[1]!, id: 'omp1', name: 'Lyra', tool: 'omp' as const, backend: 'omp-rpc' as const, tmuxSession: null };
+    const tui = await startTui({ theme: 'light', openrig: {}, sessions: [...mockupSessions(), omp] });
+    try {
+      await tui.resize(160, 46);
+      await until(() => tui.frame().includes('factory'));
+      expect(tui.frame()).toContain(fgOf(PALETTES.light.coral));
+      noDark(tui.frame());
+      await tui.press('2');
+      await until(() => tui.frame().includes(' · RIG'));
+      expect(tui.frame()).toContain('▣ ');
+      noDark(tui.frame());
+      tui.daemon.thread('omp1', [
+        { kind: 'prompt', id: 'p', turn: 1, at: now(-3), text: 'Ajoute la gestion du 429' },
+        { kind: 'reply', id: 'r', turn: 1, at: now(-1), text: 'Fait, avec un test.' }
+      ] as ThreadItem[]);
+      await tui.pick('Lyra');
+      await until(() => tui.frame().includes('π FIL · OMP') && tui.frame().includes('Fait, avec un test.'));
+      expect(tui.frame()).toContain(fgOf(PALETTES.light.omp));
+      noDark(tui.frame());
     } finally { await tui.cleanup(); }
   });
 });

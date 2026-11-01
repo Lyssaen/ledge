@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
+import type { LedgeDecision, LedgeRule } from '@ledge/protocol';
+import { DEFAULT_MANDATE, fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
 import { fleet, ottoThread } from './thread';
 
 // Captures Ledge Desktop for docs/screens (README, tour), in French, against the simulated daemon.
@@ -43,6 +44,34 @@ for (const theme of ['dark', 'light'] as const) {
     await page.getByRole('tree').getByRole('button', { name: /^Otto/ }).click();
     await expect(page.locator('.session-thread .turn').first()).toBeVisible();
     await page.screenshot({ path: `${SCREENS}desktop-session-${theme}.png` });
+  });
+}
+
+/** The Mandat tab (lot 7, maquette p-ledge-mandat): two git rules (one proposed, « à valider »), Ledge's decisions of the week. */
+const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+const mandateRules: LedgeRule[] = [
+  { id: 'r1', text: 'Merge, jamais de rebase sur une branche partagée', category: 'git', since: '2026-10-26T09:00:00.000Z', from: 'd9', appliedCount: 4, status: 'active' },
+  { id: 'r2', text: 'Fusion sur main seulement après la relecture d’un second agent', category: 'git', since: '2026-10-30T09:00:00.000Z', from: 'd2,d3', appliedCount: 0, status: 'proposed' },
+  { id: 'r3', text: 'Tests ciblés d’abord, la suite entière avant la PR', category: 'tests', since: '2026-10-20T09:00:00.000Z', from: '', appliedCount: 6, status: 'active' }
+];
+const mandateDecisions: LedgeDecision[] = [
+  { id: 'd1', escalationId: 'e1', by: 'ledge', category: 'git', summary: 'merge de feat/sqlite dans main, pas de rebase', answers: {}, rule: 'r1', from: 'build@factory', rigId: 'rf', at: ago(25) },
+  { id: 'd2', escalationId: 'e2', by: 'user', category: 'git', summary: 'relecture avant la fusion', answers: {}, from: 'orch-lead@factory', rigId: 'rf', at: ago(80) },
+  { id: 'd3', escalationId: 'e3', by: 'user', category: 'git', summary: 'relecture avant la fusion de fix/ssh', answers: {}, from: 'dev-build@starter', rigId: 'rs', at: ago(60 * 26) },
+  { id: 'd9', escalationId: 'e9', by: 'ledge', category: 'git', summary: 'force-push refusé', answers: {}, from: 'build@factory', rigId: 'rf', at: ago(60 * 24 * 4) }
+];
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`mandat, ${theme}`, async ({ page }) => {
+    await page.addInitScript(t => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
+    await fakeDaemon(page, busy, { projects: twoProjects, openrig: { machine: 'local', state: 'running', version: '0.3.0' },
+      brain: { status: { state: 'on', tool: 'claude', enabled: true }, mandate: DEFAULT_MANDATE, rules: mandateRules, decisions: mandateDecisions } });
+    await page.goto('/');
+    await page.locator('section.ledge-home').waitFor();
+    await page.locator('.home-tabs').getByRole('tab', { name: 'Mandat' }).click();
+    await expect(page.getByRole('region', { name: 'Catégorie Git et branches' })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: `${SCREENS}desktop-mandat-${theme}.png` });
   });
 }
 
