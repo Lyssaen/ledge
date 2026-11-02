@@ -108,11 +108,14 @@ export function LeftColumn({ rows, width, height, asks, near, decisions = [] }: 
       case 'seat': {
         const st = seatStateLabel(r.seat, escalations, t.seat);
         const topic = r.session ? oneLine(r.session.topic ?? r.session.title) : '';
+        // A Ledge team's seat says its role (its address, @build), as a session of a team did.
+        const role = r.rig.engine === 'ledge' ? r.seat.address : '';
         return (
           <Box key={key}><Row on={on(r)}>
             <Text>  </Text><Text color={st.color}>{g[st.glyph] as string} </Text>
             <Text color={C.fg} bold>{fit(r.seat.name, NAME_W)}</Text>
-            <Text color={C.dim}>{fit(topic, topicW)} </Text>
+            {role ? <Text color={C.violet}>{role} </Text> : null}
+            <Text color={C.dim}>{fit(topic, Math.max(6, topicW - (role ? role.length + 1 : 0)))} </Text>
             <Text color={st.color}>{st.label}</Text>
           </Row></Box>
         );

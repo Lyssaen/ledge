@@ -79,6 +79,12 @@ describe('ledge tui: the left column', () => {
       expect(rowsOf().some(r => r.kind === 'kernel')).toBe(true);
       expect(rowsOf({ engine: 'openrig' }).some(r => r.kind === 'kernel')).toBe(true);
     });
+    it('a session of a team with no rig row (dissolved, not projected yet) stays in its project as a lone session', () => {
+      const rows = ledgeRows({ rigs: [team('team-c3d4', 'mobile', true)], sessions: mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-gone', role: 'build' } : s)) });
+      const at = rows.findIndex(r => r.kind === 'session' && r.s.id === 'nova');
+      expect(at).toBeGreaterThan(-1);
+      expect(rows.slice(0, at).some(r => r.kind === 'project' && r.label === 'Ledge')).toBe(true);
+    });
     it('an OpenRig rig is never marked resting', () => {
       expect(rowsOf().filter(r => r.kind === 'rig').every(r => (r as Extract<LeftRow, { kind: 'rig' }>).resting === false)).toBe(true);
     });

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { sayToLedge, useAsks, useContextNear, useTasks, useTeams } from '@ledge/fleet';
 import { askShown, decisionEscalationId, isDecisionEscalation, projectOf as projectIdOf, type Escalation, type Rig, type RigSeat, type Task } from '@ledge/protocol';
 import { revisitDecision } from '../brain.js';
+import { refusalText, rigCall } from '../model/rigActions.js';
 import { LEDGE_FOCUS, useEditing, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
 import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
 import { listedDecisions, nearContext, openDecisions } from '../model/overview.js';
@@ -162,15 +163,16 @@ export function Home() {
       if (input === 'j' || input === 'k' || key.upArrow || key.downArrow) return true;
     }
     if (input === 'J' && selected) { if (choices.length) setJoining({ index: 0 }); else tui.toast({ text: t.overview.noTeamHere, tone: 'info' }); return true; }
-    // R, off Ledge (where it sums up the day): resume a resting team through rig.act up: the chosen team's own row, else the selected
-    // session's team, else its project's first, else the first.
+    // R, off Ledge (where it sums up the day): resume the resting team you point at, through rig.act up: the chosen team's own row, else
+    // the selected session's team, else its project's first. A live team's row or seat chosen: nothing to resume, said in a toast.
     if (input === 'R') {
-      const chosenRig = focus.kind === 'rig' ? resting.find(r => r.machine === focus.machine && r.id === focus.rigId) : undefined;
+      const at = focus.kind === 'rig' || focus.kind === 'seat' ? ledgeTeams.find(r => r.machine === focus.machine && r.id === focus.rigId) : undefined;
+      if (at && at.lifecycle !== 'stopped') { tui.toast({ text: t.toast.notResting(at.name), tone: 'info' }); return true; }
       const mine = selected?.team ? resting.find(r => r.id === selected.team) : undefined;
-      const target = chosenRig ?? mine ?? resting.find(r => selectedProject !== null && r.projectId === selectedProject) ?? resting[0];
+      const target = at ?? mine ?? resting.find(r => selectedProject !== null && r.projectId === selectedProject);
       if (target) {
-        tui.client.send({ type: 'rig.act', rid: randomUUID(), machine: target.machine, rigId: target.id, verb: 'up' });
-        tui.toast({ text: t.toast.resumed(target.name), tone: 'ok' });
+        void rigCall(tui.client, { type: 'rig.act', rid: randomUUID(), machine: target.machine, rigId: target.id, verb: 'up' }).then(r =>
+          tui.toast(r.ok ? { text: t.toast.resumed(target.name), tone: 'ok' } : { text: refusalText(r, t.rigAct), tone: 'error' }));
       }
       return true;
     }

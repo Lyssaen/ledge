@@ -1299,6 +1299,7 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
   it('lot F task 3: a team is one ▣ row of « Équipes », a resting one « au repos »; R resumes it with rig.act up; J keeps its chooser', async () => {
     const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s));
     const tui = await startTui({ sessions });
+    tui.daemon.onMessage(m => { if (m.type === 'rig.act') tui.daemon.push({ type: 'rig.result', rid: m.rid, ok: true }); });
     try {
       await tui.resize(160, 50);
       const rig = (id: string, name: string, resting: boolean) => ({ id, name, machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: resting ? 'stopped' as const : 'running' as const, kernel: false, engine: 'ledge' as const, repos: [],
@@ -1312,6 +1313,7 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
       await until(() => tui.frame().includes('▣ ledge-roles') && tui.frame().includes('▣ mobile'));
       const f = tui.frame();
       expect(f).toContain('ÉQUIPES');
+      expect(f).toContain('@build');
       expect(f).not.toContain('table commune');
       expect(f).not.toContain('OpenRig n’est pas installé');
       expect(f).not.toContain('Noyau OpenRig');
@@ -1322,6 +1324,7 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
       await until(() => sent(tui.daemon.received, 'rig.act').length === 1);
       expect(sent(tui.daemon.received, 'rig.act')[0]).toMatchObject({ type: 'rig.act', machine: 'local', rigId: 'team-c3d4', verb: 'up' });
       expect(sent(tui.daemon.received, 'team.resume')).toHaveLength(0);
+      await until(() => tui.frame().includes('Reprise de l’équipe mobile demandée.'));
       // Otto joins ledge-roles in its first free role.
       await tui.press('J');
       await until(() => tui.frame().includes('OTTO REJOINT QUELLE ÉQUIPE'));
@@ -1329,6 +1332,48 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
       await until(() => sent(tui.daemon.received, 'team.join').length === 1);
       expect(sent(tui.daemon.received, 'team.join')[0]).toEqual({ type: 'team.join', team: 'team-a1b2', session: 'otto', role: 'qa' });
     } finally { await tui.cleanup(); }
+  });
+
+  describe('lot F task 3 review: R resumes only the team you point at', () => {
+    const rigOf = (id: string, name: string, resting: boolean) => ({ id, name, machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: resting ? 'stopped' as const : 'running' as const, kernel: false, engine: 'ledge' as const, repos: [],
+      seats: resting ? [] : [{ ref: `build@${id}`, address: '@build', name: 'Nova', runtime: 'codex', state: 'working' as const, sessionId: 'nova' }] });
+    const boot = async (reply: { ok: boolean; reason?: string }) => {
+      const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s));
+      const tui = await startTui({ sessions });
+      tui.daemon.onMessage(m => { if (m.type === 'rig.act') tui.daemon.push({ type: 'rig.result', rid: m.rid, ...reply }); });
+      await tui.resize(160, 50);
+      tui.daemon.push({ type: 'teams.engine', engine: 'ledge', openrigAvailable: true, running: true });
+      tui.daemon.push({ type: 'rig.snapshot', machine: 'local', rigs: [rigOf('team-a1b2', 'ledge-roles', false), rigOf('team-c3d4', 'mobile', true)] });
+      await until(() => tui.frame().includes('▣ mobile'));
+      return tui;
+    };
+    it('a refusal shows its reason, not « resumed »', async () => {
+      const tui = await boot({ ok: false, reason: 'plus de place' });
+      try {
+        await tui.pick('Otto');
+        await tui.press('R');
+        await until(() => tui.frame().includes('plus de place'));
+        expect(tui.frame()).not.toContain('Reprise de l’équipe');
+      } finally { await tui.cleanup(); }
+    });
+    it('a live team’s seat chosen: R does nothing but say it is not at rest', async () => {
+      const tui = await boot({ ok: true });
+      try {
+        await tui.pick('Nova');
+        await tui.press('R');
+        await until(() => tui.frame().includes('ledge-roles n’est pas au repos.'));
+        expect(sent(tui.daemon.received, 'rig.act')).toHaveLength(0);
+      } finally { await tui.cleanup(); }
+    });
+    it('a session of another project, no team pointed at: R resumes nothing (no global fallback)', async () => {
+      const tui = await boot({ ok: true });
+      try {
+        await tui.pick('Luna');
+        await tui.press('R');
+        await new Promise(r => setTimeout(r, 300));
+        expect(sent(tui.daemon.received, 'rig.act')).toHaveLength(0);
+      } finally { await tui.cleanup(); }
+    });
   });
 
   it('lot F task 3: the navigation bar says « 2 Équipe », and screen 4 is « Modèles »', async () => {

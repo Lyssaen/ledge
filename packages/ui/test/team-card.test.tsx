@@ -6,7 +6,7 @@ import { ChatCopyProvider } from '../src/chat/copy';
 import { copy } from './chat-copy-fixture';
 
 const team = {
-  label: 'Proposed team', folder: 'Folder', table: () => 'Table', newTable: (p: string) => `its own room in ${p}`, seats: 'Seats',
+  label: 'Proposed team', folder: 'Folder', table: () => 'Room', newTable: (p: string) => `its own room in ${p}`, seats: 'Seats',
   autonomy: { ask: 'asks', edits: 'edits', auto: 'autonomous' }, autoWarning: (r: string) => `${r} autonomous`,
   launch: 'Launch', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (p: string) => `Saved: ${p}`, notSaved: (why: string) => `Not saved: ${why}`,
   launched: (at: string) => `Launched at ${at}`, openTable: 'Open the team', failed: (why: string) => `Failed: ${why}`, template: (id: string) => `template ${id}`, objective: (goal: string) => `Objective: ${goal}`

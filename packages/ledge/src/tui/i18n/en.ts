@@ -172,7 +172,7 @@ export const en: Messages = {
     steps: { sessions: 'the sessions', pane: n => `${n}'s terminal`, reply: n => `${n}'s reply`, git: n => `${n}'s git state`, repo: p => p },
     operator: (s, m) => `Ledge · Operator · sees ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
     teamCard: name => `Team · ${name}`, taskCard: 'Tasks to give', launchTeam: 'Launch the team', save: 'Save', saved: 'saved',
-    seats: 'Seats', table: 'Table', newTable: project => `its own room in ${project}`,
+    seats: 'Seats', table: 'Room', newTable: project => `its own room in ${project}`,
     autonomy: { ask: 'asks', edits: 'edits without asking', auto: 'autonomous' },
     autoWarning: roles => `${roles} will work without asking.`, teamLaunched: at => `✓ Team launched at ${at}`,
     give: 'Give', waitTeam: 'active once the team is launched',
@@ -293,7 +293,7 @@ export const en: Messages = {
     noTerminalOmp: n => `${n} is driven by Ledge over OMP's protocol: there is no terminal to attach to.`,
     noTerminal: n => `No terminal for ${n}.`, attachFailed: code => `tmux stopped with code ${code}.`,
     modelSwitch: 'This daemon cannot change a running session’s model.',
-    joined: (n, team) => `${n} joins ${team}.`, resumed: team => `Asked to resume team ${team}.`, saved: path => `Team saved: ${path}`,
+    joined: (n, team) => `${n} joins ${team}.`, notResting: team => `${team} is not at rest.`, resumed: team => `Asked to resume team ${team}.`, saved: path => `Team saved: ${path}`,
     draftKept: 'Draft kept: r to pick it up.', draftQuit: 'Draft in progress: ctrl+c again to quit anyway (it will be lost).',
     exited: (cmd, code) => `${cmd} exited with code ${code}.`
   },

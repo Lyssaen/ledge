@@ -184,7 +184,7 @@ export const fr = {
     steps: { sessions: 'les sessions', pane: (n: string) => `le terminal de ${n}`, reply: (n: string) => `la réponse de ${n}`, git: (n: string) => `l’état git de ${n}`, repo: (p: string) => p },
     operator: (s: number, m: number) => `Ledge · Opérateur · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
     teamCard: (name: string) => `Équipe · ${name}`, taskCard: 'Tâches à confier', launchTeam: 'Lancer l’équipe', save: 'Enregistrer', saved: 'enregistrée',
-    seats: 'Sièges', table: 'Table', newTable: (project: string) => `sa propre pièce dans ${project}`,
+    seats: 'Sièges', table: 'Pièce', newTable: (project: string) => `sa propre pièce dans ${project}`,
     autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' } as Record<'ask' | 'edits' | 'auto', string>,
     autoWarning: (roles: string) => `${roles} travaillera sans demander.`, teamLaunched: (at: string) => `✓ Équipe lancée à ${at}`,
     give: 'Confier', waitTeam: 'active une fois l’équipe lancée',
@@ -311,7 +311,7 @@ export const fr = {
     noTerminalOmp: (n: string) => `${n} est piloté par Ledge via le protocole d’OMP : pas de terminal à attacher.`,
     noTerminal: (n: string) => `Pas de terminal pour ${n}.`, attachFailed: (code: number) => `tmux s’est arrêté avec le code ${code}.`,
     modelSwitch: 'Ce daemon ne change pas le modèle d’une session en cours.',
-    joined: (n: string, team: string) => `${n} rejoint ${team}.`, resumed: (team: string) => `Reprise de l’équipe ${team} demandée.`, saved: (path: string) => `Équipe enregistrée : ${path}`,
+    joined: (n: string, team: string) => `${n} rejoint ${team}.`, notResting: (team: string) => `${team} n’est pas au repos.`, resumed: (team: string) => `Reprise de l’équipe ${team} demandée.`, saved: (path: string) => `Équipe enregistrée : ${path}`,
     draftKept: 'Brouillon gardé : r pour reprendre.', draftQuit: 'Brouillon en cours : ctrl+c encore pour quitter quand même (il sera perdu).',
     exited: (cmd: string, code: number) => `${cmd} s’est arrêté avec le code ${code}.`
   },
