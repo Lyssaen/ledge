@@ -148,7 +148,8 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 
 /** What a challenge is for. */
 /** `pc`: updating or restarting the PC's daemon (spec 2026-10-28 mobile daemon update). */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc']);
+/** `terminal`: taking the hand on a session's terminal (spec 2026-11-02 mobile terminal), bound to the session. */
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -239,6 +240,24 @@ export type PcAction = z.infer<typeof PcActionSchema>;
 /** The subject a `pc` challenge is bound to: a challenge for one version covers neither another nor a restart. */
 export const pcSubject = (action: PcAction, version?: string): string => (action === 'update' ? `update@${version ?? ''}` : 'restart');
 
+/** A terminal the phone opened, named by the daemon. */
+export const TerminalIdSchema = z.string().regex(/^t_[A-Za-z0-9_-]{8,40}$/);
+export type TerminalId = z.infer<typeof TerminalIdSchema>;
+/** The most characters one `term.input` carries: a paste is cut into several. */
+export const TERM_INPUT_MAX = 4_096;
+/** The first screen of a terminal, escapes included, cut from the top past this. */
+export const TERM_SCREEN_MAX = 65_536;
+/** One `term.output`: a batch of at most 16 KiB of bytes, decoded; a character never takes more than two UTF-16 units. */
+export const TERM_OUTPUT_MAX = 32_768;
+/** A pane's size, within what tmux accepts. */
+const TermDimSchema = z.number().int().min(1).max(10_000);
+/** Why the phone no longer holds the hand: it asked, the PC took it back, no key for 5 min, 30 min in all, the app went to the background, the link dropped. */
+export const TermReleaseWhySchema = z.enum(['asked', 'pc', 'idle', 'expired', 'background', 'link']);
+export type TermReleaseWhy = z.infer<typeof TermReleaseWhySchema>;
+/** Why a terminal ended: the session ended, its tmux went, the phone closed it, the same phone opened another, or the PC could not follow it. */
+export const TermExitWhySchema = z.enum(['ended', 'gone', 'closed', 'superseded', 'failed']);
+export type TermExitWhy = z.infer<typeof TermExitWhySchema>;
+
 /** What the daemon accepts from a phone: this union is the whitelist. */
 export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot.request') }),
@@ -312,6 +331,17 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.ignore'), op: OperationIdSchema, qid: OperationIdSchema, undo: z.literal(true).optional() }),
   /** Puts a closed task Ledge gave away from « À traiter ». */
   z.object({ type: z.literal('task.seen'), op: OperationIdSchema, task: z.string().min(1).max(40) }),
+  /** Streams a session's pane, read-only; answered by `term.opened` or `operation.result` (rejected). */
+  z.object({ type: z.literal('term.open'), op: OperationIdSchema, id: sessionId }),
+  /** « Prendre la main »: passkey, purpose `terminal`, over the session; answered by `term.held` or `operation.result` (rejected). */
+  z.object({ type: z.literal('term.hold'), op: OperationIdSchema, tid: TerminalIdSchema, assertion: AssertionSchema.optional() }),
+  /** Keys to type, as xterm produced them; `n` counts from 0 for the terminal, so a duplicate is dropped and a gap seen. Refused unless held. */
+  z.object({ type: z.literal('term.input'), tid: TerminalIdSchema, n: z.number().int().nonnegative(), data: z.string().min(1).max(TERM_INPUT_MAX) }),
+  /** « Rendre la main »: back to read-only. */
+  z.object({ type: z.literal('term.release'), tid: TerminalIdSchema }),
+  /** The phone saw a gap in `seq`: a fresh `term.opened`, please. */
+  z.object({ type: z.literal('term.resync'), tid: TerminalIdSchema }),
+  z.object({ type: z.literal('term.close'), tid: TerminalIdSchema }),
   /** Whether the phone's app is in front: a device that is visible gets no push. */
   z.object({ type: z.literal('presence'), visible: z.boolean() }),
   /** Installs `version` on the PC, then restarts its daemon; the phone asks for its own build's version. Passkey, purpose `pc`. */
@@ -334,7 +364,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon takes `session.model`. */ models: z.literal(true).optional(),
     /** The daemon sends `session.checklist` and a session's `checklist` summary. */ checklist: z.literal(true).optional(),
     /** `update`: the daemon can install a version and restart (npm, systemd); `restart`: it can restart (systemd). */ update: z.literal(true).optional(), restart: z.literal(true).optional(),
-    /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
+    /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional(),
+    /** The daemon streams a session's terminal (`term.open`). */ terminal: z.literal(true).optional(),
+    /** The PC lets a phone type into a terminal (`term.hold`): its setting is on. */ terminalInput: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
@@ -368,6 +400,17 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   AttachmentStoredSchema,
   AttachmentDataSchema,
   AttachmentErrorSchema,
+  /** A terminal's first screen (also the answer to `term.resync`, then without `op`): the pane's size, the cursor, and the `seq` the next output takes. */
+  z.object({ type: z.literal('term.opened'), op: OperationIdSchema.optional(), tid: TerminalIdSchema, id: z.string(), cols: TermDimSchema, rows: TermDimSchema,
+    screen: z.string().max(TERM_SCREEN_MAX), cursor: z.object({ x: z.number().int().nonnegative(), y: z.number().int().nonnegative() }), seq: z.number().int().nonnegative(),
+    /** Read-only for good: a subagent's page shows its parent's pane. */ readOnly: z.literal(true).optional() }),
+  /** What the pane printed since the last one; `seq` + 1 each time. */
+  z.object({ type: z.literal('term.output'), tid: TerminalIdSchema, seq: z.number().int().nonnegative(), data: z.string().min(1).max(TERM_OUTPUT_MAX) }),
+  z.object({ type: z.literal('term.size'), tid: TerminalIdSchema, cols: TermDimSchema, rows: TermDimSchema }),
+  /** The phone holds the hand until `until`, pushed back by each key (5 min), never past 30 min from the hold. */
+  z.object({ type: z.literal('term.held'), tid: TerminalIdSchema, until: z.string().datetime() }),
+  z.object({ type: z.literal('term.released'), tid: TerminalIdSchema, why: TermReleaseWhySchema }),
+  z.object({ type: z.literal('term.exit'), tid: TerminalIdSchema, why: TermExitWhySchema }),
   /** Never carries free text. */
   z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() })
 ]);

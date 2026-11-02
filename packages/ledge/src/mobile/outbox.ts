@@ -11,6 +11,8 @@ const QUEUE_BYTES_MAX = 8 * 1_048_576;
 export interface Outbox {
   /** Queues `msg` for the device; a queued message with the same `key` is replaced in place. */
   push(deviceId: string, msg: PhoneServerMessage, key?: string): void;
+  /** Whether a message with this key still waits for the device (not yet handed to the relay). */
+  queued(deviceId: string, key: string): boolean;
   /** Forgets everything queued for the device. */
   drop(deviceId: string): void;
   /** Resolves once nothing is queued or being sent for the device (at once if there is nothing), or when the outbox closes. */
@@ -151,6 +153,7 @@ export function createOutbox(opts: {
       }
       enqueue(deviceId, padded, key, msg.type === 'operation.result' || msg.type === 'error');
     },
+    queued: (deviceId, key) => queues.get(deviceId)?.some(q => q.key === key) ?? false,
     drop(deviceId) { clear(deviceId); settle(); },
     flush: deviceId => new Promise<void>(done => {
       if (closed || (!queues.has(deviceId) && sending !== deviceId)) return done();

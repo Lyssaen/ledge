@@ -23,6 +23,8 @@ export interface Tmux {
   setOption(name: string, option: string, value: string): Promise<void>;
   /** `readOnly` watches the pane without sending it keys (`attach-session -r`). */
   attachArgs(name: string, opts?: { readOnly?: boolean }): string[];
+  /** A control client on the session (`-C`) that only reads and never counts for the window's size: the phone's terminal. */
+  controlArgs?(name: string): string[] | null;
 }
 
 export function runFile(file: string, args: string[], env?: NodeJS.ProcessEnv, opts?: { timeoutMs?: number }): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -115,7 +117,8 @@ export function realTmux(socket: string | null = 'ledge', opts: { scope?: () => 
       if (r.code !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
     },
     async killSession(name) { await t(['kill-session', '-t', `=${name}`]); },
-    attachArgs(name, opts) { return [...base(), 'attach-session', ...(opts?.readOnly ? ['-r'] : []), '-t', `=${name}`]; }
+    attachArgs(name, opts) { return [...base(), 'attach-session', ...(opts?.readOnly ? ['-r'] : []), '-t', `=${name}`]; },
+    controlArgs(name) { return [...base(), '-C', 'attach-session', '-t', `=${name}`, '-f', 'ignore-size,read-only']; }
   };
 }
 
@@ -144,6 +147,8 @@ export function routedTmux(own: Tmux, seats: Tmux): Tmux {
     },
     killSession: n => of(n).killSession(n),
     setOption: (n, option, value) => of(n).setOption(n, option, value),
-    attachArgs: (n, opts) => of(n).attachArgs(n, opts)
+    attachArgs: (n, opts) => of(n).attachArgs(n, opts),
+    // Seats are refused a phone terminal (`rig`); only Ledge's own server is offered.
+    controlArgs: n => (isSeatSession(n) ? null : own.controlArgs?.(n) ?? null)
   };
 }
