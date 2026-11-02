@@ -21,7 +21,7 @@ export interface SidebarOpenRig {
   /** The local machine answers and has OpenRig: « Démarrer OpenRig » is offered there (otherwise only the OpenRig page link). */
   canStart: boolean;
   /** Where OpenRig is installed when not on this computer: the first such machine in display order (« Il est installé sur … »). */
-  installedOn: string | null;
+  installedOn: { id: string; label: string } | null;
   /** « Démarrer OpenRig » runs (on the local machine). */
   starting: boolean;
   /** Why the last « Démarrer OpenRig » failed (the daemon's error code or `rig`'s last line), until the next try. */
@@ -55,7 +55,7 @@ export function useSidebarOpenRig(client: DaemonClient, machines: readonly Machi
     kernelState: machine => (unreachable(machine) ? 'offline' : byMachine.get(machine)?.kernel.state),
     labelOf: machine => machines.find(m => m.id === machine)?.label ?? machine,
     canStart,
-    installedOn: machines.find(m => m.id !== LOCAL && byMachine.get(m.id)?.installed)?.label ?? null,
+    installedOn: (() => { const m = machines.find(x => x.id !== LOCAL && byMachine.get(x.id)?.installed); return m ? { id: m.id, label: m.label } : null; })(),
     starting: local.pending?.kind === 'daemon.start',
     failed: last && !last.ok && last.error !== 'cancelled' ? (last.error ?? '') : null,
     // The action's end reads the machine again (useOpenRig).

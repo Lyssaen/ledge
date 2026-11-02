@@ -44,7 +44,7 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
   for (const s of live) if (s.rig!.name !== KERNEL) rigs.set(s.rig!.name, [...(rigs.get(s.rig!.name) ?? []), s]);
   const launch = () => dispatch({ type: 'openrig', section: 'rigs', open: { launch: true } });
   const row = (s: Session, depth: number) => (
-    <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel')} style={{ '--d': depth } as CSSProperties}>
+    <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel', s.offline && 'off')} style={{ '--d': depth } as CSSProperties}>
       <span className="st-gap" />
       <span className="st-bot"><SessionBot session={s} size={18} paused={paused} /></span>
       <button type="button" className="st-main" onClick={() => dispatch({ type: 'open', id: s.id })}>
@@ -56,7 +56,8 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
 
   if (live.length === 0) {
     if (!openrig) return null;
-    const openPage = <button type="button" className="st-empty-link" onClick={() => dispatch({ type: 'openrig', section: 'rigs' })}>{e.openPage}</button>;
+    const openPageOn = (machine?: string) => <button type="button" className="st-empty-link" onClick={() => dispatch({ type: 'openrig', section: 'rigs', ...(machine ? { machine } : {}) })}>{e.openPage}</button>;
+    const openPage = openPageOn();
     const box = (title: string, body: JSX.Element, action: JSX.Element) => <div className="st-empty" role="status"><strong>{title}</strong>{body}{action}</div>;
     if (openrig.starting) return box(e.stopped, <p>{e.stoppedBody}</p>, <button type="button" className="st-empty-btn" disabled><i className="st-spin" aria-hidden="true" />{e.starting}</button>);
     if (!openrig.daemonUp && openrig.canStart && openrig.failed !== null) {
@@ -68,7 +69,8 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
     }
     if (!openrig.daemonUp && openrig.installed) {
       // « Démarrer OpenRig » acts on this computer only: without OpenRig here (or this computer unreachable), the page's link alone.
-      if (!openrig.canStart) return <div className="st-empty" role="status"><strong>{e.stopped}</strong>{openrig.installedOn && <p>{e.installedOn(openrig.installedOn)}</p>}{openPage}</div>;
+      // The link opens that machine's page, where it can be started (review).
+      if (!openrig.canStart) return <div className="st-empty" role="status"><strong>{e.stopped}</strong>{openrig.installedOn && <p>{e.installedOn(openrig.installedOn.label)}</p>}{openPageOn(openrig.installedOn?.id)}</div>;
       return box(e.stopped, <p>{e.stoppedBody}</p>, <button type="button" className="st-empty-btn" onClick={openrig.start}><Icon d={SHELL_ICONS.play} size={12} />{e.start}</button>);
     }
     if (!openrig.daemonUp) return null;

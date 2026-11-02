@@ -149,11 +149,25 @@ describe('the Rigs view of the sidebar', () => {
   });
 
   it('OpenRig installed elsewhere only: « Il est installé sur EC2 : démarre-le depuis sa page. » before the link (4 bis)', () => {
-    mount([], rig({ daemonUp: false, canStart: false, installedOn: 'EC2' }));
+    mount([], rig({ daemonUp: false, canStart: false, installedOn: { id: 'ec2', label: 'EC2' } }));
     expect(screen.getByRole('status')).toHaveTextContent(/^OpenRig est arrêté\.Il est installé sur EC2 : démarre-le depuis sa page\.Ouvrir la page OpenRig$/);
     cleanup();
-    mount([], rig({ daemonUp: false, canStart: false, installedOn: 'EC2' }), 'en');
+    mount([], rig({ daemonUp: false, canStart: false, installedOn: { id: 'ec2', label: 'EC2' } }), 'en');
     expect(screen.getByRole('status')).toHaveTextContent('It’s installed on EC2: start it from its page.');
+  });
+
+  it('the link of that box opens the page of the machine named, not this computer (review)', async () => {
+    const { dispatch } = mount([], rig({ daemonUp: false, canStart: false, installedOn: { id: 'ec2', label: 'EC2' } }));
+    await userEvent.click(screen.getByRole('button', { name: 'Ouvrir la page OpenRig' }));
+    expect(dispatch).toHaveBeenLastCalledWith({ type: 'openrig', section: 'rigs', machine: 'ec2' });
+  });
+
+  it('a seat on a disconnected machine: its name greyed (.off) and « hors ligne » (4 bis, review)', () => {
+    mount([{ ...KERNEL[0]!, machineId: 'ec2', offline: true }, KERNEL[1]!], rig({ kernelState: m => (m === 'ec2' ? 'offline' : 'ready') }));
+    const rows = screen.getAllByRole('treeitem');
+    expect(rows[0]).toHaveClass('off');
+    expect(rows[0]).toHaveTextContent('hors ligne');
+    expect(rows[1]).not.toHaveClass('off');
   });
 
   it('the kernel tag in English, offline: « offline · 2/3 »', () => {
@@ -282,9 +296,9 @@ describe('where OpenRig is installed when not here (4 bis)', () => {
     const answer = (m: string, s: OpenRigState) => emit({ type: 'openrig.state', requestId: asks.find(x => x.machineId === m)!.requestId, machineId: m, state: s });
     answer('local', st({ installed: false, daemon: { state: 'unknown' } }));
     answer('ec2', st({ daemon: { state: 'stopped' } }));
-    expect(result.current.installedOn).toBe('EC2');
+    expect(result.current.installedOn).toEqual({ id: 'ec2', label: 'EC2' });
     answer('pi', st({ daemon: { state: 'stopped' } }));
-    expect(result.current.installedOn).toBe('Pi');
+    expect(result.current.installedOn).toEqual({ id: 'pi', label: 'Pi' });
   });
 });
 
