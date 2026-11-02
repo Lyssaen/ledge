@@ -72,10 +72,13 @@ interface Shots { client: DaemonClient; sessionId: string; who: string; onCaptur
 /** A row's captures as thumbnails (420 × 260, their size on them). */
 function Captures({ tool, shots }: { tool: ToolItem; shots: Shots }): JSX.Element | null {
   const { t } = useI18n();
-  if (!tool.images?.length) return null;
+  if (!tool.images?.length && !tool.imagesDropped) return null;
   const { onCapture } = shots;
-  return <Thumbs className="action-captures" client={shots.client} refs={tool.images} route={{ id: shots.sessionId }} max={{ w: 420, h: 260 }} who={shots.who} at={clock(tool.at)} alt={t.images.capture} tag
-    onOpen={onCapture && (i => onCapture(tool.id, i))} />;
+  return <>
+    {tool.images?.length ? <Thumbs className="action-captures" client={shots.client} refs={tool.images} route={{ id: shots.sessionId }} max={{ w: 420, h: 260 }} who={shots.who} at={clock(tool.at)} alt={t.images.capture} tag
+    onOpen={onCapture && (i => onCapture(tool.id, i))} /> : null}
+    {tool.imagesDropped && <p className="action-dropped">{t.session.thread.captureDropped}</p>}
+  </>;
 }
 
 interface RowProps {
@@ -125,7 +128,6 @@ function ActionRow({ shots, tool, now, live, expanded, onExpand, flash, onChange
         </div>
         {expanded && detail && <pre className={cls('pre action-output', !!tool.error && 'is-error')}>{detail}</pre>}
         <Captures tool={tool} shots={shots} />
-        {tool.imagesDropped && <p className="action-dropped">{th.captureDropped}</p>}
       </div>
       {/* The ticking time of a running action is left out of what the live region announces. */}
       <span className="tm action-time" aria-hidden={running || undefined}>{tool.status === 'unknown' ? th.interrupted : fmtDur(elapsedMs(tool, now), lang)}</span>
@@ -172,7 +174,6 @@ export function ActionGroup({ client, sessionId, who, onCapture, tools, todos, n
   flash?: string | null;
   onChange(path: string): void;
 }): JSX.Element {
-  const th = useI18n().t.session.thread;
   const [open, setOpen] = useState(() => flash !== null);
   // Before the page looks for the action to scroll it into view.
   useLayoutEffect(() => { if (flash !== null) setOpen(true); }, [flash]);
@@ -184,14 +185,15 @@ export function ActionGroup({ client, sessionId, who, onCapture, tools, todos, n
   const plan = todos.at(-1);
   const all = <>{tools.map(row)}{plan && <TodoRow key={plan.id} tool={plan} />}</>;
   if (tools.length <= FOLD_AT) return <>{marker}{all}</>;
+  const hidden = tools.filter(x => !(settled(x) || x.status === 'running'));
   return <>
     {marker}
     <FoldRow s={summarize(tools, now, live, todos)} open={open} onToggle={() => setOpen(o => !o)} />
     {open ? all : <>
-      {tools.filter(x => settled(x) || x.status === 'running').map(row)}
+      {tools.filter(x => !hidden.includes(x)).map(row)}
       {/* The folded rows' captures, in order, under the fold (the shown rows carry their own). */}
-      {tools.some(x => x.images?.length || x.imagesDropped) && tools.filter(x => !(settled(x) || x.status === 'running') && (x.images?.length || x.imagesDropped)).map(x => (
-        <li key={x.id} className="r action-row action-folded-captures"><span className="n pip" aria-hidden="true" /><div className="act-col"><Captures tool={x} shots={shots} />{x.imagesDropped && <p className="action-dropped">{th.captureDropped}</p>}</div><span className="tm" /></li>
+      {hidden.filter(x => x.images?.length || x.imagesDropped).map(x => (
+        <li key={x.id} className="r action-row action-folded-captures"><span className="n pip" aria-hidden="true" /><div className="act-col"><Captures tool={x} shots={shots} /></div><span className="tm" /></li>
       ))}
     </>}
   </>;
