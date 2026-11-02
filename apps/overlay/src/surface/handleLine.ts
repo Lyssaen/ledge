@@ -1,5 +1,5 @@
 import type { Escalation, Exchange, MandateCategory, Rig, Session } from '@ledge/protocol';
-import { isStandalone } from '@ledge/ui/rigs/model';
+import { isLedgeTeamSeat, isStandalone } from '@ledge/ui/rigs/model';
 import { seatName } from '@ledge/ui/chat/ledge/threadModel';
 
 /** What the closed notch says beside Ledge (spec §8.5, `nn-closed-*`). */
@@ -56,13 +56,13 @@ export function handleLine(o: {
 
 const waitsOnUser = (s: Session) => !s.offline && (s.state === 'waiting_permission' || s.state === 'waiting_input');
 
-/** The sessions waiting on the user, as the sidebar's « À toi » counts them: standalone and online ones only (a rig seat goes
- *  through its rig, R15), less those with an open ask (counted by `handleLine` as the ask, matched by machine and name as Desktop's
+/** The sessions waiting on the user, as the sidebar's « À toi » counts them: standalone (or a Ledge team's seat) and online ones
+ *  only (an OpenRig seat goes through its rig, R15), less those with an open ask (counted by `handleLine` as the ask, matched by machine and name as Desktop's
  *  `attentionOf` does), and the one waiting longest (by its last activity) with what it asks. */
 export function waitingOf(sessions: readonly Session[], rigs: readonly Rig[], escalations: readonly Escalation[] = []): { attention: number; waiting?: WaitingSession } {
   const asking = new Set(escalations.filter(e => e.source === 'ask' && open(e)).map(e => `${e.machine}\u0000${e.from}`));
-  // The brain session (lot 7) is in no list, but what it asks the user must reach the notch.
-  const waiting = sessions.filter(s => waitsOnUser(s) && (s.brain || isStandalone(s, rigs)) && !asking.has(`${s.machineId ?? 'local'}\u0000${s.name}`));
+  // The brain session (lot 7) is in no list, but what it asks the user must reach the notch; so must a Ledge team seat's (lot F).
+  const waiting = sessions.filter(s => waitsOnUser(s) && (s.brain || isLedgeTeamSeat(s) || isStandalone(s, rigs)) && !asking.has(`${s.machineId ?? 'local'}\u0000${s.name}`));
   if (waiting.length === 0) return { attention: 0 };
   const oldest = waiting.reduce((a, b) => (Date.parse(b.lastActivityAt) < Date.parse(a.lastActivityAt) ? b : a));
   return { attention: waiting.length, waiting: { name: oldest.name, text: oldest.pending?.text ?? '' } };

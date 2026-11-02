@@ -152,7 +152,10 @@ export function RigTable({ room, maxSeats, paused, focusedId, order, dispatch, m
                 className={cls('agent-seat', `place-${side}`, focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
                 <SessionBot session={s} size={64} paused={paused} />
                 <strong><span className="seat-name" title={s.name}>{s.name}</span>{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
-                <span className="seat-machine" title={machineOf(s)}>{machineOf(s)}</span>
+                {/* A Ledge team's seat says its @role, as main's team table did. */}
+                {s.role
+                  ? <span className="seat-role" title={s.roleLabel ?? s.role}>@{s.role}</span>
+                  : <span className="seat-machine" title={machineOf(s)}>{machineOf(s)}</span>}
                 <StateBadge state={state} offline={!!s.offline} />
               </button>
               <button type="button" className={cls('seat-more', `place-${side}`)} style={{ left: at(x + 56 - 30) }} aria-label={t.manage.menu.label(s.name)} title={t.manage.menu.more}

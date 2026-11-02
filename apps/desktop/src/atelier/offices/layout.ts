@@ -1,8 +1,9 @@
 /** Pure layout of the Bureaux floor. Coordinates are in sprite pixels. */
 export const ROOM_HEIGHT = 192, SPINE = 44, EXT = 9, CORRIDOR = 60;
 export type RoomSize = 'ledge' | 'tech' | 's' | 'm' | 'l' | 'o2' | 'o4' | 'o6' | 'rs' | 'rm' | 'rl';
-/** `resting`: a Ledge team at rest (lot F, Review Focus 2), whose office stays, empty. */
-export type Team = { id: string; name: string; kind: 'project' | 'rig' | 'none'; sessionIds: string[]; resting?: boolean };
+/** `ledge`: a Ledge team (lot F), whose office stays even with nobody in it (its sidebar row always leads somewhere); `resting`: at
+ *  rest (Review Focus 2), its office plated « au repos ». */
+export type Team = { id: string; name: string; kind: 'project' | 'rig' | 'none'; sessionIds: string[]; ledge?: boolean; resting?: boolean };
 export type Room = { key: string; name: string; size: RoomSize; sessionIds: string[]; x: number; y: number; door: 'N' | 'S'; win: boolean; corY: number; resting?: boolean };
 export type Zone = { id: string; kind: string; x: number; y: number; corY: number; capacity: number };
 export type FloorLayout = { rooms: Room[]; zones: Zone[]; corridors: { y: number; wing: number }[]; width: number; height: number; wings: number };
@@ -11,9 +12,9 @@ const REST_CAP: Record<'rs' | 'rm' | 'rl', number> = { rs: 5, rm: 9, rl: 13 };
 const ZONES = [ ['lounge', 112, 5], ['cafe', 104, 4], ['games', 112, 4], ['reading', 96, 3] ] as const;
 const NOOKS = [ ['nook-coffee', 48, 1], ['nook-chair', 48, 1], ['nook-bench', 56, 2], ['nook-poufs', 56, 2] ] as const;
 type Draft = Pick<Room, 'key' | 'name' | 'size' | 'sessionIds' | 'resting'> & { x?: number };
-/** A team's offices, six seats each (twelve for « Sans projet »); a team with nobody has none, but a Ledge team at rest keeps a small one. */
+/** A team's offices, six seats each (twelve for « Sans projet »); a team with nobody has none, but a Ledge team keeps a small one. */
 export function roomsOf(team: Team): Draft[] {
-  if (team.resting && team.sessionIds.length === 0) return [{ key: team.id, name: team.name, size: 's', sessionIds: [], resting: true }];
+  if ((team.ledge || team.resting) && team.sessionIds.length === 0) return [{ key: team.id, name: team.name, size: 's', sessionIds: [], ...(team.resting ? { resting: true } : {}) }];
   const cap = team.kind === 'none' ? 12 : 6, out: Draft[] = [];
   for (let i = 0; i < team.sessionIds.length; i += cap) {
     const ids = team.sessionIds.slice(i, i + cap), part = i / cap + 1;

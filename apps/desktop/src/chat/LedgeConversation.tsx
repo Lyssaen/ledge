@@ -119,7 +119,7 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched: p.onLaunched ?? noop });
   const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const project = useProjectReview({ chat, projects: p.projects ?? null, machines: view.machines, notify: p.notify ?? noop, onProposal: p.onProposal ?? noop });
-  // The team and task cards (roles spec §3.8), as main's home drew them: « Ouvrir la table » goes to the team's own room (lot F).
+  // The team and task cards (roles spec §3.8), as main's home drew them: « Ouvrir l'équipe » goes to the team's own room (lot F).
   const teamCards = useTeamCards({ send, onMessage, chat });
   const openTable = (teamId: string) => dispatch({ type: 'home', project: teamRoomFilter(allRigs, teamId) });
   const open = (id: string) => dispatch({ type: 'open', id });

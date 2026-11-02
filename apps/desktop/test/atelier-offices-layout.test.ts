@@ -9,6 +9,8 @@ describe('Bureaux placement', () => {
   it('a Ledge team at rest keeps an empty office; any other empty team has none (Review Focus 2)', () => {
     expect(roomsOf({ id: 'local/team-c3d4', name: 'mobile', kind: 'rig', sessionIds: [], resting: true })).toEqual([{ key: 'local/team-c3d4', name: 'mobile', size: 's', sessionIds: [], resting: true }]);
     expect(roomsOf(team('empty', 0, 'rig'))).toEqual([]);
+    // A live Ledge team whose seats all stopped keeps one too, plated as any office.
+    expect(roomsOf({ id: 'local/team-a1b2', name: 'roles', kind: 'rig', sessionIds: [], ledge: true })).toEqual([{ key: 'local/team-a1b2', name: 'roles', size: 's', sessionIds: [] }]);
     const floor = buildLayout(500, [{ id: 'local/team-c3d4', name: 'mobile', kind: 'rig', sessionIds: [], resting: true }], 0);
     expect(floor.rooms.find(r => r.key === 'local/team-c3d4')).toMatchObject({ resting: true, sessionIds: [] });
   });

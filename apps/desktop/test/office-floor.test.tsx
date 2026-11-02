@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MachineState } from '@ledge/fleet';
-import type { OpenRigStatus, Projects, Rig, RigSeat, TeamsEngine } from '@ledge/protocol';
+import type { OpenRigStatus, Projects, Rig, RigSeat, Session, TeamsEngine } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { LangProvider } from '../src/i18n/lang';
 import { Atelier } from '../src/atelier/Atelier';
@@ -33,13 +33,13 @@ const filing = { dragging: null, over: null, seated: null, dragProps: () => ({})
 const actions: SessionActions = { request() {}, resume() {}, restore() {}, pending: null, confirm() {}, cancel() {}, allowed: () => true };
 const menu = { menu: null, session: null, renaming: null, open: vi.fn(), close() {}, terminal() {}, rename() {}, closeRename() {}, sendRename() {} } as unknown as SessionMenuState;
 
-function renderBureaux({ engine, rigs, openrig = [], lang = 'fr' }: { engine: TeamsEngine; rigs: Rig[]; openrig?: OpenRigStatus[]; lang?: 'fr' | 'en' }) {
+function renderBureaux({ engine, rigs, openrig = [], lang = 'fr', sessions = [otto], busy = false }: { engine: TeamsEngine; rigs: Rig[]; openrig?: OpenRigStatus[]; lang?: 'fr' | 'en'; sessions?: Session[]; busy?: boolean }) {
   const act = vi.fn<RigControls['act']>(async () => ({ ok: true }));
-  const controls = { act, adopt: vi.fn(), pending: new Set(), busy: () => false, askStop() {}, paired: () => null, showRepos() {}, askAdopt() {} } as unknown as RigControls;
+  const controls = { act, adopt: vi.fn(), pending: new Set(), busy: () => busy, askStop() {}, paired: () => null, showRepos() {}, askAdopt() {} } as unknown as RigControls;
   const nav = { ...initialNav({ view: 'atelier', helpers: true, paused: true }), place: { kind: 'overview' as const, view: 'atelier' as const, project: 'all' } };
   render(
     <LangProvider lang={lang}><RigControlsContext.Provider value={controls}>
-      <Atelier nav={nav} dispatch={() => {}} sessions={[otto]} projects={PROJECTS} order={[otto]} rigs={rigs} openrig={openrig} engine={engine} machines={MACHINES}
+      <Atelier nav={nav} dispatch={() => {}} sessions={sessions} projects={PROJECTS} order={sessions} rigs={rigs} openrig={openrig} engine={engine} machines={MACHINES}
         projectIdOf={s => (s.cwd.startsWith('/w/ledge') ? 'ledge' : null)} filing={filing} actions={actions} menu={menu} />
     </RigControlsContext.Provider></LangProvider>
   );
@@ -92,8 +92,35 @@ describe('a Ledge team at rest in the Bureaux (Review Focus 2)', () => {
     expect(act).toHaveBeenCalledWith('local', 'up', { rigId: 'team-c3d4' });
   });
 
+  it('« Reprendre » waits while an action on the team is in flight', async () => {
+    renderBureaux({ engine: 'ledge', rigs: [RESTING], busy: true });
+    const office = (await screen.findByText('mobile · au repos')).closest<HTMLElement>('.bureaux-room')!;
+    expect(within(office).getByRole('button', { name: 'Reprendre' })).toBeDisabled();
+  });
+
   it('in English: « mobile · at rest »', async () => {
     renderBureaux({ engine: 'ledge', rigs: [RESTING], lang: 'en' });
     expect(await screen.findByText('mobile · at rest')).toBeInTheDocument();
+  });
+});
+
+describe('a running Ledge team in the Bureaux (Review Focus 4)', () => {
+  const lea = fakeSession('local:lea', { name: 'Lea', cwd: '/w/ledge', state: 'working', machineId: 'local', team: 'team-a1b2', role: 'leader' });
+  const team = (state: RigSeat['state']): Rig => ({ id: 'team-a1b2', name: 'roles', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: state === 'stopped' ? 'partial' : 'running', kernel: false, engine: 'ledge', repos: [],
+    seats: [{ ref: 'leader@team-a1b2', address: '@leader', name: 'Lea', runtime: 'claude', state, sessionId: 'local:lea' }] });
+  const plates = () => [...document.querySelectorAll('.bureaux-plate')].map(p => p.textContent);
+
+  it('gives exactly one office, its seat in it; the project’s office keeps its own sessions only', async () => {
+    renderBureaux({ engine: 'ledge', rigs: [team('working')], sessions: [otto, lea] });
+    await screen.findByText('Équipes · Ledge');
+    expect(plates().filter(p => p?.startsWith('roles'))).toEqual(['roles · 1']);
+    expect(plates()).toContain('Ledge · 1');
+    expect(document.querySelectorAll('[data-agent="local:lea"]')).toHaveLength(1);
+  });
+
+  it('live with no seat running, it still keeps one empty office', async () => {
+    renderBureaux({ engine: 'ledge', rigs: [team('stopped')], sessions: [otto] });
+    await screen.findByText('Équipes · Ledge');
+    expect(plates().filter(p => p?.startsWith('roles'))).toEqual(['roles · 0']);
   });
 });

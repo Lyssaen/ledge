@@ -1,7 +1,7 @@
 import { isPending, liveHelpers, splitId } from '@ledge/fleet';
 import type { FleetAsk } from '@ledge/fleet';
 import { askShown, contextNear, decisionMirrored, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmissions, type Escalation, type Project, type ProjectColor, type Projects, type Rig, type Session, type Task, type Team } from '@ledge/protocol';
-import { isStandalone } from '@ledge/ui/rigs/model';
+import { isLedgeTeamSeat, isStandalone } from '@ledge/ui/rigs/model';
 
 /** A session row of the tree under its branch. */
 export interface BranchRow { branch: string; sessions: Session[] }
@@ -39,7 +39,8 @@ export const openEscalations = (escalations: readonly Escalation[]): Escalation[
  *  sits under « - ». Only standalone sessions are listed: a seat's session goes under its rig. */
 export function overview(sessions: readonly Session[], projects: Projects | null, asks: readonly FleetAsk[] = [], rigs: readonly Rig[] = [], escalations: readonly Escalation[] = [],
   teams: readonly Team[] = [], tasks: readonly Task[] = []): Overview {
-  const live = listed(sessions).filter(s => isStandalone(s, rigs));
+  // A Ledge team's seat stays in its team's row (and its waits in « À toi ») while lot F task 3 has not reworked the TUI's teams.
+  const live = listed(sessions).filter(s => isLedgeTeamSeat(s) || isStandalone(s, rigs));
   const yours = live.filter(isPending).sort((a, b) => a.lastActivityAt.localeCompare(b.lastActivityAt) || a.id.localeCompare(b.id));
   const nodes = new Map<string, ProjectNode>();
   const known = new Map<string, Project>((projects?.projects ?? []).map(p => [p.id, p]));

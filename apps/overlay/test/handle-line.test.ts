@@ -78,6 +78,15 @@ describe('waitingOf', () => {
     expect(waitingOf(sessions, rigs)).toEqual({ attention: 2, waiting: { name: 'Otto', text: 'npm test' } });
     expect(waitingOf([], rigs)).toEqual({ attention: 0 });
   });
+  it('a Ledge team seat waiting counts (Ledge relieves nobody, lot F); an OpenRig seat still does not', () => {
+    const otto = session({ id: 'otto', name: 'Otto', team: 'team-a1b2', state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } });
+    const seat = session({ id: 'c', name: 'seat', state: 'waiting_permission', rig: { machine: 'local', rigId: 'factory' } as Session['rig'], pending: { kind: 'permission', text: 'rm', source: 'hook' } });
+    const rigs = [
+      { id: 'team-a1b2', machine: 'local', engine: 'ledge', seats: [{ ref: 'build@team-a1b2', address: '@build', name: 'Otto', runtime: 'claude', state: 'attention', sessionId: 'otto' }] },
+      { id: 'factory', machine: 'local', seats: [{ ref: 'dev@factory', address: '@dev', name: 'dev', runtime: 'claude', state: 'working', sessionId: 'c' }] }
+    ] as unknown as Rig[];
+    expect(waitingOf([otto, seat], rigs)).toEqual({ attention: 1, waiting: { name: 'Otto', text: 'npm test' } });
+  });
   it('a waiting brain session counts (its prompts must reach the user, lot 7)', () => {
     const brain = session({ id: 'b', name: 'Ledge', brain: true, state: 'waiting_input', pending: { kind: 'question', text: 'Trust this folder?', source: 'hook' } });
     expect(waitingOf([brain], [])).toEqual({ attention: 1, waiting: { name: 'Ledge', text: 'Trust this folder?' } });

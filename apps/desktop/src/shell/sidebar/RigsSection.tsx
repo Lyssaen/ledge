@@ -71,7 +71,7 @@ export function RigsSection(p: {
         <span className="st-bot"><SessionBot session={s} size={18} paused={p.paused} /></span>
         <button type="button" className="st-main" data-tree-key={key} tabIndex={tab(key)} aria-disabled={ghost || undefined} title={ghost ? r.ghost : undefined}
           onClick={ghost ? undefined : () => p.onOpenSeat(s)}>
-          <strong>{s.name}</strong>{task && <span>{task}</span>}
+          <strong>{s.name}{!ghost && s.role && <span className="role-pill" title={s.roleLabel ?? s.role}>@{s.role}</span>}</strong>{task && <span>{task}</span>}
         </button>
         {!ghost && <span className={cls('st-time', needs(s) && timeClass)}>{s.offline ? t.side.offline : shortWhen(s.lastActivityAt, t.list.when.units, t.list.when.now)}</span>}
         {!ghost && (

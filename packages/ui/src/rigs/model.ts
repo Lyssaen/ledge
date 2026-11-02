@@ -109,9 +109,13 @@ export function isStandalone(s: Session, rigs: readonly Rig[]): boolean {
   if (s.brain) return false;
   const seated = (x: Rig) => x.seats.some(seat => seat.sessionId === s.id && seat.state !== 'stopped');
   const r = s.rig;
-  if (!r) return !s.team || !rigs.some(x => x.engine === 'ledge' && x.id === s.team && seated(x));
+  if (!r) return !s.team || !rigs.some(x => x.engine === 'ledge' && x.id === s.team && x.machine === (s.machineId ?? 'local') && seated(x));
   return !rigs.some(x => x.machine === r.machine && seated(x));
 }
+
+/** A seat of a Ledge team (lot F): it names its team, not an OpenRig rig. Its waits reach the user as a standalone session's do
+ *  (« À toi », the notch): Ledge answers for no seat, only an OpenRig rig relieves its seats (R15). */
+export const isLedgeTeamSeat = (s: Pick<Session, 'team' | 'rig'>): boolean => !!s.team && !s.rig;
 
 /** A choice of the `@` completion: what the list shows and what the field gets. */
 export interface SeatMention { key: string; label: string; insert: string }

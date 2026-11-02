@@ -14,7 +14,7 @@ interface Row { role: Role; tool: Tool; on: boolean }
 
 /**
  * « Lancer une équipe » in Ledge mode (atelier rooms spec §3.2, lot F): a team in one of the project's folders, from a template or from the
- * roles chosen one by one, each with its agent. The preview says where it sits (« nouvelle table dans la pièce Ledge ») and
+ * roles chosen one by one, each with its agent. The preview says where it sits (« L'équipe aura sa propre pièce dans Ledge ») and
  * warns of a seat that works without asking. Launching sends `team.launch`; the daemon's answer closes the form or says why.
  * A `team.failed` that carries its team was launched in part (a seat did not start, the lead may hold the objective already):
  * the form closes as launched, with the reason as `warning`, so the same team is never launched twice.

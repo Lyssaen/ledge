@@ -7,7 +7,7 @@ import { toolName } from './format';
 export interface TeamCardProps {
   team: ChatTeamProposal;
   busy: boolean; disabled: boolean;
-  /** « Lancer l'équipe », « Enregistrer » (an ad hoc team as a template), « Ouvrir la table » once launched. */
+  /** « Lancer l'équipe », « Enregistrer » (an ad hoc team as a template), « Ouvrir l'équipe » once launched (its room). */
   onLaunch: () => void; onSave?: () => void; onOpenTable?: (teamId: string) => void;
   /** The launch time as the front words it (« 23:10 »). */
   at?: (iso: string) => string;
@@ -19,7 +19,7 @@ const pill: React.CSSProperties = { fontFamily: 'var(--font-mono, ui-monospace, 
 
 /**
  * A team Ledge proposes (roles spec §3.8): its name, folder and table, every seat with its role, agent, model, effort and
- * autonomy, and a warning when a seat may act without asking. It keeps its outcome: « ✓ Équipe lancée à 23:10 · Ouvrir la table ».
+ * autonomy, and a warning when a seat may act without asking. It keeps its outcome: « ✓ Équipe lancée à 23:10 · Ouvrir l'équipe ».
  */
 export function TeamCard(p: TeamCardProps) {
   const c = useChatCopy().chat.team!;

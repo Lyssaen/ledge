@@ -42,8 +42,12 @@ describe('a Ledge team in the atelier: its own room (Review Focus 4)', () => {
     const { side } = await withTeam();
     const teamRoom = within(room('ledge-roles'));
     expect(teamRoom.getByText('team · 1 seat')).toBeVisible();
-    expect(teamRoom.getByRole('button', { name: /^Otto,/ })).toBeVisible();
+    const otto = teamRoom.getByRole('button', { name: /^Otto,/ });
+    expect(otto).toBeVisible();
+    // The seat keeps its @role pill in its team's room.
+    expect(within(otto).getByText('@build')).toBeVisible();
     const project = within(room('Ledge'));
+    expect(project.getByText('ENTRANCE')).toBeInTheDocument();
     expect(project.getByText('1 table · 1 session')).toBeVisible();
     expect(project.getByRole('button', { name: /^Pim,/ })).toBeVisible();
     expect(project.queryByRole('button', { name: /^Otto,/ })).toBeNull();
@@ -89,9 +93,48 @@ describe('a Ledge team in the atelier: its own room (Review Focus 4)', () => {
     const dt = transfer();
     fireEvent.dragStart(otto, { dataTransfer: dt });
     fireEvent.dragOver(room('ledge-roles'), { dataTransfer: dt });
+    expect(within(room('ledge-roles')).queryByText('Drop to join')).toBeNull();
+    expect(room('ledge-roles')).not.toHaveClass('drop-over');
     fireEvent.drop(room('ledge-roles'), { dataTransfer: dt, clientX: 200, clientY: 200 });
     expect(screen.queryByRole('menu', { name: /role in ledge-roles/ })).toBeNull();
     expect(d.received.some(m => m.type === 'team.join' || m.type === 'team.leave')).toBe(false);
+  });
+
+  it('a team’s seat already at its project’s table (its seat not running), dropped back there, does not leave; moved to another project, it does', async () => {
+    const t = team();
+    const env = await boot({ sessions: sessions(), projects: PROJECTS });
+    env.d.push({ type: 'teams', teams: [t] });
+    env.d.push({ type: 'rig.snapshot', machine: 'local', rigs: [{ ...projected(t), seats: projected(t).seats.map(x => ({ ...x, state: 'stopped' as const })) }] });
+    await screen.findByRole('region', { name: 'ledge-roles room' });
+    const otto = within(room('Ledge')).getByRole('button', { name: /^Otto,/ });
+    const ledge = screen.getByRole('region', { name: 'Ledge table' });
+    const dt = transfer();
+    fireEvent.dragStart(otto, { dataTransfer: dt });
+    fireEvent.dragOver(ledge, { dataTransfer: dt });
+    expect(within(ledge).queryByText('Drop to leave the team')).toBeNull();
+    fireEvent.drop(ledge, { dataTransfer: dt });
+    expect(env.d.received.some(m => m.type === 'team.leave')).toBe(false);
+    const pay = screen.getByRole('region', { name: /Payment Service Platform Migration Europe table/ });
+    fireEvent.dragStart(otto, { dataTransfer: dt });
+    fireEvent.dragOver(pay, { dataTransfer: dt });
+    expect(within(pay).getByText('Drop to leave the team')).toBeVisible();
+    fireEvent.drop(pay, { dataTransfer: dt });
+    await waitFor(() => expect(env.d.received).toContainEqual({ type: 'team.leave', team: 'team-a1b2', session: 'otto' }));
+  });
+
+  it('« Launch a team » (Ledge mode) opens the team form: a template, the preview of its own room, the autonomy note, the launch', async () => {
+    const { d, user, side } = await withTeam();
+    d.onMessage(m => {
+      if (m.type === 'roles.list') d.push({ type: 'roles.listing', requestId: m.requestId, roles: [role('lead'), { ...role('review'), autonomy: 'auto' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }, { role: 'review', tool: 'codex' }], source: 'home', path: '/h/w.yaml' }], problems: [] });
+      if (m.type === 'team.launch') d.push({ type: 'team.launched', rid: m.rid, team: team({ id: 'team-e5f6', name: 'workshop' }) });
+    });
+    await user.click(side.getByRole('button', { name: 'Launch a team' }));
+    const form = await screen.findByRole('dialog', { name: 'New team · Ledge' });
+    expect(await within(form).findByRole('status')).toHaveTextContent('The team gets its own room in Ledge');
+    expect(within(form).getByRole('note')).toHaveTextContent('@review will work without asking');
+    await user.click(within(form).getByRole('button', { name: 'Launch the team' }));
+    await waitFor(() => expect(d.received).toContainEqual(expect.objectContaining({ type: 'team.launch', cwd: '/w/ledge', name: 'workshop', template: 'workshop' })));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New team · Ledge' })).toBeNull());
   });
 
   it('« Dissolve the team » in the room’s menu asks first', async () => {

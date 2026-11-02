@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
 import type { Escalation, Exchange, OpenRigStatus, Project, Projects, Rig, RigSeat, Session, TeamsEngine } from '@ledge/protocol';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
-import { isSeatPlaceholder, ledgeLine } from '@ledge/ui/rigs/model';
+import { isSeatPlaceholder, isStandalone, ledgeLine } from '@ledge/ui/rigs/model';
 import { MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import { engineName, techCores } from '../rigs/engine';
@@ -102,36 +102,41 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
   const [overTable, setOverTable] = useState<string | null>(null);
   const [choosing, setChoosing] = useState<RoleChoice | null>(null);
   const [dissolving, setDissolving] = useState<{ id: string; name: string } | null>(null);
-  const seatDrag = (s: Session) => (s.offline || s.source === 'hook_only' ? undefined : {
+  // A resting team's members stay where they are, as at main's team table.
+  const resting = (s: Session) => !!s.team && teams?.teams?.find(x => x.id === s.team)?.state === 'resting';
+  const seatDrag = (s: Session) => (s.offline || s.source === 'hook_only' || resting(s) ? undefined : {
     draggable: true as const,
     onDragStart(e: DragEvent) { e.dataTransfer.setData('text/plain', s.id); e.dataTransfer.effectAllowed = 'move'; carried.current = s; },
     onDragEnd() { carried.current = null; setOverTable(null); }
   });
-  const dropOn = (key: string, land: (s: Session, e: DragEvent) => void) => ({
+  const dropOn = (key: string, land: (s: Session, e: DragEvent) => void, accepts: (s: Session) => boolean = () => true) => ({
     over: overTable === key,
-    onDragOver(e: DragEvent) { if (!carried.current) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverTable(key); },
+    onDragOver(e: DragEvent) { if (!carried.current || !accepts(carried.current)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverTable(key); },
     onDragLeave(e: DragEvent) { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverTable(o => (o === key ? null : o)); },
     onDrop(e: DragEvent) {
       const s = carried.current; carried.current = null; setOverTable(null);
-      if (!s) return;
+      if (!s || !accepts(s)) return;
       e.preventDefault(); e.stopPropagation();
       land(s, e);
     }
   });
-  // A project's table: filed in that project (the folder rule), and out of its team.
+  // A project's table: filed in that project (the folder rule); a team's seat that moves (out of its team's room, or to another
+  // project) leaves its team. Dropped back where it already sits, nothing happens.
+  const leaves = (s: Session, projectId: string) => !!s.team && !!teams && (!isStandalone(s, rigs) || projectIdOf(s) !== projectId);
   const tableDrop = (projectId: string) => ({
     ...dropOn(projectId, s => {
+      const leave = leaves(s, projectId);
       if (projectIdOf(s) !== projectId) filing.file(s, projectId);
-      if (s.team && teams) { teams.leave(s.team, s.id); notify?.(t.rooms.left(s.name)); }
+      if (leave && s.team && teams) { teams.leave(s.team, s.id); notify?.(t.rooms.left(s.name)); }
     }),
-    // The hint « Lâcher pour quitter l'équipe » only for a seat of a team.
-    leave: !!carried.current?.team && !!teams
+    // The hint « Lâcher pour quitter l'équipe » only for a seat that would leave its team.
+    leave: !!carried.current && leaves(carried.current, projectId)
   });
   // A Ledge team's room (its projected rig): the role, then `team.join`; a seat of that team stays where it is.
   const teamOf = (room: AtelierRoom) => (room.kind === 'rig' && room.rig.engine === 'ledge' ? teams?.teams?.find(x => x.id === room.rig.id) : undefined);
   const roomDrop = (room: AtelierRoom) => {
     const team = teamOf(room);
-    return team && dropOn(room.key, (s, e) => { if (s.team !== team.id) setChoosing({ session: s, team, at: { x: e.clientX, y: e.clientY } }); });
+    return team && dropOn(room.key, (s, e) => setChoosing({ session: s, team, at: { x: e.clientX, y: e.clientY } }), s => s.team !== team.id);
   };
   const [seats] = useSeats();
   const walk = useMemo(() => legacy ? walkOrder(scene, seats)
@@ -213,7 +218,7 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
     <div className="overview-scroll atelier bureaux-scroll" id="view-panel-atelier" role="region" aria-label={t.side.atelier} ref={view.scrollRef}>
       <div ref={view.floorRef} className="atelier-floor"><div ref={view.shellRef} className="bureaux-shell">
         <Suspense fallback={null}><OfficeFloor client={client} scene={scene} sessions={sessions} rigs={rigs} exchanges={exchanges} arcs={arcs} cores={cores} plate={t.atelier.techPlate(engineName(engine))} viewportWidth={viewportWidth}
-          onResume={controls ? rig => { void controls.act(rig.machine, 'up', { rigId: rig.id }); } : undefined}
+          onResume={controls ? rig => { void controls.act(rig.machine, 'up', { rigId: rig.id }); } : undefined} resumeBusy={controls ? rig => controls.busy(rig.machine, rig.id) : undefined}
           onOpen={id => {
             const found = rigs.flatMap(r => r.seats.map(seat => ({ rig: r, seat }))).find(x => id === `seat:${x.rig.machine}/${x.rig.id}/${x.seat.ref}`);
             if (found) onSeatTerminal?.(found.rig, found.seat);

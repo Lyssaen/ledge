@@ -35,7 +35,7 @@ export interface ChatPanelProps {
   onProposal(pid: string): void;
   /** « Lancer ce rig » on a card Ledge's brain posted (lot 7): the app opens the launch window prefilled. */
   onRigLaunch?(card: ChatRigLaunch): void;
-  /** A team card's « Ouvrir la table »: the atelier on the team's own room (lot F), `filter` its rig filter (`rig:<machine>/team-…`). */
+  /** A team card's « Ouvrir l'équipe »: the atelier on the team's own room (lot F), `filter` its rig filter (`rig:<machine>/team-…`). */
   onOpenTeam?(filter: string): void;
 }
 

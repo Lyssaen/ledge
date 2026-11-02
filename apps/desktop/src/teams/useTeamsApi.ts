@@ -68,12 +68,6 @@ export function useTeamsApi(client: DaemonClient): TeamsApi {
   }), [client, teams, tasks, teamOf, roles, answer]);
 }
 
-/** A team's tasks Ledge gave: how many are done of how many given (« 1/2 »). */
-export function ledgeProgress(tasks: readonly Task[], team: string): { done: number; given: number } {
-  const mine = tasks.filter(t => t.team === team && t.giver === LEDGE_GIVER);
-  return { done: mine.filter(t => t.state === 'done').length, given: mine.length };
-}
-
 /** A closed task Ledge gave and the user has not put away: an item of « À toi » (roles spec §3.7). */
 export const closedLedgeTasks = (tasks: readonly Task[]): Task[] => tasks.filter(t => t.giver === LEDGE_GIVER && taskClosed(t) && !t.seen);
 

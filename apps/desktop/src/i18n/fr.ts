@@ -711,7 +711,7 @@ export const fr = {
   teamLaunch: {
     title: (project: string) => `Nouvelle équipe · ${project}`, folder: 'Dossier', noFolder: 'Aucun dossier de ce projet sur cette machine', loading: 'Lecture des rôles et des modèles…',
     template: 'Modèle', custom: 'Sièges choisis un par un', seats: 'Sièges', noRole: 'Aucun rôle : écris ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent de @${role}`,
-    name: 'Nom de l’équipe', preview: (team: string, project: string) => `L’équipe ${team} s’installera à une nouvelle table de la pièce ${project}.`,
+    name: 'Nom de l’équipe', preview: (team: string, project: string) => `L'équipe aura sa propre pièce dans ${project}`,
     goal: 'Objectif', goalHint: 'Ce que l’équipe doit faire : son lead le reçoit au lancement', branch: 'Branche', done: 'Fini quand',
     goalNeeded: 'Écris l’objectif, ou vide la branche et « fini quand »',
     unknown: (roles: string) => `Rôles inconnus dans ce dossier : ${roles}`, launch: 'Lancer l’équipe', launching: 'Lancement…',
@@ -1243,7 +1243,7 @@ export const fr = {
       autonomy: { ask: 'demande avant d’agir', edits: 'modifie sans demander', auto: 'autonome' },
       autoWarning: (roles: string) => `${roles} travaillera sans demander : modifications et commandes sans ton accord.`,
       launch: 'Lancer l’équipe', launching: 'Lancement…', retry: 'Réessayer', save: 'Enregistrer', saved: (path: string) => `Enregistrée : ${path}`, notSaved: (why: string) => `Non enregistrée : ${why}`,
-      launched: (at: string) => `Équipe lancée à ${at}`, openTable: 'Ouvrir la table', failed: (why: string) => `Échec : ${why}`, template: (id: string) => `modèle ${id}`, objective: (goal: string) => `Objectif : ${goal}`
+      launched: (at: string) => `Équipe lancée à ${at}`, openTable: "Ouvrir l'équipe", failed: (why: string) => `Échec : ${why}`, template: (id: string) => `modèle ${id}`, objective: (goal: string) => `Objectif : ${goal}`
     },
     task: {
       label: (n: number) => n === 1 ? 'Tâche à confier' : `${n} tâches à confier`, to: 'à', give: 'Confier', giving: 'Envoi…', retry: 'Réessayer',

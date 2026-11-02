@@ -55,6 +55,9 @@ describe('a seat in the sidebar and on its page (atelier rooms spec §3.4, §3.5
     d.push({ type: 'teams', teams: [team] });
     d.push({ type: 'rig.snapshot', machine: 'local', rigs: [{ id: 'team-a1b2', name: 'ledge-roles', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, engine: 'ledge', repos: [],
       seats: [{ ref: 'build@team-a1b2', address: '@build', name: 'Otto', runtime: 'claude', state: 'working', sessionId: 'otto' }] }] });
+    // In the Teams section, the projected member's row keeps its @role pill.
+    const seatRow = (await within(await screen.findByRole('tree', { name: 'Teams' })).findByRole('button', { name: /^Otto/ })).closest<HTMLElement>('[role="treeitem"]')!;
+    expect(within(seatRow).getByText('@build')).toBeVisible();
     await user.click(within(await screen.findByRole('region', { name: 'ledge-roles room' })).getByRole('button', { name: /^Otto,/ }));
     await user.click(within(screen.getByRole('banner')).getByRole('button', { name: '⚑ ledge-roles' }));
     expect(await screen.findByRole('region', { name: 'ledge-roles room' })).toBeVisible();

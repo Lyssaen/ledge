@@ -1,6 +1,6 @@
 import { isBusy, type FleetAsk } from '@ledge/fleet';
 import { isDecisionEscalation, type Escalation, type Helper, type Projects, type Rig, type Session } from '@ledge/protocol';
-import { isStandalone } from '@ledge/ui/rigs/model';
+import { isLedgeTeamSeat, isStandalone } from '@ledge/ui/rigs/model';
 import { fold, taskOf } from '../../nav/agents';
 
 const UNASSIGNED = 'Sans projet';
@@ -123,8 +123,9 @@ export function attentionOf(
   const items: AttnItem[] = [];
   for (const session of sessions) {
     if (session.offline) continue;
-    // The brain session is in no list, but what it asks the user (folder trust, a permission) must reach « À toi » (lot 7).
-    if (!session.brain && !isStandalone(session, rigs ?? [])) continue;
+    // The brain session is in no list, but what it asks the user (folder trust, a permission) must reach « À toi » (lot 7); so must a
+    // Ledge team seat's, drawn in its team's room (lot F): only an OpenRig rig answers for its seats.
+    if (!session.brain && !isLedgeTeamSeat(session) && !isStandalone(session, rigs ?? [])) continue;
     if (asking.has(`${session.machineId ?? 'local'}\u0000${session.name}`)) continue;
     const kind = session.brain && session.state === 'starting' && now - Date.parse(session.lastActivityAt) >= 30_000
       ? 'brainStarting' : attnKind(session.state);

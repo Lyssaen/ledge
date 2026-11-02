@@ -674,7 +674,7 @@ export const en: Messages = {
   teamLaunch: {
     title: (project: string) => `New team · ${project}`, folder: 'Folder', noFolder: 'No folder of this project on this machine', loading: 'Reading the roles and templates…',
     template: 'Template', custom: 'Seats chosen one by one', seats: 'Seats', noRole: 'No role: write ~/.ledge/roles/<id>.md', agentOf: (role: string) => `Agent of @${role}`,
-    name: 'Team name', preview: (team: string, project: string) => `Team ${team} will sit at a new table in the ${project} room.`,
+    name: 'Team name', preview: (team: string, project: string) => `The team gets its own room in ${project}`,
     goal: 'Objective', goalHint: 'What the team must do: its lead gets it at launch', branch: 'Branch', done: 'Done when',
     goalNeeded: 'Write the objective, or clear the branch and "done when"',
     unknown: (roles: string) => `Unknown roles in this folder: ${roles}`, launch: 'Launch the team', launching: 'Launching…',
@@ -1182,7 +1182,7 @@ export const en: Messages = {
       autonomy: { ask: 'asks before acting', edits: 'edits without asking', auto: 'autonomous' },
       autoWarning: (roles: string) => `${roles} will work without asking: edits and commands without your approval.`,
       launch: 'Launch the team', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (path: string) => `Saved: ${path}`, notSaved: (why: string) => `Not saved: ${why}`,
-      launched: (at: string) => `Team launched at ${at}`, openTable: 'Open the table', failed: (why: string) => `Failed: ${why}`, template: (id: string) => `template ${id}`, objective: (goal: string) => `Objective: ${goal}`
+      launched: (at: string) => `Team launched at ${at}`, openTable: 'Open the team', failed: (why: string) => `Failed: ${why}`, template: (id: string) => `template ${id}`, objective: (goal: string) => `Objective: ${goal}`
     },
     task: {
       label: (n: number) => n === 1 ? 'Task to give' : `${n} tasks to give`, to: 'to', give: 'Give', giving: 'Sending…', retry: 'Retry',

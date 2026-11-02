@@ -172,6 +172,17 @@ describe('attentionOf, escalations', () => {
   });
 });
 
+describe('attentionOf, a Ledge team seat (lot F)', () => {
+  it('a Ledge team seat waiting on a permission stays in « À toi » (Ledge relieves nobody); an OpenRig seat still does not', () => {
+    const otto = waiting('otto', 'Otto', { state: 'waiting_permission', team: 'team-a1b2', role: 'build', pending: { kind: 'permission', text: 'npm test', source: 'hook' } });
+    const team: Rig = { id: 'team-a1b2', name: 'ledge-roles', machine: 'local', cwd: '/w/ledge', projectId: null, offProject: false, lifecycle: 'running', kernel: false, engine: 'ledge', repos: [],
+      seats: [{ ref: 'build@team-a1b2', address: '@build', name: 'Otto', runtime: 'claude', state: 'attention', sessionId: 'otto' }] };
+    const seat = waiting('seat', 'Seat', { state: 'waiting_permission', rig: { machine: 'local', rigId: 'r1', rigName: 'factory', seat: 'lead', pod: 'p', member: 'lead' } });
+    const rigged: Rig = { ...FACTORY, seats: [{ ...FACTORY.seats[0]!, sessionId: 'seat' }] };
+    expect(attentionOf([otto, seat], new Map(), [], [team, rigged]).map(i => (i.kind === 'escalation' ? i.escalation.id : i.session.name))).toEqual(['Otto']);
+  });
+});
+
 describe('attentionOf, a lead\'s question (task-<id>)', () => {
   it('is an escalation card; the session\'s own wait stays listed beside it (it works on), unlike an ask\'s', () => {
     const otto = waiting('otto', 'Otto');
