@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ClientMessageSchema, RoleDetailSchema, RoleSummarySchema } from '@ledge/protocol';
-import { createOpenRig, type RigRun } from '../src/daemon/openrig.js';
+import { createServer } from 'node:http';
+import { createOpenRig, localGet, type RigRun } from '../src/daemon/openrig.js';
 import { hasManagedBlock, importPath, layerOf, parseSpec, specPath } from '../src/daemon/openrigRoles.js';
 
 // The ledge-dev rig as OpenRig 0.7.7 showed it on 2026-11-02 (trimmed): library under ~/.openrig/specs/openrig, the running
@@ -440,5 +441,28 @@ describe('OpenRig roles: pieces', () => {
     expect(ok({ type: 'openrig.roleFile', requestId: 'r', roleId: 'f95e', path: '/a/b' })).toBe(true);
     expect(ok({ type: 'openrig.role', requestId: 'r', roleId: '-rf' })).toBe(false);
     expect(ok({ type: 'openrig.roleFile', requestId: 'r', roleId: 'f95e', path: '' })).toBe(false);
+  });
+});
+
+describe('OpenRig roles: the daemon HTTP read', () => {
+  it('goes straight to 127.0.0.1 even with a proxy in the environment; JSON or undefined, never a throw', async () => {
+    const saved = { http_proxy: process.env.http_proxy, HTTP_PROXY: process.env.HTTP_PROXY, no_proxy: process.env.no_proxy, NO_PROXY: process.env.NO_PROXY };
+    process.env.http_proxy = process.env.HTTP_PROXY = 'http://192.0.2.1:3128'; delete process.env.no_proxy; delete process.env.NO_PROXY;
+    const srv = createServer((req, res) => {
+      if (req.url === '/api/x') { res.setHeader('content-type', 'application/json'); res.end('{"ok":1}'); }
+      else if (req.url === '/api/text') res.end('not json');
+      else { res.statusCode = 404; res.end(); }
+    });
+    await new Promise<void>(r => srv.listen(0, '127.0.0.1', r));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      expect(await localGet(port, '/api/x', 2000)).toEqual({ ok: 1 });
+      expect(await localGet(port, '/api/missing', 2000)).toBeUndefined();
+      expect(await localGet(port, '/api/text', 2000)).toBeUndefined();
+    } finally {
+      await new Promise(r => srv.close(r));
+      for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+    expect(await localGet(port, '/api/x', 500)).toBeUndefined();
   });
 });

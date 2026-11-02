@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { get as httpGet } from 'node:http';
 import { existsSync, readdirSync } from 'node:fs';
 import { cp, mkdir, open as openFile, readFile, stat as statFile, writeFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
@@ -186,6 +187,22 @@ const realRoleIo = {
   }
 };
 
+/** A JSON GET on this machine's OpenRig daemon, through node:http: never through an `http_proxy` (Node's fetch takes one
+ *  with `NODE_USE_ENV_PROXY`, and a corporate proxy cannot reach 127.0.0.1). Undefined when it does not answer JSON. */
+export function localGet(port: number, path: string, timeoutMs: number): Promise<unknown> {
+  return new Promise(resolve => {
+    const req = httpGet({ host: '127.0.0.1', port, path, timeout: timeoutMs, agent: false }, res => {
+      if (res.statusCode !== 200) { res.resume(); resolve(undefined); return; }
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => resolve(parse(Buffer.concat(chunks).toString('utf8'))));
+      res.on('error', () => resolve(undefined));
+    });
+    req.on('timeout', () => req.destroy());
+    req.on('error', () => resolve(undefined));
+  });
+}
+
 /** How long a read of the rigs' members, and the files a role detail listed, are reused. */
 const SEATS_TTL_MS = 5_000;
 const FILES_TTL_MS = 5 * 60_000;
@@ -209,10 +226,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   const http = deps.http ?? (async (path: string) => {
     const port = (await state()).daemon.port;
     if (!port) return undefined;
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(HTTP_MS) });
-      return res.ok ? await res.json() : undefined;
-    } catch { return undefined; }
+    return localGet(port, path, HTTP_MS);
   });
   let version: string | undefined, versionAt = 0, last: { at: number; state: OpenRigState } | undefined;
   let reading: Promise<OpenRigState> | undefined, acting = false;
