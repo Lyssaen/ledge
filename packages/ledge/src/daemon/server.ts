@@ -195,8 +195,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A session whose hooks come from an OpenRig seat (`dev-build@starter`) is that seat: its rig at once, its role (`dev.build`)
    * once OpenRig's listing names it. Read only when the seat is new to the session or its role is still unknown.
    */
+  /** An OpenRig seat's life is OpenRig's: Ledge answers and writes to it, never stops, kills or relaunches it. */
+  const rigOwned = (s: Session) => new Refusal(`${s.name} is the OpenRig seat ${s.rig?.seat ?? s.tmuxSession ?? ''}: stop or restart it from OpenRig`, 'read_only');
   const tagRigSeat = (id: string, seat: string) => {
-    const cur = store.get(id)?.rig;
+    const session = store.get(id), cur = session?.rig;
+    // Its pane on the user's default tmux server: Ledge then sees its screen, answers and writes to it as to its own.
+    if (session && session.source === 'hook_only' && (session.tool === 'claude' || session.tool === 'codex')) {
+      void tmux.hasSession(seat).then(live => {
+        const now2 = store.get(id);
+        if (live && now2?.source === 'hook_only') store.upsert({ ...now2, source: 'rig', tmuxSession: seat });
+      }).catch(e => log(`openrig: pane of ${seat} not found: ${(e as Error).message}`));
+    }
     if (cur?.seat === seat && cur.role) return;
     const name = seat.slice(seat.lastIndexOf('@') + 1);
     store.patch(id, { rig: { seat, name, ...(cur?.seat === seat && cur.role ? { role: cur.role } : {}) } });
@@ -552,6 +561,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const id = s.id; const cur = store.get(id);
     if (!cur) throw unknownSession();
     if (cur.source === 'hook_only') throw readOnly();
+    if (cur.source === 'rig') throw rigOwned(cur);
     if (cur.state === 'exited') throw new Refusal('the session has already exited', 'busy');
     if (closing.has(id)) throw new Refusal('a close is already in progress', 'busy');
     closing.add(id);
@@ -756,6 +766,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const inPlace = backendOf(s) === 'omp-rpc';
     // Started without Ledge: Ledge can neither restart it nor drive it.
     if (s.source === 'hook_only') return { refused: 'not_launched', message: READ_ONLY };
+    if (s.source === 'rig') return { refused: 'not_launched', message: rigOwned(s).message };
     if (s.state === 'exited') return { refused: 'ended', message: 'the session has ended' };
     if (!resumeKey(s)) return { refused: 'no_conversation', message: 'no conversation to resume' };
     if (inPlace && !omp.isLive(s.id)) return { refused: 'not_running', message: 'the session is not running' };
@@ -1170,6 +1181,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
         if (s.source === 'hook_only') return refuse(readOnly(), msg.id);
+        if (s.source === 'rig') return refuse(rigOwned(s), msg.id);
         if (backendOf(s) === 'omp-rpc') return endSession(s);
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
@@ -1177,7 +1189,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.dismiss': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
-        if (s.state !== 'exited' && s.source !== 'hook_only') return refuse(new Refusal('the session is still running, kill it first', 'busy'), msg.id);
+        if (s.state !== 'exited' && s.source === 'launcher') return refuse(new Refusal('the session is still running, kill it first', 'busy'), msg.id);
         // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
         // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
         // hook-before-register path in session.event recreates it): acceptable, it is still running.
@@ -1198,6 +1210,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.resume': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
         if (s.state !== 'exited') return refuse(new Refusal('the session is still running', 'busy'), msg.id);
+        // A seat comes back with its rig (`rig up --existing`), never as a Ledge session.
+        if (s.source === 'rig') return refuse(rigOwned(s), msg.id);
         const key = resumeKey(s); if (!key) return refuse({ message: 'no conversation to resume', code: 'no_conversation' }, msg.id);
         const refused = await respawn(s, key, s.model, s.effort);
         if (refused) refuse(refused, msg.id);

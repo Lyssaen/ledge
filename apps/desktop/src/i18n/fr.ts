@@ -623,7 +623,7 @@ export const fr = {
       archive: 'Archiver', endAndArchive: 'Terminer et archiver…', delete: 'Supprimer…',
       kids: (n: number, name: string): string => `${n} ${plural(n, 'sous-agent part', 'sous-agents partent')} avec ${name}.`,
       cannotEnd: (machine: string): string => `${machine} est injoignable : Ledge ne peut pas l’arrêter.`,
-      outsideLedge: 'Lancée hors de Ledge : Ledge ne peut pas l’arrêter.',
+      rigOwned: (rig: string) => `Siège du rig ${rig} : arrêtez-le ou relancez-le depuis la page OpenRig`, outsideLedge: 'Lancée hors de Ledge : Ledge ne peut pas l’arrêter.',
       deleteKey: 'Suppr', archiveFinished: 'Archiver les terminées'
     },
     rename: { title: (name: string): string => `Renommer ${name}`, label: 'Nom de la session', save: 'Renommer', cancel: 'Annuler' },

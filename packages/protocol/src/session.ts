@@ -123,7 +123,9 @@ export const SessionSchema =z.object({
   exitCode: z.number().int().nullable().optional(),
   exitedAt: z.string().datetime().optional(),
   lastError: z.string().optional(),
-  source: z.enum(['launcher', 'hook_only']),
+  /** `launcher`: Ledge launched it; `hook_only`: only its hooks are known (read-only); `rig`: an OpenRig seat Ledge follows through
+   *  its tmux pane on the user's default server, answered like its own, whose life stays OpenRig's (no close, kill, resume, model). */
+  source: z.enum(['launcher', 'hook_only', 'rig']),
   /** When the session was put in the archive (session management): set, it leaves the live list and waits to be restored, resumed or deleted. */
   archivedAt: z.string().datetime().optional(),
   /** When the session was last taken out of the archive: the poller's retirement clock restarts from it, not from `exitedAt`. */

@@ -65,7 +65,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   // A seat carried to another room's table is filed in that project (the folder rule).
   const carried = useRef<Session | null>(null);
   const [overTable, setOverTable] = useState<string | null>(null);
-  const seatDrag = (s: Session) => (s.offline || s.source === 'hook_only' ? undefined : {
+  const seatDrag = (s: Session) => (s.offline || s.source !== 'launcher' ? undefined : {
     draggable: true as const,
     onDragStart(e: DragEvent) { e.dataTransfer.setData('text/plain', s.id); e.dataTransfer.effectAllowed = 'move'; carried.current = s; },
     onDragEnd() { carried.current = null; setOverTable(null); }

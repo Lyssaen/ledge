@@ -154,3 +154,24 @@ describe('findRig', () => {
     expect(findRig({ HOME: home, PATH: '/usr/bin' }, at(), list)).toBeNull();
   });
 });
+
+describe('routedTmux', () => {
+  it('a seat (`pod-member@rig`) goes to the default server, everything else to Ledge\'s; the list is both', async () => {
+    const { routedTmux } = await import('../src/tmux.js');
+    const calls: string[] = [];
+    const fake = (who: string, list: string[] | Error) => ({
+      newSession: async () => { calls.push(`${who}:new`); }, sendText: async (n: string) => { calls.push(`${who}:text:${n}`); }, sendKeys: async (n: string) => { calls.push(`${who}:keys:${n}`); },
+      capture: async (n: string) => `${who}:${n}`, hasSession: async () => true, killSession: async (n: string) => { calls.push(`${who}:kill:${n}`); },
+      setOption: async () => {}, attachArgs: (n: string) => [who, n],
+      listSessions: async () => { if (list instanceof Error) throw list; return list; }
+    });
+    const t = routedTmux(fake('ledge', ['ledge-a']), fake('default', ['dev-build@starter', 'my-own-shell']));
+    await t.sendText('dev-build@starter', 'x'); await t.sendKeys('ledge-a', ['C-c']);
+    expect(calls).toEqual(['default:text:dev-build@starter', 'ledge:keys:ledge-a']);
+    expect(await t.capture('dev-build@starter', 5)).toBe('default:dev-build@starter');
+    expect(t.attachArgs('dev-build@starter')).toEqual(['default', 'dev-build@starter']);
+    expect(await t.listSessions()).toEqual(['ledge-a', 'dev-build@starter']);
+    const down = routedTmux(fake('ledge', ['ledge-a']), fake('default', new Error('no server')));
+    expect(await down.listSessions()).toEqual(['ledge-a']);
+  });
+});

@@ -2594,6 +2594,27 @@ describe('server: OpenRig seats as sessions', () => {
   });
 });
 
+describe('server: an OpenRig seat answered through its pane', () => {
+  it('becomes a rig session on its pane: written to like Ledge\'s own, never killed, closed nor resumed by Ledge', async () => {
+    const seatTmux = fakeTmux({ 'dev-build@first-factory': ['❯ '] });
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: {
+      async state() { return { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, at: '2026-11-02T09:00:00.000Z', rigs: [] }; },
+      async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'seat-1', agent: 'claude', cwd: '/w/ledge', rigSeat: 'dev-build@first-factory', event: { name: 'UserPromptSubmit', at: '2026-11-02T10:57:00.000Z', source: 'hook', text: 'go' } });
+    await vi.waitFor(() => expect(store.get('seat-1')).toMatchObject({ source: 'rig', tmuxSession: 'dev-build@first-factory' }));
+    c.send({ type: 'session.kill', id: 'seat-1' });
+    expect(await c.next('error')).toMatchObject({ id: 'seat-1', code: 'read_only' });
+    expect(seatTmux.sent.some(x => x[0] === 'kill')).toBe(false);
+    c.send({ type: 'session.reply', id: 'seat-1', text: 'continue' });
+    await vi.waitFor(() => expect(seatTmux.sent.some(x => x[1] === 'dev-build@first-factory' && x.includes('continue'))).toBe(true));
+    c.close(); await srv2.close();
+  });
+});
+
 describe('close a session', () => {
   const CLOSE = { freeMs: 200, exitMs: 200 };
   /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */

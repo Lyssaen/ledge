@@ -74,7 +74,7 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
     s => row('session.archive', { session: s.id }, `Archiver ${b(s.name)}`, { session: s.name }, { session: s.id })),
   'session.restore': (a, ctx) => withSession(ctx, a.session, s => (isArchived(s) ? null : no('not_archived', `${s.name} is not archived`)),
     s => row('session.restore', { session: s.id }, `Sortir ${b(s.name)} de l'archive`, { session: s.name }, { session: s.id })),
-  'session.resume': (a, ctx) => withSession(ctx, a.session, s => (s.source === 'hook_only' ? no('read_only', `${s.name} is read-only`) : s.state !== 'exited' ? no('running', `${s.name} is still running`) : null),
+  'session.resume': (a, ctx) => withSession(ctx, a.session, s => (s.source === 'hook_only' ? no('read_only', `${s.name} is read-only`) : s.source === 'rig' ? no('read_only', `${s.name} is an OpenRig seat: restart it from OpenRig`) : s.state !== 'exited' ? no('running', `${s.name} is still running`) : null),
     s => row('session.resume', { session: s.id }, `Reprendre ${b(s.name)} sur sa conversation`, { session: s.name }, { session: s.id })),
   // The note is the row's words, never its summary: a long one would pass the summary's bounds.
   'session.decide': (a, ctx) => withSession(ctx, a.session, writable, s => {
