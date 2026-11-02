@@ -5,7 +5,7 @@ import { sayToLedge, useAsks, useContextNear, useTasks, useTeams } from '@ledge/
 import { askShown, decisionEscalationId, isDecisionEscalation, projectOf as projectIdOf, type Escalation, type Rig, type RigSeat, type Task } from '@ledge/protocol';
 import { revisitDecision } from '../brain.js';
 import { refusalText, rigCall } from '../model/rigActions.js';
-import { LEDGE_FOCUS, useEditing, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
+import { LEDGE_FOCUS, teamLaunchMode, useEditing, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
 import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
 import { listedDecisions, nearContext, openDecisions } from '../model/overview.js';
 import { wrap } from '../model/thread.js';
@@ -134,8 +134,8 @@ export function Home() {
     }
     // The rail opened over the left column: esc closes it before anything else.
     if (railOpen && key.escape) { setRailOpen(false); return true; }
-    // + on Ledge's Rigs tab launches a rig.
-    if (input === '+' && tab === 'rigs') { go('launch', { launch: 'rig' }); return true; }
+    // + on Ledge's « Équipes » tab launches a team: the engine's form.
+    if (input === '+' && tab === 'rigs') { go('launch', { launch: teamLaunchMode(tui.engine) }); return true; }
     if (showConv && conv.current?.(input, key)) return true;
     if (ledgeish) {
       if (input === ']' && folded) { setRailOpen(o => !o); return true; }

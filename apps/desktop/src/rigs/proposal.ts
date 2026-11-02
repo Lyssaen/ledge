@@ -19,6 +19,7 @@ export function proposeProject(rig: Rig, projects: Projects): { projectId: strin
   return ids.size === 1 ? { projectId: [...ids][0]!, why: 'name' } : null;
 }
 
-/** A rig of this daemon in a space off any project that no project holds yet (once filed, `projectId` is set; the daemon keeps
- *  `offProject`). Another machine's rig is never offered: projects belong to the local daemon, `rig.adopt` cannot file it there. */
-export const isUnfiled = (rig: Rig): boolean => rig.machine === 'local' && rig.offProject && !rig.projectId && rig.lifecycle !== 'unreachable';
+/** An OpenRig rig of this daemon in a space off any project that no project holds yet (once filed, `projectId` is set; the daemon keeps
+ *  `offProject`). Another machine's rig is never offered: projects belong to the local daemon, `rig.adopt` cannot file it there. Nor is a
+ *  Ledge team (lot F final review I3): its room follows its folder, and `rig.adopt` is OpenRig's, refused in Ledge mode. */
+export const isUnfiled = (rig: Rig): boolean => rig.engine !== 'ledge' && rig.machine === 'local' && rig.offProject && !rig.projectId && rig.lifecycle !== 'unreachable';

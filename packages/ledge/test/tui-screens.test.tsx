@@ -1390,6 +1390,8 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
 
   it('ctrl+t turns the new session form into a team: the template, its preview, ctrl+s launches it', async () => {
     const tui = await startTui();
+    // Ledge's team form is the Ledge engine's (lot F final review I1): in OpenRig mode ctrl+t opens OpenRig's plan launch.
+    tui.daemon.push({ type: 'teams.engine', engine: 'ledge', openrigAvailable: false, running: true });
     tui.daemon.onMessage(m => {
       if (m.type === 'roles.list') tui.daemon.push({ type: 'roles.listing', requestId: m.requestId, roles: [{ id: 'lead', label: 'Chef', prompt: '', source: 'home', path: '/h/lead.md' }, { id: 'review', label: 'Relecteur', prompt: '', autonomy: 'auto', source: 'home', path: '/h/review.md' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }, { role: 'review', tool: 'codex' }], source: 'home', path: '/h/w.yaml' }], problems: [] });
       if (m.type === 'team.launch') tui.daemon.push({ type: 'team.launched', rid: m.rid, team: { id: 'team-e5f6', name: 'workshop', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: T(0), updatedAt: T(0) } });

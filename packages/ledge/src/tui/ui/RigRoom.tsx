@@ -13,7 +13,7 @@ import { adoptable, adoptChoices, heldRepos, refusalText, rigCall, type RigCallM
 import { queueOf, seatAddress, seatRows, type QueueItem, type SeatRow } from '../model/rigRoom.js';
 import { C, projectColor } from '../theme.js';
 import { BAR, barCells } from './LedgeRail.js';
-import { AdoptBox, RestartLine, StopBox, type RigDialog } from './RigConfirm.js';
+import { AdoptBox, LeaveLine, RestartLine, StopBox, type RigDialog } from './RigConfirm.js';
 import { Button } from './SessionCard.js';
 import { Lines } from './Lines.js';
 import { Tail } from './Tail.js';
@@ -33,7 +33,8 @@ const QUEUE_W = 44;
  * tucked away, Ledge's orders to the operator and the queue of every rig. Its keys go through `keys`, its key bar through `onBar`:
  * j k the seats (past the ends, the home's left column), ↵ the seat's session, a attaches it, w writes to it through Ledge.
  * A rig's life goes through rig.act / rig.adopt (OpenRig's, or the team's own for a Ledge team): r restarts the chosen seat, S stops the rig or only that seat, u resumes a
- * stopped rig (`up`), p files an off-project rig in a project; each asks first (but u), and ends in a toast.
+ * stopped rig (`up`), p files an off-project OpenRig rig in a project, L makes the chosen seat's session leave its live Ledge team
+ * (`team.leave`, the local daemon's teams only); each asks first (but u), and ends in a toast.
  */
 export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTarget; side: boolean; height: number; keys: MutableRefObject<KeyHandler | null>; onBar(b: Keys): void }) {
   const tui = useTui();
@@ -68,6 +69,8 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
   const stopped = rig?.lifecycle === 'stopped';
   const filing = !!rig && !kernel && adoptable(rig);
   const choices = useMemo(() => (rig && filing ? adoptChoices(rig, projects, t.rigAct) : []), [rig, filing, projects, t]);
+  // L (lot F final review I5): the chosen seat's session leaves its live Ledge team, one of the local daemon's (team.leave goes there).
+  const leaving = acts && !stopped && rig?.engine === 'ledge' && rig.machine === 'local' && !!row?.seat.sessionId;
   const where = kernel ? t.room.kernelWhere : rig?.name ?? '';
 
   const openSeat = (r: SeatRow) => {
@@ -102,6 +105,13 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
   const dialogKeys = (input: string, k: Parameters<KeyHandler>[1], d: RigDialog): void => {
     if (!rig) return;
     if (k.escape) { setDialog(null); return; }
+    if (d.kind === 'leave') {
+      if (!k.return) return;
+      setDialog(null);
+      client.send({ type: 'team.leave', team: rig.id, session: d.session });
+      tui.toast({ text: t.rigAct.done.left(d.seat.name, rig.name), tone: 'ok' });
+      return;
+    }
     const count = d.kind === 'stop' ? (d.seat ? 2 : 1) : d.kind === 'adopt' ? choices.length : 1;
     if (d.kind !== 'restart' && (input === 'j' || k.downArrow)) { setDialog({ ...d, on: Math.min(count - 1, d.on + 1) }); return; }
     if (d.kind !== 'restart' && (input === 'k' || k.upArrow)) { setDialog({ ...d, on: Math.max(0, d.on - 1) }); return; }
@@ -135,12 +145,13 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
     if (input === 'S') { if (acts && !stopped) setDialog({ kind: 'stop', seat: row && row.seat.state !== 'stopped' ? row.seat : undefined, on: 0 }); return true; }
     if (input === 'u') { if (acts && stopped) call({ type: 'rig.act', machine: rig.machine, rigId: rig.id, verb: 'up' }, t.rigAct.done.up(rig.name)); return true; }
     if (input === 'p') { if (acts && filing) setDialog({ kind: 'adopt', on: 0 }); return true; }
+    if (input === 'L' && rig.engine === 'ledge') { if (leaving && row?.seat.sessionId) setDialog({ kind: 'leave', seat: row.seat, session: row.seat.sessionId }); return true; }
     return false;
   };
   useEffect(() => () => { keys.current = null; }, [keys]);
   const ak = t.rigAct.keys;
-  const rigKeys: Keys = acts ? [...(row ? [['r', ak.restart] as const] : []), ...(stopped ? [['u', ak.resume] as const] : [['S', ak.stop] as const]), ...(filing ? [['p', ak.adopt] as const] : [])] : [];
-  const bar: Keys = dialog ? [...(dialog.kind === 'restart' ? [] : [['j k', ak.choose] as const]), ['↵', ak.confirm], ['esc', ak.cancel]]
+  const rigKeys: Keys = acts ? [...(row ? [['r', ak.restart] as const] : []), ...(stopped ? [['u', ak.resume] as const] : [['S', ak.stop] as const]), ...(filing ? [['p', ak.adopt] as const] : []), ...(leaving ? [['L', ak.leave] as const] : [])] : [];
+  const bar: Keys = dialog ? [...(dialog.kind === 'restart' || dialog.kind === 'leave' ? [] : [['j k', ak.choose] as const]), ['↵', ak.confirm], ['esc', ak.cancel]]
     : [['j k', t.keys.seats], ...(live && row ? [...(row.session ? [['↵', t.keys.openSeat] as const] : []), ['a', t.keys.attachSeat] as const, ...(writable ? [['w', t.keys.write] as const] : [])] : []), ...rigKeys, ['1', t.keys.ledge]];
   const barKey = bar.map(b => b.join(' ')).join('|');
   useEffect(() => onBar(bar), [barKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -188,7 +199,7 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
   const buttons = !kernel && !!rig;
   const plateH = 5 + Math.max(1, rows.length) + (hidden.length ? 1 : 0) + (buttons ? 3 : 0);
   // An off-project rig's repos found on the way, and the projects already holding some of them.
-  const repos = rig && !kernel && rig.offProject && !rig.projectId ? rig.repos : null;
+  const repos = rig && !kernel && rig.engine !== 'ledge' && rig.offProject && !rig.projectId ? rig.repos : null;
   const held = useMemo(() => (repos && rig ? [...heldRepos(rig, projects)].flatMap(([id, rs]) => rs.map(r => ({ repo: r.name, project: projects?.projects.find(p => p.id === id)?.name ?? id }))) : []), [repos, rig, projects]);
   const reposH = repos ? 3 + Math.max(1, repos.length) + 1 + held.length : 0;
   const dialogH = dialog?.kind === 'stop' ? 4 + (dialog.seat ? 2 : 1) : dialog?.kind === 'adopt' ? 4 + choices.length : 0;
@@ -246,7 +257,7 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
         ) : null}
         {buttons && rig ? <>
           <Text> </Text>
-          {dialog?.kind === 'restart' ? <RestartLine seat={dialog.seat} ledge={rig.engine === 'ledge'} /> : (
+          {dialog?.kind === 'restart' ? <RestartLine seat={dialog.seat} ledge={rig.engine === 'ledge'} /> : dialog?.kind === 'leave' ? <LeaveLine seat={dialog.seat} team={rig.name} /> : (
             <Box columnGap={2}>
               <Button label={t.rigAct.restartSeat} k="r" off={!acts} />
               {filing ? <Button label={t.rigAct.adoptRig} k="p" primary off={!acts} /> : null}

@@ -102,13 +102,14 @@ export const en: Messages = {
     you: 'you', noTerminalCommand: (seat: string) => `No terminal to attach for ${seat}.`
   },
   rigAct: {
-    keys: { restart: 'restart', stop: 'stop…', adopt: 'file in a project…', resume: 'resume', choose: 'choose', confirm: 'confirm', cancel: 'cancel' },
+    keys: { restart: 'restart', stop: 'stop…', adopt: 'file in a project…', resume: 'resume', leave: 'leave the team', choose: 'choose', confirm: 'confirm', cancel: 'cancel' },
     restartSeat: 'Restart a seat…', stopRig: 'Stop the team…', adoptRig: 'File in a project…', resumeRig: 'Resume',
     viaOpenRig: 'Restarting and stopping go through OpenRig: a kill on Ledge’s side would read as a crash.',
     restartAsk: seat => `Restart ${seat} through OpenRig?`, yes: '↵ yes', no: 'esc no',
     stopTitle: rig => `Stop ${rig}?`, stopAll: 'Stop the team', stopSeat: seat => `Only this seat · ${seat}`,
     stopBodyLedge: n => `${n > 1 ? `Its ${n} seats stop` : 'Its seat stops'}. The team goes to rest: its conversations are kept, R or u resumes it.`,
     restartAskLedge: seat => `Restart ${seat}?`,
+    leaveAsk: (seat, team) => `${seat} leaves the team ${team}?`,
     viaLedge: 'Stopping puts the team to rest: its conversations are kept.',
     stopBody: n => `${n > 1 ? `Its ${n} seats stop` : 'Its seat stops'}. OpenRig keeps a snapshot to resume it. The files stay.`,
     adoptTitle: rig => `File ${rig} in a project?`, holds: repos => `already holds ${repos}`, leaveOut: 'Leave outside any project',
@@ -117,7 +118,7 @@ export const en: Messages = {
     repos: 'Repos found on the way', how: { cloned: 'cloned by', opened: 'opened by', created: 'created by' },
     found: 'Spotted from the workspace’s git folders, then tied to the seat that cloned or opened them (hooks).',
     already: (repo, project) => `${repo} is already a repo of the project ${project}.`, noRepo: 'No repo found yet.',
-    done: { down: rig => `${rig} is stopping`, stop: seat => `${seat} is stopping`, restart: seat => `${seat} is restarting`, up: rig => `${rig} is resuming`, adopted: (rig, project) => `${rig} filed in ${project}` },
+    done: { down: rig => `${rig} is stopping`, stop: seat => `${seat} is stopping`, restart: seat => `${seat} is restarting`, up: rig => `${rig} is resuming`, adopted: (rig, project) => `${rig} filed in ${project}`, left: (seat, team) => `${seat} leaves ${team}.` },
     refused: {
       rig_managed: 'This seat belongs to its team: stop or restart it from its room.', openrig_down: 'OpenRig is not answering.',
       unreachable: 'Machine unreachable.', failed: 'The action failed.', timeout: 'OpenRig did not answer (5 s).'
@@ -211,7 +212,7 @@ export const en: Messages = {
     missing: { prompt: 'Write an instruction.', machine: 'No machine online.', repos: 'Pick a repository or a folder.' },
     launching: 'Launching…', launched: name => `✓ ${name} is started`,
     teamTitle: 'New team', mode: 'Mode', session: 'session', team: 'team', template: 'Template', custom: 'seats chosen one by one', seats: 'Seats',
-    teamName: 'Name', noRole: 'no role: write ~/.ledge/roles/<id>.md', loadingRoles: 'reading the roles…',
+    teamName: 'Name', goal: 'Objective', goalHint: 'optional · the team’s lead receives it at launch', noRole: 'no role: write ~/.ledge/roles/<id>.md', loadingRoles: 'reading the roles…',
     teamPreview: (team, project) => `Team ${team} will get its own room in ${project}.`,
     teamLaunched: name => `✓ Team ${name} launched`, teamFailed: why => `Team not launched: ${why}`, noSeat: 'Choose at least one seat.'
   },
@@ -272,7 +273,7 @@ export const en: Messages = {
     keys: { mode: 'team or session', seePlan: 'see the plan', openRoom: 'open its room', trust: 'open the prompt', cancelLaunch: 'cancel the launch', ledge: 'Ledge' }
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Home', ledge: 'Ledge screen', rig: 'A team’s room', session: 'Session', launch: 'Launch', settings: 'Settings', screens: 'switch screen', teams: 'Templates', teamKeys: 'Teams and decisions (home)', resumeTeam: 'resume the team (its row chosen)', writeToSeat: 'write (local team)', suggestions: 'suggestions', foldExchanges: 'fold exchanges', backNarrow: 'back (narrow)', launchRig: 'new team/session', resumeSent: 'resume', answerFocus: 'decide', tabsKeys: 'tabs', rail: 'the summary · 100-139', fileIn: 'file (off-project)', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Home', ledge: 'Ledge screen', rig: 'A team’s room', session: 'Session', launch: 'Launch', settings: 'Settings', screens: 'switch screen', teams: 'Templates', teamKeys: 'Teams and decisions (home)', resumeTeam: 'resume the team (its row chosen)', writeToSeat: 'write (local team)', suggestions: 'suggestions', foldExchanges: 'fold exchanges', backNarrow: 'back (narrow)', launchRig: 'new team/session', resumeSent: 'resume', answerFocus: 'decide', tabsKeys: 'tabs', rail: 'the summary · 100-139', fileIn: 'file (off-project)', leave: 'leave the team', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
     capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,

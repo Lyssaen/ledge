@@ -1,6 +1,6 @@
 import { useTeamsEngine, type DaemonClient, type MachineState, type TeamsEngineState } from '@ledge/fleet';
-import type { OpenRigStatus, Project, Projects, Rig, TeamsEngine } from '@ledge/protocol';
-import { rigFilter } from '@ledge/ui/rigs/model';
+import type { OpenRigStatus, Project, Projects, Rig, Session, Team, TeamsEngine } from '@ledge/protocol';
+import { isStandalone, rigFilter } from '@ledge/ui/rigs/model';
 import type { NavAction } from '../nav/state';
 
 /** The teams engine in force, as the local daemon says it (lot D). A daemon that never says (before lot D) ran OpenRig's rigs. */
@@ -34,3 +34,15 @@ export function techCores(engine: TeamsEngine, rigs: readonly Rig[], openrig: re
  *  (a Ledge team lives on its machine). The chat's team card opens it. */
 export const teamRoomFilter = (rigs: readonly Rig[], teamId: string): string =>
   rigFilter(rigs.find(r => r.id === teamId && r.engine === 'ledge') ?? { machine: 'local', id: teamId });
+
+/** The live Ledge team a room or a card may add a session to (lot F final review I5): one of the local daemon's (`team.join` goes
+ *  there), active (not at rest). */
+export const joinableTeam = (rig: Rig, teams: readonly Team[] | null | undefined): Team | undefined =>
+  rig.engine === 'ledge' && rig.machine === 'local' && rig.lifecycle !== 'stopped' && rig.lifecycle !== 'unreachable'
+    ? teams?.find(x => x.id === rig.id && x.state === 'active') : undefined;
+
+/** The sessions « Ajouter une session… » offers a Ledge team (lot F final review I5): its project's standalone sessions on its machine
+ *  (off any project: those of its folder), live, launched by Ledge, in no team. */
+export const joinCandidates = (rig: Rig, sessions: readonly Session[], rigs: readonly Rig[], projectIdOf: (s: Session) => string | null): Session[] =>
+  sessions.filter(s => (s.machineId ?? 'local') === rig.machine && !s.team && !s.offline && s.state !== 'exited' && !s.archivedAt && s.source !== 'hook_only'
+    && isStandalone(s, rigs) && (rig.projectId !== null ? projectIdOf(s) === rig.projectId : projectIdOf(s) === null && (s.cwd === rig.cwd || s.cwd.startsWith(`${rig.cwd}/`))));

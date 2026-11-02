@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MachineState } from '@ledge/fleet';
-import type { OpenRigStatus, Projects, Rig, RigSeat, Session, TeamsEngine } from '@ledge/protocol';
+import type { OpenRigStatus, Projects, Rig, RigSeat, Session, Team, TeamsEngine } from '@ledge/protocol';
+import type { TeamsApi } from '../src/teams/useTeamsApi';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { LangProvider } from '../src/i18n/lang';
 import { Atelier } from '../src/atelier/Atelier';
@@ -33,14 +34,14 @@ const filing = { dragging: null, over: null, seated: null, dragProps: () => ({})
 const actions: SessionActions = { request() {}, resume() {}, restore() {}, pending: null, confirm() {}, cancel() {}, allowed: () => true };
 const menu = { menu: null, session: null, renaming: null, open: vi.fn(), close() {}, terminal() {}, rename() {}, closeRename() {}, sendRename() {} } as unknown as SessionMenuState;
 
-function renderBureaux({ engine, rigs, openrig = [], lang = 'fr', sessions = [otto], busy = false }: { engine: TeamsEngine; rigs: Rig[]; openrig?: OpenRigStatus[]; lang?: 'fr' | 'en'; sessions?: Session[]; busy?: boolean }) {
+function renderBureaux({ engine, rigs, openrig = [], lang = 'fr', sessions = [otto], busy = false, teams }: { engine: TeamsEngine; rigs: Rig[]; openrig?: OpenRigStatus[]; lang?: 'fr' | 'en'; sessions?: Session[]; busy?: boolean; teams?: TeamsApi }) {
   const act = vi.fn<RigControls['act']>(async () => ({ ok: true }));
   const controls = { act, adopt: vi.fn(), pending: new Set(), busy: () => busy, askStop() {}, paired: () => null, showRepos() {}, askAdopt() {} } as unknown as RigControls;
   const nav = { ...initialNav({ view: 'atelier', helpers: true, paused: true }), place: { kind: 'overview' as const, view: 'atelier' as const, project: 'all' } };
   render(
     <LangProvider lang={lang}><RigControlsContext.Provider value={controls}>
       <Atelier nav={nav} dispatch={() => {}} sessions={sessions} projects={PROJECTS} order={sessions} rigs={rigs} openrig={openrig} engine={engine} machines={MACHINES}
-        projectIdOf={s => (s.cwd.startsWith('/w/ledge') ? 'ledge' : null)} filing={filing} actions={actions} menu={menu} />
+        projectIdOf={s => (s.cwd.startsWith('/w/ledge') ? 'ledge' : null)} filing={filing} actions={actions} menu={menu} {...(teams ? { teams } : {})} />
     </RigControlsContext.Provider></LangProvider>
   );
   return { act };
@@ -122,5 +123,37 @@ describe('a running Ledge team in the Bureaux (Review Focus 4)', () => {
     renderBureaux({ engine: 'ledge', rigs: [team('stopped')], sessions: [otto] });
     await screen.findByText('Équipes · Ledge');
     expect(plates().filter(p => p?.startsWith('roles'))).toEqual(['roles · 0']);
+  });
+});
+
+describe('« Ajouter une session… » in the Bureaux (lot F final review I5)', () => {
+  const lea = fakeSession('local:lea', { name: 'Lea', cwd: '/w/ledge', state: 'working', machineId: 'local', team: 'team-a1b2', role: 'leader' });
+  const TEAM: Team = { id: 'team-a1b2', name: 'roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active',
+    seats: [{ role: 'leader', sessionId: 'lea' }, { role: 'qa', sessionId: null }], createdAt: '2026-11-01T08:00:00.000Z', updatedAt: '2026-11-01T08:00:00.000Z' };
+  const RIG: Rig = { id: 'team-a1b2', name: 'roles', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, engine: 'ledge', repos: [],
+    seats: [{ ref: 'leader@team-a1b2', address: '@leader', name: 'Lea', runtime: 'claude', state: 'working', sessionId: 'local:lea' }] };
+  const teamsApi = (team: Team): TeamsApi & { join: ReturnType<typeof vi.fn<TeamsApi['join']>> } => ({
+    teams: [team], tasks: [], teamOf: s => (s.team === team.id ? team : undefined), join: vi.fn<TeamsApi['join']>(), leave: vi.fn(), resume: vi.fn(), dissolve: vi.fn(), seen: vi.fn(),
+    roles: async () => ({ roles: [], templates: [], problems: [] }), answer: async () => undefined
+  });
+
+  it('the live team’s office has a « … »: « Ajouter une session… », the project’s standalone session, its role, then team.join', async () => {
+    const teams = teamsApi(TEAM);
+    renderBureaux({ engine: 'ledge', rigs: [RIG], sessions: [otto, lea], teams });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Actions de l’équipe roles' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Ajouter une session…' }));
+    const pick = await screen.findByRole('menu', { name: 'Ajouter une session à roles' });
+    expect(within(pick).getAllByRole('menuitem').map(i => i.textContent)).toEqual(['Otto']);
+    await user.click(within(pick).getByRole('menuitem', { name: 'Otto' }));
+    const roles = await screen.findByRole('menu', { name: 'Rôle de Otto dans roles' });
+    await user.click(within(roles).getByRole('menuitem', { name: '@qa' }));
+    expect(teams.join).toHaveBeenCalledWith('team-a1b2', 'local:otto', 'qa');
+  });
+
+  it('a resting team’s office has no « … »', async () => {
+    renderBureaux({ engine: 'ledge', rigs: [RESTING], teams: teamsApi({ ...TEAM, id: 'team-c3d4', name: 'mobile', state: 'resting' }) });
+    await screen.findByText('mobile · au repos');
+    expect(screen.queryByRole('button', { name: 'Actions de l’équipe mobile' })).toBeNull();
   });
 });

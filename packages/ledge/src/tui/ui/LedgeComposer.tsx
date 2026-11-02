@@ -1,6 +1,6 @@
 import { useEffect, useState, type MutableRefObject } from 'react';
 import { Box, Text } from 'ink';
-import { useTui, type KeyHandler } from '../context.js';
+import { teamLaunchMode, useTui, type KeyHandler } from '../context.js';
 import { seatStateLabel } from '../model/left.js';
 import { completeMention, mentionAt, mentionCandidates, mostActiveRig } from '../model/mention.js';
 import { C } from '../theme.js';
@@ -41,7 +41,7 @@ export interface LedgeComposerProps {
  * decides whether it goes to a seat (lot 4); the TUI does not read the `@`.
  */
 export function LedgeComposer({ draft, setDraft, active, browsing, onBrowse, history, title, onSubmit, onSay, onEscape, width, keys, onList }: LedgeComposerProps) {
-  const { t, go, rigs, escalations, d } = useTui();
+  const { t, go, rigs, escalations, d, engine } = useTui();
   // Where the cursor is in what the field shows (the draft, or an entry of the history).
   const [pos, setPos] = useState<{ text: string; cursor: number }>({ text: draft, cursor: draft.length });
   // The `@` word whose list esc closed: it stays closed until another `@` word is under the cursor.
@@ -60,7 +60,7 @@ export function LedgeComposer({ draft, setDraft, active, browsing, onBrowse, his
 
   const busiest = mostActiveRig(rigs);
   const suggestions: Array<{ label: string; run(): void }> = [
-    { label: t.compose.launchRig, run: () => go('launch', { launch: 'rig' }) },
+    { label: t.compose.launchRig, run: () => go('launch', { launch: teamLaunchMode(engine) }) },
     ...(busiest ? [{ label: t.compose.whereIs(busiest.name), run: () => onSay(t.compose.whereIs(busiest.name)) }] : []),
     { label: t.compose.decided, run: () => onSay(t.compose.decided) },
     { label: t.compose.needsMe, run: () => onSay(t.compose.needsMe) }

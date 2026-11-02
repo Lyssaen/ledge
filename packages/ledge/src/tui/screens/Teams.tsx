@@ -91,7 +91,7 @@ export function Teams() {
     }
     if (key.return && launchable) {
       catalog.current.launch = { cwd: scope.cwd, machine: scope.machine, project, ...(role ? { role } : {}), ...(template ? { template: template.id } : {}) };
-      go('launch');
+      go('launch', { launch: 'session' }); // its prefill picks the form (a role's session, a template's team), whatever was launched before
       return true;
     }
     if (input === 'o' && current && !remote) {

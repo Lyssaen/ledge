@@ -41,7 +41,7 @@ import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
 import { useRelief } from './session/useRelief';
 import { TeamLaunch } from './launch/TeamLaunch';
-import { useTeamsApi } from './teams/useTeamsApi';
+import { seatTeam, useTeamsApi } from './teams/useTeamsApi';
 import { Atelier } from './atelier/Atelier';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
@@ -378,7 +378,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}
-      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void relief.handover(s.id); }} />
+      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void relief.handover(s.id); }} teamOf={s => seatTeam(teams, s)} onLeave={(s, team) => { teams.leave(team, s.id); notify(t.rooms.left(s.name)); }} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       {rigControls.dialog}

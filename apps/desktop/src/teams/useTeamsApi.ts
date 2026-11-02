@@ -68,6 +68,12 @@ export function useTeamsApi(client: DaemonClient): TeamsApi {
   }), [client, teams, tasks, teamOf, roles, answer]);
 }
 
+/** The live Ledge team a session holds a seat in (« Quitter l'équipe {team} » of its menu, lot F final review I5): active, not at rest. */
+export const seatTeam = (teams: Pick<TeamsApi, 'teamOf'>, s: Pick<Session, 'team'>): Team | undefined => {
+  const team = teams.teamOf(s);
+  return team?.state === 'active' ? team : undefined;
+};
+
 /** A closed task Ledge gave and the user has not put away: an item of « À toi » (roles spec §3.7). */
 export const closedLedgeTasks = (tasks: readonly Task[]): Task[] => tasks.filter(t => t.giver === LEDGE_GIVER && taskClosed(t) && !t.seen);
 

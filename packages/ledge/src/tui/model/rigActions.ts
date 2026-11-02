@@ -62,8 +62,9 @@ export function adoptChoices(rig: Rig, projects: Projects | null, words: Message
   ];
 }
 
-/** A rig that « Ranger dans un projet… » may file: this daemon's (projects are the local daemon's), off any project, reachable. */
-export const adoptable = (rig: Rig): boolean => rig.machine === 'local' && rig.offProject && !rig.projectId && !rig.kernel && rig.lifecycle !== 'unreachable';
+/** A rig that « Ranger dans un projet… » may file: an OpenRig rig of this daemon (projects are the local daemon's), off any project,
+ *  reachable. Never a Ledge team (lot F final review I3): its room follows its folder, and `rig.adopt` is OpenRig's, refused in Ledge mode. */
+export const adoptable = (rig: Rig): boolean => rig.engine !== 'ledge' && rig.machine === 'local' && rig.offProject && !rig.projectId && !rig.kernel && rig.lifecycle !== 'unreachable';
 
 /** What a toast says of a refused rig.act / rig.adopt: rig_managed and a timeout in Ledge's words, else the daemon's reason. */
 export function refusalText(r: RigCallResult, words: Messages['rigAct'] = fr.rigAct): string {

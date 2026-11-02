@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent, t
 import type { Escalation, Exchange, OpenRigStatus, Project, Projects, Rig, RigSeat, Session, TeamsEngine } from '@ledge/protocol';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import { isSeatPlaceholder, isStandalone, ledgeLine } from '@ledge/ui/rigs/model';
-import { MenuItem } from '../shell/Menu';
+import { Menu, MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import { engineName, techCores } from '../rigs/engine';
 import { useRigControls } from '../rigs/useRigActions';
@@ -17,7 +17,7 @@ import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
 import { roomTileWidth, sceneOf, walkOrder, type AtelierRoom } from './layout';
 import { ProjectRoom } from './ProjectRoom';
-import { RoleChooser, type RoleChoice } from './RoleChooser';
+import { underFocus, useJoinTeam } from './RoleChooser';
 import type { TeamsApi } from '../teams/useTeamsApi';
 import { Modal } from '../shell/Modal';
 import { LedgeDesk } from './LedgeDesk';
@@ -58,7 +58,8 @@ export interface AtelierProps {
   /** More buttons at the end of the zoom bar (the detached Atelier's way out of full screen). */
   tools?: ReactNode;
   /** The live teams and Ledge's tasks (atelier rooms spec): a Ledge team is its projected rig's room (lot F); a session dropped on it
-   *  joins (RoleChooser), a seat dragged out of it leaves; its room's menu dissolves it. */
+   *  joins (RoleChooser), a seat dragged out of it leaves; its room's menu adds a session (« Ajouter une session… », the Bureaux' too)
+   *  and dissolves it. */
   teams?: TeamsApi;
   /** Says what happened (a join, a leave) in the shell's toast. */
   notify?: (text: string) => void;
@@ -100,7 +101,9 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
   // filed in that project (the folder rule) and, in a team, leaves it.
   const carried = useRef<Session | null>(null);
   const [overTable, setOverTable] = useState<string | null>(null);
-  const [choosing, setChoosing] = useState<RoleChoice | null>(null);
+  // Joining without dragging (lot F final review I5): « Ajouter une session… » of a team room's « … », in the Bureaux as in the atelier.
+  const join = useJoinTeam({ teams, sessions, rigs, projectIdOf, notify });
+  const [roomMenu, setRoomMenu] = useState<{ rig: Rig; at: { x: number; y: number } } | null>(null);
   const [dissolving, setDissolving] = useState<{ id: string; name: string } | null>(null);
   // A resting team's members stay where they are, as at main's team table.
   const resting = (s: Session) => !!s.team && teams?.teams?.find(x => x.id === s.team)?.state === 'resting';
@@ -136,7 +139,7 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
   const teamOf = (room: AtelierRoom) => (room.kind === 'rig' && room.rig.engine === 'ledge' ? teams?.teams?.find(x => x.id === room.rig.id) : undefined);
   const roomDrop = (room: AtelierRoom) => {
     const team = teamOf(room);
-    return team && dropOn(room.key, (s, e) => setChoosing({ session: s, team, at: { x: e.clientX, y: e.clientY } }), s => s.team !== team.id);
+    return team && dropOn(room.key, (s, e) => join.ask({ session: s, team, at: { x: e.clientX, y: e.clientY } }), s => s.team !== team.id);
   };
   const [seats] = useSeats();
   const walk = useMemo(() => legacy ? walkOrder(scene, seats)
@@ -219,6 +222,7 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
       <div ref={view.floorRef} className="atelier-floor"><div ref={view.shellRef} className="bureaux-shell">
         <Suspense fallback={null}><OfficeFloor client={client} scene={scene} sessions={sessions} rigs={rigs} exchanges={exchanges} arcs={arcs} cores={cores} plate={t.atelier.techPlate(engineName(engine))} viewportWidth={viewportWidth}
           onResume={controls ? rig => { void controls.act(rig.machine, 'up', { rigId: rig.id }); } : undefined} resumeBusy={controls ? rig => controls.busy(rig.machine, rig.id) : undefined}
+          roomMenu={join.offer} onRoomMenu={(rig, at) => setRoomMenu({ rig, at })}
           onOpen={id => {
             const found = rigs.flatMap(r => r.seats.map(seat => ({ rig: r, seat }))).find(x => id === `seat:${x.rig.machine}/${x.rig.id}/${x.seat.ref}`);
             if (found) onSeatTerminal?.(found.rig, found.seat);
@@ -227,6 +231,14 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
         {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
       </div></div>
     </div>
+    {/* A team office's « … » (the floor is scaled: its menu opens here, at the button, at the window's scale). */}
+    {roomMenu && (
+      <Menu open onOpenChange={o => { if (!o) setRoomMenu(null); }} label={t.rooms.rigMenu(roomMenu.rig.name)} className="room-menu-wrap" menuClassName="assign-menu room-menu"
+        at={roomMenu.at} trigger={() => null}>
+        <MenuItem onSelect={() => { join.add(roomMenu.rig, roomMenu.at); setRoomMenu(null); }}><span>{t.rooms.addSession}</span></MenuItem>
+      </Menu>
+    )}
+    {join.chooser}
   </>);
 
   return (<>
@@ -252,7 +264,10 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
                 const team = teamOf(room);
                 return (
                   <RigRoom key={room.key} room={room} width={roomTileWidth(room.tables, seats)} dispatch={dispatch} onTerminal={seat => onSeatTerminal?.(room.rig, seat)} drop={roomDrop(room)}
-                    extraActions={team && <MenuItem onSelect={() => setDissolving({ id: team.id, name: team.name })}><span><Icon d={SHELL_ICONS.archive} size={13} />{t.rooms.dissolve}</span></MenuItem>}>
+                    extraActions={team && <>
+                      {join.offer(room.rig) && <MenuItem onSelect={() => join.add(room.rig, underFocus())}><span>{t.rooms.addSession}</span></MenuItem>}
+                      <MenuItem onSelect={() => setDissolving({ id: team.id, name: team.name })}><span><Icon d={SHELL_ICONS.archive} size={13} />{t.rooms.dissolve}</span></MenuItem>
+                    </>}>
                     <RigTable room={room} maxSeats={seats} paused={nav.paused} focusedId={focusedId} order={order} dispatch={dispatch} menuId={menu.menu?.id ?? null} onMenu={menuAt}
                       seatDrag={team ? seatDrag : undefined} />
                   </RigRoom>
@@ -274,10 +289,7 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
             filing={filing} projects={projects?.projects ?? []} onMenu={menuAt} />
         </div>
       </div>
-      {choosing && teams && (
-        <RoleChooser choice={choosing} teams={teams} onClose={() => setChoosing(null)}
-          onChoose={role => { teams.join(choosing.team.id, choosing.session.id, role); notify?.(t.rooms.joined(choosing.session.name, choosing.team.name, role)); setChoosing(null); }} />
-      )}
+      {join.chooser}
       {dissolving && teams && (
         <Modal title={t.rooms.dissolveTitle(dissolving.name)} role="alertdialog" className="confirm-modal" onClose={() => setDissolving(null)}>
           <div className="confirm-content">

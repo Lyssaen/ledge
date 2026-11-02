@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
 import type { OpenRigStatus, Projects, Rig, Session } from '@ledge/protocol';
 import { useOpenRig, useRigs, useRigSpecs, type DaemonClient, type TeamBroadcastAnswer } from '@ledge/fleet';
+import { projectOf } from '@ledge/protocol';
+import { useJoinTeam } from '../atelier/RoleChooser';
+import type { TeamsApi } from '../teams/useTeamsApi';
 import { allSeats, rigsModel } from '@ledge/ui/rigs/model';
 import { useI18n } from '../i18n/lang';
 import type { NavAction, NavState, RigsSub } from '../nav/state';
@@ -29,10 +32,11 @@ export const rigsCount = (all: readonly Rig[], openrig: readonly OpenRigStatus[]
  * sub-tab and the chosen spec live in the nav's home place), « Lancer une équipe » (`launchTeam`). What is OpenRig's own shows in OpenRig
  * mode only: the Specs, and the banner when the local OpenRig is absent, stopped, refused or in error (in the sidebar's words; no card of
  * that machine shows). The specs are those of the local machine, or of the machine picked in a list when several run OpenRig.
- * A live Ledge team's card writes to all its seats (`team.broadcast`, through the fleet to the local daemon).
+ * A live Ledge team's card writes to all its seats (`team.broadcast`, through the fleet to the local daemon), and its « … » adds a session
+ * (`teams`, lot F final review I5: one of the project's standalone sessions, then its role, then `team.join`).
  */
-export function RigsTab({ nav, dispatch, client, sessions, projects, notify }: {
-  nav: NavState; dispatch: (a: NavAction) => void; client: DaemonClient; sessions: readonly Session[]; projects: Projects | null; notify?(text: string): void;
+export function RigsTab({ nav, dispatch, client, sessions, projects, notify, teams }: {
+  nav: NavState; dispatch: (a: NavAction) => void; client: DaemonClient; sessions: readonly Session[]; projects: Projects | null; notify?(text: string): void; teams?: TeamsApi;
 }): JSX.Element {
   const { t } = useI18n();
   const r = t.rigsTab;
@@ -45,6 +49,7 @@ export function RigsTab({ nav, dispatch, client, sessions, projects, notify }: {
   const byId = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions]);
   const rigs = useMemo(() => visibleRigs(allRigs, openrig), [allRigs, openrig]);
   const model = useMemo(() => rigsModel(rigs, byId, projects), [rigs, byId, projects]);
+  const join = useJoinTeam({ teams, sessions, rigs: allRigs, projectIdOf: s => (projects ? projectOf(s, projects) : null), notify });
 
   // The local machine, then every other one running OpenRig.
   const machines = useMemo(() => ['local', ...openrig.filter(s => s.state === 'running' && s.machine !== 'local').map(s => s.machine)], [openrig]);
@@ -89,12 +94,13 @@ export function RigsTab({ nav, dispatch, client, sessions, projects, notify }: {
         </p>
       )}
       <div className="rigs-body">
-        {sub === 'live' && <RigsLive model={model} openrig={openrig} byId={byId} projects={projects} dispatch={dispatch} onBroadcast={broadcast}
+        {sub === 'live' && <RigsLive model={model} openrig={openrig} byId={byId} projects={projects} dispatch={dispatch} onBroadcast={broadcast} canAdd={join.offer} onAdd={join.add}
           onTerminal={(rig, seat) => { void openSeatTerminal(client, rig, seat, byId).then(ok => { if (!ok) notify?.(t.session.terminal.openFailed(seat.name)); }); }} />}
         {sub === 'specs' && <RigsSpecs specs={specs} selected={home?.spec} rigs={allRigs} machine={machine}
           version={openrig.find(s => s.machine === machine)?.version} dispatch={dispatch} />}
         {sub === 'agents' && <RigsAgents rigs={rigs} byId={byId} dispatch={dispatch} />}
       </div>
+      {join.chooser}
     </div>
   );
 }

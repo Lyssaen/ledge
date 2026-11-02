@@ -113,7 +113,7 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
           {tab === 'conversation' && <LedgeConversation client={client} view={view} dispatch={dispatch} focus={p.focus} projects={p.projects} paused={p.paused} waits={p.waits} decisions={p.decisions}
             focusCard={p.nav.place.kind === 'home' ? p.nav.place.focus : undefined} onFocused={() => dispatch({ type: 'ledge-focused' })}
             onLaunched={p.onLaunched} onTerminal={p.onTerminal} notify={p.notify} onProposal={p.onProposal} />}
-          {tab === 'rigs' && <RigsTab nav={p.nav} dispatch={dispatch} client={client} sessions={view.sessions} projects={p.projects} notify={p.notify} />}
+          {tab === 'rigs' && <RigsTab nav={p.nav} dispatch={dispatch} client={client} sessions={view.sessions} projects={p.projects} notify={p.notify} teams={teams} />}
           {tab === 'models' && <ModelsTab client={client} teams={teams} sessions={view.sessions} projects={p.projects} machines={view.machines} dispatch={dispatch} notify={p.notify} open={p.open} atelierProject={p.atelierProject} />}
           {tab === 'mandat' && <MandateTab client={client} view={view} />}
         </div>

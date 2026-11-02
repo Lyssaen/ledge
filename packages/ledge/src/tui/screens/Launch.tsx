@@ -36,23 +36,23 @@ function ProjectChoice({ project, on }: { project: { name: string; color?: Proje
   );
 }
 
-/** The launch screen (`+`): a session, or a rig (ctrl+t switches; « Lance un rig… » and `+` on a rig open the rig). « Équipes » (4)
- *  opens it with a role, or in team mode with a template (roles spec §3.9), and its folder; ctrl+t goes to the team form of the engine
- *  in use (a rig with OpenRig, a Ledge team without) and back to the session. */
+/** The launch screen (`+`): a session, or a team of the engine in force (ctrl+t switches; « Lance une équipe… » and `+` on a team open
+ *  it: OpenRig's plan launch, or Ledge's team form, `launchMode` 'team'). « Équipes » (4) opens it with a role, or in team mode with a
+ *  template (roles spec §3.9), and its folder; ctrl+t goes to the team form of the engine in force and back to the session. */
 export function Launch() {
   const { launchMode, catalog } = useTui();
   const [prefill] = useState(() => { const p = catalog.current.launch; catalog.current.launch = undefined; return p; });
-  const [team, setTeam] = useState(prefill?.template !== undefined);
+  const [team, setTeam] = useState(prefill ? prefill.template !== undefined : launchMode === 'team');
   if (launchMode === 'rig') return <RigLaunch />;
   return team ? <TeamLaunch onSession={() => setTeam(false)} prefill={prefill?.template !== undefined ? prefill : undefined} />
     : <SessionLaunch onTeam={() => setTeam(true)} prefill={prefill?.template === undefined ? prefill : undefined} />;
 }
 
-/** « Nouvelle session »: with a role when « Équipes » opened it. ctrl+t turns it into the team form of the engine in use: a rig
- *  when the daemon reports OpenRig, a Ledge team otherwise. */
+/** « Nouvelle session »: with a role when « Équipes » opened it. ctrl+t turns it into the team form of the engine in force (lot F final
+ *  review I1): a rig in OpenRig mode, a Ledge team in Ledge mode, whatever status the OpenRig bridge reports. */
 function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPrefill }) {
-  const { client, d, machines, projects, t, g, toast, go, select, small, setLaunchMode, openrig } = useTui();
-  const rigEngine = openrig.length > 0;
+  const { client, d, machines, projects, t, g, toast, go, select, small, setLaunchMode, engine } = useTui();
+  const rigEngine = engine === 'openrig';
   const list = projects?.projects ?? [];
   // The daemon fills the model and effort left out with the role's when it is the role's agent: the form shows them (#97).
   const rolePick = (r: Role | undefined, tool: Tool): ModelPick =>
@@ -216,7 +216,7 @@ function SessionLaunch({ onTeam, prefill }: { onTeam(): void; prefill?: LaunchPr
   );
 }
 
-const TEAM_FIELDS = ['project', 'folder', 'template', 'seats', 'name'] as const;
+const TEAM_FIELDS = ['project', 'folder', 'template', 'seats', 'name', 'goal'] as const;
 type TeamField = typeof TEAM_FIELDS[number];
 /** Read at each render: the palette changes with the theme. */
 const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => ({ ask: C.faint, edits: C.dim, auto: C.yellow })[a];
@@ -244,6 +244,8 @@ function TeamLaunch({ onSession, prefill }: { onSession(): void; prefill?: Launc
   const [seats, setSeats] = useState<Array<{ role: Role; tool: Tool; on: boolean }>>([]);
   const [seatAt, setSeatAt] = useState(0);
   const [name, setName] = useState('');
+  // What the team is for: its lead receives it at launch (`objective.goal`, the CLI's `--goal`).
+  const [goal, setGoal] = useState('');
   const [launching, setLaunching] = useState(false);
   useEditing(true);
   useEffect(() => {
@@ -281,7 +283,7 @@ function TeamLaunch({ onSession, prefill }: { onSession(): void; prefill?: Launc
       if (m.type === 'team.launched') { toast({ text: t.launch.teamLaunched(m.team.name), tone: 'ok' }); go('home'); }
       else toast({ text: t.launch.teamFailed(m.reason), tone: 'error' });
     });
-    client.send({ type: 'team.launch', rid, cwd, name: teamName, ...(tpl ? { template: tpl.id } : { seats: chosen.map(x => ({ role: x.id, tool: x.tool })) }) });
+    client.send({ type: 'team.launch', rid, cwd, name: teamName, ...(tpl ? { template: tpl.id } : { seats: chosen.map(x => ({ role: x.id, tool: x.tool })) }), ...(goal.trim() ? { objective: { goal: goal.trim() } } : {}) });
   };
 
   const tools: Tool[] = ['claude', 'codex', 'cursor', 'omp'];
@@ -294,7 +296,7 @@ function TeamLaunch({ onSession, prefill }: { onSession(): void; prefill?: Launc
     if (key.ctrl && input === 't') { onSession(); return; }
     if (key.tab || key.downArrow || key.return) { setField(f => cycle(TEAM_FIELDS, f, key.shift ? -1 : 1)); return; }
     if (key.upArrow) { setField(f => cycle(TEAM_FIELDS, f, -1)); return; }
-    if (field === 'name') return;
+    if (field === 'name' || field === 'goal') return;
     const by = key.rightArrow || input === 'l' ? 1 : key.leftArrow || input === 'h' ? -1 : 0;
     if (field === 'project' && by) { const ids = list.map(p => p.id); if (ids.length) { setProjectId(cur => cycle(ids, cur ?? ids[0]!, by)); setFolderAt(0); } }
     else if (field === 'folder' && by && folders.length) setFolderAt(i => (i + by + folders.length) % folders.length);
@@ -330,6 +332,7 @@ function TeamLaunch({ onSession, prefill }: { onSession(): void; prefill?: Launc
             </Text>
           ))}</>)}
         {row('name', t.launch.teamName, <TextInput value={name} onChange={setName} active={field === 'name'} placeholder={teamName} />)}
+        {row('goal', t.launch.goal, <TextInput value={goal} onChange={setGoal} active={field === 'goal'} placeholder={t.launch.goalHint} />)}
       </TitledBox>
       <TitledBox title={t.launch.preview} color={C.coral} titleColor={C.coral}>
         <Text wrap="truncate"><Text color={C.coral}>{g.team}</Text> <Text color={C.fg} bold>{t.launch.teamPreview(teamName, project?.name ?? cwd ?? '-')}</Text></Text>

@@ -736,7 +736,8 @@ export const fr = {
     dropJoin: 'Lâcher pour rejoindre', dropLeave: 'Lâcher pour quitter l’équipe',
     chooseRole: (name: string, team: string) => `Rôle de ${name} dans ${team}`, otherRole: 'autre rôle…', loadingRoles: 'Lecture des rôles…', noRole: 'Aucun autre rôle',
     joined: (name: string, team: string, role: string) => `${name} rejoint ${team} comme @${role}.`,
-    left: (name: string) => `${name} quitte l’équipe.`
+    left: (name: string) => `${name} quitte l’équipe.`,
+    addSession: 'Ajouter une session…', addSessionTo: (team: string) => `Ajouter une session à ${team}`, noSession: 'Aucune session seule de ce projet ici'
   },
   zoom: {
     bar: "Zoom de l'atelier", out: 'Dézoomer', outTitle: 'Dézoomer (−)', in: 'Zoomer', inTitle: 'Zoomer (+)',
@@ -831,6 +832,7 @@ export const fr = {
   },
   session: {
     meta: 'Machine et dépôts',
+    leaveTeam: (team: string) => `Quitter l'équipe ${team}`,
     subagent: 'Sous-agent',
     kidsPill: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`), kidsPillTitle: 'Voir les sous-agents dans la barre latérale',
     views: { label: 'Vue de la session', thread: 'Fil', changes: 'Modifications' },

@@ -29,7 +29,7 @@ import { RigControlsContext } from '../rigs/useRigActions';
 import { ConfirmDialog } from '../manage/ConfirmDialog';
 import { Atelier } from './Atelier';
 import { useRelief } from '../session/useRelief';
-import { useTeamsApi } from '../teams/useTeamsApi';
+import { seatTeam, useTeamsApi } from '../teams/useTeamsApi';
 import { useFiling } from './filing';
 import { closeAtelierWindow, terminalToMain, toMain, watchAtelierWindow } from './detach';
 
@@ -109,7 +109,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
             </>} />
         </section>
       </div>
-      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? []} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void relief.handover(s.id); }} />
+      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? []} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void relief.handover(s.id); }} teamOf={s => seatTeam(teams, s)} onLeave={(s, team) => { teams.leave(team, s.id); notify(t.rooms.left(s.name)); }} />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       {rigControls.dialog}
       <Toast notice={notice} action={noticeAction} onAction={undo} />

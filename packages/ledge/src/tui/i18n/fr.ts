@@ -111,13 +111,14 @@ export const fr = {
   },
   /** A rig's actions through OpenRig (rig.act, rig.adopt): « Arrêter… », « Relancer un siège… », « Reprendre », « Ranger dans un projet… ». */
   rigAct: {
-    keys: { restart: 'relancer', stop: 'arrêter…', adopt: 'ranger dans un projet…', resume: 'reprendre', choose: 'choisir', confirm: 'confirmer', cancel: 'annuler' },
+    keys: { restart: 'relancer', stop: 'arrêter…', adopt: 'ranger dans un projet…', resume: 'reprendre', leave: 'quitter l’équipe', choose: 'choisir', confirm: 'confirmer', cancel: 'annuler' },
     restartSeat: 'Relancer un siège…', stopRig: 'Arrêter l’équipe…', adoptRig: 'Ranger dans un projet…', resumeRig: 'Reprendre',
     viaOpenRig: 'Relancer et arrêter passent par OpenRig : un kill côté Ledge serait vu comme un crash.',
     restartAsk: (seat: string) => `Relancer ${seat} par OpenRig ?`, yes: '↵ oui', no: 'esc non',
     stopTitle: (rig: string) => `Arrêter ${rig} ?`, stopAll: 'Arrêter l’équipe', stopSeat: (seat: string) => `Seulement ce siège · ${seat}`,
     stopBodyLedge: (n: number) => `${n > 1 ? `Ses ${n} sièges s’arrêtent` : 'Son siège s’arrête'}. L’équipe se met au repos : ses conversations sont gardées, R ou u la reprend.`,
     restartAskLedge: (seat: string) => `Relancer ${seat} ?`,
+    leaveAsk: (seat: string, team: string) => `${seat} quitte l’équipe ${team} ?`,
     viaLedge: 'Arrêter met l’équipe au repos : ses conversations sont gardées.',
     stopBody: (n: number) => `${n > 1 ? `Ses ${n} sièges s’arrêtent` : 'Son siège s’arrête'}. OpenRig garde un instantané pour le reprendre. Les fichiers restent.`,
     adoptTitle: (rig: string) => `Ranger ${rig} dans un projet ?`, holds: (repos: string) => `contient déjà ${repos}`, leaveOut: 'Laisser hors projet',
@@ -128,7 +129,8 @@ export const fr = {
     already: (repo: string, project: string) => `${repo} est déjà un dépôt du projet ${project}.`, noRepo: 'Aucun dépôt trouvé pour l’instant.',
     done: {
       down: (rig: string) => `${rig} s’arrête`, stop: (seat: string) => `${seat} s’arrête`, restart: (seat: string) => `${seat} redémarre`,
-      up: (rig: string) => `${rig} reprend`, adopted: (rig: string, project: string) => `${rig} rangé dans ${project}`
+      up: (rig: string) => `${rig} reprend`, adopted: (rig: string, project: string) => `${rig} rangé dans ${project}`,
+      left: (seat: string, team: string) => `${seat} quitte ${team}.`
     },
     refused: {
       rig_managed: 'Ce siège appartient à son équipe : arrête-le ou relance-le dans sa pièce.', openrig_down: 'OpenRig ne répond pas.',
@@ -220,7 +222,7 @@ export const fr = {
     missing: { prompt: 'Écrivez une instruction.', machine: 'Aucune machine en ligne.', repos: 'Choisissez un dépôt ou un dossier.' } as Record<'prompt' | 'machine' | 'repos', string>,
     launching: 'Lancement…', launched: (name: string) => `✓ ${name} est lancée`,
     teamTitle: 'Nouvelle équipe', mode: 'Mode', session: 'session', team: 'équipe', template: 'Modèle', custom: 'sièges choisis un par un', seats: 'Sièges',
-    teamName: 'Nom', noRole: 'aucun rôle : écris ~/.ledge/roles/<id>.md', loadingRoles: 'lecture des rôles…',
+    teamName: 'Nom', goal: 'Objectif', goalHint: 'facultatif · le chef de l’équipe le reçoit au lancement', noRole: 'aucun rôle : écris ~/.ledge/roles/<id>.md', loadingRoles: 'lecture des rôles…',
     teamPreview: (team: string, project: string) => `L’équipe ${team} aura sa propre pièce dans ${project}.`,
     teamLaunched: (name: string) => `✓ Équipe ${name} lancée`, teamFailed: (why: string) => `Équipe non lancée : ${why}`, noSeat: 'Choisissez au moins un siège.'
   },
@@ -284,7 +286,7 @@ export const fr = {
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
     title: 'Aide', global: 'Partout', overview: 'Accueil', ledge: 'Écran Ledge', rig: 'Pièce d’une équipe', session: 'Session', launch: 'Lancer', settings: 'Réglages',
-    screens: 'changer d’écran', teams: 'Modèles', teamKeys: 'Équipes et décisions (accueil)', resumeTeam: 'reprendre l’équipe (sa ligne choisie)', writeToSeat: 'écrire (équipe locale)', suggestions: 'suggestions', foldExchanges: 'replier échanges', backNarrow: 'retour (étroit)', launchRig: 'nouvelle équipe/session', resumeSent: 'reprendre', answerFocus: 'trancher', tabsKeys: 'onglets', rail: 'le point · 100-139', fileIn: 'ranger (hors projet)', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    screens: 'changer d’écran', teams: 'Modèles', teamKeys: 'Équipes et décisions (accueil)', resumeTeam: 'reprendre l’équipe (sa ligne choisie)', writeToSeat: 'écrire (équipe locale)', suggestions: 'suggestions', foldExchanges: 'replier échanges', backNarrow: 'retour (étroit)', launchRig: 'nouvelle équipe/session', resumeSent: 'reprendre', answerFocus: 'trancher', tabsKeys: 'onglets', rail: 'le point · 100-139', fileIn: 'ranger (hors projet)', leave: 'quitter l’équipe', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
   field: {

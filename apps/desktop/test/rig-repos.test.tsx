@@ -138,4 +138,12 @@ describe('Dépôts trouvés', () => {
     expect(isUnfiled(rigWith(THREE, { machine: 'mac' }))).toBe(false);
     expect(isUnfiled(rigWith(THREE))).toBe(true);
   });
+
+  it('une équipe Ledge hors projet : ni « Dépôts trouvés » ni « Ranger dans un projet… » (rig.adopt est d’OpenRig)', () => {
+    const team = rigWith([], { engine: 'ledge', id: 'team-a1b2', cwd: '/home/u/scratch' });
+    expect(isUnfiled(team)).toBe(false);
+    renderTab([team]);
+    expect(within(card()).queryByText(/Dépôts trouvés|Aucun dépôt trouvé/)).toBeNull();
+    expect(within(card()).queryByRole('button', { name: /Ranger/ })).toBeNull();
+  });
 });

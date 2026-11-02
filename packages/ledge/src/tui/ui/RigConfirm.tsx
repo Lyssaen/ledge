@@ -5,8 +5,10 @@ import { C, projectColor } from '../theme.js';
 import { Button } from './SessionCard.js';
 import { TitledBox } from './TitledBox.js';
 
-/** What a rig's room asks before acting through OpenRig: `r` a one-line confirmation, `S` the stop box, `p` the filing box. */
-export type RigDialog = { kind: 'restart'; seat: RigSeat } | { kind: 'stop'; seat: RigSeat | undefined; on: number } | { kind: 'adopt'; on: number };
+/** What a rig's room asks before acting: `r` a one-line confirmation, `S` the stop box, `p` the filing box, `L` a one-line confirmation
+ *  that the seat's session leaves its Ledge team. */
+export type RigDialog = { kind: 'restart'; seat: RigSeat } | { kind: 'stop'; seat: RigSeat | undefined; on: number } | { kind: 'adopt'; on: number }
+  | { kind: 'leave'; seat: RigSeat; session: string };
 
 /** A row of a dialog's choices: the radio, an optional glyph, the label, a faint note. */
 function Choice({ on, label, note, glyph }: { on: boolean; label: string; note?: string; glyph?: { text: string; color: string } }) {
@@ -28,6 +30,12 @@ function Choice({ on, label, note, glyph }: { on: boolean; label: string; note?:
 export function RestartLine({ seat, ledge = false }: { seat: RigSeat; ledge?: boolean }) {
   const { t } = useTui();
   return <Text wrap="truncate"><Text color={C.yellow}>{(ledge ? t.rigAct.restartAskLedge : t.rigAct.restartAsk)(seat.name)}</Text><Text color={C.dim}>  {t.rigAct.yes} · {t.rigAct.no}</Text></Text>;
+}
+
+/** « Nova quitte l'équipe ledge-roles ? ↵ oui · esc non », in place of the room's buttons. */
+export function LeaveLine({ seat, team }: { seat: RigSeat; team: string }) {
+  const { t } = useTui();
+  return <Text wrap="truncate"><Text color={C.yellow}>{t.rigAct.leaveAsk(seat.name, team)}</Text><Text color={C.dim}>  {t.rigAct.yes} · {t.rigAct.no}</Text></Text>;
 }
 
 /** « Arrêter factory ? »: a red double box, « Arrêter le rig » or « Seulement ce siège » (the chosen one), ↵ or esc. */

@@ -16,8 +16,11 @@ import type { ThemeChoice, Tone } from './theme.js';
 export type Screen = 'home' | 'session' | 'launch' | 'settings' | 'teams' | 'help';
 /** The screens the digits name: `1` Ledge and `2` a rig are the home, focused on one or the other; `3` the session; `4` the teams. */
 export const SCREENS: readonly Screen[] = ['home', 'home', 'session', 'teams'];
-/** What the launch screen launches: a session, or a rig (ctrl+t switches). */
-export type LaunchMode = 'session' | 'rig';
+/** What the launch screen launches: a session, an OpenRig rig (its plan launch) or a Ledge team (`team.launch`); ctrl+t switches. */
+export type LaunchMode = 'session' | 'rig' | 'team';
+/** « Lancer une équipe » of the engine in force (lot F final review I1): Ledge's team form, or OpenRig's plan launch, which the daemon
+ *  refuses in Ledge mode. */
+export const teamLaunchMode = (engine: TeamsEngine): LaunchMode => (engine === 'ledge' ? 'team' : 'rig');
 
 /** What the home shows on its right, chosen in its left column. */
 export type Focus = { kind: 'ledge' } | { kind: 'yours'; id: string } | { kind: 'session'; id: string }

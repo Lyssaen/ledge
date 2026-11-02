@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import type { DaemonClient } from '@ledge/fleet';
 import type { ClientMessage, Rig, ServerMessage } from '@ledge/protocol';
-import { adoptChoices, rigCall } from '../src/tui/model/rigActions.js';
+import { adoptable, adoptChoices, rigCall } from '../src/tui/model/rigActions.js';
 import { until } from './helpers.js';
 import { mockupRigs, PROJECTS, startTui } from './tui-fixture.js';
 
@@ -205,6 +205,87 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
       expect(f).not.toMatch(/m +modèle/);
       tui.daemon.push({ type: 'error', message: 'this session is a seat of an OpenRig rig: stop or restart it through its rig', request: 'session.model', code: 'rig_managed' } as ServerMessage);
       await until(() => tui.frame().includes('Ce siège appartient à son équipe'));
+    } finally { await tui.cleanup(); }
+  });
+});
+
+/** A Ledge team as the Ledge engine projects it (lot D): its seats' sessions, `offProject` when it has no project. */
+const ledgeTeam = (extra: Partial<Rig> = {}): Rig => ({
+  id: 'team-a1b2', name: 'ledge-roles', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, engine: 'ledge', repos: [],
+  seats: [{ ref: 'build@team-a1b2', address: '@build', name: 'Nova', runtime: 'codex', state: 'working', sessionId: 'nova' }], ...extra
+});
+/** The TUI in Ledge mode with `rig` alone, its room open (2). */
+async function ledgeRoom(rig: Rig) {
+  const tui = await startTui();
+  await tui.resize(160, 46);
+  tui.daemon.push({ type: 'teams.engine', engine: 'ledge', openrigAvailable: false, running: true });
+  tui.daemon.push({ type: 'rig.snapshot', machine: 'local', rigs: [rig] });
+  await until(() => tui.frame().includes(`▣ ${rig.name}`));
+  await tui.press('2');
+  await until(() => tui.frame().includes(`▣ ${rig.name.toUpperCase()} · ÉQUIPE`));
+  return tui;
+}
+
+describe('ledge tui: a Ledge team is never filed through OpenRig (lot F final review I3)', () => {
+  it('adoptable: never a Ledge team, even off any project', () => {
+    expect(adoptable(atlas())).toBe(true);
+    expect(adoptable(ledgeTeam({ projectId: null, offProject: true }))).toBe(false);
+  });
+
+  it('an off-project Ledge team’s room shows no « Dépôts trouvés » and no p; p sends no rig.adopt', async () => {
+    const tui = await ledgeRoom(ledgeTeam({ projectId: null, offProject: true, cwd: '/home/u/scratch' }));
+    try {
+      const f = tui.frame();
+      expect(f).toContain('HORS PROJET');
+      expect(f).not.toContain('DÉPÔTS TROUVÉS');
+      expect(f).not.toMatch(/p +ranger dans un projet…/);
+      expect(f).not.toContain('Ranger dans un projet');
+      await tui.press('p');
+      await new Promise(r => setTimeout(r, 100));
+      expect(tui.frame()).not.toContain('DANS UN PROJET ?');
+      expect(sent(tui.daemon.received, 'rig.adopt')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+});
+
+describe('ledge tui: L, a seat leaves its Ledge team (lot F final review I5)', () => {
+  it('L asks first, ↵ sends team.leave for the chosen seat’s session; esc sends nothing', async () => {
+    const tui = await ledgeRoom(ledgeTeam());
+    try {
+      expect(tui.frame()).toMatch(/L +quitter l’équipe/);
+      await tui.press('L');
+      await until(() => tui.frame().includes('Nova quitte l’équipe ledge-roles ?'));
+      await tui.press(ESC);
+      await until(() => !tui.frame().includes('Nova quitte l’équipe ledge-roles ?'));
+      expect(sent(tui.daemon.received, 'team.leave')).toEqual([]);
+      await tui.press('L');
+      await until(() => tui.frame().includes('Nova quitte l’équipe ledge-roles ?'));
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'team.leave').length === 1);
+      expect(sent(tui.daemon.received, 'team.leave')[0]).toEqual({ type: 'team.leave', team: 'team-a1b2', session: 'nova' });
+      await until(() => tui.frame().includes('Nova quitte ledge-roles.'));
+    } finally { await tui.cleanup(); }
+  });
+
+  it('an OpenRig rig’s seat offers no L', async () => {
+    const tui = await startTui({ openrig: {} });
+    try {
+      await openRoom(tui, 'factory');
+      expect(tui.frame()).not.toMatch(/L +quitter l’équipe/);
+      await tui.press('L');
+      await new Promise(r => setTimeout(r, 100));
+      expect(tui.frame()).not.toContain('quitte l’équipe');
+      expect(sent(tui.daemon.received, 'team.leave')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('Help lists L in a team’s room', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(160, 60);
+      await tui.press('?');
+      await until(() => tui.frame().includes('AIDE'));
+      expect(tui.frame()).toMatch(/L +quitter l’équipe/);
     } finally { await tui.cleanup(); }
   });
 });

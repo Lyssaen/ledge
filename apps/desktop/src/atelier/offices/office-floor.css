@@ -48,6 +48,8 @@
 .bureaux-resting>img{filter:grayscale(.6) brightness(.85)}
 .bureaux-resume{position:absolute;z-index:7;left:50%;top:50%;transform:translate(-50%,-50%);padding:3px 7px;border:1px solid #b56d54;background:#303033;color:#f7f0e7;font-size:8px;line-height:12px;cursor:pointer;box-shadow:0 2px 0 #171819}
 .bureaux-resume:hover,.bureaux-resume:focus-visible{outline:2px solid #e7ae5c;outline-offset:1px}
+.bureaux-more{position:absolute;z-index:7;right:10px;padding:3px 6px;border:1px solid #b56d54;background:#303033;color:#f7f0e7;font-size:8px;line-height:12px;cursor:pointer;box-shadow:0 2px 0 #171819}
+.bureaux-more:hover,.bureaux-more:focus-visible{outline:2px solid #e7ae5c;outline-offset:1px}
 @keyframes bureaux-led{to{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.bureaux-rack.running i{animation:none}}
 .bureaux-dim{opacity:.22;filter:grayscale(.5)}

@@ -8,7 +8,7 @@ import { attachCommand, runAttached } from './attach.js';
 import { readClipboardImage, type ClipboardImage } from './clipboard.js';
 import { openImage } from './openImage.js';
 import { useBrain } from './brain.js';
-import { LEDGE_FOCUS, screenSize, TuiContext, type Focus, type Kept, type KeyHandler, type LaunchMode, type Screen, type Tui } from './context.js';
+import { LEDGE_FOCUS, screenSize, teamLaunchMode, TuiContext, type Focus, type Kept, type KeyHandler, type LaunchMode, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
 import { listed, openDecisions } from './model/overview.js';
@@ -193,8 +193,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (input === ',') { go('settings'); return; }
     // `/` writes to Ledge, from anywhere: the home on Ledge, its field.
     if (input === '/') { setFocus({ kind: 'ledge' }); setLedgeFocus(LEDGE_FOCUS.field); go('home'); return; }
-    // + launches a session, a rig from the Rigs (a rig, one of its seats, the kernel chosen).
-    if (input === '+') { go('launch', { launch: focus.kind === 'rig' || focus.kind === 'seat' || focus.kind === 'kernel' ? 'rig' : 'session' }); return; }
+    // + launches a session, a team from the Rigs (a rig, one of its seats, the kernel chosen): the engine's team form.
+    if (input === '+') { go('launch', { launch: focus.kind === 'rig' || focus.kind === 'seat' || focus.kind === 'kernel' ? teamLaunchMode(engine) : 'session' }); return; }
     // 1 Ledge, 2 the rig of the selection (else the first), 3 the session chosen.
     if (input === '1') { setFocus({ kind: 'ledge' }); go('home'); return; }
     if (input === '2') {

@@ -169,3 +169,91 @@ describe('ledge tui: launch a rig', () => {
     } finally { await tui.cleanup(); }
   });
 });
+
+/** Lot F final review I1: the launch entry points follow the engine in force, not whether the bridge reports an OpenRig status. */
+describe('ledge tui: « Lancer une équipe » follows the teams engine', () => {
+  const T0 = '2026-11-01T08:00:00.000Z';
+  const LEDGE_TEAM: Rig = { id: 'team-a1b2', name: 'ledge-roles', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, engine: 'ledge', repos: [],
+    seats: [{ ref: 'build@team-a1b2', address: '@build', name: 'Nova', runtime: 'codex', state: 'working', sessionId: 'nova' }] };
+  /** Ledge mode, with an OpenRig status still reported by the bridge (it always is on this branch): roles and templates answered, team.launch launched. */
+  async function ledgeMode() {
+    const tui = await startTui();
+    tui.daemon.onMessage(m => {
+      if (m.type === 'roles.list') tui.daemon.push({ type: 'roles.listing', requestId: m.requestId, roles: [{ id: 'lead', label: 'Chef', prompt: '', source: 'home', path: '/h/lead.md' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }], source: 'home', path: '/h/w.yaml' }], problems: [] });
+      if (m.type === 'team.launch') tui.daemon.push({ type: 'team.launched', rid: m.rid, team: { id: 'team-e5f6', name: 'workshop', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: T0, updatedAt: T0 } });
+    });
+    await tui.resize(160, 46);
+    tui.daemon.push({ type: 'teams.engine', engine: 'ledge', openrigAvailable: true, running: true });
+    tui.daemon.push({ type: 'openrig.status', status: { machine: 'local', state: 'running', version: '0.6.14', human: 'registered' } });
+    tui.daemon.push({ type: 'rig.snapshot', machine: 'local', rigs: [LEDGE_TEAM] });
+    await until(() => tui.frame().includes('▣ ledge-roles'));
+    return tui;
+  }
+  const ledgeForm = (tui: Tui) => until(() => tui.frame().includes('L’équipe workshop aura sa propre pièce dans Ledge.'));
+
+  it('Ledge: + on a team row opens Ledge’s team form, never OpenRig’s plan launch; its objective goes with team.launch', async () => {
+    const tui = await ledgeMode();
+    try {
+      await tui.press('2'); // the team chosen in the left column
+      await tui.press('+');
+      await ledgeForm(tui);
+      expect(tui.frame()).not.toContain('LE BUT, LA SPEC, OÙ');
+      expect(tui.frame()).toContain('Objectif');
+      // tab to the objective (project → folder → template → seats → name → objective… from the template)
+      for (let i = 0; i < 3; i++) await tui.press('\t');
+      await tui.press('Réparer la reconnexion ssh');
+      await until(() => tui.frame().includes('Réparer la reconnexion ssh'));
+      await tui.press(CTRL_S);
+      await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
+      expect(sent(tui.daemon.received, 'team.launch')[0]).toMatchObject({ cwd: '/w/ledge', template: 'workshop', objective: { goal: 'Réparer la reconnexion ssh' } });
+      expect(sent(tui.daemon.received, 'rig.prepare')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  });
+
+  it('Ledge: « Lance une équipe… » of the composer and ctrl+t of the session form open Ledge’s team form', async () => {
+    const tui = await ledgeMode();
+    try {
+      await tui.press('/');
+      await tui.press(`${ESC}1`); // alt+1: the first suggestion
+      await ledgeForm(tui);
+      expect(tui.frame()).not.toContain('LE BUT, LA SPEC, OÙ');
+      await tui.press(ESC);
+      await until(() => !tui.frame().includes('NOUVELLE ÉQUIPE'));
+      await tui.press('3'); // a session's screen, not a team's row: + opens the session form
+      await tui.press('+');
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await tui.press(CTRL_T);
+      await ledgeForm(tui);
+      expect(tui.frame()).not.toContain('LE BUT, LA SPEC, OÙ');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('Ledge: + on the « Équipes » tab of Ledge’s home opens Ledge’s team form', async () => {
+    const tui = await ledgeMode();
+    try {
+      await tui.press('1');
+      await tui.press('\r'); // Ledge's field
+      await tui.press('\t'); // its conversation, whose ← → change the tab
+      await tui.press('\u001b[C'); // → « Équipes »
+      await new Promise(r => setTimeout(r, 100));
+      await tui.press('+');
+      await ledgeForm(tui);
+      expect(tui.frame()).not.toContain('LE BUT, LA SPEC, OÙ');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('OpenRig: + on a team row and ctrl+t still open OpenRig’s plan launch', async () => {
+    const tui = await startTui({ openrig: {} });
+    openRigDaemon(tui);
+    try {
+      tui.daemon.push({ type: 'teams.engine', engine: 'openrig', openrigAvailable: true, running: true });
+      await tui.press('2');
+      await tui.press('+');
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE · LE BUT, LA SPEC, OÙ'));
+      await tui.press(CTRL_T);
+      await until(() => tui.frame().includes('NOUVELLE SESSION'));
+      await tui.press(CTRL_T);
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE · LE BUT, LA SPEC, OÙ'));
+    } finally { await tui.cleanup(); }
+  });
+});

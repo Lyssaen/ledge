@@ -30,8 +30,9 @@ const fileFor = (room: Room): Variant | null => room.size === 'ledge' ? null : r
 const stateRank = (s: Session) => s.state === 'waiting_permission' ? 0 : s.state === 'waiting_input' ? 1 : s.state === 'working' ? 2 : s.state === 'starting' ? 3 : 4;
 
 /** Sprite room with layered bots and a keyboard accessible button for each live session. The tech room carries the active engine's
- *  `plate` and one bay per core; a Ledge team at rest is its office, empty, « {nom} · au repos », with « Reprendre » (`onResume`). */
-function OfficeRoom({ room, byId, presence, visiting, cores, plate, theme, reduced, onOpen, onMenu, onChat, onResume, resumeBusy }: { room: Room; byId: Map<string, Session>; presence: ReadonlyMap<string, Presence>; visiting: ReadonlySet<string>; cores: readonly Core[]; plate: string; theme: 'dark' | 'light'; reduced: boolean; onOpen(id: string): void; onMenu(session: Session, event: MouseEvent<HTMLElement>): void; onChat(): void; onResume?(key: string): void; resumeBusy?(key: string): boolean }) {
+ *  `plate` and one bay per core; a Ledge team at rest is its office, empty, « {nom} · au repos », with « Reprendre » (`onResume`); a live
+ *  team's office its « … » by the plate when `roomMenu` says it has one (`onRoomMenu`, the point under the button). */
+function OfficeRoom({ room, byId, presence, visiting, cores, plate, theme, reduced, onOpen, onMenu, onChat, onResume, resumeBusy, roomMenu, onRoomMenu }: { room: Room; byId: Map<string, Session>; presence: ReadonlyMap<string, Presence>; visiting: ReadonlySet<string>; cores: readonly Core[]; plate: string; theme: 'dark' | 'light'; reduced: boolean; onOpen(id: string): void; onMenu(session: Session, event: MouseEvent<HTMLElement>): void; onChat(): void; onResume?(key: string): void; resumeBusy?(key: string): boolean; roomMenu?(key: string): boolean; onRoomMenu?(key: string, at: Point): void }) {
   const { t } = useI18n();
   const src = (name: string) => `/offices/${theme === 'dark' ? 'night' : 'day'}/${name}`;
   const base = styleAt(EXT + room.x, room.y);
@@ -81,6 +82,8 @@ function OfficeRoom({ room, byId, presence, visiting, cores, plate, theme, reduc
       return end ? <button key={`${parent.id}:${helper.id}`} type="button" className="bureaux-helper" title={`${helper.kind} · ${parent.name}`} aria-label={`${helper.kind} · sous-agent de ${parent.name}`} style={styleAt(end.x - 1, end.y - 6)} onClick={() => onOpen(parent.id)}><LogoBot tool={parent.tool} state={helperState(helper)} size={18} theme={theme} seed={`${parent.id}:${helper.id}`} reducedMotion={reduced} branded /></button> : null;
     })}
     <span className={`bureaux-plate ${led?.state ?? ''}`} style={plateTop}>{room.name} · {sessions.length}</span>
+    {onRoomMenu && roomMenu?.(room.key) && <button type="button" className="bureaux-more" style={plateTop} aria-label={t.rooms.rigMenu(room.name)} title={t.rooms.rigMenuTitle}
+      onClick={e => { const r = e.currentTarget.getBoundingClientRect(); onRoomMenu(room.key, { x: r.left, y: r.bottom + 4 }); }}>…</button>}
   </div>;
 }
 
@@ -99,8 +102,8 @@ function Visitor({ session, path, theme, reduced, onOpen }: { session: Session; 
 }
 
 /** The Bureaux. `cores` and `plate`: the tech room of the active engine (spec §6.6, `techCores`); `onResume`: « Reprendre » on a Ledge
- *  team at rest. */
-export function OfficeFloor({ client, scene, sessions, rigs = [], exchanges = new Map(), arcs = [], cores, plate, onOpen, onMenu, onChat, onResume, resumeBusy, viewportWidth }: { client?: DaemonClient; scene: AtelierScene; sessions: readonly Session[]; rigs?: readonly Rig[]; exchanges?: ReadonlyMap<string, readonly Exchange[]>; arcs?: readonly Arc[]; cores: readonly Core[]; plate: string; onOpen(id: string): void; onMenu(session: Session, event: MouseEvent<HTMLElement>): void; onChat(): void; onResume?(rig: Rig): void; resumeBusy?(rig: Rig): boolean; viewportWidth: number }) {
+ *  team at rest; `roomMenu` and `onRoomMenu`: a live team office's « … » (lot F final review I5: « Ajouter une session… »). */
+export function OfficeFloor({ client, scene, sessions, rigs = [], exchanges = new Map(), arcs = [], cores, plate, onOpen, onMenu, onChat, onResume, resumeBusy, roomMenu, onRoomMenu, viewportWidth }: { client?: DaemonClient; scene: AtelierScene; sessions: readonly Session[]; rigs?: readonly Rig[]; exchanges?: ReadonlyMap<string, readonly Exchange[]>; arcs?: readonly Arc[]; cores: readonly Core[]; plate: string; onOpen(id: string): void; onMenu(session: Session, event: MouseEvent<HTMLElement>): void; onChat(): void; onResume?(rig: Rig): void; resumeBusy?(rig: Rig): boolean; roomMenu?(rig: Rig): boolean; onRoomMenu?(rig: Rig, at: Point): void; viewportWidth: number }) {
   const theme = useTheme(), { reduced } = useMotionPreferences();
   const [now, setNow] = useState(Date.now());
   const [thoughts, setThoughts] = useState<Map<string, { text: string; seen: number }>>(new Map());
@@ -118,6 +121,8 @@ export function OfficeFloor({ client, scene, sessions, rigs = [], exchanges = ne
   const rigAt = (key: string) => { const room = scene.rooms.find(r => r.key === key); return room?.kind === 'rig' ? room.rig : undefined; };
   const resume = onResume && ((key: string) => { const rig = rigAt(key); if (rig) onResume(rig); });
   const busyAt = resumeBusy && ((key: string) => { const rig = rigAt(key); return !!rig && resumeBusy(rig); });
+  const menuAt = roomMenu && ((key: string) => { const rig = rigAt(key); return !!rig && roomMenu(rig); });
+  const openMenu = onRoomMenu && ((key: string, at: Point) => { const rig = rigAt(key); if (rig) onRoomMenu(rig, at); });
   const restNeed = sessions.filter(s => present(s) && s.state === 'idle' && now - Date.parse(s.lastActivityAt) >= 300_000).length;
   const scale = Math.min(4, Math.max(1, Math.round(Math.max(320, viewportWidth) / 640)));
   const bw = Math.max(444, Math.floor(Math.max(320, viewportWidth) / scale) - 2 * EXT);
@@ -154,7 +159,7 @@ export function OfficeFloor({ client, scene, sessions, rigs = [], exchanges = ne
       {Array.from({ length: Math.max(0, Math.floor((floor.width - 100) / 80)) }, (_, i) => <i key={i} className="bureaux-lamp" style={{ left: 90 + i * 80 }} />)}
     </div>)}
     {floor.zones.map(z => <img key={z.id} className="bureaux-zone" src={`/offices/${theme === 'dark' ? 'night' : 'day'}/zone-${z.kind}.png`} alt="" style={styleAt(EXT + z.x, z.y)} />)}
-    {floor.rooms.map(r => <div key={r.key} className={focusOnly && !followKeys.has(r.key) ? 'bureaux-dim' : undefined}><OfficeRoom room={r} byId={byId} presence={presence} visiting={visiting} cores={cores} plate={plate} theme={theme} reduced={reduced} onOpen={onOpen} onMenu={onMenu} onChat={onChat} onResume={resume} resumeBusy={busyAt} /></div>)}
+    {floor.rooms.map(r => <div key={r.key} className={focusOnly && !followKeys.has(r.key) ? 'bureaux-dim' : undefined}><OfficeRoom room={r} byId={byId} presence={presence} visiting={visiting} cores={cores} plate={plate} theme={theme} reduced={reduced} onOpen={onOpen} onMenu={onMenu} onChat={onChat} onResume={resume} resumeBusy={busyAt} roomMenu={menuAt} onRoomMenu={openMenu} /></div>)}
     {!reduced && botCount <= 40 && visits.map(v => { const s = byId.get(v.fromId), from = world.seats.get(v.fromId), to = world.seats.get(v.toId); return s && from && to ? <Visitor key={v.id} session={s} path={route(from, to)} theme={theme} reduced={reduced} onOpen={() => onOpen(s.id)} /> : null; })}
     {!reduced && botCount <= 40 && invitations.map(v => <Visitor key={v.id} session={v.session} path={route(v.from, v.to)} theme={theme} reduced={reduced} onOpen={() => onOpen(v.session.id)} />)}
     {invitations.length > 0 && <div className="bureaux-bubble bureaux-ledge-bubble" style={styleAt(EXT + (floor.rooms.find(r => r.size === 'ledge')?.x ?? 44) + 15, 16)}>{invitations[0]!.text.slice(0, 80)}</div>}

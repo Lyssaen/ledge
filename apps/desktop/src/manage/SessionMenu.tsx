@@ -35,13 +35,16 @@ export interface SessionMenuProps {
   onRename(s: Session): void;
   /** « Passer le relais » (context handover spec §3.3): offered for a session Ledge can ask for its brief. */
   onHandover?(s: Session): void;
+  /** The live Ledge team the session holds a seat in, and « Quitter l'équipe {team} » (lot F final review I5: `team.leave`). */
+  team?: { id: string; name: string };
+  onLeave?(s: Session, team: string): void;
   /** The menu closed (a choice, Escape, a click outside): the caller gives the focus back where it came from. */
   onClose(): void;
 }
 
 /** The menu of one session (manage.tsx's `SessionMenu`), opened from a seat or a card of the atelier: open, terminal, rename, file, end or resume,
  *  archive, delete. A machine whose daemon cannot archive keeps Archiver, Supprimer and Reprendre disabled, with the reason. */
-export function SessionMenu({ session: s, at, actions, filing, projects, current, onOpen, onTerminal, onRename, onHandover, onClose }: SessionMenuProps): JSX.Element {
+export function SessionMenu({ session: s, at, actions, filing, projects, current, onOpen, onTerminal, onRename, onHandover, team, onLeave, onClose }: SessionMenuProps): JSX.Element {
   const { t } = useI18n();
   const m = t.manage.menu;
   const [filingOpen, setFilingOpen] = useState(false);
@@ -85,6 +88,7 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
       )}
       {!s.rig && onHandover && canHandOver(s) && item(s.handover?.state === 'failed' ? t.handover.retry : t.handover.pass, SHELL_ICONS.resume, () => onHandover(s),
         { ...(s.context ? { hint: t.handover.gauge(Math.round((s.context.used / s.context.window) * 100)) } : {}) })}
+      {team && onLeave && item(t.session.leaveTeam(team.name), SHELL_ICONS.archive, () => onLeave(s, team.id), { disabled: s.offline || undefined })}
       <hr />
       {s.rig ? seatItems() : <>
       {exited
@@ -119,15 +123,19 @@ export function RenameDialog({ session: s, onRename, onClose }: { session: Sessi
   );
 }
 
-/** The menu and the rename dialog of a `useSessionMenu`, once for the page that owns it. */
-export function SessionMenuHost({ state, actions, filing, projects, currentOf, onOpen, onHandover }: {
+/** The menu and the rename dialog of a `useSessionMenu`, once for the page that owns it. `teamOf` names the live Ledge team a session
+ *  holds a seat in, which `onLeave` leaves. */
+export function SessionMenuHost({ state, actions, filing, projects, currentOf, onOpen, onHandover, teamOf, onLeave }: {
   state: SessionMenuState; actions: SessionActions; filing: Filing; projects: readonly Project[]; currentOf(s: Session): string | null; onOpen(s: Session): void; onHandover?(s: Session): void;
+  teamOf?(s: Session): { id: string; name: string } | undefined; onLeave?(s: Session, team: string): void;
 }): JSX.Element {
   const { menu, session, renaming } = state;
+  const team = session ? teamOf?.(session) : undefined;
   return (<>
     {menu && session && (
       <SessionMenu session={session} at={menu.at} actions={actions} filing={filing} projects={projects} current={currentOf(session)}
-        onOpen={onOpen} onTerminal={state.terminal} onRename={state.rename} {...(onHandover ? { onHandover } : {})} onClose={state.close} />
+        onOpen={onOpen} onTerminal={state.terminal} onRename={state.rename} {...(onHandover ? { onHandover } : {})}
+        {...(team && onLeave ? { team, onLeave } : {})} onClose={state.close} />
     )}
     {renaming && <RenameDialog session={renaming} onRename={state.sendRename} onClose={state.closeRename} />}
   </>);

@@ -12,6 +12,7 @@ import { isLaunching, LaunchNote } from './LaunchNote';
 import { RigRepos } from './RigRepos';
 import { useRigControls, type RigControls } from './useRigActions';
 import { isUnfiled } from './proposal';
+import { underFocus } from '../atelier/RoleChooser';
 
 /** A « … » of the Rigs tab: a rig's or a seat's menu. */
 function More({ label, disabled, children }: { label: string; disabled?: boolean; children: ReactNode }): JSX.Element {
@@ -26,9 +27,10 @@ function More({ label, disabled, children }: { label: string; disabled?: boolean
 
 /** What acts on a rig card (spec §4.5, §4.6): a launching rig's « Annuler le lancement » (no confirmation: nothing worked yet), « Ouvrir
  *  l'invite » for a seat waiting for the user's trust (its terminal: Ledge types nothing there) and the note at its foot; a stopped rig's
- *  « Reprendre » and, for an OpenRig rig, « … › Reprendre depuis le dernier instantané »; a running rig's « Arrêter… » and each seat's « … » (« Relancer ce
- *  siège », « Relève », « Arrêter… »). An unreachable rig offers nothing. */
-function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => void, t: ReturnType<typeof useI18n>['t']): {
+ *  « Reprendre » and, for an OpenRig rig, « … › Reprendre depuis le dernier instantané »; a running rig's « Arrêter… », a live Ledge team's
+ *  « … › Ajouter une session… » (`onAdd`, lot F final review I5) and each seat's « … » (« Relancer ce siège », « Relève », « Arrêter… »).
+ *  An unreachable rig offers nothing. */
+function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => void, t: ReturnType<typeof useI18n>['t'], onAdd?: () => void): {
   actions?: ReactNode; seatAction?: (seat: RigSeat) => ReactNode; footer?: ReactNode;
 } {
   const a = t.rigActions;
@@ -51,7 +53,10 @@ function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => voi
     </>
   };
   return {
-    actions: <button type="button" className="st-qa" disabled={busy} onClick={() => c.askStop(rig)}>{a.stop}</button>,
+    actions: <>
+      <button type="button" className="st-qa" disabled={busy} onClick={() => c.askStop(rig)}>{a.stop}</button>
+      {onAdd && <More label={a.more(rig.name)} disabled={busy}><MenuItem onSelect={onAdd}><span>{t.rooms.addSession}</span></MenuItem></More>}
+    </>,
     seatAction: seat => <>
       {openPrompt(seat)}
       <More label={a.seatMenu(seat.name)} disabled={busy}>
@@ -64,10 +69,12 @@ function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => voi
 }
 
 /** « En cours » (spec §8.2): one card per rig, by name, then the kernels (the local one first). Without the app's rig gestures
- *  (`RigControlsContext`), the cards only show. `onBroadcast` writes to all the seats of a live Ledge team (its card's field). */
-export function RigsLive({ model, openrig, byId, projects, dispatch, onTerminal, onBroadcast }: {
+ *  (`RigControlsContext`), the cards only show. `onBroadcast` writes to all the seats of a live Ledge team (its card's field);
+ *  `canAdd` and `onAdd` its « … › Ajouter une session… ». */
+export function RigsLive({ model, openrig, byId, projects, dispatch, onTerminal, onBroadcast, canAdd, onAdd }: {
   model: ReturnType<typeof rigsModel>; openrig: readonly OpenRigStatus[]; byId: ReadonlyMap<string, Session>; projects: Projects | null;
   dispatch: (a: NavAction) => void; onTerminal(rig: Rig, seat: RigSeat): void; onBroadcast?(rig: Rig, text: string): Promise<TeamBroadcastAnswer>;
+  canAdd?(rig: Rig): boolean; onAdd?(rig: Rig, at: { x: number; y: number }): void;
 }): JSX.Element {
   const { t } = useI18n();
   const controls = useRigControls();
@@ -76,7 +83,8 @@ export function RigsLive({ model, openrig, byId, projects, dispatch, onTerminal,
   return (
     <div className="rigs-live">
       {model.rigs.map(row => {
-        const acts = controls ? rigActions(controls, row.rig, seat => onTerminal(row.rig, seat), t) : {};
+        const add = onAdd && canAdd?.(row.rig) ? () => onAdd(row.rig, underFocus()) : undefined;
+        const acts = controls ? rigActions(controls, row.rig, seat => onTerminal(row.rig, seat), t, add) : {};
         // Off any project, not filed yet: the repositories the rig found, and the way to file it (spec §8.2).
         const repos = controls && projects && isUnfiled(row.rig)
           ? <RigRepos rig={row.rig} projects={projects} onChoose={() => controls.askAdopt(row.rig)} onAdopt={id => { void controls.adopt(row.rig.machine, row.rig.id, id); }} />

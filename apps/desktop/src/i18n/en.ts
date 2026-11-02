@@ -699,7 +699,8 @@ export const en: Messages = {
     dropJoin: 'Drop to join', dropLeave: 'Drop to leave the team',
     chooseRole: (name: string, team: string) => `${name}'s role in ${team}`, otherRole: 'another role…', loadingRoles: 'Reading the roles…', noRole: 'No other role',
     joined: (name: string, team: string, role: string) => `${name} joins ${team} as @${role}.`,
-    left: (name: string) => `${name} leaves the team.`
+    left: (name: string) => `${name} leaves the team.`,
+    addSession: 'Add a session…', addSessionTo: (team: string) => `Add a session to ${team}`, noSession: 'No standalone session of this project here'
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',
@@ -790,6 +791,7 @@ export const en: Messages = {
   },
   session: {
     meta: 'Machine and repositories',
+    leaveTeam: (team: string) => `Leave the team ${team}`,
     subagent: 'Subagent',
     kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the sidebar',
     views: { label: 'Session view', thread: 'Thread', changes: 'Changes' },
