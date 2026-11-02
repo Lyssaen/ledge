@@ -395,3 +395,15 @@ describe('review of 2f4cacdb (qitem-20261102211602-6b4204ae)', () => {
     expect(answer).toHaveBeenCalledWith('qitem-1', { kind: 'seen' });
   });
 });
+
+describe('fix/openrig-answer-uncertain 047ed514', () => {
+  it('the machine drops after the answer went: the fleet says uncertain with its message; the card says « Envoi incertain », not the message', async () => {
+    mount([ask()], { answer: vi.fn(async () => answered({ ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' })) });
+    await userEvent.click(screen.getByRole('button', { name: 'Un plus fort' }));
+    const line = screen.getByRole('alert');
+    expect(line).toHaveClass('ask-uncertain');
+    expect(line).toHaveTextContent('Envoi incertain : la réponse est peut-être partie. Réessayer ne l’enverra pas deux fois.');
+    expect(line).not.toHaveTextContent('dropped');
+    expect(within(line).getByRole('button', { name: 'Réessayer' })).toBeEnabled();
+  });
+});
