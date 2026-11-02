@@ -140,6 +140,39 @@ describe('« À toi » reading', () => {
     expect(l.asks).toEqual([]);
   });
 
+  it('a change of default person forgets the asks known for the previous one, even on a partial read', async () => {
+    const f = fake();
+    let bob = false;
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: async (m, u, b) => {
+      if (!u.endsWith('/api/attention?view=default')) return f.http(m, u, b);
+      return bob
+        ? { status: 200, json: { perspective: { viewing: 'bob@external', basis: 'default', actingAs: { person: 'bob@external', authority: 'primary-user' } }, items: [], sources: [{ source: 'queue', state: 'unavailable' }] } }
+        : { status: 200, json: ATTENTION };
+    } });
+    expect((await h.list()).asks).toHaveLength(3);
+    bob = true;
+    const l = await h.list();
+    expect(l.channel.person?.address).toBe('bob@external');
+    expect(l.asks).toEqual([]);
+    expect(l.partial).toBe(true);
+  });
+
+  it('reads one at a time: a second read starts once the first has ended', async () => {
+    const f = fake();
+    let inFlight = 0, most = 0;
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: async (m, u, b) => {
+      if (!u.endsWith('/api/attention?view=default')) return f.http(m, u, b);
+      inFlight++; most = Math.max(most, inFlight);
+      await new Promise(r => setTimeout(r, 20));
+      inFlight--;
+      return f.http(m, u, b);
+    } });
+    const [a, b] = await Promise.all([h.list(), h.list()]);
+    expect(most).toBe(1);
+    expect(a.asks).toHaveLength(3);
+    expect(b.asks).toHaveLength(3);
+  });
+
   it('reads a row again only when it changed', async () => {
     const f = fake();
     const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
@@ -239,6 +272,13 @@ describe('« À toi » answering', () => {
     expect(await h.answer('qitem-2', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'refused' });
     expect(await h.answer('qitem-1', { kind: 'seen' })).toMatchObject({ ok: false, error: 'refused' });
     expect(await h.answer('qitem-1', { kind: 'resolve', text: 'x' })).toMatchObject({ ok: false, error: 'refused' });
+    expect(f.calls.some(c => c.method === 'POST')).toBe(false);
+  });
+
+  it('refuses to answer a row addressed to another person', async () => {
+    const f = fake({ rows: { 'qitem-1': ASK, 'qitem-2': NEWS, 'qitem-3': PARKED, 'qitem-bob': { ...ASK, qitemId: 'qitem-bob', destinationSession: 'bob@external' } } });
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
+    expect(await h.answer('qitem-bob', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'refused', message: 'this row is not addressed to ledge@external' });
     expect(f.calls.some(c => c.method === 'POST')).toBe(false);
   });
 

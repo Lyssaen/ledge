@@ -36,6 +36,16 @@ describe('useOpenRigAsks', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('says when a list is partial, and when it no longer is', () => {
+    const { client, emit } = fake();
+    const { result } = renderHook(() => useOpenRigAsks(client, 'local'));
+    expect(result.current.partial).toBe(false);
+    emit({ type: 'openrig.asksChanged', machineId: 'local', channel: CHANNEL, asks: [ASK], partial: true });
+    expect(result.current).toMatchObject({ partial: true, asks: [ASK] });
+    emit({ type: 'openrig.asksChanged', machineId: 'local', channel: CHANNEL, asks: [] });
+    expect(result.current).toMatchObject({ partial: false, asks: [] });
+  });
+
   it('answer resolves with its own end; leaving resolves what waits as offline', async () => {
     const { client, sent, emit, listeners } = fake();
     const { result, unmount } = renderHook(() => useOpenRigAsks(client, 'local'));
