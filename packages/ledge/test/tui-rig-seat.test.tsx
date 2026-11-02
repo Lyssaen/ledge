@@ -77,7 +77,7 @@ describe('the overview\'s RIGS and KERNEL boxes', () => {
     try {
       await tui.resize(130, 40);
       const f = tui.frame();
-      if (process.env.LEDGE_SHOW_FRAME) console.log(f);
+      if (process.env.LEDGE_SHOW_FRAME) (await import('node:fs')).writeFileSync(process.env.LEDGE_SHOW_FRAME, f);
       expect(f).toMatch(/╭─ RIGS ─/);
       expect(f).toMatch(/╭─ KERNEL ─/);
       expect(f).toMatch(/⬡ first-factory\s+ledge/);

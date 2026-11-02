@@ -138,7 +138,8 @@ export function Overview() {
         return (
           <Text key={s.id} wrap="truncate" backgroundColor={s.id === sel ? C.sel : undefined}>
             <Text color={STATE_COLOR[st]}>{g[st]} </Text><Text color={C.fg} bold>{fit(s.name, nameW)}</Text>
-            {s.rig ? <><Text color={C.blue}>{rigTag(s)}</Text><Text color={C.dim}>{seatSecond(s, '')} </Text></> : <Text color={C.dim}>{fit(s.repo ?? s.project, 9)}</Text>}<Text color={STATE_COLOR[st]}>{fit(oneLine(s.pending?.text ?? ''), s.rig ? Math.max(6, askW + 9 - rigTag(s).length - seatSecond(s, '').length - 1) : askW)}</Text>
+            {/* A seat: name, then its rig and role, then the request, each two spaces apart. */}
+            {s.rig ? <><Text> </Text><Text color={C.blue}>{rigTag(s)}</Text><Text color={C.dim}>{seatSecond(s, '')}</Text><Text>{'   '}</Text></> : <Text color={C.dim}>{fit(s.repo ?? s.project, 9)}</Text>}<Text color={STATE_COLOR[st]}>{fit(oneLine(s.pending?.text ?? ''), s.rig ? Math.max(6, askW + 9 - rigTag(s).length - seatSecond(s, '').length - 4) : askW)}</Text>
             <Text color={C.faint}> <Ago iso={s.lastActivityAt} /></Text>
           </Text>
         );
@@ -228,9 +229,9 @@ function SessionRow({ s, on, nameW, topicW, stateW, indent = 0, group }: { s: Se
       <Text color={s.offline ? C.dim : C.fg} bold>{fit(s.name, nameW)}</Text>
       {/* A seat: its tag whole, then its role and the topic in what is left (the topic goes first). */}
       {/* In the rigs' and the kernel's boxes the box says the rig: the role (and, for the kernel, the harness) instead. */}
-      {group ? <Text color={C.dim}>{fit(group === 'kernel' ? `${(s.rig?.role ?? '').replace(/\.(agent|lead|worker)$/, '').padEnd(10)}${s.tool}` : s.rig?.role ?? '', topicW)} </Text> : <>
-        {s.rig ? <Text color={C.blue}>{rigTag(s)}</Text> : null}
-        <Text color={C.dim}>{fit(seatSecond(s, oneLine(s.topic ?? s.title)), s.rig ? Math.max(0, topicW - rigTag(s).length) : topicW)} </Text>
+      {group ? <Text color={C.dim}> {fit(group === 'kernel' ? `${(s.rig?.role ?? '').replace(/\.(agent|lead|worker)$/, '').padEnd(11)}${s.tool}` : s.rig?.role ?? '', topicW - 1)} </Text> : <>
+        {s.rig ? <Text color={C.blue}> {rigTag(s)}</Text> : null}
+        <Text color={C.dim}>{fit(seatSecond(s, oneLine(s.topic ?? s.title)), s.rig ? Math.max(0, topicW - rigTag(s).length - 1) : topicW)} </Text>
       </>}
       <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{fit(s.offline ? t.overview.offline : t.state[st], stateW).trimEnd()}</Text>
       {n > 0 ? <Text color={C.violet}> +{n}</Text> : null}
