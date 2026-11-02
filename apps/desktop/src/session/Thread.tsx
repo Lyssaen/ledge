@@ -19,6 +19,7 @@ import { UserAvatar } from '../shell/UserAvatar';
 import { ActionGroup, KIND_ICON, Spin } from './ActionGroup';
 import { firstLine, MessageCard } from './MessageCard';
 import { NoticeLine } from './NoticeLine';
+import { foldable, rawOf, RigBubble, RigNoticeFold, RigNoticeLine, RigTaskCard, RigUnreadable, seatSession, type RigNotice } from './RigItems';
 import { nameOf } from './changedFiles';
 import { PlanCard } from './PlanCard';
 import { WaitLine } from './WaitLine';
@@ -71,6 +72,8 @@ export interface ThreadProps {
   onPlan(key: string): void;
   /** The conversation whose tab is the pane's active one (its peerKey: « Ouvert à côté »); null: none. */
   convOpen: string | null;
+  /** « Répondre à Bix » on an OpenRig message: the sender's composer, prefixed with what it is about. Stable. */
+  onReplyTo?(peer: Session, about: string): void;
   /** « suivre la conversation »: the conversation with that peer (peerKey) beside the thread. Stable (the page's callback);
    *  absent: no way to it (a subagent's page). */
   onConversation?(peer: string): void;
@@ -254,12 +257,13 @@ interface TurnProps {
   waiting: Waiting | null;
   /** The last exchange's wait when the agent works with no action running (waitOf), else null. */
   wait: Wait | null;
+  onReplyTo?(peer: Session, about: string): void;
 }
 
 /** One exchange on the rail: its prompt (or the task it was told of), then what the agent said, decided and did, a row each,
  *  and its end. A past one folds to one row. Rendered again only when what it shows changes: the clock's tick reaches the
  *  exchange whose action runs, not the ones before it. */
-const Turn = memo(function Turn({ client, session, helper, items, x, at, last, folded, onUnfold, now, unread, since, dispatch, flash, onChange, onCapture, onDocument, planOpen, onPlan, convOpen, onConversation, peers, convs, folded2, onFold, marks, waiting, wait }: TurnProps): JSX.Element {
+const Turn = memo(function Turn({ client, session, helper, items, x, at, last, folded, onUnfold, now, unread, since, dispatch, flash, onChange, onCapture, onDocument, planOpen, onPlan, convOpen, onConversation, peers, convs, folded2, onFold, marks, waiting, wait, onReplyTo }: TurnProps): JSX.Element {
   const { t } = useI18n();
   const th = t.session.thread;
   const offline = session.offline === true;
@@ -289,7 +293,21 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
     ? <li className="r unread-marker" role="separator" aria-label={th.unread}><span className="n new-dot" /><span className="newsep">{th.unread}</span><span className="tm" /></li>
     : null;
 
+  const machine = splitId(session.id)?.machine ?? 'local';
+  const rigLabel = { one: t.session.rig.raw, many: t.session.rig.rawMany, deliveries: t.session.rig.deliveries };
+  const rigAll = [...x.openers, ...x.segments.flatMap(s => (s.kind === 'sent' || s.kind === 'rigOut' ? [s.item] : []))];
+  const rigPeer = (item: SentItem | ReceivedItem | NoticeItem): Session | null => {
+    const byPeer = item.peer !== undefined ? peers.get(item.peer) ?? null : null;
+    if (byPeer) return byPeer;
+    const address = item.kind === 'sent' ? item.rig?.to : item.kind === 'received' ? item.rig?.from : item.outgoing ? item.rig?.to : item.rig?.from ?? item.name;
+    return seatSession(address, machine);
+  };
   const message = (item: SentItem | ReceivedItem): ReactNode => {
+    if (item.rig) {
+      const peer = rigPeer(item);
+      const raw = rawOf(item as { rig: NonNullable<typeof item.rig> }, rigAll, { ...rigLabel, one: item.kind === 'sent' ? t.session.rig.command : rigLabel.one });
+      return <RigBubble item={item as Parameters<typeof RigBubble>[0]['item']} self={session} peer={peer} raw={raw} onReply={onReplyTo} onOpenPeer={p => dispatch({ type: 'open', id: p.id })} />;
+    }
     const key = peerKey(item);
     const conv = convs.get(key) ?? [];
     const peer = item.peer !== undefined ? peers.get(item.peer) ?? null : null;
@@ -300,6 +318,13 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
       following={convOpen === key} onFollow={onConversation && (() => onConversation(key))} />;
   };
   const notice = (item: NoticeItem): ReactNode => {
+    if (item.rig) {
+      const rig = item as RigNotice;
+      const raw = rawOf(rig, rigAll, { ...rigLabel, one: rig.outgoing ? t.session.rig.command : rigLabel.one });
+      if (rig.rig.kind === 'unreadable') return <RigUnreadable item={rig} />;
+      if (rig.rig.kind === 'handoff') return <RigTaskCard item={rig} self={session} client={client} peer={rigPeer(rig)} raw={raw} />;
+      return <RigNoticeLine item={rig} raw={raw} />;
+    }
     const peer = item.peer !== undefined ? peers.get(item.peer) ?? null : null;
     return (
       <li className="r notice-row">
@@ -310,7 +335,7 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
     );
   };
   // The marker opens the exchange above its prompt, else above the first message received or notice that opens it.
-  const opener = x.prompt?.id ?? x.received[0]?.id ?? x.notices[0]?.id;
+  const opener = x.prompt?.id ?? x.openers[0]?.id;
 
   const decision = (item: Extract<Segment, { kind: 'decision' }>['item']): ReactNode => {
     const d = item.decision!;
@@ -369,6 +394,7 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
         <span className="tm">{clock(item.at)}</span>
       </li>
     );
+    else if (s.kind === 'rigOut') node = notice(s.item);
     else node = message(s.item);
     return <Fragment key={item.id}>{marker(item.id)}{node}</Fragment>;
   };
@@ -398,8 +424,9 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
             <span className="tm">{at}</span>
           </li>
         )}
-        {x.received.map(r => <Fragment key={r.id}>{r.id !== opener && marker(r.id)}{message(r)}</Fragment>)}
-        {x.notices.map(n => <Fragment key={n.id}>{n.id !== opener && marker(n.id)}{notice(n)}</Fragment>)}
+        {openerRows(x.openers).map(g => Array.isArray(g)
+          ? <Fragment key={g[0]!.id}>{g[0]!.id !== opener && marker(g[0]!.id)}<RigNoticeFold items={g} raws={n => rawOf(n, rigAll, rigLabel)} /></Fragment>
+          : <Fragment key={g.id}>{g.id !== opener && marker(g.id)}{g.kind === 'received' ? message(g) : notice(g)}</Fragment>)}
         {grouped(x.segments).map(segment)}
         {wait && <WaitLine wait={wait} seedKey={x.key} now={now} />}
         {last && waiting && (
@@ -508,7 +535,7 @@ function useKeys(id: string): [ReadonlySet<string>, (key: string) => void] {
  *  The exchanges before the last OPEN_TURNS fold to a row, except the ones that hold what is new, what runs or waits, or
  *  what the reader came back to. Memoised: the store's changes elsewhere (another session's preview, the chat, an error)
  *  leave it alone, its props being the session, its items and their exchanges, the clock and the page's stable callbacks. */
-export const Thread = memo(function Thread({ client, session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onCapture, onDocument, planOpen, onPlan, convOpen, onConversation, waiting = null }: ThreadProps): JSX.Element {
+export const Thread = memo(function Thread({ client, session, helper, items, xs, now, unread, since, dispatch, flash, onChange, onCapture, onDocument, planOpen, onPlan, convOpen, onConversation, waiting = null, onReplyTo }: ThreadProps): JSX.Element {
   const { t, lang } = useI18n();
   const offline = session.offline === true;
   const wait = useWait(session, helper, items, xs, waiting, t.session.subagent);
@@ -534,9 +561,21 @@ export const Thread = memo(function Thread({ client, session, helper, items, xs,
             flash={lit ? flash : null} onChange={onChange} onCapture={onCapture} onDocument={onDocument}
             planOpen={planOpen !== null && holdsPlan(x, planOpen) ? planOpen : null} onPlan={onPlan}
             convOpen={convHead !== undefined && messagesOf(x).some(m => m.id === convHead) ? convOpen : null} onConversation={onConversation}
-            peers={peers} convs={convs} folded2={folded} onFold={onFold} marks={marks} waiting={last ? waiting : null} wait={last ? wait : null} />
+            peers={peers} convs={convs} folded2={folded} onFold={onFold} marks={marks} waiting={last ? waiting : null} wait={last ? wait : null} onReplyTo={onReplyTo} />
         );
       })}
     </ol>
   );
 });
+
+/** The openers in order, quiet OpenRig notices in a row (two or more, no stuck sweep) gathered to fold as one line. */
+function openerRows(openers: ReadonlyArray<ReceivedItem | NoticeItem>): Array<ReceivedItem | NoticeItem | RigNotice[]> {
+  const out: Array<ReceivedItem | NoticeItem | RigNotice[]> = [];
+  for (const o of openers) {
+    const last = out.at(-1);
+    if (foldable(o) && Array.isArray(last)) last.push(o);
+    else if (foldable(o) && last && !Array.isArray(last) && foldable(last)) out[out.length - 1] = [last, o];
+    else out.push(o);
+  }
+  return out;
+}

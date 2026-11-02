@@ -900,6 +900,22 @@ export const en: Messages = {
       },
       loading: 'Loading the thread…', empty: 'Nothing in the thread yet.', notLoaded: 'The thread was not loaded before the connection was lost.'
     },
+    rig: {
+      from: 'From', to: 'To', replyTo: (n: string) => `Reply to ${n}`, seeTheirs: 'see their thread', delivered: 'delivered',
+      raw: 'Raw message', rawMany: (k: number) => `${k} messages pasted together · raw`, command: 'Command', deliveries: (k: number) => `${k} raw deliveries`,
+      twice: (k: number) => (k === 2 ? 'received twice' : `received ${k} times`), unreadable: 'Unreadable OpenRig message · shown as is',
+      rowIn: (n: string) => `Row handed to you by ${n}`, rowOut: (n: string) => `Row passed to ${n}`,
+      state: { pending: 'waiting', taken: 'taken', passed: (n: string) => `passed to ${n}`, blocked: 'blocked', done: 'done', unknown: 'state not tracked', notHanded: 'not handed off' },
+      refusedBy: (why: string) => `OpenRig: ${why}`, refusedPlain: 'not handed off by OpenRig',
+      heldBy: 'Held by', rowFrom: 'From', rowTo: 'To',
+      log: { handed: (t: string) => `handed ${t}`, passed: (t: string) => `passed ${t}`, taken: (t: string) => `taken ${t}`, done: (t: string) => `done ${t}`, notTaken: 'not taken yet' },
+      waitingOn: (id: string) => `waiting on row ${id}`, notTracked: (t: string) => `handed ${t} · Ledge doesn’t read this row back`, notTrackedOut: (t: string) => `passed ${t} · Ledge doesn’t read this row back`,
+      kicker: 'OpenRig', automatic: 'OpenRig · automatic',
+      unblocked: (id: string) => `Blocker cleared: row ${id} is to do again`, unblockedSub: (id: string) => `It was waiting on row ${id}, now closed.`,
+      stalled: (id: string, d: string) => `Row ${id} taken ${d} ago, no progress`, fromDaemon: 'A reminder from the daemon, not from a seat.',
+      folded: (k: number) => `${k} OpenRig notices`,
+      about: (s: string) => `About: “${s}”`
+    },
     message: {
       sent: 'Message sent', received: 'Message received',
       readBy: (n) => `Read by ${n}`, delivered: 'Delivered, not read yet', sending: 'Sending…', failed: 'Not delivered',

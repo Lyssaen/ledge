@@ -64,7 +64,8 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   const withImages = images.items.length > 0;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { if (focusOnArrival) input.current?.focus(); }, []); // once, on arrival
+  // Once, on arrival; the cursor at the end of the draft (a reply prefixed from another thread goes on under its prefix).
+  useEffect(() => { const el = input.current; if (focusOnArrival && el) { el.focus(); const n = el.value.length; el.setSelectionRange?.(n, n); } }, []);
 
   // What an interrupt that takes back OMP's queue returns: the instructions that were waiting, back in the draft (never re-sent).
   useEffect(() => client?.onMessage(m => {

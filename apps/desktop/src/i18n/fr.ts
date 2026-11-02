@@ -946,6 +946,23 @@ export const fr = {
       },
       loading: 'Chargement du fil…', empty: 'Rien dans le fil pour l’instant.', notLoaded: 'Le fil n’a pas été chargé avant la perte de connexion.'
     },
+    /** OpenRig's messages in a seat's thread (docs/mockups/ledge-openrig-messages.html, validated 2026-11-02). */
+    rig: {
+      from: 'De', to: 'À', replyTo: (n: string) => `Répondre à ${n}`, seeTheirs: 'voir son fil', delivered: 'remis',
+      raw: 'Message brut', rawMany: (k: number) => `${k} messages collés ensemble · brut`, command: 'Commande', deliveries: (k: number) => `${k} envois bruts`,
+      twice: (k: number) => `reçu ${k} fois`, unreadable: 'Message OpenRig illisible · affiché tel quel',
+      rowIn: (n: string) => `Ligne confiée par ${n}`, rowOut: (n: string) => `Ligne passée à ${n}`,
+      state: { pending: 'en attente', taken: 'prise', passed: (n: string) => `passée à ${n}`, blocked: 'bloquée', done: 'terminée', unknown: 'état non suivi', notHanded: 'non transmise' },
+      refusedBy: (why: string) => `OpenRig : ${why}`, refusedPlain: 'non transmise par OpenRig',
+      heldBy: 'Tenue par', rowFrom: 'De', rowTo: 'Pour',
+      log: { handed: (t: string) => `confiée ${t}`, passed: (t: string) => `passée ${t}`, taken: (t: string) => `prise ${t}`, done: (t: string) => `terminée ${t}`, notTaken: 'pas encore prise' },
+      waitingOn: (id: string) => `attend la ligne ${id}`, notTracked: (t: string) => `confiée ${t} · Ledge ne relit pas cette ligne`, notTrackedOut: (t: string) => `passée ${t} · Ledge ne relit pas cette ligne`,
+      kicker: 'OpenRig', automatic: 'OpenRig · automatique',
+      unblocked: (id: string) => `Blocage levé : la ligne ${id} est de nouveau à faire`, unblockedSub: (id: string) => `Elle attendait la ligne ${id}, qui est close.`,
+      stalled: (id: string, d: string) => `Ligne ${id} prise il y a ${d}, sans suite`, fromDaemon: 'Relance du daemon, pas d’un siège.',
+      folded: (k: number) => `${k} avis OpenRig`,
+      about: (s: string) => `À propos de : « ${s} »`
+    },
     message: {
       sent: 'Message envoyé', received: 'Message reçu',
       readBy: (n: string) => `Lu par ${n}`, delivered: 'Remis, pas encore lu', sending: 'Envoi…', failed: 'Non remis',
