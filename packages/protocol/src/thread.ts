@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRANSMISSION_OPS } from './tasks.js';
-import { AttachmentRefSchema } from './attachments.js';
+import { ATTACHMENTS_MAX, AttachmentRefSchema } from './attachments.js';
 
 /** Native session tracking (spec 2026-10-13 §3): what a session's thread is made of. */
 export const ToolStatusSchema = z.enum(['running', 'success', 'failed', 'unknown']);
@@ -18,7 +18,9 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('message'), ...base, text: z.string() }),
   /** `id` is the harness's tool_use_id when it gives one, so the result updates the same row; `byClose`: a question
    *  dismissed by Ledge closing the session. */
-  z.object({ kind: z.literal('tool'), ...base, tool: z.string(), label: z.string(), input: z.string().optional(), output: z.string().optional(), error: z.string().optional(), status: ToolStatusSchema, durationMs: z.number().nonnegative().optional(), files: z.array(FileChangeSchema).default([]), byClose: z.literal(true).optional() }),
+  z.object({ kind: z.literal('tool'), ...base, tool: z.string(), label: z.string(), input: z.string().optional(), output: z.string().optional(), error: z.string().optional(), status: ToolStatusSchema, durationMs: z.number().nonnegative().optional(), files: z.array(FileChangeSchema).default([]), byClose: z.literal(true).optional(),
+    /** Images the tool returned (a browser screenshot), in order; `imagesDropped`: some were not kept. */
+    images: z.array(AttachmentRefSchema).max(ATTACHMENTS_MAX).optional(), imagesDropped: z.literal(true).optional() }),
   /** `unknown`: answered in the terminal, the daemon only saw the prompt go away; `always`: allowed and not asked again;
    *  `byClose`: denied by Ledge closing the session. */
   z.object({ kind: z.literal('permission'), ...base, tool: z.string(), text: z.string(), decision: z.enum(['accept', 'deny', 'always', 'unknown']).optional(), byClose: z.literal(true).optional() }),
@@ -48,3 +50,9 @@ export type HelperItem = Extract<ThreadItem, { kind: 'helper' }>;
 export type SentItem = Extract<ThreadItem, { kind: 'sent' }>;
 export type ReceivedItem = Extract<ThreadItem, { kind: 'received' }>;
 export type NoticeItem = Extract<ThreadItem, { kind: 'notice' }>;
+
+/** The part of a tool name after the last `__` (an MCP tool is `mcp__<server>__<tool>`). */
+export const toolShortName = (tool: string): string => { const i = tool.lastIndexOf('__'); return i < 0 ? tool : tool.slice(i + 2); };
+
+/** A Playwright MCP screenshot tool: its image is the point of the row. */
+export const isBrowserCapture = (tool: string): boolean => tool.startsWith('mcp__') && tool.includes('playwright') && toolShortName(tool) === 'browser_take_screenshot';

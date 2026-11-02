@@ -14,6 +14,8 @@ export type ImageMime = z.infer<typeof ImageMimeSchema>;
 export const ATTACHMENT_MAX = 400_000;
 export const ATTACHMENT_LOCAL_MAX = 2_000_000;
 export const PREVIEW_MAX = 40_000;
+/** The raw capture the hook may send the daemon (a browser screenshot); its base64 fits a 4 MB frame. */
+export const CAPTURE_RAW_MAX = 2_800_000;
 /** Images per message. */
 export const ATTACHMENTS_MAX = 5;
 /** Long side of an encoded image and of its preview (pixels). */
@@ -46,6 +48,9 @@ const requestId = z.string().min(1).max(100);
 export const AttachmentPutSchema = z.object({ type: z.literal('attachment.put'), requestId, id: z.string().optional(), image: ImageUploadSchema });
 /** Reads a stored image or its preview. Routed by the session `id` or by `machine` (a chat turn's machine); local when neither. */
 export const AttachmentGetSchema = z.object({ type: z.literal('attachment.get'), requestId, attachment: AttachmentIdSchema, preview: z.boolean().optional(), id: z.string().optional(), machine: z.string().optional() });
+
+/** A tool result's image, sent by the local hook to the local daemon only: the daemon scales and stores it. */
+export const AttachmentCaptureSchema = z.object({ type: z.literal('attachment.capture'), requestId, image: z.object({ mime: ImageMimeSchema, data: z.string().min(1).max(b64Max(CAPTURE_RAW_MAX)) }) });
 
 export const AttachmentStoredSchema = z.object({ type: z.literal('attachment.stored'), requestId, ref: AttachmentRefSchema });
 export const AttachmentDataSchema = z.object({ type: z.literal('attachment.data'), requestId, attachment: AttachmentIdSchema, mime: ImageMimeSchema, data: z.string() });
