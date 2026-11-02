@@ -136,6 +136,13 @@ export function attentionRef(raw: unknown): { id: string; kind: HumanAsk['kind']
   return { id: ref.slice(6), kind: str(obj(i.answer).verb) === 'resolve' ? 'parked' : 'decision' };
 }
 
+/** Whether a session names the registered person `entityId`, as OpenRig resolves it (resolveRegisteredHumanAddress): its part before the
+ *  first `@`, for an external address (`ledge@external`) as for a canonical seat (`ledge@some-rig`). */
+export function samePerson(session: string, entityId: string): boolean {
+  const at = session.indexOf('@');
+  return at > 0 && at < session.length - 1 && session.slice(0, at) === entityId;
+}
+
 /** OpenRig's events that may change what waits on the person. */
 const WAKING = /^(queue\.|qitem\.|mission_control\.action_executed$|inbox\.)/;
 
@@ -157,7 +164,7 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
   const now = deps.now ?? Date.now, debounceMs = deps.debounceMs ?? 400, pollMs = deps.pollMs ?? 60_000, personTtl = deps.personTtlMs ?? 60_000;
   /** A row read, kept while its `tsUpdated` stands. */
   const rows = new Map<string, { at: string; row: unknown }>();
-  let person: { at: number; byAddress: Map<string, { name: string; slack: boolean }> } | null = null;
+  let person: { at: number; byAddress: Map<string, { name: string; slack: boolean; entityId: string | null }> } | null = null;
   let last = '', lastEventId: string | null = null;
   let onChange: ((list: HumanList) => void) | null = null;
   let running = false, abort: AbortController | null = null, timer: NodeJS.Timeout | null = null, poll: NodeJS.Timeout | null = null;
@@ -175,11 +182,11 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
   /** The registered people's names and whether Slack reaches them (`rig gateway human list --json`), read at most once a minute. */
   const people = async () => {
     if (person && now() - person.at < personTtl) return person.byAddress;
-    const byAddress = new Map<string, { name: string; slack: boolean }>();
+    const byAddress = new Map<string, { name: string; slack: boolean; entityId: string | null }>();
     const r = await deps.run(['gateway', 'human', 'list', '--json'], 15_000).catch(() => null);
     for (const h of Array.isArray(obj(parse(r?.stdout ?? '')).humans) ? obj(parse(r!.stdout)).humans as unknown[] : []) {
       const o = obj(h), address = str(o.address);
-      if (address) byAddress.set(address, { name: str(o.displayName) ?? str(o.entityId) ?? address, slack: obj(o.deliveryReadiness).ready === true });
+      if (address) byAddress.set(address, { name: str(o.displayName) ?? str(o.entityId) ?? address, slack: obj(o.deliveryReadiness).ready === true, entityId: str(o.entityId) });
     }
     if (r?.code === 0) person = { at: now(), byAddress };
     return byAddress;
@@ -307,9 +314,16 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     // OpenRig needs a declared actor without a seat header: the person asked (the row's destination, or the person it is parked on), as its
     // TUI sends it; the primary user's authority then records the default person whoever that is.
     const actorSession = (parked ? str(q.blockedOn) : str(q.destinationSession)) ?? undefined;
-    // Only the default person's asks are answered from here: OpenRig's primary-user authority would settle anyone's.
-    await list(); // whose asks they are now, read again: the default person may have changed since the last read
-    if (!knownFor || actorSession !== knownFor) return { qitemId, ok: false, error: 'refused', message: `this row is not addressed to ${knownFor ?? 'the default person'}` };
+    // Only the default person's asks are answered from here: OpenRig's primary-user authority would settle anyone's. Who that is is read
+    // again now (it may have changed), and nothing is sent when it cannot be checked.
+    const current = await list();
+    const me = current.channel.state === 'ready' ? current.channel.person : null;
+    if (!me) {
+      const error: HumanAnswerError = current.channel.state === 'openrig_stopped' ? 'openrig_stopped' : current.channel.state === 'unreachable' ? 'unreachable' : 'refused';
+      return { qitemId, ok: false, error, message: `the default person could not be checked (${current.channel.message ?? current.channel.state})` };
+    }
+    const entityId = (await people()).get(me.address)?.entityId ?? me.address.slice(0, me.address.indexOf('@'));
+    if (!actorSession || !samePerson(actorSession, entityId)) return { qitemId, ok: false, error: 'refused', message: `this row is not addressed to ${me.address}` };
     const res = await http('POST', `${b.url}/api/mission-control/action`, { ...action, qitemId, actorSession, authority: 'primary-user', auditNotes: { client: 'ledge' } });
     soon();
     if (res.status !== 200) return { qitemId, ok: false, ...answerError(res.status, res.json) };

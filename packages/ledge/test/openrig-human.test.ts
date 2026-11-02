@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { OpenRigAnsweredSchema, OpenRigAsksChangedSchema, parseClientMessage, type OpenRigState } from '@ledge/protocol';
-import { answerError, attentionRef, createHumanChannel, seatParts, toAsk, type HumanList, type RigHttp, type RigSse } from '../src/daemon/openrigHuman.js';
+import { answerError, attentionRef, createHumanChannel, samePerson, seatParts, toAsk, type HumanList, type RigHttp, type RigSse } from '../src/daemon/openrigHuman.js';
 import type { RigRun } from '../src/daemon/openrig.js';
 
 // Shapes read from OpenRig 0.7.7 on 2026-11-02 (GET /api/attention, GET /api/queue/<id>), trimmed to what Ledge reads.
@@ -280,6 +280,40 @@ describe('« À toi » answering', () => {
     const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
     expect(await h.answer('qitem-bob', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'refused', message: 'this row is not addressed to ledge@external' });
     expect(f.calls.some(c => c.method === 'POST')).toBe(false);
+  });
+
+  it('sends nothing when the default person cannot be checked now, nor to the previous one once it changed', async () => {
+    const f = fake();
+    let attention: 'ok' | 'down' | 'bob' = 'ok';
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: async (m, u, b) => {
+      if (!u.endsWith('/api/attention?view=default')) return f.http(m, u, b);
+      if (attention === 'down') return { status: 503, json: {} };
+      if (attention === 'bob') return { status: 200, json: { perspective: { viewing: 'bob@external', basis: 'default', actingAs: { person: 'bob@external', authority: 'primary-user' } }, items: [] } };
+      return { status: 200, json: ATTENTION };
+    } });
+    await h.list();
+    attention = 'down';
+    expect(await h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'unreachable' });
+    attention = 'bob';
+    expect(await h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'refused', message: 'this row is not addressed to bob@external' });
+    expect(f.calls.some(c => c.method === 'POST')).toBe(false);
+  });
+
+  it('answers an ask or a park addressed to the person by one of their seats, as OpenRig resolves it', async () => {
+    const f = fake({ rows: {
+      'q-seat': { ...ASK, qitemId: 'q-seat', destinationSession: 'ledge@some-rig' },
+      'q-park': { ...PARKED, qitemId: 'q-park', blockedOn: 'ledge@other-rig' },
+      'q-bob': { ...ASK, qitemId: 'q-bob', destinationSession: 'bob@some-rig' }
+    }, post: () => ({ status: 200, json: { answer: { outcome: 'answered', unanswered: [] }, createdQitemId: 'r' } }) });
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
+    expect(await h.answer('q-seat', { kind: 'words', text: 'Oui' })).toMatchObject({ ok: true, outcome: 'answered' });
+    expect(await h.answer('q-park', { kind: 'resolve', text: 'Oui' })).toMatchObject({ ok: true, outcome: 'answered' });
+    expect(await h.answer('q-bob', { kind: 'words', text: 'Oui' })).toMatchObject({ ok: false, error: 'refused' });
+    expect(f.calls.filter(c => c.method === 'POST').map(c => (c.body as { actorSession: string }).actorSession)).toEqual(['ledge@some-rig', 'ledge@other-rig']);
+    expect(samePerson('ledge@external', 'ledge')).toBe(true);
+    expect(samePerson('ledge-dev@x', 'ledge')).toBe(false);
+    expect(samePerson('ledge', 'ledge')).toBe(false);
+    expect(samePerson('ledge@', 'ledge')).toBe(false);
   });
 
   it('maps OpenRig\'s refusals', async () => {
