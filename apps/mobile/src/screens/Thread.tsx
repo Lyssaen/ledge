@@ -226,6 +226,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
       </main>
       {ending.kind === 'open'
         ? <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
+          {...(state.daemon?.commands && session.tool === 'claude' && !session.readOnly ? { slash: { tool: copy.tools[session.tool], listing: state.commands[sessionId], ask: () => store.requestCommands(sessionId) } } : {})}
           alert={endError && <EndErrorNotice error={endError} fresh={fresh} onRetry={() => openSheet('close')} onReconnect={onReconnect} />}
           {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
         : <EndFooter key={ending.kind} ending={ending.kind === 'ended' && ending.error?.op === cleared ? { ...ending, error: null } : ending} name={session.name} canResume={closable} resumeHeld={resumeHeld(session, ops, boot, now)} readOnly={!!session.readOnly} fresh={fresh} focus={sent} onResume={() => openSheet('resume')} onReconnect={onReconnect} />}
