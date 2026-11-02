@@ -47,7 +47,8 @@ export function Help() {
     [t.help.field, [['↵', k.sendOnly], ['alt+↵ ctrl+j', k.newLine], ['↑ ↓', k.lineHistory], ['ctrl ← →', k.word], ['ctrl+w', t.help.wordBefore], ['ctrl+u', k.clear], ['esc', k.keepAndLeave]]],
     [t.help.launch, [['tab ↑ ↓', k.nextField], ['← →', k.choose], [t.keys.space, k.tick], ['ctrl+r', t.keys.redraw], ['ctrl+s', k.start], ['esc', k.cancel]]],
     [t.help.settings, [['↑ ↓', k.navigate], ['← →', k.change]]],
-    [t.help.openrig, [['tab', t.openrig.machine], ['j k ↑ ↓', k.navigate], ['↵', t.openrig.unfold], ['s', t.openrig.toggle], ['R', t.openrig.restart], ['D', `${t.openrig.daemonKey} · ${t.openrig.toggle}`], ['K', `${t.openrig.kernelKey} · ${t.openrig.toggle}`], ['y n', `${t.openrig.yes} · ${t.openrig.no}`]]]
+    [t.help.rigLaunch, [['tab ↑ ↓', k.nextField], ['← →', k.choose], ['- +', t.rigLaunch.count], ['m', t.rigLaunch.modelKey], [t.keys.space, k.tick], ['p ctrl+p', t.rigLaunch.check], ['ctrl+s', k.start], ['esc', k.cancel]]],
+    [t.help.openrig, [['tab', t.openrig.machine], ['j k ↑ ↓', k.navigate], ['↵', t.openrig.unfold], ['s', t.openrig.toggle], ['R', t.openrig.restart], ['+', t.rigLaunch.launchKey], ['D', `${t.openrig.daemonKey} · ${t.openrig.toggle}`], ['K', `${t.openrig.kernelKey} · ${t.openrig.toggle}`], ['y n', `${t.openrig.yes} · ${t.openrig.no}`]]]
   ];
   const lines = helpLines(groups, Math.max(20, columns - 4));
   const [view, setView] = useState(10);

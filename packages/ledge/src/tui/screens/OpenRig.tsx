@@ -35,8 +35,10 @@ export function OpenRigScreen() {
   const tui = useTui();
   const { t, machines } = tui;
   const o = t.openrig;
-  const [machineAt, setMachineAt] = useState(0);
-  const machine = machines[Math.min(machineAt, Math.max(0, machines.length - 1))] ?? null;
+  // The machine shown is kept while the TUI runs: « Lancer un rig » (+) launches on it, and coming back shows it again.
+  const [machineId, setMachineId] = useState<string | null>(tui.kept.rigMachine ?? null);
+  const machine = machines.find(m => m.id === machineId) ?? machines[0] ?? null;
+  tui.kept.rigMachine = machine?.id ?? null;
   const rig = useOpenRig(tui.client, machine?.id ?? null);
   const state = rig.state;
   const rigs = listedRigs(state);
@@ -68,7 +70,11 @@ export function OpenRigScreen() {
       if (input === 'n' || key.escape) { setConfirm(null); return true; }
       return true;
     }
-    if (key.tab) { setMachineAt(i => step(i, key.shift ? -1 : 1, machines.length)); setOpen(new Set()); return true; }
+    if (key.tab) {
+      const i = Math.max(0, machines.findIndex(m => m.id === machine?.id));
+      setMachineId(machines[step(i, key.shift ? -1 : 1, machines.length)]?.id ?? null); setOpen(new Set()); return true;
+    }
+    if (input === '+') { if (machine) tui.go('rigLaunch'); return true; }
     if (key.upArrow || input === 'k') { setAt(i => step(i, -1, rigs.length)); return true; }
     if (key.downArrow || input === 'j') { setAt(i => step(i, 1, rigs.length)); return true; }
     if (key.return) {
@@ -86,7 +92,7 @@ export function OpenRigScreen() {
 
   const keys: Array<[string, string]> = confirm
     ? [['y', o.yes], ['n', o.no]]
-    : [['tab', o.machine], ['j k', t.keys.navigate], ['↵', o.unfold], ['s', o.toggle], ['R', o.restart], ['D', o.daemonKey], ['K', o.kernelKey], ['esc', t.keys.back]];
+    : [['tab', o.machine], ['j k', t.keys.navigate], ['↵', o.unfold], ['s', o.toggle], ['R', o.restart], ['+', t.rigLaunch.launchKey], ['D', o.daemonKey], ['K', o.kernelKey], ['esc', t.keys.back]];
   const crumb = [state?.version ? o.version(state.version) : o.title, machine?.label].filter(Boolean).join(' · ');
 
   return (

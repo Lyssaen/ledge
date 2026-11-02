@@ -88,8 +88,9 @@ On y vient par « OpenRig » dans la barre latérale, sous « Atelier ». La pag
 - **Kernel :** l'opérateur d'OpenRig (le rig nommé `kernel`), avec « Démarrer », « Arrêter », « Redémarrer ».
 - **Rigs :** chaque rig montre son état, ses sièges et son dernier snapshot ; un clic sur son nom déplie ses sièges. « Démarrer » lance `rig up <rig> --existing`, « Arrêter » `rig down <rig>`, « Redémarrer » les deux avec un snapshot.
 - Tout arrêt ou redémarrage demande confirmation, nomme les sièges qui travaillent et montre la commande `rig` lancée.
+- **Lancer un rig…** : choisir une spec (« mes specs » ou celles d'OpenRig), le dossier de travail et le nom, le nombre de sièges par rôle avec leur harnais et leur modèle, puis comment les sièges ajoutés délèguent (par paires ou chacun à tous). « Vérifier » montre ce que `rig up --plan` conclut et la spec qui sera lancée ; « Lancer » la lance. Une spec modifiée est écrite dans `~/.ledge/rigs/<nom>/`, et « Enregistrer dans mes specs » la garde dans la bibliothèque OpenRig.
 
-Y renvoyer l'utilisateur pour démarrer, arrêter ou redémarrer OpenRig, son kernel ou un rig, sur n'importe quelle machine.
+Y renvoyer l'utilisateur pour démarrer, arrêter ou redémarrer OpenRig, son kernel ou un rig, ou pour lancer un rig (par exemple trois développeurs et trois relecteurs), sur n'importe quelle machine.
 
 ### Session (`session`)
 

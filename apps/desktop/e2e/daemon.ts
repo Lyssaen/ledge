@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { OpenRigState, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { OpenRigState, RigSpec, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -35,7 +35,7 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  Like the daemon it keeps the island's settings (`extras.island`, default null: none set yet), sent after the projects, and an `island.set`
  *  replaces them and is broadcast back as `island`; `island: 'unknown'` plays a daemon too old to speak of them.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; openrig?: OpenRigState } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; openrig?: OpenRigState; rigSpecs?: RigSpec[] } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -60,6 +60,15 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       received.push(msg);
       // OpenRig (docs/mockups/ledge-openrig.html): a status answers `extras.openrig`; an action succeeds and broadcasts it again.
       if (msg.type === 'openrig.status' && extras.openrig) ws.send(JSON.stringify({ type: 'openrig.state', requestId: msg.requestId, state: extras.openrig }));
+      if (msg.type === 'openrig.specs') ws.send(JSON.stringify({ type: 'openrig.specList', requestId: msg.requestId, specs: extras.rigSpecs ?? [] }));
+      // A launch's check answers a plan and a composed spec; a launch succeeds.
+      if (msg.type === 'openrig.launch') {
+        const n = Object.values(msg.launch.seats ?? {}).reduce((a, b) => a + b - 1, 2);
+        ws.send(JSON.stringify({ type: 'openrig.launched', requestId: msg.requestId, ok: true, plan: msg.launch.plan === true, seats: n,
+          commands: [`rig up ~/.ledge/rigs/${msg.launch.name}/rig.yaml --cwd ${msg.launch.cwd}${msg.launch.plan ? ' --plan' : ' --yes'}`],
+          yaml: `name: ${msg.launch.name}\npods:\n  - id: dev\n    members:\n      - id: build\n      - id: build-2\n      - id: build-3\n      - id: review\n      - id: review-2\n      - id: review-3\n`,
+          ...(msg.launch.plan ? { check: { status: 'planned', errors: [], warnings: Array.from({ length: n }, (_, i) => `dev.s${i}: permission_policy absent; launch_posture=floor`) } } : {}) }));
+      }
       if (msg.type === 'openrig.act' && extras.openrig) { ws.send(JSON.stringify({ type: 'openrig.done', requestId: msg.requestId, ok: true, commands: [] })); ws.send(JSON.stringify({ type: 'openrig.state', state: extras.openrig })); }
       if (msg.type === 'island.set') { island = msg.prefs; ws.send(JSON.stringify({ type: 'island', prefs: island })); }
       if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }

@@ -2554,7 +2554,9 @@ describe('server: OpenRig', () => {
     const state = (s: 'running' | 'stopped') => ({ installed: true, daemon: { state: s }, kernel: { state: 'stopped' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' });
     const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: {
       async state(f) { if (f) fresh++; return state(f ? 'stopped' : 'running'); },
-      async act(a) { acts.push(a); return { ok: true, commands: ['rig daemon stop'] }; }
+      async act(a) { acts.push(a); return { ok: true, commands: ['rig daemon stop'] }; },
+      async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }
     } });
     const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
     expect((await c.next('snapshot')).daemon).toMatchObject({ openrig: true });

@@ -1,0 +1,17 @@
+{
+  "agents": [
+    {
+      "agent_id": "ad6bab827739448c6",
+      "agent_type": "fork",
+      "started_at": "2026-11-02T09:07:08.501Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-11-02T09:14:47.119Z",
+      "duration_ms": 458618
+    }
+  ],
+  "total_spawned": 1,
+  "total_completed": 1,
+  "total_failed": 0,
+  "last_updated": "2026-11-02T09:14:47.150Z"
+}

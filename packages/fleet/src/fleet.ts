@@ -45,13 +45,18 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const attachmentAsks = new Map<string, string>();
   /** `models.list` requestId -> the machine asked and the agent, so only its `models.listing` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
+  const rigFailure = (kind: 'status' | 'act' | 'specs' | 'launch', requestId: string, machineId: string, error: 'offline' | 'outdated'): ServerMessage =>
+    kind === 'act' ? { type: 'openrig.done', requestId, machineId, ok: false, commands: [], error }
+    : kind === 'specs' ? { type: 'openrig.specList', requestId, machineId, specs: [], error }
+    : kind === 'launch' ? { type: 'openrig.launched', requestId, machineId, ok: false, plan: false, commands: [], error }
+    : { type: 'openrig.state', requestId, machineId, error };
   /** `openrig.status` / `openrig.act` requestId -> the machine asked, so only its answer is emitted (a drop or a refusal answers « offline » or « outdated »). */
-  const rigAsks = new Map<string, { machine: string; act: boolean }>();
+  const rigAsks = new Map<string, { machine: string; kind: 'status' | 'act' | 'specs' | 'launch' }>();
   /** Each pending OpenRig ask of `machine` is answered with `error`: 'offline' when it dropped, 'outdated' when its daemon does not know OpenRig. */
   const answerFailedRigs = (machine: string, error: 'offline' | 'outdated') => {
     for (const [requestId, a] of rigAsks) if (a.machine === machine) {
       rigAsks.delete(requestId);
-      emit(a.act ? { type: 'openrig.done', requestId, machineId: machine, ok: false, commands: [], error } : { type: 'openrig.state', requestId, machineId: machine, error });
+      emit(rigFailure(a.kind, requestId, machine, error));
     }
   };
   const operations = new Map<string, string>();
@@ -257,7 +262,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'repos.info') { if (inspections.get(m.requestId) === machine) { inspections.delete(m.requestId); unfound.delete(m.requestId); emit(m); } return; }
     if (m.type === 'attachment.stored' || m.type === 'attachment.data' || m.type === 'attachment.error') { if (attachmentAsks.get(m.requestId) === machine) { attachmentAsks.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.found') { if (scans.get(m.requestId) === machine) { scans.delete(m.requestId); emit(m); } return; }
-    if (m.type === 'openrig.state' || m.type === 'openrig.done') {
+    if (m.type === 'openrig.state' || m.type === 'openrig.done' || m.type === 'openrig.specList' || m.type === 'openrig.launched') {
       // An answer goes out once, from the machine asked; a state that follows an action goes out from any machine.
       if (m.requestId !== undefined) { if (rigAsks.get(m.requestId)?.machine !== machine) return; rigAsks.delete(m.requestId); }
       emit({ ...m, machineId: machine }); return;
@@ -308,7 +313,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       // Likewise for repos.scan (lot 11): the new daemon answers every scan with repos.found, so a refusal means an older daemon.
       if (m.request === 'repos.scan') { answerFailedScans(machine, 'outdated'); return; }
       if (m.request === 'models.list') { answerFailedModels(machine, 'outdated'); return; }
-      if (m.request === 'openrig.status' || m.request === 'openrig.act') { answerFailedRigs(machine, 'outdated'); return; }
+      if (m.request?.startsWith('openrig.')) { answerFailedRigs(machine, 'outdated'); return; }
       if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
       if (m.request !== undefined && OPERATIONS.has(m.request)) endOperation(machine);
@@ -408,12 +413,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (!available(peers.get(machine))) { emit({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: [], error: 'offline' }); return; }
         modelLists.set(msg.requestId, { machine, tool: msg.tool });
       }
-      if (msg.type === 'openrig.status' || msg.type === 'openrig.act') {
+      if (msg.type === 'openrig.status' || msg.type === 'openrig.act' || msg.type === 'openrig.specs' || msg.type === 'openrig.launch') {
         machine = msg.machineId ?? 'local';
         const { machineId: _m, ...rest } = msg; outgoing = rest;
-        const act = msg.type === 'openrig.act';
-        if (!available(peers.get(machine))) { emit(act ? { type: 'openrig.done', requestId: msg.requestId, machineId: machine, ok: false, commands: [], error: 'offline' } : { type: 'openrig.state', requestId: msg.requestId, machineId: machine, error: 'offline' }); return; }
-        rigAsks.set(msg.requestId, { machine, act });
+        const kind = msg.type === 'openrig.status' ? 'status' as const : msg.type === 'openrig.act' ? 'act' as const : msg.type === 'openrig.specs' ? 'specs' as const : 'launch' as const;
+        if (!available(peers.get(machine))) { emit(rigFailure(kind, msg.requestId, machine, 'offline')); return; }
+        rigAsks.set(msg.requestId, { machine, kind });
       }
       if (msg.type === 'folder.list') {
         if (msg.machineId) machine = msg.machineId;

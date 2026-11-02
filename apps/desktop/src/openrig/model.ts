@@ -1,4 +1,4 @@
-import { KERNEL_RIG, rigCommands, showRigCommand, type OpenRigAction, type OpenRigState, type Rig, type RigSeat } from '@ledge/protocol';
+import { KERNEL_RIG, RigNameSchema, rigCommands, showRigCommand, type OpenRigAction, type OpenRigState, type Projects, type Rig, type RigLaunch, type RigSeat, type RigSpec } from '@ledge/protocol';
 
 /**
  * What the OpenRig page (docs/mockups/ledge-openrig.html, views 1, 2 and 5) shows and offers, as pure functions: the
@@ -34,3 +34,37 @@ export const rigOf = (a: OpenRigAction | null): string | null => (a && 'rig' in 
 
 /** `kernel` for kernel actions, `daemon` for daemon ones, the rig's name otherwise. */
 export const targetOf = (a: OpenRigAction): string => (a.kind.startsWith('daemon.') ? 'daemon' : a.kind.startsWith('kernel.') ? KERNEL_RIG : (a as { rig: string }).rig);
+
+// ── Launching a rig (view 6) ──
+
+export interface RigRole { role: string; pod: string; id: string; runtime: string; model?: string; agent: string }
+/** Each `pod.member` of a spec, in its order. */
+export const rolesOf = (spec: RigSpec): RigRole[] => spec.pods.flatMap(p => p.members.map(m => ({ role: `${p.id}.${m.id}`, pod: p.id, id: m.id, runtime: m.runtime, ...(m.model ? { model: m.model } : {}), agent: m.agent })));
+
+export interface LaunchForm { cwd: string; name: string; seats: Record<string, number>; runtimes: Record<string, 'claude-code' | 'codex'>; models: Record<string, string>; delegation: 'pairs' | 'all'; save: boolean }
+export const emptyForm = (spec: RigSpec | undefined, cwd = ''): LaunchForm => ({ cwd, name: spec?.name ?? '', seats: {}, runtimes: {}, models: {}, delegation: 'pairs', save: false });
+
+/** How many seats the form launches. */
+export const seatTotal = (spec: RigSpec, f: LaunchForm): number => rolesOf(spec).reduce((n, r) => n + (f.seats[r.role] ?? 1), 0);
+/** Whether a role has more than one seat, so the delegation choice matters. */
+export const multiplies = (f: LaunchForm): boolean => Object.values(f.seats).some(n => n > 1);
+
+/** The launch the form sends: only what differs from the spec (a harness or model equal to the spec's is not a change). */
+export function launchOf(spec: RigSpec, f: LaunchForm, plan: boolean): RigLaunch {
+  const roles = rolesOf(spec);
+  const seats = Object.fromEntries(roles.filter(r => (f.seats[r.role] ?? 1) !== 1).map(r => [r.role, f.seats[r.role]!]));
+  const runtimes = Object.fromEntries(roles.filter(r => f.runtimes[r.role] && f.runtimes[r.role] !== r.runtime).map(r => [r.role, f.runtimes[r.role]!]));
+  const models = Object.fromEntries(roles.filter(r => f.models[r.role]?.trim() && f.models[r.role]!.trim() !== r.model).map(r => [r.role, f.models[r.role]!.trim()]));
+  return {
+    spec: spec.name, cwd: f.cwd.trim(), name: f.name.trim(),
+    ...(Object.keys(seats).length ? { seats } : {}), ...(Object.keys(runtimes).length ? { runtimes } : {}), ...(Object.keys(models).length ? { models } : {}),
+    ...(multiplies(f) ? { delegation: f.delegation } : {}), ...(f.save ? { save: true } : {}), ...(plan ? { plan: true } : {})
+  };
+}
+
+/** Whether the form can be sent: a folder, and a name `rig` takes. */
+export const launchable = (f: LaunchForm): boolean => f.cwd.trim().length > 0 && RigNameSchema.safeParse(f.name.trim()).success;
+
+/** The Ledge projects' folders on a machine, for the folder field. */
+export const folderChoices = (projects: Projects | null, machine: string): Array<{ label: string; path: string }> =>
+  (projects?.projects ?? []).flatMap(p => p.repos.filter(r => r.machine === machine).map(r => ({ label: p.name, path: r.path })));

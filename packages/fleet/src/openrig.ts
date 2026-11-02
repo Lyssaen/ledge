@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { OpenRigAction, OpenRigDone, OpenRigState } from '@ledge/protocol';
+import type { OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigState, RigLaunch, RigSpec } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
 /** How often a screen that shows a machine's OpenRig asks it again. */
@@ -73,4 +73,39 @@ export function useOpenRig(client: DaemonClient, machine: string | null, pollMs 
 
   const shown = view.machine === machine ? view : { state: null };
   return { state: shown.state, ...('error' in shown && shown.error ? { error: shown.error } : {}), pending, last, act, refresh: ask };
+}
+
+export interface RigSpecsView { status: 'idle' | 'loading' | 'ready'; specs: readonly RigSpec[]; error?: string; reload(): void }
+
+/** The machine's rig specs, asked once per machine (and again on `reload`): `error` `daemon_stopped` while OpenRig is off. */
+export function useRigSpecs(client: DaemonClient, machine: string | null): RigSpecsView {
+  const [answer, setAnswer] = useState<{ machine: string; specs: readonly RigSpec[]; error?: string } | null>(null);
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    if (machine === null) return;
+    const requestId = `openrig-specs-${++next}`;
+    setAnswer(a => (a?.machine === machine ? a : null));
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.specList' || m.requestId !== requestId) return;
+      setAnswer({ machine, specs: m.specs, ...(m.error ? { error: m.error } : {}) });
+    });
+    client.send({ type: 'openrig.specs', requestId, machineId: machine });
+    return off;
+  }, [client, machine, round]);
+  const reload = useCallback(() => setRound(r => r + 1), []);
+  if (machine === null) return { status: 'idle', specs: [], reload };
+  if (!answer || answer.machine !== machine) return { status: 'loading', specs: [], reload };
+  return { status: 'ready', specs: answer.specs, ...(answer.error ? { error: answer.error } : {}), reload };
+}
+
+/** Checks (`plan`) or launches a rig on a machine; resolves with its end. */
+export function launchRig(client: DaemonClient, machine: string, launch: RigLaunch): Promise<OpenRigLaunched> {
+  const requestId = `openrig-launch-${++next}`;
+  return new Promise(resolve => {
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.launched' || m.requestId !== requestId) return;
+      off(); resolve(m);
+    });
+    client.send({ type: 'openrig.launch', requestId, launch, machineId: machine });
+  });
 }

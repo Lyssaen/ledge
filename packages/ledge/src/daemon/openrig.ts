@@ -1,8 +1,11 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { parse as parseYaml } from 'yaml';
+import { changesSpec, composeSpec, readSpec, specSeats } from './rigSpec.js';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
-import { KERNEL_RIG, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigSeat } from '@ledge/protocol';
+import { basename, delimiter, dirname, isAbsolute, join } from 'node:path';
+import { KERNEL_RIG, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigLaunch, type RigSeat, type RigSpec } from '@ledge/protocol';
 import { log } from '../log.js';
 
 /**
@@ -85,7 +88,7 @@ export { planAction, showCommand };
 /** The line that says why a command failed: the last one it printed, an error field of its JSON, or its exit code. */
 export function failure(r: { code: number | null; stdout: string; stderr: string }): string {
   const json = obj(parse(r.stdout.trim()));
-  const said = str(json.error) ?? str(json.message);
+  const said = str(json.error) ?? str(obj(json.error).message) ?? str(json.message);
   if (said) return said.slice(0, 300);
   const lines = `${r.stderr}\n${r.stdout}`.split('\n').map(l => l.trim()).filter(Boolean);
   return (lines.at(-1) ?? `exit ${r.code}`).slice(0, 300);
@@ -127,16 +130,45 @@ const execRun = (env: () => Promise<NodeJS.ProcessEnv>): RigRun => async (args, 
   });
 };
 
-export interface OpenRigDeps { run?: RigRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => number }
+export interface OpenRigDeps {
+  run?: RigRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => number;
+  /** Where Ledge writes the specs it composes (`~/.ledge/rigs`), one folder per rig. */ rigsDir?: string;
+  /** The person's home, for a `~` in a launch's folder. */ home?: string;
+  /** Files, for tests. */ fs?: { read(p: string): Promise<string>; exists(p: string): boolean; copyDir(from: string, to: string): Promise<void>; write(p: string, text: string): Promise<void> };
+}
+export interface LaunchResult { ok: boolean; plan: boolean; commands: string[]; yaml?: string; seats?: number; output?: string; error?: string; check?: { status: string; errors: string[]; warnings: string[] } }
+
+/** What `rig up --plan --json` concluded, from its JSON: status, errors, warnings (each as text, 30 at most). */
+export function readCheck(output: string): { status: string; errors: string[]; warnings: string[] } | undefined {
+  const j = obj(parse(output));
+  const status = str(j.status);
+  if (!status) return undefined;
+  const texts = (v: unknown) => (Array.isArray(v) ? v : []).map(x => (typeof x === 'string' ? x : str(obj(x).message) ?? JSON.stringify(x))).slice(0, 30);
+  return { status, errors: texts(j.errors), warnings: texts(j.warnings) };
+}
 export interface ActResult { ok: boolean; commands: string[]; output?: string; error?: string }
 export interface OpenRig {
   /** This machine's OpenRig, read again unless a read is under `STATE_TTL_MS` old (`fresh` forces it). */
   state(fresh?: boolean): Promise<OpenRigState>;
   act(action: OpenRigAction): Promise<ActResult>;
+  /** The machine's rig specs (the kernel's left out). */
+  specs(): Promise<{ specs: RigSpec[]; error?: string }>;
+  /** Checks (`plan`) or launches a rig from a spec, composed when the counts, harnesses or models change. */
+  launch(l: RigLaunch): Promise<LaunchResult>;
 }
+
+const realFs = {
+  read: (p: string) => readFile(p, 'utf8'),
+  exists: (p: string) => existsSync(p),
+  copyDir: (from: string, to: string) => cp(from, to, { recursive: true, force: true, filter: src => basename(src) !== 'rig.yaml' }),
+  write: async (p: string, text: string) => { await mkdir(dirname(p), { recursive: true }); await writeFile(p, text); }
+};
 
 export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   const run = deps.run ?? execRun(deps.env ?? (async () => process.env));
+  const files = deps.fs ?? realFs;
+  const home = deps.home ?? homedir();
+  const rigsDir = deps.rigsDir ?? join(home, '.ledge', 'rigs');
   const now = deps.now ?? Date.now;
   let version: string | undefined, last: { at: number; state: OpenRigState } | undefined;
   let reading: Promise<OpenRigState> | undefined, acting = false;
@@ -183,5 +215,61 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     }
   }
 
-  return { state, act };
+  async function specs(): Promise<{ specs: RigSpec[]; error?: string }> {
+    const r = await run(['specs', 'ls', '--json'], STATUS_MS);
+    if (r.code === null) return { specs: [], error: 'not_installed' };
+    if (r.code !== 0) return { specs: [], error: /daemon not running/i.test(`${r.stdout}${r.stderr}`) ? 'daemon_stopped' : failure(r) };
+    const listed = parse(r.stdout);
+    const out: RigSpec[] = [];
+    for (const raw of Array.isArray(listed) ? listed : []) {
+      const e = obj(raw), name = str(e.name), path = str(e.resolvedSourcePath) ?? str(e.sourcePath);
+      if (e.kind !== 'rig' || !name || !path || name === KERNEL_RIG) continue;
+      const text = await files.read(path).catch(() => null);
+      const spec = text === null ? null : readSpec(text, { name, source: str(e.sourceType) ?? 'unknown', path, ...(str(e.summary) ? { summary: str(e.summary)!.trim() } : {}) });
+      if (spec) out.push(spec);
+    }
+    return { specs: out.sort((a, b) => (a.source === b.source ? a.name.localeCompare(b.name) : a.source === 'user' ? -1 : 1)) };
+  }
+
+  async function launch(l: RigLaunch): Promise<LaunchResult> {
+    const plan = l.plan === true;
+    if (acting) return { ok: false, plan, commands: [], error: 'busy' };
+    acting = true;
+    try {
+      const cwd = l.cwd === '~' ? home : l.cwd.startsWith('~/') ? join(home, l.cwd.slice(2)) : l.cwd;
+      if (!isAbsolute(cwd) || !files.exists(cwd)) return { ok: false, plan, commands: [], error: 'cwd_missing' };
+      const listed = await specs();
+      if (listed.error) return { ok: false, plan, commands: [], error: listed.error };
+      const spec = listed.specs.find(s => s.name === l.spec);
+      if (!spec) return { ok: false, plan, commands: [], error: 'spec_not_found' };
+      let source = spec.name, yaml: string, seats: number, dir: string | undefined;
+      const text = await files.read(spec.path);
+      // OpenRig names a rig after its spec's `name:` (0.6.14 has no `rig up --name`): another name is a composed copy too.
+      if (changesSpec(l) || l.save || l.name !== spec.name) {
+        const composed = composeSpec(parseYaml(text), dirname(spec.path), l);
+        dir = join(rigsDir, l.name);
+        await files.copyDir(dirname(spec.path), dir);
+        await files.write(join(dir, 'rig.yaml'), composed.yaml);
+        source = join(dir, 'rig.yaml'); yaml = composed.yaml; seats = composed.seats;
+      } else { yaml = text; seats = specSeats(spec); }
+      const commands: string[][] = [['up', source, '--cwd', cwd, ...(plan ? ['--plan'] : ['--yes']), '--json']];
+      if (!plan && l.save && dir) commands.push(['specs', 'add', dir, '--json']);
+      const shown = commands.map(showCommand);
+      let output = '';
+      for (const args of commands) {
+        const r = await run(args, plan ? STATUS_MS * 4 : ACTION_MS.up!);
+        if (r.code === null) return { ok: false, plan, commands: shown, yaml, seats, error: 'not_installed' };
+        output = `${r.stdout}${r.stderr}`.trim().slice(-4000);
+        if (r.code !== 0) { const error = failure(r); log(`openrig: ${showCommand(args)} failed: ${error}`); return { ok: false, plan, commands: shown, yaml, seats, output, error }; }
+      }
+      log(`openrig: ${shown.join(' && ')}`);
+      const check = plan ? readCheck(output) : undefined;
+      return { ok: true, plan, commands: shown, yaml, seats, ...(output ? { output } : {}), ...(check ? { check } : {}) };
+    } finally {
+      acting = false;
+      if (!plan) last = undefined;
+    }
+  }
+
+  return { state, act, specs, launch };
 }

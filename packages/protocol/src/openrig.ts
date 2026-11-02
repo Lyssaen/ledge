@@ -104,3 +104,48 @@ export function rigCommands(a: OpenRigAction): string[][] {
 /** How a command reads in a front: `rig down starter --snapshot`, without the `--json` Ledge adds for itself. */
 export const showRigCommand = (args: string[]): string => ['rig', ...args.filter(x => x !== '--json')].join(' ');
 
+
+// ── Lot 2: launching a rig (docs/mockups/ledge-openrig.html, view 6) ──
+
+/** A seat of a spec, as the launch form shows it: its role (`pod.member`), its harness, its model when the spec sets one, the agent it runs. */
+export const RigSpecMemberSchema = z.object({ id: z.string(), runtime: z.string(), model: z.string().optional(), agent: z.string() });
+export const RigSpecPodSchema = z.object({ id: z.string(), label: z.string().optional(), members: z.array(RigSpecMemberSchema) });
+/** A rig spec of the machine's library: `source` `builtin` (shipped with OpenRig) or `user` (the person's own). */
+export const RigSpecSchema = z.object({
+  name: z.string(), source: z.string(), summary: z.string().optional(), path: z.string(),
+  pods: z.array(RigSpecPodSchema), edges: z.number().int().min(0)
+});
+export type RigSpec = z.infer<typeof RigSpecSchema>;
+
+/** A front asks a machine for its rig specs. */
+export const OpenRigSpecsSchema = z.object({ type: z.literal('openrig.specs'), requestId: z.string().min(1).max(100), machineId: z.string().optional() });
+/** The machine's rig specs; `error`: `daemon_stopped` (OpenRig must run to list them), `not_installed`, or the fleet's `offline` / `outdated`. */
+export const OpenRigSpecListSchema = z.object({
+  type: z.literal('openrig.specList'), requestId: z.string(), machineId: z.string().optional(), specs: z.array(RigSpecSchema), error: z.string().optional()
+});
+
+/** A role as `pod.member`. */
+export const RigRoleSchema = z.string().min(3).max(201).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*\.[A-Za-z0-9][A-Za-z0-9_-]*$/, 'not a role');
+const RuntimeSchema = z.enum(['claude-code', 'codex']);
+/** What the launch form asks for. `seats`: how many of each role (1 when absent, 0 drops it); `runtimes` / `models` replace the spec's
+ *  for a role; `delegation`: how added seats delegate (`pairs`: build-2 → review-2, `all`: each to each); `save`: keep the composed
+ *  spec in the person's OpenRig library; `plan`: check only (`rig up --plan`). */
+export const RigLaunchSchema = z.object({
+  spec: RigNameSchema, cwd: z.string().min(1).max(4096), name: RigNameSchema,
+  seats: z.record(RigRoleSchema, z.number().int().min(0).max(9)).optional(),
+  runtimes: z.record(RigRoleSchema, RuntimeSchema).optional(),
+  models: z.record(RigRoleSchema, z.string().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:/@[\]=,+-]*$/)).optional(),
+  delegation: z.enum(['pairs', 'all']).optional(), save: z.boolean().optional(), plan: z.boolean().optional()
+});
+export type RigLaunch = z.infer<typeof RigLaunchSchema>;
+export const OpenRigLaunchSchema = z.object({ type: z.literal('openrig.launch'), requestId: z.string().min(1).max(100), launch: RigLaunchSchema, machineId: z.string().optional() });
+/** A launch (or its check) ended. `yaml`: the spec launched (composed or the library's); `seats`: how many; `output`: what `rig` printed
+ *  (the plan, for a check); `commands`: what was run; `error`: why it failed. */
+export const OpenRigLaunchedSchema = z.object({
+  type: z.literal('openrig.launched'), requestId: z.string(), machineId: z.string().optional(), ok: z.boolean(), plan: z.boolean(),
+  commands: z.array(z.string()), yaml: z.string().optional(), seats: z.number().int().optional(), output: z.string().optional(), error: z.string().optional(),
+  /** What `rig up --plan` concluded: its status (`planned`…), its errors and its warnings (one per seat without a permission policy…). */
+  check: z.object({ status: z.string(), errors: z.array(z.string()), warnings: z.array(z.string()) }).optional()
+});
+export type OpenRigLaunched = z.infer<typeof OpenRigLaunchedSchema>;
+export type OpenRigSpecList = z.infer<typeof OpenRigSpecListSchema>;

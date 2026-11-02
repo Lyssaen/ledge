@@ -112,7 +112,7 @@ export const fr = {
   },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
-    title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig',
+    title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig', rigLaunch: 'Lancer un rig',
     screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
@@ -187,6 +187,33 @@ export const fr = {
     done: (cmd: string) => `fait : ${cmd}`,
     failed: (why: string) => `échec : ${why}`,
     why: { busy: 'une autre action OpenRig est en cours sur cette machine', not_installed: 'OpenRig n’est pas installé', offline: 'machine hors ligne', outdated: 'daemon Ledge trop ancien' } as Record<string, string>
+  },
+  rigLaunch: {
+    title: 'Lancer un rig', launchKey: 'lancer un rig', count: 'nombre de sièges',
+    spec: '1 · Spec de départ', where: '2 · Où', roles: '3 · Sièges par rôle', delegation: '4 · Qui délègue à qui', preview: 'Aperçu · rig.yaml',
+    specHint: 'Le modèle de rig : ses pods, ses rôles, les liens entre eux.',
+    source: { user: 'mes specs', builtin: 'OpenRig' } as Record<string, string>,
+    seatsOf: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`,
+    folder: 'Dossier', name: 'Nom', folderHint: 'un dossier de cette machine, ~ accepté', projectFolder: (p: string) => `projet ${p}`,
+    model: 'modèle', defaultModel: 'par défaut', modelKey: 'modèle',
+    rolesHint: 'Un compteur à 3 donne build, build-2, build-3, identiques au premier.',
+    pairs: 'par paires', all: 'chaque siège → tous', pairsHint: 'build-2 → review-2', allHint: 'chaque build → tous les review',
+    save: 'enregistrer dans mes specs', notScaled: 'un siège par rôle : rien à déléguer de plus',
+    loading: 'Lecture des specs…', noSpecs: 'Aucune spec sur cette machine.',
+    daemonStopped: 'Démarrez le daemon OpenRig d’abord (D sur l’écran OpenRig).',
+    noCheck: 'p vérifie le lancement (rig up --plan), sans rien démarrer.',
+    checking: 'Vérification…', launching: 'Lancement…',
+    passes: (seats: number) => `✓ le plan passe · ${seats} ${plural(seats, 'siège', 'sièges')}`,
+    planStatus: (s: string) => `plan : ${s}`,
+    warning: (text: string, seats: string) => (seats ? `${text} (${seats})` : text),
+    launched: (name: string, n: number) => `Rig « ${name} » lancé · ${n} ${plural(n, 'siège', 'sièges')}.`,
+    check: 'vérifier (--plan)', launch: (n: number) => `lancer ${n} ${plural(n, 'siège', 'sièges')}`,
+    missing: { spec: 'Choisissez une spec.', cwd: 'Indiquez le dossier de travail.', name: 'Le nom du rig : lettres, chiffres, . _ - (pas de - au début).', seats: 'Au moins un siège.' },
+    why: {
+      busy: 'Une autre action OpenRig est en cours sur cette machine.', cwd_missing: 'Ce dossier n’existe pas sur la machine.', spec_not_found: 'Cette spec n’est plus dans la bibliothèque.',
+      daemon_stopped: 'Démarrez le daemon OpenRig d’abord (D sur l’écran OpenRig).', not_installed: 'OpenRig n’est pas installé sur cette machine.',
+      offline: 'Machine hors ligne.', outdated: 'Le daemon Ledge de cette machine ne sait pas lancer de rig : mettez-le à jour.'
+    } as Record<string, string>
   },
   small: {
     tooSmall: (w: number, h: number) => `Fenêtre trop petite : ${w}×${h}`, atLeast: (w: number, h: number) => `il faut au moins ${w}×${h}`,

@@ -970,6 +970,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
       case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
       case 'openrig.status': return reply({ type: 'openrig.state', requestId: msg.requestId, state: await openrig.state() });
+      case 'openrig.specs': return reply({ type: 'openrig.specList', requestId: msg.requestId, ...await openrig.specs() });
+      case 'openrig.launch': {
+        const done = await openrig.launch(msg.launch);
+        reply({ type: 'openrig.launched', requestId: msg.requestId, ...done });
+        if (!done.plan && done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
+        return;
+      }
       case 'openrig.act': {
         const done = await openrig.act(msg.action);
         reply({ type: 'openrig.done', requestId: msg.requestId, ...done });

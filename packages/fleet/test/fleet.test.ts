@@ -383,6 +383,22 @@ describe('multi-machine connections', () => {
     ]);
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('routes the spec list and a launch to their machine, answers them offline and outdated', () => {
+    const { client, server, got } = setup();
+    const rig = () => got.filter(m => m.type === 'openrig.specList' || m.type === 'openrig.launched');
+    client.send({ type: 'openrig.specs', requestId: 's1', machineId: 'server' });
+    client.send({ type: 'openrig.launch', requestId: 'l1', machineId: 'server', launch: { spec: 'starter', cwd: '/w', name: 'starter', plan: true } });
+    expect(server.sent).toEqual([{ type: 'openrig.specs', requestId: 's1' }, { type: 'openrig.launch', requestId: 'l1', launch: { spec: 'starter', cwd: '/w', name: 'starter', plan: true } }]);
+    server.emit({ type: 'openrig.specList', requestId: 's1', specs: [] });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.launch' });
+    expect(rig()).toEqual([
+      { type: 'openrig.specList', requestId: 's1', machineId: 'server', specs: [] },
+      { type: 'openrig.launched', requestId: 'l1', machineId: 'server', ok: false, plan: false, commands: [], error: 'outdated' }
+    ]);
+    server.set('unreachable');
+    client.send({ type: 'openrig.specs', requestId: 's2', machineId: 'server' });
+    expect(rig().at(-1)).toEqual({ type: 'openrig.specList', requestId: 's2', machineId: 'server', specs: [], error: 'offline' });
+  });
   it('answers a repos.scan for an offline machine, and one pending on a machine that drops, with error offline', () => {
     const { client, server, got } = setup();
     client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });

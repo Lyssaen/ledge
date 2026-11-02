@@ -6,7 +6,7 @@ import { ATTACHMENTS_MAX, AttachmentDataSchema, AttachmentErrorSchema, Attachmen
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
-import { OpenRigActSchema, OpenRigDoneSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
+import { OpenRigActSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
@@ -105,6 +105,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ModelsListingSchema,
   OpenRigStateMessageSchema,
   OpenRigDoneSchema,
+  OpenRigSpecListSchema,
+  OpenRigLaunchedSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
    *  from daemons older than the auto-update. */
@@ -186,6 +188,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ModelsListSchema,
   OpenRigStatusSchema,
   OpenRigActSchema,
+  OpenRigSpecsSchema,
+  OpenRigLaunchSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.
    *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields

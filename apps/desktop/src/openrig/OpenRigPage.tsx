@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import { useOpenRig, type OpenRigView } from '@ledge/fleet/openrig';
-import type { OpenRigAction, OpenRigState, Rig } from '@ledge/protocol';
+import type { OpenRigAction, OpenRigState, Projects, Rig } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -9,6 +9,7 @@ import type { NavAction } from '../nav/state';
 import { cls } from '../shell/cls';
 import { Modal } from '../shell/Modal';
 import { openUrl } from '../tauri/bridge';
+import { RigLaunchForm } from './RigLaunchForm';
 import { asksFirst, commandsOf, isRunning, kernelRig, listedRigs, rigOf, targetOf, workingSeats } from './model';
 
 export const OPENRIG_INSTALL_URL = 'https://github.com/mvschwarz/openrig#readme';
@@ -21,13 +22,15 @@ const Dot = ({ tone }: { tone: Tone }) => <span className={`or-dot or-${tone}`} 
  * OpenRig on a machine (docs/mockups/ledge-openrig.html, view 1): the machines on top, the daemon and the kernel, then
  * the rigs, each unfolding its seats. A stop or a restart asks first (view 2); every action shows the `rig` command it runs.
  */
-export function OpenRigPage({ client, machines, machine, dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; dispatch: (a: NavAction) => void }) {
+export function OpenRigPage({ client, machines, machine, projects = null, dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; projects?: Projects | null; dispatch: (a: NavAction) => void }) {
   const { t, lang } = useI18n();
   const o = t.openrig;
   const shown = machines.find(m => m.id === machine) ?? machines.find(m => m.id === 'local') ?? machines[0];
   const id = shown?.id ?? 'local';
   const rig = useOpenRig(client, shown?.ready === false ? null : id);
   const [ask, setAsk] = useState<OpenRigAction | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const [launched, setLaunched] = useState<string | null>(null);
   const run = (a: OpenRigAction) => { if (asksFirst(a)) setAsk(a); else void rig.act(a); };
   const label = shown?.label ?? id;
   return (
@@ -43,8 +46,12 @@ export function OpenRigPage({ client, machines, machine, dispatch }: { client: D
         <span className="or-fill" />
         {rig.state && <small className="or-meta">{rig.state.version ? `${o.version(rig.state.version)} · ` : ''}{o.updated(new Date(rig.state.at).toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-GB'))}</small>}
         <Button variant="ghost" size="sm" aria-label={o.refresh} title={o.refresh} onClick={rig.refresh} disabled={shown?.ready === false}><Icon d={ICONS.refresh.d} size={14} /></Button>
+        {rig.state?.installed && !launching && <Button size="sm" onClick={() => { setLaunched(null); setLaunching(true); }}><Icon d={ICONS.plus.d} size={13} />{o.launch.open}</Button>}
       </div>
-      <Body view={rig} machine={shown} onAct={run} />
+      {launched && !launching && <p className="or-status or-ok" role="status"><Icon d={ICONS.check.d} size={13} />{o.launch.launched(launched)}</p>}
+      {launching
+        ? <RigLaunchForm client={client} machine={id} machineLabel={label} projects={projects} onClose={() => setLaunching(false)} onLaunched={name => { setLaunching(false); setLaunched(name); rig.refresh(); }} />
+        : <Body view={rig} machine={shown} onAct={run} />}
       {ask && rig.state && <Confirm action={ask} state={rig.state} machine={label} onCancel={() => setAsk(null)} onConfirm={a => { setAsk(null); void rig.act(a); }} />}
     </div>
   );

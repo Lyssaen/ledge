@@ -111,7 +111,7 @@ export const en: Messages = {
     launching: 'Launching…', launched: name => `✓ ${name} is started`
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', rigLaunch: 'Launch a rig', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
     capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,
@@ -179,6 +179,33 @@ export const en: Messages = {
     done: cmd => `done: ${cmd}`,
     failed: why => `failed: ${why}`,
     why: { busy: 'another OpenRig action runs on this machine', not_installed: 'OpenRig is not installed', offline: 'machine offline', outdated: 'Ledge daemon too old' }
+  },
+  rigLaunch: {
+    title: 'Launch a rig', launchKey: 'launch a rig', count: 'number of seats',
+    spec: '1 · Starting spec', where: '2 · Where', roles: '3 · Seats per role', delegation: '4 · Who delegates to whom', preview: 'Preview · rig.yaml',
+    specHint: 'The rig’s model: its pods, its roles, the links between them.',
+    source: { user: 'my specs', builtin: 'OpenRig' },
+    seatsOf: n => `${n} ${plural(n, 'seat', 'seats')}`,
+    folder: 'Folder', name: 'Name', folderHint: 'a folder of this machine, ~ accepted', projectFolder: p => `project ${p}`,
+    model: 'model', defaultModel: 'default', modelKey: 'model',
+    rolesHint: 'A counter at 3 gives build, build-2, build-3, the same as the first.',
+    pairs: 'in pairs', all: 'each seat → all', pairsHint: 'build-2 → review-2', allHint: 'each build → every review',
+    save: 'save in my specs', notScaled: 'one seat per role: nothing more to delegate',
+    loading: 'Reading the specs…', noSpecs: 'No spec on this machine.',
+    daemonStopped: 'Start the OpenRig daemon first (D on the OpenRig screen).',
+    noCheck: 'p checks the launch (rig up --plan) without starting anything.',
+    checking: 'Checking…', launching: 'Launching…',
+    passes: seats => `✓ the plan passes · ${seats} ${plural(seats, 'seat', 'seats')}`,
+    planStatus: s => `plan: ${s}`,
+    warning: (text, seats) => (seats ? `${text} (${seats})` : text),
+    launched: (name, n) => `Rig “${name}” launched · ${n} ${plural(n, 'seat', 'seats')}.`,
+    check: 'check (--plan)', launch: n => `launch ${n} ${plural(n, 'seat', 'seats')}`,
+    missing: { spec: 'Pick a spec.', cwd: 'Give the working folder.', name: 'The rig’s name: letters, digits, . _ - (no leading -).', seats: 'At least one seat.' },
+    why: {
+      busy: 'Another OpenRig action runs on this machine.', cwd_missing: 'This folder does not exist on the machine.', spec_not_found: 'This spec is no longer in the library.',
+      daemon_stopped: 'Start the OpenRig daemon first (D on the OpenRig screen).', not_installed: 'OpenRig is not installed on this machine.',
+      offline: 'Machine offline.', outdated: 'This machine’s Ledge daemon cannot launch a rig: update it.'
+    }
   },
   small: {
     tooSmall: (w, h) => `Window too small: ${w}×${h}`, atLeast: (w, h) => `needs at least ${w}×${h}`,
