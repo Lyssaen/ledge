@@ -58,7 +58,8 @@ export function Sidebar(p: {
   const hasRigs = p.sessions.some(s => s.rig && s.state !== 'exited');
   // « Projets » or « Rigs »: one or the other (while Ledge follows no OpenRig seat, the projects).
   const byRig = hasRigs && grouping === 'rigs';
-  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
+  // An OpenRig seat is never in the projects' tree: the « Rigs » view shows it (« À toi » too, when it waits).
+  const groups = useMemo(() => treeModel(p.sessions.filter(s => !s.rig), p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
   // A project without a session stays out of the tree; it shows again while a session is dragged (to be dropped on it)
   // and while it is the filter.
   const shownGroups = useMemo(() => groups.filter(g => g.branches.some(b => b.sessions.length > 0) || !!p.filing.dragging || (g.id !== null && base.project === g.id)),
