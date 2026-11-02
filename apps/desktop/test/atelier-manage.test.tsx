@@ -17,7 +17,8 @@ const nova = fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working'
 const kit = fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' });
 const SESSIONS = [otto, bix, cleo, nova, kit];
 
-const sent = (d: MockDaemon) => d.received.filter(m => m.type !== 'snapshot.request');
+// The sidebar's OpenRig reads (openrig.status) are background polling, not an action.
+const sent = (d: MockDaemon) => d.received.filter(m => m.type !== 'snapshot.request' && m.type !== 'openrig.status');
 /** J walks the agents; stops on the one named. */
 async function walkTo(user: { keyboard(k: string): Promise<void> }, name: string) {
   for (let i = 0; i < 6 && document.activeElement !== seat(name); i++) await user.keyboard('j');

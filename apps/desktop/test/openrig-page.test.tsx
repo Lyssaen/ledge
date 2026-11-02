@@ -101,4 +101,15 @@ describe('the OpenRig page', () => {
     expect(nav.place).toMatchObject({ kind: 'openrig', machine: 'ec2' });
     expect(navReducer(nav, { type: 'escape' }).place.kind).toBe('overview');
   });
+  it('arriving from the sidebar opens the launch form, or a running rig’s seats (sidebar tidy)', () => {
+    const f = fake();
+    const launch = render(<LangProvider lang="fr"><OpenRigPage client={f.client} machines={MACHINES} open={{ launch: true }} dispatch={vi.fn()} /></LangProvider>);
+    answer(f, RUNNING);
+    expect(document.querySelector('.or-launch')).toHaveAttribute('aria-label', 'Lancer un rig');
+    launch.unmount();
+    const g = fake();
+    render(<LangProvider lang="fr"><OpenRigPage client={g.client} machines={MACHINES} open={{ reseat: 'starter' }} dispatch={vi.fn()} /></LangProvider>);
+    answer(g, RUNNING);
+    expect(screen.getByRole('dialog', { name: 'Sièges du rig « starter » · Local' })).toBeVisible();
+  });
 });
