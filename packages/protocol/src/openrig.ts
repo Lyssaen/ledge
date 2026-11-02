@@ -230,3 +230,75 @@ export const OpenRigReseatedSchema = z.object({
   links: z.number().int().optional(), linksUnsupported: z.boolean().optional()
 });
 export type OpenRigReseated = z.infer<typeof OpenRigReseatedSchema>;
+
+// ── « À toi » : what OpenRig asks or tells the person (docs/vision/ledge-human-channel-contract.md, docs/mockups/ledge-human-operator-ab.html) ──
+
+/** The longest request text a front receives; a longer one is cut and says so. */
+export const HUMAN_ASK_BODY_MAX = 16_000;
+/** At most this many open requests are sent, the most recent first. */
+export const HUMAN_ASKS_MAX = 200;
+
+/** A question with buttons (`--human-questions-file`): `answer` is the option chosen, or the words given, null while it waits. */
+export const HumanQuestionSchema = z.object({
+  id: z.string(), question: z.string(),
+  options: z.array(z.object({ id: z.string(), label: z.string(), recommended: z.boolean() })),
+  answer: z.string().nullable()
+});
+/** One open OpenRig row for the person. `decision`: an ask addressed to them; `update`: a piece of news, closed by « Vu »;
+ *  `parked`: a seat's own row blocked on them, settled with their words. `from.seat`: who asked (the parked row's owner). */
+export const HumanAskSchema = z.object({
+  id: z.string(), kind: z.enum(['decision', 'update', 'parked']), alert: z.boolean(), priority: z.enum(['routine', 'urgent', 'critical']),
+  from: z.object({ seat: z.string(), rig: z.string().nullable(), role: z.string().nullable() }),
+  summary: z.string(), body: z.string(), bodyTruncated: z.boolean(), detail: z.string().nullable(), evidenceRef: z.string().nullable(),
+  questions: z.array(HumanQuestionSchema), createdAt: z.string(), updatedAt: z.string()
+});
+export type HumanAsk = z.infer<typeof HumanAskSchema>;
+
+/** Whether the rigs can reach the person through Ledge: `ready` OpenRig runs and a person is registered; `no_person` none is (Ledge is
+ *  not OpenRig's human channel yet); `openrig_stopped`; `not_installed`; `unreachable` its daemon runs but its API does not answer. */
+export const HumanChannelSchema = z.object({
+  state: z.enum(['ready', 'no_person', 'openrig_stopped', 'not_installed', 'unreachable']),
+  person: z.object({ address: z.string(), name: z.string() }).nullable(),
+  /** Slack still posts the person's asks too. */ slack: z.boolean(),
+  message: z.string().optional()
+});
+export type HumanChannel = z.infer<typeof HumanChannelSchema>;
+
+/** A front asks a machine for what waits on the person. */
+export const OpenRigAsksSchema = z.object({ type: z.literal('openrig.asks'), requestId: z.string().min(1).max(100), machineId: z.string().optional() });
+/** What waits on the person, whole: the answer to `openrig.asks` (`requestId`), or pushed to every front when it changes. `error`: the
+ *  fleet's `offline` / `outdated`, and then nothing else is known. */
+export const OpenRigAsksChangedSchema = z.object({
+  type: z.literal('openrig.asksChanged'), requestId: z.string().optional(), machineId: z.string().optional(),
+  channel: HumanChannelSchema.optional(), asks: z.array(HumanAskSchema), truncated: z.boolean().optional(), error: z.enum(['offline', 'outdated']).optional()
+});
+
+/** The person's answer: a button (`choice`, once per question), their words on an ask (`words`), « Vu » on a piece of news (`seen`),
+ *  or their decision on a row parked on them (`resolve`). */
+export const HumanAnswerSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('choice'), questionId: z.string().min(1).max(200), optionId: z.string().min(1).max(200) }),
+  z.object({ kind: z.literal('words'), text: z.string().trim().min(1).max(8000) }),
+  z.object({ kind: z.literal('seen') }),
+  z.object({ kind: z.literal('resolve'), text: z.string().trim().min(1).max(8000) })
+]);
+export type HumanAnswer = z.infer<typeof HumanAnswerSchema>;
+export const OpenRigAnswerSchema = z.object({
+  type: z.literal('openrig.answer'), requestId: z.string().min(1).max(100), machineId: z.string().optional(),
+  qitemId: z.string().min(1).max(200), answer: HumanAnswerSchema
+});
+/** Why an answer was not taken. `closed`: the row is already closed (drop it, no retry); `not_closed`: the answer went back but the
+ *  row changed meanwhile (retry is safe); `refused`: OpenRig refused it (`message` says why); `unreachable` / `openrig_stopped`: not
+ *  sent, retry; `offline` / `outdated`: the fleet's. */
+export const HumanAnswerErrorSchema = z.enum(['not_found', 'closed', 'refused', 'not_closed', 'unreachable', 'openrig_stopped', 'offline', 'outdated']);
+export type HumanAnswerError = z.infer<typeof HumanAnswerErrorSchema>;
+/** An answer's end. `recorded`: a choice kept, other questions wait (`remaining`); `answered`: returned to the seat as `replyId`, which
+ *  is woken, and the row closed; `already`: answered before, nothing new went. Retrying is sending the same answer again. */
+export const OpenRigAnsweredSchema = z.object({
+  type: z.literal('openrig.answered'), requestId: z.string(), machineId: z.string().optional(), qitemId: z.string(), ok: z.boolean(),
+  outcome: z.enum(['recorded', 'answered', 'already']).optional(), remaining: z.array(z.string()).optional(), replyId: z.string().optional(),
+  error: HumanAnswerErrorSchema.optional(), message: z.string().optional()
+});
+export type OpenRigAsks = z.infer<typeof OpenRigAsksSchema>;
+export type OpenRigAsksChanged = z.infer<typeof OpenRigAsksChangedSchema>;
+export type OpenRigAnswer = z.infer<typeof OpenRigAnswerSchema>;
+export type OpenRigAnswered = z.infer<typeof OpenRigAnsweredSchema>;

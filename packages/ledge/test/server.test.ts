@@ -2159,7 +2159,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigAsks: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2623,6 +2623,31 @@ describe('server: OpenRig', () => {
     expect(await c.next('openrig.roleFileContent')).toEqual({ type: 'openrig.roleFileContent', requestId: 'r3', roleId: 'f95e', path: '/s/lead/guidance/role.md', content: '# Rôle', size: 7 });
     expect(asked).toEqual(['roles', 'role nope', 'file f95e /s/lead/guidance/role.md']);
     await expect(other.next('openrig.roleList', 150)).rejects.toThrow();
+    c.close(); other.close(); await srv2.close();
+  });
+});
+
+describe('server: « À toi »', () => {
+  it('openrig.asks answers its asker and starts following; a change goes to every front; openrig.answer answers its asker', async () => {
+    const list = { channel: { state: 'ready' as const, person: { address: 'ledge@external', name: 'Ledge' }, slack: false }, asks: [] };
+    let push: ((l: typeof list) => void) | null = null;
+    const answered: string[] = [];
+    const srv2 = await startServer({ store, tmux, port: 0, human: {
+      async list() { return list; },
+      async answer(qitemId, a) { answered.push(`${qitemId} ${a.kind}`); return { qitemId, ok: true, outcome: 'answered' as const, replyId: 'qitem-reply' }; },
+      start(fn) { push = fn; }, stop() {}
+    } });
+    const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
+    await c.next('snapshot'); await other.next('snapshot');
+    expect(push).toBeNull();
+    c.send({ type: 'openrig.asks', requestId: 'r1' });
+    expect(await c.next('openrig.asksChanged')).toEqual({ type: 'openrig.asksChanged', requestId: 'r1', ...list });
+    expect(push).not.toBeNull();
+    push!({ ...list, channel: { ...list.channel, slack: true } });
+    expect((await other.next('openrig.asksChanged')).channel?.slack).toBe(true);
+    c.send({ type: 'openrig.answer', requestId: 'r2', qitemId: 'qitem-1', answer: { kind: 'words', text: 'Oui' } });
+    expect(await c.next('openrig.answered')).toEqual({ type: 'openrig.answered', requestId: 'r2', qitemId: 'qitem-1', ok: true, outcome: 'answered', replyId: 'qitem-reply' });
+    expect(answered).toEqual(['qitem-1 words']);
     c.close(); other.close(); await srv2.close();
   });
 });
