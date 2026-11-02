@@ -46,6 +46,24 @@ describe('the Équipes tab on an OpenRig phone', () => {
     expect(within(bar).getAllByRole('link').map(a => a.textContent)).toEqual(['Ledge', 'À toi', 'Équipes', 'Projets']);
     expect(within(bar).getByRole('link', { name: 'Équipes' })).toHaveAttribute('aria-current', 'page');
   });
+  it('links a live team raised from a definition to its room in « Équipes » (lot F I4)', () => {
+    const t = setup();
+    const snap = snapshot([], 'PC-Desan', undefined, { confirm: true, chat: true });
+    if (snap.type !== 'snapshot') throw new Error();
+    t.deliver({ ...snap, daemon: { ...snap.daemon, openrig: true as const, teamsEngine: 'ledge' as const },
+      rigs: [{ key: 'k1', name: 'Revue paper-service', engine: 'ledge', teamId: 'team-a1b2', project: 'paper-service', offProject: false, lifecycle: 'running', kernel: false, seats: [], repos: 0 }] });
+    render(<Teams store={t.store} />);
+    act(() => { t.deliver({ type: 'teams.catalog', catalog: catalog() }); t.deliver({ type: 'teams', teams: [live()] }); });
+    expect(screen.getByRole('link', { name: 'Revue paper-service est levée · la suivre dans Équipes ›' })).toHaveAttribute('href', '#/rig/k1/seats');
+  });
+  it('is titled « Modèles », the screen « Modèles » leads to (lot F M3)', () => {
+    const t = setup();
+    const snap = snapshot([], 'PC-Desan', undefined, { confirm: true, chat: true });
+    t.deliver(snap.type === 'snapshot' ? { ...snap, daemon: { ...snap.daemon, openrig: true as const } } : snap);
+    render(<Teams store={t.store} />);
+    expect(screen.getByRole('heading', { name: 'Modèles' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Équipes' })).toBeNull();
+  });
 });
 
 describe('the Équipes tab', () => {

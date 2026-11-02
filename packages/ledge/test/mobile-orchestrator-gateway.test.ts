@@ -26,6 +26,37 @@ describe('phone OpenRig gateway', () => {
     g.gw.forward({ type: 'rig.updated', rig: rig('local') }); await flush();
     expect(snaps()).toBe(before + 2);
   });
+  it('a Ledge team reaches the phone\'s snapshot: engine ledge, its team id, its template, no path (lot F M5)', async () => {
+    const team: Rig = { id: 'team-a1b2', machine: 'local', name: 'Revue', cwd: '/home/private/repo', projectId: null, offProject: true, lifecycle: 'stopped', kernel: false, spec: 'revue-mr', engine: 'ledge', repos: [],
+      seats: [{ ref: 'leader@team-a1b2', address: '@leader', name: 'Otto', runtime: 'claude', state: 'stopped' }] };
+    let shown: Rig[] = [];
+    const g = setup({ deps: { openrig: { ...data(), rigs: () => shown }, teamsCoalesceMs: 10 } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
+    expect(g.got('dev1').findLast(m => m.type === 'snapshot')).toMatchObject({ rigs: [] });
+    shown = [team];
+    g.gw.forward({ type: 'rig.updated', rig: team });
+    await new Promise(r => setTimeout(r, 40)); await flush();
+    const snap = g.got('dev1').findLast(m => m.type === 'snapshot');
+    expect(snap).toMatchObject({ rigs: [{ key: rigKey('local', 'team-a1b2'), name: 'Revue', engine: 'ledge', teamId: 'team-a1b2', spec: 'revue-mr', lifecycle: 'stopped', seats: [{ address: '@leader' }] }] });
+    expect(JSON.stringify(snap)).not.toMatch(/machine|cwd|\/home\/private/);
+  });
+  it('an OpenRig rig carries no team id', async () => {
+    const g = setup({ deps: { openrig: data() } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
+    const snap = g.got('dev1').find(m => m.type === 'snapshot');
+    expect(JSON.stringify(snap)).not.toContain('teamId');
+  });
+  it('says the teams engine in force in the snapshot, and sends a new snapshot when it changes (lot F I2)', async () => {
+    let engine: 'ledge' | 'openrig' = 'ledge';
+    const g = setup({ deps: { openrig: data(), teamsEngine: () => engine } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
+    expect(g.got('dev1').findLast(m => m.type === 'snapshot')).toMatchObject({ daemon: { teamsEngine: 'ledge' } });
+    engine = 'openrig';
+    g.gw.forward({ type: 'teams.engine', engine: 'openrig', openrigAvailable: true, running: false }); await flush();
+    expect(g.got('dev1').findLast(m => m.type === 'snapshot')).toMatchObject({ daemon: { teamsEngine: 'openrig' } });
+  });
+  it('says no teams engine for a daemon that does not give one', async () => {
+    const g = setup({ deps: { openrig: data() } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
+    const snap = g.got('dev1').find(m => m.type === 'snapshot');
+    expect(snap?.type === 'snapshot' && snap.daemon).not.toHaveProperty('teamsEngine');
+  });
   it('sends bounded snapshots without routing or path information', async () => {
     const g = setup({ deps: { openrig: data() } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
     const snap = g.got('dev1').find(m => m.type === 'snapshot'); expect(snap).toMatchObject({ daemon: { openrig: true }, rigs: [{ key: rigKey('local', 'same') }, { key: rigKey('remote', 'same') }] });

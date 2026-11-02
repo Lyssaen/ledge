@@ -111,3 +111,91 @@ describe('OpenRig screens', () => {
  });
  it('sends all answers together without a passkey', () => { const t = setup(); t.deliver(initial()); render(<EscalationPage store={t.store} id="e1" />); const send = screen.getByRole('button', { name: 'Envoyer la réponse' }); expect(send).toBeDisabled(); fireEvent.click(screen.getByLabelText('SQLite')); fireEvent.click(screen.getByLabelText('Oui')); fireEvent.click(send); expect(t.of('escalation.answer')).toMatchObject([{ id: 'e1', answers: { q1: 'x', q2: 'a' } }]); expect(t.of('confirm.prepare')).toEqual([]); });
 });
+
+/** A daemon in Ledge mode (lot F): its teams are Ledge teams, OpenRig is only probed. */
+function ledgeMode(rig: Partial<PhoneRig> = {}) {
+  const m = initial();
+  return { ...m, daemon: { ...m.daemon, teamsEngine: 'ledge' as const }, openrigStatus: { state: 'stopped' as const, version: '0.6.14' },
+    rigs: [{ key: 'k1', name: 'Revue', spec: 'revue-mr', engine: 'ledge' as const, teamId: 'team-a1b2', project: 'ledge', offProject: false, lifecycle: 'running' as const, kernel: false, repos: 0,
+      seats: [{ ref: 'leader@team-a1b2', address: '@leader', name: 'Otto', runtime: 'claude', state: 'working' as const }], ...rig }], escalations: [] };
+}
+const openrigMode = () => { const m = initial(); return { ...m, daemon: { ...m.daemon, teamsEngine: 'openrig' as const }, openrigStatus: { state: 'running' as const, version: '0.6.14' }, rigs: [{ ...m.rigs[0]!, spec: 'web-63', engine: 'openrig' as const }] }; };
+
+describe('Équipes follows the engine (lot F I2)', () => {
+  it('in Ledge mode, « + » opens the phone\'s team launch, no OpenRig kernel status, and a team card says « modèle »', () => {
+    const t = setup(); t.deliver(ledgeMode()); render(<Rigs store={t.store} />);
+    expect(screen.getByRole('link', { name: 'Lancer une équipe…' })).toHaveAttribute('href', '#/team/new');
+    expect(screen.queryByText(/noyau OpenRig/)).toBeNull();
+    expect(screen.getByText(/modèle revue-mr/)).toBeInTheDocument();
+    expect(screen.queryByText(/spec revue-mr/)).toBeNull();
+  });
+  it('in OpenRig mode, « + » keeps OpenRig\'s launch, the kernel status shows, and a rig card says « spec »', () => {
+    const t = setup(); t.deliver(openrigMode()); render(<Rigs store={t.store} />);
+    expect(screen.getByRole('link', { name: 'Lancer une équipe…' })).toHaveAttribute('href', '#/new-rig');
+    expect(screen.getByText(/noyau OpenRig 0\.6\.14 actif/)).toBeInTheDocument();
+    expect(screen.getByText(/spec web-63/)).toBeInTheDocument();
+  });
+  it('a daemon that does not say its engine is read as OpenRig', () => {
+    const t = setup(); t.deliver({ ...initial(), openrigStatus: { state: 'running' as const } }); render(<Rigs store={t.store} />);
+    expect(screen.getByRole('link', { name: 'Lancer une équipe…' })).toHaveAttribute('href', '#/new-rig');
+    expect(screen.getByText(/noyau OpenRig actif/)).toBeInTheDocument();
+  });
+  it('a Ledge team card says « modèle » by its own engine, and never « dépôts trouvés »', () => {
+    const t = setup(); const m = openrigMode(); t.deliver({ ...m, rigs: [{ ...ledgeMode().rigs[0]!, offProject: true, project: null }] }); render(<Rigs store={t.store} />);
+    expect(screen.getByText(/modèle revue-mr/)).toBeInTheDocument();
+    expect(screen.queryByText(/dépôts trouvés/)).toBeNull();
+  });
+  it('in Ledge mode, Ledge\'s « Lance une équipe… » (button and chip) opens the phone\'s team launch', () => {
+    const t = setup(); t.deliver(ledgeMode()); const view = render(<LedgeThread store={t.store} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Lance une équipe…' }));
+    expect(globalThis.location.hash).toBe('#/team/new');
+    expect(t.of('rig.prepare')).toEqual([]);
+    view.unmount();
+    t.deliver({ type: 'ledge.thread.item', item: { kind: 'ledge', id: 'i1', at, text: 'Bonjour' } });
+    render(<LedgeThread store={t.store} />);
+    expect(screen.getByRole('link', { name: 'Lance une équipe…' })).toHaveAttribute('href', '#/team/new');
+  });
+  it('in OpenRig mode, Ledge\'s « Lance une équipe… » keeps OpenRig\'s launch', () => {
+    const t = setup(); t.deliver(openrigMode()); t.deliver({ type: 'ledge.thread.item', item: { kind: 'ledge', id: 'i1', at, text: 'Bonjour' } });
+    render(<LedgeThread store={t.store} />);
+    expect(screen.getByRole('link', { name: 'Lance une équipe…' })).toHaveAttribute('href', '#/new-rig');
+  });
+  it('a Ledge team\'s room says « modèle », an OpenRig rig\'s says « spec »', () => {
+    const t = setup(); t.deliver(ledgeMode()); const view = render(<RigPage store={t.store} rigKey="k1" view="seats" />);
+    expect(screen.getByText(/modèle revue-mr/)).toBeInTheDocument();
+    view.unmount();
+    t.deliver(openrigMode()); render(<RigPage store={t.store} rigKey="abc" view="seats" />);
+    expect(screen.getByText(/spec web-63/)).toBeInTheDocument();
+  });
+});
+
+describe('a Ledge team\'s room reaches its live-team screen (lot F I4)', () => {
+  it('links « Gérer l\'équipe » to #/live/<teamId>; an OpenRig rig has no such link', () => {
+    const t = setup(); t.deliver(ledgeMode()); const view = render(<RigPage store={t.store} rigKey="k1" view="seats" />);
+    expect(screen.getByRole('link', { name: 'Gérer l’équipe' })).toHaveAttribute('href', '#/live/team-a1b2');
+    view.unmount();
+    t.deliver(openrigMode()); render(<RigPage store={t.store} rigKey="abc" view="seats" />);
+    expect(screen.queryByRole('link', { name: 'Gérer l’équipe' })).toBeNull();
+  });
+  it('finds the team by name and project when the daemon does not send its id', () => {
+    const t = setup(); const m = ledgeMode({ teamId: undefined }); t.deliver(m);
+    t.deliver({ type: 'teams', teams: [{ id: 'team-c3d4', name: 'Revue', project: 'ledge', state: 'active', seats: [{ role: 'leader', sessionId: null }], given: 0, done: 0 }] });
+    render(<RigPage store={t.store} rigKey="k1" view="seats" />);
+    expect(screen.getByRole('link', { name: 'Gérer l’équipe' })).toHaveAttribute('href', '#/live/team-c3d4');
+  });
+  it('a resting Ledge team offers « Reprendre », which sends team.resume, instead of « Arrêter l\'équipe… »', async () => {
+    const t = setup(); t.deliver(ledgeMode({ lifecycle: 'stopped' }));
+    const resume = vi.spyOn(t.store, 'resumeTeam').mockResolvedValue({ status: 'applied' });
+    render(<RigPage store={t.store} rigKey="k1" view="seats" />);
+    expect(screen.queryByRole('button', { name: 'Arrêter l’équipe…' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Reprendre' }));
+    expect(resume).toHaveBeenCalledWith('team-a1b2');
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Demande acceptée.'));
+  });
+  it('a running Ledge team keeps « Arrêter l\'équipe… » and offers no « Reprendre »', () => {
+    const t = setup(); t.deliver(ledgeMode()); render(<RigPage store={t.store} rigKey="k1" view="seats" />);
+    expect(screen.getByRole('button', { name: 'Arrêter l’équipe…' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reprendre' })).toBeNull();
+  });
+});
+

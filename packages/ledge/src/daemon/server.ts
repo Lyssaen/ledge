@@ -2392,7 +2392,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     challenges: createChallengeStore(),
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
-    teams: () => teams.all(), tasks: () => tasks.all(), contextNear: () => contextPrefs.near,
+    teams: () => teams.all(), tasks: () => tasks.all(), contextNear: () => contextPrefs.near, teamsEngine: () => teamsEngine,
     projectName: id => (id ? projects.projects.find(p => p.id === id)?.name ?? null : null),
     // A project's folder is its first local repo: only a project with one can be named by the phone.
     projectByName: name => projects.projects.find(p => p.name === name && p.repos.some(r => r.machine === 'local'))?.id ?? null,

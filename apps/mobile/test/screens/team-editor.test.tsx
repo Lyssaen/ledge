@@ -47,6 +47,7 @@ function open(mode: TeamEditorMode, { c = catalog(), teams = [team()], confirm =
   return { ...t, view, define, teamOp };
 }
 const NEW: TeamEditorMode = { kind: 'template', key: 'new' };
+const NO_LEADER = 'Il manque le siège @leader : ajoute-le pour lancer ou enregistrer.';
 const live: TeamEditorMode = { kind: 'live', teamId: 'team-a1b2' };
 const copyOf: TeamEditorMode = { kind: 'copy', teamId: 'team-a1b2' };
 const existing = (id = 'revue-mr', scope = 'home', project = ''): TeamEditorMode => ({ kind: 'template', key: `${scope}~${project}~${id}` });
@@ -317,13 +318,26 @@ describe('the team editor, a launch', () => {
     expect(globalThis.location.hash).toBe('#/agents');
   });
 
+  it('on an OpenRig-mode phone, a launch goes to « Équipes », where the team shows (lot F I2)', async () => {
+    const t = setup();
+    const snap = snapshot([], 'PC-Desan', undefined, { confirm: true, chat: true });
+    t.deliver(snap.type === 'snapshot' ? { ...snap, daemon: { ...snap.daemon, openrig: true as const, teamsEngine: 'ledge' as const } } : snap);
+    act(() => { t.deliver({ type: 'teams.catalog', catalog: catalog() }); t.deliver({ type: 'teams', teams: [] }); });
+    render(<TeamEditor store={t.store} mode={existing()} />);
+    const teamOp = vi.spyOn(t.store, 'teamOp').mockResolvedValue({ status: 'applied' });
+    pickProject('ledge');
+    await click(/^Lancer/);
+    expect(teamOp).toHaveBeenCalledOnce();
+    expect(globalThis.location.hash).toBe('#/rigs');
+  });
+
   it('launches an unsaved team without naming a template', async () => {
     const t = open(NEW);
     type('Nom', 'Neuve');
-    add('dev');
+    add('leader'); add('dev');
     pickProject('paper-service');
     await click(/^Lancer/);
-    expect(t.teamOp.mock.calls[0]![0]).toStrictEqual({ type: 'team.launch', project: 'paper-service', name: 'Neuve', seats: [{ role: 'dev' }] });
+    expect(t.teamOp.mock.calls[0]![0]).toStrictEqual({ type: 'team.launch', project: 'paper-service', name: 'Neuve', seats: [{ role: 'leader' }, { role: 'dev' }] });
   });
 
   it('a Dépôt team launches on its own project', async () => {
@@ -658,9 +672,41 @@ describe('the team editor, the lead rule', () => {
     type('Nom', 'Ma revue');
     add('qa');
     expect(save()).toBeDisabled();
-    expect(screen.getByText('Il manque le siège @leader : ajoute-le pour enregistrer.')).toBeInTheDocument();
+    expect(screen.getByText(NO_LEADER)).toBeInTheDocument();
     add('leader');
     expect(save()).toBeEnabled();
-    expect(screen.queryByText('Il manque le siège @leader : ajoute-le pour enregistrer.')).toBeNull();
+    expect(screen.queryByText(NO_LEADER)).toBeNull();
+  });
+
+  it('without a leader seat « Lancer l\'équipe » is disabled too, with the same reason (lot F M4)', () => {
+    const t = open(NEW);
+    type('Nom', 'Ma revue');
+    pickProject('ledge');
+    add('qa');
+    expect(launch()).toBeDisabled();
+    expect(screen.getByText(NO_LEADER)).toBeInTheDocument();
+    fireEvent.click(launch());
+    expect(t.teamOp).not.toHaveBeenCalled();
+    add('leader');
+    expect(launch()).toBeEnabled();
+  });
+
+  it('a live team\'s copy without its leader seat cannot be saved or launched, and says why (lot F M4)', () => {
+    open(copyOf);
+    pickProject('ledge');
+    remove('leader');
+    expect(save()).toBeDisabled();
+    expect(launch()).toBeDisabled();
+    expect(screen.getByText(NO_LEADER)).toBeInTheDocument();
+  });
+
+  it('a live team\'s composition without @leader cannot be saved, and says removing it is refused (lot F M4)', () => {
+    const t = open(live);
+    expect(save()).toBeEnabled();
+    remove('leader');
+    expect(save()).toBeDisabled();
+    expect(screen.getByText('Le siège @leader ne peut pas être retiré : une équipe garde son lead.')).toBeInTheDocument();
+    fireEvent.click(save());
+    expect(t.teamOp).not.toHaveBeenCalled();
   });
 });

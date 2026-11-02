@@ -7,8 +7,11 @@ const at = z.string().datetime();
 const op = z.string().uuid();
 const messageMax = 20_000;
 const toolTextMax = 2_048;
-export const PhoneRigSeatSchema = z.object({ ref: id, address: id, name: z.string().max(80), runtime: z.string().max(80), model: z.string().max(120).optional(), state: SeatStateSchema, contextPct: z.number().min(0).max(100).optional(), sessionId: id.optional() }).strict();
-export const PhoneRigSchema = z.object({ key, name: z.string().max(80), spec: z.string().max(80).optional(), engine: z.enum(['ledge', 'openrig']).optional(), project: z.string().max(80).nullable(), offProject: z.boolean(), branch: z.string().max(200).optional(), lifecycle: RigLifecycleSchema, kernel: z.boolean(), seats: z.array(PhoneRigSeatSchema).max(16), repos: z.number().int().nonnegative(), launch: z.object({ planId: id, goal: z.string().max(600), lead: id, startedAt: at, goalSentAt: at.optional(), lateNotice: z.literal(true).optional() }).strict().optional() }).strict();
+/** Server → phone records (a rig, its seats, its launch) are read without `.strict()`: the phone (relay) and the daemon (npm) ship on
+ *  different channels, and a field a newer daemon adds must not blank a whole snapshot. Unknown keys are dropped; the gateway builds
+ *  each record field by field (`toPhoneRig`), so nothing private is ever there to drop. What the phone sends stays strict. */
+export const PhoneRigSeatSchema = z.object({ ref: id, address: id, name: z.string().max(80), runtime: z.string().max(80), model: z.string().max(120).optional(), state: SeatStateSchema, contextPct: z.number().min(0).max(100).optional(), sessionId: id.optional() });
+export const PhoneRigSchema = z.object({ key, name: z.string().max(80), spec: z.string().max(80).optional(), engine: z.enum(['ledge', 'openrig']).optional(), /** A Ledge team's id (`team-…`): the phone opens its live-team screen with it. */ teamId: z.string().min(1).max(40).optional(), project: z.string().max(80).nullable(), offProject: z.boolean(), branch: z.string().max(200).optional(), lifecycle: RigLifecycleSchema, kernel: z.boolean(), seats: z.array(PhoneRigSeatSchema).max(16), repos: z.number().int().nonnegative(), launch: z.object({ planId: id, goal: z.string().max(600), lead: id, startedAt: at, goalSentAt: at.optional(), lateNotice: z.literal(true).optional() }).optional() });
 export type PhoneRig = z.infer<typeof PhoneRigSchema>;
 export const PhoneExchangeSchema = z.object({ id, rigKey: key, from: id, to: id, kind: z.enum(['message', 'task', 'handoff', 'ledge']), text: z.string().max(toolTextMax), at, cut: z.literal(true).optional() }).strict();
 export type PhoneExchange = z.infer<typeof PhoneExchangeSchema>;

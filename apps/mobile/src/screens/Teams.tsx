@@ -6,6 +6,7 @@ import { outcomeNote, type OutcomeNote } from '../model/teamsOutcome';
 import { requestsOf } from '../model/requests';
 import { closedTasks } from '../model/teams';
 import { href } from '../router';
+import { teamIdOf } from '../model/rigs';
 import { useMobile, type MobileStore } from '../state/store';
 import { Button, buttonClass } from '../ui/Button';
 import { Sheet } from '../ui/Dialog';
@@ -110,7 +111,7 @@ export function Teams({ store, onReconnect }: { store: MobileStore; onReconnect?
 
   return (
     <>
-      <Header title={copy.nav.teams} subtitle={catalog ? copy.teams.subtitle(catalog.templates.length, catalog.roles.length) : ''} link={linkView(state)} />
+      <Header title={state.openrig ? copy.nav.models : copy.nav.teams} subtitle={catalog ? copy.teams.subtitle(catalog.templates.length, catalog.roles.length) : ''} link={linkView(state)} />
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3"><OfflineBanner onReconnect={onReconnect} /></div>}
         {!catalog && (waited || state.catalogRefused ? (
@@ -140,9 +141,11 @@ export function Teams({ store, onReconnect }: { store: MobileStore; onReconnect?
                   </li>
                 ))}
               </ul>
-              {raised.map(t => (
-                <a key={t.id} href={href({ name: 'agents' })} className="block py-3 text-body text-info underline underline-offset-2">{copy.teams.live(t.name)}</a>
-              ))}
+              {raised.map(t => {
+                // On an OpenRig-mode phone the team lives in « Équipes » (its room); Agents shows no team there.
+                const room = state.openrig ? [...state.rigs.values()].find(r => teamIdOf(r, state.teams) === t.id) : undefined;
+                return <a key={t.id} href={href(room ? { name: 'rig', key: room.key, view: 'seats' } : { name: 'agents' })} className="block py-3 text-body text-info underline underline-offset-2">{room ? copy.teams.liveRoom(t.name) : copy.teams.live(t.name)}</a>;
+              })}
             </section>
             <section aria-label={copy.teams.rolesLabel}>
               <div className="flex items-center justify-between gap-2">

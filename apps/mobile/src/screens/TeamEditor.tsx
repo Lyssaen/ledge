@@ -172,8 +172,9 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
   // The lead rule is the daemon's too (it refuses the write with its own words); this is only the early notice.
   const hasLeader = seats.some(s => s.role === LEADER_ROLE);
   const canWrite = online && nameOk && seatsOk && hasLeader && (scope === 'home' || project !== '') && !changed.waiting && !gone && !handNamed;
-  const canLaunch = online && nameOk && seatsOk && project !== '';
-  const canCompose = online && seatsOk && !teamGone;
+  // The lead rule holds for every write of a team: a launch and a composition too (the daemon refuses them without @leader).
+  const canLaunch = online && nameOk && seatsOk && hasLeader && project !== '';
+  const canCompose = online && seatsOk && hasLeader && !teamGone;
 
   const projects = catalog?.projects ?? [];
   const projectOptions = project !== '' && !projects.includes(project) ? [project, ...projects] : projects;
@@ -211,7 +212,8 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
     if (!canLaunch) return;
     // A definition that was deleted meanwhile is no longer one to name.
     run(() => store.teamOp({ type: 'team.launch', project, name: name.trim(), seats: outSeats, ...(shown && !gone ? { template: shown.id } : {}) }),
-      { fallback: copy.chat.team.notLaunched, onNote: setNote, onApplied: () => navigate({ name: 'agents' }) });
+      // An OpenRig-mode phone shows the teams in « Équipes », not in Agents.
+      { fallback: copy.chat.team.notLaunched, onNote: setNote, onApplied: () => navigate(state.openrig ? { name: 'rigs' } : { name: 'agents' }) });
   };
   const compose = () => {
     if (!canCompose || mode.kind !== 'live' || !teamNow || !catalog) return;
@@ -310,7 +312,7 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
         </ul>
 
         <p className="mt-2 text-meta text-muted">{t.leaderRule}</p>
-        {isTemplate && !hasLeader && <p role="note" className="mt-1 text-small text-attention">{t.noLeader}</p>}
+        {!hasLeader && <p role="note" className="mt-1 text-small text-attention">{isLive && defaults.seats.some(s => s.role === LEADER_ROLE) ? t.leaderKept : t.noLeader}</p>}
 
         {seats.length < TEAM_SEATS_MAX && (
           <section aria-label={t.addRole}>

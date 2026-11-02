@@ -14,8 +14,37 @@ describe('phone OpenRig protocol', () => {
     expect(PhoneRigSchema.safeParse({ ...rig, engine: 'ledge' }).success).toBe(true);
     expect(PhoneRigSchema.safeParse({ ...rig, engine: 'openrig' }).success).toBe(true);
     expect(PhoneRigSchema.safeParse({ ...rig, engine: 'other' }).success).toBe(false);
-    expect(PhoneRigSchema.safeParse({ ...rig, cwd: '/private' }).success).toBe(false);
-    expect(PhoneRigSchema.safeParse({ ...rig, machine: 'remote' }).success).toBe(false);
+  });
+  it('reads a rig record with fields it does not know (a newer daemon) and keeps none of them (lot F M1)', () => {
+    const seat = { ref: 'dev@team-a1b2', address: '@dev', name: 'dev', runtime: 'claude', state: 'working', future: 1 };
+    const launch = { planId: 'p', goal: 'g', lead: '@lead', startedAt: at, future: 1 };
+    const parsed = PhoneRigSchema.parse({ ...rig, cwd: '/private', machine: 'remote', future: { x: 1 }, seats: [seat], launch });
+    expect(parsed).not.toHaveProperty('cwd');
+    expect(parsed).not.toHaveProperty('machine');
+    expect(parsed).not.toHaveProperty('future');
+    expect(parsed.seats[0]).not.toHaveProperty('future');
+    expect(parsed.launch).not.toHaveProperty('future');
+    const caps = Object.fromEntries(['claude', 'codex', 'cursor', 'omp'].map(k => [k, { freeTextAnswer: false, chooseOption: false, viewTerminal: false }]));
+    const snap = PhoneServerMessageSchema.safeParse({ type: 'snapshot', protocol: 1, sessions: [], capabilities: caps, daemon: { version: '1', name: 'pc', openrig: true }, rigs: [{ ...rig, future: 1, seats: [seat] }] });
+    expect(snap.success).toBe(true);
+    expect(PhoneServerMessageSchema.safeParse({ type: 'rig.updated', rig: { ...rig, future: 1 } }).success).toBe(true);
+    // Operations the phone sends stay strict.
+    expect(PhoneClientMessageSchema.safeParse({ type: 'rig.act', op, key: 'key', verb: 'down', future: 1 }).success).toBe(false);
+    expect(PhoneClientMessageSchema.safeParse({ type: 'rig.prepare', op, goal: 'go', project: null, future: 1 }).success).toBe(false);
+  });
+  it('carries a Ledge team\'s id on its rig, optionally (lot F I4)', () => {
+    expect(PhoneRigSchema.parse({ ...rig, engine: 'ledge', teamId: 'team-a1b2' }).teamId).toBe('team-a1b2');
+    expect(PhoneRigSchema.parse(rig).teamId).toBeUndefined();
+  });
+  it('says the teams engine in force in the snapshot\'s daemon, optionally (lot F I2)', () => {
+    const caps = Object.fromEntries(['claude', 'codex', 'cursor', 'omp'].map(k => [k, { freeTextAnswer: false, chooseOption: false, viewTerminal: false }]));
+    const snap = (daemon: object) => PhoneServerMessageSchema.safeParse({ type: 'snapshot', protocol: 1, sessions: [], capabilities: caps, daemon: { version: '1', name: 'pc', ...daemon } });
+    for (const teamsEngine of ['ledge', 'openrig']) {
+      const r = snap({ teamsEngine });
+      expect(r.success && r.data.type === 'snapshot' && r.data.daemon.teamsEngine).toBe(teamsEngine);
+    }
+    expect(snap({}).success).toBe(true);
+    expect(snap({ teamsEngine: 'other' }).success).toBe(false);
   });
   it('preserves queued delivery and rejects escalation routing details', () => {
     const queued = { ...escalation, state: 'answered', answer: { by: 'user', answers: { q1: 'a' }, at, delivery: 'queued' } };

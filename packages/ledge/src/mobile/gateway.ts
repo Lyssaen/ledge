@@ -123,6 +123,8 @@ export function createPhoneGateway(deps: {
   tasks?: () => Task[];
   /** A project's name, by id. */
   projectName?: (id: string | null) => string | null;
+  /** The teams engine in force (`teams.engine`): the phone launches and words its teams after it (lot F). Absent: the snapshot says none. */
+  teamsEngine?: () => import('@ledge/protocol').TeamsEngine;
   /** The id of the project of this name, or null: the phone names its projects, never a folder. */
   projectByName?: (name: string) => string | null;
   /** The daemon answers `definitions.list` and the role and team operations: without it the phone's catalog and writes are unavailable. */
@@ -230,7 +232,7 @@ export function createPhoneGateway(deps: {
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s) && !s.brain).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}) },
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s) && !s.brain).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(teamsOps ? { teams: true as const } : {}), ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}), ...(deps.teamsEngine ? { teamsEngine: deps.teamsEngine() } : {}) },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
     // Each record is validated before it enters the encrypted payload; malformed source records are omitted, never partially routed.
@@ -1143,6 +1145,9 @@ export function createPhoneGateway(deps: {
           case 'rig.snapshot': case 'rig.updated': case 'rig.removed': case 'escalation.updated': case 'escalation.removed': case 'decisions': case 'rules': case 'projects': case 'openrig.status':
             if (!deps.openrig) return;
             if ((m.type === 'rig.updated' && m.rig.engine === 'ledge') || (m.type === 'rig.removed' && m.rigId.startsWith('team-'))) return snapshotSoon();
+            return snapshotAll();
+          // The engine moved: the phone's launch and wording follow it from the next snapshot.
+          case 'teams.engine':
             return snapshotAll();
           case 'ledge.thread.item': {
             if (!deps.openrig) return;

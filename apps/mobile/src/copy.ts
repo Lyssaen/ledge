@@ -30,7 +30,7 @@ export const copy = {
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
   nav: {
-    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge', teams: 'Équipes', toYou: 'À toi', rigs: 'Équipes', projects: 'Projets',
+    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge', teams: 'Équipes', toYou: 'À toi', rigs: 'Équipes', projects: 'Projets', models: 'Modèles',
     /** « Retour », named after the screen it leads to; plain when that screen is not known (after a reload). */
     back: 'Retour',
     backTo: { rigs: 'Retour aux équipes', toYou: 'Retour à À toi', inbox: 'Retour aux demandes', agents: 'Retour aux agents', teams: 'Retour aux équipes', chat: 'Retour à Ledge', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
@@ -179,6 +179,7 @@ export const copy = {
     lever: 'Lever', noProject: 'Aucun projet avec un dépôt local sur ce PC : impossible de lever une équipe.',
     autonomy: { ask: 'demande', edits: 'édite', auto: 'auto' } as Record<'ask' | 'edits' | 'auto', string>,
     live: (name: string) => `${name} est levée · la suivre dans Agents ›`,
+    liveRoom: (name: string) => `${name} est levée · la suivre dans Équipes ›`,
     launched: (name: string) => `${name} levée.`,
     levering: (name: string) => `Lever ${name}`, name: 'Nom', project: 'Projet', pickProject: 'Choisir un projet',
     launchSeats: (n: number) => `Lancer l'équipe · ${n} ${n > 1 ? 'sièges' : 'siège'}`, cancel: 'Annuler',
@@ -227,7 +228,8 @@ export const copy = {
       fixedScope: (scope: string) => `Rangée dans : ${scope}.`,
       launchNote: 'Votre passkey confirme le lancement.', saveNote: 'Votre passkey confirme l’écriture sur le PC.', composeNote: 'Votre passkey confirme le changement de composition.',
       save: 'Enregistrer', delete: 'Supprimer', deleteTitle: (name: string) => `Supprimer ${name} ?`, deleteHint: 'Les équipes déjà levées ne changent pas.',
-      leaderRule: 'Une équipe a exactement un siège leader : son lead.', noLeader: 'Il manque le siège @leader : ajoute-le pour enregistrer.',
+      leaderRule: 'Une équipe a exactement un siège leader : son lead.', noLeader: 'Il manque le siège @leader : ajoute-le pour lancer ou enregistrer.',
+      leaderKept: 'Le siège @leader ne peut pas être retiré : une équipe garde son lead.',
       notSaved: 'Pas enregistré.', notDeleted: 'Pas supprimée.', exists: 'Une équipe de ce nom existe déjà.', invalid: 'Cette équipe ne peut pas être enregistrée telle quelle.',
       composed: 'Composition enregistrée.',
       /** Saved, but the seats named (or one, when none can be) did not start. */
