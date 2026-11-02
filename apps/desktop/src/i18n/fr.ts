@@ -32,6 +32,7 @@ export const fr = {
       sessions: 'Aucune session pour l’instant.', sessionsBody: 'Une session lance un agent dans un dossier ou un projet.', newSession: 'Créer une session',
       stopped: 'OpenRig est arrêté.', stoppedBody: 'Le démarrer lance aussi le kernel : l’opérateur, l’advisor et la file.', start: 'Démarrer OpenRig', starting: 'Démarrage d’OpenRig…',
       retry: 'Réessayer', openPage: 'Ouvrir la page OpenRig',
+      installedOn: (machine: string) => `Il est installé sur ${machine} : démarre-le depuis sa page.`, offlineOf: (n: number, m: number) => `hors ligne · ${n}/${m}`,
       noRig: 'Aucun rig pour l’instant.', noRigBody: 'Un rig est une équipe d’agents.', noRigOperator: (name: string) => `${name}, l’opérateur du kernel, peut t’aider à en composer un.`
     },
     openChat: 'Ouvrir la conversation avec Ledge',

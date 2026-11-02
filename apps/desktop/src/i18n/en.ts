@@ -18,6 +18,7 @@ export const en: Messages = {
       sessions: 'No session yet.', sessionsBody: 'A session runs an agent in a folder or a project.', newSession: 'Create a session',
       stopped: 'OpenRig is stopped.', stoppedBody: 'Starting it also starts the kernel: the operator, the advisor and the queue.', start: 'Start OpenRig', starting: 'Starting OpenRig…',
       retry: 'Retry', openPage: 'Open the OpenRig page',
+      installedOn: (machine: string) => `It’s installed on ${machine}: start it from its page.`, offlineOf: (n: number, m: number) => `offline · ${n}/${m}`,
       noRig: 'No rig yet.', noRigBody: 'A rig is a team of agents.', noRigOperator: (name: string) => `${name}, the kernel’s operator, can help you put one together.`
     },
     openChat: 'Open the conversation with Ledge',

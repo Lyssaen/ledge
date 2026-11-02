@@ -18,7 +18,7 @@ const seat = (id: string, name: string, rig: string, role: string, extra: Partia
 const KERNEL = [seat('k1', 'Nova', 'kernel', 'advisor.agent'), seat('k2', 'Max', 'kernel', 'operator.agent'), seat('k3', 'Rex', 'kernel', 'queue.worker')];
 const RIG = [seat('r1', 'Bix', 'ledge-dev', 'pilot.lead', { state: 'working' }), seat('r2', 'Lu', 'ledge-dev', 'design.ux')];
 
-const rig = (o: Partial<SidebarOpenRig> = {}): SidebarOpenRig => ({ installed: true, daemonUp: true, kernelState: () => 'ready', labelOf: m => ({ local: 'WSL', ec2: 'EC2' })[m] ?? m, canStart: true, starting: false, failed: null, start: vi.fn(), ...o });
+const rig = (o: Partial<SidebarOpenRig> = {}): SidebarOpenRig => ({ installed: true, daemonUp: true, kernelState: () => 'ready', labelOf: m => ({ local: 'WSL', ec2: 'EC2' })[m] ?? m, canStart: true, installedOn: null, starting: false, failed: null, start: vi.fn(), ...o });
 function mount(sessions: readonly Session[], openrig: SidebarOpenRig | undefined, lang: 'fr' | 'en' = 'fr') {
   const dispatch = vi.fn(), onToggleDense = vi.fn();
   render(<LangProvider lang={lang}><aside className="st"><RigGroups sessions={sessions} current={null} paused dispatch={dispatch} openrig={openrig} dense={false} onToggleDense={onToggleDense} /></aside></LangProvider>);
@@ -74,7 +74,8 @@ describe('the Rigs view of the sidebar', () => {
     mount(two, rig({ kernelState: m => (m === 'ec2' ? 'offline' : 'ready') }));
     let tag = document.querySelector('.st-kernel-tag')!;
     expect(tag).toHaveAttribute('data-state', 'offline');
-    expect(tag).toHaveTextContent('hors ligne');
+    // The user (20:11Z): how many of the kernel's machines are offline, out of how many.
+    expect(tag).toHaveTextContent(/^hors ligne · 1\/2$/);
     expect(tag).toHaveAttribute('title', 'WSL · opérationnel\nEC2 · hors ligne');
     cleanup();
     mount(two, rig({ kernelState: m => (m === 'ec2' ? undefined : 'ready') }));
@@ -145,6 +146,20 @@ describe('the Rigs view of the sidebar', () => {
     await userEvent.click(within(box).getByRole('button', { name: 'Ouvrir la page OpenRig' }));
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'openrig', section: 'rigs' });
     expect(start).not.toHaveBeenCalled();
+  });
+
+  it('OpenRig installed elsewhere only: « Il est installé sur EC2 : démarre-le depuis sa page. » before the link (4 bis)', () => {
+    mount([], rig({ daemonUp: false, canStart: false, installedOn: 'EC2' }));
+    expect(screen.getByRole('status')).toHaveTextContent(/^OpenRig est arrêté\.Il est installé sur EC2 : démarre-le depuis sa page\.Ouvrir la page OpenRig$/);
+    cleanup();
+    mount([], rig({ daemonUp: false, canStart: false, installedOn: 'EC2' }), 'en');
+    expect(screen.getByRole('status')).toHaveTextContent('It’s installed on EC2: start it from its page.');
+  });
+
+  it('the kernel tag in English, offline: « offline · 2/3 »', () => {
+    const three = [KERNEL[0]!, { ...KERNEL[1]!, machineId: 'ec2' }, { ...KERNEL[2]!, machineId: 'pi' }];
+    mount(three, rig({ kernelState: m => (m === 'local' ? 'ready' : 'offline') }), 'en');
+    expect(document.querySelector('.st-kernel-tag')).toHaveTextContent(/^offline · 2\/3$/);
   });
 
   it('starting: the button is disabled with « Démarrage d’OpenRig… »', () => {
@@ -255,6 +270,21 @@ describe('the kernel state of each machine, as the sidebar reads it (review)', (
     // The local machine answers that it cannot (its daemon too old).
     emit({ type: 'openrig.state', requestId: asks.find(m => m.machineId === 'local')!.requestId, machineId: 'local', error: 'outdated' });
     expect(result.current.kernelState('local')).toBe('offline');
+  });
+});
+
+describe('where OpenRig is installed when not here (4 bis)', () => {
+  it('the first remote machine with OpenRig, in display order', () => {
+    const { client, sent, emit } = fakeClient();
+    const ms = [{ ...machineOf('local'), label: 'WSL' }, { ...machineOf('pi'), label: 'Pi' }, { ...machineOf('ec2'), label: 'EC2' }];
+    const { result } = renderHook(() => useSidebarOpenRig(client, ms));
+    const asks = statusAsks(sent);
+    const answer = (m: string, s: OpenRigState) => emit({ type: 'openrig.state', requestId: asks.find(x => x.machineId === m)!.requestId, machineId: m, state: s });
+    answer('local', st({ installed: false, daemon: { state: 'unknown' } }));
+    answer('ec2', st({ daemon: { state: 'stopped' } }));
+    expect(result.current.installedOn).toBe('EC2');
+    answer('pi', st({ daemon: { state: 'stopped' } }));
+    expect(result.current.installedOn).toBe('Pi');
   });
 });
 

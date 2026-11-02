@@ -68,7 +68,7 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
     }
     if (!openrig.daemonUp && openrig.installed) {
       // « Démarrer OpenRig » acts on this computer only: without OpenRig here (or this computer unreachable), the page's link alone.
-      if (!openrig.canStart) return <div className="st-empty" role="status"><strong>{e.stopped}</strong>{openPage}</div>;
+      if (!openrig.canStart) return <div className="st-empty" role="status"><strong>{e.stopped}</strong>{openrig.installedOn && <p>{e.installedOn(openrig.installedOn)}</p>}{openPage}</div>;
       return box(e.stopped, <p>{e.stoppedBody}</p>, <button type="button" className="st-empty-btn" onClick={openrig.start}><Icon d={SHELL_ICONS.play} size={12} />{e.start}</button>);
     }
     if (!openrig.daemonUp) return null;
@@ -86,7 +86,7 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
         <section className="st-kernel-box" aria-label={t.side.kernel}>
           <div className="st-label">
             <span className="st-kernel-hex" aria-hidden="true"><Icon d={SHELL_ICONS.rig} size={12} /></span><span className="st-kernel-name">{t.side.kernel}</span><span className="st-fill" />
-            {tag && <span className="st-kernel-tag" data-state={tag} title={tagTitle}><i aria-hidden="true" />{tagWord(t, tag)}</span>}
+            {tag && <span className="st-kernel-tag" data-state={tag} title={tagTitle}><i aria-hidden="true" />{tag === 'offline' && kt ? e.offlineOf(kt.per.filter(([, x]) => x === 'offline').length, kt.per.length) : tagWord(t, tag)}</span>}
           </div>
           <div role="tree" aria-label={t.side.kernel}>{kernel.map(s => row(s, 0))}</div>
         </section>
