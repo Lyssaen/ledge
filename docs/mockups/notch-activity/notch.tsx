@@ -520,6 +520,31 @@ function Page() {
       </ul>
     </Section>
 
+    <Section id="cap" title="Complément : une longue question sous le plafond de 50 %" lead="À valider. Captures du vrai overlay (correctif de dev-front 9639be17, polices réelles, en français). Quand la carte dépasse la moitié de la hauteur, la mascotte et le titre restent en haut, et les boutons Répondre et « Ouvrir dans Ledge · Plus tard » restent en bas. Le texte de la question et les options défilent entre les deux. Une carte qui tient ne change pas.">
+      <div className="na-shots">
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-top-dark-1080.png" alt="Sombre, 1080, en haut : la question entière, puis les options. Filet au-dessus de Répondre : il en reste dessous." /><figcaption>Sombre, 1080, en haut : la question entière, puis les options. Filet au-dessus de Répondre : il en reste dessous.</figcaption></figure>
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-middle-dark-1080.png" alt="Sombre, au milieu du défilement : le filet du bas est toujours là." /><figcaption>Sombre, au milieu du défilement : le filet du bas est toujours là.</figcaption></figure>
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-end-dark-1080.png" alt="Sombre, en bas : la dernière option et la réponse courte, le filet disparaît." /><figcaption>Sombre, en bas : la dernière option et la réponse courte, le filet disparaît.</figcaption></figure>
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-top-light-1080.png" alt="Clair, 1080, en haut." /><figcaption>Clair, 1080, en haut.</figcaption></figure>
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-middle-light-1080.png" alt="Clair, au milieu." /><figcaption>Clair, au milieu.</figcaption></figure>
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-end-light-1080.png" alt="Clair, en bas." /><figcaption>Clair, en bas.</figcaption></figure>
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-top-light-1440.png" alt="Clair, écran 1440 à 150 % : même découpage, plus haut." /><figcaption>Clair, écran 1440 à 150 % : même découpage, plus haut.</figcaption></figure>
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-end-dark-1440.png" alt="Sombre, 1440 à 150 %, en bas." /><figcaption>Sombre, 1440 à 150 %, en bas.</figcaption></figure>
+      </div>
+      <h3 className="na-h3">Ce que je changerais</h3>
+      <div className="na-shots">
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-proposed-middle-dark-1080.png" alt="Proposé : le même filet de 1 px (--border) sous le titre, dès qu’on a quitté le haut. Les options ne se coupent plus net contre l’en-tête." /><figcaption>Proposé : le même filet de 1 px (--border) sous le titre, dès qu’on a quitté le haut. Les options ne se coupent plus net contre l’en-tête.</figcaption></figure>
+        <figure className="na-shot"><img src="ledge-notch-activity-cap-proposed-middle-light-1080.png" alt="Proposé, en clair." /><figcaption>Proposé, en clair.</figcaption></figure>
+      </div>
+      <ul className="na-list">
+        <li><b>Filet du bas</b> (implémenté) : visible tant qu’il reste du contenu sous la zone, absent en fin de défilement.</li>
+        <li><b>Filet du haut</b> (proposé) : visible dès que la zone n’est plus en haut. C’est la même règle, dans l’autre sens.</li>
+        <li><b>En sombre</b>, ces deux filets sont discrets (#ffffff1a), comme les autres séparateurs de l’encoche. Je ne les renforcerais pas.</li>
+        <li><b>Clavier</b> (implémenté) : une option qui prend le focus défile jusqu’à être visible ; la molette ne fait pas défiler ce qu’il y a derrière.</li>
+        <li><b>Rien d’autre ne change</b> : pas de dégradé, barre de défilement fine habituelle.</li>
+      </ul>
+    </Section>
+
     <Section id="decided" title="Décisions après validation" lead="Validée par l’utilisateur le 2 novembre à 19:01, avec ses 6 recommandations. Ces points ont été réglés ensuite, pendant l’implémentation.">
       <ul className="na-list">
         <li><b>Bouton lecture/pause</b> (utilisateur, 19:01) : une icône simple de 15 px, sans disque rond, du même style que précédent et suivant, dans une zone de 28 px.</li>
