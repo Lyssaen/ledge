@@ -105,7 +105,7 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none}
 .lbody{overflow:auto;padding:4px 6px 12px}
 .grp{display:flex;align-items:baseline;gap:6px;padding:12px 8px 4px;font-size:12px;color:var(--muted-foreground)}
 .grp b{font-weight:500;color:var(--foreground)}
-.grp .mono{font-size:10.5px;margin-left:auto}
+.grp .mono{font-size:10.5px;margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .item{display:grid;grid-template-columns:1fr auto;gap:1px 8px;padding:7px 8px;border-radius:8px;border:1px solid transparent;text-align:left;width:100%}
 .item:hover{background:var(--muted)}
 .item[aria-selected=true]{background:var(--muted);border-color:var(--input)}
@@ -179,6 +179,32 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none}
 .dl{color:var(--muted-foreground);font-size:12px;margin-left:2px}
 .dlegend{display:flex;gap:14px;font-size:12px;color:var(--muted-foreground);flex-wrap:wrap}
 .dlegend .mono{font-size:11.5px}
+/* Role tab (role.md first) */
+.rsum{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--muted-foreground);margin-bottom:12px}
+.rsum b{color:var(--foreground);font-weight:500}
+.rsum .lnk{color:var(--info);border:0;padding:0;font-size:12.5px}
+.rfile{border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;position:relative}
+.rfile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.rfile.here::before{background:var(--foreground);opacity:.55}.rfile.inh::before{background:var(--info)}.rfile.unk::before{background:var(--warning)}
+.rfile .rhead{padding-left:16px}
+.rfile .rbody{max-height:none;padding:16px 22px 22px}
+.ico{width:13px;height:13px;vertical-align:-2px;display:inline-block}
+/* Rigs view (link to the role) */
+.rigspage{overflow:auto;padding:18px 24px;display:flex;flex-direction:column;gap:14px}
+.ocards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ocard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 16px;font-size:13px}
+.ocard h3{font-size:14px;font-weight:600;display:flex;gap:8px;align-items:center}
+.ocard p{color:var(--muted-foreground);font-size:12px;margin-top:3px}
+.origs{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.orow{display:grid;grid-template-columns:minmax(140px,1.3fr) 110px 92px minmax(0,1fr) minmax(0,1.2fr) auto;gap:10px;align-items:center;padding:9px 14px;font-size:13px}
+.orow b{font-weight:500}
+.oseats{list-style:none;padding:4px 14px 10px 36px;background:color-mix(in oklab,var(--foreground) 2%,transparent)}
+.oseat{display:grid;grid-template-columns:minmax(110px,150px) minmax(130px,170px) minmax(0,1fr) 110px 70px auto;gap:10px;align-items:center;padding:6px 0;border-top:1px dashed var(--border);font-size:13px}
+.oseat:first-child{border-top:0}
+.rolelink{font-family:'Geist Mono',monospace;font-size:12px;color:var(--info);border:0;padding:0;text-align:left;display:inline-flex;gap:4px;align-items:center;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}
+.rolelink:hover,.rolelink.hov{text-decoration-color:currentColor}
+.tip{position:absolute;background:var(--foreground);color:var(--background);font-size:11.5px;padding:4px 8px;border-radius:6px;white-space:nowrap;transform:translateY(-130%);pointer-events:none}
+.muted{color:var(--muted-foreground);font-size:12px}
 /* Context (assembled startup context) */
 .ctxintro{border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--muted-foreground);margin-bottom:14px;max-width:100ch}
 .ctxintro b{color:var(--foreground);font-weight:500}
@@ -207,7 +233,7 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none}
 .rbody{padding:14px 18px 20px;overflow:auto;max-height:520px}
 .md{max-width:76ch;font-size:13.5px;line-height:21px}
 .md h1{font-size:17px;font-weight:600;margin:0 0 10px}.md h2{font-size:14.5px;font-weight:600;margin:16px 0 6px}
-.md p{margin:0 0 9px}.md ul{margin:0 0 9px 18px}.md li{margin:2px 0}
+.md p{margin:0 0 9px}.md ul,.md ol{margin:0 0 9px 20px}.md li{margin:2px 0}
 .md code{font-family:'Geist Mono',monospace;font-size:12px;background:var(--muted);padding:0 4px;border-radius:4px}
 .md pre{background:var(--well);border:1px solid var(--border);border-radius:8px;padding:8px 10px;overflow:auto;margin:0 0 9px}
 .md pre code{background:none;padding:0}
@@ -240,12 +266,15 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none}
 
 <div class="mk-bar" role="toolbar" aria-label="Vues de la maquette">
   <strong>Maquette · Rôles OpenRig dans Ledge</strong>
-  <button data-preset="params" aria-pressed="true">1 · Rôle et paramètres</button>
-  <button data-preset="seat" aria-pressed="false">2 · Vu depuis un siège</button>
-  <button data-preset="context" aria-pressed="false">3 · Contexte de démarrage</button>
-  <button data-preset="yaml" aria-pressed="false">4 · YAML source</button>
-  <button data-preset="builtin" aria-pressed="false">5 · Rôle livré, deux profils</button>
-  <button data-preset="states" aria-pressed="false">6 · États limites</button>
+  <button data-preset="role" aria-pressed="true">1 · Rôle (role.md)</button>
+  <button data-preset="params" aria-pressed="false">2 · Paramètres</button>
+  <button data-preset="seat" aria-pressed="false">3 · Vu depuis un siège</button>
+  <button data-preset="context" aria-pressed="false">4 · Contexte de démarrage</button>
+  <button data-preset="yaml" aria-pressed="false">5 · YAML</button>
+  <button data-preset="multi" aria-pressed="false">6 · Plusieurs fichiers</button>
+  <button data-preset="builtin" aria-pressed="false">7 · Rôle livré, deux profils</button>
+  <button data-preset="rigs" aria-pressed="false">8 · Lien depuis Rigs</button>
+  <button data-preset="states" aria-pressed="false">9 · États limites</button>
   <span class="sp"></span>
   <span class="seg" role="group" aria-label="Thème"><button data-theme-btn="dark" aria-pressed="true">Sombre</button><button data-theme-btn="light" aria-pressed="false">Clair</button></span>
   <span class="seg" role="group" aria-label="Langue"><button data-lang-btn="fr" aria-pressed="true">FR</button><button data-lang-btn="en" aria-pressed="false">EN</button></span>
@@ -267,6 +296,21 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none}
           </div>
         </div>
         <div class="footer" id="footer"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="view" id="v-rigs">
+  <p class="mk-note" id="note-rigs"></p>
+  <div class="win">
+    <div class="titlebar"><b>Ledge<i>.</i></b><span class="tb-sp"></span><span class="tb">♫</span><span class="tb">◯</span><span class="tb">─</span><span class="tb">☐</span><span class="tb">✕</span></div>
+    <div class="main">
+      <aside class="side" id="side2"></aside>
+      <div class="content">
+        <div class="topbar" id="topbar2"></div>
+        <div class="rpwrap"><div class="orhead" id="orhead2"></div><div class="rigspage" id="rigspage"></div></div>
+        <div class="footer" id="footer2"></div>
       </div>
     </div>
   </div>
@@ -316,12 +360,231 @@ Tu es `dev-front`. Tu tiens les interfaces : `apps/desktop` (Tauri 2 + React, Vi
 - Avant de dire fini sur un écran : captures Playwright (`pnpm --filter desktop e2e` ou un script ponctuel), zoomées, alignements contrôlés contre la maquette, thèmes clair et sombre. Joins les captures à ta passation.
 - Textes ajoutés en FR et EN (`src/i18n/fr.ts`, `src/i18n/en.ts`).
 - Quand tu dépends d'un message du protocole ou d'une API du daemon, coordonne-toi avec `dev-back@ledge-dev`.</script>
+
+<script type="text/plain" id="md-role-lead"># Rôle : lead de ledge-dev
+
+Tu es l'interlocuteur de l'utilisateur. Tu transformes son objectif en travail routé, tu fais respecter
+« maquette d'abord » et tu rends compte du résultat. Tu ne codes pas toi-même ce qu'un dev peut faire.
+
+## Au démarrage
+
+`rig whoami --json`, puis `rig queue list --owned --limit 1000`. Réclame une ligne qui t'est assignée avant d'y
+travailler. Si l'objectif arrive en message terminal, crée et réclame d'abord la ligne depuis ton siège.
+
+## Découper et router
+
+1. Lis le code concerné avant de découper. Si l'objectif est flou, pose **la** question qui change le résultat.
+2. Pour un travail suivi, enregistre-le légèrement : `rig scope mission ls`, puis une mission/slice si besoin.
+3. Classe chaque morceau :
+   - **Écran touché** (Desktop, île, mobile, TUI) → tâche à `design-ux@ledge-dev` d'abord. Quand l'UX te rend la
+     maquette, présente-la à l'utilisateur (chemin du fichier, captures, questions ouvertes) et obtiens **sa**
+     validation. Note cette validation sur la ligne. Seulement alors, tâche à `dev-front@ledge-dev` avec le chemin
+     de la maquette validée.
+   - **Back-end / protocole / relais / Rust** → `dev-back@ledge-dev`.
+   - **Les deux** → deux lignes, en indiquant à chacun le contrat partagé (messages du protocole, API) ; le back
+     livre le contrat en premier quand le front en dépend.
+4. Chaque tâche dit : le résultat attendu, ce qui compte comme fini, la branche de base, les limites (pas de
+   push/PR sans accord), et que la livraison passe par `review-qa@ledge-dev`.
+
+## Suivre et clore
+
+Suis chaque transfert jusqu'au résultat (`rig queue show <id> --full`, champ `handedOffFrom` des lignes suivantes).
+Une ligne d'un autre siège fermée ne vaut pas acceptation : vérifie la revue et ses constats résolus. Rends compte à
+l'utilisateur : branche, commits, ce qu'il peut essayer, ce qui n'est pas vérifié. Demande son accord avant tout
+push, PR ou merge.
+
+Si un siège attend à une demande de permission, dis à l'utilisateur lequel, ce qu'il demande exactement et comment
+le joindre (`rig ps --nodes --json --fields canonicalSessionName,agentActivity,tmuxAttachCommand`). Ne réponds pas
+à la place de l'utilisateur.
+
+`rig down`, `rig seat stop` et `rig up` sur l'équipe : seulement sur demande de l'utilisateur.</script>
+<script type="text/plain" id="md-role-ux"># Rôle : UX/UI de ledge-dev
+
+Tu conçois les écrans de Ledge **avant** qu'ils soient codés. Ta maquette est le contrat que `dev-front` implémente
+et que `review-qa` vérifie : elle doit lever toute ambiguïté qu'un dev aurait sinon à trancher seul.
+
+## Au démarrage
+
+`rig whoami --json`, puis `rig queue list --owned --limit 1000`. Réclame la ligne avant d'y travailler.
+
+## Avant de dessiner
+
+- Lis l'écran existant dans le code (`apps/desktop/src`, `apps/mobile/src`, `apps/overlay`, `packages/ui`) et ses
+  styles : une nouvelle surface doit appartenir au même produit (tokens, typographie, mascottes, thèmes).
+- Regarde les maquettes voisines dans `docs/mockups/` et les captures réelles dans `docs/screens/`.
+- Utilise la skill `frontend-design` pour la direction visuelle.
+
+## La maquette
+
+- Un fichier HTML autonome `docs/mockups/ledge-<sujet>.html` (ouvrable sans serveur). Quand l'écran existe déjà,
+  préfère partir des vrais composants et styles, comme `docs/mockups/desktop-observatory/` (TSX + `build.mjs`).
+- Couvre les thèmes clair **et** sombre, et le mobile quand l'écran y existe.
+- Couvre les états, pas seulement le cas heureux : vide, chargement, erreur, texte long, beaucoup d'éléments.
+- Textes en français **et** anglais (l'app a `src/i18n/fr.ts` et `en.ts`) ; donne les clés si tu les connais.
+- Plusieurs variantes seulement quand la question est vraiment ouverte ; dis laquelle tu recommandes et pourquoi.
+- Captures Playwright (`.png` à côté du HTML), zoomées sur les zones délicates ; contrôle les alignements avant de
+  dire que c'est prêt.
+
+## Rendre la maquette
+
+Clos ta ligne vers le lead (`rig queue handoff`) avec :
+- le chemin de la maquette et des captures ;
+- une **fiche de passation** courte : écrans et états couverts, textes FR/EN, comportements (clic, survol,
+  clavier, focus), ce qui change par rapport à l'existant, questions encore ouvertes pour l'utilisateur.
+
+La validation appartient à **l'utilisateur**, via le lead. Si l'utilisateur demande des changements, itère sur le
+même fichier. Une fois validée, ne modifie plus la maquette sans nouvelle validation.
+
+## Pendant l'implémentation
+
+`dev-front` peut te demander un état ou un texte manquant : réponds vite, par un complément de maquette si c'est
+visuel. Si un écart demande un choix de produit, renvoie-le au lead pour l'utilisateur. À la fin, tu peux comparer
+le rendu réel à ta maquette et signaler les écarts au dev, par la queue.
+
+Tu ne modifies pas le code applicatif.</script>
+<script type="text/plain" id="md-role-reviewer"># Rôle : reviewer de ledge-dev
+
+Tu vérifies, indépendamment, chaque candidat qu'un dev te transfère : le diff exact et le comportement qu'il promet.
+Tu ne réécris pas la livraison : tu renvoies des constats actionnables au dev qui l'a faite.
+
+## Au démarrage
+
+`rig whoami --json`, puis `rig queue list --owned --limit 1000`. Réclame la ligne avant d'y travailler.
+
+## Revoir
+
+- Lis le diff du commit candidat dans le worktree indiqué (pas dans `~/Workspace/ledge`, la copie de l'utilisateur).
+- Cherche les vrais défauts : correction, cas limites, régressions, contrats du protocole, sécurité ; pas le style.
+- Lance les tests du paquet touché (Node 22). Un échec déjà présent sur `main` (Node 18, `hook.test` sous charge)
+  n'est pas un constat sur ce changement.
+- Pour tester « sans le correctif », travaille dans une copie séparée (un autre worktree ou `git stash` dans **ta**
+  copie), jamais dans le worktree du dev.
+
+## Écrans
+
+Si le changement touche un écran, compare-le à la maquette validée citée dans la tâche : captures Playwright
+zoomées, thèmes clair et sombre, états de la maquette, textes FR/EN, alignements. Un écart à la maquette est un
+constat, sauf s'il est justifié et accepté par l'utilisateur.
+
+## Rendre
+
+Renvoie au dev par `rig queue handoff` : verdict (accepté / constats), constats classés par gravité avec fichier,
+ligne et scénario d'échec, commandes lancées et leurs résultats, ce que tu n'as pas pu vérifier. Ne déclare pas
+accepté un candidat dont les constats ne sont pas résolus.</script>
+<script type="text/plain" id="md-role-pm"># Product Manager Agent
+
+## Role
+Senior Product Manager. Own the "what" and "why" — never architecture, estimates, or implementation details.
+
+## Task-triggered capabilities
+
+Resolve the assigned outcome and selected procedure. Load `openrig-user` for
+command syntax and `mission-slice-sop` for mission/slice operations. When the
+8-step feature flow below is selected, load each step's named skill as that
+step begins: `backlog-capture`, `office-hours`, `context-builder`,
+`requirements-writer`, `ui-mockup`, `plan-review`, and `exec-summary`.
+Keep that selected flow and its SPEC contract; this list adds no blanket
+preload or feature-flow gate to other assignments.
+
+## 8-Step Feature Flow
+
+1. **Capture** — run `backlog-capture` and record the idea in `idea_backlog.md`.
+2. **Validate** — run `office-hours` and produce `validation.md` with a `GO`, `REFINE`, or `PAUSE` verdict.
+3. **Context** — run `context-builder` and produce `background.md` using `validation.md` as the starting point.
+4. **Require** — run `requirements-writer` and produce `SPEC.md` using `validation.md` and `background.md`.
+5. **Mockup** — run `ui-mockup` and produce `supporting/mockup-ascii.md` plus one or more `mockup-*.html` artifacts.
+6. **Review** — run `plan-review` and record issues or revisions before handoff.
+7. **Summarize** — run `exec-summary` and produce `executive-summary.md` from the full artifact set.
+8. **Handoff** — prepare the branch/ticket handoff only after the earlier artifacts are coherent.
+
+Each step's output feeds the next. The feature folder below is the selected
+slice directory; `SPEC.md` is its single requirements authority.
+`validation.md`, `background.md`, mockups and the executive summary are supporting
+artifacts. For legacy `requirements.md`, preserve it as input/history and
+reconcile its requirements into `SPEC.md` before continuing this flow; do not
+maintain two competing contracts.
+
+## Working Norms
+
+1. **Research before you build** — every feature needs context (competitive, regulatory, customer) before requirements are finalized.
+2. **Requirements are literal** — AI agents treat SPEC.md as instructions. Be precise. No aspirational content.
+3. **Stay in your lane** — PM writes requirements, researcher gathers context, coder builds prototypes. Escalate when you hit a boundary.
+4. **Write things down** — every step should leave artifacts in the feature folder. Nothing important lives only in conversation.
+
+## Feature Folder Structure
+
+```text
+{feature}/
+├── validation.md
+├── background.md
+├── SPEC.md
+├── executive-summary.md
+└── supporting/
+    ├── mockup-ascii.md
+    └── mockup-*.html
+```
+
+## Key Outputs
+- validation.md — GO/REFINE/PAUSE verdict on feature ideas
+- background.md — synthesized context for a feature
+- SPEC.md — structured acceptance criteria and business rules
+- executive-summary.md — single document orienting sales, leadership, and engineering</script>
+<script type="text/plain" id="md-role-conveyor-lead"># Role: Conveyor Lead
+
+You are the intake and close seat for the `conveyor` starter rig. Your job is
+to receive new work packets, keep the station pipeline understandable, and
+close work with useful evidence when the review station says the packet is
+ready.
+
+## Skills Loaded
+
+- `openrig-user`
+- `mission-slice-sop`
+- `orchestration-team`
+- `backlog-capture`
+- `verification-before-completion`
+
+## Responsibilities
+
+- Turn rough incoming requests into queue packets that a planner can act on.
+- Keep the active workflow instance honest: current owner, next owner, and
+  terminal state should always be visible through OpenRig surfaces.
+- Watch for backpressure. If planning, build, or review is backed up, stop
+  feeding new packets and help clear the queue.
+- Close completed packets only after the review station has supplied evidence.
+- Escalate unclear requirements instead of inventing hidden scope.
+
+## Principles
+
+- Handoffs are durable queue motion, not private chat.
+- The starter rig should teach a new user how OpenRig coordinates work.
+- Keep packets small enough that every station can finish its turn.
+- Prefer explicit closure notes over vague status updates.
+- Do not embed private release topology assumptions in this generic starter.</script>
+<script type="text/plain" id="md-ctx-conveyor-lead"># Startup Context
+
+Run `rig whoami --json` before making topology claims. Confirm that your
+session is `intake-lead@conveyor`.
+
+Default workflow role: `intake` and `closer`.
+
+Primary partners:
+
+- Planning: `plan-planner@conveyor`
+- Build: `build-builder@conveyor`
+- Review: `review-reviewer@conveyor`
+
+Use `rig send` for transient coordination and queue/workflow commands for
+durable packet motion.</script>
 <script type="text/plain" id="md-back"># Ton périmètre : back-end
 
-Tu es `dev-back`. Tu tiens le daemon, le protocole, le relais et le code Rust.
+Tu es `dev-back`. Tu tiens le daemon et la CLI (`packages/ledge`), le protocole (`packages/protocol`), `packages/fleet`,
+`packages/seal`, le relais (`apps/relay`) et le code natif Rust (`crates/ledge-native`, `apps/desktop/src-tauri`).
 
-- Quand le front dépend d'un message du protocole ou d'une API, livre ce contrat en premier et dis-le à `dev-front@ledge-dev`.
-- …</script>
+- Un changement de protocole est un contrat avec `dev-front@ledge-dev` : décris-le-lui (messages, champs, erreurs)
+  avant qu'il en dépende, et garde la compatibilité avec les clients existants sauf accord.
+- Si ton changement a un effet visible à l'écran, signale-le au lead : il passe par une maquette.
+- Rust : `cargo test` et `cargo clippy` sur le crate touché.</script>
 <script type="text/plain" id="md-identity">dev-front@ledge-dev
 OpenRig session identity:
 - rig: ledge-dev
@@ -411,8 +674,19 @@ Begin by naming the outcome and the reversibility of the work.</script>
    Keys sit under t.openrig.roles in apps/desktop/src/i18n/{fr,en}.ts (proposed: same names as below). */
 const S = {
 fr:{
+  tab_role:'Rôle',
+  role_sum:(n,seat)=>seat?`<b>Ce que ${seat} lit comme consignes</b> : le role.md du rôle, puis ${n-1>1?'les fichiers':'le fichier'} que le rig ajoute à ce siège, tapés dans son terminal au démarrage.`:(n>1?`<b>Les consignes du rôle</b> : ${n} fichiers, tapés dans le terminal de chaque siège au démarrage, dans cet ordre.`:`<b>Les consignes du rôle</b> : son role.md, tapé dans le terminal de chaque siège au démarrage.`),
+  role_ctx_link:n=>`Tout le contexte de démarrage (${n} ${n>1?'pièces':'pièce'}) →`,
+  not_embedded:'(Contenu réel du fichier dans l\'app ; non recopié dans cette maquette.)',
+  note_role:'<b>Le role.md au premier plan</b> : ouvrir un rôle montre d\'abord <b>ses consignes</b> — l\'onglet « Rôle », premier et ouvert par défaut, affiche le role.md en entier, rendu (bascule Brut), avec sa source, son mode de livraison et sa provenance. Les autres onglets restent : Paramètres, Contexte de démarrage (les 10 pièces), YAML.',
+  note_multi:'<b>Plusieurs fichiers</b> (<span class="mono">conveyor-lead</span>, livré avec OpenRig) : role.md puis <span class="mono">startup/context.md</span>, à la suite, dans l\'ordre de livraison. Depuis un siège, le fichier propre au siège s\'ajoute en dernier (voir vue 3, onglet Rôle).',
+  note_rigs:'<b>Lien depuis Rigs</b> : sur la page Rigs, chaque siège déplié affiche le nom de son rôle comme un lien (bleu, ↗, souligné au survol, infobulle). Un clic ouvre la vue Rôles sur ce rôle, <b>vu depuis ce siège</b>, onglet Rôle. Essayez : le lien de <span class="mono">dev.front</span>.',
+  r_daemon:'Daemon', r_active:'Actif', r_ready:'Prêt', r_kernel:'L’opérateur qui aide à choisir et lancer un rig.', r_running:'En marche', r_seats:'sièges', r_since:'depuis 32 min', r_seats_btn:'Sièges', r_stop:'Arrêter', r_open:'Ouvrir', r_launch:'Lancer un rig…',
+  r_link_tip:(role,seat)=>`Voir le rôle ${role} depuis ${seat}`,
+  s_norole:'Rôle sans role.md', s_norole_p:'La spec ne déclare aucun fichier de guidance ni de démarrage : l\'onglet Rôle le dit au lieu d\'être vide.', s_norole_body:'Ce rôle ne déclare pas de consignes. Ce que ses sièges reçoivent quand même est dans Contexte de démarrage.',
+  s_rolemiss:'role.md introuvable', s_rolemiss_p:'Le fichier est déclaré mais absent ou illisible : son chemin reste affiché, marqué inconnu.',
   note_params:'<b>OpenRig › Rôles</b> : une bascule <b>Rigs / Rôles</b> dans la ligne de tête de la page OpenRig (à côté des machines). À gauche les rôles de la machine, à droite le rôle choisi, <b>vu selon sa spec</b> : Ledge résout le YAML (imports, profils) et le dit. <b>Lecture seule</b> : aucun bouton ne modifie une spec. Chaque paramètre porte sa <b>provenance</b> — barre de couleur et pastille : ici, hérité, non déclaré, inconnu.',
-  note_seat:'<b>Vu depuis un siège</b> : ce qu\'OpenRig a résolu au lancement de <span class="mono">dev.front</span> (détail du nœud), pas ce que Ledge déduit. Le modèle, le dossier et l\'effort viennent du membre du rig ; les fichiers de culture et de périmètre viennent de la copie composée par Ledge (<span class="mono">~/.ledge/rigs/ledge-dev/</span>). On y arrive aussi depuis la page Rigs : le nom du rôle d\'un siège devient un lien.',
+  note_seat:'<b>Vu depuis un siège</b> (onglet Paramètres ; l\'onglet Rôle y montre role.md puis scope-front.md) : ce qu\'OpenRig a résolu au lancement de <span class="mono">dev.front</span> (détail du nœud), pas ce que Ledge déduit. Le modèle, le dossier et l\'effort viennent du membre du rig ; les fichiers de culture et de périmètre viennent de la copie composée par Ledge (<span class="mono">~/.ledge/rigs/ledge-dev/</span>). On y arrive aussi depuis la page Rigs : le nom du rôle d\'un siège devient un lien.',
   note_context:'<b>Contexte de démarrage</b> : il n\'existe pas de prompt système unique. Ledge montre ce que le siège reçoit, <b>dans l\'ordre que rend OpenRig</b>, pièce par pièce, avec la source, le mode de livraison (tapé dans le terminal ou bloc de <span class="mono">CLAUDE.md</span>) et ce qui n\'est pas lisible : le prompt du harnais, et une pièce prévue mais absente de <span class="mono">CLAUDE.md</span>.',
   note_yaml:'<b>YAML source</b> : le fichier tel quel, puis ce qu\'il importe et, depuis un siège, le membre dans la spec du rig qui l\'a lancé. Copier est la seule action.',
   note_builtin:'<b>Rôle livré avec OpenRig</b> (<span class="mono">pm</span>) : aucun siège ne l\'utilise, il a <b>deux profils</b> (un sélecteur apparaît), et son profil <span class="mono">default</span> ne déclare ni guidance ni sous-agents : ces lignes sont <b>non déclarées</b>, pas « vides ».',
@@ -486,8 +760,19 @@ fr:{
   s_noseat:'Rôle sans siège', s_noseat_p:'« Vu depuis » ne propose que « selon la spec ». L\'onglet Contexte montre la part du rôle :',
 },
 en:{
+  tab_role:'Role',
+  role_sum:(n,seat)=>seat?`<b>What ${seat} reads as instructions</b>: the role's role.md, then the ${n-1>1?'files':'file'} the rig adds for this seat, typed into its terminal at startup.`:(n>1?`<b>The role's instructions</b>: ${n} files, typed into each seat's terminal at startup, in this order.`:`<b>The role's instructions</b>: its role.md, typed into each seat's terminal at startup.`),
+  role_ctx_link:n=>`Full startup context (${n} ${n>1?'pieces':'piece'}) →`,
+  not_embedded:'(Real file contents in the app; not copied into this mockup.)',
+  note_role:'<b>role.md first</b>: opening a role shows <b>its instructions</b> first — the “Role” tab, first and open by default, shows the whole role.md, rendered (Raw toggle), with its source, delivery and provenance. The other tabs stay: Parameters, Startup context (the 10 pieces), YAML.',
+  note_multi:'<b>Several files</b> (<span class="mono">conveyor-lead</span>, shipped with OpenRig): role.md then <span class="mono">startup/context.md</span>, one after the other, in delivery order. From a seat, the seat\'s own file comes last (see view 3, Role tab).',
+  note_rigs:'<b>Link from Rigs</b>: on the Rigs page, each unfolded seat shows its role name as a link (blue, ↗, underlined on hover, tooltip). A click opens the Roles view on that role, <b>seen from that seat</b>, Role tab. Try the <span class="mono">dev.front</span> link.',
+  r_daemon:'Daemon', r_active:'Running', r_ready:'Ready', r_kernel:'The operator that helps choose and launch a rig.', r_running:'Running', r_seats:'seats', r_since:'for 32 min', r_seats_btn:'Seats', r_stop:'Stop', r_open:'Open', r_launch:'Launch a rig…',
+  r_link_tip:(role,seat)=>`See the ${role} role from ${seat}`,
+  s_norole:'Role without role.md', s_norole_p:'The spec declares no guidance or startup file: the Role tab says so instead of being empty.', s_norole_body:'This role declares no instructions. What its seats still receive is in Startup context.',
+  s_rolemiss:'role.md missing', s_rolemiss_p:'The file is declared but missing or unreadable: its path stays shown, marked unknown.',
   note_params:'<b>OpenRig › Roles</b>: a <b>Rigs / Roles</b> switch in the OpenRig page head row (next to the machines). Left, the machine\'s roles; right, the chosen role, <b>seen from its spec</b>: Ledge resolves the YAML (imports, profiles) and says so. <b>Read-only</b>: no button changes a spec. Every parameter shows its <b>provenance</b> — colour rail and badge: here, inherited, not declared, unknown.',
-  note_seat:'<b>Seen from a seat</b>: what OpenRig resolved when it launched <span class="mono">dev.front</span> (node detail), not what Ledge infers. Model, folder and effort come from the rig member; the culture and scope files come from the copy Ledge composed (<span class="mono">~/.ledge/rigs/ledge-dev/</span>). Also reachable from the Rigs page: a seat\'s role name becomes a link.',
+  note_seat:'<b>Seen from a seat</b> (Parameters tab; its Role tab shows role.md then scope-front.md): what OpenRig resolved when it launched <span class="mono">dev.front</span> (node detail), not what Ledge infers. Model, folder and effort come from the rig member; the culture and scope files come from the copy Ledge composed (<span class="mono">~/.ledge/rigs/ledge-dev/</span>). Also reachable from the Rigs page: a seat\'s role name becomes a link.',
   note_context:'<b>Startup context</b>: there is no single system prompt. Ledge shows what the seat receives, <b>in the order OpenRig returns</b>, piece by piece, with the source, the delivery (typed into the terminal or a <span class="mono">CLAUDE.md</span> block) and what is not readable: the harness prompt, and a piece planned but missing from <span class="mono">CLAUDE.md</span>.',
   note_yaml:'<b>YAML source</b>: the file as is, then what it imports and, from a seat, the member in the rig spec that launched it. Copy is the only action.',
   note_builtin:'<b>Role shipped with OpenRig</b> (<span class="mono">pm</span>): no seat uses it, it has <b>two profiles</b> (a picker appears), and its <span class="mono">default</span> profile declares neither guidance nor subagents: those rows are <b>not declared</b>, not “empty”.',
@@ -580,10 +865,10 @@ const SEATS = {
   'ledge-reviewer':[{id:'review.qa',session:'review-qa@ledge-dev',label:'Reviewer',rt:'codex',model:'gpt-6.1-terra',cwd:'~/Workspace/ledge',state:'idle'}],
 };
 const MINE = [
-  {name:'ledge-developer',dir:'developer',sum:'Dev de ledge-dev — implémente dans un worktree, prouve par l\'effet, passe par la revue',rt:'claude-code',skills:[]},
-  {name:'ledge-lead',dir:'lead',sum:'Lead de ledge-dev — reçoit les objectifs, applique « maquette d\'abord », route et rend compte',rt:'claude-code',skills:[]},
-  {name:'ledge-reviewer',dir:'reviewer',sum:'Reviewer de ledge-dev — revue indépendante du diff et vérification par l\'effet, écrans contre maquette',rt:'codex',skills:[]},
-  {name:'ledge-ux',dir:'ux',sum:'UX/UI de ledge-dev — maquettes dans docs/mockups avant toute implémentation front-end',rt:'claude-code',skills:[]},
+  {name:'ledge-developer',dir:'developer',mds:['md-role'],sum:'Dev de ledge-dev — implémente dans un worktree, prouve par l\'effet, passe par la revue',rt:'claude-code',skills:[]},
+  {name:'ledge-lead',dir:'lead',mds:['md-role-lead'],sum:'Lead de ledge-dev — reçoit les objectifs, applique « maquette d\'abord », route et rend compte',rt:'claude-code',skills:[]},
+  {name:'ledge-reviewer',dir:'reviewer',mds:['md-role-reviewer'],sum:'Reviewer de ledge-dev — revue indépendante du diff et vérification par l\'effet, écrans contre maquette',rt:'codex',skills:[]},
+  {name:'ledge-ux',dir:'ux',mds:['md-role-ux'],sum:'UX/UI de ledge-dev — maquettes dans docs/mockups avant toute implémentation front-end',rt:'claude-code',skills:[]},
   {name:'shared',dir:'shared',sum:'Ressources communes aux agents de ledge-dev. Le plugin openrig-core vient de l\'installation OpenRig du daemon (openrig-home:) ; les fragments runtime sont copiés de la spec shared livrée avec OpenRig 0.7.7.',res:true},
 ];
 const BUILTIN = [
@@ -605,9 +890,17 @@ const BUILTIN = [
   ['vault-specialist','apps/vault-specialist','Vault specialist agent — manages HashiCorp Vault for this managed app','claude-code',['systematic-debugging','verification-before-completion','vault-user']],
 ].map(([name,dir,sum,rt,skills,extraProfiles,res,absentUses])=>({name,dir,sum,rt,skills,extraProfiles,res,absentUses:absentUses||[],builtin:true}));
 MINE.forEach(r=>{r.absentUses=[];});
+BUILTIN.find(b=>b.name==='pm').mds=['md-role-pm'];
+BUILTIN.find(b=>b.name==='conveyor-lead').mds=['md-role-conveyor-lead','md-ctx-conveyor-lead'];
+BUILTIN.find(b=>b.name==='conveyor-lead').extraFiles=[{path:'startup/context.md',id:'startup-context',sz:'0,4 ko'}];
+BUILTIN.find(b=>b.name==='vault-specialist').extraFiles=[{path:'startup/context.md',sz:'—'}];
+['conveyor-builder','conveyor-planner','conveyor-reviewer'].forEach(n=>{BUILTIN.find(b=>b.name===n).extraFiles=[{path:'startup/context.md',sz:'—'}];});
+const SIZES={'ledge-developer':'1,8 ko','ledge-lead':'2,3 ko','ledge-ux':'2,5 ko','ledge-reviewer':'1,6 ko','pm':'3,0 ko','conveyor-lead':'1,3 ko'};
+const CP='<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.8A1.3 1.3 0 0 0 9.2 2.5H3.8A1.3 1.3 0 0 0 2.5 3.8v5.4a1.3 1.3 0 0 0 1.3 1.3h1.7"/></svg>';
+const KB='<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M4.5 6.5l2 1.5-2 1.5M8 10h3.5"/></svg>';
 
 /* ================= State ================= */
-const st = {lang:'fr',theme:'dark',role:'ledge-developer',builtin:false,lens:'spec',tab:'params',profile:'default',piece:4,raw:false,ctxMode:'one',filter:'all',open:{},builtinOpen:false};
+const st = {lang:'fr',theme:'dark',role:'ledge-developer',builtin:false,lens:'spec',tab:'role',profile:'default',piece:4,raw:false,ctxMode:'one',filter:'all',open:{},builtinOpen:false};
 const t = k => S[st.lang][k];
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const pv = (k,src) => {
@@ -615,19 +908,22 @@ const pv = (k,src) => {
   return `<span class="pv ${k}">${ic} ${t('pv_'+k)}${src?` · ${src}`:''}</span>`;
 };
 const md = s => {
-  const out=[]; let inCode=false, list=false, para=[];
+  const out=[]; let inCode=false, list=null, para=[];
   const inline = x => esc(x).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
-  const flush = () => { if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[];} if(list){out.push('</ul>');list=false;} };
+  const endPara = () => { if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[];} };
+  const endList = () => { if(list){out.push(list.items.map(i=>'<li>'+inline(i)+'</li>').join('')+'</'+list.tag+'>');out.splice(list.at,0,'<'+list.tag+'>');list=null;} };
   for(const l of s.split('\n')){
-    if(l.startsWith('```')){ if(inCode){out.push('</code></pre>');inCode=false;} else {flush();out.push('<pre><code>');inCode=true;} continue; }
+    if(l.trim().startsWith('```')){ if(inCode){out.push('</code></pre>');inCode=false;} else {endPara();endList();out.push('<pre><code>');inCode=true;} continue; }
     if(inCode){out.push(esc(l)+'\n');continue;}
-    if(/^#\s/.test(l)){flush();out.push('<h1>'+inline(l.slice(2))+'</h1>');continue;}
-    if(/^##\s/.test(l)){flush();out.push('<h2>'+inline(l.slice(3))+'</h2>');continue;}
-    if(/^- /.test(l)){ if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[];} if(!list){out.push('<ul>');list=true;} out.push('<li>'+inline(l.slice(2))+'</li>'); continue; }
-    if(!l.trim()){flush();continue;}
-    para.push(l);
+    if(/^#\s/.test(l)){endPara();endList();out.push('<h1>'+inline(l.slice(2))+'</h1>');continue;}
+    if(/^##+\s/.test(l)){endPara();endList();out.push('<h2>'+inline(l.replace(/^#+\s/,''))+'</h2>');continue;}
+    const m = l.match(/^\s*(-|\d+\.)\s+(.*)$/);
+    if(m){ endPara(); const tag=m[1]==='-'?'ul':'ol'; if(list&&list.tag!==tag) endList(); if(!list) list={tag,items:[],at:out.length}; list.items.push(m[2]); continue; }
+    if(!l.trim()){endPara();endList();continue;}
+    if(list && /^\s+/.test(l)){ list.items[list.items.length-1]+=' '+l.trim(); continue; }
+    endList(); para.push(l);
   }
-  flush(); return out.join('');
+  endPara(); endList(); return out.join('');
 };
 const txt = id => document.getElementById(id).textContent;
 function roleObj(){
@@ -651,11 +947,14 @@ function renderChrome(){
     <div class="grow"></div>
     <div class="machbar"><span><span class="dot"></span> Local</span><span><span class="dot"></span> EC2 - AWS</span><span class="sp"></span><span style="color:var(--muted-foreground)">⚙</span></div>`;
   document.getElementById('topbar').innerHTML = `<span>⬡</span><strong style="font-weight:500">${t('openrig')}</strong><span style="color:var(--muted-foreground);font-weight:400">/ ${t('v_roles')}</span>`;
-  document.getElementById('orhead').innerHTML = `
-    <div class="seg" role="radiogroup" aria-label="${t('openrig')}"><button role="radio" aria-pressed="false">${t('v_rigs')}</button><button role="radio" aria-pressed="true">${t('v_roles')} <span style="color:var(--muted-foreground);font-size:11px">21</span></button></div>
-    <div style="display:flex;gap:6px" role="tablist"><button class="chip" role="tab" aria-pressed="true"><span class="dot"></span>${t('local')}</button><button class="chip" role="tab" aria-pressed="false"><span class="dot"></span>${t('ec2')}</button></div>
-    <span class="sp"></span><span class="pill off">${t('readonly')}</span><span class="meta">${t('updated')}</span><button class="btn ghost" title="${t('refresh')}" aria-label="${t('refresh')}">↻</button>`;
+  document.getElementById('orhead').innerHTML = orhead('roles');
   document.getElementById('footer').innerHTML = `<span><span class="dot"></span> ${t('foot1')}</span><span><span class="dot off"></span> ${t('foot2')}</span>`;
+}
+
+function orhead(view){
+  return `<div class="seg" role="radiogroup" aria-label="${t('openrig')}"><button role="radio" aria-pressed="${view==='rigs'}">${t('v_rigs')}</button><button role="radio" aria-pressed="${view==='roles'}">${t('v_roles')} <span style="color:var(--muted-foreground);font-size:11px">21</span></button></div>
+    <div style="display:flex;gap:6px" role="tablist"><button class="chip" role="tab" aria-pressed="true"><span class="dot"></span>${t('local')}</button><button class="chip" role="tab" aria-pressed="false"><span class="dot"></span>${t('ec2')}</button></div>
+    <span class="sp"></span>${view==='roles'?`<span class="pill off">${t('readonly')}</span>`:''}<span class="meta">${t('updated')}</span><button class="btn ghost" title="${t('refresh')}" aria-label="${t('refresh')}">↻</button>${view==='rigs'?`<button class="btn">+ ${t('r_launch')}</button>`:''}`;
 }
 
 /* ================= List ================= */
@@ -707,6 +1006,7 @@ function headerHtml(r){
     <span class="lenshint">${seat?t('lens_seat_hint')(seat.session,'OpenRig 0.7.7'):t('lens_spec_hint')}</span></div>`}
   </div>
   <div class="dtabs" role="tablist">
+    ${r.res?'':`<button role="tab" data-tab="role" aria-selected="${st.tab==='role'}">${t('tab_role')} <small>${roleFiles(r).length}</small></button>`}
     <button role="tab" data-tab="params" aria-selected="${st.tab==='params'}">${t('tab_params')}</button>
     ${r.res?'':`<button role="tab" data-tab="context" aria-selected="${st.tab==='context'}">${t('tab_ctx')} <small>${pieces(r).length}</small></button>`}
     <button role="tab" data-tab="yaml" aria-selected="${st.tab==='yaml'}">${t('tab_yaml')}</button>
@@ -804,10 +1104,30 @@ function resParams(r){
   return h;
 }
 
+/* The role's own words: role.md first, then the role's other guidance/startup files, then (from a seat) the seat's files. */
+function roleFiles(r){
+  const seat = seatOf(r);
+  const base = srcPath(r).replace('agent.yaml','');
+  const files = [{path:'guidance/role.md',abs:base+'guidance/role.md',md:(r.mds||[])[0],sz:SIZES[r.name]||'—',pv:['here'],key:'resources.guidance[role] · startup.files[0]',d:'send',req:true,orient:true}];
+  (r.extraFiles||[]).forEach((f,i)=>files.push({path:f.path,abs:base+f.path,md:(r.mds||[])[i+1],sz:f.sz,pv:['here'],key:'startup.files['+(i+1)+']',d:'send',req:true}));
+  if(seat&&seat.extra) files.push({path:seat.extra,abs:'~/.ledge/rigs/ledge-dev/'+seat.extra,md:seat.scope,sz:seat.extra.includes('front')?'0,7 ko':'0,6 ko',pv:['inh',t('from_member')(seat.id)],key:'member.startup.files[0]',d:'send',req:true});
+  return files;
+}
+function roleHtml(r){
+  const seat = seatOf(r);
+  const fs = roleFiles(r);
+  const rawSeg = `<div class="seg" role="radiogroup"><button data-raw="0" role="radio" aria-pressed="${!st.raw}">${t('rendered')}</button><button data-raw="1" role="radio" aria-pressed="${st.raw}">${t('raw')}</button></div>`;
+  const sum = `<div class="rsum"><span>${t('role_sum')(fs.length, seat?seat.id:null)}</span><span class="sp" style="flex:1"></span>${rawSeg}<button class="lnk" data-tab="context">${t('role_ctx_link')(pieces(r).length)}</button></div>`;
+  return sum + fs.map(f=>`<div class="rfile ${f.pv[0]}"><div class="rhead"><h4 class="mono" style="font-weight:500;font-size:13px">${f.path}</h4>${pv(f.pv[0],f.pv[1])}<span class="sp"></span><span class="muted">${f.sz}</span><button class="btn ghost" title="${t('copy')}" aria-label="${t('copy')}">${CP}</button>
+      <div class="meta" style="flex-basis:100%;overflow-wrap:anywhere"><span class="mono">${f.abs}</span> · <span class="mono">${f.key}</span></div>
+      <div style="flex-basis:100%"><span class="tag">${KB} ${t('d_send')}</span><span class="tag">${t('also_restore')}</span><span class="tag">${t('required')}</span>${f.orient?'<span class="tag">orientation: role</span>':''}</div></div>
+    <div class="rbody">${f.md?((st.raw)?`<div class="raw">${esc(txt(f.md))}</div>`:`<div class="md">${md(txt(f.md))}</div>`):`<p class="muted">${t('not_embedded')}</p>`}</div></div>`).join('');
+}
+
 /* Startup pieces, in the order OpenRig returns them (node detail startupFiles + startupActions). */
 function pieces(r){
   const seat = seatOf(r);
-  const role = {title:t('p_role'),src:'guidance/role.md',abs:srcPath(r).replace('agent.yaml','guidance/role.md'),sz:'1,8 ko',pv:['here'],md:'md-role',d:'send',req:true,fresh:false,layer:'l_agent'};
+  const role = {title:t('p_role'),src:'guidance/role.md',abs:srcPath(r).replace('agent.yaml','guidance/role.md'),sz:SIZES[r.name]||'—',pv:['here'],md:(r.mds||[])[0]||'md-role',d:'send',req:true,fresh:false,layer:'l_agent'};
   if(!seat) return [role];
   const merge = (title,file,sz,mdId,o={}) => ({title,src:file,abs:o.abs||'<openrig>/daemon/assets/guidance/'+file,sz,pv:o.pv||['inh',t('from_openrig')],md:mdId,d:'merge',req:o.req!==false,fresh:!!o.fresh,layer:o.layer||'l_openrig',into:seat.rt==='codex'?'AGENTS.md':'CLAUDE.md',...o});
   const list = [
@@ -842,10 +1162,10 @@ function contextHtml(r){
   const ps = pieces(r);
   if(st.piece>=ps.length) st.piece = ps.length-1;
   const cur = ps[st.piece];
-  const listH = ps.map((p,i)=>`<button class="piece ${p.pv[0]}" data-piece="${i}" aria-selected="${i===st.piece}"><span class="n">${i}</span><span class="t">${p.title}<small>${p.src}</small></span><span class="sz">${p.sz}</span><span class="pvw">${pv(p.pv[0],p.pv[1])} <span class="dl">${p.d==='send'?'⌨':p.d==='merge'?'▤':p.d==='action'?'⚙':''}</span></span></button>`).join('');
+  const listH = ps.map((p,i)=>`<button class="piece ${p.pv[0]}" data-piece="${i}" aria-selected="${i===st.piece}"><span class="n">${i}</span><span class="t">${p.title}<small>${p.src}</small></span><span class="sz">${p.sz}</span><span class="pvw">${pv(p.pv[0],p.pv[1])} <span class="dl">${p.d==='send'?KB:p.d==='merge'?'▤':p.d==='action'?'⚙':''}</span></span></button>`).join('');
   const intro = seat ? t('ctx_intro')(seat.id)+' '+t('ctx_intro_codex') : t('ctx_spec');
   const meta = p => `<span class="mono">${p.abs||p.src}</span>${p.layer?` · ${t('layer')} ${t(p.layer)} <span title="${t('inferred')}">(${t('inferred')})</span>`:''} · ${p.sz}`;
-  const rawSeg = `<div class="seg" role="radiogroup"><button data-raw="0" role="radio" aria-pressed="${!st.raw}">${t('rendered')}</button><button data-raw="1" role="radio" aria-pressed="${st.raw}">${t('raw')}</button></div><button class="btn ghost" title="${t('copy')}" aria-label="${t('copy')}">⧉</button>`;
+  const rawSeg = `<div class="seg" role="radiogroup"><button data-raw="0" role="radio" aria-pressed="${!st.raw}">${t('rendered')}</button><button data-raw="1" role="radio" aria-pressed="${st.raw}">${t('raw')}</button></div><button class="btn ghost" title="${t('copy')}" aria-label="${t('copy')}">${CP}</button>`;
   let reader;
   if(st.ctxMode==='all'){
     reader = `<div class="reader"><div class="rhead"><h4>${seat?seat.id:r.name} — ${t('all')}</h4><span class="sp"></span>${rawSeg}</div><div class="rbody">${ps.map((p,i)=>`<div class="allsep"><span class="mono">${i}</span><b>${p.title}</b><span class="mono">${p.src}</span><span style="flex:1"></span>${pv(p.pv[0],p.pv[1])}</div>${readerBody(p)}`).join('')}</div></div>`;
@@ -854,7 +1174,7 @@ function contextHtml(r){
   }
   return `<div class="ctxintro">${intro}</div>
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><div class="seg" role="radiogroup"><button data-mode="one" role="radio" aria-pressed="${st.ctxMode==='one'}">${t('one')}</button><button data-mode="all" role="radio" aria-pressed="${st.ctxMode==='all'}">${t('all')}</button></div>
-      ${seat?`<span class="dlegend"><span>⌨ ${t('d_send')}</span><span>▤ ${t('d_merge')}</span><span>⚙ ${t('d_action')}</span><span class="mono">22,4 ko ${t('readable')}</span></span>`:''}</div>
+      ${seat?`<span class="dlegend"><span>${KB} ${t('d_send')}</span><span>▤ ${t('d_merge')}</span><span>⚙ ${t('d_action')}</span><span class="mono">22,4 ko ${t('readable')}</span></span>`:''}</div>
     <div class="ctx"><div><div class="pieces" role="listbox">${listH}</div>
       ${seat?`<div class="notshown"><b>${t('notshown_t')}</b><ul><li>${t('ns1')}</li><li>${t('ns2')}</li><li>${t('ns3')}</li></ul></div>`:''}</div>
       ${reader}</div>`;
@@ -950,10 +1270,27 @@ function yamlHtml(r){
 }
 function renderDetail(){
   const r = roleObj();
-  if(r.res){ st.lens='spec'; if(st.tab==='context') st.tab='params'; }
+  if(r.res){ st.lens='spec'; if(st.tab==='context'||st.tab==='role') st.tab='params'; }
   if(!r.extraProfiles) st.profile='default';
-  const body = st.tab==='params'?paramsHtml(r):st.tab==='context'?contextHtml(r):yamlHtml(r);
+  const body = st.tab==='role'?roleHtml(r):st.tab==='params'?paramsHtml(r):st.tab==='context'?contextHtml(r):yamlHtml(r);
   document.getElementById('detail').innerHTML = headerHtml(r)+`<div class="panel">${body}</div>`;
+}
+
+/* ================= Rigs view: the seat's role becomes a link ================= */
+function renderRigs(){
+  document.getElementById('side2').innerHTML = document.getElementById('side').innerHTML;
+  document.getElementById('footer2').innerHTML = document.getElementById('footer').innerHTML;
+  document.getElementById('topbar2').innerHTML = `<span>⬡</span><strong style="font-weight:500">${t('openrig')}</strong>`;
+  document.getElementById('orhead2').innerHTML = orhead('rigs');
+  const all = Object.entries(SEATS).flatMap(([role,ss])=>ss.map(s=>({...s,role})));
+  const order = ['pilot.lead','design.ux','dev.front','dev.back','review.qa'];
+  all.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+  document.getElementById('rigspage').innerHTML = `
+    <div class="ocards"><div class="ocard"><h3><span class="dot"></span>${t('r_daemon')} <span class="pill ok">${t('r_active')}</span></h3><p class="mono">127.0.0.1:7433 · pid 255259</p></div>
+      <div class="ocard"><h3><span class="dot"></span>Kernel <span class="pill ok">${t('r_ready')}</span></h3><p>${t('r_kernel')}</p></div></div>
+    <div style="display:flex;gap:10px;align-items:center"><h2 style="font-size:15px;font-weight:600">Rigs</h2><span class="pill off">1</span></div>
+    <div class="origs"><div class="orow"><span>▾ <b>ledge-dev</b></span><span><span class="pill ok">${t('r_running')}</span></span><span class="muted">5/5 ${t('r_seats')}</span><span></span><span class="muted">${t('r_since')}</span><span style="display:flex;gap:6px"><button class="btn">± ${t('r_seats_btn')}</button><button class="btn">■ ${t('r_stop')}</button><button class="btn">↻</button></span></div>
+      <ul class="oseats">${all.map((s,i)=>`<li class="oseat"><span class="mono">${s.id}</span><span style="position:relative"><button class="rolelink${i===2?' hov':''}" data-go-role="${s.role}" data-go-seat="${s.id}" title="${t('r_link_tip')(s.role,s.id)}">${s.role} ↗</button>${i===2?`<span class="tip" style="left:0;top:0">${t('r_link_tip')(s.role,s.id)}</span>`:''}</span><span class="muted">${s.rt} · ${s.model}</span><span><span class="pill ${s.state==='work'?'info':'ok'}">${t('st_'+s.state)}</span></span><span class="muted"></span><span style="display:flex;gap:6px"><button class="btn">${t('r_open')}</button><button class="btn ghost">⚙</button></span></li>`).join('')}</ul></div>`;
 }
 
 /* ================= States ================= */
@@ -995,6 +1332,12 @@ ${t('diverge_d')}</code></div>
   <div class="st"><div class="lbl">${t('s_amb')}</div><p style="margin-top:0">${t('s_amb_p')}</p>
     <div class="rows" style="margin-top:8px">${row('unk',t('f_skills'),'','<span class="mono">frontend-design</span><span class="hint mono">shared · design-kit</span>',pv('unk',why('amb')))}</div></div>
 
+  <div class="st"><div class="lbl">${t('s_norole')}</div><p style="margin-top:0">${t('s_norole_p')}</p>
+    <div class="rfile" style="margin-top:10px"><div class="rhead" style="padding-left:16px"><h4 class="mono" style="font-weight:500;font-size:13px">guidance/role.md</h4>${pv('abs')}</div><div class="rbody" style="padding:12px 16px"><p class="muted">${t('s_norole_body')}</p><div class="acts"><button class="btn">${t('tab_params')}</button><button class="btn">${t('tab_ctx')}</button></div></div></div></div>
+
+  <div class="st"><div class="lbl">${t('s_rolemiss')}</div><p style="margin-top:0">${t('s_rolemiss_p')}</p>
+    <div class="rfile unk" style="margin-top:10px"><div class="rhead"><h4 class="mono" style="font-weight:500;font-size:13px">guidance/role.md</h4>${pv('unk',why('unread'))}</div><div class="rbody" style="padding:12px 16px"><div class="err-box" style="margin-top:0">${t('s_missing_err')}<code>~/.openrig/specs/openrig/agents/ux/guidance/role.md</code></div></div></div></div>
+
   <div class="st"><div class="lbl">${t('s_nores')}</div><label class="search"><span>⌕</span><input value="terraform" aria-label="search"></label>
     <h4 style="margin-top:14px">${t('s_nores_t')}</h4><p>${t('s_nores_p')}</p><div class="acts"><button class="btn">${t('clear')}</button></div></div>
 
@@ -1006,21 +1349,25 @@ ${t('diverge_d')}</code></div>
 }
 
 /* ================= Wiring ================= */
-const notes = {params:'note_params',seat:'note_seat',context:'note_context',yaml:'note_yaml',builtin:'note_builtin'};
-let preset = 'params';
+const notes = {role:'note_role',multi:'note_multi',params:'note_params',seat:'note_seat',context:'note_context',yaml:'note_yaml',builtin:'note_builtin'};
+let preset = 'role';
 function render(){
   document.documentElement.lang = st.lang;
   document.documentElement.dataset.theme = st.theme;
   document.getElementById('note').innerHTML = t(notes[preset]||'note_params');
   document.getElementById('note-states').innerHTML = t('note_states');
-  renderChrome(); renderList(); renderDetail(); renderStates();
+  renderChrome(); renderList(); renderDetail(); renderStates(); renderRigs();
+  document.getElementById('note-rigs').innerHTML = t('note_rigs');
 }
 function applyPreset(p){
   preset = p;
   document.querySelectorAll('[data-preset]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.preset===p)));
-  document.getElementById('v-app').classList.toggle('on',p!=='states');
+  document.getElementById('v-app').classList.toggle('on',p!=='states'&&p!=='rigs');
   document.getElementById('v-states').classList.toggle('on',p==='states');
+  document.getElementById('v-rigs').classList.toggle('on',p==='rigs');
   const base = {role:'ledge-developer',builtin:false,profile:'default',raw:false,ctxMode:'one',open:{},builtinOpen:false,filter:'all'};
+  if(p==='role') Object.assign(st,base,{lens:'spec',tab:'role'});
+  if(p==='multi') Object.assign(st,base,{role:'conveyor-lead',builtin:true,lens:'spec',tab:'role',builtinOpen:true});
   if(p==='params') Object.assign(st,base,{lens:'spec',tab:'params'});
   if(p==='seat') Object.assign(st,base,{lens:'dev.front',tab:'params',open:{'claude-default-mcp':true}});
   if(p==='context') Object.assign(st,base,{lens:'dev.front',tab:'context',piece:4});
@@ -1036,6 +1383,7 @@ document.addEventListener('click',e=>{
   if(d.preset){ applyPreset(d.preset); return; }
   if(d.themeBtn){ st.theme=d.themeBtn; document.querySelectorAll('[data-theme-btn]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); render(); return; }
   if(d.langBtn){ st.lang=d.langBtn; document.querySelectorAll('[data-lang-btn]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); render(); return; }
+  if(d.goRole){ st.role=d.goRole; st.builtin=false; st.lens=d.goSeat; st.tab='role'; preset='seat'; document.querySelectorAll('[data-preset]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.preset==='seat'))); document.getElementById('v-rigs').classList.remove('on'); document.getElementById('v-app').classList.add('on'); render(); return; }
   if(d.role){ st.role=d.role; st.builtin=d.builtin==='true'; st.lens='spec'; st.profile='default'; st.piece=1; document.getElementById('detail').scrollTop=0; }
   else if(d.bfold) st.builtinOpen=!st.builtinOpen;
   else if(d.filter) st.filter=d.filter;
@@ -1062,7 +1410,7 @@ document.addEventListener('keydown',e=>{
     const n=tabs[(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length]; n.focus(); n.click(); e.preventDefault();
   }
 });
-applyPreset('params');
+applyPreset('role');
 </script>
 </body>
 </html>
