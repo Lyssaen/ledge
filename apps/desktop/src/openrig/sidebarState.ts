@@ -13,8 +13,9 @@ export interface SidebarOpenRig {
   installed: boolean;
   /** A followed machine's daemon runs: no « OpenRig est arrêté » box. */
   daemonUp: boolean;
-  /** The kernel's state on a machine, once read. */
-  kernelState(machine: string): RigKernelState | undefined;
+  /** The kernel's state on a machine: `offline` when the machine does not answer (unreachable, or its Ledge too old),
+   *  undefined while it has not answered yet. */
+  kernelState(machine: string): RigKernelState | 'offline' | undefined;
   /** A machine's name, for the kernel tag's tooltip. */
   labelOf(machine: string): string;
   /** The local machine answers and has OpenRig: « Démarrer OpenRig » is offered there (otherwise only the OpenRig page link). */
@@ -41,13 +42,15 @@ export function useSidebarOpenRig(client: DaemonClient, machines: readonly Machi
   const others = machines.filter(m => m.ready && m.id !== LOCAL).map(m => m.id);
   const local = useOpenRig(client, localReady ? LOCAL : null, SIDEBAR_POLL_MS);
   const rest = useOpenRigStates(client, others, SIDEBAR_POLL_MS);
-  const byMachine = new Map(rest);
+  const byMachine = new Map<string, OpenRigState>();
+  for (const [m, seen] of rest) if (seen.state) byMachine.set(m, seen.state);
   if (local.state) byMachine.set(LOCAL, local.state);
+  const unreachable = (m: string) => !machines.some(x => x.id === m && x.ready) || (m === LOCAL ? !!local.error : !!rest.get(m)?.error);
   const last = local.last;
   const canStart = local.state?.installed === true;
   return {
     ...summarize([...byMachine.values()]),
-    kernelState: machine => byMachine.get(machine)?.kernel.state,
+    kernelState: machine => (unreachable(machine) ? 'offline' : byMachine.get(machine)?.kernel.state),
     labelOf: machine => machines.find(m => m.id === machine)?.label ?? machine,
     canStart,
     starting: local.pending?.kind === 'daemon.start',

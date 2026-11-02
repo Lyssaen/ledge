@@ -69,10 +69,27 @@ describe('the Rigs view of the sidebar', () => {
     expect(document.querySelector('.st-kernel-tag')).toHaveAttribute('data-state', 'stopped');
   });
 
+  it('a kernel machine unreachable: grey « hors ligne », every machine in the tooltip; one not read yet: « Kernel » alone (review)', () => {
+    const two = [KERNEL[0]!, { ...KERNEL[1]!, machineId: 'ec2' }, KERNEL[2]!];
+    mount(two, rig({ kernelState: m => (m === 'ec2' ? 'offline' : 'ready') }));
+    let tag = document.querySelector('.st-kernel-tag')!;
+    expect(tag).toHaveAttribute('data-state', 'offline');
+    expect(tag).toHaveTextContent('hors ligne');
+    expect(tag).toHaveAttribute('title', 'WSL · opérationnel\nEC2 · hors ligne');
+    cleanup();
+    mount(two, rig({ kernelState: m => (m === 'ec2' ? undefined : 'ready') }));
+    expect(document.querySelector('.st-kernel-tag')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Kernel' }).querySelector('.st-label')).toHaveTextContent(/^Kernel$/);
+  });
+
   it('the worst state wins: stopped, then starting, then ready; one machine has no tooltip', () => {
     expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'ready' : 'starting'))?.tag).toBe('starting');
     expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'starting' : 'skipped'))?.tag).toBe('stopped');
-    expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'ready' : undefined))).toEqual({ tag: 'ready', per: [['a', 'ready']] });
+    // Not every machine read yet: no tag, never « opérationnel » from part of them (review, lead's rule).
+    expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'ready' : undefined))).toBeNull();
+    expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'ready' : 'offline'))).toEqual({ tag: 'offline', per: [['a', 'ready'], ['b', 'offline']] });
+    expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'offline' : 'stopped'))?.tag).toBe('stopped');
+    expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'offline' : 'starting'))?.tag).toBe('offline');
     expect(kernelTagOf(['a'], () => undefined)).toBeNull();
     mount(KERNEL, rig());
     expect(document.querySelector('.st-kernel-tag')).not.toHaveAttribute('title');
@@ -221,6 +238,23 @@ describe('« Démarrer OpenRig » acts on this computer only (review P1)', () =>
     expect(result.current).toMatchObject({ installed: true, daemonUp: false, canStart: false });
     act(() => result.current.start());
     expect(sent.some(m => m.type === 'openrig.act')).toBe(false);
+  });
+});
+
+describe('the kernel state of each machine, as the sidebar reads it (review)', () => {
+  it('not answered yet: undefined; answered: its state; disconnected or unanswerable: offline', () => {
+    const { client, sent, emit } = fakeClient();
+    const { result, rerender } = renderHook(({ ms }) => useSidebarOpenRig(client, ms), { initialProps: { ms: [machineOf('local'), machineOf('ec2')] } });
+    expect(result.current.kernelState('ec2')).toBeUndefined();
+    const asks = statusAsks(sent);
+    emit({ type: 'openrig.state', requestId: asks.find(m => m.machineId === 'ec2')!.requestId, machineId: 'ec2', state: st() });
+    expect(result.current.kernelState('ec2')).toBe('ready');
+    // The fleet loses EC2: its seats stay listed, offline.
+    rerender({ ms: [machineOf('local'), machineOf('ec2', false)] });
+    expect(result.current.kernelState('ec2')).toBe('offline');
+    // The local machine answers that it cannot (its daemon too old).
+    emit({ type: 'openrig.state', requestId: asks.find(m => m.machineId === 'local')!.requestId, machineId: 'local', error: 'outdated' });
+    expect(result.current.kernelState('local')).toBe('offline');
   });
 });
 

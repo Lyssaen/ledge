@@ -10,17 +10,20 @@ import { SessionBot } from '../SessionBot';
 
 const KERNEL = 'kernel';
 const waiting = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input' || s.state === 'error';
-type Tag = 'ready' | 'starting' | 'stopped';
-/** The kernel tag's word and dot (the user: « état réel ») : ready, starting, and every other state as stopped. */
-const tagOf = (state: string): Tag => (state === 'ready' ? 'ready' : state === 'starting' ? 'starting' : 'stopped');
-const RANK: Record<Tag, number> = { ready: 0, starting: 1, stopped: 2 };
-/** The kernel's seats may live on several machines: the tag says the worst of their states (stopped, then starting, then
- *  ready), never « opérationnel » while one is down; `per` lists each machine's, for the tooltip. Null until one is read. */
+type Tag = 'ready' | 'starting' | 'offline' | 'stopped';
+/** The kernel tag's word and dot (the user: « état réel ») : ready, starting, a machine that does not answer, every other state as stopped. */
+const tagOf = (state: string): Tag => (state === 'ready' ? 'ready' : state === 'starting' ? 'starting' : state === 'offline' ? 'offline' : 'stopped');
+const RANK: Record<Tag, number> = { ready: 0, starting: 1, offline: 2, stopped: 3 };
+/** The kernel's seats may live on several machines: the tag says the worst of their states (stopped, offline, starting, ready),
+ *  never « opérationnel » while one is down or unreachable; `per` lists every machine's, for the tooltip. While one of them has not
+ *  answered yet, no tag at all (the lead's rule: never conclude from part of the machines). */
 export function kernelTagOf(machines: readonly string[], stateOf: (machine: string) => string | undefined): { tag: Tag; per: Array<[string, Tag]> } | null {
-  const per = machines.flatMap(m => { const st = stateOf(m); return st === undefined ? [] : [[m, tagOf(st)] as [string, Tag]]; });
+  const per: Array<[string, Tag]> = [];
+  for (const m of machines) { const st = stateOf(m); if (st === undefined) return null; per.push([m, tagOf(st)]); }
   if (per.length === 0) return null;
   return { tag: per.reduce<Tag>((worst, [, t]) => (RANK[t] > RANK[worst] ? t : worst), 'ready'), per };
 }
+const tagWord = (t: { side: { kernelTag: Record<'ready' | 'starting' | 'stopped', string>; offline: string } }, tag: Tag) => (tag === 'offline' ? t.side.offline : t.side.kernelTag[tag]);
 
 /**
  * The OpenRig seats Ledge follows, away from the projects (docs/mockups/ledge-sidebar-tidy.html): « Kernel » first, in its box,
@@ -76,14 +79,14 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
   const kt = openrig ? kernelTagOf(kernelMachines, m => openrig.kernelState(m)) : null;
   const tag = kt?.tag ?? null;
   // Several machines: each one's state in the tooltip (« WSL · opérationnel »); one machine, nothing more on screen.
-  const tagTitle = kt && kernelMachines.length > 1 ? kt.per.map(([m, x]) => `${openrig!.labelOf(m)} · ${t.side.kernelTag[x]}`).join('\n') : undefined;
+  const tagTitle = kt && kernelMachines.length > 1 ? kt.per.map(([m, x]) => `${openrig!.labelOf(m)} · ${tagWord(t, x)}`).join('\n') : undefined;
   return (
     <>
       {kernel.length > 0 && (
         <section className="st-kernel-box" aria-label={t.side.kernel}>
           <div className="st-label">
             <span className="st-kernel-hex" aria-hidden="true"><Icon d={SHELL_ICONS.rig} size={12} /></span><span className="st-kernel-name">{t.side.kernel}</span><span className="st-fill" />
-            {tag && <span className="st-kernel-tag" data-state={tag} title={tagTitle}><i aria-hidden="true" />{t.side.kernelTag[tag]}</span>}
+            {tag && <span className="st-kernel-tag" data-state={tag} title={tagTitle}><i aria-hidden="true" />{tagWord(t, tag)}</span>}
           </div>
           <div role="tree" aria-label={t.side.kernel}>{kernel.map(s => row(s, 0))}</div>
         </section>

@@ -149,11 +149,14 @@ export function useOpenRig(client: DaemonClient, machine: string | null, pollMs 
   return { state: seen.state, ...(seen.error ? { error: seen.error } : {}), pending, last, act, refresh };
 }
 
+/** What a machine answered: its OpenRig, or why it could not (`offline`, `outdated`). */
+export type OpenRigSeen = { state: OpenRigState | null; error?: 'offline' | 'outdated' };
+
 /**
  * Several machines' OpenRig, as last read, through the same shared read (the sidebar: is OpenRig installed somewhere, does a
- * daemon run, the kernel's state). A machine that could not answer, or not yet, is absent.
+ * daemon run, the kernel's state). A machine that has not answered yet is absent; one that could not answer has its `error`.
  */
-export function useOpenRigStates(client: DaemonClient, machines: readonly string[], pollMs = OPENRIG_POLL_MS): ReadonlyMap<string, OpenRigState> {
+export function useOpenRigStates(client: DaemonClient, machines: readonly string[], pollMs = OPENRIG_POLL_MS): ReadonlyMap<string, OpenRigSeen> {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const key = [...machines].sort().join('\u0000');
   useEffect(() => {
@@ -162,8 +165,8 @@ export function useOpenRigStates(client: DaemonClient, machines: readonly string
     bump();
     return () => offs.forEach(off => off());
   }, [client, key, pollMs]);
-  const out = new Map<string, OpenRigState>();
-  for (const m of machines) { const st = seenOf(client, m).state; if (st) out.set(m, st); }
+  const out = new Map<string, OpenRigSeen>();
+  for (const m of machines) { const seen = seenOf(client, m); if (seen.state || seen.error) out.set(m, seen); }
   return out;
 }
 
