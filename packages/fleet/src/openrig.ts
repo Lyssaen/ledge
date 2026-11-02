@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import type { OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigLaunch, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
@@ -22,90 +22,149 @@ export interface OpenRigView {
 
 let next = 0;
 
+/** A machine whose OpenRig is absent, whose daemon is stopped, or that could not answer is read this often: each read runs `rig status`. */
+export const OPENRIG_IDLE_POLL_MS = 60_000;
+/** A read this recent is not repeated for a new reader or a window focus. */
+const FRESH_MS = 2_000;
+
+type Seen = { state: OpenRigState | null; error?: 'offline' | 'outdated' };
+const UNSEEN: Seen = { state: null };
+interface Entry { seen: Seen; asked: string | null; askedAt: number; answeredAt: number; readers: Map<number, { pollMs: number; notify: () => void }>; every: number; timer: ReturnType<typeof setTimeout> | null }
+interface Store { entries: Map<string, Entry>; off: (() => void) | null; offFocus: (() => void) | null }
+const stores = new WeakMap<DaemonClient, Store>();
+let reader = 0;
+
+const storeOf = (client: DaemonClient): Store => {
+  let s = stores.get(client);
+  if (!s) { s = { entries: new Map(), off: null, offFocus: null }; stores.set(client, s); }
+  return s;
+};
+const idle = (e: Entry): boolean => e.seen.error !== undefined || (e.seen.state !== null && (!e.seen.state.installed || e.seen.state.daemon.state !== 'running'));
+const everyOf = (e: Entry): number => {
+  const fastest = Math.min(...[...e.readers.values()].map(r => r.pollMs));
+  return idle(e) ? Math.max(OPENRIG_IDLE_POLL_MS, fastest) : fastest;
+};
+
+function ask(client: DaemonClient, machine: string, e: Entry): void {
+  const requestId = `openrig-${++next}`;
+  e.asked = requestId; e.askedAt = Date.now();
+  client.send({ type: 'openrig.status', requestId, machineId: machine });
+  plan(client, machine, e);
+}
+function plan(client: DaemonClient, machine: string, e: Entry): void {
+  if (e.timer) clearTimeout(e.timer);
+  e.timer = null;
+  if (e.readers.size === 0) return;
+  e.every = everyOf(e);
+  e.timer = setTimeout(() => ask(client, machine, e), e.every);
+}
+
 /**
- * A machine's OpenRig, read every `OPENRIG_POLL_MS` while the screen is shown (`machine` null: nothing is asked), and the
- * actions run on it. A state an action broadcasts, from this front or another, is taken at once.
+ * One read of a machine's OpenRig for every screen of this client that shows it (the OpenRig page, the sidebar, the TUI): a single
+ * `openrig.status` loop per machine, at the fastest pace a reader asks for, slowed to `OPENRIG_IDLE_POLL_MS` while OpenRig is absent
+ * or stopped there; read again on a window focus. A state an action broadcasts, from this front or another, is taken at once.
+ */
+function subscribe(client: DaemonClient, machine: string, pollMs: number, notify: () => void): () => void {
+  const store = storeOf(client);
+  if (!store.off) {
+    store.off = client.onMessage(m => {
+      if (m.type !== 'openrig.state') return;
+      const machineId = m.machineId ?? 'local';
+      const e = store.entries.get(machineId);
+      if (!e) return;
+      // An answer to an older ask is not taken over a newer one; a broadcast always is.
+      if (m.requestId !== undefined && m.requestId !== e.asked) return;
+      e.seen = { state: m.state ?? (m.error ? null : e.seen.state), ...(m.error ? { error: m.error } : {}) };
+      e.answeredAt = Date.now();
+      if (everyOf(e) !== e.every) plan(client, machineId, e);
+      e.readers.forEach(r => r.notify());
+    });
+  }
+  if (!store.offFocus && typeof window !== 'undefined') {
+    const onFocus = () => { for (const [id, e] of store.entries) if (Date.now() - Math.max(e.answeredAt, e.askedAt) > FRESH_MS) ask(client, id, e); };
+    window.addEventListener('focus', onFocus);
+    store.offFocus = () => window.removeEventListener('focus', onFocus);
+  }
+  let e = store.entries.get(machine);
+  const fresh = !e;
+  if (!e) { e = { seen: UNSEEN, asked: null, askedAt: 0, answeredAt: 0, readers: new Map(), every: pollMs, timer: null }; store.entries.set(machine, e); }
+  const id = ++reader;
+  e.readers.set(id, { pollMs, notify });
+  // A new reader takes the read under way or a recent one; it asks only when what is known is older than its own pace.
+  const last = Math.max(e.answeredAt, e.askedAt);
+  if (fresh || Date.now() - last >= Math.min(pollMs, everyOf(e))) ask(client, machine, e);
+  else if (everyOf(e) !== e.every) plan(client, machine, e);
+  return () => {
+    const entry = store.entries.get(machine);
+    if (!entry) return;
+    entry.readers.delete(id);
+    if (entry.readers.size > 0) { if (everyOf(entry) !== entry.every) plan(client, machine, entry); return; }
+    if (entry.timer) clearTimeout(entry.timer);
+    store.entries.delete(machine);
+    if (store.entries.size === 0) { store.off?.(); store.off = null; store.offFocus?.(); store.offFocus = null; }
+  };
+}
+const seenOf = (client: DaemonClient, machine: string): Seen => stores.get(client)?.entries.get(machine)?.seen ?? UNSEEN;
+/** Reads the machine's OpenRig again now (after an action, a refresh button). */
+function reread(client: DaemonClient, machine: string): void {
+  const e = stores.get(client)?.entries.get(machine);
+  if (e) ask(client, machine, e);
+}
+
+/**
+ * A machine's OpenRig, read every `pollMs` while the screen is shown (`machine` null: nothing is asked), through the read every
+ * screen of the client shares, and the actions run on it. An action's end reads the machine again.
  */
 export function useOpenRig(client: DaemonClient, machine: string | null, pollMs = OPENRIG_POLL_MS): OpenRigView {
-  const [view, setView] = useState<{ machine: string | null; state: OpenRigState | null; error?: 'offline' | 'outdated' }>({ machine, state: null });
+  const sub = useCallback((notify: () => void) => (machine === null ? () => {} : subscribe(client, machine, pollMs, notify)), [client, machine, pollMs]);
+  const seen = useSyncExternalStore(sub, () => (machine === null ? UNSEEN : seenOf(client, machine)));
   const [pending, setPending] = useState<OpenRigAction | null>(null);
   const [last, setLast] = useState<OpenRigDone | null>(null);
   const waiting = useRef(new Map<string, (d: OpenRigDone) => void>());
-  const asked = useRef<string | null>(null);
-
-  const ask = useCallback(() => {
-    if (machine === null) return;
-    const requestId = `openrig-${++next}`;
-    asked.current = requestId;
-    client.send({ type: 'openrig.status', requestId, machineId: machine });
-  }, [client, machine]);
 
   useEffect(() => {
-    setView({ machine, state: null }); setPending(null); setLast(null);
+    setPending(null); setLast(null);
     if (machine === null) return;
     const off = client.onMessage(m => {
-      if (m.type === 'openrig.state') {
-        if ((m.machineId ?? 'local') !== machine) return;
-        // An answer to an older ask of this screen is not taken over a newer one; a broadcast always is.
-        if (m.requestId !== undefined && m.requestId !== asked.current) return;
-        setView(v => ({ machine, state: m.state ?? (m.error ? null : v.state), ...(m.error ? { error: m.error } : {}) }));
-      } else if (m.type === 'openrig.done') {
-        const resolve = waiting.current.get(m.requestId);
-        if (!resolve) return;
-        waiting.current.delete(m.requestId);
-        resolve(m);
-      }
+      if (m.type !== 'openrig.done') return;
+      const resolve = waiting.current.get(m.requestId);
+      if (!resolve) return;
+      waiting.current.delete(m.requestId);
+      resolve(m);
     });
-    ask();
-    const timer = setInterval(ask, pollMs);
-    return () => { off(); clearInterval(timer); for (const [, r] of waiting.current) r({ type: 'openrig.done', requestId: '', ok: false, commands: [], error: 'cancelled' }); waiting.current.clear(); };
-  }, [client, machine, ask, pollMs]);
+    return () => { off(); for (const [, r] of waiting.current) r({ type: 'openrig.done', requestId: '', ok: false, commands: [], error: 'cancelled' }); waiting.current.clear(); };
+  }, [client, machine]);
 
   const act = useCallback((action: OpenRigAction): Promise<OpenRigDone> => {
     if (machine === null) return Promise.resolve({ type: 'openrig.done', requestId: '', ok: false, commands: [], error: 'offline' });
     const requestId = `openrig-act-${++next}`;
     setPending(action); setLast(null);
     return new Promise<OpenRigDone>(resolve => {
-      waiting.current.set(requestId, d => { setPending(p => (p === action ? null : p)); setLast(d); resolve(d); });
+      waiting.current.set(requestId, d => { setPending(p => (p === action ? null : p)); setLast(d); if (d.error !== 'cancelled') reread(client, machine); resolve(d); });
       client.send({ type: 'openrig.act', requestId, action, machineId: machine });
     });
   }, [client, machine]);
 
-  const shown = view.machine === machine ? view : { state: null };
-  return { state: shown.state, ...('error' in shown && shown.error ? { error: shown.error } : {}), pending, last, act, refresh: ask };
+  const refresh = useCallback(() => { if (machine !== null) reread(client, machine); }, [client, machine]);
+  return { state: seen.state, ...(seen.error ? { error: seen.error } : {}), pending, last, act, refresh };
 }
 
 /**
- * Several machines' OpenRig, as last read (the sidebar: is OpenRig installed somewhere, does a daemon run, the kernel's
- * state). Each machine is asked every `pollMs`; a state an action broadcasts is taken at once. A machine that could not
- * answer, or not yet, is absent.
+ * Several machines' OpenRig, as last read, through the same shared read (the sidebar: is OpenRig installed somewhere, does a
+ * daemon run, the kernel's state). A machine that could not answer, or not yet, is absent.
  */
 export function useOpenRigStates(client: DaemonClient, machines: readonly string[], pollMs = OPENRIG_POLL_MS): ReadonlyMap<string, OpenRigState> {
-  const [states, setStates] = useState<ReadonlyMap<string, OpenRigState>>(() => new Map());
+  const [, bump] = useReducer((n: number) => n + 1, 0);
   const key = [...machines].sort().join('\u0000');
   useEffect(() => {
     const ids = key ? key.split('\u0000') : [];
-    setStates(was => new Map([...was].filter(([m]) => ids.includes(m))));
-    if (ids.length === 0) return;
-    const asked = new Map<string, string>();
-    const off = client.onMessage(m => {
-      if (m.type !== 'openrig.state') return;
-      const machine = m.machineId ?? 'local';
-      if (!ids.includes(machine)) return;
-      // Our own asks, and broadcasts; another screen's answer is its own.
-      if (m.requestId !== undefined && m.requestId !== asked.get(machine)) return;
-      setStates(was => {
-        const n = new Map(was);
-        if (m.state) n.set(machine, m.state); else if (m.error) n.delete(machine);
-        return n;
-      });
-    });
-    const ask = () => { for (const machine of ids) { const requestId = `openrig-${++next}`; asked.set(machine, requestId); client.send({ type: 'openrig.status', requestId, machineId: machine }); } };
-    ask();
-    const timer = setInterval(ask, pollMs);
-    return () => { off(); clearInterval(timer); };
+    const offs = ids.map(m => subscribe(client, m, pollMs, bump));
+    bump();
+    return () => offs.forEach(off => off());
   }, [client, key, pollMs]);
-  return states;
+  const out = new Map<string, OpenRigState>();
+  for (const m of machines) { const st = seenOf(client, m).state; if (st) out.set(m, st); }
+  return out;
 }
 
 export interface RigSpecsView { status: 'idle' | 'loading' | 'ready'; specs: readonly RigSpec[]; error?: string; reload(): void }

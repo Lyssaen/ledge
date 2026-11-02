@@ -6,8 +6,9 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { ClientMessage, OpenRigState, ServerMessage, Session } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
 import { initialNav, navReducer } from '../src/nav/state';
-import { startMachineOf, summarize, useSidebarOpenRig, type SidebarOpenRig } from '../src/openrig/sidebarState';
-import { RigGroups } from '../src/shell/sidebar/RigGroups';
+import { summarize, useSidebarOpenRig, type SidebarOpenRig } from '../src/openrig/sidebarState';
+import { useOpenRig } from '@ledge/fleet/openrig';
+import { kernelTagOf, RigGroups } from '../src/shell/sidebar/RigGroups';
 
 afterEach(() => cleanup());
 
@@ -17,7 +18,7 @@ const seat = (id: string, name: string, rig: string, role: string, extra: Partia
 const KERNEL = [seat('k1', 'Nova', 'kernel', 'advisor.agent'), seat('k2', 'Max', 'kernel', 'operator.agent'), seat('k3', 'Rex', 'kernel', 'queue.worker')];
 const RIG = [seat('r1', 'Bix', 'ledge-dev', 'pilot.lead', { state: 'working' }), seat('r2', 'Lu', 'ledge-dev', 'design.ux')];
 
-const rig = (o: Partial<SidebarOpenRig> = {}): SidebarOpenRig => ({ installed: true, daemonUp: true, kernelState: () => 'ready', starting: false, failed: null, start: vi.fn(), ...o });
+const rig = (o: Partial<SidebarOpenRig> = {}): SidebarOpenRig => ({ installed: true, daemonUp: true, kernelState: () => 'ready', labelOf: m => ({ local: 'WSL', ec2: 'EC2' })[m] ?? m, canStart: true, starting: false, failed: null, start: vi.fn(), ...o });
 function mount(sessions: readonly Session[], openrig: SidebarOpenRig | undefined, lang: 'fr' | 'en' = 'fr') {
   const dispatch = vi.fn(), onToggleDense = vi.fn();
   render(<LangProvider lang={lang}><aside className="st"><RigGroups sessions={sessions} current={null} paused dispatch={dispatch} openrig={openrig} dense={false} onToggleDense={onToggleDense} /></aside></LangProvider>);
@@ -53,6 +54,28 @@ describe('the Rigs view of the sidebar', () => {
   it('no tag while the kernel’s state is not read yet', () => {
     mount(KERNEL, rig({ kernelState: () => undefined }));
     expect(document.querySelector('.st-kernel-tag')).toBeNull();
+  });
+
+  it('kernel seats on two machines, ready on one and stopped on the other: « arrêté », each machine in the tooltip (review P2)', () => {
+    const two = [KERNEL[0]!, { ...KERNEL[1]!, machineId: 'ec2' }, KERNEL[2]!];
+    mount(two, rig({ kernelState: m => (m === 'ec2' ? 'stopped' : 'ready') }));
+    const tag = document.querySelector('.st-kernel-tag')!;
+    expect(tag).toHaveAttribute('data-state', 'stopped');
+    expect(tag).toHaveTextContent('arrêté');
+    expect(tag).toHaveAttribute('title', 'WSL · opérationnel\nEC2 · arrêté');
+    cleanup();
+    // The order of the seats does not matter.
+    mount([two[1]!, two[0]!, two[2]!], rig({ kernelState: m => (m === 'ec2' ? 'stopped' : 'ready') }));
+    expect(document.querySelector('.st-kernel-tag')).toHaveAttribute('data-state', 'stopped');
+  });
+
+  it('the worst state wins: stopped, then starting, then ready; one machine has no tooltip', () => {
+    expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'ready' : 'starting'))?.tag).toBe('starting');
+    expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'starting' : 'skipped'))?.tag).toBe('stopped');
+    expect(kernelTagOf(['a', 'b'], m => (m === 'a' ? 'ready' : undefined))).toEqual({ tag: 'ready', per: [['a', 'ready']] });
+    expect(kernelTagOf(['a'], () => undefined)).toBeNull();
+    mount(KERNEL, rig());
+    expect(document.querySelector('.st-kernel-tag')).not.toHaveAttribute('title');
   });
 
   it('the Rigs header: compact, fold all, Launch a rig…; a rig row’s + changes its seats', async () => {
@@ -96,6 +119,17 @@ describe('the Rigs view of the sidebar', () => {
     expect(document.querySelector('section')).toBeNull();
   });
 
+  it('OpenRig stopped elsewhere but not on this computer: no Start button, only the OpenRig page link (review P1)', async () => {
+    const start = vi.fn();
+    const { dispatch } = mount([], rig({ daemonUp: false, canStart: false, failed: 'not_installed', start }));
+    const box = screen.getByRole('status');
+    expect(box).toHaveTextContent(/^OpenRig est arrêté\.Ouvrir la page OpenRig$/);
+    expect(within(box).queryByRole('button', { name: /Démarrer|Réessayer/ })).toBeNull();
+    await userEvent.click(within(box).getByRole('button', { name: 'Ouvrir la page OpenRig' }));
+    expect(dispatch).toHaveBeenLastCalledWith({ type: 'openrig', section: 'rigs' });
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it('starting: the button is disabled with « Démarrage d’OpenRig… »', () => {
     mount([], rig({ daemonUp: false, starting: true }));
     expect(screen.getByRole('button', { name: 'Démarrage d’OpenRig…' })).toBeDisabled();
@@ -136,12 +170,6 @@ describe('what the sidebar knows of OpenRig', () => {
     expect(summarize([state({ daemon: { state: 'stopped' } }), state()])).toEqual({ installed: true, daemonUp: true });
   });
 
-  it('« Démarrer OpenRig » acts on the local machine, else the first that answers', () => {
-    expect(startMachineOf([machine('ec2'), machine('local')])).toBe('local');
-    expect(startMachineOf([machine('local', false), machine('ec2')])).toBe('ec2');
-    expect(startMachineOf([machine('local', false)])).toBeNull();
-  });
-
   it('asks every ready machine, and starts the local one with daemon.start', () => {
     const listeners = new Set<(m: ServerMessage) => void>(), sent: ClientMessage[] = [];
     const client = { send: (m: ClientMessage) => { sent.push(m); }, onMessage: (f: (m: ServerMessage) => void) => { listeners.add(f); return () => { listeners.delete(f); }; } } as unknown as DaemonClient;
@@ -153,11 +181,95 @@ describe('what the sidebar knows of OpenRig', () => {
     emit({ type: 'openrig.state', requestId: asked.find(m => m.machineId === 'ec2')!.requestId, machineId: 'ec2', state: state({ kernel: { state: 'starting' } }) });
     expect(result.current).toMatchObject({ installed: true, daemonUp: true });
     expect(result.current.kernelState('ec2')).toBe('starting');
+    emit({ type: 'openrig.state', requestId: asked.find(m => m.machineId === 'local')!.requestId, machineId: 'local', state: state({ daemon: { state: 'stopped' } }) });
+    expect(result.current.canStart).toBe(true);
     act(() => result.current.start());
-    expect(sent.at(-1)).toMatchObject({ type: 'openrig.act', machineId: 'local', action: { kind: 'daemon.start' } });
+    const startAct = sent.filter(m => m.type === 'openrig.act').at(-1) as { requestId: string };
+    expect(startAct).toMatchObject({ type: 'openrig.act', machineId: 'local', action: { kind: 'daemon.start' } });
     expect(result.current.starting).toBe(true);
-    emit({ type: 'openrig.done', requestId: (sent.at(-1) as { requestId: string }).requestId, machineId: 'local', ok: false, commands: ['rig daemon start'], error: 'port in use' });
+    emit({ type: 'openrig.done', requestId: startAct.requestId, machineId: 'local', ok: false, commands: ['rig daemon start'], error: 'port in use' });
     expect(result.current).toMatchObject({ starting: false, failed: 'port in use' });
+  });
+});
+
+function fakeClient() {
+  const listeners = new Set<(m: ServerMessage) => void>(), sent: ClientMessage[] = [];
+  const client = { send: (m: ClientMessage) => { sent.push(m); }, onMessage: (f: (m: ServerMessage) => void) => { listeners.add(f); return () => { listeners.delete(f); }; } } as unknown as DaemonClient;
+  return { client, sent, emit: (m: ServerMessage) => act(() => listeners.forEach(f => f(m))) };
+}
+const machineOf = (id: string, ready = true) => ({ id, label: id, ready, status: ready ? 'open' : 'closed', recents: [], sessions: [], launcher: null }) as unknown as MachineState;
+const st = (o: Partial<OpenRigState> = {}): OpenRigState => ({ installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, rigs: [], at: '2026-11-02T09:00:00.000Z', ...o });
+const statusAsks = (sent: ClientMessage[]) => sent.filter(m => m.type === 'openrig.status') as Array<{ requestId: string; machineId: string }>;
+
+describe('« Démarrer OpenRig » acts on this computer only (review P1)', () => {
+  it('the local machine not ready, a remote one ready with OpenRig stopped: no start, and nothing is sent to the remote', () => {
+    const { client, sent, emit } = fakeClient();
+    const { result } = renderHook(() => useSidebarOpenRig(client, [machineOf('local', false), machineOf('ec2')]));
+    expect(statusAsks(sent).map(m => m.machineId)).toEqual(['ec2']);
+    emit({ type: 'openrig.state', requestId: statusAsks(sent)[0]!.requestId, machineId: 'ec2', state: st({ daemon: { state: 'stopped' } }) });
+    expect(result.current).toMatchObject({ installed: true, daemonUp: false, canStart: false });
+    act(() => result.current.start());
+    expect(sent.some(m => m.type === 'openrig.act')).toBe(false);
+  });
+
+  it('the local machine ready without OpenRig, a remote one with it: no start either', () => {
+    const { client, sent, emit } = fakeClient();
+    const { result } = renderHook(() => useSidebarOpenRig(client, [machineOf('local'), machineOf('ec2')]));
+    const asks = statusAsks(sent);
+    emit({ type: 'openrig.state', requestId: asks.find(m => m.machineId === 'local')!.requestId, machineId: 'local', state: st({ installed: false, daemon: { state: 'unknown' } }) });
+    emit({ type: 'openrig.state', requestId: asks.find(m => m.machineId === 'ec2')!.requestId, machineId: 'ec2', state: st({ daemon: { state: 'stopped' } }) });
+    expect(result.current).toMatchObject({ installed: true, daemonUp: false, canStart: false });
+    act(() => result.current.start());
+    expect(sent.some(m => m.type === 'openrig.act')).toBe(false);
+  });
+});
+
+describe('one read per machine (review P3)', () => {
+  it('the OpenRig page and the sidebar on the same machine send one openrig.status, and keep one loop at the page’s pace', () => {
+    vi.useFakeTimers();
+    try {
+      const { client, sent, emit } = fakeClient();
+      const side = renderHook(() => useSidebarOpenRig(client, [machineOf('local')]));
+      const page = renderHook(() => useOpenRig(client, 'local')); // the page's 5 s
+      expect(statusAsks(sent)).toHaveLength(1);
+      emit({ type: 'openrig.state', requestId: statusAsks(sent)[0]!.requestId, machineId: 'local', state: st() });
+      expect(page.result.current.state?.daemon.state).toBe('running');
+      expect(side.result.current.daemonUp).toBe(true);
+      act(() => { vi.advanceTimersByTime(5_000); });
+      expect(statusAsks(sent)).toHaveLength(2);
+      act(() => { vi.advanceTimersByTime(4_999); });
+      expect(statusAsks(sent)).toHaveLength(2);
+      // The page closes: the sidebar's 15 s alone.
+      page.unmount();
+      act(() => { vi.advanceTimersByTime(14_000); });
+      expect(statusAsks(sent)).toHaveLength(2);
+      act(() => { vi.advanceTimersByTime(2_000); });
+      expect(statusAsks(sent)).toHaveLength(3);
+      side.unmount();
+      act(() => { vi.advanceTimersByTime(120_000); });
+      expect(statusAsks(sent)).toHaveLength(3);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('OpenRig stopped or absent: read every minute, on a window focus, and right after Start', () => {
+    vi.useFakeTimers();
+    try {
+      const { client, sent, emit } = fakeClient();
+      const side = renderHook(() => useSidebarOpenRig(client, [machineOf('local')]));
+      emit({ type: 'openrig.state', requestId: statusAsks(sent)[0]!.requestId, machineId: 'local', state: st({ daemon: { state: 'stopped' }, kernel: { state: 'stopped' } }) });
+      act(() => { vi.advanceTimersByTime(59_000); });
+      expect(statusAsks(sent)).toHaveLength(1);
+      act(() => { vi.advanceTimersByTime(1_000); });
+      expect(statusAsks(sent)).toHaveLength(2);
+      act(() => { vi.advanceTimersByTime(3_000); window.dispatchEvent(new Event('focus')); });
+      expect(statusAsks(sent)).toHaveLength(3);
+      act(() => side.result.current.start());
+      const start = sent.at(-1) as { requestId: string };
+      expect(sent.at(-1)).toMatchObject({ type: 'openrig.act', machineId: 'local', action: { kind: 'daemon.start' } });
+      emit({ type: 'openrig.done', requestId: start.requestId, machineId: 'local', ok: true, commands: ['rig daemon start'] });
+      expect(statusAsks(sent)).toHaveLength(4);
+      side.unmount();
+    } finally { vi.useRealTimers(); }
   });
 });
 

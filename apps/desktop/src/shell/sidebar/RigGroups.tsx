@@ -10,8 +10,17 @@ import { SessionBot } from '../SessionBot';
 
 const KERNEL = 'kernel';
 const waiting = (s: Session) => s.state === 'waiting_permission' || s.state === 'waiting_input' || s.state === 'error';
+type Tag = 'ready' | 'starting' | 'stopped';
 /** The kernel tag's word and dot (the user: « état réel ») : ready, starting, and every other state as stopped. */
-const tagOf = (state: string): 'ready' | 'starting' | 'stopped' => (state === 'ready' ? 'ready' : state === 'starting' ? 'starting' : 'stopped');
+const tagOf = (state: string): Tag => (state === 'ready' ? 'ready' : state === 'starting' ? 'starting' : 'stopped');
+const RANK: Record<Tag, number> = { ready: 0, starting: 1, stopped: 2 };
+/** The kernel's seats may live on several machines: the tag says the worst of their states (stopped, then starting, then
+ *  ready), never « opérationnel » while one is down; `per` lists each machine's, for the tooltip. Null until one is read. */
+export function kernelTagOf(machines: readonly string[], stateOf: (machine: string) => string | undefined): { tag: Tag; per: Array<[string, Tag]> } | null {
+  const per = machines.flatMap(m => { const st = stateOf(m); return st === undefined ? [] : [[m, tagOf(st)] as [string, Tag]]; });
+  if (per.length === 0) return null;
+  return { tag: per.reduce<Tag>((worst, [, t]) => (RANK[t] > RANK[worst] ? t : worst), 'ready'), per };
+}
 
 /**
  * The OpenRig seats Ledge follows, away from the projects (docs/mockups/ledge-sidebar-tidy.html): « Kernel » first, in its box,
@@ -44,28 +53,37 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
 
   if (live.length === 0) {
     if (!openrig) return null;
+    const openPage = <button type="button" className="st-empty-link" onClick={() => dispatch({ type: 'openrig', section: 'rigs' })}>{e.openPage}</button>;
     const box = (title: string, body: JSX.Element, action: JSX.Element) => <div className="st-empty" role="status"><strong>{title}</strong>{body}{action}</div>;
     if (openrig.starting) return box(e.stopped, <p>{e.stoppedBody}</p>, <button type="button" className="st-empty-btn" disabled><i className="st-spin" aria-hidden="true" />{e.starting}</button>);
-    if (!openrig.daemonUp && openrig.failed !== null) {
+    if (!openrig.daemonUp && openrig.canStart && openrig.failed !== null) {
       const why = openrig.failed === 'busy' ? o.busy : openrig.failed === 'not_installed' ? o.notInstalled : openrig.failed === 'offline' ? o.offline : openrig.failed === 'outdated' ? o.outdated : o.failed(openrig.failed);
       return box(e.stopped, <p className="err">{why}</p>, <>
         <button type="button" className="st-empty-btn" onClick={openrig.start}><Icon d={SHELL_ICONS.play} size={12} />{e.retry}</button>
-        <button type="button" className="st-empty-link" onClick={() => dispatch({ type: 'openrig', section: 'rigs' })}>{e.openPage}</button>
+        {openPage}
       </>);
     }
-    if (!openrig.daemonUp) return openrig.installed ? box(e.stopped, <p>{e.stoppedBody}</p>, <button type="button" className="st-empty-btn" onClick={openrig.start}><Icon d={SHELL_ICONS.play} size={12} />{e.start}</button>) : null;
+    if (!openrig.daemonUp && openrig.installed) {
+      // « Démarrer OpenRig » acts on this computer only: without OpenRig here (or this computer unreachable), the page's link alone.
+      if (!openrig.canStart) return <div className="st-empty" role="status"><strong>{e.stopped}</strong>{openPage}</div>;
+      return box(e.stopped, <p>{e.stoppedBody}</p>, <button type="button" className="st-empty-btn" onClick={openrig.start}><Icon d={SHELL_ICONS.play} size={12} />{e.start}</button>);
+    }
+    if (!openrig.daemonUp) return null;
   }
 
   const operator = kernel.find(s => (s.rig!.role ?? s.rig!.seat).startsWith('operator'));
-  const kernelState = kernel.length > 0 ? openrig?.kernelState(kernel[0]!.machineId ?? 'local') : undefined;
-  const tag = kernelState !== undefined ? tagOf(kernelState) : null;
+  const kernelMachines = [...new Set(kernel.map(s => s.machineId ?? 'local'))];
+  const kt = openrig ? kernelTagOf(kernelMachines, m => openrig.kernelState(m)) : null;
+  const tag = kt?.tag ?? null;
+  // Several machines: each one's state in the tooltip (« WSL · opérationnel »); one machine, nothing more on screen.
+  const tagTitle = kt && kernelMachines.length > 1 ? kt.per.map(([m, x]) => `${openrig!.labelOf(m)} · ${t.side.kernelTag[x]}`).join('\n') : undefined;
   return (
     <>
       {kernel.length > 0 && (
         <section className="st-kernel-box" aria-label={t.side.kernel}>
           <div className="st-label">
             <span className="st-kernel-hex" aria-hidden="true"><Icon d={SHELL_ICONS.rig} size={12} /></span><span className="st-kernel-name">{t.side.kernel}</span><span className="st-fill" />
-            {tag && <span className="st-kernel-tag" data-state={tag}><i aria-hidden="true" />{t.side.kernelTag[tag]}</span>}
+            {tag && <span className="st-kernel-tag" data-state={tag} title={tagTitle}><i aria-hidden="true" />{t.side.kernelTag[tag]}</span>}
           </div>
           <div role="tree" aria-label={t.side.kernel}>{kernel.map(s => row(s, 0))}</div>
         </section>
