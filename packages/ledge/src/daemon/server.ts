@@ -19,7 +19,7 @@ import { DETECT_LINES } from './poller.js';
 import { answeredBy, pendingTool } from './state.js';
 import { agentThought, claudeOpenCall, claudeToolAnswered, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
-import { readPeers, type ClaudePeer } from './peers.js';
+import { bareName, readPeers, type ClaudePeer } from './peers.js';
 import { spawnSession, type TmuxTool } from '../spawn.js';
 import { createOmpHost, type OmpHost } from './omp/host.js';
 import { ompChoices } from './omp/catalog.js';
@@ -37,6 +37,7 @@ import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
 import { readTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal } from './engine/setting.js';
 import { engineRefusal, ENGINE_LEDGE } from './engine/guard.js';
+import { createLedgeEngine } from './engine/ledge.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
@@ -460,6 +461,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (mailbox.notify(id, formatTeamNotice({ team: t.id, text }), `${t.id}:left:${id}:${now()}`) && why !== 'moved') store.patch(id, { teamSeen: '' });
   }
   const unsubscribeTeams = teams.onChange(team => { broadcast({ type: 'team.updated', team }); broadcastEngine(); });
+  /** The Ledge engine (lot D task 4): the live teams in the common team shape, on the local machine. It records under either
+   *  engine; the fronts hear it only under Ledge (under OpenRig, never a Ledge rig; under Ledge, never an OpenRig one). */
+  const ledgeEngine = createLedgeEngine({ store, teams, now });
+  ledgeEngine.onMessage(m => { if (teamsEngine === 'ledge') broadcast(m); }); // its close() drops the listener
+  /** The local machine's rigs as the engine in force shows them: Ledge's teams, or nothing until the bridge's own snapshot. */
+  const localTeamsSnapshot = (): ServerMessage => ({ type: 'rig.snapshot', machine: 'local', rigs: teamsEngine === 'ledge' ? ledgeEngine.teams() : [] });
   // The engine read at start, before the daemon starts the bridge (index.ts): under Ledge, its first turn is a probe already.
   engines.apply(teamsEngine);
   const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
@@ -470,6 +477,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const index = entry ? task.log.lastIndexOf(entry) : -1;
     const tr = transmissions(task).find(x => x.index === index);
     if (tr && tr.from !== LEDGE_GIVER) history?.recordTask(tr.from, { task, tr, ...(tr.to !== LEDGE_GIVER ? { peer: tr.to } : {}) });
+    if (tr && task.team) ledgeEngine.recordTask(task, tr); // a team's hand-over: one of its exchanges
     if (tr?.op === 'give' && tr.to === LEDGE_GIVER) notifyDecision?.(task);
   } });
   // Tasks of a team purged while the daemon was down, or before purges were told: the same.
@@ -632,6 +640,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
     if (aggregate) for (const m of aggregate.replay()) reply(m);
+    if (teamsEngine === 'ledge') for (const m of ledgeEngine.replay()) reply(m); // after the aggregate's empty local snapshot
     { const m = engineMsg(); engineSent = JSON.stringify(m); reply(m); } // after the OpenRig mirror, then the teams engine
     reply({ type: 'brain.status', status: brain.status() });
     reply(mandateMsg()); reply(rulesMsg()); reply(decisionsMsg());
@@ -1672,6 +1681,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         reply({ type: 'teams.engine.result', rid: msg.rid, ok: true });
         broadcastEngine();
         engines.apply(teamsEngine);
+        // After the aggregate's own snapshots: the local machine shows Ledge's teams, or none of them under OpenRig.
+        broadcast(localTeamsSnapshot());
         return;
       }
       case 'island.set': {
@@ -1887,12 +1898,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (msg.to === TEAM_ADDRESS) {
           const ack = broadcastFromLead({ store, teams, mailbox }, msg);
           if (ack.outcome !== 'refused') history?.adoptBroadcast(msg.rid);
+          recordSent(ack, msg.from, TEAM_ADDRESS, msg.text, msg.rid);
           return reply(ack);
         }
         // `@role` names a seat of the sender's team (roles spec §3.6).
         const r = resolveRoleAddress(msg.to, msg.from, store.all(), teams.all());
         if ('reason' in r) return reply({ type: 'message.ack', rid: msg.rid, outcome: 'refused', reason: r.reason });
-        return reply(mailbox.submit({ ...msg, to: r.to }));
+        const ack = mailbox.submit({ ...msg, to: r.to });
+        recordSent(ack, msg.from, r.to, msg.text, msg.rid);
+        return reply(ack);
       }
       case 'team.broadcast': return reply(broadcastFromUser({ store, teams, mailbox }, msg));
       case 'message.read': return reply(mailbox.read(msg));
@@ -2185,7 +2199,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   function dispatch(msg: ClientMessage, reply: Reply): Promise<void> {
     const refused = engineRefusal(teamsEngine, msg);
     if (refused !== null) { refuseForEngine(msg, refused, reply); return Promise.resolve(); }
-    if (teamsEngine === 'ledge' && ledgeTeamRig(msg, reply)) return Promise.resolve();
+    if (teamsEngine === 'ledge') { const answered = ledgeTeamRig(msg, reply); if (answered) return answered; }
     return (rigRouter && isRigCommand(msg) ? rigRouter.route(msg, reply) : handle(msg, reply)).catch(e => {
       if (msg.type === 'document.read') return reply({ type: 'document.error', requestId: msg.requestId, path: msg.path, code: 'read_failed' });
       log(`${msg.type} failed: ${(e as Error).message}`);
@@ -2206,12 +2220,55 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       default: return reply({ type: 'error', message: reason, request: msg.type }); // team.join, team.resume: their handlers' refuse
     }
   }
-  /** Under Ledge, a rig id `team-…` is a Ledge team as the Rigs tab shows it: task 4 acts on it; until then it answers here. True when answered. */
-  function ledgeTeamRig(msg: ClientMessage, reply: Reply): boolean {
-    if (msg.type === 'rig.act' && msg.rigId?.startsWith('team-')) { reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'unsupported', reason: 'pas encore' }); return true; }
-    // Nothing of OpenRig is mirrored under Ledge: no exchanges to show (a Ledge team's come with task 4).
-    if (msg.type === 'rig.exchanges.request') { reply({ type: 'rig.exchanges', machine: msg.machine, rigId: msg.rigId, items: [] }); return true; }
-    return false;
+  /** Under Ledge, a rig id `team-…` is a Ledge team as the Rigs tab shows it: `rig.act` acts on it, `rig.exchanges.request`
+   *  gives its exchanges (nothing of OpenRig is mirrored: any other rig id has none). Settles once answered; null when not its message. */
+  function ledgeTeamRig(msg: ClientMessage, reply: Reply): Promise<void> | null {
+    if (msg.type === 'rig.act' && msg.rigId?.startsWith('team-')) {
+      return actOnTeam(msg).then(r => reply({ type: 'rig.result', rid: msg.rid, ...r }),
+        (e: Error) => reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: e.message }));
+    }
+    if (msg.type === 'rig.exchanges.request') {
+      reply({ type: 'rig.exchanges', machine: msg.machine, rigId: msg.rigId, items: msg.rigId.startsWith('team-') ? ledgeEngine.exchanges(msg.rigId) : [] });
+      return Promise.resolve();
+    }
+    return null;
+  }
+  type TeamActOutcome = { ok: boolean; code?: RigResultCode; reason?: string };
+  /**
+   * A Rigs tab verb on a Ledge team, as its team action: up / restore = `team.resume`; down = its seats' sessions closed, the
+   * team kept (teamsLive makes it `resting` once they have all ended); restart = `team.seat` restart; stop = the seat's session
+   * closed; handover = the seat's `session.handover`. A seat is named by its ref, `<role>@<team id>`.
+   */
+  async function actOnTeam(msg: Extract<ClientMessage, { type: 'rig.act' }>): Promise<TeamActOutcome> {
+    const outcome = (reason: string | null): TeamActOutcome => (reason === null ? { ok: true } : { ok: false, code: 'failed', reason });
+    const t = teams.get(msg.rigId!);
+    if (!t || t.state === 'dissolved') return outcome(`aucune équipe ${msg.rigId}`);
+    if (msg.verb === 'up' || msg.verb === 'restore') return outcome(await resumeTeam(t));
+    if (msg.verb === 'down') return outcome(await restTeam(t));
+    const seat = msg.seatRef ? t.seats.find(s => `${s.role}@${t.id}` === msg.seatRef) : undefined;
+    if (!seat) return { ok: false, code: 'invalid', reason: msg.seatRef ? `aucun siège ${msg.seatRef} dans ${t.name}` : 'il faut un siège (seatRef)' };
+    if (msg.verb === 'restart') return outcome((await seatTeam({ type: 'team.seat', rid: msg.rid, team: t.id, role: seat.role, action: 'restart' })).reason ?? null);
+    const s = seat.sessionId ? store.get(seat.sessionId) : undefined;
+    if (!s || s.state === 'exited' || isArchived(s)) return outcome(`@${seat.role} n'a pas de session en cours`);
+    if (msg.verb === 'stop') { await closeSession(s); return outcome(null); }
+    return outcome(handovers.start(s.id)); // handover
+  }
+  /** A team put at rest: every seat's live session closed as its user would, the team kept with its seats and their conversations. */
+  async function restTeam(t: Team): Promise<string | null> {
+    const live = t.seats.flatMap(seat => { const s = seat.sessionId ? store.get(seat.sessionId) : undefined; return s && s.state !== 'exited' && !isArchived(s) ? [{ seat, s }] : []; });
+    const done = await Promise.allSettled(live.map(({ s }) => closeSession(s)));
+    const failures = done.flatMap((r, i) => (r.status === 'rejected' ? [`@${live[i]!.seat.role} : ${(r.reason as Error).message}`] : []));
+    return failures.length ? failures.join(' ; ') : null;
+  }
+  /** A message one seat sent another, or the lead's `@team`, taken by the mailbox: one of its team's exchanges. Recorded here,
+   *  where both the sender and the target are known (the mailbox only knows names); the rid records it once. */
+  function recordSent(ack: { outcome: string }, fromId: string, to: string, text: string, rid: string): void {
+    if (ack.outcome !== 'accepted' && ack.outcome !== 'queued') return;
+    const from = store.get(fromId); if (!from) return;
+    if (to === TEAM_ADDRESS) return ledgeEngine.recordMessage(from, TEAM_ADDRESS, text, rid);
+    const name = bareName(to);
+    const target = store.all().find(s => s.name === name && s.state !== 'exited' && !isArchived(s));
+    if (target) ledgeEngine.recordMessage(from, target, text, rid);
   }
 
   let answerReceipts: ReturnType<typeof createAnswerReceipts> | null = null;
@@ -2407,6 +2464,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); clearInterval(thoughtTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeAnswerSettled?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); tasks.close(); handovers.close(); unsubscribeTeams(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); clearInterval(thoughtTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeAnswerSettled?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); tasks.close(); handovers.close(); unsubscribeTeams(); ledgeEngine.close(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

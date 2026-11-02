@@ -1186,23 +1186,25 @@ describe('server', () => {
     it('a client that connects later gets the last preview right after the snapshot', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim' }));
       srv.preview('a', ['old']); srv.preview('a', ['● latest']);
-      const r = await recorder(); await r.until(15);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs', 'teams.engine', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
+      const r = await recorder(); await r.until(16);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs', 'rig.snapshot', 'teams.engine', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
       expect(r.got[6]).toEqual({ type: 'session.preview', id: 'a', lines: ['● latest'] });
+      // Under the Ledge engine (the default) the local machine's rigs are its teams: none here.
+      expect(r.got[9]).toEqual({ type: 'rig.snapshot', machine: 'local', rigs: [] });
       r.ws.terminate();
     });
     it('a snapshot.request gets the previews again after the snapshot', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']);
       const r = await recorder(); await r.until(3);
-      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(30);
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs', 'teams.engine', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history', 'snapshot', 'machines', 'projects', 'asks', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs', 'teams.engine', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
+      r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(32);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs', 'rig.snapshot', 'teams.engine', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history', 'snapshot', 'machines', 'projects', 'asks', 'teams', 'island', 'session.preview', 'chat.history', 'context.prefs', 'rig.snapshot', 'teams.engine', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
       r.ws.terminate();
     });
     it('a removed session drops its preview; a preview for an unknown session is ignored', async () => {
       store.upsert(mk('a')); srv.preview('a', ['● hi']); srv.preview('ghost', ['boo']);
       store.remove('a');
       const r = await recorder(); await r.until(1); await new Promise(res => setTimeout(res, 50));
-      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'teams', 'island', 'chat.history', 'context.prefs', 'teams.engine', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
+      expect(r.got.map(m => m.type)).toEqual(['snapshot', 'machines', 'projects', 'asks', 'teams', 'island', 'chat.history', 'context.prefs', 'rig.snapshot', 'teams.engine', 'brain.status', 'mandate', 'rules', 'decisions', 'ledge.thread.history']);
       store.upsert(mk('a'));
       r.ws.send(JSON.stringify({ type: 'snapshot.request' })); await r.until(8); await new Promise(res => setTimeout(res, 50));
       expect(r.got.filter(m => m.type === 'session.preview')).toEqual([]);

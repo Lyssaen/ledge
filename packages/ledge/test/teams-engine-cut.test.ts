@@ -178,12 +178,12 @@ describe('the daemon with the engine not chosen off', () => {
     await c.answer('rig.snapshot', m => m.rigs.some(r => r.name === 'factory'));
   });
 
-  it('Ledge mode: rig.act is refused with ENGINE_LEDGE; a Ledge team (team-…) is not yet', async () => {
+  it('Ledge mode: rig.act is refused with ENGINE_LEDGE; a Ledge team id (team-…) reaches the Ledge engine', async () => {
     const c = await boot();
     c.send({ type: 'rig.act', rid: 'a1', machine: 'local', rigId: 'r1', verb: 'down' });
     expect(await c.answer('rig.result', m => m.rid === 'a1')).toEqual({ type: 'rig.result', rid: 'a1', ok: false, code: 'unsupported', reason: ENGINE_LEDGE });
     c.send({ type: 'rig.act', rid: 'a2', machine: 'local', rigId: 'team-abcd', verb: 'down' });
-    expect(await c.answer('rig.result', m => m.rid === 'a2')).toEqual({ type: 'rig.result', rid: 'a2', ok: false, code: 'unsupported', reason: 'pas encore' });
+    expect(await c.answer('rig.result', m => m.rid === 'a2')).toEqual({ type: 'rig.result', rid: 'a2', ok: false, code: 'failed', reason: 'aucune équipe team-abcd' });
     c.send({ type: 'rig.exchanges.request', machine: 'local', rigId: 'team-abcd' });
     expect(await c.answer('rig.exchanges')).toEqual({ type: 'rig.exchanges', machine: 'local', rigId: 'team-abcd', items: [] });
   });
