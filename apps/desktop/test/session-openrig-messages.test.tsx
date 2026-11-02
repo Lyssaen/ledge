@@ -159,6 +159,29 @@ describe('OpenRig messages in a seat’s thread', () => {
     expect(thread().getAllByText('OpenRig · automatique')).toHaveLength(3);
   });
 
+  it('a packet of quiet notices, folded, keeps its one raw after the group; so does a message followed by two', async () => {
+    const quiet = (id: string, s: number, text: string, index: number, count: number, packet: string) =>
+      notice(id, s, text, rig('openrig', { from: 'daemon@kernel', packet: { id: packet, index, count }, raw: `RAW ${id}` }));
+    const { user } = await openOtto([
+      quiet('q1', 0, 'Custody not checked', 0, 2, 'pa'),
+      quiet('q2', 1, 'relance levée', 1, 2, 'pa'),
+      { kind: 'prompt', id: 'p2', at: at(2), turn: 2, text: 'Ensuite' },
+      { ...(received('m1', 3, 'Un message, puis deux avis.', { packet: { id: 'pb', index: 0, count: 3 }, raw: 'RAW m1' }) as Extract<ThreadItem, { kind: 'received' }>), turn: 3 },
+      { ...(quiet('q3', 4, 'Custody again', 1, 3, 'pb') as Extract<ThreadItem, { kind: 'notice' }>), turn: 3 },
+      { ...(quiet('q4', 5, 'relance encore', 2, 3, 'pb') as Extract<ThreadItem, { kind: 'notice' }>), turn: 3 }
+    ]);
+    const rows = await thread().findAllByText(/messages collés ensemble · brut/);
+    expect(rows.map(r => r.textContent)).toEqual(['2 messages collés ensemble · brut', '3 messages collés ensemble · brut']);
+    const pre = (r: HTMLElement) => r.closest('.rig-packet-raw')!.querySelector('pre')!.textContent;
+    expect(pre(rows[0]!)).toBe('RAW q1\nRAW q2');
+    expect(pre(rows[1]!)).toBe('RAW m1\nRAW q3\nRAW q4');
+    // Unfolded, the notices still give up their own raw; the packet's stays after them.
+    await user.click(thread().getAllByRole('button', { name: /2 avis OpenRig/ })[0]!);
+    const unfolded = thread().getByText('relance levée').closest<HTMLElement>('[data-rig="openrig"]')!;
+    expect(unfolded.querySelector('details')).toBeNull();
+    expect(thread().getAllByText(/messages collés ensemble · brut/)).toHaveLength(2);
+  });
+
   it('a repeated delivery says « reçu 2 fois », blocks pasted together show one raw, an unreadable block stays as is', async () => {
     await openOtto([
       received('d1', 0, 'L’utilisateur retient l’option A.', { count: 2, raw: 'From: a\n\nFrom: a' }),
