@@ -24,6 +24,7 @@
  * itself never knows about any zoom.
  */
 import { createTokenSource, type TokenRead, type TokenSource } from '@ledge/fleet';
+import { MEDIA_COMMAND, NOW_PLAYING_COMMAND, NOW_PLAYING_EVENT, parseNowPlaying, type MediaCommand, type NowPlayingState } from '@ledge/protocol';
 import { resolveMonitor, type MonitorInfo } from '../monitor';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { EventCallback, UnlistenFn } from '@tauri-apps/api/event';
@@ -226,6 +227,38 @@ export function onForegroundCovered(fn: (covered: boolean) => void): () => void 
     if (disposed) un();
   }).catch(() => {});
   return () => { disposed = true; off(); };
+}
+
+/** What is playing on the PC (Windows' media controls, `@ledge/protocol` media.ts), read once. Null outside Tauri. */
+export async function nowPlaying(): Promise<NowPlayingState> {
+  if (!inTauri()) return null;
+  return invoke<unknown>(NOW_PLAYING_COMMAND).then(parseNowPlaying, () => null);
+}
+
+/** Every change of what plays. The shell broadcasts it to every window (`app.emit`), so this listens app-wide. `onReady`
+ *  fires once the listener is in place: only then is a `nowPlaying()` read sure not to miss a change made meanwhile (the
+ *  shell sends changes only). In the browser, a `ledge:now-playing` CustomEvent on `window` (dev previews and e2e)
+ *  stands in for the shell, and it is ready at once. */
+export function onNowPlaying(fn: (state: NowPlayingState) => void, onReady?: () => void): () => void {
+  if (!inTauri()) {
+    const h = (e: Event) => fn(parseNowPlaying((e as CustomEvent<unknown>).detail));
+    window.addEventListener('ledge:now-playing', h);
+    onReady?.();
+    return () => window.removeEventListener('ledge:now-playing', h);
+  }
+  let off = () => {}; let disposed = false;
+  void import('@tauri-apps/api/event').then(({ listen }) => listen<unknown>(NOW_PLAYING_EVENT, e => { if (!disposed) fn(parseNowPlaying(e.payload)); })).then(un => {
+    off = un;
+    if (disposed) un(); else onReady?.();
+  }).catch(() => {});
+  return () => { disposed = true; off(); };
+}
+
+/** Previous, play/pause or next on the player shown; true when it took it. In the browser, a `ledge:media-command`
+ *  CustomEvent tells previews which button was pressed. */
+export async function mediaCommand(command: MediaCommand): Promise<boolean> {
+  if (!inTauri()) { window.dispatchEvent(new CustomEvent('ledge:media-command', { detail: command })); return false; }
+  return invoke<boolean>(MEDIA_COMMAND, { command }).catch(() => false);
 }
 
 let shortcutPlugin: Promise<typeof import('@tauri-apps/plugin-global-shortcut')> | null = null;
