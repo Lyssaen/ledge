@@ -930,7 +930,7 @@ export const en: Messages = {
     preview: (n, ms) => `${n} ${pluralEn(n, 'repository', 'repositories')}${ms ? ` on ${ms}` : ''}`, firstSession: ' · the table appears with the first session', newName: 'New project',
     create: 'Create the project', save: 'Save', saving: 'Saving…', cancel: 'Cancel', deleteProject: 'Delete the project',
     saved: (n) => `${n} saved.`,
-    created: (n) => `Project ${n} created. It appears in the sidebar; its table opens with the first session.`,
+    created: (n) => `Project ${n} created. It appears in the sidebar and the atelier with its first session.`,
     createdWith: (n, names) => `Project ${n} created. ${new Intl.ListFormat('en', { type: 'conjunction' }).format(names)} ${pluralEn(names.length, 'joins', 'join')} its table.`,
     delete: {
       lead: (n) => `${n} disappears from the sidebar and the atelier. Its repositories stay untouched on your machines.`,

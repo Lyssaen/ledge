@@ -75,7 +75,7 @@ async function openOtto(items: ThreadItem[], threads: Record<string, ThreadItem[
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
   await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(listSessions()))));
-  await side.findByRole('button', { name: /^Docs/ });
+  await side.findByRole('button', { name: /^Ledge/ });
   const user = userEvent.setup();
   await user.click(within(side.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
   await screen.findByRole('tabpanel', { name: 'Fil de la session' });

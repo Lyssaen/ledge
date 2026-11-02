@@ -33,10 +33,10 @@ async function openOtto(items: ThreadItem[]) {
   for (const s of listSessions()) d.upsert(s);
   d.thread('otto', items);
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
-  // Ready as `boot` is: the Atelier counter shows the active sessions, the last project's row is in the sidebar.
+  // Ready as `boot` is: the Atelier counter shows the active sessions, a project with sessions is in the sidebar.
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
   await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(listSessions()))));
-  await side.findByRole('button', { name: /^Docs/ });
+  await side.findByRole('button', { name: /^Ledge/ });
   expect(within(screen.getByRole('banner')).getByText('Atelier')).toBeVisible();
   expect(screen.queryByRole('tab', { name: 'Liste' })).toBeNull();
   const user = userEvent.setup();

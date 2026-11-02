@@ -968,7 +968,7 @@ export const fr = {
     preview: (n: number, ms: string) => `${n} dépôt${plural(n, '', 's')}${ms ? ` sur ${ms}` : ''}`, firstSession: ' · la table apparaîtra avec la première session', newName: 'Nouveau projet',
     create: 'Créer le projet', save: 'Enregistrer', saving: 'Enregistrement…', cancel: 'Annuler', deleteProject: 'Supprimer le projet',
     saved: (n: string) => `${n} enregistré.`,
-    created: (n: string) => `Projet ${n} créé. Il apparaît dans la barre latérale ; sa table s’ouvrira avec la première session.`,
+    created: (n: string) => `Projet ${n} créé. Il apparaîtra dans la barre latérale et l’atelier avec sa première session.`,
     createdWith: (n: string, names: readonly string[]) => `Projet ${n} créé. ${new Intl.ListFormat('fr', { type: 'conjunction' }).format(names)} ${plural(names.length, 'rejoint', 'rejoignent')} sa table.`,
     /** The deletion view (`.pe-delete`): `names` is the agents' names already joined (four at most, then « … »). */
     delete: {

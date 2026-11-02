@@ -56,6 +56,10 @@ export function Sidebar(p: {
   // OpenRig's seats have their own groups (Rigs, Kernel), away from the projects.
   const grouping = useGrouping();
   const groups = useMemo(() => treeModel(grouping === 'rigs' ? p.sessions.filter(s => !s.rig) : p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf, grouping]);
+  // A project without a session stays out of the tree; it shows again while a session is dragged (to be dropped on it)
+  // and while it is the filter.
+  const shownGroups = useMemo(() => groups.filter(g => g.branches.some(b => b.sessions.length > 0) || !!p.filing.dragging || (g.id !== null && base.project === g.id)),
+    [groups, p.filing.dragging, base.project]);
   const attn = useMemo(() => attentionOf(p.sessions, p.waits), [p.sessions, p.waits]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
   const near = useMemo(() => nearLimit(p.sessions, p.tasksApi?.later, p.tasksApi?.near), [p.sessions, p.tasksApi?.later, p.tasksApi?.near]);
@@ -137,7 +141,7 @@ export function Sidebar(p: {
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
           }} />
         <section aria-label={t.side.projects}>
-          <Tree groups={groups} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
+          <Tree groups={shownGroups} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
             hideDone={prefs.hideDone} dense={prefs.dense} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
