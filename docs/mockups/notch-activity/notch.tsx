@@ -497,6 +497,17 @@ function Page() {
       </ul>
     </Section>
 
+    <Section id="decided" title="Décisions après validation" lead="Validée par l’utilisateur le 2 novembre à 19:01, avec ses 6 recommandations. Ces points ont été réglés ensuite, pendant l’implémentation.">
+      <ul className="na-list">
+        <li><b>Bouton lecture/pause</b> (utilisateur, 19:01) : une icône simple de 15 px, sans disque rond, du même style que précédent et suivant, dans une zone de 28 px.</li>
+        <li><b>Bulle « non lue »</b> (utilisateur, 19:09, option A) : retirée de l’encoche fermée, car la ligne d’activité la remplace. Seule reste la bulle de Ledge « Hey ! Je t’ai répondu ! ».</li>
+        <li><b>Trace au repos</b> : rouge pour un accord, ambre pour une question, un plan ou un diff. Le rouge l’emporte. Pas de trace pour une erreur.</li>
+        <li><b>Tiret de mise à jour</b> : gardé. Dans le filet : trait de Ledge, tiret à 4 px, puis barres de musique. Éveillée : pastille sur Ledge, inchangée.</li>
+        <li><b>Lune Ne pas déranger</b> : gardée, juste après Ledge (6 px), avant la ligne (10 px). Au repos, le trait reste gris ; une demande en attente le colore quand même.</li>
+        <li><b>Cartes de demande et de fin</b> qui se déplient de l’encoche : inchangées.</li>
+      </ul>
+    </Section>
+
     <Section id="copy" title="Textes FR / EN" lead="Clés proposées pour apps/overlay/src/i18n/messages.ts. Aucun texte n’est fixé côté daemon.">
       <table className="na-keys"><thead><tr><th>Clé</th><th>FR</th><th>EN</th></tr></thead>
         <tbody>{KEYS.map(([k, fr, en]) => <tr key={k}><td><code>{k}</code></td><td>{fr}</td><td>{en}</td></tr>)}</tbody></table>
