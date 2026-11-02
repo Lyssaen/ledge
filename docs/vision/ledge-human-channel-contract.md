@@ -116,6 +116,7 @@ Règles :
   (`refused`). Pas de « refuser » au lot 1 : le `deny` d'OpenRig ferme la ligne sans rien rendre au siège ; un
   refus se dit en mots (`words`).
 - `text` : 1 à 8 000 caractères.
+- Seule une ligne adressée à la personne par défaut (ou parquée sur elle) est répondue : une autre est `refused`.
 - Avec plusieurs questions, chaque `choice` est enregistré tout de suite (`outcome: 'recorded'`). La réponse
   ne part au siège qu'à la dernière (`outcome: 'answered'`).
 

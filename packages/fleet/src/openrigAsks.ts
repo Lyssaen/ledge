@@ -11,6 +11,9 @@ export interface OpenRigAsksView {
   /** What waits on the person there: critical, then urgent, then the rest, the most recent first within each. */
   asks: readonly HumanAsk[];
   truncated: boolean;
+  /** A read failed on that machine (OpenRig unreachable, a row or a source not read): the asks known before are kept, so none missing
+   *  from this list is settled; an ask never read in full has its summary as body (`bodyTruncated`). */
+  partial: boolean;
   /** The machine could not answer: `offline`, or `outdated` (its Ledge daemon predates « À toi »). */
   error?: 'offline' | 'outdated';
   /** Sends the person's answer; resolves with its end (`ok` false with `error` and `message` for « Pas envoyée : … »). Retrying is
@@ -26,8 +29,8 @@ let next = 0;
  * every push of that machine (`machine` null: nothing is asked).
  */
 export function useOpenRigAsks(client: DaemonClient, machine: string | null, pollMs = OPENRIG_ASKS_POLL_MS): OpenRigAsksView {
-  const [view, setView] = useState<{ machine: string | null; channel: HumanChannel | null; asks: readonly HumanAsk[]; truncated: boolean; error?: 'offline' | 'outdated' }>(
-    { machine, channel: null, asks: [], truncated: false });
+  const [view, setView] = useState<{ machine: string | null; channel: HumanChannel | null; asks: readonly HumanAsk[]; truncated: boolean; partial: boolean; error?: 'offline' | 'outdated' }>(
+    { machine, channel: null, asks: [], truncated: false, partial: false });
   const waiting = useRef(new Map<string, (a: OpenRigAnswered) => void>());
   const asked = useRef<string | null>(null);
 
@@ -39,7 +42,7 @@ export function useOpenRigAsks(client: DaemonClient, machine: string | null, pol
   }, [client, machine]);
 
   useEffect(() => {
-    setView({ machine, channel: null, asks: [], truncated: false });
+    setView({ machine, channel: null, asks: [], truncated: false, partial: false });
     if (machine === null) return;
     const off = client.onMessage(m => {
       if (m.type === 'openrig.asksChanged') {
@@ -48,7 +51,7 @@ export function useOpenRigAsks(client: DaemonClient, machine: string | null, pol
         if (m.requestId !== undefined && m.requestId !== asked.current) return;
         setView(v => m.error
           ? { ...v, machine, error: m.error }
-          : { machine, channel: m.channel ?? null, asks: m.asks, truncated: m.truncated === true });
+          : { machine, channel: m.channel ?? null, asks: m.asks, truncated: m.truncated === true, partial: m.partial === true });
       } else if (m.type === 'openrig.answered') {
         const resolve = waiting.current.get(m.requestId);
         if (!resolve) return;
@@ -74,6 +77,6 @@ export function useOpenRigAsks(client: DaemonClient, machine: string | null, pol
     });
   }, [client, machine]);
 
-  const shown = view.machine === machine ? view : { channel: null, asks: [], truncated: false };
-  return { channel: shown.channel, asks: shown.asks, truncated: shown.truncated, ...('error' in shown && shown.error ? { error: shown.error } : {}), answer, refresh: ask };
+  const shown = view.machine === machine ? view : { channel: null, asks: [], truncated: false, partial: false };
+  return { channel: shown.channel, asks: shown.asks, truncated: shown.truncated, partial: shown.partial, ...('error' in shown && shown.error ? { error: shown.error } : {}), answer, refresh: ask };
 }

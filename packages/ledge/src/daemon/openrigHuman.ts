@@ -198,16 +198,19 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
 
   /** The asks of the last complete or partial read, by id: a read that fails keeps them, it never settles them. */
   let known = new Map<string, HumanAsk>();
+  /** Whose asks `known` (and the rows read) are: a change of default person forgets them, so one person never sees another's. */
+  let knownFor: string | null = null;
+  const forget = () => { known = new Map(); rows.clear(); knownFor = null; };
   const sorted = (channel: HumanChannel, asks: HumanAsk[], partial: boolean): HumanList => {
     // The pressing first (critical, then urgent: the team's rule is `--priority urgent`, never `--alert`), then the most recent.
     asks.sort((x, y) => RANK[x.priority] - RANK[y.priority] || y.updatedAt.localeCompare(x.updatedAt));
     return { channel, asks: asks.slice(0, HUMAN_ASKS_MAX), ...(asks.length > HUMAN_ASKS_MAX ? { truncated: true } : {}), ...(partial ? { partial: true } : {}) };
   };
 
-  const list = async (): Promise<HumanList> => {
+  const read = async (): Promise<HumanList> => {
     const b = await base();
     if ('channel' in b) {
-      if (b.channel.state !== 'unreachable') known = new Map();
+      if (b.channel.state !== 'unreachable') forget();
       return sorted(b.channel, [...known.values()], b.channel.state === 'unreachable' && known.size > 0);
     }
     // `view=default`: the default person's queue only. Without it OpenRig's Feed shows every registered person's asks, and an answer
@@ -220,12 +223,13 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     const perspective = obj(obj(a.json).perspective);
     const address = str(obj(perspective.actingAs).person);
     if (!address) {
-      known = new Map();
+      forget();
       // A perspective without a person: several are registered and none is the default, so whose asks these are is unknown.
       return sorted(Object.keys(perspective).length
         ? { state: 'no_default', person: null, slack: false, message: 'several people are registered and none is the default (rig gateway default <id>)' }
         : { state: 'no_person', person: null, slack: false }, [], false);
     }
+    if (address !== knownFor) { forget(); knownFor = address; }
     const who = (await people()).get(address);
     const channel: HumanChannel = { state: 'ready', person: { address, name: who?.name ?? address.replace(/@.*$/, '') }, slack: who?.slack ?? false };
     // A source OpenRig could not read fully (the queue, its updates) lists fewer rows than there are: what is missing is not settled.
@@ -245,6 +249,13 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     for (const id of rows.keys()) if (!next.has(id)) rows.delete(id);
     known = next;
     return sorted(channel, [...next.values()], partial);
+  };
+  /** One read at a time: an older read never lands after a newer one, nor mixes its cache with a later person's. */
+  let reading: Promise<unknown> = Promise.resolve();
+  const list = (): Promise<HumanList> => {
+    const next = reading.then(read, read);
+    reading = next.catch(() => undefined);
+    return next;
   };
 
   /** Read again and push when something changed. */
@@ -296,6 +307,9 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     // OpenRig needs a declared actor without a seat header: the person asked (the row's destination, or the person it is parked on), as its
     // TUI sends it; the primary user's authority then records the default person whoever that is.
     const actorSession = (parked ? str(q.blockedOn) : str(q.destinationSession)) ?? undefined;
+    // Only the default person's asks are answered from here: OpenRig's primary-user authority would settle anyone's.
+    await list(); // whose asks they are now, read again: the default person may have changed since the last read
+    if (!knownFor || actorSession !== knownFor) return { qitemId, ok: false, error: 'refused', message: `this row is not addressed to ${knownFor ?? 'the default person'}` };
     const res = await http('POST', `${b.url}/api/mission-control/action`, { ...action, qitemId, actorSession, authority: 'primary-user', auditNotes: { client: 'ledge' } });
     soon();
     if (res.status !== 200) return { qitemId, ok: false, ...answerError(res.status, res.json) };
