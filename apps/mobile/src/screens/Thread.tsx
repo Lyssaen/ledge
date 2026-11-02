@@ -34,7 +34,7 @@ const Cut = ({ align }: { align: 'start' | 'end' }) => <div className={`text-met
 function Bubble({ item, store, storage }: { item: ThreadItem; store: MobileStore; storage?: Storage | undefined }) {
   switch (item.kind) {
     case 'time': return <div className="text-center font-mono text-meta text-muted">{item.label}</div>;
-    case 'rig-message': case 'rig-task': case 'rig-notice': case 'rig-fold': case 'rig-unreadable': return <RigItem e={item} storage={storage} />;
+    case 'rig-message': case 'rig-task': case 'rig-notice': case 'rig-fold': case 'rig-unreadable': case 'rig-raw': return <RigItem e={item} storage={storage} />;
     case 'me': {
       // The PC's prompt carries refs; this phone's own instruction knows the ones it stored.
       const refs = item.images ?? (item.attachments ?? []).flatMap(id => store.knownImage(id) ?? []);

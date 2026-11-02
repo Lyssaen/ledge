@@ -145,6 +145,12 @@ function Unreadable({ e }: { e: Extract<RigElement, { kind: 'rig-unreadable' }> 
   );
 }
 
+/** The packet's one raw, on its own row under its last element. */
+function PacketRaw({ e }: { e: Extract<RigElement, { kind: 'rig-raw' }> }) {
+  const { toggle, box } = useRaw(e.raw);
+  return <div className="-mt-2 flex flex-col items-start">{toggle}{box && <div className="w-full">{box}</div>}</div>;
+}
+
 export function RigItem({ e, storage }: { e: RigElement; storage?: Storage | undefined }) {
   switch (e.kind) {
     case 'rig-message': return <Message e={e} storage={storage} />;
@@ -152,5 +158,6 @@ export function RigItem({ e, storage }: { e: RigElement; storage?: Storage | und
     case 'rig-notice': return <NoticeLine e={e} />;
     case 'rig-fold': return <Fold e={e} />;
     case 'rig-unreadable': return <Unreadable e={e} />;
+    case 'rig-raw': return <PacketRaw e={e} />;
   }
 }

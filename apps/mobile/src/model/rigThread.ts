@@ -24,6 +24,8 @@ export type RigElement =
       /** The seat's own handoff OpenRig did not take (`status: 'refused'`): the card's short log line. */ refused?: { log: string } }
   | { key: string; kind: 'rig-notice'; at: string; tone: 'plain' | 'task' | 'warn'; title: string; raw?: RigRaw; cut?: true }
   | { key: string; kind: 'rig-fold'; at: string; notices: Extract<RigElement, { kind: 'rig-notice' }>[] }
+  /** The one raw of blocks pasted together, its own row after the packet. */
+  | { key: string; kind: 'rig-raw'; at: string; raw: RigRaw }
   | { key: string; kind: 'rig-unreadable'; at: string; text: string; raw?: RigRaw; cut?: true };
 
 /** A queue row's short id, as the mockup writes it: `…ffc1`. */
@@ -98,24 +100,29 @@ export function rigElement(i: PcItem, sessions: ReadonlyMap<string, PhoneSession
 const packetOf = (i: PcItem): RigInfo['packet'] => ((i.kind === 'received' || i.kind === 'sent' || i.kind === 'notice') ? i.rig?.packet : undefined);
 
 /**
- * The raws of pasted blocks: one for the packet, on its last element shown (« k messages collés ensemble · brut », the
- * raws of its items joined); the others carry none. Returns the raw each item keeps, by id (undefined: none).
+ * The raws of pasted blocks: their elements keep none of their own; one raw for the packet comes as its own row after the
+ * packet's last element shown (« k messages collés ensemble · brut », the raws of its items joined in `packet.index` order).
+ * `inPacket`: the ids that give up their raw; `after`: by the id of a packet's last element, the row that follows it.
  */
-export function packetRaws(items: PcItem[]): Map<string, RigRaw | undefined> {
-  const groups = new Map<string, { ids: string[]; raws: string[]; count: number }>();
+export function packetRaws(items: PcItem[]): { inPacket: Set<string>; after: Map<string, Extract<RigElement, { kind: 'rig-raw' }>> } {
+  const groups = new Map<string, { id: string; items: { id: string; index: number; raw: string; at: string }[]; count: number }>();
   for (const i of items) {
     const p = packetOf(i);
     if (!p || !('rig' in i) || !i.rig) continue;
-    const g = groups.get(p.id) ?? { ids: [], raws: [], count: p.count };
-    g.ids.push(i.id); g.raws.push(i.rig.raw);
+    const g = groups.get(p.id) ?? { id: p.id, items: [], count: p.count };
+    g.items.push({ id: i.id, index: p.index, raw: i.rig.raw, at: i.at });
     groups.set(p.id, g);
   }
-  const out = new Map<string, RigRaw | undefined>();
+  const inPacket = new Set<string>();
+  const after = new Map<string, Extract<RigElement, { kind: 'rig-raw' }>>();
   for (const g of groups.values()) {
-    if (g.ids.length < 2) continue; // the others fell off the phone's window: its own raw, as any block
-    g.ids.forEach((id, n) => out.set(id, n === g.ids.length - 1 ? { label: R.rawMany(g.count), text: g.raws.join('\n') } : undefined));
+    if (g.items.length < 2) continue; // the others fell off the phone's window: its own raw, as any block
+    for (const x of g.items) inPacket.add(x.id);
+    const last = g.items.at(-1)!;
+    const text = [...g.items].sort((a, b) => a.index - b.index).map(x => x.raw).join('\n');
+    after.set(last.id, { key: `packet-${g.id}`, kind: 'rig-raw', at: last.at, raw: { label: R.rawMany(g.count), text } });
   }
-  return out;
+  return { inPacket, after };
 }
 
 /** Consecutive plain OpenRig notices fold into one line (« k avis OpenRig »); a stalled one never folds. */

@@ -95,15 +95,23 @@ describe('OpenRig in the phone thread', () => {
     expect(items.some(i => i.kind === 'me')).toBe(false);
   });
 
-  it('gives pasted blocks one raw, on the last of the packet, and one time', () => {
-    const packet = (index: number) => ({ packet: { id: 'p1', index, count: 2 } });
+  it('gives pasted blocks one raw, its own row after the packet, the raws in packet order, and one time', () => {
+    const packet = (index: number) => ({ packet: { id: 'p1', index, count: 3 } });
     const items = of([
       rigReceived('a', at(19, 49), 'Oui, now', { ...packet(0), from: 'operator-agent@kernel' }),
-      rigReceived('b', at(19, 49), 'Ligne créée', packet(1), 'bix')
+      rigHandoff('c', at(19, 49), 'Ligne', packet(2)),
+      rigReceived('b', at(19, 49), 'Ligne créée', packet(1), 'bix'),
+      prompt('p', at(19, 50), 'après')
     ]);
-    expect(items.map(i => i.kind)).toEqual(['time', 'rig-message', 'rig-message']);
-    expect(items[1]).not.toHaveProperty('raw');
-    expect(items[2]).toMatchObject({ raw: { label: '2 messages collés ensemble · brut', text: expect.stringMatching(/Oui, now[\s\S]*Ligne créée/) } });
+    expect(items.map(i => i.kind)).toEqual(['time', 'rig-message', 'rig-task', 'rig-message', 'rig-raw', 'me']);
+    for (const e of items.slice(1, 4)) expect(e).not.toHaveProperty('raw');
+    expect(items[4]).toMatchObject({ key: 'packet-p1', raw: { label: '3 messages collés ensemble · brut', text: expect.stringMatching(/Oui, now[\s\S]*Ligne créée[\s\S]*Queue handoff/) } });
+  });
+
+  it('keeps its own raw on a block whose packet mates fell off the window', () => {
+    const items = of([rigReceived('b', at(19, 49), 'seul', { packet: { id: 'p1', index: 1, count: 2 } }, 'bix')]);
+    expect(items.map(i => i.kind)).toEqual(['time', 'rig-message']);
+    expect(items[1]).toMatchObject({ raw: { label: 'Brut' } });
   });
 
   it('keeps the user\'s own prompts « moi », and a time again after them', () => {

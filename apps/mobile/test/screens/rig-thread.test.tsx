@@ -139,8 +139,15 @@ describe('OpenRig in the phone thread', () => {
     const packet = (index: number) => ({ packet: { id: 'p1', index, count: 2 } });
     opened([rigReceived('a', at(19, 49), 'Oui, now', { ...packet(0), from: 'operator-agent@kernel' }), rigReceived('b', at(19, 49), 'Ligne créée', packet(1), 'bix')]);
     expect(screen.queryByRole('button', { name: 'Brut' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '2 messages collés ensemble · brut' }));
-    expect(screen.getByText(/Oui, now[\s\S]*Ligne créée/, { selector: 'pre' })).toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: '2 messages collés ensemble · brut' });
+    // its own row after the group, not inside a bubble
+    expect(toggle.closest('article')).toBeNull();
+    const last = screen.getByRole('article', { name: 'De Bix' });
+    expect(last.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(toggle);
+    const pre = screen.getByText(/Oui, now[\s\S]*Ligne créée/, { selector: 'pre' });
+    expect(pre).toHaveClass('font-mono');
+    expect(pre.closest('article')).toBeNull();
     expect(screen.getAllByText('19:49')).toHaveLength(1);
   });
 

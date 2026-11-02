@@ -91,10 +91,11 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
       const label = clock(rig.at);
       if (!(packet && packet === lastPacket) && label !== lastTime) out.push({ key: `time-${i.id}`, kind: 'time', label });
       lastTime = label; lastPacket = packet;
-      if (packets.has(i.id)) {
-        const raw = packets.get(i.id);
+      if (packets.inPacket.has(i.id)) {
         const { raw: _own, ...rest } = rig as RigElement & { raw?: unknown };
-        out.push((raw ? { ...rest, raw } : rest) as RigElement);
+        out.push(rest as RigElement);
+        const row = packets.after.get(i.id);
+        if (row) out.push(row);
       } else out.push(rig);
       continue;
     }

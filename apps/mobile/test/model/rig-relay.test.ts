@@ -29,7 +29,8 @@ describe('OpenRig through the relay', () => {
       { kind: 'rig-message', dir: 'out', delivery: 'delivered', raw: { label: 'Commande' } },
       { kind: 'rig-notice', tone: 'warn', title: 'Ligne …ffc1 sans suite depuis 7 min' },
       { kind: 'rig-message' },
-      { kind: 'rig-message', raw: { label: '2 messages collés ensemble · brut' } }
+      { kind: 'rig-message' },
+      { kind: 'rig-raw', raw: { label: '2 messages collés ensemble · brut' } }
     ]);
     expect(items[0]).toMatchObject({ kind: 'time', label: '19:00' });
   });
