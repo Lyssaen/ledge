@@ -32,7 +32,8 @@ export async function received<T extends ClientMessage['type']>(list: ClientMess
   return found!;
 }
 /** The app is up and showing the daemon's sessions on the handle. */
-export async function ready(page: Page, bots: number) {
+/** The page is up with `sessions` sessions known: Ledge is the notch's only mascot, its tooltip counts them. */
+export async function ready(page: Page, sessions: number) {
   await page.goto('/');
-  await expect(layer(page, 'handle').locator('button:not([data-resident]):not([data-overflow]):not(:has([data-update-pip]))')).toHaveCount(bots);
+  await expect(layer(page, 'handle').locator('[data-resident]')).toHaveAttribute('title', sessions === 0 ? /No sessions|Aucune session/ : new RegExp(`(^|\\. )${sessions} sessions?`));
 }

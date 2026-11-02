@@ -14,7 +14,7 @@ const desktopSets = (key: string, value: string | null) => act(() => {
   window.dispatchEvent(new StorageEvent('storage', { key, newValue: value }));
 });
 /** The folded island's Ledge mark goes grey under do-not-disturb. */
-const quiet = () => (document.querySelector('[data-ledge-mark]') as HTMLElement).style.background === 'var(--muted-foreground)';
+const quiet = () => (document.querySelector('[data-ledge-mark]') as HTMLElement).hasAttribute('data-dnd');
 const pip = () => document.querySelector('[data-update-pip]');
 
 describe('App follows what Desktop decides', () => {

@@ -247,6 +247,21 @@ const fr = {
     backTo: 'Discussion principale', delegatedBy: 'Délégué par', instruction: 'Consigne', report: 'Rapport final', helperWaiting: 'attend son rapport…',
     image: { capture: 'Capture', unavailable: 'Image indisponible', close: 'Fermer', prev: 'Image précédente', next: 'Image suivante' }
   },
+  /** The closed notch's activity line and music slot (mockup docs/mockups/ledge-notch-activity.html). */
+  notch: {
+    line: {
+      tool: { read: 'lit', edit: 'modifie', search: 'cherche', command: 'lance', other: (tool: string) => `utilise ${tool}` },
+      helper: '› sous-agent', thinking: 'réfléchit…',
+      reason: { permission: 'attend votre accord', question: 'vous pose une question', plan: 'vous soumet un plan', diff: 'vous montre un diff', finished: 'a terminé', error: 's’est arrêté sur une erreur' },
+      ago: (t: string) => `il y a ${t}`, open: (who: string) => `Ouvrir ${who} dans Ledge`
+    },
+    music: {
+      label: (title: string, artist: string) => `Musique en cours : ${title}${artist ? `, ${artist}` : ''}`,
+      prev: 'Précédent', pause: 'Pause', play: 'Lecture', next: 'Suivant',
+      cantPrev: 'Ce lecteur ne permet pas de revenir en arrière', cantNext: 'Ce lecteur ne permet pas de passer au suivant', cantPlay: 'Ce lecteur ne se met pas en pause depuis Ledge',
+      paused: 'En pause'
+    }
+  },
   shortcut: 'Ctrl Alt L'
 };
 
@@ -485,6 +500,20 @@ const en: Messages = {
     helperOpen: 'Open the discussion', helperDone: 'Done', helperWorking: 'Working',
     backTo: 'Main discussion', delegatedBy: 'Delegated by', instruction: 'Instruction', report: 'Final report', helperWaiting: 'is waiting for its report…',
     image: { capture: 'Capture', unavailable: 'Image unavailable', close: 'Close', prev: 'Previous image', next: 'Next image' }
+  },
+  notch: {
+    line: {
+      tool: { read: 'reads', edit: 'edits', search: 'searches', command: 'runs', other: (tool: string) => `uses ${tool}` },
+      helper: '› sub-agent', thinking: 'is thinking…',
+      reason: { permission: 'needs your approval', question: 'has a question', plan: 'has a plan for you', diff: 'has a diff for you', finished: 'is done', error: 'stopped on an error' },
+      ago: (t: string) => `${t} ago`, open: (who: string) => `Open ${who} in Ledge`
+    },
+    music: {
+      label: (title: string, artist: string) => `Now playing: ${title}${artist ? `, ${artist}` : ''}`,
+      prev: 'Previous', pause: 'Pause', play: 'Play', next: 'Next',
+      cantPrev: 'This player can’t go back', cantNext: 'This player can’t skip ahead', cantPlay: 'This player can’t be paused from Ledge',
+      paused: 'Paused'
+    }
   },
   shortcut: 'Ctrl Alt L'
 };

@@ -7,14 +7,16 @@ import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
 import { useMachines } from '../daemon/machines';
 import type { DocumentOrigin } from '../documents/useDocumentReader';
-import { botState, poseFor } from '../bots/poseFor';
 import type { ResidentGesture } from '../bots/ResidentMascot';
 import { groupSessions } from '@ledge/fleet';
 import { displayOrder, headersBefore } from './groups';
 import { FILET, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
-import { Handle, type HandleBot } from './Handle';
+import { Handle, type PendingTone } from './Handle';
+import { useNotchLine, useNowPlaying } from '../notch/useNotch';
+import { describe } from '../notch/describe';
+import { duration } from '../format';
 import { UnreadSay, UNREAD_SAY_BOX, SAY_TAIL_X } from './UnreadSay';
 import { pickSay, pickSpeaker, sayKindOf, SAY_LINGER_MS, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
@@ -40,7 +42,7 @@ import { SessionView, measureSessionH, SESSION_HEADER_H, READING_TERMINAL_H } fr
 import { useI18n } from '../i18n/lang';
 import type { PipTone } from './Handle';
 import { transition, MOTION, ms, enterDelay } from '../motion';
-import { focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, quitApp } from '../tauri/bridge';
+import { mediaCommand, focusTerminal, openTerminal, onShortcut, onNewSessionShortcut, onOutsideClick, setOutsideWatch, onCursorProximity, focusOverlay, releaseFocus, isTauri, onForegroundCovered, setHotZone, quitApp } from '../tauri/bridge';
 import { Icon, ICONS } from '../ui/icons';
 import { useNativeFrame } from '../tauri/useNativeFrame';
 import { useDelayed } from './useDelayed';
@@ -146,7 +148,6 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     if (st.mode !== 'reader' && reader.state.current) reader.close();
     if (st.mode === 'handle' || st.mode === 'bubble') documentSourceFocus.current = null;
   }, [st.mode, reader.state.current, reader.close]);
-  const [hoverId, setHoverId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const surfaceRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
@@ -357,7 +358,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
 
   // The finishing bot is big from the moment its notice is due until the bubble folds.
   const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
-  const bots: HandleBot[] = useMemo(() => sessions.map(s => ({ id: s.id, name: s.name, tool: s.tool, state: botState(s), pose: poseFor(s.id, s.state), pending: isPending(s), lifted: s.id === liftedId, held: !!finishedUnread[s.id], readOnly: s.source === 'hook_only', machine: s.machineId })), [sessions, liftedId, finishedUnread]);
+  const bots = useMemo(() => sessions.map(s => ({ id: s.id, pending: isPending(s) || s.id === liftedId || !!finishedUnread[s.id], machine: s.machineId })), [sessions, liftedId, finishedUnread]);
+  // The resting Ledge mark keeps the colour of the most urgent request: red for a permission, amber for the rest.
+  const pendingTone: PendingTone = sessions.some(s => isPending(s) && s.pending?.kind === 'permission') ? 'permission' : sessions.some(isPending) ? 'question' : null;
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
   const signalCounter = useRef(0);
   const [residentSignal, setResidentSignal] = useState<{ key: number; kind: ResidentGesture }>();
@@ -569,11 +572,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   useEffect(() => { if (chatClosing && client.fleet && !client.fleet.turnMachine(chatClosing)?.ready) setChatClosing(null); }, [machines, chatClosing, client]);
   const sayCandidates: SayCandidate[] = [];
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
-  for (const s of sessions) {
-    const live = sayKindOf(s);
-    if (live) sayCandidates.push({ id: s.id, kind: live, seed: `${s.id}:${live}:${s.pending?.text ?? s.state}` });
-    else if (finishedUnread[s.id]) sayCandidates.push({ id: s.id, kind: 'finished', seed: finishedUnread[s.id]! });
-  }
+  // Only Ledge's own reply speaks under the notch: the activity line says what the sessions do (user's choice, 2026-11-02).
   const speaker = pickSpeaker(sayCandidates);
   const sayText = speaker ? pickSay(t.say[speaker.kind], speaker.seed) : '';
   // A balloon speaks for 5 s once it is actually seen on the handle, then fades; a new situation (new ask, new finish)
@@ -590,9 +589,33 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   // The strip shows under a covering window once the island has been folded and left alone for 500 ms; a say
   // still hanging under its speaker keeps the island compact, the strip has no companion to hang it from.
   const strip = useDelayed(discreet && covered && st.mode === 'handle' && !st.hot && !st.hovering && bandPointer === null && !sayShown, STRIP_BACK_MS);
-  // The resting filet wakes into the compact island and its robots while the pointer is over it or near it, or the keyboard is in it.
-  const awake = st.mode === 'handle' && !strip && (st.hovering || st.hot || st.focusWithin || bandPointer !== null);
-  const geo = scaledLayout({ bots: bots.map(b => ({ id: b.id, pending: b.pending || !!b.lifted || !!b.held, machine: b.machine })), mode: st.mode, screenH, screenW, position: islandPosition, strip, awake, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: st.mode === 'peek' ? (peekH ? peekH + SURFACE_CHROME_Y : undefined) : bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
+  // The resting filet wakes while the pointer is over it or near it, or the keyboard is in it, or for 5 s on an activity.
+  const pointerAwake = st.mode === 'handle' && (st.hovering || st.hot || st.focusWithin || bandPointer !== null);
+  const notchLine = useNotchLine({ client, sessions: daemonSessions, dnd, hovering: pointerAwake });
+  const music = useNowPlaying(np => notchLine.pushTrack(np));
+  const [musicOpen, setMusicOpen] = useState(false);
+  const awake = st.mode === 'handle' && !strip && (pointerAwake || notchLine.view.awake);
+  useEffect(() => { if (!awake) setMusicOpen(false); }, [awake]);
+  const line = awake ? notchLine.view.line : null;
+  const nameOf = (id: string) => byId.get(id)?.name ?? id;
+  const described = line ? describe(line, nameOf, t) : null;
+  const aged = line && notchLine.view.aged && notchLine.view.seenAt !== null ? t.notch.line.ago(duration(Date.now() - notchLine.view.seenAt, t)) : null;
+  const handleContentRef = useRef<HTMLDivElement>(null);
+  const [handleW, setHandleW] = useState(0);
+  useLayoutEffect(() => {
+    const el = handleContentRef.current;
+    const w = el ? el.offsetWidth : 0;
+    if (w !== handleW) setHandleW(w);
+  });
+  // The row also grows without a render: the music controls' width transition, a late cover, a font that loads.
+  useEffect(() => {
+    const el = handleContentRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setHandleW(el.offsetWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [awake, st.mode]);
+  const geo = scaledLayout({ bots, handleW: st.mode === 'handle' ? handleW : 0, notch: { music: !!music, playing: !!music?.playing, musicOpen, line: described ? 200 : 0 }, mode: st.mode, screenH, screenW, position: islandPosition, strip, awake, pip: !!updatePip, dnd, readerExpanded: st.documentExpanded, bubbleH: st.mode === 'peek' ? (peekH ? peekH + SURFACE_CHROME_Y : undefined) : bubbleH ? bubbleH + SURFACE_CHROME_Y : undefined, sessionH, helperH, detailH: st.mode === 'chat' ? chatBody : detailBody ? DETAIL_HEADER_H + detailBody + SURFACE_CHROME_Y : undefined, askH: ASK_H, reading: st.reading, groups: groups.length, listExtraH: (focused && isYesNo(focused) ? EXPANDED_ROW_H - SIZES.rowH : 0) + noticeExtraH + (disconnected.length ? 28 : 0) }, { handle: hs, panel: ps });
   geoRef.current = geo;
   // The shell watches the top band over the island's span (its depth and overhang are the shell's own constants).
   const hot = visible ? { left: Math.round(geo.handle.left), w: Math.round(geo.handle.w) } : HIDDEN_HOT;
@@ -762,7 +785,9 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         style={{ position: 'absolute', left: geo.left, top: 0, width: geo.w, height: geo.h, boxSizing: 'border-box', overflow: 'clip', background: 'var(--notch)', color: 'var(--sidebar-foreground)', borderRadius: `0px 0px ${radius}px ${radius}px`, opacity: unreachable ? 0.6 : 1, willChange: 'left, width, height',
           transition: surfaceTransition }}>
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
-          <Handle updatePip={updatePip} updateVersion={updateVersion} onUpdate={() => openInLedge({ kind: 'update' })} bots={bots} slots={geo.slots} visible={st.mode === 'handle'} strip={strip} awake={awake} hoverId={hoverId} onHover={setHoverId} onOpen={id => dispatch({ type: 'botClick', id })} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} sayId={sayShown && speaker && speaker.id !== LEDGE_ID ? speaker.id : null} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+          <Handle contentRef={handleContentRef} updatePip={updatePip} updateVersion={updateVersion} onUpdate={() => openInLedge({ kind: 'update' })} sessionCount={sessions.length} visible={st.mode === 'handle'} strip={strip} awake={awake}
+            line={line} described={described} aged={aged} onOpenLine={id => openInLedge({ kind: 'session', id })} pending={pendingTone}
+            music={music} trackKey={notchLine.view.trackKey} musicOpen={musicOpen} onMusicOpen={setMusicOpen} onMedia={c => { void mediaCommand(c); }} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}

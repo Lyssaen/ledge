@@ -190,12 +190,4 @@ describe('final review fixes', () => {
     expect(mode()).toBe('bubble');
   });
 
-  it('an exited bot opens a peek, not a rename field', () => {
-    snapshot([otto({ topic: 'Done work', state: 'exited' })]);
-    mount();
-    fireEvent.click(screen.getByRole('button', { name: /Otto .*open/ }));
-    expect(mode()).toBe('peek');
-    expect(within(layer('peek')).getByText('Done work')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Done work' })).toBeNull();
-  });
 });

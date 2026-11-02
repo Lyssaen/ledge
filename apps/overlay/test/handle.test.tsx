@@ -1,124 +1,171 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { Handle, type HandleBot } from '../src/surface/Handle';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import type { NowPlaying } from '@ledge/protocol';
+import { Handle, CAN_SETTLE_MS } from '../src/surface/Handle';
 import { Badge } from '../src/ui/Badge';
-import { layout } from '../src/surface/geometry';
+import { describe as describeLine } from '../src/notch/describe';
+import { MESSAGES } from '../src/i18n/messages';
+import type { NotchLine } from '../src/notch/line';
 
-const bots = [
-  { id: 'a', name: 'Otto', tool: 'claude' as const, state: 'approval' as const, pose: 1 as const, pending: true },
-  { id: 'b', name: 'Pim', tool: 'codex' as const, state: 'working' as const, pose: 2 as const, pending: false },
-  { id: 'c', name: 'Lu', tool: 'codex' as const, state: 'done' as const, pose: 1 as const, pending: false }
-];
-const l = layout({ bots: bots.map(b => ({ id: b.id, pending: b.pending })), mode: 'handle', screenH: 1080, screenW: 1920 });
+const en = MESSAGES.en;
+const names: Record<string, string> = { otto: 'Otto', nova: 'Nova', pim: 'Pim' };
+const name = (id: string) => names[id] ?? id;
+const at = '2026-11-02T19:00:00.000Z';
+const tool: NotchLine = { kind: 'tool', session: 'otto', at, tool: 'Edit', label: 'Edit apps/overlay/src/surface/Handle.tsx' };
+const track: NotchLine = { kind: 'track', title: 'Sous la verrière', artist: 'Halles 72' };
+const music: NowPlaying = { title: 'Lignes de fuite', artist: 'Atelier Nord', playing: true, can: { previous: true, playPause: true, next: true }, player: { id: 'Spotify.exe', name: 'Spotify' } };
+const awake = (line: NotchLine | null, extra: Partial<Parameters<typeof Handle>[0]> = {}) =>
+  <Handle visible awake line={line} described={line ? describeLine(line, name, en) : null} {...extra} />;
 
-describe('<Handle>', () => {
-  it('rests as a 10 px filet: Ledge’s rectangle, then one dash per session in its state colour', () => {
-    render(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+describe('<Handle> at rest', () => {
+  it('is a 10 px filet with Ledge’s mark alone: no session dash', () => {
+    render(<Handle visible />);
     const filet = document.querySelector('[data-layer="handle"][data-filet]')!;
-    expect(filet).toHaveStyle({ height: '10px' });
-    const ledge = filet.querySelector('[data-ledge-mark]') as HTMLElement;
-    expect(ledge).toHaveStyle({ width: '9px', height: '3px', background: 'var(--sidebar-primary)' });
-    const dashes = [...filet.querySelectorAll('[data-dot]')] as HTMLElement[];
-    expect(dashes.map(d => d.getAttribute('data-state'))).toEqual(['approval', 'working', 'done']);
-    expect(dashes[0]).toHaveStyle({ width: '5px', height: '3px', background: 'var(--danger-text)' });
-    expect(dashes[1]).toHaveStyle({ background: 'var(--info)' });
-    const buttons = [...filet.querySelectorAll('button')];
-    expect(buttons.map(b => b.getAttribute('data-resident') !== null ? 'ledge' : b.getAttribute('aria-label')!.split(' ')[0])).toEqual(['ledge', 'Otto', 'Pim', 'Lu']);
+    expect(filet.querySelector('[data-ledge-mark]')).not.toBeNull();
+    expect(filet.querySelectorAll('button')).toHaveLength(1);
+    expect(filet.querySelector('[data-dot]')).toBeNull();
   });
-  it('a dash reports hover and opens its session; Ledge opens home at once', () => {
-    const onHover = vi.fn(), onOpen = vi.fn(), onOpenHome = vi.fn();
-    render(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={onHover} onOpen={onOpen} onOpenHome={onOpenHome} />);
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /Pim/ }));
-    expect(onHover).toHaveBeenCalledWith('b');
-    fireEvent.click(screen.getByRole('button', { name: /Pim/ }));
-    expect(onOpen).toHaveBeenCalledWith('b');
-    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
-    expect(onOpenHome).toHaveBeenCalledTimes(1);
+  it('orders the mark, the update dash, then the still bars while a track plays; none in pause', () => {
+    const { rerender } = render(<Handle visible music={music} updatePip="new" updateVersion="0.3.0" />);
+    const filet = document.querySelector('[data-filet]')!;
+    const order = [...filet.children].map(c => c.querySelector('[data-ledge-mark]') ? 'ledge' : c.querySelector('[data-update-pip]') ? 'pip' : c.hasAttribute('data-eq') ? 'eq' : '?');
+    expect(order).toEqual(['ledge', 'pip', 'eq']);
+    expect(screen.getByRole('img', { name: 'Now playing: Lignes de fuite, Atelier Nord' })).toBeInTheDocument();
+    rerender(<Handle visible music={{ ...music, playing: false }} />);
+    expect(document.querySelector('[data-eq]')).toBeNull();
+  });
+  it('the discreet strip keeps Ledge’s mark', () => {
+    render(<Handle visible strip />);
+    expect(document.querySelector('[data-layer="handle"][data-strip] [data-ledge-mark]')).not.toBeNull();
   });
   it('is inert when not visible', () => {
-    const { container } = render(<Handle bots={bots} slots={l.slots} visible={false} hoverId={null} onHover={() => {}} onOpen={() => {}} />);
+    const { container } = render(<Handle visible={false} />);
+    expect(container.firstChild).toHaveAttribute('inert');
     expect(container.firstChild).toHaveStyle({ opacity: '0', pointerEvents: 'none' });
   });
-});
-
-describe('<Handle> separator', () => {
-  it('draws a hairline between Ledge and the bots, and none without bots', () => {
-    const { rerender } = render(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    expect(document.querySelector('[data-machine-separator]')).toHaveStyle({ width: '1px', height: '6px' });
-    rerender(<Handle bots={[]} slots={[]} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    expect(document.querySelector('[data-machine-separator]')).toBeNull();
-  });
-});
-
-describe('<Handle> machine pipes', () => {
-  it('draws a pipe where the companions change machine, none on a single machine', () => {
-    const fleet: HandleBot[] = [{ ...bots[1]!, machine: 'srv' }, bots[0]!, { ...bots[2]!, machine: 'srv' }];
-    const fl = layout({ bots: fleet.map(b => ({ id: b.id, pending: b.pending, machine: b.machine })), mode: 'handle', screenH: 1080, screenW: 1920 });
-    const { container, rerender } = render(<Handle bots={fleet} slots={fl.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    const row = [...container.querySelectorAll('[data-layer="handle"] [data-machine-separator], [data-layer="handle"] [data-dot]')]
-      .map(e => e.hasAttribute('data-machine-separator') ? '|' : e.closest('button')!.getAttribute('aria-label')!.split(' ')[0]);
-    expect(row).toEqual(['|', 'Otto', '|', 'Pim', 'Lu']);
-    expect(container.querySelector('[data-machine-separator]')).toHaveStyle({ width: '1px', height: '6px', marginLeft: '3px' });
-    rerender(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    expect(container.querySelectorAll('[data-machine-separator]')).toHaveLength(1);
-  });
-});
-
-describe('<Handle> inertness', () => {
-  it('marks the hidden layer inert', () => {
-    const { container } = render(<Handle bots={bots} slots={l.slots} visible={false} hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    expect(container.firstChild).toHaveAttribute('inert');
-  });
-  it('keeps the visible layer focusable and shows every session', () => {
-    const { container } = render(<Handle bots={bots} slots={l.slots.filter(s => s.id !== 'c')} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    expect(container.firstChild).not.toHaveAttribute('inert');
-    expect(screen.getByRole('button', { name: /Otto/ })).not.toHaveAttribute('tabindex', '-1');
-    expect(screen.getByRole('button', { name: /Lu/ })).toBeInTheDocument();
-  });
-  it('an unread Ledge answer names the reply on the rectangle', () => {
-    render(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} unread />);
+  it('an unread Ledge answer names the reply on the mark', () => {
+    render(<Handle visible unread />);
     expect(screen.getByRole('button', { name: /Ledge replied, open/ })).toBeInTheDocument();
   });
-});
-
-describe('<Handle> island extras', () => {
-  const many = Array.from({ length: 8 }, (_, i) => ({ id: `s${i}`, name: `Bot${i}`, tool: 'claude' as const, state: (i === 7 ? 'approval' : 'working') as 'approval' | 'working', pose: 1 as const, pending: i === 7 }));
-  const geo = layout({ bots: many.map(b => ({ id: b.id, pending: b.pending })), mode: 'handle', screenH: 1080, screenW: 1920 });
-  it('shows every session, the ask first, with no overflow pill', () => {
-    render(<Handle bots={many} slots={geo.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    const buttons = [...document.querySelectorAll('[data-layer="handle"] button:not([data-resident])')];
-    expect(buttons).toHaveLength(8);
-    expect(buttons[0]).toHaveAccessibleName(/Bot7/);
-    expect(document.querySelector('[data-overflow]')).toBeNull();
-  });
-  it('the discreet strip keeps Ledge and one dash per session', () => {
-    const onOpen = vi.fn(), onOpenHome = vi.fn();
-    render(<Handle bots={many} slots={geo.slots} visible hoverId={null} onHover={() => {}} onOpen={onOpen} onOpenHome={onOpenHome} strip />);
-    const strip = document.querySelector('[data-layer="handle"][data-strip]')!;
-    expect(strip).toHaveStyle({ height: '10px' });
-    expect(strip.querySelectorAll('[data-dot]')).toHaveLength(8);
-    expect(strip.querySelector('[data-ledge-mark]')).not.toBeNull();
-    fireEvent.click(strip.querySelector('[data-dot]')!.closest('button')!);
-    expect(onOpen).toHaveBeenCalledWith('s7');
-    expect(onOpenHome).not.toHaveBeenCalled();
-  });
-  it('do not disturb mutes Ledge’s rectangle', () => {
-    const { rerender } = render(<Handle bots={many.slice(0, 2)} slots={geo.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    expect(document.querySelector('[data-ledge-mark]')).toHaveStyle({ background: 'var(--sidebar-primary)' });
-    rerender(<Handle bots={many.slice(0, 2)} slots={geo.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} dnd />);
-    expect(document.querySelector('[data-ledge-mark]')).toHaveStyle({ background: 'var(--muted-foreground)' });
-  });
-});
-
-describe('<Handle> update pip', () => {
-  it('shows the pip on the mascot with its tone, and none by default', () => {
-    const { rerender } = render(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} />);
-    expect(document.querySelector('[data-update-pip]')).toBeNull();
-    rerender(<Handle bots={bots} slots={l.slots} visible hoverId={null} onHover={() => {}} onOpen={() => {}} updatePip="new" updateVersion="0.3.0" />);
-    expect(document.querySelector('[data-update-pip="new"]')).not.toBeNull();
-    const pip = document.querySelector('[data-update-pip="new"]') as HTMLElement;
-    expect(pip).toHaveStyle({ width: '5px', height: '3px', background: 'var(--sidebar-primary)' });
+  it('the update dash keeps its tone and names the version on Ledge', () => {
+    render(<Handle visible updatePip="new" updateVersion="0.3.0" />);
+    expect(document.querySelector('[data-update-pip="new"]')).toHaveStyle({ width: '5px', height: '3px', background: 'var(--sidebar-primary)' });
     expect(document.querySelector('[data-resident]')!.getAttribute('title')).toMatch(/^Ledge 0\.3\.0 is ready\./);
+  });
+});
+
+describe('<Handle> awake', () => {
+  it('shows Ledge, the moon right after it in DND, then one line: name, verb, short target', () => {
+    render(awake(tool, { dnd: true }));
+    const row = document.querySelector('[data-awake]')!;
+    expect(row.querySelectorAll('svg.bot')).toHaveLength(0);
+    const kids = [...row.children].map(c => c.matches('[data-dnd-moon]') ? 'moon' : c.matches('[data-line]') ? 'line' : c.querySelector('[data-resident]') ? 'ledge' : '?');
+    expect(kids).toEqual(['ledge', 'moon', 'line']);
+    const line = screen.getByRole('button', { name: 'Open Otto in Ledge' });
+    expect(line.querySelector('b')).toHaveTextContent('Otto');
+    expect(line.querySelector('code')).toHaveTextContent('surface/Handle.tsx');
+    expect(line).toHaveAttribute('title', 'Otto edits surface/Handle.tsx');
+  });
+  it('a click on the line opens that session; on a track it does nothing', () => {
+    const onOpenLine = vi.fn();
+    const { rerender } = render(awake(tool, { onOpenLine }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open Otto in Ledge' }));
+    expect(onOpenLine).toHaveBeenCalledWith('otto');
+    rerender(awake(track, { onOpenLine, music }));
+    fireEvent.click(document.querySelector('[data-line]')!);
+    expect(onOpenLine).toHaveBeenCalledTimes(1);
+  });
+  it('an old line seen on hover is greyed with its age', () => {
+    render(awake(tool, { aged: '12s ago' }));
+    expect(document.querySelector('[data-line] [data-aged]')).not.toBeNull();
+    expect(document.querySelector('[data-line]')).toHaveTextContent('12s ago');
+  });
+  it('without a line, Ledge and the cover only; without music, no filet nor cover', () => {
+    const { rerender } = render(awake(null, { music }));
+    expect(document.querySelector('[data-line]')).toBeNull();
+    expect(document.querySelector('[data-cover]')).not.toBeNull();
+    rerender(awake(tool));
+    expect(document.querySelector('.nt-sep')).toBeNull();
+    expect(document.querySelector('[data-cover]')).toBeNull();
+  });
+  it('the cover opens the controls on hover or focus; each is a plain icon that sends its command', () => {
+    const onMedia = vi.fn(), onMusicOpen = vi.fn();
+    const { rerender } = render(awake(tool, { music, onMedia, onMusicOpen }));
+    fireEvent.mouseEnter(document.querySelector('[data-music]')!);
+    expect(onMusicOpen).toHaveBeenCalledWith(true);
+    expect(screen.getByRole('button', { name: 'Pause' })).toHaveAttribute('tabindex', '-1');
+    rerender(awake(tool, { music, onMedia, onMusicOpen, musicOpen: true }));
+    const pause = screen.getByRole('button', { name: 'Pause' });
+    expect(pause).toHaveAttribute('tabindex', '0');
+    expect(pause.querySelector('.na-disc, [data-disc]')).toBeNull();
+    fireEvent.click(pause);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(onMedia.mock.calls).toEqual([['play_pause'], ['next']]);
+  });
+  it('a control the player refuses is disabled, not hidden, once refused for a moment (no blink after « next »)', () => {
+    vi.useFakeTimers();
+    const props = { music, musicOpen: true, onMedia: vi.fn() };
+    const { rerender } = render(awake(null, props));
+    const refused = { ...music, can: { previous: false, playPause: true, next: false } };
+    rerender(awake(null, { ...props, music: refused }));
+    expect(screen.getByRole('button', { name: 'Previous' })).not.toHaveAttribute('aria-disabled');
+    rerender(awake(null, props));
+    act(() => { vi.advanceTimersByTime(CAN_SETTLE_MS + 50); });
+    expect(screen.getByRole('button', { name: 'Previous' })).not.toHaveAttribute('aria-disabled');
+    rerender(awake(null, { ...props, music: refused }));
+    act(() => { vi.advanceTimersByTime(CAN_SETTLE_MS + 50); });
+    const prev = screen.getByRole('button', { name: 'Previous' });
+    expect(prev).toHaveAttribute('aria-disabled', 'true');
+    expect(prev).toHaveAttribute('title', 'This player can’t go back');
+    fireEvent.click(prev);
+    expect(props.onMedia).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+  it('a paused track: greyed cover with the pause sign, « Paused », a Play button; no raw player id', () => {
+    render(awake(null, { music: { ...music, artist: '', playing: false, player: { id: 'Chrome' } }, musicOpen: true }));
+    expect(document.querySelector('[data-cover]')).toHaveAttribute('data-paused', 'true');
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Now playing: Lignes de fuite (Paused)' })).toBeInTheDocument();
+    const titles = document.querySelector('.nt-titles')!;
+    expect(titles).toHaveTextContent('Paused');
+    expect(titles).not.toHaveTextContent('Chrome');
+  });
+  it('without artist nor player name, the title alone', () => {
+    render(awake(null, { music: { ...music, artist: '', player: { id: 'Chrome' } }, musicOpen: true }));
+    expect(document.querySelector('.nt-titles')!.children).toHaveLength(1);
+  });
+  it('the cover arrives late: a neutral square with a note, then the picture', () => {
+    const { rerender } = render(awake(null, { music }));
+    expect(document.querySelector('[data-cover] img')).toBeNull();
+    rerender(awake(null, { music: { ...music, artwork: 'data:image/png;base64,AAAA' } }));
+    expect(document.querySelector('[data-cover] img')).toHaveAttribute('src', 'data:image/png;base64,AAAA');
+  });
+});
+
+describe('the line in words', () => {
+  it('names both ends of a message and opens the sender', () => {
+    const out = describeLine({ kind: 'message', session: 'otto', at, direction: 'out', counterpart: 'nova@ledge-dev-2', peer: 'nova', summary: 'Maquette validée' }, name, en);
+    expect(out).toMatchObject({ text: 'Otto → Nova · Maquette validée', open: 'otto' });
+    const fromRig = describeLine({ kind: 'message', session: 'otto', at, direction: 'in', counterpart: 'review-qa', summary: 'Deux écarts' }, name, en);
+    expect(fromRig).toMatchObject({ text: 'review-qa → Otto · Deux écarts', open: 'otto' });
+    const toRig = describeLine({ kind: 'message', session: 'otto', at, direction: 'out', counterpart: 'dev-front@ledge-dev-2', summary: 'Relis' }, name, en);
+    expect(toRig.text).toBe('Otto → dev-front · Relis');
+    const fromPeer = describeLine({ kind: 'message', session: 'nova', at, direction: 'in', counterpart: 'Otto', peer: 'otto', summary: 'Salut' }, name, en);
+    expect(fromPeer.open).toBe('otto');
+  });
+  it('a sub-agent, a command, a thinking and each notification', () => {
+    expect(describeLine({ kind: 'tool', session: 'otto', at, helperId: 'h1', tool: 'Glob', label: 'Glob apps/overlay/**/*.tsx' }, name, en).text).toBe('Otto searches **/*.tsx');
+    expect(describeLine({ kind: 'tool', session: 'otto', at, helperId: 'h1', tool: 'Glob', label: 'x' }, name, en).parts.map(p => p.k)).toContain('sub');
+    expect(describeLine({ kind: 'tool', session: 'nova', at, tool: 'Bash', label: 'pnpm --filter @ledge/overlay test' }, name, en).text).toBe('Nova runs pnpm --filter @ledge/overlay test');
+    expect(describeLine({ kind: 'tool', session: 'nova', at, tool: 'Task', label: 'Task' }, name, en).text).toBe('Nova uses Task');
+    expect(describeLine({ kind: 'thinking', session: 'nova', at }, name, en).text).toBe('Nova is thinking…');
+    expect(describeLine({ kind: 'notification', session: 'pim', at, reason: 'permission', text: 'pnpm up' }, name, en).text).toBe('Pim needs your approval · pnpm up');
+    expect(describeLine({ kind: 'notification', session: 'otto', at, reason: 'plan' }, name, en).text).toBe('Otto has a plan for you');
+    expect(describeLine({ kind: 'notification', session: 'otto', at, reason: 'finished' }, MESSAGES.fr ? name : name, MESSAGES.fr).text).toBe('Otto a terminé');
+  });
+  it('a track: the title and the artist, or the title alone; no session to open', () => {
+    expect(describeLine(track, name, en)).toMatchObject({ text: 'Sous la verrière · Halles 72', open: null });
+    expect(describeLine({ kind: 'track', title: 'Live #41', artist: '' }, name, en).text).toBe('Live #41');
   });
 });
 
