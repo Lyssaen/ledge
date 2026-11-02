@@ -2652,6 +2652,34 @@ describe('server: « À toi »', () => {
   });
 });
 
+describe('server: goals to Max', () => {
+  it('openrig.goals answers its asker and is pushed after a send; goal.send and goal.reply answer their asker', async () => {
+    const goal = (goalId: string) => ({ goalId, qitemId: `qitem-ledge-goal-${goalId}`, text: 'La pochette', folder: null, sentAt: 't', to: 'operator-agent@kernel',
+      state: 'sent' as const, proposal: null, question: null, trail: [], current: null });
+    let goals: Array<ReturnType<typeof goal>> = [];
+    const sent: string[] = [];
+    const srv2 = await startServer({ store, tmux, port: 0,
+      human: { async list() { return { channel: { state: 'ready' as const, person: null, slack: false }, asks: [] }; }, async answer(q) { return { qitemId: q, ok: true }; }, start() {}, stop() {} },
+      goals: {
+        async send(goalId, text) { sent.push(`send ${goalId} ${text}`); goals = [goal(goalId)]; return { ok: true, qitemId: `qitem-ledge-goal-${goalId}` }; },
+        async reply(goalId, replyId) { sent.push(`reply ${goalId} ${replyId}`); return { ok: false, error: 'uncertain' as const, message: 'lost' }; },
+        async list() { return { goals }; }
+      } });
+    const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
+    expect((await c.next('snapshot')).daemon).toBeUndefined();
+    await other.next('snapshot');
+    c.send({ type: 'openrig.goals', requestId: 'g1' });
+    expect(await c.next('openrig.goalsChanged')).toEqual({ type: 'openrig.goalsChanged', requestId: 'g1', goals: [] });
+    c.send({ type: 'openrig.goal.send', requestId: 'g2', goalId: 'abcdef12-0000', text: 'La pochette' });
+    expect(await c.next('openrig.goal.sent')).toEqual({ type: 'openrig.goal.sent', requestId: 'g2', goalId: 'abcdef12-0000', ok: true, qitemId: 'qitem-ledge-goal-abcdef12-0000' });
+    expect((await other.next('openrig.goalsChanged', 3000)).goals).toEqual([goal('abcdef12-0000')]);
+    c.send({ type: 'openrig.goal.reply', requestId: 'g3', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', text: 'Prends Ida' });
+    expect(await c.next('openrig.goal.replied')).toEqual({ type: 'openrig.goal.replied', requestId: 'g3', goalId: 'abcdef12-0000', ok: false, error: 'uncertain', message: 'lost' });
+    expect(sent).toEqual(['send abcdef12-0000 La pochette', 'reply abcdef12-0000 fedcba98-0000']);
+    c.close(); other.close(); await srv2.close();
+  });
+});
+
 describe('server: OpenRig seats as sessions', () => {
   it('a hook from an OpenRig seat tags its session with the rig, then the role OpenRig gives it', async () => {
     const node = { logicalId: 'dev.build', session: 'dev-build@first-factory', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'running', stopped: false, work: 0 };

@@ -42,6 +42,7 @@ import { createModels, type Models } from './models.js';
 import { claudeSlashRefusal, createCommands, type Commands } from './commands.js';
 import { createOpenRig, execRun, type OpenRig } from './openrig.js';
 import { createHumanChannel, type HumanChannelService } from './openrigHuman.js';
+import { createGoals, type GoalsService } from './openrigGoals.js';
 import type { OpenRigState } from '@ledge/protocol';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
@@ -181,7 +182,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -246,7 +247,27 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const seatTimer = setInterval(() => { void openrig.state().then(discoverSeats).catch(e => log(`openrig: seats not read: ${(e as Error).message}`)); }, SEATS_EVERY_MS);
   seatTimer.unref?.();
   // « À toi » (docs/vision/ledge-human-channel-contract.md): what OpenRig asks the person, pushed whole to every front when it changes.
-  const human = opts.human ?? createHumanChannel({ state: () => openrig.state(), run: execRun(agentEnv) });
+  // Lot 2 (docs/vision/ledge-goal-contract.md): goals given to Max, pushed whole to every front when OpenRig's queue moves, once a front
+  // has asked for them. `rig` runs there as Ledge, never as a seat: `--source ledge@external` is then the source OpenRig records.
+  const asLedge = async (): Promise<NodeJS.ProcessEnv> => {
+    const e = { ...(await agentEnv()) };
+    for (const k of Object.keys(e)) if (k.startsWith('OPENRIG_SESSION')) delete e[k];
+    return e;
+  };
+  const goals = opts.goals ?? createGoals({ state: () => openrig.state(), run: execRun(asLedge) });
+  let goalsFollowed = false, goalsTimer: NodeJS.Timeout | null = null, lastGoals = '';
+  const pushGoals = () => {
+    if (!goalsFollowed || goalsTimer) return;
+    goalsTimer = setTimeout(() => {
+      goalsTimer = null;
+      void goals.list().then(l => {
+        const key = JSON.stringify(l);
+        if (key !== lastGoals) { lastGoals = key; broadcast({ type: 'openrig.goalsChanged', ...l }); }
+      }).catch(e => log(`openrig goals: not read: ${(e as Error).message}`));
+    }, 600);
+  };
+  const human = opts.human ?? createHumanChannel({ state: () => openrig.state(), run: execRun(agentEnv), onEvent: pushGoals });
+  const followAsks = () => human.start(l => { broadcast({ type: 'openrig.asksChanged', ...l }); pushGoals(); });
   /** The seats recognised before and idle since (no hook to bring them): looked for again at start and at each OpenRig read. */
   const adoptSeats = () => { for (const s of store.all()) if (s.rig) adoptSeat(s.id, s.rig.seat); };
   adoptSeats();
@@ -434,7 +455,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigAsks: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigAsks: true, openrigGoals: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -1086,8 +1107,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       // Followed from the first front that asks: a machine nobody looks at from « À toi » never reads OpenRig's events.
-      case 'openrig.asks': human.start(l => broadcast({ type: 'openrig.asksChanged', ...l })); return reply({ type: 'openrig.asksChanged', requestId: msg.requestId, ...await human.list() });
+      case 'openrig.asks': followAsks(); return reply({ type: 'openrig.asksChanged', requestId: msg.requestId, ...await human.list() });
       case 'openrig.answer': return reply({ type: 'openrig.answered', requestId: msg.requestId, ...await human.answer(msg.qitemId, msg.answer) });
+      // Lot 2: the goals given to Max. Followed from the first front that asks, on the same OpenRig events as « À toi ».
+      case 'openrig.goals': {
+        goalsFollowed = true; followAsks();
+        const l = await goals.list();
+        lastGoals = JSON.stringify(l);
+        return reply({ type: 'openrig.goalsChanged', requestId: msg.requestId, ...l });
+      }
+      case 'openrig.goal.send': { const r = await goals.send(msg.goalId, msg.text, msg.folder); pushGoals(); return reply({ type: 'openrig.goal.sent', requestId: msg.requestId, goalId: msg.goalId, ...r }); }
+      case 'openrig.goal.reply': { const r = await goals.reply(msg.goalId, msg.replyId, msg.text); pushGoals(); return reply({ type: 'openrig.goal.replied', requestId: msg.requestId, goalId: msg.goalId, ...r }); }
       case 'openrig.act': {
         const done = await openrig.act(msg.action);
         reply({ type: 'openrig.done', requestId: msg.requestId, ...done });
@@ -1562,6 +1592,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); human.stop(); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

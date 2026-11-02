@@ -457,6 +457,28 @@ describe('multi-machine connections', () => {
     expect(end('w2')).toMatchObject({ type: 'openrig.asksChanged', error: 'offline' });
     client.send({ type: 'openrig.answer', requestId: 'w3', machineId: 'server', qitemId: 'q2', answer: { kind: 'seen' } });
     expect(end('w3')).toMatchObject({ type: 'openrig.answered', ok: false, error: 'offline' });
+  it('routes goals, a goal sent and a reply to Max to their machine; an older daemon refuses only those', () => {
+    const { client, server, got } = setup();
+    const goals = () => got.filter(m => m.type === 'openrig.goalsChanged' || m.type === 'openrig.goal.sent' || m.type === 'openrig.goal.replied');
+    client.send({ type: 'openrig.goals', requestId: 'g1', machineId: 'server' });
+    client.send({ type: 'openrig.goal.send', requestId: 'g2', machineId: 'server', goalId: 'abcdef12-0000', text: 'x' });
+    expect(server.sent).toEqual([{ type: 'openrig.goals', requestId: 'g1' }, { type: 'openrig.goal.send', requestId: 'g2', goalId: 'abcdef12-0000', text: 'x' }]);
+    server.emit({ type: 'openrig.goalsChanged', requestId: 'g1', goals: [] });
+    server.emit({ type: 'openrig.goalsChanged', goals: [] }); // a push
+    server.emit({ type: 'openrig.goal.sent', requestId: 'g2', goalId: 'abcdef12-0000', ok: true, qitemId: 'q' });
+    expect(goals()).toEqual([
+      { type: 'openrig.goalsChanged', requestId: 'g1', machineId: 'server', goals: [] },
+      { type: 'openrig.goalsChanged', machineId: 'server', goals: [] },
+      { type: 'openrig.goal.sent', requestId: 'g2', machineId: 'server', goalId: 'abcdef12-0000', ok: true, qitemId: 'q' }
+    ]);
+    client.send({ type: 'openrig.asks', requestId: 'g3', machineId: 'server' });
+    client.send({ type: 'openrig.goal.reply', requestId: 'g4', machineId: 'server', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', text: 'y' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.goal.reply' });
+    expect(goals().at(-1)).toEqual({ type: 'openrig.goal.replied', requestId: 'g4', machineId: 'server', goalId: 'abcdef12-0000', ok: false, error: 'outdated' });
+    expect(got.some(m => m.type === 'openrig.asksChanged' && m.requestId === 'g3')).toBe(false); // still pending
+    server.set('unreachable');
+    client.send({ type: 'openrig.goal.send', requestId: 'g5', machineId: 'server', goalId: 'abcdef12-0001', text: 'z' });
+    expect(goals().at(-1)).toEqual({ type: 'openrig.goal.sent', requestId: 'g5', machineId: 'server', goalId: 'abcdef12-0001', ok: false, error: 'offline' });
   });
   it('routes roles, a role and a role file to their machine; an older daemon refuses only those, the others stay pending', () => {
     const { client, server, got } = setup();
