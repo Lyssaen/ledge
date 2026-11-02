@@ -26,7 +26,7 @@ const KNOWN_MAX = 10;
 /** The names `@projet:` takes here: the registry's projects, then the folders live sessions work in; each once, any case. */
 function knownProjects(d: Deps): string[] {
   const seen = new Set<string>(); const names: string[] = [];
-  for (const n of [...d.projects.projects.map(p => p.name), ...live(d).map(s => s.project)]) {
+  for (const n of [...d.projects.projects.map(p => p.name), ...live(d).flatMap(s => [s.repo, s.project])]) {
     if (!n || seen.has(n.toLowerCase())) continue;
     seen.add(n.toLowerCase()); names.push(n);
   }
@@ -41,13 +41,16 @@ function knownProjects(d: Deps): string[] {
 export function recipientsOf(a: BroadcastAddress | { sessions: string[] }, d: Deps, except?: string): Recipients & { label: string } {
   if ('project' in a) {
     const p = projectNamed(d.projects, a.project);
-    // No registry project of that name: the folder the sessions work in (`Session.project`), any case, as an agent sees it.
-    const folder = p ? undefined : live(d).find(s => s.project.toLowerCase() === a.project.toLowerCase())?.project;
+    // No registry project of that name: the repository the sessions work in (`Session.repo`, so its linked worktrees too), else
+    // their folder (`Session.project`), any case, as `ledge who` shows them.
+    const q = a.project.toLowerCase();
+    const named = (s: Session) => s.repo?.toLowerCase() === q || s.project.toLowerCase() === q;
+    const folder = p ? undefined : (() => { const s = live(d).find(named); return s ? (s.repo?.toLowerCase() === q ? s.repo! : s.project) : undefined; })();
     if (!p && !folder) {
       const known = knownProjects(d);
       return { targets: [], refused: [], reason: `aucun projet ${a.project}${known.length ? ` (connus : ${known.join(', ')})` : ''}`, label: broadcastLabel(a) };
     }
-    const inIt = p ? (s: Session) => projectOf(s, d.projects) === p.id : (s: Session) => s.project.toLowerCase() === folder!.toLowerCase();
+    const inIt = p ? (s: Session) => projectOf(s, d.projects) === p.id : named;
     const targets = d.store.all().filter(s => s.id !== except && broadcastRecipient(s) && inIt(s));
     const name = p?.name ?? folder!;
     const label = broadcastLabel({ project: name });

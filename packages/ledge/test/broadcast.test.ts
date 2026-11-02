@@ -278,6 +278,16 @@ describe('a project found where the sessions are: their folder, when no registry
     expect(typed('ledge-a')).toEqual([]);
     c.close();
   });
+  it('a repository name reaches its linked worktrees too, whose folders are named otherwise', async () => {
+    store.upsert(mk('w1', 'Ivy', '/w/ledge', { project: 'ledge', repo: 'ledge', tmuxSession: 'ledge-w1' }));
+    store.upsert(mk('w2', 'Jon', '/w/ledge-broadcast', { project: 'ledge-broadcast', repo: 'ledge', tmuxSession: 'ledge-w2' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.message', rid: 'w1', from: 'w1', to: '@projet:ledge', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'w1', outcome: 'accepted', recipients: { sent: ['Jon'], refused: [] } });
+    await until(() => typed('ledge-w2').length === 1, 3000);
+    expect(typed('ledge-w2')[0]).toContain(') (à tout le projet ledge) Salut</ledge-message>');
+    c.close();
+  });
   it('the user writes to { project: <folder> }: a notice to each', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.broadcast', rid: 'f2', to: { project: 'scratch' }, text: 'Salut' });
