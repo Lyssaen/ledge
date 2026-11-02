@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { ClientMessage, HumanAsk, HumanChannel, ServerMessage } from '@ledge/protocol';
 import type { DaemonClient } from '../src/client';
-import { useOpenRigAsks } from '../src/openrigAsks';
+import { useOpenRigAsks, useOpenRigAsksAll } from '../src/openrigAsks';
 
 function fake() {
   const listeners = new Set<(m: ServerMessage) => void>(), sent: ClientMessage[] = [];
@@ -58,5 +58,58 @@ describe('useOpenRigAsks', () => {
     unmount();
     expect(await q).toMatchObject({ ok: false, error: 'offline' });
     expect(listeners.size).toBe(0);
+  });
+});
+
+describe('useOpenRigAsksAll', () => {
+  const ask = (id: string, priority: HumanAsk['priority'], updatedAt: string): HumanAsk => ({ ...ASK, id, priority, updatedAt });
+
+  it('asks every machine, merges their asks with their machine, the pressing first; a machine that drops keeps its asks, marked', () => {
+    const { client, sent, emit } = fake();
+    const { result } = renderHook(() => useOpenRigAsksAll(client, ['local', 'server']));
+    const asked = sent.filter(m => m.type === 'openrig.asks');
+    expect(asked.map(m => (m as { machineId: string }).machineId)).toEqual(['local', 'server']);
+    expect(result.current.partial).toBe(true); // nothing heard yet: nothing is settled
+    emit({ type: 'openrig.asksChanged', requestId: rid(asked[0]), machineId: 'local', channel: CHANNEL, asks: [ask('l1', 'routine', '2026-11-02T10:00:00Z')] });
+    emit({ type: 'openrig.asksChanged', requestId: rid(asked[1]), machineId: 'server', channel: { ...CHANNEL, person: { address: 'bob@external', name: 'Bob' } },
+      asks: [ask('s1', 'routine', '2026-11-02T11:00:00Z'), ask('s2', 'urgent', '2026-11-02T09:00:00Z')] });
+    expect(result.current.asks.map(a => `${a.machineId}:${a.id}`)).toEqual(['server:s2', 'server:s1', 'local:l1']);
+    expect(result.current.machines.server!.channel!.person!.address).toBe('bob@external'); // each machine its own default person
+    expect(result.current.partial).toBe(false);
+    // A push from one machine replaces only its own.
+    emit({ type: 'openrig.asksChanged', machineId: 'local', channel: CHANNEL, asks: [] });
+    expect(result.current.asks.map(a => a.id)).toEqual(['s2', 's1']);
+    // The server drops: its asks stay, the view says it.
+    act(() => { result.current.refresh(); });
+    const again = sent.filter(m => m.type === 'openrig.asks').at(-1)!;
+    emit({ type: 'openrig.asksChanged', requestId: rid(again), machineId: 'server', asks: [], error: 'offline' });
+    expect(result.current.asks.map(a => a.id)).toEqual(['s2', 's1']);
+    expect(result.current.machines.server).toMatchObject({ error: 'offline' });
+    expect(result.current.partial).toBe(true);
+    // A machine's own partial list marks the whole.
+    emit({ type: 'openrig.asksChanged', machineId: 'local', channel: CHANNEL, asks: [], partial: true });
+    expect(result.current.machines.local!.partial).toBe(true);
+  });
+
+  it('an answer goes to the machine that holds the ask, and comes back to its asker', async () => {
+    const { client, sent, emit } = fake();
+    const { result } = renderHook(() => useOpenRigAsksAll(client, ['local', 'server']));
+    const p = result.current.answer('server', 's1', { kind: 'choice', questionId: 'team', optionId: 'confirm' });
+    const m = sent.find(x => x.type === 'openrig.answer')!;
+    expect(m).toMatchObject({ machineId: 'server', qitemId: 's1' });
+    emit({ type: 'openrig.answered', requestId: rid(m), machineId: 'server', qitemId: 's1', ok: true, outcome: 'answered' });
+    expect(await p).toMatchObject({ ok: true, machineId: 'server' });
+  });
+
+  it('a machine no longer followed leaves the view', () => {
+    const { client, sent, emit } = fake();
+    let machines = ['local', 'server'];
+    const { result, rerender } = renderHook(() => useOpenRigAsksAll(client, machines));
+    const asked = sent.filter(m => m.type === 'openrig.asks');
+    emit({ type: 'openrig.asksChanged', requestId: rid(asked[1]), machineId: 'server', channel: CHANNEL, asks: [ask('s1', 'routine', 't')] });
+    machines = ['local'];
+    rerender();
+    expect(result.current.asks).toEqual([]);
+    expect(Object.keys(result.current.machines)).toEqual([]);
   });
 });

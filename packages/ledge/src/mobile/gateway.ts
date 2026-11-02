@@ -2,12 +2,12 @@
 // through the operation registry and then the local fronts' own `dispatch`. What the daemon broadcasts is projected for
 // the devices that follow it. Logs carry a type, a code or an error's name, never a message's content.
 import { hostname } from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   ATTACHMENT_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
   LEDGE_GIVER, SEMVER, pcSubject, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem
 } from '@ledge/protocol';
-import { ModelRefusalSchema, type ModelRefusal, type Tool } from '@ledge/protocol';
+import { ModelRefusalSchema, type HumanAnswer, type ModelRefusal, type OpenRigAnswered, type OpenRigAsksChanged, type Tool } from '@ledge/protocol';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
@@ -53,7 +53,14 @@ interface Follower {
   visible: boolean;
   /** What the last snapshot sent said of push, to see when a change deserves a new one. */
   pushStatus?: PushStatus;
+  /** Asked for « À toi » (`openrig.asks`): gets each change of what OpenRig asks the person. */
+  openrig?: boolean;
 }
+
+/** What a `rig` challenge is bound to: the OpenRig row and a digest of the exact answer, so an assertion approves that answer only. */
+export const rigSubject = (qitemId: string, answer: HumanAnswer): string =>
+  `${qitemId}:${createHash('sha256').update(JSON.stringify(answer.kind === 'choice' ? [answer.kind, answer.questionId, answer.optionId]
+    : answer.kind === 'seen' ? [answer.kind] : [answer.kind, answer.text])).digest('base64url')}`;
 
 type PushStatus = 'on' | 'off' | 'stale' | 'unavailable';
 
@@ -122,6 +129,15 @@ export function createPhoneGateway(deps: {
    * while the PC's setting allows it (`inputAllowed`) and the phone holds the hand after its passkey.
    */
   terminal?: { controlArgs(tmuxName: string): string[] | null; inputAllowed(): boolean; typing?: Set<string>; onHolder?(sessionId: string, deviceId: string | null): void; spawn?: SpawnControl };
+  /**
+   * « À toi » on this PC (lot 3): what OpenRig asks the person, and their answers, as the desktop has them (`openrig.asks` /
+   * `openrig.answer`). `follow` starts following OpenRig's events, whose changes then come through `forward` (`openrig.asksChanged`).
+   */
+  openrig?: {
+    list(): Promise<Omit<OpenRigAsksChanged, 'type' | 'requestId' | 'machineId' | 'error'> & { channel: NonNullable<OpenRigAsksChanged['channel']> }>;
+    answer(qitemId: string, answer: HumanAnswer): Promise<Omit<OpenRigAnswered, 'type' | 'requestId' | 'machineId'>>;
+    follow(): void;
+  };
 }): PhoneGateway {
   const { mobile, log } = deps;
   /** The read mark of a session no device marked: what was replied before the gateway started counts as read. */
@@ -204,7 +220,7 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
-      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}) },
+      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}) },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
@@ -270,7 +286,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'term.open' | 'term.hold' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'term.open' | 'term.hold' | 'openrig.answer' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -283,7 +299,7 @@ export function createPhoneGateway(deps: {
     `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
 
   /** The device check: the challenge is spent first, whatever the verdict, then the signature is verified and the counter kept. */
-  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'pc' | 'terminal', subject: string | undefined): Outcome | undefined => {
+  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'pc' | 'terminal' | 'rig', subject: string | undefined): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
     if (!cred || !rp || !assertion || subject === undefined) return { status: 'rejected', reason: 'confirm_required' };
@@ -666,6 +682,33 @@ export function createPhoneGateway(deps: {
     return { status: 'applied' };
   };
 
+  /**
+   * The person's answer to an OpenRig row from the phone (lot 3). A choice, words or a resolve can approve what a rig waits on: each
+   * needs the device's check, bound to that row and that very answer; « Vu » needs none. The answer's end goes to the device as
+   * `openrig.answered`, whatever it is, and the operation's own status says whether it ran.
+   */
+  /** A list as the phone takes it: its flags only when they are set. */
+  const rigList = (l: { channel: Extract<PhoneServerMessage, { type: 'openrig.asks' }>['channel']; asks: Extract<PhoneServerMessage, { type: 'openrig.asks' }>['asks']; partial?: boolean; truncated?: boolean }): Extract<PhoneServerMessage, { type: 'openrig.asks' }> =>
+    ({ type: 'openrig.asks', channel: l.channel, asks: l.asks, ...(l.partial ? { partial: true as const } : {}), ...(l.truncated ? { truncated: true as const } : {}) });
+
+  const rigAnswer = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'openrig.answer' }>): Promise<Outcome> => {
+    const told = (m: Omit<Extract<PhoneServerMessage, { type: 'openrig.answered' }>, 'type' | 'op' | 'qitemId'>) =>
+      push(deviceId, { type: 'openrig.answered', op: msg.op, qitemId: msg.qitemId, ...m });
+    if (!deps.openrig) { told({ ok: false, rejected: 'unavailable' }); return { status: 'rejected', reason: 'unavailable' }; }
+    if (msg.answer.kind !== 'seen') {
+      const refused = checkAssertion(deviceId, msg.assertion, 'rig', rigSubject(msg.qitemId, msg.answer));
+      if (refused) {
+        const why = refused.reason === 'assertion_expired' ? 'assertion_expired' : refused.reason === 'assertion_invalid' ? 'assertion_invalid' : 'confirm_required';
+        told({ ok: false, rejected: why });
+        return refused;
+      }
+    }
+    const r = await deps.openrig.answer(msg.qitemId, msg.answer);
+    const { qitemId: _q, ...rest } = r;
+    told({ ...rest, ...(rest.message !== undefined ? { message: clip(rest.message, 500).text } : {}) });
+    return r.ok ? { status: 'applied' } : { status: 'failed' };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'daemon.update' || msg.type === 'daemon.restart') return pcOperation(deviceId, msg);
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
@@ -696,6 +739,7 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'session.close' || msg.type === 'session.resume') return sessionEnd(deviceId, msg);
     if (msg.type === 'term.open') return termOpen(deviceId, msg);
     if (msg.type === 'term.hold') return termHold(deviceId, msg);
+    if (msg.type === 'openrig.answer') return rigAnswer(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -800,6 +844,14 @@ export function createPhoneGateway(deps: {
         if (!deps.chats) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
         void chatRead(deviceId, msg);
         return;
+      case 'openrig.asks': {
+        if (!deps.openrig) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        follower(deviceId).openrig = true;
+        deps.openrig.follow();
+        void deps.openrig.list().then(l => push(deviceId, rigList(l), 'openrig.asks'))
+          .catch((e: unknown) => log(`phone openrig.asks failed (${e instanceof Error ? e.name : 'error'})`));
+        return;
+      }
       case 'presence':
         follower(deviceId).visible = msg.visible;
         if (!msg.visible) terminals?.deviceHidden(deviceId);
@@ -904,6 +956,12 @@ export function createPhoneGateway(deps: {
           if (!cred || cred.rpId !== rp.rpId) return invalid();
           const challenge = deps.challenges.issue({ deviceId, purpose: 'terminal', subject: msg.id });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'terminal', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
+        if (msg.purpose === 'rig') {
+          const cred = deps.credential(deviceId);
+          if (!deps.openrig || !cred || !msg.qitem || !msg.answer || msg.answer.kind === 'seen') return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'rig', subject: rigSubject(msg.qitem, msg.answer) });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'rig', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
         // A purpose added to the enum without a branch above fails to compile here.
         const unhandled: never = msg.purpose;
@@ -1014,6 +1072,11 @@ export function createPhoneGateway(deps: {
             return;
           case 'session.removed':
             return removed(m.id);
+          // « À toi »: a change pushed to the desktop goes to every device that asked for it (a desktop's own answer is not one).
+          case 'openrig.asksChanged':
+            if (m.requestId !== undefined || m.error || !m.channel) return;
+            for (const [deviceId, f] of followers) if (f.openrig) push(deviceId, rigList({ ...m, channel: m.channel }), 'openrig.asks');
+            return;
           case 'error': {
             // A model change accepted, then failed once applied (#58): its code, never the daemon's text, to whoever follows the sessions.
             const reason = ModelRefusalSchema.safeParse(m.code);
