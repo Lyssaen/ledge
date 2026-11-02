@@ -17,8 +17,8 @@ export function actionAllowed(engine: TeamsEngine, id: string): boolean {
   return ALWAYS.has(id) || !(id.startsWith('team.') || id.startsWith('task.'));
 }
 
-/** Ledge's own escalations (its asks, `ask-…`) are answered without OpenRig, in either mode. */
-const ledgeEscalation = (id: string) => id.startsWith('ask-');
+/** Ledge's own escalations (its asks, `ask-…`, and its leads' decisions, `task-…`) are answered without OpenRig, in either mode. */
+const ledgeEscalation = (id: string) => id.startsWith('ask-') || id.startsWith('task-');
 /** A Ledge team as the Rigs tab shows it (task 4): its id is the team's. */
 const ledgeTeamRig = (rigId: string | undefined) => rigId?.startsWith('team-') === true;
 

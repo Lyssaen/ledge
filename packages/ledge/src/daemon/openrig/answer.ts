@@ -1,13 +1,15 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Escalation, OpenRigStatus, RigResultCode } from '@ledge/protocol';
+import { LEDGE_GIVER, TASK_TEXT_MAX, type Escalation, type OpenRigStatus, type RigResultCode } from '@ledge/protocol';
 import { log } from '../../log.js';
 import type { Asks } from '../asks.js';
+import type { Tasks } from '../tasks.js';
 import type { EscalationPatch } from './bridge.js';
 import type { RigCli } from './cli.js';
 import type { OpenRigHttp } from './http.js';
 import { HUMAN_ADDRESS, type AnswerPathKind } from './facts.js';
+import { TASK_ESCALATION, taskEscalation } from './decisions.js';
 
 /** What the lot 0 facts sheet settled (`ANSWER_PATH` in facts.ts). */
 export type AnswerPath = { kind: AnswerPathKind };
@@ -43,6 +45,8 @@ export interface AnswersDeps {
   port: AnswerPort;
   /** Lot 1 asks (`ask-<id>` escalations are answered there, without OpenRig). */
   asks?: Pick<Asks, 'answer'>;
+  /** Lot E: a lead's decision (`task-<id>` escalations) is answered by closing its task as Ledge, without OpenRig. */
+  tasks?: Pick<Tasks, 'run'>;
   path: AnswerPath;
   localMachine: string;
   now?: () => string;
@@ -101,6 +105,7 @@ export function readAnswerPath(factsMarkdown: string): AnswerPath {
 
 /** A refusal before anything is sent; null when the answer is complete. An `update` answered with nothing is a « seen ». */
 function invalid(e: Escalation, answers: Record<string, string>): string | null {
+  if (taskEscalation(e.id) && (answers.text?.trim().length ?? 0) > TASK_TEXT_MAX) return `la réponse dépasse ${TASK_TEXT_MAX} caractères`;
   if (e.intent === 'update' && e.source !== 'ask' && Object.keys(answers).length === 0) return null;
   if (!e.questions.length) return blank(answers.text) ? 'la réponse est vide' : null;
   const missing = e.questions.filter(q => blank(answers[q.id]));
@@ -168,6 +173,15 @@ export function createAnswers(d: AnswersDeps): Answers {
     return r.code === 'closed' ? refuse('already_answered', r.reason) : refuse('failed', r.reason);
   }
 
+  /** A lead's decision: its task closed by Ledge with the answer, which wakes the lead (`terminée par Ledge : …`). */
+  function viaTask(e: Escalation, answers: Record<string, string>, by: 'user' | 'ledge'): AnswerResult | null {
+    if (!d.tasks) return refuse('failed', "les décisions d'équipe ne sont pas branchées");
+    const text = `${by === 'ledge' ? 'Réponse de Ledge : ' : "Réponse de l'utilisateur : "}${answerBody(e, answers)}`;
+    const task = e.id.slice(TASK_ESCALATION.length);
+    const r = d.tasks.run({ type: 'task.cmd', rid: `answer-${e.id}`, by: LEDGE_GIVER, op: 'done', task, text });
+    return r.reason === undefined ? null : refuse('already_answered', r.reason);
+  }
+
   const notify = (e: Escalation) => {
     for (const fn of listeners) { try { fn(e); } catch (err) { log(`openrig: onAnswered listener threw: ${(err as Error).message}`); } }
   };
@@ -216,13 +230,13 @@ export function createAnswers(d: AnswersDeps): Answers {
     async answer(id, answers, by, o) {
       const e = d.port.escalation(id);
       // An unread remote queue is not a definite unknown escalation.
-      if (!e) return !id.startsWith('ask-') && d.port.humanRead?.() === false ? refuse('openrig_down', "les escalades d'OpenRig ne sont pas encore lues") : refuse('failed', `aucune escalade ${id}`);
+      if (!e) return !id.startsWith('ask-') && !taskEscalation(id) && d.port.humanRead?.() === false ? refuse('openrig_down', "les escalades d'OpenRig ne sont pas encore lues") : refuse('failed', `aucune escalade ${id}`);
       if (e.correcting) return by === 'user' ? correct(id, answers) : refuse('already_answered', "l'utilisateur revient sur cette décision");
       // Check and mark, synchronously (no await before inFlight.add): the first answer wins, whatever a later one holds.
       if (inFlight.has(id) || e.state === 'answered' || e.state === 'closed') return refuse('already_answered', 'déjà répondue');
       const bad = invalid(e, answers); if (bad) return refuse('invalid', bad);
       if (e.machine !== d.localMachine) return refuse('unreachable', 'réponse à distance : lot 6');
-      const ask = e.source === 'ask';
+      const ask = e.source === 'ask'; const task = taskEscalation(id);
       // A stored reply row is keyed only by escalation: its author and answer are not proof of this operation.
       let uncertainRow = false;
       if (!ask && d.port.status().state !== 'running') return refuse('openrig_down', "OpenRig n'est pas lancé");
@@ -230,12 +244,12 @@ export function createAnswers(d: AnswersDeps): Answers {
       const before: EscalationPatch = { state: e.state, graceUntil: e.graceUntil, answer: undefined };
       d.port.patch(id, { state: 'answered', answer: { by, answers, at: now(), ...(o?.rule ? { rule: o.rule } : {}) } });
       let fail: AnswerResult | null;
-      try { fail = ask ? viaAsk(e, answers) : await deliver(e, answers, () => { uncertainRow = true; }); }
+      try { fail = task ? viaTask(e, answers, by) : ask ? viaAsk(e, answers) : await deliver(e, answers, () => { uncertainRow = true; }); }
       catch (err) { fail = refuse('failed', (err as Error).message); }
       finally { inFlight.delete(id); }
       if (fail) {
-        // Closed elsewhere: no answer of ours to show. Any other failure: back to the state before.
-        d.port.patch(id, !fail.ok && fail.code === 'already_answered' ? { state: 'closed', answer: undefined } : before);
+        // Closed elsewhere: no answer of ours to show. Any other failure, or a decision task closed already (the book drops it): back to the state before.
+        d.port.patch(id, !fail.ok && fail.code === 'already_answered' && !task ? { state: 'closed', answer: undefined } : before);
         log(`openrig: answer to ${id} not delivered (${!fail.ok ? `${fail.code}: ${fail.reason}` : ''})`);
         return fail;
       }

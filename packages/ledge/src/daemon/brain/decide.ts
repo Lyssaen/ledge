@@ -2,6 +2,7 @@ import { MandateCategorySchema, type Escalation, type MandateCategory, type RigR
 import { log } from '../../log.js';
 import type { Answers } from '../openrig/answer.js';
 import type { EscalationPatch } from '../openrig/bridge.js';
+import { taskEscalation } from '../openrig/decisions.js';
 import type { LedgeThread } from '../ledgeThread.js';
 import { GRACE_MS, guardDecide, validAnswers } from './guard.js';
 import type { BrainEvent } from './inbox.js';
@@ -16,7 +17,7 @@ export type DecideResult = { ok: boolean; line: string; code?: DecideCode };
 export type AskResult = { ok: boolean; line: string; code?: Extract<RigResultCode, 'invalid' | 'already_answered' | 'failed'> };
 
 export interface Deciding {
-  /** Each new escalation: a `decision` with questions enters grace when the brain is on; every pending one is pushed to the brain. */
+  /** Each new escalation: a `decision` with questions, or a lead's (`task-…`), enters grace when the brain is on; every pending one is pushed to the brain. */
   arrived(e: Escalation): void;
   /** `ledge brain decide`: the guard, then the answer, held until graceUntil; the line is for the brain. */
   decide(id: string, answers: Record<string, string>, claimed: string, o: { rule?: string; why?: string }): Promise<DecideResult>;
@@ -42,6 +43,8 @@ export interface DecidingDeps {
   mandate: () => Mandate;
   brainOn: () => boolean;
   now?: () => number;
+  /** How long a grace lasts (GRACE_MS by default). */
+  graceMs?: number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (t: unknown) => void;
 }
@@ -51,11 +54,15 @@ type Deferred = { answers: Record<string, string>; category: MandateCategory; ru
 const pad = (n: number): string => String(n).padStart(2, '0');
 const clock = (ms: number): string => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
 const closed = (e: Escalation): boolean => e.state === 'answered' || e.state === 'closed';
-/** « <question> → <label> » per answered question: what the decision says, for the thread and the memory. */
+/** « <question> → <label> » per answered question: what the decision says, for the thread and the memory; a lead's question
+ *  (`task-…`) as « <question> → <free text> ». */
 const summaryOf = (e: Escalation, answers: Record<string, string>): string => {
+  if (taskEscalation(e.id) && answers.text?.trim()) return `${e.summary} → ${answers.text.trim()}`;
   const parts = e.questions.flatMap(q => answers[q.id] === undefined ? [] : [`${q.question} → ${q.options.find(o => o.id === answers[q.id])?.label ?? answers[q.id]}`]);
   return parts.length ? parts.join(' ; ') : e.summary;
 };
+/** What the brain settles in grace: a decision with questions (OpenRig's), or a lead's question in free text (`task-…`); not an ask. */
+const settles = (e: Escalation): boolean => e.intent === 'decision' && (taskEscalation(e.id) || (e.source !== 'ask' && e.questions.length > 0));
 
 /**
  * Grace and the brain's decisions. Everything here lives in memory only: a daemon restart drops the grace overlays (the bridge's
@@ -64,6 +71,7 @@ const summaryOf = (e: Escalation, answers: Record<string, string>): string => {
  */
 export function createDeciding(d: DecidingDeps): Deciding {
   const now = d.now ?? (() => Date.now());
+  const graceMs = d.graceMs ?? GRACE_MS;
   const setTimer = d.setTimer ?? ((fn: () => void, ms: number) => { const t = setTimeout(fn, ms); (t as { unref?: () => void }).unref?.(); return t; });
   const clearTimer = d.clearTimer ?? ((t: unknown) => clearTimeout(t as ReturnType<typeof setTimeout>));
   /** Escalations this module put in grace, with their arrival (the cap counts from it). */
@@ -141,9 +149,9 @@ export function createDeciding(d: DecidingDeps): Deciding {
   return {
     arrived(e) {
       if (closed(e) || !d.brainOn()) return;   // without a brain: pending, without advice (spec §6)
-      if (e.intent === 'decision' && e.source !== 'ask' && e.questions.length > 0 && e.state === 'pending') {
+      if (settles(e) && e.state === 'pending') {
         const at = now();
-        const next = d.escalations.patchEscalation(e.id, { state: 'grace', graceUntil: new Date(at + GRACE_MS).toISOString() });
+        const next = d.escalations.patchEscalation(e.id, { state: 'grace', graceUntil: new Date(at + graceMs).toISOString() });
         if (!next) return;
         graced.set(e.id, at); armCap(e.id);
         push({ kind: 'escalation', escalation: next, rules: d.memory.rules().filter(r => r.status === 'active') });

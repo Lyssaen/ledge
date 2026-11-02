@@ -39,7 +39,7 @@ export type RigPrepareMsg = Extract<ClientMessage, { type: 'rig.prepare' }>;
 
 const USAGE: Record<BrainOp, string> = {
   say: 'ledge brain say "<texte>"',
-  decide: 'ledge brain decide <id> --answer q=opt … --category <c> [--rule <id>] [--why "…"]',
+  decide: 'ledge brain decide <id> --answer q=opt … --category <c> [--rule <id>] [--why "…"] | decide <id> --text "<réponse>" --category <c> [--rule <id>] [--why "…"]',
   ask: 'ledge brain ask <id> [--category <c>] --advice "…"',
   rig: 'ledge brain rig up <spec> --goal "…" --because <userItemId> [--project <id> | --off <nom>] [--machine <m>] | rig down <rig> --because <userItemId> | rig restart|handover <siège>',
   send: 'ledge brain send <@siège> "<texte>"',
@@ -83,8 +83,11 @@ function parse(op: BrainOp, args: string[]): BrainCall | null {
       return { op, text: p.pos.join(' ') };
     }
     case 'decide': {
-      const p = flags(args, ['category', 'rule', 'why'], ['answer']);
-      if (!p || p.pos.length !== 1 || !p.one.category || !p.many.answer?.length) return null;
+      const p = flags(args, ['category', 'rule', 'why', 'text'], ['answer']);
+      if (!p || p.pos.length !== 1 || !p.one.category) return null;
+      // A lead's question (`task-…`) is settled in free text; --text and --answer exclude each other.
+      if (p.one.text !== undefined) return p.many.answer ? null : { op, id: p.pos[0]!, answers: { text: p.one.text }, category: p.one.category, ...opt('rule', p.one.rule), ...opt('why', p.one.why) };
+      if (!p.many.answer?.length) return null;
       const answers: Record<string, string> = {};
       for (const pair of p.many.answer) {
         const at = pair.indexOf('=');

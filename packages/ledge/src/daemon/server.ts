@@ -223,6 +223,8 @@ export interface ServerHandle {
   labelExited(): void;
   /** The decisions lone sessions ask the user: the OpenRig bridge mirrors the open ones. */
   asks: Asks;
+  /** The tasks, for the decisions a lead (or a lone session) put to Ledge (`ledge task give ledge`): the bridge mirrors the open ones. */
+  decisions: { list(): Task[]; onChange(fn: () => void): () => void };
   /** The shared projects, as last set. */
   projects(): Projects;
   /** Ledge's voice: a line in its thread (what it did on its own, e.g. starting OpenRig). */
@@ -249,7 +251,9 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  */
 export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; asks?: AsksJournal; tasks?: TasksJournal; teams?: TeamsJournal; handoverBriefMs?: number; attachments?: AttachmentStore; openrig?: Bridge;
   /** How the remote peers reach a machine's daemon (default: this daemon's own `/ssh/<alias>`); tests point it at another daemon. */
-  remoteConnect?: (machine: Machine, url: string) => DaemonClient; remoteBrainGraceMs?: number }): Promise<ServerHandle> {
+  remoteConnect?: (machine: Machine, url: string) => DaemonClient; remoteBrainGraceMs?: number;
+  /** The local brain's grace (GRACE_MS by default); tests shorten it. */
+  brainGraceMs?: number }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -401,7 +405,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const answers: Answers | null = bridge ? createAnswers({
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
       replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow, humanRead: bridge.humanRead },
-    asks, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
+    // `tasks` is made below, before any answer can come.
+    asks, tasks: { run: (cmd, o) => tasks.run(cmd, o) }, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
   let deciding: Deciding | null = null;
   let remoteBrainCoordinator: ReturnType<typeof createRemoteBrainCoordinator> | null = null;
   const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
@@ -505,6 +510,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const localTeamsSnapshot = (): ServerMessage => ({ type: 'rig.snapshot', machine: 'local', rigs: teamsEngine === 'ledge' ? ledgeEngine.teams() : [] });
   // The engine read at start, before the daemon starts the bridge (index.ts): under Ledge, its first turn is a probe already.
   engines.apply(teamsEngine);
+  /** Who follows the decisions (the bridge's book of `task-` escalations): told after every change of a task. */
+  const decisionListeners = new Set<() => void>();
   const tasks = createTasks({ store, mailbox, now, teams, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
     broadcast({ type: 'task.updated', task });
     // The card that gave it follows it, on whichever thread holds it: only Ledge gives from a card.
@@ -515,6 +522,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (tr && tr.from !== LEDGE_GIVER) history?.recordTask(tr.from, { task, tr, ...(tr.to !== LEDGE_GIVER ? { peer: tr.to } : {}) });
     if (tr && task.team) ledgeEngine.recordTask(task, tr); // a team's hand-over: one of its exchanges
     if (tr?.op === 'give' && tr.to === LEDGE_GIVER) notifyDecision?.(task);
+    for (const fn of [...decisionListeners]) { try { fn(); } catch (e) { log(`decision listener threw: ${(e as Error).message}`); } }
   } });
   // Tasks of a team purged while the daemon was down, or before purges were told: the same.
   for (const team of new Set(tasks.all().map(t => t.team))) if (team && !teams.get(team)) tasks.forgetTeam(team);
@@ -548,7 +556,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     try { return parseMandate(existsSync(f) ? readFileSync(f, 'utf8') : DEFAULT_MANDATE); } catch { return parseMandate(''); }
   };
   if (bridge && answers) deciding = createDeciding({ escalations: { escalation: bridge.escalation, patchEscalation: bridge.patchEscalation },
-    answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on' && ['idle', 'working'].includes(brain.session()?.state ?? ''), now: Date.now });
+    answers, thread, memory, inbox: brainInbox, mandate: readMandate, brainOn: () => brain.status().state === 'on' && ['idle', 'working'].includes(brain.session()?.state ?? ''), now: Date.now,
+    ...(opts.brainGraceMs !== undefined ? { graceMs: opts.brainGraceMs } : {}) });
   // Refuse delegation if durable proof cannot be read; never silently overwrite a damaged journal.
   let remoteReceipts: ReturnType<typeof createReceiptJournal> | undefined;
   try { remoteReceipts = createReceiptJournal(join(paths().dir, 'brain-delegation-receipts.json')); }
@@ -2509,6 +2518,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
     asks,
+    decisions: { list: () => tasks.all(), onChange: fn => { decisionListeners.add(fn); return () => { decisionListeners.delete(fn); }; } },
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
     close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); clearInterval(thoughtTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); unsubscribePeerEngine?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeAnswerSettled?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); tasks.close(); handovers.close(); unsubscribeTeams(); ledgeEngine.close(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())

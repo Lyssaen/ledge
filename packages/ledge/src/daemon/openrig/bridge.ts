@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { Ask, Escalation, Exchange, OpenRigStatus, Projects, Rig, RigLaunchInfo, RigRepo, ServerMessage, SessionRig, Tool } from '@ledge/protocol';
+import { openDecision, type Ask, type Escalation, type Exchange, type OpenRigStatus, type Projects, type Rig, type RigLaunchInfo, type RigRepo, type ServerMessage, type SessionRig, type Task, type Tool } from '@ledge/protocol';
 import { log } from '../../log.js';
 import { EVENTS, INSTALL_COMMAND, EVENTS_UNOBSERVED, HUMAN_ADDRESS, HUMAN_GATE_TIER, HUMAN_ID, OPERATOR_HUMAN_SESSIONS, REGISTRATION, openrigBase } from './facts.js';
 import { createOpenRigHttp, OpenRigUnreachable, type Fetch, type OpenRigHttp } from './http.js';
@@ -12,6 +12,7 @@ import { createMirror } from './mirror.js';
 import { parseSessionName } from './seats.js';
 import { createEscalationBook, createFirstSeen, rowToEscalation } from './escalations.js';
 import { askToEscalation } from './asks.js';
+import { decisionToEscalation } from './decisions.js';
 import { createExchangeLog, exchangeFromEvent, exchangeFromOutbox } from './exchanges.js';
 import { readHumanQueue, readRigs, versionCache } from './bridge-read.js';
 import type { NodeEntry, QueueRow } from './wire.js';
@@ -24,6 +25,8 @@ export interface BridgeDeps {
   env: () => Promise<NodeJS.ProcessEnv>; fetch?: Fetch; exec?: RigExec;
   projects: () => Projects; home: string; file?: string;
   asks?: { all(): Ask[]; onChange(fn: () => void): () => void };
+  /** The tasks (lot E): the open decisions a lead (or a lone session) put to Ledge are mirrored as escalations `task-<id>`. */
+  decisions?: { list(): Task[]; onChange(fn: () => void): () => void };
   sessionName: (sessionId: string) => string | undefined;
   /** False for a session that is gone or exited: its seat is free again for pairByCwd. Default: every paired session is alive. */
   alive?: (sessionId: string) => boolean;
@@ -65,7 +68,7 @@ export interface Bridge {
   humanRead(): boolean;
   onMessage(fn: (m: BridgeMessage) => void): () => void;
   /** Probe only (the Ledge teams engine): OpenRig is still probed every turn (`status()`, `openrig.status`), but never started,
-   *  registered with, streamed or mirrored; `rigs()` is empty and `escalations()` holds only Ledge's own (its asks). Off again,
+   *  registered with, streamed or mirrored; `rigs()` is empty and `escalations()` holds only Ledge's own (its asks and decisions). Off again,
    *  the next turn is whole, as at a daemon start. Setting the same value again does nothing. */
   setProbeOnly(on: boolean): void;
   /** Start cases 2 and 3 (lot 5): starts OpenRig when stopped, waits for `running` (60 s), returns the final status. Throws
@@ -103,9 +106,9 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const now = deps.now ?? (() => new Date().toISOString()); const notice = deps.notice ?? (() => {});
   const cli = createRigCli(deps.exec ?? realRigExec(deps.env)); const probeWith = versionCache(cli);
   const mirror = createMirror({ machine, projects: deps.projects, rigsRoot: paths().rigs });
-  /** OpenRig's escalations (its human queue), and Ledge's own (its asks; lot E's decisions join them): only the latter live in probe only. */
-  const rigBook = createEscalationBook(); const askBook = createEscalationBook(); const xlog = createExchangeLog();
-  const ledgeBooks = [askBook];
+  /** OpenRig's escalations (its human queue), and Ledge's own (its asks, its leads' decisions): only the latter live in probe only. */
+  const rigBook = createEscalationBook(); const askBook = createEscalationBook(); const decisionBook = createEscalationBook(); const xlog = createExchangeLog();
+  const ledgeBooks = [askBook, decisionBook];
   const listeners = new Set<(m: BridgeMessage) => void>();
   const firstSeen = createFirstSeen(now);
   const ctx = { machine, rigOf: (ref: string) => mirror.byRef(ref)?.rig.id, isKernelSeat: (ref: string) => mirror.byRef(ref)?.rig.kernel === true, seenAt: firstSeen.at };
@@ -119,7 +122,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
   let registering = false; let humanOk = false; let regAt: number | null = null;
   let humanRead = false; // the human queue was read once (a failed read keeps the books as they were: empty after a restart)
   let probeTimer: NodeJS.Timeout | null = null; const connTimers: NodeJS.Timeout[] = []; let humanTimer: NodeJS.Timeout | null = null;
-  let unsubAsks: (() => void) | null = null;
+  let unsubAsks: (() => void) | null = null; let unsubDecisions: (() => void) | null = null;
   const opening = new Set<() => void>(); // cancels of streams not open yet
   const nodesByRig = new Map<string, NodeEntry[]>(); // per-seat cwd for pairByCwd
   const outboxSeen = new Map<string, Set<string>>(); // seat ref -> outbox ids of its latest listing (never pruned by ref: a rig may come back)
@@ -174,6 +177,14 @@ export function createBridge(deps: BridgeDeps): Bridge {
   const syncAsks = () => {
     if (!deps.asks) return;
     emitEsc(askBook.replace(deps.asks.all().filter(a => a.state === 'open').map(a => askToEscalation(a, { machine, nameOf: deps.sessionName }))));
+  };
+  /** A decision task closed (answered, cancelled, dropped with its asker) leaves the book. One still waiting (pending, in grace)
+   *  goes with it: no answer of Ledge's to show, its overlay would only keep a card nobody can answer. An answered one stays. */
+  const syncDecisions = () => {
+    if (!deps.decisions) return;
+    const r = decisionBook.replace(deps.decisions.list().filter(openDecision).map(t => decisionToEscalation(t, { machine })));
+    for (const id of r.removed) { const o = overlay.get(id)?.e; if (o && (o.state === 'pending' || o.state === 'grace') && !o.answer) overlay.delete(id); }
+    emitEsc(r);
   };
 
   // While connected: each reader checks `gen` after its awaits, so a reconnect drops stale results. A failed read (unreachable,
@@ -384,12 +395,13 @@ export function createBridge(deps: BridgeDeps): Bridge {
       const m = readOpenRigFile(deps.file).machines[machine]; knownRigs = m?.rigs ?? []; cursor = m?.lastEventId ?? null;
       cursorFile();
       if (deps.asks) { unsubAsks = deps.asks.onChange(syncAsks); syncAsks(); }
+      if (deps.decisions) { unsubDecisions = deps.decisions.onChange(syncDecisions); syncDecisions(); }
       probeTimer = every(probeMs, tick); void tick();
     },
     async stop() {
       if (!active) return; active = false; disconnect();
       if (probeTimer) { clearInterval(probeTimer); probeTimer = null; }
-      unsubAsks?.(); unsubAsks = null;
+      unsubAsks?.(); unsubAsks = null; unsubDecisions?.(); unsubDecisions = null;
       await writer?.flush();
     },
     http: () => http, cli: () => cli,

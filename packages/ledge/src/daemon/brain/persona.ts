@@ -9,6 +9,7 @@ export const BRAIN_DECISIONS = 20;
 const COMMANDS: [string, string, string][] = [
   ['say "<texte>"', 'une bulle de Ledge dans le fil', 'ledge brain say "factory est prêt, @build a commencé"'],
   ['decide <escalade> --answer q=opt … --category <cat> [--rule <id>] [--why "…"]', 'tu tranches seul, dans ton mandat (le daemon vérifie)', 'ledge brain decide qi-12 --answer q1=sqlite --category code --why "déjà utilisé dans le repo"'],
+  ['decide <escalade> --text "<réponse>" --category <cat> [--rule <id>] [--why "…"]', "tu réponds seul, en texte libre, à la question du lead d'une équipe (escalade task-…), dans ton mandat", 'ledge brain decide task-t1a2b3 --text "oui, fusionne" --category git --why "tests verts"'],
   ['ask <escalade> --category <cat> --advice "…"', "tu remontes l'escalade à l'utilisateur, avec ton avis", 'ledge brain ask qi-13 --category design --advice "je garderais le bouton à droite"'],
   ['rig up <spec> --goal "…" --because <message> [--project <id> | --off <nom>]', "propose un rig (plan dans le fil, l'utilisateur lance) ; seulement si l'utilisateur l'a demandé", 'ledge brain rig up factory --goal "corriger #42" --because u-91 --project app'],
   ['rig down <rig> --because <message>', "arrête un rig ; seulement si l'utilisateur l'a demandé dans le fil", 'ledge brain rig down factory --because u-95'],

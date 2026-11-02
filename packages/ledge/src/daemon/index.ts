@@ -70,11 +70,12 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const teamJournal = teamsJournal(paths().teams);
   // One agent environment for the agents and for `rig` (facts: OpenRig runs under the user's login shell).
   const agentEnv = async () => ({ ...process.env, ...(await loginShellEnv()) });
-  // The bridge reads the server's asks and projects only once started, after startServer: lazy adapters over `server`.
+  // The bridge reads the server's asks, decisions and projects only once started, after startServer: lazy adapters over `server`.
   let say: (text: string) => void = () => {}; // Ledge's thread voice, set once the server exists
   const bridge = createBridge({ env: agentEnv, notice: text => say(text), projects: () => server.projects(), home: homedir(), sessionName: id => store.get(id)?.name,
     alive: id => { const s = store.get(id); return !!s && s.state !== 'exited'; },
-    asks: { all: () => server.asks.all(), onChange: f => server.asks.onChange(f) } });
+    asks: { all: () => server.asks.all(), onChange: f => server.asks.onChange(f) },
+    decisions: { list: () => server.decisions.list(), onChange: f => server.decisions.onChange(f) } });
   const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, asks: askJournal, tasks: taskJournal, teams: teamJournal, attachments, agentEnv, openrig: bridge });
   say = text => server.say(text);
   await bridge.start();

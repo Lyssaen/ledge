@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Escalation, LedgeDecision, LedgeRule, LedgeThreadItem } from '@ledge/protocol';
 import { ledgeBody } from '../crossSession.js';
 import type { Mailbox } from '../mailbox.js';
+import { taskEscalation } from '../openrig/decisions.js';
 
 /** What the brain is told: each event becomes one line typed into its session. */
 export type BrainEvent =
@@ -19,7 +20,19 @@ const wrap = (kind: string, id: string, parts: Array<string | undefined>): strin
 
 const answerOf = (e: Escalation): string => Object.entries(e.answer?.answers ?? {}).map(([q, o]) => `${q}=${o}`).join(', ');
 
+/** A lead's question (`task-…`, lot E): settled in free text, or handed up to the user. */
+function leadQuestion(e: Escalation, rules: LedgeRule[]): string {
+  const who = e.rigId ? `question du lead de l'équipe ${f(e.rigId)}` : `question de ${f(e.from)}`;
+  return wrap('escalation', e.id, [
+    `Question ${f(e.id)} de ${f(e.from)} (intention ${e.intent})`,
+    `Résumé : ${f(e.summary)}`, e.detail ? `Détail : ${f(e.detail)}` : undefined,
+    e.graceUntil ? `Tu as jusqu'à ${e.graceUntil}` : undefined,
+    rules.length ? `Règles de la catégorie : ${rules.map(r => f(r.text)).join(' ; ')}` : undefined,
+    `${who} : tranche-la avec ledge brain decide ${f(e.id)} --text "<réponse>" --category <cat>, ou remonte-la avec ledge brain ask ${f(e.id)} --advice "…"`]);
+}
+
 function escalation(e: Escalation, rules: LedgeRule[]): string {
+  if (taskEscalation(e.id)) return leadQuestion(e, rules);
   const asked = e.source === 'ask';
   const qs = e.questions.map(q => `${f(q.id)} « ${f(q.question)} » : ${q.options.map(o => `${f(o.id)} = ${f(o.label)}${o.recommended ? ' (recommandée)' : ''}`).join(' ; ')}`).join(' || ');
   return wrap('escalation', e.id, [
