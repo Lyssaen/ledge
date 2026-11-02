@@ -64,6 +64,9 @@ export interface PhoneLink {
 
 /** While a pairing waits, its state is read this often, so its expiry reaches the listeners without a frame. */
 export const PAIRING_POLL_MS = 1_000;
+/** A hello not answered by a ready within this is said again; the wait doubles after each, up to `HELLO_RETRY_MAX_MS`. */
+export const HELLO_WITHIN_MS = 10_000;
+export const HELLO_RETRY_MAX_MS = 60_000;
 
 export function createPhoneLink(opts: {
   keys: KeyStore;
@@ -97,6 +100,9 @@ export function createPhoneLink(opts: {
   let channel: PhoneChannel | null = null;
   /** The last session asked for with `session.watch`. */
   let watched: string | null = null;
+  let helloTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Hellos said again by `helloTimer` since the last ready, or the last hello asked from outside. */
+  let helloRetries = 0;
 
   let pairingWanted = false;
   let pairingGen = 0;
@@ -104,6 +110,8 @@ export function createPhoneLink(opts: {
   let pairingView: Pairing | null = null;
   let pairingSeen: PairingState | null = null;
   let pairingTimer: ReturnType<typeof setInterval> | undefined;
+  /** The pairing showing its code when the PC went away, the PC's confirmation not yet in. */
+  let pairingAway: Pairing | null = null;
 
   const listeners = new Set<() => void>();
   const messageListeners = new Set<(m: PhoneServerMessage) => void>();
@@ -139,9 +147,27 @@ export function createPhoneLink(opts: {
 
   // ---- the channel ----
 
+  const stopHelloTimer = () => {
+    clearTimeout(helloTimer);
+    helloTimer = undefined;
+  };
+
+  /** Each hello that leaves, the channel's own included: a PC that never answers must not leave `handshaking` for good. */
+  const armHelloTimer = (ch: PhoneChannel) => {
+    stopHelloTimer();
+    helloTimer = setTimeout(() => {
+      helloTimer = undefined;
+      if (channel !== ch || ch.ready()) return;
+      helloRetries++;
+      helloIfDue(true);
+    }, Math.min(HELLO_WITHIN_MS * 2 ** helloRetries, HELLO_RETRY_MAX_MS));
+  };
+
   const onChannelEvent = (ch: PhoneChannel, e: ChannelEvent, received?: string) => {
     if (channel !== ch) return;
+    if (e !== 'too_large') stopHelloTimer();
     if (e === 'ready') {
+      helloRetries = 0;
       check();
       void afterReady(ch);
     } else if (e === 'key_changed') {
@@ -161,13 +187,18 @@ export function createPhoneLink(opts: {
     await ch.send({ type: 'session.watch', id: watched });
   };
 
-  const helloIfDue = () => {
+  /** `again`: said by `helloTimer`; any other hello starts its waits over. */
+  const helloIfDue = (again = false) => {
     if (!loaded || finished || keyChanged || denied || !identity || !pinned || socketState !== 'open' || pcOnline !== true) return;
+    if (!again) helloRetries = 0;
     if (!channel) {
       const ch: PhoneChannel = openChannel({
         identity,
         pc: pinned,
-        send: (f) => { sock.send('pc', f); },
+        send: (f) => {
+          sock.send('pc', f);
+          if (f.k === 'hello' && channel === ch) armHelloTimer(ch);
+        },
         onMessage: (m) => {
           if (channel !== ch) return;
           if (m.type === 'snapshot') nameFrom(m.daemon.name);
@@ -268,11 +299,27 @@ export function createPhoneLink(opts: {
 
   /**
    * The PC is away: a commit still waiting for its offer is dropped (the PC lost it, or never got it), and the pairing,
-   * still wanted, starts again once the PC is back. A pairing past its commit (the code shown) is left as it is.
+   * still wanted, starts again once the PC is back. A pairing past its commit (the code shown) is left on screen until
+   * then (see `pcBack`).
    */
   const pcAway = () => {
     pcOnline = false;
-    if (pairing?.state().step === 'committing') dropPairing();
+    const st = pairing?.state();
+    if (st?.step === 'committing') dropPairing();
+    else if (st?.step === 'compare' && !st.pcConfirmed) pairingAway = pairing;
+  };
+
+  /**
+   * The PC is back: a pairing that showed its code while it was away, still without the PC's yes, is dropped (the PC
+   * drops its pairings on reconnecting, and a pair_ok sent meanwhile was lost) and a new one starts. One the PC
+   * confirmed is kept: the PC stored the device.
+   */
+  const pcBack = () => {
+    const p = pairingAway;
+    pairingAway = null;
+    const st = p && p === pairing ? p.state() : null;
+    if (st?.step === 'compare' && !st.pcConfirmed) dropPairing();
+    launchPairing();
   };
 
   const beginPairing = () => {
@@ -310,6 +357,7 @@ export function createPhoneLink(opts: {
   const forgetKeys = async (pairAfter = false) => {
     keysGen++;
     channel = null;
+    stopHelloTimer();
     keyChanged = false;
     receivedKey = null;
     denied = false;
@@ -360,7 +408,8 @@ export function createPhoneLink(opts: {
           pcOnline = m.online.includes('pc');
           // A new socket: the PC's channel for the old one is gone.
           helloIfDue();
-          launchPairing();
+          if (pcOnline) pcBack();
+          else launchPairing();
           check();
           return;
         case 'presence': {
@@ -373,7 +422,7 @@ export function createPhoneLink(opts: {
           else pcAway();
           if (back) {
             helloIfDue();
-            launchPairing();
+            pcBack();
           }
           check();
           return;
@@ -427,6 +476,7 @@ export function createPhoneLink(opts: {
   const finish = () => {
     finished = true;
     stopPairingTimer();
+    stopHelloTimer();
     sock.close();
   };
 

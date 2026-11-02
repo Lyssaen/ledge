@@ -116,7 +116,8 @@ export function createRelay(opts: RelayOptions): { server: http.Server; close():
     Promise.resolve().then(() => opts.authenticator.authenticate(req)).then(
       (who) => {
         if (!decide()) return;
-        if (closing) return refuse(socket, '401 Unauthorized');
+        // 401 means "no session" to clients, which then sign out: a shutdown or a failing store is only transient.
+        if (closing) return refuse(socket, '503 Service Unavailable');
         if (!who) {
           refusedFor('no_auth');
           return refuse(socket, '401 Unauthorized');
@@ -151,7 +152,7 @@ export function createRelay(opts: RelayOptions): { server: http.Server; close():
       () => {
         if (!decide()) return;
         refusedFor('auth_error');
-        refuse(socket, '401 Unauthorized');
+        refuse(socket, '503 Service Unavailable');
       }
     ).catch(() => socket.destroy());
   });
