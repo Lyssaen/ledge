@@ -70,6 +70,8 @@ describe('the Roles view', () => {
     const dispatch = vi.fn();
     mount(f.client, { role: 'u1', seat: 'ledge-dev/dev.front' }, dispatch);
     expect(await screen.findByRole('button', { name: 'depuis dev.front' })).toHaveAttribute('aria-pressed', 'true');
+    // « selon la spec » first, then the seats in a stable order (rig, then logical id).
+    expect(screen.getAllByRole('button', { name: /^(selon la spec|depuis )/ }).map(b => b.textContent)).toEqual(['selon la spec', 'depuis dev.back', 'depuis dev.front']);
     expect(screen.getByText('Ce qu’OpenRig a résolu au lancement de dev-front@ledge-dev (OpenRig 0.7.7).')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Ton périmètre : front-end' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'guidance/scope-front.md' }).closest('article')).toHaveTextContent('hérité · membre dev.front');

@@ -164,7 +164,7 @@ function Detail({ client, machine, summary, seat: seatKeyNav, openrigVersion, di
         <div className="orr-lens">
           <span>{r.lens}</span>
           <Seg label={r.lens} value={seat ? seatKey(seat) : 'spec'}
-            options={[{ value: 'spec', label: r.lensSpec }, ...d.seats.map(s => ({ value: seatKey(s), label: <>{r.lensFrom} <span className="mono">{seatName(d, s)}</span></> }))]}
+            options={[{ value: 'spec', label: r.lensSpec }, ...[...d.seats].sort((a, b) => a.rig.localeCompare(b.rig) || a.logicalId.localeCompare(b.logicalId)).map(s => ({ value: seatKey(s), label: <>{r.lensFrom} <span className="mono">{seatName(d, s)}</span></> }))]}
             onChange={v => lens(v === 'spec' ? null : d.seats.find(s => seatKey(s) === v) ?? null)} />
           {!seat && d.profiles.length > 1 && <><span className="orr-gap">{r.profile}</span><Seg label={r.profile} value={profile?.name ?? ''} options={d.profiles.map(p => ({ value: p.name, label: p.name }))} onChange={setProfile} /></>}
           <span className="orr-lenshint">{seat ? (seat.live ? r.lensSeatHint(seat.session ?? seat.logicalId, d.openrigVersion ?? openrigVersion) : r.lensSeatNoLive(seat.session ?? seat.logicalId)) : r.lensSpecHint}</span>
