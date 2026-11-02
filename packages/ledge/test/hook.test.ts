@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { formatWho } from '../src/cli/who.js';
-import { MESSAGE_MAX } from '@ledge/protocol';
+import { CAPTURE_RAW_MAX, MESSAGE_MAX } from '@ledge/protocol';
 import { mapClaudeHook, mapHook, mapCursorHook, runHook, codexLedgeId, underCodexDaemon, identityContext, tasksContext, REPLY_MAX, INPUT_MAX, toolOutput, trimInput } from '../src/cli/hook.js';
 import type { Session } from '@ledge/protocol';
 import { startServer } from '../src/daemon/server.js';
@@ -798,5 +798,55 @@ describe('the agent conversation id', () => {
     const helper = mapCursorHook('postToolUse', { session_id: 'b335', tool_name: 'Read' }, at, { LEDGE_SESSION: 'ab12', CURSOR_TRANSCRIPT_PATH: '/t/b617.jsonl' })!;
     expect(helper.event.helperId).toBe('b335');
     expect(helper.event.agentSessionId).toBeUndefined();
+  });
+});
+
+describe('runHook: PostToolUse images', () => {
+  const image = (i: number) => ({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: Buffer.from(`img${i}`).toString('base64') } });
+  const payload = (n: number, extra: unknown[] = []) => JSON.stringify({ session_id: 's', hook_event_name: 'PostToolUse', tool_name: 'mcp__playwright__browser_take_screenshot', tool_use_id: 't1',
+    tool_response: [{ type: 'text', text: 'ok' }, ...Array.from({ length: n }, (_, i) => image(i)), ...extra] });
+  const refN = (i: number) => ({ id: `${String(i).padStart(64, 'a')}`, mime: 'image/webp', width: 10, height: 10, bytes: 100, preview: true });
+  const run = async (body: string, answer: (i: number, ws: import('ws').WebSocket, m: { requestId: string }) => void, tool: 'claude' | 'codex' = 'claude') => {
+    const seen: Array<Record<string, any>> = [];
+    const { WebSocketServer } = await import('ws');
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' }); await new Promise(r => wss.once('listening', r));
+    let n = 0;
+    wss.on('connection', ws => ws.on('message', d => { const m = JSON.parse(String(d)); seen.push(m); if (m.type === 'attachment.capture') answer(n++, ws, m); }));
+    const t0 = Date.now();
+    try { await runHook('PostToolUse', body, { port: (wss.address() as { port: number }).port, tool }); await new Promise(r => setTimeout(r, 50)); } finally { wss.close(); }
+    return { seen, ms: Date.now() - t0 };
+  };
+  const stored = (i: number, ws: import('ws').WebSocket, m: { requestId: string }) => ws.send(JSON.stringify({ type: 'attachment.stored', requestId: m.requestId, ref: refN(i) }));
+
+  it('stores a screenshot before sending its PostToolUse', async () => {
+    const { seen } = await run(payload(2), stored);
+    expect(seen.map(m => m.type)).toEqual(['attachment.capture', 'attachment.capture', 'session.event']);
+    expect(seen[0]!.image).toEqual({ mime: 'image/png', data: Buffer.from('img0').toString('base64') });
+    expect(seen[2]!.event).toMatchObject({ name: 'PostToolUse', attachments: [refN(0).id, refN(1).id] });
+    expect(seen[2]!.event.imagesDropped).toBeUndefined();
+  });
+  it('flags a refused image as dropped and keeps the others', async () => {
+    const { seen } = await run(payload(2), (i, ws, m) => i === 0 ? ws.send(JSON.stringify({ type: 'attachment.error', requestId: m.requestId, reason: 'not_image' })) : stored(i, ws, m));
+    expect(seen.at(-1)!.event).toMatchObject({ attachments: [refN(1).id], imagesDropped: true });
+  });
+  it('sends the event without images when the daemon does not answer in time', async () => {
+    const { seen, ms } = await run(payload(1), () => {});
+    expect(ms).toBeLessThan(1300);
+    expect(seen.at(-1)).toMatchObject({ type: 'session.event', event: { imagesDropped: true } });
+    expect(seen.at(-1)!.event.attachments).toBeUndefined();
+  });
+  it('does not send an image over the raw limit, and flags it dropped', async () => {
+    const big = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: Buffer.alloc(CAPTURE_RAW_MAX + 1).toString('base64') } };
+    const { seen } = await run(JSON.stringify({ session_id: 's', hook_event_name: 'PostToolUse', tool_name: 'x', tool_response: [big] }), stored);
+    expect(seen.map(m => m.type)).toEqual(['session.event']);
+    expect(seen[0]!.event.imagesDropped).toBe(true);
+  });
+  it('a PostToolUse without images keeps the 100 ms path', async () => {
+    const { seen } = await run(payload(0), stored);
+    expect(seen.map(m => m.type)).toEqual(['session.event']);
+  });
+  it('only Claude payloads are wired', async () => {
+    const { seen } = await run(payload(1), stored, 'codex');
+    expect(seen.map(m => m.type)).toEqual(['session.event']);
   });
 });
