@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatTasksSchema, ChatActionsSchema, ChatActionSchema } from './chat.js';
 import { ActionIdSchema } from './actions.js';
-import { ATTACHMENTS_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
+import { ATTACHMENTS_MAX, AttachmentCaptureSchema, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
@@ -44,8 +44,10 @@ export const SessionEventSchema = z.object({
   task: z.string().optional(),
   /** PostToolUseFailure: the user interrupted the turn (Esc); Claude then waits for input with no Stop. */
   interrupt: z.boolean().optional(),
-  /** UserPromptSubmit: the images the prompt carried, by attachment id. */
+  /** UserPromptSubmit, PostToolUse: the images the prompt or the tool result carried, by attachment id. */
   attachments: z.array(AttachmentIdSchema).max(ATTACHMENTS_MAX).optional(),
+  /** PostToolUse: some of the result's images were not kept. */
+  imagesDropped: z.boolean().optional(),
   /** QueueUpdate: OMP's queue as it stands. */
   queue: z.array(z.object({ text: z.string(), mode: z.enum(['steer', 'follow_up']) })).optional(),
   /** AgentMessage: the harness's own message, its text so far (`streaming`) or whole. `messageId` is unique for the session's life. */
@@ -188,6 +190,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
   DocumentReadSchema,
   AttachmentPutSchema,
+  AttachmentCaptureSchema,
   AttachmentGetSchema,
   ReposInspectSchema,
   ReposScanSchema,

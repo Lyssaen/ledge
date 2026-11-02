@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Captures navigateur</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0b0b; --panel: #121212; --raise: #181818; --line: #262626; --line2: #333;
+    --fg: #ececec; --muted: #8b8b8b; --dim: #5e5e5e; --blue: #5b8cff; --green: #3ecf6e; --red: #e5484d; --amber: #f5a524;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #050505; color: var(--fg); font: 14px/20px 'Geist', system-ui, sans-serif; padding: 32px 24px 80px; }
+  .mono { font-family: 'Geist Mono', monospace; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 28px; max-width: 900px; }
+  .step { margin: 0 auto 56px; max-width: 1440px; }
+  .step h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .step h2 b { color: var(--blue); font-weight: 600; margin-right: 6px; }
+  .step p.note { color: var(--muted); margin: 0 0 14px; max-width: 980px; }
+
+  /* ---- window chrome ---- */
+  .win { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; height: 820px; display: flex; flex-direction: column; }
+  .titlebar { height: 32px; display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 13px; }
+  .titlebar .sp { flex: 1; }
+  .titlebar .dots { color: var(--muted); letter-spacing: 14px; font-size: 12px; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .side { width: 220px; border-right: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .side .box { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--muted); font-size: 13px; }
+  .side .proj { font-size: 13px; color: var(--muted); padding: 4px 6px; }
+  .side .bot { display: flex; gap: 8px; align-items: center; padding: 6px; border-radius: 6px; font-size: 13px; }
+  .side .bot.on { background: var(--raise); }
+  .side .bot i { width: 18px; height: 14px; border-radius: 4px; background: #e8a33d; display: inline-block; }
+  .side .bot small { display: block; color: var(--muted); font-size: 12px; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .crumbs { height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 22px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .crumbs b { color: var(--fg); font-weight: 500; }
+  .crumbs .sp { flex: 1; }
+  .crumbs .ico { color: var(--muted); font-size: 15px; padding: 0 6px; }
+  .tabsrow { height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+  .seg { display: flex; border: 1px solid var(--line2); border-radius: 8px; padding: 3px; gap: 2px; }
+  .seg span { padding: 4px 12px; border-radius: 6px; color: var(--muted); font-size: 13px; }
+  .seg span.on { background: var(--raise); color: var(--fg); }
+  .seg .n { font-family: 'Geist Mono', monospace; font-size: 11px; border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+  .tabsrow .where { color: var(--muted); font: 11px 'Geist Mono', monospace; }
+  .tabsrow .sp { flex: 1; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line2); border-radius: 7px; padding: 4px 10px; font-size: 13px; color: var(--fg); background: transparent; }
+  .btn.hot { border-color: #2c4a8f; background: #12203f; color: #cfe0ff; }
+  .btn .n { font: 11px 'Geist Mono', monospace; color: var(--muted); }
+  .work { flex: 1; display: flex; min-height: 0; }
+  .thread { flex: 1; overflow: hidden; padding: 22px 0; position: relative; }
+  .col { max-width: 780px; margin: 0 auto; padding: 0 28px 0 70px; position: relative; }
+  .col::before { content: ''; position: absolute; left: 41px; top: 8px; bottom: 0; width: 1px; background: var(--line); }
+
+  /* ---- thread items ---- */
+  .it { position: relative; margin-bottom: 14px; }
+  .it .dot { position: absolute; left: -38px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line2); display: grid; place-items: center; font-size: 10px; color: var(--muted); }
+  .it .dot.me { width: 26px; height: 26px; left: -42px; top: -2px; background: #f2f2f2; color: #111; font-size: 13px; border: 0; }
+  .it .dot.bot { width: 26px; height: 26px; left: -42px; top: -2px; background: #3a2412; border: 0; }
+  .it .dot.bot::after { content: ''; width: 14px; height: 10px; background: #e8a33d; border-radius: 3px; }
+  .who { color: var(--muted); font-size: 12px; display: flex; }
+  .who .sp, .row .sp { flex: 1; }
+  .time { color: var(--muted); font: 12px 'Geist Mono', monospace; }
+  .say { font-size: 15px; line-height: 22px; }
+  .row { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  .row .ok { color: var(--green); }
+  .row .tool { color: var(--fg); }
+  .row .arg { font: 12px 'Geist Mono', monospace; color: var(--muted); }
+  .row .dur { font: 12px 'Geist Mono', monospace; }
+  .caps { display: flex; gap: 10px; margin: 8px 0 2px; }
+  .cap { position: relative; border: 1px solid var(--line2); border-radius: 8px; overflow: hidden; background: #fff; cursor: pointer; }
+  .cap .tag { position: absolute; left: 6px; bottom: 6px; background: rgba(0,0,0,.72); color: #ddd; font: 11px 'Geist Mono', monospace; padding: 1px 6px; border-radius: 4px; }
+  .cap.sel { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .cap .badge { position: absolute; right: 6px; top: 6px; background: var(--blue); color: #fff; font: 600 11px 'Geist', sans-serif; padding: 1px 7px; border-radius: 10px; }
+  .hint { position: absolute; background: #f5d90a; color: #111; font-size: 12px; font-weight: 500; padding: 3px 8px; border-radius: 6px; white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+  .hint::before { content: ''; position: absolute; width: 8px; height: 8px; background: #f5d90a; transform: rotate(45deg); }
+  .hint.l::before { left: -4px; top: 9px; } .hint.t::before { top: -4px; left: 14px; } .hint.b::before { bottom: -4px; left: 14px; }
+  .quiet { color: var(--dim); font-size: 12px; font-style: italic; margin-top: 4px; }
+  .end { color: var(--muted); font-size: 13px; }
+
+  /* ---- side pane ---- */
+  .pane { width: 640px; border-left: 1px solid var(--line); display: flex; flex-direction: column; background: var(--panel); }
+  .pane.wide { width: 860px; }
+  .phead { height: 46px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+  .phead b { font-weight: 600; }
+  .phead .sp { flex: 1; }
+  .phead .x { color: var(--muted); font-size: 13px; }
+  .stage { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .meta { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+  .meta .url { color: var(--fg); font: 12px 'Geist Mono', monospace; }
+  .meta .mono { font-size: 12px; }
+  .meta .sp { flex: 1; }
+  .big { flex: 1; min-height: 0; border: 1px solid var(--line2); border-radius: 8px; background: #fff; overflow: hidden; display: grid; place-items: center; }
+  .pair { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 0; }
+  .pair .one { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .pair .lbl { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+  .pair .lbl .badge { background: var(--blue); color: #fff; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; }
+  .strip { border-top: 1px solid var(--line); padding: 12px 16px 16px; }
+  .strip .lab { color: var(--muted); font-size: 12px; margin-bottom: 8px; display: flex; }
+  .strip .lab .sp { flex: 1; }
+  .strip .cells { display: flex; gap: 10px; }
+  .cell { width: 132px; }
+  .cell .cap { height: 84px; display: grid; place-items: center; }
+  .cell .c1 { font: 11px 'Geist Mono', monospace; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cell .c2 { font-size: 11px; color: var(--dim); }
+  .turn { width: 1px; background: var(--line2); margin: 0 2px; }
+
+  /* ---- fake web page ---- */
+  .fit { overflow: hidden; position: relative; }
+  .fit > .page { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .page { width: 1280px; height: 800px; background: #fbfaf7; color: #1b1b1b; font-family: 'Geist', sans-serif; }
+  .page.m { width: 390px; height: 844px; }
+  .page nav { height: 64px; display: flex; align-items: center; padding: 0 56px; gap: 34px; border-bottom: 1px solid #ebe8e0; font-size: 16px; }
+  .page nav .logo { font-weight: 700; font-size: 20px; flex: 1; }
+  .page nav .logo i { color: #e5484d; font-style: normal; }
+  .page .hero { padding: 80px 56px 40px; }
+  .page .hero h3 { font-size: 64px; line-height: 70px; margin: 0 0 18px; font-weight: 600; letter-spacing: -1.5px; }
+  .page .hero p { font-size: 20px; color: #5d5a52; margin: 0 0 30px; max-width: 640px; line-height: 30px; }
+  .page .cta { display: inline-block; background: #1b1b1b; color: #fff; padding: 16px 30px; border-radius: 12px; font-size: 18px; }
+  .page .cards { display: flex; gap: 24px; padding: 30px 56px; }
+  .page .card { flex: 1; background: #fff; border: 1px solid #e6e2d8; border-radius: 16px; padding: 26px; height: 190px; }
+  .page .card b { display: block; font-size: 20px; margin-bottom: 10px; }
+  .page .card span { color: #6a675f; font-size: 16px; line-height: 24px; }
+  /* before: the CTA slides over the cards, the third card overflows */
+  .page.before .hero h3 { width: 1400px; }
+  .page.before .cta { position: relative; top: 150px; left: 330px; z-index: 2; box-shadow: 0 0 0 3px #fbfaf7; }
+  .page.before .cards { padding-top: 10px; }
+  .page.before .card:nth-child(3) { height: 250px; transform: translateY(-14px); }
+  .page.m nav { padding: 0 22px; } .page.m nav a { display: none; }
+  .page.m .hero { padding: 44px 22px 20px; } .page.m .hero h3 { font-size: 40px; line-height: 44px; } .page.m .hero p { font-size: 17px; line-height: 26px; }
+  .page.m .cards { flex-direction: column; padding: 20px 22px; gap: 14px; } .page.m .card { height: auto; }
+
+  /* ---- phone ---- */
+  .phone { width: 390px; height: 760px; border: 1px solid var(--line2); border-radius: 36px; background: var(--bg); padding: 22px 16px; overflow: hidden; }
+  .phone .ph { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  .phone .ph b { color: var(--fg); }
+  .phone .pr { font-size: 13px; color: var(--muted); display: flex; gap: 8px; margin: 10px 0 6px; }
+  .phone .pr .ok { color: var(--green); }
+  .phone .pr .t { color: var(--fg); }
+  .phone .msg { font-size: 14px; line-height: 21px; margin: 12px 0; }
+  .flexrow { display: flex; gap: 40px; align-items: flex-start; }
+  .legend { color: var(--muted); max-width: 520px; font-size: 13px; line-height: 21px; }
+  .legend li { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<template id="pg-before"><div class="page before"><nav><span class="logo">Factur<i>.</i></span><a>Produit</a><a>Tarifs</a><a>Connexion</a></nav><div class="hero"><h3>Vos factures, sans papier ni attente.</h3><p>Recevez, validez et archivez toutes vos factures fournisseurs au même endroit.</p><span class="cta">Commencer gratuitement</span></div><div class="cards"><div class="card"><b>Réception</b><span>Peppol, e-mail ou PDF : tout arrive au même endroit.</span></div><div class="card"><b>Validation</b><span>Un circuit d'approbation en deux clics.</span></div><div class="card"><b>Archivage légal pendant dix ans avec horodatage qualifié</b><span>Retrouvez n'importe quelle facture en une seconde, même dix ans après.</span></div></div></div></template>
+<template id="pg-after"><div class="page"><nav><span class="logo">Factur<i>.</i></span><a>Produit</a><a>Tarifs</a><a>Connexion</a></nav><div class="hero"><h3>Vos factures, sans papier<br>ni attente.</h3><p>Recevez, validez et archivez toutes vos factures fournisseurs au même endroit.</p><span class="cta">Commencer gratuitement</span></div><div class="cards"><div class="card"><b>Réception</b><span>Peppol, e-mail ou PDF : tout arrive au même endroit.</span></div><div class="card"><b>Validation</b><span>Un circuit d'approbation en deux clics.</span></div><div class="card"><b>Archivage légal</b><span>Retrouvez n'importe quelle facture en une seconde, même dix ans après.</span></div></div></div></template>
+<template id="pg-mobile"><div class="page m"><nav><span class="logo">Factur<i>.</i></span><a>Menu</a></nav><div class="hero"><h3>Vos factures, sans papier ni attente.</h3><p>Recevez, validez et archivez toutes vos factures fournisseurs.</p><span class="cta">Commencer</span></div><div class="cards"><div class="card"><b>Réception</b><span>Peppol, e-mail ou PDF.</span></div><div class="card"><b>Validation</b><span>Deux clics.</span></div></div></div></template>
+
+<h1>Captures du navigateur dans Ledge — maquette</h1>
+<p class="lead">Session de Luna sur le projet Website : elle vérifie la page d'accueil avec Playwright, corrige un débordement, puis revérifie. Les étiquettes jaunes sont des annotations de maquette, pas de l'interface.</p>
+
+<!-- ============ 1. THREAD ============ -->
+<section class="step">
+  <h2><b>1</b>Dans le fil : la capture sur la ligne d'outil</h2>
+  <p class="note">Chaque capture prise par l'agent s'affiche en vignette sous sa ligne d'outil, même quand les détails de l'action sont repliés. Le bouton « Navigateur » apparaît en tête de session dès la première capture.</p>
+  <div class="win" style="height:1010px">
+    <div class="titlebar">Ledge<span style="color:var(--red)">.</span><span class="sp"></span><span class="dots">● ◔ ▢ ─ ☐ ✕</span></div>
+    <div class="body">
+      <div class="side">
+        <div class="box">Demander à Ledge…</div>
+        <div class="box">Atelier</div>
+        <div class="proj">Projets</div>
+        <div class="bot"><i></i><div>Luna<small>Nouvelle page d'accueil</small></div></div>
+        <div class="bot on"><i style="background:#e8a33d"></i><div>Luna<small>Vérif design accueil</small></div></div>
+        <div class="bot"><i style="background:#d9734a"></i><div>Otto<small>Câbler la liste</small></div></div>
+      </div>
+      <div class="main">
+        <div class="crumbs"><span>Atelier</span>/<span>Website</span>/<b>Luna</b>· Vérif design accueil<span class="sp"></span><span class="ico">›_</span><span class="ico">···</span></div>
+        <div class="tabsrow">
+          <div class="seg"><span class="on">☰ Fil</span><span>Modifications<span class="n">1</span></span></div>
+          <span class="where">Local · website</span><span class="sp"></span>
+          <span class="btn hot" style="position:relative">▣ Navigateur <span class="n">3</span>
+            <span class="hint t" style="top:36px;left:-150px">Nouveau : ouvre l'onglet Navigateur</span></span>
+        </div>
+        <div class="work">
+          <div class="thread"><div class="col">
+            <div class="it"><span class="dot me">◉</span><div class="who">Vous<span class="sp"></span><span class="time">16:40</span></div><div class="say">Vérifie la page d'accueil en 1280 et en mobile, corrige ce qui déborde.</div></div>
+            <div class="it"><span class="dot">✓</span><div class="row"><span class="ok">✓</span><span class="tool">Navigation</span><span class="arg">localhost:5173/</span><span class="sp"></span><span class="dur">0,8 s</span></div></div>
+            <div class="it"><span class="dot">✓</span><div class="row"><span class="ok">✓</span><span class="tool">Capture</span><span class="arg">viewport · 1280×800</span><span class="sp"></span><span class="dur">0,1 s</span></div>
+              <div class="caps"><div class="cap fit" style="width:416px;height:260px" data-pg="pg-before" data-w="416"><span class="tag">1280×800</span></div>
+                <div style="position:relative"><span class="hint l" style="left:10px;top:20px">Clic → onglet Navigateur sur cette capture</span></div></div></div>
+            <div class="it"><span class="dot bot"></span><div class="say">Le bouton « Commencer » passe sur les cartes et le titre de la troisième carte déborde. Je corrige la grille et le titre.</div></div>
+            <div class="it"><span class="dot">✎</span><div class="row"><span class="tool">Modification</span><span class="arg">src/pages/Home.css <span style="color:var(--green)">+6</span> <span style="color:var(--red)">-3</span></span><span class="sp"></span><span class="dur">0,2 s</span></div></div>
+            <div class="it"><span class="dot">✓</span><div class="row"><span class="ok">✓</span><span class="tool">Capture</span><span class="arg">viewport · 1280×800</span><span class="sp"></span><span class="dur">0,1 s</span></div>
+              <div class="caps"><div class="cap fit" style="width:416px;height:260px" data-pg="pg-after" data-w="416"><span class="tag">1280×800</span></div></div></div>
+            <div class="it"><span class="dot">✓</span><div class="row"><span class="ok">✓</span><span class="tool">Capture</span><span class="arg">page entière · 1280×6400</span><span class="sp"></span><span class="dur">0,4 s</span></div>
+              <div class="quiet">Capture trop lourde pour Ledge</div>
+              <div style="position:relative"><span class="hint l" style="left:250px;top:-22px">Au-delà de 2 Mo : pas d'image, juste cette ligne</span></div></div>
+            <div class="it"><span class="dot">·</span><div class="end">Fin de l'échange · 6 actions · 1 fichier modifié</div></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. PANE ============ -->
+<section class="step">
+  <h2><b>2</b>L'onglet « Navigateur » dans le panneau latéral</h2>
+  <p class="note">La capture choisie en grand, avec l'URL de la page, l'heure, la taille et l'auteur (Luna ou un de ses sous-agents). En dessous, toutes les captures de la session dans l'ordre, séparées par échange. Plus tard, la vue en direct prendra la place de la grande image.</p>
+  <div class="win">
+    <div class="titlebar">Ledge<span style="color:var(--red)">.</span><span class="sp"></span><span class="dots">● ◔ ▢ ─ ☐ ✕</span></div>
+    <div class="body">
+      <div class="main">
+        <div class="crumbs"><span>Atelier</span>/<span>Website</span>/<b>Luna</b>· Vérif design accueil<span class="sp"></span><span class="ico">›_</span><span class="ico">···</span></div>
+        <div class="tabsrow">
+          <div class="seg"><span class="on">☰ Fil</span><span>Modifications<span class="n">1</span></span></div>
+          <span class="where">Local · website</span><span class="sp"></span><span class="btn hot">▣ Navigateur <span class="n">4</span></span>
+        </div>
+        <div class="work">
+          <div class="thread"><div class="col" style="padding-left:62px;padding-right:18px">
+            <div class="it"><span class="dot me">◉</span><div class="who">Vous<span class="sp"></span><span class="time">16:40</span></div><div class="say">Vérifie la page d'accueil en 1280 et en mobile, corrige ce qui déborde.</div></div>
+            <div class="it"><span class="dot">✓</span><div class="row"><span class="ok">✓</span><span class="tool">Capture</span><span class="arg">1280×800</span></div>
+              <div class="caps"><div class="cap fit" style="width:208px;height:130px" data-pg="pg-before" data-w="208"></div></div></div>
+            <div class="it"><span class="dot bot"></span><div class="say" style="font-size:14px">Le bouton passe sur les cartes. Je corrige.</div></div>
+            <div class="it" style="background:rgba(91,140,255,.08);border-radius:8px;padding:6px 8px;margin-left:-8px"><span class="dot" style="left:-30px;top:8px">✓</span><div class="row"><span class="ok">✓</span><span class="tool">Capture</span><span class="arg">1280×800</span></div>
+              <div class="caps"><div class="cap fit sel" style="width:208px;height:130px" data-pg="pg-after" data-w="208"></div></div>
+              <div style="position:relative"><span class="hint t" style="top:8px;left:0">« dans le fil » éclaire la ligne</span></div></div>
+          </div></div>
+          <div class="pane">
+            <div class="phead"><b>Navigateur</b><span class="sp"></span><span class="x">Agrandir</span><span class="x">Fermer</span></div>
+            <div class="stage">
+              <div class="meta"><span class="url">localhost:5173/</span><span class="mono">16:44</span><span class="mono">1280×800</span><span>Luna</span><span class="sp"></span><span class="btn">⧉ Comparer</span><span class="btn">⤢ Agrandir</span><span class="btn">↳ dans le fil</span></div>
+              <div class="big"><div class="fit" style="width:606px;height:379px" data-pg="pg-after" data-w="606"></div></div>
+            </div>
+            <div class="strip">
+              <div class="lab"><span>4 captures · 2 échanges</span><span class="sp"></span><span class="time">16:41 → 16:52</span></div>
+              <div class="cells">
+                <div class="cell"><div class="cap fit" style="width:132px" data-pg="pg-before" data-w="132"></div><div class="c1">/ · 1280×800</div><div class="c2">16:41 · Luna</div></div>
+                <div class="cell"><div class="cap fit sel" style="width:132px" data-pg="pg-after" data-w="132"></div><div class="c1">/ · 1280×800</div><div class="c2">16:44 · Luna</div></div>
+                <div class="turn"></div>
+                <div class="cell"><div class="cap fit" style="width:132px;background:#1b1b1b" data-pg="pg-mobile" data-w="39" data-h="84"></div><div class="c1">/ · 390×844</div><div class="c2">16:51 · sous-agent mobile</div></div>
+                <div class="cell"><div class="cap fit" style="width:132px" data-pg="pg-after" data-w="132"></div><div class="c1">/tarifs · 1280×800</div><div class="c2">16:52 · Luna</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. COMPARE ============ -->
+<section class="step">
+  <h2><b>3</b>Comparer avant / après</h2>
+  <p class="note">« Comparer » fait choisir une deuxième capture dans la bande : les deux s'affichent côte à côte (l'une sous l'autre si le panneau est étroit). Ici le panneau est agrandi.</p>
+  <div class="win" style="height:700px">
+    <div class="titlebar">Ledge<span style="color:var(--red)">.</span><span class="sp"></span><span class="dots">● ◔ ▢ ─ ☐ ✕</span></div>
+    <div class="body">
+      <div class="main">
+        <div class="work">
+          <div class="thread" style="flex:0 0 400px"><div class="col" style="padding-left:62px;padding-right:18px">
+            <div class="it"><span class="dot me">◉</span><div class="who">Vous<span class="sp"></span><span class="time">16:40</span></div><div class="say">Vérifie la page d'accueil en 1280 et en mobile…</div></div>
+            <div class="it"><span class="dot bot"></span><div class="say" style="font-size:14px">Le bouton passe sur les cartes. Je corrige la grille.</div></div>
+          </div></div>
+          <div class="pane" style="flex:1;width:auto">
+            <div class="phead"><b>Navigateur</b><span class="sp"></span><span class="btn hot">Comparaison · Quitter</span><span class="x">Réduire</span><span class="x">Fermer</span></div>
+            <div class="stage">
+              <div class="pair">
+                <div class="one"><div class="lbl"><span class="badge">A</span><span class="mono" style="color:var(--fg)">localhost:5173/</span><span class="mono">16:41</span><span class="mono">1280×800</span></div><div class="big"><div class="fit" style="width:470px;height:294px" data-pg="pg-before" data-w="470"></div></div></div>
+                <div class="one"><div class="lbl"><span class="badge">B</span><span class="mono" style="color:var(--fg)">localhost:5173/</span><span class="mono">16:44</span><span class="mono">1280×800</span></div><div class="big"><div class="fit" style="width:470px;height:294px" data-pg="pg-after" data-w="470"></div></div></div>
+              </div>
+            </div>
+            <div class="strip">
+              <div class="lab"><span>Choisis les deux captures à comparer</span></div>
+              <div class="cells">
+                <div class="cell"><div class="cap fit sel" style="width:132px" data-pg="pg-before" data-w="132"><span class="badge">A</span></div><div class="c1">/ · 1280×800</div><div class="c2">16:41 · Luna</div></div>
+                <div class="cell"><div class="cap fit sel" style="width:132px" data-pg="pg-after" data-w="132"><span class="badge">B</span></div><div class="c1">/ · 1280×800</div><div class="c2">16:44 · Luna</div></div>
+                <div class="turn"></div>
+                <div class="cell"><div class="cap fit" style="width:132px;background:#1b1b1b" data-pg="pg-mobile" data-w="39" data-h="84"></div><div class="c1">/ · 390×844</div><div class="c2">16:51 · sous-agent</div></div>
+                <div class="cell"><div class="cap fit" style="width:132px" data-pg="pg-after" data-w="132"></div><div class="c1">/tarifs · 1280×800</div><div class="c2">16:52 · Luna</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. PHONE ============ -->
+<section class="step">
+  <h2><b>4</b>Sur le téléphone (et la TUI) </h2>
+  <p class="note">Le téléphone n'affiche pas les lignes d'outil : seules les actions qui portent une capture y apparaissent, en ligne « Capture » minimale. Pas d'onglet Navigateur : seulement la vignette, qui s'ouvre en plein écran au toucher. La TUI montre la même capture en pastille, ouverte avec <span class="mono">o</span>.</p>
+  <div class="flexrow">
+    <div class="phone">
+      <div class="ph">‹ <b>Luna</b> · Vérif design accueil</div>
+      <div class="msg"><span style="color:var(--muted);font-size:12px">Vous · 16:40</span><br>Vérifie la page d'accueil en 1280 et en mobile, corrige ce qui déborde.</div>
+            <div class="pr"><span class="ok">✓</span><span class="t">Capture</span><span class="mono" style="font-size:12px">1280×800</span></div>
+      <div class="cap fit" style="width:300px;height:188px" data-pg="pg-before" data-w="300"><span class="tag">1280×800</span></div>
+      <div class="msg">Le bouton « Commencer » passe sur les cartes. Je corrige la grille et le titre.</div>
+      <div class="pr"><span class="ok">✓</span><span class="t">Capture</span><span class="mono" style="font-size:12px">1280×800</span></div>
+      <div class="cap fit" style="width:300px;height:188px" data-pg="pg-after" data-w="300"><span class="tag">1280×800</span></div>
+    </div>
+    <ul class="legend">
+      <li><b style="color:var(--fg)">Ce qui change partout</b> : une capture prise par un agent n'est plus perdue, elle reste attachée à la ligne d'outil qui l'a produite.</li>
+      <li><b style="color:var(--fg)">Desktop seulement</b> : l'onglet Navigateur, la bande de captures, la comparaison.</li>
+      <li><b style="color:var(--fg)">Plus tard (option 3)</b> : la vue en direct du navigateur de l'agent s'affichera dans le même onglet, à la place de la grande image ; la bande de captures restera dessous.</li>
+    </ul>
+  </div>
+</section>
+
+<script>
+  // Fill every mockup frame with its fake page, scaled to the frame's width (or height for portrait captures).
+  document.querySelectorAll('[data-pg]').forEach(el => {
+    const tpl = document.getElementById(el.dataset.pg);
+    const page = tpl.content.firstElementChild.cloneNode(true);
+    const pw = page.classList.contains('m') ? 390 : 1280, ph = page.classList.contains('m') ? 844 : 800;
+    let s = Number(el.dataset.w) / pw;
+    if (el.dataset.h) s = Number(el.dataset.h) / ph;
+    if (!el.style.height) el.style.height = Math.round(ph * (Number(el.dataset.w) / pw)) + 'px';
+    if (el.dataset.h) { el.style.height = '84px'; }
+    page.style.transform = `scale(${s})`;
+    if (el.dataset.h) { page.style.left = `calc(50% - ${pw * s / 2}px)`; }
+    el.prepend(page);
+  });
+</script>
+</body>
+</html>

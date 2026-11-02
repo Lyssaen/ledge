@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { statSync, readFileSync, writeFileSync, rmSync, existsSync, chmodSync } from 'node:fs';
+import { statSync, readFileSync, writeFileSync, rmSync, existsSync, chmodSync, readdirSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { DEFAULT_RELAY_URL, RelayUrlSchema } from '@ledge/protocol';
 import { exportIdentity } from '@ledge/seal';
 import { paths } from '../src/paths.js';
@@ -88,6 +89,22 @@ describe('mobile files', () => {
     expect(stored).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(mode(paths().mobileKey)).toBe(0o600);
     expect(existsSync(`${paths().mobileKey}.${process.pid}.tmp`)).toBe(false);
+  });
+
+  it('moves an invalid PC key aside at 0600 before creating a new one', async () => {
+    const dir = dirname(paths().mobileKey);
+    const bad = () => readdirSync(dir).filter((f) => f.startsWith(`${basename(paths().mobileKey)}.bad-`));
+    for (const f of bad()) rmSync(join(dir, f));
+    writeFileSync(paths().mobileKey, 'not-a-key\n', { mode: 0o644 });
+    const id = await loadPcIdentity();
+    const kept = bad();
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatch(/\.bad-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/);
+    expect(readFileSync(join(dir, kept[0]!), 'utf8')).toBe('not-a-key\n');
+    expect(mode(join(dir, kept[0]!))).toBe(0o600);
+    expect(readFileSync(paths().mobileKey, 'utf8').trim()).toBe(await exportIdentity(id));
+    expect(mode(paths().mobileKey)).toBe(0o600);
+    rmSync(join(dir, kept[0]!));
   });
 
   // chmod 000 does not stop root, so these cannot show anything there.

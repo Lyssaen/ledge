@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema, RefusalCodeSchema } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, ServerMessageSchema, SessionSchema, SessionEventSchema, PROTOCOL_PORT, NAMES, pickName, ThreadItemSchema, offers, NOTE_NOT_TYPED, isArchived, ChatTurnSchema, RefusalCodeSchema, toolShortName, isBrowserCapture } from '../src/index.js';
 
 const T0 = '2026-10-09T18:02:00.000Z';
 
@@ -551,5 +551,19 @@ describe('session.model.accepted', () => {
   it('says when the change applies', () => {
     expect(ServerMessageSchema.safeParse({ type: 'session.model.accepted', id: 'a', when: 'turn' }).success).toBe(true);
     expect(ServerMessageSchema.safeParse({ type: 'session.model.accepted', id: 'a', when: 'later' }).success).toBe(false);
+  });
+});
+
+describe('tool rows with images', () => {
+  it('a tool row carries images and imagesDropped', () => {
+    const ref = { id: 'a'.repeat(64), mime: 'image/jpeg', width: 1280, height: 800, bytes: 120_000, preview: true };
+    const row = ThreadItemSchema.parse({ kind: 'tool', id: 't1', at: T0, turn: 1, tool: 'x', label: 'x', status: 'success', images: [ref], imagesDropped: true });
+    expect(row).toMatchObject({ images: [ref], imagesDropped: true });
+  });
+  it('names tools', () => {
+    expect(toolShortName('mcp__plugin_playwright_playwright__browser_take_screenshot')).toBe('browser_take_screenshot');
+    expect(toolShortName('Bash')).toBe('Bash');
+    expect(isBrowserCapture('mcp__plugin_playwright_playwright__browser_take_screenshot')).toBe(true);
+    expect(isBrowserCapture('mcp__other__screenshot')).toBe(false);
   });
 });

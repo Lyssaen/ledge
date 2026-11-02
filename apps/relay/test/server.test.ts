@@ -143,19 +143,19 @@ describe('relay server', () => {
     pc.close();
   });
 
-  it('answers 401 and logs auth_error when the authenticator throws', async () => {
+  it('answers 503 and logs auth_error when the authenticator throws', async () => {
     const events: RelayLogEvent[] = [];
     relay = createRelay({ authenticator: { authenticate: async () => { throw new Error('secret-detail'); } }, log: (e) => events.push(e) });
     await new Promise<void>((res) => relay!.server.listen(0, '127.0.0.1', res));
     const port = (relay.server.address() as AddressInfo).port;
-    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(401);
+    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(503);
     await relay!.close();
     expect(events).toEqual([{ ev: 'refused', reason: 'auth_error', count: 1 }]);
   });
 
-  it('answers 401 when the authenticator throws synchronously, and keeps serving', async () => {
+  it('answers 503 when the authenticator throws synchronously, and keeps serving', async () => {
     const { port, events } = await start({ authenticator: { authenticate() { throw new Error('x'); } } });
-    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(401);
+    expect(await refused(new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } }))).toBe(503);
     expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
     await relay!.close();
     expect(events).toEqual([{ ev: 'refused', reason: 'auth_error', count: 1 }]);
@@ -264,6 +264,19 @@ describe('relay server', () => {
     late({ accountId: 'A', peer: 'pc' });
     await new Promise((r) => setTimeout(r, 30));
     expect(events.some((e) => e.ev === 'connect')).toBe(false);
+  });
+
+  it('answers 503, not 401, to an upgrade decided while closing', async () => {
+    let release: (w: Who | null) => void = () => {};
+    const authenticator: Authenticator = { authenticate: () => new Promise<Who | null>((r) => { release = r; }) };
+    const { port } = await start({ authenticator });
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { authorization: 'Bearer x' } });
+    const answer = refused(ws);
+    await new Promise((r) => setTimeout(r, 50));
+    const closed = relay!.close();
+    release({ accountId: 'A', peer: 'pc' });
+    expect(await answer).toBe(503);
+    await closed;
   });
 
   it('answers 401 bad_peer when the authenticator returns an invalid peer', async () => {

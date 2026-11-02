@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { readFileSync } from 'node:fs';
 import WebSocket, { WebSocketServer } from 'ws';
 import { RELAY_CLOSE_SIGNED_OUT, type RelayServerMessage } from '@ledge/protocol';
-import { createRelayLink, type LinkState } from '../src/mobile/link.js';
+import { createRelayLink, REPLACED_ERROR, type LinkState } from '../src/mobile/link.js';
 import { paths } from '../src/paths.js';
 import { startTestRelay, TEST_ACCOUNT, type HttpHandler, type RelayControl, type TestRelay } from './mobile-relay-harness.js';
 
@@ -126,6 +126,25 @@ describe('relay link', () => {
     t.clock.advance(5000);
     await settle();
     expect(t.count('connecting')).toBe(1);
+  });
+
+  it('waits 60 s after being replaced by another socket of the same session, instead of taking it back at once', async () => {
+    const r = await relay();
+    const a = link(r.url, r.pcToken);
+    await until(() => a.last()?.state === 'online', 'a online');
+    const b = link(r.url, r.pcToken);
+    await until(() => b.last()?.state === 'online', 'b online');
+    await until(() => a.last()?.state === 'offline', 'a replaced');
+    expect(a.last()).toMatchObject({ state: 'offline', error: REPLACED_ERROR });
+    expect(delayOf(a.last(), a.clock.now())).toBe(60_000);
+    a.clock.advance(59_999);
+    await settle();
+    expect(a.count('connecting')).toBe(1);
+    expect(b.last()?.state).toBe('online');
+    // The other one gone, the wait ends in a normal reconnection.
+    b.l.close();
+    a.clock.advance(1);
+    await until(() => a.count('online') === 2, 'a back online');
   });
 
   it('retries a stopped relay at 1, 2, 4… s, capped at 60 s', async () => {

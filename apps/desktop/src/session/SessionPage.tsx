@@ -18,6 +18,8 @@ import { clampSplit } from './prefs';
 import { ArchivedBanner } from '../manage/ArchivedBanner';
 import type { SessionActions } from '../manage/useSessionActions';
 import { Reply } from './Reply';
+import type { CaptureFocus } from './BrowserTab';
+import { capturesOf } from './captures';
 import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Tags, Thread } from './Thread';
 import { marksOf } from './markers';
@@ -149,6 +151,12 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const openDiff = useCallback((path: string) => openTab({ kind: 'diff', path }), [openTab]);
   const openPlan = useCallback((key: string) => openTab({ kind: 'plan', key }), [openTab]);
   const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', peer }), [openTab]);
+  /* The « Navigateur » tab: every image the thread's tool rows hold, opened on one (a thumbnail) or on the latest (null: the head's button). */
+  const captures = useMemo(() => capturesOf(items ?? []), [items]);
+  const [captureFocus, setCaptureFocus] = useState<CaptureFocus>({ key: null });
+  const openCapture = useCallback((key: string | null) => { setCaptureFocus({ key }); openTab({ kind: 'browser' }); }, [openTab]);
+  const onCapture = useCallback((toolId: string, index: number) => openCapture(`${toolId}:${index}`), [openCapture]);
+  const helperName = useCallback((id: string) => helperOf(session, items, id, t.session.subagent)?.kind, [session, items, t]);
   // Its neighbour takes over: the next one, else the one before. A focus in the pane (or already lost) follows: to the tab
   // now active, else the pane, else (the pane closed) the thread; a focus elsewhere stays where it is.
   const refocus = useRef(false);
@@ -333,6 +341,11 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     follow.current = false;
     setFlash({ id });
   };
+  // « dans le fil » on a capture: its tool row lit, as from the Changes view; the narrow pane closes its tab first.
+  const showCapture = (toolId: string, covered: boolean) => {
+    if (covered && activeTab !== null) closeTab(activeTab);
+    showInThread(toolId);
+  };
   const onScroll = () => {
     const el = scroller.current;
     if (!el || view !== 'thread') return;
@@ -414,9 +427,14 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
           ? <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.handover!.to! })}>{t.handover.relievedBy(session.handover.toName ?? '')}</button>
           : <span className={cls('pane-relief', session.handover.state === 'failed' && 'failed')} role="status">{t.handover.state[session.handover.state]}{session.handover.auto ? ` · ${t.handover.auto}` : ''}{session.handover.reason ? ` : ${session.handover.reason}` : ''}</span>)}
         {session.relieves && <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.relieves!.id })}>{t.handover.relieves(session.relieves.name)}</button>}
-        {(tags || kids.length > 0) && <span className="spacer" />}
+        {(tags || kids.length > 0 || captures.length > 0) && <span className="spacer" />}
         {tags && <Tags tags={tags} />}
         {kids.length > 0 && <><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
+        {captures.length > 0 && (
+          <button type="button" className="kids-pill browser-pill" aria-label={t.session.browser.pill(captures.length)} title={t.session.browser.pill(captures.length)} onClick={() => openCapture(null)}>
+            <Icon d={SHELL_ICONS.browser} size={13} />{t.session.browser.tab}<span className="tab-count mono">{captures.length}</span>
+          </button>
+        )}
       </div>
       {archived && <ArchivedBanner session={session} actions={p.actions} now={now} />}
       <div className={cls('session-split', paneShown && 'has-pane')} style={{ '--split': `${p.split * 100}%`, '--reply-h': `${replyH}px` } as CSSProperties}>
@@ -434,7 +452,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
               {items === undefined ? <p className="thread-note muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
                 : <Thread client={p.client} session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
-                    flash={flash?.id ?? null} onChange={openDiff} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
+                    flash={flash?.id ?? null} onChange={openDiff} onCapture={onCapture} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
                     convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
@@ -458,7 +476,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
             onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} convs={convs}
-            onLight={lightMessage} onOpenPeer={(peer, item) => p.dispatch({ type: 'open', id: peer.id, ...(item !== undefined && { item }) })} />
+            onLight={lightMessage} captures={captures} captureFocus={captureFocus} helperName={helperName} onShowInThread={showCapture} onOpenPeer={(peer, item) => p.dispatch({ type: 'open', id: peer.id, ...(item !== undefined && { item }) })} />
         )}
       </div>
     </section>

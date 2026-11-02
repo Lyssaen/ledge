@@ -313,6 +313,7 @@ export const copy = {
     loading: 'Chargement du fil…', unavailable: 'Fil indisponible hors connexion', empty: 'Aucun échange pour le moment.',
     unknown: 'Cette session n’existe plus sur le PC.', unknownBack: 'Retour aux agents',
     suggestion: 'Suggestion pour la suite',
+    capture: 'Capture',
     agentLabel: 'Réponse de l’agent',
     awaiting: 'Décision attendue · dans « À traiter »', examine: 'Examiner la demande',
     event: {

@@ -4,6 +4,8 @@ import { AttachmentChips } from '../src/images/AttachmentChips';
 import { ImageThumb } from '../src/images/ImageThumb';
 import { Lightbox } from '../src/images/Lightbox';
 
+vi.mock('@ledge/fleet', async importOriginal => ({ ...(await importOriginal<object>()), useImageUrl: () => ({ url: 'blob:t', failed: false }) }));
+
 const item = (over = {}) => ({ key: 'a', url: 'blob:a', width: 1440, height: 900, bytes: 212_345, state: 'ready' as const, ...over });
 
 describe('AttachmentChips', () => {
@@ -74,5 +76,17 @@ describe('Lightbox', () => {
     expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
     unmount();
     expect(document.activeElement).toBe(opener);
+  });
+});
+
+describe('Thumbs onOpen', () => {
+  it('hands the click to onOpen and opens no lightbox', async () => {
+    const { Thumbs } = await import('../src/images/Thumbs');
+    const onOpen = vi.fn();
+    const copy = { capture: 'Capture', unavailable: 'x', close: 'Fermer', prev: 'p', next: 'n' };
+    render(<Thumbs client={{} as never} refs={[{ id: 'a'.repeat(64), mime: 'image/png', width: 100, height: 50, bytes: 10, preview: true }]} route={{ id: 's' }} max={{ w: 420, h: 260 }} who="Nova" at="14:02" lang="fr" copy={copy} alt="Capture" onOpen={onOpen} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Capture' }));
+    expect(onOpen).toHaveBeenCalledWith(0);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

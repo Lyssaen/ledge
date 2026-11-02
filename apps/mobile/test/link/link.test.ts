@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage, RelayServerMessage } from '@ledge/protocol';
 import { fingerprint, generateIdentity } from '@ledge/seal';
-import { createPhoneLink, type LinkState, type PhoneLink } from '../../src/link/link';
+import { createPhoneLink, HELLO_RETRY_MAX_MS, HELLO_WITHIN_MS, type LinkState, type PhoneLink } from '../../src/link/link';
 import { memoryKeys, type KeyStore } from '../../src/link/keys';
 import { PAIRING_TTL_MS } from '../../src/link/pairing';
 import { startFakePc, type FakePc } from '../fakePc';
@@ -185,6 +185,44 @@ describe('PhoneLink', () => {
     await until(() => link.pairing()?.state().step === 'committing', 'committing again');
     await settle();
     expect(commits()).toBe(2);
+  });
+
+  it.each([
+    ['the PC reconnecting', async (pc: FakePc) => { await pc.disconnect(); await pc.reconnect(); }],
+    // A new socket of the phone: its welcome finds the PC online, a pair_ok sent meanwhile was lost.
+    ['the phone\'s socket lost', async (pc: FakePc) => { pc.phoneSockets[pc.phoneSockets.length - 1]!.close(); }]
+  ] as const)('a code shown, the PC\'s yes not in, then %s → a new pairing, a new commit', async (_, awayAndBack) => {
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const { link, commits } = recording(pc);
+    link.startPairing();
+    await until(() => link.pairing()?.state().step === 'compare', 'compare');
+    const first = link.pairing();
+    const again = pc.waitFor('pair_commit');
+    await awayAndBack(pc);
+    await again;
+    await until(() => link.pairing() !== first && link.pairing()?.state().step === 'compare', 'a new compare');
+    expect(link.state()).toBe('pairing');
+    expect(commits()).toBe(2);
+  });
+
+  it('a code shown and the PC\'s yes in, then the PC reconnecting → the same pairing, no new commit', async () => {
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const { link, commits } = recording(pc);
+    link.startPairing();
+    await until(() => link.pairing()?.state().step === 'compare', 'compare');
+    const first = link.pairing();
+    pc.ok();
+    await until(() => { const p = link.pairing()!.state(); return p.step === 'compare' && p.pcConfirmed; }, 'pcConfirmed');
+    await pc.disconnect();
+    await until(() => link.reach() === 'pc_offline', 'pc_offline');
+    await pc.reconnect();
+    await until(() => link.reach() === 'pc_online', 'pc_online');
+    await settle();
+    expect(link.pairing()).toBe(first);
+    expect(link.pairing()!.state()).toMatchObject({ step: 'compare', pcConfirmed: true });
+    expect(commits()).toBe(1);
   });
 
   it('a pairing with the relay out of reach → relay_unreachable, no commit; « Réessayer » once it is reachable → the commit', async () => {
@@ -480,6 +518,50 @@ describe('PhoneLink', () => {
     await settle();
     expect(pc.frames.filter((f) => f.k === 'hello')).toHaveLength(1);
     expect(pc.sent.filter((f) => f.k === 'rekey')).toEqual([]);
+    expect(link.state()).toBe('ready');
+  });
+
+  it('a hello left unanswered → said again after 10, 20, 40, 60, 60 s; once answered, ready and no more', async () => {
+    // Real time runs on too (the sockets need it): each wait is checked a second short of its end, not to the millisecond.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    const identity = await generateIdentity();
+    const pc = await startFakePc({ devicePublicKey: identity.publicKey });
+    cleanups.push(() => pc.close());
+    const keys = memoryKeys(null);
+    await keys.saveIdentity(identity);
+    await keys.pin({ publicKey: pc.identity.publicKey, fingerprint: await fingerprint(pc.identity.publicKey), name: null, pinnedAt: '2026-10-20T08:00:00.000Z' });
+    // The relay takes the hellos, the PC never gets them: no answer comes.
+    let mute = true;
+    let hellos = 0;
+    const Mute = class extends pc.PhoneWebSocket {
+      override send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+        const m = JSON.parse(String(data)) as { body?: string };
+        if (m.body && (JSON.parse(m.body) as { k: string }).k === 'hello') {
+          hellos++;
+          if (mute) return;
+        }
+        super.send(data);
+      }
+    } as typeof WebSocket;
+    const link = createPhoneLink({ keys, url: pc.url, WebSocketImpl: Mute, fetchImpl: authStub().fetchImpl });
+    cleanups.push(() => link.close());
+    await until(() => hellos === 1, 'the first hello');
+    expect(link.state()).toBe('handshaking');
+    let n = 1;
+    for (const wait of [HELLO_WITHIN_MS, 2 * HELLO_WITHIN_MS, 4 * HELLO_WITHIN_MS, HELLO_RETRY_MAX_MS, HELLO_RETRY_MAX_MS]) {
+      vi.advanceTimersByTime(wait - 1_000);
+      await settle();
+      expect(hellos).toBe(n);
+      vi.advanceTimersByTime(1_000);
+      await until(() => hellos === n + 1, `hello #${n + 1}`);
+      n++;
+    }
+    mute = false;
+    vi.advanceTimersByTime(HELLO_RETRY_MAX_MS);
+    await until(() => link.state() === 'ready', 'ready');
+    vi.advanceTimersByTime(2 * HELLO_RETRY_MAX_MS);
+    await settle();
+    expect(hellos).toBe(n + 1);
     expect(link.state()).toBe('ready');
   });
 

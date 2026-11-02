@@ -37,7 +37,7 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
 /** What a daemon answers about OpenRig's roles: the list, each role by library id, each file by absolute path. */
 export interface FakeRoles { list: RoleSummary[]; details: Record<string, RoleDetail>; files: Record<string, string>; openrigVersion?: string }
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; openrig?: OpenRigState; rigSpecs?: RigSpec[]; roles?: FakeRoles } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; openrig?: OpenRigState; rigSpecs?: RigSpec[]; /** Images the daemon already holds, by id (no preview: a preview get is served the whole image). */ images?: Record<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }>; roles?: FakeRoles } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -48,7 +48,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let up = true;
   let launches = 0;
   const turns = new Map<string, ChatTurn>();
-  const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>();
+  const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>(Object.entries(extras.images ?? {}).map(([id, i]) => [id, { ...i, preview: false }]));
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
