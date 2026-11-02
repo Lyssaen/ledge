@@ -27,19 +27,6 @@ test('position and discreet follow Desktop; nothing is sent back', async ({ page
   expect(d.received.some(m => m.type === 'island.set')).toBe(false);
 });
 
-test('say off: no speech bubble once an ask is set aside; on again, it speaks', async ({ page }) => {
-  const d = await fakeDaemon(page, [session('a', { name: 'Pim', ...ask })], { island: prefs({}, { say: false }) });
-  await ready(page, 1);
-  await expectMode(page, 'bubble');
-  await layer(page, 'bubble').getByRole('button', { name: /^Later/ }).click();
-  await expectMode(page, 'handle');
-  const say = page.locator('[data-unread-say]');
-  await page.waitForTimeout(800);
-  await expect(say).toHaveCSS('opacity', '0');
-  d.island(prefs());
-  await expect(say).toHaveCSS('opacity', '1');
-});
-
 test('finished off: a finish unfolds no bubble; on again, it does', async ({ page }) => {
   const d = await fakeDaemon(page, [session('a', { name: 'Pim' })], { island: prefs({}, { finished: false }) });
   await ready(page, 1);

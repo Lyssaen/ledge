@@ -40,11 +40,11 @@ test('one project, common chat clarification, remote confirmation and disconnect
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expectMode(page, 'handle');
-  await expect(layer(page, 'handle').getByRole('button', { name: /^Nova/ })).toHaveCount(0);
-  await expect(layer(page, 'handle').getByRole('button', { name: /^Otto/ })).toBeVisible();
+  // The remote machine's session leaves Ledge's count; the notch itself shows Ledge alone.
+  await expect(layer(page, 'handle').locator('[data-resident]')).toHaveAttribute('title', /^1 session/);
 });
 
-test('the folded notch puts a hairline before each machine', async ({ page }) => {
+test('the folded notch is Ledge alone, whatever the machines', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('ledge.machines', JSON.stringify([
     { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' },
     { id: 'server', label: 'dev-server', url: 'ws://127.0.0.1:47832', ssh: 'dev-server' }
@@ -54,17 +54,7 @@ test('the folded notch puts a hairline before each machine', async ({ page }) =>
     ws.send(JSON.stringify({ type: 'snapshot', sshAlias: 'dev-server', sessions: [session('r', { name: 'Nova', state: 'idle' })] }));
   });
   await ready(page, 3);
-  const handle = layer(page, 'handle');
-  await expect(surface(page)).toHaveCSS('width', `${filetWidth([2, 1])}px`);
-  await expect.poll(() => handle.evaluate(el => {
-    const out: string[] = [];
-    const walk = (node: Element) => {
-      if (node.hasAttribute('data-machine-separator')) { out.push('|'); return; }
-      if (node.hasAttribute('data-resident')) { out.push('ledge'); return; }
-      if (node.tagName === 'BUTTON' && !node.querySelector('[data-update-pip]')) { out.push(node.getAttribute('aria-label')!.split(' ')[0]!); return; }
-      for (const child of node.children) walk(child);
-    };
-    for (const child of el.children) walk(child);
-    return out;
-  })).toEqual(['ledge', '|', 'Ida', 'Kai', '|', 'Nova']);
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth()}px`);
+  await expect(layer(page, 'handle').locator('button')).toHaveCount(1);
+  await expect(layer(page, 'handle').locator('[data-machine-separator]')).toHaveCount(0);
 });

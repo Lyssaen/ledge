@@ -8,6 +8,12 @@ const reading: ReadingEntry = { reference: { path: '/w/README.md' }, loading: fa
 const document = { type: 'document.content' as const, requestId: 'r', path: '/w/README.md', text: '# Title\n\nHello', bytes: 14, modifiedAt: '2026-10-11T00:00:00Z' };
 const props = { originName: 'Otto', theme: 'dark' as const, expanded: false, onBack: vi.fn(), onClose: vi.fn(), onExpand: vi.fn(), onReload: vi.fn(), onDocument: vi.fn(), reading, onReading: vi.fn() };
 describe('DocumentView', () => {
+  it('scrolls its page inside the height it is given (an open view is half the screen at most)', () => {
+    const long = { ...document, text: Array.from({ length: 200 }, (_, i) => `Line ${i}`).join('\n\n') };
+    const view = render(<LangProvider lang="fr"><DocumentView {...props} state={{ status: 'ready', document: long }} /></LangProvider>);
+    const page = view.container.querySelector('[data-scroll]') as HTMLElement;
+    expect(page).toHaveStyle({ height: '100%', overflowY: 'auto' });
+  });
   it('shows a contents panel and exact source', () => {
     const view = render(<LangProvider lang="fr"><DocumentView {...props} state={{ status: 'ready', document }} /></LangProvider>);
     expect(screen.getByRole('heading', { name: 'Title' })).toBeInTheDocument();

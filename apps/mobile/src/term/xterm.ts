@@ -45,7 +45,19 @@ export function createXterm(host: HTMLElement): XtermScreen {
   term.open(host);
   let input = false;
   const datas: Array<(d: string) => void> = [];
-  term.onData(d => { if (input) for (const fn of datas) fn(d); });
+  const emit = (d: string) => { if (input) for (const fn of datas) fn(d); };
+  term.onData(emit);
+  // In screen reader mode xterm drops text the phone's keyboard puts in without a key. Samsung's keyboard does just that on
+  // a symbol: it takes the word back (Backspaces, which xterm sends) then types the word and the symbol again as text alone,
+  // so the line was erased and the symbol lost. That text is typed here, as xterm itself does outside that mode.
+  let keyDown = false;
+  const ta = term.textarea;
+  ta?.addEventListener('keydown', () => { keyDown = true; }, true);
+  ta?.addEventListener('keyup', () => { keyDown = false; }, true);
+  ta?.addEventListener('input', e => {
+    const ev = e as InputEvent;
+    if (ev.inputType === 'insertText' && ev.data && (!ev.composed || !keyDown)) emit(ev.data);
+  });
   const cellWidth = () => {
     const core = (term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { width?: number } } } } } })._core;
     return core?._renderService?.dimensions?.css?.cell?.width || term.options.fontSize! * CELL_RATIO;
