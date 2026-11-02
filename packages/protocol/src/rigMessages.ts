@@ -180,12 +180,16 @@ export function parseRigPrompt(prompt: string, at: string): RigBlock[] | undefin
     let j = i + 2;
     const sent = j < lines.length ? SENT.exec(lines[j]!) : null;
     if (sent) j++;
-    // the body: from the `---` after the header to the `---` right before a footer
+    // The body: from the `---` after the header to the `---` right before its own footer. Headers and footers pair like
+    // brackets: a whole envelope quoted in a message closes on its own footer and stays in the body. With no footer of its
+    // own left at the end, the envelope was cut short: it ends at the first whole header inside it (the next envelope).
     let end = -1, footer = '', glued = '';
     if (lines[j] === '---') {
+      let depth = 0;
       for (let k = j + 1; k + 1 < lines.length; k++) {
-        if (headerAt(lines, k)) break; // the next envelope: this one has no end
+        if (headerAt(lines, k)) { depth++; continue; }
         if (lines[k] !== '---' || !lines[k + 1]!.startsWith('↩ ')) continue;
+        if (depth > 0) { depth--; k++; continue; } // a quoted envelope's footer
         const f = lines[k + 1]!;
         const m = FOOTERS.map(re => re.exec(f)).find(Boolean);
         footer = m ? m[0] : f; glued = m ? f.slice(m[0].length) : '';

@@ -126,6 +126,15 @@ You are parked (arbitrated: idle at prompt) while holding 1 open obligation: qit
     expect(one(quoted)).toMatchObject({ kind: 'message', body: 'Voici le message précédent :\nFrom: other@rig\nTo: pilot@rig\nÇa disait : on y va.' });
     // a quoted header with its Sent line, but no `---` after it: still the body
     expect(one(lead('Cité :\nFrom: other@rig\nTo: pilot@rig\nSent: 11-02 19:00Z\nfin'))).toMatchObject({ kind: 'message' });
+    // a whole envelope quoted in a message: the message's body, its sender the real one
+    const inner = `From: other@rig\nTo: pilot@rig\nSent: 11-02 19:00Z · gen 11111111\n---\nLe texte cité\n---\n↩ Reply: rig send other@rig "..."`;
+    const outer = `From: pilot@rig\nTo: dev@rig\nSent: 11-02 19:05Z · gen 22222222\n---\nVoici le message cité :\n${inner}\nMerci de vérifier.\n---\n↩ Reply: rig send pilot@rig "..."`;
+    expect(parseRigPrompt(outer, AT)).toEqual([expect.objectContaining({ kind: 'message', from: 'pilot@rig', body: `Voici le message cité :\n${inner}\nMerci de vérifier.`, raw: outer })]);
+    // the same, followed by a second envelope: two messages
+    expect(parseRigPrompt(`${outer}\n${lead('suite')}`, AT)!.map(x => x.kind !== 'text' && x.kind !== 'unreadable' ? x.from : x.kind)).toEqual(['pilot@rig', 'pilot-lead@ledge-dev-2']);
+    // cut short, then two whole envelopes: the cut one ends at the first
+    const cut0 = 'From: a@rig\nTo: b@rig\nSent: 11-02 19:00Z\n---\nQueue handoff: qitem-1';
+    expect(parseRigPrompt(`${cut0}\n${inner}\n${lead('suite')}`, AT)!.map(x => x.kind !== 'text' && x.kind !== 'unreadable' ? x.from : x.kind)).toEqual(['unreadable', 'other@rig', 'pilot-lead@ledge-dev-2']);
     // cut short, then a whole envelope (with or without Sent)
     const cut = 'From: a@rig\nTo: b@rig\nSent: 11-02 19:00Z\n---\nQueue handoff: qitem-1';
     expect(parseRigPrompt(`${cut}\n${lead('suite')}`, AT)!.map(x => x.kind)).toEqual(['unreadable', 'message']);

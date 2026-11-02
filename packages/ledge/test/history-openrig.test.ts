@@ -73,6 +73,14 @@ describe('OpenRig in a seat\'s thread', () => {
     expect(h.items('s').slice(1).map(i => (i.kind === 'notice' ? i.rig?.packet : null))).toEqual([{ id: 'rig-1', index: 0, count: 2 }, { id: 'rig-1', index: 1, count: 2 }]);
   });
 
+  it('keeps a whole envelope quoted in a message inside that message\'s bubble', () => {
+    const h = new History();
+    const inner = envelope('other@rig', 'Le texte cité', 'Sent: 11-02 19:00Z · gen 11111111', 'pilot-lead@ledge-dev-2');
+    h.record('s', prompt(paste(envelope('pilot-lead@ledge-dev-2', `Voici le message cité :\n${inner}\nMerci de vérifier.`))));
+    expect(h.items('s')).toHaveLength(1);
+    expect(h.items('s')[0]).toMatchObject({ kind: 'received', from: 'pilot-lead@ledge-dev-2', text: `Voici le message cité :\n${inner}\nMerci de vérifier.` });
+  });
+
   it('leaves the user\'s prompts alone', () => {
     const h = new History();
     h.record('s', prompt('Corrige le test'));
