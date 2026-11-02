@@ -23,7 +23,7 @@ export const HandoverSchema = z.object({
   /** The relief, once launched. */
   to: z.string().optional(), toName: z.string().optional(),
   reason: z.string().optional(),
-  /** Started by Ledge itself (a seat working without asking), not by the user. */
+  /** Started by Ledge itself (a session working without asking), not by the user. */
   auto: z.literal(true).optional()
 });
 export type Handover = z.infer<typeof HandoverSchema>;

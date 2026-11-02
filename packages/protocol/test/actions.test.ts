@@ -16,7 +16,7 @@ describe('the action registry', () => {
     expect(ActionRiskSchema.safeParse(riskOf(a, a.example)).success).toBe(true);
   });
   it('finds an action by id, and nothing for an unknown one', () => {
-    expect(actionById('team.dissolve')?.risk).toBe('destructive');
+    expect(actionById('task.cancel')?.risk).toBe('destructive');
     expect(actionById('session.kill')).toBeUndefined();
   });
   it('makes accepting a request destructive and refusing it reversible', () => {
@@ -29,11 +29,11 @@ describe('the action registry', () => {
   });
   it('asks a phone for its device check before every destructive action', () => {
     for (const a of ACTIONS) if (riskOf(a, a.example) === 'destructive') expect(a.phone, a.id).not.toBeNull();
-    expect(ACTIONS.filter(a => a.card === 'generic' && a.phone).map(a => a.phone)).toEqual(['act', 'act', 'act', 'act', 'act', 'act']);
+    expect(ACTIONS.filter(a => a.card === 'generic' && a.phone).map(a => a.phone)).toEqual(['act', 'act', 'act', 'act']);
   });
-  it('keeps the six earlier cards on their own card', () => {
+  it('keeps the five earlier cards on their own card', () => {
     expect(Object.fromEntries(ACTIONS.filter(a => a.card !== 'generic').map(a => [a.id, a.card]))).toEqual({
-      'session.launch': 'launch', 'session.relay': 'relay', 'session.close': 'close', 'project.propose': 'project', 'team.launch': 'team', 'task.give': 'task'
+      'session.launch': 'launch', 'session.relay': 'relay', 'session.close': 'close', 'project.propose': 'project', 'task.give': 'task'
     });
   });
 });
@@ -44,13 +44,12 @@ describe('parseActionBlock', () => {
     expect(r).toMatchObject({ action: { id: 'session.model' }, args: { session: 'Nova', model: 'claude-opus-5-5', effort: null } });
   });
   it('reads each earlier fence as its action', () => {
-    expect(Object.entries(LEGACY_FENCE_ACTION)).toHaveLength(6);
+    expect(Object.entries(LEGACY_FENCE_ACTION)).toHaveLength(5);
     expect(parseActionBlock('close', '{"session": "s1"}')).toMatchObject({ action: { id: 'session.close' }, args: { session: 's1' } });
     expect(parseActionBlock('session', '{"cwd": "/a"}')).toMatchObject({ action: { id: 'session.launch' }, args: { cwd: '/a' } });
-    expect(parseActionBlock('team', '{"cwd": "/a", "template": "dev"}')).toMatchObject({ action: { id: 'team.launch' } });
   });
   it('trims the args as their schema says', () => {
-    expect(parseActionBlock('action', '{"action": "team.dissolve", "args": {"team": " team-3fa2 "}}')).toMatchObject({ args: { team: 'team-3fa2' } });
+    expect(parseActionBlock('action', '{"action": "task.cancel", "args": {"task": " t91b0d4 "}}')).toMatchObject({ args: { task: 't91b0d4' } });
   });
   it.each([
     ['not JSON', 'action', '{"action":', 'invalid JSON'],

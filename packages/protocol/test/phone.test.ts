@@ -163,11 +163,11 @@ describe('phone device confirmation (lot 6a)', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'confirm.challenge', purpose: 'decide', challenge: 'abc_-', rpId: 'relay.example', credentialId: 'AbC', expiresInMs: 60_000 })).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'confirm.challenge', purpose: 'register', challenge: 'abc', rpId: 'relay.example', expiresInMs: 0 })).toThrow();
   });
-  it('a confirm.challenge may echo the digest of its prepare, a 64-hex string, and keeps it', () => {
-    const base = { type: 'confirm.challenge', purpose: 'define', challenge: 'abc', rpId: 'relay.example', credentialId: 'AbC', expiresInMs: 60_000 };
-    expect(PhoneServerMessageSchema.parse({ ...base, digest: 'a'.repeat(64) })).toMatchObject({ digest: 'a'.repeat(64) });
-    expect(() => PhoneServerMessageSchema.parse({ ...base, digest: 'nope' })).toThrow();
-    expect(() => PhoneServerMessageSchema.parse(base)).not.toThrow();
+  it('no longer knows the define and team purposes of the role and team catalog', () => {
+    const base = { type: 'confirm.challenge', challenge: 'abc', rpId: 'relay.example', credentialId: 'AbC', expiresInMs: 60_000 };
+    expect(() => PhoneServerMessageSchema.parse({ ...base, purpose: 'define' })).toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ ...base, purpose: 'team' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'teams.catalog' })).toThrow();
   });
   it('still parses a lot 5 snapshot and takes the new fields', () => {
     expect(() => PhoneServerMessageSchema.parse(snap)).not.toThrow();
@@ -253,14 +253,14 @@ describe('phone chat', () => {
     expect(ConfirmPurposeSchema.parse('close')).toBe('close');
   });
   it('carries the generic rows without their args, strictly', () => {
-    const row = { action: 'team.dissolve', summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
+    const row = { action: 'task.cancel', summary: 'Annuler **Pagination**', risk: 'destructive', session: 's1' };
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [row] })).not.toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused' }] })).not.toThrow();
-    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { team: 'team-3fa2' } }] })).toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, args: { task: 't91b0d4' } }] })).toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, error: 'boom' }] })).toThrow();
     expect(ConfirmPurposeSchema.parse('act')).toBe('act');
     // Its words for the phone's own language, a cut detail, an error as a code, an action this PWA does not know yet.
-    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, action: 'team.later', vars: { team: 'api' }, detail: 'x…', detailCut: true, state: 'failed', code: 'failed' }] })).not.toThrow();
+    expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, action: 'task.later', vars: { task: 'api' }, detail: 'x…', detailCut: true, state: 'failed', code: 'failed' }] })).not.toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ ...row, code: 'x'.repeat(41) }] })).toThrow();
   });
   it('carries an ignored turn, and chat.ignore', () => {
@@ -276,7 +276,7 @@ describe('phone chat', () => {
     expect(PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, rows: [0], deny: true })).toMatchObject({ deny: true });
     expect(() => PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, deny: false })).toThrow();
     expect(() => PhoneChatTurnSchema.parse({ ...turn, actions: [{ action: 'session.decide', summary: 'Accepter', risk: 'destructive', state: 'denied', doneAt: '2026-10-20T10:00:00.000Z' }] })).not.toThrow();
-    expect(PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, args: { team: 'x' } })).not.toHaveProperty('args');
+    expect(PhoneClientMessageSchema.parse({ type: 'chat.act', op: OP, qid: QID, args: { task: 'x' } })).not.toHaveProperty('args');
   });
   it('checks the chat.close client message', () => {
     const assertion = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' };
@@ -354,17 +354,9 @@ describe('phone model change', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'session.model.failed', id: 's1', reason: 'restart_failed' })).not.toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'session.model.failed', id: 's1', reason: 'boom' })).toThrow();
   });
-  it('an operation result may be scheduled and carry seat models', () => {
+  it('an operation result may be scheduled', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', reason: 'scheduled' })).not.toThrow();
-    expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'leader', session: 's1', status: 'scheduled' }] })).not.toThrow();
-    expect(() => PhoneServerMessageSchema.parse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'r', session: 's', status: 'refused', reason: 'not_running' }] })).not.toThrow();
     expect(OperationReasonSchema.options).toContain('restart_failed');
-  });
-  it('a seat model is bounded like a role id and a session id', () => {
-    const seat = (x: object) => PhoneServerMessageSchema.safeParse({ type: 'operation.result', op: OP, status: 'applied', models: [{ role: 'r', session: 's', status: 'applied', ...x }] }).success;
-    expect(seat({ role: 'r'.repeat(40), session: 's'.repeat(100) })).toBe(true);
-    expect(seat({ role: 'r'.repeat(41) })).toBe(false);
-    expect(seat({ session: 's'.repeat(101) })).toBe(false);
   });
   it('the snapshot announces the model change', () => {
     expect(() => PhoneServerMessageSchema.parse({ type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps, omp: caps }, daemon: { version: '1.0.0', name: 'pc', models: true } })).not.toThrow();

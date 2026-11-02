@@ -492,21 +492,20 @@ describe('protocol: model and effort (#58)', () => {
     expect(() => parseServerMessage({ ...acted, failed: [{ row: 1, message: 'x', refused: false }] })).toThrow();
   });
   it('action.run names a registry action and its args, by a session or the user; action.result answers it with the row or why not', () => {
-    const run = { type: 'action.run', rid: 'r1', by: 's1', action: 'team.dissolve', args: { team: 'api' }, confirmed: true };
+    const run = { type: 'action.run', rid: 'r1', by: 's1', action: 'task.cancel', args: { task: 't91b0d4' }, confirmed: true };
     expect(parseClientMessage(run)).toEqual(run);
-    expect(parseClientMessage({ type: 'action.run', rid: 'r1', action: 'team.resume', args: { team: 'api' } })).not.toHaveProperty('by');
+    expect(parseClientMessage({ type: 'action.run', rid: 'r1', action: 'session.resume', args: { session: 'Nova' } })).not.toHaveProperty('by');
     expect(() => parseClientMessage({ ...run, action: 'session.kill' })).toThrow();
     expect(() => parseClientMessage({ ...run, confirmed: false })).toThrow();
-    const row = { action: 'team.dissolve', args: { team: 'team-3fa2' }, summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
-    const done = { type: 'action.result', rid: 'r1', action: 'team.dissolve', row };
+    const row = { action: 'task.cancel', args: { task: 't91b0d4' }, summary: 'Annuler **Pagination**', risk: 'destructive' };
+    const done = { type: 'action.result', rid: 'r1', action: 'task.cancel', row };
     expect(parseServerMessage(done)).toEqual(done);
-    const refused = { type: 'action.result', rid: 'r1', action: 'team.dissolve', row, reason: 'confirm', code: 'confirm_required' };
+    const refused = { type: 'action.result', rid: 'r1', action: 'task.cancel', row, reason: 'confirm', code: 'confirm_required' };
     expect(parseServerMessage(refused)).toEqual(refused);
-    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'team.save', path: '/h/.ledge/teams/api.yaml' })).toMatchObject({ path: '/h/.ledge/teams/api.yaml' });
-    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'team.save', reason: 'x', code: 'something-newer' })).toMatchObject({ code: 'something-newer' });
+    expect(parseServerMessage({ type: 'action.result', rid: 'r1', action: 'task.cancel', reason: 'x', code: 'something-newer' })).toMatchObject({ code: 'something-newer' });
   });
   it('chat.done and a turn carry the generic rows, one to eight, each a registry action', () => {
-    const row = { action: 'team.dissolve', args: { team: 'team-3fa2' }, summary: 'Dissoudre **api**', risk: 'destructive', team: 'team-3fa2' };
+    const row = { action: 'task.cancel', args: { task: 't91b0d4' }, summary: 'Annuler **Pagination**', risk: 'destructive' };
     expect(parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [row] })).toMatchObject({ actions: [row] });
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: [] })).toThrow();
     expect(() => parseServerMessage({ type: 'chat.done', qid: 'q1', text: 'ok', at: T0, actions: Array(9).fill(row) })).toThrow();
@@ -518,7 +517,7 @@ describe('protocol: model and effort (#58)', () => {
     const turn = { qid: 'q1', question: '?', askedAt: T0, steps: [] };
     expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'done', doneAt: T0 }] }).actions?.[0]?.state).toBe('done');
     // Refused: nothing was sent (a target changed, a request answered meanwhile); failed: sent, and it went wrong.
-    expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused', error: 'unknown team' }] }).actions?.[0]?.state).toBe('refused');
+    expect(ChatTurnSchema.parse({ ...turn, actions: [{ ...row, state: 'refused', error: 'unknown task' }] }).actions?.[0]?.state).toBe('refused');
   });
   it('a generic row carries its words for each front (vars), a cut detail and an error code', () => {
     const row = { action: 'session.decide', args: { session: 's1', decision: 'deny' }, summary: 'Refuser la demande de plan de **Nova**', risk: 'reversible',

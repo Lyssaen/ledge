@@ -34,8 +34,6 @@ export const TaskSchema = z.object({
   owner: z.string(), ownerName: z.string(),
   state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']),
   result: z.string().optional(),
-  /** The live team its owner sat in when it was given (or passed), so a team's tasks can be listed. */
-  team: z.string().optional(),
   /** A task Ledge gave and the user put away from « À toi » once closed. */
   seen: z.boolean().optional(),
   at: z.string(), updatedAt: z.string(),
@@ -58,14 +56,14 @@ export const taskClosed = (t: Pick<Task, 'state'>): boolean => t.state === 'done
 export const openDecision = (t: Pick<Task, 'owner' | 'state'>): boolean => t.owner === LEDGE_GIVER && !taskClosed(t);
 
 /** `ledge task …`, as its session `by`; a front (Desktop, the TUI, the phone, the chat's card) gives as `ledge`.
- *  `cancel`: by its giver, or by Ledge for any task. `seen` (Ledge only) puts a closed task of Ledge's away from « À toi ». `team` filters a `list`; `qid` and `row` name
+ *  `cancel`: by its giver, or by Ledge for any task. `seen` (Ledge only) puts a closed task of Ledge's away from « À toi ». `qid` and `row` name
  *  the chat's task card a `give` comes from, which then follows its task. */
 export const TaskCmdSchema = z.object({
   type: z.literal('task.cmd'), rid: z.string().min(1), by: z.string().min(1),
   op: z.enum(['give', 'take', 'done', 'refuse', 'pass', 'show', 'list', 'seen', 'cancel']),
   task: z.string().min(1).max(40).optional(), to: z.string().min(1).optional(),
   title: z.string().min(1).max(TASK_TITLE_MAX).optional(), text: z.string().max(TASK_TEXT_MAX).optional(), all: z.boolean().optional(),
-  team: z.string().min(1).max(40).optional(), qid: z.string().min(1).optional(), row: z.number().int().min(0).max(7).optional()
+  qid: z.string().min(1).optional(), row: z.number().int().min(0).max(7).optional()
 });
 /** Every change of every task, to every local front (issue #92); a task Ledge gave never has its outcome typed into a terminal (roles spec §3.7). */
 export const TaskUpdatedSchema = z.object({ type: z.literal('task.updated'), task: TaskSchema });

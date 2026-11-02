@@ -6,30 +6,6 @@ export const ToolSchema = z.enum(['claude', 'codex', 'cursor', 'omp']);
 export const OmpApprovalSchema = z.enum(['always-ask', 'write', 'yolo']);
 export type OmpApproval = z.infer<typeof OmpApprovalSchema>;
 export type Tool = z.infer<typeof ToolSchema>;
-/** How far a seat may go without asking (spec 2026-10-25 roles §3.1): each agent's own permission switch at launch,
- *  never Ledge answering in its place. `ask` adds nothing. */
-export const AutonomySchema = z.enum(['ask', 'edits', 'auto']);
-export type Autonomy = z.infer<typeof AutonomySchema>;
-
-/**
- * Each agent's own permission switch for an autonomy (spec §3.1), added at launch and kept by a resume. Ledge never
- * answers a prompt in the agent's place: what the agent still asks lands in « À toi ».
- */
-export function autonomyArgs(tool: Tool, autonomy: Autonomy | undefined): string[] {
-  if (!autonomy || autonomy === 'ask') return [];
-  switch (tool) {
-    case 'claude': return ['--permission-mode', autonomy === 'edits' ? 'acceptEdits' : 'auto'];
-    case 'codex': return autonomy === 'edits' ? ['--ask-for-approval', 'on-request'] : ['--ask-for-approval', 'never', '--sandbox', 'workspace-write'];
-    case 'cursor': return autonomy === 'auto' ? ['--force'] : [];
-    case 'omp': return [];
-  }
-}
-
-/** OMP's approval mode for an autonomy: it has no switch of its own beyond these. */
-export function ompApprovalFor(autonomy: Autonomy | undefined): OmpApproval | undefined {
-  return autonomy === 'auto' ? 'yolo' : autonomy ? 'always-ask' : undefined;
-}
-
 /** How Ledge drives a session's agent: through a tmux pane (Claude Code, Codex, Cursor Agent), or through the agent's own
  *  JSONL protocol with the daemon owning the process (OMP, spec 2026-10-20 §4). A session without it is a tmux one. */
 export const BackendSchema = z.enum(['tmux', 'omp-rpc']);
@@ -128,16 +104,6 @@ export const SessionSchema =z.object({
   effort: z.string().optional(),
   /** OMP: the approval mode it was launched with, kept by a resume; left out, `always-ask`. */
   approval: OmpApprovalSchema.optional(),
-  /** The role it was launched with or took in a team (spec 2026-10-25 roles §3.3): its id, its label as it was then. */
-  role: z.string().optional(), roleLabel: z.string().optional(),
-  /** The live team it sits in (`team-…`); left out, the project's common table. */
-  team: z.string().optional(),
-  /** The name of the team it was last taken out of (a leave, a dissolution, a seat in another team): a refused `@role` says so. */
-  teamLeft: z.string().optional(),
-  /** Its team as it was last told it (`seatKey`): its next turn is told again when the team has changed since. */
-  teamSeen: z.string().optional(),
-  /** Its role's autonomy, as launched (kept by a resume); left out, `ask`. */
-  autonomy: AutonomySchema.optional(),
   /** Its context as its agent last reported it, after a turn (context handover spec §3.1); left out, not measured. */
   context: ContextSchema.optional(),
   /** Its relief by a fresh session (§3.3): asked, launched, done or failed. */
