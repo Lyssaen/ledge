@@ -499,7 +499,9 @@ export const claudeAdapter: Adapter = {
     const n = optionNumber(flat, pending);
     if (n !== null) return pick(n, pane ? parseDialog(pane) : null);
     if (pending?.kind === 'question') return freeTextPlan(flat, pane);
-    return submit(flat);
+    // `/name` alone keeps Claude Code's command menu open, and Enter would run its highlighted entry (`/pla` runs `/plan`):
+    // a space after it closes the menu, and the command runs as typed (2.1.x, seen in tmux).
+    return submit(/^\/\S+$/.test(flat) ? `${flat} ` : flat);
   },
   interruptKeys: () => ['Escape'],
   // `/exit` quits Claude Code 2.1.x, also after a typed draft was cleared with Ctrl+U (seen in tmux).

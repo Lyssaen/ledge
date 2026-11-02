@@ -13,6 +13,7 @@ export * from './names.js';
 export * from './proposal.js';
 export * from './repos.js';
 export * from './models.js';
+export * from './commands.js';
 export * from './openrig.js';
 export * from './openrigRoles.js';
 export * from './scan.js';

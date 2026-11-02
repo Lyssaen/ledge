@@ -39,6 +39,7 @@ import { readProjects, writeProjects } from './projects.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
+import { claudeSlashRefusal, createCommands, type Commands } from './commands.js';
 import { createOpenRig, type OpenRig } from './openrig.js';
 import type { OpenRigState } from '@ledge/protocol';
 import { createRelay, free } from './relay.js';
@@ -180,7 +181,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; openrig?: OpenRig; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -258,6 +259,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (role && store.get(id)?.rig?.seat === seat) store.patch(id, { rig: { seat, name, role } });
     }).catch(e => log(`openrig: seat ${seat} not read: ${(e as Error).message}`));
   };
+  const commands = opts.commands ?? createCommands({ env: agentEnv, ...(opts.claudeBin ? { claudeBin: opts.claudeBin } : {}) });
   const models = opts.models ?? createModels({ env: agentEnv, omp: async () => ompChoices(await omp.catalog(opts.home ?? homedir())) });
   const token = await ensureDaemonToken();
   const httpServer = createServer(unauthorized);
@@ -343,7 +345,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
   ] : [];
   // Mobile access: local fronts only, never a remote peer.
-  const unsubscribeMobile = mobile?.onChange(() => broadcast({ type: 'mobile', state: mobile.state() }));
+  // A change of « Taper dans les terminaux » reaches the gateway: turned off, the phones lose the hand; each hears the new setting.
+  let terminalInput = mobile?.state().terminalInput === true;
+  const unsubscribeMobile = mobile?.onChange(() => {
+    const state = mobile.state();
+    broadcast({ type: 'mobile', state });
+    if ((state.terminalInput === true) !== terminalInput) { terminalInput = state.terminalInput === true; gateway?.terminalInputChanged(); }
+  });
+  /** The sessions a phone types into, by the device's label: Desktop shows « Téléphone au clavier ». */
+  const terminalHolders = new Map<string, string>();
+  const holdersMsg = (): ServerMessage => ({ type: 'terminal.holders', holds: [...terminalHolders].map(([id, deviceId]) => ({ id, device: mobile?.state().devices.find(d => d.id === deviceId)?.label ?? deviceId })) });
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
@@ -425,11 +436,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, broadcast: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, broadcast: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
-    if (mobile) reply({ type: 'mobile', state: mobile.state() }); // then mobile access
+    if (mobile) { reply({ type: 'mobile', state: mobile.state() }); reply(holdersMsg()); } // then mobile access, and who types from a phone
     else if (unavailable) reply({ type: 'mobile', state: unavailable });
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
@@ -682,6 +693,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // A select dialog ignores typed text and Enter would pick option 1: those take decide only.
     if (s.pending && s.pending.kind !== 'question') return new Refusal(`a ${s.pending.kind} prompt takes accept or deny, not a reply`, 'not_offered');
     if (text.trim() === '') return new Refusal('empty reply', 'invalid');
+    // A slash command that opens a terminal panel, or ends the session, never goes: nothing could close the panel from here.
+    const slash = !s.pending && s.tool === 'claude' ? claudeSlashRefusal(text) : null;
+    if (slash) return new Refusal(slash.message, 'not_offered');
     // A question dialog is a select: typed text then Enter would silently pick the highlighted option, unless the
     // adapter knows the dialog's own free-text field.
     const pending = s.pending; const adapter = adapterFor(s.tool);
@@ -1042,6 +1056,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
       case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
+      // Answered even when the agent cannot be asked: the « / » list says so, and a command typed by hand still goes.
+      case 'session.commands': {
+        const s = store.get(msg.id);
+        if (!s) return reply({ type: 'session.commands.listing', requestId: msg.requestId, id: msg.id, commands: [], error: 'unknown session' });
+        const cwd = await resolveFolder(s.cwd, opts.home).catch(() => null);
+        if (cwd === null) return reply({ type: 'session.commands.listing', requestId: msg.requestId, id: msg.id, tool: s.tool, commands: [], error: 'folder not found' });
+        return reply({ type: 'session.commands.listing', requestId: msg.requestId, id: msg.id, tool: s.tool, ...await commands.list(s.tool, cwd) });
+      }
       case 'openrig.status': {
         adoptSeats();
         const state = await openrig.state();
@@ -1391,7 +1413,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
-      case 'mobile.set': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
+      case 'terminal.release':
+        // Nothing to take back is no error: the phone may have let go already.
+        gateway?.terminalRelease(msg.id);
+        return;
+      case 'mobile.set': case 'mobile.terminal': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
       case 'mobile.pairing.approve': case 'mobile.pairing.deny': case 'mobile.device.revoke':
         if (!mobile) return refuse(new Refusal('mobile access is not available', 'unavailable'));
         return mobile.handle(msg);
@@ -1461,6 +1487,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     models: true,
     // A session's « Fermer » on the phone: the cards' close, so a close under way (a card's, another phone's) is shared.
     closeSession: closeForCard,
+    // The agent's terminal on the phone: read-only control clients on Ledge's tmux, typing behind the PC's setting and the shared lock.
+    ...(opts.tmux.controlArgs ? {
+      terminal: {
+        controlArgs: (n: string) => opts.tmux.controlArgs?.(n) ?? null,
+        inputAllowed: () => mobile.state().terminalInput === true,
+        typing,
+        onHolder: (id: string, deviceId: string | null) => {
+          if (deviceId) terminalHolders.set(id, deviceId); else terminalHolders.delete(id);
+          broadcast(holdersMsg());
+        }
+      }
+    } : {}),
     // The phone's « Mettre à jour le PC » and « Redémarrer le daemon »: the updater Desktop's `update.daemon` uses, progress broadcast.
     ...(opts.updater && opts.daemon ? {
       pc: {

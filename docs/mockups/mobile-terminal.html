@@ -1,0 +1,529 @@
+<title>Terminal mobile</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Les tokens de @ledge/ui (packages/ui/src/styles/tokens.css) et de l'app mobile (apps/mobile/src/styles.css). */
+:root {
+  --bg: oklch(1 0 0); --surface: oklch(1 0 0); --raised: oklch(0.97 0 0); --fg: oklch(0.145 0 0); --muted: oklch(0.556 0 0);
+  --line: oklch(0.922 0 0); --input: oklch(0.922 0 0);
+  --ok: #059669; --attention: #b45309; --info: #2563eb; --danger: oklch(0.505 0.213 27.518); --danger-bg: oklch(0.97 0.014 17);
+  --page: #f4f4f5; --note: #fffbe6; --note-line: #e9d98a;
+  --shadow: 0 20px 40px -12px rgba(0,0,0,0.25);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.145 0 0); --surface: oklch(0.205 0 0); --raised: oklch(0.269 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.708 0 0);
+    --line: #ffffff1a; --input: #ffffff26; --ok: #34d399; --attention: #fbbf24; --info: #60a5fa; --danger: oklch(0.704 0.191 22.216); --danger-bg: oklch(0.26 0.06 22);
+    --page: #0b0b0c; --note: #23200f; --note-line: #4a4320; --shadow: 0 20px 40px -12px rgba(0,0,0,0.7);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(0.145 0 0); --surface: oklch(0.205 0 0); --raised: oklch(0.269 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.708 0 0);
+  --line: #ffffff1a; --input: #ffffff26; --ok: #34d399; --attention: #fbbf24; --info: #60a5fa; --danger: oklch(0.704 0.191 22.216); --danger-bg: oklch(0.26 0.06 22);
+  --page: #0b0b0c; --note: #23200f; --note-line: #4a4320; --shadow: 0 20px 40px -12px rgba(0,0,0,0.7);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 "Geist", system-ui, -apple-system, "Segoe UI", sans-serif; }
+.doc { max-width: 1240px; margin: 0 auto; padding: 32px 16px 80px; }
+h1.doc-title { font-size: 26px; line-height: 32px; margin: 0 0 6px; letter-spacing: -.5px; }
+.lede { color: var(--muted); max-width: 760px; margin: 0 0 8px; }
+.toggle { margin: 12px 0 28px; display: flex; gap: 8px; }
+.toggle button { min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input); background: var(--surface); color: var(--fg); font: inherit; cursor: pointer; }
+h2.part { font-size: 18px; margin: 44px 0 4px; }
+.part-note { color: var(--muted); margin: 0 0 18px; max-width: 760px; }
+.row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+.cell { width: 360px; max-width: 100%; }
+.cap { font-weight: 600; margin: 0 0 8px; }
+.cap small { display: block; font-weight: 400; color: var(--muted); }
+
+/* Le téléphone : 360 × 740, gouttière 16 px, comme apps/mobile. */
+.phone { position: relative; width: 360px; max-width: 100%; height: 740px; border-radius: 36px; border: 1px solid var(--line); background: var(--bg); overflow: hidden; display: flex; flex-direction: column; padding: 0 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.phone.short { height: 600px; }
+.sbar { height: 34px; flex: none; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; padding: 0 8px; }
+header.th { flex: none; border-bottom: 1px solid var(--line); padding: 8px 0 12px; }
+.hrow { display: flex; align-items: center; gap: 10px; }
+.icon-btn { width: 44px; height: 44px; flex: none; display: inline-grid; place-items: center; border-radius: 12px; border: 1px solid var(--input); color: var(--fg); background: transparent; }
+.icon-btn.ghost { border-color: transparent; }
+.icon-btn[aria-disabled="true"] { opacity: .45; }
+.icon-btn.hl { outline: 2px dashed var(--info); outline-offset: 3px; }
+.bot { width: 36px; height: 36px; flex: none; border-radius: 12px; background: color-mix(in oklch, var(--info) 18%, var(--raised)); display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--info); }
+.bot.done { background: var(--raised); color: var(--muted); }
+.bot.busy { background: color-mix(in oklch, var(--attention) 18%, var(--raised)); color: var(--attention); }
+.t-title { font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -.2px; margin: 0; }
+.meta { font-size: 11px; line-height: 16px; color: var(--muted); }
+.small { font-size: 12px; line-height: 18px; }
+.muted { color: var(--muted); }
+.where { margin: 8px 0 0 46px; }
+main.log { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 20px 0 16px; }
+.me { align-self: flex-end; max-width: 94%; background: var(--raised); border-radius: 16px 16px 4px 16px; padding: 14px; }
+.agent { align-self: flex-start; max-width: 94%; background: var(--surface); border: 1px solid var(--line); border-radius: 16px 16px 16px 4px; padding: 14px; }
+.event { text-align: center; font-size: 11px; line-height: 16px; color: var(--muted); }
+footer.reply { flex: none; border-top: 1px solid var(--line); padding: 8px 0 16px; }
+.status { display: flex; align-items: center; gap: 6px; font-size: 11px; line-height: 16px; padding-bottom: 8px; }
+.status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
+.field { min-height: 48px; border: 1px solid var(--input); border-radius: 12px; display: flex; align-items: center; padding: 0 12px; color: var(--muted); gap: 8px; }
+.field .send { margin-left: auto; width: 36px; height: 36px; border-radius: 10px; background: var(--fg); color: var(--bg); display: grid; place-items: center; opacity: .45; }
+.ok { color: var(--ok); } .att { color: var(--attention); } .inf { color: var(--info); } .dan { color: var(--danger); }
+
+.btn { display: flex; width: 100%; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; border: 1px solid var(--input); background: transparent; color: var(--fg); font: 500 14px/1.4 inherit; padding: 10px 16px; text-align: center; }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: transparent; }
+.btn[aria-disabled="true"] { opacity: .45; }
+.btn.sm { width: auto; min-height: 44px; padding: 0 14px; }
+.notice { border-radius: 12px; border: 1px solid; padding: 14px; font-size: 12px; line-height: 1.65; }
+.notice strong { display: block; font-size: 14px; margin-bottom: 5px; }
+.notice.warning { border-color: color-mix(in oklch, var(--attention) 25%, transparent); background: color-mix(in oklch, var(--attention) 6%, transparent); }
+.notice.danger { border-color: color-mix(in oklch, var(--danger) 25%, transparent); background: var(--danger-bg); }
+.notice ul { margin: 0; padding-left: 18px; }
+.notice ul li + li { margin-top: 4px; }
+
+/* La feuille (ui/Dialog.tsx, Sheet) sur l'écran assombri. */
+.dim { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); border-radius: 28px 28px 0 0; padding: 12px 20px 34px; display: flex; flex-direction: column; gap: 16px; box-shadow: var(--shadow); }
+.grip { width: 36px; height: 5px; border-radius: 99px; background: color-mix(in oklch, var(--muted) 40%, transparent); align-self: center; }
+.sheet h3 { font-size: 21px; line-height: 28px; letter-spacing: -.3px; margin: 0; }
+.sheet p { margin: 0; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+
+.tag { display: inline-flex; height: 22px; align-items: center; border-radius: 6px; padding: 0 8px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+.tag.ok { background: color-mix(in oklch, var(--ok) 10%, transparent); }
+.tag.inf { background: color-mix(in oklch, var(--info) 10%, transparent); }
+.tag.att { background: color-mix(in oklch, var(--attention) 10%, transparent); }
+.tag.mut { color: var(--muted); background: color-mix(in oklch, var(--fg) 5%, transparent); }
+.lrow { display: flex; gap: 12px; border-bottom: 1px solid var(--line); padding: 16px 0; }
+.lrow h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.lrow .chev { align-self: center; color: var(--muted); }
+.group { padding: 12px 0; font-size: 11px; letter-spacing: .4px; color: var(--muted); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.end-card { border: 1px solid var(--line); background: var(--surface); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.end-card strong { font-size: 14px; }
+
+/* Les notes de la maquette : hors de l'écran. */
+.notes { margin: 12px 0 0; padding: 12px 14px; background: var(--note); border: 1px solid var(--note-line); border-radius: 12px; font-size: 12.5px; line-height: 1.55; }
+.notes ol, .notes ul { margin: 4px 0 0; padding-left: 18px; }
+.notes code, .spec code { font-family: "Geist Mono", ui-monospace, monospace; font-size: .92em; }
+.pin { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--info); color: #fff; font-size: 11px; font-weight: 700; margin-right: 4px; vertical-align: 1px; }
+.spec { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; margin-top: 16px; max-width: 900px; }
+.spec h3 { margin: 18px 0 6px; font-size: 15px; } .spec h3:first-child { margin-top: 0; }
+.spec table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.spec th, .spec td { text-align: left; border-bottom: 1px solid var(--line); padding: 7px 8px; vertical-align: top; }
+.spec th { color: var(--muted); font-weight: 500; }
+.spec ul { margin: 4px 0; padding-left: 20px; }
+@media (max-width: 420px) { .phone { height: auto; min-height: 640px; } }
+
+/* Terminal : tokens term-bg / term-fg de @ledge/ui, palette ANSI de apps/desktop/src/term/theme.ts. */
+:root { --term-bg: oklch(0.99 0 0); --term-fg: oklch(0.22 0 0); --term-dim: oklch(0.55 0 0); --t-green: #15803d; --t-red: #b91c1c; --t-amber: #a16207; --t-blue: #1d4ed8; --t-violet: #7e22ce; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --term-bg: #0c0c0d; --term-fg: #e5e5e5; --term-dim: #8a8a8a; --t-green: #4ade80; --t-red: #f87171; --t-amber: #fbbf24; --t-blue: #60a5fa; --t-violet: #c084fc; } }
+:root[data-theme="dark"] { --term-bg: #0c0c0d; --term-fg: #e5e5e5; --term-dim: #8a8a8a; --t-green: #4ade80; --t-red: #f87171; --t-amber: #fbbf24; --t-blue: #60a5fa; --t-violet: #c084fc; }
+
+.phone.term { padding: 0 16px; }
+.trow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; flex: none; }
+.seg { display: inline-flex; border: 1px solid var(--input); border-radius: 10px; padding: 2px; gap: 2px; }
+.seg span { min-height: 32px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.seg span.on { background: var(--raised); color: var(--fg); }
+.screen { position: relative; flex: 1; min-height: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--term-bg); overflow: hidden; }
+.screen.held { border: 2px solid var(--info); }
+.screen.dim .tty { opacity: .45; }
+.tty { margin: 0; padding: 12px; font-family: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; line-height: 1.45; white-space: pre; color: var(--term-fg); position: absolute; left: 0; bottom: 0; }
+.tty.fit { font-size: 2.62px; line-height: 1.5; padding: 8px; }
+.tty .g { color: var(--t-green); } .tty .r { color: var(--t-red); } .tty .a { color: var(--t-amber); } .tty .b { color: var(--t-blue); } .tty .v { color: var(--t-violet); } .tty .d { color: var(--term-dim); }
+.tty .cur { background: var(--term-fg); color: var(--term-bg); }
+.held-tag { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 600; color: #fff; background: var(--info); border-radius: 6px; padding: 2px 8px; }
+.map { flex: none; height: 4px; border-radius: 99px; background: var(--raised); margin: 8px 0 0; position: relative; }
+.map i { position: absolute; top: 0; bottom: 0; left: 0; width: 24%; border-radius: 99px; background: var(--muted); }
+footer.tf { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 0 16px; }
+.keys { display: flex; gap: 6px; overflow: hidden; flex: none; padding: 8px 0; }
+.key { flex: none; min-width: 40px; height: 40px; padding: 0 9px; border-radius: 10px; border: 1px solid var(--input); background: var(--surface); display: inline-grid; place-items: center; font: 500 13px/1 "Geist Mono", ui-monospace, monospace; color: var(--fg); }
+.key.on { background: var(--fg); color: var(--bg); border-color: transparent; }
+.key.txt { font-family: inherit; font-size: 12px; }
+.kbd { flex: none; margin: 0 -16px; height: 214px; background: color-mix(in oklch, var(--fg) 9%, var(--bg)); display: grid; place-items: center; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
+.heldbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 12px; line-height: 16px; }
+.heldbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--info); flex: none; }
+.heldbar b { font-weight: 600; }
+.heldbar .btn { margin-left: auto; }
+.line { flex: none; display: flex; gap: 8px; align-items: center; padding: 6px 0 2px; }
+.line .field { flex: 1; color: var(--fg); }
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.chk i { width: 16px; height: 16px; border-radius: 4px; background: var(--fg); display: inline-block; }
+
+/* Desktop (côté PC) */
+.desk { width: 560px; max-width: 100%; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.desk .bar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.desk .bar .bot { width: 30px; height: 30px; border-radius: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; border-radius: 8px; padding: 0 10px; font-size: 12px; font-weight: 500; color: var(--info); background: color-mix(in oklch, var(--info) 12%, transparent); }
+.chip i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.desk .pane { height: 120px; background: var(--term-bg); position: relative; overflow: hidden; }
+.setrow { display: flex; gap: 14px; align-items: flex-start; padding: 16px; }
+.switch { width: 40px; height: 24px; border-radius: 99px; background: var(--muted); position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); }
+.switch.on { background: var(--ok); } .switch.on::after { left: 19px; }
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-kbd" viewBox="0 0 24 24"><path d="M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-6 6v3h12V9a6 6 0 0 0-6-6zM5 12h14v9H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="doc">
+  <h1 class="doc-title">Le terminal d'un agent sur le téléphone</h1>
+  <p class="lede">Maquette de référence pour la spec <code>docs/superpowers/specs/2026-11-02-mobile-terminal-design.md</code>. Écrans de l'app mobile (<code>apps/mobile</code>), largeur 360 px, gouttière 16 px, tokens de <code>@ledge/ui</code>. Les encadrés jaunes sont des notes, absentes de l'app. Le contenu du terminal est un exemple.</p>
+  <p class="lede">En bref : l'écran Terminal devient un vrai terminal, en direct et en couleurs, <b>à la taille du PC</b> (le téléphone ne redimensionne jamais l'agent). On le lit sans rien confirmer. <b>Prendre la main</b> demande la passkey, puis ouvre le clavier avec une rangée de touches spéciales ; la main se rend seule après 5 min sans frappe, 30 min au plus, ou dès que l'appli passe en arrière-plan. Le PC voit « Téléphone au clavier » et peut reprendre la main.</p>
+  <div class="toggle" role="group" aria-label="Thème de la maquette">
+    <button type="button" onclick="document.documentElement.dataset.theme='light'">Clair</button>
+    <button type="button" onclick="document.documentElement.dataset.theme='dark'">Sombre</button>
+  </div>
+
+  <!-- ============ 1. Lire ============ -->
+  <h2 class="part">1. Lire le terminal</h2>
+  <p class="part-note">Ouvert depuis le fil (bouton Terminal de l'en-tête, inchangé). Aucune confirmation : le téléphone voit déjà l'aperçu aujourd'hui. Le pane du PC fait ici 200 × 52.</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">1a · En direct, lisible<small>Vue par défaut : 11 px, collée à gauche, suit le curseur</small></p>
+      <div class="phone term">
+        <div class="sbar"><span>18:40</span><span>●●● 5G</span></div>
+        <header class="th">
+          <div class="hrow">
+            <span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span>
+            <span class="bot busy">NO</span>
+            <div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · 200 × 52, taille du PC</p></div>
+          </div>
+        </header>
+        <div class="trow">
+          <span class="status ok" style="padding:0"><i></i>En direct · lecture seule</span>
+          <span class="seg" role="group" aria-label="Affichage"><span class="on">Lisible</span><span>Ajusté</span></span>
+        </div>
+        <div class="screen"><pre class="tty" data-v="read"></pre></div>
+        <div class="map" aria-hidden="true"><i></i></div>
+        <footer class="tf">
+          <span class="btn primary"><svg width="18" height="18"><use href="#i-kbd"/></svg>Prendre la main</span>
+          <span class="btn"><svg width="18" height="18"><use href="#i-stop"/></svg>Interrompre Nova</span>
+        </footer>
+      </div>
+      <div class="notes">
+        <span class="pin">1</span><b>Taille du PC.</b> xterm a exactement les <code>cols × rows</code> du pane (<code>term.opened</code>, puis <code>term.size</code>). Un doigt fait défiler dans le terminal ; la barre sous l'écran montre la partie visible des 200 colonnes. Pincer zoome entre « Ajusté » et 16 px.
+        <ul>
+          <li>« Lisible » suit le curseur : quand il sort à droite, la vue glisse ; un défilement manuel coupe le suivi jusqu'à la prochaine frappe ou un tap sur « Lisible ».</li>
+          <li>Les boutons A− / A+ d'aujourd'hui disparaissent (le pincement les remplace) ; la taille choisie reste mémorisée comme aujourd'hui (<code>ledge.mobile.terminalSize</code>).</li>
+          <li><b>Interrompre</b> garde ses règles actuelles (actif si l'agent travaille, pas de passkey).</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">1b · Ajusté<small>Les 200 colonnes dans la largeur : une vue d'ensemble</small></p>
+      <div class="phone term">
+        <div class="sbar"><span>18:40</span><span>●●● 5G</span></div>
+        <header class="th">
+          <div class="hrow">
+            <span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span>
+            <span class="bot busy">NO</span>
+            <div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · 200 × 52, taille du PC</p></div>
+          </div>
+        </header>
+        <div class="trow">
+          <span class="status ok" style="padding:0"><i></i>En direct · lecture seule</span>
+          <span class="seg" role="group" aria-label="Affichage"><span>Lisible</span><span class="on">Ajusté</span></span>
+        </div>
+        <div class="screen"><pre class="tty fit" data-v="read"></pre></div>
+        <footer class="tf">
+          <span class="btn primary"><svg width="18" height="18"><use href="#i-kbd"/></svg>Prendre la main</span>
+          <span class="btn"><svg width="18" height="18"><use href="#i-stop"/></svg>Interrompre Nova</span>
+        </footer>
+      </div>
+      <div class="notes"><span class="pin">2</span>Police calculée pour que <code>cols</code> colonnes remplissent la boîte, jamais sous 6 px à l'écran réel (ici 2,6 px pour l'exemple : en dessous de 6 px, « Ajusté » montre la partie gauche et la barre de position). Un double tap sur un endroit y zoome en « Lisible ».</div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">1c · Taper n'est pas permis sur ce PC<small>Le réglage du PC est désactivé (par défaut)</small></p>
+      <div class="phone term">
+        <div class="sbar"><span>18:40</span><span>●●● 5G</span></div>
+        <header class="th">
+          <div class="hrow">
+            <span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span>
+            <span class="bot busy">NO</span>
+            <div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · 200 × 52, taille du PC</p></div>
+          </div>
+        </header>
+        <div class="trow">
+          <span class="status ok" style="padding:0"><i></i>En direct · lecture seule</span>
+          <span class="seg" role="group" aria-label="Affichage"><span class="on">Lisible</span><span>Ajusté</span></span>
+        </div>
+        <div class="screen"><pre class="tty" data-v="read"></pre></div>
+        <div class="map" aria-hidden="true"><i></i></div>
+        <footer class="tf">
+          <span class="btn"><svg width="18" height="18"><use href="#i-stop"/></svg>Interrompre Nova</span>
+          <p class="meta muted" style="margin:0;text-align:center">Pour taper ici, activez « Taper dans les terminaux depuis le téléphone » sur le PC, dans Accès mobile.</p>
+        </footer>
+      </div>
+      <div class="notes"><span class="pin">3</span>Sans <code>daemon.terminalInput</code> dans le snapshot, pas de bouton « Prendre la main » : une phrase dit où l'activer. Un daemon sans <code>daemon.terminal</code> (plus ancien) garde l'écran d'aperçu actuel, inchangé.</div>
+    </div>
+  </div>
+
+  <!-- ============ 2. Prendre la main ============ -->
+  <h2 class="part">2. Prendre la main</h2>
+  <p class="part-note">Une feuille dit ce que cela permet, puis la passkey (usage <code>terminal</code>, liée à cette session). Elle réutilise la logique de <code>RiskConfirm</code> : défi demandé à l'ouverture, minuterie d'expiration.</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">2a · La confirmation</p>
+      <div class="phone term">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot busy">NO</span><div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · 200 × 52, taille du PC</p></div></div></header>
+        <div class="trow"><span class="status ok" style="padding:0"><i></i>En direct · lecture seule</span></div>
+        <div class="screen"><pre class="tty" data-v="read"></pre></div>
+        <div class="dim"></div>
+        <div class="sheet" role="dialog" aria-labelledby="h2a">
+          <span class="grip"></span>
+          <h3 id="h2a">Taper dans le terminal de Nova ?</h3>
+          <p class="muted">Ce que vous tapez part tel quel dans son terminal sur le PC, comme au clavier du PC. Cela vaut aussi pour une demande d'autorisation : elle ne passe alors pas par la vérification du téléphone.</p>
+          <p class="small muted">La main vous est retirée après 5 minutes sans frappe, au bout de 30 minutes, ou dès que l'appli passe en arrière-plan. Le PC affiche « Téléphone au clavier » et peut la reprendre.</p>
+          <div class="stack">
+            <span class="btn primary"><svg width="18" height="18"><use href="#i-key"/></svg>Vérifier et prendre la main</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">2b · Appareil non protégé</p>
+      <div class="phone term">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot busy">NO</span><div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · 200 × 52, taille du PC</p></div></div></header>
+        <div class="trow"><span class="status ok" style="padding:0"><i></i>En direct · lecture seule</span></div>
+        <div class="screen"><pre class="tty" data-v="read"></pre></div>
+        <div class="dim"></div>
+        <div class="sheet" role="dialog" aria-labelledby="h2b">
+          <span class="grip"></span>
+          <h3 id="h2b">Taper dans le terminal de Nova ?</h3>
+          <div class="notice warning"><strong>Protégez d'abord vos accords depuis Connexion.</strong>Prendre la main demande la passkey de cet appareil, comme fermer une session.</div>
+          <div class="stack">
+            <span class="btn primary">Ouvrir Connexion</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">2c · Refusée ou expirée</p>
+      <div class="phone term">
+        <div class="sbar"><span>18:41</span><span>●●● 5G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot busy">NO</span><div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · 200 × 52, taille du PC</p></div></div></header>
+        <div class="trow"><span class="status ok" style="padding:0"><i></i>En direct · lecture seule</span></div>
+        <div class="screen"><pre class="tty" data-v="read"></pre></div>
+        <div class="dim"></div>
+        <div class="sheet" role="dialog" aria-labelledby="h2c">
+          <span class="grip"></span>
+          <h3 id="h2c">Taper dans le terminal de Nova ?</h3>
+          <div class="notice warning"><strong>Vérification expirée</strong>Rien n'a été envoyé. Recommencez pour prendre la main.</div>
+          <div class="stack">
+            <span class="btn primary"><svg width="18" height="18"><use href="#i-key"/></svg>Vérifier et prendre la main</span>
+            <span class="btn">Annuler</span>
+          </div>
+        </div>
+      </div>
+      <div class="notes"><span class="pin">4</span>Mêmes textes que la confirmation existante pour « annulée » et « expirée » (<code>copy.confirm</code>). Un refus du PC : <code>conflict</code> → « Un autre appareil tape déjà dans ce terminal. » ; <code>read_only</code> → « Session démarrée hors de Ledge : tapez dans son terminal sur le PC. »</div>
+    </div>
+  </div>
+
+  <!-- ============ 3. Au clavier ============ -->
+  <h2 class="part">3. Au clavier</h2>
+  <p class="part-note">Le cadre passe en bleu (<code>info</code>) tant que le téléphone tient la main : on ne peut pas taper sans le voir. L'en-tête et la barre d'affichage laissent la place au clavier.</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">3a · Clavier du téléphone<small>Ctrl est armé pour la prochaine touche</small></p>
+      <div class="phone term">
+        <div class="sbar"><span>18:42</span><span>●●● 5G</span></div>
+        <div class="heldbar"><span class="dot"></span><span><b>Vous tapez dans Nova</b><br><span class="muted">Main rendue dans 4:12 sans frappe</span></span><span class="btn sm">Rendre la main</span></div>
+        <div class="screen held"><pre class="tty" data-v="held"></pre><span class="held-tag">Au clavier</span></div>
+        <div class="keys" aria-label="Touches spéciales">
+          <span class="key txt">Échap</span><span class="key txt">Tab</span><span class="key txt on">Ctrl</span><span class="key txt">Alt</span><span class="key">←</span><span class="key">↑</span><span class="key">↓</span><span class="key">→</span><span class="key">↵</span><span class="key txt">^C</span><span class="key txt">Coller</span><span class="key txt">Ligne</span>
+        </div>
+        <div class="kbd">Clavier du téléphone</div>
+      </div>
+      <div class="notes"><span class="pin">5</span><b>La rangée</b> défile à l'horizontale ; ordre fixe. Ctrl et Alt : un tap arme pour une touche, un double tap verrouille (fond plein), un tap de plus libère. ^C envoie <code>\x03</code> en une touche. Coller : bracketed paste si le pane l'a demandé (<code>ESC[?2004h</code>), découpé en messages de 4 096 caractères. Chaque touche fait 40 px de haut au moins, 44 px de zone de tap.</div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">3b · Mode Ligne<small>Pour la dictée, l'autocorrection et les claviers à composition</small></p>
+      <div class="phone term">
+        <div class="sbar"><span>18:43</span><span>●●● 5G</span></div>
+        <div class="heldbar"><span class="dot"></span><span><b>Vous tapez dans Nova</b><br><span class="muted">Main rendue dans 4:58 sans frappe</span></span><span class="btn sm">Rendre la main</span></div>
+        <div class="screen held"><pre class="tty" data-v="line"></pre><span class="held-tag">Au clavier</span></div>
+        <div class="line">
+          <span class="field">Ajoute aussi un test pour limit=0<span class="send" style="opacity:1"><svg width="18" height="18"><use href="#i-up"/></svg></span></span>
+        </div>
+        <div class="keys" aria-label="Touches spéciales">
+          <span class="chk"><i></i>Avec ↵</span><span class="key txt">Échap</span><span class="key txt">Tab</span><span class="key">↑</span><span class="key">↓</span><span class="key txt on">Ligne</span>
+        </div>
+        <div class="kbd">Clavier du téléphone (autocorrection active)</div>
+      </div>
+      <div class="notes"><span class="pin">6</span>Le champ est un vrai <code>&lt;input&gt;</code> : autocorrection, dictée et composition fonctionnent. Envoyer tape le texte, puis ↵ si « Avec ↵ » est coché (par défaut). Le texte n'est pas filtré comme une réponse (<code>UNTYPABLE</code>) : on est au clavier, mais un retour à la ligne collé devient ↵ seulement si « Avec ↵ » est coché.</div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">3c · La main est rendue<small>Ici : 5 minutes sans frappe</small></p>
+      <div class="phone term">
+        <div class="sbar"><span>18:48</span><span>●●● 5G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot busy">NO</span><div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · 200 × 52, taille du PC</p></div></div></header>
+        <div class="trow"><span class="status ok" style="padding:0"><i></i>En direct · lecture seule</span><span class="seg"><span class="on">Lisible</span><span>Ajusté</span></span></div>
+        <div class="screen"><pre class="tty" data-v="line"></pre></div>
+        <div class="map" aria-hidden="true"><i></i></div>
+        <footer class="tf">
+          <p role="status" class="small muted" style="margin:0;text-align:center">Main rendue : 5 minutes sans frappe.</p>
+          <span class="btn primary"><svg width="18" height="18"><use href="#i-kbd"/></svg>Reprendre la main</span>
+          <span class="btn"><svg width="18" height="18"><use href="#i-stop"/></svg>Interrompre Nova</span>
+        </footer>
+      </div>
+      <div class="notes"><span class="pin">7</span>Une ligne par raison (<code>term.released.why</code>) :
+        <ul>
+          <li><code>asked</code> : rien (c'est vous).</li>
+          <li><code>idle</code> : « Main rendue : 5 minutes sans frappe. »</li>
+          <li><code>expired</code> : « Main rendue : 30 minutes écoulées. »</li>
+          <li><code>background</code> : « Main rendue : l'appli est passée en arrière-plan. »</li>
+          <li><code>pc</code> : « Le PC a repris la main. »</li>
+          <li><code>link</code> : « Main rendue : connexion perdue. »</li>
+        </ul>
+        Reprendre redemande toujours la passkey.</div>
+    </div>
+  </div>
+
+  <!-- ============ 4. Hors ligne, fin ============ -->
+  <h2 class="part">4. Hors ligne et fin de session</h2>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">4a · Connexion perdue</p>
+      <div class="phone term">
+        <div class="sbar"><span>18:50</span><span>●○○ 4G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot busy">NO</span><div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · 200 × 52, taille du PC</p></div></div></header>
+        <div class="trow"><span class="status att" style="padding:0"><i></i>Connexion perdue · dernier écran connu</span></div>
+        <div class="screen dim"><pre class="tty" data-v="line"></pre></div>
+        <footer class="tf">
+          <span class="btn" aria-disabled="true"><svg width="18" height="18"><use href="#i-kbd"/></svg>Prendre la main</span>
+          <p class="meta muted" style="margin:0;text-align:center">L'écran reprend dès que le PC répond.</p>
+        </footer>
+      </div>
+      <div class="notes"><span class="pin">8</span>Au retour du lien, le téléphone renvoie <code>term.open</code> : un écran complet, jamais une suite de sorties manquantes. Même chose après un trou dans <code>seq</code> (<code>term.resync</code>), sans rien afficher.</div>
+    </div>
+
+    <div class="cell">
+      <p class="cap">4b · La session s'est terminée</p>
+      <div class="phone term">
+        <div class="sbar"><span>18:55</span><span>●●● 5G</span></div>
+        <header class="th"><div class="hrow"><span class="icon-btn ghost"><svg width="20" height="20"><use href="#i-back"/></svg></span><span class="bot done">NO</span><div style="min-width:0;flex:1"><p class="t-title">Terminal de Nova</p><p class="meta" style="margin:3px 0 0">billing-api · terminée à 18:54</p></div></div></header>
+        <div class="trow"><span class="status" style="padding:0;color:var(--muted)"><i></i>Session terminée</span></div>
+        <div class="screen dim"><pre class="tty" data-v="line"></pre></div>
+        <footer class="tf">
+          <span class="btn">Retour au fil</span>
+        </footer>
+      </div>
+      <div class="notes"><span class="pin">9</span>Le dernier écran reste affiché, estompé. Même écran pour <code>gone</code> (tmux a disparu) avec « Le terminal de Nova n'existe plus sur le PC. »</div>
+    </div>
+  </div>
+
+  <!-- ============ 5. Le PC ============ -->
+  <h2 class="part">5. Sur le PC</h2>
+  <p class="part-note">Ledge Desktop. Le réglage vit dans Accès mobile ; l'étiquette s'affiche sur la page de la session (et sur sa ligne dans la liste) tant qu'un téléphone tient la main.</p>
+  <div class="row">
+    <div class="cell" style="width:560px">
+      <p class="cap">5a · Page de la session, onglet Agent</p>
+      <div class="desk">
+        <div class="bar"><span class="bot busy">NO</span><div style="flex:1;min-width:0"><b>Nova</b> <span class="muted small">· billing-api · feat/pagination</span></div><span class="chip"><i></i>Téléphone au clavier</span><span class="btn sm">Reprendre la main</span></div>
+        <div class="pane"><pre class="tty" data-v="held" style="font-size:9px"></pre></div>
+      </div>
+      <div class="notes"><span class="pin">10</span>« Reprendre la main » envoie <code>terminal.release { id }</code> (message local nouveau) : le téléphone reçoit <code>term.released { why: 'pc' }</code>. Taper au clavier du PC ne retire pas la main : les deux claviers peuvent taper, comme deux fenêtres tmux. Pas de confirmation.</div>
+    </div>
+    <div class="cell" style="width:560px">
+      <p class="cap">5b · Réglages, Accès mobile</p>
+      <div class="desk">
+        <div class="setrow"><span class="switch"></span><div><b>Taper dans les terminaux depuis le téléphone</b><p class="small muted" style="margin:4px 0 0">Un appareil lié peut prendre la main sur le terminal d'un agent, après la vérification de sa passkey. Sans ce réglage, le téléphone lit le terminal sans pouvoir y taper.</p></div></div>
+      </div>
+      <div class="notes"><span class="pin">11</span>Désactivé par défaut. Le couper retire la main à tout téléphone qui la tient (<code>why: 'pc'</code>). Stocké avec les autres réglages mobiles du daemon.</div>
+    </div>
+  </div>
+
+  <!-- ============ 6. Spec ============ -->
+  <h2 class="part">6. Spécification pour le dev</h2>
+  <div class="spec">
+    <h3>Protocole (<code>phone.ts</code>)</h3>
+    <table>
+      <tr><th>Sens</th><th>Message</th></tr>
+      <tr><td>téléphone → PC</td><td><code>term.open { op, id }</code>, <code>term.hold { op, tid, assertion }</code>, <code>term.input { tid, n, data ≤ 4096 }</code>, <code>term.release { tid }</code>, <code>term.resync { tid }</code>, <code>term.close { tid }</code></td></tr>
+      <tr><td>PC → téléphone</td><td><code>term.opened { op, tid, cols, rows, screen ≤ 64 Kio, cursor, seq }</code>, <code>term.output { tid, seq, data }</code>, <code>term.size</code>, <code>term.held { tid, until }</code>, <code>term.released { tid, why }</code>, <code>term.exit { tid, why }</code></td></tr>
+      <tr><td>snapshot</td><td><code>daemon.terminal</code>, <code>daemon.terminalInput</code> ; <code>ConfirmPurpose</code> gagne <code>terminal</code>.</td></tr>
+    </table>
+    <h3>Écrans et composants</h3>
+    <table>
+      <tr><th>Où</th><th>Changement</th></tr>
+      <tr><td><code>screens/Terminal.tsx</code></td><td>xterm à la place du <code>&lt;pre&gt;</code> ; états 1a–4b. L'ancien rendu reste pour un daemon sans <code>daemon.terminal</code>.</td></tr>
+      <tr><td>Nouveaux <code>screens/TermKeys.tsx</code>, <code>screens/TermHold.tsx</code></td><td>La rangée de touches et le mode Ligne ; la feuille de prise de main (logique de <code>RiskConfirm</code>).</td></tr>
+      <tr><td><code>state/store.ts</code></td><td>Le terminal ouvert, son <code>seq</code>, la main ; regroupement des frappes (30 ms).</td></tr>
+      <tr><td><code>@ledge/ui</code></td><td>La palette ANSI de <code>apps/desktop/src/term/theme.ts</code>, partagée.</td></tr>
+      <tr><td><code>copy.ts</code></td><td>Tous les textes de cette page, mot pour mot.</td></tr>
+    </table>
+    <h3>Accessibilité</h3>
+    <ul>
+      <li>Le terminal : <code>aria-label</code> « Terminal de Nova », mode lecteur d'écran de xterm activé ; l'état (lecture seule / au clavier) en <code>role="status"</code>.</li>
+      <li>La main tenue se voit par le cadre <b>et</b> par le texte « Vous tapez dans Nova » : jamais par la seule couleur.</li>
+      <li>Touches : boutons avec nom (« Contrôle, armé », « Flèche haut ») ; <code>aria-pressed</code> pour Ctrl, Alt et Ligne.</li>
+    </ul>
+    <h3>Critères d'acceptation</h3>
+    <ol>
+      <li>Ouvrir le terminal d'une session : l'écran de l'agent s'affiche en couleurs en moins d'une seconde, puis suit en direct ; le Claude Code du PC garde sa largeur.</li>
+      <li>Prendre la main → Face ID → taper <code>/help</code> ↵ : l'aide s'affiche sur le PC et sur le téléphone.</li>
+      <li>Passer l'appli en arrière-plan : la main est rendue ; revenir : lecture seule, « Reprendre la main » redemande Face ID.</li>
+      <li>Réglage du PC coupé : aucun bouton pour taper, et un <code>term.input</code> forgé est refusé.</li>
+      <li>Une sortie massive (<code>yes</code> pendant 30 s) : le lien ne tombe pas, les décisions arrivent toujours, l'écran se rattrape par sauts.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 200;
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  // A line: segments [text, class?]; padded to W columns; `right` sits at the right edge, as Claude Code's status line.
+  const L = (segs, right) => {
+    let len = 0, html = '';
+    for (const [t, c] of segs) { len += [...t].length; html += c ? `<span class="${c}">${esc(t)}</span>` : esc(t); }
+    if (right) { const [t, c] = right; const pad = Math.max(1, W - len - [...t].length); html += ' '.repeat(pad) + `<span class="${c || 'd'}">${esc(t)}</span>`; }
+    return html;
+  };
+  const box = (inner, cur) => [
+    L([['╭' + '─'.repeat(W - 2) + '╮', 'd']]),
+    L([['│ ', 'd'], ['> ', ''], [inner, '']]) + (cur ? '<span class="cur"> </span>' : '') + ' '.repeat(Math.max(0, W - 5 - [...inner].length - (cur ? 1 : 0))) + '<span class="d">│</span>',
+    L([['╰' + '─'.repeat(W - 2) + '╯', 'd']])
+  ];
+  const head = [
+    L([['> ', 'd'], ['Ajoute la pagination par curseur et ses tests']]),
+    '',
+    L([['● ', 'g'], ['Je regarde d’abord le routeur des factures.']]),
+    '',
+    L([['● ', 'g'], ['Read', 'b'], ['(src/routes/invoices.ts)']]),
+    L([['  ⎿  ', 'd'], ['Read 142 lines', 'd']]),
+    '',
+    L([['● ', 'g'], ['Update', 'b'], ['(src/routes/invoices.ts)']]),
+    L([['  ⎿  ', 'd'], ['Updated src/routes/invoices.ts with 18 additions and 4 removals', 'd']]),
+    L([['      41 ', 'd'], ['-  const rows = await db.invoices.findMany({ take: 50 })', 'r']]),
+    L([['      41 ', 'd'], ['+  const { cursor, limit = 50 } = parseQuery(req.query)', 'g']]),
+    L([['      42 ', 'd'], ['+  const rows = await db.invoices.findMany({', 'g']]),
+    L([['      43 ', 'd'], ['+    take: limit + 1,', 'g']]),
+    L([['      44 ', 'd'], ['+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})', 'g']]),
+    '',
+    L([['● ', 'g'], ['Bash', 'b'], ['(pnpm vitest run test/invoices.test.ts)']]),
+    L([['  ⎿  ', 'd'], ['✓ 14 passed', 'g'], [' (1.2s)', 'd']]),
+    ''
+  ];
+  const foot = [L([['  ⏵⏵ accept edits on ', 'v'], ['(shift+tab to cycle)', 'd']], ['Opus 5.5 · contexte 38 %', 'd'])];
+  const views = {
+    read: [...head, L([['✻ ', 'a'], ['Rédaction du résumé… ', 'a'], ['(12s · ↓ 1.4k tokens · esc to interrupt)', 'd']]), '', ...box('', false), ...foot],
+    held: [...head, L([['● ', 'g'], ['C’est fait : /invoices accepte cursor et limit. Les 14 tests passent.']]), '', ...box('/he', true), ...foot],
+    line: [...head, L([['● ', 'g'], ['C’est fait : /invoices accepte cursor et limit. Les 14 tests passent.']]), '', L([['> ', 'd'], ['Ajoute aussi un test pour limit=0']]), '', L([['● ', 'g'], ['Update', 'b'], ['(test/invoices.test.ts)']]), '', ...box('', true), ...foot]
+  };
+  for (const pre of document.querySelectorAll('pre.tty')) pre.innerHTML = (views[pre.dataset.v] || views.read).join('\n');
+})();
+</script>

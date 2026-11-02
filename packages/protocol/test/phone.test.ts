@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema, PhoneChatTurnSchema, ConfirmPurposeSchema, b64Max, ATTACHMENT_MAX, PREVIEW_MAX } from '../src/index.js';
+import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema, PhoneChatTurnSchema, ConfirmPurposeSchema, b64Max, ATTACHMENT_MAX, PREVIEW_MAX, TERM_INPUT_MAX } from '../src/index.js';
 
 const OP = '123e4567-e89b-42d3-a456-426614174000';
 const expectKey = { kind: 'permission', text: 'Run ls', key: 'k1' };
@@ -417,5 +417,36 @@ describe('phone session close and resume', () => {
     expect(PhoneSessionSchema.parse({ ...session, exitedAt: '2026-10-29T18:42:00.000Z', readOnly: true })).toMatchObject({ exitedAt: '2026-10-29T18:42:00.000Z', readOnly: true });
     expect(() => PhoneSessionSchema.parse({ ...session, readOnly: false })).toThrow();
     expect(() => PhoneSessionSchema.parse({ ...session, exitedAt: 'yesterday' })).toThrow();
+  });
+});
+
+describe('the agent\'s terminal (spec 2026-11-02)', () => {
+  const OPID = '6f1c3a52-2f0b-4c1e-9d3a-0a1b2c3d4e5f';
+  const tid = 't_AbCdEfGh12345678';
+  it('accepts the terminal messages and the terminal purpose', () => {
+    for (const m of [
+      { type: 'term.open', op: OPID, id: 's1' },
+      { type: 'term.hold', op: OPID, tid },
+      { type: 'term.input', tid, n: 0, data: '\x1b[A\r' },
+      { type: 'term.release', tid }, { type: 'term.resync', tid }, { type: 'term.close', tid },
+      { type: 'confirm.prepare', purpose: 'terminal', id: 's1' }
+    ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
+    for (const m of [
+      { type: 'term.opened', op: OPID, tid, id: 's1', cols: 200, rows: 50, screen: '$', cursor: { x: 1, y: 0 }, seq: 0 },
+      { type: 'term.opened', tid, id: 's1', cols: 200, rows: 50, screen: '', cursor: { x: 0, y: 0 }, seq: 7, readOnly: true },
+      { type: 'term.output', tid, seq: 8, data: 'x' },
+      { type: 'term.size', tid, cols: 120, rows: 40 },
+      { type: 'term.held', tid, until: '2026-11-02T10:30:00.000Z' },
+      { type: 'term.released', tid, why: 'background' },
+      { type: 'term.exit', tid, why: 'superseded' }
+    ]) expect(() => PhoneServerMessageSchema.parse(m)).not.toThrow();
+  });
+  it('bounds what a phone types and refuses a terminal id off the pattern', () => {
+    expect(() => PhoneClientMessageSchema.parse({ type: 'term.input', tid, n: 0, data: 'x'.repeat(TERM_INPUT_MAX) })).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'term.input', tid, n: 0, data: 'x'.repeat(TERM_INPUT_MAX + 1) })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'term.input', tid, n: 0, data: '' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'term.input', tid, n: -1, data: 'x' })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'term.close', tid: "t_x'; kill" })).toThrow();
+    expect(() => PhoneServerMessageSchema.parse({ type: 'term.released', tid, why: 'because' })).toThrow();
   });
 });

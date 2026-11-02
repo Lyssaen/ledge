@@ -70,6 +70,10 @@ export interface FakeDaemon {
   /** The ids of the sessions closed, then resumed, from their page, in order. */
   ended: string[];
   resumed: string[];
+  /** True: the snapshot says `daemon.terminal` and `daemon.terminalInput`, and the PC streams a session's pane (a scripted one). */
+  terminal: boolean;
+  /** What the phone typed into a held terminal, in order. */
+  termTyped: string[];
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
@@ -80,7 +84,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [],
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [], terminal: false, termTyped: [],
     finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
@@ -90,7 +94,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}) },
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}), ...(d.terminal ? { terminal: true as const, terminalInput: true as const } : {}) },
     ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
   /** The scripted answer: short on purpose, a card is never cut (TOOL_TEXT_MAX). */
@@ -152,8 +156,34 @@ function runDaemon(pc: FakePc): FakeDaemon {
       return pc.send({ type: 'chat.done', qid: m.qid, turn: after });
     }
   };
+  /** The one terminal the fake PC streams: a pane of 120 columns, echoing what is typed into it once held. */
+  const TID = 't_e2eTerminal0001';
+  let termSeq = 0;
+  let held = false;
+  const terminalMessage = async (m: PhoneClientMessage) => {
+    if (m.type === 'term.open') {
+      if (!d.sessions.some((x) => x.id === m.id)) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: 'unknown_session' });
+      await pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+      termSeq = 0; held = false;
+      const screen = ['\x1b[32m●\x1b[0m Read(src/routes/invoices.ts)', '  ⎿  Read 142 lines', '', `> ${' '.repeat(96)}Opus · contexte 38 %`].join('\n');
+      return pc.send({ type: 'term.opened', op: m.op, tid: TID, id: m.id, cols: 120, rows: 30, screen, cursor: { x: 2, y: 3 }, seq: termSeq });
+    }
+    if (m.type === 'term.hold') {
+      const refused = d.device?.assertTerminal('s1', m.assertion);
+      if (refused) return pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+      held = true;
+      await pc.send({ type: 'term.held', tid: TID, until: new Date(Date.now() + 1_800_000).toISOString() });
+      return pc.send({ type: 'operation.result', op: m.op, status: 'applied' });
+    }
+    if (m.type === 'term.input' && held) {
+      d.termTyped.push(m.data);
+      return pc.send({ type: 'term.output', tid: TID, seq: termSeq++, data: m.data.replace(/\r/g, '\r\n') });
+    }
+    if (m.type === 'term.release' && held) { held = false; return pc.send({ type: 'term.released', tid: TID, why: 'asked' }); }
+  };
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') return pc.send(snapshot());
+    if (d.terminal && m.type.startsWith('term.')) return terminalMessage(m);
     if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close')) return chatMessage(m);
     if (m.type === 'session.pending') {
       const s = d.sessions.find((x) => x.id === m.id);

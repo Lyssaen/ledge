@@ -53,6 +53,10 @@ export interface Fleet {
   mobileError(): MobileError | undefined;
   /** Sends a mobile access command to the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` when not connected, `DaemonOutdated` when it never sent the state. */
   sendMobile(msg: MobileClientMessage): void;
+  /** The device typing from a phone into the session's terminal (« Téléphone au clavier »), by its label; sessions qualified, the local daemon's only. */
+  terminalHolders(): ReadonlyMap<string, string>;
+  /** « Reprendre la main »: the phone goes back to reading the session's terminal. Throws `DaemonOffline` when not connected. */
+  releaseTerminal(id: string): void;
   /** The tasks known to the local daemon, oldest first; sessions qualified. */
   tasks(): Task[];
   /** The context threshold the local daemon keeps (context handover spec §3.2): undefined until it speaks of it. */
@@ -186,6 +190,11 @@ export function useIsland(client: DaemonClient): IslandPrefs | null | undefined 
 /** The mobile access state as the local daemon holds it: undefined until it speaks of it. */
 export function useMobile(client: DaemonClient): MobileState | undefined {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.mobile ?? undefinedSnapshot, undefinedSnapshot);
+}
+const emptyHolders: ReadonlyMap<string, string> = new Map();
+/** The sessions a phone types into, by the device's label. */
+export function useTerminalHolders(client: DaemonClient): ReadonlyMap<string, string> {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.terminalHolders ?? (() => emptyHolders), () => emptyHolders);
 }
 /** The local daemon's last refused mobile.* command. */
 export function useMobileError(client: DaemonClient): MobileError | undefined {

@@ -15,7 +15,8 @@ export const RelayUrlSchema = z.string().transform((v, ctx) => {
 });
 
 /** Mobile access settings kept in mobile.json. */
-export const MobileConfigSchema = z.object({ enabled: z.boolean(), relayUrl: RelayUrlSchema });
+/** `terminalInput`: a phone may type into an agent's terminal after its passkey (spec 2026-11-02 mobile terminal); absent = off. */
+export const MobileConfigSchema = z.object({ enabled: z.boolean(), relayUrl: RelayUrlSchema, terminalInput: z.boolean().optional() });
 export type MobileConfig = z.infer<typeof MobileConfigSchema>;
 
 /** The daemon's relay link, as the fronts see it. */
@@ -50,6 +51,8 @@ export const MobileStateSchema = z.object({
   signinError: z.enum(['expired', 'denied', 'not_allowed', 'failed']).nullable(),
   link: MobileLinkStateSchema,
   devices: z.array(z.object({ id: z.string(), label: z.string(), approvedAt: z.string(), online: z.boolean(), lastSeenAt: z.string().optional() })),
-  pairings: z.array(MobilePairingSchema)
+  pairings: z.array(MobilePairingSchema),
+  /** « Taper dans les terminaux depuis le téléphone »: absent from an older daemon, which has no phone terminal. */
+  terminalInput: z.boolean().optional()
 });
 export type MobileState = z.infer<typeof MobileStateSchema>;

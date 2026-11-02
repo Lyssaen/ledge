@@ -118,6 +118,11 @@ describe('claude adapter: keys', () => {
   it('a reply with nothing pending is typed literally then Enter, multi-line joined by spaces', () => {
     expect(claudeAdapter.replyPlan('fix all three\nthen run tests')).toEqual([{ text: 'fix all three then run tests' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }, { until: expect.any(Function) }]);
   });
+  it('a slash command alone is typed with a space after it, which closes the command menu; with arguments, as is', () => {
+    expect(claudeAdapter.replyPlan('/context')[0]).toEqual({ text: '/context ' });
+    expect(claudeAdapter.replyPlan('/compact keep the plan')[0]).toEqual({ text: '/compact keep the plan' });
+    expect(claudeAdapter.replyPlan('/tmp is full')[0]).toEqual({ text: '/tmp is full' });
+  });
   it('a reply is sent only once the input box no longer holds it: typed raw, or pasted (#76)', () => {
     // Claude Code 2.1.306 in tmux: text and Enter in one burst read as a paste, the Enter a newline in the draft.
     const msg = '<ledge-message from="Nova" tool="claude">(reply with ledge send Nova) the build is green</ledge-message>';

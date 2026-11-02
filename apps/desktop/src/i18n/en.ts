@@ -372,6 +372,8 @@ export const en: Messages = {
     mobile: {
       connection: 'Connection',
       access: 'Mobile access', accessHint: 'This PC keeps an outgoing connection to the relay server. No port is opened.',
+      terminalInput: 'Type into terminals from the phone',
+      terminalInputHint: 'A linked device can take the hand on an agent’s terminal, after its passkey check. Without this setting, the phone reads the terminal and cannot type into it.',
       relay: 'Relay server', relayHint: 'The address of the server you and your phone use.',
       relayInvalid: 'Address refused: https://, or http:// for localhost only, with no path.',
       account: 'GitHub account', accountHint: 'The account that links this PC and your phones.',
@@ -753,6 +755,7 @@ export const en: Messages = {
     },
     terminal: {
       title: 'Terminal', empty: 'No output received yet.',
+      phoneHolds: (device, n) => `Phone at the keyboard: ${device} is typing into ${n}’s terminal.`, takeBack: 'Take the hand back',
       resize: 'Terminal width', openFailed: (n) => `${n}’s terminal could not open.`,
       agentTab: (n) => `${n} · agent`, shellTab: (n, dir) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
       addShell: 'New shell', closeTab: (label) => `Close ${label}`,
@@ -814,6 +817,16 @@ export const en: Messages = {
       queueLabel: 'Waiting instructions', queued: (n: number) => `Waiting (${n})`, queueSteer: 'redirect', queueAfter: 'after this turn', restore: 'Interrupt and take back', restoreTitle: 'Stops the work and puts the waiting instructions back in the field',
       queueTitle: (n: number) => pluralEn(n, `${n} message waiting`, `${n} messages waiting`), queueOrder: 'sent in order', queueNow: 'now', queueLater: 'after the turn', queueTakeBack: 'Stop and take back',
       noNote: 'This agent takes no message with a refusal: deny with N.', tooLong: (max) => `A note holds ${max} characters at most.`
+    },
+    slash: {
+      label: (tool: string) => `${tool} commands`, count: (n: number) => pluralEn(n, `${n} command`, `${n} commands`),
+      loading: 'reading the commands…', choose: 'choose', complete: 'complete', close: 'close',
+      unavailable: 'Command list unavailable.', unavailableBody: (n: string) => ` You can still type the command: Ledge sends it to ${n} as is.`,
+      none: (q: string, n: string) => `No command “${q}”. Enter sends it to ${n} as a message.`,
+      sends: (n: string) => `sends the command to ${n}`,
+      source: { builtin: 'Built-in', project: 'Project', user: 'Personal', plugin: 'Plugin', extension: 'Extension' },
+      blocked: { panel: 'Opens a terminal panel: run it in the terminal', close: 'Would end the session: use “Close session”' },
+      bare: (c: string) => `Without arguments, /${c} opens a terminal panel: give it one.`
     },
     model: {
       label: 'Model and effort', apply: 'Apply', schedule: 'Schedule', cancel: 'Cancel', nextTurn: 'next turn',

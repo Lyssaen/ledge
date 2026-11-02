@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -37,7 +37,7 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
 /** What a daemon answers about OpenRig's roles: the list, each role by library id, each file by absolute path. */
 export interface FakeRoles { list: RoleSummary[]; details: Record<string, RoleDetail>; files: Record<string, string>; openrigVersion?: string }
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; openrig?: OpenRigState; rigSpecs?: RigSpec[]; /** Images the daemon already holds, by id (no preview: a preview get is served the whole image). */ images?: Record<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }>; roles?: FakeRoles } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; /** What `session.commands` answers, for every session. */ commands?: SlashCommand[]; openrig?: OpenRigState; rigSpecs?: RigSpec[]; /** Images the daemon already holds, by id (no preview: a preview get is served the whole image). */ images?: Record<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }>; roles?: FakeRoles } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -104,6 +104,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       if (msg.type === 'machines.set') { machines = msg.machines; ws.send(JSON.stringify({ type: 'machines', machines })); }
       // #58: the agent's models from `extras.models`; without an entry, an empty list.
       if (msg.type === 'models.list') ws.send(JSON.stringify({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, models: extras.models?.[msg.tool] ?? [] }));
+      if (msg.type === 'session.commands') ws.send(JSON.stringify({ type: 'session.commands.listing', requestId: msg.requestId, id: msg.id, tool: sessions.get(msg.id)?.tool, commands: extras.commands ?? [] }));
       if (msg.type === 'repos.inspect') {
         ws.send(JSON.stringify({ type: 'repos.info', requestId: msg.requestId, repos: msg.paths.map(path => ({ path, ...(extras.repoInfo?.[path] ?? { exists: true, branch: 'main' }) })) }));
       }

@@ -63,6 +63,8 @@ export function Mobile({ ctx }: { ctx: SettingsContext }): JSX.Element {
       <Card title={c.connection}>
         {!localUp && <div role="status" className="set-well"><span>{t.offline}</span></div>}
         <SwitchRow label={c.access} hint={c.accessHint} checked={m.enabled} onChange={on => send({ type: 'mobile.set', enabled: on, relayUrl: m.relayUrl })} />
+        {/* A daemon without the phone's terminal says nothing of it: no switch. */}
+        {m.terminalInput !== undefined && <SwitchRow label={c.terminalInput} hint={c.terminalInputHint} checked={m.terminalInput} onChange={on => send({ type: 'mobile.terminal', input: on })} />}
         <fieldset className="set-fieldset" disabled={!m.enabled}>
           <RelayField key={m.relayUrl} m={m} send={send} />
           <GitHubAccount m={m} send={send} />

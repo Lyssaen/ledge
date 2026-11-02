@@ -396,6 +396,8 @@ export const fr = {
     mobile: {
       connection: 'Connexion',
       access: 'Accès mobile', accessHint: "Ce PC garde une connexion sortante vers le serveur relais. Aucun port n'est ouvert.",
+      terminalInput: 'Taper dans les terminaux depuis le téléphone',
+      terminalInputHint: 'Un appareil lié peut prendre la main sur le terminal d’un agent, après la vérification de sa passkey. Sans ce réglage, le téléphone lit le terminal sans pouvoir y taper.',
       relay: 'Serveur relais', relayHint: "L'adresse du serveur que vous et votre téléphone utilisez.",
       relayInvalid: 'Adresse refusée : https://, ou http:// pour localhost seulement, sans chemin.',
       account: 'Compte GitHub', accountHint: 'Le compte qui relie ce PC et vos téléphones.',
@@ -789,6 +791,7 @@ export const fr = {
     },
     terminal: {
       title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.',
+      phoneHolds: (device: string, n: string) => `Téléphone au clavier : ${device} tape dans le terminal de ${n}.`, takeBack: 'Reprendre la main',
       resize: 'Largeur du terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`,
       agentTab: (n: string) => `${n} · agent`, shellTab: (n: number, dir: string) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
       addShell: 'Nouveau shell', closeTab: (label: string) => `Fermer ${label}`,
@@ -851,6 +854,16 @@ export const fr = {
       queueLabel: 'Consignes en attente', queued: (n: number) => `En attente (${n})`, queueSteer: 'réorienter', queueAfter: 'après ce tour', restore: 'Interrompre et récupérer', restoreTitle: 'Arrête le travail et remet les consignes en attente dans le champ',
       queueTitle: (n: number) => plural(n, `${n} message en attente`, `${n} messages en attente`), queueOrder: 'partent dans l’ordre', queueNow: 'maintenant', queueLater: 'après le tour', queueTakeBack: 'Arrêter et reprendre',
       noNote: 'Cet agent ne prend pas de message avec un refus : refusez avec N.', tooLong: (max: number) => `Une note tient en ${max} caractères au plus.`
+    },
+    slash: {
+      label: (tool: string) => `Commandes de ${tool}`, count: (n: number) => plural(n, `${n} commande`, `${n} commandes`),
+      loading: 'lecture des commandes…', choose: 'choisir', complete: 'compléter', close: 'fermer',
+      unavailable: 'Liste des commandes indisponible.', unavailableBody: (n: string) => ` Vous pouvez quand même taper la commande : Ledge l’enverra telle quelle à ${n}.`,
+      none: (q: string, n: string) => `Aucune commande « ${q} ». Entrée l’envoie comme un message à ${n}.`,
+      sends: (n: string) => `envoie la commande à ${n}`,
+      source: { builtin: 'Intégrée', project: 'Projet', user: 'Perso', plugin: 'Plugin', extension: 'Extension' },
+      blocked: { panel: 'Ouvre un panneau du terminal : à faire dans le terminal', close: 'Terminerait la session : utilisez « Fermer la session »' },
+      bare: (c: string) => `Sans argument, /${c} ouvre un panneau du terminal : donnez-lui un argument.`
     },
     model: {
       label: 'Modèle et effort', apply: 'Appliquer', schedule: 'Programmer', cancel: 'Annuler', nextTurn: 'au prochain tour',

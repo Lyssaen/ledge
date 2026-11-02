@@ -241,6 +241,21 @@ describe('mobile access service', () => {
     expect(s.state().link).toEqual({ state: 'off' });
   });
 
+  it('keeps « Taper dans les terminaux » in mobile.json, off by default, through a mobile.set', async () => {
+    const ctx = await signedIn();
+    expect(ctx.s.state().terminalInput).toBe(false);
+    let changes = 0;
+    ctx.s.onChange(() => { changes++; });
+    await ctx.s.handle({ type: 'mobile.terminal', input: true });
+    expect(ctx.s.state().terminalInput).toBe(true);
+    expect(changes).toBeGreaterThan(0);
+    expect(JSON.parse(readFileSync(paths().mobile, 'utf8'))).toMatchObject({ terminalInput: true });
+    await ctx.s.handle({ type: 'mobile.set', enabled: true, relayUrl: ctx.s.state().relayUrl });
+    expect(ctx.s.state().terminalInput).toBe(true);
+    await ctx.s.handle({ type: 'mobile.terminal', input: false });
+    expect(JSON.parse(readFileSync(paths().mobile, 'utf8'))).not.toHaveProperty('terminalInput');
+  });
+
   it('a changed relayUrl clears the session: account is null', async () => {
     const ctx = await signedIn();
     await ctx.s.handle({ type: 'mobile.set', enabled: true, relayUrl: 'http://localhost:1' });

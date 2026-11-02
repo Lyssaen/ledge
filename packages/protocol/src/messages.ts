@@ -5,6 +5,7 @@ import { BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX } from './broadcast.js';
 import { ActionIdSchema } from './actions.js';
 import { ATTACHMENTS_MAX, AttachmentCaptureSchema, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
+import { SessionCommandsSchema, SessionCommandsListingSchema } from './commands.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { RigSeatNameSchema, OpenRigActSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
@@ -89,6 +90,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(),
   /** Drives OMP over its RPC: launching `omp` sessions is possible when the binary is there (`models.list` says so). */ omp: z.boolean().optional(),
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
+  /** Answers `session.commands`: the slash commands a session's agent offers. */ commands: z.boolean().optional(),
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
@@ -109,6 +111,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ReposInfoSchema,
   ReposFoundSchema,
   ModelsListingSchema,
+  SessionCommandsListingSchema,
   OpenRigStateMessageSchema,
   OpenRigDoneSchema,
   OpenRigSpecListSchema,
@@ -166,6 +169,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('island'), prefs: IslandPrefsSchema.nullable() }),
   /** Mobile access (lot 3), after the island in each snapshot and on every change. Local clients only. */
   z.object({ type: z.literal('mobile'), state: MobileStateSchema }),
+  /** The sessions a phone types into (« Téléphone au clavier »), after each snapshot and each change; `device` is its label. */
+  z.object({ type: z.literal('terminal.holders'), holds: z.array(z.object({ id: z.string(), device: z.string() })) }),
   /** The daemon's immediate answer to a `session.message`: delivered (`accepted`), held for later (`queued`), left to Claude's own SendMessage (`native`), or refused with a `reason`. */
   z.object({ type: z.literal('message.ack'), rid: z.string(), outcome: z.enum(['accepted', 'queued', 'native', 'refused']), reason: z.string().optional(),
     /** A broadcast's per-recipient outcome, by name. */ recipients: z.object({ sent: z.array(z.string()), refused: z.array(z.object({ name: z.string(), reason: z.string() })) }).optional() }),
@@ -200,6 +205,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ReposInspectSchema,
   ReposScanSchema,
   ModelsListSchema,
+  SessionCommandsSchema,
   OpenRigStatusSchema,
   OpenRigActSchema,
   OpenRigSpecsSchema,
@@ -305,6 +311,10 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('mobile.pairing.deny'), id: z.string().min(1).max(100) }),
   /** `id`: the device's fingerprint. */
   z.object({ type: z.literal('mobile.device.revoke'), id: z.string().min(1).max(100) }),
+  /** « Taper dans les terminaux depuis le téléphone »; turned off, every phone loses the hand. */
+  z.object({ type: z.literal('mobile.terminal'), input: z.boolean() }),
+  /** « Reprendre la main »: the phone typing into the session's terminal goes back to reading it. */
+  z.object({ type: z.literal('terminal.release'), id: z.string().min(1) }),
   /** One session writing to another by Ledge name (`to` may end in ` [ref]`); `intercept` (the Claude hook): answer `native` unless `to` is a live non-Claude session. */
   z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional(), intercept: z.boolean().optional() }),
   /** The user writing to every session of a project, or to several sessions (ids or names). */
