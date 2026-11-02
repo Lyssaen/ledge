@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { OpenRigState, RoleDetail, RoleSeat, RoleSummary, StartupEntry } from '@ledge/protocol';
 import { glyphsFor } from '../src/tui/glyphs.js';
 import { fr } from '../src/tui/i18n/fr.js';
-import { lenses, listItems, pieces, provText, roleDocs } from '../src/tui/model/roles.js';
+import { contextRows, fileAsks, lenses, listItems, pieces, provText, roleDocs, roleRows, yamlRows } from '../src/tui/model/roles.js';
 import { startTui } from './tui-fixture.js';
 import { until } from './helpers.js';
 
@@ -59,6 +59,39 @@ describe('Roles view model (TUI)', () => {
     expect(roleDocs(DEV, null).map(e => e.path)).toEqual(['guidance/role.md']);
     expect(roleDocs(DEV, SEAT).map(e => e.path)).toEqual(['guidance/role.md', 'guidance/scope-front.md']);
     expect(pieces(DEV, SEAT).map(p => (p.kind === 'harness' ? 'harness' : p.entry.path))).toEqual(['harness', 'guidance/role.md', 'guidance/scope-front.md', 'openrig-seat-skills.md']);
+  });
+});
+
+describe('Roles view: long lines and late answers (TUI)', () => {
+  const g = glyphsFor({});
+  const text = (rows: Array<{ line: Array<{ text: string }> }>) => rows.map(r => r.line.map(x => x.text).join('')).join('\n');
+  const long = `description: ${'mot '.repeat(40)}FIN-RECONNAISSABLE`;
+  it('a long YAML, raw or action line wraps at the pane’s width, its end readable, at 80 and 120 columns', () => {
+    for (const width of [76, 116]) {
+      const files = { [DEV.file.path]: { content: `name: x\n${long}` }, [roleMd.absolutePath!]: { content: long } };
+      const yaml = yamlRows(DEV, null, files, { width }, fr);
+      expect(text(yaml)).toContain('FIN-RECONNAISSABLE');
+      expect(yaml.every(r => r.line.reduce((n, x) => n + [...x.text].length, 0) <= width)).toBe(true);
+      expect(text(roleRows(DEV, null, files, { width, raw: true, narrow: width < 100, g, lang: 'fr' }, fr))).toContain('FIN-RECONNAISSABLE');
+      const action: StartupEntry = { kind: 'action', builtin: 'x', value: long, layer: 'openrig', layerInferred: false, delivery: 'send_text', appliesOn: [], origin: { kind: 'inherited', from: 'openrig' } };
+      const seat = { ...SEAT, live: { ...SEAT.live!, startup: [action] } };
+      expect(text(contextRows(DEV, seat, files, 1, { width, raw: false, narrow: width < 100, g, lang: 'fr' }, fr).rows)).toContain('FIN-RECONNAISSABLE');
+    }
+  });
+  it('a late answer from a machine or role left is dropped, even after coming back to it', async () => {
+    const asks = fileAsks();
+    const shown: string[] = [];
+    const later: Array<() => void> = [];
+    const read = (v: string) => () => new Promise<string>(res => later.push(() => res(v)));
+    asks.reset(); asks.ask('/p', read('machine A, first visit'), v => shown.push(v));
+    asks.reset(); asks.ask('/p', read('machine B'), v => shown.push(v));
+    asks.reset(); asks.ask('/p', read('machine A, back again'), v => shown.push(v));
+    // Answers in reverse order: only the current generation's is kept.
+    for (const f of later.reverse()) { f(); await Promise.resolve(); await Promise.resolve(); }
+    expect(shown).toEqual(['machine A, back again']);
+    // Asked once per generation.
+    asks.ask('/p', read('again'), v => shown.push(v));
+    expect(later).toHaveLength(3);
   });
 });
 

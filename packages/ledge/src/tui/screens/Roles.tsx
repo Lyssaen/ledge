@@ -4,7 +4,7 @@ import { readRoleFile, useOpenRigRole, useOpenRigRoles } from '@ledge/fleet/open
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { cells, cut, type Line } from '../model/cells.js';
 import { step } from '../model/openrig.js';
-import { contextRows, filesFor, headRows, lenses, listItems, listLines, paramRows, pieces, roleRows, seatKey, yamlRows, type Files, type Prov, type Row } from '../model/roles.js';
+import { contextRows, fileAsks, filesFor, headRows, lenses, listItems, listLines, paramRows, pieces, roleRows, seatKey, yamlRows, type Files, type Prov, type Row } from '../model/roles.js';
 import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { LineText } from '../ui/Lines.js';
@@ -63,20 +63,15 @@ export function RolesScreen({ onRigs, machineId, onMachine }: { onRigs: () => vo
   // A new role, lens or tab starts at the top.
   useEffect(() => { setScroll(0); setAt(0); setReading(false); }, [currentId, seatK, shownTab]);
 
-  // The files the tab reads, asked once each per role; an answer for a role no longer open is dropped.
-  const asked = useRef(new Set<string>());
-  const openRole = useRef<string | null>(null);
-  useEffect(() => { asked.current = new Set(); openRole.current = currentId; setFiles({}); }, [currentId, machine?.id]);
+  // The files the tab reads, asked once each per machine and role; an answer from a machine or role left is dropped.
+  const asks = useRef(fileAsks());
+  useEffect(() => { asks.current.reset(); setFiles({}); }, [currentId, machine?.id]);
   const wanted = (d ? filesFor(d, seat, shownTab, at, open) : []).join('\n');
   useEffect(() => {
     if (!wanted || !machine || !currentId) return;
-    const id = currentId;
+    const id = currentId, mid = machine.id;
     for (const p of wanted.split('\n')) {
-      if (asked.current.has(p)) continue;
-      asked.current.add(p);
-      void readRoleFile(tui.client, machine.id, id, p).then(m => {
-        if (openRole.current === id) setFiles(f => ({ ...f, [p]: m.content !== undefined && !m.error ? { content: m.content } : { error: m.error ?? 'missing' } }));
-      });
+      asks.current.ask(p, () => readRoleFile(tui.client, mid, id, p), m => setFiles(f => ({ ...f, [p]: m.content !== undefined && !m.error ? { content: m.content } : { error: m.error ?? 'missing' } })));
     }
   }, [wanted, machine, currentId, tui.client]);
 

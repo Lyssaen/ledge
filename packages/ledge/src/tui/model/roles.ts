@@ -165,7 +165,8 @@ function fileRows(e: StartupEntry, files: Files, o: { width: number; raw: boolea
   const prov = provOf(e.origin);
   if (!f) return [{ line: [{ text: r.reading, color: C.faint }] }];
   if (f.error || f.content === undefined) return [{ line: [{ text: r.fileMissing, color: C.yellow }], rail: 'unk' }, { line: [{ text: tilde(e.absolutePath ?? e.path ?? ''), color: C.faint }] }];
-  const lines = o.raw || !(e.path ?? '').endsWith('.md') ? f.content.split('\n').map(l => [{ text: l, color: C.fg }] as Line) : markdownLines(f.content, { width: o.width, g: o.g, color: C.fg });
+  // Raw text wraps at the pane's width: nothing is cut off, there is no sideways scroll.
+  const lines = o.raw || !(e.path ?? '').endsWith('.md') ? f.content.split('\n').flatMap(l => wrapSegs([{ text: l, color: C.fg }], o.width)) : markdownLines(f.content, { width: o.width, g: o.g, color: C.fg });
   return lines.map(line => ({ line, rail: prov }));
 }
 
@@ -308,7 +309,7 @@ export function contextRows(d: RoleDetail, seat: RoleSeat | null, files: Files, 
     rows.push({ line: [{ text: e.kind === 'action' ? pieceTitle(e, t) : e.path ?? '', color: C.fg, bold: true }, { text: `  ${provText(e.origin, t, g, o.narrow)}`, color: provColor(provOf(e.origin)) }] });
     if (e.absolutePath) rows.push({ line: cut([{ text: `${tilde(e.absolutePath)} · ${r.delivered(e.delivery === 'send_text', e.required)}`, color: C.faint }], w) });
     if (isMissing(e)) rows.push({ line: cut([{ text: r.missing(base(e.path ?? ''), tilde(e.into ?? 'CLAUDE.md')), color: C.yellow }], w), rail: 'unk' });
-    else if (e.kind === 'action') for (const l of (e.value ?? '').split('\n')) rows.push({ line: [{ text: l, color: C.fg }], rail: provOf(e.origin) });
+    else if (e.kind === 'action') for (const l of (e.value ?? '').split('\n')) for (const line of wrapSegs([{ text: l, color: C.fg }], w)) rows.push({ line, rail: provOf(e.origin) });
     else rows.push(...fileRows(e, files, o, t));
   }
   return { rows, selRow };
@@ -321,7 +322,7 @@ export function yamlRows(d: RoleDetail, seat: RoleSeat | null, files: Files, o: 
   const yaml = (text: string, hl?: number) => text.split('\n').forEach((l, i) => {
     const m = /^(\s*-?\s*)([A-Za-z_][\w.-]*)(:)(.*)$/.exec(l);
     const line: Line = /^\s*#/.test(l) ? [{ text: l, color: C.faint }] : m ? [{ text: m[1]! }, { text: m[2]!, color: C.blue }, { text: m[3]!, color: C.dim }, { text: m[4]!, color: C.green }] : [{ text: l, color: C.fg }];
-    out.push(hl === i + 1 ? { line: line.map(x => ({ ...x, bg: C.code })), rail: 'unk' } : { line });
+    for (const part of wrapSegs(line, w)) out.push(hl === i + 1 ? { line: part.map(x => ({ ...x, bg: C.code })), rail: 'unk' } : { line: part });
   });
   const file = (path: string, title: Line, hl?: number) => {
     out.push({ line: cut(title, w) });
@@ -346,3 +347,20 @@ export function filesFor(d: RoleDetail, seat: RoleSeat | null, tab: number, at: 
 }
 
 export type { Seg };
+
+/** Which answers about files may still be shown: a new machine or role starts a new generation, and an answer asked in an
+ *  older one (a late reply from the machine left, even after coming back to it) is dropped. */
+export function fileAsks() {
+  let generation = 0;
+  let asked = new Set<string>();
+  return {
+    reset() { generation++; asked = new Set(); },
+    /** Asks `path` once per generation; `onAnswer` runs only if the generation has not changed since. */
+    ask<T>(path: string, read: () => Promise<T>, onAnswer: (answer: T) => void): void {
+      if (asked.has(path)) return;
+      asked.add(path);
+      const g = generation;
+      void read().then(a => { if (g === generation) onAnswer(a); });
+    }
+  };
+}
