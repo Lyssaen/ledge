@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge TUI rôles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root,:root[data-theme=light]{--page:#e9e9e9;--chrome:oklch(0.96 0 0);--fg:#1a1a1a;--muted:#6b6b6b;--border:#d4d4d4;--btn:#e5e5e5}
+:root[data-theme=dark]{--page:#000;--chrome:#0d0d0d;--fg:#f5f5f5;--muted:#a3a3a3;--border:#ffffff1a;--btn:#262626}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Geist',system-ui,sans-serif;background:var(--page);color:var(--fg);font-size:14px;line-height:20px}
+button{font:inherit;color:inherit;cursor:pointer;background:none}
+:focus-visible{outline:2px solid #60a5fa;outline-offset:1px}
+.mk-bar{position:relative;top:0;z-index:5;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--chrome);border-bottom:1px solid var(--border)}
+.mk-bar strong{margin-right:10px;font-weight:600}
+.mk-bar .sp{flex:1}
+.mk-bar button{border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:13px;color:var(--muted)}
+.mk-bar button[aria-pressed=true]{background:var(--btn);color:var(--fg)}
+.seg{display:flex;gap:2px;border:1px solid var(--border);border-radius:9px;padding:2px}
+.seg button{border:0!important;padding:3px 9px!important}
+.note{max-width:1240px;margin:14px auto 12px;padding:0 16px;color:var(--muted);font-size:13px}
+.note b{color:var(--fg);font-weight:500}
+.note code{font-family:'Geist Mono',monospace;font-size:12px}
+.frame{max-width:max-content;margin:0 auto 26px;border-radius:10px;padding:10px;border:1px solid var(--border)}
+.tt{font-family:'Geist Mono','DejaVu Sans Mono',ui-monospace,monospace;font-size:12.5px;line-height:18px;white-space:pre}
+.tt .c{display:inline-block;width:1ch;text-align:center;overflow:hidden;vertical-align:top}
+.cap{max-width:max-content;margin:0 auto 6px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="mk-bar" role="toolbar" aria-label="Vues de la maquette">
+  <strong>Maquette · Rôles OpenRig dans ledge tui</strong>
+  <button data-v="role" aria-pressed="true">1 · Rôle (role.md) · 120</button>
+  <button data-v="params" aria-pressed="false">2 · Paramètres depuis un siège · 120</button>
+  <button data-v="context" aria-pressed="false">3 · Contexte de démarrage · 120</button>
+  <button data-v="narrow" aria-pressed="false">4 · 80 colonnes</button>
+  <button data-v="rigs" aria-pressed="false">5 · Lien depuis Rigs</button>
+  <button data-v="states" aria-pressed="false">6 · États</button>
+  <span class="sp"></span>
+  <span class="seg"><button data-theme-btn="dark" aria-pressed="true">Sombre</button><button data-theme-btn="light" aria-pressed="false">Clair</button></span>
+  <span class="seg"><button data-lang-btn="fr" aria-pressed="true">FR</button><button data-lang-btn="en" aria-pressed="false">EN</button></span>
+</div>
+<p class="note" id="note"></p>
+<div id="screens"></div>
+
+<script type="text/plain" id="md-role"># Rôle : développeur de ledge-dev
+
+Tu implémentes la tâche qui t'est assignée et tu la prouves par l'effet. Ton périmètre (front ou back) t'est donné au démarrage.
+
+## Au démarrage
+
+`rig whoami --json`, puis `rig queue list --owned --limit 1000`. Réclame la ligne avant d'y travailler.
+
+## Avant d'écrire du code
+
+- **Écran touché ?** La tâche doit citer une maquette de `docs/mockups/` validée par l'utilisateur. Sans elle, renvoie la ligne au lead : tu ne commences pas le front-end. La maquette fait foi pour la disposition, les états, les textes FR/EN et les interactions ; un point absent se demande à `design-ux@ledge-dev`, il ne s'invente pas.
+- Lis la zone concernée avant de la modifier ; reproduis un défaut avant de le corriger.
+
+## Où travailler
+
+Jamais dans `~/Workspace/ledge` (la copie de l'utilisateur, souvent avec du travail en cours). Un worktree par tâche, à côté du dépôt :
+
+```
+git -C ~/Workspace/ledge worktree add ../ledge-worktrees/<siège>-<sujet> -b <type>/<sujet> <base>
+```
+
+puis `pnpm install` **dans** ce worktree (jamais de `node_modules` lié depuis la copie principale : les builds liraient l'autre arbre). Travaille et teste dans ce dossier.
+
+## Livrer
+
+- Changement minimal et cohérent ; tests du comportement modifié ; `pnpm test` (Node 22) et `pnpm typecheck` du paquet touché au minimum.
+- Commits locaux sur ta branche. Pas de push, PR ou merge sans accord explicite de l'utilisateur.</script>
+<script type="text/plain" id="md-front"># Ton périmètre : front-end
+
+Tu es `dev-front`. Tu tiens les interfaces : `apps/desktop` (Tauri 2 + React, Vite), `apps/mobile` (PWA), `apps/overlay` (l'île), `packages/ui`, et le rendu de `ledge tui`.
+
+- Tout changement visible part d'une maquette validée (voir ton rôle). Tu travailles avec `design-ux@ledge-dev`.
+- Avant de dire fini sur un écran : captures Playwright, zoomées, alignements contrôlés contre la maquette, thèmes clair et sombre.
+- Textes ajoutés en FR et EN (`src/i18n/fr.ts`, `src/i18n/en.ts`).</script>
+
+<script>
+/* TUI palettes: packages/ledge/src/tui/theme.ts (PALETTES), plus the status bar grey of ledge-openrig.html view 4. */
+const PAL = {
+  dark:{fg:'#e6e0dc',dim:'#8f8681',faint:'#5f5854',line:'#3a3532',sel:'#2b2725',coral:'#f07a62',blue:'#7fb2ec',red:'#f0806e',yellow:'#e6c46a',green:'#86cf9d',bar:'#1f1d1b',key:'#2c2926',code:'#2a2624',bg:'#1c1917'},
+  light:{fg:'#24201d',dim:'#6b625d',faint:'#9b928c',line:'#cfc6be',sel:'#e8e1da',coral:'#c44a2f',blue:'#2c64b0',red:'#c2412f',yellow:'#8a6100',green:'#23824b',bar:'#ece6e0',key:'#e3dcd6',code:'#ece6e0',bg:'#faf7f4'}
+};
+const T = {
+fr:{
+  n_role:'<b>Écran OpenRig (6) › Rôles</b>, à côté des rigs : <code>v</code> bascule <b>Rigs ⇄ Rôles</b> (le titre le dit). À gauche les rôles, à droite le rôle choisi, ouvert sur l\'onglet <b>Rôle</b> : son <code>role.md</code> en entier, rendu comme le reste du TUI. <code>← →</code> change d\'onglet, <code>f</code> fait défiler « vu selon la spec → depuis dev.front → depuis dev.back », <code>r</code> bascule rendu / brut. Lecture seule : aucune touche ne modifie une spec.',
+  n_params:'<b>Paramètres, vu depuis dev.front</b> : chaque ligne porte sa provenance dans la marge (barre colorée) et en clair à droite — <b>● ici</b>, <b>↳ hérité · source</b>, <b>○ non déclaré</b>, <b>? inconnu · raison</b>. La légende est la première ligne. <code>↵</code> sur une ligne repliée (<code>▸</code>) la déplie (skills d\'un plugin, fragment runtime).',
+  n_context:'<b>Contexte de démarrage</b> : les pièces dans l\'ordre que rend OpenRig, avec la provenance, le canal (<code>terminal</code> ou <code>CLAUDE.md</code>) et la taille ; <code>↵</code> lit la pièce choisie dans la moitié basse. Le prompt du harnais et la pièce prévue mais absente restent à leur place, marqués <b>? inconnu</b>.',
+  n_narrow:'<b>80 colonnes</b> : un seul panneau à la fois. La liste occupe l\'écran ; <code>↵</code> ouvre le rôle sur toute la largeur, <code>esc</code> revient. La provenance se raccourcit à son glyphe et à sa source (<code>↳ shared</code>, <code>↳ dev.front</code>). La barre de touches perd d\'abord les dernières touches (<code>fitKeys</code>), <code>?</code> reste.',
+  n_rigs:'<b>Lien depuis Rigs</b> : un rig déplié laisse <code>j k</code> descendre sur ses sièges. Chaque siège montre son rôle ; <code>i</code> ouvre ce rôle <b>vu depuis ce siège</b>, onglet Rôle (vue 1 avec « depuis dev.front »).',
+  n_states:'<b>États</b> : chargement, daemon arrêté, role.md introuvable, rôle sans role.md, plusieurs fichiers de consignes.',
+  bar:' ◖ ledge', sessions:'  5 sessions · 1 machine', crumb:'OpenRig 0.7.7 · Local · Rôles', crumbRigs:'OpenRig 0.7.7 · Local',
+  roles:'Rôles', mine:'Mes specs', builtin:'Livrés avec OpenRig', seat1:'1 siège', seatsN:n=>n+' sièges', imported:'importée',
+  search:'/ rôle, skill, fichier…',
+  desc:'Dev de ledge-dev — implémente dans un worktree, prouve par l\'effet, passe par la revue',
+  path:'~/.openrig/specs/openrig/agents/developer/agent.yaml', same:'= dépôt · identique',
+  seen:'vu', spec:'selon la spec', from:'depuis',
+  tRole:'Rôle', tParams:'Paramètres', tCtx:'Contexte', tYaml:'YAML',
+  delivered:'tapé au démarrage · requis', more:n=>`↓ ${n} lignes plus bas`,
+  here:'● ici', inh:s=>'↳ hérité · '+s, abs:'○ non déclaré', unk:s=>'? inconnu · '+s,
+  legend:[['● ici','fg'],['↳ hérité','blue'],['○ non déclaré','faint'],['? inconnu','yellow']],
+  member:'membre dev.front', imp:'import shared', launch:'lancement', rig:'rig ledge-dev', plugin:'plugin openrig-core', openrig:'OpenRig', notExposed:'non exposé', missing:'absent de CLAUDE.md', unread:'illisible',
+  p:{runtime:'Runtime',model:'Modèle',effort:'Effort',profile:'Profil',cwd:'Dossier',culture:'Culture',imports:'Import',skills:'Skills',guidance:'Guidance',subagents:'Sous-agents',plugins:'Plugins',rr:'Ressources runtime',merged:'Réglages fusionnés',files:'Démarrage',rr80:'Fragments',merged80:'Fusion réglages'},
+  sec:{exec:'Exécution',uses:'Ce que le profil utilise',start:'Fichiers de démarrage'},
+  runtimeDefault:'défaut du runtime', empty:'vide', skills19:'19 skills projetées ▸', core:'shared:openrig-core · 19 skills · 2 hooks ▸', na:'non installé (runtime codex)',
+  ctxIntro:'Pas de prompt système unique : ce que dev.front reçoit, dans l\'ordre d\'OpenRig.',
+  pieces:[['?','unk','Prompt de base de Claude Code','harnais','—','non exposé'],['●','here','Rôle · guidance/role.md','terminal','1,8 ko',''],['↳','inh','Culture OpenRig par défaut','CLAUDE.md','1,3 ko','OpenRig'],['↳','inh','Culture du rig · CULTURE.md','CLAUDE.md','3,0 ko','rig ledge-dev'],['↳','inh','Périmètre · guidance/scope-front.md','terminal','0,7 ko','membre dev.front'],['↳','inh','Démarrage OpenRig','CLAUDE.md','2,6 ko','OpenRig'],['↳','inh','Accueil OpenRig 1/2','CLAUDE.md','4,0 ko','1er démarrage'],['↳','inh','Accueil OpenRig 2/2','CLAUDE.md','8,4 ko','1er démarrage'],['?','unk','Skills du siège · seat-skills.md','CLAUDE.md','—','absent de CLAUDE.md'],['↳','inh','Identité du siège','terminal','0,6 ko','OpenRig']],
+  notShown:'pas montré : ~/.claude/CLAUDE.md, mémoire, hooks, réglages fusionnés',
+  k:{machine:'machine',view:'rigs/rôles',nav:'naviguer',open:'ouvrir',tab:'onglet',from:'vu depuis',raw:'brut',search:'chercher',back:'retour',help:'aide',scroll:'défiler',list:'liste',read:'lire',unfold:'déplier',role:'rôle du siège',toggle:'démarrer/arrêter'},
+  rigsT:'Rigs', daemonT:'Daemon · Local', kernelT:'Kernel', active:'● actif', ready:'● prêt', since:'depuis 32 min', running:'● en marche', work:'au travail', idle:'disponible',
+  st:{loading:'Lecture des rôles…', daemon:'Le daemon OpenRig est arrêté sur Local.', daemon2:'Les rôles viennent du daemon : D le démarre (vue Rigs).', miss:'guidance/role.md', missWhy:'fichier introuvable', missPath:'~/.openrig/specs/openrig/agents/ux/guidance/role.md', none:'Ce rôle ne déclare pas de consignes (aucun role.md).', none2:'Ce que ses sièges reçoivent quand même : ← → Contexte.', multi:'2 fichiers, dans l\'ordre de livraison :', tLoad:'Chargement', tDaemon:'Daemon arrêté', tMiss:'role.md introuvable', tNone:'Sans role.md', tMulti:'Plusieurs fichiers'},
+},
+en:{
+  n_role:'<b>OpenRig screen (6) › Roles</b>, next to the rigs: <code>v</code> switches <b>Rigs ⇄ Roles</b> (the title says which). Left, the roles; right, the chosen role, open on the <b>Role</b> tab: its whole <code>role.md</code>, rendered like the rest of the TUI. <code>← →</code> changes tab, <code>f</code> cycles “seen from the spec → from dev.front → from dev.back”, <code>r</code> toggles rendered / raw. Read-only: no key changes a spec.',
+  n_params:'<b>Parameters, seen from dev.front</b>: each row shows its provenance in the margin (coloured bar) and in words on the right — <b>● here</b>, <b>↳ inherited · source</b>, <b>○ not declared</b>, <b>? unknown · reason</b>. The legend is the first line. <code>↵</code> on a folded row (<code>▸</code>) unfolds it (a plugin\'s skills, a runtime fragment).',
+  n_context:'<b>Startup context</b>: the pieces in the order OpenRig returns, with provenance, channel (<code>terminal</code> or <code>CLAUDE.md</code>) and size; <code>↵</code> reads the chosen piece in the lower half. The harness prompt and the planned-but-missing piece keep their place, marked <b>? unknown</b>.',
+  n_narrow:'<b>80 columns</b>: one pane at a time. The list fills the screen; <code>↵</code> opens the role full width, <code>esc</code> goes back. Provenance shortens to its glyph and source (<code>↳ shared</code>, <code>↳ dev.front</code>). The key bar drops its last keys first (<code>fitKeys</code>), <code>?</code> stays.',
+  n_rigs:'<b>Link from Rigs</b>: an unfolded rig lets <code>j k</code> walk down its seats. Each seat shows its role; <code>i</code> opens that role <b>seen from that seat</b>, Role tab (view 1 with “from dev.front”).',
+  n_states:'<b>States</b>: loading, daemon stopped, role.md missing, role without role.md, several instruction files.',
+  bar:' ◖ ledge', sessions:'  5 sessions · 1 machine', crumb:'OpenRig 0.7.7 · Local · Roles', crumbRigs:'OpenRig 0.7.7 · Local',
+  roles:'Roles', mine:'My specs', builtin:'Shipped with OpenRig', seat1:'1 seat', seatsN:n=>n+' seats', imported:'imported',
+  search:'/ role, skill, file…',
+  desc:'Dev de ledge-dev — implémente dans un worktree, prouve par l\'effet, passe par la revue',
+  path:'~/.openrig/specs/openrig/agents/developer/agent.yaml', same:'= repository · identical',
+  seen:'seen', spec:'from the spec', from:'from',
+  tRole:'Role', tParams:'Parameters', tCtx:'Context', tYaml:'YAML',
+  delivered:'typed at startup · required', more:n=>`↓ ${n} more lines`,
+  here:'● here', inh:s=>'↳ inherited · '+s, abs:'○ not declared', unk:s=>'? unknown · '+s,
+  legend:[['● here','fg'],['↳ inherited','blue'],['○ not declared','faint'],['? unknown','yellow']],
+  member:'member dev.front', imp:'import shared', launch:'launch', rig:'rig ledge-dev', plugin:'plugin openrig-core', openrig:'OpenRig', notExposed:'not exposed', missing:'missing from CLAUDE.md', unread:'unreadable',
+  p:{runtime:'Runtime',model:'Model',effort:'Effort',profile:'Profile',cwd:'Folder',culture:'Culture',imports:'Import',skills:'Skills',guidance:'Guidance',subagents:'Subagents',plugins:'Plugins',rr:'Runtime resources',merged:'Merged settings',files:'Startup',rr80:'Fragments',merged80:'Merged settings'},
+  sec:{exec:'Execution',uses:'What the profile uses',start:'Startup files'},
+  runtimeDefault:'runtime default', empty:'empty', skills19:'19 projected skills ▸', core:'shared:openrig-core · 19 skills · 2 hooks ▸', na:'not installed (runtime codex)',
+  ctxIntro:'No single system prompt: what dev.front receives, in OpenRig\'s order.',
+  pieces:[['?','unk','Claude Code base prompt','harness','—','not exposed'],['●','here','Role · guidance/role.md','terminal','1.8 kB',''],['↳','inh','OpenRig default culture','CLAUDE.md','1.3 kB','OpenRig'],['↳','inh','Rig culture · CULTURE.md','CLAUDE.md','3.0 kB','rig ledge-dev'],['↳','inh','Scope · guidance/scope-front.md','terminal','0.7 kB','member dev.front'],['↳','inh','OpenRig start','CLAUDE.md','2.6 kB','OpenRig'],['↳','inh','OpenRig onboarding 1/2','CLAUDE.md','4.0 kB','first start'],['↳','inh','OpenRig onboarding 2/2','CLAUDE.md','8.4 kB','first start'],['?','unk','Seat skills · seat-skills.md','CLAUDE.md','—','missing from CLAUDE.md'],['↳','inh','Seat identity','terminal','0.6 kB','OpenRig']],
+  notShown:'not shown: ~/.claude/CLAUDE.md, memory, hooks, merged settings',
+  k:{machine:'machine',view:'rigs/roles',nav:'navigate',open:'open',tab:'tab',from:'seen from',raw:'raw',search:'search',back:'back',help:'help',scroll:'scroll',list:'list',read:'read',unfold:'unfold',role:'seat\'s role',toggle:'start/stop'},
+  rigsT:'Rigs', daemonT:'Daemon · Local', kernelT:'Kernel', active:'● running', ready:'● ready', since:'for 32 min', running:'● running', work:'working', idle:'available',
+  st:{loading:'Reading roles…', daemon:'The OpenRig daemon is stopped on Local.', daemon2:'Roles come from the daemon: D starts it (Rigs view).', miss:'guidance/role.md', missWhy:'file not found', missPath:'~/.openrig/specs/openrig/agents/ux/guidance/role.md', none:'This role declares no instructions (no role.md).', none2:'What its seats still receive: ← → Context.', multi:'2 files, in delivery order:', tLoad:'Loading', tDaemon:'Daemon stopped', tMiss:'role.md missing', tNone:'No role.md', tMulti:'Several files'},
+}};
+
+let theme='dark', lang='fr', view='role';
+let C, L;
+
+/* ---------- a cell grid ---------- */
+class Scr{
+  constructor(w,h){this.w=w;this.h=h;this.c=[...Array(h)].map(()=>[...Array(w)].map(()=>({ch:' ',fg:C.fg,bg:null,b:false})));}
+  put(x,y,str,fg=C.fg,bg=null,b=false){ if(y<0||y>=this.h) return x; for(const ch of [...str]){ if(x>=0&&x<this.w) this.c[y][x]={ch,fg,bg:bg??this.c[y][x].bg,b}; x++; } return x; }
+  segs(x,y,segs,maxX=this.w){ for(const s of segs){ const room=maxX-x; if(room<=0) break; const str=[...s.t].slice(0,room).join(''); x=this.put(x,y,str,s.fg??C.fg,s.bg??null,!!s.b); } return x; }
+  fill(x,y,w,bg){ for(let i=x;i<x+w&&i<this.w;i++) if(y>=0&&y<this.h) this.c[y][i].bg=bg; }
+  box(x,y,w,h,title,{color=C.line,tColor=C.dim,mark=null,foot=null,bold=false}={}){
+    const head=' '+title.toUpperCase(); const mk=mark?' '+mark.t.toUpperCase():'';
+    this.put(x,y,'╭─',color); let cx=this.put(x+2,y,head,tColor,null,bold); if(mark) cx=this.put(cx,y,mk,mark.fg); cx=this.put(cx,y,' ',tColor);
+    this.put(cx,y,'─'.repeat(Math.max(0,x+w-1-cx)),color); this.put(x+w-1,y,'╮',color);
+    for(let i=1;i<h-1;i++){ this.put(x,y+i,'│',color); this.put(x+w-1,y+i,'│',color); }
+    if(foot){ const f=' '+foot+' '; const n=Math.max(1,w-4-[...f].length); this.put(x,y+h-1,'╰'+'─'.repeat(n),color); const fx=this.put(x+1+n,y+h-1,f,C.faint); this.put(fx,y+h-1,'─'.repeat(Math.max(0,x+w-1-fx))+'╯',color); }
+    else this.put(x,y+h-1,'╰'+'─'.repeat(w-2)+'╯',color);
+  }
+  html(){
+    return this.c.map(row=>row.map(k=>{ const st=`color:${k.fg};${k.bg?`background:${k.bg};`:''}${k.b?'font-weight:600;':''}`; const ch=k.ch==='&'?'&amp;':k.ch==='<'?'&lt;':k.ch==='>'?'&gt;':k.ch; return `<span class="c" style="${st}">${ch}</span>`; }).join('')).join('\n');
+  }
+}
+const len = s => [...s].length;
+const pad = (s,n) => len(s)>=n ? [...s].slice(0,n-1).join('')+'…' : s+' '.repeat(n-len(s));
+
+/* ---------- frame: status bar, keys ---------- */
+function frame(S,crumb,keys){
+  S.fill(0,0,S.w,C.bar);
+  let x=S.put(0,0,L.bar,C.coral,C.bar); S.put(x,0,L.sessions,C.dim,C.bar);
+  const cr=len(crumb)<S.w-40?crumb:crumb.split(' · ').pop(); S.put(S.w-1-len(cr),0,cr,C.dim,C.bar);
+  // fitKeys: drop the last keys until it fits, `?` stays.
+  const help=['?',L.k.help]; let list=keys.slice();
+  const w=l=>1+l.reduce((n,[k,lab],i)=>n+len(` ${k} `)+len(` ${lab}`)+(i?2:0),0);
+  while(list.length && w([...list,help])>S.w-1) list.pop();
+  x=1; for(const [k,lab] of [...list,help]){ x=S.put(x,S.h-1,` ${k} `,C.fg,C.key); x=S.put(x,S.h-1,` ${lab}`,C.dim); x+=2; }
+}
+
+/* ---------- markdown → styled lines ---------- */
+function mdLines(src,width){
+  const out=[]; let code=false;
+  const toks = str => { const r=[]; str.split(/(`[^`]+`|\*\*[^*]+\*\*)/).forEach(p=>{ if(!p) return; if(p.startsWith('`')) r.push({t:p.slice(1,-1),fg:C.fg,bg:C.code}); else if(p.startsWith('**')) r.push({t:p.slice(2,-2),fg:C.fg,b:true}); else r.push({t:p,fg:C.fg}); }); return r; };
+  const wrap = (segs,w,first='',hang='') => {
+    const words=[]; segs.forEach(s=>s.t.split(/(\s+)/).forEach(p=>{ if(p) words.push({...s,t:p}); }));
+    const lines=[]; let cur=first?[{t:first,fg:C.dim}]:[]; let n=len(first);
+    for(const wd of words){ const l=len(wd.t); if(/^\s+$/.test(wd.t)){ if(n>0&&n<w){cur.push(wd);n+=l;} continue; } if(n+l>w && n>len(hang)){ lines.push(cur); cur=hang?[{t:hang,fg:C.dim}]:[]; n=len(hang); } cur.push(wd); n+=l; }
+    if(cur.length) lines.push(cur); return lines;
+  };
+  for(const l of src.split('\n')){
+    if(l.startsWith('```')){ code=!code; continue; }
+    if(code){ out.push([{t:'  '+l,fg:C.dim,bg:C.code}]); continue; }
+    if(/^# /.test(l)){ out.push([{t:l.slice(2),fg:C.coral,b:true}]); continue; }
+    if(/^## /.test(l)){ if(out.length && out[out.length-1].length) out.push([]); out.push([{t:l.slice(3),fg:C.fg,b:true}]); continue; }
+    if(/^- /.test(l)){ wrap(toks(l.slice(2)),width,'• ','  ').forEach(x=>out.push(x)); continue; }
+    if(!l.trim()){ if(out.length && out[out.length-1].length) out.push([]); continue; }
+    wrap(toks(l),width).forEach(x=>out.push(x));
+  }
+  return out;
+}
+
+/* ---------- pieces ---------- */
+const provColor = k => ({here:C.fg,inh:C.blue,abs:C.faint,unk:C.yellow})[k];
+/* The margin rail: here is grey (not the yellow of unknown), inherited blue, not declared faint, unknown yellow. */
+function rail(S,x,y,k){ S.put(x,y,'▎',k==='here'?C.dim:provColor(k)); }
+function rightAlign(S,xEnd,y,str,fg){ S.put(xEnd-len(str),y,str,fg); }
+
+function roleList(S,x,y,w,h,{sel=0,narrow=false}={}){
+  S.box(x,y,w,h,L.roles+' · 21');
+  const ix=x+2, iw=w-4; let yy=y+1;
+  S.put(ix,yy++,L.search,C.faint);
+  yy++;
+  S.segs(ix,yy++,[{t:L.mine,fg:C.dim},{t:' · 5',fg:C.faint}]);
+  const rows=[['ledge-developer',L.seatsN(2),true],['ledge-lead',L.seat1,true],['ledge-reviewer',L.seat1,true],['ledge-ux',L.seat1,true],['shared',L.imported,false]];
+  rows.forEach(([n,c,live],i)=>{
+    const s=i===sel; if(s) S.fill(x+1,yy,w-2,C.sel);
+    S.put(x+1,yy,s?'▌':' ',s?C.coral:C.faint,s?C.sel:null);
+    S.put(ix,yy,n,live?C.fg:C.faint,s?C.sel:null,s);
+    const ct=(live?'● ':'')+c; S.put(ix+iw-len(ct),yy,ct,live?C.green:C.faint,s?C.sel:null);
+    if(live) S.put(ix+iw-len(ct)+2,yy,c,C.dim,s?C.sel:null);
+    yy++;
+    if(narrow){ const sum={'ledge-developer':'Dev de ledge-dev — implémente dans un worktree…','ledge-lead':'Lead de ledge-dev — reçoit les objectifs, applique…','ledge-reviewer':'Reviewer de ledge-dev — revue indépendante du diff…','ledge-ux':'UX/UI de ledge-dev — maquettes dans docs/mockups…','shared':'Ressources communes aux agents de ledge-dev…'}[n]; S.put(ix+2,yy++,pad(sum,iw-2),C.faint,s?null:null); }
+  });
+  yy++;
+  S.segs(ix,yy++,[{t:'▸ ',fg:C.dim},{t:L.builtin,fg:C.dim},{t:' · 16',fg:C.faint}]);
+}
+
+function detailHead(S,x,y,w,{lens='spec',tab=0,ctxN=1,narrow=false}){
+  const ix=x+2, iw=w-4; let yy=y+1;
+  mdLines(L.desc,iw).forEach(l=>{ S.segs(ix,yy++,l.map(s=>({...s,fg:C.fg}))); });
+  if(narrow) S.put(ix,yy++,pad(L.path,iw),C.faint);
+  else S.segs(ix,yy++,[{t:L.path,fg:C.faint},{t:'  '+L.same,fg:C.green}]);
+  const lensItems=[['spec',L.spec],['dev.front',L.from+' dev.front'],['dev.back',L.from+' dev.back']];
+  let lx=S.put(ix,yy,L.seen+'  ',C.dim);
+  lensItems.forEach(([k,lab])=>{ if(k===lens) lx=S.put(lx,yy,'‹ '+lab+' ›',C.fg,null,true); else lx=S.put(lx,yy,'  '+lab+'  ',C.dim); lx+=1; });
+  yy+=2;
+  const tabs=[L.tRole,L.tParams,L.tCtx+' '+ctxN,L.tYaml]; let tx=ix;
+  tabs.forEach((lab,i)=>{ if(i===tab) tx=S.put(tx,yy,'‹ '+lab+' ›',C.coral,null,true); else tx=S.put(tx,yy,'  '+lab+'  ',C.dim); tx+=1; });
+  yy++;
+  S.put(ix,yy++,'─'.repeat(iw),C.line);
+  return yy;
+}
+
+function roleBody(S,x,y,w,yEnd,{seat=false,narrow=false}){
+  const ix=x+2, iw=w-4; let yy=y;
+  const head=(file,prov,pc,size)=>{ S.segs(ix,yy,[{t:file,fg:C.fg,b:true},{t:'  '+prov,fg:pc}]); rightAlign(S,ix+iw,yy,size,C.faint); yy++; if(!narrow){ S.put(ix,yy++,L.delivered,C.faint);} yy++; };
+  head('guidance/role.md',L.here,C.fg,lang==='fr'?'1,8 ko':'1.8 kB');
+  const lines=mdLines(document.getElementById('md-role').textContent,iw);
+  let shown=0;
+  for(const l of lines){ if(yy>=yEnd) break; rail(S,x+1,yy,'here'); S.segs(ix,yy++,l,ix+iw); shown++; }
+  return lines.length-shown;
+}
+
+/* ---------- screens ---------- */
+function scrRole(w=120,h=38,{lens='spec'}={}){
+  const S=new Scr(w,h);
+  frame(S,L.crumb,[['tab',L.k.machine],['v',L.k.view],['j k',L.k.scroll],['← →',L.k.tab],['f',L.k.from],['r',L.k.raw],['/',L.k.search],['esc',L.k.list]]);
+  roleList(S,0,1,40,h-2);
+  const x=40,bw=w-40;
+  const yy=detailHead(S,x,1,bw,{lens,tab:0,ctxN:lens==='spec'?1:10});
+  const rest=roleBody(S,x,yy,bw,h-3,{});
+  S.box(x,1,bw,h-2,'ledge-developer',{mark:{t:'· v1.0 · '+L.mine,fg:C.dim},foot:L.more(rest+0),color:C.coral,tColor:C.coral,bold:true});
+  // redraw content over the border box (box drawn last for its border only)
+  detailHead(S,x,1,bw,{lens,tab:0,ctxN:lens==='spec'?1:10}); roleBody(S,x,yy,bw,h-3,{});
+  return S;
+}
+
+function scrParams(w=120,h=38){
+  const S=new Scr(w,h);
+  frame(S,L.crumb,[['tab',L.k.machine],['v',L.k.view],['j k',L.k.nav],['↵',L.k.unfold],['← →',L.k.tab],['f',L.k.from],['esc',L.k.list]]);
+  roleList(S,0,1,40,h-2);
+  const x=40,bw=w-40,ix=x+2,iw=bw-4;
+  const draw=()=>{
+    let yy=detailHead(S,x,1,bw,{lens:'dev.front',tab:1,ctxN:10});
+    let lx=ix; L.legend.forEach(([t,c])=>{ lx=S.put(lx,yy,t,C[c]); lx+=3; }); yy+=2;
+    const sec=t=>{ S.put(ix,yy++,t,C.dim,null,true); };
+    const row=(k,label,val,prov,valFg=C.fg,dim=false)=>{ prov=prov.replace(L.inh(''),'↳ ').replace(L.unk(''),'? '); rail(S,x+1,yy,k); S.put(ix,yy,pad(label,19),dim?C.faint:C.dim); S.put(ix+19,yy,pad(val,iw-19-len(prov)-2),dim?C.faint:valFg); rightAlign(S,ix+iw,yy,prov,dim?C.faint:provColor(k)); yy++; };
+    sec(L.sec.exec);
+    row('inh',L.p.runtime,'claude-code',L.inh(L.member));
+    row('inh',L.p.model,'claude-opus-5-5',L.inh(L.member));
+    row('inh',L.p.effort,L.runtimeDefault,L.inh(L.launch));
+    row('inh',L.p.cwd,'~/Workspace/ledge',L.inh(L.member));
+    row('inh',L.p.culture,'~/.ledge/rigs/ledge-dev/CULTURE.md',L.inh(L.rig));
+    row('here',L.p.imports,'local:../shared  ✓',L.here);
+    yy++; sec(L.sec.uses);
+    row('inh',L.p.skills,L.skills19,L.inh(L.plugin));
+    row('here',L.p.guidance,L.empty,L.here,C.faint);
+    row('here',L.p.subagents,L.empty,L.here,C.faint);
+    row('inh',L.p.plugins,L.core,L.inh(L.imp));
+    row('inh',L.p.rr,'claude-default-settings → .claude/settings.local.json',L.inh(L.imp));
+    row('inh','','claude-default-mcp → .mcp.json',L.inh(L.imp));
+    row('inh','','claude-activity-hooks → .claude/settings.local.json',L.inh(L.imp));
+    row('inh','','codex-default-config · '+L.na,L.inh(L.imp),C.fg,true);
+    row('unk',L.p.merged,'—',L.unk(L.notExposed));
+    yy++; sec(L.sec.start);
+    row('here',L.p.files,'guidance/role.md · terminal · '+(lang==='fr'?'requis':'required'),L.here);
+    row('inh','','guidance/scope-front.md · terminal',L.inh(L.member));
+    row('here','startup.actions',L.empty,L.here,C.faint);
+  };
+  draw(); S.box(x,1,bw,h-2,'ledge-developer',{mark:{t:'· '+L.from+' dev.front',fg:C.blue},foot:L.more(9),color:C.coral,tColor:C.coral,bold:true}); draw();
+  return S;
+}
+
+function scrContext(w=120,h=38){
+  const S=new Scr(w,h);
+  frame(S,L.crumb,[['tab',L.k.machine],['v',L.k.view],['j k',L.k.nav],['↵',L.k.read],['← →',L.k.tab],['f',L.k.from],['r',L.k.raw],['esc',L.k.list]]);
+  roleList(S,0,1,40,h-2);
+  const x=40,bw=w-40,ix=x+2,iw=bw-4;
+  const draw=()=>{
+    let yy=detailHead(S,x,1,bw,{lens:'dev.front',tab:2,ctxN:10});
+    S.put(ix,yy++,pad(L.ctxIntro,iw),C.dim); yy++;
+    const selI=4;
+    L.pieces.forEach(([g,k,title,ch,sz,src],i)=>{
+      const s=i===selI; if(s) S.fill(x+1,yy,bw-2,C.sel);
+      rail(S,x+1,yy,k); if(s) S.c[yy][x+1].bg=C.sel;
+      S.put(ix,yy,String(i).padStart(2),C.faint,s?C.sel:null);
+      S.put(ix+3,yy,g,provColor(k),s?C.sel:null);
+      S.put(ix+5,yy,pad(title,35),C.fg,s?C.sel:null,s);
+      S.put(ix+41,yy,pad(ch,10),C.dim,s?C.sel:null);
+      S.put(ix+51,yy,pad(sz,7),C.faint,s?C.sel:null);
+      S.put(ix+58,yy,pad(src,iw-58),provColor(k)===C.fg?C.dim:provColor(k),s?C.sel:null);
+      yy++;
+    });
+    S.put(ix,yy++,L.notShown,C.faint);
+    S.put(ix,yy++,'─'.repeat(iw),C.line);
+    S.segs(ix,yy++,[{t:'guidance/scope-front.md',fg:C.fg,b:true},{t:'  '+L.inh(L.member),fg:C.blue}]);
+    S.put(ix,yy++,'~/.ledge/rigs/ledge-dev/guidance/scope-front.md · '+(lang==='fr'?'tapé au démarrage · requis':'typed at startup · required'),C.faint);
+    for(const l of mdLines(document.getElementById('md-front').textContent,iw)){ if(yy>=h-3) break; rail(S,x+1,yy,'inh'); S.segs(ix,yy++,l,ix+iw); }
+  };
+  draw(); S.box(x,1,bw,h-2,'ledge-developer',{mark:{t:'· '+L.from+' dev.front',fg:C.blue},foot:L.more(3),color:C.coral,tColor:C.coral,bold:true}); draw();
+  return S;
+}
+
+function scrNarrowList(){
+  const S=new Scr(80,32);
+  frame(S,L.crumb,[['tab',L.k.machine],['v',L.k.view],['j k',L.k.nav],['↵',L.k.open],['/',L.k.search],['esc',L.k.back]]);
+  roleList(S,0,1,80,30,{narrow:true});
+  return S;
+}
+function scrNarrowDetail(){
+  const S=new Scr(80,32);
+  frame(S,L.crumb.replace(/ · [^·]+$/,''),[['j k',L.k.scroll],['← →',L.k.tab],['f',L.k.from],['r',L.k.raw],['esc',L.k.list]]);
+  const draw=()=>{ const yy=detailHead(S,0,1,80,{lens:'spec',tab:0,ctxN:1,narrow:true}); return roleBody(S,0,yy,80,29,{narrow:true}); };
+  const rest=draw(); S.box(0,1,80,30,'ledge-developer',{mark:{t:'· '+L.mine,fg:C.dim},foot:L.more(rest),color:C.coral,tColor:C.coral,bold:true}); draw();
+  return S;
+}
+function scrNarrowParams(){
+  const S=new Scr(80,32);
+  frame(S,L.crumb.replace(/ · [^·]+$/,''),[['j k',L.k.nav],['↵',L.k.unfold],['← →',L.k.tab],['f',L.k.from],['esc',L.k.list]]);
+  const ix=2,iw=76;
+  const draw=()=>{
+    let yy=detailHead(S,0,1,80,{lens:'dev.front',tab:1,ctxN:10,narrow:true});
+    let lx=ix; L.legend.forEach(([t,c])=>{ lx=S.put(lx,yy,t,C[c]); lx+=2; }); yy+=2;
+    const short={[L.member]:'dev.front',[L.imp]:'shared',[L.launch]:L.launch,[L.rig]:'ledge-dev',[L.plugin]:'openrig-core'};
+    const row=(k,label,val,src)=>{ rail(S,1,yy,k); S.put(ix,yy,pad(label,16),C.dim); const g={here:'●',inh:'↳',abs:'○',unk:'?'}[k]; const p=g+(src?' '+(short[src]||src):''); S.put(ix+16,yy,pad(val,iw-16-len(p)-1),C.fg); rightAlign(S,ix+iw,yy,p,provColor(k)); yy++; };
+    row('inh',L.p.runtime,'claude-code',L.member); row('inh',L.p.model,'claude-opus-5-5',L.member); row('inh',L.p.effort,L.runtimeDefault,L.launch);
+    row('inh',L.p.cwd,'~/Workspace/ledge',L.member); row('here',L.p.imports,'local:../shared ✓',''); row('inh',L.p.skills,L.skills19,L.plugin);
+    row('here',L.p.guidance,L.empty,''); row('inh',L.p.plugins,'openrig-core · 19 skills ▸',L.imp); row('inh',L.p.rr80,'4 ▸',L.imp);
+    row('unk',L.p.merged80,'—',L.notExposed); row('here',L.p.files,'guidance/role.md',''); row('inh','','guidance/scope-front.md',L.member);
+  };
+  draw(); S.box(0,1,80,30,'ledge-developer',{mark:{t:'· '+L.from+' dev.front',fg:C.blue},color:C.coral,tColor:C.coral,bold:true}); draw();
+  return S;
+}
+
+function scrRigs(){
+  const S=new Scr(120,26);
+  frame(S,L.crumbRigs+' · Rigs',[['tab',L.k.machine],['v',L.k.view],['j k',L.k.nav],['↵',L.k.unfold],['i',L.k.role],['s',L.k.toggle],['± =',lang==='fr'?'sièges':'seats'],['esc',L.k.back]]);
+  S.box(0,1,60,5,L.daemonT); S.box(60,1,60,5,L.kernelT);
+  S.segs(2,2,[{t:L.active,fg:C.green},{t:'   127.0.0.1:7433 · pid 255259',fg:C.dim}]);
+  S.segs(62,2,[{t:L.ready,fg:C.green}]);
+  S.box(0,6,120,18,L.rigsT+' · 1');
+  let y=7;
+  S.segs(2,y++,[{t:'▾ ',fg:C.dim},{t:pad('ledge-dev',16),fg:C.fg,b:true},{t:pad(' '+L.running,18),fg:C.green},{t:pad('5/5',7),fg:C.fg},{t:' '.repeat(34)},{t:L.since,fg:C.dim}]);
+  const seats=[['pilot.lead','ledge-lead','claude-code · claude-opus-5-5',L.work],['design.ux','ledge-ux','claude-code · claude-opus-5-5',L.work],['dev.front','ledge-developer','claude-code · claude-opus-5-5',L.work],['dev.back','ledge-developer','claude-code · claude-opus-5-5',L.idle],['review.qa','ledge-reviewer','codex · gpt-6.1-terra',L.idle]];
+  seats.forEach(([id,role,rt,act],i)=>{
+    const s=i===2; if(s) S.fill(1,y,118,C.sel); const bg=s?C.sel:null;
+    S.put(1,y,s?'▌':' ',C.coral,bg);
+    S.put(2,y,'     ◆ ',act===L.work?C.blue:C.faint,bg);
+    S.put(9,y,pad(id,14),C.fg,bg,s);
+    S.put(23,y,pad(role,18),s?C.blue:C.dim,bg,s);
+    S.put(41,y,pad(rt,32),C.dim,bg);
+    S.put(73,y,pad(act,12),act===L.work?C.blue:C.dim,bg);
+    if(s) S.put(90,y,pad('i  '+(lang==='fr'?'voir son rôle':'see its role'),28),C.faint,bg);
+    y++;
+  });
+  return S;
+}
+
+function scrStates(){
+  const S=new Scr(120,34);
+  frame(S,L.crumb,[['tab',L.k.machine],['v',L.k.view],['j k',L.k.nav],['esc',L.k.back]]);
+  const st=L.st;
+  S.box(0,1,60,8,st.tLoad); S.put(2,3,'◌ '+st.loading,C.blue);
+  S.box(60,1,60,8,st.tDaemon); S.put(62,3,'○ '+st.daemon,C.faint); S.put(62,4,st.daemon2,C.dim);
+  S.box(0,9,60,10,st.tMiss); S.segs(2,11,[{t:st.miss,fg:C.fg,b:true},{t:'  '+L.unk(L.unread),fg:C.yellow}]); rail(S,1,11,'unk');
+  S.put(2,13,st.missWhy,C.yellow); S.put(2,14,pad(st.missPath,56),C.faint);
+  S.box(60,9,60,10,st.tNone); S.segs(62,11,[{t:'guidance/role.md',fg:C.fg,b:true},{t:'  '+L.abs,fg:C.faint}]); rail(S,61,11,'abs');
+  S.put(62,13,st.none,C.dim); S.put(62,14,st.none2,C.faint);
+  S.box(0,19,120,13,st.tMulti+' · conveyor-lead');
+  S.put(2,20,st.multi,C.dim);
+  S.segs(2,22,[{t:'guidance/role.md',fg:C.fg,b:true},{t:'  '+L.here,fg:C.fg}]); rightAlign(S,118,22,lang==='fr'?'1,3 ko':'1.3 kB',C.faint);
+  ['Role: Conveyor Lead','You are the intake and close seat for the conveyor starter rig. Your job is to receive new work packets…'].forEach((l,i)=>{ rail(S,1,23+i,'here'); S.put(2,23+i,l,i?C.fg:C.coral,null,!i); });
+  S.put(2,25,'─'.repeat(116),C.line);
+  S.segs(2,26,[{t:'startup/context.md',fg:C.fg,b:true},{t:'  '+L.here,fg:C.fg}]); rightAlign(S,118,26,lang==='fr'?'0,4 ko':'0.4 kB',C.faint);
+  ['Startup Context','Run rig whoami --json before making topology claims. Confirm that your session is intake-lead@conveyor.'].forEach((l,i)=>{ rail(S,1,27+i,'here'); S.put(2,27+i,l,i?C.fg:C.coral,null,!i); });
+  return S;
+}
+
+/* ---------- render ---------- */
+const VIEWS = {
+  role:()=>[['120 × 38 · '+(lang==='fr'?'vu selon la spec':'from the spec'),scrRole()]],
+  params:()=>[['120 × 38',scrParams()]],
+  context:()=>[['120 × 38',scrContext()]],
+  narrow:()=>[['80 × 32 · '+(lang==='fr'?'liste':'list'),scrNarrowList()],['80 × 32 · ↵ '+(lang==='fr'?'rôle':'role'),scrNarrowDetail()],['80 × 32 · → '+(lang==='fr'?'paramètres depuis dev.front':'parameters from dev.front'),scrNarrowParams()]],
+  rigs:()=>[['120 × 26 · Rigs',scrRigs()],['120 × 38 · i → '+(lang==='fr'?'rôle depuis dev.front':'role from dev.front'),scrRole(120,38,{lens:'dev.front'})]],
+  states:()=>[['120 × 34',scrStates()]],
+};
+function render(){
+  C=PAL[theme]; L=T[lang];
+  document.documentElement.dataset.theme=theme; document.documentElement.lang=lang;
+  document.getElementById('note').innerHTML=L['n_'+view];
+  document.getElementById('screens').innerHTML=VIEWS[view]().map(([cap,S])=>`<p class="cap">${cap}</p><div class="frame" style="background:${C.bg}"><div class="tt">${S.html()}</div></div>`).join('');
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.v){ view=b.dataset.v; document.querySelectorAll('[data-v]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); }
+  else if(b.dataset.themeBtn){ theme=b.dataset.themeBtn; document.querySelectorAll('[data-theme-btn]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); }
+  else if(b.dataset.langBtn){ lang=b.dataset.langBtn; document.querySelectorAll('[data-lang-btn]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); }
+  else return;
+  render();
+});
+render();
+</script>
+</body>
+</html>
