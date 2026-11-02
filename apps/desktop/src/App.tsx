@@ -38,6 +38,7 @@ import { useLaunch } from './launch/useLaunch';
 import { closedLedgeTasks, useTasksApi } from './tasks/useTasksApi';
 import { Atelier } from './atelier/Atelier';
 import { OpenRigPage } from './openrig/OpenRigPage';
+import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
 import { Modal } from './shell/Modal';
@@ -113,6 +114,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const termStore = useTermStore(fleetClient);
   const projects = useProjects(fleetClient);
   const tasksApi = useTasksApi(fleetClient);
+  // « À toi »: what OpenRig's rigs ask the person, on this computer (lot 1: one machine), once its daemon reads them.
+  const localMachine = machines.find(m => m.id === 'local');
+  const asks = useOpenRigAsks(fleetClient, localMachine?.ready && localMachine.daemon?.openrigAsks ? 'local' : null);
+  const [askFocus, setAskFocus] = useState<{ id: string; n: number } | null>(null);
   const island = useIsland(fleetClient);
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
@@ -304,7 +309,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
           onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
-          ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi} />
+          ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
+          asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge' }); }} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
@@ -312,6 +318,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} tasks={tasksApi} decisions={decisions} waits={waits} tab={place.tab} task={place.task} dispatch={dispatch}
+                asks={asks} askFocus={askFocus} machineLabel={localMachine?.label ?? 'local'}
                 paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
             : place.kind === 'openrig' ? <OpenRigPage client={fleetClient} machines={machines} machine={place.machine} section={place.section ?? 'rigs'} role={place.role} seat={place.seat} projects={projects} sessions={sessions} dispatch={dispatch} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
