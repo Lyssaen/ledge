@@ -248,6 +248,27 @@ describe('reading the goals', () => {
     expect(await createGoals({ state: async () => ({ ...RUNNING, daemon: { state: 'unknown' } }), run }).list()).toEqual({ goals: [], partial: true });
   });
 
+  it('reads run one at a time, in order: an older, slower read never replaces a newer one, nor empties what is known', async () => {
+    let calls = 0, inFlight = 0, most = 0, down = false;
+    const goal = goalRow('race', 'pending', '2026-11-02T19:41:00.000Z');
+    const g = createGoals({ state: async () => RUNNING, run, http: async (_m, url) => {
+      if (down) return { status: 503, json: {} };
+      if (!url.includes('sourceSession')) return { status: 200, json: [] };
+      const n = ++calls;
+      inFlight++; most = Math.max(most, inFlight);
+      // The first read is slow and sees no goal yet; the second sees it.
+      await new Promise(r => setTimeout(r, n === 1 ? 40 : 1));
+      inFlight--;
+      return { status: 200, json: n === 1 ? [] : [goal] };
+    } });
+    const [a, b] = await Promise.all([g.list(), g.list()]);
+    expect(most).toBe(1);
+    expect(a.goals).toEqual([]);
+    expect(b.goals.map(x => x.goalId)).toEqual(['race']);
+    down = true;
+    expect(await g.list()).toMatchObject({ partial: true, goals: [{ goalId: 'race' }] });
+  });
+
   it('a list that cannot be read keeps the goals known, partial; a stop empties them', async () => {
     let fail = false, st: OpenRigState = RUNNING;
     const ok = serve({ [L('sourceSession=ledge%40external')]: [goalRow('k', 'pending', '2026-11-02T19:41:00.000Z')] });

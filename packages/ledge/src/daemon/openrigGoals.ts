@@ -134,7 +134,7 @@ export function createGoals(deps: GoalsDeps): GoalsService {
 
   /** The goals last read, by id: a read that fails, whole or for one goal, keeps what it had (partial); it never empties the list. */
   let known = new Map<string, Goal>();
-  const list: GoalsService['list'] = async () => {
+  const read = async (): Promise<GoalsList> => {
     // Reading needs OpenRig only, not Max: only a stop OpenRig confirms (or no OpenRig at all) empties the list.
     const st = await deps.state();
     if (!st.installed || st.daemon.state === 'stopped') { known = new Map(); return { goals: [] }; }
@@ -241,6 +241,13 @@ export function createGoals(deps: GoalsDeps): GoalsService {
     }
     known = next;
     return { goals: [...next.values()], ...(partial ? { partial } : {}) };
+  };
+  /** One read at a time, in the order asked: an older read never lands after a newer one, nor replaces what it found. */
+  let reading: Promise<unknown> = Promise.resolve();
+  const list: GoalsService['list'] = () => {
+    const next = reading.then(read, read);
+    reading = next.catch(() => undefined);
+    return next;
   };
 
   return { send, reply, list };
