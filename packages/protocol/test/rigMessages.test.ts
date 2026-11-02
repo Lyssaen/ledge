@@ -172,7 +172,8 @@ describe('rigCommand', () => {
   it('reads what the command printed', () => {
     const send = rigCommand('rig send a@b "x"')!;
     expect(rigCommandResult(send, 'Sent to a@b\nVerified: yes', false)).toEqual({ status: 'delivered' });
-    expect(rigCommandResult(send, 'Retained, not delivered to a@b.', false)).toEqual({ status: 'unknown' });
+    expect(rigCommandResult(send, 'Retained, not delivered to a@b.', false)).toEqual({ status: 'failed' });
+    expect(rigCommandResult(send, '{"ok":true}', false)).toEqual({ status: 'delivered' });
     expect(rigCommandResult(send, 'error', true)).toEqual({ status: 'failed' });
     const handoff = rigCommand('rig queue handoff qitem-1-a --to a@b')!;
     expect(rigCommandResult(handoff, '{"closed":{"qitemId":"qitem-1-a"},"qitemId":"qitem-2-b"}', false)).toEqual({ status: 'delivered', qitem: 'qitem-2-b' });

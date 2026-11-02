@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
-import type { OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigLaunch, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
+import { RIG_ROW_REFRESH_MS } from '@ledge/protocol';
+import type { RigRow, OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigLaunch, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
 /** How often a screen that shows a machine's OpenRig asks it again. */
@@ -277,4 +278,36 @@ export function readRoleFile(client: DaemonClient, machine: string, id: string, 
     });
     client.send({ type: 'openrig.roleFile', requestId, machineId: machine, roleId: id, path });
   });
+}
+
+// ── A queue row's state, for an OpenRig task card (docs/mockups/ledge-openrig-messages.html, decision 2) ──
+
+export interface RigRowView {
+  /** The row as last read; null until its first answer, or when it could not be read. */
+  row: RigRow | null;
+  /** Why it could not be read (`not_found`, `not_installed`, `daemon_stopped`, `failed`, the fleet's `offline` / `outdated`):
+   *  the card then says « état non suivi ». */
+  error?: string;
+}
+
+/** A row's state, asked now and again every `RIG_ROW_REFRESH_MS` while `visible` (the card on screen) and a row is named.
+ *  `machine`: the machine of the session whose thread holds the card. A last answer stays while hidden. */
+export function useRigRow(client: DaemonClient, machine: string | null, qitem: string | null, visible: boolean): RigRowView {
+  const [answer, setAnswer] = useState<{ key: string; row: RigRow | null; error?: string } | null>(null);
+  const key = machine !== null && qitem !== null ? `${machine}\u0000${qitem}` : null;
+  useEffect(() => {
+    if (machine === null || qitem === null || !visible) return;
+    const k = `${machine}\u0000${qitem}`;
+    let current = '';
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.rowState' || m.requestId !== current) return;
+      setAnswer(a => ({ key: k, row: m.row ?? (m.error === 'offline' && a?.key === k ? a.row : null), ...(m.error ? { error: m.error } : {}) }));
+    });
+    const ask = () => { current = `openrig-row-${++next}`; client.send({ type: 'openrig.row', requestId: current, machineId: machine, qitem }); };
+    ask();
+    const timer = setInterval(ask, RIG_ROW_REFRESH_MS);
+    return () => { clearInterval(timer); off(); };
+  }, [client, machine, qitem, visible]);
+  if (key === null || !answer || answer.key !== key) return { row: null };
+  return { row: answer.row, ...(answer.error ? { error: answer.error } : {}) };
 }

@@ -291,12 +291,12 @@ export function rigCommand(command: string): RigCommand | undefined {
   return undefined;
 }
 
-/** What the command printed, read: `delivered` (`rig send` said `Sent to …`), `failed` (it failed), and the row a
- *  handoff or a create made (the first queue id in its output that is not the handed one). */
-export function rigCommandResult(cmd: RigCommand, output: string, failed: boolean): { status: 'delivered' | 'failed' | 'unknown'; qitem?: string } {
-  if (cmd.kind === 'message') return { status: failed ? 'failed' : /^Sent to \S/m.test(output) ? 'delivered' : 'unknown' };
+/** What the command printed, read: `failed` when it failed or `rig send` kept the message (`Retained, not delivered`),
+ *  else `delivered`; and the row a handoff or a create made (the first queue id in its output that is not the handed one). */
+export function rigCommandResult(cmd: RigCommand, output: string, failed: boolean): { status: 'delivered' | 'failed'; qitem?: string } {
+  if (cmd.kind === 'message') return { status: failed || /^Retained, not delivered\b/m.test(output) ? 'failed' : 'delivered' };
   const ids = [...output.matchAll(new RegExp(QITEM, 'g'))].map(m => m[0]).filter(id => id !== cmd.from);
-  return { status: failed ? 'failed' : ids.length ? 'delivered' : 'unknown', ...(!failed && ids[0] ? { qitem: ids[0] } : {}) };
+  return { status: failed ? 'failed' : 'delivered', ...(!failed && ids[0] ? { qitem: ids[0] } : {}) };
 }
 
 // ── A queue row's state, read live (decision 2: re-read every 30 s while its card is visible) ──

@@ -1,4 +1,4 @@
-import { cleanTopic, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
+import { cleanTopic, parseRigPrompt, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices, ledgeNotice, ledgeTask } from './crossSession.js';
 import { sameQuestion } from '../adapters/types.js';
@@ -328,7 +328,7 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     case 'Notification': {
       // The harness's cross-session notices are not the user's words: no topic, and the last reply still waits for the user.
       const notice = ev.name === 'UserPromptSubmit' && !!ev.text && (!!crossSessionNotices(ev.text) || !!ledgeNotice(ev.text) || !!ledgeTask(ev.text));
-      if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !notice && !crossSession(ev.text)) s = withTopic(s, ev.text, 'prompt');
+      if (ev.name === 'UserPromptSubmit' && ev.text && !s.topic && !notice && !crossSession(ev.text) && !parseRigPrompt(ev.text, at)) s = withTopic(s, ev.text, 'prompt'); // OpenRig's words are not the session's subject
       // OMP's dialog is closed by OMP's own word (a cancel) or by the answer: an action starting meanwhile (its `ask` call is
       // announced after its dialog) is not the end of the request.
       if (s.pending?.source === 'rpc' && ev.name === 'PreToolUse') return { ...s, lastHookAt: at, lastActivityAt: at };

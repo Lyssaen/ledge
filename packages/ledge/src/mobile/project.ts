@@ -3,7 +3,7 @@ import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModel
 import { PHONE_COMMANDS_MAX, PhoneSlashCommandSchema, type PhoneSlashCommand, type SlashCommand } from '@ledge/protocol';
 import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
 import type { PhoneChecklist, PhoneChecklistSummary, Todo } from '@ledge/protocol';
-import type { CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, PhoneTask, Session, Task, ThreadItem, Tool } from '@ledge/protocol';
+import type { RigInfo, CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, PhoneTask, Session, Task, ThreadItem, Tool } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
 
@@ -113,6 +113,8 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
   };
   const optText = (s: string | undefined, max = THREAD_TEXT_MAX): { v?: string } => (s === undefined ? {} : { v: text(s, max) });
   const base = { id: item.id, at: item.at, turn: item.turn, ...pickSet(item, ['helperId']) };
+  // OpenRig's side of an item (docs/mockups/ledge-openrig-messages.html): its texts shortened like the others.
+  const rigOf = (i: { rig?: RigInfo }): { rig?: RigInfo } => i.rig ? { rig: { ...i.rig, raw: text(i.rig.raw), ...(i.rig.summary !== undefined ? { summary: text(i.rig.summary) } : {}), ...(i.rig.command !== undefined ? { command: text(i.rig.command, TOOL_TEXT_MAX) } : {}) } } : {};
   let out: ThreadItem;
   switch (item.kind) {
     case 'prompt':
@@ -145,12 +147,13 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
       out = {
         kind: 'sent', ...base, to: item.to, text: text(item.text), status: item.status,
         ...(summary.v !== undefined ? { summary: summary.v } : {}),
-        ...pickSet(item, ['peer', 'received', 'via'])
+        ...pickSet(item, ['peer', 'received', 'via']),
+        ...rigOf(item)
       };
       break;
     }
     case 'received':
-      out = { kind: 'received', ...base, from: item.from, text: text(item.text), ...pickSet(item, ['peer', 'sent']) };
+      out = { kind: 'received', ...base, from: item.from, text: text(item.text), ...pickSet(item, ['peer', 'sent']), ...rigOf(item) };
       break;
     case 'notice': {
       const summary = optText(item.summary), reason = optText(item.reason);
@@ -159,7 +162,8 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
         ...pickSet(item, ['name', 'peer', 'time', 'status', 'count', 'task', 'taskOp', 'outgoing']),
         ...(item.recipients ? { recipients: [...item.recipients] } : {}),
         ...(summary.v !== undefined ? { summary: summary.v } : {}),
-        ...(reason.v !== undefined ? { reason: reason.v } : {})
+        ...(reason.v !== undefined ? { reason: reason.v } : {}),
+        ...rigOf(item)
       };
       break;
     }

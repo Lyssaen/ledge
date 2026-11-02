@@ -44,7 +44,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   // One store for the thread's image refs and the server's attachment requests.
   const attachments = new AttachmentStore(paths().attachments);
   await attachments.load().catch(e => log(`attachments not loaded: ${(e as Error).message}`));
-  const history = new History({ peerOf: t => ledgePeer(t, readPeers(), store.all())?.id, refOf: id => attachments.ref(id) });
+  const history = new History({ peerOf: t => ledgePeer(t, readPeers(), store.all())?.id ?? store.all().find(s => s.rig?.seat === t && !s.archivedAt)?.id, refOf: id => attachments.ref(id) });
   try { await history.load(); } catch (e) { log(`history not loaded: ${(e as Error).message}`); }
   // Threads of sessions the store no longer holds (deleted, or past the archive cap) go now; only when the journal was
   // read whole: a session it lost is not a deleted one, and its thread must stay.

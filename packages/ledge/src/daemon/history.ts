@@ -1,5 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { parseRigPrompt, rigCommand, rigCommandResult, rigKey, type RigBlock, type RigCommand, type RigInfo } from '@ledge/protocol';
 import type { AttachmentRef, NoticeItem, ReceivedItem, SentItem, SessionEvent, Task, TaskTransmission, ThreadItem, ToolItem } from '@ledge/protocol';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
@@ -174,6 +175,11 @@ export class History {
           return this.put(id, { kind: 'notice', id: `notice-${turn + 1}-0`, at: ev.at, turn: turn + 1, notice: 'other', task: task.id,
             ...(task.from ? { name: task.from } : {}), ...(peer ? { peer } : {}), summary: task.text.replaceAll(' ⏎ ', '\n'), text: task.text });
         }
+        const blocks = parseRigPrompt(text, ev.at);
+        if (blocks) { // OpenRig typed into this seat (docs/mockups/ledge-openrig-messages.html): an item per block, the user's own words a prompt
+          this.turns.set(id, turn + 1);
+          return this.recordRig(id, blocks, { at: ev.at, turn: turn + 1 }, images);
+        }
         this.turns.set(id, turn + 1);
         return this.put(id, { kind: 'prompt', id: `prompt-${turn + 1}`, at: ev.at, turn: turn + 1, text: text, ...(images.length ? { images } : {}) });
       }
@@ -183,6 +189,8 @@ export class History {
         if (existing) return existing; // the result came first (parallel hooks): keep what it said
         if (ev.tool === 'SendMessage') return this.put(id, this.sentOf(ev, common, 'sending')); // a message to another agent: its card, not an action row
         const input = inputText(ev.toolInput);
+        const rig = input !== undefined && typeof ev.toolInput?.command !== 'undefined' ? rigCommand(input) : undefined;
+        if (rig && input) return this.put(id, this.outgoing(id, ev, common, rig, input)); // the seat's own rig send / handoff: its card, not a Bash row
         return this.put(id, { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, ...(input ? { input } : {}), status: 'running', files: filesOf(ev.tool, ev.toolInput) });
       }
       case 'PostToolUse':
@@ -195,6 +203,10 @@ export class History {
           if (sent?.status === 'read') return sent;
           return this.put(id, sent ? { ...sent, status: failed ? 'failed' : 'delivered' } : this.sentOf(ev, common, failed ? 'failed' : 'delivered')); // the result came first: the card from its input
         }
+        const input = inputText(ev.toolInput);
+        const rigCmd = input !== undefined && typeof ev.toolInput?.command !== 'undefined' ? rigCommand(input) : undefined;
+        const mine = ev.toolUseId ? this.items(id).find(i => i.id === ev.toolUseId) : undefined;
+        if (rigCmd && input && (!mine || mine.kind !== 'tool')) return this.put(id, this.outgoing(id, ev, common, rigCmd, input, { output: ev.output ?? ev.error ?? '', failed }));
         const row = this.callFor(id, ev);
         // A harness that only says what changed once the action is done (OMP's edit): the files come from its result.
         const late = row && row.files.length === 0 && ev.toolInput ? filesOf(ev.tool, ev.toolInput) : [];
@@ -310,6 +322,63 @@ export class History {
   private sentOf(ev: SessionEvent, common: { at: string; turn: number; helperId?: string }, status: SentItem['status']): SentItem {
     const input = ev.toolInput ?? {}; const to = typeof input.to === 'string' ? input.to : ''; const peer = to ? this.peerOf(to) : undefined;
     return { kind: 'sent', id: ev.toolUseId ?? `sent-${ev.at}`, ...common, to, ...(peer ? { peer } : {}), ...(typeof input.summary === 'string' && input.summary ? { summary: input.summary } : {}), text: typeof input.message === 'string' ? stripNote(input.message).text : '', status };
+  }
+
+  /** A prompt OpenRig typed: an item per block, in order. A block received again (same sender, recipient, stamp, gen and
+   *  body) updates the item it repeats: counted, its raw holding every delivery. Blocks pasted together share a packet. */
+  private recordRig(id: string, blocks: RigBlock[], common: { at: string; turn: number }, images: AttachmentRef[]): ThreadItem | undefined {
+    const rigged = blocks.filter(b => b.kind !== 'text').length;
+    let last: ThreadItem | undefined, index = 0, said = false;
+    blocks.forEach((b, i) => {
+      if (b.kind === 'text') {
+        last = this.put(id, { kind: 'prompt', id: said ? `prompt-${common.turn}-${i}` : `prompt-${common.turn}`, ...common, text: b.text, ...(images.length && !said ? { images } : {}) });
+        said = true; return;
+      }
+      const packet = rigged > 1 ? { packet: { id: `rig-${common.turn}`, index: index++, count: rigged } } : {};
+      last = this.rigItem(id, b, { id: `rig-${common.turn}-${i}`, ...common }, packet);
+    });
+    if (!said && images.length) last = this.put(id, { kind: 'prompt', id: `prompt-${common.turn}`, ...common, text: '', images });
+    return last;
+  }
+
+  private rigItem(id: string, b: Exclude<RigBlock, { kind: 'text' }>, common: { id: string; at: string; turn: number }, extra: Pick<RigInfo, 'packet'>): ThreadItem {
+    if (b.kind !== 'unreadable') {
+      const key = rigKey(b);
+      const again = key && this.items(id).find((i): i is ReceivedItem | NoticeItem => (i.kind === 'received' || i.kind === 'notice') && !!i.rig && i.rig.kind === b.kind
+        && rigKey({ ...i.rig, body: i.text }) === key);
+      if (again && again.rig) return this.put(id, { ...again, rig: { ...again.rig, count: (again.rig.count ?? 1) + 1, raw: `${again.rig.raw}\n\n${b.raw}` } });
+    }
+    if (b.kind === 'unreadable') return this.put(id, { kind: 'notice', ...common, notice: 'other', text: b.raw, rig: { kind: 'unreadable', raw: b.raw, ...extra } });
+    const rig: RigInfo = {
+      kind: b.kind, raw: b.raw, ...extra,
+      ...(b.from !== undefined ? { from: b.from } : {}), ...(b.to !== undefined ? { to: b.to } : {}), ...(b.sentAt ? { sentAt: b.sentAt } : {}), ...(b.gen ? { gen: b.gen } : {}),
+      ...(b.qitem ? { qitem: b.qitem } : {}), ...(b.summary ? { summary: b.summary } : {}), ...(b.blocker ? { blocker: b.blocker } : {}), ...(b.recovery ? { recovery: b.recovery } : {}),
+      ...(b.alert ? { alert: b.alert } : {}), ...(b.minutes !== undefined ? { minutes: b.minutes } : {}), ...(b.recovered ? { recovered: true as const } : {})
+    };
+    if (b.kind === 'message' && b.from) return this.receive(id, { kind: 'received', ...common, from: b.from, text: b.body, rig }, { from: b.from });
+    const peer = b.from ? this.peerOf(b.from) : undefined;
+    return this.put(id, { kind: 'notice', ...common, notice: 'other', ...(b.from ? { name: b.from } : {}), ...(peer ? { peer } : {}), ...(b.summary ? { summary: b.summary } : {}), text: b.body, rig });
+  }
+
+  /** The seat's own `rig send` (a sent card) or `rig queue handoff|create` (an outgoing row card), in place of its Bash row.
+   *  `done`: what the command printed, once it ended. */
+  private outgoing(id: string, ev: SessionEvent, common: { at: string; turn: number; helperId?: string }, cmd: RigCommand, command: string, done?: { output: string; failed: boolean }): ThreadItem {
+    const itemId = ev.toolUseId ?? `rig-${ev.at}-${this.items(id).length}`;
+    const prev = this.items(id).find(i => i.id === itemId);
+    const at = prev ? { at: prev.at, turn: prev.turn } : {};
+    const result = done ? rigCommandResult(cmd, done.output, done.failed) : undefined;
+    const raw = done?.output ? `${command}\n${done.output}` : command;
+    const peer = this.peerOf(cmd.to);
+    if (cmd.kind === 'message') {
+      if (prev?.kind === 'sent' && prev.status === 'read') return this.put(id, { ...prev, rig: { ...prev.rig!, raw } });
+      return this.put(id, { kind: 'sent', id: itemId, ...common, ...at, to: cmd.to, ...(peer ? { peer } : {}), text: cmd.body ?? '', status: result?.status ?? 'sending',
+        rig: { kind: 'message', to: cmd.to, command, raw } });
+    }
+    const qitem = result?.qitem ?? (prev?.kind === 'notice' ? prev.rig?.qitem : undefined);
+    const status = result ? (result.status === 'failed' ? 'refused' as const : 'delivered' as const) : undefined;
+    return this.put(id, { kind: 'notice', id: itemId, ...common, ...at, notice: 'other', outgoing: true, name: cmd.to, ...(peer ? { peer } : {}),
+      ...(cmd.summary ? { summary: cmd.summary } : {}), ...(status ? { status } : {}), text: cmd.summary ?? cmd.body ?? command,
+      rig: { kind: 'handoff', to: cmd.to, ...(qitem ? { qitem } : {}), ...(cmd.summary ? { summary: cmd.summary } : {}), command, raw } });
   }
 
   /** A notice as a thread item: the session it is about named, and its Ledge session when it is one. */

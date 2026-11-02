@@ -6,7 +6,7 @@ import { parse as parseYaml } from 'yaml';
 import { changesSpec, composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, ROLE_FILE_MAX, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -171,6 +171,9 @@ export interface OpenRig {
   role(id: string): Promise<RoleResult>;
   /** A file of a role: only a path its detail lists (`not_allowed` otherwise), `ROLE_FILE_MAX` bytes at most. */
   roleFile(id: string, path: string): Promise<RoleFileResult>;
+  /** A queue row's state (`rig queue show <id> --json`), for the OpenRig task cards of a thread: reused under `ROW_TTL_MS`,
+   *  one read at a time per row. `error`: `not_found`, `not_installed`, `daemon_stopped`, or what `rig` said. */
+  row(qitem: string): Promise<{ row?: RigRow; error?: string }>;
 }
 export interface RolesResult { roles: RoleSummary[]; openrigVersion?: string; error?: string }
 export interface RoleResult { role?: RoleDetail; error?: string }
@@ -511,5 +514,36 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return { content, size: st.size, ...(st.size > ROLE_FILE_MAX ? { truncated: true } : {}) };
   }
 
-  return { state, act, specs, launch, reseat, roles, role, roleFile };
+  const rows = new Map<string, { at: number; read: Promise<{ row?: RigRow; error?: string }> }>();
+  async function row(qitem: string): Promise<{ row?: RigRow; error?: string }> {
+    const hit = rows.get(qitem);
+    if (hit && now() - hit.at < ROW_TTL_MS) return hit.read;
+    const read = (async () => {
+      const r = await run(['queue', 'show', qitem, '--json'], STATUS_MS);
+      if (r.code === null) return { error: 'not_installed' };
+      const said = `${r.stdout}${r.stderr}`;
+      if (r.code !== 0) return { error: /qitem_not_found/.test(said) ? 'not_found' : /daemon not running/i.test(said) ? 'daemon_stopped' : failure(r) };
+      const out = readRow(r.stdout, new Date(now()).toISOString());
+      return out ? { row: out } : { error: 'failed' };
+    })();
+    rows.delete(qitem); rows.set(qitem, { at: now(), read });
+    while (rows.size > ROWS_MAX) rows.delete(rows.keys().next().value!);
+    return read;
+  }
+
+  return { state, act, specs, launch, reseat, roles, role, roleFile, row };
+}
+
+/** How long a row's read is reused: under the fronts' 30 s cadence, so a card is never more than one cadence late. */
+export const ROW_TTL_MS = RIG_ROW_REFRESH_MS / 2;
+const ROWS_MAX = 500;
+
+/** A row from `rig queue show <id> --json`; undefined when it is not one. */
+export function readRow(output: string, at: string): RigRow | undefined {
+  const j = obj(parse(output));
+  const id = str(j.qitemId), state = str(j.state), from = str(j.sourceSession), to = str(j.destinationSession), createdAt = str(j.tsCreated);
+  if (!id || !state || from === null || to === null || !createdAt || !QitemIdSchema.safeParse(id).success) return undefined;
+  const summary = str(j.summary), handedOffTo = str(j.handedOffTo), blockedOn = str(j.blockedOn), claimedAt = str(j.claimedAt);
+  return { id, state, from, to, createdAt, updatedAt: str(j.tsUpdated) ?? createdAt, at,
+    ...(summary ? { summary } : {}), ...(handedOffTo ? { handedOffTo } : {}), ...(blockedOn ? { blockedOn } : {}), ...(claimedAt ? { claimedAt } : {}) };
 }

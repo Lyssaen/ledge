@@ -201,3 +201,20 @@ describe('the checklist for the phone', () => {
     expect(PhoneSessionSchema.safeParse(p).success).toBe(true);
   });
 });
+
+describe('OpenRig on the phone (docs/mockups/ledge-openrig-messages.html)', () => {
+  it('keeps the rig side of a received, sent or notice item, its texts shortened', async () => {
+    const { THREAD_TEXT_MAX } = await import('@ledge/protocol');
+    const at = '2026-11-02T21:12:00.000Z';
+    const rig = { kind: 'handoff' as const, from: 'pilot-lead@ledge-dev-2', to: 'dev-back@ledge-dev-2', sentAt: at, gen: '45f7085e', qitem: 'qitem-1-a', count: 2, packet: { id: 'rig-3', index: 0, count: 2 }, raw: 'x'.repeat(THREAD_TEXT_MAX + 50) };
+    const notice: ThreadItem = { kind: 'notice', id: 'rig-3-0', at, turn: 3, notice: 'other', name: 'pilot-lead@ledge-dev-2', text: 'Queue handoff', rig };
+    const out = toPhoneItem(notice);
+    expect(out.cut).toBe(true);
+    expect(out.item).toMatchObject({ kind: 'notice', rig: { ...rig, raw: expect.any(String) } });
+    expect(out.item.kind === 'notice' && out.item.rig!.raw.length).toBeLessThanOrEqual(THREAD_TEXT_MAX + 1);
+    const received: ThreadItem = { kind: 'received', id: 'rig-4-0', at, turn: 4, from: 'pilot-lead@ledge-dev-2', text: 'Salut', rig: { kind: 'message', raw: 'From: …' } };
+    expect(toPhoneItem(received).item).toEqual(received);
+    const sent: ThreadItem = { kind: 'sent', id: 'toolu_1', at, turn: 4, to: 'a@b', text: 'x', status: 'delivered', rig: { kind: 'message', to: 'a@b', command: 'rig send a@b "x"', raw: 'rig send a@b "x"\nSent to a@b' } };
+    expect(toPhoneItem(sent).item).toEqual(sent);
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { OpenRigActionSchema, OpenRigStateSchema, parseClientMessage } from '@ledge/protocol';
-import { createOpenRig, failure, findRig, planAction, readState, showCommand, type RigRun } from '../src/daemon/openrig.js';
+import { createOpenRig, readRow, ROW_TTL_MS, failure, findRig, planAction, readState, showCommand, type RigRun } from '../src/daemon/openrig.js';
 
 // What OpenRig 0.6.14 printed on 2026-11-02, daemon started with --no-kernel (trimmed to the fields Ledge reads, plus a few it ignores).
 const STATUS = {
@@ -195,5 +195,35 @@ describe('a seat\'s settings', () => {
     expect(OpenRigActionSchema.safeParse({ kind: 'seat.set', seat: '--x', model: 'opus' }).success).toBe(false);
     expect(OpenRigActionSchema.safeParse({ kind: 'seat.set', seat: 'a-b@c', model: '-opus' }).success).toBe(false);
     expect(OpenRigActionSchema.safeParse({ kind: 'seat.set', seat: 'a-b@c', permissions: 'root' }).success).toBe(false);
+  });
+});
+
+describe('a queue row for an OpenRig task card', () => {
+  // `rig queue show <id> --json` (0.7.7), trimmed to the fields Ledge reads.
+  const ROW = { qitemId: 'qitem-20261102205801-ae61eb9d7f1f4b49', state: 'handed-off', summary: 'Build NSIS Windows de l\'overlay final', sourceSession: 'pilot-lead@ledge-dev-2',
+    destinationSession: 'dev-back@ledge-dev-2', handedOffTo: 'pilot-lead@ledge-dev-2', blockedOn: null, tsCreated: '2026-11-02T20:58:01.114Z', tsUpdated: '2026-11-02T21:05:00.000Z',
+    claimedAt: '2026-11-02T20:58:12.489Z', pickup: { state: 'working' } };
+  const ID = ROW.qitemId;
+  it('reads a row', () => {
+    expect(readRow(JSON.stringify(ROW), 'now')).toEqual({ id: ID, state: 'handed-off', summary: 'Build NSIS Windows de l\'overlay final', from: 'pilot-lead@ledge-dev-2', to: 'dev-back@ledge-dev-2',
+      handedOffTo: 'pilot-lead@ledge-dev-2', createdAt: '2026-11-02T20:58:01.114Z', claimedAt: '2026-11-02T20:58:12.489Z', updatedAt: '2026-11-02T21:05:00.000Z', at: 'now' });
+    expect(readRow('{"error":"x"}', 'now')).toBeUndefined();
+    expect(readRow('not json', 'now')).toBeUndefined();
+    expect(readRow(JSON.stringify({ ...ROW, qitemId: '--flag' }), 'now')).toBeUndefined();
+  });
+  it('asks rig once per cadence and row, and says why not', async () => {
+    let t = 0;
+    const { run, calls } = fakeRig({ [`queue show ${ID}`]: { code: 0, stdout: JSON.stringify(ROW) },
+      'queue show qitem-missing': { code: 1, stdout: '{"error":"qitem_not_found","hint":"Queue item was not found"}' } });
+    const rig = createOpenRig({ run, now: () => t });
+    const [a, b] = await Promise.all([rig.row(ID), rig.row(ID)]);
+    expect(a.row?.state).toBe('handed-off'); expect(b).toBe(a);
+    expect(calls).toEqual([`queue show ${ID}`]);
+    t = ROW_TTL_MS - 1; await rig.row(ID); expect(calls).toHaveLength(1);
+    t = ROW_TTL_MS; await rig.row(ID); expect(calls).toHaveLength(2);
+    expect(await rig.row('qitem-missing')).toEqual({ error: 'not_found' });
+    expect(await createOpenRig({ run: fakeRig({ queue: { code: null } }).run }).row(ID)).toEqual({ error: 'not_installed' });
+    expect(await createOpenRig({ run: fakeRig({ queue: { code: 1, stderr: 'Error: Daemon not running.' } }).run }).row(ID)).toEqual({ error: 'daemon_stopped' });
+    expect(await createOpenRig({ run: fakeRig({ queue: { code: 0, stdout: '[]' } }).run }).row(ID)).toEqual({ error: 'failed' });
   });
 });
