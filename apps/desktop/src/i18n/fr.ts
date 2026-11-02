@@ -153,6 +153,83 @@ export const fr = {
       moveNote: (from: string, to: string) => `OpenRig démarre un successeur ${to}, lui passe le contexte de ${from}, puis le met à la place (jusqu’à 3 min). La conversation ${from} reste dans l’historique.`,
       seePlan: 'Voir le plan', planTitle: 'Plan', planEmpty: 'OpenRig n’a rien décrit.', move: (to: string) => `Passer sur ${to}`, save: 'Enregistrer', applying: 'En cours…'
     },
+    /** The Roles view (docs/mockups/ledge-openrig-roles.html), read-only. */
+    roles: {
+      views: 'Rigs ou rôles', rigs: 'Rigs', roles: 'Rôles', crumb: 'Rôles', readOnly: 'Lecture seule',
+      searchPh: 'Rôle, skill, fichier…', searchLabel: 'Chercher un rôle',
+      filters: { all: 'Tous', used: 'Utilisés', mine: 'Mes specs', builtin: 'OpenRig' } satisfies Record<'all' | 'used' | 'mine' | 'builtin', string>,
+      filterLabel: 'Filtrer les rôles', listLabel: 'Rôles de la machine',
+      groupMine: 'Mes specs', groupBuiltin: 'Livrés avec OpenRig',
+      seats: (n: number) => plural(n, `${n} siège`, `${n} sièges`), importOnly: 'importée seulement',
+      library: 'Bibliothèque', repo: 'dépôt', identical: 'identique', differs: 'différent', builtinSrc: (v?: string) => (v ? `Livré avec @openrig/cli ${v}` : 'Livré avec OpenRig'),
+      copyPath: 'Copier le chemin', copied: 'Copié', copy: 'Copier',
+      lens: 'Vu', lensSpec: 'selon la spec', lensFrom: 'depuis',
+      lensSpecHint: 'Résolu par Ledge à partir du YAML : ce que la spec demande, pas ce qu’un siège a reçu.',
+      lensSeatHint: (session: string, v?: string) => `Ce qu’OpenRig a résolu au lancement de ${session}${v ? ` (OpenRig ${v})` : ''}.`,
+      lensSeatNoLive: (session: string) => `OpenRig n’a pas pu être interrogé sur ${session} : ce qui suit vient de la spec du rig.`,
+      profile: 'Profil', rigSpec: 'Spec du rig', composed: 'composée par Ledge au lancement',
+      tabs: { role: 'Rôle', params: 'Paramètres', context: 'Contexte de démarrage', yaml: 'YAML source' } satisfies Record<'role' | 'params' | 'context' | 'yaml', string>,
+      tabsLabel: 'Vues du rôle',
+      // Provenance
+      pv: { here: 'ici', inh: 'hérité', abs: 'non déclaré', unk: 'inconnu' } satisfies Record<'here' | 'inh' | 'abs' | 'unk', string>,
+      legend: { here: 'écrit dans ce fichier — une liste vide écrite s’affiche « vide »', inh: 'vient d’ailleurs, la source est nommée', abs: 'écrit nulle part', unk: 'pas connaissable ici, la raison est donnée' } satisfies Record<'here' | 'inh' | 'abs' | 'unk', string>,
+      why: { resolved_at_launch: 'résolu au lancement', not_exposed: 'non exposé par OpenRig', unreadable: 'illisible', ambiguous: 'ambigu', not_found: 'introuvable', missing_from_guidance: 'prévu, absent de CLAUDE.md' } as Record<string, string>,
+      from: { import: 'import', defaults: 'defaults', profile: 'profil', rig: 'rig', pod: 'pod', member: 'membre', launch: 'lancement', openrig: 'OpenRig', plugin: 'plugin', seat: 'siège' } as Record<string, string>,
+      // Role tab
+      /** [in bold, the rest] */
+      roleSum: (n: number, seat: string | null): readonly [string, string] => (seat
+        ? [`Ce que ${seat} lit comme consignes`, n > 1 ? ` : le role.md du rôle, puis ${n - 1 > 1 ? 'les fichiers' : 'le fichier'} que le rig ajoute à ce siège, tapés dans son terminal au démarrage.` : ' : le role.md du rôle, tapé dans son terminal au démarrage.']
+        : ['Les consignes du rôle', n > 1 ? ` : ${n} fichiers, tapés dans le terminal de chaque siège au démarrage, dans cet ordre.` : ' : son role.md, tapé dans le terminal de chaque siège au démarrage.']),
+      roleCtxLink: (n: number) => `Tout le contexte de démarrage (${n} ${n > 1 ? 'pièces' : 'pièce'}) →`,
+      noRole: 'Ce rôle ne déclare pas de consignes. Ce que ses sièges reçoivent quand même est dans Contexte de démarrage.',
+      fileMissing: 'Fichier introuvable', fileUnreadable: 'Fichier illisible', fileTruncated: (kb: string) => `Fichier tronqué à ${kb} : la suite n’est pas affichée.`,
+      reading: 'Lecture du fichier…', rendered: 'Rendu', raw: 'Brut', renderLabel: 'Affichage du fichier',
+      // Delivery tags
+      delivery: { send_text: 'tapé dans le terminal', guidance_merge: (into: string) => `bloc géré dans ${into}`, skill_install: 'skill installée', action: 'action OpenRig', auto: 'auto' },
+      freshOnly: 'premier démarrage seulement', alsoRestore: 'aussi à la reprise', restoreOnly: 'à la reprise seulement', required: 'requis', optional: 'facultatif',
+      // Parameters tab
+      sIdent: 'Identité', sExec: 'Exécution', sImports: 'Imports', sUses: (p: string) => `Ce que le profil « ${p} » utilise`, sRes: 'Ressources déclarées',
+      sFiles: 'Fichiers et actions de démarrage', sFilesSpec: 'part du rôle seulement', sFilesSeat: 'voir Contexte de démarrage pour l’ensemble',
+      sSeats: 'Sièges qui utilisent ce rôle', sSeatsSub: 'rigs connus du daemon',
+      fName: 'Nom', fVersion: 'Version', fDesc: 'Description', fRuntime: 'Runtime', fModel: 'Modèle', fEffort: 'Effort', fProfile: 'Profil', fCwd: 'Dossier de travail', fCulture: 'Culture',
+      fSkills: 'Skills', fGuidance: 'Guidance', fSubagents: 'Sous-agents', fPlugins: 'Plugins', fRr: 'Ressources runtime', fActions: 'Actions',
+      empty: 'vide', resolved: 'résolu', modelSpec: 'Le rôle ne fixe pas de modèle.', modelToday: 'Ses sièges aujourd’hui', effortDefault: 'défaut du runtime',
+      pluginCarries: (skills: number, hooks: number) => `${skills} skills · ${hooks} hooks`, show: 'Afficher', hide: 'Masquer',
+      loadout: 'Projetées pour ce siège (rig skill loadout)',
+      rrTarget: 'fusionné dans', rrNa: (rt: string) => `Non installé sur ce siège (runtime ${rt}).`, rrMerged: 'Réglages effectifs après fusion', rrMergedWhy: 'ni OpenRig ni Claude ne publient le résultat de la fusion',
+      showFragment: 'Voir le fragment', seatAdds: 'Ajouts du rig',
+      thSeat: 'Siège', thRig: 'Rig', thRt: 'Runtime · modèle', thExtra: 'En plus du rôle', thState: 'État', viewFrom: 'Voir depuis',
+      noSeat: 'Aucun siège d’un rig connu n’utilise ce rôle.', stWork: 'Au travail', stIdle: 'Disponible', stStopped: 'Arrêté',
+      importOnlyNote: ['Spec importée, pas un rôle.', ' Elle n’a pas de profil et n’occupe aucun siège ; d’autres rôles l’importent pour partager plugins et fragments runtime.'] as readonly [string, string],
+      importedBy: 'Importée par', unresolved: 'fichier importé introuvable',
+      // Startup context tab
+      ctxIntro: (seat: string, codex: boolean): readonly [string, string] => ['Il n’y a pas de prompt système unique.', ` Voici ce que ${seat} reçoit au démarrage, dans l’ordre que rend OpenRig. Les blocs de ${codex ? 'AGENTS.md' : 'CLAUDE.md'} sont partagés par tous les sièges du même dossier ; les pièces tapées dans le terminal sont propres au siège.`],
+      ctxSpec: ['Selon la spec,', ' seule la part du rôle est connue : la culture, le périmètre et les blocs OpenRig viennent du rig qui le lance. Choisissez un siège dans « Vu depuis » pour l’ensemble.'] as readonly [string, string],
+      ctxNoSeat: '« Vu » ne propose que « selon la spec » : aucun siège n’utilise ce rôle.',
+      one: 'Pièce par pièce', all: 'Tout à la suite', modeLabel: 'Lecture des pièces', piecesLabel: 'Pièces du contexte de démarrage', readable: 'lisibles',
+      p: { harness: 'Prompt de base du harnais', role: 'Rôle', cultureDefault: 'Culture OpenRig par défaut', culture: 'Culture du rig', scope: 'Périmètre du siège', start: 'Démarrage OpenRig', onb1: 'Accueil OpenRig 1/2', onb2: 'Accueil OpenRig 2/2', skills: 'Skills du siège', identity: 'Identité du siège' },
+      harnessSrc: 'fourni par le harnais',
+      layer: 'couche', inferred: 'déduite du chemin',
+      layers: { agent: 'rôle', profile: 'profil', culture: 'culture du rig', rig: 'rig', pod: 'pod', member: 'membre', openrig: 'OpenRig', seat: 'siège', unknown: 'inconnue' } as Record<string, string>,
+      opaqueT: 'Non lisible depuis Ledge', opaqueD: 'Ce texte est intégré au harnais. Ni OpenRig ni Ledge ne le voient ; il passe avant tout le reste.',
+      missingT: 'Prévue, mais pas trouvée', missingD: (file: string, into: string) => `OpenRig a inscrit ${file} au plan de démarrage de ce siège, mais le bloc n’est pas dans ${into}. Le plan n’est pas une preuve de livraison.`,
+      notShown: 'Pas montré ici',
+      unavailable: { harness_own_files: 'ce que le harnais charge de lui-même : ~/.claude/CLAUDE.md, le reste de CLAUDE.md, la mémoire, les hooks de démarrage ;', effective_settings: 'les réglages effectifs après fusion (seuls les fragments sont connus) ;', delivered_content: 'les messages reçus après le démarrage (queue, rig send).', harness_prompt: 'le prompt de base du harnais.' } as Record<string, string>,
+      // YAML tab
+      yImport: 'Importé', ySeat: (seat: string, path: string) => `Membre ${seat} dans ${path}`,
+      // States
+      loading: 'Lecture des rôles…', loadingRole: 'Lecture du rôle…',
+      daemonStoppedT: (m: string) => `Le daemon OpenRig est arrêté sur ${m}`, daemonStopped: 'La liste des rôles et les sièges viennent du daemon. Démarrez-le sur la page Rigs.', goRigs: 'Aller à Rigs',
+      outdated: 'Le Ledge de cette machine est trop ancien pour lire les rôles. Mettez-le à jour.',
+      failed: (e: string) => `Les rôles n’ont pas pu être lus : ${e}`,
+      missingFile: 'Fichier introuvable', missingFileP: 'La bibliothèque liste encore ce rôle, mais le fichier n’existe plus. Ses paramètres sont inconnus.',
+      invalid: 'Spec invalide', invalidP: 'Le fichier existe mais ne se lit pas. Les paramètres ne s’affichent pas ; le YAML brut reste lisible, ligne fautive marquée.',
+      invalidAt: (msg: string, line?: number, col?: number) => (line ? `agent.yaml ne se lit pas : ligne ${line}${col ? `, colonne ${col}` : ''} — ${msg}` : `agent.yaml ne se lit pas : ${msg}`),
+      divergeT: 'La bibliothèque diffère du dépôt', showCopy: 'Afficher', libUsed: 'Bibliothèque (utilisée)', repoCopy: 'Dépôt', seeDiff: 'Voir les différences', hideDiff: 'Masquer les différences',
+      noResultsT: (q: string) => `Aucun rôle ne contient « ${q} »`, noResults: 'La recherche porte sur le nom, le résumé, les skills et les fichiers de démarrage.', clear: 'Effacer la recherche',
+      noneT: 'Aucun rôle', none: 'OpenRig ne liste aucun rôle sur cette machine.',
+      roleLink: (role: string, seat: string) => `Voir le rôle ${role} depuis ${seat}`, roleCol: 'rôle'
+    },
     confirm: {
       title: (what: string, machine: string) => `Arrêter ${what} sur ${machine} ?`,
       restartTitle: (what: string, machine: string) => `Redémarrer ${what} sur ${machine} ?`,

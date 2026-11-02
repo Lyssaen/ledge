@@ -58,3 +58,40 @@ describe('useOpenRig', () => {
     expect(result.current.state).toBeNull();
   });
 });
+
+describe('useOpenRigRoles / useOpenRigRole / readRoleFile', () => {
+  it('the roles: asked once per machine, its own answer only', async () => {
+    const { useOpenRigRoles } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const { result } = renderHook(() => useOpenRigRoles(client, 'local'));
+    expect(result.current.status).toBe('loading');
+    expect(sent).toEqual([{ type: 'openrig.roles', requestId: rid(sent[0]), machineId: 'local' }]);
+    emit({ type: 'openrig.roleList', requestId: 'other', roles: [] });
+    expect(result.current.status).toBe('loading');
+    emit({ type: 'openrig.roleList', requestId: rid(sent[0]), machineId: 'local', roles: [], openrigVersion: '0.7.7', error: 'daemon_stopped' });
+    expect(result.current).toMatchObject({ status: 'ready', roles: [], openrigVersion: '0.7.7', error: 'daemon_stopped' });
+    act(() => result.current.reload());
+    expect(sent).toHaveLength(2);
+  });
+  it('a role: asked again when the id changes, the previous one not shown for another id', async () => {
+    const { useOpenRigRole } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const { result, rerender } = renderHook(({ id }) => useOpenRigRole(client, 'local', id), { initialProps: { id: 'a' as string | null } });
+    expect(sent.at(-1)).toMatchObject({ type: 'openrig.role', roleId: 'a' });
+    emit({ type: 'openrig.roleDetail', requestId: rid(sent.at(-1)), roleId: 'a', error: 'role_not_found' });
+    expect(result.current).toMatchObject({ status: 'ready', role: null, error: 'role_not_found' });
+    rerender({ id: 'b' });
+    expect(result.current.status).toBe('loading');
+    expect(sent.at(-1)).toMatchObject({ type: 'openrig.role', roleId: 'b' });
+    rerender({ id: null });
+    expect(result.current.status).toBe('idle');
+  });
+  it('a role file resolves with its answer', async () => {
+    const { readRoleFile } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const p = readRoleFile(client, 'local', 'a', '/s/role.md');
+    expect(sent.at(-1)).toMatchObject({ type: 'openrig.roleFile', machineId: 'local', roleId: 'a', path: '/s/role.md' });
+    emit({ type: 'openrig.roleFileContent', requestId: rid(sent.at(-1)), roleId: 'a', path: '/s/role.md', content: '# Rôle', size: 7 });
+    await expect(p).resolves.toMatchObject({ content: '# Rôle' });
+  });
+});

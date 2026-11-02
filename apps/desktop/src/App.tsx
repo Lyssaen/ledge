@@ -320,7 +320,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} tasks={tasksApi} decisions={decisions} waits={waits} tab={place.tab} task={place.task} dispatch={dispatch}
                 paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
-            : place.kind === 'openrig' ? <OpenRigPage client={fleetClient} machines={machines} machine={place.machine} projects={projects} sessions={sessions} dispatch={dispatch} />
+            : place.kind === 'openrig' ? <OpenRigPage client={fleetClient} machines={machines} machine={place.machine} section={place.section ?? 'rigs'} role={place.role} seat={place.seat} projects={projects} sessions={sessions} dispatch={dispatch} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
                 prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />

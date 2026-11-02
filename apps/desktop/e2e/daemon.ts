@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { OpenRigState, RigSpec, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -35,7 +35,9 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  Like the daemon it keeps the island's settings (`extras.island`, default null: none set yet), sent after the projects, and an `island.set`
  *  replaces them and is broadcast back as `island`; `island: 'unknown'` plays a daemon too old to speak of them.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; openrig?: OpenRigState; rigSpecs?: RigSpec[]; /** Images the daemon already holds, by id (no preview: a preview get is served the whole image). */ images?: Record<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }> } = {}) {
+/** What a daemon answers about OpenRig's roles: the list, each role by library id, each file by absolute path. */
+export interface FakeRoles { list: RoleSummary[]; details: Record<string, RoleDetail>; files: Record<string, string>; openrigVersion?: string }
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; openrig?: OpenRigState; rigSpecs?: RigSpec[]; /** Images the daemon already holds, by id (no preview: a preview get is served the whole image). */ images?: Record<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }>; roles?: FakeRoles } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -61,6 +63,10 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       // OpenRig (docs/mockups/ledge-openrig.html): a status answers `extras.openrig`; an action succeeds and broadcasts it again.
       if (msg.type === 'openrig.status' && extras.openrig) ws.send(JSON.stringify({ type: 'openrig.state', requestId: msg.requestId, state: extras.openrig }));
       if (msg.type === 'openrig.seats') ws.send(JSON.stringify({ type: 'openrig.reseated', requestId: msg.requestId, ok: true, commands: [], added: ['dev.build-2', 'dev.build-3', 'dev.review-2', 'dev.review-3'], removed: [], links: 4 }));
+      // OpenRig's roles (docs/mockups/ledge-openrig-roles.html): the list, a role by id, a file by absolute path, from `extras.roles`.
+      if (msg.type === 'openrig.roles' && extras.roles) ws.send(JSON.stringify({ type: 'openrig.roleList', requestId: msg.requestId, roles: extras.roles.list, ...(extras.roles.openrigVersion ? { openrigVersion: extras.roles.openrigVersion } : {}) }));
+      if (msg.type === 'openrig.role' && extras.roles) { const role = extras.roles.details[msg.roleId]; ws.send(JSON.stringify({ type: 'openrig.roleDetail', requestId: msg.requestId, roleId: msg.roleId, ...(role ? { role } : { error: 'role_not_found' }) })); }
+      if (msg.type === 'openrig.roleFile' && extras.roles) { const content = extras.roles.files[msg.path]; ws.send(JSON.stringify({ type: 'openrig.roleFileContent', requestId: msg.requestId, roleId: msg.roleId, path: msg.path, ...(content !== undefined ? { content, size: content.length } : { error: 'missing' }) })); }
       if (msg.type === 'openrig.specs') ws.send(JSON.stringify({ type: 'openrig.specList', requestId: msg.requestId, specs: extras.rigSpecs ?? [] }));
       // A launch's check answers a plan and a composed spec; a launch succeeds.
       if (msg.type === 'openrig.launch') {

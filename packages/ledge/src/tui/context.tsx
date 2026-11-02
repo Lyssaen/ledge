@@ -17,7 +17,9 @@ export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch
  *  session's id). */
 export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]>; asked: Asked[];
   /** The machine the OpenRig screen shows, which « Lancer un rig » launches on (null: the first one). */
-  rigMachine?: string | null }
+  rigMachine?: string | null;
+  /** The OpenRig screen's view, and the role open in its Roles view (`seat`: `rig/logicalId` it is seen from). */
+  rigView?: 'rigs' | 'roles'; role?: { id: string; seat?: string } }
 
 /** A screen's keys: true when it took the key (the global keys then leave it alone). */
 export type KeyHandler = (input: string, key: Key) => boolean;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
-import { reseatRig, useOpenRig } from '@ledge/fleet/openrig';
-import type { OpenRigAction, OpenRigState, Rig, Session } from '@ledge/protocol';
+import { reseatRig, useOpenRig, useOpenRigRoles } from '@ledge/fleet/openrig';
+import type { OpenRigAction, OpenRigState, Rig, RoleSummary, Session } from '@ledge/protocol';
 import { useScreenKeys, useTui } from '../context.js';
 import {
   asksFirst, confirmOf, daemonToggle, daemonUp, keepRig, kernelToggle, listedRigs, rigLook, rigToggle, seatBusy, step, type Confirm, type RigLook
@@ -12,6 +12,7 @@ import { canReseat, changedCounts, countsOf, planOf, seatRows, withCount, type D
 import { Frame } from '../ui/Frame.js';
 import { RigSeats } from '../ui/RigSeats.js';
 import { TitledBox } from '../ui/TitledBox.js';
+import { RolesScreen } from './Roles.js';
 
 const LOOK: Record<RigLook, { glyph: string; color: () => string }> = {
   running: { glyph: '●', color: () => C.green }, starting: { glyph: '◌', color: () => C.blue },
@@ -35,18 +36,37 @@ function question(t: Messages, a: OpenRigAction): string {
  */
 export function OpenRigScreen() {
   const tui = useTui();
+  // v switches Rigs ⇄ Rôles (docs/mockups/ledge-openrig-roles-tui.html); both are kept while the TUI runs, with the machine.
+  const [view, setView] = useState<'rigs' | 'roles'>(tui.kept.rigView ?? 'rigs');
+  const [machineId, setMachineId] = useState<string | null>(tui.kept.rigMachine ?? null);
+  tui.kept.rigView = view;
+  if (view === 'roles') return (
+    <RolesScreen machineId={machineId} onRigs={() => setView('rigs')}
+      onMachine={d => { const ms = tui.machines; const i = Math.max(0, ms.findIndex(m => m.id === (machineId ?? ms[0]?.id))); const n = ms[step(i, d, ms.length)]?.id ?? null; tui.kept.rigMachine = n; setMachineId(n); }} />
+  );
+  return <RigsView initialMachine={machineId} onRoles={(role, machine) => { tui.kept.role = role; setMachineId(machine); setView('roles'); }} />;
+}
+
+/** The Rigs view: OpenRig's daemon, kernel and rigs. `onRoles`: v (the role list) or i (a seat's role, seen from it). */
+function RigsView({ initialMachine, onRoles }: { initialMachine: string | null; onRoles: (role: { id: string; seat?: string } | undefined, machine: string | null) => void }) {
+  const tui = useTui();
   const { t, machines } = tui;
   const o = t.openrig;
   // The machine shown is kept while the TUI runs: « Lancer un rig » (+) launches on it, and coming back shows it again.
-  const [machineId, setMachineId] = useState<string | null>(tui.kept.rigMachine ?? null);
+  const [machineId, setMachineId] = useState<string | null>(initialMachine ?? tui.kept.rigMachine ?? null);
   const machine = machines.find(m => m.id === machineId) ?? machines[0] ?? null;
   tui.kept.rigMachine = machine?.id ?? null;
   const rig = useOpenRig(tui.client, machine?.id ?? null);
+  // Each seat's role, for its line and i (from the roles' `seatRefs`).
+  const roles = useOpenRigRoles(tui.client, machine?.id ?? null);
+  const roleOf = (rigName: string, logicalId: string): RoleSummary | undefined => roles.roles.find(x => x.seatRefs.some(s => s.rig === rigName && s.logicalId === logicalId));
   const state = rig.state;
   const rigs = listedRigs(state);
   const [at, setAt] = useState(0);
   const selectedId = useRef<string | null>(null);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  /** On an unfolded rig, j k walk down its seats: the seat selected (null: the rig's own line). */
+  const [seatAt, setSeatAt] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   /** « Sièges du rig » open (± on a running rig): the rig, the count asked per role, the role chosen, how added seats link. */
   const [seats, setSeats] = useState<{ rig: string; counts: Record<string, number>; at: number; delegation: Delegation; applying: boolean } | null>(null);
@@ -56,6 +76,17 @@ export function OpenRigScreen() {
   useEffect(() => { setAt(a => keepRig(rigs, a, selectedId.current)); }, [ids]); // eslint-disable-line react-hooks/exhaustive-deps
   const current: Rig | undefined = rigs[Math.min(at, rigs.length - 1)];
   selectedId.current = current?.id ?? null;
+  const seatNodes = current && open.has(current.id) ? current.nodes : [];
+  const seatSel = seatAt !== null && seatAt < seatNodes.length ? seatAt : null;
+  const down = () => {
+    if (seatSel !== null ? seatSel + 1 < seatNodes.length : seatNodes.length > 0) { setSeatAt((seatSel ?? -1) + 1); return; }
+    const n = step(at, 1, rigs.length); setAt(n); setSeatAt(null);
+  };
+  const up = () => {
+    if (seatSel !== null) { setSeatAt(seatSel > 0 ? seatSel - 1 : null); return; }
+    const n = step(at, -1, rigs.length), prev = rigs[n];
+    setAt(n); setSeatAt(prev && open.has(prev.id) && prev.nodes.length ? prev.nodes.length - 1 : null);
+  };
 
   const run = (a: OpenRigAction) => {
     void rig.act(a).then(d => {
@@ -106,13 +137,20 @@ export function OpenRigScreen() {
     }
     if (key.tab) {
       const i = Math.max(0, machines.findIndex(m => m.id === machine?.id));
-      setMachineId(machines[step(i, key.shift ? -1 : 1, machines.length)]?.id ?? null); setOpen(new Set()); return true;
+      const n = machines[step(i, key.shift ? -1 : 1, machines.length)]?.id ?? null; tui.kept.rigMachine = n; setMachineId(n); setOpen(new Set()); setSeatAt(null); return true;
+    }
+    if (input === 'v') { onRoles(undefined, machine?.id ?? null); return true; }
+    if (input === 'i') {
+      const n = current && seatSel !== null ? current.nodes[seatSel] : undefined;
+      const role = n && current ? roleOf(current.name, n.logicalId) : undefined;
+      if (role && current && n) onRoles({ id: role.id, seat: `${current.name}/${n.logicalId}` }, machine?.id ?? null);
+      return true;
     }
     if (input === '+') { if (machine) tui.go('rigLaunch'); return true; }
-    if (key.upArrow || input === 'k') { setAt(i => step(i, -1, rigs.length)); return true; }
-    if (key.downArrow || input === 'j') { setAt(i => step(i, 1, rigs.length)); return true; }
+    if (key.upArrow || input === 'k') { up(); return true; }
+    if (key.downArrow || input === 'j') { down(); return true; }
     if (key.return) {
-      if (current) setOpen(s => { const n = new Set(s); if (n.has(current.id)) n.delete(current.id); else n.add(current.id); return n; });
+      if (current) { setOpen(s => { const n = new Set(s); if (n.has(current.id)) n.delete(current.id); else n.add(current.id); return n; }); setSeatAt(null); }
       return true;
     }
     // One action at a time on a machine: the keys wait for the one running.
@@ -139,8 +177,8 @@ export function OpenRigScreen() {
     ? [['↑ ↓', t.rigSeats.role], ['- +', t.rigSeats.count], ['← →', t.rigSeats.delegationKey], ['↵', t.rigSeats.apply], ['esc', t.rigSeats.cancel]]
     : confirm
     ? [['y', o.yes], ['n', o.no]]
-    : [['tab', o.machine], ['j k', t.keys.navigate], ['↵', o.unfold], ['s', o.toggle], ['R', o.restart], ['± =', t.rigSeats.key], ['+', t.rigLaunch.launchKey], ['D', o.daemonKey], ['K', o.kernelKey], ['O', o.operatorKey], ['esc', t.keys.back]];
-  const crumb = [state?.version ? o.version(state.version) : o.title, machine?.label].filter(Boolean).join(' · ');
+    : [['tab', o.machine], ['v', t.roles.k.view], ['j k', t.keys.navigate], ['↵', o.unfold], ...(seatSel !== null ? [['i', t.roles.k.role] as [string, string]] : []), ['s', o.toggle], ['R', o.restart], ['± =', t.rigSeats.key], ['+', t.rigLaunch.launchKey], ['D', o.daemonKey], ['K', o.kernelKey], ['O', o.operatorKey], ['esc', t.keys.back]];
+  const crumb = [state?.version ? o.version(state.version) : o.title, machine?.label, t.roles.rigs].filter(Boolean).join(' · ');
 
   return (
     <Frame crumb={crumb} crumbShort={o.title} keys={keys}>
@@ -149,7 +187,7 @@ export function OpenRigScreen() {
         : !state ? <TitledBox title={o.title} mark={{ text: machine.label, color: C.dim }} flexGrow={1}><Text color={C.faint}>{o.loading}</Text></TitledBox>
         : !state.installed ? <TitledBox title={o.title} mark={{ text: machine.label, color: C.dim }} flexGrow={1}><Text color={C.dim}>{o.notInstalled}</Text></TitledBox>
         : seats && seatRig ? <RigSeats rig={seatRig} machine={machine.label} rows={rows} counts={seats.counts} at={seats.at} delegation={seats.delegation} plan={planOf(seatRig, rows, seats.counts)} applying={seats.applying} />
-        : <Body state={state} rigs={rigs} at={at} open={open} machineLabel={machine.label} />}
+        : <Body state={state} rigs={rigs} at={at} seatAt={seatSel} open={open} machineLabel={machine.label} roleOf={roleOf} />}
       {confirm ? <ConfirmBox confirm={confirm} /> : null}
       {rig.pending ? <Box paddingX={1} height={1}><Text wrap="truncate" color={C.blue}>{o.running(confirmOf(state ?? EMPTY, rig.pending).commands.join(' && '))}</Text></Box> : null}
     </Frame>
@@ -158,7 +196,7 @@ export function OpenRigScreen() {
 
 const EMPTY: OpenRigState = { installed: true, daemon: { state: 'unknown' }, kernel: { state: 'unknown' }, rigs: [], at: '' };
 
-function Body({ state, rigs, at, open, machineLabel }: { state: OpenRigState; rigs: Rig[]; at: number; open: ReadonlySet<string>; machineLabel: string }) {
+function Body({ state, rigs, at, seatAt, open, machineLabel, roleOf }: { state: OpenRigState; rigs: Rig[]; at: number; seatAt: number | null; open: ReadonlySet<string>; machineLabel: string; roleOf: (rig: string, seat: string) => RoleSummary | undefined }) {
   const { t } = useTui();
   const o = t.openrig;
   const up = daemonUp(state);
@@ -187,13 +225,13 @@ function Body({ state, rigs, at, open, machineLabel }: { state: OpenRigState; ri
       <TitledBox title={`${o.rigs} · ${rigs.length}`} flexGrow={1}>
         {!up ? <Text color={C.faint}>{o.stoppedDaemon}</Text>
           : !rigs.length ? <Text color={C.faint}>{o.noRigs}</Text>
-          : rigs.map((r, i) => <RigRow key={r.id} rig={r} selected={i === at} open={open.has(r.id)} />)}
+          : rigs.map((r, i) => <RigRow key={r.id} rig={r} selected={i === at && seatAt === null} seatAt={i === at ? seatAt : null} open={open.has(r.id)} roleOf={roleOf} />)}
       </TitledBox>
     </Box>
   );
 }
 
-function RigRow({ rig, selected, open }: { rig: Rig; selected: boolean; open: boolean }) {
+function RigRow({ rig, selected, seatAt, open, roleOf }: { rig: Rig; selected: boolean; seatAt: number | null; open: boolean; roleOf: (rig: string, seat: string) => RoleSummary | undefined }) {
   const { t } = useTui();
   const o = t.openrig;
   const look = rigLook(rig), l = LOOK[look];
@@ -213,15 +251,24 @@ function RigRow({ rig, selected, open }: { rig: Rig; selected: boolean; open: bo
           <Text color={C.dim}>{when}</Text>
         </Text>
       </Box>
-      {open ? rig.nodes.map(n => (
-        <Text key={n.logicalId} wrap="truncate">
-          <Text color={seatBusy(n) ? C.blue : C.faint}>{'     ◆ '}</Text>
-          <Text color={C.fg}>{n.logicalId.padEnd(18)}</Text>
-          <Text color={C.dim}>{[n.runtime, n.model].filter(Boolean).join(' · ').padEnd(26)}</Text>
-          <Text color={n.activity === 'running' ? C.blue : C.dim}>{o.activity(n.activity).padEnd(12)}</Text>
-          <Text color={C.dim}>{o.work(n.work)}</Text>
-        </Text>
-      )) : null}
+      {open ? rig.nodes.map((n, i) => {
+        // A seat shows its role; the one selected says i opens it (docs/mockups/ledge-openrig-roles-tui.html, view Rigs).
+        const s = i === seatAt, bg = s ? C.sel : undefined, role = roleOf(rig.name, n.logicalId);
+        return (
+          <Box key={n.logicalId} backgroundColor={bg}>
+            <Text wrap="truncate">
+              <Text color={C.coral}>{s ? '▌' : ' '}</Text>
+              <Text color={seatBusy(n) ? C.blue : C.faint}>{'    ◆ '}</Text>
+              <Text color={C.fg} bold={s}>{n.logicalId.padEnd(14)}</Text>
+              <Text color={s ? C.blue : C.dim} bold={s}>{(role?.name ?? '').padEnd(18)}</Text>
+              <Text color={C.dim}>{[n.runtime, n.model].filter(Boolean).join(' · ').padEnd(32)}</Text>
+              <Text color={n.activity === 'running' ? C.blue : C.dim}>{o.activity(n.activity).padEnd(12)}</Text>
+              <Text color={C.dim}>{o.work(n.work).padEnd(5)}</Text>
+              {s && role ? <Text color={C.faint}>{`i  ${t.roles.seeRole}`}</Text> : null}
+            </Text>
+          </Box>
+        );
+      }) : null}
     </Box>
   );
 }

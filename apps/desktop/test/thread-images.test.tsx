@@ -80,7 +80,8 @@ describe('images in a chat turn', () => {
     const send = vi.spyOn(client, 'send');
     await user.keyboard('{Control>}/{/Control}');
     await screen.findByRole('complementary', { name: 'Chat Ledge' });
-    d.push({ type: 'chat.history', turns: [{ qid: 'q-img', question: 'What do you see?', askedAt: at, steps: [], attachments: [C], machineId: 'elsewhere' }] });
+    // Asked now: the fleet keeps only the day's chat turns, so a fixed date would only pass on that day.
+    d.push({ type: 'chat.history', turns: [{ qid: 'q-img', question: 'What do you see?', askedAt: new Date().toISOString(), steps: [], attachments: [C], machineId: 'elsewhere' }] });
     await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'attachment.get', attachment: C.id, machine: 'local', preview: true })));
     await waitFor(() => expect(document.querySelector('[data-turn] [data-thumb="ready"]')).not.toBeNull());
   });

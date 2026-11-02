@@ -17,8 +17,10 @@ export type Place =
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
   | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
   | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> }
-  /** OpenRig on a machine (docs/mockups/ledge-openrig.html): its daemon, its kernel and its rigs. `machine`: the one shown, local when absent. */
-  | { kind: 'openrig'; machine?: string; view: View; project: ProjectFilter };
+  /** OpenRig on a machine (docs/mockups/ledge-openrig.html): its daemon, its kernel and its rigs. `machine`: the one shown, local when absent.
+   *  `section` 'roles': its roles (docs/mockups/ledge-openrig-roles.html), `role` the one open (library id), `seat` the seat
+   *  it is seen from (`rig/logicalId`), from the spec when absent. */
+  | { kind: 'openrig'; machine?: string; section?: 'roles'; role?: string; seat?: string; view: View; project: ProjectFilter };
 export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
   | { kind: 'launch'; project?: string }   // project : la table ou le projet d'où on l'a demandée (lot 7)
@@ -44,8 +46,9 @@ export type NavAction =
   | { type: 'filter'; project: ProjectFilter }
   | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string }
   | { type: 'settings'; section?: SectionId }
-  /** The OpenRig page, on a machine (the one shown before, else local). */
-  | { type: 'openrig'; machine?: string }
+  /** The OpenRig page, on a machine (the one shown before, else local), on its rigs or its roles (the section shown before,
+   *  else the rigs). `role`: open that role, seen from `seat` (`rig/logicalId`) or from its spec. */
+  | { type: 'openrig'; machine?: string; section?: 'rigs' | 'roles'; role?: string; seat?: string }
   | { type: 'modal'; modal: Modal }
   | { type: 'chat'; open?: boolean }
   | { type: 'fullscreen'; on: boolean }
@@ -84,8 +87,14 @@ export function navReducer(s: NavState, a: NavAction): NavState {
       return { ...s, place: { kind: 'settings', section: a.section ?? 'general', back: baseOf(place) }, modal: null, chat: false };
     case 'openrig': {
       const b = baseOf(place);
-      const machine = a.machine ?? (b.kind === 'openrig' ? b.machine : undefined);
-      return { ...s, place: { kind: 'openrig', ...(machine !== undefined ? { machine } : {}), view: b.view, project: b.project }, modal: null, chat: false };
+      const prev = b.kind === 'openrig' ? b : undefined;
+      const machine = a.machine ?? prev?.machine;
+      const section = a.section ?? (a.role !== undefined ? 'roles' : prev?.section ?? 'rigs');
+      // A role belongs to its machine: another machine opens on its list. Naming a role names its lens too.
+      const same = prev !== undefined && machine === prev.machine;
+      const role = a.role ?? (same ? prev.role : undefined);
+      const seat = a.role !== undefined ? a.seat : same ? prev.seat : undefined;
+      return { ...s, place: { kind: 'openrig', ...(machine !== undefined ? { machine } : {}), ...(section === 'roles' ? { section } : {}), ...(role !== undefined ? { role } : {}), ...(seat !== undefined ? { seat } : {}), view: b.view, project: b.project }, modal: null, chat: false };
     }
     case 'modal': return { ...s, modal: a.modal };
     case 'chat': {
