@@ -49,6 +49,27 @@ describe('attachment.capture', () => {
     expect((await c.next('attachment.data')).mime).toBe('image/jpeg');
     await c.close();
   }, 30_000);
+  it('keeps serving other clients while a capture is reduced', async () => {
+    // The test shares the daemon's event loop: a reduction on it would stall these round trips for its whole duration.
+    const raw = realPng(1920, 1200).toString('base64');
+    const other = await connect({ port: srv.port }); await other.next('snapshot');
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    let done = false;
+    const stored = c.next('attachment.stored', 25000).finally(() => { done = true; });
+    c.send({ type: 'attachment.capture', requestId: 'c3', image: { mime: 'image/png', data: raw } });
+    const rtts: number[] = [];
+    for (let i = 0; !done; i++) {
+      const t = Date.now();
+      other.send({ type: 'attachment.get', requestId: `g${i}`, attachment: 'f'.repeat(64) });
+      expect(await other.next('attachment.error', 25000)).toMatchObject({ requestId: `g${i}`, reason: 'not_found' });
+      rtts.push(Date.now() - t);
+      await new Promise(r => setTimeout(r, 10));
+    }
+    expect((await stored).ref.mime).toBe('image/jpeg');
+    expect(rtts.length).toBeGreaterThan(3);
+    expect(Math.max(...rtts)).toBeLessThan(500);
+    await other.close(); await c.close();
+  }, 30_000);
   it('refuses a capture that is not an image', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'attachment.capture', requestId: 'c2', image: { mime: 'image/png', data: Buffer.from('nope').toString('base64') } });

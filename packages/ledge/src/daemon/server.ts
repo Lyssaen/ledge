@@ -10,7 +10,7 @@ import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
-import { reduceCapture } from './reduce.js';
+import { CaptureReducer } from './captureReducer.js';
 import { withImages } from '../attachmentText.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -187,6 +187,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
+  const reducer = new CaptureReducer();
   const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all() });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
@@ -1355,8 +1356,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         try { return reply({ type: 'attachment.stored', requestId: msg.requestId, ref: await storeUpload(msg.image) }); }
         catch (e) { if (e instanceof AttachmentError) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: e.reason }); throw e; }
       case 'attachment.capture':
-        try { // reduced before answering: the hook waits for the ref, so there is nothing to defer
-          const { image, preview } = reduceCapture(Buffer.from(msg.image.data, 'base64'));
+        try { // reduced (in the reducer's worker) before answering: the hook waits for the ref, so there is nothing to defer
+          const { image, preview } = await reducer.reduce(Buffer.from(msg.image.data, 'base64'));
           return reply({ type: 'attachment.stored', requestId: msg.requestId, ref: await attachments.put(image, preview, ATTACHMENT_MAX) });
         } catch (e) { if (e instanceof AttachmentError) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: e.reason }); throw e; }
       case 'attachment.get': {
@@ -1513,6 +1514,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

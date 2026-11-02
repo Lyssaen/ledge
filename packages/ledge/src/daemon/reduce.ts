@@ -5,7 +5,7 @@ import { imageInfo } from '../imageInfo.js';
 import { AttachmentError } from './attachments.js';
 
 /** Decoded pixels above this are refused before decoding: a small PNG can announce a huge canvas. */
-const DECODE_MAX_PIXELS = 50_000_000;
+const DECODE_MAX_PIXELS = 20_000_000;
 const MIN_SIDE = 16;
 
 interface Raster { width: number; height: number; data: Uint8Array }
@@ -69,22 +69,42 @@ function resize(src: Raster, width: number, height: number): Raster {
   return { width, height, data: out };
 }
 
-/** Shrinks to `long` px on the long side, then JPEG-encodes stepping the quality down to `floor`; if still over `max`, shrinks the long side by 0.8 and goes again. */
+/**
+ * The size an encode at `q` is expected to have, as a share of one at `from`: jpeg-js measured on screenshots and photo-like
+ * pages loses 40-60 % from q85 to q45; this line stays above those curves so a choice made from it errs small.
+ */
+const qualityShare = (q: number, from: number) => 1 - (from - q) * 0.0115;
+
+/**
+ * Shrinks to `long` px on the long side and JPEG-encodes it under `max` bytes in at most 3 encodes (each one costs a pass over
+ * the raster): one at `from`; then the quality, and the size if `floor` is not enough, chosen from the byte ratio to land under
+ * `max` with a margin; then, if still over, a last one at `floor` shrunk again with a wider margin.
+ */
 function toJpeg(src: Raster, long: number, max: number, from: number, floor: number): Buffer {
-  let side = Math.min(long, Math.max(src.width, src.height));
-  while (side >= MIN_SIDE) {
-    const scale = side / Math.max(src.width, src.height);
+  const srcLong = Math.max(src.width, src.height);
+  const encodeAt = (side: number, q: number): Buffer => {
+    if (side < MIN_SIDE) throw new AttachmentError('too_large');
+    const scale = side / srcLong;
     const r = scale < 1 ? resize(src, Math.max(1, Math.round(src.width * scale)), Math.max(1, Math.round(src.height * scale))) : src;
-    for (let q = from; q >= floor; q -= 10) {
-      const jpg = encode({ data: r.data, width: r.width, height: r.height }, q).data;
-      if (jpg.length <= max) return jpg;
-    }
-    side = Math.floor(side * 0.8);
-  }
+    return encode({ data: r.data, width: r.width, height: r.height }, q).data;
+  };
+  let side = Math.min(long, srcLong);
+  let jpg = encodeAt(side, from);
+  if (jpg.length <= max) return jpg;
+  // Bytes go roughly with the area: what the quality cannot win comes from the side, by the square root.
+  const ratio = (max * 0.85) / jpg.length;
+  let q = from;
+  while (q > floor && qualityShare(q, from) > ratio) q = Math.max(floor, q - 5);
+  if (qualityShare(q, from) > ratio) side = Math.floor(side * Math.sqrt(ratio / qualityShare(q, from)));
+  jpg = encodeAt(side, q);
+  if (jpg.length <= max) return jpg;
+  // A smaller raster packs more detail per pixel than the area says: the last step keeps a wide margin.
+  jpg = encodeAt(Math.floor(side * Math.sqrt((max * 0.7) / jpg.length)), floor);
+  if (jpg.length <= max) return jpg;
   throw new AttachmentError('too_large');
 }
 
-/** Turns the raw image of a tool result into what the store keeps: a PNG or JPEG already within limits stays untouched, anything else bigger is re-encoded as JPEG (long side <= 1600, <= 400 kB); a 480 px JPEG preview comes with it. WebP and GIF cannot be decoded here: kept as is when within limits, no preview. */
+/** Turns the raw image of a tool result into what the store keeps: a PNG or JPEG already within limits stays untouched, anything else bigger is re-encoded as JPEG (long side <= 1600, <= 400 kB); a 480 px JPEG preview comes with it. WebP, GIF and what the codecs cannot read are kept as is when within limits, no preview. */
 export function reduceCapture(raw: Buffer): { image: Buffer; preview?: Buffer } {
   if (raw.length > CAPTURE_RAW_MAX) throw new AttachmentError('too_large');
   const info = imageInfo(raw);
@@ -95,7 +115,12 @@ export function reduceCapture(raw: Buffer): { image: Buffer; preview?: Buffer } 
     return { image: raw };
   }
   if (info.width * info.height > DECODE_MAX_PIXELS) throw new AttachmentError('too_large');
-  const src = decodeRaster(raw, info.mime);
+  let src: Raster;
+  try { src = decodeRaster(raw, info.mime); } catch (e) {
+    // What the codec cannot read is kept like a WebP when its header says it is within limits (a JPEG jpeg-js does not handle).
+    if (within) return { image: raw };
+    throw e;
+  }
   const image = within ? raw : toJpeg(src, IMAGE_LONG_SIDE, ATTACHMENT_MAX, 85, 45);
   return { image, preview: toJpeg(src, PREVIEW_LONG_SIDE, PREVIEW_MAX, 70, 40) };
 }
