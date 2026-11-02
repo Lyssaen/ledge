@@ -2047,6 +2047,49 @@ describe('phone gateway: images', () => {
   });
 });
 
+describe('phone gateway: a session\'s slash commands', () => {
+  it('relays session.commands to the local daemon, pushes the listing cut to the phone\'s bounds, and says so in the snapshot', async () => {
+    const g = setup({ dispatch: async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {
+      if (msg.type !== 'session.commands') return;
+      reply({ type: 'session.commands.listing', requestId: 'someone-else', id: msg.id, commands: [] });
+      reply({ type: 'session.commands.listing', requestId: msg.requestId, id: msg.id, tool: 'claude', commands: [
+        { name: 'compact', source: 'builtin', description: 'D'.repeat(300), argumentHint: '<instructions>' },
+        { name: 'usage', source: 'builtin', blocked: 'panel' }
+      ] });
+    } });
+    g.sessions.set('a', mk('a'));
+    g.send('dev1', { type: 'snapshot.request' }); await flush();
+    expect(g.got('dev1')[0]).toMatchObject({ type: 'snapshot', daemon: { commands: true } });
+    g.send('dev1', { type: 'session.commands', id: 'a' }); await flush();
+    expect(g.dispatched.filter(m => m.type === 'session.commands')).toEqual([{ type: 'session.commands', requestId: expect.any(String), id: 'a' }]);
+    const listing = g.got('dev1').find(m => m.type === 'session.commands.listing');
+    expect(PhoneServerMessageSchema.safeParse(listing).success).toBe(true);
+    expect(listing).toEqual({ type: 'session.commands.listing', id: 'a', commands: [
+      { name: 'compact', source: 'builtin', description: 'D'.repeat(200), argumentHint: '<instructions>' },
+      { name: 'usage', source: 'builtin', blocked: 'panel' }
+    ] });
+  });
+  it('an unknown session, a daemon error and no answer in time push none, in error, never the daemon\'s text', async () => {
+    const g = setup({ dispatch: async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {
+      if (msg.type === 'session.commands') reply({ type: 'session.commands.listing', requestId: msg.requestId, id: msg.id, commands: [], error: 'not installed at /home/me' });
+    } });
+    g.sessions.set('a', mk('a'));
+    g.send('dev1', { type: 'session.commands', id: 'nope' }); await flush();
+    g.send('dev1', { type: 'session.commands', id: 'a' }); await flush();
+    expect(g.got('dev1')).toEqual([{ type: 'session.commands.listing', id: 'nope', commands: [], error: true }, { type: 'session.commands.listing', id: 'a', commands: [], error: true }]);
+    expect(g.dispatched.filter(m => m.type === 'session.commands')).toHaveLength(1);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const slow = setup({ dispatch: () => new Promise<void>(() => {}) });
+      slow.sessions.set('a', mk('a'));
+      slow.send('dev1', { type: 'session.commands', id: 'a' }); await flush();
+      expect(slow.got('dev1')).toEqual([]);
+      vi.advanceTimersByTime(25_000); await flush();
+      expect(slow.got('dev1')).toEqual([{ type: 'session.commands.listing', id: 'a', commands: [], error: true }]);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
 describe('phone gateway: a session\'s model (#58)', () => {
   /** A daemon that answers each `session.model` with what `answer` gives, and `models.list` with `listing`. */
   const daemon = (o: { answer?: (m: Extract<ClientMessage, { type: 'session.model' }>) => ServerMessage[]; listing?: (m: Extract<ClientMessage, { type: 'models.list' }>) => ServerMessage[] } = {}) => async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {
