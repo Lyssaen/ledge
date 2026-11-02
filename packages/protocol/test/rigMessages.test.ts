@@ -195,6 +195,12 @@ describe('rigCommand', () => {
     expect(rigCommandResult(handoff, json, false)).toEqual({ status: 'delivered', qitem: 'qitem-2-new' });
     // the same, pretty-printed (the whole response, when the receipt is not projected)
     expect(rigCommandResult(handoff, JSON.stringify(JSON.parse(json), null, 2), false)).toEqual({ status: 'delivered', qitem: 'qitem-2-new' });
+    // with a line printed before it
+    expect(rigCommandResult(handoff, `Advisory: dev@rig {busy}\n${JSON.stringify(JSON.parse(json), null, 2)}`, false)).toEqual({ status: 'delivered', qitem: 'qitem-2-new' });
+    // the whole response: each row as `rig queue show` prints it, nested objects before its id
+    const whole = { closed: { pickup: { state: 'done' }, waiting: { state: 'terminal', obligation: 'qitem-1-source' }, qitemId: 'qitem-1-source', handedOffFrom: 'qitem-0-parent' },
+      created: { pickup: { state: 'unclaimed' }, waiting: { obligation: 'qitem-2-new', blocker: 'qitem-0-blocker' }, qitemId: 'qitem-2-new' } };
+    expect(rigCommandResult(handoff, JSON.stringify(whole, null, 2), false)).toEqual({ status: 'delivered', qitem: 'qitem-2-new' });
     // the text receipt
     const text = ['closed qitem-1-source · handed-off · owner me@rig', '  created 2026-11-02T20:58:01.114Z · updated 2026-11-02T21:00:00.000Z · body 861 bytes · from lead@rig',
       '  handed off from qitem-0-parent', '  handed off to dev@rig', 'created qitem-2-new · pending · owner dev@rig', '  handed off from qitem-1-source',

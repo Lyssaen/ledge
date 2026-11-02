@@ -300,15 +300,14 @@ export function rigCommand(command: string): RigCommand | undefined {
  *  (`created <id> · <state> · owner <seat>`). Never another id of the output: a closed row cites its parents. */
 function createdRow(cmd: Extract<RigCommand, { kind: 'handoff' }>, output: string): string | undefined {
   const id = (v: unknown): string | undefined => (typeof v === 'string' && QitemIdSchema.safeParse(v).success ? v : undefined);
-  const trimmed = output.trim();
-  const start = trimmed.indexOf('{');
-  if (start >= 0) {
-    try {
-      const j = JSON.parse(trimmed.slice(start)) as Record<string, unknown>;
-      const created = j.created && typeof j.created === 'object' ? (j.created as Record<string, unknown>).qitemId : undefined;
-      const got = cmd.op === 'create' ? id(j.qitemId) ?? id(created) : id(created);
-      if (got) return got;
-    } catch { /* not JSON: the text receipt */ }
+  // The JSON printed (compact or indented), from the first line that opens it: lines printed before (an advisory) are skipped.
+  const lines = output.split('\n');
+  for (let k = 0; k < lines.length; k++) {
+    if (!lines[k]!.startsWith('{')) continue;
+    let j: Record<string, unknown>;
+    try { j = JSON.parse(lines.slice(k).join('\n').trim()) as Record<string, unknown>; } catch { continue; }
+    const created = j.created && typeof j.created === 'object' ? (j.created as Record<string, unknown>).qitemId : undefined;
+    return cmd.op === 'create' ? id(j.qitemId) ?? id(created) : id(created);
   }
   return new RegExp(`^created (${QITEM}) · `, 'm').exec(output)?.[1];
 }
