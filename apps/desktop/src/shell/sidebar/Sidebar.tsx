@@ -116,6 +116,9 @@ export function Sidebar(p: {
         <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
           <Icon d={SHELL_ICONS.grid} size={13} /><span>{t.side.atelier}</span><span className="st-fill" /><small>{t.side.active(active)}</small>
         </button>
+        <button type="button" className={place.kind === 'openrig' ? 'on' : undefined} aria-current={place.kind === 'openrig' ? 'page' : undefined} onClick={() => p.dispatch({ type: 'openrig' })}>
+          <Icon d={SHELL_ICONS.rig} size={13} /><span>{t.openrig.side}</span>
+        </button>
       </nav>
       <div className="st-scroll">
         <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { OpenRigState, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -35,7 +35,7 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  Like the daemon it keeps the island's settings (`extras.island`, default null: none set yet), sent after the projects, and an `island.set`
  *  replaces them and is broadcast back as `island`; `island: 'unknown'` plays a daemon too old to speak of them.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>} = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; openrig?: OpenRigState } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -58,6 +58,9 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
       received.push(msg);
+      // OpenRig (docs/mockups/ledge-openrig.html): a status answers `extras.openrig`; an action succeeds and broadcasts it again.
+      if (msg.type === 'openrig.status' && extras.openrig) ws.send(JSON.stringify({ type: 'openrig.state', requestId: msg.requestId, state: extras.openrig }));
+      if (msg.type === 'openrig.act' && extras.openrig) { ws.send(JSON.stringify({ type: 'openrig.done', requestId: msg.requestId, ok: true, commands: [] })); ws.send(JSON.stringify({ type: 'openrig.state', state: extras.openrig })); }
       if (msg.type === 'island.set') { island = msg.prefs; ws.send(JSON.stringify({ type: 'island', prefs: island })); }
       if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }
       if (msg.type === 'session.decide') { const s = sessions.get(msg.id); if (s) { const { pending: _p, ...rest } = s; const next = { ...rest, state: 'working' as const }; sessions.set(s.id, next); ws.send(JSON.stringify({ type: 'session.updated', session: next })); } }

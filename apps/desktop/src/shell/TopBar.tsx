@@ -33,7 +33,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
   const project = (id: string) => projects?.projects.find(p => p.id === id);
   const filterName = (f: ProjectFilter) => (f === 'none' ? t.side.unassigned : project(f)?.name ?? t.side.unassigned);
   const overview = place.kind === 'overview';
-  const crumbIcon = place.kind === 'settings' ? SHELL_ICONS.gear : place.kind === 'session' ? ICONS.folder.d : SHELL_ICONS.grid;
+  const crumbIcon = place.kind === 'settings' ? SHELL_ICONS.gear : place.kind === 'session' ? ICONS.folder.d : place.kind === 'openrig' ? SHELL_ICONS.rig : SHELL_ICONS.grid;
 
   const crumbs = () => {
     if (place.kind === 'settings') return <>
@@ -67,6 +67,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
         )}
       </>;
     }
+    if (place.kind === 'openrig') return <strong>{t.openrig.title}</strong>;
     const filter = place.project;
     if (filter === 'all') return <strong>{t.crumb.atelier}</strong>;
     const color = project(filter)?.color;

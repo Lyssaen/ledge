@@ -81,6 +81,16 @@ On y vient par Échap depuis l'accueil ou une session, par « Retour à l'atelie
 
 Y renvoyer l'utilisateur pour avoir une vue d'ensemble de qui travaille où, ou pour ranger une session dans un projet.
 
+### OpenRig (`openrig`)
+
+On y vient par « OpenRig » dans la barre latérale, sous « Atelier ». La page pilote OpenRig sur une machine ; les puces du haut changent de machine.
+- **Daemon :** « Démarrer », « Arrêter », « Redémarrer ». La case « Au démarrage, relancer les rigs qui tournaient » lance `rig start --last` ; « Sans le kernel » ajoute `--no-kernel`.
+- **Kernel :** l'opérateur d'OpenRig (le rig nommé `kernel`), avec « Démarrer », « Arrêter », « Redémarrer ».
+- **Rigs :** chaque rig montre son état, ses sièges et son dernier snapshot ; un clic sur son nom déplie ses sièges. « Démarrer » lance `rig up <rig> --existing`, « Arrêter » `rig down <rig>`, « Redémarrer » les deux avec un snapshot.
+- Tout arrêt ou redémarrage demande confirmation, nomme les sièges qui travaillent et montre la commande `rig` lancée.
+
+Y renvoyer l'utilisateur pour démarrer, arrêter ou redémarrer OpenRig, son kernel ou un rig, sur n'importe quelle machine.
+
 ### Session (`session`)
 
 On l'ouvre en cliquant sur un siège, sur une ligne de la barre latérale ou sur un élément « À toi ». On y accède aussi par `Alt+1…9`, par `Alt+←/→`, ou par `Ctrl+K`. Un sous-agent a sa propre page.

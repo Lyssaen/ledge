@@ -6,6 +6,7 @@ import { ATTACHMENTS_MAX, AttachmentDataSchema, AttachmentErrorSchema, Attachmen
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
+import { OpenRigActSchema, OpenRigDoneSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
@@ -85,7 +86,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Drives OMP over its RPC: launching `omp` sessions is possible when the binary is there (`models.list` says so). */ omp: z.boolean().optional(),
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
-  /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional() });
+  /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
+  /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -101,6 +103,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ReposInfoSchema,
   ReposFoundSchema,
   ModelsListingSchema,
+  OpenRigStateMessageSchema,
+  OpenRigDoneSchema,
   /** `recents`: the folders of past sessions, most recent first. `launcher`: the command that runs `ledge` inside WSL
    *  (`[node, cli]`), so the overlay can attach a terminal to a session with `<launcher> attach <id>`. `daemon`: absent
    *  from daemons older than the auto-update. */
@@ -180,6 +184,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ReposInspectSchema,
   ReposScanSchema,
   ModelsListSchema,
+  OpenRigStatusSchema,
+  OpenRigActSchema,
   /** The overlay starts a session: `cwd` is a WSL path (`~` allowed), `name` a preferred bot name (the daemon picks a
    *  free one otherwise), `prompt` the agent's first instruction, `continue` resumes the folder's last conversation.
    *  With `qid` it is the chat card of that turn: the daemon launches the turn's proposal and ignores the other fields

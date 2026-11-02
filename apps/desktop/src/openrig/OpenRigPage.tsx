@@ -1,0 +1,215 @@
+import { useId, useState } from 'react';
+import type { DaemonClient, MachineState } from '@ledge/fleet';
+import { useOpenRig, type OpenRigView } from '@ledge/fleet/openrig';
+import type { OpenRigAction, OpenRigState, Rig } from '@ledge/protocol';
+import { Button } from '@ledge/ui/ui/Button';
+import { Icon, ICONS } from '@ledge/ui/ui/icons';
+import { useI18n } from '../i18n/lang';
+import type { NavAction } from '../nav/state';
+import { cls } from '../shell/cls';
+import { Modal } from '../shell/Modal';
+import { openUrl } from '../tauri/bridge';
+import { asksFirst, commandsOf, isRunning, kernelRig, listedRigs, rigOf, targetOf, workingSeats } from './model';
+
+export const OPENRIG_INSTALL_URL = 'https://github.com/mvschwarz/openrig#readme';
+
+type Tone = 'ok' | 'off' | 'info' | 'warn' | 'err';
+const Pill = ({ tone, children }: { tone: Tone; children: React.ReactNode }) => <span className={`or-pill or-${tone}`}>{children}</span>;
+const Dot = ({ tone }: { tone: Tone }) => <span className={`or-dot or-${tone}`} aria-hidden />;
+
+/**
+ * OpenRig on a machine (docs/mockups/ledge-openrig.html, view 1): the machines on top, the daemon and the kernel, then
+ * the rigs, each unfolding its seats. A stop or a restart asks first (view 2); every action shows the `rig` command it runs.
+ */
+export function OpenRigPage({ client, machines, machine, dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; dispatch: (a: NavAction) => void }) {
+  const { t, lang } = useI18n();
+  const o = t.openrig;
+  const shown = machines.find(m => m.id === machine) ?? machines.find(m => m.id === 'local') ?? machines[0];
+  const id = shown?.id ?? 'local';
+  const rig = useOpenRig(client, shown?.ready === false ? null : id);
+  const [ask, setAsk] = useState<OpenRigAction | null>(null);
+  const run = (a: OpenRigAction) => { if (asksFirst(a)) setAsk(a); else void rig.act(a); };
+  const label = shown?.label ?? id;
+  return (
+    <div className="or-page" aria-label={o.title}>
+      <div className="or-head">
+        <div className="or-machines" role="tablist" aria-label={o.machines}>
+          {machines.map(m => (
+            <button key={m.id} type="button" role="tab" aria-selected={m.id === id} className="or-chip" onClick={() => dispatch({ type: 'openrig', machine: m.id })}>
+              <Dot tone={m.ready ? 'ok' : 'off'} />{m.label}{!m.ready && <small>· {o.machineOffline}</small>}
+            </button>
+          ))}
+        </div>
+        <span className="or-fill" />
+        {rig.state && <small className="or-meta">{rig.state.version ? `${o.version(rig.state.version)} · ` : ''}{o.updated(new Date(rig.state.at).toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-GB'))}</small>}
+        <Button variant="ghost" size="sm" aria-label={o.refresh} title={o.refresh} onClick={rig.refresh} disabled={shown?.ready === false}><Icon d={ICONS.refresh.d} size={14} /></Button>
+      </div>
+      <Body view={rig} machine={shown} onAct={run} />
+      {ask && rig.state && <Confirm action={ask} state={rig.state} machine={label} onCancel={() => setAsk(null)} onConfirm={a => { setAsk(null); void rig.act(a); }} />}
+    </div>
+  );
+}
+
+function Body({ view, machine, onAct }: { view: OpenRigView; machine?: MachineState; onAct: (a: OpenRigAction) => void }) {
+  const { t } = useI18n();
+  const o = t.openrig;
+  if (machine && !machine.ready) return <p className="or-empty" role="status">{o.offline}</p>;
+  if (view.error === 'outdated') return <p className="or-empty" role="status">{o.outdated}</p>;
+  if (view.error === 'offline') return <p className="or-empty" role="status">{o.offline}</p>;
+  const s = view.state;
+  if (!s) return <p className="or-empty" role="status">{o.loading}</p>;
+  if (!s.installed) return (
+    <section className="or-card or-absent">
+      <h3><Dot tone="off" />{o.notInstalledTitle}</h3>
+      <p>{o.notInstalled}</p>
+      <div className="or-acts"><Button size="sm" onClick={() => openUrl(OPENRIG_INSTALL_URL)}>{o.howToInstall}</Button></div>
+    </section>
+  );
+  const busy = view.pending !== null;
+  const up = s.daemon.state === 'running';
+  return <>
+    <Status view={view} />
+    <div className="or-cards">
+      <DaemonCard state={s} busy={busy} onAct={onAct} />
+      <KernelCard state={s} busy={busy} onAct={onAct} />
+    </div>
+    <div className="or-h2"><h2>{o.rigs}</h2>{up && <span className="or-count">{listedRigs(s).length}</span>}</div>
+    {!up ? <p className="or-empty">{o.daemonFirst}</p>
+      : listedRigs(s).length === 0 ? <p className="or-empty">{o.noRigs}</p>
+      : <ul className="or-rigs">{listedRigs(s).map(r => <RigRow key={r.id} rig={r} busy={busy} working={rigOf(view.pending) === r.name} onAct={onAct} />)}</ul>}
+  </>;
+}
+
+/** The action under way, or how the last one ended when it failed. */
+function Status({ view }: { view: OpenRigView }) {
+  const { t } = useI18n();
+  const o = t.openrig;
+  if (view.pending) return <p className="or-status or-info" role="status"><span className="or-spin"><Icon d={ICONS.refresh.d} size={13} /></span>{o.running(commandsOf(view.pending).join(' && '))}</p>;
+  const last = view.last;
+  if (!last || last.ok) return null;
+  return (
+    <div className="or-status or-err" role="alert">
+      <p>{last.error === 'busy' ? o.busy : last.error === 'not_installed' ? o.notInstalled : last.error === 'offline' ? o.offline : last.error === 'outdated' ? o.outdated : o.failed(last.error ?? '')}</p>
+      {last.commands.length > 0 && <code>{last.commands.join(' && ')}</code>}
+    </div>
+  );
+}
+
+function DaemonCard({ state, busy, onAct }: { state: OpenRigState; busy: boolean; onAct: (a: OpenRigAction) => void }) {
+  const { t } = useI18n();
+  const o = t.openrig;
+  const [restoreLast, setRestoreLast] = useState(true);
+  const [noKernel, setNoKernel] = useState(false);
+  const d = state.daemon, up = d.state === 'running';
+  const restore = restoreLast ? 'last' as const : 'none' as const;
+  return (
+    <section className="or-card" aria-label={o.daemon}>
+      <h3><Dot tone={up ? 'ok' : d.state === 'stale' ? 'warn' : 'off'} />{o.daemon}<Pill tone={up ? 'ok' : d.state === 'stale' ? 'warn' : 'off'}>{o.daemonState[d.state]}</Pill></h3>
+      <p className="or-sub mono">{up ? [d.port !== undefined && `127.0.0.1:${d.port}`, d.pid !== undefined && `pid ${d.pid}`].filter(Boolean).join(' · ') : d.message ?? ''}</p>
+      <div className="or-acts">
+        {up ? <>
+          <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'daemon.stop' })}><Icon d={ICONS.stop.d} size={12} />{o.stop}</Button>
+          <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'daemon.restart', restore })}><Icon d={ICONS.refresh.d} size={12} />{o.restart}</Button>
+        </> : <Button size="sm" variant="primary" disabled={busy} onClick={() => onAct({ kind: 'daemon.start', restore, ...(noKernel && !restoreLast ? { noKernel: true } : {}) })}>{o.start}</Button>}
+      </div>
+      <label className="or-check"><input type="checkbox" checked={restoreLast} onChange={e => setRestoreLast(e.target.checked)} />{o.restoreLast}<code>rig start --last</code></label>
+      {!up && !restoreLast && <label className="or-check"><input type="checkbox" checked={noKernel} onChange={e => setNoKernel(e.target.checked)} />{o.noKernel}<code>--no-kernel</code></label>}
+    </section>
+  );
+}
+
+function KernelCard({ state, busy, onAct }: { state: OpenRigState; busy: boolean; onAct: (a: OpenRigAction) => void }) {
+  const { t } = useI18n();
+  const o = t.openrig;
+  const k = state.kernel.state, up = state.daemon.state === 'running', rig = kernelRig(state);
+  const tone: Tone = k === 'ready' ? 'ok' : k === 'starting' ? 'info' : 'off';
+  return (
+    <section className="or-card" aria-label={o.kernel}>
+      <h3><Dot tone={tone} />{o.kernel}<Pill tone={tone}>{o.kernelState[k]}</Pill></h3>
+      <p className="or-sub">{rig ? `${o.kernelLine} ${o.seats(rig.running, rig.seats)}` : o.kernelLine}</p>
+      <div className="or-acts">
+        {!up ? <small className="or-muted">{o.daemonFirst}</small>
+          : k === 'ready' || k === 'starting' ? <>
+            <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'kernel.stop' })}><Icon d={ICONS.stop.d} size={12} />{o.stop}</Button>
+            <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'kernel.restart' })}><Icon d={ICONS.refresh.d} size={12} />{o.restart}</Button>
+          </> : rig ? <Button size="sm" variant="primary" disabled={busy} onClick={() => onAct({ kind: 'kernel.start' })}>{o.start}</Button> : null}
+      </div>
+    </section>
+  );
+}
+
+function RigRow({ rig, busy, working, onAct }: { rig: Rig; busy: boolean; working: boolean; onAct: (a: OpenRigAction) => void }) {
+  const { t } = useI18n();
+  const o = t.openrig;
+  const [open, setOpen] = useState(false);
+  const seats = useId();
+  const on = isRunning(rig);
+  const tone: Tone = rig.attention > 0 ? 'warn' : rig.status === 'running' ? 'ok' : on ? 'info' : 'off';
+  return (
+    <li className={cls('or-rig', open && 'open', working && 'busy')}>
+      <div className="or-row">
+        <button type="button" className="or-fold" aria-expanded={open} aria-controls={seats} aria-label={o.showSeats(rig.name)} onClick={() => setOpen(!open)}>
+          <Icon d={ICONS.chevronRight.d} size={12} />
+          <strong>{rig.name}</strong>
+        </button>
+        <Pill tone={tone}>{o.rigStatus(rig.status)}</Pill>
+        <span className="or-muted">{o.seats(rig.running, rig.seats)}</span>
+        <span className={rig.attention > 0 ? 'or-attn' : 'or-muted'}>{rig.attention > 0 ? o.attention(rig.attention) : ''}</span>
+        <span className="or-muted">{[rig.uptime && on && o.uptime(rig.uptime), rig.snapshot && o.snapshot(rig.snapshot)].filter(Boolean).join(' · ')}</span>
+        <span className="or-acts">
+          {on ? <>
+            <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'rig.stop', rig: rig.name, snapshot: true })}><Icon d={ICONS.stop.d} size={12} />{o.stop}</Button>
+            <Button size="sm" disabled={busy} aria-label={`${o.restart} ${rig.name}`} title={o.restart} onClick={() => onAct({ kind: 'rig.restart', rig: rig.name })}><Icon d={ICONS.refresh.d} size={12} /></Button>
+          </> : <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'rig.start', rig: rig.name })}><Icon d={ICONS.play.d} size={12} />{o.start}</Button>}
+        </span>
+      </div>
+      {open && (
+        <ul id={seats} className="or-seats">
+          {rig.nodes.length === 0 ? <li className="or-muted">{o.noSeats}</li> : rig.nodes.map(n => (
+            <li key={n.session} className="or-seat">
+              <span className="mono">{n.logicalId}</span>
+              <span className="or-muted">{[n.runtime, n.model].filter(Boolean).join(' · ')}</span>
+              <Pill tone={n.activity === 'running' ? 'info' : n.activity === 'idle' ? 'ok' : 'off'}>{o.activity(n.activity)}</Pill>
+              <span className="or-muted">{o.work(n.work)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/** Stopping or restarting asks first, names the working seats, offers the stop's options and shows the command. */
+function Confirm({ action, state, machine, onConfirm, onCancel }: { action: OpenRigAction; state: OpenRigState; machine: string; onConfirm: (a: OpenRigAction) => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  const c = t.openrig.confirm;
+  const body = useId();
+  const [a, setA] = useState(action);
+  const target = targetOf(a);
+  const what = a.kind.startsWith('daemon.') ? c.daemon : a.kind.startsWith('kernel.') ? c.kernel : c.rig(target);
+  const stop = a.kind.endsWith('.stop');
+  const working = workingSeats(state, a);
+  const toggle = (k: 'snapshot' | 'force' | 'delete') => setA(x => (x.kind === 'rig.stop' ? { ...x, [k]: !x[k] } : x));
+  return (
+    <Modal title={(stop ? c.title : c.restartTitle)(what, machine)} role="alertdialog" describedBy={body} className="confirm-modal or-confirm" onClose={onCancel}>
+      <div className="confirm-content" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } }}>
+        <p id={body}>{c.working(working.length)}{!stop && ` ${c.restartNote}`}</p>
+        {working.length > 0 && (
+          <ul className="or-working">
+            {working.map(w => <li key={w.seat.session}><span className="mono">{w.seat.logicalId}</span><span className="or-muted">{a.kind.startsWith('daemon.') ? `${w.rig} · ` : ''}{t.openrig.activity(w.seat.activity)}{w.seat.work ? ` · ${t.openrig.work(w.seat.work)}` : ''}</span></li>)}
+          </ul>
+        )}
+        {a.kind === 'rig.stop' && <div className="or-options">
+          <label className="or-check"><input type="checkbox" checked={!!a.snapshot} onChange={() => toggle('snapshot')} />{c.snapshot}</label>
+          <label className="or-check"><input type="checkbox" checked={!!a.force} onChange={() => toggle('force')} />{c.force}<code>--force</code></label>
+          <label className="or-check"><input type="checkbox" checked={!!a.delete} onChange={() => toggle('delete')} />{c.del}<code>--delete</code></label>
+        </div>}
+        <p className="or-command">{c.command} : <code>{commandsOf(a).join(' && ')}</code></p>
+        <div className="confirm-actions">
+          <Button autoFocus onClick={onCancel}>{c.cancel}</Button>
+          <Button variant="primary" className={a.kind === 'rig.stop' && a.delete ? 'danger-btn' : ''} onClick={() => onConfirm(a)}>{c.ok(stop, what)}</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

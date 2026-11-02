@@ -11,7 +11,7 @@ export const fr = {
   time: {
     now: 'à l’instant', decimal: ',', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
   },
-  tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
+  tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig' },
   bar: {
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: (n: number) => `${n} ${plural(n, 'machine', 'machines')}`,
@@ -112,7 +112,7 @@ export const fr = {
   },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
-    title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
+    title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig',
     screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
@@ -154,6 +154,39 @@ export const fr = {
     approval: (n: string, text: string) => `${n} attend ton accord : ${text}`,
     question: (n: string, text: string) => `${n} a une question : ${text}`,
     title: (n: number) => (n > 0 ? `ledge · ${n} t’${plural(n, 'attend', 'attendent')}` : 'ledge')
+  },
+  openrig: {
+    activity: (a: string) => ({ running: 'au travail', idle: 'disponible', unknown: '—' } as Record<string, string>)[a] ?? a,
+    title: 'OpenRig', daemon: 'Daemon', kernel: 'Kernel', rigs: 'Rigs',
+    machine: 'machine', toggle: 'démarrer/arrêter', restart: 'redémarrer', unfold: 'déplier', daemonKey: 'daemon', kernelKey: 'kernel',
+    daemonState: { running: 'actif', stopped: 'arrêté', stale: 'arrêté sans arrêt propre', unknown: 'inconnu' } as Record<string, string>,
+    kernelState: { ready: 'prêt', starting: 'démarrage', stopped: 'arrêté', skipped: 'sans kernel', absent: 'absent', unknown: 'inconnu' } as Record<string, string>,
+    look: { running: 'en marche', starting: 'démarrage', attention: 'à surveiller', stopped: 'arrêté' },
+    daemonMeta: (port: number | undefined, pid: number | undefined) => [port ? `127.0.0.1:${port}` : '', pid ? `pid ${pid}` : ''].filter(Boolean).join(' · '),
+    restoreHint: '↻ au démarrage : rigs relancés',
+    kernelHint: 'l’opérateur qui aide à lancer un rig',
+    seats: (running: number, total: number) => `${running}/${total}`,
+    attention: (n: number) => `${n} ${plural(n, 'siège demande', 'sièges demandent')} attention`,
+    since: (uptime: string) => `depuis ${uptime}`, snapshot: (s: string) => `snapshot ${s}`,
+    work: (n: number) => (n ? `${n} ${plural(n, 'tâche', 'tâches')}` : ''),
+    stoppedOnPurpose: 'arrêté volontairement',
+    noRigs: 'Aucun rig sur cette machine.',
+    notInstalled: 'OpenRig n’est pas installé sur cette machine (la commande rig est introuvable).',
+    stoppedDaemon: 'Le daemon OpenRig est arrêté : D le démarre.',
+    offline: 'Machine hors ligne.', outdated: 'Le daemon Ledge de cette machine ne connaît pas OpenRig : mettez-le à jour.',
+    loading: 'Lecture d’OpenRig…', version: (v: string) => `OpenRig ${v}`,
+    confirmTitle: 'Confirmer',
+    confirm: (what: string) => `${what} ?`,
+    what: {
+      'daemon.stop': 'Arrêter le daemon OpenRig', 'daemon.restart': 'Redémarrer le daemon OpenRig', 'kernel.stop': 'Arrêter le kernel', 'kernel.restart': 'Redémarrer le kernel',
+      'rig.stop': (rig: string) => `Arrêter le rig « ${rig} »`, 'rig.restart': (rig: string) => `Redémarrer le rig « ${rig} »`
+    },
+    busy: (names: string, n: number) => (n ? `${n} ${plural(n, 'agent au travail s’arrête', 'agents au travail s’arrêtent')} : ${names}.` : 'Aucun agent au travail.'),
+    yes: 'confirmer', no: 'annuler',
+    running: (cmd: string) => `en cours : ${cmd}`,
+    done: (cmd: string) => `fait : ${cmd}`,
+    failed: (why: string) => `échec : ${why}`,
+    why: { busy: 'une autre action OpenRig est en cours sur cette machine', not_installed: 'OpenRig n’est pas installé', offline: 'machine hors ligne', outdated: 'daemon Ledge trop ancien' } as Record<string, string>
   },
   small: {
     tooSmall: (w: number, h: number) => `Fenêtre trop petite : ${w}×${h}`, atLeast: (w: number, h: number) => `il faut au moins ${w}×${h}`,

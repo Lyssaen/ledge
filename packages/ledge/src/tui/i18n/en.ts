@@ -8,7 +8,7 @@ export const en: Messages = {
   lang: { fr: 'Français', en: 'English' },
   state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only' },
   time: { now: 'just now', decimal: '.', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
-  tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings' },
+  tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig' },
   bar: {
     sessions: n => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: n => `${n} ${plural(n, 'machine', 'machines')}`,
@@ -111,7 +111,7 @@ export const en: Messages = {
     launching: 'Launching…', launched: name => `✓ ${name} is started`
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
     capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,
@@ -146,6 +146,39 @@ export const en: Messages = {
     approval: (n, text) => `${n} needs your approval: ${text}`,
     question: (n, text) => `${n} has a question: ${text}`,
     title: n => (n > 0 ? `ledge · ${n} waiting` : 'ledge')
+  },
+  openrig: {
+    activity: (a) => ({ running: 'working', idle: 'available', unknown: '—' } as Record<string, string>)[a] ?? a,
+    title: 'OpenRig', daemon: 'Daemon', kernel: 'Kernel', rigs: 'Rigs',
+    machine: 'machine', toggle: 'start/stop', restart: 'restart', unfold: 'unfold', daemonKey: 'daemon', kernelKey: 'kernel',
+    daemonState: { running: 'running', stopped: 'stopped', stale: 'stopped uncleanly', unknown: 'unknown' },
+    kernelState: { ready: 'ready', starting: 'starting', stopped: 'stopped', skipped: 'no kernel', absent: 'absent', unknown: 'unknown' },
+    look: { running: 'running', starting: 'starting', attention: 'needs a look', stopped: 'stopped' },
+    daemonMeta: (port, pid) => [port ? `127.0.0.1:${port}` : '', pid ? `pid ${pid}` : ''].filter(Boolean).join(' · '),
+    restoreHint: '↻ on start: rigs brought back',
+    kernelHint: 'the operator that helps start a rig',
+    seats: (running, total) => `${running}/${total}`,
+    attention: n => `${n} ${plural(n, 'seat needs', 'seats need')} attention`,
+    since: uptime => `up ${uptime}`, snapshot: s => `snapshot ${s}`,
+    work: n => (n ? `${n} ${plural(n, 'task', 'tasks')}` : ''),
+    stoppedOnPurpose: 'stopped on purpose',
+    noRigs: 'No rig on this machine.',
+    notInstalled: 'OpenRig is not installed on this machine (no rig command).',
+    stoppedDaemon: 'The OpenRig daemon is stopped: D starts it.',
+    offline: 'Machine offline.', outdated: 'This machine’s Ledge daemon does not know OpenRig: update it.',
+    loading: 'Reading OpenRig…', version: v => `OpenRig ${v}`,
+    confirmTitle: 'Confirm',
+    confirm: what => `${what}?`,
+    what: {
+      'daemon.stop': 'Stop the OpenRig daemon', 'daemon.restart': 'Restart the OpenRig daemon', 'kernel.stop': 'Stop the kernel', 'kernel.restart': 'Restart the kernel',
+      'rig.stop': rig => `Stop the rig “${rig}”`, 'rig.restart': rig => `Restart the rig “${rig}”`
+    },
+    busy: (names, n) => (n ? `${n} working ${plural(n, 'agent stops', 'agents stop')}: ${names}.` : 'No agent at work.'),
+    yes: 'confirm', no: 'cancel',
+    running: cmd => `running: ${cmd}`,
+    done: cmd => `done: ${cmd}`,
+    failed: why => `failed: ${why}`,
+    why: { busy: 'another OpenRig action runs on this machine', not_installed: 'OpenRig is not installed', offline: 'machine offline', outdated: 'Ledge daemon too old' }
   },
   small: {
     tooSmall: (w, h) => `Window too small: ${w}×${h}`, atLeast: (w, h) => `needs at least ${w}×${h}`,

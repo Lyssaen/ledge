@@ -38,6 +38,7 @@ import { readProjects, writeProjects } from './projects.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
+import { createOpenRig, type OpenRig } from './openrig.js';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
@@ -176,7 +177,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; openrig?: OpenRig; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -188,6 +189,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
+  // OpenRig on this machine (docs/mockups/ledge-openrig.html): `rig` runs with the login shell's PATH, as an agent would.
+  const openrig = opts.openrig ?? createOpenRig({ env: agentEnv });
   const models = opts.models ?? createModels({ env: agentEnv, omp: async () => ompChoices(await omp.catalog(opts.home ?? homedir())) });
   const token = await ensureDaemonToken();
   const httpServer = createServer(unauthorized);
@@ -351,7 +354,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -966,6 +969,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
       case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
+      case 'openrig.status': return reply({ type: 'openrig.state', requestId: msg.requestId, state: await openrig.state() });
+      case 'openrig.act': {
+        const done = await openrig.act(msg.action);
+        reply({ type: 'openrig.done', requestId: msg.requestId, ...done });
+        // Every front sees what the action changed, not only the one that asked.
+        if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
+        return;
+      }
       case 'snapshot.request': return sendSnapshot(reply);
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender

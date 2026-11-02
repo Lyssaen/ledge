@@ -2132,7 +2132,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2545,6 +2545,28 @@ describe('server: models.list (#58)', () => {
     expect(await c.next('models.listing')).toEqual({ type: 'models.listing', requestId: 'r2', tool: 'codex', models: [], error: 'not installed' });
     expect(asked).toEqual(['claude', 'codex']);
     c.close(); await srv2.close();
+  });
+});
+
+describe('server: OpenRig', () => {
+  it('answers a status under its requestId; an action answers its sender, then every front gets the fresh state', async () => {
+    const acts: unknown[] = []; let fresh = 0;
+    const state = (s: 'running' | 'stopped') => ({ installed: true, daemon: { state: s }, kernel: { state: 'stopped' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' });
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: {
+      async state(f) { if (f) fresh++; return state(f ? 'stopped' : 'running'); },
+      async act(a) { acts.push(a); return { ok: true, commands: ['rig daemon stop'] }; }
+    } });
+    const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
+    expect((await c.next('snapshot')).daemon).toMatchObject({ openrig: true });
+    await other.next('snapshot');
+    c.send({ type: 'openrig.status', requestId: 'r1' });
+    expect(await c.next('openrig.state')).toEqual({ type: 'openrig.state', requestId: 'r1', state: state('running') });
+    c.send({ type: 'openrig.act', requestId: 'r2', action: { kind: 'daemon.stop' } });
+    expect(await c.next('openrig.done')).toEqual({ type: 'openrig.done', requestId: 'r2', ok: true, commands: ['rig daemon stop'] });
+    expect(await other.next('openrig.state')).toEqual({ type: 'openrig.state', state: state('stopped') });
+    expect(acts).toEqual([{ kind: 'daemon.stop' }]);
+    expect(fresh).toBe(1);
+    c.close(); other.close(); await srv2.close();
   });
 });
 
