@@ -81,6 +81,7 @@ export function seatParts(seat: string): { rig: string | null; role: string | nu
 }
 
 const PRIORITIES = new Set(['routine', 'urgent', 'critical']);
+const RANK: Record<HumanAsk['priority'], number> = { critical: 0, urgent: 1, routine: 2 };
 
 /** One OpenRig row (`GET /api/queue/<id>`) as « À toi » shows it; null when it is not something waiting on a person. */
 export function toAsk(raw: unknown, kind: HumanAsk['kind']): HumanAsk | null {
@@ -195,7 +196,8 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
       if (ask) asks.push(ask);
     }
     for (const id of rows.keys()) if (!refs.some(r => r.id === id)) rows.delete(id);
-    asks.sort((x, y) => y.updatedAt.localeCompare(x.updatedAt));
+    // The pressing first (critical, then urgent: the team's rule is `--priority urgent`, never `--alert`), then the most recent.
+    asks.sort((x, y) => RANK[x.priority] - RANK[y.priority] || y.updatedAt.localeCompare(x.updatedAt));
     return { channel, asks: asks.slice(0, HUMAN_ASKS_MAX), ...(asks.length > HUMAN_ASKS_MAX ? { truncated: true } : {}) };
   };
 

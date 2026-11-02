@@ -46,13 +46,14 @@ function fake(over: { rows?: Record<string, unknown>; attention?: unknown; post?
 }
 
 describe('« À toi » reading', () => {
-  it('reads asks, news and rows parked on the person, with the channel, most recent first', async () => {
+  it('reads asks, news and rows parked on the person, with the channel, the pressing first then the most recent', async () => {
     const f = fake();
     const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
     const l = await h.list();
     expect(OpenRigAsksChangedSchema.parse({ type: 'openrig.asksChanged', ...l })).toBeTruthy();
     expect(l.channel).toEqual({ state: 'ready', person: { address: 'ledge@external', name: 'Ledge' }, slack: false });
-    expect(l.asks.map(a => [a.id, a.kind])).toEqual([['qitem-3', 'parked'], ['qitem-1', 'decision'], ['qitem-2', 'update']]);
+    // qitem-2 is urgent (and the oldest): it comes first.
+    expect(l.asks.map(a => [a.id, a.kind])).toEqual([['qitem-2', 'update'], ['qitem-3', 'parked'], ['qitem-1', 'decision']]);
     const ask = l.asks.find(a => a.id === 'qitem-1')!;
     expect(ask).toMatchObject({ alert: true, from: { seat: 'dev-review@starter', rig: 'starter', role: 'dev.review' }, summary: 'Choisir une couleur', evidenceRef: '/tmp/evidence.md', bodyTruncated: false });
     expect(ask.questions).toEqual([

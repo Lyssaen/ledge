@@ -20,8 +20,8 @@ type HumanAsk = {
   //  decision : une demande adressée à l'humain (--human-intent decision) → Décisions / Questions
   //  update   : une nouvelle (--human-intent update) → Nouvelles ; se ferme par « Vu »
   //  parked   : la ligne d'un siège bloquée sur l'humain (state blocked, blockedOn = la personne) → se règle par des mots
-  alert: boolean;             // créée avec --alert (urgent : île, notification)
-  priority: 'routine' | 'urgent' | 'critical';
+  alert: boolean;             // créée avec --alert ; la consigne d'équipe l'interdit vers ledge@external : l'urgence se lit dans priority
+  priority: 'routine' | 'urgent' | 'critical';   // urgent / critical : en tête d'À toi (--priority urgent)
   from: {
     seat: string;             // le siège demandeur, "pod-member@rig" (ex. "pilot-lead@ledge-dev") ; pour parked : le propriétaire de la ligne
     rig: string | null;       // "ledge-dev" (la partie après @), null si le siège n'a pas cette forme
@@ -78,8 +78,8 @@ passent par l'utilisateur. Le front peut afficher la bannière sans le bouton, o
   requestId?: string,         // présent : réponse à openrig.asks ; absent : poussé à tous les fronts
   machineId?: string,         // posé par la flotte
   channel?: HumanChannel,     // absent seulement avec error
-  asks: HumanAsk[],           // les demandes ouvertes, la plus récente d'abord ; [] si rien
-  truncated?: boolean,        // plus de 200 demandes ouvertes : les 200 plus récentes
+  asks: HumanAsk[],           // les demandes ouvertes : critical, puis urgent, puis le reste ; à priorité égale la plus récente d'abord ; [] si rien
+  truncated?: boolean,        // plus de 200 demandes ouvertes : les 200 premières dans cet ordre
   error?: 'offline' | 'outdated'   // posé par la flotte : la machine n'a pas pu répondre
 }
 ```

@@ -8,7 +8,7 @@ export const OPENRIG_ASKS_POLL_MS = 60_000;
 export interface OpenRigAsksView {
   /** Whether the rigs can reach the person on that machine; null until its first answer. */
   channel: HumanChannel | null;
-  /** What waits on the person there, the most recent first. */
+  /** What waits on the person there: critical, then urgent, then the rest, the most recent first within each. */
   asks: readonly HumanAsk[];
   truncated: boolean;
   /** The machine could not answer: `offline`, or `outdated` (its Ledge daemon predates « À toi »). */
