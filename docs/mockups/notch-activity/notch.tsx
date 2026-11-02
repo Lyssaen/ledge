@@ -58,7 +58,9 @@ const COPY = {
     cantNext: 'Ce lecteur ne permet pas de passer au suivant',
     cantPlay: 'Ce lecteur ne se met pas en pause depuis Ledge',
     paused: 'En pause',
-    ago: (s: string) => `il y a ${s}`
+    ago: (s: string) => `il y a ${s}`,
+    pendingTip: (k: 'permission' | 'question', n: string, c: number) => `${k === 'permission' ? `${n} attend votre accord` : `${n} vous pose une question`}${c > 1 ? ` (+${c - 1} autre${c > 2 ? 's' : ''})` : ''}. Cliquer pour rouvrir la demande.`,
+    pendingAria: (k: 'permission' | 'question', n: string, c: number) => `Ledge, ${c > 1 ? `${c} demandes attendent` : 'une demande attend'} : rouvrir ${k === 'permission' ? `l’accord demandé par ${n}` : `la question de ${n}`}`
   },
   en: {
     tool: { read: 'reads', edit: 'edits', search: 'searches', command: 'runs', other: (t: string) => `uses ${t}` } as Record<Exclude<ToolKind, 'other'>, string> & { other: (t: string) => string },
@@ -74,7 +76,9 @@ const COPY = {
     cantNext: 'This player can’t skip ahead',
     cantPlay: 'This player can’t be paused from Ledge',
     paused: 'Paused',
-    ago: (s: string) => `${s} ago`
+    ago: (s: string) => `${s} ago`,
+    pendingTip: (k: 'permission' | 'question', n: string, c: number) => `${k === 'permission' ? `${n} needs your approval` : `${n} has a question`}${c > 1 ? ` (+${c - 1} more)` : ''}. Click to reopen the request.`,
+    pendingAria: (k: 'permission' | 'question', n: string, c: number) => `Ledge, ${c > 1 ? `${c} requests are waiting` : 'a request is waiting'}: reopen ${k === 'permission' ? `${n}’s approval request` : `${n}’s question`}`
   }
 };
 type Copy = typeof COPY.fr;
@@ -179,7 +183,7 @@ type Rest = 'eq' | 'bare' | 'cover';
 
 interface NotchProps {
   theme: Theme; lang: Lang; awake: boolean; line?: Line | null; music?: Music | null; open?: boolean; still?: boolean; aged?: string;
-  rest?: Rest; pending?: 'permission' | 'question' | null; pulse?: boolean;
+  rest?: Rest; pending?: 'permission' | 'question' | null; pulse?: boolean; tip?: boolean; waiting?: number;
   onEnter?: () => void; onLeave?: () => void; onOpenMusic?: () => void; onCloseMusic?: () => void; onToggle?: () => void;
 }
 
@@ -206,7 +210,11 @@ function Notch(p: NotchProps) {
         <Cover music={music} />
       </>}
       {mode === 'awake' && <>
-        <span className="na-resident"><ResidentMascot size={G.resident} theme={p.theme} reducedMotion={p.still} /></span>
+        <span className="na-resident" data-pending={p.pending ?? undefined} role={p.pending ? 'button' : undefined} aria-label={p.pending ? t.pendingAria(p.pending, 'Pim', p.waiting ?? 1) : undefined} title={p.pending ? t.pendingTip(p.pending, 'Pim', p.waiting ?? 1) : undefined}>
+          <ResidentMascot size={G.resident} theme={p.theme} reducedMotion={p.still} />
+          {p.pending && <span className="na-pip" data-pending={p.pending} aria-hidden="true" />}
+          {p.pending && p.tip && <span className="na-tip" role="tooltip">{t.pendingTip(p.pending, 'Pim', p.waiting ?? 1)}</span>}
+        </span>
         {p.line ? <button type="button" className="na-line-btn" aria-label={p.line.kind === 'track' ? text(p.line, t) : t.open(('who' in p.line ? p.line.who : 'from' in p.line ? p.line.from : ''))}>
           <LineBody line={p.line} t={t} still={p.still} aged={p.aged} />
         </button> : <span className="na-line-empty" />}
@@ -494,6 +502,21 @@ function Page() {
         <li><b>Mouvement réduit</b> : pas de spinner (symbole fixe), pas de points qui pulsent, pas de rebond de pochette ; le réveil se fait par un fondu simple.</li>
         <li><b>Ne pas déranger</b> : inchangé pour la mascotte. Les réveils sont suspendus, sauf les demandes d’accord et les questions (comme les bulles aujourd’hui).</li>
         <li><b>Mobile</b> : l’encoche n’existe que sur Windows ; pas d’écran mobile concerné.</li>
+      </ul>
+    </Section>
+
+    <Section id="reopen" title="Complément : une demande attend, Ledge éveillé" lead="À valider. Tant qu’une demande attend (mise de côté, ou reçue en Ne pas déranger), un clic sur Ledge rouvre la plus ancienne au lieu d’ouvrir son chat. Le signe : la pastille de mise à jour (9×9, bordée de 2 px de la couleur de l’encoche, en haut à droite de Ledge), dans la couleur du trait au repos.">
+      <div className="na-grid">
+        <Pair lang={lang} tag="D1" title="Un accord attend" note="Pastille rouge (--danger-text). Le reste de l’encoche ne change pas." awake line={L.tool} music={TRACK_A} pending="permission" />
+        <Pair lang={lang} tag="D2" title="Une question attend" note="Pastille ambre (--warning), aussi pour un plan ou un diff." awake line={null} music={TRACK_A} pending="question" />
+        <Pair lang={lang} tag="D3 · survol de Ledge" title="Info-bulle" note="Elle dit qui attend et ce que fait le clic. Avec plusieurs demandes : « (+1 autre) ». Le rouge l’emporte sur l’ambre." awake line={null} music={TRACK_A} pending="permission" waiting={2} tip />
+      </div>
+      <ul className="na-list">
+        <li><b>Libellé accessible</b> : « Ledge, une demande attend : rouvrir l’accord demandé par Pim ». En anglais : « Ledge, a request is waiting: reopen Pim’s approval request ». Avec plusieurs demandes : « 2 demandes attendent ».</li>
+        <li><b>Au repos</b> : inchangé, le trait coloré. Le clic sur le trait fait la même chose.</li>
+        <li><b>Pastille de mise à jour</b> : même place. Quand une demande attend, la pastille de demande la remplace, et la mise à jour reste visible par le tiret du filet. La pastille revient à la réponse.</li>
+        <li><b>Sans demande</b> : pas de pastille, et le clic sur Ledge ouvre son chat comme aujourd’hui.</li>
+        <li><b>Mouvement</b> : aucun ; pas de pulsation, la couleur suffit.</li>
       </ul>
     </Section>
 
