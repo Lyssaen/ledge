@@ -330,6 +330,21 @@ mod tests {
         println!("now playing: {}", json.chars().take(400).collect::<String>());
     }
 
+    /// Drives this PC's player for real, then reads it again: `LEDGE_MEDIA_CMD=next|play_pause|previous cargo test --
+    /// --ignored live_media_command --nocapture`. Only with the user's go: it changes what plays.
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn live_media_command() {
+        let cmd = std::env::var("LEDGE_MEDIA_CMD").ok().and_then(|c| Command::parse(&c)).expect("LEDGE_MEDIA_CMD=next|play_pause|previous");
+        let before = platform::snapshot().expect("nothing plays");
+        let took = platform::command(&before.player.id, cmd);
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let after = platform::snapshot();
+        let line = |n: &Option<NowPlaying>| n.as_ref().map(|n| format!("{} — {} (playing: {}, artwork: {})", n.title, n.artist, n.playing, n.artwork.is_some())).unwrap_or("null".into());
+        println!("player: {} {:?}\ncommand {cmd:?} taken: {took}\nbefore: {}\nafter:  {}", before.player.id, before.player.name, line(&Some(before.clone())), line(&after));
+    }
+
     #[test]
     fn commands_are_the_three_the_protocol_names() {
         assert_eq!(Command::parse("previous"), Some(Command::Previous));
