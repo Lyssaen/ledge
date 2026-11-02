@@ -3,9 +3,19 @@ import type { Context, Session } from '@ledge/protocol';
 
 /** How much of a transcript's end is read for its last usage: a turn's last lines, never the whole file. */
 const TAIL_BYTES = 512 * 1024;
-/** Claude Code's window, and the one of a model launched with `[1m]`. */
+/** Claude Code's window for an older model, and the long one: a model launched with `[1m]`, or Opus, Sonnet and Fable
+ *  from the Claude 5 family on (Claude Code gives them 1 000 000 without the suffix: `context_window_size`). */
 const CLAUDE_WINDOW = 200_000;
 const CLAUDE_LONG_WINDOW = 1_000_000;
+const LONG_BY_DEFAULT = /^claude-(?:opus|sonnet|fable)-(\d+)/;
+
+/** Whether a Claude model, the transcript's (`claude-opus-5-5`) or the one Ledge launched (`opus[1m]`), has the long window. */
+function longWindow(model: string | undefined): boolean {
+  if (!model) return false;
+  if (model.includes('[1m]')) return true;
+  const m = LONG_BY_DEFAULT.exec(model);
+  return !!m && Number(m[1]) >= 5;
+}
 
 type Usage = Omit<Context, 'at'>;
 type Json = Record<string, unknown>;
@@ -27,8 +37,8 @@ async function tail(path: string): Promise<string[]> {
 
 /**
  * Claude Code: the last assistant message outside a side chain (a subagent's context is not the session's); its
- * `usage` is the whole prompt it was given plus its answer. A model launched with `[1m]`, or a use already past 200 000,
- * has the long window.
+ * `usage` is the whole prompt it was given plus its answer. The model it names, a model launched with `[1m]`, or a use
+ * already past 200 000 tells the long window.
  */
 export function claudeUsage(lines: readonly string[], model?: string): Usage | undefined {
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -41,7 +51,9 @@ export function claudeUsage(lines: readonly string[], model?: string): Usage | u
     if (!u) continue;
     const used = num(u.input_tokens) + num(u.cache_creation_input_tokens) + num(u.cache_read_input_tokens) + num(u.output_tokens);
     if (used === 0) continue;
-    const window = model?.includes('[1m]') || used > CLAUDE_WINDOW ? CLAUDE_LONG_WINDOW : CLAUDE_WINDOW;
+    const msgModel = obj(e.message)?.model;
+    const long = longWindow(model) || longWindow(typeof msgModel === 'string' ? msgModel : undefined) || used > CLAUDE_WINDOW;
+    const window = long ? CLAUDE_LONG_WINDOW : CLAUDE_WINDOW;
     return { used, window };
   }
   return undefined;

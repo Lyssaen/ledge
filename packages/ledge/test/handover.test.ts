@@ -27,6 +27,16 @@ describe('reading a session\'s context (context handover spec §3.1)', () => {
     expect(claudeUsage(['not json', '{"type":"assistant"}'])).toBeUndefined();
   });
 
+  it('Claude Code: Opus, Sonnet and Fable 5 and later have the 1M window without [1m]; Haiku and older models do not', () => {
+    const at = (model: string) => claudeUsage([JSON.stringify({ type: 'assistant', message: { model, usage: { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 150_000, output_tokens: 0 } } })]);
+    expect(at('claude-opus-5-5')).toEqual({ used: 150_000, window: 1_000_000 });
+    expect(at('claude-sonnet-5-5')).toEqual({ used: 150_000, window: 1_000_000 });
+    expect(at('claude-fable-5-1')).toEqual({ used: 150_000, window: 1_000_000 });
+    expect(at('claude-opus-4-1-20250805')).toEqual({ used: 150_000, window: 200_000 });
+    expect(at('claude-haiku-4-5')).toEqual({ used: 150_000, window: 200_000 });
+    expect(claudeUsage([claudeLine(150_000)], 'sonnet')).toEqual({ used: 150_000, window: 200_000 });
+  });
+
   it('Codex: the last token_count of the rollout, with the window it names', () => {
     expect(codexUsage([codexLine(20_000), codexLine(230_000), '{"type":"response_item"}'])).toEqual({ used: 230_000, window: 272_000 });
     expect(codexUsage(['{"type":"event_msg","payload":{"type":"token_count","info":null}}'])).toBeUndefined();
