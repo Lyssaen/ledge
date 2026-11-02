@@ -322,12 +322,25 @@ function previewLines(pane: string): string[] {
 //   ⏸ manual mode on · ? for shortcuts · ← 2 agents                         at rest
 const BUSY = /\besc to interrupt\b/;
 
+// 2.1.316 dropped "esc to interrupt": the turn's spinner, the last unindented line above the input box, is the sign.
+// Its word ends with "…"; the line that ends a turn has none (tips and tool output under it are indented):
+//
+//   ✶ Newspapering… (20s · ↓ 1.2k tokens)     working
+//   ✽ Waddling…                               working, its first second
+//   ✻ Sautéed for 25s · done 10:10 AM         at rest
+const SPINNER = /^[^\s❯●⎿│─]\s\S+…(?: \(|$)/;
+
+function spinning(lines: string[], top: number): boolean {
+  for (let i = top - 1; i >= 0; i--) if (/^\S/.test(lines[i]!)) return SPINNER.test(lines[i]!);
+  return false;
+}
+
 /** The input box is on screen, no dialog replaces it and no turn is running: Claude waits for a prompt. */
 function atRest(pane: string): boolean {
   const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
   if (dialogEnd(lines) >= 0 || parseTrust(pane)) return false;
   const box = inputBox(lines);
-  return !!box && !lines.slice(box.bottom + 1).some(l => BUSY.test(l));
+  return !!box && !lines.slice(box.bottom + 1).some(l => BUSY.test(l)) && !spinning(lines, box.top);
 }
 
 // In 2.x a digit selects its option at once: no Enter (an Enter would land on whatever comes next).

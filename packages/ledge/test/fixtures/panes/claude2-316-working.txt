@@ -1,0 +1,22 @@
+● Je crée une branche dans un worktree à part, puis je regarde les tests
+  existants de atRest et le format des fixtures.
+
+  Ran 1 shell command
+
+● Je capture deux vrais terminaux sur 2.1.316 pour en faire des fixtures : le
+  mien pendant que cette commande tourne (en cours) et celui de Lio (fini).
+
+● Running cd /home/gch/development/github.com/Paradow-dev/l… · 2s
+  ⎿  $ cd /home/gch/development/github.com/Paradow-dev/ledge/.claude/worktrees/c
+     laude-busy-spinner; F=packages/ledge/test/fixtures/panes; tmux -L ledge
+     capture-pane -p -t ledge-62d6 | tail -22 > $F/claude2-316-working.txt; tmux
+     -L ledge capture-pane -p -t ledge-21ee | tail -22 >
+     $F/claude2-316-idle.txt;…
+
+✶ Newspapering… (20s · ↓ 1.2k tokens)
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  Opus 5.5 │ ctx 98k/633k 15% (Δcompact 502k) │ $1.00 · 6m │ ~/development/gi…
+  ⏵⏵ auto mode on (shift+tab to cycle)
