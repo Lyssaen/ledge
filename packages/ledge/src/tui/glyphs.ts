@@ -12,7 +12,9 @@ const UNICODE = {
   /** Links are clickable (OSC 8); without, their address follows them. */
   links: true as boolean,
   /** A task handed between sessions in « Échanges » (#92). */
-  task: '▤'
+  task: '▤',
+  /** A role's value: written here, inherited, not declared, unknown; the margin's rail (docs/mockups/ledge-openrig-roles-tui.html). */
+  pvHere: '●', pvInh: '↳', pvAbs: '○', pvUnk: '?', rail: '▎'
 };
 export type Glyphs = typeof UNICODE;
 const ASCII: Glyphs = {
@@ -23,6 +25,7 @@ const ASCII: Glyphs = {
   cross: '+',
   running: '~', held: '.', stale: '!',
   task: '[=]',
+  pvHere: '*', pvInh: '>', pvAbs: 'o', pvUnk: '?', rail: '|',
   links: false
 };
 
