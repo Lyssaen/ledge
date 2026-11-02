@@ -37,7 +37,7 @@ arrêtée : `rig up ledge-dev --existing`.
 
 ## Fichiers
 
-- `rig.yaml` — topologie (pods, sièges, liens). `cwd: ".."` : les sièges démarrent à la racine du dépôt.
+- `rig.yaml` — topologie (pods, sièges, liens). `cwd: "~/Workspace/ledge"` : les sièges démarrent à la racine du dépôt, que la spec soit lancée depuis le dépôt ou depuis la bibliothèque OpenRig.
 - `CULTURE.md` — règles communes à toute l'équipe.
 - `agents/<rôle>/` — spec et consignes de rôle de chaque agent ; `agents/developer` sert aux deux devs.
 - `guidance/scope-*.md` — le périmètre propre à chaque dev.

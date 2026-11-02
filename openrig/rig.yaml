@@ -20,7 +20,7 @@ pods:
         agent_ref: "local:agents/lead"
         profile: default
         runtime: claude-code
-        cwd: ".."
+        cwd: "~/Workspace/ledge"
     edges: []
 
   - id: design
@@ -32,7 +32,7 @@ pods:
         agent_ref: "local:agents/ux"
         profile: default
         runtime: claude-code
-        cwd: ".."
+        cwd: "~/Workspace/ledge"
     edges: []
 
   - id: dev
@@ -44,7 +44,7 @@ pods:
         agent_ref: "local:agents/developer"
         profile: default
         runtime: claude-code
-        cwd: ".."
+        cwd: "~/Workspace/ledge"
         startup:
           files:
             - path: guidance/scope-front.md
@@ -55,7 +55,7 @@ pods:
         agent_ref: "local:agents/developer"
         profile: default
         runtime: claude-code
-        cwd: ".."
+        cwd: "~/Workspace/ledge"
         startup:
           files:
             - path: guidance/scope-back.md
@@ -75,7 +75,7 @@ pods:
         agent_ref: "local:agents/reviewer"
         profile: default
         runtime: codex
-        cwd: ".."
+        cwd: "~/Workspace/ledge"
     edges: []
 
 edges:
