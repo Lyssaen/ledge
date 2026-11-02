@@ -40,13 +40,13 @@ export function SwitchRow({ label, hint, error, checked, disabled, onChange }: {
 
 /** A segmented choice: native radios in a radiogroup, so the arrows and Tab behave as usual. `wide`: the option takes more room;
  *  `lang`: the option's own language (a language named in itself). `describedBy`: what describes the group (Row's hint and error). */
-export function Segmented<T extends string>({ label, value, options, disabled, describedBy, onChange }: { label: string; value: T; options: readonly { value: T; label: ReactNode; wide?: boolean; lang?: string }[]; disabled?: boolean; describedBy?: string; onChange(v: T): void }): JSX.Element {
+export function Segmented<T extends string>({ label, value, options, disabled, describedBy, onChange }: { label: string; value: T; options: readonly { value: T; label: ReactNode; wide?: boolean; lang?: string; disabled?: boolean }[]; disabled?: boolean; describedBy?: string; onChange(v: T): void }): JSX.Element {
   const name = useId();
   return (
     <div className="set-seg" role="radiogroup" aria-label={label} aria-describedby={describedBy} aria-disabled={disabled || undefined}>
       {options.map(o => (
         <label key={o.value} lang={o.lang} className={[o.value === value && 'on', o.wide && 'wide'].filter(Boolean).join(' ') || undefined}>
-          <input type="radio" name={name} value={o.value} checked={o.value === value} disabled={disabled} onChange={() => onChange(o.value)} />{o.label}
+          <input type="radio" name={name} value={o.value} checked={o.value === value} disabled={disabled || o.disabled} onChange={() => onChange(o.value)} />{o.label}
         </label>
       ))}
     </div>

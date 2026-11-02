@@ -1,4 +1,4 @@
-import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState } from '@ledge/protocol';
+import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type TeamsEngine, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type Ask, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage, type Task, type Team } from '@ledge/protocol';
 import type { Escalation, Exchange, OpenRigStatus, Rig } from '@ledge/protocol';
@@ -49,6 +49,10 @@ export interface Fleet {
   island(): IslandPrefs | null | undefined;
   /** Asks the local daemon to replace them; applied on its broadcast. Throws when invalid, `DaemonOffline` when not connected, `DaemonOutdated` when it never sent them. */
   setIsland(next: IslandPrefs): void;
+  /** The team engine as the local daemon holds it: null until it speaks of it (an older daemon never does); kept while it is down. */
+  teamsEngine(): TeamsEngineState | null;
+  /** Asks the local daemon to switch engine and says whether it did (`reason` when not: a team runs, OpenRig is absent), 4 s at most. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
+  setTeamsEngine(engine: TeamsEngine): Promise<{ ok: boolean; reason?: string }>;
   /** The mobile access state as the local daemon holds it: undefined until it speaks of it; kept while it is down. */
   mobile(): MobileState | undefined;
   /** The local daemon's last refused mobile.* command; cleared by the next command and by the next mobile state. */
@@ -78,6 +82,8 @@ export interface Fleet {
   /** Sets it on the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
   setContextNear(near: number): void;
 }
+/** The team engine setting: which engine, whether OpenRig is installed on some machine, whether a team runs. */
+export interface TeamsEngineState { engine: TeamsEngine; openrigAvailable: boolean; running: boolean }
 /** A refused mobile.* command, as the Mobile access settings say it. */
 export interface MobileError { request: string; message: string; code?: string }
 export const LOCAL_MACHINE: MachineConfig = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' };
@@ -209,6 +215,11 @@ const undefinedSnapshot = () => undefined;
 /** The island's settings as the local daemon holds them: undefined until it speaks of them, null while none was set. */
 export function useIsland(client: DaemonClient): IslandPrefs | null | undefined {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.island ?? undefinedSnapshot, undefinedSnapshot);
+}
+const nullEngine = () => null;
+/** The team engine as the local daemon holds it: null until it speaks of it. */
+export function useTeamsEngine(client: DaemonClient): TeamsEngineState | null {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.teamsEngine ?? nullEngine, nullEngine);
 }
 /** The mobile access state as the local daemon holds it: undefined until it speaks of it. */
 export function useMobile(client: DaemonClient): MobileState | undefined {

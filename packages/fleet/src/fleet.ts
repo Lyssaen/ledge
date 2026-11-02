@@ -1,4 +1,4 @@
-import { askShown, withoutLedgeTeams, ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Ask, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
+import { askShown, withoutLedgeTeams, ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Ask, type Task, type Team, type IslandPrefs, type TeamsEngine, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, seatTerminalCommand, shellCommand, splitId, terminalCommand, type FleetAsk, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -89,6 +89,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let projects: Projects | null = null;
   /** The local daemon's island settings: undefined until it sends them, null while none was set. */
   let island: IslandPrefs | null | undefined;
+  /** The local daemon's team engine (`teams.engine`): null until it sends it (an older daemon never does), kept while it is down. */
+  let teamsEngine: { engine: TeamsEngine; openrigAvailable: boolean; running: boolean } | null = null;
+  /** The `teams.engine.set` sent and not answered yet, by rid. */
+  const engineAnswers = new Map<string, (r: { ok: boolean; reason?: string }) => void>();
   /** The local daemon's context threshold: undefined until it sends it. */
   let contextNear: number | undefined;
   /** The local daemon's mobile access state: undefined until it sends it. */
@@ -249,6 +253,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       island = m.prefs; listeners.forEach(fn => fn());
       return;
     }
+    // So is the team engine: one global setting, the local daemon's; a remote machine's is ignored. Its answer settles the request of the same rid.
+    if (m.type === 'teams.engine') {
+      if (machine !== 'local') return;
+      teamsEngine = { engine: m.engine, openrigAvailable: m.openrigAvailable, running: m.running }; listeners.forEach(fn => fn());
+      return;
+    }
+    if (m.type === 'teams.engine.result') {
+      if (machine === 'local') engineAnswers.get(m.rid)?.({ ok: m.ok, ...(m.reason ? { reason: m.reason } : {}) });
+      return;
+    }
     // Asks are every machine's, consumed here and never relayed: the ask carries its machine.
     if (m.type === 'asks') { putAsks(machine, m.asks); return; }
     if (m.type === 'ask.updated') { putAsks(machine, undefined, m.ask); return; }
@@ -388,6 +402,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const op = operations.get(c.id), closing = closeRows.has(c.id);
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
         for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
+        if (c.id === 'local') for (const settle of [...engineAnswers.values()]) settle({ ok: false, reason: 'hors ligne' });
         for (const [rid, a] of [...askAnswers]) if (a.machine === c.id) { askAnswers.delete(rid); a.settle({ ok: false, reason: 'hors ligne' }); }
         book.dropped(c.id);
         if (askMap.delete(c.id)) putAsks(c.id, []); // a machine that fell has no decision to answer
@@ -585,6 +600,19 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
         if (island === undefined) throw Object.assign(new Error('Update the local Ledge daemon: it does not know the island settings'), { name: 'DaemonOutdated' });
         local.send({ type: 'island.set', prefs: valid });
+      },
+      teamsEngine: () => teamsEngine,
+      setTeamsEngine(engine) {
+        const local = peers.get('local')!.client;
+        if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
+        // A daemon that knows the engine sends it after its snapshot; one that never did would refuse teams.engine.set.
+        if (teamsEngine === null) throw Object.assign(new Error('Update the local Ledge daemon: it does not know the team engine'), { name: 'DaemonOutdated' });
+        const rid = `fleet-engine-${++listSeq}`;
+        return new Promise(resolve => {
+          const timer = setTimeout(() => { engineAnswers.delete(rid); resolve({ ok: false, reason: 'pas de réponse du daemon' }); }, ANSWER_MS);
+          engineAnswers.set(rid, r => { clearTimeout(timer); engineAnswers.delete(rid); resolve(r); });
+          local.send({ type: 'teams.engine.set', rid, engine });
+        });
       },
       mobile: () => mobile,
       mobileError: () => mobileError,

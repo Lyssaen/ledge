@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, type JSX } from 'react';
-import type { DaemonClient, Fleet, MachineState } from '@ledge/fleet';
+import type { DaemonClient, Fleet, MachineState, TeamsEngineState } from '@ledge/fleet';
 import type { IslandPrefs, MobileState, Projects as ProjectsState, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -14,6 +14,7 @@ import { General } from './General';
 import { Ledge } from './Ledge';
 import { Appearance } from './Appearance';
 import { Island } from './Island';
+import { Teams } from './Teams';
 import { Notifications } from './Notifications';
 import { Sounds } from './Sounds';
 import { Machines } from './Machines';
@@ -38,6 +39,8 @@ export interface SettingsContext {
   machines: readonly MachineState[];
   projects: ProjectsState | null;
   island: IslandPrefs | null | undefined;
+  /** The local daemon's team engine: null until it speaks of it (an older daemon never does). */
+  teamsEngine: TeamsEngineState | null;
   mobile: MobileState | undefined;
   /** The local daemon's last refused mobile.* command, shown by Settings › Mobile access. */
   mobileError?: { request: string; message: string; code?: string };
@@ -57,6 +60,7 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   ledge: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M8 13a4 4 0 0 0 8 0', 'M9 9.5h.01', 'M15 9.5h.01'],
   appearance: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 3v18'],
   island: ['M3 5h18v14H3z', 'M9 5h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 6.5z'],
+  teams: ['M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20', 'M10 11.5a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5Z', 'M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35', 'M14.5 5.15a3.25 3.25 0 0 1 0 6.2'],
   notifications: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'],
   sounds: ['M11 5 6 9H2v6h4l5 4V5Z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M19 5a10 10 0 0 1 0 14'],
   machines: ['M3 4h18v12H3z', 'M12 16v4', 'M8 20h8'],
@@ -72,6 +76,7 @@ function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContex
   if (section === 'ledge') return <Ledge ctx={ctx} />;
   if (section === 'appearance') return <Appearance ctx={ctx} />;
   if (section === 'island') return <Island ctx={ctx} />;
+  if (section === 'teams') return <Teams ctx={ctx} />;
   if (section === 'notifications') return <Notifications ctx={ctx} />;
   if (section === 'sounds') return <Sounds ctx={ctx} />;
   if (section === 'machines') return <Machines ctx={ctx} />;

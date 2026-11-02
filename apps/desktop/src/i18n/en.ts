@@ -74,7 +74,7 @@ export const en: Messages = {
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
-  sections: { general: 'General', ledge: 'Ledge', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  sections: { general: 'General', ledge: 'Ledge', appearance: 'Appearance', island: 'Notch', teams: 'Teams', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
@@ -83,6 +83,7 @@ export const en: Messages = {
       ledge: 'Ledge’s brain: thinking continuously, the tool that carries it and its state.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
+      teams: 'The agent teams: which engine runs them.',
       notifications: 'Who lets you know, and when to leave you alone.',
       sounds: 'Your team’s sound cues.',
       machines: 'This machine and your SSH servers. One list for the notch and Ledge Desktop.',
@@ -281,6 +282,16 @@ export const en: Messages = {
         offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for projects: update it.',
         invalid: 'The daemon refused this change. Nothing changed.', timeout: 'The daemon did not confirm this change.'
       }
+    },
+    teams: {
+      engine: 'Team engine', ledge: 'Ledge', openrig: 'OpenRig',
+      ledgeHint: 'Ledge’s own teams: seats, tasks and a lead, nothing else to install',
+      openrigHint: 'OpenRig’s rigs, run by its operator',
+      openrigAbsent: 'OpenRig is not installed on any machine',
+      running: 'A team is running: stop it to change engines',
+      outdated: 'The local daemon is too old to choose the team engine: update it.',
+      refused: { offline: 'The local daemon is offline: nothing changed.' },
+      saved: (name: string) => `Team engine: ${name}`
     },
     island: {
       bannerTitle: 'The notch has no settings of its own any more.',

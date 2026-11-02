@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { answerEscalation, daemonStore, projectOf, useAsks, useDaemon, useEscalations, useIsland, useMobile, useMobileError, useOpenRig, useProjects, useRigs, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { answerEscalation, daemonStore, projectOf, useAsks, useDaemon, useEscalations, useIsland, useTeamsEngine, useMobile, useMobileError, useOpenRig, useProjects, useRigs, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { openSeatTerminal } from './rigs/terminal';
 import { useRigExchanges } from './rigs/useRigExchanges';
 import type { Project, Projects, Rig, Session } from '@ledge/protocol';
@@ -126,6 +126,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const openrig = useOpenRig(fleetClient);
   const exchanges = useRigExchanges(fleetClient, rigs);
   const island = useIsland(fleetClient);
+  const teamsEngine = useTeamsEngine(fleetClient);
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
   const tokenMissing = useTokenMissing(daemonTokenSource());
@@ -299,7 +300,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // What the Settings page's sections receive; « Setting saved · … » goes through the app's toast, once per accepted change
   // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
-    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, mobile, mobileError, projectIdOf, sessions, dispatch, alerts, daemonUpdates,
+    notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, teamsEngine, mobile, mobileError, projectIdOf, sessions, dispatch, alerts, daemonUpdates,
     lang, setLang, paused: nav.paused
   };
 

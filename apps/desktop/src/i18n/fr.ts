@@ -89,7 +89,7 @@ export const fr = {
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
-  sections: { general: 'Général', ledge: 'Ledge', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
+  sections: { general: 'Général', ledge: 'Ledge', appearance: 'Apparence', island: 'Encoche', teams: 'Équipes', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
   settings: {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
@@ -98,6 +98,7 @@ export const fr = {
       ledge: 'Le cerveau de Ledge : penser en continu, l’outil qui le porte et son état.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
+      teams: 'Les équipes d’agents : quel moteur les fait tourner.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
       sounds: 'Les signaux sonores de votre équipe.',
       machines: 'Cette machine et vos serveurs SSH. Une seule liste pour l’encoche et Ledge Desktop.',
@@ -298,6 +299,16 @@ export const fr = {
         offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour les projets : mettez-le à jour.',
         invalid: 'Le daemon a refusé ce changement. Rien n’a changé.', timeout: 'Le daemon n’a pas confirmé ce changement.'
       } as Record<'offline' | 'outdated' | 'invalid' | 'timeout', string>
+    },
+    teams: {
+      engine: 'Moteur d’équipes', ledge: 'Ledge', openrig: 'OpenRig',
+      ledgeHint: 'Les équipes de Ledge : sièges, tâches et lead, sans rien d’autre à installer',
+      openrigHint: 'Les rigs d’OpenRig, menés par son opérateur',
+      openrigAbsent: 'OpenRig n’est installé sur aucune machine',
+      running: 'Une équipe tourne : arrête-la pour changer de moteur',
+      outdated: 'Le daemon local est trop ancien pour choisir le moteur d’équipes : mettez-le à jour.',
+      refused: { offline: 'Le daemon local est hors ligne : rien n’a changé.' },
+      saved: (name: string) => `Moteur d’équipes : ${name}`
     },
     island: {
       bannerTitle: 'L’encoche n’a plus de réglages à elle.',
