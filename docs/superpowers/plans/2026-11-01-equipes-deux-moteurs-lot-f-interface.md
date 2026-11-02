@@ -179,6 +179,7 @@
   - **Éditeur de modèle.**
     - Il affiche sous la liste des sièges la ligne « Une équipe a exactement un siège leader : son lead. ».
     - « Enregistrer » est désactivé tant qu'aucun siège n'a le rôle `leader`, avec la raison affichée.
+  - **Question du lead (report du lot E).** Dans « À toi » du téléphone, la carte d'une escalade `task-…` (`source: 'ask'`, sans questions) gagne un champ de réponse libre avec le nom de l'équipe. Le champ envoie `escalation.answer { answers: { text } }` par l'opération du téléphone qui répond déjà aux escalades. Test : une réponse libre part avec `{ text }`.
   - **Lancement d'une équipe Ledge depuis le téléphone.** Il passe par les écrans de modèles existants. L'objectif sur le téléphone n'est pas dans ce lot.
 
 - [ ] **Step 1 : tests.**
