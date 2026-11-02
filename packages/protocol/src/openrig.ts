@@ -257,7 +257,8 @@ export type HumanAsk = z.infer<typeof HumanAskSchema>;
 /** Whether the rigs can reach the person through Ledge: `ready` OpenRig runs and a person is registered; `no_person` none is (Ledge is
  *  not OpenRig's human channel yet); `openrig_stopped`; `not_installed`; `unreachable` its daemon runs but its API does not answer. */
 export const HumanChannelSchema = z.object({
-  state: z.enum(['ready', 'no_person', 'openrig_stopped', 'not_installed', 'unreachable']),
+  /** `no_default`: several people are registered and none is the default, so whose asks they are is unknown (nothing is shown). */
+  state: z.enum(['ready', 'no_person', 'no_default', 'openrig_stopped', 'not_installed', 'unreachable']),
   person: z.object({ address: z.string(), name: z.string() }).nullable(),
   /** Slack still posts the person's asks too. */ slack: z.boolean(),
   message: z.string().optional()
@@ -270,7 +271,10 @@ export const OpenRigAsksSchema = z.object({ type: z.literal('openrig.asks'), req
  *  fleet's `offline` / `outdated`, and then nothing else is known. */
 export const OpenRigAsksChangedSchema = z.object({
   type: z.literal('openrig.asksChanged'), requestId: z.string().optional(), machineId: z.string().optional(),
-  channel: HumanChannelSchema.optional(), asks: z.array(HumanAskSchema), truncated: z.boolean().optional(), error: z.enum(['offline', 'outdated']).optional()
+  channel: HumanChannelSchema.optional(), asks: z.array(HumanAskSchema), truncated: z.boolean().optional(),
+  /** A read failed (OpenRig unreachable, a row or a source not read): the asks known before are kept; none missing is settled. */
+  partial: z.boolean().optional(),
+  error: z.enum(['offline', 'outdated']).optional()
 });
 
 /** The person's answer: a button (`choice`, once per question), their words on an ask (`words`), « Vu » on a piece of news (`seen`),

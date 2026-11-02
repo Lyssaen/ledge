@@ -47,15 +47,17 @@ type HumanAsk = {
 
 ```ts
 type HumanChannel = {
-  state: 'ready' | 'no_person' | 'openrig_stopped' | 'not_installed' | 'unreachable';
+  state: 'ready' | 'no_person' | 'no_default' | 'openrig_stopped' | 'not_installed' | 'unreachable';
   //  ready           : OpenRig tourne et une personne est enregistrée : les rigs peuvent t'écrire, et Ledge lit et répond
   //  no_person       : OpenRig tourne, mais aucune personne n'est enregistrée → « Ledge n'est pas encore le canal humain d'OpenRig »
+  //  no_default      : plusieurs personnes enregistrées, aucune par défaut : Ledge ne sait pas laquelle tu es ; rien n'est montré
+  //                    (message : « rig gateway default <id> »)
   //  openrig_stopped : daemon OpenRig arrêté → « OpenRig est arrêté : les rigs ne peuvent pas t'écrire »
   //  not_installed   : pas de commande rig sur la machine
   //  unreachable     : le daemon OpenRig tourne mais son API ne répond pas (le message dit pourquoi)
   person: { address: string; name: string } | null;  // "ledge@external", "Ledge"
   slack: boolean;             // Slack est-il encore actif pour cette personne (copie) ? Faux aujourd'hui
-  message?: string;           // pour unreachable : la raison, en anglais court
+  message?: string;           // pour unreachable et no_default : la raison, en anglais court
 };
 ```
 
@@ -80,13 +82,20 @@ passent par l'utilisateur. Le front peut afficher la bannière sans le bouton, o
   channel?: HumanChannel,     // absent seulement avec error
   asks: HumanAsk[],           // les demandes ouvertes : critical, puis urgent, puis le reste ; à priorité égale la plus récente d'abord ; [] si rien
   truncated?: boolean,        // plus de 200 demandes ouvertes : les 200 premières dans cet ordre
+  partial?: boolean,          // une lecture a échoué (OpenRig injoignable, une ligne ou une source illisible) : les demandes connues
+                              // sont gardées, aucune n'est retirée à tort ; une demande jamais lue en entier a body = summary et
+                              // bodyTruncated = true
   error?: 'offline' | 'outdated'   // posé par la flotte : la machine n'a pas pu répondre
 }
 ```
 
+Seules les demandes de **la personne par défaut** sont listées (`view=default` d'OpenRig) : jamais celles d'une autre personne
+enregistrée.
+
 Le daemon pousse la liste entière, et non un diff : quand une demande arrive, quand une ligne change dans
 OpenRig (réponse donnée ailleurs, ligne close), et après chaque `openrig.answer`. Le délai est d'environ une
-seconde après l'événement OpenRig. Une demande qui disparaît de la liste est réglée : le front la retire.
+seconde après l'événement OpenRig. Une demande qui disparaît d'une liste **sans `partial`** est réglée : le front la retire. Avec `partial`, rien n'a
+disparu à tort : la liste contient déjà les demandes connues.
 
 ### Front → daemon : répondre
 
