@@ -10,7 +10,7 @@ import type { DocumentOrigin } from '../documents/useDocumentReader';
 import type { ResidentGesture } from '../bots/ResidentMascot';
 import { groupSessions } from '@ledge/fleet';
 import { displayOrder, headersBefore } from './groups';
-import { FILET, LEDGE_ID, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
+import { FILET, LEDGE_ID, openMaxH, scaledLayout, SIZES, SURFACE_CHROME_Y, type IslandPosition, type Layout } from './geometry';
 import { createSurfaceController } from './controller';
 import type { SurfaceState } from './machine';
 import { Handle, type PendingTone } from './Handle';
@@ -800,7 +800,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             music={music} trackKey={notchLine.view.trackKey} musicOpen={musicOpen} onMusicOpen={setMusicOpen} onMedia={c => { void mediaCommand(c); }} onOpenHome={openHome} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
-        <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
+        <Bubble ref={bubbleRef} maxH={openMaxH(screenH / ps) - SURFACE_CHROME_Y} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
           quick={quick} ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
           onOpen={() => { if (st.bubbleId === LEDGE_ID) dispatch({ type: 'bubbleClick' }); else if (st.bubbleId?.startsWith('machine:')) openInLedge({ kind: 'machines' }); else if (st.bubbleId) openInLedge({ kind: 'session', id: st.bubbleId }); }}
           onDismiss={() => dispatch({ type: st.bubbleKind === 'ask' ? 'defer' : 'close' })}

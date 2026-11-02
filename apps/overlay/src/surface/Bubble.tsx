@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import type { Session } from '@ledge/protocol';
 import { Bot } from '../bots/Bot';
 import { ResidentMascot } from '../bots/ResidentMascot';
@@ -16,6 +16,8 @@ import { Kbd } from '../ui/Kbd';
 export type BubbleAck = 'pending' | 'confirmed' | 'failed' | null;
 
 interface BubbleProps {
+  /** The tallest the card may be (base px, the open views' cap): past it, its choices scroll and its actions stay in view. */
+  maxH?: number;
   session: Session | null;
   moreCount: number;
   visible: boolean;
@@ -49,7 +51,7 @@ interface BubbleProps {
   ref?: Ref<HTMLDivElement>;
 }
 
-export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, preview, failure, deciding = false, quick = true, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, theme = 'dark', ref }: BubbleProps) {
+export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, preview, failure, deciding = false, quick = true, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, theme = 'dark', ref, maxH }: BubbleProps) {
   const pending = session?.pending;
   const notice = kind !== 'ask';
   const holdMs = FINISHED_BUBBLE_MS;
@@ -59,6 +61,28 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   const askKey = ledge ? 'ledge:finished' : session ? (notice ? `${session.id}:${kind}` : `${session.id}:${pending?.helperId ?? ''}:${pending?.text ?? ''}`) : kind;
   const [lockedKey, setLockedKey] = useState<string | undefined>(undefined);
   if (!visible && lockedKey !== undefined) setLockedKey(undefined);
+  // Taller than the open views' cap: the question's text joins the choices in a scrolling area under the title, the
+  // actions stay at the bottom (design-ux, 2026-11-02). Decided once per ask and cap, so the layout never flips back and forth.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const setRoot = (el: HTMLDivElement | null) => { rootRef.current = el; if (typeof ref === 'function') ref(el); else if (ref) (ref as { current: HTMLDivElement | null }).current = el; };
+  const [tallKey, setTallKey] = useState<string | null>(null);
+  const tall = !notice && !!maxH && tallKey === `${askKey}|${maxH}`;
+  useLayoutEffect(() => {
+    const el = rootRef.current, area = scrollRef.current;
+    if (notice || !maxH || tall || !el) return;
+    if (el.scrollHeight > el.clientHeight + 1 || (area && area.scrollHeight > area.clientHeight + 1)) setTallKey(`${askKey}|${maxH}`);
+  });
+  /** Content is left below the scrolling area: a hairline tops the actions until the end is reached. */
+  const [more, setMore] = useState(false);
+  const measureMore = () => { const a = scrollRef.current; setMore(!!a && a.scrollHeight > a.clientHeight + 1 && a.scrollTop + a.clientHeight < a.scrollHeight - 1); };
+  useEffect(() => {
+    const a = scrollRef.current;
+    measureMore();
+    if (!a || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measureMore); ro.observe(a);
+    return () => ro.disconnect();
+  }, [tall, askKey, pending?.options?.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const locked = ((lockedKey === askKey || deciding) && ack !== 'failed') || ack === 'pending' || ack === 'confirmed';
   const disabled = locked || blocked !== null;
   const isQ = pending?.kind === 'question';
@@ -100,32 +124,37 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
     : ack === 'pending' ? t.bubble.pending : ack === 'confirmed' ? t.bubble.confirmed : blocked;
 
   return (
-    <div ref={ref} data-layer="bubble" data-kind={kind} data-ack={ack ?? 'none'} inert={!visible} style={{ position: 'absolute', left: 0, top: 0, width: kind === 'ask' ? SIZES.bubbleW : SIZES.bubbleW, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px 12px', opacity: visible ? 1 : 0, transform: `translateY(${visible ? 0 : -8}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', visible ? 'grow' : 'fadeOut', visible ? 140 : 0]]) }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div ref={setRoot} data-layer="bubble" data-tall={tall || undefined} data-kind={kind} data-ack={ack ?? 'none'} inert={!visible} style={{ position: 'absolute', left: 0, top: 0, width: kind === 'ask' ? SIZES.bubbleW : SIZES.bubbleW, maxHeight: maxH, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px 12px', opacity: visible ? 1 : 0, transform: `translateY(${visible ? 0 : -8}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', visible ? 'grow' : 'fadeOut', visible ? 140 : 0]]) }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
         {ledge || kind === 'offline' ? <ResidentMascot size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} /> : session && <Bot seed={session.id} readOnly={session.source === 'hook_only'} tool={session.tool} state={kind === 'error' ? 'error' : botState(session)} pose={poseFor(session.id, session.state)} size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} askKey={String(askKey)} nodKey={nod} />}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexGrow: 1, minWidth: 0 }}>
           <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{title}</span>
           {notice ? <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{kind === 'offline' ? (session ? finishedSub : t.bubble.offlineSub) : kind === 'error' ? (session?.lastError || t.bubble.errorSub) : finishedSub}</span>
-            : <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{pending?.text}{session?.project ? ` · ${session.project}` : ''}</span>}
+            : !tall && <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{pending?.text}{session?.project ? ` · ${session.project}` : ''}</span>}
           {moreCount > 0 && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.bubble.more(moreCount)}</span>}
         </div>
       </div>
+      {(tall || (isQ && kind === 'ask' && quick && pending?.options)) && <div ref={scrollRef} data-scroll-area className="ledge-scroll" onScroll={measureMore} style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: '0 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      {tall && <span data-ask-text className="mono" style={{ flexShrink: 0, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{pending?.text}{session?.project ? ` · ${session.project}` : ''}</span>}
       {isQ && kind === 'ask' && quick && pending?.options && (
-        <div role="radiogroup" aria-label={t.bubble.choices} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div role="radiogroup" data-choices aria-label={t.bubble.choices} style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
           {pending.options.map((option, i) => (
-            <button key={option} type="button" role="radio" aria-checked={choice === i} disabled={disabled} onClick={() => { if (disabled) return; setChoice(i); setReply(''); setNudge(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '6px 8px', borderRadius: 8, border: '1px solid var(--sidebar-border)', background: choice === i ? 'var(--sidebar-accent)' : 'transparent', color: 'inherit', cursor: 'pointer' }}>
+            <button key={option} type="button" role="radio" aria-checked={choice === i} disabled={disabled} onFocus={e => e.currentTarget.scrollIntoView?.({ block: 'nearest' })} onClick={() => { if (disabled) return; setChoice(i); setReply(''); setNudge(false); }}
+              style={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 8, textAlign: 'left', padding: '6px 8px', borderRadius: 8, border: '1px solid var(--sidebar-border)', background: choice === i ? 'var(--sidebar-accent)' : 'transparent', color: 'inherit', cursor: 'pointer' }}>
               <Kbd>{i + 1}</Kbd><span style={{ flexGrow: 1 }}>{option}</span>
             </button>
           ))}
-          <input data-reply type="text" maxLength={140} placeholder={t.bubble.short} value={reply} disabled={disabled} aria-label={t.bubble.shortLabel}
+          <input data-reply type="text" onFocus={e => e.currentTarget.scrollIntoView?.({ block: 'nearest' })} maxLength={140} placeholder={t.bubble.short} value={reply} disabled={disabled} aria-label={t.bubble.shortLabel}
             onChange={e => { setReply(e.target.value); if (e.target.value) setChoice(null); setNudge(false); }}
-            style={{ height: 32, padding: '0 10px', borderRadius: 8, border: '1px solid var(--sidebar-border)', background: 'var(--well)', color: 'inherit' }} />
+            style={{ flexShrink: 0, height: 32, padding: '0 10px', borderRadius: 8, border: '1px solid var(--sidebar-border)', background: 'var(--well)', color: 'inherit' }} />
         </div>
       )}
-      {note && <span role="status" style={{ fontSize: 12, lineHeight: '16px', color: ack === 'failed' ? 'var(--danger-text)' : 'var(--muted-foreground)' }}>{note}</span>}
-      {nudge && !locked && <span role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{t.bubble.choose}</span>}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+      </div>}
+      {/* The hairline over the bottom that stays: shown while content is left below; its margins cancel it out of the gaps. */}
+      {(tall || (isQ && kind === 'ask' && quick && pending?.options)) && <div data-more-rule={more ? "true" : "false"} aria-hidden="true" style={{ flexShrink: 0, height: 1, margin: '-5px 0 -6px', background: more ? 'var(--border)' : 'transparent' }} />}
+      {note && <span role="status" style={{ flexShrink: 0, fontSize: 12, lineHeight: '16px', color: ack === 'failed' ? 'var(--danger-text)' : 'var(--muted-foreground)' }}>{note}</span>}
+      {nudge && !locked && <span role="alert" style={{ flexShrink: 0, fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{t.bubble.choose}</span>}
+      <div data-actions style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
         {notice ? (
           <>
             <Badge state={kind === 'finished' ? 'idle' : kind === 'error' ? 'error' : 'readonly'} label={kind === 'offline' ? t.bubble.offlineBadge : undefined} />
@@ -148,7 +177,7 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
         )}
       </div>
       {kind === 'ask' && !handOff && !locked && (
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
           <button type="button" onClick={() => onOpen()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: 12 }}>{t.bubble.openSession}<Kbd>O</Kbd></button>
           <button type="button" onClick={() => onDismiss?.()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: 12 }}>{moreCount > 0 ? t.bubble.laterNext : t.bubble.later}<Kbd>Esc</Kbd></button>
         </div>
