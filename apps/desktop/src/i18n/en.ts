@@ -809,6 +809,16 @@ export const en: Messages = {
       queueTitle: (n: number) => pluralEn(n, `${n} message waiting`, `${n} messages waiting`), queueOrder: 'sent in order', queueNow: 'now', queueLater: 'after the turn', queueTakeBack: 'Stop and take back',
       noNote: 'This agent takes no message with a refusal: deny with N.', tooLong: (max) => `A note holds ${max} characters at most.`
     },
+    slash: {
+      label: (tool: string) => `${tool} commands`, count: (n: number) => pluralEn(n, `${n} command`, `${n} commands`),
+      loading: 'reading the commands…', choose: 'choose', complete: 'complete', close: 'close',
+      unavailable: 'Command list unavailable.', unavailableBody: (n: string) => ` You can still type the command: Ledge sends it to ${n} as is.`,
+      none: (q: string, n: string) => `No command “${q}”. Enter sends it to ${n} as a message.`,
+      sends: (n: string) => `sends the command to ${n}`,
+      source: { builtin: 'Built-in', project: 'Project', user: 'Personal', plugin: 'Plugin', extension: 'Extension' },
+      blocked: { panel: 'Opens a terminal panel: run it in the terminal', close: 'Would end the session: use “Close session”' },
+      bare: (c: string) => `Without arguments, /${c} opens a terminal panel: give it one.`
+    },
     model: {
       label: 'Model and effort', apply: 'Apply', schedule: 'Schedule', cancel: 'Cancel', nextTurn: 'next turn',
       applyHint: (n) => `${n} restarts on the same conversation and keeps its context.`,

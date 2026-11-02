@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Commandes slash</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Tokens repris de docs/mockups/ledge-model-picker.html (desktop) et de mobile-session-close.html (téléphone). */
+:root{
+  --bg:#f5f5f5;--background:#fff;--card:#fff;--well:#f5f5f5;--fg:#0a0a0a;--muted:#f5f5f5;--muted-fg:#737373;
+  --border:#e5e5e5;--input:#e5e5e5;--ring:#a3a3a3;--primary:#c10007;--primary-fg:#fef2f2;
+  --info:#2563eb;--info-soft:#eff6ff;--warning:#b45309;--warning-soft:#fffbeb;--success:#059669;
+  --hl:#f0f0f0;--shadow:0 16px 32px -12px rgba(0,0,0,.22);
+}
+[data-theme="dark"]{
+  --bg:#050505;--background:#0a0a0a;--card:#171717;--well:#0a0a0a;--fg:#fafafa;--muted:#262626;--muted-fg:#a1a1a1;
+  --border:#ffffff1a;--input:#ffffff26;--ring:#737373;--primary:#9f0712;--primary-fg:#fef2f2;
+  --info:#60a5fa;--info-soft:#172554;--warning:#fbbf24;--warning-soft:#422006;--success:#34d399;
+  --hl:#262626;--shadow:0 16px 32px -12px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/19px Geist,ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.muted{color:var(--muted-fg)}
+
+.mock-bar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 20px;background:var(--background);border-bottom:1px solid var(--border)}
+.mock-bar h1{margin:0;font-size:13px;font-weight:600}
+.seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:8px;background:var(--well)}
+.seg button{border:0;background:none;padding:3px 10px;border-radius:6px;color:var(--muted-fg);cursor:pointer;font-size:12px}
+.seg button[aria-pressed="true"]{background:var(--muted);color:var(--fg)}
+
+.doc{max-width:1240px;margin:0 auto;padding:24px 16px 80px}
+h2.part{font-size:16px;margin:36px 0 4px}
+.part-note{color:var(--muted-fg);margin:0 0 16px;max-width:820px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:24px}
+@media (max-width:600px){.grid{grid-template-columns:1fr}}
+.cap{font-weight:600;margin:0 0 8px}
+.cap small{display:block;font-weight:400;color:var(--muted-fg)}
+.kbd{font-family:'Geist Mono',monospace;font-size:10px;padding:0 4px;border-radius:4px;border:1px solid currentColor;opacity:.7;line-height:14px;white-space:nowrap}
+
+/* ── Desktop : le bas d'une page de session ── */
+.pane{position:relative;background:var(--background);border:1px solid var(--border);border-radius:12px;overflow:visible;padding-top:150px}
+.pane.tall{padding-top:290px}
+.thread-fade{position:absolute;inset:0 0 auto 0;height:100%;border-radius:12px;padding:14px 16px;color:var(--muted-fg);font-size:12px;overflow:hidden;pointer-events:none}
+.thread-fade p{margin:0 0 8px;opacity:.55}
+.reply{position:relative;padding:12px 16px 16px}
+.reply form{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px;background:var(--well);border:1px solid var(--ring);border-radius:12px}
+.reply textarea{flex:1 0 100%;min-width:0;resize:none;background:none;border:0;font-size:12px;line-height:18px;padding:7px 6px;min-height:50px;outline:none}
+.ghost-arg{position:absolute;pointer-events:none;color:var(--muted-fg);font-size:12px;line-height:18px}
+.chip-model{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px;border:1px solid var(--input);border-radius:7px;font-size:11.5px;color:var(--muted-fg)}
+.hint{flex:1;font-size:11px;color:var(--muted-fg);text-align:right}
+.send{width:32px;height:32px;border-radius:8px;border:0;background:var(--primary);color:var(--primary-fg);display:grid;place-items:center}
+.send[disabled]{opacity:.5}
+
+/* La liste des commandes, posée au-dessus du champ */
+.slash{position:absolute;left:16px;right:16px;bottom:calc(100% - 10px);background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;z-index:2}
+.slash-head{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted-fg)}
+.slash-head strong{color:var(--fg);font-weight:500}
+.slash ul{list-style:none;margin:0;padding:4px;max-height:236px;overflow:auto}
+.slash li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 10px;padding:6px 8px;border-radius:6px;cursor:pointer}
+.slash li[aria-selected="true"]{background:var(--hl)}
+.slash li .nm{font-family:'Geist Mono',monospace;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slash li .nm mark{background:none;color:var(--fg);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.slash li .arg{color:var(--muted-fg);font-family:'Geist Mono',monospace;font-size:11px}
+.slash li .ds{grid-column:1/2;font-size:11.5px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slash li .src{grid-row:1/3;grid-column:2;align-self:center;font-size:10.5px;color:var(--muted-fg);border:1px solid var(--input);border-radius:5px;padding:0 6px;line-height:17px}
+.slash li .src.project{color:var(--info);border-color:color-mix(in srgb,var(--info),transparent 55%)}
+.slash li.blocked{cursor:default}
+.slash li.blocked .nm{color:var(--muted-fg)}
+.slash li.blocked .ds{color:var(--warning)}
+.slash-foot{display:flex;gap:12px;padding:6px 10px;border-top:1px solid var(--border);font-size:10.5px;color:var(--muted-fg)}
+.slash-empty{padding:12px 12px;font-size:12px;color:var(--muted-fg)}
+.slash-empty strong{color:var(--fg);font-weight:500}
+.skel{height:10px;border-radius:4px;background:var(--muted);margin:10px 8px}
+.skel.s{width:40%}.skel.m{width:65%}
+.spin{width:11px;height:11px;border-radius:50%;border:2px solid var(--input);border-top-color:var(--fg);animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
+/* ── Téléphone ── */
+.phones{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.cell{width:360px;max-width:100%}
+.phone{position:relative;width:360px;max-width:100%;height:700px;border-radius:36px;border:1px solid var(--border);background:var(--background);overflow:hidden;display:flex;flex-direction:column;padding:0 16px}
+.sbar{height:34px;flex:none;display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;padding:0 8px}
+.th{flex:none;border-bottom:1px solid var(--border);padding:8px 0 12px;display:flex;align-items:center;gap:10px}
+.pbot{width:36px;height:36px;border-radius:12px;background:color-mix(in srgb,var(--info) 18%,var(--muted));color:var(--info);display:grid;place-items:center;font-size:11px;font-weight:700}
+.th b{font-size:17px}
+.log{flex:1;min-height:0;padding:16px 0;color:var(--muted-fg);font-size:13px;overflow:hidden}
+.log p{opacity:.5;margin:0 0 10px}
+.pfoot{flex:none;border-top:1px solid var(--border);padding:8px 0 14px}
+.status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--success);padding-bottom:8px}
+.status i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.psheet{border:1px solid var(--border);border-radius:16px;background:var(--card);margin-bottom:8px;overflow:hidden}
+.psheet ul{list-style:none;margin:0;padding:4px;max-height:300px;overflow:auto}
+.psheet li{min-height:52px;padding:7px 10px;border-radius:10px;display:flex;flex-direction:column;justify-content:center}
+.psheet li + li{border-top:1px solid var(--border);border-radius:0}
+.psheet .nm{font-family:'Geist Mono',monospace;font-size:14px}
+.psheet .nm mark{background:none;color:var(--fg);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.psheet .arg{font-family:'Geist Mono',monospace;font-size:12px;color:var(--muted-fg)}
+.psheet .ds{font-size:12px;color:var(--muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psheet .tag{font-size:10.5px;color:var(--muted-fg);margin-left:6px;font-family:Geist,sans-serif}
+.psheet li.blocked .ds{color:var(--warning)}
+.psheet li.blocked .nm{color:var(--muted-fg)}
+.psheet .phead{font-size:11px;color:var(--muted-fg);padding:8px 12px 4px}
+.chips{display:flex;gap:6px;padding-bottom:8px;overflow:hidden}
+.chips span{height:32px;display:inline-flex;align-items:center;padding:0 12px;border:1px solid var(--input);border-radius:16px;font-size:13px;white-space:nowrap}
+.pfield{display:flex;align-items:flex-end;gap:8px}
+.plus,.psend{width:44px;height:44px;flex:none;border-radius:22px;display:grid;place-items:center;border:1px solid var(--input);font-size:20px}
+.psend{background:var(--primary);color:var(--primary-fg);border:0}
+.psend[disabled]{opacity:.5}
+.ptext{flex:1;min-height:44px;border-radius:22px;border:1px solid var(--input);padding:11px 14px;font-size:16px;line-height:20px;font-family:'Geist Mono',monospace;font-size:15px}
+.pnote{font-size:11px;color:var(--muted-fg);padding-top:6px}
+
+.notes{margin-top:40px;border-top:1px solid var(--border);padding-top:16px;max-width:820px;color:var(--muted-fg)}
+.notes li{margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <h1>Commandes slash dans le chat d'une session</h1>
+  <span class="seg" role="group" aria-label="Thème">
+    <button type="button" data-theme-set="light" aria-pressed="false">Clair</button>
+    <button type="button" data-theme-set="dark" aria-pressed="true">Sombre</button>
+  </span>
+  <span class="muted">Maquette · les noms et descriptions viennent d'une vraie liste Claude Code 2.1.316</span>
+</div>
+
+<div class="doc">
+
+<h2 class="part">Desktop : la liste au-dessus du champ de réponse</h2>
+<p class="part-note">Elle s'ouvre quand le brouillon commence par « / » et que le curseur est encore dans le premier mot. Les noms et alias qui commencent par la saisie passent d'abord, puis ceux qui la contiennent, puis les descriptions. ↑↓ choisit, Tab ou ↵ complète en <span class="mono">/nom </span> sans envoyer, Échap ferme la liste et garde le brouillon. Un clic complète aussi.</p>
+
+<div class="grid">
+
+<div>
+  <p class="cap">1 · Filtrage pendant la frappe<small>Essayez : le champ est vivant. La source est à droite ; « Projet » vient de <span class="mono">.claude/commands</span>.</small></p>
+  <div class="pane tall">
+    <div class="thread-fade"><p>Otto · « J'ai fini la migration du store, les tests passent. »</p></div>
+    <div class="reply">
+      <div class="slash" id="live-list" role="listbox" aria-label="Commandes de Claude Code"></div>
+      <form onsubmit="return false">
+        <textarea id="live" rows="1" aria-label="Répondre à Otto" spellcheck="false">/rev</textarea>
+        <span class="chip-model">Opus · high</span>
+        <span class="hint" id="live-hint"></span>
+        <button class="send" type="button" aria-label="Envoyer">↑</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div>
+  <p class="cap">2 · Commande complétée<small>La liste se ferme ; l'argument attendu s'affiche en filigrane. ↵ envoie le texte tel quel, comme aujourd'hui.</small></p>
+  <div class="pane">
+    <div class="thread-fade"><p>Otto · « J'ai fini la migration du store, les tests passent. »</p></div>
+    <div class="reply">
+      <form onsubmit="return false" style="position:relative">
+        <textarea rows="1" aria-label="Répondre à Otto" spellcheck="false">/code-review </textarea>
+        <span class="ghost-arg mono" style="left:104px;top:13px">[low|medium|high|xhigh|max] [--fix] [&lt;pr#&gt;|&lt;branch&gt;]</span>
+        <span class="chip-model">Opus · high</span>
+        <span class="hint"><span class="kbd">↵</span> envoie la commande à Otto</span>
+        <button class="send" type="button" aria-label="Envoyer">↑</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div>
+  <p class="cap">3 · Une commande que Ledge ne peut pas envoyer<small>Grisée, avec la raison, et impossible à choisir. Tapée quand même, le daemon la refuse avec ce même texte.</small></p>
+  <div class="pane tall">
+    <div class="thread-fade"><p>Otto · « Je peux changer de modèle si tu veux. »</p></div>
+    <div class="reply">
+      <div class="slash" role="listbox" aria-label="Commandes de Claude Code">
+        <div class="slash-head"><strong>Claude Code</strong> · 2 commandes</div>
+        <ul>
+          <li role="option" aria-selected="true"><span class="nm">/<mark>m</mark>odel <span class="arg">&lt;model&gt;</span></span><span class="src">Intégrée</span><span class="ds">Set the AI model for Claude Code</span></li>
+          <li role="option" aria-disabled="true" class="blocked"><span class="nm">/<mark>m</mark>cp</span><span class="src">Intégrée</span><span class="ds">Sans argument, ouvre un panneau du terminal : <span class="mono">/mcp reconnect</span> ou dans le terminal</span></li>
+        </ul>
+        <div class="slash-foot"><span><span class="kbd">↑↓</span> choisir</span><span><span class="kbd">Tab</span> <span class="kbd">↵</span> compléter</span><span><span class="kbd">Échap</span> fermer</span></div>
+      </div>
+      <form onsubmit="return false">
+        <textarea rows="1" aria-label="Répondre à Otto" spellcheck="false">/m</textarea>
+        <span class="chip-model">Opus · high</span>
+        <span class="hint"><span class="kbd">R</span> écrire</span>
+        <button class="send" type="button" aria-label="Envoyer">↑</button>
+      </form>
+    </div>
+  </div>
+  <p class="muted" style="font-size:11.5px;margin:6px 0 0">Seules les commandes à panneau sans argument sont bloquées, et <span class="mono">/exit</span>, qui renvoie vers « Fermer la session ».</p>
+</div>
+
+<div>
+  <p class="cap">4 · Premier « / » : la liste arrive<small>Demandée au daemon de la machine de la session, gardée ensuite pour la session. 1 à 4 s la première fois.</small></p>
+  <div class="pane">
+    <div class="thread-fade"></div>
+    <div class="reply">
+      <div class="slash" role="status">
+        <div class="slash-head"><span class="spin" aria-hidden="true"></span><strong>Claude Code</strong> · lecture des commandes…</div>
+        <div class="skel m"></div><div class="skel s"></div><div class="skel m"></div>
+      </div>
+      <form onsubmit="return false">
+        <textarea rows="1" aria-label="Répondre à Otto">/</textarea>
+        <span class="chip-model">Opus · high</span>
+        <span class="hint"><span class="kbd">R</span> écrire</span>
+        <button class="send" type="button" aria-label="Envoyer" disabled>↑</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div>
+  <p class="cap">5 · Liste indisponible<small>La sonde a échoué (agent absent, délai dépassé, machine coupée). Rien n'est bloqué.</small></p>
+  <div class="pane">
+    <div class="thread-fade"></div>
+    <div class="reply">
+      <div class="slash" role="status">
+        <div class="slash-empty"><strong>Liste des commandes indisponible.</strong> Tu peux quand même taper la commande : Ledge l'enverra telle quelle à Otto.</div>
+      </div>
+      <form onsubmit="return false">
+        <textarea rows="1" aria-label="Répondre à Otto">/compa</textarea>
+        <span class="chip-model">Opus · high</span>
+        <span class="hint"><span class="kbd">R</span> écrire</span>
+        <button class="send" type="button" aria-label="Envoyer">↑</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div>
+  <p class="cap">6 · Aucune correspondance<small>Le brouillon n'est pas une commande connue : il part comme un message ordinaire.</small></p>
+  <div class="pane">
+    <div class="thread-fade"></div>
+    <div class="reply">
+      <div class="slash" role="status">
+        <div class="slash-empty">Aucune commande « <span class="mono">/usr/local</span> ». ↵ l'envoie comme un message à Otto.</div>
+      </div>
+      <form onsubmit="return false">
+        <textarea rows="1" aria-label="Répondre à Otto">/usr/local</textarea>
+        <span class="chip-model">Opus · high</span>
+        <span class="hint"><span class="kbd">R</span> écrire</span>
+        <button class="send" type="button" aria-label="Envoyer">↑</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<h2 class="part">Mobile : la liste prend la place des réponses rapides</h2>
+<p class="part-note">Au-dessus du champ, dans le pied du fil. Un tap complète en <span class="mono">/nom </span> et rend la main au clavier ; le bouton d'envoi reste celui d'aujourd'hui. Seules les sources non intégrées (Projet, Perso, Skill, Plugin) sont marquées. Les lignes font au moins 52 px pour le pouce.</p>
+
+<div class="phones">
+  <div class="cell">
+    <p class="cap">A · Filtrage<small>« /co » dans une session Claude Code.</small></p>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span>●●●</span></div>
+      <div class="th"><span class="pbot">O</span><b>Otto</b><span class="muted" style="font-size:12px">· ledge</span></div>
+      <div class="log"><p>Otto · « J'ai fini la migration du store. »</p></div>
+      <div class="pfoot">
+        <div class="status"><i></i>Libre · attend ta consigne</div>
+        <div class="psheet" role="listbox" aria-label="Commandes de Claude Code">
+          <div class="phead">Claude Code · 5 commandes</div>
+          <ul>
+            <li role="option"><span class="nm">/<mark>co</mark>mpact <span class="arg">&lt;instructions&gt;</span></span><span class="ds">Free up context by summarizing the conversation so far</span></li>
+            <li role="option"><span class="nm">/<mark>co</mark>ntext</span><span class="ds">Show current context usage</span></li>
+            <li role="option"><span class="nm">/<mark>co</mark>de-review</span><span class="ds">Review the current diff, or a PR number/branch/path…</span></li>
+            <li role="option"><span class="nm">/<mark>co</mark>mmit-push<span class="tag" style="color:var(--info)">Projet</span></span><span class="ds">Commit staged changes and push the branch</span></li>
+            <li role="option" class="blocked" aria-disabled="true"><span class="nm">/<mark>co</mark>nfig</span><span class="ds">Sans argument, ouvre un panneau du terminal</span></li>
+          </ul>
+        </div>
+        <div class="pfield"><span class="plus">＋</span><span class="ptext">/co</span><span class="psend">↑</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <p class="cap">B · Commande complétée<small>L'argument attendu sous le champ ; les réponses rapides reviennent.</small></p>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span>●●●</span></div>
+      <div class="th"><span class="pbot">O</span><b>Otto</b><span class="muted" style="font-size:12px">· ledge</span></div>
+      <div class="log"><p>Otto · « J'ai fini la migration du store. »</p></div>
+      <div class="pfoot">
+        <div class="status"><i></i>Libre · attend ta consigne</div>
+        <div class="chips"><span>Continue</span><span>Montre-moi le diff</span><span>Lance les tests</span></div>
+        <div class="pfield"><span class="plus">＋</span><span class="ptext">/compact </span><span class="psend">↑</span></div>
+        <div class="pnote mono">/compact &lt;instructions de résumé, facultatives&gt;</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <p class="cap">C · Une session Codex<small>Mêmes gestes ; les prompts perso s'écrivent <span class="mono">/prompts:nom</span> (lot 3).</small></p>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span>●●●</span></div>
+      <div class="th"><span class="pbot">N</span><b>Nova</b><span class="muted" style="font-size:12px">· ledge</span></div>
+      <div class="log"><p>Nova · « Prête. »</p></div>
+      <div class="pfoot">
+        <div class="status"><i></i>Libre · attend ta consigne</div>
+        <div class="psheet" role="listbox" aria-label="Commandes de Codex">
+          <div class="phead">Codex · 3 commandes</div>
+          <ul>
+            <li role="option"><span class="nm">/<mark>re</mark>view</span><span class="ds">Review my current changes and find issues</span></li>
+            <li role="option"><span class="nm">/prompts:<mark>re</mark>lease<span class="tag">Perso</span></span><span class="ds">Prepare a release: changelog, version bump</span></li>
+            <li role="option" class="blocked" aria-disabled="true"><span class="nm">/<mark>re</mark>sume</span><span class="ds">Ouvre un panneau du terminal</span></li>
+          </ul>
+        </div>
+        <div class="pfield"><span class="plus">＋</span><span class="ptext">/re</span><span class="psend">↑</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <p><strong style="color:var(--fg)">Ce que la maquette ne change pas</strong></p>
+  <ul>
+    <li>L'envoi reste <span class="mono">session.reply</span> : la commande part comme le texte d'aujourd'hui, avec ses vérifications.</li>
+    <li>Pendant qu'une demande attend (permission, plan, question), le champ garde son rôle actuel et la liste ne s'ouvre pas.</li>
+    <li>Pas de liste sur une session en lecture seule, hors ligne, ni sur la page d'un sous-agent.</li>
+  </ul>
+</div>
+
+</div>
+
+<script>
+// Thème
+document.querySelectorAll('[data-theme-set]').forEach(b => b.addEventListener('click', () => {
+  document.documentElement.dataset.theme = b.dataset.themeSet;
+  document.querySelectorAll('[data-theme-set]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+}));
+
+// Le panneau 1 est vivant : une partie de la vraie liste Claude Code, plus deux commandes de projet inventées.
+const COMMANDS = [
+  { name: 'code-review', aliases: ['review'], arg: '[low|medium|high|xhigh|max] [--fix] [<pr#>]', ds: 'Review the current diff, or a PR number/branch/path target, for correctness bugs', src: 'Intégrée' },
+  { name: 'review-pr', arg: '<pr#>', ds: 'Review a GitHub PR against our checklist', src: 'Projet' },
+  { name: 'security-review', ds: 'Complete a security review of the pending changes on the current branch', src: 'Intégrée' },
+  { name: 'compact', arg: '<optional custom summarization instructions>', ds: 'Free up context by summarizing the conversation so far', src: 'Intégrée' },
+  { name: 'context', ds: 'Show current context usage', src: 'Intégrée' },
+  { name: 'clear', aliases: ['reset', 'new'], arg: '[name]', ds: 'Start a new session with empty context', src: 'Intégrée' },
+  { name: 'model', arg: '<model>', ds: 'Set the AI model for Claude Code', src: 'Intégrée' },
+  { name: 'effort', arg: '<low|medium|high|xhigh|max|auto>', ds: 'Set effort level for model usage', src: 'Intégrée' },
+  { name: 'simplify', arg: '[<target>]', ds: 'Review the changed code for reuse, simplification, efficiency', src: 'Intégrée' },
+  { name: 'release', ds: 'Prepare a Ledge release: changelog, version, tag', src: 'Projet' },
+  { name: 'recap', ds: 'Generate a one-line session recap now', src: 'Intégrée' },
+  { name: 'rename', aliases: ['name'], arg: '[name]', ds: 'Rename the current conversation', src: 'Intégrée' },
+  { name: 'pdf', ds: 'Use this skill whenever the user wants to do anything with PDF files', src: 'Skill' },
+  { name: 'mcp', arg: '[reconnect|enable|disable]', ds: 'Manage MCP servers', src: 'Intégrée' },
+  { name: 'usage', aliases: ['cost', 'stats'], ds: "Show session cost, plan usage, and what's contributing to your limits", src: 'Intégrée' }
+];
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function rank(q) {
+  const out = [];
+  for (const c of COMMANDS) {
+    const names = [c.name, ...(c.aliases || [])];
+    let r = 9;
+    if (names.some(n => n.startsWith(q))) r = 0;
+    else if (names.some(n => n.includes(q))) r = 1;
+    else if (c.ds.toLowerCase().includes(q)) r = 2;
+    if (r < 9) out.push({ c, r });
+  }
+  return out.sort((a, b) => a.r - b.r || a.c.name.localeCompare(b.c.name)).map(x => x.c);
+}
+const live = document.getElementById('live'), list = document.getElementById('live-list'), hint = document.getElementById('live-hint');
+let sel = 0, shown = [];
+function mark(name, q) { const i = name.indexOf(q); return i < 0 || !q ? esc(name) : esc(name.slice(0, i)) + '<mark>' + esc(name.slice(i, i + q.length)) + '</mark>' + esc(name.slice(i + q.length)); }
+function render() {
+  const v = live.value, m = /^\/(\S*)$/.exec(v);
+  if (!m) { list.hidden = true; hint.innerHTML = v.startsWith('/') ? '<span class="kbd">↵</span> envoie la commande à Otto' : '<span class="kbd">R</span> écrire'; return; }
+  const q = m[1].toLowerCase(); shown = rank(q); sel = Math.min(sel, Math.max(0, shown.length - 1));
+  list.hidden = false; hint.innerHTML = '';
+  if (!shown.length) { list.innerHTML = `<div class="slash-empty">Aucune commande « <span class="mono">${esc(v)}</span> ». ↵ l'envoie comme un message à Otto.</div>`; return; }
+  list.innerHTML = `<div class="slash-head"><strong>Claude Code</strong> · ${shown.length} commande${shown.length > 1 ? 's' : ''}</div><ul>` +
+    shown.map((c, i) => {
+      const alias = (c.aliases || []).find(a => a.startsWith(q) && !c.name.startsWith(q));
+      return `<li role="option" data-i="${i}" aria-selected="${i === sel}"><span class="nm">/${mark(c.name, q)}${c.arg ? ` <span class="arg">${esc(c.arg)}</span>` : ''}${alias ? ` <span class="arg">· /${esc(alias)}</span>` : ''}</span><span class="src${c.src === 'Projet' ? ' project' : ''}">${c.src}</span><span class="ds">${esc(c.ds)}</span></li>`;
+    }).join('') + '</ul><div class="slash-foot"><span><span class="kbd">↑↓</span> choisir</span><span><span class="kbd">Tab</span> <span class="kbd">↵</span> compléter</span><span><span class="kbd">Échap</span> fermer</span></div>';
+  list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+}
+function complete(i) { const c = shown[i]; if (!c) return; live.value = '/' + c.name + ' '; live.focus(); render(); }
+live.addEventListener('input', () => { sel = 0; render(); });
+live.addEventListener('keydown', e => {
+  if (list.hidden || !shown.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); sel = (sel + 1) % shown.length; render(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); sel = (sel - 1 + shown.length) % shown.length; render(); }
+  else if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); complete(sel); }
+  else if (e.key === 'Escape') { e.preventDefault(); list.hidden = true; }
+});
+list.addEventListener('mousedown', e => { const li = e.target.closest('li[data-i]'); if (li) { e.preventDefault(); complete(Number(li.dataset.i)); } });
+render();
+</script>
+</body>
+</html>

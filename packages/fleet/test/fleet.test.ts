@@ -351,6 +351,31 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'models.listing').at(-1)).toMatchObject({ requestId: 'm2' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('routes session.commands to the session\'s machine, relays only its listing with the qualified id, answers offline and outdated', () => {
+    const { client, local, server, got } = setup();
+    const listings = () => got.filter(m => m.type === 'session.commands.listing');
+    client.send({ type: 'session.commands', requestId: 'c1', id: 'server:otto' });
+    client.send({ type: 'session.commands', requestId: 'c2', id: 'local:nova' });
+    expect(server.sent).toEqual([{ type: 'session.commands', requestId: 'c1', id: 'otto' }]);
+    expect(local.sent).toEqual([{ type: 'session.commands', requestId: 'c2', id: 'nova' }]);
+    const listing: ServerMessage = { type: 'session.commands.listing', requestId: 'c1', id: 'otto', tool: 'claude', commands: [{ name: 'compact', source: 'builtin' }] };
+    local.emit(listing); // not the machine asked
+    expect(listings()).toEqual([]);
+    server.emit(listing); server.emit(listing);
+    expect(listings()).toEqual([{ ...listing, id: 'server:otto' }]);
+    // An older daemon refuses session.commands: answered outdated.
+    client.send({ type: 'session.commands', requestId: 'c3', id: 'server:otto' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'session.commands' });
+    expect(listings().at(-1)).toEqual({ type: 'session.commands.listing', requestId: 'c3', id: 'server:otto', commands: [], error: 'outdated' });
+    client.send({ type: 'session.commands', requestId: 'c4', id: 'server:otto' });
+    server.set('unreachable');
+    client.send({ type: 'session.commands', requestId: 'c5', id: 'server:otto' });
+    client.send({ type: 'session.commands', requestId: 'c6', id: 'nowhere' });
+    expect(listings().slice(-3).map(m => m.type === 'session.commands.listing' && [m.requestId, m.id, m.error])).toEqual([['c4', 'server:otto', 'offline'], ['c5', 'server:otto', 'offline'], ['c6', 'nowhere', 'offline']]);
+    local.emit({ type: 'session.commands.listing', requestId: 'c2', id: 'nova', commands: [] });
+    expect(listings().at(-1)).toMatchObject({ requestId: 'c2', id: 'local:nova' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('routes OpenRig asks to their machine, tags each answer with it, answers offline and outdated', () => {
     const { client, local, server, got } = setup();
     const rig = () => got.filter(m => m.type === 'openrig.state' || m.type === 'openrig.done');
