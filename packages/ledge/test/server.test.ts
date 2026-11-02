@@ -416,9 +416,10 @@ describe('server', () => {
     c.send({ type: 'session.register', session: mk('b', { name: 'Otto', title: 'Otto · harness-assistant' }) });
     const upd = await c.next('session.updated');
     expect(upd.session.id).toBe('b');
-    expect(upd.session.name).toBe('Nova');
-    expect(upd.session.title).toBe('Nova · harness-assistant');
-    expect(store.get('b')?.name).toBe('Nova');
+    // An ended session no longer holds its name (namesInUse): only the live Otto is skipped.
+    expect(upd.session.name).toBe('Pim');
+    expect(upd.session.title).toBe('Pim · harness-assistant');
+    expect(store.get('b')?.name).toBe('Pim');
     c.close();
   });
 
@@ -2622,6 +2623,26 @@ describe('server: an idle seat recognised before', () => {
     const srv2 = await startServer({ store, tmux: fakeTmux({ 'dev-build@first-factory': ['❯ '] }), port: 0 });
     await vi.waitFor(() => expect(store.get('seat-9')).toMatchObject({ source: 'rig', tmuxSession: 'dev-build@first-factory' }));
     await srv2.close();
+  });
+});
+
+describe('server: a seat found again after its rig restarted', () => {
+  it('comes back as the session it had, not a new one under a new name', async () => {
+    store.upsert({ id: 'claude-conv-old', name: 'Bix', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Bix', tmuxSession: 'dev-build@first-factory', state: 'exited', helpers: [],
+      startedAt: '2026-11-02T10:00:00.000Z', lastActivityAt: '2026-11-02T10:30:00.000Z', exitedAt: '2026-11-02T10:30:00.000Z', source: 'rig', rig: { seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' } });
+    const node = { logicalId: 'dev.build', session: 'dev-build@first-factory', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 };
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-02T11:00:00.000Z', rigs: [{ id: 'F', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
+    const srv2 = await startServer({ store, tmux: fakeTmux({ 'dev-build@first-factory': ['❯ '] }), port: 0, openrig: {
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'openrig.status', requestId: 'r' });
+    await c.next('openrig.state');
+    await vi.waitFor(() => expect(store.get('claude-conv-old')).toMatchObject({ name: 'Bix', state: 'idle', source: 'rig' }));
+    expect(store.get('rig-dev-build-first-factory')).toBeUndefined();
+    c.close(); await srv2.close();
   });
 });
 

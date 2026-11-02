@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction } from '@ledge/protocol';
+import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -220,7 +220,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const r of st.rigs) for (const n of r.nodes) {
       if ((n.runtime !== 'claude-code' && n.runtime !== 'codex') || n.sessionStatus !== 'running' || followed.has(n.session)) continue;
       if (!(await tmux.hasSession(n.session).catch(() => false))) continue;
-      const id = seatId(n.session), old = store.get(id), at = now();
+      // The session this seat had before (ended with its rig, archived since), else the one its id names: the same seat comes back as itself.
+      const before = store.all().filter(x => x.rig?.seat === n.session).sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))[0];
+      const id = before?.id ?? seatId(n.session), old = store.get(id), at = now();
       const rig = { seat: n.session, name: r.name, role: n.logicalId };
       const cwd = (await tmux.paneCwd?.(n.session).catch(() => null)) ?? old?.cwd ?? '';
       if (old) {
@@ -228,7 +230,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const { exitedAt: _e, exitCode: _c, pending: _p, ...rest } = store.get(id)!;
         store.upsert({ ...rest, state: 'idle', tmuxSession: n.session, source: 'rig', rig, lastActivityAt: at });
       } else {
-        const name = pickName(store.all().map(x => x.name));
+        const name = pickName([...namesInUse(store.all()), ...heldNames(store.all())]);
         store.upsert({ id, name, tool: n.runtime === 'codex' ? 'codex' : 'claude', cwd, project: basename(cwd) || r.name, title: `${name} · ${n.logicalId}`,
           tmuxSession: n.session, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'rig', rig });
         log(`openrig: seat ${n.session} followed as ${name}`);
@@ -1087,7 +1089,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const others = store.all().filter(o => o.id !== incoming.id);
         if (others.some(o => o.state !== 'exited' && o.name === incoming.name)) {
           const old = incoming.name;
-          const name = pickName(others.map(o => o.name));
+          const name = pickName([...namesInUse(others), ...heldNames(store.all())]);
           const title = incoming.title.startsWith(`${old} ·`) ? `${name}${incoming.title.slice(old.length)}` : incoming.title;
           incoming = { ...incoming, name, title };
         }
@@ -1159,7 +1161,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const before = store.get(msg.id);
         if (!before && terminal) return; // never a new session from its end
         if (!before) {
-          const taken = store.all().map(s => s.name);
+          const taken = [...namesInUse(store.all()), ...heldNames(store.all())];
           const cwd = msg.cwd ?? '';
           const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(base);

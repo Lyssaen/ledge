@@ -8,3 +8,14 @@ describe('a session kind this front does not know', () => {
     expect(SessionSchema.parse({ ...s, source: 'rig' }).source).toBe('rig');
   });
 });
+
+describe('the names a new session must not take', () => {
+  it('only those of sessions still there: neither ended nor archived', async () => {
+    const { namesInUse, pickName } = await import('../src/names.js');
+    const s = (name: string, state = 'idle', archivedAt?: string) => ({ name, state, ...(archivedAt ? { archivedAt } : {}) });
+    expect(namesInUse([s('Otto'), s('Nova', 'exited'), s('Pim', 'idle', '2026-11-01T00:00:00.000Z')])).toEqual(['Otto']);
+    // 197 archived sessions no longer push every new one to « Otto-N ».
+    const archived = Array.from({ length: 200 }, (_, i) => s(i < 64 ? ['Otto', 'Nova'][i % 2]! : `Otto-${i}`, 'exited', '2026-11-01T00:00:00.000Z'));
+    expect(pickName(namesInUse([...archived, s('Otto')]))).not.toMatch(/-\d+$/);
+  });
+});
