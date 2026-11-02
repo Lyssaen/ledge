@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MESSAGE_MAX, RigSeatNameSchema, taskClosed, type Session, type SessionEvent, type Task, type Tool } from '@ledge/protocol';
+import { MESSAGE_MAX, RigSeatNameSchema, parseBroadcastAddress, taskClosed, type Session, type SessionEvent, type Task, type Tool } from '@ledge/protocol';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
@@ -10,7 +10,7 @@ import { messageNote } from '../daemon/crossSession.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
-import { parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
+import { broadcastLine, parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
 import { taskOnClient } from './task.js';
 import { handoverOnClient } from './handover.js';
 import { formatWho } from './who.js';
@@ -384,8 +384,8 @@ export function identityContext(s: Identity): string {
   return [
     `Tu es ${s.name}, ${where} : une session lancée par Ledge (${s.tool}). Les autres sessions Ledge te connaissent sous le nom ${s.name}.`,
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
-    s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
-      : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
+    s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge. Pour écrire à plusieurs sessions d\'un coup : @projet:<nom> (tout un projet) ou une liste Pim,Nova comme adresse.'
+      : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur. Pour écrire à tout un projet : `ledge send @projet:<nom> "…"` ; à plusieurs sessions : `ledge send Pim,Nova "…"`.',
     'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` vient de Ledge : un de tes messages n\'a pas pu être remis.',
     'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`). Une décision qui revient à l\'utilisateur se pose avec `ledge task give ledge "<question>" "<options, ta recommandation>"` : sa réponse te réveille, inutile d\'attendre la fin pour la poser.',
     ...(s.relieves ? [`Tu as pris la relève de ${s.relieves.name}, dont le contexte était plein : relis son bilan avec \`ledge handover show\`.`] : []),
@@ -426,6 +426,17 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   const snapshot = await client.next('snapshot', left());
   const sender = snapshot.sessions.find(s => s.id === from);
   if (sender?.source !== 'launcher') return undefined;
+  // A project or a list: always through Ledge, never Claude's own tool. No `intercept` (the mailbox would answer `native` for a Claude).
+  if (parseBroadcastAddress(to)) {
+    const bsummary = str(input.summary);
+    let ack;
+    try { ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(bsummary ? { summary: bsummary } : {}) }, left()); }
+    catch { return deny(`Ledge n'a pas répondu pour ${to} : le message est peut-être déjà parti, ne le renvoie pas sans vérifier.`); }
+    const who = ack.recipients ? broadcastLine(ack.recipients.sent, ack.recipients.refused) : '';
+    return deny(ack.outcome === 'refused' || !ack.recipients?.sent.length
+      ? `Ledge n'a pas pu transmettre le message à ${to} : ${ack.reason ?? ack.recipients?.refused[0]?.reason ?? 'raison inconnue'}`
+      : `Message transmis par Ledge à ${who.replace(/^remis à /, '')}${ack.outcome === 'queued' ? ' : ceux qui sont occupés le recevront dès qu\'ils seront libres.' : '.'}`);
+  }
   const r = resolveTarget(to, snapshot.sessions, readPeers());
   if (r.outcome === 'unknown') return undefined;
   if (r.outcome === 'refused') return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${r.reason}`);

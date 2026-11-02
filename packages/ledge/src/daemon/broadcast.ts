@@ -1,6 +1,6 @@
 import { backendOf, broadcastLabel, projectOf, type BroadcastAddress, type ClientMessage, type MessageAck, type Projects, type ServerMessage, type Session } from '@ledge/protocol';
 import type { Store } from './store.js';
-import { reachable, sessionNamed, type Mailbox, type MailboxDeps } from './mailbox.js';
+import { MAX_SEEN, reachable, sessionNamed, type Mailbox, type MailboxDeps } from './mailbox.js';
 
 /** One refused recipient, by name, and why. */
 export interface BroadcastRefusal { name: string; reason: string }
@@ -20,7 +20,7 @@ function refusalOf(s: Session): string | null {
 
 /** The project by its name (any case), else by its id. */
 const projectNamed = (projects: Projects, q: string) =>
-  projects.projects.find(p => p.name.toLowerCase() === q.toLowerCase()) ?? projects.projects.find(p => p.id === q.toLowerCase());
+  projects.projects.find(p => p.name.toLowerCase() === q.toLowerCase()) ?? projects.projects.find(p => p.id === q);
 
 /**
  * Who a broadcast goes to. A project: its live Ledge sessions, the seats and read-only ones left out without a word. Names
@@ -62,7 +62,7 @@ export function broadcastFromSession(d: Deps & { mailbox: Pick<Mailbox, 'submit'
   const r = recipientsOf(a, d, msg.from);
   const sent: string[] = []; const refused = [...r.refused]; let accepted = false;
   for (const t of r.targets) {
-    const ack = d.mailbox.submit({ type: 'session.message', rid: `${msg.rid}:${t.id}`, from: msg.from, to: t.name, text: `(à ${r.label}) ${msg.text}`, ...(msg.summary ? { summary: msg.summary } : {}) }, { card: msg.rid });
+    const ack = d.mailbox.submit({ type: 'session.message', rid: `${msg.rid}:${t.id}`, from: msg.from, to: t.name, text: `(à ${r.label}) ${msg.text}`, ...(msg.summary ? { summary: msg.summary } : {}) }, { card: msg.rid, target: t.id });
     if (ack.outcome === 'accepted' || ack.outcome === 'queued') { sent.push(t.name); accepted ||= ack.outcome === 'accepted'; }
     else refused.push({ name: t.name, reason: ack.reason ?? 'refusé' });
   }
@@ -73,8 +73,17 @@ export function broadcastFromSession(d: Deps & { mailbox: Pick<Mailbox, 'submit'
   return { type: 'message.ack', rid: msg.rid, outcome: accepted ? 'accepted' : 'queued', recipients };
 }
 
-/** The user writes to a project or to sessions: a notice to each recipient, typed at its next free moment, behind what waits. */
-export function broadcastFromUser(d: Deps & { mailbox: Pick<Mailbox, 'notify'> }, msg: BroadcastMessage): BroadcastResult {
+/** The user writes to a project or to sessions: a notice to each recipient, typed at its next free moment, behind what waits.
+ *  `seen` (one per daemon): a resent request (same rid) is answered with its first result, nothing typed again; the oldest are forgotten past MAX_SEEN. */
+export function broadcastFromUser(d: Deps & { mailbox: Pick<Mailbox, 'notify'>; seen: Map<string, BroadcastResult> }, msg: BroadcastMessage): BroadcastResult {
+  const again = d.seen.get(msg.rid);
+  if (again) return again;
+  const result = userBroadcast(d, msg);
+  d.seen.set(msg.rid, result);
+  if (d.seen.size > MAX_SEEN) d.seen.delete(d.seen.keys().next().value!);
+  return result;
+}
+function userBroadcast(d: Deps & { mailbox: Pick<Mailbox, 'notify'> }, msg: BroadcastMessage): BroadcastResult {
   const r = recipientsOf('project' in msg.to ? { project: msg.to.project } : { sessions: msg.to.sessions }, d);
   const sent: { id: string; name: string }[] = []; const refused = [...r.refused];
   for (const t of r.targets) {

@@ -355,6 +355,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const replyText = async (id: string, text: string) => (await replyTo(id, text))?.message ?? null;
   /** The « sent » cards in the senders' threads: the mailbox's, and a broadcast's single one. */
   const mailSent: MailboxDeps['sent'] = { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) };
+  /** `session.broadcast` results by rid: a resend gets the first one. */
+  const userBroadcasts = new Map<string, Extract<ServerMessage, { type: 'session.broadcast.result' }>>();
   const mailbox = createMailbox({
     store, replyTo: replyText, typing, closing, now, ...(opts.mail ? { journal: opts.mail } : {}),
     relayQueued: id => cardThreads.queuedRelays().some(q => q.relay.id === id),
@@ -1293,7 +1295,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply(to ? broadcastFromSession({ store, projects, mailbox, sent: mailSent, now }, msg, to) : mailbox.submit(msg));
       }
       // The user's own: a notice to each recipient.
-      case 'session.broadcast': return reply(broadcastFromUser({ store, projects, mailbox }, msg));
+      case 'session.broadcast': return reply(broadcastFromUser({ store, projects, mailbox, seen: userBroadcasts }, msg));
       case 'message.read': return reply(mailbox.read(msg));
       case 'session.handover': {
         const reason = handovers.start(msg.id);

@@ -28,8 +28,9 @@ export interface MailboxDeps {
 }
 export interface Mailbox {
   /** `card`: the message is one recipient's part of a broadcast whose single card, of that rid, the caller records; no card of
-   *  its own, and its outcome goes to that card (delivered once any part is, failed once none can be). */
-  submit(m: Extract<ClientMessage, { type: 'session.message' }>, o?: { card?: string }): MessageAck;
+   *  its own, and its outcome goes to that card (delivered once any part is, failed once none can be). `target`: the session id
+   *  already resolved by the caller, used instead of looking `to` up again (another session may share the name). */
+  submit(m: Extract<ClientMessage, { type: 'session.message' }>, o?: { card?: string; target?: string }): MessageAck;
   read(m: Extract<ClientMessage, { type: 'message.read' }>): Extract<ServerMessage, { type: 'message.body' }>;
   /** Ledge's own line for a session (a task's pointer), typed at its next free moment (`first`: before anything waiting); false when it cannot be typed into. Never told back on failure. */
   notify(target: string, text: string, rid: string, o?: { first?: boolean }): boolean;
@@ -42,7 +43,7 @@ interface Queued { kind: 'message' | 'notice'; id: string; rid: string; from: st
 /** A message's body as `ledge read` gives it: `from`/`target` the session ids allowed to read it, `fromName`/`to` their names. */
 interface Body { id: string; rid: string; from: string; fromName: string; target: string; to: string; at: string; text: string }
 /** How many rids are remembered for the dedupe: past it the oldest are forgotten. */
-const MAX_SEEN = 1000;
+export const MAX_SEEN = 1000;
 /** Bodies kept for `ledge read`: a pointer typed into a session may be read days later. */
 const BODY_MAX = 200;
 const BODY_TTL_MS = 7 * 24 * 3600 * 1000;
@@ -193,7 +194,7 @@ export function createMailbox(d: MailboxDeps): Mailbox {
     submit(m, o = {}) {
       const first = seen.get(m.rid);
       if (first) return first;
-      const t = target(m.to);
+      const t = o.target ? d.store.get(o.target) : target(m.to);
       if (m.intercept && (!t || t.tool === 'claude')) return remember(m.rid, { type: 'message.ack', rid: m.rid, outcome: 'native' });
       const refuse = (reason: string): MessageAck => ({ type: 'message.ack', rid: m.rid, outcome: 'refused', reason });
       if (!t) return refuse(`aucune session Ledge nommée ${m.to}`);

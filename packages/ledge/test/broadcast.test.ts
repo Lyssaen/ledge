@@ -9,6 +9,7 @@ import { startServer } from '../src/daemon/server.js';
 import { History } from '../src/daemon/history.js';
 import { writeProjects } from '../src/daemon/projects.js';
 import { connect } from '../src/client.js';
+import { runHook, identityContext } from '../src/cli/hook.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
 
@@ -192,6 +193,42 @@ describe('broadcast from a session (session.message)', () => {
   });
 });
 
+describe('broadcast: the recipient is the resolved session, not its name again', () => {
+  it('two live sessions with one name, one read-only: the writable one gets it', async () => {
+    store.remove('a');
+    store.upsert(mk('p0', 'Pim', '/w/billing-api', { source: 'hook_only', tmuxSession: null, tool: 'claude' }));
+    store.upsert(mk('a', 'Pim', '/w/billing-api'));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.message', rid: 'd1', from: 'sol', to: '@projet:billing', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'd1', outcome: 'accepted', recipients: { sent: ['Nova', 'Pim'], refused: [] } });
+    await until(() => typed('ledge-a').length === 1 && typed('ledge-b').length === 1, 3000);
+    c.close();
+  });
+  it('a project id is matched exactly, not lowercased', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.message', rid: 'd2', from: 'sol', to: '@projet:SOLO-1', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'd2', outcome: 'refused', reason: 'aucun projet SOLO-1' });
+    c.close();
+  });
+});
+
+describe('session.broadcast dedupe', () => {
+  it('a resent request answers the first result and types nothing twice', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    const req = { type: 'session.broadcast' as const, rid: 'u1', to: { project: 'billing' }, text: 'Hello' };
+    c.send(req);
+    const first = await c.next('session.broadcast.result', 3000);
+    expect(first.sent.length).toBe(2);
+    await until(() => typed('ledge-b').length === 1, 3000);
+    store.remove('b'); // the world moved on: a recomputed answer would differ
+    c.send(req);
+    expect(await c.next('session.broadcast.result', 3000)).toEqual(first);
+    await new Promise(r => setTimeout(r, 200));
+    expect(typed('ledge-a').length).toBe(1); expect(typed('ledge-b').length).toBe(1);
+    c.close();
+  });
+});
+
 describe('broadcast from the user (session.broadcast)', () => {
   it('to a project: a notice to each live Ledge session of it', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
@@ -222,5 +259,53 @@ describe('broadcast from the user (session.broadcast)', () => {
     c.send({ type: 'session.broadcast', rid: 'u3', to: { project: 'nope' }, text: 'Salut' });
     expect(await c.next('session.broadcast.result', 3000)).toEqual({ type: 'session.broadcast.result', rid: 'u3', sent: [], refused: [], reason: 'aucun projet nope' });
     c.close();
+  });
+});
+
+describe('a Claude seat\'s SendMessage to a project or a list, through the real hook (Review Focus 4)', () => {
+  const send = (to: string, id = 'tu1') => JSON.stringify({ session_id: 'uuid-c', hook_event_name: 'PreToolUse', tool_name: 'SendMessage', tool_use_id: id, tool_input: { to, message: 'Salut', summary: 'Un salut', content: 'Salut' } });
+  const failure = (to: string, id = 'tu1') => JSON.stringify({ session_id: 'uuid-c', hook_event_name: 'PostToolUseFailure', tool_name: 'SendMessage', tool_use_id: id, tool_input: { to, message: 'Salut' }, error: 'denied by hook' });
+  const out = (o: string | undefined) => (JSON.parse(o!) as { hookSpecificOutput: Record<string, unknown> }).hookSpecificOutput;
+  let saved: string | undefined;
+  beforeEach(() => { saved = process.env.LEDGE_SESSION; process.env.LEDGE_SESSION = 'c'; store.upsert(mk('c', 'Cleo', '/w/billing-api', { tool: 'claude', tmuxSession: 'ledge-c' })); });
+  afterEach(() => { if (saved === undefined) delete process.env.LEDGE_SESSION; else process.env.LEDGE_SESSION = saved; });
+
+  it('@projet: denied with who got it, typed into the recipients, one card, still one after PostToolUseFailure', async () => {
+    const r = out(await runHook('PreToolUse', send('@projet:billing'), { port: srv.port }));
+    expect(r.permissionDecision).toBe('deny');
+    expect(r).not.toHaveProperty('updatedInput');
+    expect(r.permissionDecisionReason).toMatch(/^Message transmis par Ledge à 2 sessions \((Nova, Pim|Pim, Nova)\)/);
+    await until(() => typed('ledge-a').length === 1 && typed('ledge-b').length === 1, 3000);
+    expect(typed('ledge-a')[0]).toMatch(/\(à tout le projet billing\) Salut<\/ledge-message>$/);
+    expect(typed('ledge-c')).toEqual([]);
+    await until(() => cards('c')[0]?.status === 'delivered', 3000);
+    await runHook('PostToolUseFailure', failure('@projet:billing'), { port: srv.port });
+    await new Promise(r => setTimeout(r, 200));
+    expect(cards('c')).toEqual([expect.objectContaining({ id: 'tu1', to: '@projet:billing', status: 'delivered' })]);
+    expect(history.items('c').filter(i => i.kind === 'tool')).toEqual([]);
+  });
+
+  it('a list, one of them refused: denied with the refusal in the reason', async () => {
+    const r = out(await runHook('PreToolUse', send('Nova,Zed', 'tu2'), { port: srv.port }));
+    expect(r.permissionDecision).toBe('deny');
+    expect(r.permissionDecisionReason).toMatch(/^Message transmis par Ledge à 1 session \(Nova\)/);
+    expect(r.permissionDecisionReason).toContain('Zed');
+    await until(() => typed('ledge-b').length === 1, 3000);
+  });
+
+  it('nobody to write to: denied with the reason, never allowed', async () => {
+    const r = out(await runHook('PreToolUse', send('@projet:nope', 'tu3'), { port: srv.port }));
+    expect(r).toMatchObject({ permissionDecision: 'deny', permissionDecisionReason: expect.stringContaining('aucun projet nope') });
+    expect(r).not.toHaveProperty('updatedInput');
+  });
+});
+
+describe('identityContext tells the broadcast addresses', () => {
+  it('Claude: SendMessage to a project or a list', () => {
+    expect(identityContext({ name: 'Pim', tool: 'claude', project: 'x', cwd: '/w' })).toContain('Pour écrire à plusieurs sessions d\'un coup : @projet:<nom> (tout un projet) ou une liste Pim,Nova comme adresse.');
+  });
+  it('Codex: ledge send to a project or a list', () => {
+    const t = identityContext({ name: 'Nova', tool: 'codex', project: 'x', cwd: '/w' });
+    expect(t).toContain('ledge send @projet:<nom> "…"'); expect(t).toContain('ledge send Pim,Nova "…"');
   });
 });
