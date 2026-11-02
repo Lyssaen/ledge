@@ -101,6 +101,17 @@ describe('the Navigateur tab', () => {
     expect(within(pane()).getByRole('button', { name: 'Comparer' })).toBeVisible();
   });
 
+  it('a thread thumbnail clicked while comparing shows that capture alone', async () => {
+    renderSession({ items: [shot('s1', [REF]), shot('s2', [REF2])] });
+    await user.click(screen.getByRole('button', { name: /Navigateur/ }));
+    await user.click(within(pane()).getByRole('button', { name: 'Comparer' }));
+    await user.click(cell('s1:0')); await user.click(cell('s2:0'));
+    await user.click(threadThumb('s1'));
+    expect(within(pane()).queryAllByTestId('compare-side')).toHaveLength(0);
+    expect(selectedCell()).toHaveAttribute('data-capture', 's1:0');
+    expect(within(pane()).getByRole('button', { name: 'Comparer' })).toBeVisible();
+  });
+
   it('lights the row in the thread', async () => {
     renderSession({ items: [shot('s1', [REF]), shot('s2', [REF2])] });
     await user.click(threadThumb('s1'));

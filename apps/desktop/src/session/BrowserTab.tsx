@@ -47,11 +47,11 @@ export function BrowserTab({ captures, focus, client, session, helperName, head,
   // The selected capture: the one asked for; gone from the thread (or none asked), the latest.
   const [asked, setAsked] = useState(focus);
   const [selected, setSelected] = useState(focus.key);
-  if (asked !== focus) { setAsked(focus); setSelected(focus.key); }
+  // Comparing: the keys picked, A then B (null: the single view). A capture asked for leaves it, to show that one.
+  const [picks, setPicks] = useState<readonly string[] | null>(null);
+  if (asked !== focus) { setAsked(focus); setSelected(focus.key); setPicks(null); }
   const current = captures.find(c => c.key === selected) ?? captures.at(-1);
   if (current && current.key !== selected) setSelected(current.key);
-  // Comparing: the keys picked, A then B (null: the single view).
-  const [picks, setPicks] = useState<readonly string[] | null>(null);
   const live = picks?.filter(k => captures.some(c => c.key === k)) ?? null;
   const [viewer, setViewer] = useState<number | null>(null);
   const refs = useMemo(() => captures.map(c => c.ref), [captures]);
