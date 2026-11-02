@@ -37,7 +37,13 @@ rig queue create --destination ledge@external --tags ledge-goal:<id d'objectif> 
   { "id": "launch-rig", "label": "Lancer un rig plutôt" } ] }]
 ```
 
-Pour changer d'équipe, l'utilisateur répond en mots ; OpenRig les rend à Max comme réponse libre.
+Les trois choix de la carte (maquette `goalAsk`) :
+- **Confirmer l'équipe** : `openrig.answer` `choice` `team`/`confirm`.
+- **Lancer un rig plutôt** : `choice` `team`/`launch-rig`.
+- **Changer d'équipe** : `openrig.answer` `words` (par exemple « prends plutôt dev-front de ledge-dev-2 »). Une réponse en mots
+  règle la demande (lot 1) et OpenRig rend le texte à Max comme réponse libre, ce qui le réveille. **Max repropose** alors par une
+  nouvelle demande, avec le même tag `ledge-goal:<id>`. Ledge montre toujours la proposition la plus récente
+  (`Goal.proposal`) ; l'ancienne, réglée, reste dans le trajet.
 
 `proposition.md` : du texte libre, plus un bloc de code `ledge-team` qui contient le JSON de l'équipe :
 
@@ -93,7 +99,7 @@ type Goal = {
   //  running  : Max a transmis l'objectif à une équipe
   //  done     : le dernier siège de la chaîne a fini
   //  closed   : Max l'a close sans la transmettre (refus, abandon, réglé autrement)
-  proposal: {
+  proposal: {                        // la plus récente : après « Changer d'équipe », Max en fait une nouvelle
     askId: string;                     // la demande dans « À toi » (même id que HumanAsk.id)
     team: TeamProposal | null;         // null : proposition en texte libre
     text: string;                      // le texte de la proposition, sans le bloc
