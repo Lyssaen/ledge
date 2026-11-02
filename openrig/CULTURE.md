@@ -25,6 +25,10 @@ Une tâche qu'un autre siège doit faire est une ligne de queue (`rig queue crea
 message de chat. Réclamer une ligne avant d'y travailler, la clore avec le résultat. `rig <commande> --help` fait foi
 sur la syntaxe.
 
+Une demande adressée à l'utilisateur (`ledge@external`) n'utilise jamais `--alert` : elle tente Slack, qui n'est pas
+utilisé, et laisse un constat « non remis » au siège demandeur. Pour une demande pressante, `--priority urgent` ; Ledge
+la met en tête d'« À toi ».
+
 ## Le dépôt
 
 - Ne jamais travailler dans la copie principale `~/Workspace/ledge` : l'utilisateur y a souvent du travail en cours
