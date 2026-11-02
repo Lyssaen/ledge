@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type JSX } from 'react';
-import type { Session } from '@ledge/protocol';
+import type { HumanAsk, Session } from '@ledge/protocol';
+import { pillOf } from '../../asks/model';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
 import type { NavAction } from '../../nav/state';
@@ -14,13 +15,16 @@ const waiting = (s: Session) => s.state === 'waiting_permission' || s.state === 
  * The OpenRig seats Ledge follows, away from the projects (docs/mockups/ledge-openrig-groups.html, view 1): « Rigs », one row per
  * rig with its seats under it, and « Kernel », the operator, the advisor and the queue together. A seat that ended is left out.
  */
-export function RigGroups({ sessions, current, paused, dispatch }: { sessions: readonly Session[]; current: string | null; paused: boolean; dispatch: (a: NavAction) => void }): JSX.Element | null {
+export function RigGroups({ sessions, current, paused, dispatch, asks = [] }: { sessions: readonly Session[]; current: string | null; paused: boolean; dispatch: (a: NavAction) => void;
+  /** What OpenRig's rigs ask the person: the asking seat's row says so in red, and its rig counts it (docs/mockups/ledge-human-operator-ab.html). */
+  asks?: readonly HumanAsk[] }): JSX.Element | null {
   const { t } = useI18n();
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   const live = sessions.filter(s => s.rig && s.state !== 'exited');
   const kernel = live.filter(s => s.rig!.name === KERNEL);
   const rigs = new Map<string, Session[]>();
   for (const s of live) if (s.rig!.name !== KERNEL) rigs.set(s.rig!.name, [...(rigs.get(s.rig!.name) ?? []), s]);
+  const askOf = (s: Session) => asks.find(a => a.from.seat === s.rig?.seat);
   const row = (s: Session, depth: number) => (
     <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel')} style={{ '--d': depth } as CSSProperties}>
       <span className="st-gap" />
@@ -28,7 +32,9 @@ export function RigGroups({ sessions, current, paused, dispatch }: { sessions: r
       <button type="button" className="st-main" onClick={() => dispatch({ type: 'open', id: s.id })}>
         <strong>{s.name}</strong><span className="mono">{[s.rig!.role?.replace(/\.agent$|\.lead$|\.worker$/, '') ?? s.rig!.seat, s.tool].join(' · ')}</span>
       </button>
-      <span className={cls('st-time', waiting(s) && (s.state === 'waiting_permission' ? 't-approval' : s.state === 'waiting_input' ? 't-question' : 't-error'))}>{s.offline ? t.side.offline : ''}</span>
+      {(() => { const a = askOf(s); return a && !s.offline
+        ? <span className="st-time t-approval st-ask-mark">{t.asks.pill[pillOf(a)]}</span>
+        : <span className={cls('st-time', waiting(s) && (s.state === 'waiting_permission' ? 't-approval' : s.state === 'waiting_input' ? 't-question' : 't-error'))}>{s.offline ? t.side.offline : ''}</span>; })()}
     </div>
   );
   if (live.length === 0) return null;
@@ -41,7 +47,7 @@ export function RigGroups({ sessions, current, paused, dispatch }: { sessions: r
             {[...rigs].sort(([a], [b]) => a.localeCompare(b)).map(([name, seats]) => {
               const open = !closed.has(name);
               const flip = () => setClosed(c => { const n = new Set(c); if (n.has(name)) n.delete(name); else n.add(name); return n; });
-              const ask = seats.filter(waiting).length, working = seats.filter(x => x.state === 'working').length;
+              const ask = seats.filter(x => waiting(x) || askOf(x) !== undefined).length, working = seats.filter(x => x.state === 'working').length;
               return [
                 <div key={`rig:${name}`} role="treeitem" aria-level={1} aria-expanded={open} className="st-row st-project st-rig" style={{ '--d': 0 } as CSSProperties}>
                   <button type="button" className="st-chev" aria-label={open ? t.side.fold(name) : t.side.unfold(name)} onClick={flip}><span className={open ? 'open' : undefined}><Icon d={ICONS.chevronRight.d} size={12} /></span></button>

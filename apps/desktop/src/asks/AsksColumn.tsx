@@ -39,14 +39,16 @@ export function AsksColumn({ view, sessions, machineLabel, focus, onSource, onOp
   const channel = view.channel;
   const banner = channel && channel.state !== 'ready' ? (() => {
     const c = a.channel;
-    const [title, body, tone] = channel.state === 'no_person' ? [c.no_person.title, c.no_person.body, 'err']
-      : channel.state === 'openrig_stopped' ? [c.openrig_stopped.title, c.openrig_stopped.body, 'warn']
-      : channel.state === 'unreachable' ? [c.unreachable.title, channel.message ?? '', 'warn']
-      : [c.not_installed.title(machineLabel), c.not_installed.body, ''];
+    // The command or the reason OpenRig gives, as is, on its own line (unreachable, no_default).
+    const [title, body, tone, mono] = channel.state === 'no_person' ? [c.no_person.title, c.no_person.body, 'err', '']
+      : channel.state === 'no_default' ? [c.no_default.title, c.no_default.body, 'err', channel.message ?? '']
+      : channel.state === 'openrig_stopped' ? [c.openrig_stopped.title, c.openrig_stopped.body, 'warn', '']
+      : channel.state === 'unreachable' ? [c.unreachable.title, '', 'warn', channel.message ?? '']
+      : [c.not_installed.title(machineLabel), c.not_installed.body, '', ''];
     return (
       <div className={cls('ask-banner', tone && `ask-banner-${tone}`)} role="status" data-channel={channel.state}>
         <Icon d={ALERT} size={16} />
-        <div className="ask-banner-text"><b>{title}</b>{body && <p className={channel.state === 'unreachable' ? 'ask-mono' : undefined}>{body}</p>}</div>
+        <div className="ask-banner-text"><b>{title}</b>{body && <p>{body}</p>}{mono && <p className="ask-mono">{mono}</p>}</div>
       </div>
     );
   })() : null;

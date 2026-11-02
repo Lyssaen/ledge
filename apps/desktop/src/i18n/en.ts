@@ -25,6 +25,7 @@ export const en: Messages = {
       no_person: { title: 'Ledge is not OpenRig’s human channel yet.', body: 'Rigs still go through Max, or the kernel’s TUI. Their requests don’t arrive here.' },
       openrig_stopped: { title: 'OpenRig is stopped: rigs cannot write to you.', body: 'Your projects’ sessions still come here.' },
       unreachable: { title: 'OpenRig is not responding.', body: '' },
+      no_default: { title: 'OpenRig has several people, and none is the default.', body: 'So its requests don’t arrive here. To set one:' },
       not_installed: { title: (machine) => `OpenRig is not installed on ${machine}.`, body: 'Your projects’ sessions still come here.' }
     }
   },

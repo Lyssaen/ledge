@@ -34,6 +34,8 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   const { t, lang } = useI18n();
   const a = t.asks;
   const pill = pillOf(ask);
+  // An ask never read whole comes with its summary as body: nothing more to show (design-ux).
+  const body = ask.bodyTruncated && ask.body === ask.summary ? '' : ask.body;
   const who = whoOf(ask, session);
   const [composing, setComposing] = useState(false);
   const [text, setText] = useState('');
@@ -51,8 +53,8 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   useLayoutEffect(() => {
     const el = bodyRef.current;
     if (!el || all) return;
-    setClamped(el.scrollHeight > el.clientHeight + 1 || ask.body.split('\n').length > (pill === 'decision' || pill === 'question' ? 3 : 2));
-  }, [ask.body, all, pill]);
+    setClamped(el.scrollHeight > el.clientHeight + 1 || body.split('\n').length > (pill === 'decision' || pill === 'question' ? 3 : 2));
+  }, [body, all, pill]);
   useEffect(() => { if (composing) fieldRef.current?.focus(); }, [composing]);
   useEffect(() => {
     if (!focus) return;
@@ -148,7 +150,7 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
       <div className="ask-update-row">
         <div className="ask-update-text">
           <b>{ask.summary}</b>
-          {ask.body && <p ref={bodyRef} className="ask-body clamp2">{ask.body}</p>}
+          {body && <p ref={bodyRef} className="ask-body clamp2">{body}</p>}
         </div>
         <button type="button" className="ask-btn sm ghost" disabled={busy} onClick={() => void go({ key: 'seen', answer: { kind: 'seen' } })}>{wheel('seen')}{a.seen}</button>
       </div>
@@ -162,7 +164,7 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
       {head}
       <h4>{ask.summary}</h4>
       {!composing && <>
-        {ask.body && <p ref={bodyRef} className={cls('ask-body', !all && (pill === 'parked' ? 'clamp2' : 'clamp3'))}>{ask.body}</p>}
+        {body && <p ref={bodyRef} className={cls('ask-body', !all && (pill === 'parked' ? 'clamp2' : 'clamp3'))}>{body}</p>}
         {clamped && !all && <button type="button" className="ask-more" onClick={() => setAll(true)}>{a.readAll}</button>}
         {ask.detail && <>
           <button type="button" className="ask-fold" aria-expanded={details} onClick={() => setDetails(d => !d)}>

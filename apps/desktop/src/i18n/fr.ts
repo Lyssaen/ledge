@@ -40,6 +40,7 @@ export const fr = {
       no_person: { title: 'Ledge n’est pas encore le canal humain d’OpenRig.', body: 'Les rigs passent encore par Max, ou par le TUI du kernel. Leurs demandes n’arrivent pas ici.' },
       openrig_stopped: { title: 'OpenRig est arrêté : les rigs ne peuvent pas t’écrire.', body: 'Les sessions de tes projets passent toujours par ici.' },
       unreachable: { title: 'OpenRig ne répond pas.', body: '' },
+      no_default: { title: 'OpenRig a plusieurs personnes, et aucune n’est désignée par défaut.', body: 'Ses demandes n’arrivent donc pas ici. Pour en désigner une :' },
       not_installed: { title: (machine: string) => `OpenRig n’est pas installé sur ${machine}.`, body: 'Les sessions de tes projets passent toujours par ici.' }
     }
   },

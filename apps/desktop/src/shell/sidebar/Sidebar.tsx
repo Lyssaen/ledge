@@ -168,7 +168,7 @@ export function Sidebar(p: {
             onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>}
-        {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} />}
+        {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} asks={p.asks ?? []} />}
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
