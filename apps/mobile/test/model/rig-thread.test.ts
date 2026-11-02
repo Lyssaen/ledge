@@ -126,6 +126,20 @@ describe('OpenRig in the phone thread', () => {
     expect(items[4]).toMatchObject({ key: 'packet-p1', raw: { label: '3 messages collés ensemble · brut', text: expect.stringMatching(/Oui, now[\s\S]*Ligne créée[\s\S]*Queue handoff/) } });
   });
 
+  it('keeps the packet\'s raw row after the fold when its blocks are quiet OpenRig notices', () => {
+    const quiet = (id: string, index: number, count: number) => rigNotice(id, at(19, 46), `Custody not checked ${id}`, { kind: 'openrig', alert: 'custody', packet: { id: 'p2', index, count } });
+    const only = of([quiet('q1', 0, 2), quiet('q2', 1, 2)]);
+    expect(only.map(i => i.kind)).toEqual(['time', 'rig-fold', 'rig-raw']);
+    expect(only[1]).toMatchObject({ notices: [{ key: 'q1' }, { key: 'q2' }] });
+    for (const n of (only[1] as { notices: object[] }).notices) expect(n).not.toHaveProperty('raw');
+    expect(only[2]).toMatchObject({ raw: { label: '2 messages collés ensemble · brut', text: 'Custody not checked q1\nCustody not checked q2' } });
+
+    const mixed = of([rigReceived('m', at(19, 46), 'Salut', { packet: { id: 'p2', index: 0, count: 3 } }, 'bix'), quiet('q1', 1, 3), quiet('q2', 2, 3)]);
+    expect(mixed.map(i => i.kind)).toEqual(['time', 'rig-message', 'rig-fold', 'rig-raw']);
+    expect(mixed[1]).not.toHaveProperty('raw');
+    expect(mixed[3]).toMatchObject({ raw: { label: '3 messages collés ensemble · brut', text: expect.stringMatching(/Salut[\s\S]*q1\nCustody not checked q2$/) } });
+  });
+
   it('keeps its own raw on a block whose packet mates fell off the window', () => {
     const items = of([rigReceived('b', at(19, 49), 'seul', { packet: { id: 'p1', index: 1, count: 2 } }, 'bix')]);
     expect(items.map(i => i.kind)).toEqual(['time', 'rig-message']);

@@ -151,6 +151,20 @@ describe('OpenRig in the phone thread', () => {
     expect(screen.getAllByText('19:49')).toHaveLength(1);
   });
 
+  it('shows the raw row of a packet of quiet notices after the fold, folded or open', () => {
+    const quiet = (id: string, index: number) => rigNotice(id, at(19, 46), `Custody not checked ${id}`, { kind: 'openrig', alert: 'custody', packet: { id: 'p2', index, count: 3 } });
+    opened([rigReceived('m', at(19, 46), 'Salut', { packet: { id: 'p2', index: 0, count: 3 } }, 'bix'), quiet('q1', 1), quiet('q2', 2)]);
+    const fold = screen.getByRole('button', { name: /2 avis OpenRig/ });
+    const raw = () => screen.getByRole('button', { name: '3 messages collés ensemble · brut' });
+    expect(fold.compareDocumentPosition(raw()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Brut' })).not.toBeInTheDocument();
+    fireEvent.click(fold);
+    expect(screen.getByText('Custody not checked q2').compareDocumentPosition(raw()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Brut' })).not.toBeInTheDocument();
+    fireEvent.click(raw());
+    expect(screen.getByText(/Salut[\s\S]*Custody not checked q2/, { selector: 'pre' })).toBeInTheDocument();
+  });
+
   it('keeps the user\'s own prompt as theirs', () => {
     opened([rigReceived('r1', at(19, 1), 'a', {}, 'bix'), prompt('p1', at(19, 52), 'Regarde aussi le mobile.')]);
     const mine = screen.getByText('Regarde aussi le mobile.');
