@@ -231,22 +231,22 @@ interface RoleDetail {
   "role": {
     "summary": { "id": "f95e2928bc86da26", "name": "ledge-lead", "version": "1.0",
       "description": "Lead de ledge-dev — reçoit les objectifs, applique « maquette d'abord », route et rend compte",
-      "source": "user", "path": "/home/jde/.openrig/specs/openrig/agents/lead/agent.yaml",
+      "source": "user", "path": "/home/me/.openrig/specs/openrig/agents/lead/agent.yaml",
       "importOnly": false, "seats": 1, "running": 1 },
     "defaults": {
-      "runtime": { "value": "claude-code", "origin": { "kind": "here", "path": "/home/jde/.openrig/specs/openrig/agents/lead/agent.yaml" } },
+      "runtime": { "value": "claude-code", "origin": { "kind": "here", "path": "/home/me/.openrig/specs/openrig/agents/lead/agent.yaml" } },
       "model": { "value": null, "origin": { "kind": "absent" } },
       "effort": { "value": null, "origin": { "kind": "absent" } }
     },
-    "imports": [{ "ref": "local:../shared", "name": "shared", "path": "/home/jde/.openrig/specs/openrig/agents/shared/agent.yaml" }],
+    "imports": [{ "ref": "local:../shared", "name": "shared", "path": "/home/me/.openrig/specs/openrig/agents/shared/agent.yaml" }],
     "profiles": [{
       "name": "default",
       "runtime": { "value": "claude-code", "origin": { "kind": "inherited", "from": "defaults" } },
       "model": { "value": null, "origin": { "kind": "absent" } },
       "resources": [
-        { "category": "guidance", "id": "role", "path": "guidance/role.md", "origin": { "kind": "here", "path": "/home/jde/.openrig/specs/openrig/agents/lead/agent.yaml" } },
+        { "category": "guidance", "id": "role", "path": "guidance/role.md", "origin": { "kind": "here", "path": "/home/me/.openrig/specs/openrig/agents/lead/agent.yaml" } },
         { "category": "plugin", "id": "shared:openrig-core", "path": "openrig-home:plugins/openrig-core",
-          "origin": { "kind": "inherited", "from": "import", "ref": "shared", "path": "/home/jde/.openrig/specs/openrig/agents/shared/agent.yaml" } },
+          "origin": { "kind": "inherited", "from": "import", "ref": "shared", "path": "/home/me/.openrig/specs/openrig/agents/shared/agent.yaml" } },
         { "category": "runtime_resource", "id": "shared:claude-default-settings", "path": "runtime/claude-settings.fragment.json",
           "runtime": "claude-code", "type": "claude_settings_fragment", "target": "<cwd>/.claude/settings.local.json",
           "origin": { "kind": "inherited", "from": "import", "ref": "shared" } },
@@ -266,12 +266,12 @@ interface RoleDetail {
       ]
     }],
     "seats": [{
-      "rig": "ledge-dev", "rigSpecPath": "/home/jde/.ledge/rigs/ledge-dev/rig.yaml", "running": true,
+      "rig": "ledge-dev", "rigSpecPath": "/home/me/.ledge/rigs/ledge-dev/rig.yaml", "running": true,
       "logicalId": "pilot.lead", "session": "pilot-lead@ledge-dev", "label": "Lead", "profile": "default",
       "runtime": { "value": "claude-code", "origin": { "kind": "inherited", "from": "member", "ref": "pilot.lead" } },
       "model": { "value": "claude-opus-5-5", "origin": { "kind": "inherited", "from": "member", "ref": "pilot.lead" } },
       "effort": { "value": null, "origin": { "kind": "inherited", "from": "launch", "ref": "runtime_default" } },
-      "cwd": { "value": "/home/jde/Workspace/ledge", "origin": { "kind": "inherited", "from": "member", "ref": "pilot.lead" } },
+      "cwd": { "value": "/home/me/Workspace/ledge", "origin": { "kind": "inherited", "from": "member", "ref": "pilot.lead" } },
       "cultureFile": { "value": "CULTURE.md", "origin": { "kind": "inherited", "from": "rig", "ref": "ledge-dev" } },
       "live": {
         "resolvedSpec": { "name": "ledge-lead", "version": "1.0", "hash": "…" },
@@ -282,16 +282,16 @@ interface RoleDetail {
           { "category": "runtime_resource", "id": "shared:claude-default-settings", "origin": { "kind": "inherited", "from": "import", "ref": "shared" } }
         ],
         "startup": [
-          { "kind": "file", "path": "guidance/role.md", "absolutePath": "/home/jde/.openrig/specs/openrig/agents/lead/guidance/role.md",
+          { "kind": "file", "path": "guidance/role.md", "absolutePath": "/home/me/.openrig/specs/openrig/agents/lead/guidance/role.md",
             "layer": "agent", "layerInferred": true, "delivery": "send_text", "required": true, "appliesOn": ["fresh_start", "restore"], "orientation": "role" },
           { "kind": "file", "path": "CULTURE-default.md", "absolutePath": "<openrig>/daemon/assets/guidance/CULTURE-default.md",
-            "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/jde/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start", "restore"] },
-          { "kind": "file", "path": "CULTURE.md", "absolutePath": "/home/jde/.ledge/rigs/ledge-dev/CULTURE.md",
-            "layer": "culture", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/jde/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start", "restore"] },
-          { "kind": "file", "path": "openrig-start.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/jde/Workspace/ledge/CLAUDE.md", "required": false, "appliesOn": ["fresh_start", "restore"] },
-          { "kind": "file", "path": "openrig-onboarding-01.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/jde/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start"] },
-          { "kind": "file", "path": "openrig-onboarding-02.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/jde/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start"] },
-          { "kind": "file", "path": "openrig-seat-skills.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/jde/Workspace/ledge/CLAUDE.md", "required": false, "appliesOn": ["fresh_start", "restore"] },
+            "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/me/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start", "restore"] },
+          { "kind": "file", "path": "CULTURE.md", "absolutePath": "/home/me/.ledge/rigs/ledge-dev/CULTURE.md",
+            "layer": "culture", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/me/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start", "restore"] },
+          { "kind": "file", "path": "openrig-start.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/me/Workspace/ledge/CLAUDE.md", "required": false, "appliesOn": ["fresh_start", "restore"] },
+          { "kind": "file", "path": "openrig-onboarding-01.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/me/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start"] },
+          { "kind": "file", "path": "openrig-onboarding-02.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/me/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start"] },
+          { "kind": "file", "path": "openrig-seat-skills.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/me/Workspace/ledge/CLAUDE.md", "required": false, "appliesOn": ["fresh_start", "restore"] },
           { "kind": "action", "value": "pilot-lead@ledge-dev\nOpenRig session identity:\n- rig: ledge-dev\n…", "layer": "openrig", "layerInferred": false,
             "delivery": "send_text", "appliesOn": ["fresh_start", "restore"] }
         ],
@@ -310,22 +310,22 @@ diffère du lead, avec un startup de membre :
 
 ```json
 {
-  "rig": "ledge-dev", "rigSpecPath": "/home/jde/.ledge/rigs/ledge-dev/rig.yaml", "running": true,
+  "rig": "ledge-dev", "rigSpecPath": "/home/me/.ledge/rigs/ledge-dev/rig.yaml", "running": true,
   "logicalId": "dev.front", "session": "dev-front@ledge-dev", "label": "Dev front", "profile": "default",
   "runtime": { "value": "claude-code", "origin": { "kind": "inherited", "from": "member", "ref": "dev.front" } },
   "model": { "value": "claude-opus-5-5", "origin": { "kind": "inherited", "from": "member", "ref": "dev.front" } },
   "effort": { "value": null, "origin": { "kind": "inherited", "from": "launch", "ref": "runtime_default" } },
-  "cwd": { "value": "/home/jde/Workspace/ledge", "origin": { "kind": "inherited", "from": "member", "ref": "dev.front" } },
+  "cwd": { "value": "/home/me/Workspace/ledge", "origin": { "kind": "inherited", "from": "member", "ref": "dev.front" } },
   "cultureFile": { "value": "CULTURE.md", "origin": { "kind": "inherited", "from": "rig", "ref": "ledge-dev" } },
   "live": {
     "resolvedSpec": { "name": "ledge-developer", "version": "1.0", "hash": "…" },
     "resources": [ "…mêmes 4 que pilot.lead…" ],
     "startup": [
-      { "kind": "file", "path": "guidance/role.md", "absolutePath": "/home/jde/.openrig/specs/openrig/agents/developer/guidance/role.md",
+      { "kind": "file", "path": "guidance/role.md", "absolutePath": "/home/me/.openrig/specs/openrig/agents/developer/guidance/role.md",
         "layer": "agent", "layerInferred": true, "delivery": "send_text", "required": true, "appliesOn": ["fresh_start", "restore"], "orientation": "role" },
-      { "kind": "file", "path": "CULTURE-default.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/jde/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start", "restore"] },
-      { "kind": "file", "path": "CULTURE.md", "absolutePath": "/home/jde/.ledge/rigs/ledge-dev/CULTURE.md", "layer": "culture", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/jde/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start", "restore"] },
-      { "kind": "file", "path": "guidance/scope-front.md", "absolutePath": "/home/jde/.ledge/rigs/ledge-dev/guidance/scope-front.md",
+      { "kind": "file", "path": "CULTURE-default.md", "layer": "openrig", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/me/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start", "restore"] },
+      { "kind": "file", "path": "CULTURE.md", "absolutePath": "/home/me/.ledge/rigs/ledge-dev/CULTURE.md", "layer": "culture", "layerInferred": true, "delivery": "guidance_merge", "into": "/home/me/Workspace/ledge/CLAUDE.md", "required": true, "appliesOn": ["fresh_start", "restore"] },
+      { "kind": "file", "path": "guidance/scope-front.md", "absolutePath": "/home/me/.ledge/rigs/ledge-dev/guidance/scope-front.md",
         "layer": "member", "layerInferred": true, "delivery": "send_text", "required": true, "appliesOn": ["fresh_start", "restore"] },
       "…openrig-start, onboarding 01/02, seat-skills, action d'identité, comme pour le lead…"
     ]
@@ -333,7 +333,7 @@ diffère du lead, avec un startup de membre :
 }
 ```
 
-Pour comparaison, `review.qa` (Codex) : `into` = `/home/jde/Workspace/ledge/AGENTS.md`, ressources
+Pour comparaison, `review.qa` (Codex) : `into` = `/home/me/Workspace/ledge/AGENTS.md`, ressources
 `shared:openrig-core` + `shared:codex-default-config`, et un second `openrig-seat-skills.md` en `send_text` généré sous
 `~/.openrig/state/seats/…/review.qa/codex` (couche `seat`).
 
