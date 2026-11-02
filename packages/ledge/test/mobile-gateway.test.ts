@@ -2093,6 +2093,52 @@ describe('phone gateway: a session\'s slash commands', () => {
   });
 });
 
+describe('phone gateway: a queue row\'s state (docs/mockups/ledge-openrig-messages.html, decision 2)', () => {
+  const ID = 'qitem-20261102211216-d6159d44d566f343';
+  const row = (state: string, summary = 'Back messages OpenRig') => ({ id: ID, state, summary, from: 'pilot-lead@ledge-dev-2', to: 'dev-back@ledge-dev-2', createdAt: T0, updatedAt: T1, at: T1 });
+  it('relays openrig.row to the local daemon and pushes its state, a change on the next ask; the snapshot says so', async () => {
+    const states = ['in-progress', 'handed-off'];
+    const g = setup({ dispatch: async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {
+      if (msg.type !== 'openrig.row') return;
+      reply({ type: 'openrig.rowState', requestId: 'someone-else', qitem: msg.qitem, row: row('done') });
+      reply({ type: 'openrig.rowState', requestId: msg.requestId, qitem: msg.qitem, row: { ...row(states.shift()!, 'S'.repeat(300)), handedOffTo: 'review-qa@ledge-dev-2' } });
+    } });
+    g.send('dev1', { type: 'snapshot.request' }); await flush();
+    expect(g.got('dev1')[0]).toMatchObject({ type: 'snapshot', daemon: { rigRows: true } });
+    g.send('dev1', { type: 'openrig.row', qitem: ID }); await flush();
+    g.send('dev1', { type: 'openrig.row', qitem: ID }); await flush();
+    expect(g.dispatched.filter(m => m.type === 'openrig.row')).toEqual([{ type: 'openrig.row', requestId: expect.any(String), qitem: ID }, { type: 'openrig.row', requestId: expect.any(String), qitem: ID }]);
+    const got = g.got('dev1').filter(m => m.type === 'openrig.rowState');
+    for (const m of got) expect(PhoneServerMessageSchema.safeParse(m).success).toBe(true);
+    expect(got.map(m => m.type === 'openrig.rowState' && m.row?.state)).toEqual(['in-progress', 'handed-off']);
+    expect(got[0]).toMatchObject({ qitem: ID, row: { handedOffTo: 'review-qa@ledge-dev-2', summary: expect.stringMatching(/^S+…?$/) } });
+    expect(got[0]!.type === 'openrig.rowState' && got[0]!.row!.summary!.length).toBeLessThanOrEqual(200);
+  });
+  it('no row, a daemon error and no answer in time push the row as not followed, never the daemon\'s text', async () => {
+    const g = setup({ dispatch: async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {
+      if (msg.type !== 'openrig.row') return;
+      reply({ type: 'openrig.rowState', requestId: msg.requestId, qitem: msg.qitem, error: msg.qitem === 'qitem-gone' ? 'not_found' : 'Error: rig failed in /home/me' });
+    } });
+    g.send('dev1', { type: 'openrig.row', qitem: 'qitem-gone' }); await flush();
+    g.send('dev1', { type: 'openrig.row', qitem: 'qitem-broken' }); await flush();
+    expect(g.got('dev1')).toEqual([{ type: 'openrig.rowState', qitem: 'qitem-gone', error: 'not_found' }, { type: 'openrig.rowState', qitem: 'qitem-broken', error: 'unavailable' }]);
+    // not a queue id: refused by the whitelist, never asked
+    g.send('dev1', { type: 'openrig.row', qitem: '--json' }); await flush();
+    expect(g.dispatched.filter(m => m.type === 'openrig.row')).toHaveLength(2);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const slow = setup({ dispatch: () => new Promise<void>(() => {}) });
+      for (let k = 0; k < 9; k++) slow.send('dev1', { type: 'openrig.row', qitem: `qitem-${k}` });
+      await flush();
+      // the ninth at once: a device holds at most eight reads
+      expect(slow.got('dev1')).toEqual([{ type: 'openrig.rowState', qitem: 'qitem-8', error: 'unavailable' }]);
+      vi.advanceTimersByTime(15_000); await flush();
+      expect(slow.got('dev1').filter(m => m.type === 'openrig.rowState')).toHaveLength(9);
+      expect(slow.got('dev1').every(m => m.type === 'openrig.rowState' && m.error === 'unavailable')).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
 describe('phone gateway: a session\'s model (#58)', () => {
   /** A daemon that answers each `session.model` with what `answer` gives, and `models.list` with `listing`. */
   const daemon = (o: { answer?: (m: Extract<ClientMessage, { type: 'session.model' }>) => ServerMessage[]; listing?: (m: Extract<ClientMessage, { type: 'models.list' }>) => ServerMessage[] } = {}) => async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {

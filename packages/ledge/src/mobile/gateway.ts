@@ -10,6 +10,7 @@ import {
 import { ModelRefusalSchema, type ModelRefusal, type Tool } from '@ledge/protocol';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
 import { BROADCAST_SESSIONS_MAX } from '@ledge/protocol';
+import { PHONE_ROW_SUMMARY_MAX } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -68,6 +69,10 @@ const REQUEST_NAME = /^[a-z][a-z.]{0,39}$/;
 const MODELS_WAIT_MS = 20_000;
 /** How long a phone's `session.commands` waits for the daemon's listing (whose Claude Code probe gives up after 20 s). */
 const COMMANDS_WAIT_MS = 25_000;
+/** How long a phone's `openrig.row` waits for the daemon (whose `rig queue show` gives up first), and how many of a device's
+ *  reads may run at once: each new row runs `rig` once, a row read again is the daemon's cache. */
+const ROW_WAIT_MS = 15_000;
+const ROWS_IN_FLIGHT = 8;
 
 export function createPhoneGateway(deps: {
   mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'>;
@@ -204,7 +209,7 @@ export function createPhoneGateway(deps: {
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, rigRows: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
       ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), broadcast: true as const },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
@@ -607,6 +612,32 @@ export function createPhoneGateway(deps: {
     push(deviceId, { type: 'session.commands.listing', id, commands: toPhoneCommands(listing.commands) });
   };
 
+  /** A queue row's state for an OpenRig task card (docs/mockups/ledge-openrig-messages.html, decision 2), asked of the local
+   *  daemon like a Desktop card's (its cache included). `not_found`, or `unavailable` for anything else: never the daemon's text. */
+  const rowsInFlight = new Map<string, number>();
+  const rowRead = async (deviceId: string, qitem: string) => {
+    const busy = rowsInFlight.get(deviceId) ?? 0;
+    if (busy >= ROWS_IN_FLIGHT) return push(deviceId, { type: 'openrig.rowState', qitem, error: 'unavailable' });
+    rowsInFlight.set(deviceId, busy + 1);
+    const requestId = randomUUID();
+    let answer: Extract<ServerMessage, { type: 'openrig.rowState' }> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        deps.dispatch({ type: 'openrig.row', requestId, qitem }, m => { if (m.type === 'openrig.rowState' && m.requestId === requestId) answer ??= m; }),
+        new Promise<void>(r => { timer = setTimeout(r, ROW_WAIT_MS); })
+      ]);
+    } catch (e) { log(`phone openrig.row failed (${e instanceof Error ? e.name : 'error'})`); }
+    finally {
+      clearTimeout(timer);
+      const left = (rowsInFlight.get(deviceId) ?? 1) - 1;
+      if (left > 0) rowsInFlight.set(deviceId, left); else rowsInFlight.delete(deviceId);
+    }
+    const row = answer?.row;
+    if (!row) return push(deviceId, { type: 'openrig.rowState', qitem, error: answer?.error === 'not_found' ? 'not_found' : 'unavailable' });
+    push(deviceId, { type: 'openrig.rowState', qitem, row: { ...row, ...(row.summary !== undefined ? { summary: clip(row.summary, PHONE_ROW_SUMMARY_MAX).text } : {}) } });
+  };
+
   const chatTask = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.task' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     const card = turn?.tasks?.[msg.row];
@@ -834,6 +865,9 @@ export function createPhoneGateway(deps: {
       case 'session.commands':
         if (!live(msg.id)) return push(deviceId, { type: 'session.commands.listing', id: msg.id, commands: [], error: true });
         void commandsList(deviceId, msg.id).catch((e: unknown) => log(`phone session.commands failed (${e instanceof Error ? e.name : 'error'})`));
+        return;
+      case 'openrig.row':
+        void rowRead(deviceId, msg.qitem).catch((e: unknown) => log(`phone openrig.row failed (${e instanceof Error ? e.name : 'error'})`));
         return;
       case 'snapshot.request':
         follower(deviceId).subscribed = true;
