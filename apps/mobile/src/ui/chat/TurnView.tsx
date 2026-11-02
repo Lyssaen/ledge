@@ -8,7 +8,6 @@ import { CloseCards } from './CloseCard';
 import { LaunchCards } from './LaunchCard';
 import { RelayCard } from './RelayCard';
 import { TaskCards } from './TaskCard';
-import { TeamCard } from './TeamCard';
 import { buttonClass } from '../Button';
 import { Icon } from '../icons';
 
@@ -78,9 +77,8 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop
       {!live && turn.closes && <CloseCards store={store} qid={turn.qid} closes={turn.closes} canConfirm={canConfirm} sessions={list} />}
       {!live && !turn.closes && relay && <RelayCard store={store} qid={turn.qid} relay={relay} target={list.find(x => x.id === relay.id)} known={list.some(x => x.id === relay.id)} ignoredAt={turn.ignoredAt} />}
       {!live && !turn.closes && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} ignoredAt={turn.ignoredAt} />}
-      {!live && turn.team && <TeamCard store={store} qid={turn.qid} team={turn.team} canConfirm={canConfirm} ignoredAt={turn.ignoredAt} />}
       {!live && turn.actions && <ActionCards store={store} qid={turn.qid} actions={turn.actions} ignoredAt={turn.ignoredAt} canConfirm={canConfirm} />}
-      {!live && turn.tasks && turn.tasks.length > 0 && <TaskCards store={store} qid={turn.qid} tasks={turn.tasks} waiting={!!turn.team && turn.team.teamId === undefined} />}
+      {!live && turn.tasks && turn.tasks.length > 0 && <TaskCards store={store} qid={turn.qid} tasks={turn.tasks} />}
       {live && (
         <button type="button" onClick={onStop} className={buttonClass({ size: 'sm', className: 'self-start' })}>
           <Icon name="stop" className="size-3.5" />

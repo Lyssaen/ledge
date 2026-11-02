@@ -25,7 +25,7 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     return {
       applied, emitted,
       d: { chat: c.chat, emit: (m: ChatMessage) => emitted.push(m), inFlight: new Set<string>(), now: () => '2026-10-26T10:00:00.000Z',
-        resolve: (r: ChatAction) => r, apply: async (r: ChatAction) => { applied.push(String(r.args.session ?? r.args.team)); }, ...extra }
+        resolve: (r: ChatAction) => r, apply: async (r: ChatAction) => { applied.push(String(r.args.session ?? r.args.task)); }, ...extra }
     };
   };
 
@@ -66,15 +66,15 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     await expect(actFromChat(d, 'q1')).rejects.toThrow(new ActRefused('already done'));
   });
   it('refuses a destructive row without the confirmation, and applies nothing', async () => {
-    const c = card([row('session.archive', { session: 'a' }), row('team.dissolve', { team: 't' }, { risk: 'destructive' })]);
+    const c = card([row('session.archive', { session: 'a' }), row('task.cancel', { task: 't' }, { risk: 'destructive' })]);
     const { d, applied } = deps(c);
     const e = await actFromChat(d, 'q1').then(() => null, (x: unknown) => x as ActRefused);
     expect(e).toBeInstanceOf(ActRefused); expect(e?.code).toBe('confirm_required');
     expect(applied).toEqual([]); expect(c.marks).toEqual([]);
     expect(await actFromChat(d, 'q1', undefined, true)).toEqual({ done: [0, 1], failed: [] });
   });
-  it('one confirmation applies every team.dissolve of a plan, in order', async () => {
-    const c = card(['t1', 't2', 't3'].map(t => row('team.dissolve', { team: t }, { risk: 'destructive' })));
+  it('one confirmation applies every task.cancel of a plan, in order', async () => {
+    const c = card(['t1', 't2', 't3'].map(t => row('task.cancel', { task: t }, { risk: 'destructive' })));
     const { d, applied } = deps(c);
     await expect(actFromChat(d, 'q1')).rejects.toThrow(ActRefused);
     expect(await actFromChat(d, 'q1', undefined, true)).toEqual({ done: [0, 1, 2], failed: [] });
@@ -153,14 +153,14 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
       expect(applied).toEqual(['a']);
     });
     it('refuses a row that is not a request, and sends nothing', async () => {
-      const c = card([accept(), row('team.dissolve', { team: 't' }, { risk: 'destructive' })]);
+      const c = card([accept(), row('task.cancel', { task: 't' }, { risk: 'destructive' })]);
       const { d, applied } = deps(c);
       await expect(actFromChat(d, 'q1', undefined, undefined, true)).rejects.toThrow('only a request is refused');
       expect(applied).toEqual([]);
     });
   });
-  it('the same args at another risk (a template saved meanwhile) is refused: it was confirmed at the old one', async () => {
-    const c = card([row('team.save', { team: 't', name: 'api', seats: [] })]);
+  it('the same args at another risk is refused: it was confirmed at the old one', async () => {
+    const c = card([row('session.archive', { session: 'a' })]);
     const { d, applied } = deps(c, { resolve: (r: ChatAction) => ({ ...r, risk: 'destructive' as const }) });
     expect((await actFromChat(d, 'q1')).failed).toEqual([{ row: 0, message: 'the target has changed since the card', refused: true }]);
     expect(applied).toEqual([]);

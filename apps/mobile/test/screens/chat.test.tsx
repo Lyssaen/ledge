@@ -5,7 +5,6 @@ import { copy } from '../../src/copy';
 import { Agents } from '../../src/screens/Agents';
 import { Chat } from '../../src/screens/Chat';
 import { Inbox } from '../../src/screens/Inbox';
-import { TabBar } from '../../src/ui/TabBar';
 import { session } from '../model/fixtures';
 import { chat, snapshot } from '../state/helpers';
 import { app } from './app-setup';
@@ -24,34 +23,27 @@ const type = (text: string) => fireEvent.change(screen.getByLabelText('Question 
 const send = () => fireEvent.click(screen.getByRole('button', { name: 'Envoyer la question' }));
 
 describe('the tab bar', () => {
-  it('has three tabs without device.chat, in the inbox and in the agents', () => {
+  it('has two tabs without device.chat, in the inbox and in the agents', () => {
     const t = setup();
     t.deliver(snapshot([session('a')]));
     const { unmount } = render(<Inbox store={t.store} />);
-    expect(within(nav()).getAllByRole('link')).toHaveLength(3);
+    expect(within(nav()).getAllByRole('link')).toHaveLength(2);
     unmount();
     render(<Agents store={t.store} />);
-    expect(within(nav()).getAllByRole('link')).toHaveLength(3);
+    expect(within(nav()).getAllByRole('link')).toHaveLength(2);
   });
 
-  it('active="teams" marks « Équipes » as the current page, linking #/teams', () => {
-    render(<TabBar count={0} chat active="teams" />);
-    expect(within(nav()).getByRole('link', { name: 'Équipes' })).toHaveAttribute('aria-current', 'page');
-    expect(within(nav()).getByRole('link', { name: 'Équipes' })).toHaveAttribute('href', '#/teams');
-    expect(within(nav()).getAllByRole('link').filter(a => a.getAttribute('aria-current') === 'page')).toHaveLength(1);
-  });
-
-  it('has four tabs with device.chat: Ledge, À traiter, Agents, Équipes', () => {
+  it('has three tabs with device.chat: Ledge, À traiter, Agents', () => {
     const t = setup();
     t.deliver(snapshot([session('a')], 'Atelier', undefined, ON));
     const { unmount } = render(<Inbox store={t.store} />);
-    expect(within(nav()).getAllByRole('link')).toHaveLength(4);
-    expect(within(nav()).getAllByRole('link').map(a => a.textContent?.replace(/\d+$/, ''))).toEqual(['Ledge', 'À traiter', 'Agents', 'Équipes']);
+    expect(within(nav()).getAllByRole('link')).toHaveLength(3);
+    expect(within(nav()).getAllByRole('link').map(a => a.textContent?.replace(/\d+$/, ''))).toEqual(['Ledge', 'À traiter', 'Agents']);
     expect(within(nav()).getAllByRole('link')[0]).toHaveAccessibleName('Ledge');
     expect(within(nav()).getByRole('link', { name: 'Ledge' })).toHaveAttribute('href', '#/chat');
     unmount();
     render(<Agents store={t.store} />);
-    expect(within(nav()).getAllByRole('link')).toHaveLength(4);
+    expect(within(nav()).getAllByRole('link')).toHaveLength(3);
   });
 
   it('#/chat goes back to the inbox without device.chat', async () => {
@@ -69,9 +61,9 @@ describe('the tab bar', () => {
 });
 
 describe('the chat screen', () => {
-  it('an empty thread says so and offers suggestions with real names; a tap puts one in the field', () => {
+  it('an empty thread opens on « Le point » and offers suggestions with real names; a tap puts one in the field', () => {
     chatSetup();
-    expect(screen.getByText(copy.chat.empty)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: copy.chat.point.label })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Qui attend quelque chose de moi ?' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Où en est Bix sur le badge d\'attente ?' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Qu\'est-ce qui a changé dans ledge aujourd\'hui ?' }));

@@ -176,15 +176,15 @@ describe('prototype parity', () => {
     expect(within(view).queryByText(/passed|tests? ran|all green|✓/i)).toBeNull();
   });
 
-  it('large and empty teams fit', () => {
+  it('large and empty fleets fit', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver); FakeResizeObserver.all = [];
     snapshot([]);
     const { unmount } = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
     expect(surface()).toHaveStyle({ width: `${filetWidth([])}px`, height: '10px' });
     unmount();
 
-    const team = Array.from({ length: 12 }, (_, i) => fakeSession(`s${String(i).padStart(2, '0')}`, { name: `Bot${i}`, ...(i % 4 === 1 ? asks(`cmd ${i}`) : {}) }));
-    snapshot(team);
+    const bots = Array.from({ length: 12 }, (_, i) => fakeSession(`s${String(i).padStart(2, '0')}`, { name: `Bot${i}`, ...(i % 4 === 1 ? asks(`cmd ${i}`) : {}) }));
+    snapshot(bots);
     const big = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={() => {}} />);
     // Every session is a dash, asks first; the filet stays inside the 1024 px viewport.
     const buttons = within(layer('handle')).getAllByRole('button', { name: /open$/ }).filter(b => !b.hasAttribute('data-resident'));

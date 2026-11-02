@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BRIEF_MAX, isArchived, taskClosed, type ClientMessage, type Handover, type Session, type Task, type Team, type Tool } from '@ledge/protocol';
+import { BRIEF_MAX, isArchived, taskClosed, type ClientMessage, type Handover, type Session, type Task, type Tool } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { log } from '../log.js';
@@ -17,9 +17,8 @@ export interface HandoverDeps {
   /** The request for a brief goes before anything waiting: past the brief's deadline Ledge writes an empty one. */
   mailbox: Pick<Mailbox, 'notify'>;
   tasks: { run(cmd: TaskCmd): { reason?: string }; all(): Task[] };
-  teams: { get(id: string): Team | undefined };
-  /** Launches the relief as `session.launch` would (its role seats it at its team's table). */
-  launch(req: { tool: Tool; cwd: string; prompt: string; model?: string; effort?: string; role?: string; team?: string }): Promise<Session>;
+  /** Launches the relief as `session.launch` would. */
+  launch(req: { tool: Tool; cwd: string; prompt: string; model?: string; effort?: string }): Promise<Session>;
   /** Stops the relieved session's agent. */
   close(s: Session): Promise<unknown>;
   /** Where briefs are kept, one `<session id>.md` each. */
@@ -38,7 +37,7 @@ export interface Handovers {
   close(): void;
 }
 
-/** The live session a relieved one handed its seat to, down the chain of reliefs; none once the chain has ended. */
+/** The live session a relieved one handed its work to, down the chain of reliefs; none once the chain has ended. */
 export function reliefOf(get: (id: string) => Session | undefined, s: Session): Session | undefined {
   let cur: Session | undefined = s;
   for (let hops = 0; cur && hops < 50; hops++) {
@@ -49,7 +48,7 @@ export function reliefOf(get: (id: string) => Session | undefined, s: Session): 
   return undefined;
 }
 
-/** Names of relieved sessions whose seat still lives: no other launch takes them, so a message to one still reaches its seat. */
+/** Names of relieved sessions whose relief still lives: no other launch takes them, so a message to one still reaches its relief. */
 export function heldNames(all: Session[]): string[] {
   const byId = new Map(all.map(s => [s.id, s] as const));
   return all.filter(s => s.handover?.state === 'done' && reliefOf(id => byId.get(id), s)).map(s => s.name);
@@ -66,7 +65,7 @@ const quote = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}�
 
 /**
  * The relief of a session whose context is nearly full (context handover spec §3.3): its brief asked at its next free
- * moment, a fresh session at the same seat given that brief, its open tasks passed to it, and the old one closed.
+ * moment, a fresh session in the same folder given that brief, its open tasks passed to it, and the old one closed.
  */
 export function createHandovers(d: HandoverDeps): Handovers {
   const now = d.now ?? (() => new Date().toISOString());
@@ -100,11 +99,8 @@ export function createHandovers(d: HandoverDeps): Handovers {
     try { mkdirSync(d.dir, { recursive: true }); writeFileSync(file(id), `${brief.trim()}\n`); }
     catch (e) { log(`brief of ${id} not kept: ${(e as Error).message}`); }
     mark(id, { state: 'launching', ...(auto ? { auto: true } : {}) });
-    const team = s.team ? d.teams.get(s.team) : undefined;
-    const live = team && team.state !== 'dissolved' ? team : undefined;
-    const seat = s.role ? ` (@${s.role}${live ? `, équipe ${live.name}` : ''})` : '';
     const prompt = [
-      `Tu prends la relève de ${s.name}${seat}, dont le contexte était plein. Voici son bilan :`,
+      `Tu prends la relève de ${s.name}, dont le contexte était plein. Voici son bilan :`,
       '',
       quote(brief.trim(), PROMPT_BRIEF_MAX),
       '',
@@ -112,8 +108,7 @@ export function createHandovers(d: HandoverDeps): Handovers {
     ].join('\n');
     let relief: Session;
     try {
-      relief = await d.launch({ tool: s.tool, cwd: s.cwd, prompt, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}),
-        ...(s.role ? { role: s.role } : {}), ...(s.role && live ? { team: live.id } : {}) });
+      relief = await d.launch({ tool: s.tool, cwd: s.cwd, prompt, ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}) });
     } catch (e) {
       const reason = (e as Error).message;
       log(`relief of ${s.name} (${id}) not launched: ${reason}`);
@@ -128,8 +123,6 @@ export function createHandovers(d: HandoverDeps): Handovers {
       const r = d.tasks.run({ type: 'task.cmd', rid: `handover-${t.id}`, by: id, op: 'pass', task: t.id, to: relief.id, text: `relève de ${s.name}` });
       if (r.reason) log(`task ${t.id} not passed to ${relief.name}: ${r.reason}`);
     }
-    // Its seat is the relief's now (the launch took it): the old record leaves the table.
-    if (s.team) d.store.patch(id, { team: undefined });
     const cur = d.store.get(id);
     if (cur && cur.state !== 'exited') await d.close(cur).catch(e => log(`relieved ${id} not closed: ${(e as Error).message}`));
     mark(id, { state: 'done', to: relief.id, toName: relief.name, ...(auto ? { auto: true } : {}) });

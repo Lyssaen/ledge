@@ -3,7 +3,7 @@ import { fakeDaemon, session } from './daemon';
 import { hoverHandle } from './scenarios';
 import { filetWidth } from '../src/surface/geometry';
 
-const team = () => [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada' })];
+const trio = () => [session('a'), session('b', { name: 'Pim', project: 'speos-api' }), session('c', { name: 'Ada' })];
 const box = async (l: import('@playwright/test').Locator) => (await l.boundingBox())!;
 const storeScales = (page: import('@playwright/test').Page, s: { handle?: string; panel?: string }) =>
   page.addInitScript(v => { try { if (v.handle) localStorage.setItem('ledge.handleScale', v.handle); if (v.panel) localStorage.setItem('ledge.panelScale', v.panel); } catch { /* ignore */ } }, s);
@@ -12,7 +12,7 @@ test.describe('4K work area', () => {
   test.use({ viewport: { width: 3840, height: 2160 } });
 
   test('both on Auto: the handle and its bots at 2x, the windows at their base size', async ({ page }) => {
-    await fakeDaemon(page, team());
+    await fakeDaemon(page, trio());
     await ready(page, 3);
     await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '2');
     await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');
@@ -29,7 +29,7 @@ test.describe('4K work area', () => {
   });
 
   test('hovering the 2x handle leaves it folded while a new companion arrives', async ({ page }) => {
-    const d = await fakeDaemon(page, team());
+    const d = await fakeDaemon(page, trio());
     await ready(page, 3);
     await hoverHandle(page);
     await page.mouse.move(1920, 200, { steps: 4 });
@@ -56,7 +56,7 @@ test.describe('4K work area', () => {
 
   test('a stored single Size from an older version applies to both', async ({ page }) => {
     await page.addInitScript(() => { try { if (!sessionStorage.getItem('migrated')) { localStorage.setItem('ledge.uiScale', '1.25'); sessionStorage.setItem('migrated', '1'); } } catch { /* ignore */ } });
-    await fakeDaemon(page, team());
+    await fakeDaemon(page, trio());
     await ready(page, 3);
     await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1.25');
     await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1.25');
@@ -65,7 +65,7 @@ test.describe('4K work area', () => {
 });
 
 test('at 1920x1080 both Autos stay at 100%', async ({ page }) => {
-  await fakeDaemon(page, team());
+  await fakeDaemon(page, trio());
   await ready(page, 3);
   await expect(page.locator('html')).toHaveAttribute('data-handle-scale', '1');
   await expect(page.locator('html')).toHaveAttribute('data-panel-scale', '1');

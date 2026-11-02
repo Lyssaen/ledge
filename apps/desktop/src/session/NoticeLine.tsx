@@ -38,13 +38,13 @@ export function NoticeLine({ item, peer, onOpenPeer, onOpenTask }: NoticeLinePro
       break;
     }
     // A task: given to this session, or (issue #92) one it handed over, said by what it did.
-    default: title = item.task ? (item.outgoing && item.taskOp ? tn.taskOut[item.taskOp](name) : tn.taskFrom(name)) : item.team ? tn.teamJoined : tn.other;
+    default: title = item.task ? (item.outgoing && item.taskOp ? tn.taskOut[item.taskOp](name) : tn.taskFrom(name)) : tn.other;
   }
-  // A task Ledge or a teammate gave (roles spec §3.5), or a team joined: « TÂCHE » / « ÉQUIPE » instead of « Avis automatique ».
-  const kicker = item.task ? tn.task : item.team ? tn.team : tn.kicker;
+  // A task Ledge or another session gave (roles spec §3.5): « TÂCHE » instead of « Avis automatique ».
+  const kicker = item.task ? tn.task : tn.kicker;
   const warn = item.notice === 'unavailable' || item.notice === 'expired' || (item.notice === 'delivery' && WARN.has(item.status ?? ''));
   return (
-    <div className={cls('notice-line', warn && 'warn', item.task && 'notice-task', item.team && 'notice-team')} data-notice={item.id} role="note" title={item.text}>
+    <div className={cls('notice-line', warn && 'warn', item.task && 'notice-task')} data-notice={item.id} role="note" title={item.text}>
       <div className="notice-head">
         <span className="notice-kicker"><Icon d={SHELL_ICONS.mail} size={12} />{kicker}</span>
         <span className="notice-title">{title}</span>

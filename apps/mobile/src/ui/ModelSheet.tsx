@@ -16,7 +16,7 @@ const ROW = 'flex min-h-12 w-full items-center gap-3 rounded-control border bord
 export function ModelSheet({ tool, models, error, current, pick, onPick, note, actions, defaultHint = copy.model.defaultHint }: {
   tool: string; models: PhoneModelChoice[]; error: boolean | undefined; current: Pick; pick: Pick; onPick: (p: Pick) => void;
   note: string; actions: ReactNode;
-  /** What « Par défaut » gives; the agent's own choice unless the caller knows better (a seat's role). */ defaultHint?: string;
+  /** What « Par défaut » gives; the agent's own choice unless the caller knows better. */ defaultHint?: string;
 }) {
   const known = current.model === null || models.some(m => m.id === current.model);
   const levels = efforts(tool, models, pick);

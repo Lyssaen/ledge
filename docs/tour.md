@@ -6,7 +6,7 @@ All captures below are the real app, in French (its default language, English is
 
 ## Ledge Desktop
 
-Ledge Desktop is the main window. It opens on Ledge's home view, where you talk to Ledge, the operator: four tabs, « Conversation » (the chat at full width, with « Le point »: what waits for you, the teams, what Ledge handed out), « Équipes » (live teams, templates and roles), « Tâches » (every task, and the decisions waiting for you) and « Historique » (today's conversations). `/` comes back to it; « Retour à l'atelier » or Échap leads to the atelier.
+Ledge Desktop is the main window. It opens on Ledge's home view, where you talk to Ledge, the operator: three tabs, « Conversation » (the chat at full width, with « Le point »: what waits for you and what Ledge handed out), « Tâches » (every task, and the decisions waiting for you) and « Historique » (today's conversations). `/` comes back to it; « Retour à l'atelier » or Échap leads to the atelier.
 
 The atelier gives each project a table: the agents sit around it, their topics lie on it as sheets, their subagents stand at the ends. The sidebar holds « Accueil », « À toi » (every request waiting, oldest first, answered in place) and the project tree by branch. When an agent writes to another, a bubble opens over the sender and a dotted line runs to the receiver's seat.
 

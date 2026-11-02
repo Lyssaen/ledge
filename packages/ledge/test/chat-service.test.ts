@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { NOTE_MAX, parseServerMessage, type Projects, type ServerMessage, type Session, type Team } from '@ledge/protocol';
+import { NOTE_MAX, parseServerMessage, type Projects, type ServerMessage, type Session, type Task } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createChat, droppedNote, tooWide, TOO_MANY } from '../src/chat/service.js';
 
@@ -625,21 +625,21 @@ describe('ledge-action blocks (spec 2026-10-26 action registry §3)', () => {
     expect(done.actions).toEqual([expect.objectContaining({ action: 'session.archive', args: { session: 'a1' } })]);
     expect(logged).toContain('chat q1: action ignored: Bram is still running: close it first');
   });
-  it('a plan of three team.dissolve keeps its three rows: none is dropped past the first', async () => {
+  it('a plan of three task.cancel keeps its three rows: none is dropped past the first', async () => {
     const T0 = '2026-10-11T08:00:00.000Z';
-    const team = (id: string): Team => ({ id, name: id, project: null, machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: T0, updatedAt: T0 });
-    const ids = ['team-a1', 'team-b2', 'team-c3'];
-    const answer = 'Je dissous les trois équipes.\n\n' + ids.map(t => act('team.dissolve', { team: t })).join('\n');
-    const { done } = await askWith(answer, [], { teams: () => ids.map(team) });
-    expect(done.actions?.map(a => a.args)).toEqual(ids.map(t => ({ team: t })));
+    const task = (id: string): Task => ({ id, title: id, giver: 'ledge', giverName: 'Ledge', owner: 'a1', ownerName: 'Arlo', state: 'open', at: T0, updatedAt: T0, log: [] });
+    const ids = ['t000001', 't000002', 't000003'];
+    const answer = 'J’annule les trois tâches.\n\n' + ids.map(t => act('task.cancel', { task: t })).join('\n');
+    const { done } = await askWith(answer, [session('a1', { name: 'Arlo' })], { tasks: () => ids.map(task) });
+    expect(done.actions?.map(a => a.args)).toEqual(ids.map(t => ({ task: t })));
     expect(done.actions!.every(a => a.risk === 'destructive')).toBe(true);
-    expect(logged.some(l => l.includes('team.dissolve beyond'))).toBe(false);
+    expect(logged.some(l => l.includes('task.cancel beyond'))).toBe(false);
   });
   it('droppedNote: nothing when the card holds every action; else the count, the reasons, the others counted together', () => {
     expect(droppedNote(0, 0, [], 0)).toBe('');
     expect(droppedNote(3, 3, [], 0)).toBe('');
     expect(droppedNote(1, 0, [], 0)).toBe('Note : la carte ne reprend pas l’action proposée.');
-    expect(droppedNote(4, 1, ['3 team.dissolve de trop : une seule par réponse'], 3)).toBe('Note : la carte ne reprend que 1 des 4 actions proposées (3 team.dissolve de trop : une seule par réponse).');
+    expect(droppedNote(4, 1, ['3 session.decide de trop : une seule par réponse'], 3)).toBe('Note : la carte ne reprend que 1 des 4 actions proposées (3 session.decide de trop : une seule par réponse).');
     expect(droppedNote(4, 0, ['1 en double'], 1)).toBe('Note : la carte ne reprend aucune des 4 actions proposées (1 en double ; 3 autres).');
   });
   it('says under the answer what the card dropped: an action past its cap, a target Ledge cannot find, a block it cannot read', async () => {

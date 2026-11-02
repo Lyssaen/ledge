@@ -13,7 +13,7 @@ const at = new Date(AT).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '
 const plan: ActionRowView[] = [
   { summary: 'Passer **Nova** sur Opus 5.5, effort élevé', risk: 'reversible', action: 'session.model' },
   { summary: 'Archiver **Otto**', risk: 'reversible', action: 'session.archive' },
-  { summary: 'Dissoudre l’équipe **ledge-roles**', risk: 'destructive', action: 'team.dissolve', detail: 'Ses 6 sessions retournent à la table commune.' }
+  { summary: 'Annuler la tâche « Relire » de **Max**', risk: 'destructive', action: 'task.cancel', detail: 'Max est prévenu ; la tâche ne peut pas être rouverte.' }
 ];
 const permission: ActionRowView = {
   summary: 'Accepter la demande de **Nova**', risk: 'destructive', action: 'session.decide', target: 'Nova',
@@ -27,7 +27,7 @@ describe('the action card in the Desktop\'s words (#94)', () => {
   it('a plan, as the mockup words it', () => {
     show(plan);
     expect(screen.getByRole('region', { name: 'Plan de 3 actions' })).toBeTruthy();
-    for (const name of ['Changer', 'Archiver', 'Dissoudre…', 'Tout appliquer (3)…', 'Ignorer']) expect(screen.getByRole('button', { name })).toBeTruthy();
+    for (const name of ['Changer', 'Archiver', 'Abandonner…', 'Tout appliquer (3)…', 'Ignorer']) expect(screen.getByRole('button', { name })).toBeTruthy();
     expect(document.body).toHaveTextContent('Irréversible');
     expect(document.body).toHaveTextContent('· je te redemanderai');
     expect(document.body).toHaveTextContent('dans l’ordre, s’arrête au premier échec · 1 irréversible, je te redemanderai');

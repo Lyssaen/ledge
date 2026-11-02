@@ -4,14 +4,14 @@ Ce guide est écrit à la main et versionné avec le code. Ledge le recopie dans
 
 ## Ce qu'est Ledge
 
-Ledge veille sur les sessions d'agents de l'utilisateur : Claude Code, Codex, Cursor Agent et OMP, lancés dans WSL ou sur un serveur SSH. Il montre ce que fait chaque agent et ce qu'il attend. Il permet de répondre à une demande sans ouvrir son terminal, de lancer des sessions et de monter des équipes.
+Ledge veille sur les sessions d'agents de l'utilisateur : Claude Code, Codex, Cursor Agent et OMP, lancés dans WSL ou sur un serveur SSH. Il montre ce que fait chaque agent et ce qu'il attend. Il permet de répondre à une demande sans ouvrir son terminal et de lancer des sessions.
 
-- **Le daemon** (`ledge daemon`, paquet npm `@paradow/ledge`) tourne dans WSL ou sur un serveur. Il suit les sessions par leurs hooks et par tmux, garde les projets, les équipes, les tâches et les messages entre sessions, et fait tourner le chat de Ledge. La CLI `ledge` lui parle :
+- **Le daemon** (`ledge daemon`, paquet npm `@paradow/ledge`) tourne dans WSL ou sur un serveur. Il suit les sessions par leurs hooks et par tmux, garde les projets, les tâches et les messages entre sessions, et fait tourner le chat de Ledge. La CLI `ledge` lui parle :
   - `ledge claude|codex|cursor` lance un agent suivi ;
   - `ledge attach <id>` met le terminal sur une session ;
   - `ledge who` et `ledge status` listent les sessions ;
   - `ledge send` et `ledge read` servent aux messages entre sessions ;
-  - `ledge task`, `ledge decide`, `ledge team`, `ledge handover` et `ledge close` gèrent les tâches, les décisions, les équipes, la passation de relais et la fermeture ;
+  - `ledge task`, `ledge decide`, `ledge handover` et `ledge close` gèrent les tâches, les décisions, la passation de relais et la fermeture ;
   - `ledge tui` est Ledge dans un terminal ;
   - `ledge setup` et `ledge uninstall` installent et retirent les hooks et `~/.ledge`.
 - **Ledge Desktop** est l'application Windows : la fenêtre principale (accueil, atelier, sessions, réglages) et l'**encoche**.
@@ -51,24 +51,16 @@ L'application s'ouvre ici. On y vient aussi par `/` ou par l'entrée « Accueil 
 #### Conversation (`conversation`)
 
 C'est la conversation avec Ledge, en pleine largeur.
-- On y pose des questions et on mentionne une session ou une équipe.
+- On y pose des questions et on mentionne une session.
 - On y valide les cartes que Ledge propose.
-- Le panneau « Le point » résume trois sections : « À toi », « Équipes » et « Confiées par Ledge ». Le bouton « Résumer la journée » est là aussi.
+- Le panneau « Le point » résume deux sections : « À toi » et « Confiées par Ledge ». Le bouton « Résumer la journée » est là aussi.
 
 Y renvoyer l'utilisateur pour une longue discussion avec Ledge, ou pour faire le point sur la journée.
-
-#### Équipes (`teams`)
-
-Le catalogue a trois parties : « En cours » (les équipes actives), « Modèles » et « Rôles ».
-- Les boutons « Lancer une session », « Monter une équipe… » et « Lancer cette équipe… » sont ici.
-- Les rôles et les modèles se lisent ici mais se modifient dans leurs fichiers : `~/.ledge/roles/<id>.md` et `~/.ledge/teams/<id>.yaml`, ou les mêmes sous `<dépôt>/.ledge/`.
-
-Y renvoyer l'utilisateur pour voir ou monter une équipe, ou pour consulter un rôle.
 
 #### Tâches (`tasks`)
 
 Toutes les tâches données entre sessions et par Ledge.
-- Filtres : « Toutes / Ouvertes / Closes », donneur, équipe, « Décisions ».
+- Filtres : « Toutes / Ouvertes / Closes », donneur, « Décisions ».
 - Une tâche ouverte montre son résultat, sa raison et son historique.
 - Une décision se tranche ici : « Répondre », puis « Envoyer la réponse », puis « Confirmer l'envoi ».
 
@@ -80,10 +72,8 @@ Les conversations du jour avec Ledge, chacune avec « Voir dans la conversation 
 
 ### Atelier (`overview`)
 
-On y vient par Échap depuis l'accueil ou une session, par « Retour à l'atelier », ou par la vue « Atelier » de la barre latérale. Chaque projet est une table, avec ses agents assis autour et leurs sous-agents en petits bots. Une équipe a sa pièce.
+On y vient par Échap depuis l'accueil ou une session, par « Retour à l'atelier », ou par la vue « Atelier » de la barre latérale. Chaque projet est une table, avec ses agents assis autour et leurs sous-agents en petits bots.
 - Le menu d'une table propose « Nouvelle session », « Modifier le projet » et « Isoler cette table ».
-- Le menu d'une pièce propose « Nouvelle équipe ici… ».
-- Le menu d'une équipe propose « Voir les tâches » et « Dissoudre l'équipe ».
 - On range une session en la glissant sur une table.
 - Le zoom se règle au clavier (+, −, 0) ou avec `Ctrl` + molette.
 - Le bureau « Parler à Ledge » ouvre le chat ancré.
@@ -170,10 +160,9 @@ S'ouvre par `?`. Liste complète des raccourcis.
 #### Nouvelle session (`launch`)
 
 S'ouvre par `N` dans l'atelier, `Ctrl+Alt+N` partout, « Nouvelle session » dans la barre latérale ou un menu de table.
-- **Champs :** consigne, agent (Claude Code, Codex, Cursor Agent, OMP), modèle et effort, projet, machine, dossiers et dépôts, rôle éventuel.
-- **Mode équipe :** « Nouvelle équipe ». On choisit un modèle, ou des sièges un par un, et le nom de l'équipe.
+- **Champs :** consigne, agent (Claude Code, Codex, Cursor Agent, OMP), modèle et effort, projet, machine, dossiers et dépôts.
 
-Y renvoyer l'utilisateur pour lancer lui-même une session ou une équipe avec des réglages précis.
+Y renvoyer l'utilisateur pour lancer lui-même une session avec des réglages précis.
 
 #### Projet (`project`)
 
@@ -185,7 +174,7 @@ Crée (« Nouveau projet »), modifie ou supprime un projet. On y donne son nom,
 
 ## Ledge mobile
 
-Une application web pour le téléphone, avec quatre onglets en bas : « À traiter », « Agents », « Ledge », « Équipes ». Pour la lier :
+Une application web pour le téléphone, avec trois onglets en bas : « À traiter », « Agents », « Ledge ». Pour la lier :
 1. Sur le PC, dans Réglages › Accès mobile, activer l'accès, choisir le relais et se connecter avec GitHub.
 2. Sur le téléphone, ouvrir l'adresse du relais et se connecter avec le même compte.
 3. Comparer le code affiché sur les deux appareils et approuver sur le PC.
@@ -196,11 +185,11 @@ Les demandes en attente, les plus anciennes d'abord, filtrées par type (autoris
 
 ### Agents (`agents`)
 
-Les sessions par projet et par table, avec les tables d'équipe. Une session ouvre son fil, l'en-tête d'une équipe ouvre l'équipe en cours.
+Les sessions par projet. Une session ouvre son fil.
 
 ### Ledge (`chat`)
 
-Le chat de Ledge sur le téléphone, avec « Le point ». Les cartes proposent une session, une équipe ou une tâche. Cette conversation est propre au téléphone.
+Le chat de Ledge sur le téléphone, avec « Le point ». Les cartes proposent une session ou une tâche. Cette conversation est propre au téléphone.
 
 ### Fil d'une session (`thread`)
 
@@ -218,30 +207,6 @@ Une demande seule : autorisation, question, plan ou modifications. On l'approuve
 
 S'ouvre depuis l'état de la liaison en en-tête. On y voit le PC, le compte, le serveur et les empreintes, et on y règle l'apparence. « Le PC » met à jour ou redémarre le daemon du PC. On peut aussi s'y déconnecter.
 
-### Équipes (`teams`)
-
-Les équipes et les rôles. « Nouvelle équipe », « Nouveau rôle ». « Lever » lance une équipe dans un projet, après confirmation par passkey.
-
-### Éditeur d'équipe (`team`)
-
-Les sièges d'une équipe, où la ranger (maison ou dépôt), Enregistrer ou Supprimer.
-
-### Copier une équipe (`team-copy`)
-
-Enregistre la composition d'une équipe en cours comme nouvelle équipe.
-
-### Éditeur de rôle (`role`)
-
-Identifiant, libellé, consigne, et les valeurs par défaut : outil, modèle, effort, autonomie.
-
-### Équipe en cours (`live`)
-
-La fiche d'une équipe active : ses sièges, sa consigne, « Modifier la composition », « Enregistrer comme équipe », « Dissoudre l'équipe ».
-
-### Composition (`compose`)
-
-Modifier les sièges d'une équipe en cours, puis « Appliquer ».
-
 ### Écrans qui s'affichent d'eux-mêmes
 
 Ces écrans ne sont pas des adresses : l'application les montre d'elle-même, selon l'état de la liaison avec le PC.
@@ -255,11 +220,10 @@ Ces écrans ne sont pas des adresses : l'application les montre d'elle-même, se
 |---|---|
 | répondre à un agent, voir ses modifications | Session (desktop), Demande ou Fil (mobile) |
 | voir ce qui l'attend | « À toi » (desktop), À traiter (mobile) |
-| lancer une session ou une équipe lui-même | Nouvelle session (`N`, `Ctrl+Alt+N`) |
+| lancer une session lui-même | Nouvelle session (`N`, `Ctrl+Alt+N`) |
 | créer, modifier ou supprimer un projet | Réglages › Projets, ou le menu d'une table |
 | renommer, archiver, supprimer une session, passer le relais | Session › « Gérer la session » |
 | trancher une décision, suivre une tâche | Accueil › Tâches |
-| écrire un rôle ou un modèle d'équipe | Ses fichiers `.ledge/roles` et `.ledge/teams`, ou Équipes (mobile) |
 | ajouter un serveur | Réglages › Machines |
 | lier un téléphone | Réglages › Accès mobile |
 | changer l'agent du chat | Réglages › Général › Agent par défaut |

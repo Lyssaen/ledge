@@ -14,7 +14,6 @@ import { LaunchCard } from './LaunchCard';
 import { CloseGroupCard } from './CloseGroupCard';
 import { RelayCard } from './RelayCard';
 import { ProjectCard } from './ProjectCard';
-import { TeamCard } from './TeamCard';
 import { TaskCard } from './TaskCard';
 import { ActionCard, actionRowOf } from './ActionCard';
 import { groupSessions } from '@ledge/fleet';
@@ -48,17 +47,13 @@ export interface ChatViewProps {
   /** The project card's « Review the proposal » (lot 11): without it (the island) there is no card, the answer stands alone.
    *  `projectNamed`: the current name of the project an `addTo` designates, or undefined when none exists (then a new project). */
   onProject?: (qid: string) => void; projectNamed?: (name: string) => string | undefined;
-  /** The team and task cards (roles spec §3.8): drawn when the front gives their actions and their copy. `teamBusy` is the
-   *  turn whose team is being launched, `taskBusy` the task row being given. */
-  onLaunchTeam?: (qid: string) => void; onSaveTeam?: (qid: string) => void; onOpenTeam?: (teamId: string) => void;
-  onGiveTask?: (qid: string, row: number) => void; teamBusy?: string | null; taskBusy?: { qid: string; row: number } | null;
+  /** The task card (roles spec §3.8): drawn when the front gives its action and its copy. `taskBusy` the task row being given. */
+  onGiveTask?: (qid: string, row: number) => void; taskBusy?: { qid: string; row: number } | null;
   /** The generic card (#94): drawn when the front gives `onAct` and its copy. `actingQid` / `actingRows` the turn and rows being
    *  applied (useActionCards); `onIgnoreCards` « Ignore » the turn's cards, `undo` for « Review ». `onDenyAction` the row's
    *  « Deny », once the daemon gives a permission its deny row. */
   onAct?: (qid: string, rows: number[], confirmed: boolean) => void; actingQid?: string | null; actingRows?: readonly number[] | null;
   onIgnoreCards?: (qid: string, undo: boolean) => void; onDenyAction?: (qid: string, row: number) => void;
-  /** A launch time as the front words it. */
-  clock?: (iso: string) => string;
   /** Desktop: in the flow of its parent column (no absolute positioning, no fade), no Back button; Close stays in the header. */
   docked?: boolean;
   /** Hover or keyboard focus of a `ledge://session/<id>` link in an answer; null when it ends. */
@@ -217,7 +212,7 @@ export function ChatView(p: ChatViewProps) {
                     })()}
                     {!!turn.choices?.length && turn === turns.at(-1) && <><div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{turn.choices.map(c => <Button key={c.id} variant="outline" size="sm" disabled={busy || !!p.offline} onClick={() => submit(t.machines.choose(c.label))} style={{ height: 30, padding: '0 10px', fontSize: 12 }}>{c.label}</Button>)}</div><small style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{t.machines.clarification}</small></>}
                     {turn.machineName && (turn.proposal || turn.relay || turn.closes || (turn.actions && p.onAct) || (turn.projectProposal && p.onProject)) && <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t.machines.destination} : <strong style={{ color: 'var(--sidebar-foreground)' }}>{turn.machineId === 'local' ? t.machines.local : turn.machineName}</strong>{p.turnAvailable?.(turn.qid) === false && ` · ${t.machines.offline}`}</div>}
-                    {/* An ignored turn is set aside whole (chat.ignore): the daemon refuses its launch, relay, close, team and task, so their cards wait too. */}
+                    {/* An ignored turn is set aside whole (chat.ignore): the daemon refuses its launch, relay, close and task, so their cards wait too. */}
                     {turn.answeredAt !== undefined && turn.closes ? (
                       <CloseGroupCard closes={turn.closes} sessions={p.sessions} busy={p.closingQid === turn.qid} busyRows={p.closingQid === turn.qid ? p.closingRows ?? [] : []}
                         disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.closingQid && p.closingQid !== turn.qid) || !!p.launchingQid || !!p.relayingQid}
@@ -237,12 +232,8 @@ export function ChatView(p: ChatViewProps) {
                         model={turn.proposal.launchedId === undefined ? p.renderModel?.(turn.qid, turn.proposal.tool, p.launchingQid === turn.qid) : undefined}
                         onLaunch={() => p.onLaunchProposal?.(turn.qid)} onOpenSession={p.onOpenSession} onTerminal={id => p.onTerminal?.(id)} />
                     )}
-                    {turn.answeredAt !== undefined && turn.team && p.onLaunchTeam && t.chat.team && (
-                      <TeamCard team={turn.team} busy={p.teamBusy === turn.qid} disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.teamBusy && p.teamBusy !== turn.qid)}
-                        onLaunch={() => p.onLaunchTeam!(turn.qid)} onSave={p.onSaveTeam && (() => p.onSaveTeam!(turn.qid))} onOpenTable={p.onOpenTeam} at={p.clock} />
-                    )}
                     {turn.answeredAt !== undefined && turn.tasks && p.onGiveTask && t.chat.task && (
-                      <TaskCard tasks={turn.tasks} busyRow={p.taskBusy?.qid === turn.qid ? p.taskBusy.row : null} waitingTeam={!!turn.team && !turn.team.teamId}
+                      <TaskCard tasks={turn.tasks} busyRow={p.taskBusy?.qid === turn.qid ? p.taskBusy.row : null}
                         disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!turn.ignoredAt || (!!p.taskBusy && p.taskBusy.qid !== turn.qid)} onGive={row => p.onGiveTask!(turn.qid, row)} />
                     )}
                     {turn.answeredAt !== undefined && turn.actions && p.onAct && t.chat.action && (
@@ -250,7 +241,7 @@ export function ChatView(p: ChatViewProps) {
                         ignoredAt={turn.ignoredAt} narrow={!p.docked} disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false || !!p.actingQid}
                         onApply={(rows, o) => p.onAct!(turn.qid, rows, o.confirmed)} onDeny={row => p.onDenyAction?.(turn.qid, row)}
                         onIgnore={() => p.onIgnoreCards?.(turn.qid, false)} onReview={() => p.onIgnoreCards?.(turn.qid, true)}
-                        onOpen={row => { const a = turn.actions![row]; if (a?.session) p.onOpenSession(a.session); else if (a?.team) p.onOpenTeam?.(a.team); }} />
+                        onOpen={row => { const a = turn.actions![row]; if (a?.session) p.onOpenSession(a.session); }} />
                     )}
                     {turn.answeredAt !== undefined && turn.projectProposal && p.onProject && (
                       <ProjectCard proposal={turn.projectProposal} target={turn.projectProposal.addTo === undefined ? undefined : p.projectNamed?.(turn.projectProposal.addTo)} onReview={() => p.onProject!(turn.qid)} />

@@ -3,13 +3,41 @@
 import { open, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatStep } from '@ledge/protocol';
-import { frontMatter } from '../daemon/roles.js';
 
 /** The longest note copied, in bytes: past it the copy is cut, and the index says so. */
 export const NOTE_MAX = 32 * 1024;
 /** The most notes copied: the others are counted in the index, never read. */
 export const NOTES_MAX = 200;
 export const NOTES_INDEX = 'context-index.md';
+
+const unquote = (v: string): string => (v.length >= 2 && (v[0] === '"' || v[0] === "'") && v.at(-1) === v[0] ? v.slice(1, -1) : v);
+
+/** A front matter value: a trailing ` # comment` dropped from an unquoted value only, quotes taken off. */
+function scalarValue(raw: string): string {
+  const v = raw.trim();
+  const q = v[0];
+  if (q === '"' || q === "'") {
+    const end = v.indexOf(q, 1);
+    if (end > 0 && /^(\s+#.*)?$/.test(v.slice(end + 1))) return v.slice(1, end);
+  }
+  return unquote(v.replace(/(^|\s)#.*$/, '').trim());
+}
+
+/** `key: value` lines between two `---` at the top, and the body after them. A value may be quoted. */
+export function frontMatter(text: string): { fields: Record<string, string>; body: string } {
+  const src = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  const m = /^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(src);
+  if (!m) return { fields: {}, body: src.trim() };
+  const fields: Record<string, string> = {};
+  for (const raw of m[1]!.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const i = line.indexOf(':');
+    if (i <= 0) throw new Error(`front matter line without a key: ${line.replace(/\s+#.*$/, '').slice(0, 60)}`);
+    fields[line.slice(0, i).trim()] = scalarValue(line.slice(i + 1));
+  }
+  return { fields, body: src.slice(m[0].length).trim() };
+}
 
 /** One line of Markdown, at most `max` characters. */
 const line = (text: string, max = 200): string => { const t = text.replace(/\s*[\r\n]+\s*/g, ' ').trim(); return t.length > max ? `${t.slice(0, max - 1)}…` : t; };

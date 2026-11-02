@@ -1,4 +1,4 @@
-import type { Projects, Role, Session } from '@ledge/protocol';
+import type { Projects, Session } from '@ledge/protocol';
 import type { Overview } from './overview';
 
 export type View = 'atelier';
@@ -7,8 +7,8 @@ export type ProjectFilter = string;
 export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
 export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
 /** The tabs of Ledge's home view (ledge home spec §2.2). */
-export type HomeTab = 'conversation' | 'teams' | 'tasks' | 'history';
-export const HOME_TABS: readonly HomeTab[] = ['conversation', 'teams', 'tasks', 'history'];
+export type HomeTab = 'conversation' | 'tasks' | 'history';
+export const HOME_TABS: readonly HomeTab[] = ['conversation', 'tasks', 'history'];
 export type Place =
   /** Ledge's home view, where the app opens (ledge home spec §2.1): `view` and `project` are the atelier's, kept for the
    *  way back; `back` is the place Échap returns to (none at start: the atelier). */
@@ -19,10 +19,7 @@ export type Place =
   | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> };
 export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
-  | { kind: 'launch'; project?: string; team?: true   // project : la table ou le projet d'où on l'a demandée (lot 7) ; team : le formulaire en mode équipe
-      // Pré-remplissage depuis le catalogue (#97) : cwd, le dossier lu ; role, le rôle de la session (ses défauts) ; template, le
-      // modèle de l'équipe ; seat, le rôle coché d'une équipe montée siège par siège ; machine, celle du dossier lu (#99), locale si absente.
-      cwd?: string; machine?: string; role?: Pick<Role, 'id' | 'label' | 'tool' | 'model' | 'effort'>; template?: string; seat?: string }
+  | { kind: 'launch'; project?: string }   // project : la table ou le projet d'où on l'a demandée (lot 7)
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }

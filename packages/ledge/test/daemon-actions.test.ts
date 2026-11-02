@@ -1,25 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { ACTION_ERROR_CODES, actionById, ChatActionSchema, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Role, type Session, type Task, type Team } from '@ledge/protocol';
+import { ACTION_ERROR_CODES, actionById, ChatActionSchema, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Session, type Task } from '@ledge/protocol';
 import { denied } from '../src/chat/act.js';
 import { actionMessage, cardRefusal, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
 
 const T0 = '2026-10-26T08:00:00.000Z';
 const mk = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w/api', project: 'api', title: `${name} · api`,
   tmuxSession: `ledge-${id}`, state: 'idle', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra });
-const team = (extra: Partial<Team> = {}): Team => ({ id: 'team-3fa2', name: 'api', project: 'api', machine: 'local', cwd: '/w/api', state: 'active',
-  seats: [{ role: 'dev-back', sessionId: 'nova' }, { role: 'rev-back', sessionId: 'lu' }], createdAt: T0, updatedAt: T0, ...extra });
 const task = (extra: Partial<Task> = {}): Task => ({ id: 't91b0d4', title: 'Pagination', giver: 'ledge', giverName: 'Ledge', owner: 'nova', ownerName: 'Nova',
   state: 'taken', at: T0, updatedAt: T0, log: [], ...extra });
-const role = (id: string): Role => ({ id, label: id, prompt: '', source: 'home', path: `/h/${id}.md` });
 const permission: Pending = { kind: 'permission', text: 'Bash: rm -rf dist', tool: 'Bash', source: 'hook' };
 
 const ctx = (over: Partial<ResolveCtx> = {}): ResolveCtx => ({
   sessions: [mk('nova', 'Nova', { model: 'claude-sonnet-5-5', pending: permission, state: 'waiting_permission' }), mk('lu', 'Lu', { tool: 'codex' }), mk('bix', 'Bix'),
     mk('old', 'Old', { state: 'exited' }), mk('ro', 'Ro', { source: 'hook_only' }), mk('arch', 'Arch', { state: 'exited', archivedAt: T0 })],
-  teams: [team(), team({ id: 'team-77aa', name: 'nap', state: 'resting', seats: [] }), team({ id: 'team-dead', name: 'old', state: 'dissolved' })],
-  tasks: [task(), task({ id: 'tdone00', state: 'done' }), task({ id: 'tdeci01', title: 'Fusionner feat/roles ?', giver: 'nova', giverName: 'Nova', owner: 'ledge', ownerName: 'Ledge', state: 'open', team: 'team-3fa2' }),
+  tasks: [task(), task({ id: 'tdone00', state: 'done' }), task({ id: 'tdeci01', title: 'Fusionner feat/roles ?', giver: 'nova', giverName: 'Nova', owner: 'ledge', ownerName: 'Ledge', state: 'open' }),
     task({ id: 'tdeci02', giver: 'nova', giverName: 'Nova', owner: 'ledge', ownerName: 'Ledge', state: 'done' })],
-  findRole: id => (['dev-back', 'rev-back'].includes(id) ? role(id) : undefined),
   ...over
 });
 const ok = (id: ActionId, args: unknown, c = ctx()): ChatAction => {
@@ -39,7 +34,7 @@ const refused = (id: ActionId, args: unknown, c = ctx()): string => {
 describe('resolveAction', () => {
   it('covers every generic action of the registry', () => {
     expect([...GENERIC_ACTIONS].sort()).toEqual(['session.archive', 'session.decide', 'session.interrupt', 'session.model', 'session.restore', 'session.resume',
-      'task.answer', 'task.cancel', 'task.pass', 'team.dissolve', 'team.join', 'team.leave', 'team.resume', 'team.save']);
+      'task.answer', 'task.cancel', 'task.pass']);
   });
   it('names a session by id or by bot name, and refuses an unknown or ambiguous one', () => {
     expect(ok('session.interrupt', { session: 'Bix' }).args).toEqual({ session: 'bix' });
@@ -84,14 +79,14 @@ describe('resolveAction', () => {
     expect(code('session.model', { session: 'Ro', model: 'opus', effort: null })).toBe('read_only');
     expect(code('session.model', { session: 'Old', model: 'opus', effort: null })).toBe('exited');
     expect(code('session.decide', { session: 'Bix', decision: 'accept' })).toBe('no_request');
-    expect(code('team.join', { team: 'team-dead', session: 'Bix', role: 'dev-back' })).toBe('dissolved');
+    expect(code('session.restore', { session: 'Bix' })).toBe('not_archived');
     expect(code('task.cancel', { task: 'tdone00' })).toBe('closed');
     expect(code('task.pass', { task: 't91b0d4', to: 'Nova' })).toBe('holder');
   });
   it('each row carries its words (vars), for a front in its own language', () => {
     expect(ok('session.model', { session: 'Nova', model: 'claude-opus-5-5', effort: null }).vars).toEqual({ session: 'Nova', model: 'claude-opus-5-5' });
     expect(ok('session.decide', { session: 'Nova', decision: 'deny', note: 'Pas sur main' }).vars).toEqual({ session: 'Nova', decision: 'deny', kind: 'permission', note: 'Pas sur main' });
-    expect(ok('team.join', { team: 'api', session: 'Bix', role: 'rev-back' }).vars).toEqual({ team: 'api', session: 'Bix', role: 'rev-back' });
+    expect(ok('session.archive', { session: 'Old' }).vars).toEqual({ session: 'Old' });
     expect(ok('task.pass', { task: 't91b0d4', to: 'Bix', note: 'à toi' }).vars).toEqual({ task: 'Pagination', owner: 'Nova', session: 'Bix', note: 'à toi' });
     expect(ok('task.cancel', { task: 't91b0d4' }).vars).toEqual({ task: 'Pagination', owner: 'Nova' });
   });
@@ -153,37 +148,6 @@ describe('resolveAction', () => {
     const plan = ctx({ sessions: [mk('p', 'P', { pending: { kind: 'plan', text: 'Le plan', body: '1. Faire', source: 'hook' } })] });
     expect(ok('session.decide', { session: 'P', decision: 'accept' }, plan).detail).toBe('Le plan\n\n1. Faire');
   });
-  it('team.join and team.leave check the team, the seat and the role', () => {
-    expect(ok('team.join', { team: 'api', session: 'Bix', role: 'rev-back' })).toMatchObject({ args: { team: 'team-3fa2', session: 'bix', role: 'rev-back' }, team: 'team-3fa2', summary: 'Faire entrer **Bix** dans **api** comme @rev-back' });
-    expect(refused('team.join', { team: 'api', session: 'Nova', role: 'dev-back' })).toBe('Nova is already in api');
-    expect(refused('team.join', { team: 'api', session: 'Bix', role: 'ops' })).toBe('unknown role ops');
-    expect(refused('team.join', { team: 'old', session: 'Bix', role: 'dev-back' })).toBe('unknown team old');
-    expect(refused('team.join', { team: 'team-dead', session: 'Bix', role: 'dev-back' })).toBe('team old is dissolved');
-    expect(ok('team.leave', { team: 'team-3fa2', session: 'Lu' }).summary).toBe('Retirer **Lu** de **api**');
-    expect(refused('team.leave', { team: 'api', session: 'Bix' })).toBe('Bix is not in api');
-  });
-  it('team.resume, team.dissolve, team.save', () => {
-    expect(ok('team.resume', { team: 'nap' }).args).toEqual({ team: 'team-77aa' });
-    expect(refused('team.resume', { team: 'api' })).toBe('team api is not resting');
-    expect(ok('team.dissolve', { team: 'api' })).toMatchObject({ risk: 'destructive', summary: 'Dissoudre l\'équipe **api**' });
-    expect(ok('team.save', { team: 'api', name: 'api-duo' }).args).toEqual({ team: 'team-3fa2', name: 'api-duo',
-      seats: [{ role: 'dev-back', tool: 'claude', model: 'claude-sonnet-5-5' }, { role: 'rev-back', tool: 'codex' }] });
-    expect(refused('team.save', { team: 'nap', name: 'x' })).toBe('team nap has no seat');
-  });
-  it('team.save over a template already saved replaces it: destructive, said so, and only at the version the card read (#143)', () => {
-    const saved = ctx({ templateHash: name => (name === 'api-duo' ? '0123456789abcdef' : undefined) });
-    const replace = ok('team.save', { team: 'api', name: 'api-duo' }, saved);
-    expect(replace).toMatchObject({ risk: 'destructive', summary: 'Remplacer le modèle « api-duo » par **api**', vars: { team: 'api', name: 'api-duo', replaces: '1' }, args: { base: '0123456789abcdef' } });
-    expect(actionMessage(replace, 'r1')).toMatchObject({ type: 'team.save', name: 'api-duo', base: '0123456789abcdef' });
-    const fresh = ok('team.save', { team: 'api', name: 'other' }, saved);
-    expect(fresh).toMatchObject({ risk: 'reversible', vars: { team: 'api', name: 'other' } });
-    expect(fresh.args).not.toHaveProperty('base');
-    expect(actionMessage(fresh, 'r1')).not.toHaveProperty('base');
-  });
-  it('team.save keeps the name each seat asks for (#144)', () => {
-    const named = ctx({ teams: [team({ seats: [{ role: 'dev-back', sessionId: 'nova', name: 'Zed' }, { role: 'rev-back', sessionId: null, name: 'Ari' }] })] });
-    expect(ok('team.save', { team: 'api', name: 'duo' }, named).args.seats).toEqual([{ role: 'dev-back', tool: 'claude', model: 'claude-sonnet-5-5', name: 'Zed' }, { role: 'rev-back', name: 'Ari' }]);
-  });
   it('task.cancel and task.pass', () => {
     expect(ok('task.cancel', { task: 't91b0d4', reason: 'Plus utile' })).toMatchObject({ risk: 'destructive', args: { task: 't91b0d4', reason: 'Plus utile' }, summary: 'Annuler la tâche « Pagination » de **Nova**' });
     expect(refused('task.cancel', { task: 'tdone00' })).toBe('task tdone00 is closed');
@@ -195,7 +159,7 @@ describe('resolveAction', () => {
   it('task.answer: the user\'s answer to an open decision, shown whole, destructive; never a task that is not one', () => {
     expect(ok('task.answer', { task: 'tdeci01', answer: 'Oui, fusionne' })).toMatchObject({ action: 'task.answer', risk: 'destructive', args: { task: 'tdeci01', answer: 'Oui, fusionne' },
       summary: 'Répondre à la décision « Fusionner feat/roles ? » de **Nova**', vars: { task: 'Fusionner feat/roles ?', session: 'Nova', answer: 'Oui, fusionne' },
-      session: 'nova', team: 'team-3fa2', detail: 'Oui, fusionne' });
+      session: 'nova', detail: 'Oui, fusionne' });
     expect(ok('task.answer', { task: 'tdeci01', answer: 'x'.repeat(TASK_TEXT_MAX) })).toMatchObject({ detailCut: true });
     expect(code('task.answer', { task: 't91b0d4', answer: 'oui' })).toBe('not_decision');
     expect(code('task.answer', { task: 'tdeci02', answer: 'oui' })).toBe('closed');
@@ -214,11 +178,6 @@ describe('actionMessage', () => {
     expect(msg('session.restore', { session: 'Arch' })).toEqual({ type: 'session.restore', id: 'arch' });
     expect(msg('session.resume', { session: 'Old' })).toEqual({ type: 'session.resume', id: 'old' });
     expect(msg('session.decide', { session: 'Nova', decision: 'accept' })).toEqual({ type: 'session.decide', id: 'nova', decision: 'accept', expect: { kind: 'permission', text: 'Bash: rm -rf dist', key: pendingKey(permission) } });
-    expect(msg('team.join', { team: 'api', session: 'Bix', role: 'dev-back' })).toEqual({ type: 'team.join', team: 'team-3fa2', session: 'bix', role: 'dev-back' });
-    expect(msg('team.leave', { team: 'api', session: 'Lu' })).toEqual({ type: 'team.leave', team: 'team-3fa2', session: 'lu' });
-    expect(msg('team.resume', { team: 'nap' })).toEqual({ type: 'team.resume', team: 'team-77aa' });
-    expect(msg('team.dissolve', { team: 'api' })).toEqual({ type: 'team.dissolve', team: 'team-3fa2' });
-    expect(msg('team.save', { team: 'api', name: 'duo' })).toMatchObject({ type: 'team.save', rid: 'r1', name: 'duo', seats: [{ role: 'dev-back' }, { role: 'rev-back' }] });
     expect(msg('task.cancel', { task: 't91b0d4', reason: 'non' })).toEqual({ type: 'task.cmd', rid: 'r1', by: 'ledge', op: 'cancel', task: 't91b0d4', text: 'non' });
     expect(msg('task.pass', { task: 't91b0d4', to: 'Bix' })).toEqual({ type: 'task.cmd', rid: 'r1', by: 'ledge', op: 'pass', task: 't91b0d4', to: 'bix' });
     expect(msg('task.answer', { task: 'tdeci01', answer: 'Oui' })).toEqual({ type: 'task.cmd', rid: 'r1', by: 'ledge', op: 'done', task: 'tdeci01', text: 'Oui' });
@@ -226,7 +185,7 @@ describe('actionMessage', () => {
   it('every message it builds is a valid client message', async () => {
     const { parseClientMessage } = await import('@ledge/protocol');
     const c = ctx();
-    for (const [id, args] of [['session.decide', { session: 'Nova', decision: 'deny', note: 'non' }], ['team.save', { team: 'api', name: 'duo' }], ['task.pass', { task: 't91b0d4', to: 'Bix', note: 'à toi' }], ['task.answer', { task: 'tdeci01', answer: 'non' }]] as const)
+    for (const [id, args] of [['session.decide', { session: 'Nova', decision: 'deny', note: 'non' }], ['task.cancel', { task: 't91b0d4', reason: 'non' }], ['task.pass', { task: 't91b0d4', to: 'Bix', note: 'à toi' }], ['task.answer', { task: 'tdeci01', answer: 'non' }]] as const)
       expect(() => parseClientMessage(actionMessage(ok(id, args, c), 'r1'))).not.toThrow();
   });
 });

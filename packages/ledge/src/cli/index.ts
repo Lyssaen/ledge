@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const USAGE = `ledge <claude|codex|cursor> [--name <bot>] [--role <id>] [-- agent args]   start an agent in a tracked session (--role: .ledge/roles/<id>.md)
+const USAGE = `ledge <claude|codex|cursor> [--name <bot>] [-- agent args]   start an agent in a tracked session
 ledge attach [--read-only] <id>                              put this terminal on a running session
 ledge daemon                                                 run the daemon in the foreground
 ledge hook [codex|cursor] <Event>                            receive a hook (reads JSON on stdin)
@@ -12,7 +12,6 @@ ledge read <id>                                              print a long messag
 ledge task <give|list|show|take|done|refuse|pass> …         give another session work, take it, close it (ledge task: details)
 ledge decide [<id> "<réponse>"]                               the decisions sessions wait for from you; answer one
 ledge handover "<bilan>" | show                              the relief brief, when Ledge asks for it; show: read your predecessor's
-ledge team <up|list|join|leave|resume|dissolve|save> …       start, list and run teams (ledge team: details; --json for agents)
 ledge close <session>… [--json]                              close sessions cleanly (their conversation stays resumable)
 ledge tui [--notify bell|osc9|off] [--here]                  follow and answer the sessions (in a Ledge tab of Windows Terminal unless --here)
 ledge bridge                                                 exchange Ledge messages over SSH stdio
@@ -57,7 +56,6 @@ async function main(argv: string[]): Promise<number> {
     case 'decide': { const { runDecide } = await import('./decide.js'); const r = await runDecide(rest); console.log(r.line); return r.code; }
     case 'handover': { const { runHandover } = await import('./handover.js'); const r = await runHandover(rest); console.log(r.line); return r.code; }
     case 'close': { const { runClose } = await import('./action.js'); const r = await runClose(rest); console.log(r.line); return r.code; }
-    case 'team': { const { runTeam } = await import('./team.js'); const r = await runTeam(rest); console.log(r.line); return r.code; }
     case 'tui': { const { runTui } = await import('../tui/index.js'); return runTui(rest); }
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }

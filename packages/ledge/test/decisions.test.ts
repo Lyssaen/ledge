@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ACTION_IDS, actionById, LEDGE_GIVER, openDecision, PhoneTaskSchema, PushPayloadSchema, transmissions, type ChatAction, type Session, type Team } from '@ledge/protocol';
+import { ACTION_IDS, actionById, LEDGE_GIVER, openDecision, PhoneTaskSchema, PushPayloadSchema, transmissions, type ChatAction, type Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createTasks, type Tasks, type TasksDeps } from '../src/daemon/tasks.js';
 import { actionMessage, GENERIC_ACTIONS, resolveAction, RUN_ACTIONS, runGuard, type ResolveCtx } from '../src/daemon/actions.js';
@@ -20,7 +20,7 @@ let store: Store; let tasks: Tasks; let told: Array<[string, string]>;
 const notify: TasksDeps['mailbox']['notify'] = (target, text) => { told.push([target, text]); return true; };
 const ask = (title = 'Fusionner feat/roles ?', text = 'oui / non ; je recommande oui') =>
   tasks.run({ type: 'task.cmd', rid: 'r', by: 'otto', op: 'give', to: 'ledge', title, text }).task!;
-const ctx = (over: Partial<ResolveCtx> = {}): ResolveCtx => ({ sessions: store.all(), teams: [], tasks: tasks.all(), findRole: () => undefined, ...over });
+const ctx = (over: Partial<ResolveCtx> = {}): ResolveCtx => ({ sessions: store.all(), tasks: tasks.all(), ...over });
 /** task.answer as a card or `action.run` resolves it, then applies it as the daemon does (actionMessage → tasks.run). */
 const answer = (task: string, text: string) => {
   const r = resolveAction('task.answer', actionById('task.answer')!.args.parse({ task, answer: text }), ctx());
@@ -69,11 +69,11 @@ describe('the phone (t05ecf7)', () => {
     const given = tasks.run({ type: 'task.cmd', rid: 'g', by: LEDGE_GIVER, op: 'give', to: 'Pim', title: 'Relire' }).task!;
     tasks.run({ type: 'task.cmd', rid: 's', by: 'otto', op: 'give', to: 'Pim', title: 'Entre sièges' });
     expect(phoneTasks(tasks.all(), Date.parse(T0)).map(x => x.id)).toEqual([d.id, given.id]);
-    const phone = toPhoneTask(d, undefined, undefined);
+    const phone = toPhoneTask(d);
     expect(phone).toMatchObject({ id: d.id, giver: 'otto', giverName: 'Otto', owner: LEDGE_GIVER, text: 'oui / non ; je recommande oui', state: 'open' });
     expect(PhoneTaskSchema.safeParse(phone).success).toBe(true);
     // A task Ledge gave keeps its detail on the PC: the phone never needed it.
-    expect(toPhoneTask(given, undefined, undefined)).not.toHaveProperty('text');
+    expect(toPhoneTask(given)).not.toHaveProperty('text');
   });
 
   it('drops an answered decision from the list, but still hears of it so it leaves the screen', () => {
@@ -110,13 +110,11 @@ describe('task.answer: the one way to answer a decision', () => {
     expect(told).toEqual([['otto', expect.stringContaining('Oui, fusionne')]]);
   });
 
-  it('is the user\'s alone: no session runs it, not even a team\'s @leader', () => {
+  it('is the user\'s alone: no session runs it, not even the one that asked', () => {
     const d = ask();
     const row = resolveAction('task.answer', { task: d.id, answer: 'oui' }, ctx()) as ChatAction;
-    const led: Team = { id: 'team-1', name: 'api', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'leader', sessionId: 'pim' }, { role: 'dev', sessionId: 'otto' }], createdAt: T0, updatedAt: T0 };
-    const c = ctx({ teams: [led] });
-    expect(runGuard(row, undefined, c)).toBeNull();
-    expect(runGuard({ ...row, team: 'team-1' }, 'pim', c)).toMatch(/utilisateur/);
-    expect(runGuard(row, 'otto', c)).toMatch(/utilisateur/);
+    expect(runGuard(row, undefined)).toBeNull();
+    expect(runGuard(row, 'pim')).toMatch(/utilisateur/);
+    expect(runGuard(row, 'otto')).toMatch(/utilisateur/);
   });
 });

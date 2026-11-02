@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MESSAGE_MAX, taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
-import { findRole } from '../daemon/roles.js';
-import { resolveRoleAddress, seatContext, seatKey, seatView, teamChangeLine, teammates } from '../daemon/seat.js';
+import { MESSAGE_MAX, taskClosed, type Session, type SessionEvent, type Task, type Tool } from '@ledge/protocol';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
@@ -356,8 +354,6 @@ function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boo
 }
 
 type Identity = Pick<Session, 'name' | 'tool' | 'project' | 'cwd'> & Partial<Pick<Session, 'repo' | 'branch' | 'worktree'>> & {
-  /** Its role and team, as `seatContext` words them (roles spec §3.5): rebuilt at every start from the live team. */
-  seat?: string;
   /** The tasks it holds, open (context handover spec §2): kept by Ledge, not in its conversation. */
   tasks?: Task[];
   /** The session it relieves (§3.3): its brief is one command away. */
@@ -390,9 +386,8 @@ export function identityContext(s: Identity): string {
     'Pour voir les autres sessions (nom, outil, état, projet, branche, sujet), lance `ledge who`.',
     s.tool === 'claude' ? 'Pour écrire à une autre session Ledge, Claude ou Codex, utilise son nom Ledge (donné par `ledge who`) comme adresse SendMessage : Ledge le transmet. `ListAgents` montre les noms internes de Claude, pas les noms Ledge.'
       : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge task` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
-    'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne (ta consigne de rôle, ton équipe).',
+    'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` vient de Ledge : un de tes messages n\'a pas pu être remis.',
     'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`). Une décision qui revient à l\'utilisateur se pose avec `ledge task give ledge "<question>" "<options, ta recommandation>"` : sa réponse te réveille, inutile d\'attendre la fin pour la poser.',
-    ...(s.seat ? [s.seat] : []),
     ...(s.relieves ? [`Tu as pris la relève de ${s.relieves.name}, dont le contexte était plein : relis son bilan avec \`ledge handover show\`.`] : []),
     ...(s.tasks ? [tasksContext(s.tasks) ?? ''].filter(Boolean) : [])
   ].join('\n');
@@ -400,7 +395,7 @@ export function identityContext(s: Identity): string {
 
 /** The identity of a launched session: the daemon's record (it follows renames), else LEDGE_NAME and the folder, with
  *  the branch read from git when the daemon has none yet. */
-async function identity(agent: Tool, cwd: string | undefined, known: Session | undefined, deadline: number, live: { sessions: Session[]; teams: Team[] } = { sessions: [], teams: [] }): Promise<Identity | undefined> {
+async function identity(agent: Tool, cwd: string | undefined, known: Session | undefined, deadline: number): Promise<Identity | undefined> {
   const name = known?.name ?? process.env.LEDGE_NAME;
   const dir = known?.cwd ?? cwd;
   if (!name || !dir) return undefined;
@@ -409,40 +404,8 @@ async function identity(agent: Tool, cwd: string | undefined, known: Session | u
     name, tool: known?.tool ?? agent, cwd: dir, project: known?.project ?? (basename(dir) || dir),
     ...(known?.repo ?? git?.repo ? { repo: known?.repo ?? git!.repo } : {}),
     ...(known?.branch ?? git?.branch ? { branch: known?.branch ?? git!.branch } : {}),
-    ...(known?.worktree ?? git?.worktree ? { worktree: true } : {}),
-    ...seatOf(known, dir, live)
+    ...(known?.worktree ?? git?.worktree ? { worktree: true } : {})
   };
-}
-
-/** The role and team lines of a seat: its role file read again (it may have changed), its teammates as they are now. */
-function seatOf(known: Session | undefined, dir: string, live: { sessions: Session[]; teams: Team[] }): { seat?: string } {
-  const roleId = known?.role ?? process.env.LEDGE_ROLE;
-  if (!roleId) return {};
-  let role;
-  try { role = findRole(roleId, dir); } catch { role = undefined; }
-  const team = known?.team ? live.teams.find(t => t.id === known.team && t.state !== 'dissolved') : undefined;
-  const seat = seatContext({ ...(role ? { role } : {}), roleId, roleLabel: known?.roleLabel, ...(team ? { team: { name: team.name, members: teammates(team, live.sessions).filter(m => m.name !== known?.name) } } : {}) });
-  return seat ? { seat } : {};
-}
-
-/** A turn's look at its team waits this long for the snapshot: past it, the turn goes on and the next one looks again. */
-const SEAT_REFRESH_MS = 500;
-
-/**
- * Its team as it is now, against what the seat was last told (`teamSeen`): the line to add to its turn when it changed,
- * and the new view recorded once it is said. Nothing to say (same team, or never told: recorded silently) is undefined.
- */
-async function seatChange(client: Client, id: string, deadline: number): Promise<string | undefined> {
-  const left = () => Math.max(0, deadline - Date.now());
-  const snapshot = await client.next('snapshot', left()).catch(() => undefined);
-  const me = snapshot?.sessions.find(s => s.id === id);
-  if (!snapshot || !me || (!me.team && !me.teamSeen)) return undefined;
-  const teams = me.team ? (await client.next('teams', left()).catch(() => undefined))?.teams : [];
-  if (!teams) return undefined;
-  const key = seatKey(seatView(id, snapshot.sessions, teams));
-  if (key === me.teamSeen) return undefined;
-  client.send({ type: 'seat.seen', id, key });
-  return teamChangeLine(me.teamSeen, key);
 }
 
 /** A Claude `SendMessage` waits this long for the daemon's ack: the message is typed into a Codex, not just recorded. */
@@ -463,15 +426,7 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   const snapshot = await client.next('snapshot', left());
   const sender = snapshot.sessions.find(s => s.id === from);
   if (sender?.source !== 'launcher') return undefined;
-  // `@build` names the seat of that role in the sender's team (roles spec §3.6): resolved to its Ledge name first.
-  let address = to;
-  if (to.startsWith('@')) {
-    const teams = sender.team ? (await client.next('teams', left()).catch(() => undefined))?.teams ?? [] : [];
-    const role = resolveRoleAddress(to, from, snapshot.sessions, teams);
-    if ('reason' in role) return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${role.reason}`);
-    address = role.to;
-  }
-  const r = resolveTarget(address, snapshot.sessions, readPeers());
+  const r = resolveTarget(to, snapshot.sessions, readPeers());
   if (r.outcome === 'unknown') return undefined;
   if (r.outcome === 'refused') return deny(`Ledge n'a pas pu transmettre le message à ${to} : ${r.reason}`);
   if (r.outcome === 'native') {
@@ -485,7 +440,7 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
   // Too long for Ledge: a Codex, a Cursor or an OMP can only be reached through it, refused below with the length
   // (Claude's own tool, which cannot reach them, would only fail later).
   const summary = str(input.summary);
-  const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to: address, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
+  const ack = await sendMessageAndAwaitAck(client, { type: 'session.message', rid: toolUseId, from, to, text: input.message as string, ...(summary ? { summary } : {}), intercept: true }, left());
   const target = `${to} (${tool})`;
   const reason = ack.outcome === 'accepted' ? `Message transmis par Ledge à ${target} : il le reçoit maintenant.`
     : ack.outcome === 'queued' ? `Message transmis par Ledge à ${target} : il le recevra dès qu'il sera libre.`
@@ -520,9 +475,8 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   // Ledge's own chat runs Claude Code headless: its hooks (if any ran) must never make a session.
   if (process.env.LEDGE_CHAT === '1') { log(`hook ${label} ignored: Ledge chat`); return undefined; }
   let mapped: MappedHook | null = null;
-  let identify = false; let known: Session | undefined; let live = { sessions: [] as Session[], teams: [] as Team[] }; let deadline = Date.now() + (opts.timeoutMs ?? 100);
+  let identify = false; let known: Session | undefined; let deadline = Date.now() + (opts.timeoutMs ?? 100);
   let relayed: string | undefined;
-  let seatLine: string | undefined;
   let held: Task[] = [];
   try {
     const payload = JSON.parse(stdin || '{}');
@@ -530,31 +484,23 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     if (!mapped) { log(`hook ${label} ignored: unknown event, malformed payload, non-terminal SessionEnd or subagent event without a session of its own`); return undefined; }
     const launchedId = agent === 'codex' ? codexLedgeId() : agent === 'claude' ? process.env.LEDGE_SESSION : undefined;
     identify = eventName === 'SessionStart' && !!launchedId && mapped.id === launchedId;
-    // A turn of a session Ledge launched reads what changed in its team since it was last told (Claude Code and Codex add it).
-    const refresh = eventName === 'UserPromptSubmit' && agent !== 'cursor' && !!launchedId && mapped.id === launchedId;
     const input = ((payload as Payload).tool_input ?? {}) as Payload;
     const intercept = agent === 'claude' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'SendMessage'
       && typeof input.to === 'string' && typeof input.message === 'string' && !!input.message;
     const command = agent === 'codex' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'Bash' && typeof input.command === 'string'
       ? parseLedgeCommand(input.command) : undefined;
-    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : refresh ? SEAT_REFRESH_MS : 100);
+    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : 100);
     deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
     client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}) });
     if (identify) {
       const snapshot = await client.next('snapshot', Math.max(0, deadline - Date.now())).catch(() => undefined);
       known = snapshot?.sessions.find(s => s.id === mapped!.id);
-      // A seat's team follows the snapshot (`teams`): its line names the teammates as they are now.
-      const teamList = known?.team ? (await client.next('teams', Math.max(0, deadline - Date.now())).catch(() => undefined))?.teams : undefined;
-      live = { sessions: snapshot?.sessions ?? [], teams: teamList ?? [] };
-      // What its start tells it of its team, recorded: its turns are told only what changes after.
-      if (snapshot && known && (!known.team || teamList)) client.send({ type: 'seat.seen', id: known.id, key: seatKey(seatView(known.id, live.sessions, live.teams)) });
       // Its own open tasks (§2), within the same deadline: none known is no block.
       client.send({ type: 'task.cmd', rid: randomUUID(), by: mapped.id, op: 'list' });
       const listed = await client.next('task.result', Math.max(0, deadline - Date.now())).catch(() => undefined);
       held = (listed?.tasks ?? []).filter(t => t.owner === mapped!.id && !taskClosed(t));
     }
-    if (refresh) seatLine = await seatChange(client, mapped.id, deadline);
     if (intercept) relayed = await relayMessage(client, mapped.id, str((payload as Payload).tool_use_id), input, deadline);
     if (command) relayed = await runLedgeCommand(client, command, mapped.id, deadline);
     // close() resolves once the handshake completes, i.e. after the send is flushed; one shared deadline
@@ -563,9 +509,8 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     log(`hook ${label} dropped: ${(e as Error).message}`);
   }
   if (relayed) return relayed;
-  if (seatLine) return JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: seatLine } });
   if (!identify || !mapped) return undefined;
-  const found = await identity(agent, mapped.cwd, known, deadline, live);
+  const found = await identity(agent, mapped.cwd, known, deadline);
   const who = found ? { ...found, ...(held.length ? { tasks: held } : {}), ...(known?.relieves ? { relieves: known.relieves } : {}) } : undefined;
   return who ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: identityContext(who) } }) : undefined;
 }

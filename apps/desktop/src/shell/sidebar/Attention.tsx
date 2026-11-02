@@ -5,8 +5,8 @@ import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
 import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
-import { DecisionAnswer } from '../../teams/DecisionAnswer';
-import type { TeamsApi } from '../../teams/useTeamsApi';
+import { DecisionAnswer } from '../../tasks/DecisionAnswer';
+import type { TasksApi } from '../../tasks/useTasksApi';
 import { cls } from '../cls';
 import { HelperBot, SessionBot } from '../SessionBot';
 import { quickDecide, type AttnItem } from './model';
@@ -32,7 +32,7 @@ export function Attention(p: {
   /** The decisions sessions put to the user, open (`ledge task give ledge …`): who asks, the title, the options, and
    *  « Répondre », answered in place through `answer` (task.answer). */
   decisions?: readonly Task[];
-  answer?: TeamsApi['answer'];
+  answer?: TasksApi['answer'];
   /** The closed tasks Ledge gave, not put away (roles spec §3.7): « ✓ Otto a fini … · tâche de Ledge », with « Voir ». */
   ledgeTasks?: readonly Task[];
   onSeeTask?(id: string): void;
@@ -100,7 +100,7 @@ export function Attention(p: {
               <span className="st-where" title={x.text}>{x.text ?? ''}</span>
               {answering !== x.id && p.answer && <button type="button" className="st-qa pri" onClick={() => setAnswering(x.id)}>{t.decision.answer}</button>}
             </div>
-            {answering === x.id && p.answer && <DecisionAnswer task={x} teams={{ answer: p.answer }} onClose={() => setAnswering(null)} />}
+            {answering === x.id && p.answer && <DecisionAnswer task={x} api={{ answer: p.answer }} onClose={() => setAnswering(null)} />}
           </div>
         </div>
       ))}
@@ -124,7 +124,7 @@ export function Attention(p: {
           <div key={`near:${s.id}`} className="st-card st-task st-near" data-near={s.id}>
             <span className="st-bot st-task-mark" aria-hidden="true">{failed ? '!' : '◔'}</span>
             <div className="st-card-body">
-              <div className="st-l1"><span className="st-req" title={failed ? s.handover?.reason : undefined}>{failed ? t.handover.failedShort(s.name) : t.handover.nearShort(`${s.name}${s.role ? ` @${s.role}` : ''}`, pct)}</span></div>
+              <div className="st-l1"><span className="st-req" title={failed ? s.handover?.reason : undefined}>{failed ? t.handover.failedShort(s.name) : t.handover.nearShort(s.name, pct)}</span></div>
               <div className="st-l2">
                 <span className="st-where" title={failed ? s.handover?.reason : t.handover.nearHint}>{failed ? (s.handover?.reason ?? '') : ''}</span>
                 <button type="button" className="st-qa pri" title={t.handover.passTitle} onClick={() => p.onHandover?.(s.id)}>{failed ? t.handover.retry : t.handover.pass}</button>

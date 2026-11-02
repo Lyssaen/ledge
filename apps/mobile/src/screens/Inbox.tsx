@@ -10,15 +10,14 @@ import { Header, linkView } from '../ui/Header';
 import { Mascot, MobileBot } from '../ui/MobileBot';
 import { OfflineBanner } from '../ui/Notice';
 import { TabBar } from '../ui/TabBar';
-import { Flag, RolePill } from '../ui/teams/RolePill';
-import { closedTasks } from '../model/teams';
+import { closedTasks } from '../model/tasks';
 import { navigate } from '../router';
 import { buttonClass, chipClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 import { Tag } from '../ui/Tag';
 
 type InboxFilter = Filter | 'tasks';
-const FILTERS: Filter[] = ['all', 'permission', 'question'];
+const FILTERS: InboxFilter[] = ['all', 'permission', 'question', 'tasks'];
 
 export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
 
@@ -41,14 +40,13 @@ function Row({ item, session, now, offline }: { item: InboxItem; session: PhoneS
   );
 }
 
-/** A closed task Ledge gave (ledge home spec §2.4): its owner with its role and team, the start of its result. */
+/** A closed task Ledge gave (ledge home spec §2.4): its owner, the start of its result. */
 function TaskRow({ task, now, onSee }: { task: PhoneTask; now: number; onSee: () => void }) {
   const title = task.state === 'done' ? copy.inbox.finishedTitle(task.title) : task.state === 'refused' ? copy.inbox.refusedTitle(task.title) : copy.inbox.droppedTitle(task.title);
   return (
     <article aria-label={title} className="rounded-card border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2 text-small">
-        <span className="font-medium">{task.ownerName}</span>{task.ownerRole && <RolePill role={task.ownerRole} />}
-        {task.teamName && <span className="flex items-center gap-1 text-team"><Flag />{task.teamName}</span>}
+        <span className="font-medium">{task.ownerName}</span>
         <span className="ml-auto text-meta text-muted">{ageLabel(task.updatedAt, now)}</span>
       </div>
       <h3 className="mt-[11px] mb-[3px] text-base leading-[1.4] font-semibold [overflow-wrap:anywhere]">{title}</h3>
@@ -74,7 +72,6 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
   const list = filter === 'tasks' ? [] : filterItems(all, filter);
   const closed = closedTasks(state.tasks.values());
   const tasks = filter === 'all' || filter === 'tasks' ? closed : [];
-  const filters: InboxFilter[] = state.teams ? [...FILTERS, 'tasks'] : FILTERS;
   const waiting = all.length + closed.length;
   const see = (t: PhoneTask) => { void store.seeTask(t.id); navigate({ name: 'thread', sessionId: t.owner }); };
   const offline = !state.fresh;
@@ -86,7 +83,7 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {offline && <div className="mb-3">{notice ?? <OfflineBanner onReconnect={onReconnect} />}</div>}
         <div role="group" aria-label={copy.inbox.filtersLabel} className="mb-1.5 flex gap-1">
-          {filters.map(f => (
+          {FILTERS.map(f => (
             <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={chipClass(filter === f)}>{copy.inbox.filters[f]}</button>
           ))}
         </div>

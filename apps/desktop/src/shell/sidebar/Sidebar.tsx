@@ -21,7 +21,7 @@ import { Attention } from './Attention';
 import { attentionOf, treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
-import { closedLedgeTasks, nearLimit, openDecisions, type TeamsApi } from '../../teams/useTeamsApi';
+import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
 
 /** The explorer shell: Session, Ask Ledge, Atelier, Your turn, the project tree, Archives, then the foot. */
 export function Sidebar(p: {
@@ -37,10 +37,10 @@ export function Sidebar(p: {
   onAsk(text: string): void;
   onTerminal(s: Session): void;
   revealArchives: number; revealCurrent: number;
-  /** Ledge's entry's live line (ledge home spec §2.1): the closed tasks Ledge gave not put away, and the active teams. */
-  ledge?: { closedTasks: number; activeTeams: number };
-  /** The live teams and Ledge's tasks: the tree's team rows (atelier rooms spec §3.4), « À toi »'s closed Ledge tasks (§3.7). */
-  teams?: TeamsApi;
+  /** Ledge's entry's live line (ledge home spec §2.1): the closed tasks Ledge gave not put away. */
+  ledge?: { closedTasks: number };
+  /** Ledge's tasks: « À toi »'s decisions and closed Ledge tasks (roles spec §3.7), and the sessions near their context limit. */
+  tasksApi?: TasksApi;
 }): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -51,11 +51,11 @@ export function Sidebar(p: {
   const { place } = p.nav;
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
-  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf, p.teams?.teams ?? []), [p.sessions, p.projects, p.projectIdOf, p.teams?.teams]);
+  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
   const attn = useMemo(() => attentionOf(p.sessions, p.waits), [p.sessions, p.waits]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
-  const near = useMemo(() => nearLimit(p.sessions, p.teams?.later, p.teams?.near), [p.sessions, p.teams?.later, p.teams?.near]);
-  const decisions = useMemo(() => (p.teams ? openDecisions(p.teams.tasks) : []), [p.teams]);
+  const near = useMemo(() => nearLimit(p.sessions, p.tasksApi?.later, p.tasksApi?.near), [p.sessions, p.tasksApi?.later, p.tasksApi?.near]);
+  const decisions = useMemo(() => (p.tasksApi ? openDecisions(p.tasksApi.tasks) : []), [p.tasksApi]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
   keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };
@@ -105,7 +105,7 @@ export function Sidebar(p: {
           <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
           <span className="st-ledge-names">
             <span className="st-ledge-brand">Ledge<span className="brand-dot">.</span></span>
-            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + decisions.length + (p.ledge?.closedTasks ?? 0) + near.length, p.ledge?.activeTeams ?? 0)}</small>
+            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + decisions.length + (p.ledge?.closedTasks ?? 0) + near.length)}</small>
           </span>
           <Kbd>/</Kbd>
         </button>
@@ -121,10 +121,10 @@ export function Sidebar(p: {
         <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
-          decisions={decisions} answer={p.teams?.answer}
-          ledgeTasks={p.teams ? closedLedgeTasks(p.teams.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.teams?.seen(id)}
-          near={near} onHandover={id => { void p.teams?.handover(id); }}
-          onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.teams?.putLater(s); }}
+          decisions={decisions} answer={p.tasksApi?.answer}
+          ledgeTasks={p.tasksApi ? closedLedgeTasks(p.tasksApi.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.tasksApi?.seen(id)}
+          near={near} onHandover={id => { void p.tasksApi?.handover(id); }}
+          onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.tasksApi?.putLater(s); }}
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
@@ -141,7 +141,7 @@ export function Sidebar(p: {
             }}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
-            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} tasks={p.teams?.tasks} />
+            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}

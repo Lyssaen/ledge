@@ -2,14 +2,14 @@ import { useState, type JSX } from 'react';
 import type { Task } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { useI18n } from '../i18n/lang';
-import { ANSWER_SILENT, decisionOptions, type TeamsApi } from './useTeamsApi';
+import { ANSWER_SILENT, decisionOptions, type TasksApi } from './useTasksApi';
 
 /**
  * « Répondre » to a decision a session put to the user: a free text, empty at first (the options the session offered fill it
  * on a click, never chosen for the user), then the answer shown whole with an explicit confirmation, since an answer cannot be
  * taken back; only then `task.answer`. A refusal stays on screen with its reason.
  */
-export function DecisionAnswer({ task, teams, onClose }: { task: Task; teams: Pick<TeamsApi, 'answer'>; onClose(): void }): JSX.Element {
+export function DecisionAnswer({ task, api, onClose }: { task: Task; api: Pick<TasksApi, 'answer'>; onClose(): void }): JSX.Element {
   const { t } = useI18n();
   const c = t.decision;
   const [draft, setDraft] = useState('');
@@ -19,7 +19,7 @@ export function DecisionAnswer({ task, teams, onClose }: { task: Task; teams: Pi
   const text = draft.trim();
   const send = async () => {
     setStep('sending'); setError(null);
-    const reason = await teams.answer(task.id, text);
+    const reason = await api.answer(task.id, text);
     if (reason === undefined) return onClose();
     setError(reason === ANSWER_SILENT ? c.silent : c.failed(reason));
     setStep('confirm');

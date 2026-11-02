@@ -21,19 +21,19 @@ function open(turn: Partial<PhoneChatTurn>, confirm = true) {
   return t;
 }
 const archive: PhoneChatAction = { action: 'session.archive', summary: 'Archiver **Otto**', vars: { session: 'Otto' }, risk: 'reversible', session: 'b' };
-const dissolve: PhoneChatAction = { action: 'team.dissolve', summary: 'Dissoudre l’équipe **workshop**', vars: { team: 'workshop' }, risk: 'destructive', team: 'team-1', detail: 'Ses 6 sessions retournent à la table commune.' };
+const cancel: PhoneChatAction = { action: 'task.cancel', summary: 'Annuler la tâche « Revue » de **Otto**', vars: { task: 'Revue', owner: 'Otto' }, risk: 'destructive', detail: 'Otto est prévenu et arrête la tâche.' };
 const card = () => screen.getByRole('region', { name: /Action proposée|Plan de/ });
 
 describe('the action card', () => {
-  it('draws a dissolution with its risk, and confirms it in a sheet before any check', async () => {
-    const t = open({ actions: [dissolve] });
+  it('draws a cancellation with its risk, and confirms it in a sheet before any check', async () => {
+    const t = open({ actions: [cancel] });
     const spy = vi.spyOn(t.store, 'act').mockResolvedValue({ status: 'applied' });
-    expect(within(card()).getByText('workshop').tagName).toBe('STRONG');
+    expect(within(card()).getByText('Otto').tagName).toBe('STRONG');
     expect(within(card()).getByText(C.risk.destructive)).toBeInTheDocument();
-    fireEvent.click(within(card()).getByRole('button', { name: 'Dissoudre…' }));
+    fireEvent.click(within(card()).getByRole('button', { name: 'Abandonner…' }));
     expect(spy).not.toHaveBeenCalled();
-    const sheet = screen.getByRole('dialog', { name: 'Dissoudre l’équipe workshop ?' });
-    expect(within(sheet).getByText(dissolve.detail!)).toBeInTheDocument();
+    const sheet = screen.getByRole('dialog', { name: 'Annuler la tâche « Revue » de Otto ?' });
+    expect(within(sheet).getByText(cancel.detail!)).toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole('button', { name: copy.confirm.go }));
     expect(spy).toHaveBeenCalledWith(QID, [0], undefined);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -48,7 +48,7 @@ describe('the action card', () => {
   });
 
   it('a plan: steps in order, « Tout appliquer » sends every open row through one sheet', () => {
-    const t = open({ actions: [archive, dissolve] });
+    const t = open({ actions: [archive, cancel] });
     const spy = vi.spyOn(t.store, 'act').mockResolvedValue({ status: 'applied' });
     expect(screen.getByRole('region', { name: C.label(2) })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: `${C.all(2)}…` }));
@@ -58,23 +58,23 @@ describe('the action card', () => {
   });
 
   it('after a failed step, holds the next ones and resumes from it', () => {
-    open({ actions: [{ ...archive, state: 'done', doneAt: '2026-10-30T10:01:00.000Z' }, { ...dissolve, state: 'failed', code: 'dissolved' }, archive] });
-    expect(screen.getByRole('alert').textContent).toBe('Échec : l’équipe workshop a été dissoute entre-temps.');
+    open({ actions: [{ ...archive, state: 'done', doneAt: '2026-10-30T10:01:00.000Z' }, { ...cancel, state: 'failed', code: 'closed' }, archive] });
+    expect(screen.getByRole('alert').textContent).toBe('Échec : la tâche « Revue » est déjà close.');
     expect(screen.getByText(C.held(2))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: `${C.resume(2, 2)}…` })).toBeInTheDocument();
   });
 
   it('says a cancelled check sent nothing', async () => {
-    const t = open({ actions: [dissolve] });
+    const t = open({ actions: [cancel] });
     vi.spyOn(t.store, 'act').mockResolvedValue({ status: 'cancelled' });
-    fireEvent.click(within(card()).getByRole('button', { name: 'Dissoudre…' }));
+    fireEvent.click(within(card()).getByRole('button', { name: 'Abandonner…' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: copy.confirm.go }));
     expect(await screen.findByText(copy.confirm.cancelled)).toBeInTheDocument();
   });
 
   it('without a passkey, a checked row cannot be applied and Connexion is pointed to', () => {
-    open({ actions: [dissolve] }, false);
-    expect(within(card()).getByRole('button', { name: 'Dissoudre…' })).toBeDisabled();
+    open({ actions: [cancel] }, false);
+    expect(within(card()).getByRole('button', { name: 'Abandonner…' })).toBeDisabled();
     expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '#/connection');
   });
 
@@ -102,7 +102,7 @@ describe('the action card', () => {
 
 describe('store.act', () => {
   it('signs a checked row with an `act` challenge over the turn and sends it confirmed', async () => {
-    const t = open({ actions: [archive, dissolve] });
+    const t = open({ actions: [archive, cancel] });
     vi.mocked(getAssertion).mockResolvedValue({ id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' });
     const p = t.store.act(QID, [1]);
     await waitFor(() => expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'act', qid: QID }]));
@@ -125,7 +125,7 @@ describe('store.act', () => {
   });
 
   it('refuses a checked row on a phone without a passkey, before asking anything', async () => {
-    const t = open({ actions: [dissolve] }, false);
+    const t = open({ actions: [cancel] }, false);
     await expect(t.store.act(QID, [0])).resolves.toEqual({ status: 'rejected', reason: 'confirm_required' });
     expect(t.of('confirm.prepare')).toHaveLength(0);
   });

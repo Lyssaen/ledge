@@ -24,17 +24,14 @@ describe('the sidebar shell', () => {
   });
 
   it('Ledge’s entry (ledge home spec §2.1): its live line, and a click goes to the home view, lit, with its composer focused', async () => {
-    const { side, user, d } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
+    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
     const entry = side.getByRole('button', { name: 'Home: Ledge, the operator' });
-    expect(entry).toHaveTextContent(/\d+ yours · 0 active teams/);
+    expect(entry).toHaveTextContent(/\d+ yours\//);
     await user.click(entry);
     const home = await screen.findByRole('region', { name: 'Home: Ledge, the operator' });
     await waitFor(() => expect(within(home).getByRole('textbox', { name: 'Ask Ledge' })).toHaveFocus());
     expect(entry).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    // A team at work shows in the line.
-    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-roles', project: null, machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] });
-    await waitFor(() => expect(entry).toHaveTextContent('· 1 active team'));
   });
 
   it('the question field under the entry: Enter with text goes home and sends chat.ask', async () => {

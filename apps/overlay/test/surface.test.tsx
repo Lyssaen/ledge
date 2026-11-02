@@ -35,7 +35,7 @@ describe('<Surface>', () => {
     expect(screen.queryByText(MESSAGES.fr.unreachable)).toBeNull();
   });
 
-  it('starts as the handle sized to the team', () => {
+  it('starts as the handle sized to the fleet', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     expect(surface()).toHaveStyle({ width: `${filetWidth([2])}px` });
     expect(screen.getAllByRole('button', { name: /open$/ })).toHaveLength(3);

@@ -100,20 +100,6 @@ describe('createTasks', () => {
     expect(told).toEqual([['otto', expect.stringContaining("abandonnée : Pim s'est terminée sans la finir")]]);
   });
 
-  it('forgetTeam takes a purged team off its tasks, which stay their owner\'s and giver\'s (issue #146)', () => {
-    const t = give(); const other = give('Relis');
-    const seen: Task[] = [];
-    const saved: Task[] = [{ ...t, team: 'team-dead' }, { ...other, team: 'team-live' }];
-    tasks.close(); tasks = createTasks({ store, mailbox: { notify }, now: () => T0, journal: { load: () => saved, save: () => {} }, onTask: x => seen.push(x) });
-    tasks.forgetTeam('team-dead');
-    expect(tasks.all().find(x => x.id === t.id)!.team).toBeUndefined();
-    expect(tasks.all().find(x => x.id === other.id)!.team).toBe('team-live');
-    expect(seen.map(x => x.id)).toEqual([t.id]);
-    expect(cmd('pim', 'list').tasks!.map(x => x.id)).toContain(t.id);
-    tasks.forgetTeam('team-dead');
-    expect(seen).toHaveLength(1);
-  });
-
   it('with a journal, tasks outlive the daemon; an owner gone meanwhile drops them', () => {
     const journal = tasksJournal(join(mkdtempSync(join(tmpdir(), 'tasks-j-')), 'tasks.json'));
     let saved: Task[] | undefined;
@@ -128,7 +114,7 @@ describe('createTasks', () => {
     expect(told).toEqual([['otto', expect.stringContaining('abandonnée : Nova')]]);
   });
 
-  it('cancel: by its giver or by Ledge, closed with its reason; the owner is told to stop, and a seat giver learns it', () => {
+  it('cancel: by its giver or by Ledge, closed with its reason; the owner is told to stop, and a session giver learns it', () => {
     const t = give();
     told = [];
     expect(cmd('nova', 'cancel', { task: t.id }).reason).toContain('seul celui qui l\'a confiée (Otto)');
@@ -202,7 +188,7 @@ describe('closing and parking (borrowed from OpenRig)', () => {
     vi.advanceTimersByTime(2_000);
     expect(told).toEqual([['pim', expect.stringContaining(`tu tiens encore ${t.id} « Lance les tests » (à prendre)`)]]);
     vi.advanceTimersByTime(120_000); expect(told).toHaveLength(1);
-    // Back at work then idle again with the same tasks: not told twice (a lead waiting on its team is not woken each stretch).
+    // Back at work then idle again with the same tasks: not told twice (a session waiting on others is not woken each stretch).
     store.upsert({ ...store.get('pim')!, state: 'working' }); vi.advanceTimersByTime(120_000); expect(told).toHaveLength(1);
     store.upsert({ ...store.get('pim')!, state: 'idle' }); vi.advanceTimersByTime(61_000); expect(told).toHaveLength(1);
     // A new task makes a new set: told again once it sits.
@@ -250,22 +236,19 @@ describe('ledge task (CLI)', () => {
 
 describe('tasks Ledge gives (roles spec §3.7)', () => {
   let updates: Task[];
-  let teams: import('../src/daemon/teamsLive.js').TeamsLive;
-  beforeEach(async () => {
-    const { createTeamsLive } = await import('../src/daemon/teamsLive.js');
+  beforeEach(() => {
     updates = [];
-    teams = createTeamsLive({ store, now: () => T0 });
-    tasks = createTasks({ store, mailbox: { notify }, teams, onTask: t => updates.push(t), now: () => T0 });
+    tasks = createTasks({ store, mailbox: { notify }, onTask: t => updates.push(t), now: () => T0 });
   });
 
   it('give by ledge: the owner gets the usual pointer from Ledge; every change reaches the fronts, never a terminal', () => {
-    const t = cmd('ledge', 'give', { to: 'Pim', title: 'Implémenter les rôles' }).task!;
+    const t = cmd('ledge', 'give', { to: 'Pim', title: 'Implémenter les tâches' }).task!;
     expect(t).toMatchObject({ giver: 'ledge', giverName: 'Ledge', owner: 'pim', state: 'open' });
     expect(told).toEqual([['pim', expect.stringContaining('from="Ledge"')]]);
     expect(updates.map(u => u.state)).toEqual(['open']);
     told = [];
     cmd('pim', 'take', { task: t.id });
-    cmd('pim', 'done', { task: t.id, text: 'rôles lus au démarrage' });
+    cmd('pim', 'done', { task: t.id, text: 'tâches lues au démarrage' });
     expect(updates.map(u => u.state)).toEqual(['open', 'taken', 'done']);
     // Nothing is typed anywhere for Ledge: the outcome is an item of « À toi ».
     expect(told).toEqual([]);
@@ -274,7 +257,7 @@ describe('tasks Ledge gives (roles spec §3.7)', () => {
     expect(cmd('pim', 'seen', { task: t.id }).reason).toBe('seul Ledge range ses propres tâches');
   });
 
-  it('a pass between seats keeps Ledge as the giver; an owner that ends drops it to Ledge', () => {
+  it('a pass between sessions keeps Ledge as the giver; an owner that ends drops it to Ledge', () => {
     const t = cmd('ledge', 'give', { to: 'pim', title: 'Relire' }).task!;
     const passed = cmd('pim', 'pass', { task: t.id, to: 'Nova' }).task!;
     expect(passed).toMatchObject({ giver: 'ledge', owner: 'nova' });
@@ -284,21 +267,14 @@ describe('tasks Ledge gives (roles spec §3.7)', () => {
     expect(told).toEqual([]);
   });
 
-  it('@role names a seat of a team: the giver’s own for a session, the named one for Ledge; list by team', () => {
-    const team = teams.create({ name: 'ledge-roles', project: 'ledge', cwd: '/w/ledge', roles: ['lead', 'qa'] });
-    teams.seat(team.id, 'lead', store.get('otto')!, 'Chef'); teams.seat(team.id, 'qa', store.get('pim')!, 'QA');
-    const t = cmd('otto', 'give', { to: '@qa', title: 'Teste' }).task!;
-    expect(t).toMatchObject({ owner: 'pim', team: team.id, giver: 'otto' });
-    expect(cmd('nova', 'give', { to: '@qa', title: 'x' }).reason).toBe("@qa n'existe que dans une équipe");
-    expect(cmd('ledge', 'give', { to: '@qa', title: 'x' }).reason).toBe("@qa n'existe que dans une équipe");
-    const l = cmd('ledge', 'give', { to: '@lead', team: team.id, title: 'Mène' }).task!;
-    expect(l).toMatchObject({ owner: 'otto', giver: 'ledge', team: team.id });
-    expect(cmd('ledge', 'give', { to: '@ops', team: team.id, title: 'x' }).reason).toContain("personne ne tient @ops dans l'équipe ledge-roles");
-    expect(cmd('ledge', 'list', { team: team.id }).tasks!.map(x => x.id)).toEqual([t.id, l.id]);
-    // Ledge lists every task, the ones the seats gave each other too (issue #92).
+  it('a session is named by its name or its id; Ledge lists and reads every task', () => {
+    const t = cmd('otto', 'give', { to: 'Pim', title: 'Teste' }).task!;
+    expect(t).toMatchObject({ owner: 'pim', giver: 'otto' });
+    expect(cmd('otto', 'give', { to: '@qa', title: 'x' }).reason).toBe('aucune session Ledge nommée @qa');
+    const l = cmd('ledge', 'give', { to: 'otto', title: 'Mène' }).task!;
+    expect(l).toMatchObject({ owner: 'otto', giver: 'ledge' });
+    // Ledge lists every task, the ones the sessions gave each other too (issue #92).
     expect(cmd('ledge', 'list').tasks!.map(x => x.id)).toEqual([t.id, l.id]);
-    expect(cmd('ledge', 'list', { team: 'team-0000' }).reason).toBe('aucune équipe team-0000');
-    // Ledge reads any task, the ones the seats gave each other too.
     expect(cmd('ledge', 'show', { task: t.id }).task!.id).toBe(t.id);
   });
 });
@@ -345,7 +321,7 @@ describe('task transmissions (issue #92)', () => {
     expect(strip(c).at(-1)).toEqual({ index: 1, op: 'cancel', from: 'ledge', to: 'pim', fromName: 'Ledge', toName: 'Pim' });
   });
 
-  it('writes a cancel by Ledge of a task a seat gave from its giver, Ledge as the one who did it', () => {
+  it('writes a cancel by Ledge of a task a session gave from its giver, Ledge as the one who did it', () => {
     const t = give();
     const c = cmd(LEDGE_GIVER, 'cancel', { task: t.id }).task!;
     expect(c.log.at(-1)).toMatchObject({ by: 'Ledge', op: 'cancel', from: 'otto', to: 'pim', fromName: 'Otto', toName: 'Pim' });
@@ -360,7 +336,7 @@ describe('task transmissions (issue #92)', () => {
     expect(updates.at(-1)![1]!.from).toBeUndefined();
   });
 
-  it('tells onTask of a task between two seats, with the entry', () => {
+  it('tells onTask of a task between two sessions, with the entry', () => {
     const t = give();
     expect(updates).toHaveLength(1);
     expect(updates[0]![0].id).toBe(t.id);

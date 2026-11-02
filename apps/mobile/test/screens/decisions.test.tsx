@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { PhoneChatAction, PhoneTask, PhoneTeam } from '@ledge/protocol';
+import type { PhoneChatAction, PhoneTask } from '@ledge/protocol';
 import { copy } from '../../src/copy';
-import { closedTasks, openDecisions, openTasks } from '../../src/model/teams';
+import { closedTasks, openDecisions, openTasks } from '../../src/model/tasks';
 import { Chat } from '../../src/screens/Chat';
 import { Inbox } from '../../src/screens/Inbox';
 import { session } from '../model/fixtures';
@@ -14,16 +14,14 @@ vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(), createCr
 const QID = '0b1e8f7a-4c1d-4a55-9d0e-2f3a4b5c6d7e';
 const NOW = new Date().toISOString();
 const ON = { confirm: true, chat: true as const };
-const team: PhoneTeam = { id: 'team-a1b2', name: 'ledge-roles', project: 'Ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }], done: 0, given: 1, createdAt: NOW };
-const task = (id: string, extra: Partial<PhoneTask> = {}): PhoneTask => ({ id, title: `Tâche ${id}`, owner: 'otto', ownerName: 'Otto', ownerRole: 'build', state: 'taken', at: NOW, updatedAt: NOW, ...extra });
+const task = (id: string, extra: Partial<PhoneTask> = {}): PhoneTask => ({ id, title: `Tâche ${id}`, owner: 'otto', ownerName: 'Otto', state: 'taken', at: NOW, updatedAt: NOW, ...extra });
 /** A decision Otto put to the user: owner Ledge, giver Otto, the options in its text. */
 const decision = (extra: Partial<PhoneTask> = {}): PhoneTask =>
   task('t5d6e7f', { owner: 'ledge', ownerName: 'Ledge', giver: 'otto', giverName: 'Otto', title: 'Fusionner feat/roles ?', text: 'Oui : fusionne maintenant\nNon : attends la revue de Mila', state: 'open', ...extra });
 
 function withDecision(tasks: PhoneTask[]) {
   const t = setup();
-  t.deliver(snapshot([session('otto', { name: 'Otto', repo: 'ledge', role: 'build', team: 'team-a1b2' })], 'PC-Desan', undefined, ON));
-  t.deliver({ type: 'teams', teams: [team] });
+  t.deliver(snapshot([session('otto', { name: 'Otto', repo: 'ledge' })], 'PC-Desan', undefined, ON));
   t.deliver({ type: 'tasks', tasks });
   return t;
 }

@@ -8,27 +8,18 @@ export type Route =
   | { name: 'thread'; sessionId: string }
   | { name: 'terminal'; sessionId: string }
   | { name: 'request'; sessionId: string; key: string }
-  | { name: 'connection' }
-  /** The Équipes tab. `team`: the editor of a team definition (`key` is `new` or a catalog key, `model/catalog.ts`); `team-copy`: a live team's composition as a new team; `role`: a role's editor. */
-  | { name: 'teams' }
-  | { name: 'team'; key: string }
-  | { name: 'team-copy'; teamId: string }
-  | { name: 'role'; key: string }
-  | { name: 'live'; teamId: string }
-  | { name: 'compose'; teamId: string };
+  | { name: 'connection' };
 
 /** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
-const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, chat: true, thread: true, terminal: true, request: true, connection: true, teams: true, team: true, 'team-copy': true, role: true, live: true, compose: true };
+const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, chat: true, thread: true, terminal: true, request: true, connection: true };
 export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
 
-const SIMPLE = ['agents', 'chat', 'connection', 'teams'] as const;
+const SIMPLE = ['agents', 'chat', 'connection'] as const;
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   try {
     if (parts[0] === 'request' && parts.length === 3) return { name: 'request', sessionId: decodeURIComponent(parts[1]!), key: decodeURIComponent(parts[2]!) };
-    if ((parts[0] === 'team' || parts[0] === 'role') && parts.length === 2) return { name: parts[0], key: decodeURIComponent(parts[1]!) };
-    if ((parts[0] === 'team-copy' || parts[0] === 'live' || parts[0] === 'compose') && parts.length === 2) return { name: parts[0], teamId: decodeURIComponent(parts[1]!) };
     if ((parts[0] === 'thread' || parts[0] === 'terminal') && parts.length === 2) return { name: parts[0], sessionId: decodeURIComponent(parts[1]!) };
   } catch { /* malformed escape: fall through to the inbox */ }
   const simple = SIMPLE.find((n) => n === parts[0]);
@@ -38,8 +29,6 @@ export function parseRoute(hash: string): Route {
 
 export function href(r: Route): string {
   if (r.name === 'request') return `#/request/${encodeURIComponent(r.sessionId)}/${encodeURIComponent(r.key)}`;
-  if (r.name === 'team' || r.name === 'role') return `#/${r.name}/${encodeURIComponent(r.key)}`;
-  if (r.name === 'team-copy' || r.name === 'live' || r.name === 'compose') return `#/${r.name}/${encodeURIComponent(r.teamId)}`;
   if (r.name === 'thread' || r.name === 'terminal') return `#/${r.name}/${encodeURIComponent(r.sessionId)}`;
   return r.name === 'inbox' ? '#/' : `#/${r.name}`;
 }

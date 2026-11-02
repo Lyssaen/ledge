@@ -47,7 +47,7 @@ export const overview = (): Session[] => [
   session('pim', { name: 'Pim', tool: 'cursor', project: 'landing-page', startedAt: ago(8) }),
   session('bix', { name: 'Bix', project: 'documentation', startedAt: ago(2), ...reply })
 ];
-export const team = (): Session[] => ['Otto', 'Nova', 'Pim', 'Bix', 'Lu', 'Milo', 'Ada', 'Nox', 'Pip', 'Sol', 'Mina', 'Tao'].map((name, i) =>
+export const bots = (): Session[] => ['Otto', 'Nova', 'Pim', 'Bix', 'Lu', 'Milo', 'Ada', 'Nox', 'Pip', 'Sol', 'Mina', 'Tao'].map((name, i) =>
   session(`t${i}`, { name, tool: (['claude', 'codex', 'cursor'] as const)[i % 3], project: ['harness-assistant', 'design-system', 'landing-page'][i % 3]!, startedAt: ago(12 - i), ...(i === 1 || i === 7 || i === 10 ? perm : i % 3 === 0 ? { state: 'idle' as const } : {}) }));
 
 /** Hovers the island with the real mouse, coming from below it. The sober island does not open a panel for this. */

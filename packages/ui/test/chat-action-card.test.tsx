@@ -9,8 +9,8 @@ import { T0, fakeSession } from './fixtures';
 
 const noop = () => {};
 const archive: ChatAction = { action: 'session.archive', args: { session: 'otto' }, summary: 'Archiver **Otto**', vars: { session: 'Otto' }, risk: 'reversible', session: 'local:otto' };
-const dissolve: ChatAction = { action: 'team.dissolve', args: { team: 't1' }, summary: 'Dissoudre l’équipe **qa**', vars: { team: 'qa' }, risk: 'destructive', team: 't1' };
-const turn = (o: Partial<ChatTurn> = {}): ChatTurn => ({ qid: 'q1', question: 'q', askedAt: T0, answeredAt: T0, steps: [], answer: 'Voici.', actions: [archive, dissolve], ...o });
+const cancel: ChatAction = { action: 'task.cancel', args: { task: 't91b0d4' }, summary: 'Annuler la tâche « Relire » de **Max**', vars: { task: 'Relire', owner: 'Max' }, risk: 'destructive', session: 'local:max' };
+const turn = (o: Partial<ChatTurn> = {}): ChatTurn => ({ qid: 'q1', question: 'q', askedAt: T0, answeredAt: T0, steps: [], answer: 'Voici.', actions: [archive, cancel], ...o });
 const base: ChatViewProps = { turns: [turn()], live: null, sessions: [fakeSession('local:otto')], visible: true, offline: null, onAsk: noop, onCancel: noop, onReset: noop, onBack: noop, onClose: noop, onOpenSession: noop, now: Date.parse(T0), docked: true };
 const withCard = { ...copy, chat: { ...copy.chat, action: actionCopy } };
 const ui = (p: Partial<ChatViewProps>) => <ChatCopyProvider value={withCard}><ChatView {...base} {...p} /></ChatCopyProvider>;
@@ -21,7 +21,7 @@ describe('the chat draws a turn\'s generic card (#94)', () => {
     render(ui({ onAct }));
     const card = screen.getByRole('region', { name: 'Plan of 2 actions' });
     expect(card).toHaveTextContent('Archive Otto');
-    expect(card).toHaveTextContent('Dissolve the team qa');
+    expect(card).toHaveTextContent('Cancel Max’s task “Relire”');
     fireEvent.click(screen.getByRole('button', { name: 'Apply all (2)…' }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply the 2' }));
     expect(onAct).toHaveBeenCalledWith('q1', [0, 1], true);
@@ -105,7 +105,7 @@ describe('useActionCards: chat.act and chat.ignore (#94)', () => {
   it('freed when the turn\'s rows change, by a chat.act refusal, or when its machine goes', () => {
     const a = setup();
     act(() => a.result.current.act('q1', [0], false));
-    a.rerender({ ...a.props, chat: [turn({ actions: [{ ...archive, state: 'done' }, dissolve] })] });
+    a.rerender({ ...a.props, chat: [turn({ actions: [{ ...archive, state: 'done' }, cancel] })] });
     expect(a.result.current.actingQid).toBeNull();
     const b = setup();
     act(() => b.result.current.act('q1', [0], false));
@@ -129,7 +129,7 @@ describe('useActionCards: chat.act and chat.ignore (#94)', () => {
   it('a plan under way: held while a row sent runs or is still to come; freed once none is', () => {
     const { send, result, rerender, props } = setup();
     act(() => result.current.act('q1', [0, 1], true));
-    const at = (states: Array<ChatAction['state']>) => rerender({ ...props, chat: [turn({ actions: [archive, dissolve].map((a, i) => ({ ...a, ...(states[i] ? { state: states[i] } : {}) })) })] });
+    const at = (states: Array<ChatAction['state']>) => rerender({ ...props, chat: [turn({ actions: [archive, cancel].map((a, i) => ({ ...a, ...(states[i] ? { state: states[i] } : {}) })) })] });
     at(['running']);
     expect(result.current.actingQid).toBe('q1');
     act(() => result.current.act('q1', [1], true));
@@ -146,7 +146,7 @@ describe('useActionCards: chat.act and chat.ignore (#94)', () => {
     for (const stop of ['failed', 'refused'] as const) {
       const { result, rerender, props } = setup();
       act(() => result.current.act('q1', [0, 1], true));
-      rerender({ ...props, chat: [turn({ actions: [{ ...archive, state: stop }, dissolve] })] });
+      rerender({ ...props, chat: [turn({ actions: [{ ...archive, state: stop }, cancel] })] });
       expect(result.current.actingQid, stop).toBeNull();
     }
   });

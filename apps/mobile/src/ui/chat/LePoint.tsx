@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { CONTEXT_NEAR, type PhoneSession, type PhoneTask, type PhoneTeam } from '@ledge/protocol';
+import { CONTEXT_NEAR, type PhoneSession, type PhoneTask } from '@ledge/protocol';
 import { copy } from '../../copy';
-import { closedTasks, openDecisions, openTasks } from '../../model/teams';
+import { closedTasks, openDecisions, openTasks } from '../../model/tasks';
 import { ageLabel, headline, requestsOf } from '../../model/requests';
 import { href, navigate } from '../../router';
 import type { MobileStore } from '../../state/store';
 import { useNow } from '../../useNow';
-import { Flag, Progress, RolePill } from './RolePill';
 import { buttonClass } from '../Button';
 import { Tag } from '../Tag';
 
@@ -26,10 +25,10 @@ function closedLine(t: PhoneTask): string {
 /**
  * « Le point » (ledge home spec §2.4), built from the PC's state, not asked of Ledge: what waits for the user (a plain
  * authorisation answered in place, the rest opened; the decisions sessions put to the user, answered through the chat;
- * the closed tasks Ledge gave), the teams with Ledge's progress, and the tasks Ledge gave that are still open.
+ * the closed tasks Ledge gave), and the tasks Ledge gave that are still open.
  * `onAnswer` puts a decision's answer in the making into the chat's field: the phone never answers by itself.
  */
-export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, threshold = CONTEXT_NEAR, onAnswer }: { store: MobileStore; sessions: PhoneSession[]; teams: PhoneTeam[]; tasks: Map<string, PhoneTask>; syncedAt: string | null; fresh: boolean; threshold?: number; onAnswer?: (t: PhoneTask) => void }) {
+export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = CONTEXT_NEAR, onAnswer }: { store: MobileStore; sessions: PhoneSession[]; tasks: Map<string, PhoneTask>; syncedAt: string | null; fresh: boolean; threshold?: number; onAnswer?: (t: PhoneTask) => void }) {
   const now = useNow();
   const [busy, setBusy] = useState<string | null>(null);
   const byId = new Map(sessions.map(s => [s.id, s]));
@@ -63,7 +62,7 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
               <div key={id} className="flex items-center gap-2">
                 <Dot tone="danger" />
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-body">
-                  <span className="font-medium">{r.botName}</span>{s?.role && <RolePill role={s.role} />}
+                  <span className="font-medium">{r.botName}</span>
                   <span className="min-w-0 truncate font-mono">{headline(r)}</span>
                 </span>
                 {inPlace ? (
@@ -93,7 +92,7 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
             <div key={t.id} className="flex items-center gap-2">
               <Dot tone={t.state === 'done' ? 'ok' : 'attention'} />
               <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-body">
-                <span className="font-medium">{t.ownerName}</span>{t.ownerRole && <RolePill role={t.ownerRole} />}<span>{closedLine(t)}</span>
+                <span className="font-medium">{t.ownerName}</span><span>{closedLine(t)}</span>
               </span>
               <button type="button" className={SMALL} onClick={() => see(t)}>{P.see}</button>
             </div>
@@ -102,25 +101,9 @@ export function LePoint({ store, sessions, teams, tasks, syncedAt, fresh, thresh
             <div key={`near:${s.id}`} className="flex items-center gap-2">
               <Dot tone="attention" />
               <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-body" title={P.nearHint}>
-                <span className="font-medium">{s.name}</span>{s.role && <RolePill role={s.role} />}<span className="text-attention">· {P.near(Math.round((s.context!.used / s.context!.window) * 100))}</span>
+                <span className="font-medium">{s.name}</span><span className="text-attention">· {P.near(Math.round((s.context!.used / s.context!.window) * 100))}</span>
               </span>
               <a href={href({ name: 'thread', sessionId: s.id })} className={SMALL}>{P.see}</a>
-            </div>
-          ))}
-        </div>
-      )}
-      {teams.length > 0 && (
-        <div role="group" aria-label={P.teamsLabel} className="flex flex-col gap-2">
-          <h3 className={HEAD}>{P.teams}</h3>
-          {teams.map(t => t.state === 'active' ? (
-            <div key={t.id} className="flex items-center gap-2 text-body">
-              <Flag /><span className="font-medium">{t.name}</span><span className="flex-1 text-muted">{P.seats(t.seats.length)}</span>
-              {t.given > 0 && <Progress done={t.done} given={t.given} />}
-            </div>
-          ) : (
-            <div key={t.id} className="flex items-center gap-2 text-body text-muted">
-              <Flag dim /><span className="flex-1"><span className="font-medium">{t.name}</span> · {P.resting}</span>
-              <button type="button" className={SMALL} disabled={!fresh} onClick={() => void store.resumeTeam(t.id)}>{P.resume}</button>
             </div>
           ))}
         </div>

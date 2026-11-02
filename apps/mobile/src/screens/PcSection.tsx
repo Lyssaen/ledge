@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { PcAction } from '@ledge/protocol';
 import { copy } from '../copy';
-import { outcomeNote, type OutcomeNote } from '../model/teamsOutcome';
+import { outcomeNote, type OutcomeNote } from '../model/outcome';
 import { olderThan, pcRunning, type PcRun } from '../state/pc';
 import { useMobile, type MobileStore } from '../state/store';
 import { Button } from '../ui/Button';

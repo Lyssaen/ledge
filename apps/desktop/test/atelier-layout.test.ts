@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { projectOf } from '@ledge/fleet';
-import type { Helper, Projects, Session, Team } from '@ledge/protocol';
+import type { Helper, Projects, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { mainOrder } from '../src/nav/agents';
 import { layoutTable, tableLength, roomWidth, roomTileWidth, noteX, tableBranch, sheetState, helperState, sceneOf, walkOrder, type AtelierScene } from '../src/atelier/layout';
@@ -76,26 +76,16 @@ it('the scene of each filter, and the J / K order', () => {
   expect(walkOrder(sceneOf(crowd, projects, idOf, 'all')).map(s => s.name)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
   expect(walkOrder(sceneOf(crowd, projects, idOf, 'all'), 4).map(s => s.name)).toEqual(['a', 'b', 'c', 'd']);
 });
-it('rooms and tables (atelier rooms spec §3.1): a table per live team, the common table, resting kept, dissolved gone', () => {
-  const projects: Projects = { projects: ['ledge', 'pay'].map(id => ({ id, name: id, color: 'blue' as const, description: '', repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
+it('rooms (atelier rooms spec §3.1): one common table per project with sessions', () => {
+  const projects: Projects = { projects: ['ledge', 'pay', 'idle'].map(id => ({ id, name: id, color: 'blue' as const, description: '', repos: [{ machine: 'local', path: `/w/${id}` }] })), rules: [] };
   const idOf = (s: Session) => projectOf(s, projects);
-  const team = (id: string, extra: Partial<Team> = {}): Team => ({ id, name: id, project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [], createdAt: `2026-10-26T08:0${id.at(-1)}:00.000Z`, updatedAt: '', ...extra });
-  const roles = team('team-0001', { seats: [{ role: 'build', sessionId: 'otto' }, { role: 'review', sessionId: 'nova' }] });
-  const mobile = team('team-0002', { state: 'resting', seats: [{ role: 'build', sessionId: 'arlo' }] });
-  const gone = team('team-0003', { state: 'dissolved' });
-  const order = mainOrder([main('otto', { team: 'team-0001' }), main('nova', { team: 'team-0001' }), main('pim'), main('kit', { cwd: '/w/pay' }), main('zed', { cwd: '/w/pay', team: 'team-0001' })], projects);
-  const archived = main('arlo', { state: 'exited', archivedAt: '2026-10-26T09:00:00.000Z', team: 'team-0002' });
-  const scene = sceneOf(order, projects, idOf, 'all', [roles, mobile, gone], id => (id === 'arlo' ? archived : undefined));
-  const tables = (sc: AtelierScene) => sc.rooms.map(r => [r.project.id, r.tables.map(t => `${t.kind}${t.team ? `(${t.team.name})` : ''}:${t.mains.map(m => m.name).join(',')}`)]);
-  // A session whose team lives in another room sits at its own room's common table.
-  expect(tables(scene)).toEqual([['ledge', ['common:pim', 'team(team-0001):nova,otto', 'team(team-0002):arlo']], ['pay', ['common:kit,zed']]]);
-  // The resting team's seats are not walked.
-  expect(walkOrder(scene).map(s => s.name)).toEqual(['pim', 'nova', 'otto', 'kit', 'zed']);
-  // No session outside the teams: no common table; an empty team table still shows.
-  const alone = sceneOf(mainOrder([main('otto', { team: 'team-0001' })], projects), projects, idOf, 'ledge', [roles, team('team-0004')]);
-  expect(tables(alone)).toEqual([['ledge', ['team(team-0001):otto', 'team(team-0004):']]]);
-  // No team: today's one table per project, inside its room.
-  expect(tables(sceneOf(order, projects, idOf, 'all'))).toEqual([['ledge', ['common:nova,otto,pim']], ['pay', ['common:kit,zed']]]);
+  const order = mainOrder([main('otto'), main('nova'), main('pim'), main('kit', { cwd: '/w/pay' }), main('zed', { cwd: '/w/pay' })], projects);
+  const tables = (sc: AtelierScene) => sc.rooms.map(r => [r.project.id, r.tables.map(t => `${t.key}:${t.mains.map(m => m.name).join(',')}`)]);
+  expect(tables(sceneOf(order, projects, idOf, 'all'))).toEqual([['ledge', ['common:ledge:nova,otto,pim']], ['pay', ['common:pay:kit,zed']]]);
+  expect(walkOrder(sceneOf(order, projects, idOf, 'all')).map(s => s.name)).toEqual(['nova', 'otto', 'pim', 'kit', 'zed']);
+  // A project without sessions has no room; filtered on, it is the empty project.
+  const empty = sceneOf(order, projects, idOf, 'idle');
+  expect([empty.rooms.length, empty.empty?.id]).toEqual([0, 'idle']);
   expect(roomTileWidth([{ mains: [1, 2] }, { mains: [1] }])).toBe(roomWidth(2) + roomWidth(1) + 70 + 220);
 });
 it('mosaic rows and zoom arithmetic', () => {

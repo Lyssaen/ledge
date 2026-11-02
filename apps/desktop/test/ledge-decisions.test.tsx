@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { ClientMessage, Task } from '@ledge/protocol';
 import { boot, closeDaemons, PROJECTS } from './helpers';
-import { decisionOptions } from '../src/teams/useTeamsApi';
+import { decisionOptions } from '../src/tasks/useTasksApi';
 
 const T0 = new Date().toISOString();
 /** A decision Otto put to the user (`ledge task give ledge …`): giver the session, owner Ledge. */
@@ -40,7 +40,7 @@ describe('a decision a session puts to the user', () => {
     expect(within(card).getByText('Otto')).toBeVisible();
     expect(within(card).getByRole('button', { name: 'Answer' })).toBeVisible();
     expect(bar.getByText('1')).toBeVisible();
-    expect(side().getByText(/^1 yours ·/)).toBeVisible();
+    expect(side().getByText(/^1 yours$/)).toBeVisible();
     // Not a task Ledge gave.
     expect(within(point().getByLabelText('Given by Ledge')).queryByText('Fusionner feat/roles ?')).toBeNull();
   });
@@ -83,7 +83,7 @@ describe('a decision a session puts to the user', () => {
     expect(point().queryByText('Fusionner feat/roles ?')).toBeNull();
   });
 
-  it('« Tasks »: « Decisions » keeps the decisions alone, « The seats » no longer has them; an open one offers « Answer »', async () => {
+  it('« Tasks »: « Decisions » keeps the decisions alone, « The sessions » no longer has them; an open one offers « Answer »', async () => {
     const { d, user } = await openHome();
     d.push({ type: 'task.updated', task: given('t000001') });
     d.push({ type: 'task.updated', task: given('t000002', { giver: 'pim', giverName: 'Pim' }) });
@@ -93,7 +93,7 @@ describe('a decision a session puts to the user', () => {
     await waitFor(() => expect(titles()).toHaveLength(3));
     await user.selectOptions(giver, 'decisions');
     expect(titles()).toEqual(['Fusionner feat/roles ?']);
-    await user.selectOptions(giver, 'seats');
+    await user.selectOptions(giver, 'sessions');
     expect(titles()).toEqual(['Tâche t000002']);
     await user.selectOptions(giver, 'ledge');
     expect(titles()).toEqual(['Tâche t000001']);

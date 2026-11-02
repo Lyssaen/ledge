@@ -62,7 +62,7 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
       try {
         const current = deps.resolve(row);
         if ('refused' in current) { refused = current.code ?? 'changed'; throw new Error(current.refused); }
-        // The same args at another risk (a template saved meanwhile under that name) is another action: confirmed for neither.
+        // The same args at another risk is another action: confirmed for neither.
         if (JSON.stringify(current.args) !== JSON.stringify(row.args) || current.risk !== row.risk) throw new Error(row.action === 'session.decide' ? 'the request has changed since the card' : 'the target has changed since the card');
         // On the row the user saw, and as it stands now: a request that grew past the card since is cut too.
         const never = cardRefusal(row) ?? cardRefusal(current);

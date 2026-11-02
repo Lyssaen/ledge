@@ -40,7 +40,7 @@ describe('buildPersona (spec 2026-10-26 action registry §4)', () => {
     }
   });
   it('writes only ledge-action blocks, never the earlier fences', () => {
-    expect(buildPersona('claude')).not.toMatch(/```ledge-(session|relay|close|project|team|task)\b/);
+    expect(buildPersona('claude')).not.toMatch(/```ledge-(session|relay|close|project|task)\b/);
   });
   it('lists what Ledge never proposes', () => {
     const p = buildPersona('codex');

@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
-import { PROJECT_COLORS, type Helper, type Projects, type Session, type Task } from '@ledge/protocol';
+import type { Helper, Projects, Session } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { Filing } from '../../atelier/filing';
 import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
 import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
-import { ledgeProgress } from '../../teams/useTeamsApi';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
 import { AutoMark, HelperBot, SessionBot } from '../SessionBot';
@@ -71,8 +70,6 @@ export function Tree(p: {
   onToggleDense(): void;
   onNewProject(): void;
   paused: boolean;
-  /** The tasks Ledge gave: a team row's « 1/2 ». */
-  tasks?: readonly Task[];
 }): JSX.Element {
   const { t } = useI18n();
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
@@ -148,10 +145,10 @@ export function Tree(p: {
   );
 
   const agentRows = (s: Session, depth: number, parentKey: string, helper?: Helper): ReactNode[] => {
-    const team = helper ? [] : (s.helpers ?? []);
-    const auto = team.some(h => helperNeeds(s, h));
-    const open = team.length > 0 && auto !== kids.has(s.id);
-    const toggle = team.length > 0 ? () => flip(kids, setKids, s.id) : undefined;
+    const subs = helper ? [] : (s.helpers ?? []);
+    const auto = subs.some(h => helperNeeds(s, h));
+    const open = subs.length > 0 && auto !== kids.has(s.id);
+    const toggle = subs.length > 0 ? () => flip(kids, setKids, s.id) : undefined;
     const treeKey = helper ? `${s.id}:${helper.id}` : s.id;
     if (!helper) nav.current.set(s.id, { toggle, open, parent: parentKey, session: s });
     else nav.current.set(treeKey, { parent: s.id });
@@ -163,7 +160,7 @@ export function Tree(p: {
       ? (helper.state === 'waiting_permission' ? 't-approval' : helper.state === 'waiting_input' ? 't-question' : helper.state === 'error' ? 't-error' : undefined)
       : (s.state === 'waiting_permission' ? 't-approval' : s.state === 'waiting_input' ? 't-question' : s.state === 'error' ? 't-error' : undefined);
     const row = (
-      <div key={treeKey} role="treeitem" aria-level={depth + 1} aria-expanded={team.length > 0 ? open : undefined}
+      <div key={treeKey} role="treeitem" aria-level={depth + 1} aria-expanded={subs.length > 0 ? open : undefined}
         aria-selected={selected} aria-current={selected ? 'true' : undefined}
         className={cls('st-row st-agent', selected && 'sel', !helper && isFinished(s) && 'done', s.offline && 'off', !!helper && 'helper')}
         style={{ '--d': depth } as CSSProperties}
@@ -175,9 +172,9 @@ export function Tree(p: {
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
           onClick={() => helper ? p.onOpen(s.id, helper.id) : p.onOpen(s.id)}>
-          <strong>{name}{!helper && <AutoMark session={s} />}{!helper && s.role && <span className="role-pill" title={s.roleLabel ?? s.role}>@{s.role}</span>}</strong>{task && <span>{task}</span>}
+          <strong>{name}{!helper && <AutoMark session={s} />}</strong>{task && <span>{task}</span>}
         </button>
-        {team.length > 0 && !open && <span className="st-kids" title={t.side.kids(team.length)}>{team.length}</span>}
+        {subs.length > 0 && !open && <span className="st-kids" title={t.side.kids(subs.length)}>{subs.length}</span>}
         <span className={cls('st-time', waiting && timeClass)}>{s.offline ? t.side.offline : shortWhen(s.lastActivityAt, t.list.when.units, t.list.when.now)}</span>
         <span className="st-acts">
           <button type="button" tabIndex={-1} aria-label={t.side.terminalOne(name)} title="Terminal · T" onClick={() => p.onTerminal(s)}><Icon d={SHELL_ICONS.terminal} size={13} /></button>
@@ -186,7 +183,7 @@ export function Tree(p: {
         </span>
       </div>
     );
-    return [row, ...(open ? team.flatMap(h => agentRows(s, depth + 1, s.id, h)) : [])];
+    return [row, ...(open ? subs.flatMap(h => agentRows(s, depth + 1, s.id, h)) : [])];
   };
 
   const sessionRows = (list: readonly Session[], depth: number, key: string, parentKey: string): ReactNode[] => {
@@ -235,15 +232,12 @@ export function Tree(p: {
   for (const g of p.groups) {
     const label = g.id === null ? t.side.unassigned : g.name;
     const pkey = projectKey(g.id);
-    const common = g.branches.flatMap(b => b.sessions);
-    const sessions = [...common, ...g.teams.flatMap(x => x.sessions)];
-    // With teams (atelier rooms spec §3.4): « table commune », then a row per team, each holding its seats.
-    const teamed = g.teams.length > 0;
-    const has = sessions.length > 0 || teamed;
+    const sessions = g.branches.flatMap(b => b.sessions);
+    const has = sessions.length > 0;
     const open = has && !closed.has(pkey);
     const toggle = has ? () => flip(closed, setClosed, pkey) : undefined;
     const branch = g.branches.length === 1 ? g.branches[0]!.branch : undefined;
-    const sub = teamed ? t.teams.tables(g.teams.length + (common.length > 0 ? 1 : 0)) : g.flatten && branch && g.repo ? `${g.repo} · ${branch}` : (!g.flatten && g.repo ? g.repo : '');
+    const sub = g.flatten && branch && g.repo ? `${g.repo} · ${branch}` : (!g.flatten && g.repo ? g.repo : '');
     const project = g.id ? p.projects?.projects.find(x => x.id === g.id) ?? null : null;
     nav.current.set(pkey, { toggle, open });
     rows.push(
@@ -260,32 +254,15 @@ export function Tree(p: {
       </div>
     );
     if (!open) continue;
-    // The common table: its own row only when the project has teams.
-    let base = 0; let parent = pkey; let commonOpen = true;
-    if (teamed && common.length > 0) {
-      const ckey = `${pkey}:common`;
-      commonOpen = !closed.has(ckey);
-      const ctoggle = () => flip(closed, setClosed, ckey);
-      nav.current.set(ckey, { toggle: ctoggle, open: commonOpen, parent: pkey });
-      rows.push(
-        <div key={ckey} role="treeitem" aria-level={2} aria-expanded={commonOpen} className="st-row st-common" style={{ '--d': 1 } as CSSProperties}>
-          <Chevron open={commonOpen} label={commonOpen ? t.side.fold(t.teams.common) : t.side.unfold(t.teams.common)} onClick={ctoggle} />
-          <button type="button" className="st-main" data-tree-key={ckey} tabIndex={tabOf(ckey)} onClick={ctoggle}><span>{t.teams.common}</span></button>
-          <span className="st-fill" /><span className="st-count">{common.length}</span>
-        </div>
-      );
-      base = 1; parent = ckey;
-    }
-    if (commonOpen && (!teamed || common.length > 0)) {
-    if (g.flatten) rows.push(...sessionRows(common, 1 + base, parent, parent));
+    if (g.flatten) rows.push(...sessionRows(sessions, 1, pkey, pkey));
     else for (const b of g.branches) {
       const bkey = `${pkey}:${b.branch}`;
       const bopen = !closed.has(bkey);
       const btoggle = () => flip(closed, setClosed, bkey);
       const visible = b.sessions.filter(s => !p.hideDone || shown.has(bkey) || !isFinished(s)).length;
-      nav.current.set(bkey, { toggle: btoggle, open: bopen, parent });
+      nav.current.set(bkey, { toggle: btoggle, open: bopen, parent: pkey });
       rows.push(
-        <div key={bkey} role="treeitem" aria-level={2 + base} aria-expanded={bopen} className="st-row st-branch" style={{ '--d': 1 + base } as CSSProperties}>
+        <div key={bkey} role="treeitem" aria-level={2} aria-expanded={bopen} className="st-row st-branch" style={{ '--d': 1 } as CSSProperties}>
           <Chevron open={bopen} label={bopen ? t.side.fold(b.branch) : t.side.unfold(b.branch)} onClick={btoggle} />
           <Icon d={branchIcon} size={13} />
           <button type="button" className="st-main mono" data-tree-key={bkey} tabIndex={tabOf(bkey)} onClick={btoggle}><span>{b.branch}</span></button>
@@ -298,29 +275,7 @@ export function Tree(p: {
           </span>
         </div>
       );
-      if (bopen) rows.push(...sessionRows(b.sessions, 2 + base, bkey, bkey));
-    }
-    }
-    for (const { team, sessions: seats } of g.teams) {
-      const tkey = `${pkey}:team:${team.id}`;
-      const topen = !closed.has(tkey);
-      const ttoggle = () => flip(closed, setClosed, tkey);
-      const { done, given } = ledgeProgress(p.tasks ?? [], team.id);
-      const progress = t.home.point.progress(done, given);
-      nav.current.set(tkey, { toggle: ttoggle, open: topen, parent: pkey });
-      // One line, as a project's: the flag in the project's colour, the name, « team » or « resting », and Ledge's tasks once it gave some.
-      rows.push(
-        <div key={tkey} role="treeitem" aria-level={2} aria-expanded={topen} className={cls('st-row st-team', team.state === 'resting' && 'resting')}
-          style={{ '--d': 1, ...(project ? { '--team': PROJECT_COLORS[project.color] } : {}) } as CSSProperties}>
-          <Chevron open={topen} label={topen ? t.side.fold(team.name) : t.side.unfold(team.name)} onClick={ttoggle} />
-          <span className="st-flag"><Icon d={SHELL_ICONS.flag} size={13} /></span>
-          <button type="button" className="st-main" data-tree-key={tkey} tabIndex={tabOf(tkey)} onClick={() => p.onHome(g.id ?? 'none')}>
-            <strong>{team.name}</strong><span>{team.state === 'resting' ? t.teams.treeResting : t.teams.tree}</span>
-          </button>
-          {given > 0 && <span className="st-progress" role="progressbar" aria-valuemin={0} aria-valuemax={given} aria-valuenow={done} title={progress} aria-label={progress}><i><b style={{ width: `${Math.round((done / given) * 100)}%` }} /></i>{done}/{given}</span>}
-        </div>
-      );
-      if (topen) rows.push(...sessionRows(seats, 2, tkey, tkey));
+      if (bopen) rows.push(...sessionRows(b.sessions, 2, bkey, bkey));
     }
   }
 
