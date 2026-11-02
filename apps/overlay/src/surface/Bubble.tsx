@@ -75,7 +75,9 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   });
   /** Content is left below the scrolling area: a hairline tops the actions until the end is reached. */
   const [more, setMore] = useState(false);
-  const measureMore = () => { const a = scrollRef.current; setMore(!!a && a.scrollHeight > a.clientHeight + 1 && a.scrollTop + a.clientHeight < a.scrollHeight - 1); };
+  /** Scrolled past the top: the same hairline under the title (mockup complement 6b040c85, proposed). */
+  const [below, setBelow] = useState(false);
+  const measureMore = () => { const a = scrollRef.current; setMore(!!a && a.scrollHeight > a.clientHeight + 1 && a.scrollTop + a.clientHeight < a.scrollHeight - 1); setBelow(!!a && a.scrollTop > 0); };
   useEffect(() => {
     const a = scrollRef.current;
     measureMore();
@@ -134,6 +136,7 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
           {moreCount > 0 && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.bubble.more(moreCount)}</span>}
         </div>
       </div>
+      {(tall || (isQ && kind === 'ask' && quick && pending?.options)) && <div data-top-rule={below ? 'true' : 'false'} aria-hidden="true" style={{ flexShrink: 0, height: 1, margin: '-5px 0 -6px', background: below ? 'var(--border)' : 'transparent' }} />}
       {(tall || (isQ && kind === 'ask' && quick && pending?.options)) && <div ref={scrollRef} data-scroll-area className="ledge-scroll" onScroll={measureMore} style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: '0 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
       {tall && <span data-ask-text className="mono" style={{ flexShrink: 0, fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{pending?.text}{session?.project ? ` · ${session.project}` : ''}</span>}
       {isQ && kind === 'ask' && quick && pending?.options && (

@@ -22,6 +22,8 @@ for (const { height, panel } of [{ height: 1080, panel: '1' }, { height: 1080, p
     await expect(bubble).toHaveAttribute('data-tall', 'true');
     await expect(bubble.locator('[data-scroll-area] [data-ask-text]')).toContainText('Which migration strategy for the four databases?');
     await expect(bubble.locator('[data-more-rule]')).toHaveAttribute('data-more-rule', 'true');
+    // At the top, no hairline under the title; it comes once the area has scrolled.
+    await expect(bubble.locator('[data-top-rule]')).toHaveAttribute('data-top-rule', 'false');
     // The choices scroll: the last one can be reached by keyboard and chosen, then Reply sends it; at the end the hairline goes.
     await bubble.getByRole('radio', { name: /Option 1:/ }).focus();
     for (let i = 0; i < 11; i++) await page.keyboard.press('Tab');
@@ -30,6 +32,7 @@ for (const { height, panel } of [{ height: 1080, panel: '1' }, { height: 1080, p
     await last.click();
     await bubble.locator('[data-scroll-area]').evaluate(el => { el.scrollTop = el.scrollHeight; });
     await expect(bubble.locator('[data-more-rule]')).not.toHaveAttribute('data-more-rule', 'true');
+    await expect(bubble.locator('[data-top-rule]')).toHaveAttribute('data-top-rule', 'true');
     if (process.env.NOTCH_SHOTS) await page.screenshot({ path: `${process.env.NOTCH_SHOTS}/bubble-cap-${height}-${panel}.png`, clip: { x: s.x - 20, y: 0, width: s.width + 40, height: s.height + 20 } });
     await bubble.getByRole('button', { name: /^Reply/ }).click();
     expect(await received(d.received, 'session.reply')).toMatchObject({ id: 'a', text: options[11] });
