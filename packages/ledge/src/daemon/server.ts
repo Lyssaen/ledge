@@ -197,15 +197,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    */
   /** An OpenRig seat's life is OpenRig's: Ledge answers and writes to it, never stops, kills or relaunches it. */
   const rigOwned = (s: Session) => new Refusal(`${s.name} is the OpenRig seat ${s.rig?.seat ?? s.tmuxSession ?? ''}: stop or restart it from OpenRig`, 'read_only');
+  /** A seat's pane on the user's default tmux server: once found, Ledge sees its screen, answers and writes to it as to its own. */
+  const adoptSeat = (id: string, seat: string) => {
+    const session = store.get(id);
+    if (!session || session.source !== 'hook_only' || session.state === 'exited' || (session.tool !== 'claude' && session.tool !== 'codex')) return;
+    void tmux.hasSession(seat).then(live => {
+      const now2 = store.get(id);
+      if (live && now2?.source === 'hook_only' && now2.state !== 'exited') store.upsert({ ...now2, source: 'rig', tmuxSession: seat });
+    }).catch(e => log(`openrig: pane of ${seat} not found: ${(e as Error).message}`));
+  };
+  /** The seats recognised before and idle since (no hook to bring them): looked for again at start and at each OpenRig read. */
+  const adoptSeats = () => { for (const s of store.all()) if (s.rig) adoptSeat(s.id, s.rig.seat); };
+  adoptSeats();
   const tagRigSeat = (id: string, seat: string) => {
     const session = store.get(id), cur = session?.rig;
-    // Its pane on the user's default tmux server: Ledge then sees its screen, answers and writes to it as to its own.
-    if (session && session.source === 'hook_only' && (session.tool === 'claude' || session.tool === 'codex')) {
-      void tmux.hasSession(seat).then(live => {
-        const now2 = store.get(id);
-        if (live && now2?.source === 'hook_only') store.upsert({ ...now2, source: 'rig', tmuxSession: seat });
-      }).catch(e => log(`openrig: pane of ${seat} not found: ${(e as Error).message}`));
-    }
+    adoptSeat(id, seat);
     if (cur?.seat === seat && cur.role) return;
     const name = seat.slice(seat.lastIndexOf('@') + 1);
     store.patch(id, { rig: { seat, name, ...(cur?.seat === seat && cur.role ? { role: cur.role } : {}) } });
@@ -994,7 +1000,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
       case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
-      case 'openrig.status': return reply({ type: 'openrig.state', requestId: msg.requestId, state: await openrig.state() });
+      case 'openrig.status': adoptSeats(); return reply({ type: 'openrig.state', requestId: msg.requestId, state: await openrig.state() });
       case 'openrig.specs': return reply({ type: 'openrig.specList', requestId: msg.requestId, ...await openrig.specs() });
       case 'openrig.launch': {
         const done = await openrig.launch(msg.launch);

@@ -2615,6 +2615,16 @@ describe('server: an OpenRig seat answered through its pane', () => {
   });
 });
 
+describe('server: an idle seat recognised before', () => {
+  it('is put on its pane at start, without waiting for a hook', async () => {
+    store.upsert({ id: 'seat-9', name: 'Otto-49', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'untracked session', tmuxSession: null, state: 'idle', helpers: [],
+      startedAt: '2026-11-02T10:00:00.000Z', lastActivityAt: '2026-11-02T10:00:00.000Z', source: 'hook_only', rig: { seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' } });
+    const srv2 = await startServer({ store, tmux: fakeTmux({ 'dev-build@first-factory': ['❯ '] }), port: 0 });
+    await vi.waitFor(() => expect(store.get('seat-9')).toMatchObject({ source: 'rig', tmuxSession: 'dev-build@first-factory' }));
+    await srv2.close();
+  });
+});
+
 describe('close a session', () => {
   const CLOSE = { freeMs: 200, exitMs: 200 };
   /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */
