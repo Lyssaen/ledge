@@ -439,8 +439,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const targets = machines.filter(m => m.id !== 'local' && said(m.id) !== undefined && said(m.id) !== e);
     return Promise.all(targets.map(m => alignPeer(m.id, e)));
   }
-  // A peer that connects running another engine is given this one, once per connection.
-  const unsubscribePeerEngine = remote?.onTeamsEngine?.((machine, e, first) => { if (first && e !== teamsEngine) void alignPeer(machine, teamsEngine); });
+  // A peer that connects running another engine is given this one, once per connection: only from an explicit choice (the file exists).
+  const unsubscribePeerEngine = remote?.onTeamsEngine?.((machine, e, first) => { if (first && e !== teamsEngine && existsSync(paths().teamsEngine)) void alignPeer(machine, teamsEngine); });
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
   /** The OpenRig side of the one read path (activeEngine, below): the aggregate as a TeamEngine. */
   const openrigEngine = aggregate ? createOpenRigEngine(aggregate) : null;
@@ -1715,6 +1715,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           try { writeTeamsEngine(paths().teamsEngine, msg.engine); } // first: a failing write leaves memory unchanged
           catch (e) { return reply({ type: 'teams.engine.result', rid: msg.rid, ok: false, reason: (e as Error).message }); }
           teamsEngine = msg.engine;
+          if (teamsEngine === 'ledge') remoteBrainOwner?.close(); // a delegating brain must not answer a now-hidden OpenRig escalation
           broadcastEngine();
           engines.apply(teamsEngine);
           // After the aggregate's own snapshots: the local machine shows Ledge's teams, or none of them under OpenRig.

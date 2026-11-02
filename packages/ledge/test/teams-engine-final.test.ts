@@ -184,9 +184,17 @@ describe('the daemon, lot D final review', () => {
       expect(peer.sets()).toEqual([]);
     });
 
-    it('a peer that connects later on another engine is given the local one, once', async () => {
+    it('a daemon on the default engine (no file) never pushes it onto a peer at connect', async () => {
       const peer = fakePeer();
       await boot({ peer });
+      peer.hello('openrig');
+      await sleep(150);
+      expect(peer.sets()).toEqual([]);
+    });
+
+    it('a peer that connects later on another engine is given the local one, once (explicit choice)', async () => {
+      const peer = fakePeer();
+      await boot({ peer, engine: 'ledge' });
       peer.hello('openrig');
       await until(() => peer.sets().length === 1);
       expect(peer.sets()[0]).toMatchObject({ engine: 'ledge' });
@@ -289,6 +297,20 @@ describe('the daemon, lot D final review', () => {
     const removed = after.findIndex(m => m.type === 'escalation.removed' && m.id === 'E9');
     expect(pending).toBeGreaterThanOrEqual(0);
     expect(removed).toBeGreaterThan(pending);
+  }, 20_000);
+
+  it('a brain lease held for another machine is released on the switch to Ledge', async () => {
+    const c = await boot({ engine: 'openrig', rigs: [factory()] });
+    fake!.pushEscalation({ qitemId: 'E7', humanIntent: 'decision', humanQuestions: [{ id: 'q', question: 'Branche ?', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] }] });
+    await until(() => bridge!.escalation('E7')?.questions.length === 1, 5000);
+    c.send({ type: 'brain.delegate.claim', rid: 'c', id: 'E7' });
+    const grant = await c.answer('brain.delegate.result', m => m.rid === 'c');
+    expect(grant).toMatchObject({ ok: true, token: expect.any(String) });
+    c.send({ type: 'teams.engine.set', rid: 's', engine: 'ledge' });
+    expect((await c.answer('teams.engine.result', m => m.rid === 's')).ok).toBe(true);
+    // The lease is gone: its token no longer releases or decides anything.
+    c.send({ type: 'brain.delegate.release', rid: 'r', id: 'E7', token: grant.token! });
+    expect(await c.answer('brain.delegate.result', m => m.rid === 'r')).toMatchObject({ ok: false });
   }, 20_000);
 
   it('M5: Ledge → OpenRig → Ledge, one client throughout: each time exactly that engine\'s rigs, never both; a late client sees the same', async () => {
