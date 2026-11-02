@@ -57,6 +57,9 @@ interface Follower {
   openrig?: boolean;
 }
 
+/** The bounds of « À toi » on the phone: a phone message must fit the sealed frame (about 1 MiB once padded). */
+export const RIG_PHONE_ASKS = 50, RIG_PHONE_BODY = 4000, RIG_PHONE_DETAIL = 2000, RIG_PHONE_BYTES = 900_000;
+
 /** What a `rig` challenge is bound to: the OpenRig row and a digest of the exact answer, so an assertion approves that answer only. */
 export const rigSubject = (qitemId: string, answer: HumanAnswer): string =>
   `${qitemId}:${createHash('sha256').update(JSON.stringify(answer.kind === 'choice' ? [answer.kind, answer.questionId, answer.optionId]
@@ -687,9 +690,21 @@ export function createPhoneGateway(deps: {
    * needs the device's check, bound to that row and that very answer; « Vu » needs none. The answer's end goes to the device as
    * `openrig.answered`, whatever it is, and the operation's own status says whether it ran.
    */
-  /** A list as the phone takes it: its flags only when they are set. */
-  const rigList = (l: { channel: Extract<PhoneServerMessage, { type: 'openrig.asks' }>['channel']; asks: Extract<PhoneServerMessage, { type: 'openrig.asks' }>['asks']; partial?: boolean; truncated?: boolean }): Extract<PhoneServerMessage, { type: 'openrig.asks' }> =>
-    ({ type: 'openrig.asks', channel: l.channel, asks: l.asks, ...(l.partial ? { partial: true as const } : {}), ...(l.truncated ? { truncated: true as const } : {}) });
+  /**
+   * A list as the phone takes it. A phone message has a size bound (the sealed frame): texts are cut (`bodyTruncated`), at most
+   * RIG_PHONE_ASKS asks go, and the least pressing ones are left out until it fits, `truncated` then saying so. The list comes sorted
+   * the pressing first, so what is left is what matters most.
+   */
+  const rigList = (l: { channel: Extract<PhoneServerMessage, { type: 'openrig.asks' }>['channel']; asks: Extract<PhoneServerMessage, { type: 'openrig.asks' }>['asks']; partial?: boolean; truncated?: boolean }): Extract<PhoneServerMessage, { type: 'openrig.asks' }> => {
+    const cut = (t: string, max: number) => (t.length > max ? t.slice(0, max) : t);
+    const asks = l.asks.slice(0, RIG_PHONE_ASKS).map(a => ({ ...a, body: cut(a.body, RIG_PHONE_BODY), bodyTruncated: a.bodyTruncated || a.body.length > RIG_PHONE_BODY,
+      ...(a.detail !== null ? { detail: cut(a.detail, RIG_PHONE_DETAIL) } : {}) }));
+    const make = (n: number): Extract<PhoneServerMessage, { type: 'openrig.asks' }> => ({ type: 'openrig.asks', channel: l.channel, asks: asks.slice(0, n),
+      ...(l.partial ? { partial: true as const } : {}), ...(l.truncated || n < l.asks.length ? { truncated: true as const } : {}) });
+    let n = asks.length, msg = make(n);
+    while (n > 0 && Buffer.byteLength(JSON.stringify(msg), 'utf8') > RIG_PHONE_BYTES) msg = make(--n);
+    return msg;
+  };
 
   const rigAnswer = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'openrig.answer' }>): Promise<Outcome> => {
     const told = (m: Omit<Extract<PhoneServerMessage, { type: 'openrig.answered' }>, 'type' | 'op' | 'qitemId'>) =>

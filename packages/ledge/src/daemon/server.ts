@@ -321,6 +321,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   let notifyDecision: ((task: Task) => void) | undefined;
   /** Every local front gets it; the phone gateway passes on only what it knows. */
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
+  /** « À toi »: OpenRig followed from the first front (desktop, TUI or phone) that asks; each change goes to all of them. */
+  const followAsks = () => human.start(l => broadcast({ type: 'openrig.asksChanged', ...l }));
   threads.setEmitter('desktop', broadcast);
   const history = opts.history;
   await attachments.load().catch(e => log(`attachments not loaded: ${(e as Error).message}`));
@@ -1086,7 +1088,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       // Followed from the first front that asks: a machine nobody looks at from « À toi » never reads OpenRig's events.
-      case 'openrig.asks': human.start(l => broadcast({ type: 'openrig.asksChanged', ...l })); return reply({ type: 'openrig.asksChanged', requestId: msg.requestId, ...await human.list() });
+      case 'openrig.asks': followAsks(); return reply({ type: 'openrig.asksChanged', requestId: msg.requestId, ...await human.list() });
       case 'openrig.answer': return reply({ type: 'openrig.answered', requestId: msg.requestId, ...await human.answer(msg.qitemId, msg.answer) });
       case 'openrig.act': {
         const done = await openrig.act(msg.action);
@@ -1433,6 +1435,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   if (mobile) gateway = createPhoneGateway({
     mobile,
+    // « À toi » on the phone (lot 3): this PC's OpenRig, as the desktop has it; a phone's answer goes through the same checks.
+    openrig: { list: () => human.list(), answer: (qitemId, answer) => human.answer(qitemId, answer), follow: followAsks },
     // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
     chats: { ...threads, async drop(id: string) {
       const waiting = [...new Set(threads.queuedRelays().filter(q => q.thread === `device:${id}`).map(q => q.relay.id))];
