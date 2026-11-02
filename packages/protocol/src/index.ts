@@ -6,6 +6,7 @@ export * from './session.js';
 export * from './machines.js';
 export * from './island.js';
 export * from './projects.js';
+export * from './broadcast.js';
 export * from './messages.js';
 export * from './tasks.js';
 export * from './names.js';
