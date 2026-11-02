@@ -156,8 +156,15 @@ Règles :
 }
 ```
 
-**Réessayer** consiste à renvoyer le même `openrig.answer`. C'est sûr : OpenRig ne crée jamais de deuxième
-réponse (`outcome: 'already'`).
+**Réessayer** consiste à renvoyer le même `openrig.answer`. C'est sûr : OpenRig ne crée jamais de deuxième réponse. Un renvoi
+après `uncertain` dit ce qu'il en est, selon la réponse :
+- `choice` ou `words` déjà rendus : `ok: true`, `outcome: 'already'` ;
+- `seen` déjà fait (la nouvelle est close) : `ok: false`, `error: 'closed'` ;
+- `resolve` déjà fait (la ligne n'est plus parquée sur la personne) : `ok: false`, `error: 'closed'` ;
+- sinon, l'action se fait : `answered` ou `recorded`.
+
+`already` et `closed` veulent dire tous deux qu'il n'y a plus rien à faire : la demande est réglée, par cette réponse ou par une
+autre. On la retire, sans « Pas envoyée ».
 
 ## Hors lot 1
 
@@ -237,5 +244,5 @@ lot 1.
   - l'empreinte d'un `op` `openrig.answer` comprend la ligne et la réponse, si bien qu'un même `op` pour autre chose donne
     `conflict` ;
   - le rejeu d'un `op` renvoie aussi son `openrig.answered` gardé, sans refaire l'action.
-  - une réponse `uncertain` (sa fin s'est perdue) se réessaie avec un **nouvel** `op`, car le même `op` rejoue la fin gardée.
-    C'est sûr : OpenRig ne crée jamais deux réponses, il dit `already`.
+  - une réponse `uncertain` (sa fin s'est perdue) se réessaie avec un **nouvel** `op`, car le même `op` rejoue la fin gardée. C'est
+    sûr : OpenRig ne crée jamais deux réponses.
