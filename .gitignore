@@ -7,3 +7,6 @@ target/
 .DS_Store
 .worktrees/
 .superpowers/
+
+# Local state of the oh-my-claudecode tool
+.omc/
