@@ -15,9 +15,9 @@ export function broadcastReport(r: BroadcastResult, b: Messages['broadcast']): s
 }
 
 /**
- * « Écrire à tout le projet » or to the sessions picked in the sidebar (broadcast spec): one field and « Envoyer ». The local
- * daemon answers who got it: once anyone did, the dialog closes and the toast says so; nobody, it stays with why. A resend
- * after a silence keeps the rid, so the daemon never writes it twice.
+ * « Écrire à tout le projet » or to the sessions picked in the sidebar (broadcast spec): one field and « Envoyer ». Each
+ * machine holding them answers who got it, merged by the fleet: once anyone did, the dialog closes and the toast says so;
+ * nobody, it stays with why. A resend after a silence keeps the rid, so no daemon writes it twice.
  */
 export function BroadcastDialog({ to, label, fleet, onClose, onSent }: { to: BroadcastTo; label: string; fleet: Pick<Fleet, 'broadcast'>; onClose(): void; onSent(report: string): void }): JSX.Element {
   const { t } = useI18n();

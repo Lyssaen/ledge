@@ -1,4 +1,4 @@
-import { ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
+import { backendOf, BROADCAST_SESSIONS_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -10,11 +10,19 @@ type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel', 'session.close']);
 type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUpload[]; coordinator: string };
-/** How long `broadcast` waits for its result, and the `reason` it resolves with past it: sent, its outcome unknown (a resend
- *  with the same rid is answered once by the daemon). */
+/** How long a machine's answer to a broadcast is waited for; past it, that machine is a refusal (« pas de réponse »). When
+ *  every machine asked was silent, the result's `reason` is BROADCAST_SILENT: sent, its outcome unknown (a resend with the same
+ *  rid is answered once by each daemon). */
 export const BROADCAST_TIMEOUT_MS = 8000;
 export const BROADCAST_SILENT = 'silent';
 let broadcastSeq = 0;
+type Refusal = { name: string; reason: string };
+/** One broadcast in flight across machines: each asked machine with its own rid (`${rid}:${machine}`) and its timer, until
+ *  every one has answered, refused or timed out; then the merged result goes out under `rid`. */
+type PendingBroadcast = { rid: string; waiting: Map<string, ReturnType<typeof setTimeout>>; sent: { id: string; name: string }[]; refused: Refusal[]; reasons: string[]; silent: number; asked: number; empty?: string };
+/** Whom a broadcast reaches on a machine, as its daemon's mailbox says (`reachable`, and no OpenRig seat): the fleet uses it to
+ *  pick a project's sessions on a remote machine, whose own project registry is private to it. */
+const broadcastable = (s: Session) => s.source === 'launcher' && s.state !== 'exited' && !isArchived(s) && (!!s.tmuxSession || backendOf(s) === 'omp-rpc') && !s.rig;
 
 export interface FleetOptions {
   /** Storage key prefix: `ledge` (island) or `desktop` (spec §7). */
@@ -48,8 +56,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const scans = new Map<string, string>();
   /** `attachment.put` / `attachment.get` requestId -> the machine asked, so only its answer is emitted (a drop answers « offline »). */
   const attachmentAsks = new Map<string, string>();
-  /** A `session.broadcast`'s sessions on another machine, by rid: the local daemon cannot write to them, so the fleet refuses them in its result. */
-  const awayRefusals = new Map<string, { name: string; reason: string }[]>();
+  /** The broadcasts in flight, by the rid the front gave, in the order sent (an `error`, which names no rid, settles a machine's oldest). */
+  const broadcasts = new Map<string, PendingBroadcast>();
   /** `models.list` requestId -> the machine asked and the agent, so only its `models.listing` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
   const rigFailure = (kind: 'status' | 'act' | 'specs' | 'launch' | 'seats', requestId: string, machineId: string, error: 'offline' | 'outdated'): ServerMessage =>
@@ -309,6 +317,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       return;
     }
     if (m.type === 'error') {
+      // An `error` names no rid: it answers this machine's oldest broadcast still waiting (an older daemon does not know the message).
+      if (m.request === 'session.broadcast') {
+        const b = [...broadcasts.values()].find(x => x.waiting.has(machine));
+        if (b) { b.refused.push(machineRefusal(machine, m.code === 'invalid' || m.message === 'invalid message' ? 'version trop ancienne' : m.message)); settleBroadcast(b, machine); }
+        return;
+      }
       if (p.restarting) return;
       // A mobile.* refusal belongs to the Mobile access settings (the local daemon's alone), never to a session.
       if (m.request?.startsWith('mobile.')) {
@@ -330,13 +344,81 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     }
     // A relief's answer comes from the machine the session runs on (context handover spec §3.3).
     if (m.type === 'session.handover.result') { emit(m); return; }
-    // A broadcast is the local daemon's (see `send`): its recipients qualified, with the sessions the fleet refused itself.
+    // A machine's part of a broadcast (`${rid}:${machine}`): merged, its recipients qualified; a stray or late one is dropped.
     if (m.type === 'session.broadcast.result') {
-      if (machine !== 'local') return;
-      const away = awayRefusals.get(m.rid) ?? []; awayRefusals.delete(m.rid);
-      emit({ ...m, sent: m.sent.map(x => ({ ...x, id: qualify('local', x.id) })), refused: [...m.refused, ...away] }); return;
+      const suffix = `:${machine}`;
+      if (!m.rid.endsWith(suffix)) return;
+      const b = broadcasts.get(m.rid.slice(0, -suffix.length));
+      if (!b || !b.waiting.has(machine)) return;
+      b.sent.push(...m.sent.map(x => ({ ...x, id: qualify(machine, x.id) }))); b.refused.push(...m.refused);
+      if (m.reason) b.reasons.push(m.reason);
+      settleBroadcast(b, machine); return;
     }
     if (machine === 'local') emit(m);
+  }
+  const labelOf = (machine: string) => peers.get(machine)?.config.label ?? configs.find(c => c.id === machine)?.label ?? machine;
+  const machineRefusal = (machine: string, why: string): Refusal => ({ name: labelOf(machine), reason: `${labelOf(machine)} : ${why}` });
+  /** A machine's part is over (answered, refused, timed out or dropped); the last one sends the merged result. */
+  function settleBroadcast(b: PendingBroadcast, machine: string) {
+    const timer = b.waiting.get(machine); if (timer === undefined) return;
+    clearTimeout(timer); b.waiting.delete(machine);
+    if (!b.waiting.size) finishBroadcast(b);
+  }
+  function finishBroadcast(b: PendingBroadcast) {
+    if (broadcasts.get(b.rid) === b) broadcasts.delete(b.rid);
+    // A reason only when nothing went anywhere: every machine silent, else the first daemon's own reason.
+    const reason = b.sent.length ? undefined : b.asked > 0 && b.silent === b.asked ? BROADCAST_SILENT : b.reasons[0] ?? b.empty ?? 'personne à qui écrire';
+    emit({ type: 'session.broadcast.result', rid: b.rid, sent: b.sent, refused: b.refused, ...(reason ? { reason } : {}) });
+  }
+  /**
+   * A broadcast reaches every machine that holds its sessions, each daemon writing to its own (broadcast spec):
+   * - sessions: grouped by machine (a qualified id), each machine sent its own ids; an unqualified entry is a name, the local daemon's;
+   * - a project: the local daemon by the project (its registry is the app's); each other machine where the registry places the
+   *   project (its repos and rules), by the ids of its sessions that the registry files there and that a broadcast can reach.
+   * An unavailable machine is one refusal naming it. Each part has its own rid (`${rid}:${machine}`), so each daemon's dedupe holds.
+   */
+  function sendBroadcast(msg: Extract<ClientMessage, { type: 'session.broadcast' }>) {
+    const parts = new Map<string, Extract<ClientMessage, { type: 'session.broadcast' }>['to']>();
+    const b: PendingBroadcast = { rid: msg.rid, waiting: new Map(), sent: [], refused: [], reasons: [], silent: 0, asked: 0 };
+    const offline = new Set<string>();
+    if ('sessions' in msg.to) {
+      const byMachine = new Map<string, string[]>();
+      for (const raw of msg.to.sessions) {
+        const o = splitId(raw), known = o && peers.has(o.machine);
+        // A machine in the list but not connected to (disabled): offline, as one whose connection is down.
+        if (o && !known && configs.some(c => c.id === o.machine)) { offline.add(o.machine); continue; }
+        const [m, id] = known ? [o!.machine, o!.id] : ['local', raw];
+        byMachine.set(m, [...(byMachine.get(m) ?? []), id]);
+      }
+      for (const [m, ids] of byMachine) parts.set(m, { sessions: ids });
+    } else {
+      const reg = projects, q = msg.to.project;
+      const project = reg?.projects.find(x => x.id === q) ?? reg?.projects.find(x => x.name.toLowerCase() === q.toLowerCase());
+      if (!reg || !project) parts.set('local', msg.to);   // the local daemon says it knows no such project
+      else {
+        b.empty = `personne à qui écrire dans le projet ${project.name}`;
+        const where = new Set([...project.repos.map(r => r.machine), ...reg.rules.filter(r => r.project === project.id).map(r => r.machine)]);
+        for (const m of where) {
+          if (m === 'local') { parts.set('local', { project: project.id }); continue; }
+          const p = peers.get(m); if (!p) continue;   // not a machine connected to (disabled, or gone from the list)
+          if (!available(p)) { offline.add(m); continue; }
+          const ids = p.snapshot!.sessions.filter(s => broadcastable(s) && projectOf({ machineId: m, cwd: s.cwd }, reg) === project.id).map(s => s.id);
+          if (ids.length) parts.set(m, { sessions: ids.slice(0, BROADCAST_SESSIONS_MAX) });
+        }
+      }
+    }
+    // The same rid sent again while still in flight replaces it: the older parts' timers are dropped.
+    for (const t of broadcasts.get(msg.rid)?.waiting.values() ?? []) clearTimeout(t);
+    broadcasts.set(msg.rid, b);
+    for (const [m, to] of parts) {
+      const p = peers.get(m);
+      if (!available(p)) { offline.add(m); continue; }
+      b.asked++;
+      b.waiting.set(m, setTimeout(() => { b.silent++; b.refused.push(machineRefusal(m, 'pas de réponse')); settleBroadcast(b, m); }, BROADCAST_TIMEOUT_MS));
+      p!.client.send({ ...msg, rid: `${msg.rid}:${m}`, to });
+    }
+    for (const m of offline) b.refused.push(machineRefusal(m, 'hors ligne'));
+    if (!b.waiting.size) finishBroadcast(b);
   }
   function add(c: MachineConfig) {
     const client = makeClient({ url: machineUrl(c, configs[0]!), token: opts.token });
@@ -350,6 +432,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const op = operations.get(c.id), closing = closeRows.has(c.id);
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
         for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
+        for (const b of [...broadcasts.values()]) if (b.waiting.has(c.id)) { b.refused.push(machineRefusal(c.id, 'hors ligne')); settleBroadcast(b, c.id); }
         answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedRigs(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
@@ -453,23 +536,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         }
       }
       if (msg.type === 'update.daemon') machine = 'local';
-      // A broadcast is the local daemon's, whose sessions are named there without their machine; another machine's cannot be reached from it.
-      if (msg.type === 'session.broadcast') {
-        machine = 'local';
-        if ('sessions' in msg.to) {
-          const mine: string[] = [], away: { name: string; reason: string }[] = [];
-          for (const raw of msg.to.sessions) {
-            const o = splitId(raw), p = o ? peers.get(o.machine) : undefined;
-            if (!o || !p) { mine.push(raw); continue; }   // a name, not a qualified id
-            if (o.machine === 'local') { mine.push(o.id); continue; }
-            const name = p.snapshot?.sessions.find(x => x.id === o.id)?.name ?? o.id;
-            away.push({ name, reason: `${name} est sur ${p.config.label} : seules les sessions de la machine locale reçoivent un message groupé` });
-          }
-          if (!mine.length) { emit({ type: 'session.broadcast.result', rid: msg.rid, sent: [], refused: away, reason: 'personne à qui écrire' }); return; }
-          if (away.length) awayRefusals.set(msg.rid, away);
-          outgoing = { ...msg, to: { sessions: mine } };
-        }
-      }
+      if (msg.type === 'session.broadcast') { sendBroadcast(msg); return; }
       // Ledge's tasks are the local daemon's: its sessions are named there without their machine.
       if ((msg.type === 'task.cmd' && !msg.qid) || msg.type === 'action.run') machine = 'local';
       if (outgoing.type === 'task.cmd') { const o = outgoing.to ? splitId(outgoing.to) : null; if (o) outgoing = { ...outgoing, to: o.id }; const b = splitId(outgoing.by); if (b && outgoing.by !== LEDGE_GIVER) outgoing = { ...outgoing, by: b.id }; }
@@ -548,14 +615,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (contextNear === undefined) throw Object.assign(new Error('Update the local Ledge daemon: it does not know the context threshold'), { name: 'DaemonOutdated' });
         local.send({ type: 'context.set', prefs: valid });
       },
+      // `send` always answers a broadcast, merged, within BROADCAST_TIMEOUT_MS: nothing more to wait for here.
       broadcast(to, text, rid = `broadcast-${Date.now()}-${++broadcastSeq}`) {
         return new Promise<BroadcastResult>(resolve => {
-          const done = (r: BroadcastResult) => { clearTimeout(timer); messages.delete(listen); resolve(r); };
-          const listen = (m: ServerMessage) => {
-            if (m.type === 'session.broadcast.result' && m.rid === rid) done(m);
-            else if (m.type === 'error' && m.request === 'session.broadcast') done({ type: 'session.broadcast.result', rid, sent: [], refused: [], reason: m.message });
-          };
-          const timer = setTimeout(() => done({ type: 'session.broadcast.result', rid, sent: [], refused: [], reason: BROADCAST_SILENT }), BROADCAST_TIMEOUT_MS);
+          const listen = (m: ServerMessage) => { if (m.type === 'session.broadcast.result' && m.rid === rid) { messages.delete(listen); resolve(m); } };
           messages.add(listen);
           api.send({ type: 'session.broadcast', rid, to, text });
         });

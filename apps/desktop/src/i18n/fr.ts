@@ -456,7 +456,7 @@ export const fr = {
     project: 'Écrire à tout le projet…', selection: (n: number) => `Écrire aux ${n} sessions…`, title: (label: string) => `Écrire à ${label}`,
     send: 'Envoyer', cancel: 'Annuler', field: 'Message', picked: 'Sessions sélectionnées',
     sent: (n: number, names: string) => `Remis à ${n} ${plural(n, 'session', 'sessions')} : ${names}`, refused: (list: string) => `Refusé : ${list}`,
-    silent: 'Le daemon local n’a pas répondu. Envoyer à nouveau ne l’écrira pas deux fois.'
+    silent: 'Aucune machine n’a répondu. Envoyer à nouveau ne l’écrira pas deux fois.'
   },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
