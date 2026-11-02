@@ -50,7 +50,8 @@ export function OpenRigPage({ client, machines, machine, section = 'rigs', role,
   // When the roles were last read, for « mis à jour à » on the Roles view.
   const rolesReady = roles.status === 'ready';
   useEffect(() => { if (rolesReady) setRolesAt(Date.now()); }, [rolesReady, roles.roles]);
-  const refresh = () => { rig.refresh(); forgetRoleFiles(); roles.reload(); };
+  const [refreshed, setRefreshed] = useState(0);
+  const refresh = () => { rig.refresh(); forgetRoleFiles(); roles.reload(); setRefreshed(n => n + 1); };
   const rolesCount = rolesReady && !roles.error ? roles.roles.length : null;
   const version = roles.openrigVersion ?? rig.state?.version;
   return (
@@ -76,7 +77,7 @@ export function OpenRigPage({ client, machines, machine, section = 'rigs', role,
         {!onRoles && rig.state?.installed && !launching && <Button size="sm" onClick={() => { setLaunched(null); setLaunching(true); }}><Icon d={ICONS.plus.d} size={13} />{o.launch.open}</Button>}
       </div>
       {onRoles ? (shown && !shown.ready ? <p className="or-empty" role="status">{o.offline}</p>
-        : <RolesView client={client} machine={id} machineLabel={label} roles={roles} {...(role !== undefined ? { roleId: role } : {})} {...(seat !== undefined ? { seat } : {})} dispatch={dispatch} />) : <>
+        : <RolesView client={client} machine={id} machineLabel={label} roles={roles} {...(role !== undefined ? { roleId: role } : {})} {...(seat !== undefined ? { seat } : {})} refreshed={refreshed} dispatch={dispatch} />) : <>
       {launched && !launching && <p className="or-status or-ok" role="status"><Icon d={ICONS.check.d} size={13} />{o.launch.launched(launched)}</p>}
       {launching
         ? <RigLaunchForm client={client} machine={id} machineLabel={label} projects={projects} onClose={() => setLaunching(false)} onLaunched={name => { setLaunching(false); setLaunched(name); rig.refresh(); }} />

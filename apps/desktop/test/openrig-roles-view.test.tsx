@@ -138,6 +138,34 @@ describe('the Roles view', () => {
     expect((await screen.findByText('defaults')).closest('.orr-line')).toHaveClass('orr-hl');
   });
 
+  it('« Actualiser » reads the open role again: a new answer replaces what is shown', async () => {
+    let version = '1.0';
+    const f = fake({ details: new Proxy({}, { get: () => ({ ...DEVELOPER, summary: { ...DEVELOPER.summary, version } }) }) as Record<string, RoleDetail> });
+    mount(f.client, { role: 'u1' });
+    expect(await screen.findByText('v1.0')).toBeInTheDocument();
+    const asked = f.sent.filter(m => m.type === 'openrig.role').length;
+    version = '2.0';
+    await userEvent.click(screen.getByRole('button', { name: 'Actualiser' }));
+    expect(await screen.findByText('v2.0')).toBeInTheDocument();
+    expect(f.sent.filter(m => m.type === 'openrig.role').length).toBe(asked + 1);
+  });
+
+  it('« Livrés avec OpenRig » folds even while one of its roles is open; a cleared search brings the choice back', async () => {
+    const f = fake({ details: { b1: { ...DEVELOPER, summary: ROLES[3]! } } });
+    mount(f.client, { role: 'b1' });
+    const group = await screen.findByRole('button', { name: /Livrés avec OpenRig/ });
+    expect(group).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(group);
+    expect(group).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('option', { name: /^pm/ })).toBeNull();
+    await userEvent.type(screen.getByLabelText('Chercher un rôle'), 'qa');
+    expect(screen.getByRole('button', { name: /Livrés avec OpenRig/ })).toHaveAttribute('aria-expanded', 'true');
+    // A group without a result is hidden while searching.
+    expect(screen.queryByText('Mes specs', { selector: 'b' })).toBeNull();
+    await userEvent.clear(screen.getByLabelText('Chercher un rôle'));
+    expect(screen.getByRole('button', { name: /Livrés avec OpenRig/ })).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('on the Rigs page, a seat’s role is a link to that role seen from the seat', async () => {
     const seat = { logicalId: 'dev.front', session: 'dev-front@ledge-dev', runtime: 'claude-code', model: 'claude-opus-5-5', sessionStatus: 'running', lifecycleState: 'running', activity: 'running', stopped: false, work: 0 };
     const state: OpenRigState = { installed: true, version: '0.7.7', daemon: { state: 'running', pid: 1, port: 7433 }, kernel: { state: 'ready' }, at: new Date().toISOString(),

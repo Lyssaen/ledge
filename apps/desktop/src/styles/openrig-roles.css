@@ -201,6 +201,8 @@
 .or-rolelink:hover, .or-rolelink:focus-visible { text-decoration-color: currentColor; }
 
 @media (max-width: 1100px) {
+  /* The mockup's narrow layout: on the Roles view, Ledge's sidebar gives its width to the reading. */
+  body:has(.or-page-roles) .sidebar, body:has(.or-page-roles) aside.sidebar.st { display: none; }
   .orr-rp { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: auto; }
   .orr-list { border-right: 0; border-bottom: 1px solid var(--border); max-height: 300px; }
   .orr-detail { overflow: visible; }

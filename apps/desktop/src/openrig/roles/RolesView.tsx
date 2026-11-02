@@ -15,12 +15,16 @@ type Tab = 'role' | 'params' | 'context' | 'yaml';
  * OpenRig › Rôles (docs/mockups/ledge-openrig-roles.html): the machine's roles on the left, the one chosen on the right,
  * seen from its spec or from one of its seats. Read-only: copying is the only action.
  */
-export function RolesView({ client, machine, machineLabel, roles, roleId, seat, dispatch }: { client: DaemonClient; machine: string; machineLabel: string; roles: RolesData; roleId?: string; seat?: string; dispatch: (a: NavAction) => void }) {
+export function RolesView({ client, machine, machineLabel, roles, roleId, seat, refreshed = 0, dispatch }: { client: DaemonClient; machine: string; machineLabel: string; roles: RolesData; roleId?: string; seat?: string; /** Bumped by « Actualiser »: the open role is read again. */ refreshed?: number; dispatch: (a: NavAction) => void }) {
   const { t } = useI18n();
   const r = t.openrig.roles;
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<RoleFilter>('all');
-  const [builtinOpen, setBuiltinOpen] = useState(false);
+  // « Livrés avec OpenRig »: folded unless the open role is one of them or the filter is OpenRig, until the person chooses.
+  // A search unfolds it (its results would hide), and clearing the search brings back that choice.
+  const [fold, setFold] = useState<boolean | null>(null);
+  const [searchFold, setSearchFold] = useState<boolean | null>(null);
+  useEffect(() => { if (!query.trim()) setSearchFold(null); }, [query]);
   const search = useRef<HTMLInputElement>(null);
   // Ctrl F searches the roles while the view is shown.
   useEffect(() => {
@@ -41,7 +45,8 @@ export function RolesView({ client, machine, machineLabel, roles, roleId, seat, 
   const { mine, builtin } = groupRoles(roles.roles, filter, query);
   const shown = [...mine, ...builtin];
   const current = roles.roles.find(x => x.id === roleId) ?? mine[0] ?? builtin[0] ?? roles.roles[0];
-  const biOpen = builtinOpen || filter === 'builtin' || query.trim() !== '' || current?.source === 'builtin';
+  const searching = query.trim() !== '';
+  const biOpen = searching ? searchFold ?? true : fold ?? (filter === 'builtin' || current?.source === 'builtin');
   const open = (x: RoleSummary) => dispatch({ type: 'openrig', section: 'roles', role: x.id });
   const listKeys = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -73,13 +78,13 @@ export function RolesView({ client, machine, machineLabel, roles, roleId, seat, 
             {mine.map(item)}
           </>}
           {builtin.length > 0 && <>
-            <button type="button" className="orr-grp orr-grpbtn" aria-expanded={biOpen} onClick={() => setBuiltinOpen(!biOpen)}><span className="orr-chev" aria-hidden>{biOpen ? '▾' : '▸'}</span><b>{r.groupBuiltin}</b>{builtin.length}{roles.openrigVersion && <span className="mono">@openrig/cli {roles.openrigVersion}</span>}</button>
+            <button type="button" className="orr-grp orr-grpbtn" aria-expanded={biOpen} onClick={() => (searching ? setSearchFold(!biOpen) : setFold(!biOpen))}><span className="orr-chev" aria-hidden>{biOpen ? '▾' : '▸'}</span><b>{r.groupBuiltin}</b>{builtin.length}{roles.openrigVersion && <span className="mono">@openrig/cli {roles.openrigVersion}</span>}</button>
             {biOpen && builtin.map(item)}
           </>}
         </div>
       </div>
       <div className="orr-detail">
-        {current ? <Detail key={`${machine}\u0000${current.id}`} client={client} machine={machine} summary={current} seat={seat} openrigVersion={roles.openrigVersion} dispatch={dispatch} /> : null}
+        {current ? <Detail key={`${machine}\u0000${current.id}`} client={client} machine={machine} summary={current} seat={seat} refreshed={refreshed} openrigVersion={roles.openrigVersion} dispatch={dispatch} /> : null}
       </div>
     </div>
   );
@@ -96,11 +101,17 @@ function Loading({ label }: { label: string }) {
   return <div className="orr-state" role="status"><h4><span className="or-dot or-info" />{label}</h4><div className="orr-skel" style={{ width: '80%' }} /><div className="orr-skel" style={{ width: '60%' }} /><div className="orr-skel" style={{ width: '72%' }} /></div>;
 }
 
-function Detail({ client, machine, summary, seat: seatKeyNav, openrigVersion, dispatch }: { client: DaemonClient; machine: string; summary: RoleSummary; seat?: string; openrigVersion?: string; dispatch: (a: NavAction) => void }) {
+function Detail({ client, machine, summary: listed, seat: seatKeyNav, refreshed, openrigVersion, dispatch }: { client: DaemonClient; machine: string; summary: RoleSummary; seat?: string; refreshed: number; openrigVersion?: string; dispatch: (a: NavAction) => void }) {
   const { t } = useI18n();
   const r = t.openrig.roles;
-  const view = useOpenRigRole(client, machine, summary.id);
+  const view = useOpenRigRole(client, machine, listed.id);
+  // « Actualiser » reads the open role again, not only the list: the detail never mixes old parameters with a file read anew.
+  const { reload } = view;
+  const first = useRef(refreshed);
+  useEffect(() => { if (refreshed !== first.current) reload(); }, [refreshed, reload]);
   const d = view.role;
+  // The header follows the role as last read, not the list's line about it.
+  const summary = d?.summary ?? listed;
   const seat = d ? seatOf(d, seatKeyNav) : undefined;
   const [tab, setTab] = useState<Tab>(summary.importOnly ? 'params' : 'role');
   const [profileName, setProfile] = useState<string | undefined>(undefined);
