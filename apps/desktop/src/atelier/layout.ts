@@ -91,8 +91,8 @@ export function sceneOf(order: readonly Session[], projects: Projects | null, pr
   const list = projects?.projects ?? [];
   const known = new Set(list.map(p => p.id));
   const idOf = (s: Session) => { const id = projectIdOf(s); return id !== null && known.has(id) ? id : null; };
-  // An OpenRig seat sits in its rig's room (the kernel's its own), never at a project's table.
-  const own = byRig ? order.filter(s => !s.rig) : order;
+  // An OpenRig seat sits in its rig's room (the kernel's its own), never at a project's table; « Projets » shows no seat.
+  const own = order.filter(s => !s.rig);
   const showTables = filter === 'all' || filter !== 'none';
   const projectRooms = showTables
     ? list.filter(p => filter === 'all' || p.id === filter)

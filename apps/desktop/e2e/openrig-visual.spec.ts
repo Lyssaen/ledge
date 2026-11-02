@@ -87,6 +87,9 @@ for (const theme of ['dark', 'light'] as const) {
     await side.getByRole('radio', { name: 'Projets' }).click();
     await expect(side.getByRole('radio', { name: 'Projets' })).toHaveAttribute('aria-checked', 'true');
     await expect(side.getByText('Kernel', { exact: true })).toHaveCount(0);
+    // No OpenRig seat among the projects (Bix stays in « À toi », waiting).
+    for (const name of ['Bix', 'Nova', 'Ada']) await expect(side.getByRole('region', { name: 'Projets' }).getByText(name, { exact: true })).toHaveCount(0);
+    await expect(page.locator('.agent-seat', { hasText: 'Nova' })).toHaveCount(0);
     await side.screenshot({ path: info.outputPath(`zoom-sidebar-projects-${theme}.png`) });
     await page.screenshot({ path: info.outputPath(`grouping-projects-${theme}.png`) });
     await side.getByRole('radio', { name: 'Rigs' }).click();

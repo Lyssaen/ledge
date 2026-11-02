@@ -154,7 +154,7 @@ export const en: Messages = {
   },
   crumb: { atelier: 'Atelier', list: 'List', settings: 'Settings', clearFilter: 'Remove the filter: show every project', clearFilterTitle: 'Every project (Esc)', escape: 'Esc', openParent: (n) => `Open ${n}’s conversation` },
   top: {
-    grouping: 'Group OpenRig’s seats', groupingBy: { projects: 'Projects', rigs: 'Rigs' }, groupingHint: { projects: 'OpenRig’s seats at their project’s table', rigs: 'Each rig in its room, the kernel apart' }, 
+    grouping: 'Group OpenRig’s seats', groupingBy: { projects: 'Projects', rigs: 'Rigs' }, groupingHint: { projects: 'Your projects’ sessions, without OpenRig’s seats', rigs: 'OpenRig’s seats: each rig, the kernel apart' }, 
     viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
     chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
