@@ -841,6 +841,20 @@ describe('runHook: PostToolUse images', () => {
     expect(seen.map(m => m.type)).toEqual(['session.event']);
     expect(seen[0]!.event.imagesDropped).toBe(true);
   });
+  it('flags images past the fifth as dropped', async () => {
+    const { seen } = await run(payload(7), stored);
+    expect(seen.filter(m => m.type === 'attachment.capture')).toHaveLength(5);
+    expect(seen.at(-1)!.event).toMatchObject({ attachments: [0, 1, 2, 3, 4].map(i => refN(i).id), imagesDropped: true });
+  });
+  it('takes only the answer to the request it sent', async () => {
+    const { seen } = await run(payload(2), (i, ws, m) => {
+      ws.send(JSON.stringify({ type: 'attachment.error', requestId: 'someone-else', reason: 'not_image' }));
+      ws.send(JSON.stringify({ type: 'attachment.stored', requestId: 'someone-else', ref: refN(9) }));
+      stored(i, ws, m);
+    });
+    expect(seen.at(-1)!.event.attachments).toEqual([refN(0).id, refN(1).id]);
+    expect(seen.at(-1)!.event.imagesDropped).toBeUndefined();
+  });
   it('a PostToolUse without images keeps the 100 ms path', async () => {
     const { seen } = await run(payload(0), stored);
     expect(seen.map(m => m.type)).toEqual(['session.event']);

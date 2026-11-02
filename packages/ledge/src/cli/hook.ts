@@ -477,7 +477,9 @@ async function storeImages(client: Client, images: Array<{ mime: ImageMime; data
     const requestId = randomUUID();
     try {
       client.send({ type: 'attachment.capture', requestId, image });
-      const answer = await client.nextOf(['attachment.stored', 'attachment.error'], left);
+      // Only the answer to this request counts: another one (late, or someone else's) is skipped, within the same deadline.
+      let answer = await client.nextOf(['attachment.stored', 'attachment.error'], left);
+      while (answer.requestId !== requestId) answer = await client.nextOf(['attachment.stored', 'attachment.error'], Math.max(0, deadline - Date.now()));
       if (answer.type === 'attachment.stored') ids.push(answer.ref.id); else dropped = true;
     } catch { dropped = true; }
   }
@@ -509,14 +511,14 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
       && typeof input.to === 'string' && typeof input.message === 'string' && !!input.message;
     const command = agent === 'codex' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'Bash' && typeof input.command === 'string'
       ? parseLedgeCommand(input.command) : undefined;
-    const images = agent === 'claude' && eventName === 'PostToolUse' ? toolImages((payload as Payload).tool_response) : [];
+    const { images, dropped: cut } = agent === 'claude' && eventName === 'PostToolUse' ? toolImages((payload as Payload).tool_response) : { images: [], dropped: false };
     const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : images.length ? CAPTURE_HOOK_MS : 100);
     deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
     // OpenRig runs its seats with their name in the environment, which the agent's hooks inherit.
     const seat = RigSeatNameSchema.safeParse(process.env.OPENRIG_SESSION_NAME);
-    const stored = images.length ? await storeImages(client, images, deadline) : undefined;
-    const event = stored ? { ...mapped.event, ...(stored.ids.length ? { attachments: stored.ids } : {}), ...(stored.dropped ? { imagesDropped: true as const } : {}) } : mapped.event;
+    const stored = images.length ? await storeImages(client, images, deadline) : { ids: [], dropped: false };
+    const event = { ...mapped.event, ...(stored.ids.length ? { attachments: stored.ids } : {}), ...(stored.dropped || cut ? { imagesDropped: true as const } : {}) };
     client.send({ type: 'session.event', id: mapped.id, event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}), ...(seat.success ? { rigSeat: seat.data } : {}) });
     if (identify) {
       const snapshot = await client.next('snapshot', Math.max(0, deadline - Date.now())).catch(() => undefined);
