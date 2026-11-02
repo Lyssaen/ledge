@@ -187,6 +187,44 @@ describe('PhoneLink', () => {
     expect(commits()).toBe(2);
   });
 
+  it.each([
+    ['the PC reconnecting', async (pc: FakePc) => { await pc.disconnect(); await pc.reconnect(); }],
+    // A new socket of the phone: its welcome finds the PC online, a pair_ok sent meanwhile was lost.
+    ['the phone\'s socket lost', async (pc: FakePc) => { pc.phoneSockets[pc.phoneSockets.length - 1]!.close(); }]
+  ] as const)('a code shown, the PC\'s yes not in, then %s → a new pairing, a new commit', async (_, awayAndBack) => {
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const { link, commits } = recording(pc);
+    link.startPairing();
+    await until(() => link.pairing()?.state().step === 'compare', 'compare');
+    const first = link.pairing();
+    const again = pc.waitFor('pair_commit');
+    await awayAndBack(pc);
+    await again;
+    await until(() => link.pairing() !== first && link.pairing()?.state().step === 'compare', 'a new compare');
+    expect(link.state()).toBe('pairing');
+    expect(commits()).toBe(2);
+  });
+
+  it('a code shown and the PC\'s yes in, then the PC reconnecting → the same pairing, no new commit', async () => {
+    const pc = await startFakePc();
+    cleanups.push(() => pc.close());
+    const { link, commits } = recording(pc);
+    link.startPairing();
+    await until(() => link.pairing()?.state().step === 'compare', 'compare');
+    const first = link.pairing();
+    pc.ok();
+    await until(() => { const p = link.pairing()!.state(); return p.step === 'compare' && p.pcConfirmed; }, 'pcConfirmed');
+    await pc.disconnect();
+    await until(() => link.reach() === 'pc_offline', 'pc_offline');
+    await pc.reconnect();
+    await until(() => link.reach() === 'pc_online', 'pc_online');
+    await settle();
+    expect(link.pairing()).toBe(first);
+    expect(link.pairing()!.state()).toMatchObject({ step: 'compare', pcConfirmed: true });
+    expect(commits()).toBe(1);
+  });
+
   it('a pairing with the relay out of reach → relay_unreachable, no commit; « Réessayer » once it is reachable → the commit', async () => {
     const pc = await startFakePc();
     cleanups.push(() => pc.close());

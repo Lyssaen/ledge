@@ -104,6 +104,8 @@ export function createPhoneLink(opts: {
   let pairingView: Pairing | null = null;
   let pairingSeen: PairingState | null = null;
   let pairingTimer: ReturnType<typeof setInterval> | undefined;
+  /** The pairing showing its code when the PC went away, the PC's confirmation not yet in. */
+  let pairingAway: Pairing | null = null;
 
   const listeners = new Set<() => void>();
   const messageListeners = new Set<(m: PhoneServerMessage) => void>();
@@ -268,11 +270,27 @@ export function createPhoneLink(opts: {
 
   /**
    * The PC is away: a commit still waiting for its offer is dropped (the PC lost it, or never got it), and the pairing,
-   * still wanted, starts again once the PC is back. A pairing past its commit (the code shown) is left as it is.
+   * still wanted, starts again once the PC is back. A pairing past its commit (the code shown) is left on screen until
+   * then (see `pcBack`).
    */
   const pcAway = () => {
     pcOnline = false;
-    if (pairing?.state().step === 'committing') dropPairing();
+    const st = pairing?.state();
+    if (st?.step === 'committing') dropPairing();
+    else if (st?.step === 'compare' && !st.pcConfirmed) pairingAway = pairing;
+  };
+
+  /**
+   * The PC is back: a pairing that showed its code while it was away, still without the PC's yes, is dropped (the PC
+   * drops its pairings on reconnecting, and a pair_ok sent meanwhile was lost) and a new one starts. One the PC
+   * confirmed is kept: the PC stored the device.
+   */
+  const pcBack = () => {
+    const p = pairingAway;
+    pairingAway = null;
+    const st = p && p === pairing ? p.state() : null;
+    if (st?.step === 'compare' && !st.pcConfirmed) dropPairing();
+    launchPairing();
   };
 
   const beginPairing = () => {
@@ -360,7 +378,8 @@ export function createPhoneLink(opts: {
           pcOnline = m.online.includes('pc');
           // A new socket: the PC's channel for the old one is gone.
           helloIfDue();
-          launchPairing();
+          if (pcOnline) pcBack();
+          else launchPairing();
           check();
           return;
         case 'presence': {
@@ -373,7 +392,7 @@ export function createPhoneLink(opts: {
           else pcAway();
           if (back) {
             helloIfDue();
-            launchPairing();
+            pcBack();
           }
           check();
           return;
