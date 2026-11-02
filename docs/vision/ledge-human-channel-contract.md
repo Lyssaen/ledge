@@ -150,7 +150,8 @@ Règles :
   //  openrig_stopped : daemon OpenRig arrêté → « Pas envoyée : OpenRig est arrêté », Réessayer
   //  uncertain       : peut-être partie : la réponse d'OpenRig s'est perdue (délai, coupure), est une erreur serveur ou est illisible.
   //                    Ni « Envoyé » ni « Pas envoyée » : Réessayer est sûr et dit ce qu'il en est (answered, already ou closed)
-  //  offline / outdated : posés par la flotte
+  //  offline / outdated : posés par la flotte ; offline seulement si rien n'est parti (machine injoignable avant l'envoi).
+  //                    Une machine qui tombe après l'envoi donne uncertain.
   message?: string            // la raison lisible (anglais, telle qu'OpenRig la donne), pour « Pas envoyée : {raison} »
 }
 ```

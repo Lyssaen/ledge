@@ -447,6 +447,17 @@ describe('multi-machine connections', () => {
     client.send({ type: 'openrig.asks', requestId: 'h5', machineId: 'server' });
     expect(human().at(-1)).toEqual({ type: 'openrig.asksChanged', requestId: 'h5', machineId: 'server', asks: [], error: 'offline' });
   });
+  it('an answer already sent whose machine drops is uncertain, never offline; a read stays offline; an answer refused before sending is offline', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'openrig.answer', requestId: 'w1', machineId: 'server', qitemId: 'q1', answer: { kind: 'seen' } });
+    client.send({ type: 'openrig.asks', requestId: 'w2', machineId: 'server' });
+    server.set('unreachable');
+    const end = (id: string) => got.find(m => 'requestId' in m && m.requestId === id);
+    expect(end('w1')).toMatchObject({ type: 'openrig.answered', qitemId: 'q1', ok: false, error: 'uncertain' });
+    expect(end('w2')).toMatchObject({ type: 'openrig.asksChanged', error: 'offline' });
+    client.send({ type: 'openrig.answer', requestId: 'w3', machineId: 'server', qitemId: 'q2', answer: { kind: 'seen' } });
+    expect(end('w3')).toMatchObject({ type: 'openrig.answered', ok: false, error: 'offline' });
+  });
   it('routes roles, a role and a role file to their machine; an older daemon refuses only those, the others stay pending', () => {
     const { client, server, got } = setup();
     const roles = () => got.filter(m => m.type === 'openrig.roleList' || m.type === 'openrig.roleDetail' || m.type === 'openrig.roleFileContent' || m.type === 'openrig.state');
