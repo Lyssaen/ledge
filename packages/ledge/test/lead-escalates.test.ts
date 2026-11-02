@@ -8,6 +8,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
 import { connect, type Client } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
+import { until } from './helpers.js';
 
 // Lot E, task 1: inside a team only the lead puts questions to Ledge; the other seats ask their lead.
 
@@ -71,5 +72,15 @@ describe('only a team lead puts questions to Ledge', () => {
     const r = await ask('solo');
     expect(r.code).toBeUndefined();
     expect(r.ask).toMatchObject({ from: 'solo', state: 'open' });
+  });
+
+  it('a session that left its team, or whose team was dissolved, puts its question to Ledge as a lone one', async () => {
+    c.send({ type: 'team.launch', rid: 'r1', cwd: work, name: 'api', seats: [{ role: 'leader' }, { role: 'review', tool: 'codex' as const }] });
+    const { team } = await c.next('team.launched', 5000);
+    const review = seatOf(team, 'review'); const lead = seatOf(team, 'leader');
+    c.send({ type: 'team.leave', team: team.id, session: review });
+    await until(async () => (await give(review)).reason === undefined);
+    c.send({ type: 'team.dissolve', team: team.id });
+    await until(async () => (await give(lead)).reason === undefined);
   });
 });
