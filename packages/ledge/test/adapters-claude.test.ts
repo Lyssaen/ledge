@@ -264,6 +264,23 @@ describe('claude adapter: at rest', () => {
     expect(claudeAdapter.atRest!(fx('claude-working'))).toBe(false);
     for (const f of ['claude2-plan', 'claude2-trust', 'claude2-permission-bash', 'claude2-question']) expect(claudeAdapter.atRest!(fx(f)), f).toBe(false);
   });
+  // Claude Code 2.1.316 dropped "esc to interrupt" from the footer: the spinner above the input box is the only sign.
+  it('is not at rest while 2.1.316 shows its spinner above the input box', () => {
+    expect(claudeAdapter.atRest!(fx('claude2-316-working'))).toBe(false);
+  });
+  it('is not at rest on the spinner of a turn just started, before its counter and under a tip', () => {
+    const pane = fx('claude2-316-working').replace(/^✶ Newspapering… \(.*\)$/m, '✽ Waddling…\n  ⎿  Tip: You can control how big a workflow is\n     just by prompting.');
+    expect(pane).toContain('✽ Waddling…\n');
+    expect(claudeAdapter.atRest!(pane)).toBe(false);
+  });
+  it('is at rest under the 2.1.316 line that ends a turn', () => {
+    expect(claudeAdapter.atRest!(fx('claude2-316-idle'))).toBe(true);
+  });
+  it('is at rest when the reply above the end-of-turn line quotes a spinner', () => {
+    const pane = fx('claude2-316-idle').replace('  Tu valides', '✶ Newspapering… (20s · ↓ 1.2k tokens)\n  « ✽ Waddling… (7s) »\n  Tu valides');
+    expect(pane).toContain('✶ Newspapering… (20s');
+    expect(claudeAdapter.atRest!(pane)).toBe(true);
+  });
 });
 
 describe('claude adapter: titled input box', () => {
