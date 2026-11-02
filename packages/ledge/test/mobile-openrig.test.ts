@@ -145,6 +145,27 @@ describe('phone gateway: « À toi »', () => {
     expect(list.asks[1]).not.toHaveProperty('detailTruncated');
   });
 
+  it('an answer whose end was lost is uncertain on the phone; a replay of the op says it again; a new op asks OpenRig again, which says already', async () => {
+    let calls = 0;
+    const g = setup({ deps: { openrig: {
+      async list() { return { channel: CHANNEL, asks: [ASK] }; },
+      async answer(qitemId) { return ++calls === 1 ? { qitemId, ok: false, error: 'uncertain' as const, message: "OpenRig's answer was lost" } : { qitemId, ok: true, outcome: 'already' as const, replyId: 'qitem-reply' }; },
+      follow() {}
+    } } });
+    const op = randomUUID();
+    const go = async (o: string) => { g.send('dev1', { type: 'openrig.answer', op: o, qitemId: 'qitem-2', answer: { kind: 'seen' } }); await flush(); };
+    await go(op);
+    expect(g.results('dev1').filter(r => r.op === op).at(-1)).toMatchObject({ status: 'failed' });
+    expect(g.got('dev1').filter(m => m.type === 'openrig.answered').at(-1)).toMatchObject({ op, ok: false, error: 'uncertain' });
+    await go(op);
+    expect(g.got('dev1').filter(m => m.type === 'openrig.answered').at(-1)).toMatchObject({ op, ok: false, error: 'uncertain' });
+    expect(calls).toBe(1);
+    const again = randomUUID();
+    await go(again);
+    expect(g.got('dev1').filter(m => m.type === 'openrig.answered').at(-1)).toMatchObject({ op: again, ok: true, outcome: 'already' });
+    expect(calls).toBe(2);
+  });
+
   it('binds the subject to the row and the exact words', () => {
     expect(rigSubject('q1', { kind: 'words', text: 'Oui' })).not.toBe(rigSubject('q1', { kind: 'words', text: 'Non' }));
     expect(rigSubject('q1', { kind: 'words', text: 'Oui' })).not.toBe(rigSubject('q2', { kind: 'words', text: 'Oui' }));

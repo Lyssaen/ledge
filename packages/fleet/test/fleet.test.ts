@@ -1,3 +1,5 @@
+import { act, renderHook } from '@testing-library/react';
+import { useOpenRigAsksAll } from '../src/openrigAsks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
@@ -457,6 +459,15 @@ describe('multi-machine connections', () => {
     expect(end('w2')).toMatchObject({ type: 'openrig.asksChanged', error: 'offline' });
     client.send({ type: 'openrig.answer', requestId: 'w3', machineId: 'server', qitemId: 'q2', answer: { kind: 'seen' } });
     expect(end('w3')).toMatchObject({ type: 'openrig.answered', ok: false, error: 'offline' });
+  });
+  it('through the real fleet, useOpenRigAsksAll gets uncertain for an answer whose machine drops in flight, offline for one refused before', async () => {
+    const { client, server } = setup();
+    const { result } = renderHook(() => useOpenRigAsksAll(client, ['local', 'server']));
+    const inFlight = result.current.answer('server', 'q-flight', { kind: 'words', text: 'Oui' });
+    expect(server.sent.some(m => m.type === 'openrig.answer')).toBe(true);
+    act(() => { server.set('unreachable'); });
+    expect(await inFlight).toMatchObject({ type: 'openrig.answered', machineId: 'server', qitemId: 'q-flight', ok: false, error: 'uncertain' });
+    expect(await result.current.answer('server', 'q-after', { kind: 'seen' })).toMatchObject({ machineId: 'server', qitemId: 'q-after', ok: false, error: 'offline' });
   });
   it('routes roles, a role and a role file to their machine; an older daemon refuses only those, the others stay pending', () => {
     const { client, server, got } = setup();

@@ -237,3 +237,5 @@ lot 1.
   - l'empreinte d'un `op` `openrig.answer` comprend la ligne et la réponse, si bien qu'un même `op` pour autre chose donne
     `conflict` ;
   - le rejeu d'un `op` renvoie aussi son `openrig.answered` gardé, sans refaire l'action.
+  - une réponse `uncertain` (sa fin s'est perdue) se réessaie avec un **nouvel** `op`, car le même `op` rejoue la fin gardée.
+    C'est sûr : OpenRig ne crée jamais deux réponses, il dit `already`.
