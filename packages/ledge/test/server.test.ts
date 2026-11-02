@@ -710,6 +710,32 @@ describe('server', () => {
     expect(tmux.sent).toEqual([]);
     c.close();
   });
+  it('a slash command that opens a terminal panel, or ends the session, is refused before any key', async () => {
+    store.upsert(mk('a', { state: 'idle' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.reply', id: 'a', text: '/model' });
+    expect(await c.next('error', 3000)).toMatchObject({ id: 'a', request: 'session.reply', code: 'not_offered', message: expect.stringMatching(/^\/model without arguments opens a panel/) });
+    c.send({ type: 'session.reply', id: 'a', text: '/exit' });
+    expect(await c.next('error', 3000)).toMatchObject({ code: 'not_offered', message: expect.stringMatching(/close it from Ledge/) });
+    expect(tmux.sent).toEqual([]);
+    c.close();
+  });
+  it('session.commands answers with the agent\'s commands in the session\'s folder, or why there are none', async () => {
+    const asked: string[] = [];
+    await srv.close();
+    srv = await startServer({ store, tmux, port: 0, commands: { list: async (tool, cwd) => { asked.push(`${tool} ${cwd}`); return { commands: [{ name: 'compact', source: 'builtin' }] }; } } });
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-commands-'));
+    store.upsert(mk('a', { state: 'idle', cwd: dir })); store.upsert(mk('b', { state: 'idle', cwd: join(dir, 'gone') }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.commands', requestId: 'r1', id: 'a' });
+    expect(await c.next('session.commands.listing', 3000)).toEqual({ type: 'session.commands.listing', requestId: 'r1', id: 'a', tool: 'claude', commands: [{ name: 'compact', source: 'builtin' }] });
+    expect(asked).toEqual([`claude ${dir}`]);
+    c.send({ type: 'session.commands', requestId: 'r2', id: 'b' });
+    expect(await c.next('session.commands.listing', 3000)).toMatchObject({ requestId: 'r2', commands: [], error: 'folder not found' });
+    c.send({ type: 'session.commands', requestId: 'r3', id: 'nope' });
+    expect(await c.next('session.commands.listing', 3000)).toMatchObject({ requestId: 'r3', commands: [], error: 'unknown session' });
+    c.close();
+  });
   it('deny with a note: Escape, the note once the input is back, Enter; the thread says denied', async () => {
     const pane = fx('claude2-permission-bash'); const rest = fx('claude2-rest-after-deny');
     tmux = fakeTmux({ 'ledge-a': [pane, rest, rest] }); await srv.close();
@@ -2133,7 +2159,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);

@@ -845,6 +845,16 @@ export const fr = {
       queueTitle: (n: number) => plural(n, `${n} message en attente`, `${n} messages en attente`), queueOrder: 'partent dans l’ordre', queueNow: 'maintenant', queueLater: 'après le tour', queueTakeBack: 'Arrêter et reprendre',
       noNote: 'Cet agent ne prend pas de message avec un refus : refusez avec N.', tooLong: (max: number) => `Une note tient en ${max} caractères au plus.`
     },
+    slash: {
+      label: (tool: string) => `Commandes de ${tool}`, count: (n: number) => plural(n, `${n} commande`, `${n} commandes`),
+      loading: 'lecture des commandes…', choose: 'choisir', complete: 'compléter', close: 'fermer',
+      unavailable: 'Liste des commandes indisponible.', unavailableBody: (n: string) => ` Vous pouvez quand même taper la commande : Ledge l’enverra telle quelle à ${n}.`,
+      none: (q: string, n: string) => `Aucune commande « ${q} ». Entrée l’envoie comme un message à ${n}.`,
+      sends: (n: string) => `envoie la commande à ${n}`,
+      source: { builtin: 'Intégrée', project: 'Projet', user: 'Perso', plugin: 'Plugin', extension: 'Extension' },
+      blocked: { panel: 'Ouvre un panneau du terminal : à faire dans le terminal', close: 'Terminerait la session : utilisez « Fermer la session »' },
+      bare: (c: string) => `Sans argument, /${c} ouvre un panneau du terminal : donnez-lui un argument.`
+    },
     model: {
       label: 'Modèle et effort', apply: 'Appliquer', schedule: 'Programmer', cancel: 'Annuler', nextTurn: 'au prochain tour',
       applyHint: (n: string) => `${n} redémarre sur la même conversation et garde son contexte.`,

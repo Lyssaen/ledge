@@ -45,6 +45,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const attachmentAsks = new Map<string, string>();
   /** `models.list` requestId -> the machine asked and the agent, so only its `models.listing` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
+  /** `session.commands` requestId -> the machine asked and the session's qualified id, so only its listing answers it (a drop or a refusal answers « offline » or « outdated »). */
+  const commandLists = new Map<string, { machine: string; id: string }>();
   type RigKind = 'status' | 'act' | 'specs' | 'launch' | 'seats' | 'roles' | 'role' | 'roleFile';
   type RigAsk = { machine: string; kind: RigKind; roleId?: string; path?: string };
   const rigFailure = (a: RigAsk, requestId: string, machineId: string, error: 'offline' | 'outdated'): ServerMessage =>
@@ -87,6 +89,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** Each pending models.list of `machine` is answered empty with `error` (#58): 'offline' when it dropped, 'outdated' when its daemon does not know models.list. */
   const answerFailedModels = (machine: string, error: 'offline' | 'outdated') => {
     for (const [requestId, l] of modelLists) if (l.machine === machine) { modelLists.delete(requestId); emit({ type: 'models.listing', requestId, tool: l.tool, models: [], error }); }
+  };
+  /** Each pending session.commands of `machine` is answered empty with `error`: 'offline' when it dropped, 'outdated' when its daemon does not know session.commands. */
+  const answerFailedCommands = (machine: string, error: 'offline' | 'outdated') => {
+    for (const [requestId, l] of commandLists) if (l.machine === machine) { commandLists.delete(requestId); emit({ type: 'session.commands.listing', requestId, id: l.id, commands: [], error }); }
   };
   let source: 'daemon' | 'local' = 'local';
   /** The local daemon's projects (build spec §5); the last ones stay while it is down. */
@@ -276,6 +282,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       emit({ ...m, machineId: machine }); return;
     }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
+    if (m.type === 'session.commands.listing') { const l = commandLists.get(m.requestId); if (l?.machine === machine) { commandLists.delete(m.requestId); emit({ ...m, id: l.id }); } return; }
     if (m.type === 'chat.routed') {
       if (routing?.qid !== m.qid || routing.coordinator !== machine) return;
       const req = routing; routing = null;
@@ -322,6 +329,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.request === 'repos.scan') { answerFailedScans(machine, 'outdated'); return; }
       if (m.request === 'models.list') { answerFailedModels(machine, 'outdated'); return; }
       // A daemon that drives OpenRig but predates its roles refuses only those: its other pending OpenRig asks stay.
+      if (m.request === 'session.commands') { answerFailedCommands(machine, 'outdated'); return; }
       if (m.request === 'openrig.roles' || m.request === 'openrig.role' || m.request === 'openrig.roleFile') { answerFailedRigs(machine, 'outdated', ['roles', 'role', 'roleFile']); return; }
       if (m.request?.startsWith('openrig.')) { answerFailedRigs(machine, 'outdated'); return; }
       if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
@@ -346,7 +354,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const op = operations.get(c.id), closing = closeRows.has(c.id);
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
         for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
-        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedRigs(c.id, 'offline');
+        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedCommands(c.id, 'offline'); answerFailedRigs(c.id, 'offline');
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
@@ -387,6 +395,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       }
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
       let machine = selected; let outgoing: ClientMessage = msg;
+      if (msg.type === 'session.commands') {
+        const origin = splitId(msg.id);
+        if (!origin || !available(peers.get(origin.machine))) { emit({ type: 'session.commands.listing', requestId: msg.requestId, id: msg.id, commands: [], error: 'offline' }); return; }
+        commandLists.set(msg.requestId, { machine: origin.machine, id: msg.id });
+      }
       if ('id' in msg && msg.id !== undefined) { const origin = splitId(msg.id); if (!origin) { if (msg.type === 'attachment.put' || msg.type === 'attachment.get') emit({ type: 'attachment.error', requestId: msg.requestId, reason: 'offline' }); else emit({ type: 'error', id: msg.id, message: 'Unknown machine', request: msg.type }); return; } machine = origin.machine; outgoing = { ...msg, id: origin.id }; }
       if ('qid' in msg && msg.qid) { const b = bindings.get(msg.qid); if (!b) { emit({ type: 'error', message: 'Unknown conversation destination', request: msg.type }); return; } machine = b.machine; outgoing = { ...outgoing, qid: b.raw } as ClientMessage; }
       if (msg.type === 'attachment.put' || msg.type === 'attachment.get') {

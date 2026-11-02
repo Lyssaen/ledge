@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ClipboardEvent, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
 import { isBusy, type DaemonClient } from '@ledge/fleet';
+import { useSlashCommands } from '@ledge/fleet/slashCommands';
+import { completed, draftCommand, matchCommands, slashQuery } from '@ledge/ui/slash/match';
 import { NOTE_MAX, offers, type Helper, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -8,7 +10,7 @@ import type { Decisions } from '../fleet/decisions';
 import { AttachmentChips } from '@ledge/ui/images';
 import { useAttachments } from '../images/useAttachments';
 import { useI18n } from '../i18n/lang';
-import { machineOf } from '../nav/agents';
+import { machineOf, toolName } from '../nav/agents';
 import type { ScreenKeyHandler } from '../nav/screenKeys';
 import type { NavAction } from '../nav/state';
 import { cls } from '../shell/cls';
@@ -17,6 +19,7 @@ import { SessionBot } from '../shell/SessionBot';
 import { isNative } from '../term/mode';
 import type { SessionMemory } from './memory';
 import { SessionModel } from './SessionModel';
+import { SlashMenu, slashOptionId } from './SlashMenu';
 import { alwaysScope, isFreeRow, PendingCard, sortOf, type PendingActions } from './PendingCard';
 
 export interface ReplyProps {
@@ -76,6 +79,28 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   }), [client, session.id, key]);
 
   const text = draft.trim();
+  // The « / » list (lot 1: Claude Code), only where the field sends an instruction: no request waiting, the session drivable.
+  const slashTool = session.tool === 'claude' && canAct && !pending;
+  const query = slashTool ? slashQuery(draft) : null;
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const slashOpen = query !== null && dismissed !== draft;
+  const slash = useSlashCommands(client, session.id, slashOpen);
+  const matches = useMemo(() => (query !== null && slash.status === 'ready' ? matchCommands(slash.commands, query) : []), [query, slash]);
+  const pickable = matches.map((m, i) => (m.command.blocked ? -1 : i)).filter(i => i >= 0);
+  const [selectedRaw, setSelected] = useState(0);
+  const selected = pickable.includes(selectedRaw) ? selectedRaw : pickable[0] ?? -1;
+  useEffect(() => { setSelected(0); }, [query]);
+  const listId = useId();
+  const listShown = slashOpen && slash.status === 'ready' && !slash.error && matches.length > 0;
+  /** The draft becomes `/name `, the list closes, the field keeps the focus for the arguments. */
+  const pick = (i: number) => {
+    const m = matches[i]; if (!m || m.command.blocked) return;
+    setDraft(completed(m.command)); input.current?.focus();
+  };
+  // Once completed: the arguments it takes, faint after it, and what Enter will do (or why a bare one will not go).
+  const chosen = slashTool && slash.status === 'ready' ? draftCommand(draft, slash.commands) : undefined;
+  const ghost = chosen?.argumentHint && draft === completed(chosen) ? chosen.argumentHint : null;
+  const bare = chosen?.bare === 'panel' && /^\/\S+\s*$/.test(draft);
   // A permission, a diff or a plan takes the text as a refusal's note: only where the harness carries one, at most NOTE_MAX.
   const isNote = sort === 'approval' || sort === 'plan';
   const noteless = isNote && !offers(session.tool, pending!.kind, 'note');
@@ -179,6 +204,15 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   };
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
+    // The « / » list takes ↑↓, Tab and Enter while it shows commands, and Esc while it is open at all.
+    if (slashOpen && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDismissed(draft); return; }
+    if (listShown && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && pickable.length > 0) {
+      e.preventDefault();
+      const at = pickable.indexOf(selected), step = e.key === 'ArrowDown' ? 1 : -1;
+      setSelected(pickable[(at + step + pickable.length) % pickable.length]!);
+      return;
+    }
+    if (listShown && selected >= 0 && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey))) { e.preventDefault(); pick(selected); return; }
     // While OMP works, Ctrl / ⌘ Enter redirects the turn now; Enter alone queues the text for the turn's end.
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && working && (text || withImages)) { e.preventDefault(); steer(); }
     else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
@@ -193,6 +227,9 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   const placeholder = working ? tr.placeholder.queued(name) : sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
     : session.state === 'exited' || (session.state === 'idle' && !isBusy(session)) ? tr.placeholder.done(name) : tr.placeholder.idle(name);
   const hint = stopping ? tr.stopping
+    : chosen?.blocked && !pending ? <span className="slash-warn">{t.session.slash.blocked[chosen.blocked]}</span>
+    : bare ? <span className="slash-warn">{t.session.slash.bare(chosen!.name)}</span>
+    : chosen && !pending ? <><Kbd>↵</Kbd> {t.session.slash.sends(name)}</>
     : withImages && pending ? t.images.dialog
     : working && text ? <><Kbd>↵</Kbd> {tr.whenQueued} · <Kbd>Ctrl ↵</Kbd> {tr.whenNow}</>
     : stoppable && client && !askCard ? <><Kbd>{tr.escKey}</Kbd> {tr.stopKey}</>
@@ -233,9 +270,12 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
         <form className={cls(pending && 'with-pending', (session.queue?.length ?? 0) > 0 && native && 'under-queue')} onSubmit={e => { e.preventDefault(); submit(); }}
           onDragOver={client && !shut ? e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); } : undefined}
           onDrop={client && !shut ? e => { if (e.dataTransfer.files.length === 0) return; e.preventDefault(); images.add([...e.dataTransfer.files]); } : undefined}>
+          {slashOpen && <SlashMenu id={listId} state={slash} query={query!} matches={matches} selected={selected} tool={toolName(session.tool)} name={name} onPick={pick} onHover={setSelected} />}
           {withImages && <div className="reply-chips"><AttachmentChips items={images.items} onRemove={images.remove} size={{ w: 72, h: 54 }} removeLabel={t.images.remove} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'} /></div>}
           <textarea ref={input} rows={1} aria-label={tr.label} placeholder={placeholder} value={draft} disabled={shut}
-            maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} onPaste={onPaste} />
+            maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} onPaste={onPaste}
+            {...(slashTool ? { 'aria-autocomplete': 'list' as const, 'aria-expanded': listShown, ...(listShown ? { 'aria-controls': listId } : {}), ...(listShown && selected >= 0 ? { 'aria-activedescendant': slashOptionId(listId, selected) } : {}) } : {})} />
+          {ghost && !withImages && <div className="slash-ghost" aria-hidden="true"><span className="slash-ghost-typed">{draft}</span><span className="slash-ghost-hint">{ghost}</span></div>}
           {images.error && <span className="reply-hint reply-images-error" role="alert">{images.error}</span>}
           {client && <SessionModel client={client} session={session} notify={notify} />}
           <span className="reply-hint">{hint}</span>

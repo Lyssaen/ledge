@@ -4,6 +4,7 @@ import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema
 import { ActionIdSchema } from './actions.js';
 import { ATTACHMENTS_MAX, AttachmentCaptureSchema, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
+import { SessionCommandsSchema, SessionCommandsListingSchema } from './commands.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { RigSeatNameSchema, OpenRigActSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
@@ -88,6 +89,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `model` and `effort` on `session.launch` and answers `models.list` (#58). */ models: z.boolean().optional(),
   /** Drives OMP over its RPC: launching `omp` sessions is possible when the binary is there (`models.list` says so). */ omp: z.boolean().optional(),
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
+  /** Answers `session.commands`: the slash commands a session's agent offers. */ commands: z.boolean().optional(),
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
@@ -107,6 +109,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ReposInfoSchema,
   ReposFoundSchema,
   ModelsListingSchema,
+  SessionCommandsListingSchema,
   OpenRigStateMessageSchema,
   OpenRigDoneSchema,
   OpenRigSpecListSchema,
@@ -195,6 +198,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ReposInspectSchema,
   ReposScanSchema,
   ModelsListSchema,
+  SessionCommandsSchema,
   OpenRigStatusSchema,
   OpenRigActSchema,
   OpenRigSpecsSchema,
