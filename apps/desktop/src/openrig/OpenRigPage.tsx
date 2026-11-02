@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import { useOpenRig, type OpenRigView } from '@ledge/fleet/openrig';
-import type { OpenRigAction, OpenRigState, Projects, Rig } from '@ledge/protocol';
+import type { OpenRigAction, OpenRigState, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -23,7 +23,7 @@ const Dot = ({ tone }: { tone: Tone }) => <span className={`or-dot or-${tone}`} 
  * OpenRig on a machine (docs/mockups/ledge-openrig.html, view 1): the machines on top, the daemon and the kernel, then
  * the rigs, each unfolding its seats. A stop or a restart asks first (view 2); every action shows the `rig` command it runs.
  */
-export function OpenRigPage({ client, machines, machine, projects = null, dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; projects?: Projects | null; dispatch: (a: NavAction) => void }) {
+export function OpenRigPage({ client, machines, machine, projects = null, sessions = [], dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; projects?: Projects | null; sessions?: readonly Session[]; dispatch: (a: NavAction) => void }) {
   const { t, lang } = useI18n();
   const o = t.openrig;
   const shown = machines.find(m => m.id === machine) ?? machines.find(m => m.id === 'local') ?? machines[0];
@@ -54,7 +54,8 @@ export function OpenRigPage({ client, machines, machine, projects = null, dispat
       {launched && !launching && <p className="or-status or-ok" role="status"><Icon d={ICONS.check.d} size={13} />{o.launch.launched(launched)}</p>}
       {launching
         ? <RigLaunchForm client={client} machine={id} machineLabel={label} projects={projects} onClose={() => setLaunching(false)} onLaunched={name => { setLaunching(false); setLaunched(name); rig.refresh(); }} />
-        : <Body view={rig} machine={shown} onAct={run} onSeats={name => { setReseated(null); setReseating(name); }} />}
+        : <Body view={rig} machine={shown} onAct={run} onSeats={name => { setReseated(null); setReseating(name); }}
+            operator={operatorOf(rig.state, sessions, id)} sessionOf={seat => sessionOfSeat(sessions, seat, id)} onOpen={sid => dispatch({ type: 'open', id: sid })} />}
       {reseated && !launching && <p className="or-status or-ok" role="status">{reseated}</p>}
       {reseating && rig.state && (() => { const r = rig.state.rigs.find(x => x.name === reseating); return r ? (
         <SeatsDialog client={client} machine={id} machineLabel={label} rig={r} onClose={() => setReseating(null)}
@@ -65,7 +66,7 @@ export function OpenRigPage({ client, machines, machine, projects = null, dispat
   );
 }
 
-function Body({ view, machine, onAct, onSeats }: { view: OpenRigView; machine?: MachineState; onAct: (a: OpenRigAction) => void; onSeats: (rig: string) => void }) {
+function Body({ view, machine, onAct, onSeats, operator, sessionOf, onOpen }: { view: OpenRigView; machine?: MachineState; onAct: (a: OpenRigAction) => void; onSeats: (rig: string) => void; operator: Session | undefined; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void }) {
   const { t } = useI18n();
   const o = t.openrig;
   if (machine && !machine.ready) return <p className="or-empty" role="status">{o.offline}</p>;
@@ -86,12 +87,12 @@ function Body({ view, machine, onAct, onSeats }: { view: OpenRigView; machine?: 
     <Status view={view} />
     <div className="or-cards">
       <DaemonCard state={s} busy={busy} onAct={onAct} />
-      <KernelCard state={s} busy={busy} onAct={onAct} />
+      <KernelCard state={s} busy={busy} onAct={onAct} operator={operator} sessionOf={sessionOf} onOpen={onOpen} />
     </div>
     <div className="or-h2"><h2>{o.rigs}</h2>{up && <span className="or-count">{listedRigs(s).length}</span>}</div>
     {!up ? <p className="or-empty">{o.daemonFirst}</p>
       : listedRigs(s).length === 0 ? <p className="or-empty">{o.noRigs}</p>
-      : <ul className="or-rigs">{listedRigs(s).map(r => <RigRow key={r.id} rig={r} busy={busy} working={rigOf(view.pending) === r.name} onAct={onAct} onSeats={() => onSeats(r.name)} />)}</ul>}
+      : <ul className="or-rigs">{listedRigs(s).map(r => <RigRow key={r.id} rig={r} busy={busy} working={rigOf(view.pending) === r.name} onAct={onAct} onSeats={() => onSeats(r.name)} sessionOf={sessionOf} onOpen={onOpen} />)}</ul>}
   </>;
 }
 
@@ -133,7 +134,7 @@ function DaemonCard({ state, busy, onAct }: { state: OpenRigState; busy: boolean
   );
 }
 
-function KernelCard({ state, busy, onAct }: { state: OpenRigState; busy: boolean; onAct: (a: OpenRigAction) => void }) {
+function KernelCard({ state, busy, onAct, operator, sessionOf, onOpen }: { state: OpenRigState; busy: boolean; onAct: (a: OpenRigAction) => void; operator: Session | undefined; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void }) {
   const { t } = useI18n();
   const o = t.openrig;
   const k = state.kernel.state, up = state.daemon.state === 'running', rig = kernelRig(state);
@@ -145,15 +146,21 @@ function KernelCard({ state, busy, onAct }: { state: OpenRigState; busy: boolean
       <div className="or-acts">
         {!up ? <small className="or-muted">{o.daemonFirst}</small>
           : k === 'ready' || k === 'starting' ? <>
+            <Button size="sm" variant="primary" disabled={!operator} title={operator ? undefined : o.operatorNotYet} onClick={() => operator && onOpen(operator.id)}>{o.talkToOperator}</Button>
             <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'kernel.stop' })}><Icon d={ICONS.stop.d} size={12} />{o.stop}</Button>
             <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'kernel.restart' })}><Icon d={ICONS.refresh.d} size={12} />{o.restart}</Button>
           </> : rig ? <Button size="sm" variant="primary" disabled={busy} onClick={() => onAct({ kind: 'kernel.start' })}>{o.start}</Button> : null}
       </div>
+      {up && rig && rig.nodes.length > 0 && (
+        <ul className="or-kseats" aria-label={o.kernelSeats}>
+          {rig.nodes.map(n => <SeatLine key={n.session} seat={n} session={sessionOf(n.session)} onOpen={onOpen} />)}
+        </ul>
+      )}
     </section>
   );
 }
 
-function RigRow({ rig, busy, working, onAct, onSeats }: { rig: Rig; busy: boolean; working: boolean; onAct: (a: OpenRigAction) => void; onSeats: () => void }) {
+function RigRow({ rig, busy, working, onAct, onSeats, sessionOf, onOpen }: { rig: Rig; busy: boolean; working: boolean; onAct: (a: OpenRigAction) => void; onSeats: () => void; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void }) {
   const { t } = useI18n();
   const o = t.openrig;
   const [open, setOpen] = useState(false);
@@ -181,14 +188,7 @@ function RigRow({ rig, busy, working, onAct, onSeats }: { rig: Rig; busy: boolea
       </div>
       {open && (
         <ul id={seats} className="or-seats">
-          {rig.nodes.length === 0 ? <li className="or-muted">{o.noSeats}</li> : rig.nodes.map(n => (
-            <li key={n.session} className="or-seat">
-              <span className="mono">{n.logicalId}</span>
-              <span className="or-muted">{[n.runtime, n.model].filter(Boolean).join(' · ')}</span>
-              <Pill tone={n.activity === 'running' ? 'info' : n.activity === 'idle' ? 'ok' : 'off'}>{o.activity(n.activity)}</Pill>
-              <span className="or-muted">{o.work(n.work)}</span>
-            </li>
-          ))}
+          {rig.nodes.length === 0 ? <li className="or-muted">{o.noSeats}</li> : rig.nodes.map(n => <SeatLine key={n.session} seat={n} session={sessionOf(n.session)} onOpen={onOpen} work />)}
         </ul>
       )}
     </li>
@@ -227,5 +227,34 @@ function Confirm({ action, state, machine, onConfirm, onCancel }: { action: Open
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** The Ledge session of the kernel's operator seat (`operator.agent`) on that machine, once Ledge follows it. */
+export function operatorOf(state: OpenRigState | null, sessions: readonly Session[], machine: string): Session | undefined {
+  const seat = state?.rigs.find(r => r.name === 'kernel')?.nodes.find(n => n.logicalId === 'operator.agent')?.session;
+  if (!seat) return undefined;
+  return sessionOfSeat(sessions, seat, machine);
+}
+
+/** The Ledge session that follows an OpenRig seat on that machine, if any. */
+export const sessionOfSeat = (sessions: readonly Session[], seat: string, machine: string): Session | undefined =>
+  sessions.find(x => x.rig?.seat === seat && x.state !== 'exited' && (x.machineId ?? 'local') === machine);
+
+/** One seat: its role, harness and model, what it does, and « Ouvrir » once Ledge follows it (its thread, its terminal, its requests). */
+function SeatLine({ seat: n, session, onOpen, work = false }: { seat: RigSeat; session: Session | undefined; onOpen: (id: string) => void; work?: boolean }) {
+  const { t } = useI18n();
+  const o = t.openrig;
+  const up = n.sessionStatus === 'running';
+  return (
+    <li className="or-seat">
+      <span className="mono">{n.logicalId}</span>
+      <span className="or-muted">{[n.runtime, n.model].filter(Boolean).join(' · ')}</span>
+      <Pill tone={!up ? 'off' : n.activity === 'running' ? 'info' : n.activity === 'idle' ? 'ok' : 'off'}>{up ? o.activity(n.activity) : o.seatStatus(n.sessionStatus)}</Pill>
+      <span className="or-muted">{work ? o.work(n.work) : ''}</span>
+      <span className="or-seat-open">{session
+        ? <Button size="sm" onClick={() => onOpen(session.id)} aria-label={o.openSeat(n.logicalId)}>{o.open}</Button>
+        : null}</span>
+    </li>
   );
 }

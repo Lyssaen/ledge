@@ -149,6 +149,7 @@ export const en: Messages = {
     title: n => (n > 0 ? `ledge · ${n} waiting` : 'ledge')
   },
   openrig: {
+    operatorKey: 'operator', operatorHint: 'O: talk to it', operatorNotYet: 'Ledge does not follow the operator’s session yet: try again in a few seconds.',
     activity: (a) => ({ running: 'working', idle: 'available', unknown: '—' } as Record<string, string>)[a] ?? a,
     title: 'OpenRig', daemon: 'Daemon', kernel: 'Kernel', rigs: 'Rigs',
     machine: 'machine', toggle: 'start/stop', restart: 'restart', unfold: 'unfold', daemonKey: 'daemon', kernelKey: 'kernel',

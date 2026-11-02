@@ -2625,6 +2625,36 @@ describe('server: an idle seat recognised before', () => {
   });
 });
 
+describe('server: OpenRig seats found by Ledge itself', () => {
+  it('follows each running Claude Code and Codex seat on its pane; a later hook of that seat is the same session', async () => {
+    const node = (logicalId: string, session: string, runtime: string, sessionStatus = 'running') => ({ logicalId, session, runtime, model: null, sessionStatus, lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 });
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-02T09:00:00.000Z', rigs: [
+      { id: 'K', name: 'kernel', status: 'running', lifecycleState: 'running', seats: 3, running: 3, attention: 0, uptime: null, snapshot: null,
+        nodes: [node('operator.agent', 'operator-agent@kernel', 'codex'), node('operator.human', 'operator-human@kernel', 'terminal'), node('advisor.lead', 'advisor-lead@kernel', 'claude-code', 'detached')] },
+      { id: 'F', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node('dev.build', 'dev-build@first-factory', 'claude-code')] }
+    ] };
+    const seatTmux = fakeTmux({ 'operator-agent@kernel': ['› '], 'operator-human@kernel': ['$ '], 'dev-build@first-factory': ['❯ '] });
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: {
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'openrig.status', requestId: 'r' });
+    await c.next('openrig.state');
+    await vi.waitFor(() => expect(store.get('rig-operator-agent-kernel')).toMatchObject({ tool: 'codex', source: 'rig', tmuxSession: 'operator-agent@kernel', rig: { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' } }));
+    await vi.waitFor(() => expect(store.get('rig-dev-build-first-factory')).toMatchObject({ tool: 'claude', source: 'rig' }));
+    // A terminal seat and a detached one are not agents Ledge can answer.
+    expect(store.get('rig-operator-human-kernel')).toBeUndefined();
+    expect(store.get('rig-advisor-lead-kernel')).toBeUndefined();
+    // The Claude seat's hook, under its own conversation id, lands on the seat's session.
+    c.send({ type: 'session.event', id: 'claude-conv-1', agent: 'claude', cwd: '/w/ledge', rigSeat: 'dev-build@first-factory', event: { name: 'UserPromptSubmit', at: '2026-11-02T10:57:00.000Z', source: 'hook', text: 'go' } });
+    await vi.waitFor(() => expect(store.get('rig-dev-build-first-factory')?.state).toBe('working'));
+    expect(store.get('claude-conv-1')).toBeUndefined();
+    c.close(); await srv2.close();
+  });
+});
+
 describe('close a session', () => {
   const CLOSE = { freeMs: 200, exitMs: 200 };
   /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */

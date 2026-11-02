@@ -39,6 +39,7 @@ import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
 import { createOpenRig, type OpenRig } from './openrig.js';
+import type { OpenRigState } from '@ledge/protocol';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
@@ -206,6 +207,38 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (live && now2?.source === 'hook_only' && now2.state !== 'exited') store.upsert({ ...now2, source: 'rig', tmuxSession: seat });
     }).catch(e => log(`openrig: pane of ${seat} not found: ${(e as Error).message}`));
   };
+  /** The session Ledge gives a seat it found itself: one per seat, the same after a restart of its rig. */
+  const seatId = (seat: string) => `rig-${seat.replace(/[^A-Za-z0-9._-]/g, '-')}`;
+  /**
+   * Every running Claude Code or Codex seat of OpenRig, as a session on its pane (docs/mockups/ledge-openrig.html, view 3):
+   * the ones whose hooks never reached Ledge (Codex's, an idle Claude's) included. A seat already followed is left as it is;
+   * one found again after its rig restarted comes back as the same session.
+   */
+  async function discoverSeats(st: OpenRigState): Promise<void> {
+    if (st.daemon.state !== 'running') return;
+    const followed = new Set(store.all().filter(x => x.rig && x.state !== 'exited').map(x => x.rig!.seat));
+    for (const r of st.rigs) for (const n of r.nodes) {
+      if ((n.runtime !== 'claude-code' && n.runtime !== 'codex') || n.sessionStatus !== 'running' || followed.has(n.session)) continue;
+      if (!(await tmux.hasSession(n.session).catch(() => false))) continue;
+      const id = seatId(n.session), old = store.get(id), at = now();
+      const rig = { seat: n.session, name: r.name, role: n.logicalId };
+      const cwd = (await tmux.paneCwd?.(n.session).catch(() => null)) ?? old?.cwd ?? '';
+      if (old) {
+        if (old.archivedAt) store.unarchive(id, at);
+        const { exitedAt: _e, exitCode: _c, pending: _p, ...rest } = store.get(id)!;
+        store.upsert({ ...rest, state: 'idle', tmuxSession: n.session, source: 'rig', rig, lastActivityAt: at });
+      } else {
+        const name = pickName(store.all().map(x => x.name));
+        store.upsert({ id, name, tool: n.runtime === 'codex' ? 'codex' : 'claude', cwd, project: basename(cwd) || r.name, title: `${name} · ${n.logicalId}`,
+          tmuxSession: n.session, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'rig', rig });
+        log(`openrig: seat ${n.session} followed as ${name}`);
+      }
+      followed.add(n.session);
+    }
+  }
+  const SEATS_EVERY_MS = 30_000;
+  const seatTimer = setInterval(() => { void openrig.state().then(discoverSeats).catch(e => log(`openrig: seats not read: ${(e as Error).message}`)); }, SEATS_EVERY_MS);
+  seatTimer.unref?.();
   /** The seats recognised before and idle since (no hook to bring them): looked for again at start and at each OpenRig read. */
   const adoptSeats = () => { for (const s of store.all()) if (s.rig) adoptSeat(s.id, s.rig.seat); };
   adoptSeats();
@@ -1000,7 +1033,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
       case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
-      case 'openrig.status': adoptSeats(); return reply({ type: 'openrig.state', requestId: msg.requestId, state: await openrig.state() });
+      case 'openrig.status': {
+        adoptSeats();
+        const state = await openrig.state();
+        void discoverSeats(state).catch(e => log(`openrig: seats not followed: ${(e as Error).message}`));
+        return reply({ type: 'openrig.state', requestId: msg.requestId, state });
+      }
       case 'openrig.specs': return reply({ type: 'openrig.specList', requestId: msg.requestId, ...await openrig.specs() });
       case 'openrig.launch': {
         const done = await openrig.launch(msg.launch);
@@ -1091,6 +1129,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply(listing);
       }
       case 'session.event': {
+        // A seat Ledge already follows under its own id: its agent's hooks are that session's, not a second one.
+        if (msg.rigSeat && !store.get(msg.id)) {
+          const followed = store.all().find(x => x.source === 'rig' && x.rig?.seat === msg.rigSeat && x.state !== 'exited');
+          if (followed) msg.id = followed.id;
+        }
         let ev = msg.event;
         if (ev.name === 'UserPromptSubmit') {
           // A reply typed with images comes back as a plain prompt: the first one within the window carries them.
@@ -1462,6 +1505,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

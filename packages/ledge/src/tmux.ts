@@ -13,6 +13,8 @@ export interface Tmux {
   capture(name: string, lines: number): Promise<string | null>;
   /** The pane's width in columns, or null when tmux cannot tell. */
   width?(name: string): Promise<number | null>;
+  /** The folder the pane's program runs in, or null when tmux cannot tell. */
+  paneCwd?(name: string): Promise<string | null>;
   hasSession(name: string): Promise<boolean>;
   /** Empty when no tmux server runs; throws on any other failure. */
   listSessions(): Promise<string[]>;
@@ -96,6 +98,11 @@ export function realTmux(socket: string | null = 'ledge', opts: { scope?: () => 
     async hasSession(name) {
       return (await t(['has-session', '-t', `=${name}`])).code === 0;
     },
+    async paneCwd(name) {
+      const r = await t(['display-message', '-p', '-t', `=${name}:`, '#{pane_current_path}']);
+      const p = r.stdout.trim();
+      return r.code === 0 && p.startsWith('/') ? p : null;
+    },
     async listSessions() {
       const r = await t(['list-sessions', '-F', '#{session_name}']);
       if (r.code === 0) return r.stdout.split('\n').map(s => s.trim()).filter(Boolean);
@@ -128,6 +135,7 @@ export function routedTmux(own: Tmux, seats: Tmux): Tmux {
     sendKeys: (n, keys) => of(n).sendKeys(n, keys),
     capture: (n, lines) => of(n).capture(n, lines),
     width: async n => { const t = of(n); return t.width ? t.width(n) : null; },
+    paneCwd: async n => { const t = of(n); return t.paneCwd ? t.paneCwd(n) : null; },
     hasSession: n => of(n).hasSession(n),
     async listSessions() {
       const mine = await own.listSessions();

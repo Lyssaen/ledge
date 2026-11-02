@@ -101,3 +101,16 @@ describe('ledge tui: OpenRig (6)', () => {
     } finally { await tui.cleanup(); }
   });
 });
+
+describe('the kernel operator in the TUI', () => {
+  it('O finds the session Ledge follows for the kernel\'s operator.agent, on that machine', async () => {
+    const { operatorSession } = await import('../src/tui/screens/OpenRig.js');
+    const node = { logicalId: 'operator.agent', session: 'operator-agent@kernel', runtime: 'codex', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 };
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-02T09:00:00.000Z',
+      rigs: [{ id: 'k', name: 'kernel', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
+    const s = (id: string, machineId: string | undefined, state: 'idle' | 'exited' = 'idle') => ({ id, name: id, tool: 'codex' as const, cwd: '/w', project: 'w', title: id, tmuxSession: 'operator-agent@kernel', state, helpers: [], startedAt: '2026-11-02T09:00:00.000Z', lastActivityAt: '2026-11-02T09:00:00.000Z', source: 'rig' as const, rig: { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' }, ...(machineId ? { machineId } : {}) });
+    expect(operatorSession(state, [s('old', undefined, 'exited'), s('remote', 'ec2'), s('here', undefined)], 'local')?.id).toBe('here');
+    expect(operatorSession(state, [s('remote', 'ec2')], 'local')).toBeUndefined();
+    expect(operatorSession(null, [s('here', undefined)], 'local')).toBeUndefined();
+  });
+});

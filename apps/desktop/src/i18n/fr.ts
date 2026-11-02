@@ -66,6 +66,9 @@ export const fr = {
     dnd: 'Ne pas déranger', dndOn: 'Ne pas déranger : activé', minimize: 'Réduire', maximize: 'Agrandir', restore: 'Restaurer', close: 'Fermer'
   },
   openrig: {
+    kernelSeats: 'Sièges du kernel', open: 'Ouvrir', openSeat: (role: string) => `Ouvrir la session de ${role}`, terminalSeat: 'terminal', notFollowedYet: 'Ledge le suit dans quelques secondes.',
+    seatStatus: (st: string) => ({ detached: 'détaché', stopped: 'arrêté', starting: 'démarrage…' } as Record<string, string>)[st] ?? st,
+    talkToOperator: 'Parler à l’opérateur', operatorNotYet: 'Ledge ne suit pas encore la session de l’opérateur : elle apparaît dans quelques secondes.',
     seatOf: (rig: string, role?: string) => (role ? `Siège ${role} du rig ${rig}` : `Siège du rig ${rig}`),
     title: 'OpenRig', side: 'OpenRig', refresh: 'Actualiser', updated: (time: string) => `mis à jour à ${time}`, version: (v: string) => `OpenRig ${v}`,
     machines: 'Machines', machineOffline: 'hors ligne',

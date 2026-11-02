@@ -80,3 +80,25 @@ for (const theme of ['dark', 'light'] as const) {
     for (const name of ['Bix', 'Nova']) await page.locator('.agent-seat', { hasText: name }).screenshot({ path: info.outputPath(`zoom-seat-${name}-${theme}.png`) });
   });
 }
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`kernel seats and opening a seat, ${theme}`, async ({ page }, info) => {
+    await page.addInitScript(t => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
+    const k = (logicalId: string, runtime: string, activity: string, sessionStatus = 'running') => ({ logicalId, session: `${logicalId.replace('.', '-')}@kernel`, runtime, model: null, sessionStatus, lifecycleState: 'running', activity, stopped: false, work: 0 });
+    const state = { ...STATE, rigs: [STATE.rigs[0]!, { id: 'k', name: 'kernel', status: 'running', lifecycleState: 'running', seats: 4, running: 3, attention: 0, uptime: '3d', snapshot: null,
+      nodes: [k('operator.agent', 'codex', 'idle'), k('advisor.lead', 'claude-code', 'running'), k('queue.worker', 'codex', 'idle'), k('operator.human', 'terminal', 'running')] }] };
+    await fakeDaemon(page, [
+      session('op', { cwd: '/w/openrigdev', project: 'openrigdev', name: 'Lu', tool: 'codex', state: 'idle', source: 'rig', tmuxSession: 'operator-agent@kernel', rig: { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' } }),
+      session('b', { cwd: '/w/ledge', project: 'ledge', name: 'Bix', state: 'working', source: 'rig', tmuxSession: 'dev.build@starter', rig: { seat: 'dev.build@starter', name: 'starter', role: 'dev.build' } })
+    ], { openrig: state as never, rigSpecs: SPECS });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'OpenRig' }).click();
+    await expect(page.getByRole('list', { name: 'Sièges du kernel' })).toBeVisible();
+    await page.getByRole('button', { name: 'Voir les sièges de starter' }).click();
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: info.outputPath(`kernel-seats-${theme}.png`) });
+    await page.getByRole('region', { name: 'Kernel' }).screenshot({ path: info.outputPath(`zoom-kernel-${theme}.png`) });
+    await page.getByRole('button', { name: 'Parler à l’opérateur' }).click();
+    await expect(page.locator('.crumb-session')).toContainText('Lu');
+  });
+}

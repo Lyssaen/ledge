@@ -136,3 +136,9 @@
 /* In the atelier, a seat's rig sits above its mascot, its role under its name in the machine's place: the seat keeps its height. */
 .office-shell .agent-seat .seat-rig-tag { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); pointer-events: none; }
 .office-shell .agent-seat .seat-rig-tag .rig-tag { margin-left: 0; max-width: 108px; font-size: 9px; line-height: 13px; padding: 0 4px; background: var(--background); }
+
+/* A seat's line (kernel card, a rig's seats): « Ouvrir » once Ledge follows it. */
+.or-seat { grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) 110px 80px 80px; }
+.or-seat-open { justify-self: end; }
+.or-kseats { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px solid var(--border); }
+.or-kseats .or-seat { grid-template-columns: minmax(110px, 1fr) minmax(0, 1fr) 100px 0 72px; padding: 4px 0; }

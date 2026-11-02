@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import { reseatRig, useOpenRig } from '@ledge/fleet/openrig';
-import type { OpenRigAction, OpenRigState, Rig } from '@ledge/protocol';
+import type { OpenRigAction, OpenRigState, Rig, Session } from '@ledge/protocol';
 import { useScreenKeys, useTui } from '../context.js';
 import {
   asksFirst, confirmOf, daemonToggle, daemonUp, keepRig, kernelToggle, listedRigs, rigLook, rigToggle, seatBusy, step, type Confirm, type RigLook
@@ -119,6 +119,12 @@ export function OpenRigScreen() {
     const busy = rig.pending !== null;
     if (input === 'D') { if (state?.installed && !busy) ask(daemonToggle(state)); return true; }
     if (input === 'K') { if (daemonUp(state) && !busy) ask(kernelToggle(state!)); return true; }
+    // The kernel's operator, a seat Ledge follows: its session screen, to talk to it.
+    if (input === 'O') {
+      const op = operatorSession(state, tui.d.sessions, machine?.id ?? 'local');
+      if (op) { tui.select(op.id); tui.go('session'); } else if (daemonUp(state)) tui.toast({ text: o.operatorNotYet, tone: 'info' });
+      return true;
+    }
     if (input === 's') { if (daemonUp(state) && current && !busy) ask(rigToggle(current)); return true; }
     if (input === 'R') { if (daemonUp(state) && current && !busy) ask({ kind: 'rig.restart', rig: current.name }); return true; }
     if (input === '±' || input === '=') {
@@ -133,7 +139,7 @@ export function OpenRigScreen() {
     ? [['↑ ↓', t.rigSeats.role], ['- +', t.rigSeats.count], ['← →', t.rigSeats.delegationKey], ['↵', t.rigSeats.apply], ['esc', t.rigSeats.cancel]]
     : confirm
     ? [['y', o.yes], ['n', o.no]]
-    : [['tab', o.machine], ['j k', t.keys.navigate], ['↵', o.unfold], ['s', o.toggle], ['R', o.restart], ['± =', t.rigSeats.key], ['+', t.rigLaunch.launchKey], ['D', o.daemonKey], ['K', o.kernelKey], ['esc', t.keys.back]];
+    : [['tab', o.machine], ['j k', t.keys.navigate], ['↵', o.unfold], ['s', o.toggle], ['R', o.restart], ['± =', t.rigSeats.key], ['+', t.rigLaunch.launchKey], ['D', o.daemonKey], ['K', o.kernelKey], ['O', o.operatorKey], ['esc', t.keys.back]];
   const crumb = [state?.version ? o.version(state.version) : o.title, machine?.label].filter(Boolean).join(' · ');
 
   return (
@@ -167,6 +173,15 @@ function Body({ state, rigs, at, open, machineLabel }: { state: OpenRigState; ri
         <TitledBox title={o.kernel} flexGrow={1} width="50%">
           <Text wrap="truncate" color={up ? kernelColor : C.faint}>{state.kernel.state === 'ready' ? '● ' : '○ '}{o.kernelState[state.kernel.state] ?? state.kernel.state}</Text>
           <Text wrap="truncate" color={C.faint}>{o.kernelHint}</Text>
+          {up && (state.rigs.find(r => r.name === 'kernel')?.nodes ?? []).map(n => (
+            <Text key={n.session} wrap="truncate">
+              <Text color={n.sessionStatus !== 'running' ? C.faint : n.activity === 'running' ? C.blue : C.green}>{'◆ '}</Text>
+              <Text color={C.fg}>{n.logicalId.padEnd(16)}</Text>
+              <Text color={C.dim}>{n.runtime.padEnd(13)}</Text>
+              <Text color={C.dim}>{n.sessionStatus === 'running' ? o.activity(n.activity) : n.sessionStatus}</Text>
+              {n.logicalId === 'operator.agent' && <Text color={C.faint}>{'  '}{o.operatorHint}</Text>}
+            </Text>
+          ))}
         </TitledBox>
       </Box>
       <TitledBox title={`${o.rigs} · ${rigs.length}`} flexGrow={1}>
@@ -222,4 +237,10 @@ function ConfirmBox({ confirm }: { confirm: Confirm }) {
       <Text><Text color={C.fg} bold> y </Text><Text color={C.dim}>{o.yes}   </Text><Text color={C.fg} bold> n </Text><Text color={C.dim}>{o.no}</Text></Text>
     </TitledBox>
   );
+}
+
+/** The Ledge session of the kernel's operator seat (`operator.agent`) on that machine, once Ledge follows it. */
+export function operatorSession(state: OpenRigState | null, sessions: readonly Session[], machine: string): Session | undefined {
+  const seat = state?.rigs.find(r => r.name === 'kernel')?.nodes.find(n => n.logicalId === 'operator.agent')?.session;
+  return seat ? sessions.find(x => x.rig?.seat === seat && x.state !== 'exited' && (x.machineId ?? 'local') === machine) : undefined;
 }

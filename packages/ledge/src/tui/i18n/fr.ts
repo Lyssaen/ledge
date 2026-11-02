@@ -157,6 +157,7 @@ export const fr = {
     title: (n: number) => (n > 0 ? `ledge · ${n} t’${plural(n, 'attend', 'attendent')}` : 'ledge')
   },
   openrig: {
+    operatorKey: 'opérateur', operatorHint: 'O : lui parler', operatorNotYet: 'Ledge ne suit pas encore la session de l’opérateur : réessayez dans quelques secondes.',
     activity: (a: string) => ({ running: 'au travail', idle: 'disponible', unknown: '—' } as Record<string, string>)[a] ?? a,
     title: 'OpenRig', daemon: 'Daemon', kernel: 'Kernel', rigs: 'Rigs',
     machine: 'machine', toggle: 'démarrer/arrêter', restart: 'redémarrer', unfold: 'déplier', daemonKey: 'daemon', kernelKey: 'kernel',
