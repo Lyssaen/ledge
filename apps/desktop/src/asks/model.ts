@@ -32,9 +32,14 @@ export function bySection(asks: readonly HumanAsk[]): Record<AskSection, HumanAs
   return out;
 }
 
-/** The Ledge session that follows the asking seat, if any (its mascot, its name, the sidebar's marks). */
-export const sessionOfAsk = (a: HumanAsk, sessions: readonly Session[]): Session | undefined =>
-  sessions.find(s => s.rig?.seat === a.from.seat && s.state !== 'exited');
+/** The machine whose OpenRig the asks come from (lot 1: this computer's). */
+export const ASKS_MACHINE = 'local';
+/** Whether a session is the asking seat on the asks' machine: the same rig and seat on another machine is another seat (review). */
+export const isAskSeat = (s: Session, seat: string, machine = ASKS_MACHINE): boolean =>
+  s.rig?.seat === seat && s.state !== 'exited' && (s.machineId ?? 'local') === machine;
+/** The Ledge session that follows the asking seat on the asks' machine, if any (its mascot, its name, its files, the sidebar's marks). */
+export const sessionOfAsk = (a: HumanAsk, sessions: readonly Session[], machine = ASKS_MACHINE): Session | undefined =>
+  sessions.find(s => isAskSeat(s, a.from.seat, machine));
 
 /** The seat's role as the sidebar writes it: `pilot.lead` → `pilot`, `design.ux` stays. */
 export const shortRole = (role: string | null): string | null => role?.replace(/\.agent$|\.lead$|\.worker$/, '') ?? null;

@@ -407,3 +407,25 @@ describe('fix/openrig-answer-uncertain 047ed514', () => {
     expect(within(line).getByRole('button', { name: 'Réessayer' })).toBeEnabled();
   });
 });
+
+describe('review of f382bce6: the asks are this computer’s, never a namesake seat on another machine', () => {
+  const remote = { ...BIX, id: 'remote:bix', name: 'Bix distant', machineId: 'ec2' };
+  it('sessionOfAsk takes the local seat even when a remote namesake comes first; none when only the remote one exists', async () => {
+    const { sessionOfAsk } = await import('../src/asks/model');
+    expect(sessionOfAsk(ask(), [remote, BIX])?.id).toBe(BIX.id);
+    expect(sessionOfAsk(ask(), [remote])).toBeUndefined();
+  });
+  it('the card: with only a remote namesake, the rig’s hexagon and the seat’s role as name, not the remote session', () => {
+    // (Its source: LedgeHome opens it through sessionOfAsk, undefined here, so it shows inert; see the « no session » test above.)
+    mount([ask()], { sessions: [remote] });
+    const card = screen.getByRole('article');
+    expect(card).not.toHaveTextContent('Bix distant');
+    expect(card.querySelector('.ask-hex')).not.toBeNull();
+    expect(card).toHaveTextContent('ledge-dev· pilotdécision');
+  });
+  it('the sidebar marks only the local seat, and counts it in its rig only', () => {
+    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[remote, BIX]} current={null} paused dispatch={vi.fn()} dense={false} onToggleDense={vi.fn()} asks={[ask()]} /></aside></LangProvider>);
+    const marked = [...document.querySelectorAll('.st-ask-mark')].map(m => m.closest('[role="treeitem"]')!.querySelector('strong')!.textContent);
+    expect(marked).toEqual(['Bix']);
+  });
+});

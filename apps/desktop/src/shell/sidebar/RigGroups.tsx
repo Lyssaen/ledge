@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type JSX } from 'react';
 import type { HumanAsk, Session } from '@ledge/protocol';
-import { markOf } from '../../asks/model';
+import { isAskSeat, markOf } from '../../asks/model';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
 import type { NavAction } from '../../nav/state';
@@ -45,7 +45,8 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
   const kernel = live.filter(s => s.rig!.name === KERNEL);
   const rigs = new Map<string, Session[]>();
   for (const s of live) if (s.rig!.name !== KERNEL) rigs.set(s.rig!.name, [...(rigs.get(s.rig!.name) ?? []), s]);
-  const askOf = (s: Session) => markOf(asks.filter(a => a.from.seat === s.rig?.seat));
+  // Only the asking seat on the asks' machine is marked: a namesake seat elsewhere is not (review).
+  const askOf = (s: Session) => markOf(asks.filter(a => s.rig !== undefined && isAskSeat(s, a.from.seat)));
   const launch = () => dispatch({ type: 'openrig', section: 'rigs', open: { launch: true } });
   const row = (s: Session, depth: number) => (
     <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel', s.offline && 'off')} style={{ '--d': depth } as CSSProperties}>
