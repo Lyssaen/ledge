@@ -82,7 +82,8 @@ export function RigsLive({ model, openrig, byId, projects, dispatch, onTerminal,
           ? <RigRepos rig={row.rig} projects={projects} onChoose={() => controls.askAdopt(row.rig)} onAdopt={id => { void controls.adopt(row.rig.machine, row.rig.id, id); }} />
           : null;
         const footer = acts.footer || repos ? <>{acts.footer}{repos}</> : undefined;
-        const live = row.rig.engine === 'ledge' && row.rig.lifecycle !== 'stopped' && row.rig.lifecycle !== 'unreachable';
+        // The fleet writes to the local daemon's teams only (team.broadcast): another machine's Ledge team gets no field.
+        const live = row.rig.engine === 'ledge' && row.rig.machine === 'local' && row.rig.lifecycle !== 'stopped' && row.rig.lifecycle !== 'unreachable';
         return (
           <RigCard key={row.key} rig={row.rig} place={row.place} byId={byId} onOpen={open}
             {...(live && onBroadcast ? { onBroadcast: (text: string) => onBroadcast(row.rig, text) } : {})}

@@ -678,6 +678,7 @@ export const en: Messages = {
     goal: 'Objective', goalHint: 'What the team must do: its lead gets it at launch', branch: 'Branch', done: 'Done when',
     goalNeeded: 'Write the objective, or clear the branch and "done when"',
     unknown: (roles: string) => `Unknown roles in this folder: ${roles}`, launch: 'Launch the team', launching: 'Launching…',
+    noProject: 'No project with a folder on this machine: create one to launch a team in it',
     failed: (why: string) => `The team was not launched: ${why}`, partial: (reason: string) => `Team partly launched: ${reason}`, noAnswer: 'Ledge did not answer.', launched: (team: string, project: string) => `Team ${team} settles in the ${project} room.`
   },
   rooms: {

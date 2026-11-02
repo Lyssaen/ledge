@@ -1,10 +1,14 @@
 // Lot F, task 1: one « Teams » screen whatever the engine. A Ledge team arrives as a Rig with `engine: 'ledge'`; what is OpenRig's own
 // (its banner, its specs, its launch by plan) shows in OpenRig mode only.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { OpenRigStatus, Rig, RigSeat, Role } from '@ledge/protocol';
-import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
+import { rigsModel } from '@ledge/ui/rigs/model';
+import { boot, closeDaemons, PROJECTS, recordToasts, type MockDaemon } from './helpers';
+import { LangProvider } from '../src/i18n/lang';
+import { RigsLive } from '../src/rigs/RigsLive';
+import { teamRoom } from '../src/rigs/engine';
 import { visibleRigs } from '../src/rigs/RigsTab';
 import { fr } from '../src/i18n/fr';
 import { en } from '../src/i18n/en';
@@ -33,8 +37,8 @@ const listing = (d: MockDaemon) => d.onMessage(m => {
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
-async function openHome(engine: 'ledge' | 'openrig', { rigs, openrig }: { rigs: Rig[]; openrig: OpenRigStatus }) {
-  const env = await boot({ home: true, machines: LOCAL, projects: PROJECTS, sessions: [
+async function openHome(engine: 'ledge' | 'openrig', { rigs, openrig, projects = PROJECTS }: { rigs: Rig[]; openrig: OpenRigStatus; projects?: typeof PROJECTS }) {
+  const env = await boot({ home: true, machines: LOCAL, projects, sessions: [
     fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', team: 'team-a1b2', role: 'leader' }),
     fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'idle', team: 'team-a1b2', role: 'review' })
   ] });
@@ -97,6 +101,32 @@ describe('Ledge mode', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await user.click(side().getByRole('button', { name: 'Launch a team' }));
     expect(await screen.findByRole('dialog', { name: 'New team · Ledge' })).toBeVisible();
+  });
+
+  it('« Launch a team » with no project holding a folder on this machine says so, and opens nothing', async () => {
+    const log = recordToasts();
+    const remoteOnly = { ...PROJECTS, projects: PROJECTS.projects.map(p => ({ ...p, repos: p.repos.map(r => ({ ...r, machine: 'nas' })) })) };
+    const { user } = await openHome('ledge', { rigs: [LEDGE_TEAM], openrig: ABSENT, projects: remoteOnly });
+    const tab = within(await toTeams(user, 1));
+    await user.click(tab.getByRole('button', { name: 'Launch a team' }));
+    await waitFor(() => expect(log).toContain('No project with a folder on this machine: create one to launch a team in it'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('teamRoom: the project asked for, else the first with a local folder; a stale id opens nothing', () => {
+    expect(teamRoom(PROJECTS, 'pay')?.id).toBe('pay');
+    expect(teamRoom(PROJECTS, undefined)?.id).toBe('ledge');
+    expect(teamRoom(PROJECTS, 'gone')).toBeUndefined();
+    expect(teamRoom(null, undefined)).toBeUndefined();
+  });
+
+  it('a Ledge team on another machine has no field: the fleet writes to the local daemon’s teams only', () => {
+    const remote: Rig = { ...LEDGE_TEAM, id: 'team-c3d4', name: 'far-team', machine: 'nas' };
+    const model = rigsModel([LEDGE_TEAM, remote], new Map(), PROJECTS);
+    render(<LangProvider lang="en"><RigsLive model={model} openrig={[]} byId={new Map()} projects={PROJECTS} dispatch={() => {}} onTerminal={() => {}}
+      onBroadcast={() => Promise.resolve({ sent: 1 })} /></LangProvider>);
+    expect(within(screen.getByRole('article', { name: 'ledge-roles' })).getByRole('textbox', { name: 'Write to the whole team…' })).toBeVisible();
+    expect(within(screen.getByRole('article', { name: 'far-team' })).queryByRole('textbox', { name: 'Write to the whole team…' })).toBeNull();
   });
 
   it('« Stop… » on a Ledge team says its sessions close and it rests, nothing of OpenRig’s snapshot', async () => {
@@ -177,5 +207,7 @@ describe('the words', () => {
     expect(fr.home.catalog.leadRule).toBe("Une équipe a exactement un siège leader : son lead, qui reçoit l'objectif.");
     expect(en.home.catalog.leadRule).toBe('A team has exactly one leader seat: its lead, who receives the objective.');
     expect([fr.side.rigs.title, fr.side.rigs.launch, fr.modalTitles.rigLaunch]).toEqual(['Équipes', 'Lancer une équipe', 'Nouvelle équipe']);
+    expect(fr.teamLaunch.noProject).toBe('Aucun projet avec un dossier sur cette machine : crée-en un pour y lancer une équipe');
+    expect(en.teamLaunch.noProject).toBe('No project with a folder on this machine: create one to launch a team in it');
   });
 });

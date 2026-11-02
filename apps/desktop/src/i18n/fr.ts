@@ -715,6 +715,7 @@ export const fr = {
     goal: 'Objectif', goalHint: 'Ce que l’équipe doit faire : son lead le reçoit au lancement', branch: 'Branche', done: 'Fini quand',
     goalNeeded: 'Écris l’objectif, ou vide la branche et « fini quand »',
     unknown: (roles: string) => `Rôles inconnus dans ce dossier : ${roles}`, launch: 'Lancer l’équipe', launching: 'Lancement…',
+    noProject: 'Aucun projet avec un dossier sur cette machine : crée-en un pour y lancer une équipe',
     failed: (why: string) => `L’équipe n’a pas été lancée : ${why}`, partial: (reason: string) => `Équipe lancée en partie : ${reason}`, noAnswer: 'Ledge n’a pas répondu.', launched: (team: string, project: string) => `L’équipe ${team} s’installe dans la pièce ${project}.`
   },
   rooms: {

@@ -19,7 +19,7 @@ import { daemonTokenSource, onOpenTarget, onTrayAction, openUrl, setTrayLabels }
 import { parseTarget, targetAction } from './open/target';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, rigLaunchModal, type NavAction, type NavState } from './nav/state';
-import { engineOf } from './rigs/engine';
+import { engineOf, teamRoom } from './rigs/engine';
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { mainOrder } from './nav/agents';
@@ -72,10 +72,6 @@ import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 
 const NO_PROJECTS: readonly Project[] = [];
-/** The project a team form opens on: the one asked for (a room, the catalog), else the atelier's filter, else the first one with a local
- *  folder (« Lancer une équipe » of the « Équipes » tab and of the sidebar, lot F). None: there is nowhere to seat a team. */
-const teamRoom = (projects: Projects | null, wanted: string | undefined): Project | undefined =>
-  (wanted ? projects?.projects.find(x => x.id === wanted) : undefined) ?? projects?.projects.find(x => x.repos.some(r => r.machine === 'local'));
 
 /** Ledge's terminal colours as the root's tokens give them now. */
 const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
@@ -247,6 +243,17 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The New session form starts on the overview's project filter (a project id, not « all » nor « none »).
   const base = place.kind === 'settings' ? place.back : place;
   const filter = base.project !== 'all' && base.project !== 'none' ? base.project : undefined;
+  // The team form (lot F): the project asked for, else the atelier's filter when it is a project (not a rig's or a kernel's), else
+  // `teamRoom`'s first project with a local folder. None to be found: « Lancer une équipe » says why and the window does not stay asked for.
+  const teamWanted = nav.modal?.kind === 'launch' && nav.modal.team
+    ? nav.modal.project ?? (filter && projects?.projects.some(x => x.id === filter) ? filter : undefined) : undefined;
+  const room = nav.modal?.kind === 'launch' && nav.modal.team ? teamRoom(projects, teamWanted) : undefined;
+  const noRoom = nav.modal?.kind === 'launch' && !!nav.modal.team && !room;
+  useEffect(() => {
+    if (!noRoom) return;
+    dispatch({ type: 'modal', modal: null });
+    if (teamWanted === undefined) notify(t.teamLaunch.noProject);
+  }, [noRoom]); // eslint-disable-line react-hooks/exhaustive-deps -- once per window asked for
   // Launching from the form: one at a time, nothing optimistic. Once the daemon says launched, the form closes, the filter
   // shows the launch's table, the seat lights and the notice names who starts where.
   const launched = useRef<{ name: string; project: string; projectId: string } | null>(null);
@@ -348,15 +355,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
-      {nav.modal?.kind === 'launch' && nav.modal.team && teamRoom(projects, nav.modal.project ?? filter) && (() => {
-        const room = teamRoom(projects, (nav.modal as { project?: string }).project ?? filter)!;
-        return (
-          <Modal title={t.teamLaunch.title(room.name)} wide onClose={close}>
-            <TeamLaunch client={fleetClient} teams={teams} project={room} onCancel={close} initial={nav.modal as { cwd?: string; template?: string; seat?: string }}
-              onLaunched={(team, warning) => { close(); dispatch({ type: 'home', project: room.id }); notify(warning ? t.teamLaunch.partial(warning) : t.teamLaunch.launched(team.name, room.name)); }} />
-          </Modal>
-        );
-      })()}
+      {nav.modal?.kind === 'launch' && nav.modal.team && room && (
+        <Modal title={t.teamLaunch.title(room.name)} wide onClose={close}>
+          <TeamLaunch client={fleetClient} teams={teams} project={room} onCancel={close} initial={nav.modal as { cwd?: string; template?: string; seat?: string }}
+            onLaunched={(team, warning) => { close(); dispatch({ type: 'home', project: room.id }); notify(warning ? t.teamLaunch.partial(warning) : t.teamLaunch.launched(team.name, room.name)); }} />
+        </Modal>
+      )}
       {nav.modal?.kind === 'launch' && !nav.modal.team && (
         <Modal title={t.modalTitles.launch} wide onClose={close}>
           <LaunchPlace client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
