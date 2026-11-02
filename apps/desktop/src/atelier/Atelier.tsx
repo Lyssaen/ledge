@@ -155,13 +155,13 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
           <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} tasks={tasks} />
           <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
           <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
-            {scene.rooms.map(({ project, tables }) => (
-              <ProjectRoom key={project.id} project={project} tables={tables} width={roomTileWidth(tables, seats)} dispatch={dispatch}>
+            {scene.rooms.map(({ project, tables, rig }) => (
+              <ProjectRoom key={project.id} project={project} tables={tables} rig={rig} sessions={sessions} width={roomTileWidth(tables, seats)} dispatch={dispatch}>
                 {tables.map(table => (
                   <ProjectTable key={table.key} table={table} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
                     isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
                     actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt}
-                    seatDrag={seatDrag} tableDrop={tableDrop(table, project.id)} />
+                    seatDrag={seatDrag} tableDrop={rig ? undefined : tableDrop(table, project.id)} />
                 ))}
               </ProjectRoom>
             ))}

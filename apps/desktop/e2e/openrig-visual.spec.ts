@@ -69,7 +69,10 @@ for (const theme of ['dark', 'light'] as const) {
       session('otto', { cwd: '/w/ledge', project: 'ledge', name: 'Otto', state: 'idle' }),
       session('s1', { cwd: '/w/ledge', project: 'ledge', name: 'Bix', state: 'waiting_permission', source: 'hook_only', rig: { seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' },
         pending: { kind: 'permission' as const, text: 'npm test', tool: 'Bash', source: 'hook' as const } }),
-      session('s2', { cwd: '/w/ledge', project: 'ledge', name: 'Nova', state: 'working', source: 'hook_only', rig: { seat: 'dev-review@first-factory', name: 'first-factory', role: 'dev.review' } })
+      session('s2', { cwd: '/w/ledge', project: 'ledge', name: 'Nova', state: 'working', source: 'hook_only', rig: { seat: 'dev-review@first-factory', name: 'first-factory', role: 'dev.review' } }),
+      session('k1', { cwd: '/w/openrigdev', project: 'openrigdev', name: 'Lu', tool: 'codex', state: 'idle', source: 'rig', tmuxSession: 'operator-agent@kernel', rig: { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' } }),
+      session('k2', { cwd: '/w/openrigdev', project: 'openrigdev', name: 'Ada', state: 'working', source: 'rig', tmuxSession: 'advisor-lead@kernel', rig: { seat: 'advisor-lead@kernel', name: 'kernel', role: 'advisor.lead' } }),
+      session('k3', { cwd: '/w/openrigdev', project: 'openrigdev', name: 'Sol', tool: 'codex', state: 'idle', source: 'rig', tmuxSession: 'queue-worker@kernel', rig: { seat: 'queue-worker@kernel', name: 'kernel', role: 'queue.worker' } })
     ], { projects: twoProjects });
     await page.goto('/');
     await openAtelier(page);
@@ -98,6 +101,14 @@ for (const theme of ['dark', 'light'] as const) {
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: info.outputPath(`kernel-seats-${theme}.png`) });
     await page.getByRole('region', { name: 'Kernel' }).screenshot({ path: info.outputPath(`zoom-kernel-${theme}.png`) });
+    await page.getByRole('button', { name: 'Réglages de operator.agent' }).click();
+    const dlg = page.getByRole('dialog', { name: 'Réglages du siège operator.agent · kernel' });
+    await dlg.getByRole('radio', { name: 'Claude Code' }).click();
+    await dlg.getByLabel('Modèle').fill('opus');
+    await dlg.getByRole('radio', { name: 'high' }).click();
+    await expect(dlg).toContainText('rig seat set-runtime operator-agent@kernel --runtime claude-code --model opus --effort high --reason Ledge');
+    await dlg.screenshot({ path: info.outputPath(`seat-settings-${theme}.png`) });
+    await dlg.getByRole('button', { name: 'Annuler' }).click();
     await page.getByRole('button', { name: 'Parler à l’opérateur' }).click();
     await expect(page.locator('.crumb-session')).toContainText('Lu');
   });

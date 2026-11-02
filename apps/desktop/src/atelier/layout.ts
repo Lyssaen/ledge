@@ -79,8 +79,11 @@ export const helperState = (h: Helper): BotState => HELPER_STATE[h.state];
 
 /** A room's table (atelier rooms spec §3.1): the project's common table, where all its sessions sit. */
 export interface AtelierTable { key: string; mains: Session[] }
-/** A project's room: its walls hold its table. */
-export interface AtelierRoom { project: Project; tables: AtelierTable[] }
+/** An OpenRig rig's room, or the kernel's (docs/mockups/ledge-openrig-groups.html, view 1): its seats around its own table, away
+ *  from the projects'; `folder` and `project`: where the rig works. */
+export interface RigRoomInfo { kind: 'rig' | 'kernel'; name: string; folder: string; project: string | null }
+/** A project's room, or a rig's (`rig`): its walls hold its table. */
+export interface AtelierRoom { project: Project; tables: AtelierTable[]; rig?: RigRoomInfo }
 export interface AtelierScene { rooms: AtelierRoom[]; unassigned: Session[]; empty: Project | null }
 
 /** The rooms of the atelier (atelier rooms spec §3.1): a project with sessions has a room, its sessions at its common table. */
@@ -88,16 +91,36 @@ export function sceneOf(order: readonly Session[], projects: Projects | null, pr
   const list = projects?.projects ?? [];
   const known = new Set(list.map(p => p.id));
   const idOf = (s: Session) => { const id = projectIdOf(s); return id !== null && known.has(id) ? id : null; };
+  // An OpenRig seat sits in its rig's room (the kernel's its own), never at a project's table.
+  const own = order.filter(s => !s.rig);
   const showTables = filter === 'all' || filter !== 'none';
-  const rooms = showTables
+  const projectRooms = showTables
     ? list.filter(p => filter === 'all' || p.id === filter)
-      .map(project => ({ project, tables: [{ key: `common:${project.id}`, mains: order.filter(s => idOf(s) === project.id) }] }))
+      .map(project => ({ project, tables: [{ key: `common:${project.id}`, mains: own.filter(s => idOf(s) === project.id) }] }))
       .filter(r => r.tables[0]!.mains.length > 0)
     : [];
-  const unassigned = filter === 'all' || filter === 'none' ? order.filter(s => idOf(s) === null) : [];
+  const rigs = filter === 'all' ? rigRooms(order.filter(s => s.rig), id => list.find(p => p.id === id)?.name ?? null, projectIdOf) : [];
+  const rooms = [...rigs.filter(r => r.rig!.kind === 'kernel'), ...projectRooms, ...rigs.filter(r => r.rig!.kind === 'rig')];
+  const unassigned = filter === 'all' || filter === 'none' ? own.filter(s => idOf(s) === null) : [];
   const target = filter === 'all' || filter === 'none' ? undefined : list.find(p => p.id === filter);
   const empty = target && rooms.length === 0 ? target : null;
   return { rooms, unassigned, empty };
+}
+
+export const KERNEL_ROOM = 'kernel';
+/** One room per rig whose seats Ledge follows, the kernel's first; a rig's folder is its first seat's. */
+export function rigRooms(seats: readonly Session[], projectName: (id: string) => string | null, projectIdOf: (s: Session) => string | null): AtelierRoom[] {
+  const by = new Map<string, Session[]>();
+  for (const s of seats) by.set(s.rig!.name, [...(by.get(s.rig!.name) ?? []), s]);
+  return [...by].sort(([a], [b]) => (a === KERNEL_ROOM ? -1 : b === KERNEL_ROOM ? 1 : a.localeCompare(b))).map(([name, mains]) => {
+    const kind = name === KERNEL_ROOM ? 'kernel' as const : 'rig' as const;
+    const pid = projectIdOf(mains[0]!);
+    return {
+      project: { id: `rig:${name}`, name, color: kind === 'kernel' ? 'violet' : 'slate', description: '', repos: [] },
+      tables: [{ key: `rig:${name}`, mains }],
+      rig: { kind, name, folder: mains[0]!.cwd, project: pid ? projectName(pid) : null }
+    };
+  });
 }
 
 /** Room, then seat (Alt ←/→, Alt 1…9, J / K); `MAX_SEATS` applies per table. */

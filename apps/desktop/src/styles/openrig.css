@@ -123,7 +123,7 @@
 .or-chip-seat { font: 11.5px 'Geist Mono', monospace; border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; color: var(--muted-foreground); }
 .or-chip-seat.new { border-color: color-mix(in oklab, var(--success) 50%, transparent); color: var(--success); }
 .or-chip-seat.rm { border-color: color-mix(in oklab, var(--danger-text) 50%, transparent); color: var(--danger-text); text-decoration: line-through; }
-.or-cmds { margin: 10px 0 4px; background: var(--well); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 10px; font: 11.5px/18px 'Geist Mono', monospace; color: var(--muted-foreground); white-space: pre-wrap; word-break: break-all; }
+.or-cmds { margin: 10px 0 4px; background: var(--well); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 10px; font: 11.5px/18px "Geist Mono", monospace; color: var(--muted-foreground); white-space: pre-wrap; word-break: normal; overflow-wrap: break-word; }
 .or-warn-line { color: var(--danger-text); font-size: 12.5px; margin: 6px 0 0; }
 
 .or-seg-wrap { flex-wrap: wrap; }
@@ -142,3 +142,25 @@
 .or-seat-open { justify-self: end; }
 .or-kseats { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px solid var(--border); }
 .or-kseats .or-seat { grid-template-columns: minmax(110px, 1fr) minmax(0, 1fr) 100px 0 72px; padding: 4px 0; }
+
+/* A seat's settings (docs/mockups/ledge-openrig-groups.html, view 2). */
+.or-seat-open { display: inline-flex; gap: 4px; align-items: center; }
+.or-gear { width: 30px; padding: 0 !important; font-size: 14px !important; color: var(--muted-foreground); }
+.or-seat { grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) 110px 80px 110px; }
+.or-kseats .or-seat { grid-template-columns: minmax(110px, 1fr) minmax(0, 1fr) 100px 0 104px; }
+.or-setgrid { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 10px 14px; align-items: center; margin: 4px 0 12px; }
+.or-setgrid .ledge-field { height: 32px; padding: 0 10px; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--well); color: var(--foreground); }
+.or-setlabel { font-size: 12.5px; color: var(--muted-foreground); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.or-when { font-size: 11px; line-height: 17px; padding: 0 6px; border-radius: 4px; background: var(--status-info-soft); color: var(--info); }
+.or-when.now { background: var(--status-warning-soft); color: var(--warning); }
+.or-plan { max-height: 220px; overflow: auto; }
+.or-plan-err { color: var(--danger-text); }
+
+/* A rig's room and the kernel's (docs/mockups/ledge-openrig-groups.html, view 1). */
+.rig-room .seat-rig-tag { display: none; }
+.rig-plaque .rig-hex { display: inline-grid; place-items: center; color: var(--info); }
+.kernel-room .rig-plaque .rig-hex { color: #b9a2f0; }
+.rig-plaque .plaque-where { font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rig-plaque .plaque-btn { margin-left: 4px; height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.rig-plaque .plaque-btn:hover { background: var(--muted); }
+.kernel-room { --room-floor: color-mix(in oklab, #8b5cf6 10%, var(--background)); }

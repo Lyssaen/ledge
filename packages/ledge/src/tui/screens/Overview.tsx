@@ -22,8 +22,8 @@ import { TitledBox } from '../ui/TitledBox.js';
 /** Under this many columns the overview is one column: the session card opens with ↵. */
 export const WIDE = 100;
 
-type Row = { kind: 'project'; key: string; label: string; color: string; count: number }
-  | { kind: 'branch'; key: string; branch: string; indent: number } | { kind: 'session'; key: string; s: Session; indent: number };
+type Row = { kind: 'project'; key: string; label: string; color: string; count: number; rig?: boolean }
+  | { kind: 'branch'; key: string; branch: string; indent: number; head?: boolean } | { kind: 'session'; key: string; s: Session; indent: number };
 
 /** The rows of the tree box that fit in `height`, scrolled so that the selected session shows. */
 export function windowed<T extends { key: string }>(rows: readonly T[], selectedKey: string | null, height: number): T[] {
@@ -100,7 +100,12 @@ export function Overview() {
     return false;
   });
 
-  const tree: Row[] = view.tree.flatMap(n => {
+  const tree: Row[] = view.tree.flatMap((n, i) => {
+    // RIGS and KERNEL each open with their header, after the projects (docs/mockups/ledge-openrig-groups.html, view 3).
+    const head = n.kind && view.tree[i - 1]?.kind !== n.kind ? [{ kind: 'branch' as const, key: `head:${n.kind}`, branch: n.kind === 'kernel' ? t.overview.kernelGroup : t.overview.rigsGroup, indent: 0, head: true }] : [];
+    if (n.kind) return [...head,
+      { kind: 'project' as const, key: n.key, label: n.label, color: n.kind === 'kernel' ? C.violet : C.blue, count: n.count, rig: true },
+      ...n.branches.flatMap(b => b.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: 0 })))];
     return [
       { kind: 'project' as const, key: n.key, label: n.label, color: projectColor(n.color), count: n.count },
       ...n.branches.flatMap(b => [{ kind: 'branch' as const, key: `${n.key}|${b.branch}`, branch: b.branch, indent: 2 }, ...b.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: 0 }))])
@@ -142,9 +147,9 @@ export function Overview() {
   const treeBox = (
     <TitledBox title={t.overview.projects} flexGrow={1}>
       {tree.length === 0 ? <Text color={C.faint}>{t.overview.noSession}</Text> : windowed(tree, sel, treeHeight).map(r => r.kind === 'project'
-        ? <Text key={r.key} wrap="truncate"><Text color={r.color}>{g.project}</Text> <Text color={C.fg} bold>{r.label}</Text> <Text color={C.faint}>{t.overview.sessions(r.count)}</Text></Text>
+        ? <Text key={r.key} wrap="truncate"><Text color={r.color}>{r.rig ? '⬡' : g.project}</Text> <Text color={C.fg} bold>{r.label}</Text> <Text color={C.faint}>{t.overview.sessions(r.count)}</Text></Text>
         : r.kind === 'branch'
-          ? <Text key={r.key} wrap="truncate" color={C.faint}>{' '.repeat(r.indent)}{g.branch} {r.branch}</Text>
+          ? r.head ? <Text key={r.key} wrap="truncate" color={C.dim} bold>{r.branch}</Text> : <Text key={r.key} wrap="truncate" color={C.faint}>{' '.repeat(r.indent)}{g.branch} {r.branch}</Text>
           : <SessionRow key={r.key} s={r.s} on={r.s.id === sel} nameW={nameW} topicW={Math.max(6, topicW - r.indent)} stateW={stateW} indent={r.indent} />)}
     </TitledBox>
   );

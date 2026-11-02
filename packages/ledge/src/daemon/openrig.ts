@@ -19,7 +19,7 @@ export type RigRun = (args: string[], timeoutMs: number) => Promise<{ code: numb
 
 const STATUS_MS = 15_000;
 /** How long one command of an action may take: starting a rig waits for its agents. */
-const ACTION_MS: Record<string, number> = { start: 120_000, up: 300_000, down: 120_000, stop: 60_000 };
+const ACTION_MS: Record<string, number> = { start: 120_000, up: 300_000, down: 120_000, stop: 60_000, seat: 240_000 };
 /** A state read this recently is answered again, so several fronts polling do not each run `rig`. */
 export const STATE_TTL_MS = 2_000;
 /** How long the `rig --version` read stands before it is asked again. */

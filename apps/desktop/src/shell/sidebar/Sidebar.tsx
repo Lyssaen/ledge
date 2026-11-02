@@ -21,6 +21,7 @@ import { Attention } from './Attention';
 import { attentionOf, treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
+import { RigGroups } from './RigGroups';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
 
 /** The explorer shell: Session, Ask Ledge, Atelier, Your turn, the project tree, Archives, then the foot. */
@@ -51,7 +52,8 @@ export function Sidebar(p: {
   const { place } = p.nav;
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
-  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
+  // OpenRig's seats have their own groups (Rigs, Kernel), away from the projects.
+  const groups = useMemo(() => treeModel(p.sessions.filter(s => !s.rig), p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
   const attn = useMemo(() => attentionOf(p.sessions, p.waits), [p.sessions, p.waits]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
   const near = useMemo(() => nearLimit(p.sessions, p.tasksApi?.later, p.tasksApi?.near), [p.sessions, p.tasksApi?.later, p.tasksApi?.near]);
@@ -147,6 +149,7 @@ export function Sidebar(p: {
             onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>
+        <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} />
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}

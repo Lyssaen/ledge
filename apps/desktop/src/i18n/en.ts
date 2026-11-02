@@ -8,6 +8,7 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'co
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
   side: {
+    rigs: 'Rigs', kernel: 'Kernel', rigOf: (name) => `The rig ${name} on the OpenRig page`, rigAsks: (n) => `${n} ${pluralEn(n, 'request', 'requests')}`, 
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
@@ -128,6 +129,15 @@ export const en: Messages = {
       noLinks: 'This OpenRig cannot link seats added to a running rig (before 0.7): they have no delegation link.',
       snapshotNote: 'A snapshot follows, so a restart keeps the new size.',
       errors: { rig_not_running: 'This rig is not running.', rig_root_unknown: 'This rig’s agents cannot be found: a seat cannot be copied.' } as Record<string, string>
+    },
+    seatSettings: {
+      open: (role) => `${role} settings`, title: (role, rig) => `Settings of the seat ${role} · ${rig}`,
+      now: (what) => `Now on ${what}.`,
+      runtime: 'Harness', model: 'Model', effort: 'Effort', permissions: 'Permissions', unchanged: 'Unchanged', modelPlaceholder: 'its agent’s',
+      whenNow: 'now', whenResume: 'at resume', whenLaunch: 'at launch',
+      perm: { inherit: 'The rig’s', floor: 'Default', auto: 'Auto', full_bypass: 'YOLO' } as Record<string, string>,
+      moveNote: (from, to) => `OpenRig starts a ${to} successor, hands it ${from}’s context, then puts it in place (up to 3 min). The ${from} conversation stays in the history.`,
+      seePlan: 'See the plan', planTitle: 'Plan', planEmpty: 'OpenRig described nothing.', move: (to) => `Move to ${to}`, save: 'Save', applying: 'Applying…'
     },
     confirm: {
       title: (what, machine) => `Stop ${what} on ${machine}?`,
@@ -538,7 +548,7 @@ export const en: Messages = {
     relievedBy: (name: string) => `relieved by ${name}`, relieves: (name: string) => `relieves ${name}`,
     refused: (why: string) => `Relief refused: ${why}`, auto: 'by Ledge'
   },
-  rooms: {
+  rooms: { rigRoom: (kind, name) => (kind === 'kernel' ? 'The OpenRig kernel’s room' : `The rig ${name}’s room`), kernel: 'Kernel', kernelWhere: 'OpenRig · operator, advisor, queue', rigWhere: (folder, project) => `rig · ${folder}${project ? ` · project ${project}` : ''}`, manageRig: 'Manage', 
     room: (name: string) => `${name} room`,
     plaqueCounts: (sessions: number) => `${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
     waiting: (n: number) => `${n} waiting`, working: (n: number) => `${n} working`,

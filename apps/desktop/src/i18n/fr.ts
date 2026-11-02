@@ -22,6 +22,7 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'co
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
 export const fr = {
   side: {
+    rigs: 'Rigs', kernel: 'Kernel', rigOf: (name: string) => `Le rig ${name} sur la page OpenRig`, rigAsks: (n: number) => `${n} ${n > 1 ? 'demandes' : 'demande'}`, 
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
@@ -142,6 +143,15 @@ export const fr = {
       noLinks: 'Cet OpenRig ne sait pas lier des sièges ajoutés à un rig en marche (avant 0.7) : ils n’ont pas de lien de délégation.',
       snapshotNote: 'Un snapshot suit, pour qu’un redémarrage garde la nouvelle taille.',
       errors: { rig_not_running: 'Ce rig ne tourne pas.', rig_root_unknown: 'Les agents de ce rig sont introuvables : impossible de copier un siège.' } as Record<string, string>
+    },
+    seatSettings: {
+      open: (role: string) => `Réglages de ${role}`, title: (role: string, rig: string) => `Réglages du siège ${role} · ${rig}`,
+      now: (what: string) => `Aujourd’hui sur ${what}.`,
+      runtime: 'Harnais', model: 'Modèle', effort: 'Effort', permissions: 'Permissions', unchanged: 'Inchangé', modelPlaceholder: 'celui de son agent',
+      whenNow: 'tout de suite', whenResume: 'à la reprise', whenLaunch: 'au lancement',
+      perm: { inherit: 'Celle du rig', floor: 'Par défaut', auto: 'Auto', full_bypass: 'YOLO' } as Record<string, string>,
+      moveNote: (from: string, to: string) => `OpenRig démarre un successeur ${to}, lui passe le contexte de ${from}, puis le met à la place (jusqu’à 3 min). La conversation ${from} reste dans l’historique.`,
+      seePlan: 'Voir le plan', planTitle: 'Plan', planEmpty: 'OpenRig n’a rien décrit.', move: (to: string) => `Passer sur ${to}`, save: 'Enregistrer', applying: 'En cours…'
     },
     confirm: {
       title: (what: string, machine: string) => `Arrêter ${what} sur ${machine} ?`,
@@ -559,7 +569,7 @@ export const fr = {
     relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,
     refused: (why: string) => `Relève refusée : ${why}`, auto: 'par Ledge'
   },
-  rooms: {
+  rooms: { rigRoom: (kind: 'rig' | 'kernel', name: string) => (kind === 'kernel' ? 'Salle du kernel OpenRig' : `Salle du rig ${name}`), kernel: 'Kernel', kernelWhere: 'OpenRig · opérateur, advisor, file', rigWhere: (folder: string, project: string | null) => `rig · ${folder}${project ? ` · projet ${project}` : ''}`, manageRig: 'Gérer', 
     room: (name: string) => `Pièce ${name}`,
     plaqueCounts: (sessions: number) => plural(sessions, `${sessions} session`, `${sessions} sessions`),
     waiting: (n: number) => plural(n, `${n} attend`, `${n} attendent`), working: (n: number) => plural(n, `${n} au travail`, `${n} au travail`),

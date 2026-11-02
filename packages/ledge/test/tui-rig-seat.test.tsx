@@ -49,3 +49,16 @@ describe('ledge tui: rig seats in the overview and the session card', () => {
     } finally { await tui.cleanup(); }
   });
 });
+
+describe('OpenRig groups in the overview', () => {
+  it('rig seats leave the projects for their rig\'s group; the kernel\'s group comes last', async () => {
+    const { overview } = await import('../src/tui/model/overview.js');
+    const T = '2026-11-02T10:00:00.000Z';
+    const s = (id: string, cwd: string, rig?: { seat: string; name: string; role: string }) => ({ id, name: id, tool: 'claude' as const, cwd, project: 'ledge', title: id, tmuxSession: null, state: 'idle' as const, helpers: [], startedAt: T, lastActivityAt: T, source: rig ? 'rig' as const : 'launcher' as const, ...(rig ? { rig } : {}) });
+    const v = overview([s('otto', '/w/ledge'), s('lu', '/w/rigdev', { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' }), s('bix', '/w/ledge', { seat: 'dev-build@ff', name: 'ff', role: 'dev.build' })], null);
+    expect(v.tree.map(n => [n.label, n.kind ?? 'project', n.branches.flatMap(b => b.sessions.map(x => x.id))])).toEqual([
+      ['ledge', 'project', ['otto']], ['ff', 'rig', ['bix']], ['Kernel', 'kernel', ['lu']]
+    ]);
+    expect(v.order).toEqual(['otto', 'bix', 'lu']);
+  });
+});

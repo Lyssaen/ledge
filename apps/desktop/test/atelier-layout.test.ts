@@ -132,3 +132,22 @@ it('plants: one or two per table, from the project id, never on the label corner
   }
 });
 });
+
+describe('OpenRig rooms in the atelier', () => {
+  it('the kernel first, then the projects without the seats, then each rig in its own room', async () => {
+    const { sceneOf } = await import('../src/atelier/layout');
+    const T = '2026-11-02T10:00:00.000Z';
+    const s = (id: string, cwd: string, rig?: { seat: string; name: string; role: string }) => ({ id, name: id, tool: 'claude' as const, cwd, project: 'x', title: id, tmuxSession: null, state: 'idle' as const, helpers: [], startedAt: T, lastActivityAt: T, source: rig ? 'rig' as const : 'launcher' as const, ...(rig ? { rig } : {}) });
+    const order = [s('otto', '/w/ledge'), s('bix', '/w/ledge', { seat: 'dev-build@ff', name: 'ff', role: 'dev.build' }), s('lu', '/w/rigdev', { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' })];
+    const projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue' as const, description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+    const idOf = (x: { cwd: string }) => (x.cwd === '/w/ledge' ? 'ledge' : null);
+    const scene = sceneOf(order, projects, idOf, 'all');
+    expect(scene.rooms.map(r => [r.project.name, r.rig?.kind ?? 'project', r.tables[0]!.mains.map(m => m.id)])).toEqual([
+      ['kernel', 'kernel', ['lu']], ['Ledge', 'project', ['otto']], ['ff', 'rig', ['bix']]
+    ]);
+    expect(scene.rooms[2]!.rig).toEqual({ kind: 'rig', name: 'ff', folder: '/w/ledge', project: 'Ledge' });
+    // A project filter shows that project's own table only.
+    expect(sceneOf(order, projects, idOf, 'ledge').rooms.map(r => r.project.name)).toEqual(['Ledge']);
+    expect(scene.unassigned).toEqual([]);
+  });
+});

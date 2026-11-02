@@ -11,6 +11,7 @@ import { Modal } from '../shell/Modal';
 import { openUrl } from '../tauri/bridge';
 import { RigLaunchForm } from './RigLaunchForm';
 import { SeatsDialog } from './SeatsDialog';
+import { SeatSettings } from './SeatSettings';
 import { asksFirst, commandsOf, isRunning, kernelRig, listedRigs, rigOf, targetOf, workingSeats } from './model';
 
 export const OPENRIG_INSTALL_URL = 'https://github.com/mvschwarz/openrig#readme';
@@ -34,6 +35,7 @@ export function OpenRigPage({ client, machines, machine, projects = null, sessio
   const [launched, setLaunched] = useState<string | null>(null);
   const [reseating, setReseating] = useState<string | null>(null);
   const [reseated, setReseated] = useState<string | null>(null);
+  const [settings, setSettings] = useState<{ seat: RigSeat; rig: string } | null>(null);
   const run = (a: OpenRigAction) => { if (asksFirst(a)) setAsk(a); else void rig.act(a); };
   const label = shown?.label ?? id;
   return (
@@ -55,7 +57,9 @@ export function OpenRigPage({ client, machines, machine, projects = null, sessio
       {launching
         ? <RigLaunchForm client={client} machine={id} machineLabel={label} projects={projects} onClose={() => setLaunching(false)} onLaunched={name => { setLaunching(false); setLaunched(name); rig.refresh(); }} />
         : <Body view={rig} machine={shown} onAct={run} onSeats={name => { setReseated(null); setReseating(name); }}
-            operator={operatorOf(rig.state, sessions, id)} sessionOf={seat => sessionOfSeat(sessions, seat, id)} onOpen={sid => dispatch({ type: 'open', id: sid })} />}
+            operator={operatorOf(rig.state, sessions, id)} sessionOf={seat => sessionOfSeat(sessions, seat, id)} onOpen={sid => dispatch({ type: 'open', id: sid })}
+            onSettings={(seat, r) => setSettings({ seat, rig: r })} />}
+      {settings && <SeatSettings seat={settings.seat} rig={settings.rig} view={rig} onClose={() => setSettings(null)} />}
       {reseated && !launching && <p className="or-status or-ok" role="status">{reseated}</p>}
       {reseating && rig.state && (() => { const r = rig.state.rigs.find(x => x.name === reseating); return r ? (
         <SeatsDialog client={client} machine={id} machineLabel={label} rig={r} onClose={() => setReseating(null)}
@@ -66,7 +70,7 @@ export function OpenRigPage({ client, machines, machine, projects = null, sessio
   );
 }
 
-function Body({ view, machine, onAct, onSeats, operator, sessionOf, onOpen }: { view: OpenRigView; machine?: MachineState; onAct: (a: OpenRigAction) => void; onSeats: (rig: string) => void; operator: Session | undefined; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void }) {
+function Body({ view, machine, onAct, onSeats, operator, sessionOf, onOpen, onSettings }: { view: OpenRigView; machine?: MachineState; onAct: (a: OpenRigAction) => void; onSeats: (rig: string) => void; operator: Session | undefined; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void; onSettings: (seat: RigSeat, rig: string) => void }) {
   const { t } = useI18n();
   const o = t.openrig;
   if (machine && !machine.ready) return <p className="or-empty" role="status">{o.offline}</p>;
@@ -87,12 +91,12 @@ function Body({ view, machine, onAct, onSeats, operator, sessionOf, onOpen }: { 
     <Status view={view} />
     <div className="or-cards">
       <DaemonCard state={s} busy={busy} onAct={onAct} />
-      <KernelCard state={s} busy={busy} onAct={onAct} operator={operator} sessionOf={sessionOf} onOpen={onOpen} />
+      <KernelCard state={s} busy={busy} onAct={onAct} operator={operator} sessionOf={sessionOf} onOpen={onOpen} onSettings={onSettings} />
     </div>
     <div className="or-h2"><h2>{o.rigs}</h2>{up && <span className="or-count">{listedRigs(s).length}</span>}</div>
     {!up ? <p className="or-empty">{o.daemonFirst}</p>
       : listedRigs(s).length === 0 ? <p className="or-empty">{o.noRigs}</p>
-      : <ul className="or-rigs">{listedRigs(s).map(r => <RigRow key={r.id} rig={r} busy={busy} working={rigOf(view.pending) === r.name} onAct={onAct} onSeats={() => onSeats(r.name)} sessionOf={sessionOf} onOpen={onOpen} />)}</ul>}
+      : <ul className="or-rigs">{listedRigs(s).map(r => <RigRow key={r.id} rig={r} busy={busy} working={rigOf(view.pending) === r.name} onAct={onAct} onSeats={() => onSeats(r.name)} sessionOf={sessionOf} onOpen={onOpen} onSettings={onSettings} />)}</ul>}
   </>;
 }
 
@@ -134,7 +138,7 @@ function DaemonCard({ state, busy, onAct }: { state: OpenRigState; busy: boolean
   );
 }
 
-function KernelCard({ state, busy, onAct, operator, sessionOf, onOpen }: { state: OpenRigState; busy: boolean; onAct: (a: OpenRigAction) => void; operator: Session | undefined; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void }) {
+function KernelCard({ state, busy, onAct, operator, sessionOf, onOpen, onSettings }: { state: OpenRigState; busy: boolean; onAct: (a: OpenRigAction) => void; operator: Session | undefined; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void; onSettings: (seat: RigSeat, rig: string) => void }) {
   const { t } = useI18n();
   const o = t.openrig;
   const k = state.kernel.state, up = state.daemon.state === 'running', rig = kernelRig(state);
@@ -153,14 +157,14 @@ function KernelCard({ state, busy, onAct, operator, sessionOf, onOpen }: { state
       </div>
       {up && rig && rig.nodes.length > 0 && (
         <ul className="or-kseats" aria-label={o.kernelSeats}>
-          {rig.nodes.map(n => <SeatLine key={n.session} seat={n} session={sessionOf(n.session)} onOpen={onOpen} />)}
+          {rig.nodes.map(n => <SeatLine key={n.session} seat={n} session={sessionOf(n.session)} onOpen={onOpen} onSettings={() => onSettings(n, rig.name)} />)}
         </ul>
       )}
     </section>
   );
 }
 
-function RigRow({ rig, busy, working, onAct, onSeats, sessionOf, onOpen }: { rig: Rig; busy: boolean; working: boolean; onAct: (a: OpenRigAction) => void; onSeats: () => void; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void }) {
+function RigRow({ rig, busy, working, onAct, onSeats, sessionOf, onOpen, onSettings }: { rig: Rig; busy: boolean; working: boolean; onAct: (a: OpenRigAction) => void; onSeats: () => void; sessionOf: (seat: string) => Session | undefined; onOpen: (id: string) => void; onSettings: (seat: RigSeat, rig: string) => void }) {
   const { t } = useI18n();
   const o = t.openrig;
   const [open, setOpen] = useState(false);
@@ -188,7 +192,7 @@ function RigRow({ rig, busy, working, onAct, onSeats, sessionOf, onOpen }: { rig
       </div>
       {open && (
         <ul id={seats} className="or-seats">
-          {rig.nodes.length === 0 ? <li className="or-muted">{o.noSeats}</li> : rig.nodes.map(n => <SeatLine key={n.session} seat={n} session={sessionOf(n.session)} onOpen={onOpen} work />)}
+          {rig.nodes.length === 0 ? <li className="or-muted">{o.noSeats}</li> : rig.nodes.map(n => <SeatLine key={n.session} seat={n} session={sessionOf(n.session)} onOpen={onOpen} onSettings={() => onSettings(n, rig.name)} work />)}
         </ul>
       )}
     </li>
@@ -242,7 +246,7 @@ export const sessionOfSeat = (sessions: readonly Session[], seat: string, machin
   sessions.find(x => x.rig?.seat === seat && x.state !== 'exited' && (x.machineId ?? 'local') === machine);
 
 /** One seat: its role, harness and model, what it does, and « Ouvrir » once Ledge follows it (its thread, its terminal, its requests). */
-function SeatLine({ seat: n, session, onOpen, work = false }: { seat: RigSeat; session: Session | undefined; onOpen: (id: string) => void; work?: boolean }) {
+function SeatLine({ seat: n, session, onOpen, onSettings, work = false }: { seat: RigSeat; session: Session | undefined; onOpen: (id: string) => void; onSettings: () => void; work?: boolean }) {
   const { t } = useI18n();
   const o = t.openrig;
   const up = n.sessionStatus === 'running';
@@ -252,9 +256,10 @@ function SeatLine({ seat: n, session, onOpen, work = false }: { seat: RigSeat; s
       <span className="or-muted">{[n.runtime, n.model].filter(Boolean).join(' · ')}</span>
       <Pill tone={!up ? 'off' : n.activity === 'running' ? 'info' : n.activity === 'idle' ? 'ok' : 'off'}>{up ? o.activity(n.activity) : o.seatStatus(n.sessionStatus)}</Pill>
       <span className="or-muted">{work ? o.work(n.work) : ''}</span>
-      <span className="or-seat-open">{session
-        ? <Button size="sm" onClick={() => onOpen(session.id)} aria-label={o.openSeat(n.logicalId)}>{o.open}</Button>
-        : null}</span>
+      <span className="or-seat-open">
+        {session && <Button size="sm" onClick={() => onOpen(session.id)} aria-label={o.openSeat(n.logicalId)}>{o.open}</Button>}
+        {(n.runtime === 'claude-code' || n.runtime === 'codex') && <Button size="sm" variant="ghost" className="or-gear" aria-label={o.seatSettings.open(n.logicalId)} title={o.seatSettings.open(n.logicalId)} onClick={onSettings}>⚙</Button>}
+      </span>
     </li>
   );
 }

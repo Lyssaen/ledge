@@ -175,3 +175,25 @@ describe('routedTmux', () => {
     expect(await down.listSessions()).toEqual(['ledge-a']);
   });
 });
+
+describe('a seat\'s settings', () => {
+  const cmds = (a: unknown) => planAction(OpenRigActionSchema.parse(a)).map(showCommand);
+  it('another harness moves the seat now, model and effort going with it; the plan first with --dry-run', () => {
+    expect(cmds({ kind: 'seat.set', seat: 'operator-agent@kernel', runtime: 'claude-code', model: 'opus', effort: 'high' }))
+      .toEqual(['rig seat set-runtime operator-agent@kernel --runtime claude-code --model opus --effort high --reason Ledge']);
+    expect(cmds({ kind: 'seat.set', seat: 'operator-agent@kernel', runtime: 'claude-code', dryRun: true }))
+      .toEqual(['rig seat set-runtime operator-agent@kernel --runtime claude-code --dry-run --reason Ledge']);
+  });
+  it('without a harness change, model, effort and permissions are saved for the next resume', () => {
+    expect(cmds({ kind: 'seat.set', seat: 'dev-build@starter', model: 'sonnet', effort: 'low', permissions: 'auto' })).toEqual([
+      'rig seat set-model dev-build@starter --model sonnet --reason Ledge',
+      'rig seat set-effort dev-build@starter --effort low --reason Ledge',
+      'rig seat set-permissions dev-build@starter --mode auto --reason Ledge'
+    ]);
+  });
+  it('a seat, a model or a mode rig would read as a flag never passes', () => {
+    expect(OpenRigActionSchema.safeParse({ kind: 'seat.set', seat: '--x', model: 'opus' }).success).toBe(false);
+    expect(OpenRigActionSchema.safeParse({ kind: 'seat.set', seat: 'a-b@c', model: '-opus' }).success).toBe(false);
+    expect(OpenRigActionSchema.safeParse({ kind: 'seat.set', seat: 'a-b@c', permissions: 'root' }).success).toBe(false);
+  });
+});

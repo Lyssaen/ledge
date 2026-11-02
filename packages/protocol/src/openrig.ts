@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EffortSchema, ModelIdSchema } from './models.js';
 
 /**
  * OpenRig on a machine (mvschwarz/openrig): its daemon, its kernel (the rig named `kernel`, whose operator helps start a
@@ -11,6 +12,11 @@ export const RigNameSchema = z.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za
 
 /** An OpenRig seat's session name, `pod-member@rig` (`dev-build@starter`). */
 export const RigSeatNameSchema = z.string().min(3).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$/, 'not a seat');
+
+/** A seat's permissions at its next launch (`rig seat set-permissions --mode`): `inherit` its rig's, `floor` the default posture,
+ *  `auto` Claude's auto mode, `full_bypass` no prompt at all. */
+export const SeatPermissionsSchema = z.enum(['inherit', 'floor', 'auto', 'full_bypass']);
+export type SeatPermissions = z.infer<typeof SeatPermissionsSchema>;
 
 /** The kernel's own rig, which OpenRig starts with its daemon unless told `--no-kernel`. */
 export const KERNEL_RIG = 'kernel';
@@ -56,7 +62,12 @@ export const OpenRigActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('kernel.restart') }),
   z.object({ kind: z.literal('rig.start'), rig: RigNameSchema }),
   z.object({ kind: z.literal('rig.stop'), rig: RigNameSchema, snapshot: z.boolean().optional(), force: z.boolean().optional(), delete: z.boolean().optional() }),
-  z.object({ kind: z.literal('rig.restart'), rig: RigNameSchema })
+  z.object({ kind: z.literal('rig.restart'), rig: RigNameSchema }),
+  /** A seat's settings (docs/mockups/ledge-openrig-groups.html, view 2). `runtime`: moves it now to the other harness (a successor
+   *  takes its context, `rig seat set-runtime`), `model` and `effort` going with it; without it, `model`, `effort` and `permissions`
+   *  apply at its next resume. `dryRun`: the move's plan only. */
+  z.object({ kind: z.literal('seat.set'), seat: RigSeatNameSchema, runtime: z.enum(['claude-code', 'codex']).optional(), model: ModelIdSchema.optional(),
+    effort: EffortSchema.optional(), permissions: SeatPermissionsSchema.optional(), dryRun: z.boolean().optional() })
 ]);
 export type OpenRigAction = z.infer<typeof OpenRigActionSchema>;
 
@@ -101,6 +112,16 @@ export function rigCommands(a: OpenRigAction): string[][] {
     case 'rig.start': return [up(a.rig)];
     case 'rig.stop': return [down(a.rig, a)];
     case 'rig.restart': return [down(a.rig, { snapshot: true }), up(a.rig)];
+    case 'seat.set': {
+      const why = ['--reason', 'Ledge'];
+      if (a.runtime) return [['seat', 'set-runtime', a.seat, '--runtime', a.runtime, ...(a.model ? ['--model', a.model] : []), ...(a.effort ? ['--effort', a.effort] : []),
+        ...(a.permissions && a.permissions !== 'inherit' ? ['--permission-mode', a.permissions] : []), ...(a.dryRun ? ['--dry-run'] : []), ...why]];
+      return [
+        ...(a.model ? [['seat', 'set-model', a.seat, '--model', a.model, ...why, '--json']] : []),
+        ...(a.effort ? [['seat', 'set-effort', a.seat, '--effort', a.effort, ...why, '--json']] : []),
+        ...(a.permissions ? [['seat', 'set-permissions', a.seat, '--mode', a.permissions, ...why, '--json']] : [])
+      ];
+    }
   }
 }
 
