@@ -1,4 +1,4 @@
-import { type Escalation, type Exchange, type Machines, type OpenRigStatus, type Projects, type Rig, type TeamsEngine } from '@ledge/protocol';
+import { withoutLedgeTeams, type Escalation, type Exchange, type Machines, type OpenRigStatus, type Projects, type Rig, type TeamsEngine } from '@ledge/protocol';
 import { log } from '../../log.js';
 import { rigProjectId } from './adopt.js';
 import type { Bridge, BridgeMessage } from './bridge.js';
@@ -131,7 +131,9 @@ export function createRigAggregate(opts: { bridge: Bridge; remote: RemotePeers; 
     markUnreachable(p, { machine, state: 'unsupported', detail: `Ledge ${v ? `${v} ` : ''}sur ${labelOf(machine)} ne connaît pas OpenRig : mets-le à jour` });
   });
 
-  remote.onMessage((machine, m: RemoteMessage) => {
+  remote.onMessage((machine, frame: RemoteMessage) => {
+    // A peer under the Ledge engine sends its teams as rigs: they stay on their machine (never stored, never told) until teams span machines.
+    const m = withoutLedgeTeams(frame); if (!m) return;
     const p = peer(machine); const r = p.resync;
     if (r) {
       if (m.type === 'escalation.updated') r.seen.add(m.escalation.id);

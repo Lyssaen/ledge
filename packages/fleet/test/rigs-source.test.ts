@@ -235,3 +235,25 @@ describe('same (rig book equality)', () => {
     expect(same({ a: [1, 2] }, { a: [2, 1] })).toBe(false); expect(same({ a: 1 }, { a: '1' })).toBe(false); expect(same([], {})).toBe(false);
   });
 });
+
+// Lot D task 4 review: a peer daemon under the Ledge engine sends its teams as rigs (engine 'ledge'); until teams span
+// machines, a remote machine's Ledge teams and their exchanges are not shown, only its OpenRig rigs.
+describe('a remote machine\'s Ledge teams', () => {
+  it('are ignored with their exchanges; the local daemon\'s own are kept', () => {
+    const { api, local, ec2 } = setup();
+    const team = rig('team-ab12', { engine: 'ledge' });
+    const tx: Exchange = { ...exch('x1'), rigId: 'team-ab12' };
+    ec2.emit({ type: 'rig.snapshot', machine: 'local', rigs: [rig('r1'), team] });
+    ec2.emit({ type: 'rig.updated', rig: rig('team-cd34') }); // a team id with no engine field
+    ec2.emit({ type: 'rig.exchange', exchange: tx });
+    ec2.emit({ type: 'rig.exchanges', machine: 'local', rigId: 'team-ab12', items: [tx] });
+    expect(api.fleet!.rigs().map(r => `${r.machine}/${r.id}`)).toEqual(['ec2/r1']);
+    expect(api.fleet!.exchanges('ec2', 'team-ab12')).toBeNull();
+    local.emit({ type: 'rig.snapshot', machine: 'local', rigs: [team] });
+    local.emit({ type: 'rig.exchange', exchange: tx });
+    expect(api.fleet!.rigs().map(r => `${r.machine}/${r.id}`)).toEqual(['ec2/r1', 'local/team-ab12']);
+    expect(api.fleet!.exchanges('local', 'team-ab12')).toEqual([tx]);
+    ec2.emit({ type: 'rig.removed', machine: 'local', rigId: 'team-ab12' });
+    expect(api.fleet!.rigs().map(r => `${r.machine}/${r.id}`)).toEqual(['ec2/r1', 'local/team-ab12']);
+  });
+});

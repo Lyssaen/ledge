@@ -112,6 +112,31 @@ describe('RigAggregate', () => {
     expect(s.agg.rigs().map(r => r.id)).toEqual(['r1', 'r3']);
   });
 
+  it('a peer\'s Ledge teams stay on their machine: never stored, never told, under either engine (lot D task 4 review)', () => {
+    const s = setup();
+    const team = rig('team-ab12', 'ec2', { engine: 'ledge' });
+    const teamExchange: Exchange = { ...exch('ec2'), id: 'x9', rigId: 'team-ab12' };
+    s.ec2Replay([rig('r2', 'ec2'), team]);
+    expect(s.out.filter(m => m.type === 'rig.snapshot')).toEqual([{ type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r2', 'ec2')] }]);
+    s.out.length = 0;
+    s.msg('ec2', { type: 'rig.updated', rig: team });
+    s.msg('ec2', { type: 'rig.updated', rig: rig('team-cd34', 'ec2') }); // a team id from an older peer, no engine field
+    s.msg('ec2', { type: 'rig.exchange', exchange: teamExchange });
+    s.msg('ec2', { type: 'rig.exchanges', machine: 'ec2', rigId: 'team-ab12', items: [teamExchange] });
+    s.msg('ec2', { type: 'rig.removed', machine: 'ec2', rigId: 'team-ab12' });
+    expect(s.out).toEqual([]);
+    expect(s.agg.rigs().map(r => r.id)).toEqual(['r1', 'r2']);
+    expect(s.agg.exchanges('ec2', 'team-ab12')).toBeNull();
+    // Under Ledge they are not kept for later either: back to OpenRig, only OpenRig's rigs are told.
+    s.agg.setEngine('ledge');
+    s.msg('ec2', { type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r2', 'ec2'), team] });
+    s.msg('ec2', { type: 'rig.updated', rig: team });
+    s.out.length = 0;
+    s.agg.setEngine('openrig');
+    expect(s.out.filter(m => m.type === 'rig.snapshot')).toEqual([{ type: 'rig.snapshot', machine: 'ec2', rigs: [rig('r2', 'ec2')] }]);
+    expect(s.agg.rigs().map(r => r.id)).toEqual(['r1', 'r2']);
+  });
+
   it('remembers collisions between local and remote, and between remote machines', () => {
     const s = setup();
     s.msg('ec2', { type: 'escalation.updated', escalation: esc('L1', 'ec2') });

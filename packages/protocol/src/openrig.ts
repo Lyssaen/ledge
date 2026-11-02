@@ -50,6 +50,25 @@ export const RigSchema = z.object({ id: z.string(), name: z.string(), machine: z
   /** Where the rig comes from: a projected Ledge team carries 'ledge'; absent means an OpenRig rig. */ engine: TeamsEngineSchema.optional() });
 export type Rig = z.infer<typeof RigSchema>;
 
+/** A Ledge team projected as a rig (lot D): `engine: 'ledge'`, or a team id (TeamIdSchema's form: a removal or an exchange carries no engine). */
+export const isLedgeTeamRigId = (id: string): boolean => /^team-[0-9a-f]{4,8}$/.test(id);
+export const isLedgeTeamRig = (r: Pick<Rig, 'id' | 'engine'>): boolean => r.engine === 'ledge' || isLedgeTeamRigId(r.id);
+type RigFrame = { type: 'rig.snapshot'; rigs: Rig[] } | { type: 'rig.updated'; rig: Rig } | { type: 'rig.removed' | 'rig.exchanges'; rigId: string } | { type: 'rig.exchange'; exchange: { rigId: string } };
+/**
+ * A rig frame from another machine without its Ledge teams: a Ledge team stays on its machine until teams span machines.
+ * A snapshot keeps its other rigs; a frame about a Ledge team is null; any other message passes as it is.
+ */
+export function withoutLedgeTeams<M extends { type: string }>(m: M): M | null {
+  const f = m as unknown as RigFrame;
+  switch (f.type) {
+    case 'rig.snapshot': return { ...m, rigs: f.rigs.filter(r => !isLedgeTeamRig(r)) };
+    case 'rig.updated': return isLedgeTeamRig(f.rig) ? null : m;
+    case 'rig.removed': case 'rig.exchanges': return isLedgeTeamRigId(f.rigId) ? null : m;
+    case 'rig.exchange': return isLedgeTeamRigId(f.exchange.rigId) ? null : m;
+    default: return m;
+  }
+}
+
 export const EscalationQuestionSchema = z.object({ id: z.string(), question: z.string(),
   options: z.array(z.object({ id: z.string(), label: z.string(), recommended: z.boolean().optional() })).min(2).max(4) });
 export type EscalationQuestion = z.infer<typeof EscalationQuestionSchema>;

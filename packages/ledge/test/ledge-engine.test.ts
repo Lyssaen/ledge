@@ -176,6 +176,7 @@ describe('the Ledge engine in the daemon', () => {
   });
   afterEach(async () => {
     await srv.close();
+    rmSync(process.env.LEDGE_HOME!, { recursive: true, force: true }); rmSync(work, { recursive: true, force: true });
     if (home === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = home;
   });
 
@@ -247,12 +248,84 @@ describe('the Ledge engine in the daemon', () => {
     expect((await c.next('rig.exchanges')).items).toEqual([]);
     await c.close();
   });
+
+  it('a refused message is no exchange', async () => {
+    await start();
+    const { c } = await client();
+    const team = await launch(c);
+    const build = team.seats.find(s => s.role === 'build')!.sessionId!;
+    c.send({ type: 'session.message', rid: 'm1', from: build, to: '@team', text: 'Salut' }); // only the lead speaks to @team
+    expect((await c.next('message.ack')).outcome).toBe('refused');
+    c.send({ type: 'session.message', rid: 'm2', from: build, to: '@nobody', text: 'Salut' });
+    expect((await c.next('message.ack')).outcome).toBe('refused');
+    await expect(c.next('rig.exchange', 300)).rejects.toThrow('timeout');
+    c.send({ type: 'rig.exchanges.request', machine: 'local', rigId: team.id });
+    expect((await c.next('rig.exchanges')).items).toEqual([]);
+    await c.close();
+  });
+
+  it('rig.act restart starts a fresh session in the seat; handover asks its brief; a seat is needed', async () => {
+    await start();
+    const { c } = await client();
+    const team = await launch(c);
+    const build = team.seats.find(s => s.role === 'build')!.sessionId!;
+    idle(build);
+    c.send({ type: 'rig.act', rid: 'n1', machine: 'local', rigId: team.id, verb: 'restart' });
+    expect(await c.next('rig.result', 3000)).toEqual({ type: 'rig.result', rid: 'n1', ok: false, code: 'invalid', reason: 'il faut un siège (seatRef)' });
+    c.send({ type: 'rig.act', rid: 'h1', machine: 'local', rigId: team.id, seatRef: `build@${team.id}`, verb: 'handover' });
+    expect(await c.next('rig.result', 3000)).toEqual({ type: 'rig.result', rid: 'h1', ok: true });
+    expect(store.get(build)!.handover?.state).toBe('briefing');
+    c.send({ type: 'rig.act', rid: 'h2', machine: 'local', rigId: team.id, seatRef: `build@${team.id}`, verb: 'handover' });
+    expect(await c.next('rig.result', 3000)).toMatchObject({ rid: 'h2', ok: false, code: 'failed', reason: expect.stringContaining('déjà en cours') });
+    const lead = team.seats.find(s => s.role === 'leader')!.sessionId!;
+    idle(lead);
+    c.send({ type: 'rig.act', rid: 'r1', machine: 'local', rigId: team.id, seatRef: `leader@${team.id}`, verb: 'restart' });
+    expect(await c.next('rig.result', 5000)).toEqual({ type: 'rig.result', rid: 'r1', ok: true });
+    expect(store.get(lead)!.state).toBe('exited');
+    const now = await connect({ port: srv.port });
+    const seat = (await now.next('teams')).teams.find(t => t.id === team.id)!.seats.find(s => s.role === 'leader')!;
+    expect(seat.sessionId).not.toBe(lead);
+    expect(store.get(seat.sessionId!)!.state).not.toBe('exited');
+    await now.close(); await c.close();
+  });
+
+  it('an unknown team is invalid; a team named on another machine is not served here', async () => {
+    await start();
+    const { c } = await client();
+    const team = await launch(c);
+    c.send({ type: 'rig.act', rid: 'a1', machine: 'local', rigId: 'team-ffff', verb: 'down' });
+    expect(await c.next('rig.result', 3000)).toEqual({ type: 'rig.result', rid: 'a1', ok: false, code: 'invalid', reason: 'aucune équipe team-ffff' });
+    c.send({ type: 'rig.act', rid: 'a2', machine: 'ec2', rigId: team.id, verb: 'down' });
+    expect(await c.next('rig.result', 3000)).toMatchObject({ rid: 'a2', ok: false, code: 'invalid' });
+    expect(team.seats.every(s => store.get(s.sessionId!)!.state !== 'exited')).toBe(true);
+    c.send({ type: 'rig.exchanges.request', machine: 'ec2', rigId: team.id });
+    expect(await c.next('error', 3000)).toMatchObject({ request: 'rig.exchanges.request', code: 'invalid' });
+    await c.close();
+  });
+
+  it('a stop while the seat is already closing reads that close: ok, not busy', async () => {
+    await start();
+    const { c } = await client();
+    const team = await launch(c);
+    const build = team.seats.find(s => s.role === 'build')!.sessionId!;
+    idle(build);
+    c.send({ type: 'rig.act', rid: 's1', machine: 'local', rigId: team.id, seatRef: `build@${team.id}`, verb: 'stop' });
+    c.send({ type: 'rig.act', rid: 's2', machine: 'local', rigId: team.id, seatRef: `build@${team.id}`, verb: 'down' });
+    const got = [await c.next('rig.result', 5000), await c.next('rig.result', 5000)];
+    expect(got.map(r => [r.rid, r.ok]).sort()).toEqual([['s1', true], ['s2', true]]);
+    expect(store.get(build)!.state).toBe('exited');
+    await c.close();
+  });
 });
 
 // Ledge ↔ OpenRig: the fronts never see the rigs of the engine not chosen.
 describe('the switch of engine', () => {
-  let srv: Awaited<ReturnType<typeof startServer>> | null = null; let bridge: Bridge | null = null; let fake: FakeOpenRig | null = null; let dir: string; let store: Store;
-  afterEach(async () => { await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await fake?.stop(); fake = null; rmSync(dir, { recursive: true, force: true }); });
+  let srv: Awaited<ReturnType<typeof startServer>> | null = null; let bridge: Bridge | null = null; let fake: FakeOpenRig | null = null; let dir: string; let store: Store; let home: string | undefined;
+  beforeEach(() => { home = process.env.LEDGE_HOME; });
+  afterEach(async () => {
+    await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await fake?.stop(); fake = null; rmSync(dir, { recursive: true, force: true });
+    if (home === undefined) delete process.env.LEDGE_HOME; else process.env.LEDGE_HOME = home;
+  });
 
   it('under Ledge the local snapshot is Ledge’s teams; switched to OpenRig, they are cleared and never told again', async () => {
     dir = mkdtempSync(join(tmpdir(), 'ledge-switch-')); process.env.LEDGE_HOME = dir;

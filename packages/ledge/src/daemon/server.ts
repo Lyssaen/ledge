@@ -1113,8 +1113,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The close card rows being closed: a second click, or another overlay, is passed over until the first one has answered. */
   const chatCloses = new Set<string>();
   /**
-   * The cards' closes under way, by session. Two cards can name one session (a phone's and Desktop's): the second waits for
-   * the first one's close and reads its outcome, closed rather than failed for a close another card is making.
+   * The cards' closes under way, by session, and the Rigs tab's stop and down on a Ledge team. Two cards can name one session
+   * (a phone's and Desktop's): the second waits for the first one's close and reads its outcome, closed rather than failed for
+   * a close another card is making.
    */
   const cardSessionCloses = new Map<string, Promise<{ how: CloseHow }>>();
   function closeForCard(id: string): Promise<{ how: CloseHow }> {
@@ -2223,11 +2224,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Under Ledge, a rig id `team-…` is a Ledge team as the Rigs tab shows it: `rig.act` acts on it, `rig.exchanges.request`
    *  gives its exchanges (nothing of OpenRig is mirrored: any other rig id has none). Settles once answered; null when not its message. */
   function ledgeTeamRig(msg: ClientMessage, reply: Reply): Promise<void> | null {
+    // A Ledge team lives on its own machine (until teams span machines): one named on another is not this daemon's to serve.
+    const elsewhere = (m: { machine: string }) => m.machine !== 'local';
     if (msg.type === 'rig.act' && msg.rigId?.startsWith('team-')) {
+      if (elsewhere(msg)) { reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'invalid', reason: `une équipe Ledge reste sur sa machine : ${msg.rigId} n'est pas une équipe de ${msg.machine}` }); return Promise.resolve(); }
       return actOnTeam(msg).then(r => reply({ type: 'rig.result', rid: msg.rid, ...r }),
         (e: Error) => reply({ type: 'rig.result', rid: msg.rid, ok: false, code: 'failed', reason: e.message }));
     }
     if (msg.type === 'rig.exchanges.request') {
+      if (msg.rigId.startsWith('team-') && elsewhere(msg)) { reply({ type: 'error', message: `une équipe Ledge reste sur sa machine : ${msg.rigId} n'est pas une équipe de ${msg.machine}`, request: msg.type, code: 'invalid' }); return Promise.resolve(); }
       reply({ type: 'rig.exchanges', machine: msg.machine, rigId: msg.rigId, items: msg.rigId.startsWith('team-') ? ledgeEngine.exchanges(msg.rigId) : [] });
       return Promise.resolve();
     }
@@ -2242,7 +2247,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   async function actOnTeam(msg: Extract<ClientMessage, { type: 'rig.act' }>): Promise<TeamActOutcome> {
     const outcome = (reason: string | null): TeamActOutcome => (reason === null ? { ok: true } : { ok: false, code: 'failed', reason });
     const t = teams.get(msg.rigId!);
-    if (!t || t.state === 'dissolved') return outcome(`aucune équipe ${msg.rigId}`);
+    if (!t || t.state === 'dissolved') return { ok: false, code: 'invalid', reason: `aucune équipe ${msg.rigId}` };
     if (msg.verb === 'up' || msg.verb === 'restore') return outcome(await resumeTeam(t));
     if (msg.verb === 'down') return outcome(await restTeam(t));
     const seat = msg.seatRef ? t.seats.find(s => `${s.role}@${t.id}` === msg.seatRef) : undefined;
@@ -2250,13 +2255,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (msg.verb === 'restart') return outcome((await seatTeam({ type: 'team.seat', rid: msg.rid, team: t.id, role: seat.role, action: 'restart' })).reason ?? null);
     const s = seat.sessionId ? store.get(seat.sessionId) : undefined;
     if (!s || s.state === 'exited' || isArchived(s)) return outcome(`@${seat.role} n'a pas de session en cours`);
-    if (msg.verb === 'stop') { await closeSession(s); return outcome(null); }
+    if (msg.verb === 'stop') { await closeShared(s); return outcome(null); }
     return outcome(handovers.start(s.id)); // handover
   }
+  /** A seat's close, the one already under way when a card or another verb is closing it (closeForCard): never refused as busy for it. */
+  const closeShared = (s: Session): Promise<unknown> => Promise.resolve().then(() => closeForCard(s.id));
   /** A team put at rest: every seat's live session closed as its user would, the team kept with its seats and their conversations. */
   async function restTeam(t: Team): Promise<string | null> {
     const live = t.seats.flatMap(seat => { const s = seat.sessionId ? store.get(seat.sessionId) : undefined; return s && s.state !== 'exited' && !isArchived(s) ? [{ seat, s }] : []; });
-    const done = await Promise.allSettled(live.map(({ s }) => closeSession(s)));
+    const done = await Promise.allSettled(live.map(({ s }) => closeShared(s)));
     const failures = done.flatMap((r, i) => (r.status === 'rejected' ? [`@${live[i]!.seat.role} : ${(r.reason as Error).message}`] : []));
     return failures.length ? failures.join(' ; ') : null;
   }

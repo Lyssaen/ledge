@@ -1,4 +1,4 @@
-import { askShown, ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Ask, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
+import { askShown, withoutLedgeTeams, ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Ask, type Task, type Team, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, seatTerminalCommand, shellCommand, splitId, terminalCommand, type FleetAsk, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -256,7 +256,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     // A daemon that does not know `ask.answer` says so: the answer was not taken.
     if (m.type === 'error' && m.request === 'ask.answer') { for (const a of [...askAnswers.values()]) if (a.machine === machine) a.settle({ ok: false, reason: m.message }); return; }
     // With an aggregating local daemon every rig comes from it, with its real machine: a remote peer's own would show it twice.
-    if (isRigMessage(m)) { if (machine !== 'local' && relayed()) return; if (book.apply(machine, m)) listeners.forEach(fn => fn()); return; }
+    // A remote machine's Ledge teams stay on it (until teams span machines): only its OpenRig rigs are shown.
+    if (isRigMessage(m)) {
+      if (machine !== 'local' && relayed()) return;
+      const f = machine === 'local' ? m : withoutLedgeTeams(m); if (!f) return;
+      if (book.apply(machine, f)) listeners.forEach(fn => fn()); return;
+    }
     // Teams and tasks are the local daemon's (one team, one machine): a remote machine's are ignored.
     if (m.type === 'teams' || m.type === 'team.updated') {
       if (machine !== 'local') return;
