@@ -186,7 +186,8 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
   const exitLine = view?.exit === 'gone' ? L.exit.gone(session.name) : view?.exit ? L.exit[view.exit] : null;
   const refusedLine = view?.refused ? L.refused[view.refused] ?? L.refused.unavailable! : null;
   const holdRefusedLine = view?.holdRefused ? L.holdRefused[view.holdRefused] ?? copy.confirm.refused[view.holdRefused as keyof typeof copy.confirm.refused] ?? null : null;
-  const heldLeft = view?.held ? Math.min(view.held.lastKey + HOLD_IDLE_MS, view.held.until) - now : 0;
+  // The page's clock ticks once a second, behind the last key: never more than the 5 minutes.
+  const heldLeft = view?.held ? Math.min(HOLD_IDLE_MS, Math.min(view.held.lastKey + HOLD_IDLE_MS, view.held.until) - now) : 0;
 
   return (
     <>

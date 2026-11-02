@@ -99,6 +99,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let mobile: MobileState | undefined;
   /** The local daemon's last refused mobile.* command: cleared by the next command and by every mobile broadcast. */
   let mobileError: MobileError | undefined;
+  /** The local sessions a phone types into, qualified, by the device's label: a new map on each change. */
+  let holders: ReadonlyMap<string, string> = new Map();
   /** The tasks known to the local daemon, by id, sessions qualified. */
   let tasks = new Map<string, Task>(); let taskList: Task[] = [];
   /** The `task.cmd list` this fleet sent after a local snapshot: their answers fill `tasks`. */
@@ -233,6 +235,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'task.updated') { if (machine === 'local') putTasks([m.task]); return; }
     if (m.type === 'task.result' && taskLists.has(m.rid)) { taskLists.delete(m.rid); if (machine === 'local' && m.tasks) putTasks(m.tasks); return; }
     // Mobile access is the local daemon's alone (its relay session and approved devices): a remote machine's is ignored.
+    if (m.type === 'terminal.holders') {
+      if (machine !== 'local') return;
+      holders = new Map(m.holds.map(h => [qualify('local', h.id), h.device]));
+      listeners.forEach(fn => fn());
+      return;
+    }
     if (m.type === 'mobile') {
       if (machine !== 'local') return;
       mobile = m.state; mobileError = undefined; listeners.forEach(fn => fn());
@@ -521,6 +529,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       },
       mobile: () => mobile,
       mobileError: () => mobileError,
+      terminalHolders: () => holders,
+      releaseTerminal(id) {
+        const local = peers.get('local')!.client;
+        if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
+        const origin = splitId(id);
+        if (origin?.machine !== 'local') return;
+        local.send({ type: 'terminal.release', id: origin.id });
+      },
       tasks: () => taskList,
       contextNear: () => contextNear,
       setContextNear(near) {

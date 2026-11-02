@@ -1,5 +1,6 @@
 // The phone's xterm: the pane's own size, never fitted to the phone; the font size zooms instead (spec §3.5).
 import { Terminal } from '@xterm/xterm';
+import { CanvasAddon } from '@xterm/addon-canvas';
 import '@xterm/xterm/css/xterm.css';
 import { termTheme, type TermTheme } from '@ledge/ui/termTheme';
 import type { TermScreen } from './controller';
@@ -37,6 +38,10 @@ export function createXterm(host: HTMLElement): XtermScreen {
     // The screen reader mode reads the rows as text (the mockup's accessibility notes).
     screenReaderMode: true
   });
+  // The canvas renderer, never the DOM one: the relay serves the app with `style-src 'self'`, and the DOM renderer draws
+  // through <style> elements the policy blocks (no font, no colours, no cell widths). Loaded before `open`, so the DOM
+  // renderer is never made. WebGL is fragile on iOS Safari.
+  term.loadAddon(new CanvasAddon());
   term.open(host);
   let input = false;
   const datas: Array<(d: string) => void> = [];

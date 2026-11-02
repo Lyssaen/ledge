@@ -396,6 +396,8 @@ export const fr = {
     mobile: {
       connection: 'Connexion',
       access: 'Accès mobile', accessHint: "Ce PC garde une connexion sortante vers le serveur relais. Aucun port n'est ouvert.",
+      terminalInput: 'Taper dans les terminaux depuis le téléphone',
+      terminalInputHint: 'Un appareil lié peut prendre la main sur le terminal d’un agent, après la vérification de sa passkey. Sans ce réglage, le téléphone lit le terminal sans pouvoir y taper.',
       relay: 'Serveur relais', relayHint: "L'adresse du serveur que vous et votre téléphone utilisez.",
       relayInvalid: 'Adresse refusée : https://, ou http:// pour localhost seulement, sans chemin.',
       account: 'Compte GitHub', accountHint: 'Le compte qui relie ce PC et vos téléphones.',
@@ -782,6 +784,7 @@ export const fr = {
     },
     terminal: {
       title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.',
+      phoneHolds: (device: string, n: string) => `Téléphone au clavier : ${device} tape dans le terminal de ${n}.`, takeBack: 'Reprendre la main',
       resize: 'Largeur du terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`,
       agentTab: (n: string) => `${n} · agent`, shellTab: (n: number, dir: string) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
       addShell: 'Nouveau shell', closeTab: (label: string) => `Fermer ${label}`,

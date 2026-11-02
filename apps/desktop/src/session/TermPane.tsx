@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FocusEvent, type JSX, type ReactNode } from 'react';
-import { useDaemon, useMachines, type DaemonClient } from '@ledge/fleet';
+import { useDaemon, useMachines, useTerminalHolders, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -39,6 +39,7 @@ export function TermPane(p: TermPaneProps): JSX.Element {
   const [hasBackend] = useState(() => ptyBackend() !== null);
   const mode = agentMode(session, helper, hasBackend);
   const lines = useDaemon().previews.get(sid) ?? [];
+  const phone = useTerminalHolders(p.client).get(sid);
   const remote = !!session.machineId && session.machineId !== 'local';
   const host = remote ? machineOf(session) : tt.local;
   const tab = tabs.find(x => x.id === active) ?? tabs[0]!;
@@ -104,6 +105,11 @@ export function TermPane(p: TermPaneProps): JSX.Element {
       if (tab.status === 'unavailable') return <Banner>{tt.shellUnavailable}</Banner>;
       if (tab.status === 'ended') return <Banner action={<Button variant="outline" size="sm" onClick={() => starting(tab.id, () => store.reopen(sid, tab.id))}>{tt.reopen}</Button>}>{tab.end?.lost ? tt.shellLost : tab.end?.code == null ? tt.shellEndedNoCode : tt.shellEnded(tab.end.code)}</Banner>;
       return null;
+    }
+    // A phone holds the hand (spec 2026-11-02 mobile terminal, 5a): both keyboards type, and the PC can take it back.
+    if (phone !== undefined) {
+      const takeBack = () => { try { p.client.fleet?.releaseTerminal(sid); } catch { p.notify(t.offline); } };
+      return <Banner tone="info" action={<Button variant="outline" size="sm" onClick={takeBack}>{tt.takeBack}</Button>}>{tt.phoneHolds(phone, session.name)}</Banner>;
     }
     if ((mode.kind === 'live' || mode.kind === 'parent') && link.state === 'reconnecting') {
       const s = Math.max(0, Math.ceil(((link.retryAt ?? now) - now) / 1000));
@@ -183,7 +189,7 @@ export function TermPane(p: TermPaneProps): JSX.Element {
   );
 }
 
-function Banner({ children, action, tone }: { children: ReactNode; action?: ReactNode; tone?: 'warn' }): JSX.Element {
+function Banner({ children, action, tone }: { children: ReactNode; action?: ReactNode; tone?: 'warn' | 'info' }): JSX.Element {
   return <div className={cls('term-banner', tone)} role="status"><span>{children}</span>{action}</div>;
 }
 

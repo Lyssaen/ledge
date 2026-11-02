@@ -69,9 +69,10 @@ function makeStore(over: Partial<TermDeps> = {}) {
 
 const NO_MACHINES: readonly unknown[] = [];
 /** What Workspace does around the pane (Task 7): it shows the agent tab while the pane is open. */
-function Pane({ session, helper = null, maxed = false, on = {}, machines = NO_MACHINES }: { session: Session; helper?: { id: string; name: string } | null; maxed?: boolean; on?: Partial<Record<'notify' | 'onMax' | 'onClose' | 'onGoParent', () => void>>; machines?: readonly unknown[] }): JSX.Element {
+const NO_HOLDERS: ReadonlyMap<string, string> = new Map();
+function Pane({ session, helper = null, maxed = false, on = {}, machines = NO_MACHINES, holders = NO_HOLDERS, release = () => {} }: { session: Session; helper?: { id: string; name: string } | null; maxed?: boolean; on?: Partial<Record<'notify' | 'onMax' | 'onClose' | 'onGoParent', () => void>>; machines?: readonly unknown[]; holders?: ReadonlyMap<string, string>; release?: (id: string) => void }): JSX.Element {
   useLayoutEffect(() => { store.showAgent(session.id, agentMode(session, helper, env.backend !== null)); }, [session, helper]);
-  const client = { send: () => {}, fleet: { retry, machines: () => machines, subscribe: () => () => {} } } as unknown as DaemonClient;
+  const client = { send: () => {}, fleet: { retry, machines: () => machines, subscribe: () => () => {}, terminalHolders: () => holders, releaseTerminal: release } } as unknown as DaemonClient;
   return (
     <LangProvider lang="fr">
       <TermStoreContext.Provider value={store}>
@@ -432,4 +433,13 @@ it("an older daemon gives no home: the shell's label and first line show the raw
   fireEvent.click(screen.getByRole('tab', { name: 'Shell · /home/u/soft/ledge' }));
   await tick();
   expect(surfaceOf('nova#shell-1')!.written[0]).toBe('Shell ouvert dans le dossier de Nova : /home/u/soft/ledge\r\n');
+});
+
+it('says when a phone types into the agent\'s terminal, and takes the hand back', async () => {
+  const release = vi.fn();
+  render(<Pane session={nova} holders={new Map([[nova.id, 'iPhone · Safari']])} release={release} />);
+  await tick();
+  expect(screen.getByText('Téléphone au clavier : iPhone · Safari tape dans le terminal de Nova.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Reprendre la main' }));
+  expect(release).toHaveBeenCalledWith(nova.id);
 });

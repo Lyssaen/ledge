@@ -62,16 +62,17 @@ tmux -L ledge -C attach-session -t =<tmuxSession> -f ignore-size,read-only
 
 - `-f ignore-size`: this client never counts for the window's size (tmux ≥ 3.2; the PC has 3.6). Checked at start:
   an older tmux makes the daemon not announce the feature.
-- `read-only`, always: the control client only reads. Typing goes through separate `tmux send-keys` calls (below),
-  which the daemon makes only for a held terminal (3.4), so no keystroke can reach the pane through the stream.
+- `read-only`, always: the client's own keys never reach the pane. Commands still run through it (tmux 3.6 runs a
+  control client's `send-keys` even read-only): the daemon writes only its own commands there, and `send-keys` only for
+  a held terminal (3.4), the bytes in hex, so nothing the phone sends is ever read as a command.
 - Output: `%output %<pane> <octal-escaped bytes>` for the session's active pane, decoded into bytes, then through one
   streaming `TextDecoder` per terminal (a UTF-8 character split across two notifications stays whole).
 - Size: `%layout-change` (and the first `display -p '#{pane_width}x#{pane_height}'`) gives the pane's size; the phone's
   xterm is set to it, never the reverse.
 - First screen: `capture-pane -p -e -N -t <pane>` (escapes kept), plus the cursor (`#{cursor_x},#{cursor_y}`), sent as
   `term.opened.screen`; output that arrives while it is captured is held and sent after it.
-- Input: `send-keys -t <pane> -H <hex…>` through the daemon's existing `Tmux` (a new `sendBytes`), so a phone types
-  exactly the bytes xterm produced, control characters included.
+- Input: `send-keys -t <pane> -H <hex…>`, 512 bytes a command, through the same control client (no process per key),
+  so a phone types exactly the bytes xterm produced, control characters included.
 - End: `%exit`, the process ending, or the tmux session gone → `term.exit`.
 
 A new module `packages/ledge/src/mobile/terminal.ts` owns the control clients (one per open terminal), the parser of
@@ -98,7 +99,7 @@ PC → phone, added to `PhoneServerMessageSchema`:
 | `term.opened { op, tid, cols, rows, screen, cursor, seq }` | The first screen (≤ 64 KiB, cut from the top), the pane's size, the first `seq`. Also the answer to `term.resync`. |
 | `term.output { tid, seq, data }` | The bytes since the last one, decoded as UTF-8. `seq` + 1 each time. |
 | `term.size { tid, cols, rows }` | The pane changed size on the PC. |
-| `term.held { tid, until }` / `term.released { tid, why }` | Who types. `why`: `asked`, `pc` (taken back on the PC), `idle`, `background`, `expired`, `link`. |
+| `term.held { tid, until }` / `term.released { tid, why }` | Who types; `until` is the 30-minute cap, the phone counts the 5 idle minutes itself. `why`: `asked`, `pc` (taken back on the PC), `idle`, `background`, `expired`, `link`. |
 | `term.exit { tid, why }` | `ended` (the session), `gone` (tmux), `closed`, `superseded` (the same phone opened another), `failed`. |
 
 `ConfirmPurposeSchema` gains `terminal`. The snapshot's `daemon` gains `terminal: true` (stream) and

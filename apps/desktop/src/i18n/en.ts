@@ -372,6 +372,8 @@ export const en: Messages = {
     mobile: {
       connection: 'Connection',
       access: 'Mobile access', accessHint: 'This PC keeps an outgoing connection to the relay server. No port is opened.',
+      terminalInput: 'Type into terminals from the phone',
+      terminalInputHint: 'A linked device can take the hand on an agent’s terminal, after its passkey check. Without this setting, the phone reads the terminal and cannot type into it.',
       relay: 'Relay server', relayHint: 'The address of the server you and your phone use.',
       relayInvalid: 'Address refused: https://, or http:// for localhost only, with no path.',
       account: 'GitHub account', accountHint: 'The account that links this PC and your phones.',
@@ -747,6 +749,7 @@ export const en: Messages = {
     },
     terminal: {
       title: 'Terminal', empty: 'No output received yet.',
+      phoneHolds: (device, n) => `Phone at the keyboard: ${device} is typing into ${n}’s terminal.`, takeBack: 'Take the hand back',
       resize: 'Terminal width', openFailed: (n) => `${n}’s terminal could not open.`,
       agentTab: (n) => `${n} · agent`, shellTab: (n, dir) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
       addShell: 'New shell', closeTab: (label) => `Close ${label}`,
