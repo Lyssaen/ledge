@@ -58,9 +58,27 @@ Pas de nouveau rig : ledge-dev a un siège design et connaît l'encoche.
 ```
 ````
 
-Champs : `rig` (nom du rig, obligatoire), `running` (le rig tourne déjà), `folder` (le dépôt), `seats` (`seat` obligatoire ;
-`name` et `note` optionnels), `reason`. Un bloc absent ou illisible n'empêche rien : la carte montre le texte, avec les boutons
-de la demande.
+Champs (convention acceptée par Max le 2026-11-02, avec ses ajouts) :
+- `kind` : `"existing"` (on confie l'objectif à une équipe qui existe) ou `"launch"` (un nouveau rig est lancé). Obligatoire.
+- `rig` (nom du rig, obligatoire), `running` (le rig tourne déjà), `folder` (dossier de travail, **absolu**), `reason`.
+- `seats` : `seat` obligatoire ; `name` et `note` optionnels.
+- Pour `"launch"`, **avant tout oui** : `agents` (nombre d'agents), `runtimes` (ex. `["claude-code", "codex"]`), `plan` (le
+  résumé de `rig up --plan`), `writes` (ce que le lancement écrit dans le dossier : `CLAUDE.md`, `.mcp.json`, `.openrig/`,
+  `.claude/settings.local.json`, la config Codex…), `permissions` (le mode de permissions des sièges).
+
+Un bloc absent ou illisible n'empêche rien : la carte montre le texte, avec les boutons de la demande.
+
+**Questions de Max.** Si l'objectif n'a pas de dossier, ou qu'aucune équipe ne convient, Max ne devine pas : il pose une question
+par le même canal (une demande vers `ledge@external` taguée `ledge-goal:<id>`, avec ou sans boutons, sans question `team`).
+« À toi » l'affiche comme une question du lot 1, et `Goal.question` la porte.
+
+**Transmission.** Quand Max confie l'objectif (`rig queue handoff`), la ligne transmise garde **l'objectif dans les mots de
+l'utilisateur** et le tag `ledge-goal:<id>` (`--tags ledge-goal:<id>`). Ledge suit la chaîne par `handedOffFrom`, et à défaut les
+lignes de sièges taguées `ledge-goal:<id>`.
+
+**Un lancement de rig reste « Toujours moi »**, quel que soit le réglage de Ledge, sauf réglage explicite de l'utilisateur pour ce
+sujet. Au lot 2, Ledge ne décide jamais seul. Le jour où il confirmera seul (lot 4), la réponse le dira à Max : champ réservé
+`delegated` (voir `openrig.answer` ci-dessous), pour que Max ne le prenne jamais pour un oui humain.
 
 ## Messages
 
@@ -92,9 +110,10 @@ type Goal = {
   goalId: string; qitemId: string;
   text: string; folder: string | null; sentAt: string;
   to: string;                          // le siège de Max
-  state: 'sent' | 'taken' | 'proposed' | 'running' | 'done' | 'closed';
+  state: 'sent' | 'taken' | 'asking' | 'proposed' | 'running' | 'done' | 'closed';
   //  sent     : la ligne attend Max
   //  taken    : Max l'a prise, pas encore de proposition
+  //  asking   : Max pose une question (dossier, équipe) ; elle attend l'utilisateur dans « À toi »
   //  proposed : une proposition attend l'utilisateur (dans « À toi »)
   //  running  : Max a transmis l'objectif à une équipe
   //  done     : le dernier siège de la chaîne a fini
@@ -106,6 +125,7 @@ type Goal = {
     answer: { kind: 'option'; id: string } | { kind: 'words'; text: string } | null;  // ce que l'utilisateur a répondu
     answeredAt: string | null;
   } | null;
+  question: { askId: string; text: string } | null;   // la question de Max encore ouverte (HumanAsk.id), s'il y en a une
   trail: Array<{                       // le trajet, du plus ancien au plus récent
     at: string;
     kind: 'sent' | 'taken' | 'note' | 'handed' | 'closed';
@@ -117,8 +137,12 @@ type Goal = {
   current: { qitemId: string; seat: string; state: string } | null;  // la ligne de la chaîne qui porte l'objectif maintenant
 };
 
-type TeamProposal = { rig: string; running: boolean | null; folder: string | null;
-  seats: Array<{ seat: string; name: string | null; role: string | null; note: string | null }>; reason: string | null };
+type TeamProposal = {
+  kind: 'existing' | 'launch';
+  rig: string; running: boolean | null; folder: string | null;
+  seats: Array<{ seat: string; name: string | null; role: string | null; note: string | null }>; reason: string | null;
+  launch: { agents: number | null; runtimes: string[]; plan: string | null; writes: string[]; permissions: string | null } | null;  // kind launch
+};
 ```
 
 On garde les 20 objectifs les plus récents, le plus récent en premier. `role` se déduit du nom du siège (`pod.member`).
@@ -130,6 +154,10 @@ On garde les 20 objectifs les plus récents, le plus récent en premier. `role` 
 - `team?: TeamProposal` : le bloc `ledge-team` lu.
 
 La carte violette se répond avec `openrig.answer` : `choice` `team`/`confirm`, `choice` `team`/`launch-rig`, ou `words`.
+
+**Champ réservé (lot 4).** `openrig.answer` gagnera `delegated?: { by: 'ledge'; source: string }`. Avec lui, la réponse rendue
+à Max commence par « Decided by Ledge on the person's behalf (setting: …; source: …) », et l'audit OpenRig porte
+`auditNotes.by = "ledge"`. Au lot 2, ce champ n'existe pas encore, et toute réponse vient de l'utilisateur.
 
 ### Écrire à Max sur un objectif (repli, ou en plus)
 
