@@ -67,6 +67,8 @@ export const en: Messages = {
     model: m => `model: ${m}`, defaultModel: 'default', notice: 'Ledge',
     rowIn: 'row handed by', rowOut: 'row passed to', handedAt: time => `handed ${time}`, passedAt: time => `passed ${time}`,
     notHanded: 'not handed off', notHandedBy: 'not handed off by OpenRig', openrigSaid: line => `OpenRig: ${line}`,
+    rowState: { pending: 'waiting', taken: 'taken', passed: n => `passed to ${n}`, blocked: 'blocked', done: 'done' },
+    takenAt: time => `taken ${time}`, doneAt: time => `done ${time}`, notTaken: 'not taken yet', waitingOn: id => `waiting on row ${id}`,
     untracked: 'state not tracked', reply: 'reply', raw: 'raw', close: 'close', times: k => `received ${k} times`,
     unreadable: 'unreadable OpenRig message, shown as is', openrig: 'OpenRig',
     unblocked: id => `blocker cleared: row ${id} is to do again`,

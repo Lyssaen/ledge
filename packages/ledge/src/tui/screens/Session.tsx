@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { isPending, putImage, splitId } from '@ledge/fleet';
 import { offers, type Pending, type Session } from '@ledge/protocol';
@@ -7,7 +7,10 @@ import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js'
 import { ChipsLine, useChips, useOpenImage, usePaste } from '../images.js';
 import { machineLabel, modelLabel, paneName, TOOL_NAME } from '../model/labels.js';
 import { cells, pad, row, type Line } from '../model/cells.js';
-import { anchorLine, markRig, selectedRig, threadImages, threadView } from '../model/thread.js';
+import { anchorLine, cardsInView, markRig, selectedRig, threadImages, threadView } from '../model/thread.js';
+import { useRigRow } from '@ledge/fleet/openrig';
+import type { DaemonClient } from '@ledge/fleet';
+import type { RigRow } from '@ledge/protocol';
 import { aboutDraft, type Peer } from '../model/rigLines.js';
 import { ago, oneLine } from '../model/time.js';
 import { C, STATE_COLOR } from '../theme.js';
@@ -66,8 +69,19 @@ function SessionView({ s }: { s: Session }) {
       return x ? { id: x.id, name: x.name } : undefined;
     };
   }, [sessions, machine]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The rows of OpenRig's task cards, as last read (decision 2: while the card is in view, again every 30 s); only from a
+  // daemon that answers rows. A row stays as read once its card scrolls away.
+  const rowsLive = machines.find(m => m.id === machine)?.daemon?.openrigRows === true;
+  const [rowStates, setRows] = useState<ReadonlyMap<string, RigRow>>(() => new Map());
+  const onRow = useCallback((qitem: string, row: RigRow | null) => setRows(x => {
+    if ((x.get(qitem) ?? null) === row) return x;
+    const n = new Map(x); if (row) n.set(qitem, row); else n.delete(qitem); return n;
+  }), []);
+  const row = useMemo(() => (q: string) => rowStates.get(q), [rowStates]);
+  // A seat's Ledge session (`Session.rig.seat`), on this machine: who a row was passed to.
+  const seat = useMemo(() => (address: string) => sessions.find(y => y.rig?.seat === address && (splitId(y.id)?.machine ?? 'local') === machine)?.name, [sessions, machine]);
   // The clock is not in here: a running action's spinner and time tick on their own (ui/Lines.tsx).
-  const thread = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded, peer, raws }) : { lines: [] as Line[], keys: [] as string[], turns: new Map<string, string>(), rig: new Map(), heads: new Map() }, [items, t, g, width, diffs, unfolded, tone, peer, raws]);
+  const thread = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded, peer, raws, row, seat }) : { lines: [] as Line[], keys: [] as string[], turns: new Map<string, string>(), rig: new Map(), heads: new Map(), cards: new Map() }, [items, t, g, width, diffs, unfolded, tone, peer, raws, row, seat]);
   const { lines, keys: lineKeys } = thread;
   const p = s.pending;
   const [view, setView] = useState(10);
@@ -86,6 +100,8 @@ function SessionView({ s }: { s: Session }) {
   const rigKey = selectedRig(thread, lines.length - view - up, lines.length - 1 - up);
   const rigEl = rigKey ? thread.rig.get(rigKey) : undefined;
   const shown = useMemo(() => markRig(thread, rigKey, g), [thread, rigKey, g]);
+  // The cards with a line in view, while the thread is drawn.
+  const watched = rowsLive && mode !== 'model' && !terminal ? cardsInView(thread, lines.length - view - up, lines.length - 1 - up) : [];
   const replyTo = (target: Peer, text: string) => {
     const other = d.byId.get(target.id);
     if (other?.offline) { toast({ text: t.toast.offline(target.name), tone: 'info' }); return; }
@@ -206,6 +222,7 @@ function SessionView({ s }: { s: Session }) {
           : lines.length === 0 ? <Text color={C.faint}>{t.session.empty}</Text>
           : <Lines lines={shown} up={up} onHeight={setView} />}
       </TitledBox> : null}
+      {watched.map(q => <RowWatch key={q} client={client} machine={machine} qitem={q} onRow={onRow} />)}
       {p && request ? <PendingBox s={s} a={request} /> : null}
       <ChipsLine chips={chips.items} />
       {mode === 'reply' || mode === 'note'
@@ -217,6 +234,14 @@ function SessionView({ s }: { s: Session }) {
         </TitledBox>}
     </Frame>
   );
+}
+
+/** Reads one row while it is mounted (its card in view): dev-back's `useRigRow`, asked now and every RIG_ROW_REFRESH_MS. */
+function RowWatch({ client, machine, qitem, onRow }: { client: DaemonClient; machine: string; qitem: string; onRow(qitem: string, row: RigRow | null): void }) {
+  const { row, error } = useRigRow(client, machine, qitem, true);
+  // An error answer (not found, OpenRig stopped…) leaves the card « état non suivi »; offline keeps the last row (useRigRow).
+  useEffect(() => { if (row || error) onRow(qitem, row); }, [row, error, qitem, onRow]);
+  return null;
 }
 
 export type Ask = { lines: Line[]; buttons: Array<{ label: string; k: string; primary?: boolean }> };

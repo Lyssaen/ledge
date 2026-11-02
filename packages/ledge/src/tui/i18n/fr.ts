@@ -72,6 +72,9 @@ export const fr = {
     /** OpenRig's messages in a seat's thread (docs/mockups/openrig-messages, validated 2026-11-02). */
     rowIn: 'ligne confiée par', rowOut: 'ligne passée à', handedAt: (time: string) => `confiée ${time}`, passedAt: (time: string) => `passée ${time}`,
     notHanded: 'non transmise', notHandedBy: 'non transmise par OpenRig', openrigSaid: (line: string) => `OpenRig : ${line}`,
+    /** A queue row's state, read live (`openrig.rowState`), and its short log. */
+    rowState: { pending: 'en attente', taken: 'prise', passed: (n: string) => `passée à ${n}`, blocked: 'bloquée', done: 'terminée' },
+    takenAt: (time: string) => `prise ${time}`, doneAt: (time: string) => `terminée ${time}`, notTaken: 'pas encore prise', waitingOn: (id: string) => `attend la ligne ${id}`,
     untracked: 'état non suivi', reply: 'répondre', raw: 'brut', close: 'fermer', times: (k: number) => `reçu ${k} fois`,
     unreadable: 'message OpenRig illisible, affiché tel quel', openrig: 'OpenRig',
     unblocked: (id: string) => `blocage levé : la ligne ${id} est de nouveau à faire`,

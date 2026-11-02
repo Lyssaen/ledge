@@ -1,4 +1,4 @@
-import type { NoticeItem, ReceivedItem, RigInfo, SentItem, ThreadItem } from '@ledge/protocol';
+import type { NoticeItem, ReceivedItem, RigInfo, RigRow, SentItem, ThreadItem } from '@ledge/protocol';
 import type { Glyphs } from '../glyphs.js';
 import type { Messages } from '../i18n/lang.js';
 import { C } from '../theme.js';
@@ -18,6 +18,10 @@ export interface RigOpts {
   t: Messages; g: Glyphs; width: number; cap(n: number): number;
   /** The Ledge session of a thread item's `peer`. */
   peer?(id: string): Peer | undefined;
+  /** A queue row's state as last read (`openrig.rowState`); undefined: not read, not tracked. */
+  row?(qitem: string): RigRow | undefined;
+  /** The name of a seat's Ledge session (`Session.rig.seat`), for the seat a row was passed to. */
+  seat?(address: string): string | undefined;
 }
 
 /** The OpenRig items of a thread: those with `rig`. */
@@ -121,12 +125,13 @@ export function rigLines(it: RigItem, o: RigOpts): Line[] {
     // The seat's own handoff OpenRig did not take: said so in red, with the first line of what OpenRig printed (the raw is
     // the command, then its output; all of it under b).
     const refused = out && it.status === 'refused';
-    const state: Seg = refused ? { text: t.session.notHanded, color: C.red } : { text: t.session.untracked, color: C.faint };
+    const row = !refused && r.qitem ? o.row?.(r.qitem) : undefined;
+    const state: Seg = refused ? { text: t.session.notHanded, color: C.red } : row ? rowState(row, o) : { text: t.session.untracked, color: C.faint };
     const head: Line = [{ text: `${g.rigRow} ${out ? t.session.rowOut : t.session.rowIn} `, color: C.violet }, bold(w.name),
       pad(2), state, ...(id ? [pad(2), { text: id, color: C.faint }] : [])];
     const summary = r.summary ?? it.summary;
     const log = out ? t.session.passedAt(time) : t.session.handedAt(time), keys = `b ${t.session.raw}`;
-    let journal = keysLine([log, keys]);
+    let journal = keysLine(row ? [...rowLog(row, out, o), keys] : [log, keys]);
     if (refused) {
       const said = r.raw.replace(/\r/g, '').split('\n').slice(1).map(l => l.trim()).find(Boolean);
       const why = said ? t.session.openrigSaid(said) : t.session.notHandedBy;
@@ -150,6 +155,29 @@ export function rigLines(it: RigItem, o: RigOpts): Line[] {
   }
   if (r.kind === 'unreadable') return unreadableLines(it, o);
   return [];
+}
+
+/** A row's state as OpenRig says it, in the mockup's colours: done green with ✓, taken blue, passed violet, blocked amber,
+ *  waiting faint; a word Ledge does not know, as is. */
+function rowState(row: RigRow, o: RigOpts): Seg {
+  const { t, g } = o, s = t.session.rowState;
+  switch (row.state) {
+    case 'pending': return { text: s.pending, color: C.faint };
+    case 'in-progress': return { text: s.taken, color: C.blue };
+    case 'handed-off': return { text: s.passed(row.handedOffTo ? o.seat?.(row.handedOffTo) ?? address(row.handedOffTo).seat : ''), color: C.violet };
+    case 'blocked': return { text: s.blocked, color: C.yellow };
+    case 'done': return { text: `${g.ok} ${s.done}`, color: C.green };
+    default: return { text: row.state, color: C.faint };
+  }
+}
+
+/** The row's short log: handed (or passed), taken (or not yet), done; what a blocked row waits on. */
+function rowLog(row: RigRow, out: boolean, o: RigOpts): string[] {
+  const { t, g } = o, at = (iso: string) => clock(iso);
+  return [out ? t.session.passedAt(at(row.createdAt)) : t.session.handedAt(at(row.createdAt)),
+    ...(row.claimedAt ? [t.session.takenAt(at(row.claimedAt))] : row.state === 'pending' ? [t.session.notTaken] : []),
+    ...(row.state === 'done' ? [t.session.doneAt(at(row.updatedAt))] : []),
+    ...(row.state === 'blocked' && row.blockedOn ? [t.session.waitingOn(shortId(row.blockedOn, 6, g))] : [])];
 }
 
 /** An unreadable block: said so, faint, then the block as is: its header up to its first `---` on one line (` / `), the rest

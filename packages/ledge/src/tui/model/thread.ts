@@ -1,4 +1,4 @@
-import type { AttachmentRef, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { AttachmentRef, RigRow, ThreadItem, ToolItem } from '@ledge/protocol';
 import { OPEN_TURNS, turns, type Turn } from '@ledge/ui/thread/turns';
 import { rawTarget, SPINNER } from '@ledge/ui/thread/tools';
 import type { Glyphs } from '../glyphs.js';
@@ -73,7 +73,9 @@ const more = (): Seg => ({ text: ' …', color: C.faint });
 /** `peer`: the Ledge session of a thread item's `peer` (an OpenRig sender's name, the reply `r` gives); `raws`: the OpenRig
  *  elements whose raw is open (key b). */
 interface Opts { t: Messages; g: Glyphs; now?: number; width: number; diffs: boolean; ascii?: boolean; cap(n: number): number;
-  peer?(id: string): Peer | undefined; raws?: ReadonlySet<string> }
+  peer?(id: string): Peer | undefined; raws?: ReadonlySet<string>;
+  /** A queue row's state as last read, and a seat's Ledge name (OpenRig's task cards). */
+  row?(qitem: string): RigRow | undefined; seat?(address: string): string | undefined }
 
 /** Each text's lines, by item: the thread is drawn again at each change, and the store keeps the items that did not change.
  *  Past 500 texts the parser's own cache goes round and would parse them all again. */
@@ -125,7 +127,15 @@ export function foldedLine(turn: Turn, o: Pick<Opts, 't' | 'g'>): Line {
  *  key r gives on a received message whose sender has a Ledge session. */
 export type RigElement = { raw: string; title: string; reply?: { peer: Peer; text: string } };
 /** `heads`: each OpenRig element's first line, where its selection mark goes (`markRig`). */
-export type ThreadView = { lines: Line[]; keys: string[]; turns: Map<string, string>; rig: Map<string, RigElement>; heads: Map<string, number> };
+/** `cards`: the row each OpenRig task card is about, by its key (the rows to read while the card is in view). */
+export type ThreadView = { lines: Line[]; keys: string[]; turns: Map<string, string>; rig: Map<string, RigElement>; heads: Map<string, number>; cards: Map<string, string> };
+
+/** The rows of the task cards with a line between `top` and `bottom` (line indexes), once each. */
+export function cardsInView(v: Pick<ThreadView, 'keys' | 'cards'>, top: number, bottom: number): string[] {
+  const out = new Set<string>();
+  for (let i = Math.max(0, top); i <= Math.min(bottom, v.keys.length - 1); i++) { const q = v.cards.get(v.keys[i]!); if (q) out.add(q); }
+  return [...out];
+}
 
 /** The cells OpenRig's elements keep at their left for the selection mark, so that nothing moves when it moves. */
 export const GUTTER = 2;
@@ -153,7 +163,7 @@ function rawOf(it: RigItem, packets: Map<string, RigItem[]>, t: Messages): { raw
  *  one line (unless unfolded), a stuck sweep left out. */
 export function threadView(items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolded: boolean }): ThreadView {
   const all = turns(items);
-  const lines: Line[] = [], keys: string[] = [], turnOf = new Map<string, string>(), rig = new Map<string, RigElement>(), heads = new Map<string, number>();
+  const lines: Line[] = [], keys: string[] = [], turnOf = new Map<string, string>(), rig = new Map<string, RigElement>(), heads = new Map<string, number>(), cards = new Map<string, string>();
   const opts: Opts = { ...o, cap: n => (o.unfolded ? Infinity : n) };
   // OpenRig's elements drawn in the width less their gutter.
   const inner: Opts = { ...opts, width: o.width - GUTTER };
@@ -191,6 +201,7 @@ export function threadView(items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolde
       }
       if (!r) { push(it.id, itemLines(it, opts)); continue; }
       heads.set(it.id, lines.length);
+      if (r.kind === 'notice' && r.rig.kind === 'handoff' && r.rig.qitem && r.status !== 'refused') cards.set(it.id, r.rig.qitem);
       push(it.id, gutter(rigLines(r, inner)));
       const { raw, title } = rawOf(r, packets, o.t);
       const reply = replyOf(it, opts);
@@ -198,7 +209,7 @@ export function threadView(items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolde
       if (o.raws?.has(it.id)) push(it.id, gutter(rawBox(raw, title, inner)));
     }
   });
-  return { lines, keys, turns: turnOf, rig, heads };
+  return { lines, keys, turns: turnOf, rig, heads, cards };
 }
 
 /** The OpenRig element key b and r act on: the lowest one with a line in the view (`top`…`bottom`, line indexes). */

@@ -1,12 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { writeFileSync } from 'node:fs';
-import type { ClientMessage, ThreadItem } from '@ledge/protocol';
+import { RIG_ROW_REFRESH_MS, type ClientMessage, type RigRow, type ThreadItem } from '@ledge/protocol';
 import { until } from './helpers.js';
 import { startTui } from './tui-fixture.js';
 import { fr } from '../src/tui/i18n/fr.js';
 import { en } from '../src/tui/i18n/en.js';
 import { glyphsFor } from '../src/tui/glyphs.js';
-import { markRig, selectedRig, threadLines, threadView } from '../src/tui/model/thread.js';
+import { cardsInView, markRig, selectedRig, threadLines, threadView } from '../src/tui/model/thread.js';
 import { helpLines } from '../src/tui/screens/Help.js';
 import { aboutDraft, address } from '../src/tui/model/rigLines.js';
 import { cells } from '../src/tui/model/cells.js';
@@ -63,7 +63,10 @@ const after = (s: string, n = 1) => lines[lines.findIndex(l => l.includes(s)) + 
 describe('tui OpenRig messages in a thread', () => {
   it('prints the sample thread at 80 columns, every line at most the width', () => {
     // Printed for the report: the whole sample thread, as the TUI draws it.
-    if (process.env.PRINT_RIG_THREAD) { const v = threadView(items, o); writeFileSync(process.env.PRINT_RIG_THREAD, text(markRig(v, 'm2', glyphsFor({}))).join('\n')); }
+    if (process.env.PRINT_RIG_THREAD) { const rows: Record<string, RigRow> = {
+      'qitem-20261102190205-c0704682203041b9': { id: 'qitem-20261102190205-c0704682203041b9', state: 'done', from: 'pilot-lead@ledge-dev-2', to: 'design-ux@ledge-dev-2', createdAt: at(1), claimedAt: at(1.4), updatedAt: at(2), at: at(3) },
+      'qitem-20261102-9999aa11': { id: 'qitem-20261102-9999aa11', state: 'pending', from: 'design-ux@ledge-dev-2', to: 'dev-front@ledge-dev-2', createdAt: at(51), updatedAt: at(51), at: at(52) } };
+    const v = threadView(items, { ...o, row: q => rows[q] }); writeFileSync(process.env.PRINT_RIG_THREAD, text(markRig(v, 'm2', glyphsFor({}))).join('\n')); }
     for (const l of lines) expect(cells(l)).toBeLessThanOrEqual(80);
   });
 
@@ -346,6 +349,124 @@ describe('ledge tui: keys b and r on OpenRig’s messages', () => {
       expect(tui.frame()).toMatch(/↵ +écrire +b +brut/);
       await tui.press('r');
       await until(() => tui.frame().includes('RÉPONDRE À BIX'));
+    } finally { await tui.cleanup(); }
+  });
+});
+
+describe('tui OpenRig task cards: the row’s state, read live', () => {
+  const Q = 'qitem-20261102190205-c0704682203041b9';
+  const rowAt = (state: string, more: Partial<RigRow> = {}): RigRow => ({ id: Q, state, from: 'pilot-lead@ledge-dev-2', to: 'design-ux@ledge-dev-2', createdAt: at(1), updatedAt: at(2), at: at(3), ...more });
+  const card = (row: RigRow | undefined, item: ThreadItem = items[1]!) => threadLines([item], { ...o, row: q => (q === row?.id ? row : undefined), seat: a => (a === 'dev-front@ledge-dev-2' ? 'Ida' : undefined) });
+
+  it('each state in its words and colour, its short log under', () => {
+    const cases: Array<[RigRow, RegExp, string, RegExp]> = [
+      [rowAt('pending'), /Bix {2}en attente {2}…3041b9/, C.faint, new RegExp(`^ {6}confiée ${clock(at(1))} · pas encore prise · b brut$`)],
+      [rowAt('in-progress', { claimedAt: at(1.5) }), /Bix {2}prise {2}…3041b9/, C.blue, new RegExp(`^ {6}confiée ${clock(at(1))} · prise ${clock(at(1.5))} · b brut$`)],
+      [rowAt('done', { claimedAt: at(1.5), updatedAt: at(2) }), /Bix {2}✓ terminée {2}…3041b9/, C.green, new RegExp(`^ {6}confiée ${clock(at(1))} · prise ${clock(at(1.5))} · terminée ${clock(at(2))} · b brut$`)],
+      [rowAt('handed-off', { handedOffTo: 'dev-front@ledge-dev-2' }), /Bix {2}passée à Ida {2}…3041b9/, C.violet, /confiée \d\d:\d\d · b brut$/],
+      [rowAt('blocked', { claimedAt: at(1.5), blockedOn: 'qitem-20261102-77aa4f39aa' }), /Bix {2}bloquée {2}…3041b9/, C.yellow, /prise \d\d:\d\d · attend la ligne …4f39aa · b brut$/],
+      [rowAt('parked'), /Bix {2}parked {2}…3041b9/, C.faint, /confiée \d\d:\d\d · b brut$/]
+    ];
+    for (const [row, head, color, log] of cases) {
+      const ls = card(row), tx = text(ls);
+      expect(tx[0], row.state).toMatch(head);
+      expect(ls[0]!.find(s => /en attente|prise|terminée|passée à|bloquée|parked/.test(s.text))!.color, row.state).toBe(color);
+      expect(tx[2], row.state).toMatch(log);
+    }
+    // handed-off to a seat without a Ledge session: its seat.
+    expect(text(card(rowAt('handed-off', { handedOffTo: 'review-qa@ledge-dev-2' })))[0]).toMatch(/passée à review-qa/);
+    // Not read: « état non suivi », the item's time.
+    expect(text(card(undefined))[0]).toMatch(/état non suivi/);
+  });
+
+  it('the card the seat passed: « passée HH:MM » first; refused stays « non transmise »', () => {
+    const out = items.find(i => i.id === 'h2')!;
+    const row = { ...rowAt('done', { claimedAt: at(52), updatedAt: at(53) }), id: 'qitem-20261102-9999aa11', createdAt: at(51) };
+    const tx = text(threadLines([out], { ...o, row: q => (q === row.id ? row : undefined) }));
+    expect(tx[0]).toMatch(/^ {2}▤ ligne passée à dev-front {2}✓ terminée {2}…99aa11/);
+    expect(tx[2]).toBe(`      passée ${clock(at(51))} · prise ${clock(at(52))} · terminée ${clock(at(53))} · b brut`);
+    const refused = items.find(i => i.id === 'h3')!;
+    expect(text(threadLines([refused], { ...o, row: () => row }))[0]).toMatch(/non transmise/);
+    // English.
+    expect(text(threadLines([out], { ...o, t: en, row: q => (q === row.id ? row : undefined) }))[0]).toMatch(/✓ done/);
+  });
+
+  it('the cards in view are the rows to read; a refused card and the other elements are none', () => {
+    const v = threadView(items, o);
+    expect([...v.cards.values()]).toEqual([Q, 'qitem-20261102-9999aa11']);
+    expect(cardsInView(v, 0, v.lines.length - 1)).toEqual([Q, 'qitem-20261102-9999aa11']);
+    const h1 = v.keys.indexOf('h1');
+    expect(cardsInView(v, h1 + 4, v.lines.length - 1)).toEqual(['qitem-20261102-9999aa11']);
+    expect(cardsInView(v, 0, h1 - 2)).toEqual([]);
+  });
+});
+
+describe('ledge tui: a task card reads its row while in view', () => {
+  const T = (s: number) => new Date(Date.parse('2026-10-09T18:00:00.000Z') + s * 1000).toISOString();
+  const Q = 'qitem-20261009180001-aaaabbbbcccc0001';
+  const handoff = (id: string, qitem: string, s: number): ThreadItem => ({ kind: 'notice', id, at: T(s), turn: 1, notice: 'other', name: 'pilot-lead@ledge-dev-2', text: 'Queue handoff: …',
+    rig: { kind: 'handoff', from: 'pilot-lead@ledge-dev-2', qitem, summary: `Relire ${id}`, raw: 'From: …' } });
+  const row = (state: string, more: Partial<RigRow> = {}): RigRow => ({ id: Q, state, from: 'pilot-lead@ledge-dev-2', to: 'docs@ledge-dev-2', createdAt: T(1), updatedAt: T(3), at: T(4), ...more });
+  const open = async (tui: Awaited<ReturnType<typeof startTui>>) => {
+    await tui.press('j'); await tui.press('j');
+    await until(() => tui.frame().includes('BIX · DOCUMENTER'));
+    await tui.press('\r');
+    await until(() => tui.frame().includes('ligne confiée par'));
+  };
+
+  it('no answer, then pending, in progress, done, as OpenRig answers each ask (now, then every 30 s while in view)', async () => {
+    // Only the 30 s refresh is driven by hand: the rest of the TUI runs on real time.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const tui = await startTui({ daemonExtras: { openrigRows: true } });
+    tui.daemon.thread('bix', [{ kind: 'prompt', id: 'p1', at: T(0), turn: 1, text: 'Va' }, handoff('h1', Q, 1)]);
+    const asks = () => sent(tui.daemon.received, 'openrig.row');
+    // The next ask (the first, then one per RIG_ROW_REFRESH_MS), answered.
+    const answer = async (n: number, r: RigRow | undefined, error?: string) => {
+      if (n > 1) vi.advanceTimersByTime(RIG_ROW_REFRESH_MS);
+      await until(() => asks().length === n);
+      const ask = asks()[n - 1]!;
+      expect(ask.qitem).toBe(Q);
+      tui.daemon.push({ type: 'openrig.rowState', requestId: ask.requestId, qitem: Q, ...(r ? { row: r } : {}), ...(error ? { error } : {}) });
+    };
+    try {
+      await open(tui);
+      await until(() => asks().length === 1);
+      expect(tui.frame()).toContain('état non suivi');
+      await answer(1, row('pending'));
+      await until(() => tui.frame().includes('en attente'));
+      expect(tui.frame()).toContain('pas encore prise');
+      await answer(2, row('in-progress', { claimedAt: T(2) }));
+      await until(() => /pilot-lead +prise/.test(tui.frame()));
+      await answer(3, row('done', { claimedAt: T(2) }));
+      await until(() => tui.frame().includes('✓ terminée'));
+      expect(tui.frame()).toMatch(/confiée \d\d:\d\d · prise \d\d:\d\d · terminée \d\d:\d\d · b brut/);
+      // An error answer: not tracked again.
+      await answer(4, undefined, 'not_found');
+      await until(() => tui.frame().includes('état non suivi'));
+    } finally { await tui.cleanup(); vi.useRealTimers(); }
+  });
+
+  it('asks nothing of a daemon that does not answer rows', async () => {
+    const tui = await startTui();
+    tui.daemon.thread('bix', [{ kind: 'prompt', id: 'p1', at: T(0), turn: 1, text: 'Va' }, handoff('h1', Q, 1)]);
+    try {
+      await open(tui);
+      await new Promise(r => setTimeout(r, 200));
+      expect(sent(tui.daemon.received, 'openrig.row')).toEqual([]);
+      expect(tui.frame()).toContain('état non suivi');
+    } finally { await tui.cleanup(); }
+  });
+
+  it('asks only for the cards in view', async () => {
+    const tui = await startTui({ daemonExtras: { openrigRows: true } });
+    const old = 'qitem-20261009180001-0ld0ld0ld0ld';
+    tui.daemon.thread('bix', [{ kind: 'prompt', id: 'p1', at: T(0), turn: 1, text: 'Va' }, handoff('h0', old, 1),
+      ...Array.from({ length: 60 }, (_, i) => ({ kind: 'message' as const, id: `m${i}`, at: T(2 + i), turn: 1, text: `Ligne ${i}` })), handoff('h1', Q, 70)]);
+    try {
+      await open(tui);
+      await until(() => sent(tui.daemon.received, 'openrig.row').length >= 1);
+      await new Promise(r => setTimeout(r, 200));
+      expect(sent(tui.daemon.received, 'openrig.row').map(m => m.qitem)).toEqual([Q]);
     } finally { await tui.cleanup(); }
   });
 });
