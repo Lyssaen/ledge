@@ -22,7 +22,7 @@ import { createOutbox } from './outbox.js';
 import { createTerminalHost, type SpawnControl, type TerminalHost } from './terminal.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation, type Report } from './operations.js';
 import { capabilities, clip, forPhone, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneThread } from './project.js';
-import { canSwitch, toPhoneModels } from './project.js';
+import { canSwitch, toPhoneCommands, toPhoneModels } from './project.js';
 import { checklistSummary, toPhoneChecklist } from './project.js';
 import { riskOf } from './risk.js';
 import { CHALLENGE_TTL_MS, type ChallengeStore } from './challenges.js';
@@ -66,6 +66,8 @@ const REQUEST_NAME = /^[a-z][a-z.]{0,39}$/;
 
 /** How long a phone's `models.list` waits for the daemon's listing (whose agent probe gives up after 15 s) before it is told none came. */
 const MODELS_WAIT_MS = 20_000;
+/** How long a phone's `session.commands` waits for the daemon's listing (whose Claude Code probe gives up after 20 s). */
+const COMMANDS_WAIT_MS = 25_000;
 
 export function createPhoneGateway(deps: {
   mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'>;
@@ -202,7 +204,7 @@ export function createPhoneGateway(deps: {
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
       ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), broadcast: true as const },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
@@ -588,6 +590,23 @@ export function createPhoneGateway(deps: {
     push(deviceId, { type: 'models.listing', tool, models: toPhoneModels(listing.models), ...(listing.error !== undefined ? { error: true as const } : {}) });
   };
 
+  /** A session's slash commands, asked of the local daemon; none, in error, when they could not be read in time. */
+  const commandsList = async (deviceId: string, id: string) => {
+    const requestId = randomUUID();
+    let listing: Extract<ServerMessage, { type: 'session.commands.listing' }> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        deps.dispatch({ type: 'session.commands', requestId, id }, m => { if (m.type === 'session.commands.listing' && m.requestId === requestId) listing ??= m; }),
+        new Promise<void>(r => { timer = setTimeout(r, COMMANDS_WAIT_MS); })
+      ]);
+    } catch (e) { log(`phone session.commands failed (${e instanceof Error ? e.name : 'error'})`); }
+    finally { clearTimeout(timer); }
+    // Never the daemon's error text, which may hold a path: only that there is none.
+    if (!listing || listing.error !== undefined) return push(deviceId, { type: 'session.commands.listing', id, commands: [], error: true });
+    push(deviceId, { type: 'session.commands.listing', id, commands: toPhoneCommands(listing.commands) });
+  };
+
   const chatTask = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'chat.task' }>): Promise<Outcome> => {
     const turn = ownTurn(deviceId, msg.qid);
     const card = turn?.tasks?.[msg.row];
@@ -811,6 +830,10 @@ export function createPhoneGateway(deps: {
         // Ignored by a gateway that does not say `models`: the phone never offers the switch there.
         if (!deps.models) return;
         void modelsList(deviceId, msg.tool).catch((e: unknown) => log(`phone models.list failed (${e instanceof Error ? e.name : 'error'})`));
+        return;
+      case 'session.commands':
+        if (!live(msg.id)) return push(deviceId, { type: 'session.commands.listing', id: msg.id, commands: [], error: true });
+        void commandsList(deviceId, msg.id).catch((e: unknown) => log(`phone session.commands failed (${e instanceof Error ? e.name : 'error'})`));
         return;
       case 'snapshot.request':
         follower(deviceId).subscribed = true;

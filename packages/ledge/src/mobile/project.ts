@@ -1,5 +1,6 @@
 import { LEDGE_GIVER, openDecision, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModelChoice } from '@ledge/protocol';
+import { PHONE_COMMANDS_MAX, PhoneSlashCommandSchema, type PhoneSlashCommand, type SlashCommand } from '@ledge/protocol';
 import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
 import type { PhoneChecklist, PhoneChecklistSummary, Todo } from '@ledge/protocol';
 import type { CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, PhoneTask, Session, Task, ThreadItem, Tool } from '@ledge/protocol';
@@ -226,6 +227,17 @@ const MODELS_MAX = 40;
  */
 export function canSwitch(s: Session): boolean {
   return s.source === 'launcher' && s.state !== 'exited';
+}
+
+/** A session's slash commands for the phone: descriptions cut to its bounds; one its schema still refuses is left out. */
+export function toPhoneCommands(commands: readonly SlashCommand[]): PhoneSlashCommand[] {
+  const out: PhoneSlashCommand[] = [];
+  for (const c of commands) {
+    if (out.length >= PHONE_COMMANDS_MAX) break;
+    const p = PhoneSlashCommandSchema.safeParse({ ...c, ...(c.description !== undefined ? { description: clip(c.description, 200).text } : {}) });
+    if (p.success) out.push(p.data);
+  }
+  return out;
 }
 
 /**

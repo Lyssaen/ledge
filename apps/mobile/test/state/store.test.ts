@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneSession, ThreadItem } from '@ledge/protocol';
-import { createStore, type MobileStore } from '../../src/state/store';
+import { COMMANDS_KEEP_MS, createStore, type MobileStore } from '../../src/state/store';
 import { OPS_KEY, RESEND_MAX_MS, UNCERTAIN_MS } from '../../src/state/operations';
 import { LAST_STATE_KEY } from '../../src/state/persist';
 import { outcomeFor } from '../../src/model/requestOutcome';
@@ -655,6 +655,46 @@ describe('the store, device confirmation', () => {
     expect(t.state().checklists.get('a')).toBeNull();
     t.deliver({ type: 'session.removed', id: 'a' });
     expect(t.state().checklists.has('a')).toBe(false);
+  });
+});
+
+describe('slash commands', () => {
+  const withCommands = (boot?: string) => { const s = snapshot([session('a')], 'Atelier', boot); return s.type === 'snapshot' ? { ...s, daemon: { ...s.daemon, commands: true as const } } : s; };
+  const compact = { name: 'compact', source: 'builtin' as const };
+
+  it('asks a session\'s commands once, keeps the listing, and asks again after an error, a lost link or COMMANDS_KEEP_MS', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const t = setup();
+      t.deliver(withCommands());
+      t.store.requestCommands('a'); t.store.requestCommands('a');
+      expect(t.of('session.commands')).toEqual([{ type: 'session.commands', id: 'a' }]);
+      t.deliver({ type: 'session.commands.listing', id: 'a', commands: [compact] });
+      expect(t.state().commands.a).toMatchObject({ commands: [compact] });
+      t.store.requestCommands('a');
+      expect(t.of('session.commands')).toHaveLength(1);
+      vi.advanceTimersByTime(COMMANDS_KEEP_MS + 1);
+      t.store.requestCommands('a');
+      expect(t.of('session.commands')).toHaveLength(2);
+      t.deliver({ type: 'session.commands.listing', id: 'a', commands: [], error: true });
+      t.store.requestCommands('a');
+      expect(t.of('session.commands')).toHaveLength(3);
+      t.set('connecting' as never); t.set('ready'); t.deliver(withCommands());
+      t.store.requestCommands('a');
+      expect(t.of('session.commands')).toHaveLength(4);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a PC that does not say commands is never asked; a new boot forgets the listings', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a')]));
+    t.store.requestCommands('a');
+    expect(t.of('session.commands')).toEqual([]);
+    t.deliver(withCommands('11111111-1111-4111-8111-111111111111'));
+    t.store.requestCommands('a');
+    t.deliver({ type: 'session.commands.listing', id: 'a', commands: [compact] });
+    t.deliver(withCommands('22222222-2222-4222-8222-222222222222'));
+    expect(t.state().commands).toEqual({});
   });
 });
 

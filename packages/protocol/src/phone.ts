@@ -11,6 +11,7 @@ import { MESSAGE_MAX, RefusalCodeSchema, SEMVER, UpdateFailureSchema } from './m
 import { BROADCAST_SESSIONS_MAX } from './broadcast.js';
 import { PushSubscriptionSchema } from './push.js';
 import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } from './models.js';
+import { SlashCommandSchema } from './commands.js';
 
 /** The phone/PC messages have their own schemas: a type or a field that is not here never crosses the relay. */
 export const PHONE_PROTOCOL = 1;
@@ -305,6 +306,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.broadcast'), op: OperationIdSchema, sessions: z.array(sessionId).min(1).max(BROADCAST_SESSIONS_MAX), text: z.string().trim().min(1).max(MESSAGE_MAX) }).strict(),
   /** The models an agent offers on the PC. */
   z.object({ type: z.literal('models.list'), tool: ToolSchema }),
+  /** The slash commands of a session's agent, for the « / » list of its field. */
+  z.object({ type: z.literal('session.commands'), id: sessionId }),
   /** The phone drops its passkey from the daemon. */
   z.object({ type: z.literal('device.forget'), op: OperationIdSchema }),
   /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). */
@@ -361,6 +364,11 @@ export const PhoneModelChoiceSchema = z.object({
 }).strict();
 export type PhoneModelChoice = z.infer<typeof PhoneModelChoiceSchema>;
 
+/** A slash command as the phone gets it: the PC's, its description shortened. */
+export const PHONE_COMMANDS_MAX = 300;
+export const PhoneSlashCommandSchema = SlashCommandSchema.extend({ description: z.string().max(200).optional() }).strict();
+export type PhoneSlashCommand = z.infer<typeof PhoneSlashCommandSchema>;
+
 /** What the daemon sends a phone. */
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(),
@@ -370,6 +378,7 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional(),
     /** The daemon streams a session's terminal (`term.open`). */ terminal: z.literal(true).optional(),
     /** The PC lets a phone type into a terminal (`term.hold`): its setting is on. */ terminalInput: z.literal(true).optional(),
+    /** The daemon answers `session.commands`. */ commands: z.literal(true).optional(),
     /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
@@ -389,6 +398,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('models.listing'), tool: ToolSchema, models: z.array(PhoneModelChoiceSchema).max(40), error: z.literal(true).optional() }),
   /** A model change that was accepted and then failed (the agent could not restart). */
   z.object({ type: z.literal('session.model.failed'), id: z.string(), reason: ModelRefusalSchema }),
+  /** A session's slash commands; `error`: they could not be read (the agent is not listed, or did not answer in time): a command typed by hand still goes. */
+  z.object({ type: z.literal('session.commands.listing'), id: z.string(), commands: z.array(PhoneSlashCommandSchema).max(PHONE_COMMANDS_MAX), error: z.literal(true).optional() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(PhoneChatTurnSchema).max(50) }),
   z.object({ type: z.literal('chat.step'), qid: OperationIdSchema, step: PhoneChatStepSchema }),
   /** The whole text so far, not an increment. */

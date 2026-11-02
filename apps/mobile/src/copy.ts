@@ -331,6 +331,15 @@ export const copy = {
       fromPc: 'le PC', fromPhone: 'le téléphone'
     },
     delivery: { sending: 'Envoi au PC…', taken: 'Pris par le terminal', takenNow: 'Pris par le terminal · à l’instant', uncertain: 'Réception non confirmée' },
+    slash: {
+      label: (tool: string) => `Commandes de ${tool}`, count: (tool: string, n: number) => `${tool} · ${n} commande${n > 1 ? 's' : ''}`,
+      loading: (tool: string) => `${tool} · lecture des commandes…`,
+      unavailable: (bot: string) => `Liste des commandes indisponible. Vous pouvez quand même taper la commande : Ledge l’enverra telle quelle à ${bot}.`,
+      none: (q: string, bot: string) => `Aucune commande « ${q} ». Elle partira comme un message à ${bot}.`,
+      source: { builtin: '', project: 'Projet', user: 'Perso', plugin: 'Plugin', extension: 'Extension' } as Record<string, string>,
+      blocked: { panel: 'Ouvre un panneau du terminal', close: 'Terminerait la session : fermez-la depuis Ledge' } as Record<string, string>,
+      bare: (c: string) => `Sans argument, /${c} ouvre un panneau du terminal : donnez-lui un argument.`
+    },
     composer: {
       label: (bot: string) => `Message pour ${bot}`, send: (bot: string) => `Envoyer à ${bot}`,
       quickLabel: 'Consignes rapides',

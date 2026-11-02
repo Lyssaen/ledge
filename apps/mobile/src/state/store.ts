@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -35,9 +35,11 @@ export interface MobileState {
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true } | null;
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
   models: Record<string, { models: PhoneModelChoice[]; error?: true }>;
+  /** The slash commands of each session's agent, by session id, as `session.commands.listing` said; `at` when they came. `error`: they could not be read. */
+  commands: Record<string, { commands: PhoneSlashCommand[]; error?: true; at: number }>;
   /** Why the last model change of a session failed after the PC accepted it, by session id. Kept until a new change is sent or the session's model or effort changes. */
   modelFailures: Record<string, ModelRefusal>;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
@@ -69,6 +71,8 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
 export const PREPARE_MS = 10_000;
 /** How long « Se déconnecter » waits for the PC to confirm that it removed this phone. */
 export const FORGET_MS = 5_000;
+/** How long a session's slash commands are shown again without asking (the PC keeps its own, and sees a commands folder change). */
+export const COMMANDS_KEEP_MS = 2 * 60_000;
 
 export type Answer = Extract<PhoneClientMessage, { type: 'session.answer' }>['answers'][number];
 
@@ -97,6 +101,8 @@ export interface MobileStore {
   prepareConfirm(req: ConfirmRequest): Promise<ConfirmChallenge>;
   /** Asks the PC for the models of an agent, once per tool per link (again after an `error` listing); they land in `getState().models`. */
   requestModels(tool: string): void;
+  /** Asks the PC for a session's slash commands; again after an `error` listing, or once `COMMANDS_KEEP_MS` has passed. They land in `getState().commands`. */
+  requestCommands(id: string): void;
   /** Changes a live session's model and effort (`null`: the agent's own default). Resolves when the PC answers; a late failure lands in `getState().modelFailures`. */
   changeModel(id: string, model: string | null, effort: string | null): Promise<ChatAction>;
   /** Writes one message to several sessions at once (at most 32). Resolves when the PC answers, with who got it (`sent`, names) and who did not. */
@@ -196,6 +202,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     device: null,
     daemon: last?.daemon ?? null,
     models: {},
+    commands: {},
     modelFailures: {},
     fresh: false,
     syncedAt: last?.syncedAt ?? null,
@@ -207,6 +214,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   let reads = loadReads(storage);
   /** The tools whose model list was asked on this link and boot; an `error` listing is asked again. */
   const modelAsks = new Set<string>();
+  /** The sessions whose commands were asked on this link and not answered yet. */
+  const commandAsks = new Set<string>();
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
   let boot: string | null = null;
   /** Ends a followed update or restart the PC never came back from: armed by the first step, cleared at the end. */
@@ -334,6 +343,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     askedSinceReady.clear();
     // A list asked on the lost channel never comes: it is asked again. Those already answered stay.
     for (const tool of [...modelAsks]) if (!state.models[tool]) modelAsks.delete(tool);
+    commandAsks.clear();
     settleForget(false);
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
@@ -358,11 +368,11 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         // A new boot is a new PC process: what it offered may differ.
         const bootChanged = (m.daemon.boot ?? null) !== boot;
         boot = m.daemon.boot ?? null;
-        if (bootChanged) modelAsks.clear();
+        if (bootChanged) { modelAsks.clear(); commandAsks.clear(); }
         const pc = pcSnapshot(state.pc, m.daemon);
         if (!pcRunning(pc)) stopPcWatch();
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
-        set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {} } : {}) });
+        set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {}, commands: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -371,6 +381,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       }
       case 'attachment.stored': case 'attachment.data': case 'attachment.error':
         images.handle(m);
+        return;
+      case 'session.commands.listing':
+        commandAsks.delete(m.id);
+        set({ commands: { ...state.commands, [m.id]: { commands: m.commands, ...(m.error ? { error: true as const } : {}), at: Date.now() } } });
         return;
       case 'models.listing':
         set({ models: { ...state.models, [m.tool]: { models: m.models, ...(m.error ? { error: true as const } : {}) } } });
@@ -565,8 +579,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, modelFailures: {} });
-    modelAsks.clear();
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, modelFailures: {} });
+    modelAsks.clear(); commandAsks.clear();
     stopPcWatch();
   }
 
@@ -619,6 +633,16 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         preparing = { purpose: req.purpose, resolve, reject, timer: setTimeout(() => settle(new Error('timeout')), PREPARE_MS) };
         send(m.data);
       });
+    },
+
+    requestCommands(id) {
+      if (closed || !ready() || !state.daemon?.commands || commandAsks.has(id)) return;
+      const kept = state.commands[id];
+      if (kept && !kept.error && Date.now() - kept.at < COMMANDS_KEEP_MS) return;
+      const m = PhoneClientMessageSchema.safeParse({ type: 'session.commands', id });
+      if (!m.success) return;
+      commandAsks.add(id);
+      send(m.data);
     },
 
     requestModels(tool) {
