@@ -600,6 +600,13 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const described = line ? describe(line, nameOf, t) : null;
   const aged = line && notchLine.view.aged && notchLine.view.seenAt !== null ? t.notch.line.ago(duration(Date.now() - notchLine.view.seenAt, t)) : null;
+  // While a request waits (Ledge's mark red or amber), Ledge reopens the oldest one in the notch, as a robot's click did:
+  // one set aside with Later, or that came in Do not disturb (user's choice A, 2026-11-02). Otherwise the chat, as before.
+  const openHome = () => {
+    const oldest = ctl.state().queue.find(id => byId.has(id) && isPending(byId.get(id)!));
+    if (pendingTone && oldest) dispatch({ type: 'botClick', id: oldest });
+    else dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' });
+  };
   const handleContentRef = useRef<HTMLDivElement>(null);
   const [handleW, setHandleW] = useState(0);
   useLayoutEffect(() => {
@@ -787,7 +794,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         <div data-zoom="handle" style={{ position: 'absolute', left: 0, top: 0, zoom: hs }}>
           <Handle contentRef={handleContentRef} updatePip={updatePip} updateVersion={updateVersion} onUpdate={() => openInLedge({ kind: 'update' })} sessionCount={sessions.length} visible={st.mode === 'handle'} strip={strip} awake={awake}
             line={line} described={described} aged={aged} onOpenLine={id => openInLedge({ kind: 'session', id })} pending={pendingTone}
-            music={music} trackKey={notchLine.view.trackKey} musicOpen={musicOpen} onMusicOpen={setMusicOpen} onMedia={c => { void mediaCommand(c); }} onOpenHome={() => dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' })} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
+            music={music} trackKey={notchLine.view.trackKey} musicOpen={musicOpen} onMusicOpen={setMusicOpen} onMedia={c => { void mediaCommand(c); }} onOpenHome={openHome} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}

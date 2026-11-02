@@ -232,6 +232,35 @@ describe('<Surface>', () => {
     expect(line()?.textContent).toMatch(/\ds ago/);
   });
 
+  it('while requests wait, Ledge reopens the oldest one; without any, it opens the chat', async () => {
+    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
+    await act(async () => { mock.upsert(fakeSession('a', { state: 'waiting_input', pending: { kind: 'question', text: 'Which?', source: 'hook' } })); await sleep(30); mock.upsert(pimAsks()); await sleep(50); vi.advanceTimersByTime(540); });
+    const bubble = () => document.querySelector('[data-layer="bubble"]') as HTMLElement;
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    expect(bubble()).toHaveTextContent('Which?');
+    fireEvent.click(screen.getByRole('button', { name: /^Later/ }));
+    expect(bubble()).toHaveTextContent('npm test');
+    fireEvent.click(screen.getByRole('button', { name: /^Later/ }));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    await act(async () => { vi.advanceTimersByTime(5000); });
+    expect(mark()).toHaveAttribute('data-pending', 'permission');
+    // The oldest first: Otto's question, then Pim's permission once Otto's is answered.
+    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    expect(bubble()).toHaveTextContent('Which?');
+    fireEvent.click(screen.getByRole('button', { name: /^Later/ }));
+    await act(async () => { mock.upsert(fakeSession('a')); await sleep(50); });
+    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(bubble()).toHaveTextContent('npm test');
+    fireEvent.click(screen.getByRole('button', { name: /^Later/ }));
+    await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); });
+    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(surface()).toHaveAttribute('data-mode', 'chat');
+  });
+
   it('the chat stays open when the pointer leaves, and Close folds it', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
