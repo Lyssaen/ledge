@@ -32,6 +32,42 @@ describe('activity feed', () => {
     expect(feed.push(item(tool('failed', { id: 'tu2' })))).toBeNull();
   });
 
+  it('stays on the actions still running when one of parallel actions ends', () => {
+    const feed = createActivityFeed();
+    feed.push(snapshot(session()));
+    feed.push(item(tool('running', { id: 'a' })));
+    feed.push(item(tool('running', { id: 'b', label: 'pnpm build' })));
+    // a ends first, b still runs: no thinking
+    expect(feed.push(item(tool('success', { id: 'a' })))).toBeNull();
+    // b ends last: thinking
+    expect(feed.push(item(tool('success', { id: 'b', at: T1 })))).toEqual({ kind: 'thinking', session: 's1', at: T1 });
+    // interleaved again: c starts, d starts, c ends, d ends
+    feed.push(item(tool('running', { id: 'c' })));
+    feed.push(item(tool('running', { id: 'd' })));
+    expect(feed.push(item(tool('failed', { id: 'c' })))).toBeNull();
+    expect(feed.push(item(tool('success', { id: 'd' })))).toMatchObject({ kind: 'thinking' });
+  });
+
+  it('counts a helper\'s actions apart from its main agent\'s', () => {
+    const feed = createActivityFeed();
+    feed.push(snapshot(session()));
+    feed.push(item(tool('running', { id: 'main' })));
+    feed.push(item(tool('running', { id: 'sub', helperId: 'h1' })));
+    // the helper is back to thinking even though its main agent's action still runs
+    expect(feed.push(item(tool('success', { id: 'sub', helperId: 'h1' })))).toEqual({ kind: 'thinking', session: 's1', at: T0, helperId: 'h1' });
+    expect(feed.push(item(tool('success', { id: 'main' })))).toEqual({ kind: 'thinking', session: 's1', at: T0 });
+  });
+
+  it('forgets an interrupted action once the turn ends', () => {
+    const feed = createActivityFeed();
+    feed.push(snapshot(session()));
+    feed.push(item(tool('running', { id: 'lost' })));
+    feed.push(updated(session({ state: 'idle' })));
+    feed.push(updated(session({ state: 'working' })));
+    feed.push(item(tool('running', { id: 'next' })));
+    expect(feed.push(item(tool('success', { id: 'next' })))).toMatchObject({ kind: 'thinking' });
+  });
+
   it('starts thinking on a prompt', () => {
     const feed = createActivityFeed();
     expect(feed.push(item({ kind: 'prompt', id: 'p1', at: T0, turn: 1, text: 'go' }))).toEqual({ kind: 'thinking', session: 's1', at: T0 });

@@ -57,20 +57,28 @@ export function createActivityFeed(): ActivityFeed {
     return true;
   };
   const helper = (helperId: string | undefined) => (helperId ? { helperId } : {});
+  /** The actions running, by session and helper (`<session>/<helper>`): an agent thinks only once none runs. */
+  const running = new Map<string, Set<string>>();
+  const lane = (session: string, helperId: string | undefined) => `${session}/${helperId ?? ''}`;
+  const forget = (session: string) => { for (const k of [...running.keys()]) if (k.startsWith(`${session}/`)) running.delete(k); };
 
   return {
     push(msg) {
       switch (msg.type) {
         case 'snapshot':
           sessions.clear();
+          running.clear();
           for (const s of msg.sessions) sessions.set(s.id, s);
           return null;
         case 'session.removed':
           sessions.delete(msg.id);
+          forget(msg.id);
           return null;
         case 'session.updated': {
           const prev = sessions.get(msg.session.id);
           sessions.set(msg.session.id, msg.session);
+          // A turn that ends leaves nothing running (an interrupted action never reports its end).
+          if (msg.session.state !== 'working') forget(msg.session.id);
           return prev ? fromTransition(prev, msg.session) : null;
         }
         case 'session.thread.item': {
@@ -88,12 +96,21 @@ export function createActivityFeed(): ActivityFeed {
               return { kind: 'message', session, at: item.at, ...helper(item.helperId), direction: 'in', counterpart: item.from,
                 ...(item.peer ? { peer: item.peer } : {}), summary: summaryOf(undefined, item.text) };
             case 'tool':
+            {
+              const key = lane(session, item.helperId);
               if (item.status === 'running') {
-                return firstSight(`${session}/${item.id}`) ? { kind: 'tool', session, at: item.at, ...helper(item.helperId), tool: item.tool, label: item.label } : null;
+                if (!firstSight(`${session}/${item.id}`)) return null;
+                running.set(key, (running.get(key) ?? new Set()).add(item.id));
+                return { kind: 'tool', session, at: item.at, ...helper(item.helperId), tool: item.tool, label: item.label };
               }
-              // An action that ends while the turn goes on: the agent is back to thinking. Its end is seen once.
-              if (!firstSight(`${session}/${item.id}/end`) || s?.state !== 'working') return null;
+              // An action that ends while the turn goes on and no other action of that agent still runs: the agent is
+              // back to thinking. Its end is seen once.
+              const lanes = running.get(key);
+              lanes?.delete(item.id);
+              if (lanes?.size === 0) running.delete(key);
+              if (!firstSight(`${session}/${item.id}/end`) || s?.state !== 'working' || (lanes?.size ?? 0) > 0) return null;
               return { kind: 'thinking', session, at: item.at, ...helper(item.helperId) };
+            }
             case 'prompt':
               return firstSight(`${session}/${item.id}`) ? { kind: 'thinking', session, at: item.at, ...helper(item.helperId) } : null;
             default:
