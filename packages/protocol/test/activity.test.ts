@@ -58,6 +58,20 @@ describe('activity feed', () => {
     expect(feed.push(item(tool('success', { id: 'main' })))).toEqual({ kind: 'thinking', session: 's1', at: T0 });
   });
 
+  it('keeps parallel actions across a wait for the user', () => {
+    const feed = createActivityFeed();
+    feed.push(snapshot(session()));
+    feed.push(item(tool('running', { id: 'a' })));
+    feed.push(item(tool('running', { id: 'b' })));
+    feed.push(updated(session({ state: 'waiting_permission', pending: { kind: 'permission', text: 'rm x', tool: 'Bash', source: 'hook' } })));
+    feed.push(updated(session({ state: 'working' })));
+    // a ends, b started before the ask still runs: no thinking
+    expect(feed.push(item(tool('success', { id: 'a' })))).toBeNull();
+    feed.push(updated(session({ state: 'waiting_input', pending: { kind: 'question', text: 'ok?', source: 'hook' } })));
+    feed.push(updated(session({ state: 'working' })));
+    expect(feed.push(item(tool('success', { id: 'b' })))).toMatchObject({ kind: 'thinking' });
+  });
+
   it('forgets an interrupted action once the turn ends', () => {
     const feed = createActivityFeed();
     feed.push(snapshot(session()));

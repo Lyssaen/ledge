@@ -77,8 +77,9 @@ export function createActivityFeed(): ActivityFeed {
         case 'session.updated': {
           const prev = sessions.get(msg.session.id);
           sessions.set(msg.session.id, msg.session);
-          // A turn that ends leaves nothing running (an interrupted action never reports its end).
-          if (msg.session.state !== 'working') forget(msg.session.id);
+          // A turn that ends leaves nothing running (an interrupted action never reports its end). A wait for the user
+          // (permission, question) only pauses the turn: its actions still run.
+          if (msg.session.state === 'idle' || msg.session.state === 'exited' || msg.session.state === 'error') forget(msg.session.id);
           return prev ? fromTransition(prev, msg.session) : null;
         }
         case 'session.thread.item': {

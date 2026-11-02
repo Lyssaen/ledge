@@ -73,14 +73,47 @@ pub fn play_pause_op(playing: bool, toggle: bool, play: bool, pause: bool) -> Op
     else { None }
 }
 
-/// Reads of a missing thumbnail on plain polls, for one track, before waiting for the player's next change notice.
+/// Passes (one per event burst or poll) a cover keeps being read after a new track or a properties notice, until one
+/// read settles it: players publish the thumbnail late, and its stream can be briefly unreadable while they swap it.
 pub const ARTWORK_TRIES: u32 = 10;
 
-/// Whether this pass reads the thumbnail: always for a new track, and after the player said its properties changed (a
-/// cover published late, corrected or replaced under the same title); on a plain poll, only while it is missing and
-/// tries remain.
-pub fn should_read_artwork(new_track: bool, props_changed: bool, has: bool, tries: u32) -> bool {
-    new_track || props_changed || (!has && tries < ARTWORK_TRIES)
+/// What one read of the thumbnail gave.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ArtRead {
+    /// A cover: it replaces the one shown.
+    Image(String),
+    /// The player has none (or one too big or not an image): none is shown, the read goes on while tries remain, in
+    /// case it is published late.
+    Absent,
+    /// The stream could not be read: the cover shown stays, the read goes on while tries remain.
+    Unreadable,
+}
+
+/// The cover of the track shown and the reads still owed: a new track or a properties notice owes ARTWORK_TRIES reads,
+/// a cover read settles them. A pending read survives a failure even while an older cover shows.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Artwork { pub url: Option<String>, pub pending: u32 }
+
+impl Artwork {
+    /// A new track starts with no cover; a new track or a properties notice owes reads.
+    pub fn begin(&mut self, new_track: bool, props_changed: bool) {
+        if new_track { self.url = None; }
+        if new_track || props_changed { self.pending = ARTWORK_TRIES; }
+    }
+    pub fn wants_read(&self) -> bool { self.pending > 0 }
+    pub fn settle(&mut self, read: ArtRead) {
+        match read {
+            ArtRead::Image(url) => { self.url = Some(url); self.pending = 0; }
+            ArtRead::Absent => { self.url = None; self.pending = self.pending.saturating_sub(1); }
+            ArtRead::Unreadable => { self.pending = self.pending.saturating_sub(1); }
+        }
+    }
+}
+
+/// Whether two lists hold the same sessions in the same order, by `same` (COM identity on Windows): a session replaced
+/// by another of the same app is a change, and its events must be followed on the new one.
+pub fn same_sessions<T>(a: &[T], b: &[T], same: impl Fn(&T, &T) -> bool) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| same(x, y))
 }
 
 /// The artwork as a data URL: the player's content type when it is an image one, else the bytes' own signature. Empty,
@@ -161,7 +194,7 @@ mod platform {
     use windows::Storage::Streams::DataReader;
     use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 
-    use super::{data_url, pick, play_pause_op, should_read_artwork, Command, Controls, Media, NowPlaying, PlayPauseOp, Player, NOW_PLAYING_EVENT};
+    use super::{data_url, pick, play_pause_op, same_sessions, ArtRead, Artwork, Command, Controls, Media, NowPlaying, PlayPauseOp, Player, NOW_PLAYING_EVENT};
 
     /// A read even when no event comes: a player that publishes no change notice is still followed.
     const POLL: Duration = Duration::from_secs(2);
@@ -202,7 +235,8 @@ mod platform {
     }
 
     /// The track the artwork belongs to, its data URL when read, and how many reads came back without one.
-    struct Artwork { key: (String, String, String, String), url: Option<String>, tries: u32 }
+    /// The track (player, title, artist, album) the cover belongs to.
+    type TrackKey = (String, String, String, String);
 
     fn watch(app: AppHandle, mgr: SessionManager) {
         let (tx, rx) = mpsc::channel::<Signal>();
@@ -210,21 +244,22 @@ mod platform {
         let _ = mgr.SessionsChanged(&TypedEventHandler::new(move |_, _| { let _ = t.send(Signal::Other); Ok(()) }));
         let t = tx.clone();
         let _ = mgr.CurrentSessionChanged(&TypedEventHandler::new(move |_, _| { let _ = t.send(Signal::Other); Ok(()) }));
-        let mut watched: Vec<(Session, String, EventRegistrationToken, EventRegistrationToken)> = Vec::new();
+        let mut watched: Vec<(Session, EventRegistrationToken, EventRegistrationToken)> = Vec::new();
         let mut names: HashMap<String, Option<String>> = HashMap::new();
-        let mut artwork: Option<Artwork> = None;
+        let mut artwork: Option<(TrackKey, Artwork)> = None;
         let mut last: Option<Option<NowPlaying>> = None;
         let mut props_changed = false;
         loop {
             let sessions = sessions_of(&mgr);
             let ids: Vec<String> = sessions.iter().map(id_of).collect();
-            if watched.iter().map(|w| &w.1).ne(ids.iter()) {
-                for (s, _, a, b) in watched.drain(..) { let _ = s.RemoveMediaPropertiesChanged(a); let _ = s.RemovePlaybackInfoChanged(b); }
-                for (s, id) in sessions.iter().zip(&ids) {
+            let held: Vec<Session> = watched.iter().map(|w| w.0.clone()).collect();
+            if !same_sessions(&held, &sessions, same) {
+                for (s, a, b) in watched.drain(..) { let _ = s.RemoveMediaPropertiesChanged(a); let _ = s.RemovePlaybackInfoChanged(b); }
+                for s in &sessions {
                     let (t1, t2) = (tx.clone(), tx.clone());
                     let a = s.MediaPropertiesChanged(&TypedEventHandler::new(move |_, _| { let _ = t1.send(Signal::Properties); Ok(()) }));
                     let b = s.PlaybackInfoChanged(&TypedEventHandler::new(move |_, _| { let _ = t2.send(Signal::Other); Ok(()) }));
-                    if let (Ok(a), Ok(b)) = (a, b) { watched.push((s.clone(), id.clone(), a, b)); }
+                    if let (Ok(a), Ok(b)) = (a, b) { watched.push((s.clone(), a, b)); }
                 }
             }
             let (state, selected) = read(&mgr, &sessions, &ids, &mut names, &mut artwork, props_changed);
@@ -248,7 +283,7 @@ mod platform {
     }
 
     /// The state to report and the session it comes from.
-    fn read(mgr: &SessionManager, sessions: &[Session], ids: &[String], names: &mut HashMap<String, Option<String>>, artwork: &mut Option<Artwork>, props_changed: bool) -> (Option<NowPlaying>, Option<Session>) {
+    fn read(mgr: &SessionManager, sessions: &[Session], ids: &[String], names: &mut HashMap<String, Option<String>>, artwork: &mut Option<(TrackKey, Artwork)>, props_changed: bool) -> (Option<NowPlaying>, Option<Session>) {
         let current = mgr.GetCurrentSession().ok().and_then(|c| sessions.iter().position(|s| same(s, &c)));
         let playing: Vec<bool> = sessions.iter()
             .map(|s| s.GetPlaybackInfo().and_then(|i| i.PlaybackStatus()).map(|st| st == Status::Playing).unwrap_or(false)).collect();
@@ -257,7 +292,7 @@ mod platform {
         (state_of(s, id, playing[i], names, artwork, props_changed), Some(s.clone()))
     }
 
-    fn state_of(s: &Session, id: &str, playing: bool, names: &mut HashMap<String, Option<String>>, artwork: &mut Option<Artwork>, props_changed: bool) -> Option<NowPlaying> {
+    fn state_of(s: &Session, id: &str, playing: bool, names: &mut HashMap<String, Option<String>>, artwork: &mut Option<(TrackKey, Artwork)>, props_changed: bool) -> Option<NowPlaying> {
         let props = s.TryGetMediaPropertiesAsync().ok()?.get().ok()?;
         let title = props.Title().map(|h| h.to_string()).unwrap_or_default();
         if title.trim().is_empty() || id.is_empty() { return None; }
@@ -271,17 +306,11 @@ mod platform {
             next: flag(&|c| c.IsNextEnabled()),
         };
         let key = (id.to_string(), title.clone(), artist.clone(), album.clone().unwrap_or_default());
-        let new_track = !matches!(artwork, Some(a) if a.key == key);
-        if new_track { *artwork = Some(Artwork { key, url: None, tries: 0 }); }
-        let art = artwork.as_mut().expect("set above");
-        if should_read_artwork(new_track, props_changed, art.url.is_some(), art.tries) {
-            // A cover read replaces the one shown; a failed read keeps it (the thumbnail stream is briefly unreadable
-            // while the player swaps it) and counts as a try while there is none.
-            match thumbnail(&props) {
-                Some(url) => { art.url = Some(url); art.tries = 0; }
-                None => if art.url.is_none() { art.tries += 1; },
-            }
-        }
+        let new_track = !matches!(artwork, Some((k, _)) if *k == key);
+        if new_track { *artwork = Some((key, Artwork::default())); }
+        let art = &mut artwork.as_mut().expect("set above").1;
+        art.begin(new_track, props_changed);
+        if art.wants_read() { art.settle(thumbnail(&props)); }
         let name = names.entry(id.to_string()).or_insert_with(|| display_name(id)).clone();
         Some(NowPlaying {
             title, artist, album, artwork: art.url.clone(), playing, can,
@@ -289,16 +318,24 @@ mod platform {
         })
     }
 
-    fn thumbnail(props: &Properties) -> Option<String> {
-        let stream = props.Thumbnail().ok()?.OpenReadAsync().ok()?.get().ok()?;
-        let size = stream.Size().ok()?;
-        if size == 0 || size > super::ARTWORK_MAX_BYTES as u64 { return None; }
-        let content_type = stream.ContentType().map(|h| h.to_string()).unwrap_or_default();
-        let reader = DataReader::CreateDataReader(&stream).ok()?;
-        let loaded = reader.LoadAsync(size as u32).ok()?.get().ok()? as usize;
-        let mut bytes = vec![0u8; loaded];
-        reader.ReadBytes(&mut bytes).ok()?;
-        data_url(&content_type, &bytes)
+    /// The cover: none published (the property is null) is `Absent`, a stream that fails is `Unreadable`.
+    fn thumbnail(props: &Properties) -> ArtRead {
+        let Ok(reference) = props.Thumbnail() else { return ArtRead::Absent };
+        let read = || -> windows::core::Result<(String, Vec<u8>)> {
+            let stream = reference.OpenReadAsync()?.get()?;
+            let size = stream.Size()?;
+            if size == 0 || size > super::ARTWORK_MAX_BYTES as u64 { return Ok((String::new(), Vec::new())); }
+            let content_type = stream.ContentType().map(|h| h.to_string()).unwrap_or_default();
+            let reader = DataReader::CreateDataReader(&stream)?;
+            let loaded = reader.LoadAsync(size as u32)?.get()? as usize;
+            let mut bytes = vec![0u8; loaded];
+            reader.ReadBytes(&mut bytes)?;
+            Ok((content_type, bytes))
+        };
+        match read() {
+            Ok((content_type, bytes)) => data_url(&content_type, &bytes).map(ArtRead::Image).unwrap_or(ArtRead::Absent),
+            Err(_) => ArtRead::Unreadable,
+        }
     }
 
     /// The player's name as Windows shows it (a packaged app, or one it registered); none for a plain exe it cannot name.
@@ -402,14 +439,50 @@ mod tests {
 
     #[test]
     fn the_cover_is_read_again_when_the_player_changes_it() {
-        // a new track, and a properties notice for the same track (a late, corrected or replaced cover)
-        assert!(should_read_artwork(true, false, false, ARTWORK_TRIES));
-        assert!(should_read_artwork(false, true, true, 0));
-        assert!(should_read_artwork(false, true, false, ARTWORK_TRIES));
-        // a plain poll: only while missing and tries remain
-        assert!(should_read_artwork(false, false, false, ARTWORK_TRIES - 1));
-        assert!(!should_read_artwork(false, false, false, ARTWORK_TRIES));
-        assert!(!should_read_artwork(false, false, true, 0));
+        let mut a = Artwork::default();
+        // a new track whose cover comes late: absent, then there, read on plain polls
+        a.begin(true, false);
+        a.settle(ArtRead::Absent);
+        assert!(a.wants_read());
+        a.begin(false, false);
+        a.settle(ArtRead::Image("data:image/png;base64,A".into()));
+        assert_eq!(a.url.as_deref(), Some("data:image/png;base64,A"));
+        assert!(!a.wants_read());
+        // a plain poll with the cover settled reads nothing
+        a.begin(false, false);
+        assert!(!a.wants_read());
+        // a properties notice, a transient failure while the old cover shows, then success on a plain poll
+        a.begin(false, true);
+        a.settle(ArtRead::Unreadable);
+        assert_eq!(a.url.as_deref(), Some("data:image/png;base64,A"));
+        a.begin(false, false);
+        assert!(a.wants_read());
+        a.settle(ArtRead::Image("data:image/png;base64,B".into()));
+        assert_eq!(a.url.as_deref(), Some("data:image/png;base64,B"));
+        // a cover the player takes away is taken away
+        a.begin(false, true);
+        a.settle(ArtRead::Absent);
+        assert_eq!(a.url, None);
+        // reads stop after ARTWORK_TRIES failures, until the next notice
+        for _ in 0..ARTWORK_TRIES { a.begin(false, false); a.settle(ArtRead::Unreadable); }
+        assert!(!a.wants_read());
+        a.begin(false, true);
+        assert!(a.wants_read());
+        // a new track drops the old cover
+        a.settle(ArtRead::Image("x".into()));
+        a.begin(true, false);
+        assert_eq!(a.url, None);
+    }
+
+    #[test]
+    fn a_session_replaced_by_another_of_the_same_app_is_a_change() {
+        // (app id, object identity): the same app, another session object
+        let held = [("MSEdge", 1), ("Spotify.exe", 2)];
+        let now = [("MSEdge", 3), ("Spotify.exe", 2)];
+        let same = |a: &(&str, i32), b: &(&str, i32)| a.1 == b.1;
+        assert!(!same_sessions(&held, &now, same));
+        assert!(same_sessions(&held, &held, same));
+        assert!(!same_sessions(&held, &held[..1], same));
     }
 
     /// Reads this PC's media session for real: `cargo test -- --ignored live_media --nocapture` while something plays.
@@ -418,8 +491,13 @@ mod tests {
     #[ignore]
     fn live_media_read() {
         let state = platform::snapshot();
-        let json = serde_json::to_string(&state).unwrap();
-        println!("now playing: {}", json.chars().take(400).collect::<String>());
+        let mut json = serde_json::to_value(&state).unwrap();
+        if let Some(art) = json.get_mut("artwork") {
+            let len = art.as_str().map(|a| a.len()).unwrap_or(0);
+            let head: String = art.as_str().unwrap_or("").chars().take(30).collect();
+            *art = serde_json::Value::String(format!("{head}… ({len} chars)"));
+        }
+        println!("now playing: {json}");
     }
 
     /// Drives this PC's player for real, then reads it again: `LEDGE_MEDIA_CMD=next|play_pause|previous cargo test --
@@ -433,7 +511,7 @@ mod tests {
         let took = platform::command(cmd);
         std::thread::sleep(std::time::Duration::from_secs(2));
         let after = platform::snapshot();
-        let line = |n: &Option<NowPlaying>| n.as_ref().map(|n| format!("{} — {} (playing: {}, artwork: {})", n.title, n.artist, n.playing, n.artwork.is_some())).unwrap_or("null".into());
+        let line = |n: &Option<NowPlaying>| n.as_ref().map(|n| format!("{} — {} (playing: {}, artwork: {:?} chars, can: {:?})", n.title, n.artist, n.playing, n.artwork.as_ref().map(|a| a.len()), n.can)).unwrap_or("null".into());
         println!("player: {} {:?}\ncommand {cmd:?} taken: {took}\nbefore: {}\nafter:  {}", before.player.id, before.player.name, line(&Some(before.clone())), line(&after));
     }
 
