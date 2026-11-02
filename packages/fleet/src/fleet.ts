@@ -64,9 +64,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     : a.kind === 'goalReply' ? { type: 'openrig.goal.replied', requestId, machineId, goalId: a.goalId ?? '', replyId: a.replyId ?? '', ok: false, error }
     : { type: 'openrig.state', requestId, machineId, error };
   /** The OpenRig writes whose end is told `uncertain` when their machine drops after they were sent (a refusal before sending stays `offline`). */
-  const SENT_WRITES: ReadonlySet<RigKind> = new Set(['answer']);
+  const SENT_WRITES: ReadonlySet<RigKind> = new Set(['answer', 'goalSend', 'goalReply']);
   const rigUncertain = (a: RigAsk, requestId: string, machineId: string): ServerMessage =>
-    ({ type: 'openrig.answered', requestId, machineId, qitemId: a.qitemId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' });
+    a.kind === 'answer' ? { type: 'openrig.answered', requestId, machineId, qitemId: a.qitemId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' }
+    : a.kind === 'goalSend' ? { type: 'openrig.goal.sent', requestId, machineId, goalId: a.goalId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' }
+    : { type: 'openrig.goal.replied', requestId, machineId, goalId: a.goalId ?? '', replyId: a.replyId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' };
   /** `openrig.status` / `openrig.act` requestId -> the machine asked, so only its answer is emitted (a drop or a refusal answers « offline » or « outdated »). */
   const rigAsks = new Map<string, RigAsk>();
   /** Each pending OpenRig ask of `machine` (of `kinds` only, when given) is answered with `error`: 'offline' when it dropped,
@@ -74,8 +76,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const answerFailedRigs = (machine: string, error: 'offline' | 'outdated', kinds?: readonly RigKind[]) => {
     for (const [requestId, a] of rigAsks) if (a.machine === machine && (!kinds || kinds.includes(a.kind))) {
       rigAsks.delete(requestId);
-      // A write already handed to the machine (an answer to OpenRig) that drops before its end may have been done there: `uncertain`,
-      // never `offline`, which says nothing left (sending it again is safe: OpenRig records an answer once).
+      // A write already handed to the machine (a goal, a word to Max, an answer) that drops before its end may have been done there:
+      // `uncertain`, never `offline`, which says nothing left (sending it again with the same id is safe).
       emit(error === 'offline' && SENT_WRITES.has(a.kind) ? rigUncertain(a, requestId, machine) : rigFailure(a, requestId, machine, error));
     }
   };

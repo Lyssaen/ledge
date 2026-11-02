@@ -236,6 +236,18 @@ describe('reading the goals', () => {
     expect(await createGoals({ state: async () => RUNNING, run, http: full.http }).list()).toEqual({ goals: [], partial: true });
   });
 
+  it('a goal row handed on whose successor is not found is running and partial, never closed', async () => {
+    const s = serve({ [L('sourceSession=ledge%40external')]: [goalRow('lost', 'done', '2026-11-02T19:41:00.000Z', { handedOffTo: 'pilot-lead@ledge-dev', closureReason: 'handed_off_to' })] });
+    const l = await createGoals({ state: async () => RUNNING, run, http: s.http }).list();
+    expect(l.partial).toBe(true);
+    expect(l.goals[0]).toMatchObject({ state: 'running' });
+  });
+
+  it('a first read that fails, with nothing known yet, is an empty list said partial, not an empty list', async () => {
+    expect(await createGoals({ state: async () => RUNNING, run, http: async () => ({ status: 503, json: {} }) }).list()).toEqual({ goals: [], partial: true });
+    expect(await createGoals({ state: async () => ({ ...RUNNING, daemon: { state: 'unknown' } }), run }).list()).toEqual({ goals: [], partial: true });
+  });
+
   it('a list that cannot be read keeps the goals known, partial; a stop empties them', async () => {
     let fail = false, st: OpenRigState = RUNNING;
     const ok = serve({ [L('sourceSession=ledge%40external')]: [goalRow('k', 'pending', '2026-11-02T19:41:00.000Z')] });

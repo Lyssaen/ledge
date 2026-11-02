@@ -480,6 +480,21 @@ describe('multi-machine connections', () => {
     client.send({ type: 'openrig.goal.send', requestId: 'g5', machineId: 'server', goalId: 'abcdef12-0001', text: 'z' });
     expect(goals().at(-1)).toEqual({ type: 'openrig.goal.sent', requestId: 'g5', machineId: 'server', goalId: 'abcdef12-0001', ok: false, error: 'offline' });
   });
+  it('a write already sent whose machine drops is uncertain, never offline; a read stays offline; a write refused before sending is offline', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'openrig.goal.send', requestId: 'w1', machineId: 'server', goalId: 'abcdef12-0000', text: 'x' });
+    client.send({ type: 'openrig.goal.reply', requestId: 'w2', machineId: 'server', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', text: 'y' });
+    client.send({ type: 'openrig.answer', requestId: 'w3', machineId: 'server', qitemId: 'q1', answer: { kind: 'seen' } });
+    client.send({ type: 'openrig.goals', requestId: 'w4', machineId: 'server' });
+    server.set('unreachable');
+    const end = (id: string) => got.find(m => 'requestId' in m && m.requestId === id);
+    expect(end('w1')).toMatchObject({ type: 'openrig.goal.sent', goalId: 'abcdef12-0000', ok: false, error: 'uncertain' });
+    expect(end('w2')).toMatchObject({ type: 'openrig.goal.replied', replyId: 'fedcba98-0000', ok: false, error: 'uncertain' });
+    expect(end('w3')).toMatchObject({ type: 'openrig.answered', qitemId: 'q1', ok: false, error: 'uncertain' });
+    expect(end('w4')).toMatchObject({ type: 'openrig.goalsChanged', error: 'offline' });
+    client.send({ type: 'openrig.goal.send', requestId: 'w5', machineId: 'server', goalId: 'abcdef12-0001', text: 'z' });
+    expect(end('w5')).toMatchObject({ ok: false, error: 'offline' });
+  });
   it('routes roles, a role and a role file to their machine; an older daemon refuses only those, the others stay pending', () => {
     const { client, server, got } = setup();
     const roles = () => got.filter(m => m.type === 'openrig.roleList' || m.type === 'openrig.roleDetail' || m.type === 'openrig.roleFileContent' || m.type === 'openrig.state');

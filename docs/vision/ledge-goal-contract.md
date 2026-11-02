@@ -153,6 +153,10 @@ qu'ils étaient lus, sans état fabriqué à partir de ce qui manque, et une cha
 `done`. Seul un arrêt confirmé d'OpenRig vide la liste ; l'absence de Max n'empêche pas de la lire. Le trajet suit aussi une ligne
 transmise par `handoff-and-complete` (close `done`, mais avec un successeur).
 
+La flotte répond `offline` seulement si rien n'est parti (machine injoignable avant l'envoi) ; une machine qui tombe après l'envoi
+d'un objectif, d'une réponse à Max ou d'une réponse de « À toi » donne `uncertain`. Une première lecture ratée est `partial`, même
+sans rien de connu ; une ligne d'objectif transmise dont le successeur est introuvable est `running` et `partial`.
+
 Le hook `useOpenRigGoals` termine toujours un envoi : `offline` si la connexion n'était pas ouverte (rien n'est parti),
 `uncertain` si elle tombe pendant l'attente ou si rien ne revient en 45 s (renvoyer avec le même `goalId` / `replyId` est sûr).
 

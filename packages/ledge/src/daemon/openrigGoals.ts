@@ -138,7 +138,8 @@ export function createGoals(deps: GoalsDeps): GoalsService {
     // Reading needs OpenRig only, not Max: only a stop OpenRig confirms (or no OpenRig at all) empties the list.
     const st = await deps.state();
     if (!st.installed || st.daemon.state === 'stopped') { known = new Map(); return { goals: [] }; }
-    const kept = (): GoalsList => ({ goals: [...known.values()], ...(known.size ? { partial: true } : {}) });
+    // A read that fails is partial even with nothing known yet: an empty list is said only when read.
+    const kept = (): GoalsList => ({ goals: [...known.values()], partial: true });
     if (st.daemon.state !== 'running' || !st.daemon.port) return kept();
     const url = `http://127.0.0.1:${st.daemon.port}`;
     let partial = false, missed = false;
@@ -185,10 +186,14 @@ export function createGoals(deps: GoalsDeps): GoalsService {
       const successor = async (id: string) => (await rows(`/api/queue/list?handedOffFrom=${encodeURIComponent(id)}`, 5))?.[0];
       const chain: Json[] = [];
       let first = await successor(qitemId);
-      if (!first && TERMINAL.has(str(g.state) ?? '') && !str(g.handedOffTo)) {
+      const rootHandedOn = str(g.state) === 'handed-off' || !!str(g.handedOffTo) || str(g.closureReason) === 'handed_off_to';
+      if (!first && TERMINAL.has(str(g.state) ?? '') && !rootHandedOn) {
         first = (await taggedRows()).filter(r => goalOf(r.tags) === qitemId && r.destinationSession !== PERSON && r.sourceSession !== PERSON)
           .sort((a, b) => (str(a.tsCreated) ?? '').localeCompare(str(b.tsCreated) ?? ''))[0];
       }
+      // The goal row was handed on but its successor was not found: where the goal is now is not known.
+      const rootLost = !first && rootHandedOn;
+      if (rootLost) missed = partial = true;
       let cut = false;
       for (let row = first; row; ) {
         if (chain.length >= CHAIN_MAX) { cut = true; break; }
@@ -223,6 +228,7 @@ export function createGoals(deps: GoalsDeps): GoalsService {
       const lastOpen = last && (cut || missed || !TERMINAL.has(str(last.state) ?? ''));
       const state: Goal['state'] = q ? 'asking'
         : p && str(p.state) === 'pending' ? 'proposed'
+        : rootLost ? 'running'
         : last ? (lastOpen ? 'running' : str(last.state) === 'done' ? 'done' : 'closed')
         : str(g.state) === 'pending' ? 'sent'
         : TERMINAL.has(str(g.state) ?? '') ? 'closed' : 'taken';
