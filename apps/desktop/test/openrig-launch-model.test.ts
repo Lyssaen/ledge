@@ -28,3 +28,16 @@ describe('the launch form', () => {
     expect(folderChoices(null, 'local')).toEqual([]);
   });
 });
+
+describe('permissions in the launch form', () => {
+  it('sends the rig\'s policy and a role\'s, and --non-interruptive only when a seat is YOLO', async () => {
+    const { bypasses, builtinOf } = await import('../src/openrig/model');
+    const base = emptyForm(STARTER, '/w');
+    expect(launchOf(STARTER, { ...base, policy: 'auto', nonInterruptive: true }, false)).toEqual({ spec: 'starter', cwd: '/w', name: 'starter', policy: 'auto' });
+    const yolo = { ...base, policies: { 'dev.review': 'yolo' as const }, nonInterruptive: true };
+    expect(bypasses(yolo)).toBe(true);
+    expect(launchOf(STARTER, yolo, false)).toEqual({ spec: 'starter', cwd: '/w', name: 'starter', policies: { 'dev.review': 'yolo' }, nonInterruptive: true });
+    expect(builtinOf('builtin:standard')).toBe('standard');
+    expect(builtinOf('policies/mine.policy.md')).toBeNull();
+  });
+});

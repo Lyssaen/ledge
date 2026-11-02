@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigState, RigLaunch, RigSpec } from '@ledge/protocol';
+import type { OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigState, RigLaunch, RigSpec } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
 /** How often a screen that shows a machine's OpenRig asks it again. */
@@ -107,5 +107,17 @@ export function launchRig(client: DaemonClient, machine: string, launch: RigLaun
       off(); resolve(m);
     });
     client.send({ type: 'openrig.launch', requestId, launch, machineId: machine });
+  });
+}
+
+/** Brings a running rig's roles to `seats` (role -> count) on a machine; resolves with what changed. */
+export function reseatRig(client: DaemonClient, machine: string, rig: string, seats: Record<string, number>, delegation?: 'pairs' | 'all'): Promise<OpenRigReseated> {
+  const requestId = `openrig-seats-${++next}`;
+  return new Promise(resolve => {
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.reseated' || m.requestId !== requestId) return;
+      off(); resolve(m);
+    });
+    client.send({ type: 'openrig.seats', requestId, machineId: machine, rig, seats, ...(delegation ? { delegation } : {}) });
   });
 }

@@ -108,11 +108,12 @@ export const showRigCommand = (args: string[]): string => ['rig', ...args.filter
 // ── Lot 2: launching a rig (docs/mockups/ledge-openrig.html, view 6) ──
 
 /** A seat of a spec, as the launch form shows it: its role (`pod.member`), its harness, its model when the spec sets one, the agent it runs. */
-export const RigSpecMemberSchema = z.object({ id: z.string(), runtime: z.string(), model: z.string().optional(), agent: z.string() });
+export const RigSpecMemberSchema = z.object({ id: z.string(), runtime: z.string(), model: z.string().optional(), agent: z.string(), /** Its `permission_policy`, as written. */ policy: z.string().optional() });
 export const RigSpecPodSchema = z.object({ id: z.string(), label: z.string().optional(), members: z.array(RigSpecMemberSchema) });
 /** A rig spec of the machine's library: `source` `builtin` (shipped with OpenRig) or `user` (the person's own). */
 export const RigSpecSchema = z.object({
   name: z.string(), source: z.string(), summary: z.string().optional(), path: z.string(),
+  /** The rig's `permission_policy`, as written (`builtin:auto`, a file…). */ policy: z.string().optional(),
   pods: z.array(RigSpecPodSchema), edges: z.number().int().min(0)
 });
 export type RigSpec = z.infer<typeof RigSpecSchema>;
@@ -130,12 +131,21 @@ const RuntimeSchema = z.enum(['claude-code', 'codex']);
 /** What the launch form asks for. `seats`: how many of each role (1 when absent, 0 drops it); `runtimes` / `models` replace the spec's
  *  for a role; `delegation`: how added seats delegate (`pairs`: build-2 → review-2, `all`: each to each); `save`: keep the composed
  *  spec in the person's OpenRig library; `plan`: check only (`rig up --plan`). */
+/** OpenRig's built-in permission policies (`builtin:<name>`): `auto` Claude's auto mode, `yolo` no prompt at all, `open` / `standard`
+ *  / `locked` recorded rules (applied once translated into the harness's settings). */
+export const RigPolicySchema = z.enum(['auto', 'standard', 'open', 'yolo', 'locked']);
+export type RigPolicy = z.infer<typeof RigPolicySchema>;
+export const RIG_POLICIES: readonly RigPolicy[] = RigPolicySchema.options;
 export const RigLaunchSchema = z.object({
   spec: RigNameSchema, cwd: z.string().min(1).max(4096), name: RigNameSchema,
   seats: z.record(RigRoleSchema, z.number().int().min(0).max(9)).optional(),
   runtimes: z.record(RigRoleSchema, RuntimeSchema).optional(),
   models: z.record(RigRoleSchema, z.string().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:/@[\]=,+-]*$/)).optional(),
-  delegation: z.enum(['pairs', 'all']).optional(), save: z.boolean().optional(), plan: z.boolean().optional()
+  delegation: z.enum(['pairs', 'all']).optional(), save: z.boolean().optional(), plan: z.boolean().optional(),
+  /** The rig's permission policy, in place of the spec's; `policies`: a role's, over the rig's. */
+  policy: RigPolicySchema.optional(), policies: z.record(RigRoleSchema, RigPolicySchema).optional(),
+  /** Accept the harnesses' first-launch warnings (`rig up --non-interruptive`), so a bypassing seat does not stop on Claude's dialog. */
+  nonInterruptive: z.boolean().optional()
 });
 export type RigLaunch = z.infer<typeof RigLaunchSchema>;
 export const OpenRigLaunchSchema = z.object({ type: z.literal('openrig.launch'), requestId: z.string().min(1).max(100), launch: RigLaunchSchema, machineId: z.string().optional() });
@@ -149,3 +159,50 @@ export const OpenRigLaunchedSchema = z.object({
 });
 export type OpenRigLaunched = z.infer<typeof OpenRigLaunchedSchema>;
 export type OpenRigSpecList = z.infer<typeof OpenRigSpecListSchema>;
+
+// ── Lot 3: changing a running rig's seats (docs/mockups/ledge-openrig.html, view 7) ──
+
+/** A seat's role, `pod.member` without the copy's number: `dev.build-3` is `dev.build`. */
+export const roleOf = (logicalId: string): string => logicalId.replace(/-\d+$/, '');
+/** A copy's number: 1 for the role's first seat (`build`), 3 for `build-3`. */
+const copyOf = (logicalId: string): number => { const m = /-(\d+)$/.exec(logicalId); return m ? Number(m[1]) : 1; };
+
+/** A running rig's seats by role, each role's seats in copy order. */
+export function seatsByRole(nodes: readonly { logicalId: string }[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const n of nodes) out.set(roleOf(n.logicalId), [...(out.get(roleOf(n.logicalId)) ?? []), n.logicalId]);
+  for (const [role, ids] of out) out.set(role, ids.sort((a, b) => copyOf(a) - copyOf(b)));
+  return out;
+}
+
+/** What reaching `seats` (role -> count) does to a rig: the seats to add (each a copy of its role's first, under the next free
+ *  number) and those to remove (the last copies first; the first seat only when its role goes to 0). A role not named keeps its count. */
+export function seatPlan(nodes: readonly { logicalId: string }[], seats: Record<string, number>): { add: Array<{ role: string; pod: string; id: string; from: string }>; remove: string[] } {
+  const by = seatsByRole(nodes);
+  const add: Array<{ role: string; pod: string; id: string; from: string }> = [], remove: string[] = [];
+  for (const [role, want] of Object.entries(seats)) {
+    const have = by.get(role) ?? [];
+    if (have.length === 0) continue;
+    if (want < have.length) { remove.push(...have.slice(want).reverse()); continue; }
+    const [pod, member] = role.split('.') as [string, string];
+    let next = Math.max(...have.map(copyOf));
+    for (let i = have.length; i < want; i++) add.push({ role, pod, id: `${member}-${++next}`, from: have[0]! });
+  }
+  return { add, remove };
+}
+
+/** A front asks a machine to change a running rig's seats. */
+export const OpenRigSeatsSchema = z.object({
+  type: z.literal('openrig.seats'), requestId: z.string().min(1).max(100), machineId: z.string().optional(),
+  rig: RigNameSchema, seats: z.record(RigRoleSchema, z.number().int().min(0).max(9)),
+  /** How the added seats are linked, where OpenRig can add links to a running rig (0.7+): like a launch's. */ delegation: z.enum(['pairs', 'all']).optional()
+});
+/** The seats changed (or not). `added` / `removed`: the seats, as `pod.member`; `error`: `rig_not_running`, `rig_root_unknown` (its
+ *  agents cannot be found to copy a seat), `busy`, the fleet's `offline` / `outdated`, or what `rig` said. */
+export const OpenRigReseatedSchema = z.object({
+  type: z.literal('openrig.reseated'), requestId: z.string(), machineId: z.string().optional(), ok: z.boolean(),
+  commands: z.array(z.string()), added: z.array(z.string()), removed: z.array(z.string()), output: z.string().optional(), error: z.string().optional(),
+  /** The links ensured between the seats; `linksUnsupported`: this OpenRig cannot add links to a running rig (before 0.7). */
+  links: z.number().int().optional(), linksUnsupported: z.boolean().optional()
+});
+export type OpenRigReseated = z.infer<typeof OpenRigReseatedSchema>;

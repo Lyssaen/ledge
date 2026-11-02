@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { OpenRigState, RigLaunch, RigSpec } from '@ledge/protocol';
 import {
-  emptyForm, fieldsOf, folderChoices, launchOf, missingOf, moveField, nextFolder, orderSpecs, rolesOf, warningLines, withModel, withRuntime, withSeats, withSpec
+  emptyForm, fieldsOf, folderChoices, launchOf, missingOf, moveField, nextFolder, orderSpecs, rolesOf, warningLines, withModel, withPolicy, withRolePolicy, withRuntime, withSeats, withSpec, yoloChosen
 } from '../src/tui/model/rigLaunch.js';
 import { PROJECTS, startTui } from './tui-fixture.js';
 import { until } from './helpers.js';
@@ -36,6 +36,26 @@ describe('rig launch model', () => {
     expect(withSeats(f, 'dev.build', 20).seats['dev.build']).toBe(9);
     expect(withSpec(f, 'factory')).toMatchObject({ spec: 'factory', seats: {}, runtimes: {}, models: {}, name: 'ledge-scale', cwd: '~/w/ledge' });
   });
+  it('permissions: the rig’s policy and a role’s are sent only when chosen; --non-interruptive only with YOLO somewhere', () => {
+    const roles = rolesOf(STARTER);
+    let f = withSpec(emptyForm(null, '/w'), 'starter');
+    expect(launchOf(f, roles, false)).not.toHaveProperty('policy');
+    f = withPolicy(f, 1); expect(f.policy).toBe('auto');
+    f = withPolicy(withPolicy(f, -1), -1); expect(f.policy).toBe('locked');
+    f = withPolicy(f, 1); expect(f.policy).toBeNull();
+    f = withPolicy(f, 2); // standard
+    f = withRolePolicy(withRolePolicy(withRolePolicy(withRolePolicy(f, 'dev.review'), 'dev.review'), 'dev.review'), 'dev.review'); // auto, standard, open, yolo
+    expect(f.policies).toEqual({ 'dev.review': 'yolo' });
+    expect(yoloChosen(f, roles)).toBe(true);
+    expect(fieldsOf(roles, true)).toEqual(['spec', 'cwd', 'name', 'role:0', 'role:1', 'policy', 'nonInterruptive', 'delegation', 'save']);
+    expect(launchOf({ ...f, nonInterruptive: true }, roles, false)).toMatchObject({ policy: 'standard', policies: { 'dev.review': 'yolo' }, nonInterruptive: true });
+    // No YOLO left: the box ticked is not sent.
+    const back = withRolePolicy(withRolePolicy(f, 'dev.review'), 'dev.review'); // locked, then as the rig
+    expect(back.policies).toEqual({});
+    expect(launchOf({ ...back, nonInterruptive: true }, roles, false)).not.toHaveProperty('nonInterruptive');
+    // Another spec: the roles' policies start over, the rig's stays.
+    expect(withSpec(f, 'factory')).toMatchObject({ policy: 'standard', policies: {} });
+  });
   it('says what is missing', () => {
     const roles = rolesOf(STARTER);
     expect(missingOf(emptyForm(null, '/w'), roles)).toBe('spec');
@@ -59,7 +79,7 @@ describe('rig launch model', () => {
   });
   it('fields in tab order, one per role, wrapping', () => {
     const f = fieldsOf(rolesOf(STARTER));
-    expect(f).toEqual(['spec', 'cwd', 'name', 'role:0', 'role:1', 'delegation', 'save']);
+    expect(f).toEqual(['spec', 'cwd', 'name', 'role:0', 'role:1', 'policy', 'delegation', 'save']);
     expect(moveField(f, 'save', 1)).toBe('spec');
     expect(moveField(f, 'role:5', 1)).toBe('spec');
   });
@@ -81,6 +101,7 @@ describe('ledge tui: launch a rig (+ on the OpenRig screen)', () => {
             ...(m.launch.plan ? { check: { status: 'planned', errors: [], warnings: ['dev.build: permission_policy absent; launch_posture=floor', 'dev.review: permission_policy absent; launch_posture=floor'] } } : {}) });
         }
       });
+      await tui.resize(110, 36);
       await tui.press('6');
       await until(() => tui.frame().includes('RIGS'));
       await tui.press('+');
@@ -94,20 +115,27 @@ describe('ledge tui: launch a rig (+ on the OpenRig screen)', () => {
       await tui.press('ledge-scale');
       await tui.press('\t'); await tui.press('+');
       await until(() => tui.frame().includes('par paires'));
+      // 4 · Permissions: ← → to YOLO (red explanation), the box appears and is ticked with space.
+      await tui.press('\t'); await tui.press('\t');
+      for (let i = 0; i < 4; i++) await tui.press('\u001b[C');
+      await until(() => tui.frame().includes('◂ YOLO ▸') && tui.frame().includes('aucune demande'));
+      await tui.press('\t'); await tui.press(' ');
+      await until(() => tui.frame().includes('✓ accepter les avertissements'));
+      expect(tui.frame()).toContain('dev.review'); // the roles keep their room
       await tui.press('p');
       await until(() => tui.frame().includes('le plan passe'));
       const f = tui.frame();
       expect(f).toContain('permission_policy absent');
       expect(f.match(/permission_policy absent/g)).toHaveLength(1);
       expect(f).toContain('name: ledge-scale');
-      expect(launches[0]).toEqual({ spec: 'starter', cwd: '/w/ledge', name: 'ledge-scale', seats: { 'dev.build': 2 }, delegation: 'pairs', plan: true });
+      expect(launches[0]).toEqual({ spec: 'starter', cwd: '/w/ledge', name: 'ledge-scale', seats: { 'dev.build': 2 }, policy: 'yolo', nonInterruptive: true, delegation: 'pairs', plan: true });
       await tui.press('\u0013'); // ctrl+s
       await until(() => launches.length === 2);
       expect(launches[1]).not.toHaveProperty('plan');
       await until(() => tui.frame().includes('RIGS') && !tui.frame().includes('ledge-x3'));
       expect(tui.frame()).toContain('Rig « ledge-scale » lancé · 4 sièges.');
     } finally { await tui.cleanup(); }
-  });
+  }, 15_000);
   it('daemon stopped: says to start it first; esc goes back to the OpenRig screen', async () => {
     const tui = await startTui();
     try {

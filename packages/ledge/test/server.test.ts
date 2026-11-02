@@ -2556,7 +2556,8 @@ describe('server: OpenRig', () => {
       async state(f) { if (f) fresh++; return state(f ? 'stopped' : 'running'); },
       async act(a) { acts.push(a); return { ok: true, commands: ['rig daemon stop'] }; },
       async specs() { return { specs: [] }; },
-      async launch() { return { ok: true, plan: true, commands: [] }; }
+      async launch() { return { ok: true, plan: true, commands: [] }; },
+      async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
     } });
     const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
     expect((await c.next('snapshot')).daemon).toMatchObject({ openrig: true });

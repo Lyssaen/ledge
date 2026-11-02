@@ -10,6 +10,7 @@ import { cls } from '../shell/cls';
 import { Modal } from '../shell/Modal';
 import { openUrl } from '../tauri/bridge';
 import { RigLaunchForm } from './RigLaunchForm';
+import { SeatsDialog } from './SeatsDialog';
 import { asksFirst, commandsOf, isRunning, kernelRig, listedRigs, rigOf, targetOf, workingSeats } from './model';
 
 export const OPENRIG_INSTALL_URL = 'https://github.com/mvschwarz/openrig#readme';
@@ -31,6 +32,8 @@ export function OpenRigPage({ client, machines, machine, projects = null, dispat
   const [ask, setAsk] = useState<OpenRigAction | null>(null);
   const [launching, setLaunching] = useState(false);
   const [launched, setLaunched] = useState<string | null>(null);
+  const [reseating, setReseating] = useState<string | null>(null);
+  const [reseated, setReseated] = useState<string | null>(null);
   const run = (a: OpenRigAction) => { if (asksFirst(a)) setAsk(a); else void rig.act(a); };
   const label = shown?.label ?? id;
   return (
@@ -51,13 +54,18 @@ export function OpenRigPage({ client, machines, machine, projects = null, dispat
       {launched && !launching && <p className="or-status or-ok" role="status"><Icon d={ICONS.check.d} size={13} />{o.launch.launched(launched)}</p>}
       {launching
         ? <RigLaunchForm client={client} machine={id} machineLabel={label} projects={projects} onClose={() => setLaunching(false)} onLaunched={name => { setLaunching(false); setLaunched(name); rig.refresh(); }} />
-        : <Body view={rig} machine={shown} onAct={run} />}
+        : <Body view={rig} machine={shown} onAct={run} onSeats={name => { setReseated(null); setReseating(name); }} />}
+      {reseated && !launching && <p className="or-status or-ok" role="status">{reseated}</p>}
+      {reseating && rig.state && (() => { const r = rig.state.rigs.find(x => x.name === reseating); return r ? (
+        <SeatsDialog client={client} machine={id} machineLabel={label} rig={r} onClose={() => setReseating(null)}
+          onDone={d => { setReseating(null); setReseated(`${o.reseat.done(d.added.length, d.removed.length, d.links ?? 0)}${d.linksUnsupported ? ` ${o.reseat.noLinks}` : ''}`); rig.refresh(); }} />
+      ) : null; })()}
       {ask && rig.state && <Confirm action={ask} state={rig.state} machine={label} onCancel={() => setAsk(null)} onConfirm={a => { setAsk(null); void rig.act(a); }} />}
     </div>
   );
 }
 
-function Body({ view, machine, onAct }: { view: OpenRigView; machine?: MachineState; onAct: (a: OpenRigAction) => void }) {
+function Body({ view, machine, onAct, onSeats }: { view: OpenRigView; machine?: MachineState; onAct: (a: OpenRigAction) => void; onSeats: (rig: string) => void }) {
   const { t } = useI18n();
   const o = t.openrig;
   if (machine && !machine.ready) return <p className="or-empty" role="status">{o.offline}</p>;
@@ -83,7 +91,7 @@ function Body({ view, machine, onAct }: { view: OpenRigView; machine?: MachineSt
     <div className="or-h2"><h2>{o.rigs}</h2>{up && <span className="or-count">{listedRigs(s).length}</span>}</div>
     {!up ? <p className="or-empty">{o.daemonFirst}</p>
       : listedRigs(s).length === 0 ? <p className="or-empty">{o.noRigs}</p>
-      : <ul className="or-rigs">{listedRigs(s).map(r => <RigRow key={r.id} rig={r} busy={busy} working={rigOf(view.pending) === r.name} onAct={onAct} />)}</ul>}
+      : <ul className="or-rigs">{listedRigs(s).map(r => <RigRow key={r.id} rig={r} busy={busy} working={rigOf(view.pending) === r.name} onAct={onAct} onSeats={() => onSeats(r.name)} />)}</ul>}
   </>;
 }
 
@@ -145,7 +153,7 @@ function KernelCard({ state, busy, onAct }: { state: OpenRigState; busy: boolean
   );
 }
 
-function RigRow({ rig, busy, working, onAct }: { rig: Rig; busy: boolean; working: boolean; onAct: (a: OpenRigAction) => void }) {
+function RigRow({ rig, busy, working, onAct, onSeats }: { rig: Rig; busy: boolean; working: boolean; onAct: (a: OpenRigAction) => void; onSeats: () => void }) {
   const { t } = useI18n();
   const o = t.openrig;
   const [open, setOpen] = useState(false);
@@ -165,6 +173,7 @@ function RigRow({ rig, busy, working, onAct }: { rig: Rig; busy: boolean; workin
         <span className="or-muted">{[rig.uptime && on && o.uptime(rig.uptime), rig.snapshot && o.snapshot(rig.snapshot)].filter(Boolean).join(' · ')}</span>
         <span className="or-acts">
           {on ? <>
+            <Button size="sm" disabled={busy} aria-label={o.reseat.openLabel(rig.name)} onClick={onSeats}>{o.reseat.open}</Button>
             <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'rig.stop', rig: rig.name, snapshot: true })}><Icon d={ICONS.stop.d} size={12} />{o.stop}</Button>
             <Button size="sm" disabled={busy} aria-label={`${o.restart} ${rig.name}`} title={o.restart} onClick={() => onAct({ kind: 'rig.restart', rig: rig.name })}><Icon d={ICONS.refresh.d} size={12} /></Button>
           </> : <Button size="sm" disabled={busy} onClick={() => onAct({ kind: 'rig.start', rig: rig.name })}><Icon d={ICONS.play.d} size={12} />{o.start}</Button>}

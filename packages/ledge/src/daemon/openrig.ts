@@ -2,10 +2,10 @@ import { execFile } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
-import { changesSpec, composeSpec, readSpec, specSeats } from './rigSpec.js';
+import { changesSpec, composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join } from 'node:path';
-import { KERNEL_RIG, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigLaunch, type RigSeat, type RigSpec } from '@ledge/protocol';
+import { KERNEL_RIG, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
 import { log } from '../log.js';
 
 /**
@@ -22,6 +22,8 @@ const STATUS_MS = 15_000;
 const ACTION_MS: Record<string, number> = { start: 120_000, up: 300_000, down: 120_000, stop: 60_000 };
 /** A state read this recently is answered again, so several fronts polling do not each run `rig`. */
 export const STATE_TTL_MS = 2_000;
+/** How long the `rig --version` read stands before it is asked again. */
+export const VERSION_TTL_MS = 5 * 60_000;
 
 type Json = Record<string, unknown>;
 const obj = (v: unknown): Json => (v && typeof v === 'object' && !Array.isArray(v) ? v as Json : {});
@@ -155,7 +157,11 @@ export interface OpenRig {
   specs(): Promise<{ specs: RigSpec[]; error?: string }>;
   /** Checks (`plan`) or launches a rig from a spec, composed when the counts, harnesses or models change. */
   launch(l: RigLaunch): Promise<LaunchResult>;
+  /** Brings a running rig's roles to `seats` (role -> count): copies of each role's first seat added, the last copies removed,
+   *  the spec's links ensured where this OpenRig can, then a snapshot so a restart keeps the new size. */
+  reseat(rig: string, seats: Record<string, number>, delegation?: 'pairs' | 'all'): Promise<ReseatResult>;
 }
+export interface ReseatResult { ok: boolean; commands: string[]; added: string[]; removed: string[]; output?: string; error?: string; links?: number; linksUnsupported?: boolean }
 
 const realFs = {
   read: (p: string) => readFile(p, 'utf8'),
@@ -170,7 +176,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   const home = deps.home ?? homedir();
   const rigsDir = deps.rigsDir ?? join(home, '.ledge', 'rigs');
   const now = deps.now ?? Date.now;
-  let version: string | undefined, last: { at: number; state: OpenRigState } | undefined;
+  let version: string | undefined, versionAt = 0, last: { at: number; state: OpenRigState } | undefined;
   let reading: Promise<OpenRigState> | undefined, acting = false;
   const absent = (): OpenRigState => ({ installed: false, daemon: { state: 'unknown' }, kernel: { state: 'unknown' }, rigs: [], at: new Date(now()).toISOString() });
 
@@ -178,7 +184,8 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     const at = new Date(now()).toISOString();
     const status = await run(['status', '--json'], STATUS_MS);
     if (status.code === null) { version = undefined; return absent(); }
-    if (!version) { const v = await run(['--version'], STATUS_MS); version = v.code === 0 ? v.stdout.trim().split(/\s+/)[0] || undefined : undefined; }
+    // Read again now and then: an OpenRig upgraded under a running Ledge shows its new version and features.
+    if (!version || now() - versionAt > VERSION_TTL_MS) { const v = await run(['--version'], STATUS_MS); version = v.code === 0 ? v.stdout.trim().split(/\s+/)[0] || undefined : undefined; versionAt = now(); }
     const parsed = parse(status.stdout);
     if (parsed === undefined) log(`openrig: rig status printed no JSON (${failure(status)})`);
     const daemon = obj(obj(parsed).daemon);
@@ -215,6 +222,16 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     }
   }
 
+  /** What this `rig` can do, read once from its help: `rig up --name` and `rig edge` came with 0.7. */
+  let can: { for: string; name: boolean; edge: boolean } | undefined;
+  async function features(): Promise<{ name: boolean; edge: boolean }> {
+    if (can && can.for === (version ?? '')) return can;
+    if (!version) { const v = await run(['--version'], STATUS_MS); version = v.code === 0 ? v.stdout.trim().split(/\s+/)[0] || undefined : undefined; }
+    const [up, all] = await Promise.all([run(['up', '--help'], STATUS_MS), run(['help'], STATUS_MS)]);
+    can = { for: version ?? '', name: /--name\b/.test(up.stdout), edge: /^\s+edge\b/m.test(`${all.stdout}${all.stderr}`) };
+    return can;
+  }
+
   async function specs(): Promise<{ specs: RigSpec[]; error?: string }> {
     const r = await run(['specs', 'ls', '--json'], STATUS_MS);
     if (r.code === null) return { specs: [], error: 'not_installed' };
@@ -244,15 +261,18 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       if (!spec) return { ok: false, plan, commands: [], error: 'spec_not_found' };
       let source = spec.name, yaml: string, seats: number, dir: string | undefined;
       const text = await files.read(spec.path);
-      // OpenRig names a rig after its spec's `name:` (0.6.14 has no `rig up --name`): another name is a composed copy too.
-      if (changesSpec(l) || l.save || l.name !== spec.name) {
+      const can = await features();
+      // Before 0.7 OpenRig named a rig after its spec's `name:` only (no `rig up --name`): another name was a composed copy too.
+      const rename = l.name !== spec.name;
+      if (changesSpec(l) || l.save || (rename && !can.name)) {
         const composed = composeSpec(parseYaml(text), dirname(spec.path), l);
         dir = join(rigsDir, l.name);
         await files.copyDir(dirname(spec.path), dir);
         await files.write(join(dir, 'rig.yaml'), composed.yaml);
         source = join(dir, 'rig.yaml'); yaml = composed.yaml; seats = composed.seats;
       } else { yaml = text; seats = specSeats(spec); }
-      const commands: string[][] = [['up', source, '--cwd', cwd, ...(plan ? ['--plan'] : ['--yes']), '--json']];
+      if (!dir && rename && !plan) await files.write(join(rigsDir, l.name, 'source.json'), JSON.stringify({ spec: spec.name, path: spec.path }));
+      const commands: string[][] = [['up', source, ...(!dir && rename ? ['--name', l.name] : []), '--cwd', cwd, ...(l.nonInterruptive ? ['--non-interruptive'] : []), ...(plan ? ['--plan'] : ['--yes']), '--json']];
       if (!plan && l.save && dir) commands.push(['specs', 'add', dir, '--json']);
       const shown = commands.map(showCommand);
       let output = '';
@@ -271,5 +291,71 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     }
   }
 
-  return { state, act, specs, launch };
+  /** The folder a rig's `local:` agents are relative to: the spec Ledge composed for it, the library spec it launched under
+   *  another name, or the library spec of its name; null when none is known. */
+  async function rootOf(rig: string): Promise<string | null> {
+    const mine = join(rigsDir, rig);
+    if (files.exists(join(mine, 'rig.yaml'))) return mine;
+    const marker = await files.read(join(mine, 'source.json')).catch(() => null);
+    const path = marker === null ? undefined : str(obj(parse(marker)).path);
+    if (path) return dirname(path);
+    const listed = await specs();
+    const spec = listed.specs.find(s => s.name === rig);
+    return spec ? dirname(spec.path) : null;
+  }
+
+  async function reseat(rigName: string, seats: Record<string, number>, delegation: 'pairs' | 'all' = 'pairs'): Promise<ReseatResult> {
+    const none = { added: [] as string[], removed: [] as string[] };
+    const st = await state(true);
+    const rig = st.rigs.find(r => r.name === rigName);
+    if (!rig || (rig.status !== 'running' && rig.status !== 'partial' && rig.running === 0)) return { ok: false, commands: [], ...none, error: 'rig_not_running' };
+    const plan = seatPlan(rig.nodes, seats);
+    if (plan.add.length === 0 && plan.remove.length === 0) return { ok: true, commands: [], ...none };
+    if (acting) return { ok: false, commands: [], ...none, error: 'busy' };
+    acting = true;
+    try {
+      const can = await features();
+      const commands: string[][] = [];
+      let show: unknown;
+      if (plan.add.length) {
+        const r = await run(['spec', 'show', rig.id, '--json'], STATUS_MS);
+        if (r.code === null) return { ok: false, commands: [], ...none, error: 'not_installed' };
+        if (r.code !== 0) return { ok: false, commands: [], ...none, error: failure(r) };
+        show = parse(r.stdout);
+        const root = await rootOf(rigName);
+        for (const a of plan.add) {
+          const member = memberOf(show, a.pod, a.from.slice(a.pod.length + 1));
+          const fragment = member ? fragmentOf(member, a.id, root) : null;
+          if (!fragment) return { ok: false, commands: [], ...none, error: 'rig_root_unknown' };
+          const path = join(rigsDir, rigName, 'seats', `${a.pod}.${a.id}.json`);
+          await files.write(path, JSON.stringify(fragment, null, 2));
+          commands.push(['add', rig.id, a.pod, path, ...(root ? ['--rig-root', root] : []), '--json']);
+        }
+      }
+      for (const id of plan.remove) commands.push(['remove', rig.id, id, '--json']);
+      // The links of the roles that grew, between the seats they will have: `rig edge add` leaves one already there unchanged.
+      let links = 0;
+      if (plan.add.length && can.edge) {
+        const after = seatsByRole([...rig.nodes.filter(n => !plan.remove.includes(n.logicalId)).map(n => ({ logicalId: n.logicalId })), ...plan.add.map(a => ({ logicalId: `${a.pod}.${a.id}` }))]);
+        for (const l of linksFor(show, after, new Set(plan.add.map(a => a.role)), delegation)) { commands.push(['edge', 'add', rig.id, l.from, l.to, '--kind', l.kind, '--json']); links++; }
+      }
+      commands.push(['snapshot', rig.id]);
+      const shown = commands.map(showCommand);
+      const added = plan.add.map(a => `${a.pod}.${a.id}`), removed = plan.remove;
+      let output = '';
+      for (const args of commands) {
+        const r = await run(args, args[0] === 'add' ? ACTION_MS.up! : ACTION_MS.down!);
+        if (r.code === null) return { ok: false, commands: shown, added, removed, error: 'not_installed' };
+        output = `${r.stdout}${r.stderr}`.trim().slice(-2000);
+        if (r.code !== 0) { const error = failure(r); log(`openrig: ${showCommand(args)} failed: ${error}`); return { ok: false, commands: shown, added, removed, output, error }; }
+      }
+      log(`openrig: ${rigName} reseated (+${added.length} -${removed.length}, ${links} links)`);
+      return { ok: true, commands: shown, added, removed, ...(output ? { output } : {}), ...(plan.add.length ? (can.edge ? { links } : { linksUnsupported: true }) : {}) };
+    } finally {
+      acting = false;
+      last = undefined;
+    }
+  }
+
+  return { state, act, specs, launch, reseat };
 }

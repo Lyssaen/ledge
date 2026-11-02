@@ -60,3 +60,21 @@ test('launching a rig: 3 builders and 3 reviewers, checked, then launched', asyn
     { spec: 'starter', cwd: '~/Workspace/ledge', name: 'ledge-scale', seats: { 'dev.build': 3, 'dev.review': 3 }, delegation: 'pairs' }
   ]);
 });
+
+test('a running rig\'s seats: 3 builders and 3 reviewers, added while it runs', async ({ page }, info) => {
+  await page.addInitScript(() => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', 'dark'); } catch { /* ignore */ } });
+  const daemon = await fakeDaemon(page, [session('otto')], { openrig: STATE, rigSpecs: SPECS });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'OpenRig' }).click();
+  await page.getByRole('button', { name: 'Changer les sièges de starter' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Sièges du rig « starter » · Local' });
+  for (const role of ['dev.build', 'dev.review']) for (let i = 0; i < 2; i++) await dialog.getByRole('button', { name: `Un siège de plus pour ${role}` }).click();
+  await expect(dialog).toContainText('+ build-3');
+  await expect(dialog).toContainText('rig add starter dev review-3.json');
+  await page.screenshot({ path: info.outputPath('openrig-seats.png') });
+  await dialog.getByRole('button', { name: 'Ajouter 4 sièges' }).click();
+  await expect(page.getByText('+4 sièges, 4 liens.')).toBeVisible();
+  expect(daemon.received.filter(m => m.type === 'openrig.seats').map(m => m.type === 'openrig.seats' && { rig: m.rig, seats: m.seats, delegation: m.delegation })).toEqual([
+    { rig: 'starter', seats: { 'dev.build': 3, 'dev.review': 3 }, delegation: 'pairs' }
+  ]);
+});

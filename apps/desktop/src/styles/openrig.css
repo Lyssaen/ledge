@@ -75,9 +75,11 @@
 .or-fsec h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
 .or-hint { margin: 0 0 8px; font-size: 12px; color: var(--muted-foreground); }
 .or-specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-.or-spec { text-align: left; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 9px 11px; background: var(--card); font-size: 12px; color: var(--muted-foreground); cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.or-spec { text-align: left; border: 1px solid var(--input); border-radius: var(--radius-lg); padding: 10px 12px; background: color-mix(in oklab, var(--foreground) 3%, var(--background)); font-size: 12px; line-height: 17px; color: var(--muted-foreground); cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 64px; transition: border-color .15s, background-color .15s; }
+.or-spec:hover { border-color: color-mix(in oklab, var(--foreground) 30%, transparent); }
+.or-spec:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .or-spec b { display: flex; align-items: center; gap: 6px; color: var(--foreground); font-size: 13px; font-weight: 500; }
-.or-spec.sel { border-color: color-mix(in oklab, var(--primary) 70%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 40%, transparent) inset; }
+.or-spec.sel { border-color: var(--primary); background: color-mix(in oklab, var(--primary) 8%, var(--background)); box-shadow: 0 0 0 1px var(--primary) inset; }
 .or-src { margin-left: auto; font: 10px 'Geist Mono', monospace; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); font-weight: 400; }
 .or-row3 { display: grid; grid-template-columns: 1.4fr 0.8fr 1fr; gap: 10px; }
 .or-fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted-foreground); min-width: 0; }
@@ -85,15 +87,19 @@
 .or-fld .ledge-field { height: 30px; padding: 0 9px; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--well); color: var(--foreground); }
 .or-static { height: 30px; display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--foreground); }
 .or-roles { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
-.or-pod { padding: 6px 12px; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-foreground); background: color-mix(in oklab, var(--foreground) 3%, transparent); border-bottom: 1px solid var(--border); }
-.or-role { display: grid; grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.or-pod { padding: 6px 12px; font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+.or-role { display: grid; grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr) 104px; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.or-role-head { padding: 7px 12px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); background: color-mix(in oklab, var(--foreground) 3%, transparent); }
+.or-role-head > :last-child { text-align: center; }
+.or-role > .ledge-field { height: 32px; width: 100%; min-width: 0; padding: 0 10px; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--well); color: var(--foreground); }
 .or-role:last-child { border-bottom: 0; }
 .or-role > .mono { align-self: center; display: flex; flex-direction: column; }
 .or-role > .mono small { font-family: 'Geist', sans-serif; font-size: 11px; color: var(--muted-foreground); }
-.or-step { display: inline-flex; align-items: center; border: 1px solid var(--input); border-radius: var(--radius-sm); overflow: hidden; height: 30px; }
-.or-step button { width: 28px; height: 100%; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 15px; }
+.or-step { display: inline-grid; grid-template-columns: 32px 38px 32px; align-items: stretch; justify-self: center; border: 1px solid var(--input); border-radius: var(--radius-sm); overflow: hidden; height: 32px; background: var(--well); }
+.or-step button { display: grid; place-items: center; padding: 0; margin: 0; width: 100%; height: 100%; border: 0; background: transparent; color: var(--foreground); cursor: pointer; font: 500 16px/1 'Geist', system-ui, sans-serif; }
+.or-step button:hover:not(:disabled) { background: var(--muted); }
 .or-step button:disabled { opacity: .35; cursor: default; }
-.or-step span { min-width: 30px; text-align: center; font: 13px 'Geist Mono', monospace; border-left: 1px solid var(--input); border-right: 1px solid var(--input); line-height: 28px; }
+.or-step span { display: grid; place-items: center; font: 13px 'Geist Mono', monospace; border-left: 1px solid var(--input); border-right: 1px solid var(--input); }
 .or-step.changed span { color: var(--success); }
 .or-seg { display: inline-flex; border: 1px solid var(--input); border-radius: var(--radius-md); padding: 2px; gap: 2px; }
 .or-seg button { border: 0; background: transparent; font-size: 12.5px; padding: 4px 12px; border-radius: var(--radius-sm); color: var(--muted-foreground); cursor: pointer; }
@@ -105,6 +111,22 @@
 .or-yaml-box h4, .or-where h4 { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; }
 .or-yaml { margin: 0; background: var(--term-bg); color: var(--term-fg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; font: 11.5px/17px 'Geist Mono', monospace; max-height: 420px; overflow: auto; white-space: pre; }
 .or-where { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; font-size: 12px; color: var(--muted-foreground); }
-.or-where ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.or-where ul { margin: 0; padding-left: 18px; list-style: disc; display: flex; flex-direction: column; gap: 4px; }
 @media (max-width: 1100px) { .or-launch { grid-template-columns: 1fr; } .or-row3 { grid-template-columns: 1fr; } .or-role { grid-template-columns: 1fr auto; } }
-.or-status code { white-space: normal; word-break: break-all; }
+.or-status code { display: block; max-width: 100%; white-space: pre; overflow-x: auto; }
+.or-under { margin: 6px 0 0; }
+
+/* A running rig's seats (view 7). */
+.or-seats-dialog .or-roles { margin-bottom: 12px; }
+.or-role-live { grid-template-columns: 160px minmax(0, 1fr) 104px; }
+.or-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.or-chip-seat { font: 11.5px 'Geist Mono', monospace; border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; color: var(--muted-foreground); }
+.or-chip-seat.new { border-color: color-mix(in oklab, var(--success) 50%, transparent); color: var(--success); }
+.or-chip-seat.rm { border-color: color-mix(in oklab, var(--danger-text) 50%, transparent); color: var(--danger-text); text-decoration: line-through; }
+.or-cmds { margin: 10px 0 4px; background: var(--well); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 10px; font: 11.5px/18px 'Geist Mono', monospace; color: var(--muted-foreground); white-space: pre-wrap; word-break: break-all; }
+.or-warn-line { color: var(--danger-text); font-size: 12.5px; margin: 6px 0 0; }
+
+.or-seg-wrap { flex-wrap: wrap; }
+.or-seg button.or-risky[aria-checked=true] { color: var(--danger-text); background: var(--status-danger-soft); }
+.or-check-top { margin-top: 10px; }
+.or-indent { margin: 2px 0 0 21px; }

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { launchRig, useRigSpecs } from '@ledge/fleet/openrig';
-import type { OpenRigLaunched, RigSpec } from '@ledge/protocol';
+import { RIG_POLICIES, type OpenRigLaunched, type RigSpec } from '@ledge/protocol';
 import { useEditing, useTui } from '../context.js';
 import {
   emptyForm, fieldsOf, folderChoices, isText, launchOf, missingOf, modelOf, moveField, nameOf, nextFolder, orderSpecs, roleAt, rolesOf,
-  runtimeOf, scaled, seatsOf, totalSeats, warningLines, withModel, withRuntime, withSeats, withSpec, type FieldId, type RigForm
+  runtimeOf, scaled, seatsOf, totalSeats, warningLines, withModel, withPolicy, withRolePolicy, withRuntime, withSeats, withSpec, yoloChosen, type FieldId, type RigForm
 } from '../model/rigLaunch.js';
 import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -47,7 +47,8 @@ export function RigLaunchScreen() {
 
   const spec = specs.find(s => s.name === form.spec);
   const roles = rolesOf(spec);
-  const fields = fieldsOf(roles);
+  const yolo = yoloChosen(form, roles);
+  const fields = fieldsOf(roles, yolo);
   // The first spec is chosen once the list comes; the folder too, once the projects come.
   useEffect(() => { if (!form.spec && specs[0]) setFormState(f => withSpec(f, specs[0]!.name)); }, [specs]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!form.cwd && folders[0]) setFormState(f => ({ ...f, cwd: folders[0]!.path })); }, [folders]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -95,8 +96,11 @@ export function RigLaunchScreen() {
       else if (input === '+' || input === '=') setForm(f => withSeats(f, role.role, 1));
       else if (input === '-') setForm(f => withSeats(f, role.role, -1));
       else if (input === 'm') { setModelAt(roleAt(field)); setModelDraft(modelOf(form, role) ?? ''); }
+      else if (input === 'o') setForm(f => withRolePolicy(f, role.role));
       return;
     }
+    if (field === 'policy' && by) { setForm(f => withPolicy(f, by)); return; }
+    if (field === 'nonInterruptive' && (by || input === ' ' || key.return)) { setForm(f => ({ ...f, nonInterruptive: !f.nonInterruptive })); return; }
     if (field === 'delegation' && (by || input === ' ')) { setForm(f => ({ ...f, delegation: f.delegation === 'pairs' ? 'all' : 'pairs' })); return; }
     if (field === 'save' && (by || input === ' ' || key.return)) { setForm(f => ({ ...f, save: !f.save })); return; }
   });
@@ -119,7 +123,7 @@ export function RigLaunchScreen() {
 
   const keys: Array<[string, string]> = modelAt !== null
     ? [['↵', t.keys.apply], ['esc', t.keys.cancel]]
-    : [['tab ↑ ↓', t.keys.nextField], ['← →', t.keys.choose], ['- +', l.count], ['m', l.modelKey], ['p', l.check], ['ctrl+s', l.launch(seats)], ['esc', t.keys.cancel]];
+    : [['tab ↑ ↓', t.keys.nextField], ['← →', t.keys.choose], ['- +', l.count], ['m', l.modelKey], ['o', l.policyKey], ['p', l.check], ['ctrl+s', l.launch(seats)], ['esc', t.keys.cancel]];
 
   return (
     <Frame crumb={`${l.title} · ${machine?.label ?? '-'}`} crumbShort={l.title} keys={keys}>
@@ -160,6 +164,7 @@ export function RigLaunchScreen() {
                   <Box width={14} flexShrink={0}><Text wrap="truncate" color={C.fg} bold>{r.role}</Text></Box>
                   <Box width={16} flexShrink={0}><Text wrap="truncate">{chosen(on, runtime)}</Text></Box>
                   <Box width={7} flexShrink={0}><Text><Text color={C.dim}>− </Text><Text color={n === 1 ? C.fg : C.green} bold>{n}</Text><Text color={C.dim}> +</Text></Text></Box>
+                  <Box width={13} flexShrink={0}><Text wrap="truncate" color={form.policies[r.role] === 'yolo' ? C.red : form.policies[r.role] ? C.fg : C.faint}>{form.policies[r.role] ? l.policyOf[form.policies[r.role]!] : l.asRig}</Text></Box>
                   <Box flexGrow={1} overflow="hidden">
                     {modelAt === i
                       ? <TextInput value={modelDraft} onChange={setModelDraft} active onSubmit={v => { setForm(x => withModel(x, r, v)); setModelAt(null); }} onEscape={() => setModelAt(null)} placeholder={l.defaultModel} />
@@ -168,6 +173,11 @@ export function RigLaunchScreen() {
                 </Box>
               );
             })}
+          </TitledBox>
+          <TitledBox title={l.permissions} flexShrink={0}>
+            {row('policy', '', <Text wrap="truncate">{chosen(field === 'policy' || form.policy !== null, form.policy === null ? l.specPolicy(spec?.policy ?? l.noSpecPolicy) : l.policyOf[form.policy]!)}<Text color={C.faint}>{`  ${[null, ...RIG_POLICIES].indexOf(form.policy) + 1}/${RIG_POLICIES.length + 1}`}</Text></Text>, 1)}
+            <Box flexShrink={0} paddingLeft={3}><Text wrap="wrap" color={(form.policy ?? spec?.policy?.replace(/^builtin:/, '')) === 'yolo' ? C.red : C.faint}>{l.policyHint[form.policy ?? spec?.policy?.replace(/^builtin:/, '') ?? 'none'] ?? l.policyHint.none}</Text></Box>
+            {yolo ? row('nonInterruptive', '', <Text wrap="truncate"><Text color={form.nonInterruptive ? C.red : C.faint}>{form.nonInterruptive ? g.boxOn : g.boxOff}</Text><Text color={C.dim}> {l.nonInterruptive}</Text></Text>, 1) : null}
           </TitledBox>
           <TitledBox title={l.delegation} flexShrink={0} height={4}>
             {row('delegation', '', <Text wrap="truncate">{scaled(form, roles)

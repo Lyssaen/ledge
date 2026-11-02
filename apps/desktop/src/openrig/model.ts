@@ -1,4 +1,4 @@
-import { KERNEL_RIG, RigNameSchema, rigCommands, showRigCommand, type OpenRigAction, type OpenRigState, type Projects, type Rig, type RigLaunch, type RigSeat, type RigSpec } from '@ledge/protocol';
+import { KERNEL_RIG, RIG_POLICIES, RigNameSchema, rigCommands, showRigCommand, type OpenRigAction, type OpenRigState, type Projects, type Rig, type RigLaunch, type RigPolicy, type RigSeat, type RigSpec } from '@ledge/protocol';
 
 /**
  * What the OpenRig page (docs/mockups/ledge-openrig.html, views 1, 2 and 5) shows and offers, as pure functions: the
@@ -41,8 +41,9 @@ export interface RigRole { role: string; pod: string; id: string; runtime: strin
 /** Each `pod.member` of a spec, in its order. */
 export const rolesOf = (spec: RigSpec): RigRole[] => spec.pods.flatMap(p => p.members.map(m => ({ role: `${p.id}.${m.id}`, pod: p.id, id: m.id, runtime: m.runtime, ...(m.model ? { model: m.model } : {}), agent: m.agent })));
 
-export interface LaunchForm { cwd: string; name: string; seats: Record<string, number>; runtimes: Record<string, 'claude-code' | 'codex'>; models: Record<string, string>; delegation: 'pairs' | 'all'; save: boolean }
-export const emptyForm = (spec: RigSpec | undefined, cwd = ''): LaunchForm => ({ cwd, name: spec?.name ?? '', seats: {}, runtimes: {}, models: {}, delegation: 'pairs', save: false });
+export interface LaunchForm { cwd: string; name: string; seats: Record<string, number>; runtimes: Record<string, 'claude-code' | 'codex'>; models: Record<string, string>; delegation: 'pairs' | 'all'; save: boolean;
+  /** The rig's policy, null: the spec's. */ policy: RigPolicy | null; /** A role's, over the rig's. */ policies: Record<string, RigPolicy>; nonInterruptive: boolean }
+export const emptyForm = (spec: RigSpec | undefined, cwd = ''): LaunchForm => ({ cwd, name: spec?.name ?? '', seats: {}, runtimes: {}, models: {}, delegation: 'pairs', save: false, policy: null, policies: {}, nonInterruptive: false });
 
 /** How many seats the form launches. */
 export const seatTotal = (spec: RigSpec, f: LaunchForm): number => rolesOf(spec).reduce((n, r) => n + (f.seats[r.role] ?? 1), 0);
@@ -58,7 +59,8 @@ export function launchOf(spec: RigSpec, f: LaunchForm, plan: boolean): RigLaunch
   return {
     spec: spec.name, cwd: f.cwd.trim(), name: f.name.trim(),
     ...(Object.keys(seats).length ? { seats } : {}), ...(Object.keys(runtimes).length ? { runtimes } : {}), ...(Object.keys(models).length ? { models } : {}),
-    ...(multiplies(f) ? { delegation: f.delegation } : {}), ...(f.save ? { save: true } : {}), ...(plan ? { plan: true } : {})
+    ...(multiplies(f) ? { delegation: f.delegation } : {}), ...(f.save ? { save: true } : {}), ...(plan ? { plan: true } : {}),
+    ...(f.policy ? { policy: f.policy } : {}), ...(Object.keys(f.policies).length ? { policies: f.policies } : {}), ...(f.nonInterruptive && bypasses(f) ? { nonInterruptive: true } : {})
   };
 }
 
@@ -68,3 +70,8 @@ export const launchable = (f: LaunchForm): boolean => f.cwd.trim().length > 0 &&
 /** The Ledge projects' folders on a machine, for the folder field. */
 export const folderChoices = (projects: Projects | null, machine: string): Array<{ label: string; path: string }> =>
   (projects?.projects ?? []).flatMap(p => p.repos.filter(r => r.machine === machine).map(r => ({ label: p.name, path: r.path })));
+
+/** Whether a seat would launch with every prompt bypassed (YOLO), so Claude's first-launch warning would stop it. */
+export const bypasses = (f: LaunchForm): boolean => f.policy === 'yolo' || Object.values(f.policies).includes('yolo');
+/** `builtin:auto` -> `auto`; null for a custom policy file or none. */
+export const builtinOf = (policy: string | undefined): RigPolicy | null => { const m = /^builtin:(\w+)$/.exec(policy ?? ''); return m && (RIG_POLICIES as readonly string[]).includes(m[1]!) ? m[1] as RigPolicy : null; };

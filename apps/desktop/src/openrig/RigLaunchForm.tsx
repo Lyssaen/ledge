@@ -1,12 +1,12 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import { launchRig, useRigSpecs } from '@ledge/fleet/openrig';
-import type { OpenRigLaunched, Projects, RigSpec } from '@ledge/protocol';
+import { RIG_POLICIES, type OpenRigLaunched, type Projects, type RigPolicy, type RigSpec } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
-import { emptyForm, folderChoices, launchable, launchOf, multiplies, rolesOf, seatTotal, type LaunchForm } from './model';
+import { builtinOf, bypasses, emptyForm, folderChoices, launchable, launchOf, multiplies, rolesOf, seatTotal, type LaunchForm } from './model';
 
 /** The warning OpenRig gives for each seat without a permission policy: summed up in one line. */
 const NO_POLICY = /permission_policy absent/;
@@ -66,16 +66,17 @@ export function RigLaunchForm({ client, machine, machineLabel, projects, onClose
               <label className="or-fld">{l.folder}
                 <input className="ledge-field mono" list={listId} value={form.cwd} placeholder="~/Workspace/mon-projet" spellCheck={false} onChange={e => set({ cwd: e.target.value })} />
                 <datalist id={listId}>{folders.map(f => <option key={f.path} value={f.path}>{f.label}</option>)}</datalist>
-                <small>{l.folderHint}</small>
               </label>
               <label className="or-fld">{l.machine}<span className="or-static"><span className="or-dot or-ok" />{machineLabel}</span></label>
               <label className="or-fld">{l.name}<input className="ledge-field mono" value={form.name} spellCheck={false} onChange={e => { setNamed(true); set({ name: e.target.value }); }} /></label>
             </div>
+            <p className="or-hint or-under">{l.folderHint}</p>
           </section>
           <section className="or-fsec" aria-label={l.roles}>
             <h3>{l.roles}</h3>
             <p className="or-hint">{l.rolesHint}</p>
             <div className="or-roles">
+              <div className="or-role or-role-head" aria-hidden><span>{l.role}</span><span>{l.runtime}</span><span>{l.model}</span><span>{l.permsColumn}</span><span>{l.count}</span></div>
               {spec.pods.map(p => (
                 <div key={p.id}>
                   <div className="or-pod">pod {p.id}{p.label ? ` · ${p.label}` : ''}</div>
@@ -85,15 +86,16 @@ export function RigLaunchForm({ client, machine, machineLabel, projects, onClose
                     return (
                       <div key={r.role} className="or-role">
                         <span className="mono">{r.id}<small>{r.agent}</small></span>
-                        <label className="or-fld or-inline">{l.runtime}
-                          <select className="ledge-field" value={runtime} onChange={e => set({ runtimes: { ...form.runtimes, [r.role]: e.target.value as 'claude-code' | 'codex' } })}>
-                            {[...new Set(['claude-code', 'codex', r.runtime])].map(x => <option key={x} value={x}>{x}</option>)}
-                          </select>
-                        </label>
-                        <label className="or-fld or-inline">{l.model}
-                          <input className="ledge-field mono" value={form.models[r.role] ?? (runtime === r.runtime ? r.model ?? '' : '')} placeholder={l.modelPlaceholder} spellCheck={false}
-                            onChange={e => set({ models: { ...form.models, [r.role]: e.target.value } })} />
-                        </label>
+                        <select className="ledge-field" aria-label={`${l.runtime} · ${r.role}`} value={runtime} onChange={e => set({ runtimes: { ...form.runtimes, [r.role]: e.target.value as 'claude-code' | 'codex' } })}>
+                          {[...new Set(['claude-code', 'codex', r.runtime])].map(x => <option key={x} value={x}>{x}</option>)}
+                        </select>
+                        <input className="ledge-field mono" aria-label={`${l.model} · ${r.role}`} value={form.models[r.role] ?? (runtime === r.runtime ? r.model ?? '' : '')} placeholder={l.modelPlaceholder} spellCheck={false}
+                          onChange={e => set({ models: { ...form.models, [r.role]: e.target.value } })} />
+                        <select className="ledge-field" aria-label={`${l.permsColumn} · ${r.role}`} value={form.policies[r.role] ?? ''}
+                          onChange={e => { const { [r.role]: _drop, ...rest } = form.policies; set({ policies: e.target.value ? { ...rest, [r.role]: e.target.value as RigPolicy } : rest }); }}>
+                          <option value="">{l.permsRole}{(() => { const own = builtinOf(spec.pods.find(p => p.id === r.pod)?.members.find(m => m.id === r.id)?.policy); return own ? ` · ${l.policy[own]}` : ''; })()}</option>
+                          {RIG_POLICIES.map(x => <option key={x} value={x}>{l.policy[x]}</option>)}
+                        </select>
                         <span className={cls('or-step', n !== 1 && 'changed')}>
                           <button type="button" aria-label={l.fewer(r.role)} disabled={n <= 0} onClick={() => set({ seats: { ...form.seats, [r.role]: n - 1 } })}>−</button>
                           <span aria-live="polite">{n}</span>
@@ -105,6 +107,19 @@ export function RigLaunchForm({ client, machine, machineLabel, projects, onClose
                 </div>
               ))}
             </div>
+          </section>
+          <section className="or-fsec" aria-label={l.perms}>
+            <h3>{l.perms}</h3>
+            <p className="or-hint">{l.permsHint}</p>
+            <div className="or-seg or-seg-wrap" role="radiogroup" aria-label={l.perms}>
+              <button type="button" role="radio" aria-checked={form.policy === null} onClick={() => set({ policy: null })}>{l.permsSpec(builtinOf(spec.policy) ? l.policy[builtinOf(spec.policy)!]! : spec.policy ?? '')}</button>
+              {RIG_POLICIES.map(x => <button key={x} type="button" role="radio" aria-checked={form.policy === x} className={x === 'yolo' ? 'or-risky' : undefined} onClick={() => set({ policy: x })}>{l.policy[x]}</button>)}
+            </div>
+            <p className="or-hint or-under">{l.policyHint[form.policy ?? builtinOf(spec.policy) ?? 'none']}</p>
+            {bypasses(form) && <>
+              <label className="or-check or-check-top"><input type="checkbox" checked={form.nonInterruptive} onChange={e => set({ nonInterruptive: e.target.checked })} />{l.nonInterruptive}<code>--non-interruptive</code></label>
+              <p className="or-hint or-indent">{l.nonInterruptiveHint}</p>
+            </>}
           </section>
           {multiplies(form) && (
             <section className="or-fsec" aria-label={l.delegation}>

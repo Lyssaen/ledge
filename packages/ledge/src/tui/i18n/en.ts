@@ -182,7 +182,20 @@ export const en: Messages = {
   },
   rigLaunch: {
     title: 'Launch a rig', launchKey: 'launch a rig', count: 'number of seats',
-    spec: '1 · Starting spec', where: '2 · Where', roles: '3 · Seats per role', delegation: '4 · Who delegates to whom', preview: 'Preview · rig.yaml',
+    permissions: '4 · Permissions', policyKey: 'permissions',
+    policyOf: { auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked' },
+    specPolicy: p => `the spec’s (${p})`, noSpecPolicy: 'none',
+    asRig: 'as the rig',
+    policyHint: {
+      none: 'no policy: Claude in acceptEdits, Codex in workspace-write',
+      auto: 'Claude decides on its own (auto mode); Codex keeps the default posture',
+      standard: 'everything passes but PRs, publishing, merging, force push and destructive (asks a person); rules applied once translated into the harness settings',
+      open: 'everything passes but destructive; rules applied once translated into the harness settings',
+      yolo: 'no prompt: Claude --dangerously-skip-permissions, Codex danger-full-access',
+      locked: 'only the toolchain and rig up/down pass; rules applied once translated into the harness settings'
+    },
+    nonInterruptive: 'accept the first-launch warnings (--non-interruptive)',
+    spec: '1 · Starting spec', where: '2 · Where', roles: '3 · Seats per role', delegation: '5 · Who delegates to whom', preview: 'Preview · rig.yaml',
     specHint: 'The rig’s model: its pods, its roles, the links between them.',
     source: { user: 'my specs', builtin: 'OpenRig' },
     seatsOf: n => `${n} ${plural(n, 'seat', 'seats')}`,
@@ -205,6 +218,22 @@ export const en: Messages = {
       busy: 'Another OpenRig action runs on this machine.', cwd_missing: 'This folder does not exist on the machine.', spec_not_found: 'This spec is no longer in the library.',
       daemon_stopped: 'Start the OpenRig daemon first (D on the OpenRig screen).', not_installed: 'OpenRig is not installed on this machine.',
       offline: 'Machine offline.', outdated: 'This machine’s Ledge daemon cannot launch a rig: update it.'
+    }
+  },
+  rigSeats: {
+    title: (rig, machine) => `Seats · ${rig} · ${machine}`, key: 'seats',
+    stays: now => `The rig keeps running. Now: ${now}.`,
+    role: 'role', count: 'number', delegationKey: 'delegation', apply: 'apply', cancel: 'cancel',
+    pairs: 'delegation in pairs', all: 'each added → all', linksPairs: 'links added in pairs', linksAll: 'links added to all',
+    nothing: 'Change a number: - +', notRunning: 'Only a running rig changes seats.',
+    busy: seat => `${seat} is working: its work in progress stops.`,
+    applying: 'applying…',
+    done: (added, removed, links) => `+${added} −${removed} seats${links !== undefined ? `, ${links} ${plural(links, 'link', 'links')}` : ''}`,
+    linksUnsupported: 'this OpenRig cannot link seats added to a running rig (before 0.7)',
+    why: {
+      rig_not_running: 'The rig is no longer running.', rig_root_unknown: 'Cannot copy a seat: the rig’s agents cannot be found.',
+      busy: 'Another OpenRig action runs on this machine.', not_installed: 'OpenRig is not installed on this machine.',
+      offline: 'Machine offline.', outdated: 'This machine’s Ledge daemon cannot change a rig’s seats: update it.'
     }
   },
   small: {

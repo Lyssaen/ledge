@@ -144,7 +144,7 @@ describe('launching a rig', () => {
     expect(parse(written.get('/home/me/.ledge/rigs/ledge-scale/rig.yaml')!).pods[0].members).toHaveLength(6);
     const go = await rig.launch(launch({ seats: { 'dev.build': 3, 'dev.review': 3 }, save: true }));
     expect(go.commands).toEqual(['rig up /home/me/.ledge/rigs/ledge-scale/rig.yaml --cwd /w/ledge --yes', 'rig specs add /home/me/.ledge/rigs/ledge-scale']);
-    expect(calls.filter(c => c[0] === 'up')).toHaveLength(2);
+    expect(calls.filter(c => c[0] === 'up' && c[1] !== '--help')).toHaveLength(2);
   });
   it('refuses a missing folder or spec, and says why rig failed', async () => {
     const { rig } = setup({ 'up starter': { code: 1, stdout: '{"ok":false,"error":{"code":"x","message":"rig starter is already running"}}' } });
@@ -161,5 +161,130 @@ describe('the plan check', () => {
     expect(readCheck(out)).toEqual({ status: 'planned', errors: [], warnings: ['dev.build: permission_policy absent; launch_posture=floor'] });
     expect(readCheck(JSON.stringify({ status: 'blocked', errors: [{ code: 'x', message: 'cwd inside OpenRig' }] }))?.errors).toEqual(['cwd inside OpenRig']);
     expect(readCheck('not json')).toBeUndefined();
+  });
+});
+
+// What `rig spec show --json` printed for a running starter (OpenRig 0.6.14 / 0.7.7: camelCase, agents relative to the rig's folder).
+const SHOW = {
+  version: '0.2', name: 'starter', permissionPolicy: 'builtin:auto', env: { HTTP_PROXY: 'http://p:3128' },
+  pods: [{ id: 'dev', label: 'Project', members: [
+    { id: 'build', agentRef: 'local:../../../agents/development/implementer', profile: 'default', runtime: 'claude-code', cwd: '/w/ledge', restorePolicy: 'resume_if_possible', startup: { files: [{ path: 'guidance/lead-first-move.md', deliveryHint: 'send_text', required: true }] }, env: { MY_VAR: '1' } },
+    { id: 'review', agentRef: 'local:../../../agents/development/qa', profile: 'default', runtime: 'codex', model: 'gpt-6-astra', cwd: '/w/ledge' }
+  ], edges: [{ kind: 'delegates_to', from: 'build', to: 'review' }] }],
+  edges: []
+};
+const nodes = (...ids: string[]) => ids.map(logicalId => ({ logicalId }));
+
+describe('changing a running rig\'s seats', () => {
+  it('the plan: copies under the next free number, the last copies removed first, the first seat only at 0', async () => {
+    const { seatPlan, roleOf } = await import('@ledge/protocol');
+    expect(roleOf('dev.build-3')).toBe('dev.build');
+    expect(seatPlan(nodes('dev.build', 'dev.review'), { 'dev.build': 3, 'dev.review': 3 })).toEqual({
+      add: [{ role: 'dev.build', pod: 'dev', id: 'build-2', from: 'dev.build' }, { role: 'dev.build', pod: 'dev', id: 'build-3', from: 'dev.build' },
+        { role: 'dev.review', pod: 'dev', id: 'review-2', from: 'dev.review' }, { role: 'dev.review', pod: 'dev', id: 'review-3', from: 'dev.review' }],
+      remove: []
+    });
+    expect(seatPlan(nodes('dev.build', 'dev.build-2', 'dev.build-4'), { 'dev.build': 4 }).add.map(a => a.id)).toEqual(['build-5']);
+    expect(seatPlan(nodes('dev.build', 'dev.build-2', 'dev.build-3'), { 'dev.build': 1 }).remove).toEqual(['dev.build-3', 'dev.build-2']);
+    expect(seatPlan(nodes('dev.build'), { 'dev.build': 0, 'dev.qa': 2 }).remove).toEqual(['dev.build']);
+  });
+  it('a fragment in snake_case, the env names kept, the agent made absolute from the rig\'s folder', async () => {
+    const { fragmentOf, memberOf } = await import('../src/daemon/rigSpec.js');
+    const f = fragmentOf(memberOf(SHOW, 'dev', 'build')!, 'build-2', DIR)!;
+    expect(f).toMatchObject({ id: 'build-2', agent_ref: 'path:/opt/openrig/daemon/specs/agents/development/implementer', restore_policy: 'resume_if_possible', env: { MY_VAR: '1' }, startup: { files: [{ delivery_hint: 'send_text' }] } });
+    expect(fragmentOf(memberOf(SHOW, 'dev', 'build')!, 'build-2', null)).toBeNull();
+    expect(memberOf(SHOW, 'dev', 'nope')).toBeNull();
+  });
+  it('the links of the roles that grew, by pairs', async () => {
+    const { linksFor } = await import('../src/daemon/rigSpec.js');
+    const after = new Map([['dev.build', ['dev.build', 'dev.build-2']], ['dev.review', ['dev.review', 'dev.review-2']]]);
+    expect(linksFor(SHOW, after, new Set(['dev.build']), 'pairs')).toEqual([
+      { from: 'dev.build', to: 'dev.review', kind: 'delegates_to' }, { from: 'dev.build-2', to: 'dev.review-2', kind: 'delegates_to' }
+    ]);
+    expect(linksFor(SHOW, after, new Set(['dev.qa']), 'pairs')).toEqual([]);
+  });
+});
+
+describe('OpenRig 0.7: rig up --name and rig edge', () => {
+  const PS = JSON.stringify([{ rigId: 'R1', name: 'starter', nodeCount: 2, runningCount: 2, status: 'running', lifecycleState: 'running', attentionCount: 0 }]);
+  const NODES = JSON.stringify([
+    { rigId: 'R1', logicalId: 'dev.build', canonicalSessionName: 'dev-build@starter', runtime: 'claude-code', agentActivity: { state: 'idle' } },
+    { rigId: 'R1', logicalId: 'dev.review', canonicalSessionName: 'dev-review@starter', runtime: 'codex', agentActivity: { state: 'idle' } }
+  ]);
+  const LS = JSON.stringify([{ kind: 'rig', name: 'starter', sourceType: 'builtin', resolvedSourcePath: `${DIR}/rig.yaml` }]);
+  function rig(version: '0.6.14' | '0.7.7') {
+    const calls: string[][] = [], written = new Map<string, string>();
+    const v7 = version === '0.7.7';
+    const answer = (a: string[]): string => {
+      const k = a.slice(0, 2).join(' ');
+      if (k === '--version') return `${version} (x)`;
+      if (k === 'up --help') return v7 ? '  --name <rig>  Launch the spec as…' : '  --existing';
+      if (k === 'help') return v7 ? '  edge   Add or remove typed edges\n' : '  remove  Remove a node\n';
+      if (k === 'status --json') return JSON.stringify({ daemon: { state: 'running', reachable: true }, kernel: { state: 'ready' } });
+      if (k === 'ps --json') return PS;
+      if (k === 'ps --nodes') return NODES;
+      if (k === 'specs ls') return LS;
+      if (k === 'spec show') return JSON.stringify(SHOW);
+      return '{}';
+    };
+    const run: RigRun = async args => { calls.push(args); return { code: 0, stdout: answer(args), stderr: '' }; };
+    const fs = { read: async (p: string) => { if (p === `${DIR}/rig.yaml`) return STARTER; throw new Error('ENOENT'); }, exists: (p: string) => p === '/w/ledge', copyDir: async () => {}, write: async (p: string, t: string) => { written.set(p, t); } };
+    return { rig: createOpenRig({ run, fs, home: '/home/me', rigsDir: '/r' }), calls, written };
+  }
+  it('0.7 launches the library spec under another name with --name, and remembers where it came from', async () => {
+    const { rig: r, calls, written } = rig('0.7.7');
+    const res = await r.launch(launch({ name: 'alpha' }));
+    expect(res.commands).toEqual(['rig up starter --name alpha --cwd /w/ledge --yes']);
+    expect(calls.some(c => c[0] === 'up' && c[1] === 'starter')).toBe(true);
+    expect(JSON.parse(written.get('/r/alpha/source.json')!)).toEqual({ spec: 'starter', path: `${DIR}/rig.yaml` });
+  });
+  it('0.6 composes a copy for another name, as before', async () => {
+    const { rig: r } = rig('0.6.14');
+    expect((await r.launch(launch({ name: 'alpha' }))).commands).toEqual(['rig up /r/alpha/rig.yaml --cwd /w/ledge --yes']);
+  });
+  it('0.7 adds the seats, links them by pairs, then snapshots', async () => {
+    const { rig: r, written } = rig('0.7.7');
+    const res = await r.reseat('starter', { 'dev.build': 2, 'dev.review': 2 });
+    expect(res).toMatchObject({ ok: true, added: ['dev.build-2', 'dev.review-2'], removed: [], links: 2 });
+    expect(res.commands).toEqual([
+      `rig add R1 dev /r/starter/seats/dev.build-2.json --rig-root ${DIR}`,
+      `rig add R1 dev /r/starter/seats/dev.review-2.json --rig-root ${DIR}`,
+      'rig edge add R1 dev.build dev.review --kind delegates_to',
+      'rig edge add R1 dev.build-2 dev.review-2 --kind delegates_to',
+      'rig snapshot R1'
+    ]);
+    expect(JSON.parse(written.get('/r/starter/seats/dev.review-2.json')!)).toMatchObject({ id: 'review-2', runtime: 'codex', model: 'gpt-6-astra' });
+  });
+  it('0.6 adds the seats without links, and says so', async () => {
+    const { rig: r } = rig('0.6.14');
+    const res = await r.reseat('starter', { 'dev.build': 2 });
+    expect(res).toMatchObject({ ok: true, added: ['dev.build-2'], linksUnsupported: true });
+    expect(res.commands.some(c => c.startsWith('rig edge'))).toBe(false);
+  });
+  it('nothing to change, or a rig that does not run', async () => {
+    const { rig: r, calls } = rig('0.7.7');
+    expect(await r.reseat('starter', { 'dev.build': 1 })).toEqual({ ok: true, commands: [], added: [], removed: [] });
+    expect((await r.reseat('nope', { 'dev.build': 2 })).error).toBe('rig_not_running');
+    expect(calls.some(c => c[0] === 'add')).toBe(false);
+  });
+});
+
+describe('permissions at launch', () => {
+  it('the rig\'s policy and a role\'s are written as builtin policies; the spec\'s are read back', () => {
+    const d = parse(composeSpec(parse(STARTER), DIR, launch({ policy: 'auto', policies: { 'dev.review': 'yolo' } })).yaml);
+    expect(d.permission_policy).toBe('builtin:auto');
+    expect(d.pods[0].members[0]).not.toHaveProperty('permission_policy');
+    expect(d.pods[0].members[1].permission_policy).toBe('builtin:yolo');
+    expect(changesSpec(launch({ policy: 'auto' }))).toBe(true);
+    const spec = readSpec(STARTER.replace('culture_file:', 'permission_policy: builtin:standard\nculture_file:'), { name: 'starter', source: 'builtin', path: '/x' });
+    expect(spec?.policy).toBe('builtin:standard');
+    expect(RigLaunchSchema.safeParse({ spec: 'starter', cwd: '/w', name: 'x', policy: 'root' }).success).toBe(false);
+  });
+  it('accepting the first-launch warnings adds --non-interruptive', async () => {
+    const calls: string[][] = [];
+    const run: RigRun = async args => { calls.push(args); return { code: 0, stdout: args[0] === 'specs' ? JSON.stringify([{ kind: 'rig', name: 'starter', sourceType: 'builtin', resolvedSourcePath: `${DIR}/rig.yaml` }]) : '{}', stderr: '' }; };
+    const fs = { read: async () => STARTER, exists: () => true, copyDir: async () => {}, write: async () => {} };
+    const r = await createOpenRig({ run, fs, home: '/h', rigsDir: '/r' }).launch(launch({ name: 'starter', policy: 'yolo', nonInterruptive: true }));
+    expect(r.commands[0]).toBe('rig up /r/starter/rig.yaml --cwd /w/ledge --non-interruptive --yes');
   });
 });

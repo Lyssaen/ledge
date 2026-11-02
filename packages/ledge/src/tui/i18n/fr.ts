@@ -190,7 +190,20 @@ export const fr = {
   },
   rigLaunch: {
     title: 'Lancer un rig', launchKey: 'lancer un rig', count: 'nombre de sièges',
-    spec: '1 · Spec de départ', where: '2 · Où', roles: '3 · Sièges par rôle', delegation: '4 · Qui délègue à qui', preview: 'Aperçu · rig.yaml',
+    permissions: '4 · Permissions', policyKey: 'permissions',
+    policyOf: { auto: 'Auto', standard: 'Standard', open: 'Ouvert', yolo: 'YOLO', locked: 'Verrouillé' } as Record<string, string>,
+    specPolicy: (p: string) => `celle de la spec (${p})`, noSpecPolicy: 'aucune',
+    asRig: 'comme le rig',
+    policyHint: {
+      none: 'sans politique : Claude en acceptEdits, Codex en workspace-write',
+      auto: 'Claude décide seul (mode auto) ; Codex garde la posture par défaut',
+      standard: 'tout passe sauf PR, publication, fusion, force push et destructif (demande une personne) ; règles appliquées une fois traduites dans les réglages du harnais',
+      open: 'tout passe sauf le destructif ; règles appliquées une fois traduites dans les réglages du harnais',
+      yolo: 'aucune demande : Claude --dangerously-skip-permissions, Codex danger-full-access',
+      locked: 'seuls la chaîne d’outils et rig up/down passent ; règles appliquées une fois traduites dans les réglages du harnais'
+    } as Record<string, string>,
+    nonInterruptive: 'accepter les avertissements de premier lancement (--non-interruptive)',
+    spec: '1 · Spec de départ', where: '2 · Où', roles: '3 · Sièges par rôle', delegation: '5 · Qui délègue à qui', preview: 'Aperçu · rig.yaml',
     specHint: 'Le modèle de rig : ses pods, ses rôles, les liens entre eux.',
     source: { user: 'mes specs', builtin: 'OpenRig' } as Record<string, string>,
     seatsOf: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`,
@@ -213,6 +226,22 @@ export const fr = {
       busy: 'Une autre action OpenRig est en cours sur cette machine.', cwd_missing: 'Ce dossier n’existe pas sur la machine.', spec_not_found: 'Cette spec n’est plus dans la bibliothèque.',
       daemon_stopped: 'Démarrez le daemon OpenRig d’abord (D sur l’écran OpenRig).', not_installed: 'OpenRig n’est pas installé sur cette machine.',
       offline: 'Machine hors ligne.', outdated: 'Le daemon Ledge de cette machine ne sait pas lancer de rig : mettez-le à jour.'
+    } as Record<string, string>
+  },
+  rigSeats: {
+    title: (rig: string, machine: string) => `Sièges · ${rig} · ${machine}`, key: 'sièges',
+    stays: (now: string) => `Le rig reste en marche. Aujourd’hui : ${now}.`,
+    role: 'rôle', count: 'nombre', delegationKey: 'délégation', apply: 'appliquer', cancel: 'annuler',
+    pairs: 'délégation par paires', all: 'chaque ajout → tous', linksPairs: 'liens ajoutés par paires', linksAll: 'liens ajoutés à tous',
+    nothing: 'Changez un nombre : - +', notRunning: 'Seul un rig en marche change de sièges.',
+    busy: (seat: string) => `${seat} travaille : son travail en cours s’arrête.`,
+    applying: 'en cours…',
+    done: (added: number, removed: number, links: number | undefined) => `+${added} −${removed} sièges${links !== undefined ? `, ${links} ${plural(links, 'lien', 'liens')}` : ''}`,
+    linksUnsupported: 'cet OpenRig ne sait pas lier des sièges ajoutés à un rig en marche (avant 0.7)',
+    why: {
+      rig_not_running: 'Le rig n’est plus en marche.', rig_root_unknown: 'Impossible de copier un siège : les agents du rig sont introuvables.',
+      busy: 'Une autre action OpenRig est en cours sur cette machine.', not_installed: 'OpenRig n’est pas installé sur cette machine.',
+      offline: 'Machine hors ligne.', outdated: 'Le daemon Ledge de cette machine ne sait pas changer les sièges d’un rig : mettez-le à jour.'
     } as Record<string, string>
   },
   small: {

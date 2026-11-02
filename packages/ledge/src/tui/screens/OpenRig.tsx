@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
-import { useOpenRig } from '@ledge/fleet/openrig';
+import { reseatRig, useOpenRig } from '@ledge/fleet/openrig';
 import type { OpenRigAction, OpenRigState, Rig } from '@ledge/protocol';
 import { useScreenKeys, useTui } from '../context.js';
 import {
@@ -8,7 +8,9 @@ import {
 } from '../model/openrig.js';
 import type { Messages } from '../i18n/lang.js';
 import { C } from '../theme.js';
+import { canReseat, changedCounts, countsOf, planOf, seatRows, withCount, type Delegation } from '../model/rigSeats.js';
 import { Frame } from '../ui/Frame.js';
+import { RigSeats } from '../ui/RigSeats.js';
 import { TitledBox } from '../ui/TitledBox.js';
 
 const LOOK: Record<RigLook, { glyph: string; color: () => string }> = {
@@ -46,6 +48,8 @@ export function OpenRigScreen() {
   const selectedId = useRef<string | null>(null);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  /** « Sièges du rig » open (± on a running rig): the rig, the count asked per role, the role chosen, how added seats link. */
+  const [seats, setSeats] = useState<{ rig: string; counts: Record<string, number>; at: number; delegation: Delegation; applying: boolean } | null>(null);
 
   // The selection follows its rig when the list changes (a rig started, stopped or gone).
   const ids = rigs.map(r => r.id).join(',');
@@ -64,7 +68,37 @@ export function OpenRigScreen() {
     if (asksFirst(a)) setConfirm(confirmOf(state, a)); else run(a);
   };
 
+  // The seats' window reads the rig as it is now; it closes when the rig goes or stops.
+  const seatRig = seats ? rigs.find(r => r.name === seats.rig) : undefined;
+  const rows = seatRig ? seatRows(seatRig) : [];
+  useEffect(() => { if (seats && !seats.applying && !canReseat(seatRig)) setSeats(null); }, [seats, seatRig]);
+  const apply = () => {
+    if (!seats || !seatRig || !machine || seats.applying) return;
+    const changed = changedCounts(rows, seats.counts);
+    if (!Object.keys(changed).length) return;
+    const adds = planOf(seatRig, rows, seats.counts).add.length > 0;
+    setSeats(x => (x ? { ...x, applying: true } : x));
+    void reseatRig(tui.client, machine.id, seatRig.name, changed, adds ? seats.delegation : undefined).then(r => {
+      if (!r.ok) { setSeats(x => (x ? { ...x, applying: false } : x)); tui.toast({ text: t.rigSeats.why[r.error ?? ''] ?? r.error ?? '', tone: 'error' }); return; }
+      setSeats(null); rig.refresh();
+      const done = t.rigSeats.done(r.added.length, r.removed.length, r.links);
+      tui.toast({ text: r.linksUnsupported ? `${done} · ${t.rigSeats.linksUnsupported}` : done, tone: r.linksUnsupported ? 'info' : 'ok' });
+    });
+  };
+
   useScreenKeys((input, key) => {
+    if (seats) {
+      if (seats.applying) return true;
+      if (key.escape) { setSeats(null); return true; }
+      if (key.return) { apply(); return true; }
+      if (key.upArrow || input === 'k') { setSeats(x => (x ? { ...x, at: step(x.at, -1, rows.length) } : x)); return true; }
+      if (key.downArrow || input === 'j') { setSeats(x => (x ? { ...x, at: step(x.at, 1, rows.length) } : x)); return true; }
+      const role = rows[seats.at]?.role;
+      if (role && (input === '+' || input === '=')) { setSeats(x => (x ? { ...x, counts: withCount(x.counts, role, 1) } : x)); return true; }
+      if (role && input === '-') { setSeats(x => (x ? { ...x, counts: withCount(x.counts, role, -1) } : x)); return true; }
+      if (key.leftArrow || key.rightArrow) { setSeats(x => (x ? { ...x, delegation: x.delegation === 'pairs' ? 'all' : 'pairs' } : x)); return true; }
+      return true;
+    }
     if (confirm) {
       if (input === 'y') { run(confirm.action); setConfirm(null); return true; }
       if (input === 'n' || key.escape) { setConfirm(null); return true; }
@@ -87,12 +121,19 @@ export function OpenRigScreen() {
     if (input === 'K') { if (daemonUp(state) && !busy) ask(kernelToggle(state!)); return true; }
     if (input === 's') { if (daemonUp(state) && current && !busy) ask(rigToggle(current)); return true; }
     if (input === 'R') { if (daemonUp(state) && current && !busy) ask({ kind: 'rig.restart', rig: current.name }); return true; }
+    if (input === '±' || input === '=') {
+      if (!busy && canReseat(current)) setSeats({ rig: current.name, counts: countsOf(seatRows(current)), at: 0, delegation: 'pairs', applying: false });
+      else if (current) tui.toast({ text: t.rigSeats.notRunning, tone: 'info' });
+      return true;
+    }
     return false;
   });
 
-  const keys: Array<[string, string]> = confirm
+  const keys: Array<[string, string]> = seats
+    ? [['↑ ↓', t.rigSeats.role], ['- +', t.rigSeats.count], ['← →', t.rigSeats.delegationKey], ['↵', t.rigSeats.apply], ['esc', t.rigSeats.cancel]]
+    : confirm
     ? [['y', o.yes], ['n', o.no]]
-    : [['tab', o.machine], ['j k', t.keys.navigate], ['↵', o.unfold], ['s', o.toggle], ['R', o.restart], ['+', t.rigLaunch.launchKey], ['D', o.daemonKey], ['K', o.kernelKey], ['esc', t.keys.back]];
+    : [['tab', o.machine], ['j k', t.keys.navigate], ['↵', o.unfold], ['s', o.toggle], ['R', o.restart], ['± =', t.rigSeats.key], ['+', t.rigLaunch.launchKey], ['D', o.daemonKey], ['K', o.kernelKey], ['esc', t.keys.back]];
   const crumb = [state?.version ? o.version(state.version) : o.title, machine?.label].filter(Boolean).join(' · ');
 
   return (
@@ -101,6 +142,7 @@ export function OpenRigScreen() {
         : rig.error ? <TitledBox title={o.title} mark={{ text: machine.label, color: C.dim }} flexGrow={1}><Text color={C.yellow}>{rig.error === 'offline' ? o.offline : o.outdated}</Text></TitledBox>
         : !state ? <TitledBox title={o.title} mark={{ text: machine.label, color: C.dim }} flexGrow={1}><Text color={C.faint}>{o.loading}</Text></TitledBox>
         : !state.installed ? <TitledBox title={o.title} mark={{ text: machine.label, color: C.dim }} flexGrow={1}><Text color={C.dim}>{o.notInstalled}</Text></TitledBox>
+        : seats && seatRig ? <RigSeats rig={seatRig} machine={machine.label} rows={rows} counts={seats.counts} at={seats.at} delegation={seats.delegation} plan={planOf(seatRig, rows, seats.counts)} applying={seats.applying} />
         : <Body state={state} rigs={rigs} at={at} open={open} machineLabel={machine.label} />}
       {confirm ? <ConfirmBox confirm={confirm} /> : null}
       {rig.pending ? <Box paddingX={1} height={1}><Text wrap="truncate" color={C.blue}>{o.running(confirmOf(state ?? EMPTY, rig.pending).commands.join(' && '))}</Text></Box> : null}

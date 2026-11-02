@@ -977,6 +977,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (!done.plan && done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
         return;
       }
+      case 'openrig.seats': {
+        const done = await openrig.reseat(msg.rig, msg.seats, msg.delegation);
+        reply({ type: 'openrig.reseated', requestId: msg.requestId, ...done });
+        if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
+        return;
+      }
       case 'openrig.act': {
         const done = await openrig.act(msg.action);
         reply({ type: 'openrig.done', requestId: msg.requestId, ...done });

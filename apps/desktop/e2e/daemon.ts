@@ -60,6 +60,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       received.push(msg);
       // OpenRig (docs/mockups/ledge-openrig.html): a status answers `extras.openrig`; an action succeeds and broadcasts it again.
       if (msg.type === 'openrig.status' && extras.openrig) ws.send(JSON.stringify({ type: 'openrig.state', requestId: msg.requestId, state: extras.openrig }));
+      if (msg.type === 'openrig.seats') ws.send(JSON.stringify({ type: 'openrig.reseated', requestId: msg.requestId, ok: true, commands: [], added: ['dev.build-2', 'dev.build-3', 'dev.review-2', 'dev.review-3'], removed: [], links: 4 }));
       if (msg.type === 'openrig.specs') ws.send(JSON.stringify({ type: 'openrig.specList', requestId: msg.requestId, specs: extras.rigSpecs ?? [] }));
       // A launch's check answers a plan and a composed spec; a launch succeeds.
       if (msg.type === 'openrig.launch') {
