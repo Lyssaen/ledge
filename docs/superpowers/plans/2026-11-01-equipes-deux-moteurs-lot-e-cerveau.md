@@ -98,6 +98,7 @@
   - **La garde** (`guard.ts`, `validAnswers`). Pour une escalade `task-`, elle accepte `{ text: string }` non vide, au plus `TASK_TEXT_MAX`. Elle refuse des réponses par option. Les règles de catégorie, de mots critiques et de mandat s'appliquent comme pour une escalade OpenRig.
   - **La commande du cerveau** : `ledge brain decide <id> --text "<réponse>" --category <cat> [--rule <id>] [--why "…"]`. `--text` exclut `--answer`. L'usage (`USAGE`) gagne cette ligne.
   - **La livraison** (`answer.ts`). Pour un id `task-`, `deliver` appelle `tasks.run({ by: 'ledge', op: 'done', task: id.slice(5), text })`. Le texte vaut `Réponse de Ledge : <text>` (par `'ledge'`) ou `Réponse de l'utilisateur : <text>` (par `'user'`). Si la tâche est déjà close, c'est un refus, et la mise à jour d'état est annulée comme pour un échec de livraison OpenRig. L'escalade passe alors `answered`, et le livre la retire à la fermeture de la tâche.
+  - **La garde du moteur** (`daemon/engine/guard.ts`, lot D). En mode Ledge, elle laisse passer `escalation.answer` pour les ids `task-` comme pour les `ask-`. Ce sont des escalades de Ledge lui-même. Test : en mode Ledge, `escalation.answer { id: 'task-…' }` n'est pas refusé par `ENGINE_LEDGE`.
   - **Le cerveau** :
     - Dans `inbox.ts`, l'événement d'une escalade `task-` dit : `question du lead de l'équipe <rigId> : tranche-la avec ledge brain decide <id> --text "<réponse>" --category <cat>, ou remonte-la avec ledge brain ask <id> --advice "…"`.
     - Dans `persona.ts`, le tableau des commandes gagne `--text`.
