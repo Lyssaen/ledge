@@ -129,6 +129,9 @@ importers:
       '@ledge/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@xterm/xterm':
+        specifier: 5.5.0
+        version: 5.5.0
       react:
         specifier: ^19.0.0
         version: 19.3.0

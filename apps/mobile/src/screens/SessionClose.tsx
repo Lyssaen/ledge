@@ -21,7 +21,7 @@ type Problem = 'cancelled' | 'expired' | 'failed' | 'prepareFailed';
  * The device check of a close or a resume, as RiskConfirm makes it: the challenge is asked as soon as it can be, so the tap
  * that follows opens the device's prompt at once; a cancelled prompt sends nothing, and an expired or failed check offers a new one.
  */
-function useDeviceCheck(store: MobileStore, purpose: 'close' | 'act', id: string, enabled: boolean, onConfirm: (a: Assertion) => string | null) {
+export function useDeviceCheck(store: MobileStore, purpose: 'close' | 'act' | 'terminal', id: string, enabled: boolean, onConfirm: (a: Assertion) => string | null) {
   const [challenge, setChallenge] = useState<ConfirmChallenge | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [asking, setAsking] = useState(false);
@@ -34,7 +34,7 @@ function useDeviceCheck(store: MobileStore, purpose: 'close' | 'act', id: string
     let on = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     setChallenge(null);
-    store.prepareConfirm({ purpose, id }).then(
+    store.prepareConfirm(purpose === 'terminal' ? { purpose, id } : { purpose, id }).then(
       c => {
         if (!on) return;
         setChallenge(c);
