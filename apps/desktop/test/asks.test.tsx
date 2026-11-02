@@ -269,3 +269,31 @@ describe('the sidebar', () => {
     expect(document.querySelector('.st-rig .t-need')).toHaveTextContent('1');
   });
 });
+
+describe('Markdown bodies (the lead: folded = words without syntax, unfolded = rendered)', () => {
+  it('plainOf drops the syntax and keeps the words and lines', async () => {
+    const { plainOf } = await import('../src/asks/plain');
+    expect(plainOf('## Contexte\n\n- **un** point\n- `code` et [lien](http://x)\n\n> cité\n\n```ts\nconst a = 1;\n```\n---\n| a | b |\n|---|---|\n| 1 | 2 |'))
+      .toBe('Contexte\n\nun point\ncode et lien\n\ncité\n\nconst a = 1;\na · b\n1 · 2');
+    expect(plainOf('1. _premier_ ~~non~~\n2) [x] fait')).toBe('premier non\nfait');
+    expect(plainOf('a snake_case_name and 2*3*4')).toBe('a snake_case_name and 2*3*4');
+  });
+
+  it('a long body folded shows no raw « ## » or « - »; « Tout lire » renders the Markdown', async () => {
+    mount([ask({ body: '## Contexte\n- un\n- deux\n- trois\n- quatre' })]);
+    const folded = document.querySelector('.ask-body.clamp3')!;
+    expect(folded.textContent).toBe('Contexte\nun\ndeux\ntrois\nquatre');
+    await userEvent.click(screen.getByRole('button', { name: 'Tout lire' }));
+    const md = document.querySelector('.ask-md [data-markdown]')!;
+    expect(md.querySelector('h2')).toHaveTextContent('Contexte');
+    expect(md.querySelectorAll('li')).toHaveLength(4);
+  });
+
+  it('a short body that fits is rendered whole; « Détails » renders its Markdown', async () => {
+    mount([ask({ body: 'Voir **ceci**.', detail: '- un\n- deux' })]);
+    expect(document.querySelector('.ask-md strong')).toHaveTextContent('ceci');
+    expect(screen.queryByRole('button', { name: 'Tout lire' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Détails' }));
+    expect(document.querySelectorAll('.ask-detail li')).toHaveLength(2);
+  });
+});

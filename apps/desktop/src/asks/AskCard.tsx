@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import type { HumanAnswer, HumanAsk, OpenRigAnswered, Session } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -7,6 +8,7 @@ import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot } from '../shell/SessionBot';
 import { endOf, pillOf, whoOf, type AnswerEnd } from './model';
+import { plainOf } from './plain';
 
 const FILE = ['M6 3h8l4 4v14H6z', 'M14 3v4h4'];
 const ALERT = ['M12 3 2 20h20z', 'M12 10v4', 'M12 17h.01'];
@@ -36,6 +38,8 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   const pill = pillOf(ask);
   // An ask never read whole comes with its summary as body: nothing more to show (design-ux).
   const body = ask.bodyTruncated && ask.body === ask.summary ? '' : ask.body;
+  // Rigs write Markdown (the lead): folded, the words without the syntax; unfolded, rendered as in the threads.
+  const plain = useMemo(() => plainOf(body), [body]);
   const who = whoOf(ask, session);
   const [composing, setComposing] = useState(false);
   const [text, setText] = useState('');
@@ -46,6 +50,9 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   const [all, setAll] = useState(false);
   const [details, setDetails] = useState(false);
   const [clamped, setClamped] = useState(false);
+  // Measured for this very text: a new body is measured again before it may show whole.
+  const [measuredFor, setMeasuredFor] = useState<string | null>(null);
+  const measured = measuredFor === plain;
   const bodyRef = useRef<HTMLParagraphElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
@@ -53,8 +60,9 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   useLayoutEffect(() => {
     const el = bodyRef.current;
     if (!el || all) return;
-    setClamped(el.scrollHeight > el.clientHeight + 1 || body.split('\n').length > (pill === 'decision' || pill === 'question' ? 3 : 2));
-  }, [body, all, pill]);
+    setClamped(el.scrollHeight > el.clientHeight + 1 || plain.split('\n').length > (pill === 'decision' || pill === 'question' ? 3 : 2));
+    setMeasuredFor(plain);
+  }, [plain, all, pill]);
   useEffect(() => { if (composing) fieldRef.current?.focus(); }, [composing]);
   useEffect(() => {
     if (!focus) return;
@@ -150,7 +158,7 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
       <div className="ask-update-row">
         <div className="ask-update-text">
           <b>{ask.summary}</b>
-          {body && <p ref={bodyRef} className="ask-body clamp2">{body}</p>}
+          {plain && <p ref={bodyRef} className="ask-body clamp2">{plain}</p>}
         </div>
         <button type="button" className="ask-btn sm ghost" disabled={busy} onClick={() => void go({ key: 'seen', answer: { kind: 'seen' } })}>{wheel('seen')}{a.seen}</button>
       </div>
@@ -164,13 +172,16 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
       {head}
       <h4>{ask.summary}</h4>
       {!composing && <>
-        {body && <p ref={bodyRef} className={cls('ask-body', !all && (pill === 'parked' ? 'clamp2' : 'clamp3'))}>{body}</p>}
+        {body && (all || (measured && !clamped)
+          // Unfolded, or short enough to show whole: the Markdown rendered.
+          ? <div className="ask-body ask-md"><ThreadMarkdown text={body} /></div>
+          : <p ref={bodyRef} className={cls('ask-body', pill === 'parked' ? 'clamp2' : 'clamp3')}>{plain}</p>)}
         {clamped && !all && <button type="button" className="ask-more" onClick={() => setAll(true)}>{a.readAll}</button>}
         {ask.detail && <>
           <button type="button" className="ask-fold" aria-expanded={details} onClick={() => setDetails(d => !d)}>
             <span className={cls('ask-chev', details && 'open')}><Icon d={ICONS.chevronRight.d} size={11} /></span>{a.details}
           </button>
-          {details && <p className="ask-body ask-detail">{ask.detail}</p>}
+          {details && <div className="ask-body ask-md ask-detail"><ThreadMarkdown text={ask.detail} /></div>}
         </>}
         {source}
       </>}

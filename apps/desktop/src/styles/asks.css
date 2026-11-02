@@ -84,3 +84,9 @@
 .ask-n.neutral { background: var(--muted); color: var(--muted-foreground); }
 /* One line atop the column when a read of OpenRig failed and the list kept the known asks (design-ux). */
 .ask-partial { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); }
+
+/* The body rendered from Markdown (unfolded, or short enough): the threads' renderer, at the card's size and tone. */
+.ask-md { white-space: normal; }
+.ask-md .ledge-thread-md { font-size: 12.5px; line-height: 18px; color: var(--muted-foreground); }
+.ask-md .ledge-thread-md > :first-child { margin-top: 0; }
+.ask-md .ledge-thread-md > :last-child { margin-bottom: 0; }
