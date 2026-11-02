@@ -74,6 +74,18 @@ for (const theme of ['dark', 'light'] as const) {
     await page.locator('.ask-done').screenshot({ path: info.outputPath(`done-${theme}.png`) });
   });
 
+  test(`uncertain and words on several questions, ${theme}`, async ({ page }, info) => {
+    await open(page, { theme, asks: [ASKS[1]!, ASKS[2]!], answered: { ok: false, outcome: undefined, error: 'uncertain' } });
+    const one = page.locator('article[data-ask="qitem-192556"]');
+    await one.getByRole('button', { name: 'Un plus fort pour décider seul' }).click();
+    await expect(one.getByRole('alert')).toHaveText(/Envoi incertain/);
+    await one.screenshot({ path: info.outputPath(`card-uncertain-${theme}.png`) });
+    const two = page.locator('article[data-ask="qitem-two"]');
+    await two.getByRole('button', { name: 'Répondre autrement…' }).click();
+    await expect(two.getByText(/règle toute la demande/)).toBeVisible();
+    await two.screenshot({ path: info.outputPath(`card-two-words-${theme}.png`) });
+  });
+
   for (const state of ['no_person', 'no_default', 'openrig_stopped', 'unreachable', 'not_installed'] as const) {
     test(`banner ${state}, ${theme}`, async ({ page }, info) => {
       const message = state === 'unreachable' ? 'connection refused on 127.0.0.1:7433' : state === 'no_default' ? 'rig human default <address>' : undefined;
