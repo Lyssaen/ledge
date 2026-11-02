@@ -6,9 +6,10 @@ import { C } from '../theme.js';
 /** A rounded box with its title in the top border, as the mockup draws them (Ink's borders take no title); `mark`, when
  *  given, follows the title in its own colour (a machine's ●); `foot` at the right of the bottom border. `double`: a
  *  double line, for a box that asks to confirm (it reads as another state even where its red and the coral are close). */
-export function TitledBox({ title, mark, color = C.line, titleColor = C.dim, titleBold, double, foot, footColor = C.faint, children, flexGrow, height, width, flexShrink, minHeight }: {
+export function TitledBox({ title, mark, color = C.line, titleColor = C.dim, titleBold, double, foot, footColor = C.faint, children, flexGrow, height, width, flexShrink, minHeight, paddingX = 1 }: {
   title: string; mark?: { text: string; color: string }; color?: string; titleColor?: string; titleBold?: boolean; double?: boolean; foot?: string; footColor?: string; children?: ReactNode;
   flexGrow?: number; flexShrink?: number; height?: number | string; width?: number | string; minHeight?: number;
+  /** 0: the lines draw their own margin (the Roles view's provenance rail sits in it). */ paddingX?: number;
 }) {
   const b = double ? { tl: '╔', h: '═', tr: '╗', bl: '╚', br: '╝' } : { tl: '╭', h: '─', tr: '╮', bl: '╰', br: '╯' };
   const ref = useRef<DOMElement>(null);
@@ -26,7 +27,7 @@ export function TitledBox({ title, mark, color = C.line, titleColor = C.dim, tit
   return (
     <Box ref={ref} flexDirection="column" flexGrow={flexGrow} flexShrink={flexShrink} height={height} width={width} minHeight={minHeight} overflow="hidden">
       <Text wrap="truncate"><Text color={color}>{b.tl}{b.h}</Text>{w > 0 ? shown.map((s, i) => <Text key={i} color={s.color} bold={titleBold}>{s.text}</Text>) : null}<Text color={color}>{b.h.repeat(rest)}{b.tr}</Text></Text>
-      <Box flexDirection="column" borderStyle={double ? 'double' : 'round'} borderTop={false} borderBottom={!f} borderColor={color} paddingX={1} flexGrow={1} overflow="hidden">
+      <Box flexDirection="column" borderStyle={double ? 'double' : 'round'} borderTop={false} borderBottom={!f} borderColor={color} paddingX={paddingX} flexGrow={1} overflow="hidden">
         {children}
       </Box>
       {f ? <Text wrap="truncate"><Text color={color}>{b.bl}{b.h.repeat(Math.max(1, w - 5 - cells(f)))} </Text><Text color={footColor}>{f}</Text><Text color={color}> {b.h}{b.br}</Text></Text> : null}
