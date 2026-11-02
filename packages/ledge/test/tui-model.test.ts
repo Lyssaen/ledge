@@ -473,4 +473,14 @@ describe('tui image lines', () => {
     expect(threadImages(items, false)).toEqual([other]);
     expect(threadImages(items, true)).toEqual([ref, other]);
   });
+
+  it('threadImages includes the images of tool rows, in thread order', () => {
+    const other = { ...ref, id: 'c'.repeat(64) };
+    const items: ThreadItem[] = [
+      { kind: 'prompt', id: 'p1', at, turn: 1, text: 'un', images: [ref] },
+      { kind: 'tool', id: 't1', at, turn: 1, tool: 'browser', label: 'Navigateur', status: 'success', files: [], images: [other] },
+      { kind: 'reply', id: 'r1', at, turn: 1, text: 'ok' }
+    ];
+    expect(threadImages(items, true)).toEqual([ref, other]);
+  });
 });
