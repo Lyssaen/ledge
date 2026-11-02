@@ -56,6 +56,15 @@ function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
         {item.cut && <Cut align="start" />}
       </div>
     );
+    case 'capture': {
+      const first = item.images[0];
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <div className="text-meta text-muted"><span aria-hidden>✓</span> <span>{item.label}</span>{first && <> <span className="font-mono">{first.width}×{first.height}</span></>}</div>
+          <PhoneThumbs store={store} refs={item.images} align="start" />
+        </div>
+      );
+    }
     case 'event': return <div className="text-center text-meta text-muted">{item.label}</div>;
     case 'awaiting': return (
       <Notice title={copy.thread.awaiting} tone={item.item.kind === 'question' ? 'warning' : 'approval'}>

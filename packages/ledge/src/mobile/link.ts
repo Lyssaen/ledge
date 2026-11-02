@@ -1,6 +1,6 @@
 // The daemon's outgoing websocket to the relay, kept open with reconnection and backoff.
 import WebSocket from 'ws';
-import { RELAY_CLOSE_SIGNED_OUT, RelayServerMessageSchema, type RelayClientMessage, type RelayServerMessage } from '@ledge/protocol';
+import { RELAY_CLOSE_REPLACED, RELAY_CLOSE_SIGNED_OUT, RelayServerMessageSchema, type RelayClientMessage, type RelayServerMessage } from '@ledge/protocol';
 import { log } from '../log.js';
 
 export type LinkState =
@@ -29,6 +29,7 @@ export const PONG_WITHIN_MS = 10_000;
 /** Bound on the upgrade, then again on the wait for `welcome` after `open`. */
 export const WELCOME_WITHIN_MS = 15_000;
 const ERROR_MAX = 200;
+export const REPLACED_ERROR = 'replaced by another connection of this PC session';
 
 const realSchedule: Schedule = (fn, ms) => {
   const h = setTimeout(fn, ms);
@@ -45,6 +46,7 @@ function wsUrl(relayUrl: string): string {
 /**
  * Connects at once and keeps the link up until `close()`.
  * Backoff: 1 s, doubled after each failure, ±20 % jitter from `random`, never above 60 s; back to 1 s on each `welcome`.
+ * Replaced by another socket of the same session (4000): waits 60 s, so two daemons do not take turns every second.
  * `now`, `random` and `schedule` (timers for retries and pings) are for tests; they default to the real ones.
  */
 export function createRelayLink(opts: {
@@ -108,10 +110,10 @@ export function createRelayLink(opts: {
     return Math.round(Math.min(jittered, BACKOFF_MAX_MS));
   };
 
-  const fail = (error: string) => {
+  const fail = (error: string, fixedDelay?: number) => {
     drop();
     if (finished) return;
-    const delay = nextDelay();
+    const delay = fixedDelay ?? nextDelay();
     const cut = error.slice(0, ERROR_MAX);
     log(`mobile link: offline (${cut}), retry in ${delay} ms`);
     setState({ state: 'offline', retryAt: new Date(now() + delay).toISOString(), error: cut });
@@ -173,6 +175,7 @@ export function createRelayLink(opts: {
     sock.on('close', (code: number) => {
       if (ws !== sock) return;
       if (code === RELAY_CLOSE_SIGNED_OUT) signedOut('other_pc');
+      else if (code === RELAY_CLOSE_REPLACED) fail(REPLACED_ERROR, BACKOFF_MAX_MS);
       else fail(lastError || `connection closed (${code})`);
     });
   };

@@ -127,7 +127,8 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
         ...(input.v !== undefined ? { input: input.v } : {}),
         ...(output.v !== undefined ? { output: output.v } : {}),
         ...(error.v !== undefined ? { error: error.v } : {}),
-        ...pickSet(item, ['durationMs']),
+        ...pickSet(item, ['durationMs', 'imagesDropped']),
+        ...(item.images?.length ? { images: item.images } : {}),
         files: item.files.map((f): FileChange => ({ path: f.path, ...pickSet(f, ['from']), change: f.change }))
       };
       break;

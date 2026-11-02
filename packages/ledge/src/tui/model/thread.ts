@@ -61,6 +61,7 @@ function toolLines(it: ToolItem, o: Opts): Line[] {
       .forEach((x, k) => out.push([{ text: `      ${g.bar} `, color: C.faint }, ...(k ? [{ text: `${g.cont} `, color: C.faint }] : []), ...x]));
     if (lines.length > DIFF_MAX) out.push([{ text: `      ${g.bar} ${g.ellipsis} ${lines.length - DIFF_MAX}`, color: C.faint }]);
   }
+  for (const r of it.images ?? []) out.push(imageLine(r, t, 'o'));
   return out;
 }
 
@@ -144,8 +145,8 @@ export function anchorLine(v: Pick<ThreadView, 'keys' | 'turns'>, anchor: { key:
 }
 
 export const threadLines = (items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolded: boolean }): Line[] => threadView(items, o).lines;
-/** The images of the turns shown in full (the last OPEN_TURNS, or all unfolded), oldest first. */
+/** The images of the prompts and tool rows of the turns shown in full (the last OPEN_TURNS, or all unfolded), oldest first. */
 export function threadImages(items: ThreadItem[], unfolded: boolean): AttachmentRef[] {
   const all = turns(items);
-  return (unfolded ? all : all.slice(-OPEN_TURNS)).flatMap(turn => turn.items.flatMap(it => (it.kind === 'prompt' ? it.images ?? [] : [])));
+  return (unfolded ? all : all.slice(-OPEN_TURNS)).flatMap(turn => turn.items.flatMap(it => (it.kind === 'prompt' || it.kind === 'tool' ? it.images ?? [] : [])));
 }

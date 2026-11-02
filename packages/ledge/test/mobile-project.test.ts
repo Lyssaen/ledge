@@ -119,6 +119,10 @@ describe('images on the phone projection', () => {
     const item: ThreadItem = { kind: 'prompt', id: 'p1', at: T, turn: 1, text: 'look', images: [ref] };
     expect(toPhoneItem(item).item).toEqual({ kind: 'prompt', id: 'p1', at: T, turn: 1, text: 'look', images: [ref] });
   });
+  it('a tool row keeps its images and imagesDropped', () => {
+    const item: ThreadItem = { kind: 'tool', id: 't1', at: T, turn: 1, tool: 'shot', label: 'shot', status: 'success', files: [], images: [ref], imagesDropped: true };
+    expect(toPhoneItem(item).item).toMatchObject({ kind: 'tool', images: [ref], imagesDropped: true });
+  });
   it('a prompt item without images stays as it was', () => {
     expect(toPhoneItem({ kind: 'prompt', id: 'p1', at: T, turn: 1, text: 'look' }).item).not.toHaveProperty('images');
   });

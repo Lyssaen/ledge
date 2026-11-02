@@ -4,13 +4,13 @@ L'équipe d'agents qui développe Ledge, versionnée avec le code.
 
 ## Les sièges
 
-| Siège | Runtime | Rôle |
+| Siège | Runtime · modèle | Rôle |
 |---|---|---|
-| `pilot-lead@ledge-dev` | Claude Code | Ton interlocuteur. Découpe l'objectif, applique « maquette d'abord », route, suit, rend compte. |
-| `design-ux@ledge-dev` | Claude Code | Maquettes HTML dans `docs/mockups/` (clair/sombre, états, FR/EN, captures) avant tout front-end. |
-| `dev-front@ledge-dev` | Claude Code | Desktop, île, mobile, `packages/ui`, rendu TUI — à partir d'une maquette validée. |
-| `dev-back@ledge-dev` | Claude Code | Daemon/CLI, protocole, fleet, seal, relais, Rust. |
-| `review-qa@ledge-dev` | Codex | Revue indépendante du diff, tests, écrans comparés à la maquette (Playwright). |
+| `pilot-lead@ledge-dev` | Claude Code · Opus 5.5 | Ton interlocuteur. Découpe l'objectif, applique « maquette d'abord », route, suit, rend compte. |
+| `design-ux@ledge-dev` | Claude Code · Opus 5.5 | Maquettes HTML dans `docs/mockups/` (clair/sombre, états, FR/EN, captures) avant tout front-end. |
+| `dev-front@ledge-dev` | Claude Code · Opus 5.5 | Desktop, île, mobile, `packages/ui`, rendu TUI — à partir d'une maquette validée. |
+| `dev-back@ledge-dev` | Claude Code · Opus 5.5 | Daemon/CLI, protocole, fleet, seal, relais, Rust. |
+| `review-qa@ledge-dev` | Codex · gpt-6.1-terra | Revue indépendante du diff, tests, écrans comparés à la maquette (Playwright). |
 
 ## Le flux
 

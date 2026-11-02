@@ -202,7 +202,8 @@ export class History {
         const plan = row && ev.tool === 'todo' && ev.toolInput ? inputText(ev.toolInput) : undefined;
         const base: ToolItem = row ? { ...row, ...(late.length ? { files: late } : {}), ...(plan ? { input: plan } : {}) } : { kind: 'tool', id: ev.toolUseId ?? `tool-${ev.at}-${this.items(id).length}`, ...common, tool: ev.tool, label: ev.text ?? ev.tool, status: 'running', files: filesOf(ev.tool, ev.toolInput) };
         const error = failed ? ev.error ?? (ev.interrupt ? 'interrupted' : 'failed') : undefined;
-        return this.put(id, { ...base, status: failed ? 'failed' : 'success', ...(ev.output !== undefined ? { output: ev.output } : {}), ...(error ? { error } : {}), ...(ev.durationMs !== undefined ? { durationMs: ev.durationMs } : {}) });
+        const images = (ev.attachments ?? []).flatMap(a => this.refOf(a) ?? []);
+        return this.put(id, { ...base, ...(images.length ? { images } : {}), ...(ev.imagesDropped ? { imagesDropped: true as const } : {}), status: failed ? 'failed' : 'success', ...(ev.output !== undefined ? { output: ev.output } : {}), ...(error ? { error } : {}), ...(ev.durationMs !== undefined ? { durationMs: ev.durationMs } : {}) });
       }
       case 'PermissionRequest': {
         if (!ev.tool || !ev.text) return undefined;

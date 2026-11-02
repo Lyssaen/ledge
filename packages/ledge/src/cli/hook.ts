@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MESSAGE_MAX, RigSeatNameSchema, parseBroadcastAddress, taskClosed, type Session, type SessionEvent, type Task, type Tool } from '@ledge/protocol';
+import { CAPTURE_RAW_MAX, MESSAGE_MAX, RigSeatNameSchema, parseBroadcastAddress, type ImageMime, taskClosed, type Session, type SessionEvent, type Task, type Tool } from '@ledge/protocol';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
@@ -16,6 +16,7 @@ import { handoverOnClient } from './handover.js';
 import { formatWho } from './who.js';
 import { takeImages } from '../attachmentText.js';
 import { paths } from '../paths.js';
+import { toolImages } from './toolImages.js';
 
 type Payload = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
@@ -410,6 +411,8 @@ async function identity(agent: Tool, cwd: string | undefined, known: Session | u
 
 /** A Claude `SendMessage` waits this long for the daemon's ack: the message is typed into a Codex, not just recorded. */
 const SEND_MESSAGE_MS = 1500;
+/** A PostToolUse that carries images waits for the daemon to reduce and store them: past it, the images are dropped. */
+export const CAPTURE_HOOK_MS = 1000;
 
 const deny = (reason: string) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
 
@@ -475,6 +478,25 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
   return deny(line);
 }
 
+/** Hands each image to the daemon in order and waits for its answer within the deadline; refused, oversized or unanswered ones are dropped. */
+async function storeImages(client: Client, images: Array<{ mime: ImageMime; data: string }>, deadline: number): Promise<{ ids: string[]; dropped: boolean }> {
+  const ids: string[] = []; let dropped = false;
+  for (const image of images) {
+    if (Buffer.byteLength(image.data, 'base64') > CAPTURE_RAW_MAX) { dropped = true; continue; }
+    const left = deadline - Date.now();
+    if (left <= 0) { dropped = true; continue; }
+    const requestId = randomUUID();
+    try {
+      client.send({ type: 'attachment.capture', requestId, image });
+      // Only the answer to this request counts: another one (late, or someone else's) is skipped, within the same deadline.
+      let answer = await client.nextOf(['attachment.stored', 'attachment.error'], left);
+      while (answer.requestId !== requestId) answer = await client.nextOf(['attachment.stored', 'attachment.error'], Math.max(0, deadline - Date.now()));
+      if (answer.type === 'attachment.stored') ids.push(answer.ref.id); else dropped = true;
+    } catch { dropped = true; }
+  }
+  return { ids, dropped };
+}
+
 /**
  * Always resolves, always fast: a hook must never slow the agent down. Resolves with what the hook prints for the agent:
  * on SessionStart, a session Ledge launched gets its identity as `additionalContext` (Claude Code and Codex read it);
@@ -500,12 +522,15 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
       && typeof input.to === 'string' && typeof input.message === 'string' && !!input.message;
     const command = agent === 'codex' && eventName === 'PreToolUse' && str((payload as Payload).tool_name) === 'Bash' && typeof input.command === 'string'
       ? parseLedgeCommand(input.command) : undefined;
-    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : 100);
+    const { images, dropped: cut } = agent === 'claude' && eventName === 'PostToolUse' ? toolImages((payload as Payload).tool_response) : { images: [], dropped: false };
+    const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : images.length ? CAPTURE_HOOK_MS : 100);
     deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
     // OpenRig runs its seats with their name in the environment, which the agent's hooks inherit.
     const seat = RigSeatNameSchema.safeParse(process.env.OPENRIG_SESSION_NAME);
-    client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}), ...(seat.success ? { rigSeat: seat.data } : {}) });
+    const stored = images.length ? await storeImages(client, images, deadline) : { ids: [], dropped: false };
+    const event = { ...mapped.event, ...(stored.ids.length ? { attachments: stored.ids } : {}), ...(stored.dropped || cut ? { imagesDropped: true as const } : {}) };
+    client.send({ type: 'session.event', id: mapped.id, event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}), ...(seat.success ? { rigSeat: seat.data } : {}) });
     if (identify) {
       const snapshot = await client.next('snapshot', Math.max(0, deadline - Date.now())).catch(() => undefined);
       known = snapshot?.sessions.find(s => s.id === mapped!.id);
