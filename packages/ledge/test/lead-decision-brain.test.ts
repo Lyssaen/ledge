@@ -11,7 +11,10 @@ import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import type { MailState } from '../src/daemon/mailbox.js';
 import { createMemory } from '../src/daemon/brain/memory.js';
 import { parseBrainArgs } from '../src/daemon/brain/commands.js';
-import { validAnswers } from '../src/daemon/brain/guard.js';
+import { guardDecide, validAnswers } from '../src/daemon/brain/guard.js';
+import { DEFAULT_MANDATE, parseMandate } from '../src/daemon/brain/mandate.js';
+import { createAnswers } from '../src/daemon/openrig/answer.js';
+import { createTasks } from '../src/daemon/tasks.js';
 import { formatBrainEvent } from '../src/daemon/brain/inbox.js';
 import { brainInstructions } from '../src/daemon/brain/persona.js';
 import { decisionToEscalation } from '../src/daemon/openrig/decisions.js';
@@ -172,7 +175,7 @@ describe('the brain settles it within the mandate', () => {
     expect(srv!.decisions.list().map(x => x.id)).toContain(t.id);
   });
 
-  it('decide --answer on a task- escalation is invalid; --text on an OpenRig-like one with questions is refused', async () => {
+  it('decide --answer on a task- escalation is invalid; --text with --answer is a usage error', async () => {
     await start({ brain: true });
     const { lead } = await launch();
     const t = await ask(lead);
@@ -180,6 +183,78 @@ describe('the brain settles it within the mandate', () => {
     await until(() => lastUpdate(id)?.state === 'grace');
     expect(await brain('decide', [id, '--answer', 'q1=oui', '--category', 'git'])).toMatchObject({ ok: false, code: 'invalid' });
     expect(await brain('decide', [id, '--text', 'oui', '--answer', 'q1=a', '--category', 'git'])).toMatchObject({ ok: false, code: 'invalid', line: expect.stringMatching(/^ledge brain decide/) });
+  });
+});
+
+describe('the brain\'s words and the brain\'s comings and goings', () => {
+  it('decide --text with a critical word goes up to the user, the task stays open', async () => {
+    await start({ brain: true });
+    const { lead } = await launch();
+    const t = await ask(lead);
+    const id = `task-${t.id}`;
+    await until(() => lastUpdate(id)?.state === 'grace');
+    expect(await brain('decide', [id, '--text', 'oui, force-push', '--category', 'git'])).toMatchObject({ ok: false, code: 'mandate', line: expect.stringContaining('force-push') });
+    await until(() => lastUpdate(id)?.state === 'pending');
+    expect(lastUpdate(id)).toMatchObject({ state: 'pending', category: 'critical' });
+    expect(await brain('ask', [id, '--advice', 'à toi de voir'])).toMatchObject({ ok: true });
+    await until(() => lastUpdate(id)?.advice === 'à toi de voir');
+    await pause(GRACE + 200);
+    expect(taskNow(t.id)?.state ?? 'open').toBe('open');
+    expect(decisions()).toEqual([]);
+  });
+
+  it('brain off, a question waits; the brain comes on: the question is graced and the brain told', async () => {
+    await start({ brain: false });
+    const { lead } = await launch();
+    const t = await ask(lead);
+    const id = `task-${t.id}`;
+    await until(() => lastUpdate(id)?.state === 'pending');
+    await pause(200);
+    expect(noticesTo('brain')).toEqual([]);
+    const at = new Date().toISOString();
+    store.upsert({ id: 'brain', name: 'Ledge', tool: 'claude', cwd: home, project: 'x', title: 'Ledge', tmuxSession: 'ledge-brain', state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', brain: true } as never);
+    await until(() => lastUpdate(id)?.state === 'grace');
+    await until(() => noticesTo('brain').some(q => q.text.includes(`id="${id}"`) && q.text.includes(`ledge brain decide ${id} --text`)));
+    // Told once: a later change of the brain does not grace it again.
+    store.upsert({ ...store.get('brain')!, state: 'working' }); store.upsert({ ...store.get('brain')!, state: 'idle' });
+    await pause(100);
+    expect(noticesTo('brain').filter(q => q.text.includes(`<ledge-event kind="escalation" id="${id}"`))).toHaveLength(1);
+  });
+
+  async function lone(): Promise<Task> {
+    const at = new Date().toISOString();
+    store.upsert({ id: 'solo', name: 'Solo', tool: 'claude', cwd: work, project: 'x', title: 'Solo', tmuxSession: 'ledge-solo', state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' } as never);
+    return ask('solo');
+  }
+  async function engine(e: 'ledge' | 'openrig') {
+    const rid = `e${++n}`;
+    send({ type: 'teams.engine.set', rid, engine: e });
+    expect(await reply('teams.engine.result', rid)).toMatchObject({ ok: true });
+  }
+
+  it('a lead question in grace survives a switch to the Ledge engine', async () => {
+    await start({ brain: true });
+    await until(() => bridge!.status().state === 'running');
+    const t = await lone();
+    const id = `task-${t.id}`;
+    await until(() => lastUpdate(id)?.state === 'grace');
+    await engine('openrig');
+    await engine('ledge');
+    await pause(100);
+    expect(bridge!.escalation(id)!.state).toBe('grace');
+    expect(lastUpdate(id)!.state).toBe('grace');
+  });
+
+  it('under the OpenRig engine, a task- answer still closes the task', async () => {
+    await start({ brain: false });
+    await until(() => bridge!.status().state === 'running');
+    const t = await lone();
+    const id = `task-${t.id}`;
+    await until(() => lastUpdate(id)?.state === 'pending');
+    await engine('openrig');
+    expect(await answer(id, 'oui')).toMatchObject({ ok: true });
+    await until(() => taskNow(t.id)?.state === 'done');
+    expect(taskNow(t.id)!.result).toBe("Réponse de l'utilisateur : oui");
   });
 });
 
@@ -218,6 +293,7 @@ describe('Review Focus', () => {
     expect(final.result).toBe("Réponse de l'utilisateur : non");
     expect(final.log.filter(e => e.op === 'done')).toHaveLength(1);
     expect(decisions().map(d => d.by)).toEqual(['user']);
+    expect(noticesTo(lead).filter(q => q.text.includes(t.id) && q.text.includes('terminée par'))).toHaveLength(1);
   });
 
   it.each([[false], [true]])('3. the lead ends before the answer (brain %s): task dropped, escalation removed, a late answer refused', async on => {
@@ -272,6 +348,37 @@ describe('the pieces', () => {
     expect(validAnswers(e, { text: 'x'.repeat(20_001) })).not.toBeNull();
     // An ask- one still has nothing to settle.
     expect(validAnswers({ ...e, id: 'ask-a1' }, { text: 'oui' })).not.toBeNull();
+    // An OpenRig escalation with questions is not settled in free text.
+    const rig: Escalation = { ...e, id: 'qi-1', source: 'rig', questions: [{ id: 'q1', question: 'Fusionner ?', options: [{ id: 'oui', label: 'Oui' }, { id: 'non', label: 'Non' }] }] };
+    expect(validAnswers(rig, { text: 'oui' })).not.toBeNull();
+    expect(validAnswers(rig, { q1: 'oui' })).toBeNull();
+  });
+
+  it('guardDecide: the brain\'s own free text is scanned for critical words', () => {
+    const e = decisionToEscalation(task, { machine: 'local' });
+    const mandate = parseMandate(DEFAULT_MANDATE);
+    expect(guardDecide(e, 'git', { text: 'oui' }, mandate)).toEqual({ ok: true, category: 'git' });
+    expect(guardDecide(e, 'git', { text: 'oui, force-push' }, mandate)).toMatchObject({ ok: false, convert: 'ask', category: 'critical', reason: 'contient « force-push »' });
+  });
+
+  it('a task- delivery to a task closed meanwhile is refused and rolled back; a missing task is not « already answered »', async () => {
+    const store = new Store(); const at = new Date().toISOString();
+    store.upsert({ id: 'solo', name: 'Solo', tool: 'claude', cwd: '/w', project: 'x', title: 'Solo', tmuxSession: 'ledge-solo', state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher' } as never);
+    const tasks = createTasks({ store, mailbox: { notify: () => true } });
+    const t = tasks.run({ type: 'task.cmd', rid: 'g', by: 'solo', op: 'give', to: 'ledge', title: QUESTION }).task!;
+    tasks.run({ type: 'task.cmd', rid: 'c', by: 'solo', op: 'cancel', task: t.id });
+    const held = new Map<string, Escalation>(); const patches: unknown[] = [];
+    for (const x of [decisionToEscalation(t, { machine: 'local' }), { ...decisionToEscalation(t, { machine: 'local' }), id: 'task-tnope00' }]) held.set(x.id, { ...x, state: 'grace', graceUntil: at });
+    const answers = createAnswers({ tasks, path: { kind: 'reply-and-approve' }, localMachine: 'local', port: {
+      escalation: id => held.get(id), patch: (id, p) => { patches.push(p); const next = { ...held.get(id)!, ...p } as Escalation; for (const k of Object.keys(p) as (keyof Escalation)[]) if (p[k] === undefined) delete next[k]; held.set(id, next); return next; },
+      status: () => ({ machine: 'local', state: 'stopped' }), cli: () => ({ queueCreate: async () => ({ ok: false }) }) as never, http: () => null, replyRow: () => undefined, setReplyRow: () => {} } });
+    expect(await answers.answer(`task-${t.id}`, { text: 'oui' }, 'user')).toMatchObject({ ok: false, code: 'already_answered' });
+    expect(held.get(`task-${t.id}`)).toMatchObject({ state: 'grace', graceUntil: at });
+    expect(held.get(`task-${t.id}`)!.answer).toBeUndefined();
+    expect(patches).toHaveLength(2);
+    expect(await answers.answer('task-tnope00', { text: 'oui' }, 'ledge')).toMatchObject({ ok: false, code: 'failed', reason: expect.stringContaining('aucune tâche') });
+    expect(held.get('task-tnope00')).toMatchObject({ state: 'grace' });
+    expect(tasks.all().find(x => x.id === t.id)!.log.filter(e => e.op === 'done')).toHaveLength(0);
   });
 
   it('the brain\'s texts: the event of a task- escalation, the commands table', () => {

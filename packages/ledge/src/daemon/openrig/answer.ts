@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LEDGE_GIVER, TASK_TEXT_MAX, type Escalation, type OpenRigStatus, type RigResultCode } from '@ledge/protocol';
+import { LEDGE_GIVER, TASK_TEXT_MAX, taskClosed, type Escalation, type OpenRigStatus, type RigResultCode } from '@ledge/protocol';
 import { log } from '../../log.js';
 import type { Asks } from '../asks.js';
 import type { Tasks } from '../tasks.js';
@@ -46,7 +46,7 @@ export interface AnswersDeps {
   /** Lot 1 asks (`ask-<id>` escalations are answered there, without OpenRig). */
   asks?: Pick<Asks, 'answer'>;
   /** Lot E: a lead's decision (`task-<id>` escalations) is answered by closing its task as Ledge, without OpenRig. */
-  tasks?: Pick<Tasks, 'run'>;
+  tasks?: Pick<Tasks, 'run' | 'all'>;
   path: AnswerPath;
   localMachine: string;
   now?: () => string;
@@ -178,8 +178,12 @@ export function createAnswers(d: AnswersDeps): Answers {
     if (!d.tasks) return refuse('failed', "les décisions d'équipe ne sont pas branchées");
     const text = `${by === 'ledge' ? 'Réponse de Ledge : ' : "Réponse de l'utilisateur : "}${answerBody(e, answers)}`;
     const task = e.id.slice(TASK_ESCALATION.length);
+    // Closed meanwhile (answered elsewhere, cancelled, dropped with its lead): already answered; gone: a failure.
+    const t = d.tasks.all().find(x => x.id === task);
+    if (!t) return refuse('failed', `aucune tâche ${task}`);
+    if (taskClosed(t)) return refuse('already_answered', `la tâche ${task} est déjà close (${t.state})`);
     const r = d.tasks.run({ type: 'task.cmd', rid: `answer-${e.id}`, by: LEDGE_GIVER, op: 'done', task, text });
-    return r.reason === undefined ? null : refuse('already_answered', r.reason);
+    return r.reason === undefined ? null : refuse('failed', r.reason);
   }
 
   const notify = (e: Escalation) => {

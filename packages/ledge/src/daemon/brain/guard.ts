@@ -12,9 +12,9 @@ const entries = [...WORDS].sort((a, b) => b.length - a.length)
   .map(w => ({ word: w, re: new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(w)}(?![\\p{L}\\p{N}])`, 'iu') }));
 export const CRITICAL_WORDS: readonly RegExp[] = entries.map(e => e.re);
 
-/** The longest critical word found in the summary, detail, a question or an option label, or null. */
-export function criticalIn(e: Escalation): string | null {
-  const texts = [e.summary, e.detail ?? '', ...e.questions.flatMap(q => [q.question, ...q.options.map(o => o.label)])];
+/** The longest critical word found in the summary, detail, a question or an option label (and the `extra` texts), or null. */
+export function criticalIn(e: Escalation, extra: readonly string[] = []): string | null {
+  const texts = [e.summary, e.detail ?? '', ...e.questions.flatMap(q => [q.question, ...q.options.map(o => o.label)]), ...extra];
   let best: string | null = null;
   for (const t of texts) for (const { word, re } of entries) if (re.test(t) && (best === null || word.length > best.length)) best = word;
   return best;
@@ -24,9 +24,9 @@ export type GuardVerdict =
   | { ok: true; category: MandateCategory }
   | { ok: false; convert: 'ask'; category: MandateCategory | undefined; reason: string };
 
-/** Steps 1-3 and 5 of the guard; `validAnswers` (step 4) is the caller's. */
-export function guardDecide(e: Escalation, claimed: string, _answers: Record<string, string>, mandate: Mandate): GuardVerdict {
-  const word = criticalIn(e);
+/** Steps 1-3 and 5 of the guard; `validAnswers` (step 4) is the caller's. The brain's own free text (`text`) is scanned too. */
+export function guardDecide(e: Escalation, claimed: string, answers: Record<string, string>, mandate: Mandate): GuardVerdict {
+  const word = criticalIn(e, typeof answers.text === 'string' ? [answers.text] : []);
   if (word) return { ok: false, convert: 'ask', category: 'critical', reason: `contient « ${word} »` };
   const parsed = MandateCategorySchema.safeParse(claimed);
   if (!parsed.success) return { ok: false, convert: 'ask', category: undefined, reason: 'catégorie inconnue' };

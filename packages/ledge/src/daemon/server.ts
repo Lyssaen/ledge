@@ -406,7 +406,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     port: { escalation: bridge.escalation, patch: bridge.patchEscalation, status: bridge.status, cli: bridge.cli, http: bridge.http,
       replyRow: bridge.replyRow, setReplyRow: bridge.setReplyRow, humanRead: bridge.humanRead },
     // `tasks` is made below, before any answer can come.
-    asks, tasks: { run: (cmd, o) => tasks.run(cmd, o) }, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
+    asks, tasks: { run: (cmd, o) => tasks.run(cmd, o), all: () => tasks.all() }, path: { kind: ANSWER_PATH }, localMachine: 'local', now }) : null;
   let deciding: Deciding | null = null;
   let remoteBrainCoordinator: ReturnType<typeof createRemoteBrainCoordinator> | null = null;
   const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
@@ -422,7 +422,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    *  first (it takes OpenRig's escalations off the fronts while the bridge still holds them). Same engine again: nothing. */
   const engines = { apply: (e: TeamsEngine): void => {
     // First, while OpenRig's escalations are still seen: the graces the local brain holds go back to pending (none dropped unsaid).
-    if (e === 'ledge') deciding?.release("moteur d'équipes Ledge");
+    // Ledge's own (its asks, its leads' questions) stay: the Ledge engine is theirs.
+    if (e === 'ledge') deciding?.release("moteur d'équipes Ledge", x => x.source !== 'ask');
     aggregate?.setEngine(e); bridge?.setProbeOnly(e === 'ledge');
     if (e !== 'ledge') return;
     // The other machines' OpenRig escalations this brain holds go back to them: the local brain must not decide a stale one.
@@ -472,7 +473,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     if (m.type === 'escalation.updated' && !thread.hasEscalation(m.escalation.id)) {
       thread.append({ kind: 'escalation', escalationId: m.escalation.id });
       deciding?.arrived(m.escalation);   // grace when the brain is on (Lot 7)
-    }
+    } else if (m.type === 'escalation.updated') deciding?.rearm([m.escalation]);   // a lead's question the brain was not told of (a restart)
     if (m.type === 'rig.exchange') thread.exchange(m.exchange);
   });
   /** The live teams (spec 2026-10-25 roles §3.3): every change reaches the local fronts. */
@@ -611,6 +612,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeBrain = brain.onStatus(status => {
     broadcast({ type: 'brain.status', status });
     if (status.state !== 'on') deciding?.release(`brain ${status.state}`);
+    else if (localBrainReady()) deciding?.rearm(bridge?.escalations() ?? []);   // the leads' questions waiting meanwhile
     if (status.enabled === true && (status.state === 'starting' || status.state === 'on')) remoteBrainOwner?.close();
     if (localBrainReady()) { for (const e of aggregate?.escalations() ?? []) if (e.machine !== 'local') remoteBrainCoordinator?.observe(e); }
     else remoteBrainCoordinator?.releaseAll();
@@ -654,7 +656,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const labelExited = (): void => { for (const id of [...unlabelled]) { const s = store.get(id); if (s) labelExit(s); else unlabelled.delete(id); } };
   const unsubscribe = store.onChange(c => {
     if (c.type !== 'recents' && (c.type === 'removed' || c.session.brain)) {
-      if (localBrainReady()) { for (const e of aggregate?.escalations() ?? []) if (e.machine !== 'local') remoteBrainCoordinator?.observe(e); }
+      if (localBrainReady()) { for (const e of aggregate?.escalations() ?? []) if (e.machine !== 'local') remoteBrainCoordinator?.observe(e); deciding?.rearm(bridge?.escalations() ?? []); }
       else remoteBrainCoordinator?.releaseAll();
     }
     if (c.type === 'recents') return broadcast({ type: 'recents', recents: c.recents });

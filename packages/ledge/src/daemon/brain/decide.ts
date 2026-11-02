@@ -23,8 +23,11 @@ export interface Deciding {
   decide(id: string, answers: Record<string, string>, claimed: string, o: { rule?: string; why?: string }): Promise<DecideResult>;
   /** `ledge brain ask`: category (optional), advice, state pending; never refused by the guard. */
   ask(id: string, category: string | undefined, advice: string): AskResult;
-  /** The brain is down or off: every grace goes back to pending, deferred decisions are dropped. */
-  release(reason: string): void;
+  /** The brain is down or off: every grace (or each one `which` keeps) goes back to pending, deferred decisions are dropped. */
+  release(reason: string, which?: (e: Escalation) => boolean): void;
+  /** A lead's question (`task-…`) still pending that the brain was never told of (it was off, the daemon restarted, it was
+   *  released): `arrived` again. Only `task-` escalations; told once per daemon run unless released. */
+  rearm(list: readonly Escalation[]): void;
   dispose(): void;
 }
 
@@ -78,6 +81,8 @@ export function createDeciding(d: DecidingDeps): Deciding {
   const graced = new Map<string, number>();
   const caps = new Map<string, unknown>();
   const deferred = new Map<string, Deferred>();
+  /** Escalations the brain was told of (arrived with the brain on), until a release. */
+  const told = new Set<string>();
 
   const clearCap = (id: string): void => { const t = caps.get(id); if (t !== undefined) { clearTimer(t); caps.delete(id); } };
   const dropDeferred = (id: string): void => { const x = deferred.get(id); if (x) { clearTimer(x.timer); deferred.delete(id); } };
@@ -146,9 +151,10 @@ export function createDeciding(d: DecidingDeps): Deciding {
     } else d.memory.propose(fallbackRuleText(question, pair.label), pair.category, from);
   });
 
-  return {
+  const api: Deciding = {
     arrived(e) {
       if (closed(e) || !d.brainOn()) return;   // without a brain: pending, without advice (spec §6)
+      told.add(e.id);
       if (settles(e) && e.state === 'pending') {
         const at = now();
         const next = d.escalations.patchEscalation(e.id, { state: 'grace', graceUntil: new Date(at + graceMs).toISOString() });
@@ -194,17 +200,26 @@ export function createDeciding(d: DecidingDeps): Deciding {
 
     ask(id, category, advice) { return askImpl(id, category, advice, false); },
 
-    release(reason) {
-      const ids = new Set([...graced.keys(), ...deferred.keys()]);
-      if (ids.size) log(`brain: ${reason}, ${ids.size} grace(s) back to pending`);
-      for (const id of ids) ungrace(id);
+    release(reason, which) {
+      const ids = [...new Set([...graced.keys(), ...deferred.keys()])].filter(id => { const e = d.escalations.escalation(id); return !which || !e || which(e); });
+      if (ids.length) log(`brain: ${reason}, ${ids.length} grace(s) back to pending`);
+      for (const id of ids) { told.delete(id); ungrace(id); }
+    },
+
+    rearm(list) {
+      for (const x of list) {
+        if (!taskEscalation(x.id) || told.has(x.id)) continue;
+        const e = d.escalations.escalation(x.id);
+        if (e && e.state === 'pending') api.arrived(e);
+      }
     },
 
     dispose() {
       unsubscribe();
       for (const t of caps.values()) clearTimer(t);
       for (const x of deferred.values()) clearTimer(x.timer);
-      caps.clear(); deferred.clear(); graced.clear();
+      caps.clear(); deferred.clear(); graced.clear(); told.clear();
     },
   };
+  return api;
 }
