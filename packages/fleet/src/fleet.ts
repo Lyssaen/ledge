@@ -1,6 +1,6 @@
 import { ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type MachineConfig, type MobileError, type MachineState } from './machines';
+import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
@@ -10,6 +10,11 @@ type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
 const OPERATIONS: ReadonlySet<string> = new Set(['session.launch', 'session.relay', 'session.relay.cancel', 'session.close']);
 type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUpload[]; coordinator: string };
+/** How long `broadcast` waits for its result, and the `reason` it resolves with past it: sent, its outcome unknown (a resend
+ *  with the same rid is answered once by the daemon). */
+export const BROADCAST_TIMEOUT_MS = 8000;
+export const BROADCAST_SILENT = 'silent';
+let broadcastSeq = 0;
 
 export interface FleetOptions {
   /** Storage key prefix: `ledge` (island) or `desktop` (spec §7). */
@@ -43,6 +48,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const scans = new Map<string, string>();
   /** `attachment.put` / `attachment.get` requestId -> the machine asked, so only its answer is emitted (a drop answers « offline »). */
   const attachmentAsks = new Map<string, string>();
+  /** A `session.broadcast`'s sessions on another machine, by rid: the local daemon cannot write to them, so the fleet refuses them in its result. */
+  const awayRefusals = new Map<string, { name: string; reason: string }[]>();
   /** `models.list` requestId -> the machine asked and the agent, so only its `models.listing` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
   const rigFailure = (kind: 'status' | 'act' | 'specs' | 'launch' | 'seats', requestId: string, machineId: string, error: 'offline' | 'outdated'): ServerMessage =>
@@ -323,6 +330,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     }
     // A relief's answer comes from the machine the session runs on (context handover spec §3.3).
     if (m.type === 'session.handover.result') { emit(m); return; }
+    // A broadcast is the local daemon's (see `send`): its recipients qualified, with the sessions the fleet refused itself.
+    if (m.type === 'session.broadcast.result') {
+      if (machine !== 'local') return;
+      const away = awayRefusals.get(m.rid) ?? []; awayRefusals.delete(m.rid);
+      emit({ ...m, sent: m.sent.map(x => ({ ...x, id: qualify('local', x.id) })), refused: [...m.refused, ...away] }); return;
+    }
     if (machine === 'local') emit(m);
   }
   function add(c: MachineConfig) {
@@ -440,6 +453,23 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         }
       }
       if (msg.type === 'update.daemon') machine = 'local';
+      // A broadcast is the local daemon's, whose sessions are named there without their machine; another machine's cannot be reached from it.
+      if (msg.type === 'session.broadcast') {
+        machine = 'local';
+        if ('sessions' in msg.to) {
+          const mine: string[] = [], away: { name: string; reason: string }[] = [];
+          for (const raw of msg.to.sessions) {
+            const o = splitId(raw), p = o ? peers.get(o.machine) : undefined;
+            if (!o || !p) { mine.push(raw); continue; }   // a name, not a qualified id
+            if (o.machine === 'local') { mine.push(o.id); continue; }
+            const name = p.snapshot?.sessions.find(x => x.id === o.id)?.name ?? o.id;
+            away.push({ name, reason: `${name} est sur ${p.config.label} : seules les sessions de la machine locale reçoivent un message groupé` });
+          }
+          if (!mine.length) { emit({ type: 'session.broadcast.result', rid: msg.rid, sent: [], refused: away, reason: 'personne à qui écrire' }); return; }
+          if (away.length) awayRefusals.set(msg.rid, away);
+          outgoing = { ...msg, to: { sessions: mine } };
+        }
+      }
       // Ledge's tasks are the local daemon's: its sessions are named there without their machine.
       if ((msg.type === 'task.cmd' && !msg.qid) || msg.type === 'action.run') machine = 'local';
       if (outgoing.type === 'task.cmd') { const o = outgoing.to ? splitId(outgoing.to) : null; if (o) outgoing = { ...outgoing, to: o.id }; const b = splitId(outgoing.by); if (b && outgoing.by !== LEDGE_GIVER) outgoing = { ...outgoing, by: b.id }; }
@@ -517,6 +547,18 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (local.status() !== 'open') throw Object.assign(new Error('The local daemon is not connected'), { name: 'DaemonOffline' });
         if (contextNear === undefined) throw Object.assign(new Error('Update the local Ledge daemon: it does not know the context threshold'), { name: 'DaemonOutdated' });
         local.send({ type: 'context.set', prefs: valid });
+      },
+      broadcast(to, text, rid = `broadcast-${Date.now()}-${++broadcastSeq}`) {
+        return new Promise<BroadcastResult>(resolve => {
+          const done = (r: BroadcastResult) => { clearTimeout(timer); messages.delete(listen); resolve(r); };
+          const listen = (m: ServerMessage) => {
+            if (m.type === 'session.broadcast.result' && m.rid === rid) done(m);
+            else if (m.type === 'error' && m.request === 'session.broadcast') done({ type: 'session.broadcast.result', rid, sent: [], refused: [], reason: m.message });
+          };
+          const timer = setTimeout(() => done({ type: 'session.broadcast.result', rid, sent: [], refused: [], reason: BROADCAST_SILENT }), BROADCAST_TIMEOUT_MS);
+          messages.add(listen);
+          api.send({ type: 'session.broadcast', rid, to, text });
+        });
       },
       sendMobile(msg) {
         const local = peers.get('local')!.client;

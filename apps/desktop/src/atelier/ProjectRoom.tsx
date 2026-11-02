@@ -46,6 +46,9 @@ export function ProjectRoom({ project, tables, rig, sessions: rigSessions, width
           <MenuItem onSelect={() => dispatch({ type: 'modal', modal: { kind: 'project', edit: project.id } })}>
             <span><Icon d={PENCIL} size={13} />{t.atelier.edit}</span>
           </MenuItem>
+          <MenuItem onSelect={() => dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project: project.id } } })}>
+            <span><Icon d={SHELL_ICONS.mail} size={13} />{t.broadcast.project}</span>
+          </MenuItem>
         </Menu>
       </div>}
       <div className="room-tables">{children}</div>

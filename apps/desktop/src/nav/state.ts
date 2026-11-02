@@ -25,11 +25,13 @@ export type Modal =
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }
+  // to : un projet (son id) ou les sessions choisies dans la barre latérale (ids qualifiés) ; le message part par le daemon local (broadcast)
+  | { kind: 'broadcast'; to: { project: string } | { sessions: string[] } }
   | null;
 /** Every place and dialog kind, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new kind fails to compile until it is listed here. */
 const PLACE_KIND: Record<Place['kind'], true> = { home: true, overview: true, session: true, settings: true, openrig: true };
 export const PLACE_KINDS = Object.keys(PLACE_KIND) as Place['kind'][];
-const MODAL_KIND: Record<NonNullable<Modal>['kind'], true> = { search: true, shortcuts: true, launch: true, project: true };
+const MODAL_KIND: Record<NonNullable<Modal>['kind'], true> = { search: true, shortcuts: true, launch: true, project: true, broadcast: true };
 export const MODAL_KINDS = Object.keys(MODAL_KIND) as NonNullable<Modal>['kind'][];
 /** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
 export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }

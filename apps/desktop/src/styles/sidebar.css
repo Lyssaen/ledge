@@ -45,6 +45,7 @@
 .st-row{--d:0;position:relative;display:flex;align-items:center;gap:6px;min-height:28px;padding:0 6px 0 calc(4px + var(--d) * 14px);border-radius:var(--radius-sm);font-size:13px;color:var(--muted-foreground)}
 .st-row:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
 .st-row.sel{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.picked{background:color-mix(in srgb,var(--sidebar-primary) 14%,transparent);color:var(--sidebar-foreground);box-shadow:inset 2px 0 0 var(--sidebar-primary)}
 .st-row.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));outline:1.5px solid var(--sidebar-primary)}
 .st-project.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));color:var(--foreground);outline:1.5px solid var(--sidebar-primary)}
 .is-dragging .st-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
@@ -111,6 +112,12 @@
 .st-dense .st-agent .st-main{flex-direction:row;gap:6px;align-items:baseline;padding:2px 0}
 .st-dense .st-agent>.st-chev,.st-dense .st-agent>.st-gap,.st-dense .st-bot,.st-dense .st-time,.st-dense .st-kids{margin-top:0}
 .st-dense .st-acts{top:1px}
+/* The sessions picked with Ctrl/⌘ + click: « Écrire aux N sessions… » and « Annuler », above the foot. */
+.st-picked{flex:none;display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--sidebar-border);font-size:12px}
+.st .st-picked-write{display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--radius-sm);background:var(--primary);color:var(--primary-foreground);font-weight:500}
+.st .st-picked-write:hover{background:var(--primary-hover)}
+.st .st-picked-cancel{height:28px;padding:0 8px;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st .st-picked-cancel:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
 /* Machines and Settings at the foot. */
 .st-foot{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground);overflow:hidden}
 .st .st-mach{display:flex;align-items:center;gap:5px;white-space:nowrap}

@@ -4,6 +4,9 @@ import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects,
 import { useSyncExternalStore } from 'react';
 import { DAEMON_PROTOCOL_PREFIX, type TokenSource } from './token';
 
+/** Where a `session.broadcast` goes, and its answer. */
+export type BroadcastTo = Extract<ClientMessage, { type: 'session.broadcast' }>['to'];
+export type BroadcastResult = Extract<ServerMessage, { type: 'session.broadcast.result' }>;
 /** The url exists for `local` only: set by the fleet, never persisted nor sent. */
 export type MachineConfig = Machine & { url?: string };
 export interface MachineState extends MachineConfig { status: DaemonStatus; ready: boolean; recents: Recent[]; sessions: Session[]; launcher: string[] | null; version?: string; daemon?: DaemonInfo; error?: string }
@@ -56,6 +59,10 @@ export interface Fleet {
   contextNear(): number | undefined;
   /** Sets it on the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
   setContextNear(near: number): void;
+  /** Writes `text` to a project or to sessions, through the local daemon (broadcast spec), and resolves with its
+   *  `session.broadcast.result` of that `rid`: a refusal of the request, or a silence past BROADCAST_TIMEOUT_MS (`reason`
+   *  BROADCAST_SILENT), as a result that sent nothing. A resend with the same `rid` is answered once. */
+  broadcast(to: BroadcastTo, text: string, rid?: string): Promise<BroadcastResult>;
 }
 /** A refused mobile.* command, as the Mobile access settings say it. */
 export interface MobileError { request: string; message: string; code?: string }

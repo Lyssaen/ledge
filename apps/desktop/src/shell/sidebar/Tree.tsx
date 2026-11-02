@@ -63,6 +63,11 @@ export function Tree(p: {
   onHome(project?: string): void;
   onOpen(id: string, helper?: string): void;
   onLaunch(project?: string): void;
+  /** « Écrire à tout le projet… »: the ✉ beside « + » on a project's row. */
+  onBroadcast(project: string): void;
+  /** The sessions picked with Ctrl/⌘ + click, to write to them together; a plain click still opens. */
+  picked: ReadonlySet<string>;
+  onPick(id: string): void;
   onMenu(id: string, e: MouseEvent): void;
   onArchive(ids: string[]): void;
   onDelete(ids: string[]): void;
@@ -163,7 +168,7 @@ export function Tree(p: {
     const row = (
       <div key={treeKey} role="treeitem" aria-level={depth + 1} aria-expanded={subs.length > 0 ? open : undefined}
         aria-selected={selected} aria-current={selected ? 'true' : undefined}
-        className={cls('st-row st-agent', selected && 'sel', !helper && isFinished(s) && 'done', s.offline && 'off', !!helper && 'helper')}
+        className={cls('st-row st-agent', selected && 'sel', !helper && p.picked.has(s.id) && 'picked', !helper && isFinished(s) && 'done', s.offline && 'off', !!helper && 'helper')}
         style={{ '--d': depth } as CSSProperties}
         onContextMenu={helper ? undefined : e => { e.preventDefault(); p.onMenu(s.id, e); }}>
         {toggle ? <Chevron open={open} label={open ? t.side.foldKids(name) : t.side.unfoldKids(name)} onClick={toggle} /> : <span className="st-gap" />}
@@ -172,7 +177,7 @@ export function Tree(p: {
           : <SessionBot session={s} size={18} paused={p.paused} />}</span>
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
-          onClick={() => helper ? p.onOpen(s.id, helper.id) : p.onOpen(s.id)}>
+          onClick={e => { if (!helper && (e.ctrlKey || e.metaKey)) p.onPick(s.id); else if (helper) p.onOpen(s.id, helper.id); else p.onOpen(s.id); }}>
           <strong>{name}{!helper && <AutoMark session={s} />}{!helper && <RigTag session={s} />}</strong>{task && <span>{task}</span>}
         </button>
         {subs.length > 0 && !open && <span className="st-kids" title={t.side.kids(subs.length)}>{subs.length}</span>}
@@ -251,7 +256,10 @@ export function Tree(p: {
           <strong>{label}</strong>{sub && <span className="mono">{sub}</span>}
         </button>
         <span className="st-tally">{tally(g).map(x => <span key={x.c} className={x.c} title={`${x.n} ${x.label}`}><i />{x.n}</span>)}</span>
-        {g.id && <span className="st-acts"><button type="button" tabIndex={-1} aria-label={t.side.newHere(label)} title={t.side.newHere(label)} onClick={() => p.onLaunch(g.id!)}><Icon d={ICONS.plus.d} size={13} /></button></span>}
+        {g.id && <span className="st-acts">
+          <button type="button" tabIndex={-1} aria-label={t.broadcast.title(label)} title={t.broadcast.project} onClick={() => p.onBroadcast(g.id!)}><Icon d={SHELL_ICONS.mail} size={13} /></button>
+          <button type="button" tabIndex={-1} aria-label={t.side.newHere(label)} title={t.side.newHere(label)} onClick={() => p.onLaunch(g.id!)}><Icon d={ICONS.plus.d} size={13} /></button>
+        </span>}
       </div>
     );
     if (!open) continue;

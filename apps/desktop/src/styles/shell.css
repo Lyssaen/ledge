@@ -183,6 +183,11 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .confirm-content p { margin: 0; font-size: 13px; line-height: 20px; }
 .confirm-content .confirm-extra { margin-top: 10px; font-size: 12px; line-height: 18px; color: var(--muted-foreground); }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+/* Writing to a project or to picked sessions: one message field, what refused it, Annuler / Envoyer. */
+.broadcast-modal { width: 480px; }
+.broadcast-form { display: flex; flex-direction: column; padding: 16px 20px 18px; }
+.broadcast-form textarea { min-height: 96px; resize: vertical; padding: 8px 10px; border: 1px solid var(--input); border-radius: var(--radius-md); background: transparent; color: inherit; font: inherit; font-size: 13px; line-height: 20px; }
+.broadcast-form .broadcast-error { margin: 10px 0 0; font-size: 12px; line-height: 18px; color: var(--danger-text); }
 .ledge-btn.danger-btn { background: var(--destructive) !important; border-color: var(--destructive) !important; color: var(--destructive-foreground) !important; }
 
 /* « What's new » (#26): the release notes scroll inside the dialog; the GitHub links sit under them. */
