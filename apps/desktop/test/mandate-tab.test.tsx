@@ -183,7 +183,7 @@ describe('the Mandat tab (lot 7)', () => {
     expect(lines().map(l => l.textContent)).toEqual([expect.stringContaining('relecture avant fusion'), expect.stringContaining('tests ciblés')]);
     await user.selectOptions(mem.getByRole('combobox', { name: 'Category' }), 'tests');
     expect(lines()).toHaveLength(1);
-    await user.selectOptions(mem.getByRole('combobox', { name: 'Rig' }), 'rf');
+    await user.selectOptions(mem.getByRole('combobox', { name: 'Team' }), 'rf');
     expect(lines()).toHaveLength(0);
     await user.selectOptions(mem.getByRole('combobox', { name: 'Category' }), '');
     expect(lines()).toHaveLength(1);

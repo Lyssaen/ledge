@@ -1,6 +1,6 @@
 import { askShown, withoutLedgeTeams, ChatTurnSchema, ContextPrefsSchema, isArchived, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Ask, type Task, type Team, type IslandPrefs, type TeamsEngine, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
-import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, seatTerminalCommand, shellCommand, splitId, terminalCommand, type FleetAsk, type MachineConfig, type MobileError, type MachineState, type TeamsEngineAnswer } from './machines';
+import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, seatTerminalCommand, shellCommand, splitId, terminalCommand, type FleetAsk, type MachineConfig, type MobileError, type MachineState, type TeamBroadcastAnswer, type TeamsEngineAnswer } from './machines';
 import type { TokenSource } from './token';
 import { createRigBook, isRigMessage } from './rigs';
 
@@ -93,6 +93,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let teamsEngine: { engine: TeamsEngine; openrigAvailable: boolean; running: boolean } | null = null;
   /** The `teams.engine.set` sent and not answered yet, by rid. */
   const engineAnswers = new Map<string, (r: TeamsEngineAnswer) => void>();
+  /** The user's `team.broadcast` sent and not answered yet, by rid. */
+  const broadcastAnswers = new Map<string, (r: TeamBroadcastAnswer) => void>();
   /** The local daemon's context threshold: undefined until it sends it. */
   let contextNear: number | undefined;
   /** The local daemon's mobile access state: undefined until it sends it. */
@@ -259,6 +261,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       teamsEngine = { engine: m.engine, openrigAvailable: m.openrigAvailable, running: m.running }; listeners.forEach(fn => fn());
       return;
     }
+    // The answer to the user's message to a whole team (the local daemon's teams only): it settles the request of the same rid.
+    if (m.type === 'team.broadcast.result') {
+      const settle = machine === 'local' ? broadcastAnswers.get(m.rid) : undefined;
+      if (settle) { settle(m.sent !== undefined ? { sent: m.sent } : { reason: m.reason ?? 'refused' }); return; }
+    }
     if (m.type === 'teams.engine.result') {
       if (machine === 'local') engineAnswers.get(m.rid)?.({ ok: m.ok, ...(m.reason ? { reason: m.reason } : {}), ...(m.peers?.length ? { peers: m.peers } : {}) });
       return;
@@ -403,6 +410,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
         for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
         if (c.id === 'local') for (const settle of [...engineAnswers.values()]) settle({ ok: false, reason: 'offline' });
+        if (c.id === 'local') for (const settle of [...broadcastAnswers.values()]) settle({ reason: 'offline' });
         for (const [rid, a] of [...askAnswers]) if (a.machine === c.id) { askAnswers.delete(rid); a.settle({ ok: false, reason: 'hors ligne' }); }
         book.dropped(c.id);
         if (askMap.delete(c.id)) putAsks(c.id, []); // a machine that fell has no decision to answer
@@ -612,6 +620,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
           const timer = setTimeout(() => { engineAnswers.delete(rid); resolve({ ok: false, reason: 'timeout' }); }, ANSWER_MS);
           engineAnswers.set(rid, r => { clearTimeout(timer); engineAnswers.delete(rid); resolve(r); });
           local.send({ type: 'teams.engine.set', rid, engine });
+        });
+      },
+      broadcastTeam(team, text) {
+        const local = peers.get('local')!.client;
+        if (local.status() !== 'open') return Promise.resolve({ reason: 'offline' });
+        const rid = `fleet-broadcast-${++listSeq}`;
+        return new Promise(resolve => {
+          const timer = setTimeout(() => { broadcastAnswers.delete(rid); resolve({ reason: 'timeout' }); }, ANSWER_MS);
+          broadcastAnswers.set(rid, r => { clearTimeout(timer); broadcastAnswers.delete(rid); resolve(r); });
+          local.send({ type: 'team.broadcast', rid, team, text });
         });
       },
       mobile: () => mobile,

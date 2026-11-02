@@ -33,11 +33,11 @@ export const fr = {
     ledge: {
       decision: (n: number, rig?: string) => (n > 1 ? `${n} décisions t’attendent` : `Une décision t’attend${rig ? ` · ${rig}` : ''}`),
       grace: (rig?: string) => `Ledge s’en occupe…${rig ? ` · ${rig}` : ''}`,
-      calm: (n: number) => (n === 0 ? 'Rien ne t’attend' : `J’orchestre ${n} ${plural(n, 'rig', 'rigs')}`),
+      calm: (n: number) => (n === 0 ? 'Rien ne t’attend' : `J’orchestre ${n} ${plural(n, 'équipe', 'équipes')}`),
       unread: (n: number) => `${n} non ${plural(n, 'lu', 'lus')}`
     },
     rigs: {
-      title: 'Rigs', tree: 'Rigs', launch: 'Lancer un rig', seats: (n: number) => `rig · ${n}`, off: 'hors projet', unreachable: 'injoignable',
+      title: 'Équipes', tree: 'Équipes', launch: 'Lancer une équipe', seats: (n: number) => `équipe · ${n}`, off: 'hors projet', unreachable: 'injoignable',
       kernel: 'Noyau OpenRig', kernelTag: 'noyau', more: (n: number) => `+${n}`, room: (name: string) => `Voir ${name} dans l’atelier (double-clic ou Entrée)`,
       absent: 'OpenRig n’est pas installé', stopped: 'OpenRig est arrêté', error: 'OpenRig est en erreur', unsupported: (v?: string) => (v ? `OpenRig ${v} non pris en charge` : 'Cette version d’OpenRig n’est pas prise en charge'),
       ghost: 'Siège sans session Ledge'
@@ -110,7 +110,7 @@ export const fr = {
     machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible',
     mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès",
     ledge: {
-      title: 'Cerveau', think: 'Ledge pense en continu', thinkHint: 'Ledge lit les escalades des rigs et tranche ce que son mandat permet.',
+      title: 'Cerveau', think: 'Ledge pense en continu', thinkHint: 'Ledge lit les escalades des équipes et tranche ce que son mandat permet.',
       tool: 'Outil', toolHint: 'Le changement prend effet à la prochaine relève ou au prochain démarrage.',
       status: { on: 'En marche', context: (pct: number) => `En marche · ${pct} % de contexte`, starting: 'Démarre…', off: 'Arrêté', down: (reason?: string) => (reason ? `En panne : ${reason}` : 'En panne'), restart: 'Redémarrer' },
       refused: (reason: string) => `Ledge n’a pas pu : ${reason}`
@@ -398,19 +398,19 @@ export const fr = {
   },
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',
   close: 'Fermer',
-  modalTitles: { launch: 'Nouvelle session', rigLaunch: 'Nouveau rig' },
-  // « Nouveau rig » en trois temps (spec §4.6, maquettes l-1, l-2, w-1).
+  modalTitles: { launch: 'Nouvelle session', rigLaunch: 'Nouvelle équipe' },
+  // « Nouvelle équipe » d’OpenRig en trois temps (spec §4.6, maquettes l-1, l-2, w-1).
   rigLaunch: {
     goal: 'But donné au lead', suggestions: 'Idées de but',
     ideas: ['Corriger les tests qui échouent', 'Livrer une issue', 'Relire une PR'],
     ideasOff: ['Explorer un dépôt inconnu', 'Comparer deux dépôts', 'Prototyper une idée'],
     spec: 'Spec OpenRig', specHint: 'L’équipe qu’OpenRig monte', recommended: 'Recommandé par Ledge', change: 'Changer', noSpec: 'Choisis une spec',
     specsLoading: 'Lecture des specs…', specsFailed: 'Les specs n’ont pas pu être lues.',
-    refreshSpecs: 'Actualiser', chooseFor: 'Choisir pour ce rig', seatsOf: (n: number, what: string) => `${n} ${plural(n, 'siège', 'sièges')} · ${what}`,
+    refreshSpecs: 'Actualiser', chooseFor: 'Choisir pour cette équipe', seatsOf: (n: number, what: string) => `${n} ${plural(n, 'siège', 'sièges')} · ${what}`,
     registry: 'Depuis le registre…', registryWhat: 'openrig.dev/rigs', soon: 'Bientôt',
     recommends: (spec: string, why: 'bounded' | 'long') => `Ledge recommande ${spec} : ${why === 'long' ? 'un travail suivi sur plusieurs jours, avec des relectures.' : 'une modification bornée, vite relue.'}`,
     providers: 'Fournisseurs', providerSeats: (n: number, label: string) => `${n} ${plural(n, 'siège', 'sièges')} ${label}`,
-    where: 'Où travaille le rig', project: 'Projet', offProject: '+ Nouvel espace, hors projet', machine: 'Machine',
+    where: 'Où travaille l’équipe', project: 'Projet', offProject: '+ Nouvel espace, hors projet', machine: 'Machine',
     why: {
       absent: (m: string) => `OpenRig n’est pas installé sur ${m}`, unsupported: (v: string) => `OpenRig ${v} non pris en charge`,
       offline: 'hors ligne', unreachable: 'OpenRig injoignable'
@@ -421,9 +421,9 @@ export const fr = {
     workspace: 'Espace de travail', workspaceHelp: 'Ledge le crée vide, nommé d’après le but. OpenRig y installe le rig.', invalidName: 'Nom invalide',
     opens: 'ouvrira sa pièce', opensOff: 'ouvrira sa pièce, hors projet',
     summary: (n: number, where: string, machine: string) => `1 table · ${n} ${plural(n, 'siège', 'sièges')} · ${where} · ${machine}`, inProject: (p: string) => `dans ${p}`,
-    cancel: 'Annuler', seePlan: 'Voir le plan', launch: 'Lancer le rig', preparing: 'Préparation du plan…', launching: 'Lancement…',
+    cancel: 'Annuler', seePlan: 'Voir le plan', launch: 'Lancer l’équipe', preparing: 'Préparation du plan…', launching: 'Lancement…',
     missing: { goal: 'Donne un but au lead.', spec: 'Choisis une spec.', repo: 'Choisis un dépôt.', branch: 'Nomme la nouvelle branche.', name: 'Nom invalide', machine: 'Choisis une machine où OpenRig peut lancer le rig.' },
-    planTitle: (spec: string) => `Plan du rig ${spec}`,
+    planTitle: (spec: string) => `Plan de l’équipe ${spec}`,
     starts: (n: number) => `Ce qui démarre · ${n} ${plural(n, 'siège', 'sièges')}`,
     changes: (cwd: string) => `Ce qui change dans ${cwd}`, writes: 'OpenRig ajoute',
     copyChip: (spec: string) => `Travailler dans une copie : .worktrees/rig-${spec}`,
@@ -491,7 +491,7 @@ export const fr = {
     messageLabel: (sender: string, n: string, summary: string) => `${sender} écrit à ${n} : ${summary}. Ouvrir l’échange`,
     desk: 'Parler à Ledge',
     watching: (n: number) => plural(n, `Je veille sur ${n} agent.`, `Je veille sur ${n} agents.`),
-    orchestrating: (n: number, d: number) => `J’orchestre ${n} ${plural(n, 'rig', 'rigs')}${d > 0 ? ` · ${d} ${plural(d, 'décision', 'décisions')} pour toi` : ''}.`,
+    orchestrating: (n: number, d: number) => `J’orchestre ${n} ${plural(n, 'équipe', 'équipes')}${d > 0 ? ` · ${d} ${plural(d, 'décision', 'décisions')} pour toi` : ''}.`,
     exchangeTicket: (n: string) => `ticket pour ${n}`,
     listening: 'Je vous écoute.',
     assistant: 'Votre assistant',
@@ -517,45 +517,38 @@ export const fr = {
   home: {
     /** The header of the Ledge screen (spec §8): with OpenRig, what Ledge orchestrates and the standalone sessions; without, those only. */
     header: (rigs: number, agents: number, sessions: number) => `Orchestrateur OpenRig · ${rigs} ${plural(rigs, 'rig', 'rigs')}, ${agents} ${plural(agents, 'agent', 'agents')} · ${solo(sessions)} · tranche dans son mandat`,
+    /** The same with Ledge's own teams engine: nothing of OpenRig. */
+    headerLedge: (teams: number, agents: number, sessions: number) => `Orchestrateur · ${teams} ${plural(teams, 'équipe', 'équipes')}, ${agents} ${plural(agents, 'agent', 'agents')} · ${solo(sessions)} · tranche dans son mandat`,
     solo,
     tabsLabel: 'Vues de Ledge',
-    tabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandat', teams: (n: number) => `Équipes · ${n}`, tasks: (n: number) => `Tâches · ${n}` },
-    brainOffer: { text: 'Je peux penser en continu : je lis les escalades des rigs, je tranche ce que mon mandat permet après une minute, et je te passe le reste.', activate: 'Activer', later: 'Plus tard' },
-    rigsCount: (n: number) => (n > 0 ? `Rigs · ${n}` : 'Rigs'),
+    tabs: { conversation: 'Conversation', rigs: 'Équipes', models: 'Modèles', mandat: 'Mandat' },
+    brainOffer: { text: 'Je peux penser en continu : je lis les escalades des équipes, je tranche ce que mon mandat permet après une minute, et je te passe le reste.', activate: 'Activer', later: 'Plus tard' },
+    rigsCount: (n: number) => (n > 0 ? `Équipes · ${n}` : 'Équipes'),
     toAtelier: 'Retour à l’atelier',
     thread: 'Fil de Ledge', older: 'Voir plus ancien',
-    placeholder: "Écrire à Ledge… (@build pour un agent d'un rig)",
+    placeholder: "Écrire à Ledge… (@build pour un agent d'une équipe)",
     /** The suggestions over the field; one ending in « … » fills the field instead of sending. */
-    suggest: { launch: 'Lance un rig…', whereIs: (rig: string) => `Où en est ${rig} ?`, sessions: 'Où en sont mes sessions ?', decided: "Qu'as-tu tranché ?", needsMe: 'Qui a besoin de moi ?' },
+    suggest: { launch: 'Lance une équipe…', whereIs: (rig: string) => `Où en est ${rig} ?`, sessions: 'Où en sont mes sessions ?', decided: "Qu'as-tu tranché ?", needsMe: 'Qui a besoin de moi ?' },
     footer: 'tranche dans son mandat · design, architecture et critique te reviennent',
     mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`,
     /** « En parler » of a decision: the field starts with this, the next message carries the escalation. */
     talkAbout: (summary: string) => `À propos de « ${summary} » : `,
     /** The right rail of the Conversation tab (spec §8, `c-A.png`). */
     rail: {
-      label: 'Rail de Ledge', yours: (n: number) => `À toi · ${n}`, rigs: (n: number) => `Rigs · ${n}`,
-      collapsed: (yours: number, rigs: number) => `À toi · ${yours} · Rigs · ${rigs}`,
+      label: 'Rail de Ledge', yours: (n: number) => `À toi · ${n}`, rigs: (n: number) => `Équipes · ${n}`,
+      collapsed: (yours: number, rigs: number) => `À toi · ${yours} · Équipes · ${rigs}`,
       atWork: (name: string, n: number, m: number) => `${name} ${n}/${m} au travail`, table: 'Table',
       settled: (n: number) => `Tranché aujourd'hui · ${n}`, revisit: 'Revenir',
-      summarise: 'Résumer la journée', summarisePrompt: "Résume ma journée : ce que les rigs ont fait, ce que j'ai tranché, ce qui m'attend."
+      summarise: 'Résumer la journée', summarisePrompt: "Résume ma journée : ce que les équipes ont fait, ce que j'ai tranché, ce qui m'attend."
     },
     point: {
-      seats: (n: number) => plural(n, `${n} siège`, `${n} sièges`),
       progress: (done: number, given: number) => `${done}/${given} ${plural(given, 'tâche', 'tâches')} de Ledge`,
-      table: 'Table',
-      resume: 'Reprendre',
-      resting: 'au repos',
       dismiss: 'Ranger',
       closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} a fini « ${title} »` : state === 'refused' ? `${owner} a refusé « ${title} »` : `${owner} a abandonné « ${title} »`,
       ofLedge: 'tâche de Ledge'
     },
-    tasks: {
-      filters: 'Filtres', all: 'Toutes', open: 'Ouvertes', closed: 'Closes', giver: 'Donneur', anyGiver: 'Tous', ledge: 'Ledge', seats: 'Les sièges', decisions: 'Décisions', team: 'Équipe', anyTeam: 'Toutes',
-      none: 'Aucune tâche.', result: 'Résultat', reason: 'Raison', log: 'Historique', from: (giver: string, owner: string) => `de ${giver} à ${owner}`, close: 'Fermer'
-    },
-    teams: { none: 'Aucune équipe en cours. Demande à Ledge d’en monter une.', dissolved: 'dissoute' },
     catalog: {
-      views: 'Vues des équipes', live: (n?: number) => `En cours · ${n ?? 0}`, templates: (n?: number) => (n === undefined ? 'Modèles' : `Modèles · ${n}`), roles: (n?: number) => (n === undefined ? 'Rôles' : `Rôles · ${n}`),
+      views: 'Vues des modèles', templates: (n?: number) => (n === undefined ? 'Modèles' : `Modèles · ${n}`), roles: (n?: number) => (n === undefined ? 'Rôles' : `Rôles · ${n}`),
       folder: 'Dossier', folderTitle: 'Le dossier dont le catalogue est lu', personal: 'Perso seulement',
       scopeProject: (name: string) => `projet ${name} · dépôt + ~/.ledge`, scopeFolder: 'dossier · dépôt + ~/.ledge', scopePersonal: 'sans dossier : ~/.ledge seulement',
       repoWins: 'Le dépôt l’emporte sur ~/.ledge pour un même id.',
@@ -567,7 +560,7 @@ export const fr = {
       noTemplate: 'Aucun modèle dans ce dossier.', noTemplateHint: 'Un modèle s’écrit dans .ledge/teams/<id>.yaml ; « Enregistrer » sur une carte d’équipe du chat en crée un.', noMatch: 'Aucun rôle ne correspond.',
       inTemplates: (n: number) => `dans ${n} ${plural(n, 'modèle', 'modèles')}`, heldBy: (names: string) => `tenu par ${names}`, seats: (n: number) => `${n} ${plural(n, 'poste', 'postes')}`,
       toolDefaults: 'défauts de l’outil', source: { repo: 'dépôt', home: 'perso' } as Record<'repo' | 'home', string>,
-      role: 'Rôle', template: 'Modèle d’équipe', fromTemplate: 'modèle', seeRole: (id: string) => `Voir le rôle @${id}`,
+      role: 'Rôle', template: 'Modèle d’équipe', seeRole: (id: string) => `Voir le rôle @${id}`,
       launchSession: 'Lancer une session', mountTeam: 'Monter une équipe…', launchTeam: 'Lancer cette équipe…',
       needProject: 'Ce dossier n’est d’aucun projet : une équipe s’installe dans la pièce d’un projet.',
       tool: 'Outil', model: 'Modèle', effort: 'Effort', autonomy: 'Autonomie', file: 'Fichier', anyTool: 'au choix', toolDefault: 'défaut de l’outil',
@@ -588,7 +581,8 @@ export const fr = {
       overWord: 'bleu', overNote: 'ce que le modèle change aux défauts du rôle.', unknownRole: 'Rôle inconnu dans ce dossier',
       autoWarn: (roles: readonly string[]) => `${andList(roles)} ${plural(roles.length, 'travaille', 'travaillent')} sans demander (autonomie auto, fixée par le fichier du rôle).`,
       born: 'Équipes nées', noneBorn: 'aucune', active: 'active', resting: 'au repos',
-      templateReadOnly: 'Lecture seule : un modèle se modifie dans son fichier ; « Enregistrer » sur une carte d’équipe du chat en crée un.'
+      templateReadOnly: 'Lecture seule : un modèle se modifie dans son fichier ; « Enregistrer » sur une carte d’équipe du chat en crée un.',
+      leadRule: "Une équipe a exactement un siège leader : son lead, qui reçoit l'objectif.", close: 'Fermer'
     }
   },
   /** Ledge's thread (lot 4): `ledgeThreadCopy` hands it to `@ledge/ui`'s thread components. */
@@ -639,14 +633,14 @@ export const fr = {
     source: { twice: 'tu as tranché deux fois pareil', order: 'ta consigne', answerTo: (seat: string) => `ta réponse à ${seat}` },
     editor: { title: 'Le mandat', save: 'Enregistrer', cancel: 'Annuler', saving: 'Enregistrement…', refused: (reason: string) => `Non enregistré : ${reason}` },
     memoriesTitle: 'Souvenirs', decisions: 'Décisions',
-    filters: { who: 'Qui', everyone: 'Tous', ledge: 'Ledge', you: 'toi', category: 'Catégorie', allCategories: 'Toutes', rig: 'Rig', allRigs: 'Tous' }
+    filters: { who: 'Qui', everyone: 'Tous', ledge: 'Ledge', you: 'toi', category: 'Catégorie', allCategories: 'Toutes', rig: 'Équipe', allRigs: 'Toutes' }
   },
-  /** The Rigs tab of the Ledge screen (spec §8.2): En cours · Specs · Agents. */
+  /** The « Équipes » tab of the Ledge screen (spec §8.2): En cours · Specs (OpenRig only) · Agents. */
   rigsTab: {
-    tabs: 'Vues des rigs',
+    tabs: 'Vues des équipes',
     sub: { live: (n: number) => `En cours · ${n}`, specs: (n?: number) => (n === undefined ? 'Specs' : `Specs · ${n}`), agents: (n: number) => `Agents · ${n}` },
-    rig: 'rig', seats: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`, inProject: (name: string) => `dans ${name}`, off: 'hors projet',
-    branch: (b: string) => `⎇ ${b}`, spec: 'spec', onMachine: (m: string) => `sur ${m}`,
+    rig: 'équipe', seats: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`, inProject: (name: string) => `dans ${name}`, off: 'hors projet',
+    branch: (b: string) => `⎇ ${b}`, spec: 'spec', template: 'modèle', onMachine: (m: string) => `sur ${m}`,
     working: (w: number, n: number) => `${w}/${n} au travail`, ready: (r: number, n: number) => `${r}/${n} prêts`,
     table: 'Table', tableTitle: (name: string) => `Voir ${name} dans l’atelier`, terminals: 'Terminaux', terminalsOf: (name: string) => `Terminaux de ${name}`,
     seatState: { working: 'Au travail', ready: 'Disponible', idle: 'Disponible', starting: 'démarre…', trust: 'attend ta confiance dans le dossier',
@@ -656,33 +650,37 @@ export const fr = {
     version: (v?: string) => (v ? `OpenRig ${v}` : 'OpenRig, version inconnue'),
     openrigState: { absent: 'absent', stopped: 'arrêté', starting: 'démarre', running: 'allumé', unsupported: 'non pris en charge', error: 'en erreur', unreachable: 'injoignable' } as Record<OpenRigState, string>,
     human: { registered: 'humain inscrit', missing: 'humain non inscrit', failed: 'inscription de l’humain échouée' } as Record<'registered' | 'missing' | 'failed', string>,
-    noRigs: 'Aucun rig en cours.',
+    noRigs: 'Aucune équipe en cours.',
     library: 'Bibliothèque · ~/.openrig/specs', registry: 'Registre · openrig.dev/rigs', registryNone: 'Rien de lu depuis le registre',
     specsList: 'Specs', specOf: (name: string) => `Spec ${name}`, specSeats: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`,
     specLine: (n: number, source: string) => `Spec OpenRig · ${n} ${plural(n, 'siège', 'sièges')} · ${source}`,
     source: { builtin: 'intégrée', library: 'bibliothèque', registry: 'registre' } as Record<RigSpecInfo['source'], string>,
     seatsTitle: 'Sièges', cols: { seat: 'Siège', role: 'Rôle', tool: 'Outil · modèle · effort', autonomy: 'Autonomie' },
-    file: 'Fichier', copy: 'Copier', copied: 'Copié', born: 'Rigs nés', bornNone: 'Aucun pour l’instant',
+    file: 'Fichier', copy: 'Copier', copied: 'Copié', born: 'Équipes nées', bornNone: 'Aucune pour l’instant',
     lifecycle: { launching: 'se lance', running: 'active', partial: 'partielle', stopped: 'arrêtée', unreachable: 'injoignable' } as Record<RigLifecycle, string>,
-    launch: 'Lancer ce rig…', machine: 'Machine',
+    launch: 'Lancer cette équipe…', machine: 'Machine',
     loading: 'Lecture des specs…', none: 'Aucune spec dans la bibliothèque.', failed: 'Les specs n’ont pas pu être lues.',
-    agents: 'Agents', agentCols: { address: 'Adresse', name: 'Nom', rig: 'Rig', state: 'État', tool: 'Outil · modèle', context: 'Contexte' }, noAgents: 'Aucun siège.'
+    agents: 'Agents', agentCols: { address: 'Adresse', name: 'Nom', rig: 'Équipe', state: 'État', tool: 'Outil · modèle', context: 'Contexte' }, noAgents: 'Aucun siège.',
+    /** A live Ledge team's card: the user's message to all its seats (team.broadcast), and what came of it. */
+    broadcast: "Écrire à toute l'équipe…", broadcastSend: 'Envoyer', broadcastSent: (n: number) => `Envoyé à ${n} ${plural(n, 'siège', 'sièges')}`,
+    broadcastFailed: (why: string) => `Non envoyé : ${why}`, broadcastOffline: 'le daemon local est hors ligne', broadcastSilent: 'le daemon n’a pas répondu'
   },
   /** Lot 5: acting on a rig or a seat (spec §4.5), its launch (§4.6), the isolated rig room's bar. */
   rigActions: {
-    stop: 'Arrêter…', stopRigBar: 'Arrêter le rig…', resume: 'Reprendre', restore: 'Reprendre depuis le dernier instantané',
+    stop: 'Arrêter…', stopRigBar: 'Arrêter l’équipe…', resume: 'Reprendre', restore: 'Reprendre depuis le dernier instantané',
     restartSeat: 'Relancer ce siège', handover: 'Relève', cancelLaunch: 'Annuler le lancement', openPrompt: 'Ouvrir l’invite',
     starting: 'démarre', more: (name: string) => `Plus d’actions pour ${name}`, seatMenu: (name: string) => `Actions de ${name}`,
     stopTitle: (rig: string) => `Arrêter ${rig} ?`,
     stopBody: (n: number) => `Ses ${n} sièges s’arrêtent. OpenRig garde un instantané pour le reprendre. Les fichiers restent.`,
-    stopRig: 'Arrêter le rig', stopSeat: 'Seulement ce siège', cancel: 'Annuler',
+    stopBodyLedge: "Les sessions de l'équipe se ferment ; l'équipe reste au repos et se reprend d'un clic.",
+    stopRig: 'Arrêter l’équipe', stopSeat: 'Seulement ce siège', cancel: 'Annuler',
     goalWaits: (lead: string, n: number) => `Le but attend : je le donne à ${lead} dès que les ${n} sièges sont prêts.`,
     trustWaits: (seat: string) => `${seat} attend ta confiance dans le dossier, je ne réponds pas à sa place.`,
-    rigThread: 'Fil du rig', repos: (n: number) => `Dépôts · ${n}`, adopt: 'Ranger dans un projet…',
+    rigThread: 'Fil de l’équipe', repos: (n: number) => `Dépôts · ${n}`, adopt: 'Ranger dans un projet…',
     openrigDown: (machine: string) => `OpenRig ne répond pas sur ${machine}`, refused: (reason: string) => `Action refusée : ${reason}`
   },
   rigRepos: {
-    title: (n: number) => `Dépôts trouvés · ${n}`, sub: 'ce que le rig a cloné ou ouvert', none: 'Aucun dépôt trouvé pour l’instant. Je regarde toutes les 30 s.',
+    title: (n: number) => `Dépôts trouvés · ${n}`, sub: 'ce que l’équipe a cloné ou ouvert', none: 'Aucun dépôt trouvé pour l’instant. Je regarde toutes les 30 s.',
     branch: (b: string) => `⎇ ${b}`, modified: (m: number) => `${m} ${plural(m, 'fichier modifié', 'fichiers modifiés')}`,
     cloned: (by?: string) => (by ? `cloné par ${by}` : 'cloné'), opened: (by?: string) => (by ? `lu par ${by}` : 'lu'),
     created: (by?: string) => (by ? `créé par ${by}` : 'créé'), noRemote: 'pas encore de dépôt distant',
@@ -690,7 +688,7 @@ export const fr = {
     proposeName: (rig: string, project: string) => `Je propose de ranger ${rig} dans ${project} : un de ses dépôts porte ce nom. Je ne déplace rien sans toi.`,
     fileIn: (project: string) => `Ranger dans ${project}`, choose: 'Ranger dans un projet…',
     adoptTitle: (rig: string) => `Ranger ${rig} dans un projet`, projects: 'Projets', noProjects: 'Aucun projet pour l’instant.',
-    adoptNote: (project: string) => `Le rig garde sa pièce et ses fichiers ; sa plaque dira « dans ${project} ».`,
+    adoptNote: (project: string) => `L’équipe garde sa pièce et ses fichiers ; sa plaque dira « dans ${project} ».`,
     adoptPick: 'Choisis un projet.', adopt: 'Ranger', cancel: 'Annuler', plaque: (n: number, names: string) => `${n} ${plural(n, 'dépôt', 'dépôts')} · ${names}`
   },
   /** A decision a session put to the user (`ledge task give ledge …`), answered from « À toi » or « Tâches » (task.answer). */
@@ -728,11 +726,11 @@ export const fr = {
     waiting: (n: number) => plural(n, `${n} attend`, `${n} attendent`), working: (n: number) => plural(n, `${n} au travail`, `${n} au travail`),
     roomMenu: (name: string) => `Actions de la pièce ${name}`, roomMenuTitle: 'Actions de la pièce',
     newSessionHere: 'Nouvelle session ici', newTeamHere: 'Nouvelle équipe ici…', entrance: 'ENTRÉE',
-    rigSeats: (n: number) => `rig · ${n} ${plural(n, 'siège', 'sièges')}`,
+    rigSeats: (n: number) => `équipe · ${n} ${plural(n, 'siège', 'sièges')}`,
     inProject: (name: string) => `dans ${name}`, offProject: (cwd: string) => `hors projet · ${cwd}`, onMachine: (m: string) => `sur ${m}`,
     kernelWhat: 'la mécanique · operator et queue',
-    rigMenu: (name: string) => `Actions du rig ${name}`, rigMenuTitle: 'Actions du rig',
-    terminals: 'Terminaux', rigThread: 'Fil du rig',
+    rigMenu: (name: string) => `Actions de l’équipe ${name}`, rigMenuTitle: 'Actions de l’équipe',
+    terminals: 'Terminaux', rigThread: 'Fil de l’équipe',
     hidden: (n: number) => plural(n, `${n} siège rangé (advisor, terminal)`, `${n} sièges rangés (advisor, terminal)`),
     teamTable: (name: string) => `Équipe ${name}`,
     teamLine: (done: number, given: number) => `équipe · opérateur Ledge · ${done}/${given} ${plural(given, 'tâche', 'tâches')}`,
@@ -1040,7 +1038,7 @@ export const fr = {
     /** Claude Code's automated cross-session notices (NoticeLine): system events, never the user's words. */
     seat: {
       task: (id: string, title: string, giver: string, state: string) => `${id} · ${title} · donnée par ${giver} · ${state}`,
-      seeTasks: 'Voir les tâches', pinned: 'Tâche en cours', autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' }
+      seeTasks: 'Voir l’équipe', pinned: 'Tâche en cours', autonomy: { ask: 'demande', edits: 'modifie sans demander', auto: 'autonome' }
     },
     notice: {
       task: 'TÂCHE', taskFrom: (name: string) => `Tâche de ${name}`, seeTask: 'Voir la tâche',
@@ -1263,7 +1261,7 @@ export const fr = {
     // #94 : la carte générique, une ligne par action, un plan au-delà d’une (docs/mockups/ledge-action-card.html).
     action: actionCopy.fr,
     // Lot 7 : la carte que le cerveau pose ; son bouton ouvre la fenêtre de lancement pré-remplie.
-    rigLaunch: { label: 'Rig à lancer', launch: 'Lancer ce rig' },
+    rigLaunch: { label: 'Équipe à lancer', launch: 'Lancer cette équipe' },
     project: {
       label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,
       repos: (n: number) => `${n} dépôt${n > 1 ? 's' : ''}`, review: 'Vérifier la proposition'

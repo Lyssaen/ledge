@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { ServerMessage, Task, Team } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
 import type { DaemonClient, DaemonStatus } from '../src/client';
@@ -74,5 +74,28 @@ describe('teams and tasks from the local daemon', () => {
     api.send({ type: 'team.broadcast', rid: 'b1', team: 'team-a1b2', text: 'Pause', machineId: 'srv' });
     expect(local.sent.filter(m => m.type === 'team.broadcast')).toEqual([{ type: 'team.broadcast', rid: 'b1', team: 'team-a1b2', text: 'Pause' }]);
     expect(remote.sent.some(m => m.type === 'team.broadcast')).toBe(false);
+  });
+
+  it('broadcastTeam sends team.broadcast to the local daemon and resolves on its result of the same rid; offline when down, timeout past 4 s', async () => {
+    const { api, local } = setup();
+    const first = api.fleet!.broadcastTeam('team-a1b2', 'Pause');
+    const second = api.fleet!.broadcastTeam('team-a1b2', 'Reprenez');
+    const [a, b] = local.sent.filter(m => m.type === 'team.broadcast') as Array<{ rid: string; team: string; text: string }>;
+    expect(a).toEqual({ type: 'team.broadcast', rid: expect.any(String), team: 'team-a1b2', text: 'Pause' });
+    expect(a!.rid).not.toBe(b!.rid);
+    local.emit({ type: 'team.broadcast.result', rid: b!.rid, team: 'team-a1b2', reason: 'no live seat' });
+    local.emit({ type: 'team.broadcast.result', rid: a!.rid, team: 'team-a1b2', sent: 3 });
+    expect(await second).toEqual({ reason: 'no live seat' });
+    expect(await first).toEqual({ sent: 3 });
+    vi.useFakeTimers();
+    try {
+      const silent = api.fleet!.broadcastTeam('team-a1b2', 'Allô');
+      vi.advanceTimersByTime(4000);
+      expect(await silent).toEqual({ reason: 'timeout' });
+    } finally { vi.useRealTimers(); }
+    const pending = api.fleet!.broadcastTeam('team-a1b2', 'Encore');
+    local.set('unreachable');
+    expect(await pending).toEqual({ reason: 'offline' });
+    expect(await api.fleet!.broadcastTeam('team-a1b2', 'Rien')).toEqual({ reason: 'offline' });
   });
 });

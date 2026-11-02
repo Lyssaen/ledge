@@ -21,17 +21,17 @@ test('sidebar: Ledge line, standalone projects, rigs and kernel', async ({ page 
   await fakeDaemon(page, [otto, buildSeat, orchLead], { projects: twoProjects, rigs: [FACTORY, KERNEL], escalations: [ESC], openrig: RUNNING });
   await page.goto('/'); await openAtelier(page);
   await expect(page.getByRole('button', { name: /Ledge\..*A decision is waiting for you · factory/ })).toBeVisible();
-  await expect(page.getByRole('tree').getByRole('button', { name: /^build/ })).toHaveCount(1); // under Rigs, not under Projects
+  await expect(page.getByRole('tree').getByRole('button', { name: /^build/ })).toHaveCount(1); // under Teams, not under Projects
   await expect(page.locator('section[aria-label="Projects"]').getByText('build')).toHaveCount(0);
   await expect(page.locator('section[aria-label="Projects"]').getByRole('button', { name: /^Otto/ })).toBeVisible();
-  const rigs = page.locator('section[aria-label="Rigs"]');
-  await expect(rigs.getByRole('treeitem', { name: /factory/ })).toContainText('rig · 2');
+  const rigs = page.locator('section[aria-label="Teams"]');
+  await expect(rigs.getByRole('treeitem', { name: /factory/ })).toContainText('team · 2');
   await expect(rigs.getByRole('treeitem', { name: /OpenRig kernel/ })).toContainText('kernel');
   await page.keyboard.press('/');
   await expect(page.locator('section.ledge-home')).toBeVisible();
-  await page.getByRole('button', { name: 'Launch a rig', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'New rig' })).toBeVisible();
-  await page.getByRole('dialog', { name: 'New rig' }).getByRole('button', { name: 'Close' }).last().click(); // the title bar's × is « Close » too
+  await page.locator('section[aria-label="Teams"]').getByRole('button', { name: 'Launch a team', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'New team' })).toBeVisible();
+  await page.getByRole('dialog', { name: 'New team' }).getByRole('button', { name: 'Close' }).last().click(); // the title bar's × is « Close » too
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
@@ -41,20 +41,20 @@ test('a rig pushed then removed by the daemon comes and goes; its seat returns t
   const projects = page.locator('section[aria-label="Projects"]');
   await expect(projects.getByRole('button', { name: /^build/ })).toBeVisible();
   daemon.pushRig({ ...FACTORY, seats: [seat('build', { sessionId: 'build' })] });
-  await expect(page.locator('section[aria-label="Rigs"]').getByRole('button', { name: /^build/ })).toBeVisible();
+  await expect(page.locator('section[aria-label="Teams"]').getByRole('button', { name: /^build/ })).toBeVisible();
   await expect(projects.getByRole('button', { name: /^build/ })).toHaveCount(0);
   daemon.removeRig('local', 'r-factory');
-  await expect(page.locator('section[aria-label="Rigs"]').getByRole('treeitem', { name: /factory/ })).toHaveCount(0);
+  await expect(page.locator('section[aria-label="Teams"]').getByRole('treeitem', { name: /factory/ })).toHaveCount(0);
   await expect(projects.getByRole('button', { name: /^build/ })).toBeVisible();
 });
 
-test('without OpenRig the Rigs section invites to install it', async ({ page }) => {
+test('without OpenRig the Teams section invites to install it (OpenRig mode)', async ({ page }) => {
   const daemon = await fakeDaemon(page, [otto], { projects: twoProjects, openrig: { machine: 'local', state: 'absent', install: 'npm i -g @openrig/cli' } });
   await page.goto('/'); await openAtelier(page);
-  const rigs = page.locator('section[aria-label="Rigs"]');
+  const rigs = page.locator('section[aria-label="Teams"]');
   await expect(rigs).toContainText('OpenRig is not installed');
   await expect(rigs).toContainText('npm i -g @openrig/cli');
-  await expect(rigs.getByRole('button', { name: 'Launch a rig' })).toBeVisible();
+  await expect(rigs.getByRole('button', { name: 'Launch a team' })).toBeVisible();
   // The sidebar never acts on a rig by itself.
   expect(daemon.received.some(m => m.type === 'rig.act')).toBe(false);
 });
@@ -63,7 +63,7 @@ test('in the rail (< 850 px) seats and the kernel hide; a rig keeps its swatch, 
   await page.setViewportSize({ width: 800, height: 760 });
   await fakeDaemon(page, [otto, buildSeat, orchLead], { projects: twoProjects, rigs: [FACTORY, KERNEL], openrig: RUNNING });
   await page.goto('/');
-  const rigs = page.locator('section[aria-label="Rigs"]');
+  const rigs = page.locator('section[aria-label="Teams"]');
   // The rail hides the row's name (as a project's), so the row is found by its class.
   await expect(rigs.locator('.st-rig .side-swatch')).toBeVisible();
   await expect(rigs.locator('.st-rig .st-main')).toBeHidden();
@@ -81,8 +81,8 @@ test('atelier: a double-click on factory shows its room alone; an exchange bubbl
   await page.goto('/'); await openAtelier(page);
   const atelier = page.locator('.office-shell');
   await expect(atelier.locator('[data-room="local/r-factory"]')).toBeVisible();
-  await expect(atelier.locator('[data-room="local/r-factory"] .room-plaque')).toContainText('rig · 3 seats');
-  await page.locator('section[aria-label="Rigs"]').getByRole('button', { name: 'factory rig · 3' }).dblclick();
+  await expect(atelier.locator('[data-room="local/r-factory"] .room-plaque')).toContainText('team · 3 seats');
+  await page.locator('section[aria-label="Teams"]').getByRole('button', { name: 'factory team · 3' }).dblclick();
   await expect(page.locator('.project-filter[data-filter="rig"]')).toContainText('factory');
   await expect(atelier.locator('[data-room]')).toHaveCount(1);
   const room = atelier.locator('[data-room="local/r-factory"]');
@@ -103,14 +103,14 @@ test('atelier: a double-click on factory shows its room alone; an exchange bubbl
   expect(errors).toEqual([]);
 });
 
-test('Ledge screen › Rigs: running rigs, the daemon’s spec, the seats, and never a rig.act', async ({ page }) => {
+test('Ledge screen › Teams: running rigs, the daemon’s spec, the seats, and never a rig.act', async ({ page }) => {
   const spec: RigSpecInfo = { id: 'factory', name: 'factory', source: 'library', path: '~/.openrig/specs/rigs/factory/rig.yaml',
     seats: [{ address: '@build', member: 'build', pod: 'Builder', runtime: 'claude-code', model: 'opus', effort: 'high' }, { address: '@lead', member: 'lead', pod: 'Lead', runtime: 'codex', model: 'gpt-5.5' }] };
   const daemon = await fakeDaemon(page, [otto, buildSeat, orchLead], { projects: twoProjects, rigs: [{ ...FACTORY, spec: 'factory' }, KERNEL], openrig: RUNNING, specs: [spec] });
   await page.goto('/');
   const home = page.locator('section.ledge-home');
-  await home.getByRole('tab', { name: 'Rigs · 1' }).click();
-  const sub = home.getByRole('tablist', { name: 'Rig views' });
+  await home.getByRole('tab', { name: 'Teams · 1' }).click();
+  const sub = home.getByRole('tablist', { name: 'Team views' });
   await expect(sub.getByRole('tab', { name: 'Running · 1' })).toHaveAttribute('aria-selected', 'true');
   await expect(home.getByRole('article', { name: 'factory' })).toContainText('1/2 working');
   await expect(home.getByRole('article', { name: 'OpenRig kernel' })).toBeVisible();

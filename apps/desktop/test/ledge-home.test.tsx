@@ -35,20 +35,20 @@ async function openHome({ openrig = true }: { openrig?: boolean } = {}) {
   if (openrig) {
     env.d.push({ type: 'openrig.status', status: RUNNING });
     env.d.push({ type: 'rig.snapshot', machine: 'local', rigs: [KERNEL, FACTORY, STARTER] });
-    await home().findByRole('tab', { name: 'Rigs · 2' });
+    await home().findByRole('tab', { name: 'Teams · 2' });
   }
   return env;
 }
 const thread = (d: MockDaemon, items: LedgeThreadItem[]) => d.push({ type: 'ledge.thread.history', items });
 
 describe('the Ledge screen, on Ledge’s thread', () => {
-  it('tabs are Conversation · Rigs · Teams · Tasks · Mandate; the header counts rigs, agents and standalone sessions', async () => {
+  it('tabs are Conversation · Teams · Templates · Mandate (lot F); the header counts rigs, agents and standalone sessions', async () => {
     await openHome();
-    expect(home().getAllByRole('tab').map(t => t.textContent)).toEqual(['Conversation', 'Rigs · 2', 'Teams · 0', 'Tasks · 0', 'Mandate']);
+    expect(home().getAllByRole('tab').map(t => t.textContent)).toEqual(['Conversation', 'Teams · 2', 'Templates', 'Mandate']);
     expect(home().getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true');
     expect(home().getByText('OpenRig orchestrator · 2 rigs, 4 agents · 2 standalone sessions · settles within its mandate')).toBeVisible();
     expect(home().getByText('settles within its mandate · design, architecture and critical calls come back to you')).toBeVisible();
-    expect(field()).toHaveAttribute('placeholder', "Write to Ledge… (@build for a rig's agent)");
+    expect(field()).toHaveAttribute('placeholder', "Write to Ledge… (@build for a team's agent)");
     // No « The point », no image button.
     expect(screen.queryByRole('region', { name: 'The point' })).toBeNull();
     expect(home().queryByRole('button', { name: /image/i })).toBeNull();
@@ -57,7 +57,7 @@ describe('the Ledge screen, on Ledge’s thread', () => {
   it('without OpenRig the header only counts the standalone sessions, and the suggestion asks about the sessions', async () => {
     await openHome({ openrig: false });
     expect(home().getByText('2 standalone sessions')).toBeVisible();
-    expect(home().getAllByRole('tab').map(t => t.textContent)).toEqual(['Conversation', 'Rigs', 'Teams · 0', 'Tasks · 0', 'Mandate']);
+    expect(home().getAllByRole('tab').map(t => t.textContent)).toEqual(['Conversation', 'Teams', 'Templates', 'Mandate']);
     expect(home().getByRole('button', { name: 'Where are my sessions at?' })).toBeVisible();
   });
 
@@ -66,11 +66,11 @@ describe('the Ledge screen, on Ledge’s thread', () => {
     await user.click(home().getByRole('button', { name: 'Where is factory at?' }));
     await waitFor(() => expect(says(d)).toHaveLength(1));
     expect(says(d)[0]).toEqual({ type: 'ledge.say', rid: expect.any(String), text: 'Where is factory at?' });
-    await user.click(home().getByRole('button', { name: 'Launch a rig…' }));
-    expect(field()).toHaveValue('Launch a rig ');
+    await user.click(home().getByRole('button', { name: 'Launch a team…' }));
+    expect(field()).toHaveValue('Launch a team ');
     await user.type(field(), 'factory{Enter}');
     await waitFor(() => expect(says(d)).toHaveLength(2));
-    expect(says(d)[1]).toMatchObject({ text: 'Launch a rig factory' });
+    expect(says(d)[1]).toMatchObject({ text: 'Launch a team factory' });
     expect(field()).toHaveValue('');
     expect(d.received.some(m => m.type === 'chat.ask')).toBe(false);
     for (const s of ['What did you settle?', 'Who needs me?']) expect(home().getByRole('button', { name: s })).toBeVisible();
@@ -162,17 +162,17 @@ describe('the Ledge screen, on Ledge’s thread', () => {
     expect(field()).toHaveValue('ask @build ');
   });
 
-  it('Mandate shows the Mandat tab (lot 7); the Rigs tab keeps its sub-tab', async () => {
+  it('Mandate shows the Mandat tab (lot 7); the Teams tab keeps its sub-tab', async () => {
     const { user } = await openHome();
     await user.click(home().getByRole('tab', { name: 'Mandate' }));
     expect(within(home().getByRole('tabpanel', { name: 'Mandate' })).getByRole('tab', { name: 'What Ledge settles' })).toBeVisible();
-    await user.click(home().getByRole('tab', { name: 'Rigs · 2' }));
-    const sub = within(home().getByRole('tablist', { name: 'Rig views' }));
+    await user.click(home().getByRole('tab', { name: 'Teams · 2' }));
+    const sub = within(home().getByRole('tablist', { name: 'Team views' }));
     expect(sub.getByRole('tab', { name: 'Running · 2' })).toHaveAttribute('aria-selected', 'true');
     await user.click(sub.getByRole('tab', { name: /^Agents/ }));
     await user.click(home().getByRole('tab', { name: 'Conversation' }));
-    await user.click(home().getByRole('tab', { name: 'Rigs · 2' }));
-    expect(within(home().getByRole('tablist', { name: 'Rig views' })).getByRole('tab', { name: /^Agents/ })).toHaveAttribute('aria-selected', 'true');
+    await user.click(home().getByRole('tab', { name: 'Teams · 2' }));
+    expect(within(home().getByRole('tablist', { name: 'Team views' })).getByRole('tab', { name: /^Agents/ })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('mentionAt only knows @', () => {
@@ -183,10 +183,10 @@ describe('the Ledge screen, on Ledge’s thread', () => {
   });
 
   it('the French labels are the plan’s, word for word', () => {
-    expect([fr.home.tabs.conversation, fr.home.tabs.rigs, fr.home.tabs.mandat]).toEqual(['Conversation', 'Rigs', 'Mandat']);
-    expect([fr.home.tabs.teams(2), fr.home.tabs.tasks(3)]).toEqual(['Équipes · 2', 'Tâches · 3']);
-    expect(fr.home.placeholder).toBe("Écrire à Ledge… (@build pour un agent d'un rig)");
-    expect([fr.home.suggest.launch, fr.home.suggest.whereIs('factory'), fr.home.suggest.decided, fr.home.suggest.needsMe]).toEqual(['Lance un rig…', 'Où en est factory ?', "Qu'as-tu tranché ?", 'Qui a besoin de moi ?']);
+    expect([fr.home.tabs.conversation, fr.home.tabs.rigs, fr.home.tabs.models, fr.home.tabs.mandat]).toEqual(['Conversation', 'Équipes', 'Modèles', 'Mandat']);
+    expect([fr.home.rigsCount(2), fr.home.rigsCount(0)]).toEqual(['Équipes · 2', 'Équipes']);
+    expect(fr.home.placeholder).toBe("Écrire à Ledge… (@build pour un agent d'une équipe)");
+    expect([fr.home.suggest.launch, fr.home.suggest.whereIs('factory'), fr.home.suggest.decided, fr.home.suggest.needsMe]).toEqual(['Lance une équipe…', 'Où en est factory ?', "Qu'as-tu tranché ?", 'Qui a besoin de moi ?']);
     expect(fr.home.suggest.sessions).toBe('Où en sont mes sessions ?');
     expect(fr.home.footer).toBe('tranche dans son mandat · design, architecture et critique te reviennent');
     expect(fr.home.header(2, 8, 4)).toBe('Orchestrateur OpenRig · 2 rigs, 8 agents · 4 sessions seules · tranche dans son mandat');

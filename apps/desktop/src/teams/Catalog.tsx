@@ -13,8 +13,8 @@ import type { RolesListing, TeamsApi } from './useTeamsApi';
 import { useDocument } from '../session/useDocument';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 
-/** The « Équipes » tab's views (#97): the live teams, and the catalog a folder reads, its templates and its roles. */
-export type TeamsView = 'live' | 'templates' | 'roles';
+/** The « Modèles » tab's views (#97, lot F): the catalog a folder reads, its templates and its roles. */
+export type TeamsView = 'templates' | 'roles';
 /** What the catalog shows on the right: a role, a template, or the files skipped. */
 export interface CatalogPick { role?: string; template?: string; problems?: boolean }
 
@@ -405,6 +405,7 @@ function TemplateDetail({ ctx, cwd, template, roles, onPick }: {
           </tbody>
         </table>
         <p className="cat-ro"><span className="over">{c.overWord}</span> : {c.overNote}</p>
+        <p className="cat-ro cat-lead-rule">{c.leadRule}</p>
       </div>
       {auto.length > 0 && <p className="cat-warn" role="note">⚠ {c.autoWarn(auto)}</p>}
       <dl className="cat-facts">
@@ -449,7 +450,7 @@ function FileReader({ client, path, onClose }: { client: DaemonClient; path: str
     <aside className="cat-reader" aria-label={t.home.catalog.reader(folderName(path))}>
       <div className="cat-reader-head">
         <strong>{folderName(path)}</strong><code title={path}>{path}</code>
-        <Button variant="ghost" size="sm" aria-label={t.home.tasks.close} title={t.home.tasks.close} onClick={onClose}><Icon d={ICONS.close.d} size={14} /></Button>
+        <Button variant="ghost" size="sm" aria-label={t.home.catalog.close} title={t.home.catalog.close} onClick={onClose}><Icon d={ICONS.close.d} size={14} /></Button>
       </div>
       <div className="cat-reader-body">
         {doc.status === 'loading' ? <p className="lp-none">{tp.reading}</p>

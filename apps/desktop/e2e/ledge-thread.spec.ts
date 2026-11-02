@@ -20,7 +20,7 @@ const otto = session('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', 
 const thread = (page: Page) => page.getByRole('log', { name: 'Ledge’s thread' });
 const card = (page: Page) => thread(page).locator('[data-escalation-card="q1"]');
 const todo = (page: Page) => page.locator('aside.sidebar [data-escalation="q1"]');
-const field = (page: Page) => page.getByPlaceholder('Write to Ledge… (@build for a rig\'s agent)');
+const field = (page: Page) => page.getByPlaceholder('Write to Ledge… (@build for a team\'s agent)');
 
 async function boot(page: Page) {
   await page.goto('/');

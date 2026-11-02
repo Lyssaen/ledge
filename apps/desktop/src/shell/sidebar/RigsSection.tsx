@@ -1,5 +1,5 @@
 import { useRef, useState, type CSSProperties, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
-import { PROJECT_COLORS, type OpenRigStatus, type Rig, type Session } from '@ledge/protocol';
+import { PROJECT_COLORS, type OpenRigStatus, type Rig, type Session, type TeamsEngine } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { isSeatPlaceholder, kernelFilter, kernelSplit, rigColor, rigFilter, seatSession, type rigsModel } from '@ledge/ui/rigs/model';
 import { useI18n } from '../../i18n/lang';
@@ -13,12 +13,13 @@ const NO_SESSIONS: ReadonlyMap<string, Session> = new Map();
 const flip = (set: Set<string>, k: string): Set<string> => { const n = new Set(set); if (n.has(k)) n.delete(k); else n.add(k); return n; };
 const needs = (s: Session) => !s.offline && (s.state === 'waiting_permission' || s.state === 'waiting_input' || s.state === 'error');
 
-/** The sidebar's Rigs section (spec §8.1): its title and « + », one row per rig (unfolded, its running seats as session rows), the
- *  OpenRig kernel last (folded, advisor and the human's terminal behind « +n »), or an invitation when OpenRig is absent or stopped.
+/** The sidebar's « Équipes » section (spec §8.1, lot F): its title and « + » (« Lancer une équipe »), one row per rig (unfolded, its running
+ *  seats as session rows), the OpenRig kernel last (folded, advisor and the human's terminal behind « +n »), or, in OpenRig mode only, an
+ *  invitation when OpenRig is absent or stopped.
  *  A seat with no Ledge session (`isSeatPlaceholder`) is shown read-only: no time, no task, no click, no menu.
  *  `byId` finds the paired sessions of the kernel's hidden seats (the model only carries the shown ones). */
 export function RigsSection(p: {
-  model: ReturnType<typeof rigsModel>; openrig: readonly OpenRigStatus[]; current: string | null;
+  model: ReturnType<typeof rigsModel>; openrig: readonly OpenRigStatus[]; engine: TeamsEngine; current: string | null;
   onOpenSeat(s: Session): void; onRoom(filter: string): void; onLaunch(): void; onMenu(id: string, e: MouseEvent): void;
   paused: boolean; dense: boolean; byId?: ReadonlyMap<string, Session>;
 }): JSX.Element {
@@ -33,7 +34,7 @@ export function RigsSection(p: {
 
   const local = p.openrig.find(s => s.machine === 'local');
   const empty = p.model.rigs.length === 0 && p.model.kernels.length === 0;
-  const invite = !empty || !local ? null
+  const invite = !empty || !local || p.engine === 'ledge' ? null
     : local.state === 'absent' ? r.absent
     : local.state === 'stopped' ? r.stopped
     : local.state === 'error' ? r.error

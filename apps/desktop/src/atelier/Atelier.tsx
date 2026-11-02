@@ -10,7 +10,7 @@ import { activeCount } from '../nav/agents';
 import type { SessionMenuState } from '../manage/useSessionMenu';
 import type { SessionActions } from '../manage/useSessionActions';
 import { useScreenKeys } from '../nav/screenKeys';
-import type { NavAction, NavState } from '../nav/state';
+import { TO_TEAMS, type NavAction, type NavState } from '../nav/state';
 import { roomTileWidth, sceneOf, walkOrder, type AtelierTable } from './layout';
 import { ProjectRoom } from './ProjectRoom';
 import { RoleChooser, type RoleChoice } from './RoleChooser';
@@ -239,7 +239,7 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
                     isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
                     actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt}
                     teamTasks={table.team ? teams?.tasks.filter(x => x.team === table.team!.id) : undefined}
-                    teamActions={teams && { resume: teams.resume, dissolve: (id, name) => setDissolving({ id, name }), tasks: () => dispatch({ type: 'ledge', tab: 'tasks' }) }}
+                    teamActions={teams && { resume: teams.resume, dissolve: (id, name) => setDissolving({ id, name }), tasks: () => dispatch(TO_TEAMS) }}
                     seatDrag={seatDrag} tableDrop={tableDrop(table, project.id)} />
                 ))}
               </ProjectRoom>

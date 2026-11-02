@@ -8,8 +8,6 @@ import { decisionOptions } from '../src/teams/useTeamsApi';
 const T0 = new Date().toISOString();
 /** A decision Otto put to the user (`ledge task give ledge …`): giver the session, owner Ledge. */
 const decision = (extra: Partial<Task> = {}): Task => ({ id: 't00000d', title: 'Fusionner feat/roles ?', text: '- Oui, fusionne\n- Non, attends la revue', giver: 'otto', giverName: 'Otto', owner: 'ledge', ownerName: 'Ledge', state: 'open', at: T0, updatedAt: T0, log: [{ at: T0, by: 'Otto', what: 'confiée à Ledge' }], ...extra });
-const given = (id: string, extra: Partial<Task> = {}): Task => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'otto', ownerName: 'Otto', state: 'open', at: T0, updatedAt: T0, log: [], ...extra });
-const home = () => within(screen.getByRole('region', { name: 'Home: Ledge, the operator' }));
 const side = () => within(screen.getByRole('complementary', { name: 'Sidebar' }));
 /** What « Répondre » may send: the registry action, never a task command. */
 const answers = (received: readonly ClientMessage[]) => received.filter(m => m.type === 'action.run' || (m.type === 'task.cmd' && m.op !== 'list'));
@@ -21,7 +19,7 @@ async function openHome() {
   const env = await boot({ home: true, machines: [{ id: 'local', label: 'Local' }], projects: PROJECTS, sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' })] });
   await screen.findByRole('region', { name: 'Home: Ledge, the operator' });
   env.d.push({ type: 'task.updated', task: decision() });
-  // The OpenRig branch's Ledge screen has no « The point »: « Your turn » in the sidebar and « Tasks » list the decisions.
+  // The OpenRig branch's Ledge screen has no « The point » and, since lot F, no « Tasks »: « Your turn » in the sidebar lists the decisions.
   await side().findByText('Fusionner feat/roles ?');
   return env;
 }
@@ -71,27 +69,6 @@ describe('a decision a session puts to the user', () => {
     // Answered, the daemon closes it: it leaves « Yours ».
     d.push({ type: 'task.updated', task: decision({ state: 'done', result: 'Non' }) });
     await waitFor(() => expect(side().queryByText('Fusionner feat/roles ?')).toBeNull());
-  });
-
-  it('« Tasks »: « Decisions » keeps the decisions alone, « The seats » no longer has them; an open one offers « Answer »', async () => {
-    const { d, user } = await openHome();
-    d.push({ type: 'task.updated', task: given('t000001') });
-    d.push({ type: 'task.updated', task: given('t000002', { giver: 'pim', giverName: 'Pim' }) });
-    await user.click(home().getByRole('tab', { name: /Tasks/ }));
-    const giver = home().getByRole('combobox', { name: 'Giver' });
-    const titles = () => home().getAllByRole('button').filter(b => b.classList.contains('lp-task')).map(b => b.querySelector('strong')?.textContent);
-    await waitFor(() => expect(titles()).toHaveLength(3));
-    await user.selectOptions(giver, 'decisions');
-    expect(titles()).toEqual(['Fusionner feat/roles ?']);
-    await user.selectOptions(giver, 'seats');
-    expect(titles()).toEqual(['Tâche t000002']);
-    await user.selectOptions(giver, 'ledge');
-    expect(titles()).toEqual(['Tâche t000001']);
-    await user.selectOptions(giver, 'decisions');
-    await user.click(home().getByText('Fusionner feat/roles ?'));
-    const detail = within(await screen.findByRole('region', { name: 'Fusionner feat/roles ?' }));
-    await user.click(detail.getByRole('button', { name: 'Answer' }));
-    expect(detail.getByRole('textbox', { name: 'Your answer' })).toHaveValue('');
   });
 });
 

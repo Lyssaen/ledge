@@ -1,5 +1,6 @@
 import { useState, type JSX, type ReactNode } from 'react';
 import type { OpenRigStatus, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
+import type { TeamBroadcastAnswer } from '@ledge/fleet';
 import { rigFilter, type rigsModel } from '@ledge/ui/rigs/model';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -25,7 +26,7 @@ function More({ label, disabled, children }: { label: string; disabled?: boolean
 
 /** What acts on a rig card (spec §4.5, §4.6): a launching rig's « Annuler le lancement » (no confirmation: nothing worked yet), « Ouvrir
  *  l'invite » for a seat waiting for the user's trust (its terminal: Ledge types nothing there) and the note at its foot; a stopped rig's
- *  « Reprendre » and « … › Reprendre depuis le dernier instantané »; a running rig's « Arrêter… » and each seat's « … » (« Relancer ce
+ *  « Reprendre » and, for an OpenRig rig, « … › Reprendre depuis le dernier instantané »; a running rig's « Arrêter… » and each seat's « … » (« Relancer ce
  *  siège », « Relève », « Arrêter… »). An unreachable rig offers nothing. */
 function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => void, t: ReturnType<typeof useI18n>['t']): {
   actions?: ReactNode; seatAction?: (seat: RigSeat) => ReactNode; footer?: ReactNode;
@@ -45,7 +46,8 @@ function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => voi
   if (rig.lifecycle === 'stopped') return {
     actions: <>
       <button type="button" className="st-qa" disabled={busy} onClick={() => act('up')}>{a.resume}</button>
-      <More label={a.more(rig.name)} disabled={busy}><MenuItem onSelect={() => act('restore')}><span>{a.restore}</span></MenuItem></More>
+      {/* A Ledge team has no snapshot of OpenRig's: « Reprendre » is all it takes. */}
+      {rig.engine !== 'ledge' && <More label={a.more(rig.name)} disabled={busy}><MenuItem onSelect={() => act('restore')}><span>{a.restore}</span></MenuItem></More>}
     </>
   };
   return {
@@ -62,10 +64,10 @@ function rigActions(c: RigControls, rig: Rig, onTerminal: (seat: RigSeat) => voi
 }
 
 /** « En cours » (spec §8.2): one card per rig, by name, then the kernels (the local one first). Without the app's rig gestures
- *  (`RigControlsContext`), the cards only show. */
-export function RigsLive({ model, openrig, byId, projects, dispatch, onTerminal }: {
+ *  (`RigControlsContext`), the cards only show. `onBroadcast` writes to all the seats of a live Ledge team (its card's field). */
+export function RigsLive({ model, openrig, byId, projects, dispatch, onTerminal, onBroadcast }: {
   model: ReturnType<typeof rigsModel>; openrig: readonly OpenRigStatus[]; byId: ReadonlyMap<string, Session>; projects: Projects | null;
-  dispatch: (a: NavAction) => void; onTerminal(rig: Rig, seat: RigSeat): void;
+  dispatch: (a: NavAction) => void; onTerminal(rig: Rig, seat: RigSeat): void; onBroadcast?(rig: Rig, text: string): Promise<TeamBroadcastAnswer>;
 }): JSX.Element {
   const { t } = useI18n();
   const controls = useRigControls();
@@ -80,8 +82,10 @@ export function RigsLive({ model, openrig, byId, projects, dispatch, onTerminal 
           ? <RigRepos rig={row.rig} projects={projects} onChoose={() => controls.askAdopt(row.rig)} onAdopt={id => { void controls.adopt(row.rig.machine, row.rig.id, id); }} />
           : null;
         const footer = acts.footer || repos ? <>{acts.footer}{repos}</> : undefined;
+        const live = row.rig.engine === 'ledge' && row.rig.lifecycle !== 'stopped' && row.rig.lifecycle !== 'unreachable';
         return (
           <RigCard key={row.key} rig={row.rig} place={row.place} byId={byId} onOpen={open}
+            {...(live && onBroadcast ? { onBroadcast: (text: string) => onBroadcast(row.rig, text) } : {})}
             onTable={() => dispatch({ type: 'home', project: rigFilter(row.rig) })} onTerminal={seat => onTerminal(row.rig, seat)}
             {...acts} {...(footer ? { footer } : {})} />
         );

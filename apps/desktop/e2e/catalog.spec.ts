@@ -3,8 +3,8 @@ import type { Role, Team, TeamTemplate } from '@ledge/protocol';
 import { test, expect } from './fixtures';
 import { fakeDaemon, session, T0, twoProjects } from './daemon';
 
-// The catalog of « Teams » (#97, docs/mockups/ledge-teams-roles.html): the roles, templates and skipped files a folder reads,
-// and the live teams linking to them. LEDGE_CATALOG_SHOTS=<dir> also captures each view, dark and light, to compare with the mockup.
+// The catalog of « Templates » (« Modèles », #97, lot F; docs/mockups/ledge-teams-roles.html): the roles, templates and skipped files a
+// folder reads. The live teams are the « Teams » tab's. LEDGE_CATALOG_SHOTS=<dir> also captures each view, dark and light, to compare with the mockup.
 const SHOTS = process.env.LEDGE_CATALOG_SHOTS;
 
 const role = (id: string, label: string, extra: Partial<Role>): Role => ({ id, label, prompt: `Tu es ${label}.`, source: 'repo', path: `/w/ledge/.ledge/roles/${id}.md`, ...extra });
@@ -40,14 +40,16 @@ async function openTeams(page: Page, theme?: 'dark' | 'light') {
   await fakeDaemon(page, sessions, { projects: twoProjects, teams: [team], roles: { '/w/ledge': { roles, templates, problems } } });
   await page.goto('/');
   const home = page.locator('section.ledge-home');
-  await home.getByRole('tab', { name: /^(Teams|Équipes)/ }).click();
+  await home.getByRole('tablist', { name: /^(Ledge views|Vues de Ledge)$/ }).getByRole('tab', { name: /^(Templates|Modèles)$/ }).click();
   return home;
 }
+/** The catalog's own views, « Templates · n » and « Roles · n ». */
+const views = (page: Page) => page.locator('section.ledge-home').getByRole('tablist', { name: /^(Template views|Vues des modèles)$/ });
 const detail = (page: Page) => page.locator('section.ledge-home .cat-detail');
 
 test('the roles view shows a role’s defaults, its file and its prompt', async ({ page }) => {
   const home = await openTeams(page);
-  await home.getByRole('tab', { name: /^Roles/ }).click();
+  await views(page).getByRole('tab', { name: /^Roles/ }).click();
   await home.locator('.cat-row[data-role="review"]').click();
   const d = detail(page);
   await expect(d.getByRole('heading', { name: /Relecteur/ })).toBeVisible();
@@ -57,27 +59,25 @@ test('the roles view shows a role’s defaults, its file and its prompt', async 
   await expect(d.getByText('sans modifier le code')).toBeVisible();
 });
 
-test('the templates view shows the seats and warns of an auto seat', async ({ page }) => {
+test('the templates view, where the tab opens, shows the seats, the lead rule, and warns of an auto seat', async ({ page }) => {
   const home = await openTeams(page);
-  await home.getByRole('tab', { name: /^Templates/ }).click();
+  await expect(views(page).getByRole('tab', { name: /^Templates/ })).toHaveAttribute('aria-selected', 'true');
   await home.locator('.cat-list').getByRole('button', { name: /workshop/ }).click();
   await expect(detail(page)).toContainText('gpt-5.5-mini');
+  await expect(detail(page)).toContainText('A team has exactly one leader seat: its lead, who receives the objective.');
   await expect(detail(page).locator('.cat-warn')).toContainText('@qa');
 });
 
 test('the skipped files are listed with their reason', async ({ page }) => {
   const home = await openTeams(page);
-  await home.getByRole('tab', { name: /^Roles/ }).click();
+  await views(page).getByRole('tab', { name: /^Roles/ }).click();
   await home.locator('.cat-list').getByRole('button', { name: /⚠/ }).click();
   await expect(detail(page)).toContainText('le même rôle deux fois dans une équipe');
 });
 
-test('a live team links to its template and its roles', async ({ page }) => {
-  const home = await openTeams(page);
-  await home.getByRole('button', { name: 'workshop' }).click();
-  await expect(detail(page)).toContainText('gpt-5.5-mini');
-  await home.getByRole('tab', { name: /^Live/ }).click();
-  await home.getByRole('button', { name: '@review' }).click();
+test('a template’s @role leads to the role', async ({ page }) => {
+  await openTeams(page);
+  await detail(page).getByRole('button', { name: '@review' }).click();
   await expect(detail(page).getByRole('heading', { name: /Relecteur/ })).toBeVisible();
 });
 
@@ -87,13 +87,13 @@ for (const theme of ['dark', 'light'] as const) {
     await page.setViewportSize({ width: 1440, height: 900 });
     const home = await openTeams(page, theme);
     await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({ path: `${SHOTS}/live-${theme}.png` });
-    await home.getByRole('tab', { name: /^Rôles/ }).click();
+    await page.screenshot({ path: `${SHOTS}/models-${theme}.png` });
+    await views(page).getByRole('tab', { name: /^Rôles/ }).click();
     await home.locator('.cat-row[data-role="review"]').click();
     await page.screenshot({ path: `${SHOTS}/roles-${theme}.png` });
     await home.locator('.cat-list').getByRole('button', { name: /⚠/ }).click();
     await page.screenshot({ path: `${SHOTS}/problems-${theme}.png` });
-    await home.getByRole('tab', { name: /^Modèles/ }).click();
+    await views(page).getByRole('tab', { name: /^Modèles/ }).click();
     await home.locator('.cat-list').getByRole('button', { name: /workshop/ }).click();
     await page.screenshot({ path: `${SHOTS}/templates-${theme}.png` });
   });

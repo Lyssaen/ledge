@@ -81,7 +81,7 @@ describe('Dépôts trouvés', () => {
     renderTab([rigWith(THREE)]);
     const c = card();
     expect(within(c).getByText('Dépôts trouvés · 3')).toBeInTheDocument();
-    expect(within(c).getByText('ce que le rig a cloné ou ouvert')).toBeInTheDocument();
+    expect(within(c).getByText('ce que l’équipe a cloné ou ouvert')).toBeInTheDocument();
     expect(within(c).getByText('ledge ⎇ feat/rigs · cloné par build · 9 fichiers modifiés')).toBeInTheDocument();
     expect(within(c).getByText('notes · lu par advisor')).toBeInTheDocument();
     expect(within(c).getByText('sketch · créé par design · pas encore de dépôt distant')).toBeInTheDocument();
@@ -106,7 +106,7 @@ describe('Dépôts trouvés', () => {
     const dialog = screen.getByRole('dialog', { name: 'Ranger factory dans un projet' });
     expect(within(dialog).getByRole('button', { name: 'Ranger' })).toBeDisabled();
     await user.click(within(dialog).getByRole('radio', { name: /Website/ }));
-    expect(dialog).toHaveTextContent('Le rig garde sa pièce et ses fichiers ; sa plaque dira « dans Website ».');
+    expect(dialog).toHaveTextContent('L’équipe garde sa pièce et ses fichiers ; sa plaque dira « dans Website ».');
     await user.click(within(dialog).getByRole('button', { name: 'Ranger' }));
     expect(sent.filter(m => m.type === 'rig.adopt')).toEqual([expect.objectContaining({ rigId: 'r1', projectId: 'website' })]);
   });

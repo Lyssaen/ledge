@@ -76,7 +76,7 @@ describe('actions on rigs and seats', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Arrêter factory ?' });
     expect(dialog).toHaveTextContent('Ses 3 sièges s’arrêtent. OpenRig garde un instantané pour le reprendre. Les fichiers restent.');
     expect(within(dialog).queryByRole('button', { name: 'Seulement ce siège' })).toBeNull();
-    await user.click(within(dialog).getByRole('button', { name: 'Arrêter le rig' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Arrêter l’équipe' }));
     expect(acts()).toEqual([expect.objectContaining({ type: 'rig.act', machine: 'local', verb: 'down', rigId: 'r1' })]);
     expect(acts()[0]).not.toHaveProperty('seatRef');
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -113,7 +113,7 @@ describe('actions on rigs and seats', () => {
     const seatTerminal = vi.fn(() => null);
     renderTab([LAUNCHING], clientOf([LAUNCHING], seatTerminal));
     const factory = within(card('factory'));
-    expect(card('factory')).toHaveTextContent('rig · démarre · dans Ledge');
+    expect(card('factory')).toHaveTextContent('équipe · démarre · dans Ledge');
     expect(factory.getByText('4/7 prêts')).toBeVisible();
     expect(factory.queryByRole('button', { name: 'Arrêter…' })).toBeNull();
     expect(card('factory')).toHaveTextContent('Le but attend : je le donne à orch-lead dès que les 7 sièges sont prêts.');

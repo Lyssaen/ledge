@@ -7,7 +7,7 @@ import type { Decisions } from '../fleet/decisions';
 import { whenOf, type Wait } from '../list/time';
 import { repoOf } from '../list/model';
 import { machineOf } from '../nav/agents';
-import type { NavAction, NavState } from '../nav/state';
+import { TO_TEAMS, type NavAction, type NavState } from '../nav/state';
 import { useScreenKeys, type ScreenKeyHandler } from '../nav/screenKeys';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
@@ -451,7 +451,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
             <div className="pinned-task" role="note" aria-label={t.session.seat.pinned} data-task={held.id}>
               <span className="kicker mono">{t.session.notice.task}</span>
               <span className="pinned-text">{t.session.seat.task(held.id, held.title, held.giverName, t.chat.task.state[held.state])}</span>
-              <button type="button" className="message-link" onClick={() => p.dispatch({ type: 'ledge', tab: 'tasks', task: held.id })}>{t.session.seat.seeTasks}</button>
+              <button type="button" className="message-link" onClick={() => p.dispatch(TO_TEAMS)}>{t.session.seat.seeTasks}</button>
             </div>
           )}
           {!archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}

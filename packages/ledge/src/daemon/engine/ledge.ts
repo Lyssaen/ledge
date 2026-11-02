@@ -64,6 +64,8 @@ export function createLedgeEngine(d: LedgeEngineDeps): LedgeEngine {
     return {
       id: team.id, name: team.name, machine: 'local', cwd: team.cwd, projectId: team.project, offProject: team.project === null,
       ...(branch ? { branch } : {}),
+      // The template it was born of, where an OpenRig rig names its spec: the card shows it (lot F).
+      ...(team.template ? { spec: team.template } : {}),
       lifecycle: team.state === 'resting' ? 'stopped' : allLive ? 'running' : 'partial',
       kernel: false, engine: 'ledge', seats, repos: []
     };

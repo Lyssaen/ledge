@@ -7,20 +7,21 @@ export type View = 'atelier';
 export type ProjectFilter = string;
 export type SectionId = 'general' | 'ledge' | 'appearance' | 'island' | 'teams' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
 export const SECTIONS: readonly SectionId[] = ['general', 'ledge', 'appearance', 'island', 'teams', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
-/** The tabs of the Ledge screen (spec §8, lot 4): its thread, its rigs, the Ledge teams and their tasks (roles spec §3.9), and its mandate. */
-export type HomeTab = 'conversation' | 'rigs' | 'teams' | 'tasks' | 'mandat';
-export const HOME_TABS: readonly HomeTab[] = ['conversation', 'rigs', 'teams', 'tasks', 'mandat'];
+/** The tabs of the Ledge screen (spec §8, lot 4; lot F): its thread, « Équipes » (the rigs of either engine), « Modèles » (main's catalog of
+ *  templates and roles) and its mandate. */
+export type HomeTab = 'conversation' | 'rigs' | 'models' | 'mandat';
+export const HOME_TABS: readonly HomeTab[] = ['conversation', 'rigs', 'models', 'mandat'];
 /** A saved tab: an old one (`history`) or anything unknown reads as the conversation. */
 export function readHomeTab(saved: string | null): HomeTab {
   return (HOME_TABS as readonly string[]).includes(saved ?? '') ? saved as HomeTab : 'conversation';
 }
-/** The sub-tabs of the Rigs tab (spec §8.2): the running rigs, the specs a machine offers, every seat. */
+/** The sub-tabs of the « Équipes » tab (spec §8.2): the running teams, the specs a machine offers (OpenRig only), every seat. */
 export type RigsSub = 'live' | 'specs' | 'agents';
 export type Place =
   /** Ledge's home view, where the app opens (ledge home spec §2.1): `view` and `project` are the atelier's, kept for the
    *  way back; `back` is the place Échap returns to (none at start: the atelier); `rigs` the Rigs tab's sub-tab and `spec` the spec
    *  chosen in its Specs, kept while the user goes from tab to tab. */
-  | { kind: 'home'; tab: HomeTab; view: View; project: ProjectFilter; focus?: string; back?: Exclude<Place, { kind: 'settings' } | { kind: 'home' }>; rigs?: RigsSub; spec?: string; /** The task « Tâches » opens on. */ task?: string }
+  | { kind: 'home'; tab: HomeTab; view: View; project: ProjectFilter; focus?: string; back?: Exclude<Place, { kind: 'settings' } | { kind: 'home' }>; rigs?: RigsSub; spec?: string }
   | { kind: 'overview'; view: View; project: ProjectFilter }
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
   | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
@@ -43,6 +44,8 @@ export function rigLaunchModal(c: ChatRigLaunch): Extract<Modal, { kind: 'rig-la
   return { kind: 'rig-launch', goal: c.goal, ...(c.spec ? { spec: c.spec } : {}), ...(c.project ? { project: c.project } : {}),
     ...(c.off ? { off: c.off } : {}), ...(c.machine ? { machine: c.machine } : {}) };
 }
+/** Where a team's task leads since main's « Tâches » tab gave way (lot F): the « Équipes » tab, on the running teams. */
+export const TO_TEAMS: NavAction = { type: 'ledge', tab: 'rigs', rigs: 'live' };
 /** What the Ledge screen was on when the user left it: its tab, the Rigs sub-tab, the spec chosen in Specs. */
 export interface HomeMemo { tab: HomeTab; rigs?: RigsSub; spec?: string }
 /** Every place and dialog kind, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new kind fails to compile until it is listed here. */
@@ -57,7 +60,7 @@ export type NavAction =
   /** The atelier (the overview), on a project filter. */
   | { type: 'home'; project?: ProjectFilter }
   /** Ledge's home view, on a tab (and the Rigs tab's sub-tab, the spec chosen in Specs); its composer takes the focus (`chatFocus`). */
-  | { type: 'ledge'; tab?: HomeTab; rigs?: RigsSub; spec?: string; focus?: string; task?: string }
+  | { type: 'ledge'; tab?: HomeTab; rigs?: RigsSub; spec?: string; focus?: string }
   /** The thread scrolled to the escalation `focus` named: the request is spent. */
   | { type: 'ledge-focused' }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
@@ -99,7 +102,7 @@ function reduce(s: NavState, a: NavAction): NavState {
       const rigs = a.rigs ?? was?.rigs;
       const spec = a.spec ?? was?.spec;
       // The docked chat closes: the home view is the same conversation, wider.
-      return { ...s, place: { kind: 'home', tab, view: b.view, project: b.project, ...(back ? { back } : {}), ...(rigs ? { rigs } : {}), ...(spec !== undefined ? { spec } : {}), ...(a.focus ? { focus: a.focus } : {}), ...(a.task ? { task: a.task } : {}) },
+      return { ...s, place: { kind: 'home', tab, view: b.view, project: b.project, ...(back ? { back } : {}), ...(rigs ? { rigs } : {}), ...(spec !== undefined ? { spec } : {}), ...(a.focus ? { focus: a.focus } : {}) },
         modal: null, chat: false, chatFocus: s.chatFocus + 1 };
     }
     case 'ledge-focused': {

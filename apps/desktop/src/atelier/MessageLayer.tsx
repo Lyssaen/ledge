@@ -5,7 +5,7 @@ import { exchangeArcs, type Arc } from '@ledge/ui/rigs/model';
 import type { AtelierRoom } from '@ledge/ui/rigs/scene';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import type { NavAction } from '../nav/state';
+import { TO_TEAMS, type NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
 
 /** Messages between agents in the atelier (exchange.tsx, AtelierExchanges): the sender's bubble for 5 s and a dotted line to the
@@ -264,7 +264,7 @@ export function MessageLayer({ sessions, clock, paused, reduced, dispatch, arcs 
         const from = nameOf(tr.from, tr.fromName), to = nameOf(tr.to, tr.toName);
         return <Wire key={`${task.id}#${tr.index}`} from={endOf(tr.from)} to={endOf(tr.to)} kind="task" still={still} layer={layer}
           label={t.atelier.taskLabel(tr.op, from, to, task.title)} head={<><Icon d={SHELL_ICONS.plan} size={11} />{t.atelier.taskTo[tr.op](to)}</>}
-          text={tr.op === 'pass' && tr.note ? tr.note : task.title} onOpen={() => dispatch({ type: 'ledge', tab: 'tasks', task: task.id })} />;
+          text={tr.op === 'pass' && tr.note ? tr.note : task.title} onOpen={() => dispatch(TO_TEAMS)} />;
       })}
     </div>
   );

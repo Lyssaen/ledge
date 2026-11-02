@@ -29,7 +29,7 @@ const build = fakeSession('local:build', { name: 'build', cwd: '/w/ledge', state
 let dispatched: NavAction[] = [];
 let menu = vi.fn();
 
-function SidebarHarness({ rigs = [], escalations = [], openrig = [RUNNING], sessions = [otto, build] }: { rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus[]; sessions?: Session[] }) {
+function SidebarHarness({ rigs = [], escalations = [], openrig = [RUNNING], sessions = [otto, build], engine }: { rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus[]; sessions?: Session[]; engine?: 'ledge' | 'openrig' }) {
   const filing = { dragging: null, over: null, seated: null, dragProps: () => ({}), dropProps: () => ({}), file() {}, markSeated() {} } as unknown as Filing;
   const actions: SessionActions = { request() {}, resume() {}, restore() {}, pending: null, confirm() {}, cancel() {}, allowed: () => true };
   const decisions = { decide() {} } as unknown as Decisions;
@@ -38,16 +38,16 @@ function SidebarHarness({ rigs = [], escalations = [], openrig = [RUNNING], sess
       <Sidebar nav={{ ...initialNav({ view: 'atelier', helpers: true, paused: true }), place: { kind: 'overview', view: 'atelier', project: 'all' } }} dispatch={a => { dispatched.push(a); }}
         sessions={sessions} archived={[]} machines={[]} projects={PROJECTS} order={sessions} projectIdOf={s => (s.cwd === '/w/ledge' ? 'ledge' : null)}
         filing={filing} actions={actions} decisions={decisions} waits={new Map()} menu={{ open: menu }} onTerminal={() => {}}
-        revealArchives={0} revealCurrent={0} rigs={rigs} escalations={escalations} openrig={openrig} />
+        revealArchives={0} revealCurrent={0} rigs={rigs} escalations={escalations} openrig={openrig} {...(engine ? { engine } : {})} />
     </LangProvider>
   );
 }
 
 const user = userEvent.setup();
-const rigsTree = () => within(screen.getByRole('tree', { name: 'Rigs' }));
+const rigsTree = () => within(screen.getByRole('tree', { name: 'Équipes' }));
 const projectsTree = () => within(screen.getByRole('tree', { name: 'Projets, branches et sessions' }));
 
-describe('the sidebar’s Ledge line and Rigs section', () => {
+describe('the sidebar’s Ledge line and « Équipes » section', () => {
   beforeEach(() => { dispatched = []; menu = vi.fn(); });
 
   it('la ligne Ledge ouvre l’écran Ledge et ne contient plus de champ', async () => {
@@ -61,19 +61,19 @@ describe('the sidebar’s Ledge line and Rigs section', () => {
     expect(dispatched).toContainEqual({ type: 'ledge', tab: 'conversation' });
   });
 
-  it('la ligne Ledge au calme : « J’orchestre n rigs », sans pastille', () => {
+  it('la ligne Ledge au calme : « J’orchestre n équipes », sans pastille', () => {
     render(<SidebarHarness rigs={[FACTORY, KERNEL]} />);
-    const line = screen.getByRole('button', { name: /Ledge\..*J’orchestre 1 rig/ });
+    const line = screen.getByRole('button', { name: /Ledge\..*J’orchestre 1 équipe/ });
     expect(line.querySelector('.st-ledge-unread')).toBeNull();
     expect(line).not.toHaveAttribute('aria-current');
   });
 
-  it('Projets ne liste pas build (siège de factory) ; Rigs le liste sous factory', async () => {
+  it('Projets ne liste pas build (siège de factory) ; Équipes le liste sous factory', async () => {
     render(<SidebarHarness rigs={[FACTORY, KERNEL]} />);
     expect(projectsTree().getByRole('button', { name: /^Otto/ })).toBeVisible();
     expect(projectsTree().queryByRole('button', { name: /^build/ })).toBeNull();
     const rig = rigsTree().getByRole('treeitem', { name: /factory/ });
-    expect(rig).toHaveTextContent('rig · 2');
+    expect(rig).toHaveTextContent('équipe · 2');
     expect(rig.querySelector('.side-swatch')).not.toBeNull();
     expect(rigsTree().getByRole('button', { name: /^build/ })).toBeVisible();
     expect(rigsTree().getByRole('button', { name: /^orch-lead/ })).toBeVisible();
@@ -88,12 +88,12 @@ describe('the sidebar’s Ledge line and Rigs section', () => {
     expect(dispatched).toContainEqual({ type: 'home', project: 'rig:local/r-factory' });
   });
 
-  it('Entrée sur la ligne de rig ouvre sa pièce ; « + » ouvre le lancement d’un rig', async () => {
+  it('Entrée sur la ligne de rig ouvre sa pièce ; « + » ouvre le lancement par plan d’OpenRig', async () => {
     render(<SidebarHarness rigs={[FACTORY]} />);
     rigsTree().getByRole('button', { name: /^factory/ }).focus();
     await user.keyboard('{Enter}');
     expect(dispatched).toContainEqual({ type: 'home', project: 'rig:local/r-factory' });
-    await user.click(screen.getByRole('button', { name: 'Lancer un rig' }));
+    await user.click(screen.getByRole('button', { name: 'Lancer une équipe' }));
     expect(dispatched).toContainEqual({ type: 'modal', modal: { kind: 'rig-launch' } });
   });
 
@@ -112,12 +112,20 @@ describe('the sidebar’s Ledge line and Rigs section', () => {
     expect(rigsTree().getByRole('button', { name: /^human/ })).toBeVisible();
   });
 
-  it('sans OpenRig : « OpenRig n’est pas installé » sous Rigs', () => {
+  it('sans OpenRig : « OpenRig n’est pas installé » sous Équipes', () => {
     render(<SidebarHarness rigs={[]} openrig={[{ machine: 'local', state: 'absent', install: 'npm i -g @openrig/cli' }]} />);
-    const section = screen.getByRole('region', { name: 'Rigs' });
+    const section = screen.getByRole('region', { name: 'Équipes' });
     expect(within(section).getByText('OpenRig n’est pas installé')).toBeVisible();
     expect(within(section).getByText('npm i -g @openrig/cli')).toBeVisible();
-    expect(within(section).getByRole('button', { name: 'Lancer un rig' })).toBeVisible();
+    expect(within(section).getByRole('button', { name: 'Lancer une équipe' })).toBeVisible();
+  });
+
+  it('moteur Ledge : pas d’invitation d’OpenRig, « + » ouvre le formulaire d’équipe de Ledge (lot F)', async () => {
+    render(<SidebarHarness engine="ledge" rigs={[]} openrig={[{ machine: 'local', state: 'absent', install: 'npm i -g @openrig/cli' }]} />);
+    const section = screen.getByRole('region', { name: 'Équipes' });
+    expect(within(section).queryByText('OpenRig n’est pas installé')).toBeNull();
+    await user.click(within(section).getByRole('button', { name: 'Lancer une équipe' }));
+    expect(dispatched).toContainEqual({ type: 'modal', modal: { kind: 'launch', team: true } });
   });
 
   it('OpenRig arrêté, ou d’une version non prise en charge', () => {

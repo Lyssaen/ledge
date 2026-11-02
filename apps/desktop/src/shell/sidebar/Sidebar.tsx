@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import type { FleetAsk, MachineState } from '@ledge/fleet';
-import { decisionMirrored, type Escalation, type OpenRigStatus, type Project, type Projects, type Rig, type Session } from '@ledge/protocol';
+import { decisionMirrored, type Escalation, type OpenRigStatus, type Project, type Projects, type Rig, type Session, type TeamsEngine } from '@ledge/protocol';
 import { isStandalone, ledgeLine, rigsModel } from '@ledge/ui/rigs/model';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
@@ -10,7 +10,8 @@ import { useI18n } from '../../i18n/lang';
 import type { Wait } from '../../list/time';
 import type { SessionActions } from '../../manage/useSessionActions';
 import { activeCount } from '../../nav/agents';
-import type { NavAction, NavState } from '../../nav/state';
+import { TO_TEAMS, type NavAction, type NavState } from '../../nav/state';
+import { launchTeam } from '../../rigs/engine';
 import { useStored } from '../../state/useStored';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
@@ -50,6 +51,8 @@ export function Sidebar(p: {
   onAnswerAsk?(ask: FleetAsk, text: string): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** OpenRig (lot 3): every machine's rigs, the escalations Ledge raised, OpenRig's status per machine. */
   rigs?: readonly Rig[]; escalations?: readonly Escalation[]; openrig?: readonly OpenRigStatus[];
+  /** The teams engine in force (lot F): « Lancer une équipe » and OpenRig's invitation follow it. */
+  engine?: TeamsEngine;
   /** Answers an escalation of « À toi » (`answerEscalation`, one send through the daemon). */
   onAnswerEscalation?(id: string, answers: Record<string, string>): void;
   /** The live teams and Ledge's tasks: the tree's team rows (atelier rooms spec §3.4), « À toi »'s closed Ledge tasks (§3.7) and decisions (0.30). */
@@ -134,7 +137,7 @@ export function Sidebar(p: {
           near={near} onHandover={id => { void p.relief?.handover(id); }}
           onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.relief?.putLater(s); }}
           decisions={decisions} answer={p.teams?.answer}
-          ledgeTasks={p.teams ? closedLedgeTasks(p.teams.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.teams?.seen(id)}
+          ledgeTasks={p.teams ? closedLedgeTasks(p.teams.tasks) : []} onSeeTask={() => p.dispatch(TO_TEAMS)} onDismissTask={id => p.teams?.seen(id)}
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
@@ -154,9 +157,9 @@ export function Sidebar(p: {
             onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} tasks={p.teams?.tasks} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>
-        <RigsSection model={rigRows} openrig={p.openrig ?? NO_STATUSES} current={current} byId={byId} paused={p.nav.paused} dense={prefs.dense}
+        <RigsSection model={rigRows} openrig={p.openrig ?? NO_STATUSES} engine={p.engine ?? 'openrig'} current={current} byId={byId} paused={p.nav.paused} dense={prefs.dense}
           onOpenSeat={s => p.dispatch({ type: 'open', id: s.id })} onRoom={project => p.dispatch({ type: 'home', project })}
-          onLaunch={() => p.dispatch({ type: 'modal', modal: { kind: 'rig-launch' } })}
+          onLaunch={() => p.dispatch(launchTeam(p.engine ?? 'openrig'))}
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host?.querySelector<HTMLElement>('[data-tree-key]') ?? host);

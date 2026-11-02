@@ -68,12 +68,12 @@ describe('the Rigs tab of the Ledge screen', () => {
   it('En cours : factory 4/6 au travail, starter 1/2, noyau au repos en dernier', async () => {
     renderTab();
     await screen.findByRole('tab', { name: 'Specs · 2' });
-    const tabs = screen.getByRole('tablist', { name: 'Vues des rigs' });
+    const tabs = screen.getByRole('tablist', { name: 'Vues des équipes' });
     expect(within(tabs).getAllByRole('tab').map(t => t.textContent)).toEqual(['En cours · 2', 'Specs · 2', 'Agents · 8']);
     expect(within(tabs).getByRole('tab', { name: 'En cours · 2' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getAllByRole('article').map(a => a.getAttribute('aria-label'))).toEqual(['factory', 'starter', 'Noyau OpenRig']);
     const factory = within(card('factory'));
-    expect(card('factory')).toHaveTextContent('rig · 6 sièges · dans Ledge · ⎇ feat/rigs · spec factory');
+    expect(card('factory')).toHaveTextContent('équipe · 6 sièges · dans Ledge · ⎇ feat/rigs · spec factory');
     expect(factory.getByText('4/6 au travail')).toBeVisible();
     expect(card('factory')).not.toHaveTextContent('sur ');
     const lead = factory.getByText('orch-lead').closest('[data-seat]') as HTMLElement;
@@ -137,7 +137,7 @@ describe('the Rigs tab of the Ledge screen', () => {
     const half: Rig = { ...STARTER, seats: [...STARTER.seats, seat('dev-qa', { ref: 'dev-qa@starter', state: 'stopped' })] };
     const kernel: Rig = { ...KERNEL, seats: [...KERNEL.seats, seat('advisor-old', { ref: 'advisor-old@kernel', state: 'stopped' })] };
     renderTab({ rigs: [kernel, half] });
-    expect(card('starter')).toHaveTextContent('rig · 2 sièges');
+    expect(card('starter')).toHaveTextContent('équipe · 2 sièges');
     expect(within(card('starter')).getByText('1/2 au travail')).toBeVisible();
     expect(within(card('starter')).queryByText('dev-qa')).toBeNull();
     await user.click(within(card('Noyau OpenRig')).getByRole('button', { name: '+2' }));
@@ -172,7 +172,7 @@ describe('the Rigs tab of the Ledge screen', () => {
     expect(card('starter')).toHaveTextContent('sur ec2-build');
   });
 
-  it('Specs : factory sélectionnée, 7 lignes de siège, « Lancer ce rig… » ouvre rig-launch avec spec factory', async () => {
+  it('Specs : factory sélectionnée, 7 lignes de siège, « Lancer cette équipe… » ouvre rig-launch avec spec factory', async () => {
     renderTab();
     await user.click(await screen.findByRole('tab', { name: 'Specs · 2' }));
     expect(dispatched).toContainEqual({ type: 'ledge', tab: 'rigs', rigs: 'specs' });
@@ -195,7 +195,7 @@ describe('the Rigs tab of the Ledge screen', () => {
     expect(detail.getByText('~/.openrig/specs/rigs/factory/rig.yaml')).toBeVisible();
     expect(detail.getByRole('button', { name: 'Copier' })).toBeVisible();
     expect(detail.getByText('factory', { selector: '.rs-born-name' }).closest('li')).toHaveTextContent('active');
-    await user.click(detail.getByRole('button', { name: 'Lancer ce rig…' }));
+    await user.click(detail.getByRole('button', { name: 'Lancer cette équipe…' }));
     expect(dispatched).toContainEqual({ type: 'modal', modal: { kind: 'rig-launch', spec: 'factory' } });
     expect(sent.filter(m => m.type === 'rig.specs.request')).toHaveLength(1);
   });

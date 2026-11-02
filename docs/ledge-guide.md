@@ -46,41 +46,34 @@ Raccourcis principaux :
 
 ### Accueil (`home`)
 
-L'application s'ouvre ici. On y vient aussi par `/` ou par l'entrée « Accueil » de la barre latérale. C'est la vue de Ledge, l'opérateur. Elle a cinq onglets : Conversation, Rigs, Équipes, Tâches et Mandat.
+L'application s'ouvre ici. On y vient aussi par `/` ou par l'entrée « Accueil » de la barre latérale. C'est la vue de Ledge, l'opérateur. Elle a quatre onglets : Conversation, Équipes, Modèles et Mandat. Ils sont les mêmes quel que soit le moteur d'équipes (Ledge ou OpenRig, dans Réglages › Équipes).
 
 #### Conversation (`conversation`)
 
 C'est le fil de Ledge, en pleine largeur.
-- On y écrit à Ledge, ou à un agent d'un rig avec `@siège`.
-- On y valide les cartes que Ledge propose : sessions, équipes et tâches, actions, rigs.
-- Les décisions des agents des rigs s'y tranchent ; les suggestions proposent de faire le point sur la journée.
+- On y écrit à Ledge, ou à un agent d'une équipe avec `@siège`.
+- On y valide les cartes que Ledge propose : sessions, équipes et tâches, actions.
+- Les décisions des agents des équipes s'y tranchent ; les suggestions proposent de faire le point sur la journée.
 
 Y renvoyer l'utilisateur pour une longue discussion avec Ledge, ou pour faire le point sur la journée.
 
-#### Équipes (`teams`)
+#### Équipes (`rigs`)
 
-Le catalogue a trois parties : « En cours » (les équipes actives), « Modèles » et « Rôles ».
+Les équipes du moteur actif, de toutes les machines : « En cours », « Agents » (tous les sièges) et, avec le moteur OpenRig seulement, « Specs » (les specs qu'une machine propose).
+- Une équipe montre ses sièges, son état, sa place (un projet, ou hors projet) et son modèle ou sa spec.
+- « Lancer une équipe » ouvre le formulaire d'équipe de Ledge (avec son objectif) avec le moteur Ledge, le lancement par plan d'OpenRig avec le moteur OpenRig.
+- Une équipe Ledge active a un champ « Écrire à toute l'équipe… » qui envoie un message à tous ses sièges. « Arrêter… » la met au repos ; « Reprendre » la relance.
+
+Y renvoyer l'utilisateur pour suivre une équipe, ses sièges, lui écrire ou en lancer une.
+
+#### Modèles (`models`)
+
+Le catalogue d'un dossier : « Modèles », « Rôles » et les fichiers ignorés.
 - Les boutons « Lancer une session », « Monter une équipe… » et « Lancer cette équipe… » sont ici.
+- Un modèle a exactement un siège leader : son lead, qui reçoit l'objectif.
 - Les rôles et les modèles se lisent ici mais se modifient dans leurs fichiers : `~/.ledge/roles/<id>.md` et `~/.ledge/teams/<id>.yaml`, ou les mêmes sous `<dépôt>/.ledge/`.
 
-Y renvoyer l'utilisateur pour voir ou monter une équipe, ou pour consulter un rôle.
-
-#### Tâches (`tasks`)
-
-Toutes les tâches données entre sessions et par Ledge.
-- Filtres : « Toutes / Ouvertes / Closes », donneur, équipe, « Décisions ».
-- Une tâche ouverte montre son résultat, sa raison et son historique.
-- Une décision se tranche ici : « Répondre », puis « Envoyer la réponse », puis « Confirmer l'envoi ».
-
-Y renvoyer l'utilisateur pour suivre une tâche ou trancher une décision qui l'attend.
-
-#### Rigs (`rigs`)
-
-Les rigs OpenRig de toutes les machines, quand le démon a un pont OpenRig : « En cours », « Specs » (les specs qu'une machine propose) et « Agents » (tous les sièges).
-- Un rig montre ses sièges, son état et sa place (un projet, ou hors projet).
-- « Lancer ce rig… » ouvre « Nouveau rig » sur la spec choisie.
-
-Y renvoyer l'utilisateur pour suivre un rig OpenRig, ses sièges, ou lancer un rig depuis une spec.
+Y renvoyer l'utilisateur pour consulter un modèle ou un rôle, ou monter une équipe à partir d'eux.
 
 #### Mandat (`mandat`)
 

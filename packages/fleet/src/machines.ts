@@ -55,6 +55,9 @@ export interface Fleet {
    *  runs, OpenRig is absent), or the code `offline` (it dropped meanwhile) or `timeout` (no answer). `peers`: the other machines
    *  it passed the engine on to, a refusal with its reason. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
   setTeamsEngine(engine: TeamsEngine): Promise<TeamsEngineAnswer>;
+  /** The user's message to every live seat of a local Ledge team (`team.broadcast`), and the daemon's answer, 4 s at most: how many
+   *  seats it reached, or why not (the daemon's own text, or the code `offline` / `timeout`). */
+  broadcastTeam(team: string, text: string): Promise<TeamBroadcastAnswer>;
   /** The mobile access state as the local daemon holds it: undefined until it speaks of it; kept while it is down. */
   mobile(): MobileState | undefined;
   /** The local daemon's last refused mobile.* command; cleared by the next command and by the next mobile state. */
@@ -86,6 +89,8 @@ export interface Fleet {
 }
 /** The team engine setting: which engine, whether OpenRig is installed on some machine, whether a team runs. */
 export interface TeamsEngineState { engine: TeamsEngine; openrigAvailable: boolean; running: boolean }
+/** The answer to `broadcastTeam`: `sent` seats, or the refusal's `reason`. */
+export interface TeamBroadcastAnswer { sent?: number; reason?: string }
 /** The answer to `setTeamsEngine`. */
 export interface TeamsEngineAnswer { ok: boolean; reason?: string; peers?: TeamsEnginePeer[] }
 /** A refused mobile.* command, as the Mobile access settings say it. */

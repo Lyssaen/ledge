@@ -13,7 +13,7 @@ test('an off-project rig: Ledge proposes the project, « File in Ledge » files 
   const daemon = await fakeDaemon(page, [], { projects: twoProjects, rigs: [FACTORY], openrig: RUNNING });
   await page.goto('/');
   const home = page.locator('section.ledge-home');
-  await home.getByRole('tab', { name: 'Rigs · 1' }).click();
+  await home.getByRole('tab', { name: 'Teams · 1' }).click();
   const card = home.getByRole('article', { name: 'factory' });
   await expect(card).toContainText('off project');
   await expect(card).toContainText('Repositories found · 3');
@@ -26,14 +26,14 @@ test('an off-project rig: Ledge proposes the project, « File in Ledge » files 
   await expect(card).toContainText('in Ledge');
   await expect(card).not.toContainText('off project');
   await expect(card).not.toContainText('I suggest filing');
-  await expect(page.locator('section[aria-label="Rigs"]').getByRole('treeitem', { name: /factory/ })).not.toContainText('off project');
+  await expect(page.locator('section[aria-label="Teams"]').getByRole('treeitem', { name: /factory/ })).not.toContainText('off project');
 });
 
 test('« File in a project… » lists the projects with the proposed one selected', async ({ page }) => {
   const daemon = await fakeDaemon(page, [], { projects: twoProjects, rigs: [FACTORY], openrig: RUNNING });
   await page.goto('/');
   const home = page.locator('section.ledge-home');
-  await home.getByRole('tab', { name: 'Rigs · 1' }).click();
+  await home.getByRole('tab', { name: 'Teams · 1' }).click();
   await home.getByRole('article', { name: 'factory' }).getByRole('button', { name: 'File in a project…' }).click();
   const dialog = page.getByRole('dialog', { name: 'File factory in a project' });
   await expect(dialog.getByRole('radio', { name: 'Ledge' })).toBeChecked();

@@ -19,6 +19,7 @@ import { daemonTokenSource, onOpenTarget, onTrayAction, openUrl, setTrayLabels }
 import { parseTarget, targetAction } from './open/target';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, rigLaunchModal, type NavAction, type NavState } from './nav/state';
+import { engineOf } from './rigs/engine';
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { mainOrder } from './nav/agents';
@@ -71,6 +72,10 @@ import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 
 const NO_PROJECTS: readonly Project[] = [];
+/** The project a team form opens on: the one asked for (a room, the catalog), else the atelier's filter, else the first one with a local
+ *  folder (« Lancer une équipe » of the « Équipes » tab and of the sidebar, lot F). None: there is nowhere to seat a team. */
+const teamRoom = (projects: Projects | null, wanted: string | undefined): Project | undefined =>
+  (wanted ? projects?.projects.find(x => x.id === wanted) : undefined) ?? projects?.projects.find(x => x.repos.some(r => r.machine === 'local'));
 
 /** Ledge's terminal colours as the root's tokens give them now. */
 const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
@@ -316,14 +321,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           relief={relief} asks={asks} onAnswerAsk={(a, text) => fleet.answerAsk(a.machine, a.id, text)}
           onAnswerEscalation={(id, answers) => { answerEscalation(fleetClient, id, answers); }}
-          rigs={rigs} escalations={escalations} openrig={openrig} teams={teams} />
+          rigs={rigs} escalations={escalations} openrig={openrig} engine={engineOf(teamsEngine)} teams={teams} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} rigs={rigs} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined} teamOf={teams.teamOf}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
-            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} teams={teams} decisions={decisions} waits={waits} tab={place.tab} task={place.task} nav={nav} dispatch={dispatch}
+            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} relief={relief} teams={teams} decisions={decisions} waits={waits} tab={place.tab} nav={nav} dispatch={dispatch}
                 paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal}
                 open={place.back?.kind === 'session' ? sessions.find(x => x.id === (place.back as { id: string }).id) : undefined} atelierProject={place.project} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} teams={teams}
@@ -343,8 +348,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       </div>
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
-      {nav.modal?.kind === 'launch' && nav.modal.team && projects?.projects.find(x => x.id === (nav.modal as { project?: string }).project) && (() => {
-        const room = projects.projects.find(x => x.id === (nav.modal as { project?: string }).project)!;
+      {nav.modal?.kind === 'launch' && nav.modal.team && teamRoom(projects, nav.modal.project ?? filter) && (() => {
+        const room = teamRoom(projects, (nav.modal as { project?: string }).project ?? filter)!;
         return (
           <Modal title={t.teamLaunch.title(room.name)} wide onClose={close}>
             <TeamLaunch client={fleetClient} teams={teams} project={room} onCancel={close} initial={nav.modal as { cwd?: string; template?: string; seat?: string }}

@@ -90,15 +90,15 @@ describe('the brain in Ledge’s thread (lot 7)', () => {
     expect(screen.getAllByText('Ledge brain').length).toBeGreaterThan(0);
   });
 
-  it('a rig the brain proposes shows « Launch this rig », which opens the launch window prefilled', async () => {
+  it('a rig the brain proposes shows « Launch this team », which opens the launch window prefilled', async () => {
     const { d, user } = await openHome();
     const now = new Date().toISOString();
     const turn: ChatTurn = { qid: 'brain-1', question: '', askedAt: now, answeredAt: now, steps: [], answer: 'Je propose de lancer un rig hors projet (reprise) : reprendre après reboot',
       rigLaunch: { goal: 'reprendre après reboot', off: 'reprise', machine: 'local' } };
     d.push({ type: 'chat.history', turns: [turn] });
     push(d, [{ kind: 'ledge', id: 'l2', at: now, text: turn.answer!, qid: 'brain-1' }]);
-    await user.click(await thread().findByRole('button', { name: 'Launch this rig' }));
-    const dialog = within(await screen.findByRole('dialog', { name: 'New rig' }));
+    await user.click(await thread().findByRole('button', { name: 'Launch this team' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'New team' }));
     expect(dialog.getByDisplayValue('reprendre après reboot')).toBeVisible();
     expect(dialog.getByDisplayValue('reprise')).toBeVisible();
   });

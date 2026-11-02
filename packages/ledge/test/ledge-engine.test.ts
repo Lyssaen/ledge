@@ -49,6 +49,12 @@ describe('the Ledge engine, alone', () => {
     expect(engine.kind).toBe('ledge');
   });
 
+  it('a team born of a template carries its id as the rig\'s spec (lot F: the card names the template)', () => {
+    const t = teams.create({ name: 'atelier', template: 'workshop', project: 'api', cwd: '/w/api', roles: ['leader'] });
+    expect(engine.teams().find(r => r.id === t.id)!.spec).toBe('workshop');
+    expect(engine.teams().find(r => r.id === team.id)!.spec).toBeUndefined();
+  });
+
   it('a free seat is stopped under its role, the team partial; waiting is attention, starting starting', () => {
     const t = teams.create({ name: 'solo', project: null, cwd: '/w/solo', roles: ['leader', { role: 'build', tool: 'codex' }] });
     store.upsert(mk('mila', 'Mila', { state: 'waiting_permission' }));

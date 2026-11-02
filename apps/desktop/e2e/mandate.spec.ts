@@ -115,8 +115,8 @@ test('Tranché aujourd\'hui lists Ledge\'s decision and « Revenir » brings the
   await expect(thread(page)).toContainText("J'ai tranché pour build : merge de feat/sqlite dans main");
   await expect(thread(page)).toContainText('Règle du 20/10');
   const rail = page.getByRole('complementary', { name: 'Rail de Ledge' });
-  // At 1280 px the rail is the compact line « À toi · 0 · Rigs · 1 »: opened, it shows its sections.
-  const toggle = rail.getByRole('button', { name: /^À toi · \d+ · Rigs/ });
+  // At 1280 px the rail is the compact line « À toi · 0 · Équipes · 1 »: opened, it shows its sections.
+  const toggle = rail.getByRole('button', { name: /^À toi · \d+ · Équipes/ });
   if (await toggle.isVisible()) await toggle.click();
   const today = rail.getByRole('region', { name: "Tranché aujourd'hui · 1" });
   await expect(today).toContainText('merge de feat/sqlite dans main');

@@ -375,11 +375,11 @@ describe('the atelier', () => {
       await waitFor(() => expect(wires()).toHaveLength(1));
       expect(document.querySelector('.exchange-ticket')).toBeNull();
     });
-    it("clicking the bubble opens the task in Ledge's tasks", async () => {
+    it('clicking the bubble opens Ledge’s « Teams », where the team is (main’s « Tasks » gave way, lot F)', async () => {
       const { d, user } = await boot({ sessions: [...DEFAULT_SESSIONS, rio] });
       d.push({ type: 'task.updated', task: task('t7a1b2c', [entry('give', 'otto', 'rio', 500)]) });
       await user.click(await screen.findByRole('button', { name: /^Otto gives/ }));
-      await waitFor(() => expect(screen.getByRole('tab', { name: /^Tasks/ })).toHaveAttribute('aria-selected', 'true'));
+      await waitFor(() => expect(screen.getByRole('tab', { name: /^Teams/ })).toHaveAttribute('aria-selected', 'true'));
     });
     it('French copy', () => {
       expect(fr.atelier.taskTo.give('Nova')).toBe('Tâche → Nova');

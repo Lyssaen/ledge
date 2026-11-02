@@ -8,7 +8,7 @@ const WITH: DaemonInfo = { version: '0.30.0', install: 'npm', systemd: true, ope
 const WITHOUT: DaemonInfo = { version: '0.30.0', install: 'npm', systemd: true };
 const home = () => within(screen.getByRole('region', { name: 'Home: Ledge, the operator' }));
 const sets = (d: MockDaemon) => d.received.filter((m): m is Extract<ClientMessage, { type: 'brain.set' }> => m.type === 'brain.set');
-const TEXT = /I can think continuously: I read the rigs’ escalations/;
+const TEXT = /I can think continuously: I read the teams’ escalations/;
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { vi.restoreAllMocks(); cleanup(); await closeDaemons(); });

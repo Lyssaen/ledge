@@ -323,6 +323,11 @@ button.rc-seat-main:hover { background: var(--sidebar-accent); }
 .rc-health { margin: 4px 0; font-size: 12px; }
 .rc-launch-note { display: flex; gap: 10px; align-items: baseline; margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-md); background: var(--well); font-size: 13px; line-height: 1.5; }
 .rc-launch-note strong { font-weight: 600; }
+/* A live Ledge team's « Écrire à toute l'équipe… » (lot F): one line under its seats, then what came of it. */
+.rc-broadcast { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0 0; }
+.rc-broadcast input { flex: 1; min-width: 180px; height: 28px; padding: 0 10px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-sm); background: var(--well); color: var(--sidebar-foreground); font: inherit; font-size: 13px; }
+.rc-broadcast-said { color: var(--muted-foreground); font-size: 12px; }
+.rc-broadcast-said.bad { color: var(--destructive); }
 .rc-trust-note { color: var(--muted-foreground); }
 .rc-more-actions:disabled { opacity: .5; cursor: default; }
 .app-header .rig-bar { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; flex-shrink: 0; }

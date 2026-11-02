@@ -37,7 +37,7 @@ async function openHome() {
   env.d.push({ type: 'openrig.status', status: RUNNING });
   env.d.push({ type: 'rig.snapshot', machine: 'local', rigs: [KERNEL, FACTORY, STARTER] });
   env.d.push({ type: 'escalation.updated', escalation: ESC });
-  await home().findByRole('tab', { name: 'Rigs · 2' });
+  await home().findByRole('tab', { name: 'Teams · 2' });
   await rail().findByText('JSON or SQLite?');
   return env;
 }
@@ -63,10 +63,10 @@ describe('the Ledge screen rail', () => {
     await waitFor(() => expect(d.received.some(m => m.type === 'session.decide' && m.decision === 'accept')).toBe(true));
   });
 
-  it('Rigs shows n/m at work, the bar and a Table button that filters the atelier', async () => {
+  it('Teams shows n/m at work, the bar and a Table button that filters the atelier', async () => {
     const { user } = await openHome();
     const r = rail();
-    expect(r.getByText('Rigs · 2')).toBeVisible();
+    expect(r.getByText('Teams · 2')).toBeVisible();
     expect(r.getByText('factory 3/4 at work')).toBeVisible();
     expect(r.getByText('starter 1/1 at work')).toBeVisible();
     expect(r.getAllByRole('progressbar')).toHaveLength(2);
@@ -83,7 +83,7 @@ describe('the Ledge screen rail', () => {
     const { d, user } = await openHome();
     await user.click(rail().getByRole('button', { name: 'Summarise the day' }));
     await waitFor(() => expect(says(d)).toHaveLength(1));
-    expect(says(d)[0]!.text).toBe('Summarise my day: what the rigs did, what I settled, what is waiting for me.');
+    expect(says(d)[0]!.text).toBe('Summarise my day: what the teams did, what I settled, what is waiting for me.');
   });
 
   it('View on an escalation scrolls the thread to its card, once', async () => {
@@ -133,7 +133,7 @@ describe('the Ledge screen rail', () => {
     const send = vi.fn();
     const client = { send, onMessage: () => () => {}, fleet: undefined } as never;
     const { rerender } = render(<LangProvider lang="en"><LedgeRail client={client} view={{ sessions: [], machines: [] } as never} dispatch={() => {}} compact /></LangProvider>);
-    expect(screen.getByRole('button', { name: /Your turn · 0 · Rigs · 0/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Your turn · 0 · Teams · 0/ })).toHaveAttribute('aria-expanded', 'false');
     await user.click(screen.getByRole('button', { name: /Your turn · 0/ }));
     expect(screen.getByRole('button', { name: /Your turn · 0/ })).toHaveAttribute('aria-expanded', 'true');
     rerender(<LangProvider lang="en"><LedgeRail client={client} view={{ sessions: [], machines: [] } as never} dispatch={() => {}} compact /></LangProvider>);

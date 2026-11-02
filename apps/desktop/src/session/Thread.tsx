@@ -10,7 +10,7 @@ import { Badge } from '@ledge/ui/ui/Badge';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { Thumbs } from '../images/Thumbs';
-import type { NavAction } from '../nav/state';
+import { TO_TEAMS, type NavAction } from '../nav/state';
 import { helperState } from '../atelier/layout';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
@@ -302,7 +302,7 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
     return (
       <li className="r notice-row">
         <span className="n node" aria-hidden="true"><Icon d={SHELL_ICONS.mail} size={12} /></span>
-        <NoticeLine item={item} peer={peer} onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id })} onOpenTask={task => dispatch({ type: 'ledge', tab: 'tasks', task })} />
+        <NoticeLine item={item} peer={peer} onOpenPeer={() => peer && dispatch({ type: 'open', id: peer.id })} onOpenTask={() => dispatch(TO_TEAMS)} />
         <span className="tm">{clock(item.at)}</span>
       </li>
     );

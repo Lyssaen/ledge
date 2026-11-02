@@ -47,7 +47,8 @@ describe('a seat in the sidebar and on its page (atelier rooms spec §3.4, §3.5
     expect(document.querySelector('.pane-meta')).toHaveTextContent('⚑ ledge-roles · Claude Code · opus · edits without asking');
     const pinned = await screen.findByRole('note', { name: 'Current task' });
     expect(pinned).toHaveTextContent('t5c7e2a · Relire le candidat · given by Ledge · taken');
-    await user.click(within(pinned).getByRole('button', { name: 'See the tasks' }));
-    expect(await screen.findByRole('region', { name: 'Relire le candidat' })).toBeVisible();
+    // main's « Tasks » gave way (lot F): the link leads to the « Teams » tab.
+    await user.click(within(pinned).getByRole('button', { name: 'See the team' }));
+    expect(await screen.findByRole('tab', { name: /^Teams/, selected: true })).toBeVisible();
   });
 });

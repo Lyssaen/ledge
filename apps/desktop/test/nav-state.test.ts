@@ -53,10 +53,11 @@ describe('nav state', () => {
     const far = navReducer(navReducer(navReducer(specs, { type: 'open', id: 'a' }), { type: 'open', id: 'b' }), { type: 'ledge' });
     expect(far.place).toMatchObject({ tab: 'rigs', rigs: 'specs', spec: 'factory' });
   });
-  it('the tabs are Conversation · Rigs · Teams · Tasks · Mandat; an old or unknown saved tab reads as the conversation', () => {
-    expect(HOME_TABS).toEqual(['conversation', 'rigs', 'teams', 'tasks', 'mandat']);
-    for (const tab of ['rigs', 'teams', 'tasks', 'mandat'] as const) expect(readHomeTab(tab)).toBe(tab);
-    for (const old of ['history', 'garbage', null]) expect(readHomeTab(old)).toBe('conversation');
+  it('the tabs are Conversation · Équipes · Modèles · Mandat (lot F); an old or unknown saved tab reads as the conversation', () => {
+    expect(HOME_TABS).toEqual(['conversation', 'rigs', 'models', 'mandat']);
+    for (const tab of ['rigs', 'models', 'mandat'] as const) expect(readHomeTab(tab)).toBe(tab);
+    // main's « Équipes » and « Tâches » gave way: a tab saved on them reads as the conversation.
+    for (const old of ['history', 'teams', 'tasks', 'garbage', null]) expect(readHomeTab(old)).toBe('conversation');
   });
   it('asking for the chat when it is already open asks its field for the focus again; closing it does not', () => {
     const opened = navReducer(s0, { type: 'chat', open: true });

@@ -53,10 +53,10 @@ const room = (key: string) => document.querySelector<HTMLElement>(`[data-room="$
 describe('rig and kernel rooms in the atelier', () => {
   beforeEach(() => { dispatched = []; terminals = []; });
 
-  it('plaque : « factory · rig · 6 sièges · dans Ledge · 4 au travail »', () => {
+  it('plaque : « factory · équipe · 6 sièges · dans Ledge · 4 au travail »', () => {
     renderAtelier();
     const plaque = room('local/r1').querySelector('.room-plaque')!;
-    expect(plaque).toHaveTextContent(/factory.*rig · 6 sièges.*dans Ledge.*4 au travail/);
+    expect(plaque).toHaveTextContent(/factory.*équipe · 6 sièges.*dans Ledge.*4 au travail/);
     expect(plaque).not.toHaveTextContent('sur ');
   });
 
@@ -102,18 +102,18 @@ describe('rig and kernel rooms in the atelier', () => {
   it('« … › Terminaux › build » ouvre le terminal du siège', async () => {
     renderAtelier();
     const r = within(room('local/r1'));
-    await user.click(r.getByRole('button', { name: 'Actions du rig factory' }));
-    const m = within(screen.getByRole('menu', { name: 'Actions du rig factory' }));
+    await user.click(r.getByRole('button', { name: 'Actions de l’équipe factory' }));
+    const m = within(screen.getByRole('menu', { name: 'Actions de l’équipe factory' }));
     await user.click(m.getByRole('menuitem', { name: 'Terminaux' }));
     await user.click(m.getByRole('menuitem', { name: 'build' }));
     expect(terminals).toEqual([{ rig: 'factory', seat: 'build' }]);
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('« … › Fil du rig » ouvre la conversation de Ledge', async () => {
+  it('« … › Fil de l’équipe » ouvre la conversation de Ledge', async () => {
     renderAtelier();
-    await user.click(within(room('local/r1')).getByRole('button', { name: 'Actions du rig factory' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Fil du rig' }));
+    await user.click(within(room('local/r1')).getByRole('button', { name: 'Actions de l’équipe factory' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Fil de l’équipe' }));
     expect(dispatched).toContainEqual({ type: 'ledge', tab: 'conversation' });
   });
 
@@ -122,7 +122,7 @@ describe('rig and kernel rooms in the atelier', () => {
     const rigRoom = scene.rooms.find(r => r.kind === 'rig')!;
     if (rigRoom.kind !== 'rig') throw new Error('no rig room');
     render(<LangProvider lang="fr"><RigRoom room={rigRoom} width={800} dispatch={() => {}} onTerminal={() => {}} extraActions={<button role="menuitem">Arrêter…</button>}><div /></RigRoom></LangProvider>);
-    await user.click(screen.getByRole('button', { name: 'Actions du rig factory' }));
+    await user.click(screen.getByRole('button', { name: 'Actions de l’équipe factory' }));
     const items = within(screen.getByRole('menu')).getAllByRole('menuitem').map(i => i.textContent);
     expect(items.at(-1)).toBe('Arrêter…');
   });
@@ -136,9 +136,9 @@ describe('rig and kernel rooms in the atelier', () => {
     expect(within(k).queryByText('advisor-lead')).toBeNull();
   });
 
-  it('le bureau de Ledge : « J’orchestre 1 rig · 1 décision pour toi », sinon « Je veille sur n agents »', () => {
+  it('le bureau de Ledge : « J’orchestre 1 équipe · 1 décision pour toi », sinon « Je veille sur n agents »', () => {
     const { unmount } = renderAtelier({ escalations: [ESC] });
-    expect(screen.getByRole('button', { name: 'Parler à Ledge' })).toHaveTextContent('J’orchestre 1 rig · 1 décision pour toi.');
+    expect(screen.getByRole('button', { name: 'Parler à Ledge' })).toHaveTextContent('J’orchestre 1 équipe · 1 décision pour toi.');
     unmount();
     renderAtelier({ rigs: [] });
     expect(screen.getByRole('button', { name: 'Parler à Ledge' })).toHaveTextContent(/Je veille sur \d+ agents/);

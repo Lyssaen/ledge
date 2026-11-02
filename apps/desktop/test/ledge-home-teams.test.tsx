@@ -1,4 +1,5 @@
-// Main's « Teams » catalog tests (#97), on the Ledge screen of the OpenRig branch: its « Teams » tab is main's TeamsTab.
+// Main's catalog tests (#97), on the Ledge screen of the OpenRig branch: since lot F its « Templates » tab (« Modèles ») holds main's
+// catalog of templates, roles and skipped files; the live teams are the « Teams » tab's, whatever the engine.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -42,13 +43,15 @@ function answerRoles(d: Awaited<ReturnType<typeof boot>>['d'], listing: typeof L
   d.onMessage(m => { if (m.type === 'roles.list') d.push({ type: 'roles.listing', requestId: m.requestId, ...(m.cwd === REPO ? listing : HOME_ONLY) }); });
 }
 const lastRolesList = (d: Awaited<ReturnType<typeof boot>>['d']) => d.received.filter(m => m.type === 'roles.list').at(-1);
-const tabs = () => within(home().getByRole('tablist', { name: 'Team views' }));
+const tabs = () => within(home().getByRole('tablist', { name: 'Template views' }));
+/** The home's « Templates » tab (not its view « Templates · n »). */
+const modelsTab = () => within(home().getByRole('tablist', { name: 'Ledge views' })).getByRole('tab', { name: 'Templates' });
 
-describe('« Teams »: the catalog of templates, roles and skipped files (#97)', () => {
+describe('« Templates »: the catalog of templates, roles and skipped files (#97, lot F)', () => {
   it('reads the atelier’s project by default and lists the roles by source; a role shows its defaults, autonomy, file, shadow and instructions', async () => {
     const { d, user } = await openHome();
     answerRoles(d);
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await waitFor(() => expect(d.received).toContainEqual({ type: 'roles.list', cwd: REPO, requestId: expect.any(String) }));
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     expect(home().getByRole('button', { name: /Folder Ledge \/w\/ledge/ })).toBeVisible();
@@ -92,7 +95,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
   it('another folder, « Personal only » included, is read again and remembered; the skipped files have their view', async () => {
     const { d, user } = await openHome();
     answerRoles(d);
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     await user.click(home().getByRole('button', { name: /2 files not read/ }));
     const skipped = within(home().getByRole('region', { name: 'Skipped files' }));
@@ -118,7 +121,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     const { d, user } = await openHome();
     answerRoles(d);
     d.onMessage(m => { if (m.type === 'team.launch') d.push({ type: 'team.launched', rid: m.rid, team: { ...team, id: 'team-e5f6', name: 'workshop' } }); });
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     await user.click(within(home().getByRole('region', { name: '@build' })).getByRole('button', { name: 'Start a session' }));
     const form = await screen.findByRole('dialog', { name: 'New session' });
@@ -139,7 +142,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     const { d, user } = await openHome();
     answerRoles(d);
     d.onMessage(m => { if (m.type === 'team.launch') d.push({ type: 'team.launched', rid: m.rid, team: { ...team, id: 'team-e5f6', name: 'workshop' } }); });
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Templates · 1' }));
     await user.click(within(home().getByRole('region', { name: 'workshop' })).getByRole('button', { name: 'Launch this team…' }));
     const form = await screen.findByRole('dialog', { name: 'New team · Ledge' });
@@ -159,7 +162,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     const { d, user } = await openHome();
     answerRoles(d);
     d.onMessage(m => { if (m.type === 'team.launch') d.push({ type: 'team.failed', rid: m.rid, reason: '@review : codex not found', team: { ...team, id: 'team-e5f6', name: 'workshop', objectiveTask: 't0a1b2c' } }); });
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Templates · 1' }));
     await user.click(within(home().getByRole('region', { name: 'workshop' })).getByRole('button', { name: 'Launch this team…' }));
     const form = await screen.findByRole('dialog', { name: 'New team · Ledge' });
@@ -176,7 +179,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     answerRoles(d);
     d.documents.set(`${REPO}/.ledge/roles/build.md`, '---\nlabel: Builder\n---\n# Builder\n\nTu **implémentes**.');
     d.documents.set(`${REPO}/.ledge/teams/workshop.yaml`, 'name: workshop\nseats:\n  - role: lead\n');
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     await user.click(within(home().getByRole('region', { name: '@build' })).getByRole('button', { name: 'Open' }));
     await waitFor(() => expect(d.received).toContainEqual({ type: 'document.read', requestId: expect.any(String), path: `${REPO}/.ledge/roles/build.md` }));
@@ -195,42 +198,25 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     const { d, user } = await openHome();
     answerRoles(d);
     d.documentErrors.set(`${REPO}/.ledge/teams/workshop.yaml`, 'unsupported_type');
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Templates · 1' }));
     await user.click(within(home().getByRole('region', { name: 'workshop' })).getByRole('button', { name: 'Open' }));
     const reader = within(await home().findByRole('complementary', { name: 'File workshop.yaml' }));
     expect(await reader.findByText('This daemon does not read templates yet: update Ledge on this machine, or copy the path.')).toBeVisible();
   });
 
-  it('a live team leads to its template and each @role in the catalog of its folder', async () => {
-    const { d, user } = await openHome();
-    answerRoles(d);
-    d.push({ type: 'teams', teams: [{ ...team, template: 'workshop' }] });
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
-    const live = within((await home().findByText('ledge-roles')).closest('.home-team') as HTMLElement);
-    await user.click(live.getByRole('button', { name: 'workshop' }));
-    expect(tabs().getByRole('tab', { name: /^Templates/ })).toHaveAttribute('aria-selected', 'true');
-    expect(await home().findByRole('region', { name: 'workshop' })).toBeVisible();
-    // Teams born of the template.
-    expect(within(home().getByRole('region', { name: 'workshop' })).getByText('ledge-roles')).toBeVisible();
-    await user.click(tabs().getByRole('tab', { name: /^Live/ }));
-    await user.click(within((home().getByText('ledge-roles')).closest('.home-team') as HTMLElement).getByRole('button', { name: '@review' }));
-    expect(await home().findByRole('region', { name: '@review' })).toBeVisible();
-  });
-
   it('a @role the folder does not have is said unknown, never shown as another one (Gus)', async () => {
     const { d, user } = await openHome();
-    answerRoles(d);
-    d.push({ type: 'teams', teams: [{ ...team, seats: [...team.seats, { role: 'ghost', sessionId: null }] }] });
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
-    await user.click(within((await home().findByText('ledge-roles')).closest('.home-team') as HTMLElement).getByRole('button', { name: '@ghost' }));
+    answerRoles(d, { ...LISTING, templates: [{ ...LISTING.templates[0]!, seats: [...LISTING.templates[0]!.seats, { role: 'ghost' }] }] });
+    await user.click(modelsTab());
+    await user.click(within(await home().findByRole('region', { name: 'workshop' })).getByRole('button', { name: '@ghost' }));
     expect(await home().findByText('@ghost: role unknown in this folder.')).toBeVisible();
     expect(home().queryByRole('region', { name: '@build' })).toBeNull();
   });
 
   it('a daemon that does not answer is not an empty folder: it is said, and « Retry » reads again (Gus)', async () => {
     const { d, user } = await openHome();
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(tabs().getByRole('tab', { name: 'Roles' }));
     const alert = await home().findByRole('alert', {}, { timeout: 8000 });
     expect(alert).toHaveTextContent('The daemon did not answer: this folder’s catalog could not be read.');
@@ -244,7 +230,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
   it('a role naming an effort without a model keeps its effort in the form (Gus)', async () => {
     const { d, user } = await openHome();
     answerRoles(d, { ...LISTING, roles: [repoRole('build', { label: 'Builder', tool: 'claude', effort: 'high' })] });
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 1' }));
     await user.click(within(home().getByRole('region', { name: '@build' })).getByRole('button', { name: 'Start a session' }));
     const form = await screen.findByRole('dialog', { name: 'New session' });
@@ -256,7 +242,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
   it('« Set up a team… » opens the team form on seats chosen one by one, its role ticked (Gus)', async () => {
     const { d, user } = await openHome();
     answerRoles(d);
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     await user.click(within(home().getByRole('region', { name: '@build' })).getByRole('button', { name: 'Set up a team…' }));
     const form = await screen.findByRole('dialog', { name: 'New team · Ledge' });
@@ -269,12 +255,12 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     const { d, user, side } = await openHome();
     answerRoles(d);
     // Remembered: « Personal only »; the tab reads it back once reopened.
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     await user.click(home().getByRole('button', { name: /^Folder/ }));
     await user.click(screen.getByRole('menuitem', { name: /Personal only/ }));
     await user.click(home().getByRole('tab', { name: 'Conversation' }));
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await waitFor(() => expect(lastRolesList(d)).toEqual({ type: 'roles.list', requestId: expect.any(String) }));
     await user.click(tabs().getByRole('tab', { name: 'Roles · 1' }));
     expect(home().getByRole('button', { name: /^Folder Personal only/ })).toBeVisible();
@@ -282,7 +268,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     await user.click(side.getByRole('button', { name: /^Otto/ }));
     await screen.findByRole('textbox', { name: 'Reply to the agent' });
     await user.click(side.getByRole('button', { name: /^Home: Ledge, the operator/ }));
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await waitFor(() => expect(lastRolesList(d)).toEqual({ type: 'roles.list', cwd: REPO, requestId: expect.any(String) }));
   });
 
@@ -291,7 +277,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
     const projects = { ...PROJECTS, projects: [{ ...ledge, repos: [...ledge.repos, { machine: 'nas', path: '/srv/ledge' }] }, ...PROJECTS.projects.slice(1)] };
     const { d, user } = await openHome({ machines: LOCAL_AND_NAS, projects });
     answerRoles(d);
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     expect(home().getByRole('button', { name: /^Folder Ledge · ledge \/w\/ledge · Local/ })).toBeVisible();
     await user.click(home().getByRole('button', { name: /^Folder/ }));
@@ -310,7 +296,7 @@ describe('« Teams »: the catalog of templates, roles and skipped files (#97)',
   it('with one machine the picker names none', async () => {
     const { d, user } = await openHome();
     answerRoles(d);
-    await user.click(home().getByRole('tab', { name: /^Teams/ }));
+    await user.click(modelsTab());
     await user.click(await tabs().findByRole('tab', { name: 'Roles · 4' }));
     expect(home().getByRole('button', { name: /^Folder/ })).not.toHaveTextContent('Local');
   });

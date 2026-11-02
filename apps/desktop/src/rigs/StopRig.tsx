@@ -9,7 +9,7 @@ import { AdoptRig } from './AdoptRig';
 import { proposeProject } from './proposal';
 import { useRigActions, type RigControls } from './useRigActions';
 
-/** « Arrêter… » (spec §4.5): what stops (« Ses n sièges s'arrêtent… »), « Arrêter le rig », « Seulement ce siège » when asked from a
+/** « Arrêter… » (spec §4.5): what stops (« Ses n sièges s'arrêtent… », a Ledge team's sessions closing to rest, lot F), « Arrêter le rig », « Seulement ce siège » when asked from a
  *  seat, and « Annuler », which has the focus (Escape and the backdrop cancel too). */
 export function StopRig(p: { rig: Rig; seat?: RigSeat; onStopRig(): void; onStopSeat(): void; onCancel(): void }): JSX.Element {
   const { t } = useI18n();
@@ -19,7 +19,7 @@ export function StopRig(p: { rig: Rig; seat?: RigSeat; onStopRig(): void; onStop
   return (
     <Modal title={a.stopTitle(p.rig.name)} role="alertdialog" describedBy={body} className="confirm-modal" onClose={p.onCancel}>
       <div className="confirm-content" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); p.onCancel(); } }}>
-        <p id={body}>{a.stopBody(n)}</p>
+        <p id={body}>{p.rig.engine === 'ledge' ? a.stopBodyLedge : a.stopBody(n)}</p>
         <div className="confirm-actions">
           <Button autoFocus onClick={p.onCancel}>{a.cancel}</Button>
           {p.seat && <Button onClick={p.onStopSeat}>{a.stopSeat}</Button>}

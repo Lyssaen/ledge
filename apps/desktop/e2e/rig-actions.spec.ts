@@ -18,10 +18,10 @@ test('a launching rig, then a running one: cancel the launch, stop only one seat
   const daemon = await fakeDaemon(page, [devBuild], { projects: twoProjects, rigs: [FACTORY, STARTER], openrig: RUNNING });
   await page.goto('/');
   const home = page.locator('section.ledge-home');
-  await home.getByRole('tab', { name: 'Rigs · 2' }).click();
+  await home.getByRole('tab', { name: 'Teams · 2' }).click();
 
   const factory = home.getByRole('article', { name: 'factory' });
-  await expect(factory).toContainText('rig · starting');
+  await expect(factory).toContainText('team · starting');
   await expect(factory).toContainText('1/2 ready');
   await expect(factory).toContainText('The goal waits: I give it to orch-lead as soon as the 2 seats are ready.');
   await expect(factory).toContainText('design waits for you to trust the folder, I don’t answer in its place.');

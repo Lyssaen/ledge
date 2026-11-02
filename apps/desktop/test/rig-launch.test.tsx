@@ -78,7 +78,7 @@ describe('RigLaunch', () => {
   it('projet + copie : « Lancer le rig » à l’étape 1 envoie rig.prepare puis rig.launch', async () => {
     show({ wanted: { project: 'ledge', goal: 'Corriger les tests qui échouent' } });
     await screen.findByText('Recommandé par Ledge');
-    await user.click(screen.getByRole('button', { name: /^Lancer le rig/ }));
+    await user.click(screen.getByRole('button', { name: /^Lancer l’équipe/ }));
     const prepare = last('rig.prepare')!;
     expect(prepare).toMatchObject({ machine: 'local', spec: 'starter', goal: 'Corriger les tests qui échouent',
       where: { kind: 'project', projectId: 'ledge', repo: '/w/ledge', branch: 'feat/starter', copy: true } });
@@ -89,21 +89,21 @@ describe('RigLaunch', () => {
     expect(dispatched).toContainEqual({ type: 'ledge', tab: 'rigs', rigs: 'live' });
   });
 
-  it('copie décochée : pas de « Lancer le rig » à l’étape 1, « Voir le plan » principal ; « Lancer » à l’étape 2', async () => {
+  it('copie décochée : pas de « Lancer l’équipe » à l’étape 1, « Voir le plan » principal ; « Lancer » à l’étape 2', async () => {
     show({ wanted: { project: 'ledge', goal: 'Corriger les tests qui échouent' } });
     await screen.findByText('Recommandé par Ledge');
     await user.click(screen.getByRole('button', { name: 'Travailler dans une copie' }));
-    expect(screen.queryByRole('button', { name: /^Lancer le rig/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Lancer l’équipe/ })).toBeNull();
     const see = screen.getByRole('button', { name: 'Voir le plan' });
     expect(see.dataset.variant).toBe('primary');
     await user.click(see);
     const prepare = last('rig.prepare')!;
     expect(prepare.where).toMatchObject({ kind: 'project', copy: false });
     answer({ type: 'rig.plan', rid: prepare.rid, plan: planFor(prepare) });
-    expect(await screen.findByRole('heading', { name: 'Plan du rig starter' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Plan de l’équipe starter' })).toBeTruthy();
     expect(screen.getByText('Ce qui démarre · 2 sièges')).toBeTruthy();
     expect(last('rig.launch')).toBeUndefined();
-    await user.click(screen.getByRole('button', { name: /^Lancer le rig/ }));
+    await user.click(screen.getByRole('button', { name: /^Lancer l’équipe/ }));
     expect(last('rig.launch')).toMatchObject({ planId: 'plan-1' });
   });
 
@@ -117,7 +117,7 @@ describe('RigLaunch', () => {
     await user.type(goal, ' et comparer');
     expect(name.value).toBe('reprise-wsl');
     await screen.findByText('Recommandé par Ledge');
-    await user.click(screen.getByRole('button', { name: /^Lancer le rig/ }));
+    await user.click(screen.getByRole('button', { name: /^Lancer l’équipe/ }));
     expect(last('rig.prepare')?.where).toEqual({ kind: 'off-project', name: 'reprise-wsl' });
   });
 
@@ -127,7 +127,7 @@ describe('RigLaunch', () => {
     const name = screen.getByLabelText('Espace de travail');
     await user.clear(name); await user.type(name, '../x');
     expect(screen.getByText('Nom invalide')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /^Lancer le rig/ }));
+    await user.click(screen.getByRole('button', { name: /^Lancer l’équipe/ }));
     await user.click(screen.getByRole('button', { name: 'Voir le plan' }));
     expect(last('rig.prepare')).toBeUndefined();
   });
@@ -147,12 +147,12 @@ describe('RigLaunch', () => {
     await user.click(screen.getByRole('button', { name: 'Voir le plan' }));
     const prepare = last('rig.prepare')!;
     answer({ type: 'rig.plan', rid: prepare.rid, plan: planFor(prepare) });
-    await screen.findByRole('heading', { name: 'Plan du rig starter' });
-    await user.click(screen.getByRole('button', { name: /^Lancer le rig/ }));
+    await screen.findByRole('heading', { name: 'Plan de l’équipe starter' });
+    await user.click(screen.getByRole('button', { name: /^Lancer l’équipe/ }));
     const back = screen.getByRole('button', { name: 'Retour' });
     expect(back.getAttribute('aria-disabled')).toBe('true');
     await user.click(back);
-    expect(screen.getByRole('heading', { name: 'Plan du rig starter' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Plan de l’équipe starter' })).toBeTruthy();
     answer({ type: 'rig.result', rid: last('rig.launch')!.rid, ok: true });
     await waitFor(() => expect(closed).toBe(1));
     expect(dispatched).toContainEqual({ type: 'ledge', tab: 'rigs', rigs: 'live' });
@@ -164,15 +164,15 @@ describe('RigLaunch', () => {
     await user.click(screen.getByRole('button', { name: 'Voir le plan' }));
     const prepare = last('rig.prepare')!;
     answer({ type: 'rig.plan', rid: prepare.rid, plan: planFor(prepare) });
-    await screen.findByRole('heading', { name: 'Plan du rig starter' });
-    await user.click(screen.getByRole('button', { name: /^Lancer le rig/ }));
+    await screen.findByRole('heading', { name: 'Plan de l’équipe starter' });
+    await user.click(screen.getByRole('button', { name: /^Lancer l’équipe/ }));
     answer({ type: 'rig.result', rid: last('rig.launch')!.rid, ok: false, code: 'failed', reason: 'plan already launched' });
     expect(await screen.findByText(/plan already launched/)).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Plan du rig starter' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Plan de l’équipe starter' })).toBeTruthy();
     expect(closed).toBe(0);
     // A failed launch keeps the plan taken: trying again makes a new plan, never resends the old one.
     const before = sent.filter(m => m.type === 'rig.prepare').length;
-    await user.click(screen.getByRole('button', { name: /^Lancer le rig/ }));
+    await user.click(screen.getByRole('button', { name: /^Lancer l’équipe/ }));
     expect(sent.filter(m => m.type === 'rig.prepare')).toHaveLength(before + 1);
     expect(sent.filter(m => m.type === 'rig.launch')).toHaveLength(1);
   });

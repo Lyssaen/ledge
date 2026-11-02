@@ -207,7 +207,7 @@ describe('messages between agents in the thread', () => {
     await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:nova'));
   });
 
-  it('a task card, either side, says who handed it to whom and opens the task (#92)', async () => {
+  it('a task card, either side, says who handed it to whom and leads to the teams (#92, lot F)', async () => {
     const { user } = await openOtto([
       { kind: 'notice', id: 'task-t1-0', at: at(0), turn: 1, notice: 'other', task: 't1', taskOp: 'give', outgoing: true, name: 'nova', peer: 'nova', summary: 'Relire le reducer', text: 'Tâche « Relire le reducer » confiée à nova' },
       { kind: 'notice', id: 'notice-2-0', at: at(1), turn: 1, notice: 'other', task: 't2', name: 'Max', summary: 'Lance les tests', text: 'Tâche de Max : « Lance les tests »' }
@@ -219,6 +219,6 @@ describe('messages between agents in the thread', () => {
     expect(incoming).toHaveTextContent('Tâche de Max');
     expect(within(incoming).getByRole('button', { name: 'Voir la tâche' })).toBeVisible();
     await user.click(within(out).getByRole('button', { name: 'Voir la tâche' }));
-    await waitFor(() => expect(screen.getByRole('tab', { name: /^Tâches/ })).toHaveAttribute('aria-selected', 'true'));
+    await waitFor(() => expect(screen.getByRole('tab', { name: /^Équipes/ })).toHaveAttribute('aria-selected', 'true'));
   });
 });
