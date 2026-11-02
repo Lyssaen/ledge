@@ -221,3 +221,17 @@ règle peut être assouplie, mais elle est stricte au départ.
 corps coupés à 4 000 caractères (`bodyTruncated`) et ses compléments à 2 000. Elle contient au plus 50 demandes, et si
 nécessaire on retire les moins pressantes jusqu'à tenir dans 900 Ko ; `truncated` le dit alors. Le desktop garde les limites du
 lot 1.
+
+### Lot 3 — après revue (`qitem-20261102214819-7e4492a8`)
+
+- `useOpenRigAsks` / `useOpenRigAsksAll` : une réponse se termine toujours. `offline` : la connexion (ou, dans une flotte, la
+  machine) n'était pas ouverte, rien n'est parti. `uncertain` : elle est partie, mais sa fin n'est pas revenue (connexion tombée,
+  45 s sans réponse, écran quitté) ; renvoyer la même réponse est sûr. `qitemId` et `machineId` sont toujours rendus. Changer la
+  liste des machines suivies n'interrompt pas une réponse en cours.
+- `useOpenRigAsksAll` suit aussi la connexion de chaque machine : une machine qui tombe est marquée tout de suite
+  (`machines[id].error = 'offline'`, ses demandes gardées), puis redemandée à son retour.
+- Téléphone :
+  - `HumanAsk.detailTruncated: true` quand le complément est coupé ;
+  - l'empreinte d'un `op` `openrig.answer` comprend la ligne et la réponse, si bien qu'un même `op` pour autre chose donne
+    `conflict` ;
+  - le rejeu d'un `op` renvoie aussi son `openrig.answered` gardé, sans refaire l'action.

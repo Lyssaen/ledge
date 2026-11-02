@@ -117,6 +117,34 @@ describe('phone gateway: « À toi »', () => {
     expect(Buffer.byteLength(JSON.stringify(list), 'utf8')).toBeLessThanOrEqual(900_000);
   });
 
+  it('the same op for another row or another answer is a conflict; a replay gets the detailed end again without a second run', async () => {
+    const { g, answers } = make();
+    const op = randomUUID();
+    const go = async (msg: object) => { g.send('dev1', { type: 'openrig.answer', op, ...msg }); await flush(); };
+    await go({ qitemId: 'qitem-2', answer: { kind: 'seen' } });
+    expect(g.results('dev1').filter(r => r.op === op).at(-1)).toMatchObject({ status: 'applied' });
+    await go({ qitemId: 'qitem-3', answer: { kind: 'seen' } });
+    expect(g.results('dev1').filter(r => r.op === op).at(-1)).toMatchObject({ status: 'rejected', reason: 'conflict' });
+    const before = g.got('dev1').filter(m => m.type === 'openrig.answered').length;
+    await go({ qitemId: 'qitem-2', answer: { kind: 'seen' } }); // the same: a replay
+    expect(g.results('dev1').filter(r => r.op === op).at(-1)).toMatchObject({ status: 'applied' });
+    const told = g.got('dev1').filter(m => m.type === 'openrig.answered');
+    expect(told).toHaveLength(before + 1);
+    expect(told.at(-1)).toEqual({ type: 'openrig.answered', op, qitemId: 'qitem-2', ok: true, outcome: 'answered', replyId: 'qitem-reply' });
+    expect(answers).toEqual(['qitem-2 {"kind":"seen"}']);
+  });
+
+  it('a detail cut for the phone says so', async () => {
+    const g = setup({ deps: { openrig: { async list() { return { channel: CHANNEL, asks: [{ ...ASK, detail: 'x'.repeat(2100) }, { ...ASK, id: 'short', detail: 'court' }] }; }, async answer(q) { return { qitemId: q, ok: true }; }, follow() {} } } });
+    g.send('dev1', { type: 'openrig.asks' });
+    await flush();
+    const list = g.got('dev1').find(m => m.type === 'openrig.asks');
+    if (list?.type !== 'openrig.asks') throw new Error('no list');
+    expect(list.asks[0]).toMatchObject({ detailTruncated: true, bodyTruncated: false });
+    expect(list.asks[0]!.detail).toHaveLength(2000);
+    expect(list.asks[1]).not.toHaveProperty('detailTruncated');
+  });
+
   it('binds the subject to the row and the exact words', () => {
     expect(rigSubject('q1', { kind: 'words', text: 'Oui' })).not.toBe(rigSubject('q1', { kind: 'words', text: 'Non' }));
     expect(rigSubject('q1', { kind: 'words', text: 'Oui' })).not.toBe(rigSubject('q2', { kind: 'words', text: 'Oui' }));

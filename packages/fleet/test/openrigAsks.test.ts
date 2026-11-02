@@ -2,13 +2,23 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { ClientMessage, HumanAsk, HumanChannel, ServerMessage } from '@ledge/protocol';
-import type { DaemonClient } from '../src/client';
+import type { DaemonClient, DaemonStatus } from '../src/client';
 import { useOpenRigAsks, useOpenRigAsksAll } from '../src/openrigAsks';
 
-function fake() {
-  const listeners = new Set<(m: ServerMessage) => void>(), sent: ClientMessage[] = [];
-  const client = { send: (m: ClientMessage) => { sent.push(m); }, onMessage: (f: (m: ServerMessage) => void) => { listeners.add(f); return () => { listeners.delete(f); }; } } as unknown as DaemonClient;
-  return { client, sent, emit: (m: ServerMessage) => act(() => listeners.forEach(f => f(m))), listeners };
+/** A client with a fleet: `status` is the connection's; `machine(id, s)` sets one machine's connection, as the fleet publishes it. */
+function fake(initial: DaemonStatus = 'open') {
+  const listeners = new Set<(m: ServerMessage) => void>(), statuses = new Set<(s: DaemonStatus) => void>(), fleetSubs = new Set<() => void>(), sent: ClientMessage[] = [];
+  let status = initial;
+  const machines = new Map<string, DaemonStatus>([['local', 'open'], ['server', 'open']]);
+  const client = {
+    send: (m: ClientMessage) => { sent.push(m); }, status: () => status,
+    onMessage: (f: (m: ServerMessage) => void) => { listeners.add(f); return () => { listeners.delete(f); }; },
+    onStatus: (f: (s: DaemonStatus) => void) => { statuses.add(f); return () => { statuses.delete(f); }; },
+    fleet: { machines: () => [...machines].map(([id, st]) => ({ id, status: st })), subscribe: (f: () => void) => { fleetSubs.add(f); return () => { fleetSubs.delete(f); }; } }
+  } as unknown as DaemonClient;
+  return { client, sent, listeners, emit: (m: ServerMessage) => act(() => listeners.forEach(f => f(m))),
+    drop: () => act(() => { status = 'connecting'; statuses.forEach(f => f(status)); }),
+    machine: (id: string, st: DaemonStatus) => act(() => { machines.set(id, st); fleetSubs.forEach(f => f()); }) };
 }
 const rid = (m: ClientMessage | undefined) => (m as { requestId: string }).requestId;
 const CHANNEL: HumanChannel = { state: 'ready', person: { address: 'ledge@external', name: 'Ledge' }, slack: false };
@@ -46,7 +56,7 @@ describe('useOpenRigAsks', () => {
     expect(result.current).toMatchObject({ partial: false, asks: [] });
   });
 
-  it('answer resolves with its own end; leaving resolves what waits as offline', async () => {
+  it('answer resolves with its own end; leaving ends what waits as uncertain, with its row', async () => {
     const { client, sent, emit, listeners } = fake();
     const { result, unmount } = renderHook(() => useOpenRigAsks(client, 'local'));
     const p = result.current.answer('qitem-1', { kind: 'words', text: 'Oui' });
@@ -56,7 +66,7 @@ describe('useOpenRigAsks', () => {
     expect(await p).toMatchObject({ ok: false, error: 'unreachable' });
     const q = result.current.answer('qitem-1', { kind: 'seen' });
     unmount();
-    expect(await q).toMatchObject({ ok: false, error: 'offline' });
+    expect(await q).toMatchObject({ ok: false, error: 'uncertain', qitemId: 'qitem-1' });
     expect(listeners.size).toBe(0);
   });
 });
@@ -111,5 +121,58 @@ describe('useOpenRigAsksAll', () => {
     rerender();
     expect(result.current.asks).toEqual([]);
     expect(Object.keys(result.current.machines)).toEqual([]);
+  });
+});
+
+describe('« À toi » answers always end', () => {
+  it('offline when nothing left (connection or machine down), uncertain when the connection drops or nothing comes back in time', async () => {
+    vi.useFakeTimers();
+    try {
+      const closed = fake('connecting');
+      const { result: r0 } = renderHook(() => useOpenRigAsksAll(closed.client, ['local']));
+      expect(await r0.current.answer('local', 'q0', { kind: 'seen' })).toMatchObject({ ok: false, error: 'offline', qitemId: 'q0' });
+      expect(closed.sent.some(m => m.type === 'openrig.answer')).toBe(false);
+
+      const f = fake();
+      const { result } = renderHook(() => useOpenRigAsksAll(f.client, ['local', 'server'], 60_000, 1000));
+      f.machine('server', 'unreachable');
+      expect(await result.current.answer('server', 'q1', { kind: 'seen' })).toMatchObject({ ok: false, error: 'offline', machineId: 'server' });
+      const inFlight = result.current.answer('local', 'q2', { kind: 'seen' });
+      f.drop();
+      expect(await inFlight).toMatchObject({ ok: false, error: 'uncertain', qitemId: 'q2', machineId: 'local' });
+
+      const g = fake();
+      const { result: r2 } = renderHook(() => useOpenRigAsksAll(g.client, ['local'], 60_000, 1000));
+      const late = r2.current.answer('local', 'q3', { kind: 'seen' });
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(await late).toMatchObject({ ok: false, error: 'uncertain', qitemId: 'q3' });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a change of the machines followed does not end an answer on its way', async () => {
+    const f = fake();
+    let machines = ['local', 'server'];
+    const { result, rerender } = renderHook(() => useOpenRigAsksAll(f.client, machines));
+    const p = result.current.answer('server', 'q1', { kind: 'seen' });
+    machines = ['server', 'local'];
+    rerender();
+    const m = f.sent.find(x => x.type === 'openrig.answer')!;
+    f.emit({ type: 'openrig.answered', requestId: rid(m), machineId: 'server', qitemId: 'q1', ok: true, outcome: 'answered' });
+    expect(await p).toMatchObject({ ok: true, qitemId: 'q1' });
+  });
+
+  it('a machine whose connection drops is marked at once, its asks kept, and asked again when back', () => {
+    const f = fake();
+    const { result } = renderHook(() => useOpenRigAsksAll(f.client, ['local', 'server']));
+    const first = f.sent.filter(m => m.type === 'openrig.asks');
+    f.emit({ type: 'openrig.asksChanged', requestId: rid(first[1]), machineId: 'server', channel: CHANNEL, asks: [ASK] });
+    f.emit({ type: 'openrig.asksChanged', requestId: rid(first[0]), machineId: 'local', channel: CHANNEL, asks: [] });
+    expect(result.current.partial).toBe(false);
+    f.machine('server', 'unreachable');
+    expect(result.current.machines.server).toMatchObject({ error: 'offline', asks: [ASK] });
+    expect(result.current.partial).toBe(true);
+    const before = f.sent.length;
+    f.machine('server', 'open');
+    expect(f.sent.slice(before)).toEqual([{ type: 'openrig.asks', requestId: expect.any(String), machineId: 'server' }]);
   });
 });

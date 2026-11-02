@@ -255,7 +255,9 @@ export const HumanQuestionSchema = z.object({
 export const HumanAskSchema = z.object({
   id: z.string(), kind: z.enum(['decision', 'update', 'parked']), alert: z.boolean(), priority: z.enum(['routine', 'urgent', 'critical']),
   from: z.object({ seat: z.string(), rig: z.string().nullable(), role: z.string().nullable() }),
-  summary: z.string(), body: z.string(), bodyTruncated: z.boolean(), detail: z.string().nullable(), evidenceRef: z.string().nullable(),
+  summary: z.string(), body: z.string(), bodyTruncated: z.boolean(), detail: z.string().nullable(),
+  /** The detail was cut (on the phone, to fit its message): its end, which may decide, is not shown. */ detailTruncated: z.literal(true).optional(),
+  evidenceRef: z.string().nullable(),
   questions: z.array(HumanQuestionSchema), createdAt: z.string(), updatedAt: z.string()
 });
 export type HumanAsk = z.infer<typeof HumanAskSchema>;

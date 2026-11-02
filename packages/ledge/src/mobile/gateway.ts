@@ -698,7 +698,9 @@ export function createPhoneGateway(deps: {
   const rigList = (l: { channel: Extract<PhoneServerMessage, { type: 'openrig.asks' }>['channel']; asks: Extract<PhoneServerMessage, { type: 'openrig.asks' }>['asks']; partial?: boolean; truncated?: boolean }): Extract<PhoneServerMessage, { type: 'openrig.asks' }> => {
     const cut = (t: string, max: number) => (t.length > max ? t.slice(0, max) : t);
     const asks = l.asks.slice(0, RIG_PHONE_ASKS).map(a => ({ ...a, body: cut(a.body, RIG_PHONE_BODY), bodyTruncated: a.bodyTruncated || a.body.length > RIG_PHONE_BODY,
-      ...(a.detail !== null ? { detail: cut(a.detail, RIG_PHONE_DETAIL) } : {}) }));
+      ...(a.detail !== null ? { detail: cut(a.detail, RIG_PHONE_DETAIL) } : {}),
+      // A cut detail says so, as the body does: what decides may be at its end.
+      ...(a.detailTruncated || (a.detail?.length ?? 0) > RIG_PHONE_DETAIL ? { detailTruncated: true as const } : {}) }));
     const make = (n: number): Extract<PhoneServerMessage, { type: 'openrig.asks' }> => ({ type: 'openrig.asks', channel: l.channel, asks: asks.slice(0, n),
       ...(l.partial ? { partial: true as const } : {}), ...(l.truncated || n < l.asks.length ? { truncated: true as const } : {}) });
     let n = asks.length, msg = make(n);
@@ -707,21 +709,25 @@ export function createPhoneGateway(deps: {
   };
 
   const rigAnswer = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'openrig.answer' }>): Promise<Outcome> => {
-    const told = (m: Omit<Extract<PhoneServerMessage, { type: 'openrig.answered' }>, 'type' | 'op' | 'qitemId'>) =>
-      push(deviceId, { type: 'openrig.answered', op: msg.op, qitemId: msg.qitemId, ...m });
-    if (!deps.openrig) { told({ ok: false, rejected: 'unavailable' }); return { status: 'rejected', reason: 'unavailable' }; }
+    // Each end is sent, and kept with the operation so a replay of the same op gets it again.
+    let detail: Extract<PhoneServerMessage, { type: 'openrig.answered' }> | undefined;
+    const told = (m: Omit<Extract<PhoneServerMessage, { type: 'openrig.answered' }>, 'type' | 'op' | 'qitemId'>) => {
+      detail = { type: 'openrig.answered', op: msg.op, qitemId: msg.qitemId, ...m };
+      push(deviceId, detail);
+    };
+    if (!deps.openrig) { told({ ok: false, rejected: 'unavailable' }); return { status: 'rejected', reason: 'unavailable', detail }; }
     if (msg.answer.kind !== 'seen') {
       const refused = checkAssertion(deviceId, msg.assertion, 'rig', rigSubject(msg.qitemId, msg.answer));
       if (refused) {
         const why = refused.reason === 'assertion_expired' ? 'assertion_expired' : refused.reason === 'assertion_invalid' ? 'assertion_invalid' : 'confirm_required';
         told({ ok: false, rejected: why });
-        return refused;
+        return { ...refused, detail };
       }
     }
     const r = await deps.openrig.answer(msg.qitemId, msg.answer);
     const { qitemId: _q, ...rest } = r;
     told({ ...rest, ...(rest.message !== undefined ? { message: clip(rest.message, 500).text } : {}) });
-    return r.ok ? { status: 'applied' } : { status: 'failed' };
+    return r.ok ? { status: 'applied', detail } : { status: 'failed', detail };
   };
 
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
@@ -769,7 +775,12 @@ export function createPhoneGateway(deps: {
   const write = async (deviceId: string, msg: PhoneOperation) => {
     const begun = registry.begin(deviceId, msg.op, fingerprint(msg));
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
-    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.how);
+    if (begun.kind === 'replay') {
+      result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.how);
+      // A replay gets the operation's detailed end again (what an OpenRig answer came to), never a second run.
+      if (begun.record.detail !== undefined && approved(deviceId) && !stopped) push(deviceId, begun.record.detail as PhoneServerMessage);
+      return;
+    }
     let outcome: Outcome;
     try {
       result(deviceId, msg.op, 'received');
@@ -779,7 +790,7 @@ export function createPhoneGateway(deps: {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
     }
-    registry.finish(msg.op, outcome.status, outcome.reason, outcome.how);
+    registry.finish(msg.op, outcome.status, outcome.reason, outcome.how, outcome.detail);
     result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how);
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
