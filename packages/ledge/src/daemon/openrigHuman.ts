@@ -24,7 +24,7 @@ export interface HumanChannelDeps {
   now?: () => number;
 }
 
-export interface HumanList { channel: HumanChannel; asks: HumanAsk[]; truncated?: boolean }
+export interface HumanList { channel: HumanChannel; asks: HumanAsk[]; truncated?: boolean; partial?: boolean }
 
 export interface HumanChannelService {
   /** What waits on the person now (read again, at most once per call). */
@@ -111,6 +111,22 @@ export function toAsk(raw: unknown, kind: HumanAsk['kind']): HumanAsk | null {
   };
 }
 
+/** An ask from its attention item alone, when its row could not be read: its text is then the summary (`bodyTruncated`). */
+export function fromAttention(raw: unknown, kind: HumanAsk['kind']): HumanAsk | null {
+  const i = obj(raw), ref = attentionRef(raw);
+  if (!ref) return null;
+  const seat = str(i.asker) ?? 'unknown', summary = str(i.summary) ?? ref.id, at = str(i.at) ?? '';
+  const answers = obj(i.humanAnswers), urgency = str(i.urgency);
+  const questions = (Array.isArray(i.humanQuestions) ? i.humanQuestions : []).flatMap(x => {
+    const o = obj(x), qid = str(o.id), question = str(o.question);
+    if (!qid || !question) return [];
+    const options = (Array.isArray(o.options) ? o.options : []).flatMap(y => { const p = obj(y), oid = str(p.id), label = str(p.label); return oid && label ? [{ id: oid, label, recommended: p.recommended === true }] : []; });
+    return [{ id: qid, question, options, answer: str(answers[qid]) }];
+  });
+  return { id: ref.id, kind, alert: false, priority: urgency && PRIORITIES.has(urgency) ? urgency as HumanAsk['priority'] : 'routine',
+    from: { seat, ...seatParts(seat) }, summary, body: summary, bodyTruncated: true, detail: null, evidenceRef: null, questions, createdAt: at, updatedAt: at };
+}
+
 /** An attention item's row id and what it is: `queue:<id>` an ask (or a park, by its verb), `queue-update:<id>` a piece of news. */
 export function attentionRef(raw: unknown): { id: string; kind: HumanAsk['kind'] } | null {
   const i = obj(raw), ref = str(i.id);
@@ -169,36 +185,66 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     return byAddress;
   };
 
-  const row = async (url: string, id: string, at: string | null): Promise<unknown> => {
+  /** A row read: `gone` when OpenRig no longer has it, `failed` when it could not be read (which settles nothing). */
+  const row = async (url: string, id: string, at: string | null): Promise<{ row: unknown } | 'gone' | 'failed'> => {
     const kept = rows.get(id);
-    if (kept && at && kept.at === at) return kept.row;
+    if (kept && at && kept.at === at) return { row: kept.row };
     const r = await http('GET', `${url}/api/queue/${encodeURIComponent(id)}`);
-    if (r.status !== 200) return null;
+    if (r.status === 404) return 'gone';
+    if (r.status !== 200) return 'failed';
     rows.set(id, { at: str(obj(r.json).tsUpdated) ?? at ?? '', row: r.json });
-    return r.json;
+    return { row: r.json };
+  };
+
+  /** The asks of the last complete or partial read, by id: a read that fails keeps them, it never settles them. */
+  let known = new Map<string, HumanAsk>();
+  const sorted = (channel: HumanChannel, asks: HumanAsk[], partial: boolean): HumanList => {
+    // The pressing first (critical, then urgent: the team's rule is `--priority urgent`, never `--alert`), then the most recent.
+    asks.sort((x, y) => RANK[x.priority] - RANK[y.priority] || y.updatedAt.localeCompare(x.updatedAt));
+    return { channel, asks: asks.slice(0, HUMAN_ASKS_MAX), ...(asks.length > HUMAN_ASKS_MAX ? { truncated: true } : {}), ...(partial ? { partial: true } : {}) };
   };
 
   const list = async (): Promise<HumanList> => {
     const b = await base();
-    if ('channel' in b) return { channel: b.channel, asks: [] };
-    const a = await http('GET', `${b.url}/api/attention`);
-    if (a.status !== 200) return { channel: { state: 'unreachable', person: null, slack: false, message: a.status ? `attention answered HTTP ${a.status}` : "OpenRig's daemon did not answer" }, asks: [] };
-    const address = str(obj(obj(obj(a.json).perspective).actingAs).person);
-    const who = address ? (await people()).get(address) : undefined;
-    const channel: HumanChannel = address
-      ? { state: 'ready', person: { address, name: who?.name ?? address.replace(/@.*$/, '') }, slack: who?.slack ?? false }
-      : { state: 'no_person', person: null, slack: false };
-    const items = Array.isArray(obj(a.json).items) ? obj(a.json).items as unknown[] : [];
-    const refs = items.flatMap(i => { const r = attentionRef(i); return r ? [{ ...r, at: str(obj(i).at) }] : []; });
-    const asks: HumanAsk[] = [];
-    for (const r of refs) {
-      const ask = toAsk(await row(b.url, r.id, r.at), r.kind);
-      if (ask) asks.push(ask);
+    if ('channel' in b) {
+      if (b.channel.state !== 'unreachable') known = new Map();
+      return sorted(b.channel, [...known.values()], b.channel.state === 'unreachable' && known.size > 0);
     }
-    for (const id of rows.keys()) if (!refs.some(r => r.id === id)) rows.delete(id);
-    // The pressing first (critical, then urgent: the team's rule is `--priority urgent`, never `--alert`), then the most recent.
-    asks.sort((x, y) => RANK[x.priority] - RANK[y.priority] || y.updatedAt.localeCompare(x.updatedAt));
-    return { channel, asks: asks.slice(0, HUMAN_ASKS_MAX), ...(asks.length > HUMAN_ASKS_MAX ? { truncated: true } : {}) };
+    // `view=default`: the default person's queue only. Without it OpenRig's Feed shows every registered person's asks, and an answer
+    // here would settle someone else's with the primary user's authority.
+    const a = await http('GET', `${b.url}/api/attention?view=default`);
+    if (a.status !== 200) {
+      const channel: HumanChannel = { state: 'unreachable', person: null, slack: false, message: a.status ? `attention answered HTTP ${a.status}` : "OpenRig's daemon did not answer" };
+      return sorted(channel, [...known.values()], known.size > 0);
+    }
+    const perspective = obj(obj(a.json).perspective);
+    const address = str(obj(perspective.actingAs).person);
+    if (!address) {
+      known = new Map();
+      // A perspective without a person: several are registered and none is the default, so whose asks these are is unknown.
+      return sorted(Object.keys(perspective).length
+        ? { state: 'no_default', person: null, slack: false, message: 'several people are registered and none is the default (rig gateway default <id>)' }
+        : { state: 'no_person', person: null, slack: false }, [], false);
+    }
+    const who = (await people()).get(address);
+    const channel: HumanChannel = { state: 'ready', person: { address, name: who?.name ?? address.replace(/@.*$/, '') }, slack: who?.slack ?? false };
+    // A source OpenRig could not read fully (the queue, its updates) lists fewer rows than there are: what is missing is not settled.
+    const sources = Array.isArray(obj(a.json).sources) ? obj(a.json).sources as unknown[] : [];
+    const sourcePartial = sources.some(s => /^queue/.test(str(obj(s).source) ?? '') && str(obj(s).state) !== 'available');
+    let partial = sourcePartial;
+    const items = Array.isArray(obj(a.json).items) ? obj(a.json).items as unknown[] : [];
+    const refs = items.flatMap(i => { const r = attentionRef(i); return r ? [{ ...r, at: str(obj(i).at), item: i }] : []; });
+    const next = new Map<string, HumanAsk>();
+    for (const r of refs) {
+      const got = await row(b.url, r.id, r.at);
+      if (got === 'gone') continue;
+      const ask = got === 'failed' ? (partial = true, known.get(r.id) ?? fromAttention(r.item, r.kind)) : toAsk(got.row, r.kind);
+      if (ask) next.set(ask.id, ask);
+    }
+    if (sourcePartial) for (const [id, ask] of known) if (!next.has(id) && !refs.some(r => r.id === id)) next.set(id, ask);
+    for (const id of rows.keys()) if (!next.has(id)) rows.delete(id);
+    known = next;
+    return sorted(channel, [...next.values()], partial);
   };
 
   /** Read again and push when something changed. */

@@ -31,14 +31,17 @@ const ATTENTION = {
 };
 const HUMANS = { ok: true, humans: [{ entityId: 'ledge', displayName: 'Ledge', address: 'ledge@external', deliveryReadiness: { ready: false } }] };
 
-function fake(over: { rows?: Record<string, unknown>; attention?: unknown; post?: (body: Record<string, unknown>) => { status: number; json: unknown } } = {}) {
+function fake(over: { rows?: Record<string, unknown>; attention?: unknown; detail?: (id: string) => { status: number; json: unknown } | undefined; post?: (body: Record<string, unknown>) => { status: number; json: unknown } } = {}) {
   const rows: Record<string, unknown> = over.rows ?? { 'qitem-1': ASK, 'qitem-2': NEWS, 'qitem-3': PARKED };
   const calls: Array<{ method: string; url: string; body?: unknown }> = [];
   const http: RigHttp = async (method, url, body) => {
     calls.push({ method, url, body });
     if (method === 'POST') return over.post?.(body as Record<string, unknown>) ?? { status: 200, json: {} };
-    if (url === `${BASE}/api/attention`) return { status: 200, json: over.attention ?? ATTENTION };
+    if (url === `${BASE}/api/attention?view=default`) return { status: 200, json: over.attention ?? ATTENTION };
+    if (url.startsWith(`${BASE}/api/attention`)) return { status: 400, json: { error: 'this test serves the default view only' } };
     const id = decodeURIComponent(url.slice(`${BASE}/api/queue/`.length));
+    const d = over.detail?.(id);
+    if (d) return d;
     return rows[id] ? { status: 200, json: rows[id] } : { status: 404, json: { error: 'qitem_not_found' } };
   };
   const run: RigRun = async () => ({ code: 0, stdout: JSON.stringify(HUMANS), stderr: '' });
@@ -65,6 +68,78 @@ describe('« À toi » reading', () => {
     expect(l.asks.find(a => a.id === 'qitem-3')!.from.seat).toBe('dev-back@ledge-dev');
   });
 
+  it('a row OpenRig cannot read stays open, from what was known or from the attention item, and the list says it is partial', async () => {
+    let failing = false;
+    const f = fake({ detail: id => (failing && id === 'qitem-1' ? { status: 503, json: {} } : undefined) });
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
+    expect((await h.list()).partial).toBeUndefined();
+    failing = true;
+    ATTENTION.items[0]!.at = '2026-11-02T19:59:00.000Z'; // the row changed, so it is read again, and that read fails
+    try {
+      const l = await h.list();
+      expect(l.partial).toBe(true);
+      expect(l.channel.state).toBe('ready');
+      expect(l.asks.find(a => a.id === 'qitem-1')).toMatchObject({ body: ASK.body, bodyTruncated: false });
+      // Never read before: built from the attention item.
+      const g = fake({ detail: id => (id === 'qitem-1' ? { status: 503, json: {} } : undefined),
+        attention: { ...ATTENTION, items: [{ ...ATTENTION.items[0], asker: 'dev-review@starter', summary: 'Choisir une couleur', urgency: 'urgent', humanQuestions: ASK.humanQuestions, humanAnswers: {} }] } });
+      const fresh = await createHumanChannel({ state: async () => RUNNING, run: g.run, http: g.http }).list();
+      expect(fresh.partial).toBe(true);
+      expect(fresh.asks[0]).toMatchObject({ id: 'qitem-1', summary: 'Choisir une couleur', body: 'Choisir une couleur', bodyTruncated: true, priority: 'urgent', from: { seat: 'dev-review@starter' } });
+      expect(fresh.asks[0]!.questions.map(q => q.id)).toEqual(['couleur', 'taille']);
+    } finally { ATTENTION.items[0]!.at = ASK.tsUpdated; }
+  });
+
+  it('a row OpenRig no longer has is settled; one a partial source leaves out is kept', async () => {
+    const f = fake();
+    const without1 = { ...ATTENTION, items: ATTENTION.items.filter(i => i.id !== 'queue:qitem-1') };
+    // OpenRig could not read its queue fully: a row it leaves out is not settled.
+    let calls = 0;
+    const both = createHumanChannel({ state: async () => RUNNING, run: f.run, http: async (m, u, b) => {
+      if (u.endsWith('/api/attention?view=default')) return { status: 200, json: calls++ === 0 ? ATTENTION : { ...without1, sources: [{ source: 'queue', state: 'partial' }] } };
+      return f.http(m, u, b);
+    } });
+    await both.list();
+    const kept = await both.list();
+    expect(kept.partial).toBe(true);
+    expect(kept.asks.map(a => a.id)).toContain('qitem-1');
+    // A complete read without it: settled.
+    let calls2 = 0;
+    const settled = createHumanChannel({ state: async () => RUNNING, run: f.run, http: async (m, u, b) =>
+      (u.endsWith('/api/attention?view=default') ? { status: 200, json: calls2++ === 0 ? ATTENTION : without1 } : f.http(m, u, b)) });
+    await settled.list();
+    expect((await settled.list()).asks.map(a => a.id)).not.toContain('qitem-1');
+    // Listed but gone from the queue (404): settled too.
+    const gone = fake({ detail: id => (id === 'qitem-1' ? { status: 404, json: { error: 'qitem_not_found' } } : undefined) });
+    const g = await createHumanChannel({ state: async () => RUNNING, run: gone.run, http: gone.http }).list();
+    expect(g.asks.map(a => a.id)).not.toContain('qitem-1');
+    expect(g.partial).toBeUndefined();
+  });
+
+  it('OpenRig unreachable keeps the asks known, partial; stopped clears them', async () => {
+    let up = true, running = true;
+    const f = fake();
+    const h = createHumanChannel({ state: async () => (running ? RUNNING : { ...RUNNING, daemon: { state: 'stopped' } }), run: f.run,
+      http: async (m, u, b) => (up ? f.http(m, u, b) : { status: 0, json: undefined }) });
+    await h.list();
+    up = false;
+    const l = await h.list();
+    expect(l).toMatchObject({ channel: { state: 'unreachable' }, partial: true });
+    expect(l.asks).toHaveLength(3);
+    running = false;
+    expect(await h.list()).toEqual({ channel: { state: 'openrig_stopped', person: null, slack: false }, asks: [] });
+  });
+
+  it('reads the default person\'s view only; several people and no default show nothing and say so', async () => {
+    const f = fake();
+    await createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http }).list();
+    expect(f.calls.filter(c => c.url.includes('/api/attention')).map(c => c.url)).toEqual([`${BASE}/api/attention?view=default`]);
+    const g = fake({ attention: { perspective: { viewing: null, basis: 'all', defaultSource: 'none', actingAs: { person: null, authority: 'primary-user' } }, items: ATTENTION.items } });
+    const l = await createHumanChannel({ state: async () => RUNNING, run: g.run, http: g.http }).list();
+    expect(l.channel.state).toBe('no_default');
+    expect(l.asks).toEqual([]);
+  });
+
   it('reads a row again only when it changed', async () => {
     const f = fake();
     const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
@@ -78,6 +153,7 @@ describe('« À toi » reading', () => {
     expect((await stopped.list()).channel.state).toBe('openrig_stopped');
     const absent = createHumanChannel({ state: async () => ({ ...RUNNING, installed: false }), run: f.run, http: f.http });
     expect((await absent.list()).channel.state).toBe('not_installed');
+    // No person registered: OpenRig's Feed has no perspective at all.
     expect((await createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http }).list()).channel).toEqual({ state: 'no_person', person: null, slack: false });
     const down = createHumanChannel({ state: async () => RUNNING, run: f.run, http: async () => ({ status: 0, json: undefined }) });
     expect((await down.list()).channel).toMatchObject({ state: 'unreachable', person: null });
