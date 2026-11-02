@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod media;
 mod notch;
 mod pty;
 
@@ -207,10 +208,12 @@ fn main() {
         .manage(notch::PrevForeground::default())
         .manage(notch::Screen::default())
         .manage(pty::PtyState::default())
+        .manage(media::Media::default())
         .invoke_handler(tauri::generate_handler![
             focus_terminal, foreground_is_terminal, open_terminal, open_url, daemon_token, get_autostart, set_autostart, set_tray_labels, take_open_target,
             open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
             notch::list_monitors, notch::set_monitor, open_atelier, pty::pty_open, pty::pty_write, pty::pty_resize, pty::pty_close,
+            media::now_playing, media::media_command,
         ])
         .setup(|app| {
             // WSL stops once no `wsl.exe` holds it: Ledge holds one from login until it quits, so the daemon stays reachable.
@@ -219,6 +222,8 @@ fn main() {
             build_tray(app)?;
             // Before the tray-only check: the notch shows even when the login item starts us minimized.
             notch::setup(app)?;
+            // What plays on the PC, for the closed notch (Windows' media controls).
+            media::start(app.handle().clone());
             default_autostart(app);
             // The window is created hidden and the window-state plugin has already put it back in place: show it now,
             // without a flash at the default size, unless the login item launched us into the tray.
