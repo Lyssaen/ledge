@@ -11,7 +11,7 @@
 .st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
 .st-ask input::placeholder{color:var(--muted-foreground)}
 .st .st-mascot{display:inline-flex;flex:none}
-.st-views{display:flex;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st-views{display:flex;flex-direction:column;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
 .st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
 .st .st-views button:hover{color:var(--sidebar-foreground)}
 .st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
