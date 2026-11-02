@@ -177,7 +177,8 @@ function runDaemon(pc: FakePc): FakeDaemon {
     }
     if (m.type === 'term.input' && held) {
       d.termTyped.push(m.data);
-      return pc.send({ type: 'term.output', tid: TID, seq: termSeq++, data: m.data.replace(/\r/g, '\r\n') });
+      // Echoed as a shell's line editor does: a Backspace erases the cell before.
+      return pc.send({ type: 'term.output', tid: TID, seq: termSeq++, data: m.data.replace(/\r/g, '\r\n').replace(/\x7f/g, '\b \b') });
     }
     if (m.type === 'term.release' && held) { held = false; return pc.send({ type: 'term.released', tid: TID, why: 'asked' }); }
   };

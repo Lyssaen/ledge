@@ -75,6 +75,24 @@ test('the terminal streams at the PC\'s size, then types after the passkey', asy
     await page.keyboard.type('ls');
     await page.getByRole('button', { name: L.keyLabel.enter }).click();
     await expect.poll(() => h.daemon.termTyped.join('')).toBe('ls\r');
+    // « / » and the other symbols reach the pane: from a hardware keyboard, and from Samsung's, which on a symbol takes the
+    // word back (Backspaces as keyCode 229) and types it again with the symbol as text alone, without a key.
+    await page.keyboard.type('/');
+    await page.keyboard.type('/truc');
+    await page.keyboard.type('abc');
+    await expect.poll(() => h.daemon.termTyped.join('')).toBe('ls\r//trucabc');
+    await page.locator('.xterm-helper-textarea').evaluate(async (ta: HTMLTextAreaElement) => {
+      for (let i = 0; i < 3; i++) {
+        ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', keyCode: 229, bubbles: true, cancelable: true }));
+        ta.value = ta.value.slice(0, -1);
+        ta.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true, composed: true }));
+        ta.dispatchEvent(new KeyboardEvent('keyup', { key: 'Unidentified', keyCode: 229, bubbles: true }));
+        await new Promise(r => setTimeout(r, 10));
+      }
+      ta.value += 'abc/';
+      ta.dispatchEvent(new InputEvent('input', { data: 'abc/', inputType: 'insertText', bubbles: true, composed: true }));
+    });
+    await expect.poll(() => h.daemon.termTyped.join('')).toBe('ls\r//trucabc\x7f\x7f\x7fabc/');
     await expect(page.locator('.xterm-accessibility-tree')).toContainText('ls');
     await page.screenshot({ path: 'test-results/terminal-held.png' });
     await page.getByRole('button', { name: L.release }).click();
