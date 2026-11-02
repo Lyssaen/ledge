@@ -82,7 +82,13 @@ export async function loadPcIdentity(): Promise<Identity> {
   const stored = readText(file, 'mobile-key')?.trim();
   if (stored) {
     try { return await importIdentity(stored); }
-    catch { log('mobile-key is invalid, creating a new key'); }
+    catch {
+      // Kept aside, not overwritten: the paired phones know the old key.
+      const backup = `${file}.bad-${new Date().toISOString().replace(/:/g, '-')}`;
+      renameSync(file, backup);
+      chmodSync(backup, 0o600);
+      log(`mobile-key is invalid, moved to ${backup}, creating a new key`);
+    }
   }
   const id = await generateIdentity({ extractable: true });
   writePrivate(file, await exportIdentity(id));
