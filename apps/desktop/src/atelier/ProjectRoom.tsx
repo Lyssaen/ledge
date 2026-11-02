@@ -18,7 +18,7 @@ const waitingOf = (s: Session) => s.state === 'waiting_permission' || s.state ==
  * (swatch, name, « 7 sessions », waiting and working counts, the room's menu), the entrance in the front wall,
  * and its table.
  */
-export function ProjectRoom({ project, tables, rig, sessions: rigSessions, width, dispatch, children }: { project: Project; tables: readonly AtelierTable[]; rig?: RigRoomInfo; sessions?: readonly Session[]; width: number; dispatch: (a: NavAction) => void; children: ReactNode }): JSX.Element {
+export function ProjectRoom({ project, tables, rig, sessions: rigSessions, width, dispatch, broadcast = false, children }: { project: Project; tables: readonly AtelierTable[]; rig?: RigRoomInfo; sessions?: readonly Session[]; width: number; dispatch: (a: NavAction) => void; /** The local daemon takes a broadcast: « Écrire à tout le projet… » is offered. */ broadcast?: boolean; children: ReactNode }): JSX.Element {
   const { t } = useI18n();
   const [menu, setMenu] = useState(false);
   const sessions = tables.flatMap(x => x.mains);
@@ -46,6 +46,9 @@ export function ProjectRoom({ project, tables, rig, sessions: rigSessions, width
           <MenuItem onSelect={() => dispatch({ type: 'modal', modal: { kind: 'project', edit: project.id } })}>
             <span><Icon d={PENCIL} size={13} />{t.atelier.edit}</span>
           </MenuItem>
+          {broadcast && <MenuItem onSelect={() => dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project: project.id } } })}>
+            <span><Icon d={SHELL_ICONS.mail} size={13} />{t.broadcast.project}</span>
+          </MenuItem>}
         </Menu>
       </div>}
       <div className="room-tables">{children}</div>

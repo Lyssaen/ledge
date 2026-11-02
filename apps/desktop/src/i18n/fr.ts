@@ -54,7 +54,14 @@ export const fr = {
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
     ledgeHome: 'Accueil : Ledge, l’opérateur', ledgeLine: (yours: number) => `${yours} à toi`,
-    ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
+    kernelTag: { ready: 'opérationnel', starting: 'démarrage', stopped: 'arrêté' } as Record<'ready' | 'starting' | 'stopped', string>,
+    empty: {
+      sessions: 'Aucune session pour l’instant.', sessionsBody: 'Une session lance un agent dans un dossier ou un projet.', newSession: 'Créer une session',
+      stopped: 'OpenRig est arrêté.', stoppedBody: 'Le démarrer lance aussi le kernel : l’opérateur, l’advisor et la file.', start: 'Démarrer OpenRig', starting: 'Démarrage d’OpenRig…',
+      retry: 'Réessayer', openPage: 'Ouvrir la page OpenRig',
+      installedOn: (machine: string) => `Il est installé sur ${machine} : démarre-le depuis sa page.`, offlineOf: (n: number, m: number) => `hors ligne · ${n}/${m}`,
+      noRig: 'Aucun rig pour l’instant.', noRigBody: 'Un rig est une équipe d’agents.', noRigOperator: (name: string) => `${name}, l’opérateur du kernel, peut t’aider à en composer un.`
+    },
     openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
     yours: 'À toi', yoursMore: (n: number) => `Voir les ${n} autres`, yoursLess: 'Réduire',
@@ -557,6 +564,13 @@ export const fr = {
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',
   close: 'Fermer',
   modalTitles: { launch: 'Nouvelle session' },
+  /** Writing to a whole project, or to the sessions selected in the sidebar (broadcast spec): one message, each recipient gets it in its queue. */
+  broadcast: {
+    project: 'Écrire à tout le projet…', selection: (n: number) => `Écrire aux ${n} sessions…`, title: (label: string) => `Écrire à ${label}`,
+    send: 'Envoyer', cancel: 'Annuler', field: 'Message', picked: 'Sessions sélectionnées',
+    sent: (n: number, names: string) => `Remis à ${n} ${plural(n, 'session', 'sessions')} : ${names}`, refused: (list: string) => `Refusé : ${list}`,
+    silent: 'Aucune machine n’a répondu. Envoyer à nouveau ne l’écrira pas deux fois.'
+  },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
     browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap'

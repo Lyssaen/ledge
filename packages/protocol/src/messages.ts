@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatTasksSchema, ChatActionsSchema, ChatActionSchema } from './chat.js';
+import { BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX } from './broadcast.js';
 import { ActionIdSchema } from './actions.js';
 import { ATTACHMENTS_MAX, AttachmentCaptureSchema, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
@@ -94,7 +95,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
   /** Answers `openrig.roles`, `openrig.role` and `openrig.roleFile`: reads OpenRig's roles (agent specs). */ openrigRoles: z.boolean().optional(),
-  /** Answers `openrig.asks` and `openrig.answer`: what OpenRig asks the person, and their answers (« À toi »). */ openrigAsks: z.boolean().optional() });
+  /** Answers `openrig.asks` and `openrig.answer`: what OpenRig asks the person, and their answers (« À toi »). */ openrigAsks: z.boolean().optional(),
+  /** Takes `session.broadcast` (its `ledge bridge` too, on this machine): a client sends it only when this is set. */ broadcast: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -173,7 +175,10 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   /** The sessions a phone types into (« Téléphone au clavier »), after each snapshot and each change; `device` is its label. */
   z.object({ type: z.literal('terminal.holders'), holds: z.array(z.object({ id: z.string(), device: z.string() })) }),
   /** The daemon's immediate answer to a `session.message`: delivered (`accepted`), held for later (`queued`), left to Claude's own SendMessage (`native`), or refused with a `reason`. */
-  z.object({ type: z.literal('message.ack'), rid: z.string(), outcome: z.enum(['accepted', 'queued', 'native', 'refused']), reason: z.string().optional() }),
+  z.object({ type: z.literal('message.ack'), rid: z.string(), outcome: z.enum(['accepted', 'queued', 'native', 'refused']), reason: z.string().optional(),
+    /** A broadcast's per-recipient outcome, by name. */ recipients: z.object({ sent: z.array(z.string()), refused: z.array(z.object({ name: z.string(), reason: z.string() })) }).optional() }),
+  /** The answer to a `session.broadcast`: who got it (`sent`) and who did not; `reason`: the whole broadcast was refused. */
+  z.object({ type: z.literal('session.broadcast.result'), rid: z.string(), sent: z.array(z.object({ id: z.string(), name: z.string() })), refused: z.array(z.object({ name: z.string(), reason: z.string() })), reason: z.string().optional() }),
   /** The answer to a `message.read`: the body with its sender, target and time, or the refusal's `reason`. */
   z.object({ type: z.literal('message.body'), id: z.string(), from: z.string().optional(), to: z.string().optional(), at: z.string().optional(), text: z.string().optional(), reason: z.string().optional() }),
   TaskResultSchema,
@@ -317,6 +322,10 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('terminal.release'), id: z.string().min(1) }),
   /** One session writing to another by Ledge name (`to` may end in ` [ref]`); `intercept` (the Claude hook): answer `native` unless `to` is a live non-Claude session. */
   z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional(), intercept: z.boolean().optional() }),
+  /** The user writing to every session of a project, or to several sessions (ids or names). */
+  z.object({ type: z.literal('session.broadcast'), rid: z.string().min(1).max(100), to: z.union([z.object({ project: z.string().min(1).max(80) }), z.object({ sessions: z.array(z.string().min(1)).min(1).max(BROADCAST_SESSIONS_MAX) })]),
+    text: z.string().trim().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional(),
+    /** How the recipients are told who it went to (« (à <label>) »), instead of the names: a project the fleet turned into sessions. */ label: z.string().min(1).max(BROADCAST_LABEL_MAX).optional() }),
   /** `ledge read <id>`: a message's whole body, for its receiver or its sender (`by`, a session id). */
   z.object({ type: z.literal('message.read'), id: z.string().min(1).max(40), by: z.string().min(1) }),
   TaskCmdSchema,

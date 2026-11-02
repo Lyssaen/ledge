@@ -21,6 +21,9 @@ export interface Op {
   reason?: OperationReason;
   /** How an applied `session.close` ended the agent. */
   how?: CloseHow;
+  /** An applied `session.broadcast`: the names that got it, and those that did not (not kept across a reload). */
+  sent?: string[];
+  refused?: { name: string; reason: string }[];
   /** A `session.close` or `session.resume`: the session's `startedAt` (the PC's) when it was sent. A new one says it was started again since. */
   startedAt?: string;
   /** When the phone first sent it. */

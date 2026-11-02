@@ -258,13 +258,13 @@ describe('the sidebar', () => {
     expect(markOf([ask({ kind: 'update', questions: [] })])).toBeNull();
     expect(markOf([ask({ questions: [] }), ask({ kind: 'parked', questions: [] })])).toBe('parked');
     expect(markOf([ask({ kind: 'parked', questions: [] }), ask()])).toBe('decision');
-    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[BIX]} current={null} paused dispatch={vi.fn()} asks={[ask({ kind: 'update', questions: [] })]} /></aside></LangProvider>);
+    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[BIX]} current={null} paused dispatch={vi.fn()} dense={false} onToggleDense={vi.fn()} asks={[ask({ kind: 'update', questions: [] })]} /></aside></LangProvider>);
     expect(document.querySelector('.st-ask-mark')).toBeNull();
     expect(document.querySelector('.st-rig .t-need')).toBeNull();
   });
 
   it('Rigs: the asking seat’s row says « décision » in red, and its rig counts it', () => {
-    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[BIX]} current={null} paused dispatch={vi.fn()} asks={[ask()]} /></aside></LangProvider>);
+    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[BIX]} current={null} paused dispatch={vi.fn()} dense={false} onToggleDense={vi.fn()} asks={[ask()]} /></aside></LangProvider>);
     expect(document.querySelector('.st-ask-mark')).toHaveTextContent('décision');
     expect(document.querySelector('.st-rig .t-need')).toHaveTextContent('1');
   });

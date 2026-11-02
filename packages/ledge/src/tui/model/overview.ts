@@ -18,7 +18,7 @@ export interface Overview {
 /** The sessions the overview lists: live ones (an exited session leaves the list; archived ones are not in `sessions`). */
 export const listed = (sessions: readonly Session[]): Session[] => sessions.filter(s => s.state !== 'exited');
 
-const machineOf = (s: Session): string => s.machineId ?? splitId(s.id)?.machine ?? 'local';
+export const machineOf = (s: Session): string => s.machineId ?? splitId(s.id)?.machine ?? 'local';
 
 /** The tree: the daemon's projects in their order, then repositories outside any project in the order their first session
  *  started; inside each, branches in the order their first session started. A session without a branch sits under « - ». */

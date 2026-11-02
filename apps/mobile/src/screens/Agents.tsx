@@ -1,4 +1,5 @@
-import { CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
+import { useState } from 'react';
+import { BROADCAST_SESSIONS_MAX, CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
 import { agentsOf, type AgentRow } from '../model/agents';
 import { closingHere, endedAtLabel } from '../model/sessionEnd';
@@ -9,6 +10,7 @@ import { useMobile, type MobileStore } from '../state/store';
 import { Header, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { OfflineBanner } from '../ui/Notice';
+import { Button } from '../ui/Button';
 import { Tag } from '../ui/Tag';
 import { TabBar } from '../ui/TabBar';
 import { closedTasks } from '../model/tasks';
@@ -60,6 +62,44 @@ function Row({ row, session, offline, threshold, plan, closing, now }: { row: Ag
   );
 }
 
+/** « Écrire au groupe »: a field under the head of a group; the answer says who got the message and who did not. `ids`: the
+ *  group's live sessions; more than one broadcast takes is refused in words, never cut. */
+function GroupWrite({ store, label, ids, offline }: { store: MobileStore; label: string; ids: string[]; offline: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState<{ lines: string[]; error: boolean } | null>(null);
+  const send = async () => {
+    if (ids.length > BROADCAST_SESSIONS_MAX) { setReport({ lines: [copy.agents.tooMany(ids.length, BROADCAST_SESSIONS_MAX)], error: true }); return; }
+    setBusy(true);
+    const done = await store.broadcast(ids, text.trim());
+    setBusy(false);
+    if (done.sent) {
+      const sent = done.sent;
+      setReport({ lines: [...(sent.length ? [copy.agents.sentTo(sent)] : [copy.agents.nobody]), ...(done.refused ?? []).map(r => copy.agents.refusedLine(r.name, r.reason))], error: sent.length === 0 });
+      if (sent.length) { setOpen(false); setText(''); }
+    } else if (done.status === 'expired') setReport({ lines: [copy.agents.uncertain], error: true });
+    else setReport({ lines: [copy.agents.notSent], error: true });
+  };
+  return (
+    <div className="pb-2">
+      {!open && <button type="button" disabled={offline} onClick={() => { setReport(null); setOpen(true); }} className="text-meta text-info disabled:opacity-60">{copy.agents.writeGroup}</button>}
+      {open && (
+        <div className="flex flex-col gap-2">
+          <label htmlFor={`group-${ids[0]}`} className="sr-only">{copy.agents.writeGroupLabel(label)}</label>
+          <textarea id={`group-${ids[0]}`} rows={2} value={text} disabled={busy} placeholder={copy.agents.writeGroupPlaceholder} onChange={e => setText(e.target.value)}
+            className="min-h-11 w-full resize-none rounded-[14px] border border-input bg-surface px-3.5 py-[11px] text-base leading-5 text-fg placeholder:text-muted disabled:opacity-60" />
+          <div className="flex gap-2">
+            <Button variant="ghost" className="flex-1" disabled={busy} onClick={() => { setOpen(false); setText(''); }}>{copy.agents.cancel}</Button>
+            <Button variant="primary" className="flex-[2]" disabled={busy || !text.trim()} onClick={() => void send()}>{copy.agents.send}</Button>
+          </div>
+        </div>
+      )}
+      {report && <div role="status" className={`mt-1 text-meta ${report.error ? 'text-attention' : 'text-muted'}`}>{report.lines.map((l, i) => <p key={i} className="[overflow-wrap:anywhere]">{l}</p>)}</div>}
+    </div>
+  );
+}
+
 /** Every session of the PC, by repository, each opening its thread. */
 export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect?: () => void }) {
   const state = useMobile(store);
@@ -78,6 +118,11 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
           <section key={g.rows[0]!.sessionId} aria-label={g.label}>
             <div className="py-3 text-meta tracking-[.4px] text-muted">{g.label}</div>
+            {state.daemon?.broadcast && (() => {
+              // Only the live ones: an ended session cannot be written to, the phone already knows it.
+              const live = g.rows.map(r => r.sessionId).filter(id => { const st = state.sessions.get(id)?.state; return st !== undefined && st !== 'exited'; });
+              return live.length > 0 && <GroupWrite store={store} label={g.label} ids={live} offline={offline} />;
+            })()}
             {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} closing={closing.has(r.sessionId)} now={now} />)}
           </section>
         ))}

@@ -5,6 +5,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { activeCount } from '../src/nav/agents';
 import { boot, closeDaemons, listSessions, TWO_PROJECTS } from './helpers';
 import { MESSAGES } from '../src/i18n/messages';
+import { setGrouping } from '../src/openrig/grouping';
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
@@ -12,12 +13,14 @@ afterEach(async () => { cleanup(); await closeDaemons(); });
 const banner = () => within(screen.getByRole('banner'));
 
 describe('the sidebar shell', () => {
-  it('has Ask Ledge and Atelier, and neither New session button, brand nor search', async () => {
+  it('has Ledge’s entry and Atelier, and neither question field, New session button, brand nor search', async () => {
     const sessions = listSessions();
     const { side } = await boot({ projects: TWO_PROJECTS, sessions });
     expect(side.queryByRole('button', { name: /^New session N/ })).toBeNull();
     expect(document.querySelector('.st-brand')).toBeNull();
-    expect(side.getByRole('textbox', { name: 'Ask Ledge' })).toBeVisible();
+    // docs/mockups/ledge-sidebar-tidy.html, point 5: the « Ask Ledge… » field is gone; the entry (or /) opens Ledge's home.
+    expect(side.queryByRole('textbox')).toBeNull();
+    expect(document.querySelector('[data-ask-input]')).toBeNull();
     expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions)));
     expect(document.querySelector('.sidebar [data-brand]')).toBeNull();
     expect(side.queryByRole('button', { name: /Search/ })).toBeNull();
@@ -34,13 +37,26 @@ describe('the sidebar shell', () => {
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
 
-  it('the question field under the entry: Enter with text goes home and sends chat.ask', async () => {
-    // One machine: with two, the fleet sends chat.route instead of chat.ask (chat.test boots the same way).
-    const { d, user, side } = await boot({ projects: TWO_PROJECTS, sessions: listSessions(), machines: [{ id: 'local', label: 'Local' }] });
-    await user.type(side.getByRole('textbox', { name: 'Ask Ledge' }), 'hello{Enter}');
-    expect(await screen.findByRole('region', { name: 'Home: Ledge, the operator' })).toBeVisible();
-    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-    expect(d.received).toContainEqual({ type: 'chat.ask', qid: expect.stringMatching(/^q-/), text: 'hello', tool: 'claude' });
+  it('no session: the Projects header keeps only + and the box offers « Create a session » (sidebar tidy, point 3)', async () => {
+    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: [] });
+    const box = side.getByRole('status');
+    expect(box).toHaveTextContent('No session yet.A session runs an agent in a folder or a project.Create a session');
+    expect(box).toHaveClass('st-empty');
+    const header = box.previousElementSibling as HTMLElement;
+    expect(within(header).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['New project']);
+    await user.click(within(box).getByRole('button', { name: 'Create a session' }));
+    expect(await screen.findByRole('dialog', { name: /New session/ })).toBeVisible();
+  });
+
+  it('the Projects / Rigs toggle sits right under the views, out of the scrolling list (sidebar tidy, point 4)', async () => {
+    const rigSeat = { ...listSessions()[0]!, id: 'seat', name: 'Bix', rig: { seat: 'pilot-lead@ledge-dev', name: 'ledge-dev', role: 'pilot.lead' } };
+    setGrouping('projects'); // boot waits for the projects' tree
+    try {
+      await boot({ projects: TWO_PROJECTS, sessions: [...listSessions(), rigSeat] });
+    } finally { setGrouping('rigs'); }
+    const toggle = screen.getByRole('radiogroup', { name: 'Group OpenRig’s seats' });
+    expect(toggle.previousElementSibling).toHaveClass('st-views');
+    expect(toggle.closest('.st-scroll')).toBeNull();
   });
 
   it('a ? beside Settings lists the shortcuts in its tooltip and opens their dialog', async () => {

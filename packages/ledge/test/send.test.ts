@@ -13,6 +13,22 @@ async function fakeDaemon(ack: { outcome: string; reason?: string } | null) {
   return { got, port: (wss.address() as { port: number }).port, close: () => wss.close() };
 }
 
+describe('ledge send to a project or a list', () => {
+  const sendTo = async (ack: Record<string, unknown>) => { const d = await fakeDaemon(ack as never); try { return await sendMessage(['@projet:billing', 'Salut'], { port: d.port, env: { LEDGE_SESSION: 'a' } }); } finally { d.close(); } };
+  it('says who got it', async () => {
+    expect(await sendTo({ outcome: 'accepted', recipients: { sent: ['Nova', 'Pim'], refused: [] } })).toEqual({ line: 'remis à 2 sessions (Nova, Pim)', code: 0 });
+    expect(await sendTo({ outcome: 'queued', recipients: { sent: ['Nova'], refused: [] } })).toEqual({ line: 'remis à 1 session (Nova)', code: 0 });
+  });
+  it('and who it could not reach, with why', async () => {
+    expect(await sendTo({ outcome: 'accepted', recipients: { sent: ['Nova', 'Pim'], refused: [{ name: 'Zed', reason: 'lecture seule' }, { name: 'Max', reason: 'terminée' }] } }))
+      .toEqual({ line: 'remis à 2 sessions (Nova, Pim) ; refusé : Zed (lecture seule), Max (terminée)', code: 0 });
+  });
+  it('nothing sent: refused with the reason, exit 1', async () => {
+    expect(await sendTo({ outcome: 'refused', reason: 'personne à qui écrire', recipients: { sent: [], refused: [{ name: 'Zed', reason: 'lecture seule' }] } }))
+      .toEqual({ line: 'refusé : personne à qui écrire', code: 1 });
+  });
+});
+
 describe('ledge send', () => {
   it('accepted: the message is handed over', async () => {
     const d = await fakeDaemon({ outcome: 'accepted' });
