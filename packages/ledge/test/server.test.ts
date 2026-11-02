@@ -2133,7 +2133,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2549,6 +2549,9 @@ describe('server: models.list (#58)', () => {
   });
 });
 
+/** An OpenRig fake's roles, when a test does not look at them. */
+const NO_ROLES = { async roles() { return { roles: [] }; }, async role() { return { error: 'role_not_found' }; }, async roleFile() { return { error: 'not_allowed' }; } };
+
 describe('server: OpenRig', () => {
   it('answers a status under its requestId; an action answers its sender, then every front gets the fresh state', async () => {
     const acts: unknown[] = []; let fresh = 0;
@@ -2558,7 +2561,7 @@ describe('server: OpenRig', () => {
       async act(a) { acts.push(a); return { ok: true, commands: ['rig daemon stop'] }; },
       async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; },
-      async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+      async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
     } });
     const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
     expect((await c.next('snapshot')).daemon).toMatchObject({ openrig: true });
@@ -2572,6 +2575,30 @@ describe('server: OpenRig', () => {
     expect(fresh).toBe(1);
     c.close(); other.close(); await srv2.close();
   });
+  it('roles, a role and a role file answer their asker only, under its requestId, with the id and path asked', async () => {
+    const asked: string[] = [];
+    const summary = { id: 'f95e', name: 'ledge-lead', source: 'user' as const, path: '/s/lead/agent.yaml', importOnly: false, seats: 1, running: 1, skills: [], startupFiles: ['guidance/role.md'], seatRefs: [{ rig: 'ledge-dev', logicalId: 'pilot.lead', session: 'pilot-lead@ledge-dev' }] };
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: {
+      async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' }; },
+      async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; },
+      async roles() { asked.push('roles'); return { roles: [summary], openrigVersion: '0.7.7' }; },
+      async role(id) { asked.push(`role ${id}`); return { error: 'role_not_found' }; },
+      async roleFile(id, path) { asked.push(`file ${id} ${path}`); return { content: '# Rôle', size: 7 }; }
+    } });
+    const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
+    expect((await c.next('snapshot')).daemon).toMatchObject({ openrig: true, openrigRoles: true });
+    await other.next('snapshot');
+    c.send({ type: 'openrig.roles', requestId: 'r1' });
+    expect(await c.next('openrig.roleList')).toEqual({ type: 'openrig.roleList', requestId: 'r1', roles: [summary], openrigVersion: '0.7.7' });
+    c.send({ type: 'openrig.role', requestId: 'r2', roleId: 'nope' });
+    expect(await c.next('openrig.roleDetail')).toEqual({ type: 'openrig.roleDetail', requestId: 'r2', roleId: 'nope', error: 'role_not_found' });
+    c.send({ type: 'openrig.roleFile', requestId: 'r3', roleId: 'f95e', path: '/s/lead/guidance/role.md' });
+    expect(await c.next('openrig.roleFileContent')).toEqual({ type: 'openrig.roleFileContent', requestId: 'r3', roleId: 'f95e', path: '/s/lead/guidance/role.md', content: '# Rôle', size: 7 });
+    expect(asked).toEqual(['roles', 'role nope', 'file f95e /s/lead/guidance/role.md']);
+    await expect(other.next('openrig.roleList', 150)).rejects.toThrow();
+    c.close(); other.close(); await srv2.close();
+  });
 });
 
 describe('server: OpenRig seats as sessions', () => {
@@ -2580,7 +2607,7 @@ describe('server: OpenRig seats as sessions', () => {
     const srv2 = await startServer({ store, tmux, port: 0, openrig: {
       async state() { return { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, at: '2026-11-02T09:00:00.000Z', rigs: [{ id: 'R', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
-      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
     } });
     const c = await connect({ port: srv2.port });
     await c.next('snapshot');
@@ -2601,7 +2628,7 @@ describe('server: an OpenRig seat answered through its pane', () => {
     const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: {
       async state() { return { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, at: '2026-11-02T09:00:00.000Z', rigs: [] }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
-      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
     } });
     const c = await connect({ port: srv2.port });
     await c.next('snapshot');
@@ -2634,7 +2661,7 @@ describe('server: a seat found again after its rig restarted', () => {
     const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-02T11:00:00.000Z', rigs: [{ id: 'F', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
     const srv2 = await startServer({ store, tmux: fakeTmux({ 'dev-build@first-factory': ['❯ '] }), port: 0, openrig: {
       async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
-      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
     } });
     const c = await connect({ port: srv2.port });
     await c.next('snapshot');
@@ -2657,7 +2684,7 @@ describe('server: OpenRig seats found by Ledge itself', () => {
     const seatTmux = fakeTmux({ 'operator-agent@kernel': ['› '], 'operator-human@kernel': ['$ '], 'dev-build@first-factory': ['❯ '] });
     const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: {
       async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
-      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
     } });
     const c = await connect({ port: srv2.port });
     await c.next('snapshot');

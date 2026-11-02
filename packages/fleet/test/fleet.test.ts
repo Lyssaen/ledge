@@ -399,6 +399,32 @@ describe('multi-machine connections', () => {
     client.send({ type: 'openrig.specs', requestId: 's2', machineId: 'server' });
     expect(rig().at(-1)).toEqual({ type: 'openrig.specList', requestId: 's2', machineId: 'server', specs: [], error: 'offline' });
   });
+  it('routes roles, a role and a role file to their machine; an older daemon refuses only those, the others stay pending', () => {
+    const { client, server, got } = setup();
+    const roles = () => got.filter(m => m.type === 'openrig.roleList' || m.type === 'openrig.roleDetail' || m.type === 'openrig.roleFileContent' || m.type === 'openrig.state');
+    client.send({ type: 'openrig.roles', requestId: 'o1', machineId: 'server' });
+    client.send({ type: 'openrig.role', requestId: 'o2', machineId: 'server', roleId: 'f95e' });
+    expect(server.sent).toEqual([{ type: 'openrig.roles', requestId: 'o1' }, { type: 'openrig.role', requestId: 'o2', roleId: 'f95e' }]);
+    server.emit({ type: 'openrig.roleList', requestId: 'o1', roles: [] });
+    server.emit({ type: 'openrig.roleList', requestId: 'o1', roles: [] }); // once only
+    server.emit({ type: 'openrig.roleDetail', requestId: 'o2', roleId: 'f95e', error: 'role_not_found' });
+    expect(roles()).toEqual([
+      { type: 'openrig.roleList', requestId: 'o1', machineId: 'server', roles: [] },
+      { type: 'openrig.roleDetail', requestId: 'o2', machineId: 'server', roleId: 'f95e', error: 'role_not_found' }
+    ]);
+    // A daemon that drives OpenRig but predates roles: the roles asks are outdated, its pending status is not.
+    client.send({ type: 'openrig.status', requestId: 'o3', machineId: 'server' });
+    client.send({ type: 'openrig.roleFile', requestId: 'o4', machineId: 'server', roleId: 'f95e', path: '/a/role.md' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.roleFile' });
+    expect(roles().at(-1)).toEqual({ type: 'openrig.roleFileContent', requestId: 'o4', machineId: 'server', roleId: 'f95e', path: '/a/role.md', error: 'outdated' });
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: 'now' };
+    server.emit({ type: 'openrig.state', requestId: 'o3', state });
+    expect(roles().at(-1)).toEqual({ type: 'openrig.state', requestId: 'o3', machineId: 'server', state });
+    server.set('unreachable');
+    client.send({ type: 'openrig.role', requestId: 'o5', machineId: 'server', roleId: 'f95e' });
+    expect(roles().at(-1)).toEqual({ type: 'openrig.roleDetail', requestId: 'o5', machineId: 'server', roleId: 'f95e', error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('answers a repos.scan for an offline machine, and one pending on a machine that drops, with error offline', () => {
     const { client, server, got } = setup();
     client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });
