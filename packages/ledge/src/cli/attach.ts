@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { PROTOCOL_PORT, backendOf } from '@ledge/protocol';
 import { connect } from '../client.js';
-import { realTmux } from '../tmux.js';
+import { isSeatSession, realTmux } from '../tmux.js';
 import { attachEnv } from './launch.js';
 
 const TMUX_SOCKET = 'ledge';
@@ -16,6 +16,8 @@ function attachInherit(args: string[], env: NodeJS.ProcessEnv): Promise<number> 
 
 export interface AttachOptions {
   port?: number; tmuxSocket?: string;
+  /** The tmux server of OpenRig's seats: the user's default one (null) unless a test names another. */
+  seatSocket?: string | null;
   /** Watches the pane without sending it keys. */
   readOnly?: boolean;
   /** Runs `tmux <args>` attached to the user's terminal and resolves with its exit code. */
@@ -25,6 +27,17 @@ export interface AttachOptions {
 }
 
 /** The name of session `id` when the daemon says it has no terminal (OMP), else null (no daemon, no such session, a tmux one). */
+/** The tmux session of an OpenRig seat Ledge follows (`source: 'rig'`), from the daemon's snapshot; null otherwise. */
+async function seatSession(id: string, port: number): Promise<string | null> {
+  try {
+    const c = await connect({ port, timeoutMs: 800 });
+    const snap = await c.next('snapshot');
+    await Promise.race([c.close(), new Promise(r => setTimeout(r, 500))]);
+    const s = snap.sessions.find(x => x.id === id);
+    return s?.source === 'rig' && s.tmuxSession && isSeatSession(s.tmuxSession) ? s.tmuxSession : null;
+  } catch { return null; }
+}
+
 async function nativeSession(id: string, port: number): Promise<string | null> {
   try {
     const c = await connect({ port, timeoutMs: 800 });
@@ -42,8 +55,13 @@ async function nativeSession(id: string, port: number): Promise<string | null> {
  */
 export async function attach(id: string, opts: AttachOptions = {}): Promise<number> {
   if (!id) { console.error('ledge attach: missing session id'); return 2; }
-  const tmux = realTmux(opts.tmuxSocket ?? TMUX_SOCKET);
-  const tmuxName = `ledge-${id}`;
+  let tmux = realTmux(opts.tmuxSocket ?? TMUX_SOCKET);
+  let tmuxName = `ledge-${id}`;
+  // An OpenRig seat runs on the user's default tmux server, under its seat's name (`dev-build@starter`).
+  if (!(await tmux.hasSession(tmuxName))) {
+    const seat = await seatSession(id, opts.port ?? PROTOCOL_PORT);
+    if (seat) { tmux = realTmux(opts.seatSocket === undefined ? null : opts.seatSocket); tmuxName = seat; }
+  }
   if (!(await tmux.hasSession(tmuxName))) {
     // An OMP session has no pane: the daemon drives it over its protocol, and nothing a terminal shows is its state (spec 2026-10-20 §3.5).
     const native = await nativeSession(id, opts.port ?? PROTOCOL_PORT);

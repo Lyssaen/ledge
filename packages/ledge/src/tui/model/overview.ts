@@ -4,7 +4,8 @@ import { contextNear, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmis
 /** A session row of the tree under its branch. */
 export interface BranchRow { branch: string; sessions: Session[] }
 /** A project of the tree: a project of the daemon's list, or a repository outside any (`color` absent). */
-export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number }
+/** `kind`: an OpenRig rig's group or the kernel's (docs/mockups/ledge-openrig-groups.html, view 3), after the projects. */
+export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number; kind?: 'rig' | 'kernel' }
 export interface Overview {
   /** The sessions waiting for the user, the oldest request first. */
   yours: Session[];
@@ -27,7 +28,17 @@ export function overview(sessions: readonly Session[], projects: Projects | null
   const nodes = new Map<string, ProjectNode>();
   const known = new Map<string, Project>((projects?.projects ?? []).map(p => [p.id, p]));
   for (const p of projects?.projects ?? []) nodes.set(`p:${p.id}`, { key: `p:${p.id}`, label: p.name, color: p.color, branches: [], count: 0 });
+  const rigNodes = new Map<string, ProjectNode>();
   for (const s of live) {
+    // An OpenRig seat goes to its rig's group, the kernel's to the kernel's, never to a project.
+    if (s.rig) {
+      const kind = s.rig.name === 'kernel' ? 'kernel' as const : 'rig' as const;
+      const key = kind === 'kernel' ? 'g:kernel' : `g:rig:${s.rig.name}`;
+      let node = rigNodes.get(key);
+      if (!node) { node = { key, label: kind === 'kernel' ? 'Kernel' : s.rig.name, kind, branches: [{ branch: '', sessions: [] }], count: 0 }; rigNodes.set(key, node); }
+      node.branches[0]!.sessions.push(s); node.count += 1;
+      continue;
+    }
     const pid = projects ? projectOf({ machineId: machineOf(s), cwd: s.cwd }, projects) : null;
     const key = pid && known.has(pid) ? `p:${pid}` : `r:${machineOf(s)}:${s.repoPath ?? s.cwd}`;
     let node = nodes.get(key);
@@ -37,7 +48,8 @@ export function overview(sessions: readonly Session[], projects: Projects | null
     if (!row) { row = { branch, sessions: [] }; node.branches.push(row); }
     row.sessions.push(s); node.count += 1;
   }
-  const tree = [...nodes.values()].filter(n => n.count > 0);
+  const groups = [...rigNodes.values()].sort((a, b) => (a.kind === b.kind ? a.label.localeCompare(b.label) : a.kind === 'kernel' ? 1 : -1));
+  const tree = [...[...nodes.values()].filter(n => n.count > 0), ...groups];
   const order = tree.flatMap(n => n.branches.flatMap(b => b.sessions.map(s => s.id)));
   return { yours, tree, order, machines: new Set(live.map(machineOf)).size };
 }

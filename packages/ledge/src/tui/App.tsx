@@ -17,6 +17,8 @@ import { Ask } from './screens/Ask.js';
 import { Launch } from './screens/Launch.js';
 import { Settings } from './screens/Settings.js';
 import { Help } from './screens/Help.js';
+import { OpenRigScreen } from './screens/OpenRig.js';
+import { RigLaunchScreen } from './screens/RigLaunch.js';
 import { MIN } from './ui/Frame.js';
 import { setTone, tone as toneNow, toneFor, type ThemeChoice, type Tone } from './theme.js';
 
@@ -167,9 +169,9 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (input === ',') { go('settings'); return; }
     if (input === '/') { go('ask'); return; }
     if (input === '+') { go('launch'); return; }
-    if (/^[1-5]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
+    if (/^[1-6]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
   });
 
-  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, help: Help }[screen];
+  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, openrig: OpenRigScreen, rigLaunch: RigLaunchScreen, help: Help }[screen];
   return <TuiContext.Provider value={tui}><Body /></TuiContext.Provider>;
 }

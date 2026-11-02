@@ -416,9 +416,10 @@ describe('server', () => {
     c.send({ type: 'session.register', session: mk('b', { name: 'Otto', title: 'Otto · harness-assistant' }) });
     const upd = await c.next('session.updated');
     expect(upd.session.id).toBe('b');
-    expect(upd.session.name).toBe('Nova');
-    expect(upd.session.title).toBe('Nova · harness-assistant');
-    expect(store.get('b')?.name).toBe('Nova');
+    // An ended session no longer holds its name (namesInUse): only the live Otto is skipped.
+    expect(upd.session.name).toBe('Pim');
+    expect(upd.session.title).toBe('Pim · harness-assistant');
+    expect(store.get('b')?.name).toBe('Pim');
     c.close();
   });
 
@@ -2132,7 +2133,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2544,6 +2545,133 @@ describe('server: models.list (#58)', () => {
     c.send({ type: 'models.list', requestId: 'r2', tool: 'codex' });
     expect(await c.next('models.listing')).toEqual({ type: 'models.listing', requestId: 'r2', tool: 'codex', models: [], error: 'not installed' });
     expect(asked).toEqual(['claude', 'codex']);
+    c.close(); await srv2.close();
+  });
+});
+
+describe('server: OpenRig', () => {
+  it('answers a status under its requestId; an action answers its sender, then every front gets the fresh state', async () => {
+    const acts: unknown[] = []; let fresh = 0;
+    const state = (s: 'running' | 'stopped') => ({ installed: true, daemon: { state: s }, kernel: { state: 'stopped' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' });
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: {
+      async state(f) { if (f) fresh++; return state(f ? 'stopped' : 'running'); },
+      async act(a) { acts.push(a); return { ok: true, commands: ['rig daemon stop'] }; },
+      async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; },
+      async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
+    expect((await c.next('snapshot')).daemon).toMatchObject({ openrig: true });
+    await other.next('snapshot');
+    c.send({ type: 'openrig.status', requestId: 'r1' });
+    expect(await c.next('openrig.state')).toEqual({ type: 'openrig.state', requestId: 'r1', state: state('running') });
+    c.send({ type: 'openrig.act', requestId: 'r2', action: { kind: 'daemon.stop' } });
+    expect(await c.next('openrig.done')).toEqual({ type: 'openrig.done', requestId: 'r2', ok: true, commands: ['rig daemon stop'] });
+    expect(await other.next('openrig.state')).toEqual({ type: 'openrig.state', state: state('stopped') });
+    expect(acts).toEqual([{ kind: 'daemon.stop' }]);
+    expect(fresh).toBe(1);
+    c.close(); other.close(); await srv2.close();
+  });
+});
+
+describe('server: OpenRig seats as sessions', () => {
+  it('a hook from an OpenRig seat tags its session with the rig, then the role OpenRig gives it', async () => {
+    const node = { logicalId: 'dev.build', session: 'dev-build@first-factory', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'running', stopped: false, work: 0 };
+    const srv2 = await startServer({ store, tmux, port: 0, openrig: {
+      async state() { return { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, at: '2026-11-02T09:00:00.000Z', rigs: [{ id: 'R', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] }; },
+      async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'seat-1', agent: 'claude', cwd: '/w/ledge', rigSeat: 'dev-build@first-factory', event: { name: 'UserPromptSubmit', at: '2026-11-02T10:57:00.000Z', source: 'hook', text: 'go' } });
+    await vi.waitFor(() => expect(store.get('seat-1')?.rig).toEqual({ seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' }));
+    expect(store.get('seat-1')?.source).toBe('hook_only');
+    // A seat name rig could not have made is not taken.
+    c.send({ type: 'session.event', id: 'seat-2', agent: 'claude', cwd: '/w', rigSeat: '--x', event: { name: 'UserPromptSubmit', at: '2026-11-02T10:57:00.000Z', source: 'hook', text: 'go' } } as never);
+    await new Promise(r => setTimeout(r, 50));
+    expect(store.get('seat-2')).toBeUndefined();
+    c.close(); await srv2.close();
+  });
+});
+
+describe('server: an OpenRig seat answered through its pane', () => {
+  it('becomes a rig session on its pane: written to like Ledge\'s own, never killed, closed nor resumed by Ledge', async () => {
+    const seatTmux = fakeTmux({ 'dev-build@first-factory': ['❯ '] });
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: {
+      async state() { return { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, at: '2026-11-02T09:00:00.000Z', rigs: [] }; },
+      async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'seat-1', agent: 'claude', cwd: '/w/ledge', rigSeat: 'dev-build@first-factory', event: { name: 'UserPromptSubmit', at: '2026-11-02T10:57:00.000Z', source: 'hook', text: 'go' } });
+    await vi.waitFor(() => expect(store.get('seat-1')).toMatchObject({ source: 'rig', tmuxSession: 'dev-build@first-factory' }));
+    c.send({ type: 'session.kill', id: 'seat-1' });
+    expect(await c.next('error')).toMatchObject({ id: 'seat-1', code: 'read_only' });
+    expect(seatTmux.sent.some(x => x[0] === 'kill')).toBe(false);
+    c.send({ type: 'session.reply', id: 'seat-1', text: 'continue' });
+    await vi.waitFor(() => expect(seatTmux.sent.some(x => x[1] === 'dev-build@first-factory' && x.includes('continue'))).toBe(true));
+    c.close(); await srv2.close();
+  });
+});
+
+describe('server: an idle seat recognised before', () => {
+  it('is put on its pane at start, without waiting for a hook', async () => {
+    store.upsert({ id: 'seat-9', name: 'Otto-49', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'untracked session', tmuxSession: null, state: 'idle', helpers: [],
+      startedAt: '2026-11-02T10:00:00.000Z', lastActivityAt: '2026-11-02T10:00:00.000Z', source: 'hook_only', rig: { seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' } });
+    const srv2 = await startServer({ store, tmux: fakeTmux({ 'dev-build@first-factory': ['❯ '] }), port: 0 });
+    await vi.waitFor(() => expect(store.get('seat-9')).toMatchObject({ source: 'rig', tmuxSession: 'dev-build@first-factory' }));
+    await srv2.close();
+  });
+});
+
+describe('server: a seat found again after its rig restarted', () => {
+  it('comes back as the session it had, not a new one under a new name', async () => {
+    store.upsert({ id: 'claude-conv-old', name: 'Bix', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Bix', tmuxSession: 'dev-build@first-factory', state: 'exited', helpers: [],
+      startedAt: '2026-11-02T10:00:00.000Z', lastActivityAt: '2026-11-02T10:30:00.000Z', exitedAt: '2026-11-02T10:30:00.000Z', source: 'rig', rig: { seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' } });
+    const node = { logicalId: 'dev.build', session: 'dev-build@first-factory', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 };
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-02T11:00:00.000Z', rigs: [{ id: 'F', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
+    const srv2 = await startServer({ store, tmux: fakeTmux({ 'dev-build@first-factory': ['❯ '] }), port: 0, openrig: {
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'openrig.status', requestId: 'r' });
+    await c.next('openrig.state');
+    await vi.waitFor(() => expect(store.get('claude-conv-old')).toMatchObject({ name: 'Bix', state: 'idle', source: 'rig' }));
+    expect(store.get('rig-dev-build-first-factory')).toBeUndefined();
+    c.close(); await srv2.close();
+  });
+});
+
+describe('server: OpenRig seats found by Ledge itself', () => {
+  it('follows each running Claude Code and Codex seat on its pane; a later hook of that seat is the same session', async () => {
+    const node = (logicalId: string, session: string, runtime: string, sessionStatus = 'running') => ({ logicalId, session, runtime, model: null, sessionStatus, lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 });
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-02T09:00:00.000Z', rigs: [
+      { id: 'K', name: 'kernel', status: 'running', lifecycleState: 'running', seats: 3, running: 3, attention: 0, uptime: null, snapshot: null,
+        nodes: [node('operator.agent', 'operator-agent@kernel', 'codex'), node('operator.human', 'operator-human@kernel', 'terminal'), node('advisor.lead', 'advisor-lead@kernel', 'claude-code', 'detached')] },
+      { id: 'F', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node('dev.build', 'dev-build@first-factory', 'claude-code')] }
+    ] };
+    const seatTmux = fakeTmux({ 'operator-agent@kernel': ['› '], 'operator-human@kernel': ['$ '], 'dev-build@first-factory': ['❯ '] });
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: {
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'openrig.status', requestId: 'r' });
+    await c.next('openrig.state');
+    await vi.waitFor(() => expect(store.get('rig-operator-agent-kernel')).toMatchObject({ tool: 'codex', source: 'rig', tmuxSession: 'operator-agent@kernel', rig: { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' } }));
+    await vi.waitFor(() => expect(store.get('rig-dev-build-first-factory')).toMatchObject({ tool: 'claude', source: 'rig' }));
+    // A terminal seat and a detached one are not agents Ledge can answer.
+    expect(store.get('rig-operator-human-kernel')).toBeUndefined();
+    expect(store.get('rig-advisor-lead-kernel')).toBeUndefined();
+    // The Claude seat's hook, under its own conversation id, lands on the seat's session.
+    c.send({ type: 'session.event', id: 'claude-conv-1', agent: 'claude', cwd: '/w/ledge', rigSeat: 'dev-build@first-factory', event: { name: 'UserPromptSubmit', at: '2026-11-02T10:57:00.000Z', source: 'hook', text: 'go' } });
+    await vi.waitFor(() => expect(store.get('rig-dev-build-first-factory')?.state).toBe('working'));
+    expect(store.get('claude-conv-1')).toBeUndefined();
     c.close(); await srv2.close();
   });
 });

@@ -26,3 +26,9 @@ export function pickName(taken: Iterable<string>, preferred?: string): string {
   if (first) return first;
   for (let i = 2; ; i++) if (free(`${NAMES[0]}-${i}`)) return `${NAMES[0]}-${i}`;
 }
+
+/** The names a new session must not take: those of the sessions still there, neither ended nor archived. An archived one
+ *  keeps its name for its own record, but does not hold it: with every past session counted, the 64 names were all taken
+ *  and every new session was « Otto-N ». */
+export const namesInUse = (sessions: Iterable<{ name: string; state: string; archivedAt?: string }>): string[] =>
+  [...sessions].filter(s => s.state !== 'exited' && !s.archivedAt).map(s => s.name);

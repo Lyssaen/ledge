@@ -18,6 +18,7 @@ const MENU_WIDTH = 260;
  *  icons only, in groups: display (overview only), or the open agent's state, the terminal toggle and the session menu; then
  *  shortcuts and full screen (search and chat are in the title bar). */
 export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage, onRevealArchives, onDetach }: {
+  /** Ledge follows OpenRig seats: the atelier offers to group them by project or by rig. */
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
   /** The subagent whose page is open (session is then its parent). */
   helper: Helper | null; terminal: boolean; onTerminal(): void;
@@ -33,7 +34,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
   const project = (id: string) => projects?.projects.find(p => p.id === id);
   const filterName = (f: ProjectFilter) => (f === 'none' ? t.side.unassigned : project(f)?.name ?? t.side.unassigned);
   const overview = place.kind === 'overview';
-  const crumbIcon = place.kind === 'settings' ? SHELL_ICONS.gear : place.kind === 'session' ? ICONS.folder.d : SHELL_ICONS.grid;
+  const crumbIcon = place.kind === 'settings' ? SHELL_ICONS.gear : place.kind === 'session' ? ICONS.folder.d : place.kind === 'openrig' ? SHELL_ICONS.rig : SHELL_ICONS.grid;
 
   const crumbs = () => {
     if (place.kind === 'settings') return <>
@@ -67,6 +68,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
         )}
       </>;
     }
+    if (place.kind === 'openrig') return <strong>{t.openrig.title}</strong>;
     const filter = place.project;
     if (filter === 'all') return <strong>{t.crumb.atelier}</strong>;
     const color = project(filter)?.color;
@@ -127,3 +129,4 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
     </header>
   );
 }
+

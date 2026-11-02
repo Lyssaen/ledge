@@ -11,7 +11,7 @@ export const fr = {
   time: {
     now: 'à l’instant', decimal: ',', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
   },
-  tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages' },
+  tabs: { overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig' },
   bar: {
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: (n: number) => `${n} ${plural(n, 'machine', 'machines')}`,
@@ -34,7 +34,8 @@ export const fr = {
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
     openSession: (name: string) => `ouvrir ${name}`
   },
-  overview: {
+  overview: { rigsGroup: 'RIGS', kernelGroup: 'KERNEL', 
+    rigSeat: (rig: string, role: string) => `rig ${rig} · ${role}`,
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
     nobodyWaits: 'Personne ne t’attend.', noSession: 'Aucune session. + pour en lancer une.', noPreview: 'Pas d’aperçu.', noExchange: 'Aucun échange.',
     sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`, outside: 'Hors projet', offline: 'hors ligne', readOnly: 'lecture seule',
@@ -112,7 +113,7 @@ export const fr = {
   },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
   help: {
-    title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages',
+    title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig', rigLaunch: 'Lancer un rig',
     screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
@@ -154,6 +155,96 @@ export const fr = {
     approval: (n: string, text: string) => `${n} attend ton accord : ${text}`,
     question: (n: string, text: string) => `${n} a une question : ${text}`,
     title: (n: number) => (n > 0 ? `ledge · ${n} t’${plural(n, 'attend', 'attendent')}` : 'ledge')
+  },
+  openrig: {
+    operatorKey: 'opérateur', operatorHint: 'O : lui parler', operatorNotYet: 'Ledge ne suit pas encore la session de l’opérateur : réessayez dans quelques secondes.',
+    activity: (a: string) => ({ running: 'au travail', idle: 'disponible', unknown: '—' } as Record<string, string>)[a] ?? a,
+    title: 'OpenRig', daemon: 'Daemon', kernel: 'Kernel', rigs: 'Rigs',
+    machine: 'machine', toggle: 'démarrer/arrêter', restart: 'redémarrer', unfold: 'déplier', daemonKey: 'daemon', kernelKey: 'kernel',
+    daemonState: { running: 'actif', stopped: 'arrêté', stale: 'arrêté sans arrêt propre', unknown: 'inconnu' } as Record<string, string>,
+    kernelState: { ready: 'prêt', starting: 'démarrage', stopped: 'arrêté', skipped: 'sans kernel', absent: 'absent', unknown: 'inconnu' } as Record<string, string>,
+    look: { running: 'en marche', starting: 'démarrage', attention: 'à surveiller', stopped: 'arrêté' },
+    daemonMeta: (port: number | undefined, pid: number | undefined) => [port ? `127.0.0.1:${port}` : '', pid ? `pid ${pid}` : ''].filter(Boolean).join(' · '),
+    restoreHint: '↻ au démarrage : rigs relancés',
+    kernelHint: 'l’opérateur qui aide à lancer un rig',
+    seats: (running: number, total: number) => `${running}/${total}`,
+    attention: (n: number) => `${n} ${plural(n, 'siège demande', 'sièges demandent')} attention`,
+    since: (uptime: string) => `depuis ${uptime}`, snapshot: (s: string) => `snapshot ${s}`,
+    work: (n: number) => (n ? `${n} ${plural(n, 'tâche', 'tâches')}` : ''),
+    stoppedOnPurpose: 'arrêté volontairement',
+    noRigs: 'Aucun rig sur cette machine.',
+    notInstalled: 'OpenRig n’est pas installé sur cette machine (la commande rig est introuvable).',
+    stoppedDaemon: 'Le daemon OpenRig est arrêté : D le démarre.',
+    offline: 'Machine hors ligne.', outdated: 'Le daemon Ledge de cette machine ne connaît pas OpenRig : mettez-le à jour.',
+    loading: 'Lecture d’OpenRig…', version: (v: string) => `OpenRig ${v}`,
+    confirmTitle: 'Confirmer',
+    confirm: (what: string) => `${what} ?`,
+    what: {
+      'daemon.stop': 'Arrêter le daemon OpenRig', 'daemon.restart': 'Redémarrer le daemon OpenRig', 'kernel.stop': 'Arrêter le kernel', 'kernel.restart': 'Redémarrer le kernel',
+      'rig.stop': (rig: string) => `Arrêter le rig « ${rig} »`, 'rig.restart': (rig: string) => `Redémarrer le rig « ${rig} »`
+    },
+    busy: (names: string, n: number) => (n ? `${n} ${plural(n, 'agent au travail s’arrête', 'agents au travail s’arrêtent')} : ${names}.` : 'Aucun agent au travail.'),
+    yes: 'confirmer', no: 'annuler',
+    running: (cmd: string) => `en cours : ${cmd}`,
+    done: (cmd: string) => `fait : ${cmd}`,
+    failed: (why: string) => `échec : ${why}`,
+    why: { busy: 'une autre action OpenRig est en cours sur cette machine', not_installed: 'OpenRig n’est pas installé', offline: 'machine hors ligne', outdated: 'daemon Ledge trop ancien' } as Record<string, string>
+  },
+  rigLaunch: {
+    title: 'Lancer un rig', launchKey: 'lancer un rig', count: 'nombre de sièges',
+    permissions: '4 · Permissions', policyKey: 'permissions',
+    policyOf: { auto: 'Auto', standard: 'Standard', open: 'Ouvert', yolo: 'YOLO', locked: 'Verrouillé' } as Record<string, string>,
+    specPolicy: (p: string) => `celle de la spec (${p})`, noSpecPolicy: 'aucune',
+    asRig: 'comme le rig',
+    policyHint: {
+      none: 'sans politique : Claude en acceptEdits, Codex en workspace-write',
+      auto: 'Claude décide seul (mode auto) ; Codex garde la posture par défaut',
+      standard: 'tout passe sauf PR, publication, fusion, force push et destructif (demande une personne) ; règles appliquées une fois traduites dans les réglages du harnais',
+      open: 'tout passe sauf le destructif ; règles appliquées une fois traduites dans les réglages du harnais',
+      yolo: 'aucune demande : Claude --dangerously-skip-permissions, Codex danger-full-access',
+      locked: 'seuls la chaîne d’outils et rig up/down passent ; règles appliquées une fois traduites dans les réglages du harnais'
+    } as Record<string, string>,
+    nonInterruptive: 'accepter les avertissements de premier lancement (--non-interruptive)',
+    spec: '1 · Spec de départ', where: '2 · Où', roles: '3 · Sièges par rôle', delegation: '5 · Qui délègue à qui', preview: 'Aperçu · rig.yaml',
+    specHint: 'Le modèle de rig : ses pods, ses rôles, les liens entre eux.',
+    source: { user: 'mes specs', builtin: 'OpenRig' } as Record<string, string>,
+    seatsOf: (n: number) => `${n} ${plural(n, 'siège', 'sièges')}`,
+    folder: 'Dossier', name: 'Nom', folderHint: 'un dossier de cette machine, ~ accepté', projectFolder: (p: string) => `projet ${p}`,
+    model: 'modèle', defaultModel: 'par défaut', modelKey: 'modèle',
+    rolesHint: 'Un compteur à 3 donne build, build-2, build-3, identiques au premier.',
+    pairs: 'par paires', all: 'chaque siège → tous', pairsHint: 'build-2 → review-2', allHint: 'chaque build → tous les review',
+    save: 'enregistrer dans mes specs', notScaled: 'un siège par rôle : rien à déléguer de plus',
+    loading: 'Lecture des specs…', noSpecs: 'Aucune spec sur cette machine.',
+    daemonStopped: 'Démarrez le daemon OpenRig d’abord (D sur l’écran OpenRig).',
+    noCheck: 'p vérifie le lancement (rig up --plan), sans rien démarrer.',
+    checking: 'Vérification…', launching: 'Lancement…',
+    passes: (seats: number) => `✓ le plan passe · ${seats} ${plural(seats, 'siège', 'sièges')}`,
+    planStatus: (s: string) => `plan : ${s}`,
+    warning: (text: string, seats: string) => (seats ? `${text} (${seats})` : text),
+    launched: (name: string, n: number) => `Rig « ${name} » lancé · ${n} ${plural(n, 'siège', 'sièges')}.`,
+    check: 'vérifier (--plan)', launch: (n: number) => `lancer ${n} ${plural(n, 'siège', 'sièges')}`,
+    missing: { spec: 'Choisissez une spec.', cwd: 'Indiquez le dossier de travail.', name: 'Le nom du rig : lettres, chiffres, . _ - (pas de - au début).', seats: 'Au moins un siège.' },
+    why: {
+      busy: 'Une autre action OpenRig est en cours sur cette machine.', cwd_missing: 'Ce dossier n’existe pas sur la machine.', spec_not_found: 'Cette spec n’est plus dans la bibliothèque.',
+      daemon_stopped: 'Démarrez le daemon OpenRig d’abord (D sur l’écran OpenRig).', not_installed: 'OpenRig n’est pas installé sur cette machine.',
+      offline: 'Machine hors ligne.', outdated: 'Le daemon Ledge de cette machine ne sait pas lancer de rig : mettez-le à jour.'
+    } as Record<string, string>
+  },
+  rigSeats: {
+    title: (rig: string, machine: string) => `Sièges · ${rig} · ${machine}`, key: 'sièges',
+    stays: (now: string) => `Le rig reste en marche. Aujourd’hui : ${now}.`,
+    role: 'rôle', count: 'nombre', delegationKey: 'délégation', apply: 'appliquer', cancel: 'annuler',
+    pairs: 'délégation par paires', all: 'chaque ajout → tous', linksPairs: 'liens ajoutés par paires', linksAll: 'liens ajoutés à tous',
+    nothing: 'Changez un nombre : - +', notRunning: 'Seul un rig en marche change de sièges.',
+    busy: (seat: string) => `${seat} travaille : son travail en cours s’arrête.`,
+    applying: 'en cours…',
+    done: (added: number, removed: number, links: number | undefined) => `+${added} −${removed} sièges${links !== undefined ? `, ${links} ${plural(links, 'lien', 'liens')}` : ''}`,
+    linksUnsupported: 'cet OpenRig ne sait pas lier des sièges ajoutés à un rig en marche (avant 0.7)',
+    why: {
+      rig_not_running: 'Le rig n’est plus en marche.', rig_root_unknown: 'Impossible de copier un siège : les agents du rig sont introuvables.',
+      busy: 'Une autre action OpenRig est en cours sur cette machine.', not_installed: 'OpenRig n’est pas installé sur cette machine.',
+      offline: 'Machine hors ligne.', outdated: 'Le daemon Ledge de cette machine ne sait pas changer les sièges d’un rig : mettez-le à jour.'
+    } as Record<string, string>
   },
   small: {
     tooSmall: (w: number, h: number) => `Fenêtre trop petite : ${w}×${h}`, atLeast: (w: number, h: number) => `il faut au moins ${w}×${h}`,

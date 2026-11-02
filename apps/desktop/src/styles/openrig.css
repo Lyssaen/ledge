@@ -1,0 +1,171 @@
+/* The OpenRig page (docs/mockups/ledge-openrig.html, views 1, 2 and 5). */
+.or-page { flex: 1; min-height: 0; overflow: auto; padding: 20px 24px 28px; display: flex; flex-direction: column; gap: 18px; }
+.or-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.or-fill { flex: 1; }
+.or-meta, .or-muted { color: var(--muted-foreground); font-size: 12px; }
+.or-machines { display: flex; gap: 6px; flex-wrap: wrap; }
+.or-chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted-foreground); background: transparent; cursor: pointer; }
+.or-chip[aria-selected=true] { color: var(--foreground); background: var(--muted); border-color: var(--input); }
+.or-chip small { font-size: 11px; color: var(--muted-foreground); }
+
+.or-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; background: var(--muted-foreground); }
+.or-dot.or-ok { background: var(--success); } .or-dot.or-warn { background: var(--warning); } .or-dot.or-info { background: var(--info); } .or-dot.or-err { background: var(--danger-text); }
+.or-row > .or-pill, .or-seat > .or-pill { justify-self: start; }
+.or-pill { font-size: 11px; line-height: 18px; padding: 0 7px; border-radius: 5px; font-weight: 500; white-space: nowrap; }
+.or-pill.or-ok { background: var(--status-success-soft); color: var(--success); }
+.or-pill.or-off { background: var(--muted); color: var(--muted-foreground); }
+.or-pill.or-warn { background: var(--status-warning-soft); color: var(--warning); }
+.or-pill.or-info { background: var(--status-info-soft); color: var(--info); }
+.or-pill.or-err { background: var(--status-danger-soft); color: var(--danger-text); }
+
+.or-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.or-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.or-card h3 { margin: 0; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.or-card p { margin: 0; }
+.or-sub { color: var(--muted-foreground); font-size: 12px; min-height: 16px; }
+.or-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.or-check { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; }
+.or-check code, .or-command code, .or-status code { white-space: nowrap; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--muted-foreground); background: var(--well); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
+
+.or-h2 { display: flex; align-items: center; gap: 10px; }
+.or-h2 h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.or-count { font-size: 11px; padding: 0 7px; border-radius: 5px; background: var(--muted); color: var(--muted-foreground); }
+.or-empty { color: var(--muted-foreground); font-size: 13px; margin: 0; }
+
+.or-rigs { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; }
+.or-rig { border-bottom: 1px solid var(--border); }
+.or-rig:last-child { border-bottom: 0; }
+.or-rig.busy { background: color-mix(in oklab, var(--info) 6%, transparent); }
+.or-row { display: grid; grid-template-columns: minmax(140px, 1.3fr) 110px 92px minmax(0, 1fr) minmax(0, 1.2fr) auto; gap: 10px; align-items: center; padding: 9px 14px; }
+.or-row .or-acts { margin: 0; justify-content: flex-end; }
+.or-fold { display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+.or-fold strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.or-fold svg { color: var(--muted-foreground); transition: transform .15s var(--grow); }
+.or-rig.open .or-fold svg { transform: rotate(90deg); }
+.or-attn { color: var(--warning); font-size: 12px; }
+.or-seats { list-style: none; margin: 0; padding: 4px 14px 10px 36px; background: color-mix(in oklab, var(--foreground) 2%, transparent); }
+.or-seat { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) 110px 90px; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px dashed var(--border); font-size: 13px; }
+.or-seat:first-child { border-top: 0; }
+
+.or-status { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12.5px; border-radius: var(--radius-md); padding: 8px 11px; border: 1px solid var(--border); }
+.or-status.or-info { color: var(--info); background: var(--status-info-soft); }
+.or-status.or-err { flex-direction: column; align-items: flex-start; color: var(--danger-text); background: var(--status-danger-soft); }
+.or-status p { margin: 0; }
+.or-spin { display: inline-flex; animation: or-spin 1s linear infinite; }
+@keyframes or-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .or-spin { animation: none; } }
+
+.or-confirm .or-working { list-style: none; margin: 0 0 10px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.or-confirm .or-working li { display: flex; gap: 10px; justify-content: space-between; padding: 6px 10px; border-top: 1px solid var(--border); font-size: 13px; }
+.or-confirm .or-working li:first-child { border-top: 0; }
+.or-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.or-command { font-size: 12.5px; color: var(--muted-foreground); }
+.or-absent p { color: var(--muted-foreground); font-size: 13px; }
+
+@media (max-width: 900px) {
+  .or-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .or-row > :nth-child(3), .or-row > :nth-child(4), .or-row > :nth-child(5) { display: none; }
+  .or-seat { grid-template-columns: minmax(0, 1fr) auto; }
+  .or-seat > :nth-child(2), .or-seat > :nth-child(4) { display: none; }
+}
+
+/* Launching a rig (view 6). */
+.or-launch { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
+.or-launch-main, .or-launch-aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.or-fsec h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+.or-hint { margin: 0 0 8px; font-size: 12px; color: var(--muted-foreground); }
+.or-specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.or-spec { text-align: left; border: 1px solid var(--input); border-radius: var(--radius-lg); padding: 10px 12px; background: color-mix(in oklab, var(--foreground) 3%, var(--background)); font-size: 12px; line-height: 17px; color: var(--muted-foreground); cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 64px; transition: border-color .15s, background-color .15s; }
+.or-spec:hover { border-color: color-mix(in oklab, var(--foreground) 30%, transparent); }
+.or-spec:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.or-spec b { display: flex; align-items: center; gap: 6px; color: var(--foreground); font-size: 13px; font-weight: 500; }
+.or-spec.sel { border-color: var(--primary); background: color-mix(in oklab, var(--primary) 8%, var(--background)); box-shadow: 0 0 0 1px var(--primary) inset; }
+.or-src { margin-left: auto; font: 10px 'Geist Mono', monospace; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); font-weight: 400; }
+.or-row3 { display: grid; grid-template-columns: 1.4fr 0.8fr 1fr; gap: 10px; }
+.or-fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted-foreground); min-width: 0; }
+.or-fld small { font-size: 11px; }
+.or-fld .ledge-field { height: 30px; padding: 0 9px; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--well); color: var(--foreground); }
+.or-static { height: 30px; display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--foreground); }
+.or-roles { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.or-pod { padding: 6px 12px; font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+.or-role { display: grid; grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr) 104px; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.or-role-head { padding: 7px 12px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); background: color-mix(in oklab, var(--foreground) 3%, transparent); }
+.or-role-head > :last-child { text-align: center; }
+.or-role > .ledge-field { height: 32px; width: 100%; min-width: 0; padding: 0 10px; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--well); color: var(--foreground); }
+.or-role:last-child { border-bottom: 0; }
+.or-role > .mono { align-self: center; display: flex; flex-direction: column; }
+.or-role > .mono small { font-family: 'Geist', sans-serif; font-size: 11px; color: var(--muted-foreground); }
+.or-step { display: inline-grid; grid-template-columns: 32px 38px 32px; align-items: stretch; justify-self: center; border: 1px solid var(--input); border-radius: var(--radius-sm); overflow: hidden; height: 32px; background: var(--well); }
+.or-step button { display: grid; place-items: center; padding: 0; margin: 0; width: 100%; height: 100%; border: 0; background: transparent; color: var(--foreground); cursor: pointer; font: 500 16px/1 'Geist', system-ui, sans-serif; }
+.or-step button:hover:not(:disabled) { background: var(--muted); }
+.or-step button:disabled { opacity: .35; cursor: default; }
+.or-step span { display: grid; place-items: center; font: 13px 'Geist Mono', monospace; border-left: 1px solid var(--input); border-right: 1px solid var(--input); }
+.or-step.changed span { color: var(--success); }
+.or-seg { display: inline-flex; border: 1px solid var(--input); border-radius: var(--radius-md); padding: 2px; gap: 2px; }
+.or-seg button { border: 0; background: transparent; font-size: 12.5px; padding: 4px 12px; border-radius: var(--radius-sm); color: var(--muted-foreground); cursor: pointer; }
+.or-seg button[aria-checked=true] { background: var(--muted); color: var(--foreground); }
+.or-factions { display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--border); padding-top: 14px; flex-wrap: wrap; }
+.or-status.or-ok { color: var(--success); background: var(--status-success-soft); flex-direction: column; align-items: flex-start; }
+.or-status p { display: flex; align-items: center; gap: 6px; }
+.or-status .or-line { color: var(--muted-foreground); font-size: 12px; }
+.or-yaml-box h4, .or-where h4 { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; }
+.or-yaml { margin: 0; background: var(--term-bg); color: var(--term-fg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; font: 11.5px/17px 'Geist Mono', monospace; max-height: 420px; overflow: auto; white-space: pre; }
+.or-where { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; font-size: 12px; color: var(--muted-foreground); }
+.or-where ul { margin: 0; padding-left: 18px; list-style: disc; display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 1100px) { .or-launch { grid-template-columns: 1fr; } .or-row3 { grid-template-columns: 1fr; } .or-role { grid-template-columns: 1fr auto; } }
+.or-status code { display: block; max-width: 100%; white-space: pre; overflow-x: auto; }
+.or-under { margin: 6px 0 0; }
+
+/* A running rig's seats (view 7). */
+.or-seats-dialog .or-roles { margin-bottom: 12px; }
+.or-role-live { grid-template-columns: 160px minmax(0, 1fr) 104px; }
+.or-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.or-chip-seat { font: 11.5px 'Geist Mono', monospace; border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; color: var(--muted-foreground); }
+.or-chip-seat.new { border-color: color-mix(in oklab, var(--success) 50%, transparent); color: var(--success); }
+.or-chip-seat.rm { border-color: color-mix(in oklab, var(--danger-text) 50%, transparent); color: var(--danger-text); text-decoration: line-through; }
+.or-cmds { margin: 10px 0 4px; background: var(--well); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 10px; font: 11.5px/18px "Geist Mono", monospace; color: var(--muted-foreground); white-space: pre-wrap; word-break: normal; overflow-wrap: break-word; }
+.or-warn-line { color: var(--danger-text); font-size: 12.5px; margin: 6px 0 0; }
+
+.or-seg-wrap { flex-wrap: wrap; }
+.or-seg button.or-risky[aria-checked=true] { color: var(--danger-text); background: var(--status-danger-soft); }
+.or-check-top { margin-top: 10px; }
+.or-indent { margin: 2px 0 0 21px; }
+
+/* An OpenRig seat's rig, beside its name (sidebar, atelier, « À toi »). */
+.rig-tag { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; border: 1px solid color-mix(in oklab, var(--info) 45%, transparent); color: var(--info); font: 500 10px/15px 'Geist Mono', monospace; vertical-align: middle; white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+/* In the atelier, a seat's rig sits above its mascot, its role under its name in the machine's place: the seat keeps its height. */
+.office-shell .agent-seat .seat-rig-tag { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); pointer-events: none; }
+.office-shell .agent-seat .seat-rig-tag .rig-tag { margin-left: 0; max-width: 108px; font-size: 9px; line-height: 13px; padding: 0 4px; background: var(--background); }
+
+/* A seat's line (kernel card, a rig's seats): « Ouvrir » once Ledge follows it. */
+.or-seat { grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) 110px 80px 80px; }
+.or-seat-open { justify-self: end; }
+.or-kseats { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px solid var(--border); }
+.or-kseats .or-seat { grid-template-columns: minmax(110px, 1fr) minmax(0, 1fr) 100px 0 72px; padding: 4px 0; }
+
+/* A seat's settings (docs/mockups/ledge-openrig-groups.html, view 2). */
+.or-seat-open { display: inline-flex; gap: 4px; align-items: center; }
+.or-gear { width: 30px; padding: 0 !important; font-size: 14px !important; color: var(--muted-foreground); }
+.or-seat { grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) 110px 80px 110px; }
+.or-kseats .or-seat { grid-template-columns: minmax(110px, 1fr) minmax(0, 1fr) 100px 0 104px; }
+.or-setgrid { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 10px 14px; align-items: center; margin: 4px 0 12px; }
+.or-setgrid .ledge-field { height: 32px; padding: 0 10px; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--input); background: var(--well); color: var(--foreground); }
+.or-setlabel { font-size: 12.5px; color: var(--muted-foreground); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.or-when { font-size: 11px; line-height: 17px; padding: 0 6px; border-radius: 4px; background: var(--status-info-soft); color: var(--info); }
+.or-when.now { background: var(--status-warning-soft); color: var(--warning); }
+.or-plan { max-height: 220px; overflow: auto; }
+.or-plan-err { color: var(--danger-text); }
+
+/* A rig's room and the kernel's (docs/mockups/ledge-openrig-groups.html, view 1). */
+.rig-room .seat-rig-tag { display: none; }
+.rig-plaque .rig-hex { display: inline-grid; place-items: center; color: var(--info); }
+.kernel-room .rig-plaque .rig-hex { color: #b9a2f0; }
+.rig-plaque .plaque-where { font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rig-plaque .plaque-btn { margin-left: 4px; height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.rig-plaque .plaque-btn:hover { background: var(--muted); }
+.kernel-room { --room-floor: color-mix(in oklab, #8b5cf6 10%, var(--background)); }
+
+/* « Projets | Rigs » in the atelier's bar. */
+.grouping-toggle { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--well); margin-right: 8px; }
+.grouping-toggle button { height: 24px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
+.grouping-toggle button[aria-checked=true] { background: var(--muted); color: var(--foreground); }

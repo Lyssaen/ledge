@@ -8,7 +8,7 @@ export const en: Messages = {
   lang: { fr: 'Français', en: 'English' },
   state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only' },
   time: { now: 'just now', decimal: '.', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
-  tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings' },
+  tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig' },
   bar: {
     sessions: n => `${n} ${plural(n, 'session', 'sessions')}`,
     machines: n => `${n} ${plural(n, 'machine', 'machines')}`,
@@ -31,7 +31,8 @@ export const en: Messages = {
     applyRow: 'apply the line', apply: 'apply', applyAll: 'apply all', deny: 'deny', ignore: 'ignore', review: 'review',
     openSession: name => `open ${name}`
   },
-  overview: {
+  overview: { rigsGroup: 'RIGS', kernelGroup: 'KERNEL', 
+    rigSeat: (rig, role) => `rig ${rig} · ${role}`,
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
     nobodyWaits: 'Nobody is waiting for you.', noSession: 'No session. Press + to start one.', noPreview: 'No preview.', noExchange: 'No message yet.',
     sessions: n => `${n} ${plural(n, 'session', 'sessions')}`, outside: 'No project', offline: 'offline', readOnly: 'read-only',
@@ -111,7 +112,7 @@ export const en: Messages = {
     launching: 'Launching…', launched: name => `✓ ${name} is started`
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', rigLaunch: 'Launch a rig', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
     capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,
@@ -146,6 +147,96 @@ export const en: Messages = {
     approval: (n, text) => `${n} needs your approval: ${text}`,
     question: (n, text) => `${n} has a question: ${text}`,
     title: n => (n > 0 ? `ledge · ${n} waiting` : 'ledge')
+  },
+  openrig: {
+    operatorKey: 'operator', operatorHint: 'O: talk to it', operatorNotYet: 'Ledge does not follow the operator’s session yet: try again in a few seconds.',
+    activity: (a) => ({ running: 'working', idle: 'available', unknown: '—' } as Record<string, string>)[a] ?? a,
+    title: 'OpenRig', daemon: 'Daemon', kernel: 'Kernel', rigs: 'Rigs',
+    machine: 'machine', toggle: 'start/stop', restart: 'restart', unfold: 'unfold', daemonKey: 'daemon', kernelKey: 'kernel',
+    daemonState: { running: 'running', stopped: 'stopped', stale: 'stopped uncleanly', unknown: 'unknown' },
+    kernelState: { ready: 'ready', starting: 'starting', stopped: 'stopped', skipped: 'no kernel', absent: 'absent', unknown: 'unknown' },
+    look: { running: 'running', starting: 'starting', attention: 'needs a look', stopped: 'stopped' },
+    daemonMeta: (port, pid) => [port ? `127.0.0.1:${port}` : '', pid ? `pid ${pid}` : ''].filter(Boolean).join(' · '),
+    restoreHint: '↻ on start: rigs brought back',
+    kernelHint: 'the operator that helps start a rig',
+    seats: (running, total) => `${running}/${total}`,
+    attention: n => `${n} ${plural(n, 'seat needs', 'seats need')} attention`,
+    since: uptime => `up ${uptime}`, snapshot: s => `snapshot ${s}`,
+    work: n => (n ? `${n} ${plural(n, 'task', 'tasks')}` : ''),
+    stoppedOnPurpose: 'stopped on purpose',
+    noRigs: 'No rig on this machine.',
+    notInstalled: 'OpenRig is not installed on this machine (no rig command).',
+    stoppedDaemon: 'The OpenRig daemon is stopped: D starts it.',
+    offline: 'Machine offline.', outdated: 'This machine’s Ledge daemon does not know OpenRig: update it.',
+    loading: 'Reading OpenRig…', version: v => `OpenRig ${v}`,
+    confirmTitle: 'Confirm',
+    confirm: what => `${what}?`,
+    what: {
+      'daemon.stop': 'Stop the OpenRig daemon', 'daemon.restart': 'Restart the OpenRig daemon', 'kernel.stop': 'Stop the kernel', 'kernel.restart': 'Restart the kernel',
+      'rig.stop': rig => `Stop the rig “${rig}”`, 'rig.restart': rig => `Restart the rig “${rig}”`
+    },
+    busy: (names, n) => (n ? `${n} working ${plural(n, 'agent stops', 'agents stop')}: ${names}.` : 'No agent at work.'),
+    yes: 'confirm', no: 'cancel',
+    running: cmd => `running: ${cmd}`,
+    done: cmd => `done: ${cmd}`,
+    failed: why => `failed: ${why}`,
+    why: { busy: 'another OpenRig action runs on this machine', not_installed: 'OpenRig is not installed', offline: 'machine offline', outdated: 'Ledge daemon too old' }
+  },
+  rigLaunch: {
+    title: 'Launch a rig', launchKey: 'launch a rig', count: 'number of seats',
+    permissions: '4 · Permissions', policyKey: 'permissions',
+    policyOf: { auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked' },
+    specPolicy: p => `the spec’s (${p})`, noSpecPolicy: 'none',
+    asRig: 'as the rig',
+    policyHint: {
+      none: 'no policy: Claude in acceptEdits, Codex in workspace-write',
+      auto: 'Claude decides on its own (auto mode); Codex keeps the default posture',
+      standard: 'everything passes but PRs, publishing, merging, force push and destructive (asks a person); rules applied once translated into the harness settings',
+      open: 'everything passes but destructive; rules applied once translated into the harness settings',
+      yolo: 'no prompt: Claude --dangerously-skip-permissions, Codex danger-full-access',
+      locked: 'only the toolchain and rig up/down pass; rules applied once translated into the harness settings'
+    },
+    nonInterruptive: 'accept the first-launch warnings (--non-interruptive)',
+    spec: '1 · Starting spec', where: '2 · Where', roles: '3 · Seats per role', delegation: '5 · Who delegates to whom', preview: 'Preview · rig.yaml',
+    specHint: 'The rig’s model: its pods, its roles, the links between them.',
+    source: { user: 'my specs', builtin: 'OpenRig' },
+    seatsOf: n => `${n} ${plural(n, 'seat', 'seats')}`,
+    folder: 'Folder', name: 'Name', folderHint: 'a folder of this machine, ~ accepted', projectFolder: p => `project ${p}`,
+    model: 'model', defaultModel: 'default', modelKey: 'model',
+    rolesHint: 'A counter at 3 gives build, build-2, build-3, the same as the first.',
+    pairs: 'in pairs', all: 'each seat → all', pairsHint: 'build-2 → review-2', allHint: 'each build → every review',
+    save: 'save in my specs', notScaled: 'one seat per role: nothing more to delegate',
+    loading: 'Reading the specs…', noSpecs: 'No spec on this machine.',
+    daemonStopped: 'Start the OpenRig daemon first (D on the OpenRig screen).',
+    noCheck: 'p checks the launch (rig up --plan) without starting anything.',
+    checking: 'Checking…', launching: 'Launching…',
+    passes: seats => `✓ the plan passes · ${seats} ${plural(seats, 'seat', 'seats')}`,
+    planStatus: s => `plan: ${s}`,
+    warning: (text, seats) => (seats ? `${text} (${seats})` : text),
+    launched: (name, n) => `Rig “${name}” launched · ${n} ${plural(n, 'seat', 'seats')}.`,
+    check: 'check (--plan)', launch: n => `launch ${n} ${plural(n, 'seat', 'seats')}`,
+    missing: { spec: 'Pick a spec.', cwd: 'Give the working folder.', name: 'The rig’s name: letters, digits, . _ - (no leading -).', seats: 'At least one seat.' },
+    why: {
+      busy: 'Another OpenRig action runs on this machine.', cwd_missing: 'This folder does not exist on the machine.', spec_not_found: 'This spec is no longer in the library.',
+      daemon_stopped: 'Start the OpenRig daemon first (D on the OpenRig screen).', not_installed: 'OpenRig is not installed on this machine.',
+      offline: 'Machine offline.', outdated: 'This machine’s Ledge daemon cannot launch a rig: update it.'
+    }
+  },
+  rigSeats: {
+    title: (rig, machine) => `Seats · ${rig} · ${machine}`, key: 'seats',
+    stays: now => `The rig keeps running. Now: ${now}.`,
+    role: 'role', count: 'number', delegationKey: 'delegation', apply: 'apply', cancel: 'cancel',
+    pairs: 'delegation in pairs', all: 'each added → all', linksPairs: 'links added in pairs', linksAll: 'links added to all',
+    nothing: 'Change a number: - +', notRunning: 'Only a running rig changes seats.',
+    busy: seat => `${seat} is working: its work in progress stops.`,
+    applying: 'applying…',
+    done: (added, removed, links) => `+${added} −${removed} seats${links !== undefined ? `, ${links} ${plural(links, 'link', 'links')}` : ''}`,
+    linksUnsupported: 'this OpenRig cannot link seats added to a running rig (before 0.7)',
+    why: {
+      rig_not_running: 'The rig is no longer running.', rig_root_unknown: 'Cannot copy a seat: the rig’s agents cannot be found.',
+      busy: 'Another OpenRig action runs on this machine.', not_installed: 'OpenRig is not installed on this machine.',
+      offline: 'Machine offline.', outdated: 'This machine’s Ledge daemon cannot change a rig’s seats: update it.'
+    }
   },
   small: {
     tooSmall: (w, h) => `Window too small: ${w}×${h}`, atLeast: (w, h) => `needs at least ${w}×${h}`,

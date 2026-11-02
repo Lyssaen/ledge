@@ -155,7 +155,8 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
   const view = render(createElement(App as ComponentType<{ client?: DaemonClient }>, { client }));
   const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
   await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions))));
-  const last = projects.projects[projects.projects.length - 1];
+  // The projects are in once the last one with a session is listed (a project without one is not: the sidebar hides it).
+  const last = projects.projects.filter(p => sessions.some(s => !s.archivedAt && p.repos.some(r => s.cwd === r.path || s.cwd.startsWith(`${r.path}/`)))).at(-1);
   if (last) await side.findByRole('button', { name: new RegExp(`^${last.name}`) });
   // The app opens on Ledge's home view (ledge home spec §2.1); most tests are about the atelier, reached from the sidebar.
   await screen.findByRole('region', { name: /^(Home|Accueil) ?: Ledge, (the operator|l’opérateur)$/ });

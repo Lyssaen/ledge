@@ -142,7 +142,7 @@ function SessionView({ s }: { s: Session }) {
     return false;
   });
 
-  const title = `${s.name} · ${oneLine(s.topic ?? s.title)} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
+  const title = `${s.name}${s.rig ? ` · ${t.overview.rigSeat(s.rig.name, s.rig.role ?? s.rig.seat)}` : ''} · ${oneLine(s.topic ?? s.title)} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
   const showsThread = mode !== 'model' && !terminal && !!items && lines.length > 0;
   const above = lines.length - view - up;
   const foot = up > 0 ? t.session.scrolled(above, up) : lines.length > view ? t.session.above(lines.length - view) : undefined;

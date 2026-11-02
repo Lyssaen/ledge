@@ -34,12 +34,16 @@ describe('the atelier', () => {
     expect(screen.queryByRole('region', { name: 'No project' })).toBeNull();
   });
   it('a filter shows its table; a project without agents proposes New session; No project shows the zone only', async () => {
-    const { side, user } = await boot();
+    const { d, side, user } = await boot();
     await user.click(side.getByRole('button', { name: /^Ledge/ }));
     expect(screen.getAllByRole('region', { name: / table$/ }).map(r => r.getAttribute('aria-label'))).toEqual(['Ledge table']);
     expect(screen.queryByRole('region', { name: 'No project' })).toBeNull();
-    await user.click(side.getByRole('button', { name: /^Docs/ }));
-    expect(screen.getByRole('heading', { name: 'No agent at the Docs table' })).toBeVisible();
+    // A project without a session is not in the sidebar; filtered on, it stays there once its last session is gone.
+    expect(side.queryByRole('button', { name: /^Docs/ })).toBeNull();
+    d.upsert(fakeSession('doc', { name: 'Doc', cwd: '/w/docs', state: 'working' }));
+    await user.click(await side.findByRole('button', { name: /^Docs/ }));
+    d.remove('doc');
+    expect(await screen.findByRole('heading', { name: 'No agent at the Docs table' })).toBeVisible();
     await user.click(within(document.querySelector<HTMLElement>('.empty-project')!).getByRole('button', { name: 'New session' }));
     expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
     await user.keyboard('{Escape}');
@@ -170,8 +174,11 @@ describe('the atelier', () => {
     expect(within(screen.getByRole('banner')).getByText('Kit')).toBeVisible();
   });
   it('the empty table names the folders of its repositories', async () => {
-    const { side, user } = await boot();
-    await user.click(side.getByRole('button', { name: /^Docs/ }));
+    const { d, side, user } = await boot();
+    d.upsert(fakeSession('doc', { name: 'Doc', cwd: '/w/docs', state: 'working' }));
+    await user.click(await side.findByRole('button', { name: /^Docs/ }));
+    d.remove('doc');
+    await screen.findByRole('heading', { name: 'No agent at the Docs table' });
     expect(document.querySelector('.empty-project')).toHaveTextContent('The table will appear as soon as a session starts in docs.');
   });
   it('the overview is the atelier, with no List tab', async () => {

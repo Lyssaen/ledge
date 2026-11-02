@@ -9,12 +9,15 @@ import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 import type { ThemeChoice, Tone } from './theme.js';
 
-export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'help';
-export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch', 'settings'];
+export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'openrig' | 'rigLaunch' | 'help';
+/** The screens `1`…`6` go to, in order. */
+export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch', 'settings', 'openrig'];
 
 /** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ask`, or a
  *  session's id). */
-export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]>; asked: Asked[] }
+export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]>; asked: Asked[];
+  /** The machine the OpenRig screen shows, which « Lancer un rig » launches on (null: the first one). */
+  rigMachine?: string | null }
 
 /** A screen's keys: true when it took the key (the global keys then leave it alone). */
 export type KeyHandler = (input: string, key: Key) => boolean;

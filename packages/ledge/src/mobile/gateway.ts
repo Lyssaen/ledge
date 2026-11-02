@@ -484,7 +484,8 @@ export function createPhoneGateway(deps: {
     const closing = msg.type === 'session.close';
     const s = live(msg.id);
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
-    if (s.source === 'hook_only') return { status: 'rejected', reason: 'read_only' };
+    // An OpenRig seat is closed and resumed by OpenRig, like one started outside Ledge.
+    if (s.source === 'hook_only' || s.source === 'rig') return { status: 'rejected', reason: 'read_only' };
     if (closing && s.state === 'exited') return { status: 'rejected', reason: 'ended' };
     if (!closing && s.state !== 'exited') return { status: 'rejected', reason: 'busy' };
     if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };

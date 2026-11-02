@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction } from '@ledge/protocol';
+import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -38,6 +38,8 @@ import { readProjects, writeProjects } from './projects.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
+import { createOpenRig, type OpenRig } from './openrig.js';
+import type { OpenRigState } from '@ledge/protocol';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
@@ -176,7 +178,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; openrig?: OpenRig; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -188,6 +190,71 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
+  // OpenRig on this machine (docs/mockups/ledge-openrig.html): `rig` runs with the login shell's PATH, as an agent would.
+  const openrig = opts.openrig ?? createOpenRig({ env: agentEnv });
+  /**
+   * A session whose hooks come from an OpenRig seat (`dev-build@starter`) is that seat: its rig at once, its role (`dev.build`)
+   * once OpenRig's listing names it. Read only when the seat is new to the session or its role is still unknown.
+   */
+  /** An OpenRig seat's life is OpenRig's: Ledge answers and writes to it, never stops, kills or relaunches it. */
+  const rigOwned = (s: Session) => new Refusal(`${s.name} is the OpenRig seat ${s.rig?.seat ?? s.tmuxSession ?? ''}: stop or restart it from OpenRig`, 'read_only');
+  /** A seat's pane on the user's default tmux server: once found, Ledge sees its screen, answers and writes to it as to its own. */
+  const adoptSeat = (id: string, seat: string) => {
+    const session = store.get(id);
+    if (!session || session.source !== 'hook_only' || session.state === 'exited' || (session.tool !== 'claude' && session.tool !== 'codex')) return;
+    void tmux.hasSession(seat).then(live => {
+      const now2 = store.get(id);
+      if (live && now2?.source === 'hook_only' && now2.state !== 'exited') store.upsert({ ...now2, source: 'rig', tmuxSession: seat });
+    }).catch(e => log(`openrig: pane of ${seat} not found: ${(e as Error).message}`));
+  };
+  /** The session Ledge gives a seat it found itself: one per seat, the same after a restart of its rig. */
+  const seatId = (seat: string) => `rig-${seat.replace(/[^A-Za-z0-9._-]/g, '-')}`;
+  /**
+   * Every running Claude Code or Codex seat of OpenRig, as a session on its pane (docs/mockups/ledge-openrig.html, view 3):
+   * the ones whose hooks never reached Ledge (Codex's, an idle Claude's) included. A seat already followed is left as it is;
+   * one found again after its rig restarted comes back as the same session.
+   */
+  async function discoverSeats(st: OpenRigState): Promise<void> {
+    if (st.daemon.state !== 'running') return;
+    const followed = new Set(store.all().filter(x => x.rig && x.state !== 'exited').map(x => x.rig!.seat));
+    for (const r of st.rigs) for (const n of r.nodes) {
+      if ((n.runtime !== 'claude-code' && n.runtime !== 'codex') || n.sessionStatus !== 'running' || followed.has(n.session)) continue;
+      if (!(await tmux.hasSession(n.session).catch(() => false))) continue;
+      // The session this seat had before (ended with its rig, archived since), else the one its id names: the same seat comes back as itself.
+      const before = store.all().filter(x => x.rig?.seat === n.session).sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))[0];
+      const id = before?.id ?? seatId(n.session), old = store.get(id), at = now();
+      const rig = { seat: n.session, name: r.name, role: n.logicalId };
+      const cwd = (await tmux.paneCwd?.(n.session).catch(() => null)) ?? old?.cwd ?? '';
+      if (old) {
+        if (old.archivedAt) store.unarchive(id, at);
+        const { exitedAt: _e, exitCode: _c, pending: _p, ...rest } = store.get(id)!;
+        store.upsert({ ...rest, state: 'idle', tmuxSession: n.session, source: 'rig', rig, lastActivityAt: at });
+      } else {
+        const name = pickName([...namesInUse(store.all()), ...heldNames(store.all())]);
+        store.upsert({ id, name, tool: n.runtime === 'codex' ? 'codex' : 'claude', cwd, project: basename(cwd) || r.name, title: `${name} · ${n.logicalId}`,
+          tmuxSession: n.session, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'rig', rig });
+        log(`openrig: seat ${n.session} followed as ${name}`);
+      }
+      followed.add(n.session);
+    }
+  }
+  const SEATS_EVERY_MS = 30_000;
+  const seatTimer = setInterval(() => { void openrig.state().then(discoverSeats).catch(e => log(`openrig: seats not read: ${(e as Error).message}`)); }, SEATS_EVERY_MS);
+  seatTimer.unref?.();
+  /** The seats recognised before and idle since (no hook to bring them): looked for again at start and at each OpenRig read. */
+  const adoptSeats = () => { for (const s of store.all()) if (s.rig) adoptSeat(s.id, s.rig.seat); };
+  adoptSeats();
+  const tagRigSeat = (id: string, seat: string) => {
+    const session = store.get(id), cur = session?.rig;
+    adoptSeat(id, seat);
+    if (cur?.seat === seat && cur.role) return;
+    const name = seat.slice(seat.lastIndexOf('@') + 1);
+    store.patch(id, { rig: { seat, name, ...(cur?.seat === seat && cur.role ? { role: cur.role } : {}) } });
+    void openrig.state().then(st => {
+      const role = st.rigs.flatMap(r => r.nodes).find(n => n.session === seat)?.logicalId;
+      if (role && store.get(id)?.rig?.seat === seat) store.patch(id, { rig: { seat, name, role } });
+    }).catch(e => log(`openrig: seat ${seat} not read: ${(e as Error).message}`));
+  };
   const models = opts.models ?? createModels({ env: agentEnv, omp: async () => ompChoices(await omp.catalog(opts.home ?? homedir())) });
   const token = await ensureDaemonToken();
   const httpServer = createServer(unauthorized);
@@ -351,7 +418,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -535,6 +602,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const id = s.id; const cur = store.get(id);
     if (!cur) throw unknownSession();
     if (cur.source === 'hook_only') throw readOnly();
+    if (cur.source === 'rig') throw rigOwned(cur);
     if (cur.state === 'exited') throw new Refusal('the session has already exited', 'busy');
     if (closing.has(id)) throw new Refusal('a close is already in progress', 'busy');
     closing.add(id);
@@ -739,6 +807,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const inPlace = backendOf(s) === 'omp-rpc';
     // Started without Ledge: Ledge can neither restart it nor drive it.
     if (s.source === 'hook_only') return { refused: 'not_launched', message: READ_ONLY };
+    if (s.source === 'rig') return { refused: 'not_launched', message: rigOwned(s).message };
     if (s.state === 'exited') return { refused: 'ended', message: 'the session has ended' };
     if (!resumeKey(s)) return { refused: 'no_conversation', message: 'no conversation to resume' };
     if (inPlace && !omp.isLive(s.id)) return { refused: 'not_running', message: 'the session is not running' };
@@ -966,6 +1035,32 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
       case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
+      case 'openrig.status': {
+        adoptSeats();
+        const state = await openrig.state();
+        void discoverSeats(state).catch(e => log(`openrig: seats not followed: ${(e as Error).message}`));
+        return reply({ type: 'openrig.state', requestId: msg.requestId, state });
+      }
+      case 'openrig.specs': return reply({ type: 'openrig.specList', requestId: msg.requestId, ...await openrig.specs() });
+      case 'openrig.launch': {
+        const done = await openrig.launch(msg.launch);
+        reply({ type: 'openrig.launched', requestId: msg.requestId, ...done });
+        if (!done.plan && done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
+        return;
+      }
+      case 'openrig.seats': {
+        const done = await openrig.reseat(msg.rig, msg.seats, msg.delegation);
+        reply({ type: 'openrig.reseated', requestId: msg.requestId, ...done });
+        if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
+        return;
+      }
+      case 'openrig.act': {
+        const done = await openrig.act(msg.action);
+        reply({ type: 'openrig.done', requestId: msg.requestId, ...done });
+        // Every front sees what the action changed, not only the one that asked.
+        if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
+        return;
+      }
       case 'snapshot.request': return sendSnapshot(reply);
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
@@ -994,7 +1089,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const others = store.all().filter(o => o.id !== incoming.id);
         if (others.some(o => o.state !== 'exited' && o.name === incoming.name)) {
           const old = incoming.name;
-          const name = pickName(others.map(o => o.name));
+          const name = pickName([...namesInUse(others), ...heldNames(store.all())]);
           const title = incoming.title.startsWith(`${old} ·`) ? `${name}${incoming.title.slice(old.length)}` : incoming.title;
           incoming = { ...incoming, name, title };
         }
@@ -1036,6 +1131,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply(listing);
       }
       case 'session.event': {
+        // A seat Ledge already follows under its own id: its agent's hooks are that session's, not a second one.
+        if (msg.rigSeat && !store.get(msg.id)) {
+          const followed = store.all().find(x => x.source === 'rig' && x.rig?.seat === msg.rigSeat && x.state !== 'exited');
+          if (followed) msg.id = followed.id;
+        }
         let ev = msg.event;
         if (ev.name === 'UserPromptSubmit') {
           // A reply typed with images comes back as a plain prompt: the first one within the window carries them.
@@ -1061,7 +1161,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const before = store.get(msg.id);
         if (!before && terminal) return; // never a new session from its end
         if (!before) {
-          const taken = store.all().map(s => s.name);
+          const taken = [...namesInUse(store.all()), ...heldNames(store.all())];
           const cwd = msg.cwd ?? '';
           const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(base);
@@ -1072,6 +1172,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           settleByHook(msg.id, ev); store.apply(msg.id, msg.event);
         }
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
+        if (msg.rigSeat) tagRigSeat(msg.id, msg.rigSeat);
         return;
       }
       case 'session.thread':
@@ -1131,6 +1232,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.kill': {
         const s = store.get(msg.id); if (!s) return;
         if (s.source === 'hook_only') return refuse(readOnly(), msg.id);
+        if (s.source === 'rig') return refuse(rigOwned(s), msg.id);
         if (backendOf(s) === 'omp-rpc') return endSession(s);
         if (s.tmuxSession) await tmux.killSession(s.tmuxSession);
         store.apply(msg.id, { name: 'PaneGone', at: now(), source: 'daemon' });
@@ -1138,7 +1240,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       case 'session.dismiss': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
-        if (s.state !== 'exited' && s.source !== 'hook_only') return refuse(new Refusal('the session is still running, kill it first', 'busy'), msg.id);
+        if (s.state !== 'exited' && s.source === 'launcher') return refuse(new Refusal('the session is still running, kill it first', 'busy'), msg.id);
         // Removal broadcasts session.removed, drops the remembered preview and is saved to the journal.
         // A dismissed hook_only session that is in fact still alive comes back on its next hook (the
         // hook-before-register path in session.event recreates it): acceptable, it is still running.
@@ -1159,6 +1261,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.resume': {
         const s = store.get(msg.id); if (!s) return refuse(unknownSession(), msg.id);
         if (s.state !== 'exited') return refuse(new Refusal('the session is still running', 'busy'), msg.id);
+        // A seat comes back with its rig (`rig up --existing`), never as a Ledge session.
+        if (s.source === 'rig') return refuse(rigOwned(s), msg.id);
         const key = resumeKey(s); if (!key) return refuse({ message: 'no conversation to resume', code: 'no_conversation' }, msg.id);
         const refused = await respawn(s, key, s.model, s.effort);
         if (refused) refuse(refused, msg.id);
@@ -1403,6 +1507,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

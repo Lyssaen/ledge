@@ -10,6 +10,7 @@ import type { SessionActions } from '../manage/useSessionActions';
 import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
 import { roomTileWidth, sceneOf, walkOrder, type AtelierTable } from './layout';
+import { useGrouping } from '../openrig/grouping';
 import { ProjectRoom } from './ProjectRoom';
 import { LedgeDesk } from './LedgeDesk';
 import { MessageLayer, useMessageClock } from './MessageLayer';
@@ -61,11 +62,12 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
-  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter), [order, projects, projectIdOf, filter]);
+  const grouping = useGrouping();
+  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter, grouping === 'rigs'), [order, projects, projectIdOf, filter, grouping]);
   // A seat carried to another room's table is filed in that project (the folder rule).
   const carried = useRef<Session | null>(null);
   const [overTable, setOverTable] = useState<string | null>(null);
-  const seatDrag = (s: Session) => (s.offline || s.source === 'hook_only' ? undefined : {
+  const seatDrag = (s: Session) => (s.offline || s.source !== 'launcher' ? undefined : {
     draggable: true as const,
     onDragStart(e: DragEvent) { e.dataTransfer.setData('text/plain', s.id); e.dataTransfer.effectAllowed = 'move'; carried.current = s; },
     onDragEnd() { carried.current = null; setOverTable(null); }
@@ -155,13 +157,13 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
           <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} tasks={tasks} />
           <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
           <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
-            {scene.rooms.map(({ project, tables }) => (
-              <ProjectRoom key={project.id} project={project} tables={tables} width={roomTileWidth(tables, seats)} dispatch={dispatch}>
+            {scene.rooms.map(({ project, tables, rig }) => (
+              <ProjectRoom key={project.id} project={project} tables={tables} rig={rig} sessions={sessions} width={roomTileWidth(tables, seats)} dispatch={dispatch}>
                 {tables.map(table => (
                   <ProjectTable key={table.key} table={table} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
                     isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
                     actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt}
-                    seatDrag={seatDrag} tableDrop={tableDrop(table, project.id)} />
+                    seatDrag={seatDrag} tableDrop={rig ? undefined : tableDrop(table, project.id)} />
                 ))}
               </ProjectRoom>
             ))}

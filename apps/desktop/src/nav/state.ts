@@ -16,7 +16,9 @@ export type Place =
   | { kind: 'overview'; view: View; project: ProjectFilter }
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
   | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
-  | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> };
+  | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> }
+  /** OpenRig on a machine (docs/mockups/ledge-openrig.html): its daemon, its kernel and its rigs. `machine`: the one shown, local when absent. */
+  | { kind: 'openrig'; machine?: string; view: View; project: ProjectFilter };
 export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
   | { kind: 'launch'; project?: string }   // project : la table ou le projet d'où on l'a demandée (lot 7)
@@ -25,7 +27,7 @@ export type Modal =
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }
   | null;
 /** Every place and dialog kind, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new kind fails to compile until it is listed here. */
-const PLACE_KIND: Record<Place['kind'], true> = { home: true, overview: true, session: true, settings: true };
+const PLACE_KIND: Record<Place['kind'], true> = { home: true, overview: true, session: true, settings: true, openrig: true };
 export const PLACE_KINDS = Object.keys(PLACE_KIND) as Place['kind'][];
 const MODAL_KIND: Record<NonNullable<Modal>['kind'], true> = { search: true, shortcuts: true, launch: true, project: true };
 export const MODAL_KINDS = Object.keys(MODAL_KIND) as NonNullable<Modal>['kind'][];
@@ -40,6 +42,8 @@ export type NavAction =
   | { type: 'filter'; project: ProjectFilter }
   | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string }
   | { type: 'settings'; section?: SectionId }
+  /** The OpenRig page, on a machine (the one shown before, else local). */
+  | { type: 'openrig'; machine?: string }
   | { type: 'modal'; modal: Modal }
   | { type: 'chat'; open?: boolean }
   | { type: 'fullscreen'; on: boolean }
@@ -76,6 +80,11 @@ export function navReducer(s: NavState, a: NavAction): NavState {
     }
     case 'settings':
       return { ...s, place: { kind: 'settings', section: a.section ?? 'general', back: baseOf(place) }, modal: null, chat: false };
+    case 'openrig': {
+      const b = baseOf(place);
+      const machine = a.machine ?? (b.kind === 'openrig' ? b.machine : undefined);
+      return { ...s, place: { kind: 'openrig', ...(machine !== undefined ? { machine } : {}), view: b.view, project: b.project }, modal: null, chat: false };
+    }
     case 'modal': return { ...s, modal: a.modal };
     case 'chat': {
       const chat = a.open ?? !s.chat;
@@ -90,7 +99,7 @@ export function navReducer(s: NavState, a: NavAction): NavState {
       if (place.kind === 'settings') return { ...s, place: place.back };
       // Échap from the home view goes back to where the user came from, the atelier at first.
       if (place.kind === 'home') return { ...s, place: place.back ?? { kind: 'overview', view: place.view, project: place.project } };
-      if (place.kind === 'session') return { ...s, place: { kind: 'overview', view: place.view, project: place.project } };
+      if (place.kind === 'session' || place.kind === 'openrig') return { ...s, place: { kind: 'overview', view: place.view, project: place.project } };
       if (place.project !== 'all') return { ...s, place: { ...place, project: 'all' } };
       if (s.fullscreen) return { ...s, fullscreen: false };
       return s;

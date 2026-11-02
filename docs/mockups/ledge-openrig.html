@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge OpenRig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--primary:oklch(0.444 0.177 26.899);--primary-hover:oklch(0.396 0.141 25.723);
+  --border:#ffffff1a;--input:#ffffff26;--sidebar:oklch(0.205 0 0);--success:#34d399;--warning:#fbbf24;--info:#60a5fa;
+  --danger-text:oklch(0.704 0.191 22.216);--s-ok:#052e16;--s-warn:#422006;--s-info:#172554;--s-danger:#450a0a;
+  --term-bg:#0c0c0d;--term-fg:#e5e5e5;--t-green:#4ade80;--t-yellow:#facc15;--t-red:#f87171;--t-blue:#7cb3fb;--t-dim:#8f8f8f;--t-cyan:#39c5cf;
+  --bot-top:#34434b;--bot-bottom:#273238;--well:oklch(0.145 0 0);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Geist',system-ui,sans-serif;background:#000;color:var(--foreground);font-size:14px;line-height:20px;min-height:100vh}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+button{font-family:inherit;color:inherit;cursor:pointer}
+
+/* Mockup chrome (not part of the product) */
+.mk-bar{position:sticky;top:0;z-index:20;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:#0a0a0a;border-bottom:1px solid var(--border)}
+.mk-bar strong{margin-right:10px;font-weight:600}
+.mk-bar button{background:transparent;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:13px;color:var(--muted-foreground)}
+.mk-bar button[aria-pressed=true]{background:var(--muted);color:var(--foreground);border-color:var(--input)}
+.mk-note{max-width:1440px;margin:14px auto 0;padding:0 16px;color:var(--muted-foreground);font-size:13px}
+.mk-note b{color:var(--foreground);font-weight:500}
+.view{display:none;padding:14px 16px 40px}.view.on{display:block}
+
+/* Desktop window */
+.win{max-width:1440px;margin:0 auto;height:820px;border:1px solid var(--border);border-radius:10px;overflow:hidden;display:grid;grid-template-rows:32px 1fr;background:var(--background)}
+.titlebar{display:flex;align-items:center;gap:22px;padding:0 0 0 14px;font-weight:600;border-bottom:1px solid var(--border);background:#0d0d0d}
+.titlebar span{color:var(--danger-text)}
+.main{display:grid;grid-template-columns:288px 1fr;min-height:0}
+.side{background:#141414;border-right:1px solid var(--border);padding:10px 10px 0;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+.side .grow{flex:1}
+.side .machbar{display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);margin:0 -10px;padding:10px 12px;font-size:12px}
+.side .machbar .sp{flex:1}.side .machbar small{color:var(--muted-foreground);font-family:'Geist Mono',monospace;font-size:11px}
+.ledgecard{border:1px solid #b91c1c88;background:linear-gradient(#2a1414,#1a1010);border-radius:10px;padding:8px 9px;display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:center}
+.ledgecard b{font-weight:600;font-size:13px}.ledgecard b i{color:var(--danger-text);font-style:normal}
+.ledgecard small{grid-column:2;font-size:11px;color:var(--muted-foreground);line-height:13px}
+.ledgecard kbd{grid-row:1/3;grid-column:3;border:1px solid var(--input);border-radius:4px;padding:0 5px;font-size:11px;color:var(--muted-foreground)}
+.ledgecard .in{grid-column:1/4;margin-top:4px;border:1px solid var(--input);border-radius:6px;padding:2px 7px;font-size:12.5px;color:var(--muted-foreground)}
+.mascot{grid-row:1/3;width:22px;height:14px;border-radius:9px 9px 3px 3px;background:#c2564f;position:relative}
+.mascot::after{content:'';position:absolute;left:5px;right:5px;top:4px;height:3px;background:#3a1010;border-radius:2px}
+.titlebar .tb-sp{flex:1}.titlebar .tb{color:var(--muted-foreground);font-weight:400;font-size:13px;width:28px;text-align:center}
+.relay{display:flex;gap:6px;justify-content:flex-end;padding:2px 2px 4px}
+.ask{display:flex;align-items:center;gap:8px;border:1px solid var(--input);border-radius:10px;padding:8px 10px;color:var(--muted-foreground);font-size:13px}
+.ask kbd{margin-left:auto;border:1px solid var(--input);border-radius:4px;padding:0 5px;font-size:11px}
+.nav{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:13px;color:var(--muted-foreground)}
+.nav.cur{background:var(--muted);color:var(--foreground);border:1px solid var(--input)}
+.nav .cnt{margin-left:auto;font-size:11px;color:var(--muted-foreground)}
+.nav .ic{width:14px;height:14px;display:inline-grid;place-items:center}
+.sec{font-size:12px;color:var(--muted-foreground);padding:10px 6px 2px;display:flex;align-items:center;gap:6px}
+.tree .proj{display:flex;align-items:center;gap:8px;padding:5px 6px;font-weight:500}
+.sq{width:9px;height:9px;border-radius:2px;display:inline-block}
+.tree .br{padding:4px 6px 4px 22px;color:var(--muted-foreground);font-size:12px}
+.tree .s{display:flex;align-items:center;gap:8px;padding:4px 6px 4px 34px;font-size:13px}
+.tree .s small{color:var(--muted-foreground);font-size:11px}
+.rigtag{font-size:10px;line-height:15px;padding:0 5px;border-radius:4px;border:1px solid #7cb3fb55;color:var(--info);font-family:'Geist Mono',monospace}
+.footer{display:flex;align-items:center;gap:18px;padding:0 14px;font-size:12px;color:var(--muted-foreground);border-top:1px solid var(--border);background:#0d0d0d}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;background:var(--success)}
+.dot.off{background:#6b6b6b}.dot.warn{background:var(--warning)}.dot.err{background:var(--danger-text)}.dot.info{background:var(--info)}
+
+.content{display:grid;grid-template-rows:56px 1fr 34px;min-height:0}
+.topbar{display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--border);font-weight:500}
+.topbar .sp{flex:1}
+.page{overflow:auto;padding:20px 24px 28px}
+.machines{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--muted-foreground);background:transparent}
+.chip[aria-pressed=true]{color:var(--foreground);background:var(--muted);border-color:var(--input)}
+.chip small{font-size:11px;color:var(--muted-foreground)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.card h3{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card .meta{color:var(--muted-foreground);font-size:12px;margin-top:3px}
+.card .acts{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.pill{font-size:11px;line-height:18px;padding:0 7px;border-radius:5px;font-weight:500}
+.pill.ok{background:var(--s-ok);color:var(--success)}.pill.off{background:var(--muted);color:var(--muted-foreground)}
+.pill.warn{background:var(--s-warn);color:var(--warning)}.pill.info{background:var(--s-info);color:var(--info)}.pill.err{background:var(--s-danger);color:var(--danger-text)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;font-size:12.5px;border-radius:7px;border:1px solid var(--input);background:transparent}
+.btn:hover{background:var(--muted)}
+.btn.primary{background:var(--primary);border-color:transparent;color:#fff}.btn.primary:hover{background:var(--primary-hover)}
+.btn.danger{color:var(--danger-text)}
+.btn.ghost{border-color:transparent;color:var(--muted-foreground)}
+.btn svg{width:13px;height:13px}
+.check{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-foreground);margin-top:10px}
+.check i{width:14px;height:14px;border-radius:4px;background:var(--primary);display:inline-grid;place-items:center;font-style:normal;font-size:10px;color:#fff}
+.cmd{font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--muted-foreground);background:var(--well);border:1px solid var(--border);border-radius:6px;padding:2px 7px;display:inline-block}
+
+.h2{display:flex;align-items:center;gap:10px;margin:4px 0 10px}
+.h2 h2{font-size:15px;font-weight:600}
+.h2 .sp{flex:1}
+.rigs{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.rig{border-bottom:1px solid var(--border)}
+.rig:last-child{border-bottom:0}
+.rig-row{display:grid;grid-template-columns:22px 1.3fr 110px 92px 1fr 1.1fr auto;gap:10px;align-items:center;padding:11px 14px}
+.rig-row .nm{font-weight:500;white-space:nowrap;min-width:0;overflow:hidden;display:flex;align-items:center;gap:8px}
+.rig-row .nm small{font-weight:400;color:var(--muted-foreground);font-size:12px}
+.rig-row .c{color:var(--muted-foreground);font-size:12px}
+.chev{color:var(--muted-foreground);font-size:11px;transition:transform .15s}
+.rig[data-open] .chev{transform:rotate(90deg)}
+.seats{display:none;background:#ffffff05;padding:4px 14px 12px 46px}
+.rig[data-open] .seats{display:block}
+.seat{display:grid;grid-template-columns:28px 160px 120px 90px 1fr 120px auto;gap:10px;align-items:center;padding:7px 0;border-top:1px dashed #ffffff12;font-size:13px}
+.seat:first-child{border-top:0}
+.seat .role{font-family:'Geist Mono',monospace;font-size:12px}
+.seat .c{color:var(--muted-foreground);font-size:12px}
+.ctx{height:5px;border-radius:3px;background:var(--muted);overflow:hidden;width:70px;display:inline-block;vertical-align:middle;margin-right:6px}
+.ctx b{display:block;height:100%;background:var(--info)}.ctx b.hot{background:var(--warning)}
+.attn{display:flex;align-items:center;gap:6px;color:var(--warning);font-size:12px}
+
+/* Bot */
+.bot{width:24px;height:20px;position:relative;display:inline-block}
+.bot::before{content:"";position:absolute;inset:0 2px 3px;border-radius:6px 6px 4px 4px;background:linear-gradient(var(--bot-top),var(--bot-bottom));box-shadow:0 0 0 1px #ffffff14}
+.bot::after{content:"";position:absolute;left:6px;right:6px;top:6px;height:5px;border-radius:3px;background:#172124;box-shadow:inset 3px 0 0 -1px var(--e,#90c7f2),inset -3px 0 0 -1px var(--e,#90c7f2)}
+.bot.idle{--e:#a9dfc7}.bot.q{--e:#f6d487}.bot.ap{--e:#f2b09c}.bot.off{--e:#555}
+.bot.big{transform:scale(2.1);margin:14px 18px}
+
+/* Confirm dialog */
+.scrim{position:absolute;inset:0;background:#000a;display:grid;place-items:center;z-index:5}
+.dlg{width:470px;background:var(--card);border:1px solid var(--input);border-radius:14px;padding:18px 20px;box-shadow:0 20px 40px -12px #000b}
+.dlg h4{font-size:15px;font-weight:600;margin-bottom:6px}
+.dlg p{color:var(--muted-foreground);font-size:13px;margin-bottom:10px}
+.dlg ul{list-style:none;border:1px solid var(--border);border-radius:9px;margin-bottom:12px}
+.dlg li{display:flex;align-items:center;gap:10px;padding:7px 10px;border-top:1px solid var(--border);font-size:13px}
+.dlg li:first-child{border-top:0}
+.dlg li .c{margin-left:auto;font-size:12px;color:var(--muted-foreground)}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.dlg .opt{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted-foreground);margin-top:6px}
+.dlg .opt i{flex:none;margin-top:3px;width:14px;height:14px;border-radius:4px;border:1px solid var(--input);display:inline-grid;place-items:center;font-style:normal;font-size:10px}
+.dlg .opt i.on{background:var(--primary);border-color:transparent;color:#fff}
+.rel{position:relative}
+
+/* Atelier */
+.atelier{position:relative;background:radial-gradient(circle at 50% 40%,#151a1f,#0b0d0f);background-size:auto;overflow:hidden}
+.atelier::before{content:"";position:absolute;inset:0;background-image:linear-gradient(#ffffff06 1px,transparent 1px),linear-gradient(90deg,#ffffff06 1px,transparent 1px);background-size:40px 40px}
+.room{position:absolute;border-radius:22px;border:1px solid #ffffff1c;background:linear-gradient(160deg,#18202b,#121820);box-shadow:0 30px 60px -20px #000;transform:perspective(1400px) rotateX(10deg)}
+.room.green{background:linear-gradient(160deg,#16231e,#111a16)}
+.table{position:absolute;left:12%;right:12%;top:38%;height:30%;border-radius:16px;background:linear-gradient(#6b5a3a,#4a3e28);box-shadow:inset 0 0 0 1px #ffffff20,0 10px 20px -8px #000}
+.note{position:absolute;font-size:9px;line-height:11px;padding:5px 7px;background:#2a2a2a;border:1px solid #ffffff25;border-radius:3px;color:#ddd;width:86px;transform:rotate(-3deg)}
+.chair{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px}
+.chair .bot{transform:scale(1.7);margin:8px 0 6px}
+.chair .who{font-weight:500}
+.chair .sub{font-size:10.5px;color:var(--muted-foreground);font-family:'Geist Mono',monospace}
+.chair .pill{font-size:10.5px}
+.roomlabel{position:absolute;left:18px;bottom:14px;background:#111;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;display:flex;gap:8px;align-items:center}
+.rigband{white-space:nowrap;position:absolute;left:50%;top:14px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:#0e1622;border:1px solid #7cb3fb44;border-radius:999px;padding:4px 6px 4px 12px;font-size:12px;color:var(--info)}
+.rigband .btn{height:22px;font-size:11.5px;color:var(--foreground)}
+.legend{position:absolute;left:24px;bottom:18px;background:#111c;border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:11.5px;color:var(--muted-foreground);display:flex;gap:14px}
+
+/* TUI */
+.term{max-width:1100px;margin:0 auto;background:var(--term-bg);color:var(--term-fg);border:1px solid var(--border);border-radius:10px;padding:14px 18px;font-family:'Geist Mono',monospace;font-size:13px;line-height:19px;white-space:pre;overflow:auto}
+.g{color:var(--t-green)}.y{color:var(--t-yellow)}.r{color:var(--t-red)}.b{color:var(--t-blue)}.d{color:var(--t-dim)}.cy{color:var(--t-cyan)}.inv{background:#2b2b2b}.bold{font-weight:600}
+.cli{max-width:1100px;margin:18px auto 0}
+.cli h3{font-size:14px;font-weight:600;margin-bottom:8px}
+
+/* States */
+.states{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.states .card p{color:var(--muted-foreground);font-size:13px;margin-top:8px}
+.states .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-foreground);margin-bottom:8px}
+.err-box{margin-top:10px;border:1px solid #f8717133;background:var(--s-danger);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.err-box code{display:block;margin-top:5px;font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--muted-foreground)}
+
+
+/* Launch / scale */
+.form{display:grid;grid-template-columns:1fr 380px;gap:18px;min-height:0}
+.fcol{display:flex;flex-direction:column;gap:16px;min-width:0}
+.fsec h5{font-size:13px;font-weight:600;margin-bottom:2px}
+.fsec .hint{font-size:12px;color:var(--muted-foreground);margin-bottom:8px}
+.seg{display:flex;border:1px solid var(--input);border-radius:9px;padding:2px;gap:2px;width:max-content}
+.seg button{border:0;background:transparent;font-size:12.5px;padding:4px 12px;border-radius:7px;color:var(--muted-foreground)}
+.seg button[aria-pressed=true]{background:var(--muted);color:var(--foreground)}
+.specs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.spec{border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--card);font-size:12px;color:var(--muted-foreground)}
+.spec b{display:flex;align-items:center;gap:6px;color:var(--foreground);font-size:13px;font-weight:500;margin-bottom:2px}
+.spec.sel{border-color:#f87171aa;box-shadow:0 0 0 1px #f8717155 inset}
+.spec .src{font-size:10px;font-family:'Geist Mono',monospace;border:1px solid var(--border);border-radius:4px;padding:0 4px;margin-left:auto;color:var(--muted-foreground);font-weight:400}
+.row2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted-foreground)}
+.fld .in{border:1px solid var(--input);border-radius:7px;padding:5px 9px;font-size:13px;color:var(--foreground);background:var(--well)}
+.roles{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.pod{padding:6px 12px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground);background:#ffffff06;border-bottom:1px solid var(--border)}
+.role{display:grid;grid-template-columns:150px 1fr 160px 150px 104px;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}
+.role:last-child{border-bottom:0}
+.role .rn{font-family:'Geist Mono',monospace;font-size:12.5px}
+.role .rn small{display:block;font-family:'Geist',sans-serif;color:var(--muted-foreground);font-size:11px}
+.role .c{color:var(--muted-foreground);font-size:12px}
+.sel-in{border:1px solid var(--input);border-radius:6px;padding:3px 8px;font-size:12px;display:flex;justify-content:space-between;background:var(--well)}
+.step{display:flex;align-items:center;border:1px solid var(--input);border-radius:7px;overflow:hidden;width:max-content}
+.step button{width:28px;height:26px;border:0;background:transparent;font-size:14px}
+.step span{min-width:30px;text-align:center;font-family:'Geist Mono',monospace;font-size:13px;border-left:1px solid var(--input);border-right:1px solid var(--input);line-height:26px}
+.step.changed span{color:var(--success)}
+.addrole{padding:8px 12px;font-size:12.5px;color:var(--muted-foreground);display:flex;gap:8px;align-items:center}
+.links{font-size:12px;color:var(--muted-foreground);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.yaml{background:var(--term-bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-family:'Geist Mono',monospace;font-size:11.5px;line-height:17px;white-space:pre;overflow:auto;color:var(--term-fg)}
+.yaml .k{color:var(--t-blue)}.yaml .v{color:var(--t-green)}.yaml .cm{color:var(--t-dim)}.yaml .add{background:#16a34a22;display:inline-block;width:100%}
+.aside{display:flex;flex-direction:column;gap:12px;min-width:0}
+.where{border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted-foreground)}
+.where b{color:var(--foreground);font-weight:500}
+.where li{margin:4px 0 0 16px}
+.plan{border:1px solid #34d39944;background:var(--s-ok);border-radius:9px;padding:8px 11px;font-size:12.5px}
+.plan small{display:block;color:var(--muted-foreground);font-size:11.5px;margin-top:2px}
+.factions{display:flex;gap:8px;justify-content:flex-end;align-items:center;border-top:1px solid var(--border);padding-top:14px;margin-top:4px}
+.factions .sp{flex:1}
+.cmds{font-family:'Geist Mono',monospace;font-size:11.5px;line-height:18px;color:var(--muted-foreground);background:var(--well);border:1px solid var(--border);border-radius:8px;padding:8px 10px;white-space:pre;overflow:auto}
+.dlg.wide{width:760px}
+.seatlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.seatchip{font-family:'Geist Mono',monospace;font-size:11.5px;border:1px solid var(--border);border-radius:6px;padding:1px 7px;color:var(--muted-foreground)}
+.seatchip.new{border-color:#34d39966;color:var(--success)}
+.seatchip.rm{border-color:#f8717166;color:var(--danger-text);text-decoration:line-through}
+
+
+.tsub{max-width:1440px;margin:12px auto 10px;display:flex;gap:6px;padding:0 16px}
+.tsub button{background:transparent;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:12.5px;color:var(--muted-foreground)}
+.tsub button[aria-pressed=true]{background:var(--muted);color:var(--foreground)}
+.tframe{max-width:1440px;margin:0 auto;overflow:auto;background:#1c1917;border:1px solid var(--border);border-radius:10px;padding:10px}
+.tpane{display:none}.tpane.on{display:block}
+.tt{font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;line-height:17px;white-space:pre;color:#e6e0dc;width:max-content}
+
+@media (max-width:900px){.main{grid-template-columns:1fr}.side{display:none}.grid2,.states{grid-template-columns:1fr}.rig-row{grid-template-columns:22px 1fr auto}.rig-row>:nth-child(n+3):not(:last-child){display:none}.seat{grid-template-columns:28px 1fr auto}.seat>:nth-child(n+3):not(:last-child){display:none}.win{height:auto}}
+</style>
+</head>
+<body>
+
+<div class="mk-bar" role="toolbar" aria-label="Vues de la maquette">
+  <strong>Maquette · OpenRig dans Ledge</strong>
+  <button data-v="page" aria-pressed="true">1 · Desktop — page OpenRig</button>
+  <button data-v="confirm" aria-pressed="false">2 · Arrêter un rig</button>
+  <button data-v="atelier" aria-pressed="false">3 · Sièges dans l'atelier</button>
+  <button data-v="tui" aria-pressed="false">4 · TUI + CLI</button>
+  <button data-v="states" aria-pressed="false">5 · États limites</button>
+  <button data-v="launch" aria-pressed="false">6 · Lancer un rig</button>
+  <button data-v="scale" aria-pressed="false">7 · Ajouter des sièges</button>
+</div>
+
+<!-- ============ 1. PAGE ============ -->
+<section class="view on" id="v-page">
+  <p class="mk-note"><b>Entrée « OpenRig » dans la barre latérale</b>, sous Atelier. Une page par machine (puces en haut) : le daemon et le kernel en tête, puis les rigs. Chaque action affiche la commande <span class="cmd">rig …</span> qu'elle lance — rien n'est caché. Clic sur un rig : ses sièges ; « Ouvrir » ouvre le siège comme une session Ledge.</p>
+  <div style="height:12px"></div>
+  <div class="win">
+    <div class="titlebar"><b style="font-weight:600">Ledge<span style="color:var(--danger-text)">.</span></b><span class="tb-sp"></span><span class="tb">♫</span><span class="tb">◯</span><span class="tb">─</span><span class="tb">☐</span><span class="tb">✕</span></div>
+    <div class="main">
+      <aside class="side" id="sidebar"></aside>
+      <div class="content">
+        <div class="topbar"><span class="ic">⬡</span>OpenRig<span class="sp"></span><span class="c" style="color:var(--muted-foreground);font-size:12px;font-weight:400">OpenRig 0.6.14 · mis à jour il y a 2 s</span><button class="btn ghost" title="Actualiser">↻</button></div>
+        <div class="page">
+          <div class="machines">
+            <button class="chip" aria-pressed="true"><span class="dot"></span>Local <small>· 2 rigs actifs</small></button>
+            <button class="chip" aria-pressed="false"><span class="dot"></span>EC2 - AWS <small>· daemon OpenRig arrêté</small></button>
+                      </div>
+
+          <div class="grid2">
+            <div class="card">
+              <h3><span class="dot"></span>Daemon <span class="pill ok">Actif</span></h3>
+              <div class="meta mono">127.0.0.1:7433 · pid 255259 · depuis 3 j 4 h</div>
+              <div class="acts">
+                <button class="btn">■ Arrêter</button>
+                <button class="btn">↻ Redémarrer</button>
+                <button class="btn ghost">Journal</button>
+              </div>
+              <div class="check"><i>✓</i>Au redémarrage, relancer les rigs qui tournaient <span class="cmd">rig start --last</span></div>
+            </div>
+            <div class="card">
+              <h3><span class="dot"></span>Kernel <span class="pill ok">Prêt</span></h3>
+              <div class="meta">Opérateur · Claude Code · contexte 18 %</div>
+              <div class="acts">
+                <button class="btn primary">Parler à l'opérateur</button>
+                <button class="btn">■ Arrêter</button>
+                <button class="btn">↻ Redémarrer</button>
+              </div>
+              <div class="check" style="color:var(--muted-foreground)">Arrêter <span class="cmd">rig down kernel</span> · Démarrer <span class="cmd">rig up kernel --existing</span></div>
+            </div>
+          </div>
+
+          <div class="h2"><h2>Rigs</h2><span class="pill off">4</span><span class="sp"></span><button class="btn ghost">Afficher les archivés</button><button class="btn">+ Lancer un rig…</button></div>
+          <div class="rigs">
+            <div class="rig" data-open>
+              <div class="rig-row">
+                <span class="chev">▶</span>
+                <span class="nm">starter <small>~/Workspace/ledge</small></span>
+                <span><span class="pill ok">En marche</span></span>
+                <span class="c">2/2 sièges</span>
+                <span class="attn">● 1 demande en attente</span>
+                <span class="c">depuis 2 h 12 · snapshot 09:40</span>
+                <span style="display:flex;gap:6px"><button class="btn">± Sièges</button><button class="btn">■ Arrêter</button><button class="btn">↻</button></span>
+              </div>
+              <div class="seats">
+                <div class="seat"><span class="bot ap"></span><span class="role">dev.build</span><span class="c">Claude Code · Opus</span><span><span class="pill err">Votre accord</span></span><span class="c"><span class="ctx"><b style="width:42%"></b></span>42 %</span><span class="c">2 tâches</span><span style="display:flex;gap:6px"><button class="btn primary">Ouvrir</button><button class="btn ghost">⋯</button></span></div>
+                <div class="seat"><span class="bot"></span><span class="role">dev.review</span><span class="c">Codex · gpt-6-astra</span><span><span class="pill info">Au travail</span></span><span class="c"><span class="ctx"><b class="hot" style="width:81%"></b></span>81 %</span><span class="c">1 tâche</span><span style="display:flex;gap:6px"><button class="btn">Ouvrir</button><button class="btn ghost">⋯</button></span></div>
+              </div>
+            </div>
+            <div class="rig">
+              <div class="rig-row">
+                <span class="chev">▶</span>
+                <span class="nm">workshop <small>~/Workspace/paper-channel</small></span>
+                <span><span class="pill info">Démarrage…</span></span>
+                <span class="c">2/4 sièges</span>
+                <span class="c">—</span>
+                <span class="c">lancé il y a 20 s</span>
+                <span style="display:flex;gap:6px"><button class="btn" disabled style="opacity:.45">■ Arrêter</button><button class="btn" disabled style="opacity:.45">↻</button></span>
+              </div>
+            </div>
+            <div class="rig">
+              <div class="rig-row">
+                <span class="chev">▶</span>
+                <span class="nm">openrig-build <small>~/Workspace/synapse/openrigdev</small></span>
+                <span><span class="pill off">Arrêté</span></span>
+                <span class="c">0/3 sièges</span>
+                <span class="c">arrêté volontairement</span>
+                <span class="c">snapshot hier 18:02</span>
+                <span style="display:flex;gap:6px"><button class="btn">▶ Démarrer</button></span>
+              </div>
+            </div>
+            <div class="rig">
+              <div class="rig-row">
+                <span class="chev">▶</span>
+                <span class="nm">research <small>~/notes</small></span>
+                <span><span class="pill warn">À surveiller</span></span>
+                <span class="c">1/2 sièges</span>
+                <span class="attn">● 1 siège arrêté avec du travail</span>
+                <span class="c">depuis 1 j</span>
+                <span style="display:flex;gap:6px"><button class="btn">■ Arrêter</button><button class="btn">↻</button></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span><span class="dot"></span> Sessions locales et SSH</span><span><span class="dot off"></span> Encoche masquée</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. CONFIRM ============ -->
+<section class="view" id="v-confirm">
+  <p class="mk-note"><b>Arrêter</b> un rig, le kernel ou le daemon demande toujours confirmation et dit <b>qui travaille</b> (d'après <span class="cmd">rig ps --nodes --rig starter</span>). <b>Redémarrer</b> = arrêt avec snapshot puis <span class="cmd">rig up starter --existing</span> : chaque siège reprend sa conversation quand son harnais le permet. Démarrer n'a pas de confirmation.</p>
+  <div style="height:12px"></div>
+  <div class="win rel">
+    <div class="titlebar"><b style="font-weight:600">Ledge<span style="color:var(--danger-text)">.</span></b><span class="tb-sp"></span><span class="tb">♫</span><span class="tb">◯</span><span class="tb">─</span><span class="tb">☐</span><span class="tb">✕</span></div>
+    <div class="main"><aside class="side" id="sidebar2"></aside><div class="content"><div class="topbar">OpenRig</div><div class="page"></div><div class="footer"><span><span class="dot"></span> Sessions locales et SSH</span><span><span class="dot off"></span> Encoche masquée</span></div></div></div>
+    <div class="scrim">
+      <div class="dlg" role="dialog" aria-labelledby="dlg-t">
+        <h4 id="dlg-t">Arrêter le rig « starter » sur Local ?</h4>
+        <p>Ses 2 agents s'arrêtent, et le travail en cours avec eux.</p>
+        <ul>
+          <li><span class="bot ap"></span><span class="mono">dev.build</span><span class="c">attend votre accord · 2 tâches</span></li>
+          <li><span class="bot"></span><span class="mono">dev.review</span><span class="c">au travail · 1 tâche</span></li>
+        </ul>
+        <div class="opt"><i class="on">✓</i><span>Prendre un snapshot avant (pour le relancer tel quel)</span></div>
+        <div class="opt"><i></i><span>Couper tout de suite, sans laisser finir <span class="cmd">--force</span></span></div>
+        <div class="opt"><i></i><span>Supprimer aussi le rig — il ne pourra plus être relancé <span class="cmd">--delete</span></span></div>
+        <p style="margin-top:12px;margin-bottom:0">Commande : <span class="cmd">rig down starter --snapshot</span></p>
+        <div class="acts"><button class="btn ghost">Annuler</button><button class="btn primary">Arrêter starter</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. ATELIER ============ -->
+<section class="view" id="v-atelier">
+  <p class="mk-note"><b>Les sièges d'un rig sont des sessions Ledge</b> : ils s'assoient à la table du projet (d'après leur dossier), avec leur rôle sous le nom et une étiquette de rig. Leurs demandes arrivent dans « À toi », l'île et le téléphone comme les autres. Un bandeau au-dessus de la table regroupe le rig et ses actions. Les sessions Ledge ordinaires restent à côté, sans étiquette.</p>
+  <div style="height:12px"></div>
+  <div class="win">
+    <div class="titlebar"><b style="font-weight:600">Ledge<span style="color:var(--danger-text)">.</span></b><span class="tb-sp"></span><span class="tb">♫</span><span class="tb">◯</span><span class="tb">─</span><span class="tb">☐</span><span class="tb">✕</span></div>
+    <div class="main">
+      <aside class="side" id="sidebar3"></aside>
+      <div class="content">
+        <div class="topbar"><span class="ic">⊞</span>Atelier</div>
+        <div class="atelier">
+          <div class="room" style="left:4%;top:9%;width:54%;height:72%">
+            <div class="rigband"><span class="dot info"></span>rig <b class="mono" style="color:var(--foreground)">starter</b> · 2 sièges<button class="btn">■ Arrêter</button><button class="btn">↻</button></div>
+            <div class="table">
+              <div class="note" style="left:8%;top:18%">Câbler OpenRig au daemon</div>
+              <div class="note" style="left:36%;top:28%;transform:rotate(2deg)">Revue : rig ps --json</div>
+              <div class="note" style="left:66%;top:16%">Tests TUI écran 6</div>
+            </div>
+            <div class="chair" style="left:20%;top:16%"><span class="bot ap"></span><span class="who">Bix <span class="rigtag">starter</span></span><span class="sub">dev.build</span><span class="pill err">Votre accord</span></div>
+            <div class="chair" style="left:44%;top:16%"><span class="bot"></span><span class="who">Nova <span class="rigtag">starter</span></span><span class="sub">dev.review</span><span class="pill info">Au travail</span></div>
+            <div class="chair" style="left:68%;top:16%"><span class="bot idle"></span><span class="who">Otto</span><span class="sub">Local</span><span class="pill ok">Disponible</span></div>
+            <div class="chair" style="left:44%;top:72%"><span class="bot"></span><span class="who">Pim</span><span class="sub">Local</span><span class="pill info">Au travail</span></div>
+            <div class="roomlabel"><span class="sq" style="background:#10b981"></span>Ledge <span class="mono" style="color:var(--muted-foreground);font-size:11px">feat/openrig</span></div>
+          </div>
+          <div class="room green" style="left:62%;top:12%;width:34%;height:66%">
+            <div class="rigband"><span class="dot warn"></span>rig <b class="mono" style="color:var(--foreground)">workshop</b> · démarrage 2/4</div>
+            <div class="table" style="left:14%;right:14%"></div>
+            <div class="chair" style="left:12%;top:16%"><span class="bot q"></span><span class="who">Luna <span class="rigtag">workshop</span></span><span class="sub">orch.lead</span><span class="pill warn">Une question</span></div>
+            <div class="chair" style="left:52%;top:16%"><span class="bot"></span><span class="who">Rio <span class="rigtag">workshop</span></span><span class="sub">dev.build</span><span class="pill info">Au travail</span></div>
+            <div class="chair" style="left:12%;top:72%;opacity:.45"><span class="bot off"></span><span class="who">dev.qa</span><span class="sub">démarrage…</span></div>
+            <div class="chair" style="left:52%;top:72%;opacity:.45"><span class="bot off"></span><span class="who">dev.review</span><span class="sub">démarrage…</span></div>
+            <div class="roomlabel"><span class="sq" style="background:#3b82f6"></span>Paper Channel <span class="mono" style="color:var(--muted-foreground);font-size:11px">main</span></div>
+          </div>
+          <div class="legend"><span><span class="rigtag">starter</span> siège d'un rig OpenRig</span><span>rôle du siège sous le nom</span><span>sans étiquette : session Ledge</span></div>
+        </div>
+        <div class="footer"><span><span class="dot"></span> Sessions locales et SSH</span><span><span class="dot off"></span> Encoche masquée</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. TUI ============ -->
+<section class="view" id="v-tui">
+  <p class="mk-note"><b>Dans <span class="cmd">ledge tui</span></b>, dans le style actuel (en-tête, panneaux encadrés, touches en bas). OpenRig devient l'écran <span class="cmd">6</span>, la place laissée par Équipes. Les mêmes parcours que Desktop : l'écran OpenRig, <span class="cmd">+</span> lance un rig, <span class="cmd">±</span> change les sièges d'un rig en marche, et les sièges apparaissent dans la vue d'ensemble, étiquetés.</p>
+  <div class="tsub">
+    <button data-t="A" aria-pressed="true">Écran OpenRig (6)</button>
+    <button data-t="B" aria-pressed="false">Lancer un rig (+)</button>
+    <button data-t="C" aria-pressed="false">Sièges (±)</button>
+    <button data-t="D" aria-pressed="false">Vue d'ensemble (1)</button>
+  </div>
+  <div class="tframe">
+    <div class="tpane on" data-p="A"><div class="tt"><span style="color:#f07a62;background:#5f5f5f;font-weight:600"> ◖ ledge</span><span style="color:#afafaf;background:#5f5f5f">  6 sessions · 2 machines</span><span style="color:#e6e0dc;background:#5f5f5f">                                                                           </span><span style="color:#afafaf;background:#5f5f5f">OpenRig · Local ●  EC2 - AWS ○ </span><span style="color:#e6e0dc;background:#5f5f5f"> </span>
+<span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">DAEMON · LOCAL</span><span style="color:#3a3532"> ───────────────────────────────────────────────────╮</span><span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">KERNEL</span><span style="color:#3a3532"> ───────────────────────────────────────────────────────────╮</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">● actif</span><span style="color:#8f8681">   127.0.0.1:7433 · pid 255259 · depuis 3 j 4 h</span><span style="color:#e6e0dc">             </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">● prêt</span><span style="color:#8f8681">    opérateur · Claude Code · ctx 18 %</span><span style="color:#e6e0dc">                       </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">↻ redémarrage : relance les rigs qui tournaient</span><span style="color:#5f5854">  rig start --last</span><span style="color:#e6e0dc">  </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">O</span><span style="color:#8f8681"> parler à l&#x27;opérateur</span><span style="color:#e6e0dc">                                             </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╰────────────────────────────────────────────────────────────────────╯</span><span style="color:#3a3532">╰────────────────────────────────────────────────────────────────────╯</span>
+<span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">RIGS · 4</span><span style="color:#3a3532"> ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc;background:#2b2725"> </span><span style="color:#e6e0dc;background:#2b2725;font-weight:600">▾ starter</span><span style="color:#8f8681;background:#2b2725">       ~/Workspace/ledge            </span><span style="color:#86cf9d;background:#2b2725">● en marche   </span><span style="color:#e6e0dc;background:#2b2725">2/2   </span><span style="color:#e6c46a;background:#2b2725">1 demande               </span><span style="color:#8f8681;background:#2b2725">depuis 2 h 12 · snapshot 09:40</span><span style="color:#e6e0dc;background:#2b2725">                  </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#f0806e">    ◆ </span><span style="color:#e6e0dc">Bix    dev.build    </span><span style="color:#8f8681">Claude Code · Opus     </span><span style="color:#f0806e">votre accord   </span><span style="color:#8f8681">ctx </span><span style="color:#7fb2ec">████</span><span style="color:#5f5854">░░░░░░</span><span style="color:#8f8681"> 42 %   2 tâches</span><span style="color:#e6e0dc">                                           </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">    ◆ </span><span style="color:#e6e0dc">Nova   dev.review   </span><span style="color:#8f8681">Codex · gpt-6-astra    </span><span style="color:#7fb2ec">au travail     </span><span style="color:#8f8681">ctx </span><span style="color:#e6c46a">████████</span><span style="color:#5f5854">░░</span><span style="color:#8f8681"> 81 %   1 tâche</span><span style="color:#e6e0dc">                                            </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">    ↳ build → review</span><span style="color:#e6e0dc">                                                                                                                     </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">▸ workshop</span><span style="color:#8f8681">      ~/Workspace/paper-channel    </span><span style="color:#7fb2ec">◌ démarrage   </span><span style="color:#e6e0dc">2/4                     </span><span style="color:#8f8681">            lancé il y a 20 s</span><span style="color:#e6e0dc">                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">▸ openrig-build</span><span style="color:#8f8681"> ~/Workspace/synapse/openrigdev </span><span style="color:#5f5854">○ arrêté      </span><span style="color:#e6e0dc">0/3   </span><span style="color:#8f8681">arrêté volontairement   </span><span style="color:#8f8681">snapshot hier 18:02</span><span style="color:#e6e0dc">                           </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">▸ research</span><span style="color:#8f8681">      ~/notes                      </span><span style="color:#e6c46a">▲ à surveiller </span><span style="color:#e6e0dc">1/2   </span><span style="color:#e6c46a">1 siège arrêté avec du travail</span><span style="color:#e6e0dc">                                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                                                                                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                                                                                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                                                                                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span>
+<span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600"> tab </span><span style="color:#8f8681"> machine  </span><span style="color:#e6e0dc;font-weight:600"> j k </span><span style="color:#8f8681"> naviguer  </span><span style="color:#e6e0dc;font-weight:600"> ↵ </span><span style="color:#8f8681"> déplier · ouvrir le siège  </span><span style="color:#e6e0dc;font-weight:600"> s </span><span style="color:#8f8681"> démarrer/arrêter  </span><span style="color:#e6e0dc;font-weight:600"> R </span><span style="color:#8f8681"> redémarrer  </span><span style="color:#e6e0dc;font-weight:600"> ± </span><span style="color:#8f8681"> sièges  </span><span style="color:#e6e0dc;font-weight:600"> + </span><span style="color:#8f8681"> lancer un rig  </span><span style="color:#e6e0dc;font-weight:600"> D </span><span style="color:#8f8681"> daemon  </span><span style="color:#e6e0dc;font-weight:600"> K </span><span style="color:#8f8681"> kernel  </span><span style="color:#e6e0dc;font-weight:600"> ? </span><span style="color:#8f8681"> aide  </span></div></div>
+    <div class="tpane" data-p="B"><div class="tt"><span style="color:#f07a62;background:#5f5f5f;font-weight:600"> ◖ ledge</span><span style="color:#afafaf;background:#5f5f5f">  6 sessions · 2 machines</span><span style="color:#e6e0dc;background:#5f5f5f">                                                                                    </span><span style="color:#afafaf;background:#5f5f5f">Lancer un rig · Local </span><span style="color:#e6e0dc;background:#5f5f5f"> </span>
+<span style="color:#f07a62">╭─ </span><span style="color:#f07a62;font-weight:600">1 · SPEC DE DÉPART</span><span style="color:#f07a62"> ───────────────────────────────────────────────╮</span><span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">APERÇU · rig.yaml</span><span style="color:#3a3532"> ────────────────────────────────────────────────╮</span>
+<span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">‹ Bibliothèque ›</span><span style="color:#8f8681">  Fichier du projet   Bundle GitHub</span><span style="color:#e6e0dc">                </span><span style="color:#f07a62">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d;font-weight:600">✓ le plan passe</span><span style="color:#8f8681"> · 6 sièges · 3 liens</span><span style="color:#e6e0dc">                               </span><span style="color:#3a3532">│</span>
+<span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                   </span><span style="color:#f07a62">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">rig up …/ledge-scale/rig.yaml --plan</span><span style="color:#e6e0dc">                               </span><span style="color:#3a3532">│</span>
+<span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">◉ starter       </span><span style="color:#8f8681">build + review · 2           </span><span style="color:#5f5854">OpenRig</span><span style="color:#e6e0dc">               </span><span style="color:#f07a62">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                   </span><span style="color:#3a3532">│</span>
+<span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc">○ factory       </span><span style="color:#8f8681">lead, advisor, build… · 7    </span><span style="color:#5f5854">OpenRig</span><span style="color:#e6e0dc">               </span><span style="color:#f07a62">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">name: </span><span style="color:#86cf9d">ledge-scale</span><span style="color:#e6e0dc">                                                  </span><span style="color:#3a3532">│</span>
+<span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc">○ code-review   </span><span style="color:#8f8681">lead, r1, r2 · 3             </span><span style="color:#5f5854">OpenRig</span><span style="color:#e6e0dc">               </span><span style="color:#f07a62">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">pods:</span><span style="color:#e6e0dc">                                                              </span><span style="color:#3a3532">│</span>
+<span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc">○ research      </span><span style="color:#8f8681">lead, analyst, synth. · 3    </span><span style="color:#5f5854">OpenRig</span><span style="color:#e6e0dc">               </span><span style="color:#f07a62">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">  - id: </span><span style="color:#86cf9d">dev</span><span style="color:#e6e0dc">                                                        </span><span style="color:#3a3532">│</span>
+<span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc">○ ledge-x3      </span><span style="color:#8f8681">3 build + 3 review · 6       </span><span style="color:#5f5854">mes specs</span><span style="color:#e6e0dc">             </span><span style="color:#f07a62">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">    members:</span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span>
+<span style="color:#f07a62">╰────────────────────────────────────────────────────────────────────╯</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">      - id: </span><span style="color:#86cf9d">build</span><span style="color:#8f8681">      claude-code</span><span style="color:#e6e0dc">                                 </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">2 · OÙ</span><span style="color:#3a3532"> ───────────────────────────────────────────────────────────╮</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">      + build-2     comme build</span><span style="color:#e6e0dc">                                    </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">Projet   </span><span style="color:#e6e0dc">‹ Ledge · ~/Workspace/ledge ›</span><span style="color:#e6e0dc">                             </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">      + build-3     comme build</span><span style="color:#e6e0dc">                                    </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">Machine  </span><span style="color:#e6e0dc">‹ Local ›</span><span style="color:#e6e0dc">                                                 </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">      - id: </span><span style="color:#86cf9d">review</span><span style="color:#8f8681">     codex · gpt-6-astra</span><span style="color:#e6e0dc">                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">Nom      </span><span style="color:#e6e0dc;font-weight:600">ledge-scale</span><span style="color:#f07a62">▏</span><span style="color:#e6e0dc">                                              </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">      + review-2    comme review</span><span style="color:#e6e0dc">                                   </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╰────────────────────────────────────────────────────────────────────╯</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">      + review-3    comme review</span><span style="color:#e6e0dc">                                   </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">3 · SIÈGES PAR RÔLE</span><span style="color:#3a3532"> ──────────────────────────────────────────────╮</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">    edges:</span><span style="color:#e6e0dc">                                                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">pod dev</span><span style="color:#e6e0dc">                                                            </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">      build   → review</span><span style="color:#e6e0dc">                                             </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">build   </span><span style="color:#8f8681">implementer  </span><span style="color:#e6e0dc">‹ Claude Code ›  </span><span style="color:#e6e0dc">‹ Opus · élevé ›  </span><span style="color:#8f8681">−</span><span style="color:#86cf9d;font-weight:600"> 3 </span><span style="color:#8f8681">+</span><span style="color:#e6e0dc">      </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">      + build-2 → review-2</span><span style="color:#e6e0dc">                                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">review  </span><span style="color:#8f8681">qa           </span><span style="color:#e6e0dc">‹ Codex ›        </span><span style="color:#e6e0dc">‹ gpt-6-astra › </span><span style="color:#8f8681"> −</span><span style="color:#86cf9d;font-weight:600"> 3 </span><span style="color:#8f8681">+</span><span style="color:#e6e0dc">       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">      + build-3 → review-3</span><span style="color:#e6e0dc">                                         </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">+ ajouter un rôle…</span><span style="color:#5f5854">  orchestrator, planner, product-designer…</span><span style="color:#e6e0dc">       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                   </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╰────────────────────────────────────────────────────────────────────╯</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">Où vivent les specs</span><span style="color:#e6e0dc">                                                </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">4 · QUI DÉLÈGUE À QUI</span><span style="color:#3a3532"> ────────────────────────────────────────────╮</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">OpenRig   livrées avec OpenRig, lecture seule</span><span style="color:#e6e0dc">                      </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">‹ par paires ›</span><span style="color:#8f8681">  build-2 → review-2</span><span style="color:#5f5854">    chaque build → tous les revi…</span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">mes specs ~/.openrig/specs/ (rig specs add)</span><span style="color:#e6e0dc">                        </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">☑ enregistrer dans mes specs : ledge-scale</span><span style="color:#e6e0dc">                         </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">projet    un rig.yaml versionné dans le dépôt</span><span style="color:#e6e0dc">                      </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╰────────────────────────────────────────────────────────────────────╯</span><span style="color:#3a3532">╰────────────────────────────────────────────────────────────────────╯</span>
+<span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600"> tab ↑ ↓ </span><span style="color:#8f8681"> champ  </span><span style="color:#e6e0dc;font-weight:600"> ← → </span><span style="color:#8f8681"> choisir  </span><span style="color:#e6e0dc;font-weight:600"> - + </span><span style="color:#8f8681"> nombre de sièges  </span><span style="color:#e6e0dc;font-weight:600"> p </span><span style="color:#8f8681"> vérifier (--plan)  </span><span style="color:#e6e0dc;font-weight:600"> ctrl+s </span><span style="color:#8f8681"> lancer 6 sièges  </span><span style="color:#e6e0dc;font-weight:600"> esc </span><span style="color:#8f8681"> annuler  </span></div></div>
+    <div class="tpane" data-p="C"><div class="tt"><span style="color:#f07a62;background:#5f5f5f;font-weight:600"> ◖ ledge</span><span style="color:#afafaf;background:#5f5f5f">  6 sessions · 2 machines</span><span style="color:#e6e0dc;background:#5f5f5f">                                                                           </span><span style="color:#afafaf;background:#5f5f5f">OpenRig · Local ●  EC2 - AWS ○ </span><span style="color:#e6e0dc;background:#5f5f5f"> </span>
+<span style="color:#e6e0dc">                                                                                                                                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">╭─ </span><span style="color:#f07a62;font-weight:600">SIÈGES · STARTER · LOCAL</span><span style="color:#f07a62"> ───────────────────────────────────────────────────────╮</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">Le rig reste en marche. Aujourd&#x27;hui : 1 build, 1 review.</span><span style="color:#e6e0dc">                         </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                                 </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">build   </span><span style="color:#8f8681">Claude Code · Opus     </span><span style="color:#e6e0dc">build </span><span style="color:#86cf9d">+build-2 +build-3</span><span style="color:#8f8681">          −</span><span style="color:#86cf9d;font-weight:600"> 3 </span><span style="color:#8f8681">+</span><span style="color:#e6e0dc">            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">review  </span><span style="color:#8f8681">Codex · gpt-6-astra    </span><span style="color:#e6e0dc">review </span><span style="color:#86cf9d">+review-2 +review-3</span><span style="color:#8f8681">       −</span><span style="color:#86cf9d;font-weight:600"> 3 </span><span style="color:#8f8681">+</span><span style="color:#e6e0dc">            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">+ ajouter un rôle…</span><span style="color:#e6e0dc">                                                               </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                                 </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600">‹ délégation par paires ›</span><span style="color:#5f5854">   chaque build → tous les review</span><span style="color:#e6e0dc">                       </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                                 </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">rig add starter dev build-2.member.yaml   </span><span style="color:#5f5854"># copié de build</span><span style="color:#e6e0dc">                       </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">rig add starter dev review-2.member.yaml  </span><span style="color:#5f5854"># copié de review</span><span style="color:#e6e0dc">                      </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">…</span><span style="color:#e6e0dc">                                                                                </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">rig edge add starter dev.build-2 dev.review-2 --kind delegates_to</span><span style="color:#e6e0dc">                </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">rig snapshot starter                      </span><span style="color:#5f5854"># un redémarrage garde 6 sièges</span><span style="color:#e6e0dc">        </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                                 </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">☑ reporter la taille dans la spec ledge-scale (rig export)</span><span style="color:#e6e0dc">                       </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                                 </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600"> ↵ </span><span style="color:#f07a62"> ajouter 4 sièges    </span><span style="color:#e6e0dc;font-weight:600"> esc </span><span style="color:#8f8681"> annuler</span><span style="color:#e6e0dc">                                            </span><span style="color:#f07a62">│</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                            </span><span style="color:#f07a62">╰──────────────────────────────────────────────────────────────────────────────────╯</span><span style="color:#e6e0dc">                            </span>
+<span style="color:#e6e0dc">                                                                                                                                            </span>
+<span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600"> - + </span><span style="color:#8f8681"> nombre  </span><span style="color:#e6e0dc;font-weight:600"> ↑ ↓ </span><span style="color:#8f8681"> rôle  </span><span style="color:#e6e0dc;font-weight:600"> ←→ </span><span style="color:#8f8681"> délégation  </span><span style="color:#e6e0dc;font-weight:600"> ↵ </span><span style="color:#8f8681"> appliquer  </span><span style="color:#e6e0dc;font-weight:600"> esc </span><span style="color:#8f8681"> annuler  </span></div></div>
+    <div class="tpane" data-p="D"><div class="tt"><span style="color:#f07a62;background:#5f5f5f;font-weight:600"> ◖ ledge</span><span style="color:#afafaf;background:#5f5f5f">  6 sessions · 2 machines</span><span style="color:#e6e0dc;background:#5f5f5f">                                                                                     </span><span style="color:#afafaf;background:#5f5f5f">Local ●  EC2 - AWS ○ </span><span style="color:#e6e0dc;background:#5f5f5f"> </span>
+<span style="color:#ffaf87">╭─ </span><span style="color:#ffaf87;font-weight:600">À TOI · 2</span><span style="color:#ffaf87"> ────────────────────────────────────────────╮</span><span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">BIX · STARTER · DEV.BUILD</span><span style="color:#3a3532"> ────────────────────────────────────────────────────╮</span>
+<span style="color:#ffaf87">│</span><span style="color:#e6e0dc"> </span><span style="color:#f0806e">◆ </span><span style="color:#e6e0dc">Bix </span><span style="color:#7fb2ec">[starter]</span><span style="color:#8f8681"> dev.build · npm test </span><span style="color:#e6e0dc;font-weight:600"> y n</span><span style="color:#e6e0dc">              </span><span style="color:#ffaf87">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#f0806e">◆ Votre accord</span><span style="color:#8f8681">  Claude Code · Opus · ctx 42 % · Local · ⎇ feat/openrig</span><span style="color:#e6e0dc">         </span><span style="color:#3a3532">│</span>
+<span style="color:#ffaf87">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6c46a">◆ </span><span style="color:#e6e0dc">Luna </span><span style="color:#7fb2ec">[workshop]</span><span style="color:#8f8681"> orch.lead · Quel port ?</span><span style="color:#e6e0dc">              </span><span style="color:#ffaf87">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">  rig starter · délègue à Nova (dev.review)</span><span style="color:#e6e0dc">                                    </span><span style="color:#3a3532">│</span>
+<span style="color:#ffaf87">╰────────────────────────────────────────────────────────╯</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">PROJETS</span><span style="color:#3a3532"> ──────────────────────────────────────────────╮</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc">  Bash  npm test</span><span style="color:#e6e0dc">                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#10b981">■ </span><span style="color:#e6e0dc;font-weight:600">Ledge</span><span style="color:#8f8681"> 4 sessions</span><span style="color:#e6e0dc">                                     </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">  ⎇ feat/openrig</span><span style="color:#e6e0dc">                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600"> y </span><span style="color:#8f8681"> oui   </span><span style="color:#e6e0dc;font-weight:600"> n </span><span style="color:#8f8681"> non   </span><span style="color:#e6e0dc;font-weight:600"> A </span><span style="color:#8f8681"> toujours</span><span style="color:#e6e0dc">                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#f0806e">   ◆ </span><span style="color:#e6e0dc">Bix   </span><span style="color:#7fb2ec">[starter]</span><span style="color:#8f8681">  dev.build   </span><span style="color:#f0806e">Votre accord</span><span style="color:#e6e0dc">         </span><span style="color:#3a3532">│</span><span style="color:#3a3532">╰────────────────────────────────────────────────────────────────────────────────╯</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">   ● </span><span style="color:#e6e0dc">Nova  </span><span style="color:#7fb2ec">[starter]</span><span style="color:#8f8681">  dev.review  </span><span style="color:#7fb2ec">Au travail</span><span style="color:#e6e0dc">           </span><span style="color:#3a3532">│</span><span style="color:#3a3532">╭─ </span><span style="color:#8f8681;font-weight:600">TERMINAL · BUILD@STARTER</span><span style="color:#3a3532"> ─────────────────────────────────────────────────────╮</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#86cf9d">   ○ </span><span style="color:#e6e0dc">Otto-46</span><span style="color:#8f8681">                    </span><span style="color:#86cf9d">Disponible</span><span style="color:#e6e0dc">             </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#8f8681">$ npm test</span><span style="color:#e6e0dc">                                                                     </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#3b82f6">■ </span><span style="color:#e6e0dc;font-weight:600">Paper Channel</span><span style="color:#8f8681"> 2 sessions</span><span style="color:#e6e0dc">                             </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#5f5854">…</span><span style="color:#e6e0dc">                                                                              </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6c46a">   ◆ </span><span style="color:#e6e0dc">Luna  </span><span style="color:#7fb2ec">[workshop]</span><span style="color:#8f8681"> orch.lead   </span><span style="color:#e6c46a">Question</span><span style="color:#e6e0dc">             </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#7fb2ec">   ● </span><span style="color:#e6e0dc">Rio   </span><span style="color:#7fb2ec">[workshop]</span><span style="color:#8f8681"> dev.build   </span><span style="color:#7fb2ec">Au travail</span><span style="color:#e6e0dc">           </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                       </span><span style="color:#3a3532">│</span><span style="color:#3a3532">│</span><span style="color:#e6e0dc"> </span><span style="color:#e6e0dc"></span><span style="color:#e6e0dc">                                                                               </span><span style="color:#3a3532">│</span>
+<span style="color:#3a3532">╰────────────────────────────────────────────────────────╯</span><span style="color:#3a3532">╰────────────────────────────────────────────────────────────────────────────────╯</span>
+<span style="color:#e6e0dc"> </span><span style="color:#e6e0dc;font-weight:600"> j k </span><span style="color:#8f8681"> naviguer  </span><span style="color:#e6e0dc;font-weight:600"> ↵ </span><span style="color:#8f8681"> ouvrir  </span><span style="color:#e6e0dc;font-weight:600"> a </span><span style="color:#8f8681"> attacher (tmux)  </span><span style="color:#e6e0dc;font-weight:600"> y n A </span><span style="color:#8f8681"> répondre  </span><span style="color:#e6e0dc;font-weight:600"> 6 </span><span style="color:#8f8681"> OpenRig  </span><span style="color:#e6e0dc;font-weight:600"> / </span><span style="color:#8f8681"> demander à Ledge  </span><span style="color:#e6e0dc;font-weight:600"> ? </span><span style="color:#8f8681"> aide  </span></div></div>
+  </div>
+  <div class="cli">
+    <h3>Et en ligne de commande</h3>
+<div class="term" style="max-width:none"><span class="d">$</span> ledge rig status                         <span class="d"># daemon, kernel, rigs — toutes les machines</span>
+<span class="d">$</span> ledge rig start [--machine "EC2 - AWS"] [--last]
+<span class="d">$</span> ledge rig stop | restart                 <span class="d"># le daemon</span>
+<span class="d">$</span> ledge rig kernel start | stop | restart
+<span class="d">$</span> ledge rig up starter --cwd . --name ledge-scale --seats build=3,review=3
+<span class="d">$</span> ledge rig seats starter build=3 review=3 <span class="d"># scale un rig en marche, liens compris</span>
+<span class="d">$</span> ledge rig down starter | restart starter</div>
+  </div>
+</section>
+
+<!-- ============ 5. STATES ============ -->
+<section class="view" id="v-states">
+  <p class="mk-note"><b>Ce que la page dit</b> quand OpenRig n'est pas là, est arrêté, ou qu'une action échoue.</p>
+  <div style="height:12px"></div>
+  <div class="states">
+    <div class="card"><div class="lbl">Daemon arrêté</div>
+      <h3><span class="dot off"></span>Daemon <span class="pill off">Arrêté</span></h3>
+      <div class="meta">Arrêté sans arrêt propre le 30 oct. à 15:50.</div>
+      <div class="acts"><button class="btn primary">▶ Démarrer</button></div>
+      <div class="check"><i>✓</i>Relancer les rigs qui tournaient <span class="cmd">rig start --last</span></div>
+      <div class="check"><i style="background:transparent;border:1px solid var(--input)"></i>Sans le kernel <span class="cmd">--no-kernel</span></div>
+      <p>Kernel et rigs : grisés, avec « Démarrez le daemon d'abord ».</p>
+    </div>
+    <div class="card"><div class="lbl">OpenRig absent sur la machine</div>
+      <h3><span class="dot off"></span>Machine sans OpenRig</h3>
+      <p>OpenRig n'est pas installé sur cette machine (la commande <span class="cmd">rig</span> est introuvable).</p>
+      <div class="acts"><button class="btn">Comment l'installer</button></div>
+      <p>Lien vers la doc OpenRig ; Ledge n'installe rien lui-même.</p>
+    </div>
+    <div class="card"><div class="lbl">Action en cours</div>
+      <h3><span class="dot info"></span>Kernel <span class="pill info">Redémarrage…</span></h3>
+      <div class="meta">Arrêt fait · démarrage de l'opérateur (jusqu'à 60 s)</div>
+      <div class="acts"><button class="btn" disabled style="opacity:.45">■ Arrêter</button><button class="btn" disabled style="opacity:.45">↻ Redémarrer</button></div>
+      <p>Les boutons de l'élément concerné sont désactivés ; les autres restent utilisables.</p>
+    </div>
+    <div class="card"><div class="lbl">Échec</div>
+      <h3><span class="dot err"></span>Rig workshop <span class="pill err">Échec du démarrage</span></h3>
+      <div class="err-box">Le siège dev.qa attend une autorisation dans son terminal.<code>rig up workshop --existing → exit 1: seat dev.qa blocked at trust prompt</code></div>
+      <div class="acts"><button class="btn primary">Ouvrir dev.qa</button><button class="btn">Réessayer</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. LAUNCH ============ -->
+<section class="view" id="v-launch">
+  <p class="mk-note"><b>« + Lancer un rig… »</b> ouvre ce formulaire à la place de la page. On part d'une spec (bibliothèque OpenRig, mes specs, un fichier du projet ou un bundle GitHub), on choisit le projet, la machine et le nom, puis on ajuste <b>le nombre de sièges par rôle</b>. Ledge écrit la spec résultante (aperçu à droite), la fait vérifier par <span class="cmd">rig up --plan</span>, puis lance. « Enregistrer dans mes specs » la garde pour la prochaine fois.</p>
+  <div style="height:12px"></div>
+  <div class="win">
+    <div class="titlebar"><b style="font-weight:600">Ledge<span style="color:var(--danger-text)">.</span></b></div>
+    <div class="main">
+      <aside class="side" id="sidebar6"></aside>
+      <div class="content">
+        <div class="topbar"><span class="ic">⬡</span>OpenRig <span style="color:var(--muted-foreground);font-weight:400">/ Lancer un rig</span><span class="sp"></span><button class="btn ghost">✕</button></div>
+        <div class="page">
+          <div class="form">
+            <div class="fcol">
+              <div class="fsec">
+                <h5>1 · Spec de départ</h5>
+                <div class="hint">Le modèle de rig : ses pods, ses rôles, les liens entre eux.</div>
+                <div class="seg" style="margin-bottom:10px"><button aria-pressed="true">Bibliothèque</button><button aria-pressed="false">Fichier du projet</button><button aria-pressed="false">Bundle GitHub</button></div>
+                <div class="specs">
+                  <div class="spec sel"><b>starter<span class="src">OpenRig</span></b>build + review · 2 sièges</div>
+                  <div class="spec"><b>factory<span class="src">OpenRig</span></b>lead, advisor, build, qa, design, r1, r2 · 7</div>
+                  <div class="spec"><b>code-review<span class="src">OpenRig</span></b>lead, r1, r2 · 3</div>
+                  <div class="spec"><b>research<span class="src">OpenRig</span></b>lead, analyst, synthesizer · 3</div>
+                  <div class="spec"><b>pm<span class="src">OpenRig</span></b>lead, researcher, build · 3</div>
+                  <div class="spec"><b>ledge-x3<span class="src">mes specs</span></b>3 build + 3 review · 6</div>
+                </div>
+              </div>
+              <div class="fsec">
+                <h5>2 · Où</h5>
+                <div class="row2">
+                  <label class="fld">Projet (dossier de travail)<span class="in">Ledge · ~/Workspace/ledge</span></label>
+                  <label class="fld">Machine<span class="in">● Local</span></label>
+                  <label class="fld">Nom du rig<span class="in mono">ledge-scale</span></label>
+                </div>
+              </div>
+              <div class="fsec">
+                <h5>3 · Sièges par rôle</h5>
+                <div class="hint">Chaque rôle vient de la spec. Un compteur à 3 donne <span class="mono">build</span>, <span class="mono">build-2</span>, <span class="mono">build-3</span>, identiques au premier.</div>
+                <div class="roles">
+                  <div class="pod">pod dev · Project</div>
+                  <div class="role"><span class="rn">build<small>implementer</small></span><span class="c">écrit le code, délègue la revue</span><span class="sel-in"><span>Claude Code</span>▾</span><span class="sel-in"><span>Opus · élevé</span>▾</span><span class="step changed"><button>−</button><span>3</span><button>+</button></span></div>
+                  <div class="role"><span class="rn">review<small>qa</small></span><span class="c">relit et teste</span><span class="sel-in"><span>Codex</span>▾</span><span class="sel-in"><span>gpt-6-astra</span>▾</span><span class="step changed"><button>−</button><span>3</span><button>+</button></span></div>
+                  <div class="addrole"><button class="btn">+ Ajouter un rôle…</button><span>depuis les agents OpenRig : orchestrator, planner, product-designer, independent-reviewer…</span></div>
+                </div>
+              </div>
+              <div class="fsec">
+                <h5>4 · Qui délègue à qui</h5>
+                <div class="seg"><button aria-pressed="true">Par paires (build-2 → review-2)</button><button aria-pressed="false">Chaque build → tous les review</button></div>
+              </div>
+              <div class="factions"><label class="check" style="margin:0"><i>✓</i>Enregistrer dans mes specs sous <span class="cmd">ledge-scale</span></label><span class="sp"></span><button class="btn ghost">Annuler</button><button class="btn">Vérifier (--plan)</button><button class="btn primary">Lancer 6 sièges</button></div>
+            </div>
+            <div class="aside">
+              <div class="plan">✓ Le plan passe : 6 sièges, 3 liens, aucune autorisation en attente.<small>rig up ~/.openrig/specs/ledge-scale/rig.yaml --cwd ~/Workspace/ledge --plan</small></div>
+              <div class="yaml"><span class="k">version</span>: <span class="v">"0.2"</span>
+<span class="k">name</span>: <span class="v">ledge-scale</span>
+<span class="cm"># d'après starter (bibliothèque OpenRig)</span>
+<span class="k">pods</span>:
+  - <span class="k">id</span>: <span class="v">dev</span>
+    <span class="k">members</span>:
+      - <span class="k">id</span>: <span class="v">build</span>
+        <span class="k">agent_ref</span>: <span class="v">"local:…/development/implementer"</span>
+        <span class="k">runtime</span>: <span class="v">claude-code</span>
+        <span class="k">profile</span>: <span class="v">default</span>
+        <span class="k">cwd</span>: <span class="v">"."</span>
+<span class="add">      - <span class="k">id</span>: <span class="v">build-2</span>   <span class="cm"># comme build</span></span>
+<span class="add">      - <span class="k">id</span>: <span class="v">build-3</span>   <span class="cm"># comme build</span></span>
+      - <span class="k">id</span>: <span class="v">review</span>
+        <span class="k">agent_ref</span>: <span class="v">"local:…/development/qa"</span>
+        <span class="k">runtime</span>: <span class="v">codex</span>
+        <span class="k">model</span>: <span class="v">gpt-6-astra</span>
+<span class="add">      - <span class="k">id</span>: <span class="v">review-2</span>  <span class="cm"># comme review</span></span>
+<span class="add">      - <span class="k">id</span>: <span class="v">review-3</span>  <span class="cm"># comme review</span></span>
+    <span class="k">edges</span>:
+      - { <span class="k">kind</span>: delegates_to, <span class="k">from</span>: build,   <span class="k">to</span>: review }
+<span class="add">      - { <span class="k">kind</span>: delegates_to, <span class="k">from</span>: build-2, <span class="k">to</span>: review-2 }</span>
+<span class="add">      - { <span class="k">kind</span>: delegates_to, <span class="k">from</span>: build-3, <span class="k">to</span>: review-3 }</span></div>
+              <div class="where"><b>Où vivent les specs</b>
+                <ul>
+                  <li><b>Bibliothèque OpenRig</b> : livrée avec OpenRig (starter, factory, code-review…), en lecture seule.</li>
+                  <li><b>Mes specs</b> : <span class="mono">~/.openrig/specs/</span> sur la machine, via <span class="mono">rig specs add</span>.</li>
+                  <li><b>Fichier du projet</b> : un <span class="mono">rig.yaml</span> versionné dans le dépôt, ex. <span class="mono">.openrig/rig.yaml</span>.</li>
+                  <li><b>Bundle GitHub</b> : un lien vers un <span class="mono">.rigbundle</span> publié.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span><span class="dot"></span> Sessions locales et SSH</span><span><span class="dot off"></span> Encoche masquée</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7. SCALE ============ -->
+<section class="view" id="v-scale">
+  <p class="mk-note"><b>« ± Sièges »</b> sur un rig en marche : les mêmes compteurs par rôle, appliqués <b>sans arrêter le rig</b>. Chaque nouveau siège copie le premier de son rôle (agent, harnais, modèle) et reçoit son lien de délégation. Les sièges existants continuent leur travail. Baisser un compteur retire les derniers sièges, avec la même confirmation qu'un arrêt s'ils travaillent.</p>
+  <div style="height:12px"></div>
+  <div class="win rel">
+    <div class="titlebar"><b style="font-weight:600">Ledge<span style="color:var(--danger-text)">.</span></b></div>
+    <div class="main"><aside class="side" id="sidebar7"></aside><div class="content"><div class="topbar">OpenRig</div><div class="page"></div><div class="footer"><span><span class="dot"></span> Sessions locales et SSH</span><span><span class="dot off"></span> Encoche masquée</span></div></div></div>
+    <div class="scrim">
+      <div class="dlg wide" role="dialog" aria-labelledby="sc-t">
+        <h4 id="sc-t">Sièges du rig « starter » · Local</h4>
+        <p>Le rig reste en marche. Aujourd'hui : 1 build, 1 review.</p>
+        <div class="roles" style="margin-bottom:12px">
+          <div class="pod">pod dev</div>
+          <div class="role" style="grid-template-columns:120px 1fr 104px"><span class="rn">build<small>Claude Code · Opus</small></span><span class="seatlist"><span class="seatchip">build</span><span class="seatchip new">+ build-2</span><span class="seatchip new">+ build-3</span></span><span class="step changed"><button>−</button><span>3</span><button>+</button></span></div>
+          <div class="role" style="grid-template-columns:120px 1fr 104px"><span class="rn">review<small>Codex · gpt-6-astra</small></span><span class="seatlist"><span class="seatchip">review</span><span class="seatchip new">+ review-2</span><span class="seatchip new">+ review-3</span></span><span class="step changed"><button>−</button><span>3</span><button>+</button></span></div>
+          <div class="addrole"><button class="btn">+ Ajouter un rôle…</button><span>un rôle absent du rig, ex. orchestrator ou planner</span></div>
+        </div>
+        <div class="seg" style="margin-bottom:10px"><button aria-pressed="true">Délégation par paires</button><button aria-pressed="false">Chaque build → tous les review</button></div>
+        <div class="cmds">rig add starter dev build-2.member.yaml     <span style="color:var(--t-dim)"># ×2 build, ×2 review : fragment copié de build / review</span>
+rig add starter dev review-2.member.yaml
+…
+rig edge add starter dev.build-2 dev.review-2 --kind delegates_to
+rig edge add starter dev.build-3 dev.review-3 --kind delegates_to
+rig snapshot starter                          <span style="color:var(--t-dim)"># pour qu'un redémarrage garde 6 sièges</span></div>
+        <div class="opt"><i class="on">✓</i><span>Reporter la nouvelle taille dans la spec <span class="cmd">ledge-scale</span> de mes specs (<span class="mono">rig export</span>)</span></div>
+        <div class="acts"><button class="btn ghost">Annuler</button><button class="btn primary">Ajouter 4 sièges</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+const side = (cur) => `
+  <div class="ledgecard"><span class="mascot"></span><b>Ledge<i>.</i></b><kbd>/</kbd><small>2 à toi</small><div class="in">Demander à Ledge…</div></div>
+  <div class="nav ${cur==='atelier'?'cur':''}"><span class="ic">⊞</span>Atelier<span class="cnt mono">6 actifs</span></div>
+  <div class="nav ${cur==='openrig'?'cur':''}"><span class="ic">⬡</span>OpenRig<span class="cnt"><span class="dot" style="margin-right:4px"></span>3 rigs</span></div>
+  <div class="sec">À toi <span class="pill err" style="border-radius:999px">2</span><span style="margin-left:auto;border:1px solid var(--input);border-radius:4px;padding:0 5px;font-size:11px" class="mono">Alt ↓</span></div>
+  <div class="tree">
+    <div class="s" style="padding-left:6px"><span class="bot ap"></span>Bix <span class="rigtag">starter</span><small style="margin-left:auto">2 min</small></div>
+    <div class="relay"><button class="btn primary" style="height:22px;font-size:11.5px">Oui</button><button class="btn" style="height:22px;font-size:11.5px">Non</button></div>
+    <div class="s" style="padding-left:6px"><span class="bot q"></span>Luna <span class="rigtag">workshop</span><small style="margin-left:auto">5 min</small></div>
+  </div>
+  <div class="sec">Projets</div>
+  <div class="tree">
+    <div class="proj"><span class="sq" style="background:#10b981"></span>Ledge <small class="mono" style="font-weight:400;color:var(--muted-foreground);font-size:11px">ledge · feat/openrig</small></div>
+    <div class="s" style="padding-left:22px"><span class="bot ap"></span>Bix <span class="rigtag">starter</span><small style="margin-left:auto">dev.build</small></div>
+    <div class="s" style="padding-left:22px"><span class="bot"></span>Nova <span class="rigtag">starter</span><small style="margin-left:auto">dev.review</small></div>
+    <div class="s" style="padding-left:22px"><span class="bot idle"></span>Otto-48<small style="margin-left:auto">à l'instant</small></div>
+    <div class="br" style="padding-left:22px">+2 terminées</div>
+    <div class="proj"><span class="sq" style="background:#f59e0b"></span>Software Factory</div>
+    <div class="proj"><span class="sq" style="background:#3b82f6"></span>Paper Channel <small class="mono" style="font-weight:400;color:var(--muted-foreground);font-size:11px">website · main</small></div>
+    <div class="s" style="padding-left:22px"><span class="bot q"></span>Luna <span class="rigtag">workshop</span><small style="margin-left:auto">orch.lead</small></div>
+    <div class="s" style="padding-left:22px"><span class="bot"></span>Rio <span class="rigtag">workshop</span><small style="margin-left:auto">dev.build</small></div>
+    <div class="proj"><span class="sq" style="background:#8b5cf6"></span>Workspace</div>
+    <div class="proj"><span class="sq" style="background:#14b8a6"></span>Synapse Agents</div>
+  </div>
+  <div class="grow"></div>
+  <div class="machbar"><span><span class="dot"></span> Local <small>6</small></span><span><span class="dot"></span> EC2 - AWS <small>0</small></span><span class="sp"></span><span style="color:var(--muted-foreground)">?</span><span style="color:var(--muted-foreground)">⚙</span></div>`;
+document.getElementById('sidebar').innerHTML = side('openrig');
+document.getElementById('sidebar2').innerHTML = side('openrig');
+document.getElementById('sidebar3').innerHTML = side('atelier');
+document.getElementById('sidebar6').innerHTML = side('openrig');
+document.getElementById('sidebar7').innerHTML = side('openrig');
+document.querySelectorAll('.mk-bar button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.mk-bar button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + b.dataset.v));
+}));
+document.querySelectorAll('.tsub button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tsub button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.querySelectorAll('.tpane').forEach(p => p.classList.toggle('on', p.dataset.p === b.dataset.t));
+}));
+document.querySelectorAll('.rig-row').forEach(r => r.addEventListener('click', e => {
+  if (e.target.closest('button')) return; const g = r.parentElement; g.toggleAttribute('data-open');
+}));
+</script>
+</body>
+</html>

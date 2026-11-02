@@ -85,6 +85,8 @@ export const SessionSchema =z.object({
   worktree: z.boolean().optional(),
   /** The folder the agent works in now, as its last hook reported it: `cwd` stays where it started, this follows a worktree it entered. */
   workdir: z.string().optional(),
+  /** The OpenRig seat this agent is: its session name (`dev-build@starter`), its rig, and its role (`dev.build`) once OpenRig named it. */
+  rig: z.object({ seat: z.string(), name: z.string(), role: z.string().optional() }).optional(),
   tmuxSession: z.string().nullable(),
   /** Left out for a tmux session. `omp-rpc`: no pane, nothing to attach to; the daemon holds the process (see `agentSessionFile`). */
   backend: BackendSchema.optional(),
@@ -121,7 +123,10 @@ export const SessionSchema =z.object({
   exitCode: z.number().int().nullable().optional(),
   exitedAt: z.string().datetime().optional(),
   lastError: z.string().optional(),
-  source: z.enum(['launcher', 'hook_only']),
+  /** `launcher`: Ledge launched it; `hook_only`: only its hooks are known (read-only); `rig`: an OpenRig seat Ledge follows through
+   *  its tmux pane on the user's default server, answered like its own, whose life stays OpenRig's (no close, kill, resume, model). */
+  // A kind a newer daemon adds reads as read-only here, never as a snapshot thrown away whole (« hors ligne »).
+  source: z.enum(['launcher', 'hook_only', 'rig']).catch('hook_only'),
   /** When the session was put in the archive (session management): set, it leaves the live list and waits to be restored, resumed or deleted. */
   archivedAt: z.string().datetime().optional(),
   /** When the session was last taken out of the archive: the poller's retirement clock restarts from it, not from `exitedAt`. */

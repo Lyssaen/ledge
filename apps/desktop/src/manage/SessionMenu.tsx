@@ -17,8 +17,9 @@ export const isLiveSession = (s: Session): boolean => !s.offline && s.state !== 
 /** A session Ledge can relieve (context handover spec §3.3): one it launched, live, in a pane, not already handing over. */
 export const canHandOver = (s: Session): boolean => isStoppable(s) && s.source === 'launcher' && s.tool !== 'omp' && !!s.tmuxSession && !s.archivedAt
   && (!s.handover || s.handover.state === 'failed');
-/** Ledge can stop a session only when it launched it and it still runs: one launched outside Ledge (hook_only) is read only. */
-export const isStoppable = (s: Session): boolean => isLiveSession(s) && s.source !== 'hook_only';
+/** Ledge can stop a session only when it launched it and it still runs: one launched outside Ledge (hook_only) is read only, and an
+ *  OpenRig seat (`rig`) is stopped by OpenRig. */
+export const isStoppable = (s: Session): boolean => isLiveSession(s) && s.source === 'launcher';
 
 export interface SessionMenuProps {
   session: Session;
@@ -72,8 +73,8 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
         { ...(s.context ? { hint: t.handover.gauge(Math.round((s.context.used / s.context.window) * 100)) } : {}) })}
       <hr />
       {exited
-        ? item(m.resume, SHELL_ICONS.resume, () => actions.resume(s.id), { disabled: outdated })
-        : item(m.end, SHELL_ICONS.stop, () => actions.request('end', [s.id]), { disabled: s.offline ? m.cannotEnd(machine) : s.source === 'hook_only' ? m.outsideLedge : undefined })}
+        ? item(m.resume, SHELL_ICONS.resume, () => actions.resume(s.id), { disabled: s.source === 'rig' ? m.rigOwned(s.rig?.name ?? '') : outdated })
+        : item(m.end, SHELL_ICONS.stop, () => actions.request('end', [s.id]), { disabled: s.offline ? m.cannotEnd(machine) : s.source === 'hook_only' ? m.outsideLedge : s.source === 'rig' ? m.rigOwned(s.rig?.name ?? '') : undefined })}
       {item(stoppable ? m.endAndArchive : m.archive, SHELL_ICONS.archive, () => actions.request('archive', [s.id]), { hint: 'E', key: 'e', disabled: outdated })}
       {note}
       <hr />

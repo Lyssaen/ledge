@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MESSAGE_MAX, taskClosed, type Session, type SessionEvent, type Task, type Tool } from '@ledge/protocol';
+import { MESSAGE_MAX, RigSeatNameSchema, taskClosed, type Session, type SessionEvent, type Task, type Tool } from '@ledge/protocol';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
 import { log } from '../log.js';
 import { QUESTION_TOOLS } from '../daemon/state.js';
@@ -492,7 +492,9 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
     const timeoutMs = opts.timeoutMs ?? (identify ? 1000 : intercept || command ? SEND_MESSAGE_MS : 100);
     deadline = Date.now() + timeoutMs;
     const client = await connect({ port: opts.port, timeoutMs });
-    client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}) });
+    // OpenRig runs its seats with their name in the environment, which the agent's hooks inherit.
+    const seat = RigSeatNameSchema.safeParse(process.env.OPENRIG_SESSION_NAME);
+    client.send({ type: 'session.event', id: mapped.id, event: mapped.event, agent: mapped.agent, ...(mapped.cwd ? { cwd: mapped.cwd } : {}), ...(seat.success ? { rigSeat: seat.data } : {}) });
     if (identify) {
       const snapshot = await client.next('snapshot', Math.max(0, deadline - Date.now())).catch(() => undefined);
       known = snapshot?.sessions.find(s => s.id === mapped!.id);

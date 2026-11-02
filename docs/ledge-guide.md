@@ -81,6 +81,19 @@ On y vient par Échap depuis l'accueil ou une session, par « Retour à l'atelie
 
 Y renvoyer l'utilisateur pour avoir une vue d'ensemble de qui travaille où, ou pour ranger une session dans un projet.
 
+### OpenRig (`openrig`)
+
+On y vient par « OpenRig » dans la barre latérale, sous « Atelier ». La page pilote OpenRig sur une machine ; les puces du haut changent de machine.
+- **Daemon :** « Démarrer », « Arrêter », « Redémarrer ». La case « Au démarrage, relancer les rigs qui tournaient » lance `rig start --last` ; « Sans le kernel » ajoute `--no-kernel`.
+- **Kernel :** l'opérateur d'OpenRig (le rig nommé `kernel`), avec « Démarrer », « Arrêter », « Redémarrer ».
+- **Rigs :** chaque rig montre son état, ses sièges et son dernier snapshot ; un clic sur son nom déplie ses sièges. « Démarrer » lance `rig up <rig> --existing`, « Arrêter » `rig down <rig>`, « Redémarrer » les deux avec un snapshot.
+- **Permissions au lancement** : « Celle de la spec », « Auto » (mode auto de Claude), « Standard », « Ouvert », « YOLO » (aucune demande) ou « Verrouillé », pour tout le rig ; la colonne « Permissions » de la table change un rôle. Avec YOLO, « Accepter les avertissements de premier lancement » (`--non-interruptive`) évite qu'un siège s'arrête sur l'avertissement de Claude.
+- **± Sièges** (rig en marche) : un compteur par rôle ajoute des copies du premier siège du rôle (`build-2`, `build-3`) ou retire les dernières, sans arrêter le rig. Les sièges ajoutés sont reliés par paires ou chacun à tous (OpenRig 0.7 et plus), puis un snapshot garde la nouvelle taille pour un redémarrage.
+- Tout arrêt ou redémarrage demande confirmation, nomme les sièges qui travaillent et montre la commande `rig` lancée.
+- **Lancer un rig…** : choisir une spec (« mes specs » ou celles d'OpenRig), le dossier de travail et le nom, le nombre de sièges par rôle avec leur harnais et leur modèle, puis comment les sièges ajoutés délèguent (par paires ou chacun à tous). « Vérifier » montre ce que `rig up --plan` conclut et la spec qui sera lancée ; « Lancer » la lance. Une spec modifiée est écrite dans `~/.ledge/rigs/<nom>/`, et « Enregistrer dans mes specs » la garde dans la bibliothèque OpenRig.
+
+Y renvoyer l'utilisateur pour démarrer, arrêter ou redémarrer OpenRig, son kernel ou un rig, ou pour lancer un rig (par exemple trois développeurs et trois relecteurs), sur n'importe quelle machine.
+
 ### Session (`session`)
 
 On l'ouvre en cliquant sur un siège, sur une ligne de la barre latérale ou sur un élément « À toi ». On y accède aussi par `Alt+1…9`, par `Alt+←/→`, ou par `Ctrl+K`. Un sous-agent a sa propre page.

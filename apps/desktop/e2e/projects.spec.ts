@@ -78,10 +78,9 @@ test('+ Projects, a name, Workspace › paper-fonts on main from the folder brow
   const sent = sets(daemon.received);
   expect(sent).toHaveLength(1);
   expect(sent[0]!.projects.projects).toContainEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'amber', description: '', repos: [{ machine: 'local', path: '/home/me/Workspace/paper-fonts' }] });
-  const entry = sidebarProjects(page).getByRole('button', { name: /^Paper Rendering/ });
-  await expect(entry).toBeVisible();
-  await expect(entry.locator('xpath=ancestor::*[@role="treeitem"][1]').locator('.side-swatch')).toHaveCSS('background-color', 'rgb(245, 158, 11)');
-  await expect(page.locator('.toast')).toHaveText('Project Paper Rendering created. It appears in the sidebar; its table opens with the first session.');
+  // No session yet: the sidebar shows the project with its first one.
+  await expect(page.locator('.toast')).toHaveText('Project Paper Rendering created. It appears in the sidebar and the atelier with its first session.');
+  await expect(sidebarProjects(page).getByRole('button', { name: /^Paper Rendering/ })).toHaveCount(0);
 });
 
 test('Move to… › New project… on an agent with no project: the project is created with its folder, the agent leaves « No project » for the new table', async ({ page }) => {

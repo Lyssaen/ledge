@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge rigs et kernel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--primary:oklch(0.444 0.177 26.899);--primary-hover:oklch(0.396 0.141 25.723);
+  --border:#ffffff1a;--input:#ffffff26;--sidebar:oklch(0.205 0 0);--success:#34d399;--warning:#fbbf24;--info:#60a5fa;
+  --danger-text:oklch(0.704 0.191 22.216);--s-ok:#052e16;--s-warn:#422006;--s-info:#172554;--s-danger:#450a0a;
+  --term-bg:#0c0c0d;--term-fg:#e5e5e5;--t-green:#4ade80;--t-yellow:#facc15;--t-red:#f87171;--t-blue:#7cb3fb;--t-dim:#8f8f8f;--t-cyan:#39c5cf;
+  --bot-top:#34434b;--bot-bottom:#273238;--well:oklch(0.145 0 0);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Geist',system-ui,sans-serif;background:#000;color:var(--foreground);font-size:14px;line-height:20px;min-height:100vh}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+button{font-family:inherit;color:inherit;cursor:pointer}
+
+/* Mockup chrome (not part of the product) */
+.mk-bar{position:sticky;top:0;z-index:20;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:#0a0a0a;border-bottom:1px solid var(--border)}
+.mk-bar strong{margin-right:10px;font-weight:600}
+.mk-bar button{background:transparent;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:13px;color:var(--muted-foreground)}
+.mk-bar button[aria-pressed=true]{background:var(--muted);color:var(--foreground);border-color:var(--input)}
+.mk-note{max-width:1440px;margin:14px auto 0;padding:0 16px;color:var(--muted-foreground);font-size:13px}
+.mk-note b{color:var(--foreground);font-weight:500}
+.view{display:none;padding:14px 16px 40px}.view.on{display:block}
+
+/* Desktop window */
+.win{max-width:1440px;margin:0 auto;height:820px;border:1px solid var(--border);border-radius:10px;overflow:hidden;display:grid;grid-template-rows:32px 1fr;background:var(--background)}
+.titlebar{display:flex;align-items:center;gap:22px;padding:0 0 0 14px;font-weight:600;border-bottom:1px solid var(--border);background:#0d0d0d}
+.titlebar span{color:var(--danger-text)}
+.main{display:grid;grid-template-columns:288px 1fr;min-height:0}
+.side{background:#141414;border-right:1px solid var(--border);padding:10px 10px 0;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+.side .grow{flex:1}
+.side .machbar{display:flex;align-items:center;gap:12px;border-top:1px solid var(--border);margin:0 -10px;padding:10px 12px;font-size:12px}
+.side .machbar .sp{flex:1}.side .machbar small{color:var(--muted-foreground);font-family:'Geist Mono',monospace;font-size:11px}
+.ledgecard{border:1px solid #b91c1c88;background:linear-gradient(#2a1414,#1a1010);border-radius:10px;padding:8px 9px;display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:center}
+.ledgecard b{font-weight:600;font-size:13px}.ledgecard b i{color:var(--danger-text);font-style:normal}
+.ledgecard small{grid-column:2;font-size:11px;color:var(--muted-foreground);line-height:13px}
+.ledgecard kbd{grid-row:1/3;grid-column:3;border:1px solid var(--input);border-radius:4px;padding:0 5px;font-size:11px;color:var(--muted-foreground)}
+.ledgecard .in{grid-column:1/4;margin-top:4px;border:1px solid var(--input);border-radius:6px;padding:2px 7px;font-size:12.5px;color:var(--muted-foreground)}
+.mascot{grid-row:1/3;width:22px;height:14px;border-radius:9px 9px 3px 3px;background:#c2564f;position:relative}
+.mascot::after{content:'';position:absolute;left:5px;right:5px;top:4px;height:3px;background:#3a1010;border-radius:2px}
+.titlebar .tb-sp{flex:1}.titlebar .tb{color:var(--muted-foreground);font-weight:400;font-size:13px;width:28px;text-align:center}
+.relay{display:flex;gap:6px;justify-content:flex-end;padding:2px 2px 4px}
+.ask{display:flex;align-items:center;gap:8px;border:1px solid var(--input);border-radius:10px;padding:8px 10px;color:var(--muted-foreground);font-size:13px}
+.ask kbd{margin-left:auto;border:1px solid var(--input);border-radius:4px;padding:0 5px;font-size:11px}
+.nav{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:13px;color:var(--muted-foreground)}
+.nav.cur{background:var(--muted);color:var(--foreground);border:1px solid var(--input)}
+.nav .cnt{margin-left:auto;font-size:11px;color:var(--muted-foreground)}
+.nav .ic{width:14px;height:14px;display:inline-grid;place-items:center}
+.sec{font-size:12px;color:var(--muted-foreground);padding:10px 6px 2px;display:flex;align-items:center;gap:6px}
+.tree .proj{display:flex;align-items:center;gap:8px;padding:5px 6px;font-weight:500}
+.sq{width:9px;height:9px;border-radius:2px;display:inline-block}
+.tree .br{padding:4px 6px 4px 22px;color:var(--muted-foreground);font-size:12px}
+.tree .s{display:flex;align-items:center;gap:8px;padding:4px 6px 4px 34px;font-size:13px}
+.tree .s small{color:var(--muted-foreground);font-size:11px}
+.rigtag{font-size:10px;line-height:15px;padding:0 5px;border-radius:4px;border:1px solid #7cb3fb55;color:var(--info);font-family:'Geist Mono',monospace}
+.footer{display:flex;align-items:center;gap:18px;padding:0 14px;font-size:12px;color:var(--muted-foreground);border-top:1px solid var(--border);background:#0d0d0d}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;background:var(--success)}
+.dot.off{background:#6b6b6b}.dot.warn{background:var(--warning)}.dot.err{background:var(--danger-text)}.dot.info{background:var(--info)}
+
+.content{display:grid;grid-template-rows:56px 1fr 34px;min-height:0}
+.topbar{display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--border);font-weight:500}
+.topbar .sp{flex:1}
+.page{overflow:auto;padding:20px 24px 28px}
+.machines{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--muted-foreground);background:transparent}
+.chip[aria-pressed=true]{color:var(--foreground);background:var(--muted);border-color:var(--input)}
+.chip small{font-size:11px;color:var(--muted-foreground)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.card h3{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card .meta{color:var(--muted-foreground);font-size:12px;margin-top:3px}
+.card .acts{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.pill{font-size:11px;line-height:18px;padding:0 7px;border-radius:5px;font-weight:500}
+.pill.ok{background:var(--s-ok);color:var(--success)}.pill.off{background:var(--muted);color:var(--muted-foreground)}
+.pill.warn{background:var(--s-warn);color:var(--warning)}.pill.info{background:var(--s-info);color:var(--info)}.pill.err{background:var(--s-danger);color:var(--danger-text)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;font-size:12.5px;border-radius:7px;border:1px solid var(--input);background:transparent}
+.btn:hover{background:var(--muted)}
+.btn.primary{background:var(--primary);border-color:transparent;color:#fff}.btn.primary:hover{background:var(--primary-hover)}
+.btn.danger{color:var(--danger-text)}
+.btn.ghost{border-color:transparent;color:var(--muted-foreground)}
+.btn svg{width:13px;height:13px}
+.check{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-foreground);margin-top:10px}
+.check i{width:14px;height:14px;border-radius:4px;background:var(--primary);display:inline-grid;place-items:center;font-style:normal;font-size:10px;color:#fff}
+.cmd{font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--muted-foreground);background:var(--well);border:1px solid var(--border);border-radius:6px;padding:2px 7px;display:inline-block}
+
+.h2{display:flex;align-items:center;gap:10px;margin:4px 0 10px}
+.h2 h2{font-size:15px;font-weight:600}
+.h2 .sp{flex:1}
+.rigs{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.rig{border-bottom:1px solid var(--border)}
+.rig:last-child{border-bottom:0}
+.rig-row{display:grid;grid-template-columns:22px 1.3fr 110px 92px 1fr 1.1fr auto;gap:10px;align-items:center;padding:11px 14px}
+.rig-row .nm{font-weight:500;white-space:nowrap;min-width:0;overflow:hidden;display:flex;align-items:center;gap:8px}
+.rig-row .nm small{font-weight:400;color:var(--muted-foreground);font-size:12px}
+.rig-row .c{color:var(--muted-foreground);font-size:12px}
+.chev{color:var(--muted-foreground);font-size:11px;transition:transform .15s}
+.rig[data-open] .chev{transform:rotate(90deg)}
+.seats{display:none;background:#ffffff05;padding:4px 14px 12px 46px}
+.rig[data-open] .seats{display:block}
+.seat{display:grid;grid-template-columns:28px 160px 120px 90px 1fr 120px auto;gap:10px;align-items:center;padding:7px 0;border-top:1px dashed #ffffff12;font-size:13px}
+.seat:first-child{border-top:0}
+.seat .role{font-family:'Geist Mono',monospace;font-size:12px}
+.seat .c{color:var(--muted-foreground);font-size:12px}
+.ctx{height:5px;border-radius:3px;background:var(--muted);overflow:hidden;width:70px;display:inline-block;vertical-align:middle;margin-right:6px}
+.ctx b{display:block;height:100%;background:var(--info)}.ctx b.hot{background:var(--warning)}
+.attn{display:flex;align-items:center;gap:6px;color:var(--warning);font-size:12px}
+
+/* Bot */
+.bot{width:24px;height:20px;position:relative;display:inline-block}
+.bot::before{content:"";position:absolute;inset:0 2px 3px;border-radius:6px 6px 4px 4px;background:linear-gradient(var(--bot-top),var(--bot-bottom));box-shadow:0 0 0 1px #ffffff14}
+.bot::after{content:"";position:absolute;left:6px;right:6px;top:6px;height:5px;border-radius:3px;background:#172124;box-shadow:inset 3px 0 0 -1px var(--e,#90c7f2),inset -3px 0 0 -1px var(--e,#90c7f2)}
+.bot.idle{--e:#a9dfc7}.bot.q{--e:#f6d487}.bot.ap{--e:#f2b09c}.bot.off{--e:#555}
+.bot.big{transform:scale(2.1);margin:14px 18px}
+
+/* Confirm dialog */
+.scrim{position:absolute;inset:0;background:#000a;display:grid;place-items:center;z-index:5}
+.dlg{width:470px;background:var(--card);border:1px solid var(--input);border-radius:14px;padding:18px 20px;box-shadow:0 20px 40px -12px #000b}
+.dlg h4{font-size:15px;font-weight:600;margin-bottom:6px}
+.dlg p{color:var(--muted-foreground);font-size:13px;margin-bottom:10px}
+.dlg ul{list-style:none;border:1px solid var(--border);border-radius:9px;margin-bottom:12px}
+.dlg li{display:flex;align-items:center;gap:10px;padding:7px 10px;border-top:1px solid var(--border);font-size:13px}
+.dlg li:first-child{border-top:0}
+.dlg li .c{margin-left:auto;font-size:12px;color:var(--muted-foreground)}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.dlg .opt{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted-foreground);margin-top:6px}
+.dlg .opt i{flex:none;margin-top:3px;width:14px;height:14px;border-radius:4px;border:1px solid var(--input);display:inline-grid;place-items:center;font-style:normal;font-size:10px}
+.dlg .opt i.on{background:var(--primary);border-color:transparent;color:#fff}
+.rel{position:relative}
+
+/* Atelier */
+.atelier{position:relative;background:radial-gradient(circle at 50% 40%,#151a1f,#0b0d0f);background-size:auto;overflow:hidden}
+.atelier::before{content:"";position:absolute;inset:0;background-image:linear-gradient(#ffffff06 1px,transparent 1px),linear-gradient(90deg,#ffffff06 1px,transparent 1px);background-size:40px 40px}
+.room{position:absolute;border-radius:22px;border:1px solid #ffffff1c;background:linear-gradient(160deg,#18202b,#121820);box-shadow:0 30px 60px -20px #000;transform:perspective(1400px) rotateX(10deg)}
+.room.green{background:linear-gradient(160deg,#16231e,#111a16)}
+.table{position:absolute;left:12%;right:12%;top:38%;height:30%;border-radius:16px;background:linear-gradient(#6b5a3a,#4a3e28);box-shadow:inset 0 0 0 1px #ffffff20,0 10px 20px -8px #000}
+.note{position:absolute;font-size:9px;line-height:11px;padding:5px 7px;background:#2a2a2a;border:1px solid #ffffff25;border-radius:3px;color:#ddd;width:86px;transform:rotate(-3deg)}
+.chair{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px}
+.chair .bot{transform:scale(1.7);margin:8px 0 6px}
+.chair .who{font-weight:500}
+.chair .sub{font-size:10.5px;color:var(--muted-foreground);font-family:'Geist Mono',monospace}
+.chair .pill{font-size:10.5px}
+.roomlabel{position:absolute;left:18px;bottom:14px;background:#111;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;display:flex;gap:8px;align-items:center}
+.rigband{white-space:nowrap;position:absolute;left:50%;top:14px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:#0e1622;border:1px solid #7cb3fb44;border-radius:999px;padding:4px 6px 4px 12px;font-size:12px;color:var(--info)}
+.rigband .btn{height:22px;font-size:11.5px;color:var(--foreground)}
+.legend{position:absolute;left:24px;bottom:18px;background:#111c;border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:11.5px;color:var(--muted-foreground);display:flex;gap:14px}
+
+/* TUI */
+.term{max-width:1100px;margin:0 auto;background:var(--term-bg);color:var(--term-fg);border:1px solid var(--border);border-radius:10px;padding:14px 18px;font-family:'Geist Mono',monospace;font-size:13px;line-height:19px;white-space:pre;overflow:auto}
+.g{color:var(--t-green)}.y{color:var(--t-yellow)}.r{color:var(--t-red)}.b{color:var(--t-blue)}.d{color:var(--t-dim)}.cy{color:var(--t-cyan)}.inv{background:#2b2b2b}.bold{font-weight:600}
+.cli{max-width:1100px;margin:18px auto 0}
+.cli h3{font-size:14px;font-weight:600;margin-bottom:8px}
+
+/* States */
+.states{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.states .card p{color:var(--muted-foreground);font-size:13px;margin-top:8px}
+.states .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-foreground);margin-bottom:8px}
+.err-box{margin-top:10px;border:1px solid #f8717133;background:var(--s-danger);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.err-box code{display:block;margin-top:5px;font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--muted-foreground)}
+
+
+/* Launch / scale */
+.form{display:grid;grid-template-columns:1fr 380px;gap:18px;min-height:0}
+.fcol{display:flex;flex-direction:column;gap:16px;min-width:0}
+.fsec h5{font-size:13px;font-weight:600;margin-bottom:2px}
+.fsec .hint{font-size:12px;color:var(--muted-foreground);margin-bottom:8px}
+.seg{display:flex;border:1px solid var(--input);border-radius:9px;padding:2px;gap:2px;width:max-content}
+.seg button{border:0;background:transparent;font-size:12.5px;padding:4px 12px;border-radius:7px;color:var(--muted-foreground)}
+.seg button[aria-pressed=true]{background:var(--muted);color:var(--foreground)}
+.specs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.spec{border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--card);font-size:12px;color:var(--muted-foreground)}
+.spec b{display:flex;align-items:center;gap:6px;color:var(--foreground);font-size:13px;font-weight:500;margin-bottom:2px}
+.spec.sel{border-color:#f87171aa;box-shadow:0 0 0 1px #f8717155 inset}
+.spec .src{font-size:10px;font-family:'Geist Mono',monospace;border:1px solid var(--border);border-radius:4px;padding:0 4px;margin-left:auto;color:var(--muted-foreground);font-weight:400}
+.row2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted-foreground)}
+.fld .in{border:1px solid var(--input);border-radius:7px;padding:5px 9px;font-size:13px;color:var(--foreground);background:var(--well)}
+.roles{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.pod{padding:6px 12px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground);background:#ffffff06;border-bottom:1px solid var(--border)}
+.role{display:grid;grid-template-columns:150px 1fr 160px 150px 104px;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}
+.role:last-child{border-bottom:0}
+.role .rn{font-family:'Geist Mono',monospace;font-size:12.5px}
+.role .rn small{display:block;font-family:'Geist',sans-serif;color:var(--muted-foreground);font-size:11px}
+.role .c{color:var(--muted-foreground);font-size:12px}
+.sel-in{border:1px solid var(--input);border-radius:6px;padding:3px 8px;font-size:12px;display:flex;justify-content:space-between;background:var(--well)}
+.step{display:flex;align-items:center;border:1px solid var(--input);border-radius:7px;overflow:hidden;width:max-content}
+.step button{width:28px;height:26px;border:0;background:transparent;font-size:14px}
+.step span{min-width:30px;text-align:center;font-family:'Geist Mono',monospace;font-size:13px;border-left:1px solid var(--input);border-right:1px solid var(--input);line-height:26px}
+.step.changed span{color:var(--success)}
+.addrole{padding:8px 12px;font-size:12.5px;color:var(--muted-foreground);display:flex;gap:8px;align-items:center}
+.links{font-size:12px;color:var(--muted-foreground);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.yaml{background:var(--term-bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-family:'Geist Mono',monospace;font-size:11.5px;line-height:17px;white-space:pre;overflow:auto;color:var(--term-fg)}
+.yaml .k{color:var(--t-blue)}.yaml .v{color:var(--t-green)}.yaml .cm{color:var(--t-dim)}.yaml .add{background:#16a34a22;display:inline-block;width:100%}
+.aside{display:flex;flex-direction:column;gap:12px;min-width:0}
+.where{border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted-foreground)}
+.where b{color:var(--foreground);font-weight:500}
+.where li{margin:4px 0 0 16px}
+.plan{border:1px solid #34d39944;background:var(--s-ok);border-radius:9px;padding:8px 11px;font-size:12.5px}
+.plan small{display:block;color:var(--muted-foreground);font-size:11.5px;margin-top:2px}
+.factions{display:flex;gap:8px;justify-content:flex-end;align-items:center;border-top:1px solid var(--border);padding-top:14px;margin-top:4px}
+.factions .sp{flex:1}
+.cmds{font-family:'Geist Mono',monospace;font-size:11.5px;line-height:18px;color:var(--muted-foreground);background:var(--well);border:1px solid var(--border);border-radius:8px;padding:8px 10px;white-space:pre;overflow:auto}
+.dlg.wide{width:760px}
+.seatlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.seatchip{font-family:'Geist Mono',monospace;font-size:11.5px;border:1px solid var(--border);border-radius:6px;padding:1px 7px;color:var(--muted-foreground)}
+.seatchip.new{border-color:#34d39966;color:var(--success)}
+.seatchip.rm{border-color:#f8717166;color:var(--danger-text);text-decoration:line-through}
+
+
+.tsub{max-width:1440px;margin:12px auto 10px;display:flex;gap:6px;padding:0 16px}
+.tsub button{background:transparent;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:12.5px;color:var(--muted-foreground)}
+.tsub button[aria-pressed=true]{background:var(--muted);color:var(--foreground)}
+.tframe{max-width:1440px;margin:0 auto;overflow:auto;background:#1c1917;border:1px solid var(--border);border-radius:10px;padding:10px}
+.tpane{display:none}.tpane.on{display:block}
+.tt{font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;line-height:17px;white-space:pre;color:#e6e0dc;width:max-content}
+
+@media (max-width:900px){.main{grid-template-columns:1fr}.side{display:none}.grid2,.states{grid-template-columns:1fr}.rig-row{grid-template-columns:22px 1fr auto}.rig-row>:nth-child(n+3):not(:last-child){display:none}.seat{grid-template-columns:28px 1fr auto}.seat>:nth-child(n+3):not(:last-child){display:none}.win{height:auto}}
+
+.room.kernel{background:linear-gradient(160deg,#1d1828,#14111c);border-color:#b9a2f055}
+.room.kernel .table{background:linear-gradient(#3b3352,#2a2440)}
+.room.rig{background:linear-gradient(160deg,#16202b,#101820);border-color:#7cb3fb40}
+.roomhead{position:absolute;left:16px;top:12px;display:flex;align-items:center;gap:8px;font-size:12.5px}
+.roomhead b{font-weight:600}
+.roomhead small{color:var(--muted-foreground);font-family:'Geist Mono',monospace;font-size:11px}
+.roomhead .hex{color:#b9a2f0}
+.roomacts{position:absolute;right:14px;bottom:12px;display:flex;gap:6px}
+.roomacts .btn{height:24px;font-size:11.5px}
+.chair .seatrole{font-size:10.5px;color:var(--muted-foreground);font-family:'Geist Mono',monospace}
+.chair .harness{font-size:10px;color:#b9a2f0;font-family:'Geist Mono',monospace}
+.sec .hex{color:#b9a2f0}
+.tree .grp{display:flex;align-items:center;gap:8px;padding:5px 6px;font-weight:500}
+.tree .grp small{font-weight:400;color:var(--muted-foreground);font-size:11px;font-family:'Geist Mono',monospace}
+.tree .grp .pill{margin-left:auto}
+.kseat{display:grid;grid-template-columns:24px 140px 1fr 100px auto auto;gap:10px;align-items:center;padding:6px 0;border-top:1px dashed #ffffff14;font-size:13px}
+.kseat:first-child{border-top:0}
+.kseat .mono{font-size:12.5px}
+.gear{width:28px;height:28px;display:inline-grid;place-items:center;border:1px solid var(--input);border-radius:7px;background:transparent;color:var(--muted-foreground)}
+.dlg.set{width:680px}
+.dlg.set .cmds{white-space:pre-wrap;word-break:break-word}
+.setgrid{display:grid;grid-template-columns:200px 1fr;gap:10px 14px;align-items:center;margin:6px 0 12px}
+.setgrid label{font-size:12.5px;color:var(--muted-foreground);white-space:nowrap}
+.setgrid .in{border:1px solid var(--input);border-radius:7px;padding:6px 10px;font-size:13px;background:var(--well);display:flex;justify-content:space-between}
+.setgrid .seg{width:auto}
+.setnote{font-size:12px;color:var(--muted-foreground);margin:-4px 0 10px 214px}
+.when{font-size:11px;padding:0 6px;border-radius:4px;background:var(--s-info);color:var(--info);margin-left:6px}
+.when.now{background:var(--s-warn);color:var(--warning)}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1440px;margin:0 auto}
+.compare .card h4{font-size:13px;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="mk-bar" role="toolbar" aria-label="Vues de la maquette">
+  <strong>Maquette · Rigs et kernel à part des projets</strong>
+  <button data-v="atelier" aria-pressed="true">1 · Atelier</button>
+  <button data-v="settings" aria-pressed="false">2 · Réglages d'un siège</button>
+  <button data-v="tui" aria-pressed="false">3 · TUI</button>
+  <button data-v="before" aria-pressed="false">4 · Avant / après</button>
+</div>
+
+<!-- 1. ATELIER -->
+<section class="view on" id="v-atelier">
+  <p class="mk-note"><b>Les rigs ont leur propre salle</b>, à côté des projets : leurs sièges s'assoient autour de leur table, avec leur rôle sous le nom. La salle dit le dossier où le rig travaille (« ~/Workspace/ledge · projet Ledge ») et porte ses actions. Les tables des projets ne gardent que les sessions de Ledge. <b>Le kernel</b> a sa salle à lui, violette, en haut à gauche, avec l'opérateur, l'advisor et la file. Dans la barre latérale, trois groupes : <b>Projets</b>, <b>Rigs</b>, <b>Kernel</b>.</p>
+  <div style="height:12px"></div>
+  <div class="win">
+    <div class="titlebar"><b style="font-weight:600">Ledge<span style="color:var(--danger-text)">.</span></b></div>
+    <div class="main">
+      <aside class="side">
+        <div class="ledgecard"><span class="mascot"></span><b>Ledge<i>.</i></b><kbd>/</kbd><small>1 à toi</small><div class="in">Demander à Ledge…</div></div>
+        <div class="nav cur"><span class="ic">⊞</span>Atelier<span class="cnt mono">7 actifs</span></div>
+        <div class="nav"><span class="ic">⬡</span>OpenRig</div>
+        <div class="sec">À toi <span class="pill err" style="border-radius:999px">1</span></div>
+        <div class="tree"><div class="s" style="padding-left:6px"><span class="bot ap"></span>Bix <span class="rigtag">first-factory</span><small style="margin-left:auto">2 min</small></div></div>
+        <div class="sec">Projets</div>
+        <div class="tree">
+          <div class="proj"><span class="sq" style="background:#3b82f6"></span>Ledge <small class="mono" style="font-weight:400;color:var(--muted-foreground);font-size:11px">ledge · main</small></div>
+          <div class="s" style="padding-left:22px"><span class="bot idle"></span>Otto<small style="margin-left:auto">à l'instant</small></div>
+          <div class="s" style="padding-left:22px"><span class="bot"></span>Pim<small style="margin-left:auto">3 min</small></div>
+          <div class="proj"><span class="sq" style="background:#22c55e"></span>Website</div>
+        </div>
+        <div class="sec">Rigs</div>
+        <div class="tree">
+          <div class="grp"><span class="ic" style="color:var(--info)">⬡</span>first-factory <small>ledge</small><span class="pill ok">2/2</span></div>
+          <div class="s" style="padding-left:22px"><span class="bot ap"></span>Bix<small style="margin-left:auto">dev.build</small></div>
+          <div class="s" style="padding-left:22px"><span class="bot"></span>Nova<small style="margin-left:auto">dev.review</small></div>
+          <div class="grp"><span class="ic" style="color:var(--info)">⬡</span>workshop <small>website</small><span class="pill info">2/4</span></div>
+        </div>
+        <div class="sec"><span class="hex">⬡</span> Kernel</div>
+        <div class="tree">
+          <div class="s" style="padding-left:6px"><span class="bot idle"></span>Lu<small style="margin-left:auto">operator · codex</small></div>
+          <div class="s" style="padding-left:6px"><span class="bot"></span>Ada<small style="margin-left:auto">advisor · claude</small></div>
+          <div class="s" style="padding-left:6px"><span class="bot idle"></span>Sol<small style="margin-left:auto">queue · codex</small></div>
+        </div>
+        <div class="grow"></div>
+        <div class="machbar"><span><span class="dot"></span> Local <small>7</small></span><span><span class="dot"></span> EC2 - AWS <small>0</small></span><span class="sp"></span></div>
+      </aside>
+      <div class="content">
+        <div class="topbar"><span class="ic">⊞</span>Atelier</div>
+        <div class="atelier">
+          <!-- kernel -->
+          <div class="room kernel" style="left:3%;top:6%;width:30%;height:40%">
+            <div class="roomhead"><span class="hex">⬡</span><b>Kernel</b><small>OpenRig · Local</small></div>
+            <div class="roomacts"><button class="btn">Parler à l'opérateur</button></div>
+            <div class="table" style="top:46%;height:24%;left:14%;right:14%"></div>
+            <div class="chair" style="left:9%;top:16%"><span class="bot idle"></span><span class="who">Lu</span><span class="seatrole">operator</span><span class="pill ok">Disponible</span></div>
+            <div class="chair" style="left:40%;top:16%"><span class="bot"></span><span class="who">Ada</span><span class="seatrole">advisor</span><span class="pill info">Au travail</span></div>
+            <div class="chair" style="left:70%;top:16%"><span class="bot idle"></span><span class="who">Sol</span><span class="seatrole">queue</span><span class="pill ok">Disponible</span></div>
+          </div>
+          <!-- project -->
+          <div class="room" style="left:36%;top:6%;width:28%;height:40%">
+            <div class="roomhead"><span class="sq" style="background:#3b82f6"></span><b>Ledge</b><small>ledge · main</small></div>
+            <div class="table" style="top:46%;height:24%"></div>
+            <div class="chair" style="left:22%;top:16%"><span class="bot idle"></span><span class="who">Otto</span><span class="sub">Local</span><span class="pill ok">Disponible</span></div>
+            <div class="chair" style="left:58%;top:16%"><span class="bot"></span><span class="who">Pim</span><span class="sub">Local</span><span class="pill info">Au travail</span></div>
+          </div>
+          <!-- rig first-factory -->
+          <div class="room rig" style="left:3%;top:52%;width:44%;height:42%">
+            <div class="roomhead"><span class="ic" style="color:var(--info)">⬡</span><b>first-factory</b><small>rig · ~/Workspace/ledge · projet Ledge</small></div>
+            <div class="roomacts"><button class="btn">± Sièges</button><button class="btn">■ Arrêter</button><button class="btn">↻</button></div>
+            <div class="table" style="top:46%;height:24%;left:18%;right:18%">
+              <div class="note" style="left:10%;top:20%">Câbler OpenRig</div><div class="note" style="left:56%;top:24%;transform:rotate(2deg)">Revue lot 4c</div>
+            </div>
+            <div class="chair" style="left:24%;top:16%"><span class="bot ap"></span><span class="who">Bix</span><span class="seatrole">dev.build</span><span class="pill err">Votre accord</span></div>
+            <div class="chair" style="left:58%;top:16%"><span class="bot"></span><span class="who">Nova</span><span class="seatrole">dev.review</span><span class="pill info">Au travail</span></div>
+          </div>
+          <!-- rig workshop -->
+          <div class="room rig" style="left:50%;top:52%;width:44%;height:42%">
+            <div class="roomhead"><span class="ic" style="color:var(--info)">⬡</span><b>workshop</b><small>rig · ~/Workspace/website · projet Website</small></div>
+            <div class="roomacts"><button class="btn">± Sièges</button><button class="btn">■ Arrêter</button></div>
+            <div class="table" style="top:46%;height:24%;left:12%;right:12%"></div>
+            <div class="chair" style="left:10%;top:16%"><span class="bot q"></span><span class="who">Luna</span><span class="seatrole">orch.lead</span><span class="pill warn">Une question</span></div>
+            <div class="chair" style="left:38%;top:16%"><span class="bot"></span><span class="who">Rio</span><span class="seatrole">dev.build</span><span class="pill info">Au travail</span></div>
+            <div class="chair" style="left:66%;top:16%;opacity:.45"><span class="bot off"></span><span class="who">dev.qa</span><span class="seatrole">démarrage…</span></div>
+          </div>
+        </div>
+        <div class="footer"><span><span class="dot"></span> Sessions locales et SSH</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. SETTINGS -->
+<section class="view" id="v-settings">
+  <p class="mk-note"><b>⚙ sur chaque siège</b> (carte Kernel de la page OpenRig, sièges d'un rig, menu d'un siège dans l'atelier) ouvre ses réglages. <b>Le harnais change tout de suite</b> : OpenRig lance un successeur sur l'autre harnais, lui passe le contexte, puis le met à sa place (« Voir le plan » montre d'abord ce qu'il fera). Le modèle, l'effort et les permissions s'appliquent à la prochaine reprise du siège.</p>
+  <div style="height:12px"></div>
+  <div class="win rel">
+    <div class="titlebar"><b style="font-weight:600">Ledge<span style="color:var(--danger-text)">.</span></b></div>
+    <div class="main">
+      <aside class="side" style="opacity:.5"></aside>
+      <div class="content">
+        <div class="topbar"><span class="ic">⬡</span>OpenRig</div>
+        <div class="page">
+          <div class="grid2">
+            <div class="card"><h3><span class="dot"></span>Daemon <span class="pill ok">Actif</span></h3><div class="meta mono">127.0.0.1:7433 · pid 255259</div></div>
+            <div class="card">
+              <h3><span class="dot"></span>Kernel <span class="pill ok">Prêt</span></h3>
+              <div class="acts"><button class="btn primary">Parler à l'opérateur</button><button class="btn">■ Arrêter</button><button class="btn">↻ Redémarrer</button></div>
+              <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:6px">
+                <div class="kseat"><span class="bot idle"></span><span class="mono">operator.agent</span><span class="c" style="color:var(--muted-foreground)">codex · gpt-6-astra</span><span class="pill ok">Disponible</span><button class="btn">Ouvrir</button><button class="gear" aria-label="Réglages">⚙</button></div>
+                <div class="kseat"><span class="bot"></span><span class="mono">advisor.lead</span><span class="c" style="color:var(--muted-foreground)">claude-code · opus</span><span class="pill info">Au travail</span><button class="btn">Ouvrir</button><button class="gear">⚙</button></div>
+                <div class="kseat"><span class="bot idle"></span><span class="mono">queue.worker</span><span class="c" style="color:var(--muted-foreground)">codex</span><span class="pill ok">Disponible</span><button class="btn">Ouvrir</button><button class="gear">⚙</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"></div>
+      </div>
+    </div>
+    <div class="scrim">
+      <div class="dlg set" role="dialog">
+        <h4>Réglages du siège operator.agent · kernel</h4>
+        <p>L'opérateur du kernel, aujourd'hui sur Codex · gpt-6-astra.</p>
+        <div class="setgrid">
+          <label>Harnais <span class="when now">tout de suite</span></label>
+          <div class="seg"><button aria-pressed="false">Codex</button><button aria-pressed="true">Claude Code</button></div>
+          <label>Modèle <span class="when">à la reprise</span></label>
+          <div class="in"><span>Opus</span>▾</div>
+          <label>Effort <span class="when">à la reprise</span></label>
+          <div class="seg"><button aria-pressed="false">low</button><button aria-pressed="false">medium</button><button aria-pressed="true">high</button><button aria-pressed="false">max</button></div>
+          <label>Permissions <span class="when">au lancement</span></label>
+          <div class="seg"><button aria-pressed="true">Celle du rig</button><button aria-pressed="false">Par défaut</button><button aria-pressed="false">Auto</button><button aria-pressed="false">YOLO</button></div>
+        </div>
+        <p class="setnote">Le changement de harnais démarre un successeur Claude Code, lui passe le contexte de Codex, puis le met à la place (jusqu'à 3 min). La conversation Codex reste dans l'historique.</p>
+        <div class="cmds">rig seat set-runtime operator-agent@kernel --runtime claude-code --model opus --effort high
+<span style="color:var(--t-dim)"># « Voir le plan » : la même commande avec --dry-run</span></div>
+        <div class="acts" style="margin-top:12px"><button class="btn ghost">Annuler</button><button class="btn">Voir le plan</button><button class="btn primary">Passer sur Claude Code</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. TUI -->
+<section class="view" id="v-tui">
+  <p class="mk-note"><b>Dans <span class="cmd">ledge tui</span></b>, la vue d'ensemble a les mêmes trois groupes : PROJETS, RIGS (un rig par ligne, ses sièges dessous) et KERNEL. Sur l'écran 6, <span class="cmd">c</span> sur un siège du kernel ouvre ses réglages.</p>
+  <div style="height:12px"></div>
+<div class="term">╭─ À TOI · 1 ─────────────────────────────────╮╭─ BIX · RIG FIRST-FACTORY · DEV.BUILD ──────────────────────────╮
+│ <span class="r">◆</span> Bix   <span class="b">[first-factory]</span> dev.build  npm test   ││ <span class="r">◆ Votre accord</span>  Claude Code · opus · ~/Workspace/ledge       │
+╰─────────────────────────────────────────────╯│   Veut exécuter : npm test                                     │
+╭─ PROJETS ───────────────────────────────────╮│    y oui   n non   A toujours                                  │
+│ <span class="b">■</span> Ledge  2 sessions                          │╰────────────────────────────────────────────────────────────────╯
+│    <span class="g">○</span> Otto     Disponible                      │
+│    <span class="b">●</span> Pim      Au travail                      │
+╰─────────────────────────────────────────────╯
+╭─ RIGS ──────────────────────────────────────╮
+│ <span class="b">⬡</span> first-factory  <span class="d">ledge</span>             <span class="g">2/2</span>      │
+│    <span class="r">◆</span> Bix     dev.build    <span class="r">Votre accord</span>       │
+│    <span class="b">●</span> Nova    dev.review   <span class="b">Au travail</span>         │
+│ <span class="b">⬡</span> workshop       <span class="d">website</span>           <span class="cy">2/4</span>      │
+╰─────────────────────────────────────────────╯
+╭─ KERNEL ────────────────────────────────────╮
+│    <span class="g">○</span> Lu      operator  codex   Disponible     │
+│    <span class="b">●</span> Ada     advisor   claude  Au travail     │
+│    <span class="g">○</span> Sol     queue     codex   Disponible     │
+╰─────────────────────────────────────────────╯
+  <span class="d">j k naviguer   ↵ ouvrir   a attacher   y n A répondre   6 OpenRig   ? aide</span></div>
+</section>
+
+<!-- 4. BEFORE / AFTER -->
+<section class="view" id="v-before">
+  <p class="mk-note">Ce qui change par rapport à aujourd'hui.</p>
+  <div style="height:12px"></div>
+  <div class="compare">
+    <div class="card"><h4>Aujourd'hui</h4><p class="meta" style="font-size:13px;line-height:20px">Un siège de rig s'assoit à la table du projet de son dossier, mêlé aux sessions de Ledge, avec l'étiquette du rig. Les sièges du kernel tombent dans le projet de leur dossier (souvent « Sans projet » ou celui d'OpenRig). Le harnais d'un siège ne se change pas depuis Ledge.</p></div>
+    <div class="card"><h4>Proposé</h4><p class="meta" style="font-size:13px;line-height:20px">Une salle par rig (son dossier et son projet écrits sur la salle), une salle Kernel à part, et dans la barre latérale trois groupes : Projets (sessions de Ledge), Rigs, Kernel. Un rig arrêté garde sa salle vide, grisée, avec « Démarrer ». Chaque siège a ses réglages (⚙) : harnais tout de suite, modèle, effort et permissions à la reprise.</p></div>
+  </div>
+</section>
+
+<script>
+document.querySelectorAll('.mk-bar button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.mk-bar button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + b.dataset.v));
+}));
+</script>
+</body>
+</html>

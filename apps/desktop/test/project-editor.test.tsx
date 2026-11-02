@@ -97,13 +97,14 @@ describe('the project editor: a new project from the sidebar', () => {
     expect(screen.getByRole('dialog', { name: 'New project' })).toBeVisible();
   });
 
-  it('the broadcast that holds it closes the editor, says so, and the project appears in the sidebar', async () => {
+  it('the broadcast that holds it closes the editor and says so; the sidebar shows the project with its first session', async () => {
     const { side, user, dialog, name } = await openNew();
     await user.type(name, 'Paper Rendering');
     await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar; its table opens with the first session.');
-    expect(side.getByRole('button', { name: /^Paper Rendering/ })).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar and the atelier with its first session.');
+    // No session yet: the sidebar shows it with its first one.
+    expect(side.queryByRole('button', { name: /^Paper Rendering/ })).toBeNull();
   });
 
   it('a daemon that never confirms: 8 s later the editor says so, and the values stay', async () => {
@@ -141,8 +142,9 @@ describe('the project editor: a new project from the sidebar', () => {
     await waitFor(() => expect(setsOf(d)).toHaveLength(1));
     d.releaseProjects();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar; its table opens with the first session.');
-    expect(side.getByRole('button', { name: /^Paper Rendering/ })).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar and the atelier with its first session.');
+    // No session yet: the sidebar shows it with its first one.
+    expect(side.queryByRole('button', { name: /^Paper Rendering/ })).toBeNull();
   });
 
   it('edited after the 8 s: the late confirmation keeps the editor open with the newer values, now on the project it created; Save sends them', async () => {
@@ -157,7 +159,7 @@ describe('the project editor: a new project from the sidebar', () => {
     fireEvent.change(dialog.getByRole('textbox', { name: /^Description/ }), { target: { value: 'Fonts and pages' } });
     await waitFor(() => expect(setsOf(d)).toHaveLength(1));
     d.releaseProjects();
-    await waitFor(() => expect(side.getByRole('button', { name: /^Paper Rendering/ })).toBeVisible());
+    await waitFor(() => expect(dialog.getByRole('button', { name: /^Save/ })).toBeVisible());
     await tick();
     // Still open, the newer edit kept, the refusal gone, no problem (the project it created is its own): « Save » now.
     expect(screen.getByRole('dialog', { name: 'New project' })).toBeVisible();

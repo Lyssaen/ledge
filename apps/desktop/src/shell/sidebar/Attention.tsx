@@ -7,6 +7,7 @@ import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { DecisionAnswer } from '../../tasks/DecisionAnswer';
 import type { TasksApi } from '../../tasks/useTasksApi';
+import { RigTag } from '../../openrig/RigTag';
 import { cls } from '../cls';
 import { HelperBot, SessionBot } from '../SessionBot';
 import { quickDecide, type AttnItem } from './model';
@@ -75,6 +76,7 @@ export function Attention(p: {
               <div className="st-l1">
                 <button type="button" className="st-name" onClick={() => p.onOpen(item.session.id, item.helper?.id)}
                   aria-label={`${t.list.open} ${who}`}>{who}</button>
+                {!item.helper && <RigTag session={item.session} />}
                 <span className="st-where"><ProjectSwatch project={project} />{where}</span>
                 <span className={cls('st-time', `t-${item.kind}`)}>{shortWhen(item.since, units, t.list.when.now)}</span>
               </div>

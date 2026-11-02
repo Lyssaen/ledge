@@ -13,6 +13,8 @@ export interface Tmux {
   capture(name: string, lines: number): Promise<string | null>;
   /** The pane's width in columns, or null when tmux cannot tell. */
   width?(name: string): Promise<number | null>;
+  /** The folder the pane's program runs in, or null when tmux cannot tell. */
+  paneCwd?(name: string): Promise<string | null>;
   hasSession(name: string): Promise<boolean>;
   /** Empty when no tmux server runs; throws on any other failure. */
   listSessions(): Promise<string[]>;
@@ -50,9 +52,10 @@ export function newSessionCommand(tmuxArgs: string[], scoped: boolean, unit: str
   return { file: 'systemd-run', args: ['--user', '--scope', '--quiet', '--collect', `--unit=${unit}`, '--', 'tmux', ...tmuxArgs] };
 }
 
-export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean> } = {}): Tmux {
+/** `socket` null: the user's default tmux server (OpenRig's seats run there), with its own configuration. */
+export function realTmux(socket: string | null = 'ledge', opts: { scope?: () => Promise<boolean> } = {}): Tmux {
   const scope = opts.scope ?? (async () => systemdAvailable());
-  const base = () => ['-L', socket, '-f', paths().tmuxConf];
+  const base = () => (socket === null ? [] : ['-L', socket, '-f', paths().tmuxConf]);
   const t = (args: string[], env?: NodeJS.ProcessEnv) => run([...base(), ...args], env);
   return {
     async newSession({ name, cwd, env, unset = [], command }) {
@@ -95,6 +98,11 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
     async hasSession(name) {
       return (await t(['has-session', '-t', `=${name}`])).code === 0;
     },
+    async paneCwd(name) {
+      const r = await t(['display-message', '-p', '-t', `=${name}:`, '#{pane_current_path}']);
+      const p = r.stdout.trim();
+      return r.code === 0 && p.startsWith('/') ? p : null;
+    },
     async listSessions() {
       const r = await t(['list-sessions', '-F', '#{session_name}']);
       if (r.code === 0) return r.stdout.split('\n').map(s => s.trim()).filter(Boolean);
@@ -108,5 +116,34 @@ export function realTmux(socket = 'ledge', opts: { scope?: () => Promise<boolean
     },
     async killSession(name) { await t(['kill-session', '-t', `=${name}`]); },
     attachArgs(name, opts) { return [...base(), 'attach-session', ...(opts?.readOnly ? ['-r'] : []), '-t', `=${name}`]; }
+  };
+}
+
+/** An OpenRig seat's tmux session: `pod-member@rig`. Ledge names its own `ledge-<id>`, never with an `@`. */
+export const isSeatSession = (name: string): boolean => name.includes('@');
+
+/**
+ * Ledge's own tmux server for its sessions, the user's default server for OpenRig's seats (docs/mockups/ledge-openrig.html,
+ * view 3): each call goes to the server of the session it names. The list is both, so a seat is never taken for gone;
+ * a default server that cannot be read leaves only Ledge's sessions, as before.
+ */
+export function routedTmux(own: Tmux, seats: Tmux): Tmux {
+  const of = (name: string) => (isSeatSession(name) ? seats : own);
+  return {
+    newSession: o => own.newSession(o),
+    sendText: (n, text) => of(n).sendText(n, text),
+    sendKeys: (n, keys) => of(n).sendKeys(n, keys),
+    capture: (n, lines) => of(n).capture(n, lines),
+    width: async n => { const t = of(n); return t.width ? t.width(n) : null; },
+    paneCwd: async n => { const t = of(n); return t.paneCwd ? t.paneCwd(n) : null; },
+    hasSession: n => of(n).hasSession(n),
+    async listSessions() {
+      const mine = await own.listSessions();
+      const theirs = await seats.listSessions().catch(() => [] as string[]);
+      return [...mine, ...theirs.filter(isSeatSession)];
+    },
+    killSession: n => of(n).killSession(n),
+    setOption: (n, option, value) => of(n).setOption(n, option, value),
+    attachArgs: (n, opts) => of(n).attachArgs(n, opts)
   };
 }

@@ -12,6 +12,7 @@ export * from './names.js';
 export * from './proposal.js';
 export * from './repos.js';
 export * from './models.js';
+export * from './openrig.js';
 export * from './scan.js';
 export * from './topic.js';
 export * from './routing.js';
