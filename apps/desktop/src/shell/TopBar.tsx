@@ -68,7 +68,11 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
         )}
       </>;
     }
-    if (place.kind === 'openrig') return <strong>{t.openrig.title}</strong>;
+    if (place.kind === 'openrig') return place.section === 'roles' ? <>
+      <button className="crumb-link" onClick={() => dispatch({ type: 'openrig', section: 'rigs' })}>{t.openrig.title}</button>
+      <span className="muted">/</span>
+      <strong>{t.openrig.roles.crumb}</strong>
+    </> : <strong>{t.openrig.title}</strong>;
     const filter = place.project;
     if (filter === 'all') return <strong>{t.crumb.atelier}</strong>;
     const color = project(filter)?.color;
