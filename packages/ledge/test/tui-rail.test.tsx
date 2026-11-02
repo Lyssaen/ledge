@@ -27,11 +27,11 @@ describe('ledge tui: the rail and the tabs', () => {
       tui.daemon.push({ type: 'decisions', items: today() });
       await until(() => tui.frame().includes('TRANCHÉ AUJOURD’HUI · 3'));
       const f = tui.frame();
-      expect(f).toContain('RIGS · 2');
+      expect(f).toContain('ÉQUIPES · 2');
       expect(f).toMatch(/▣ factory +4\/6 ████████░░░░/);
       expect(f).toMatch(/▣ starter +1\/2 ██████░░░░░░/);
       expect(f).toMatch(/◈ noyau +au repos/);
-      expect(f).toContain('2 · la pièce du rig');
+      expect(f).toContain('2 · la pièce de l’équipe');
       expect(f).toContain('✓ merge, pas de rebase');
       expect(f).not.toContain('vieille affaire');
       expect(f).toContain('u revenir dessus');
@@ -42,7 +42,7 @@ describe('ledge tui: the rail and the tabs', () => {
       expect(f).toContain('design, architecture,');
       expect(f).toContain('m le mandat et ses souvenirs');
       expect(f).toContain('Résumer la journée');
-      expect(f).toContain('LEDGE · CONVERSATION · RIGS · MANDAT');
+      expect(f).toContain('LEDGE · CONVERSATION · ÉQUIPES · MANDAT');
       // « À toi » is the left column's, once.
       expect(f.split('À TOI').length - 1).toBe(1);
     } finally { await tui.cleanup(); }
@@ -58,7 +58,7 @@ describe('ledge tui: the rail and the tabs', () => {
       tui.daemon.push({ type: 'decisions', items: today().slice(3) });
       await new Promise(r => setTimeout(r, 100));
       expect(tui.frame()).not.toContain('TRANCHÉ AUJOURD’HUI');
-      expect(tui.frame()).toContain('RIGS · 2');
+      expect(tui.frame()).toContain('ÉQUIPES · 2');
     } finally { await tui.cleanup(); }
   });
 
@@ -69,7 +69,7 @@ describe('ledge tui: the rail and the tabs', () => {
       await until(() => tui.frame().includes('Résumer la journée'));
       await tui.press('R');
       await until(() => sent(tui.daemon.received, 'ledge.say').length === 1);
-      expect(sent(tui.daemon.received, 'ledge.say')[0]!.text).toBe('Résume ma journée : ce que les rigs ont fait, ce que j\'ai tranché, ce qui m\'attend.');
+      expect(sent(tui.daemon.received, 'ledge.say')[0]!.text).toBe('Résume ma journée : ce que les équipes ont fait, ce que j\'ai tranché, ce qui m\'attend.');
     } finally { await tui.cleanup(); }
   });
 
@@ -187,7 +187,7 @@ describe('ledge tui: the rail and the tabs', () => {
       const lines = tui.frame().split('\n');
       expect(lines.length).toBeLessThanOrEqual(16);
       // The rigs box is whole: its title, its rig, its bottom border on its own line above the key bar.
-      const rigs = lines.findIndex(l => l.includes('╭─ RIGS'));
+      const rigs = lines.findIndex(l => l.includes('╭─ ÉQUIPES'));
       expect(rigs).toBeGreaterThan(0);
       expect(lines[rigs + 1]).toContain('▣ factory');
       expect(lines[rigs + 2]).toMatch(/^╰─+╯$/);

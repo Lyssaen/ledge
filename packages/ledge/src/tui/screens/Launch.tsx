@@ -222,7 +222,7 @@ type TeamField = typeof TEAM_FIELDS[number];
 const autonomyColor = (a: 'ask' | 'edits' | 'auto'): string => ({ ask: C.faint, edits: C.dim, auto: C.yellow })[a];
 
 /** The team mode (roles spec §3.9): a project and one of its folders, a template or seats chosen one by one (each with its
- *  agent), the team's name, and the preview « L'équipe workshop s'installera à une nouvelle table de la pièce Ledge » with the
+ *  agent), the team's name, and the preview « L'équipe workshop aura sa propre pièce dans Ledge » with the
  *  autonomy warning. ctrl+s sends `team.launch`; its answer says how it went. */
 function TeamLaunch({ onSession, prefill }: { onSession(): void; prefill?: LaunchPrefill }) {
   const { client, machines, projects, t, g, toast, go, small } = useTui();

@@ -63,6 +63,27 @@ describe('ledge tui: the left column', () => {
     expect(rows.some(r => r.kind === 'rig' || r.kind === 'kernel')).toBe(false);
   });
 
+  describe('lot F task 3: Ledge teams as rig rows, whatever the engine', () => {
+    const team = (id: string, name: string, resting: boolean) => ({ id, name, machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: resting ? 'stopped' as const : 'running' as const, kernel: false, engine: 'ledge' as const, repos: [],
+      seats: resting ? [] : [{ ref: `build@${id}`, address: '@build', name: 'Nova', runtime: 'codex', state: 'working' as const, sessionId: 'nova' }] });
+    const ledgeRows = (o: Partial<Parameters<typeof leftRows>[0]> = {}) => rowsOf({ engine: 'ledge', rigs: [team('team-a1b2', 'ledge-roles', false), team('team-c3d4', 'mobile', true)], openrig: [MOCKUP_OPENRIG],
+      sessions: mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s)), ...o });
+    it('a team is one rig row (no team row), a resting one marked resting', () => {
+      const rows = ledgeRows();
+      expect(rows.filter(r => r.kind === 'rig').map(r => [(r as Extract<LeftRow, { kind: 'rig' }>).rig.name, (r as Extract<LeftRow, { kind: 'rig' }>).resting])).toEqual([['ledge-roles', false], ['mobile', true]]);
+      expect(rows.some(r => (r.kind as string) === 'team' || (r.kind as string) === 'common')).toBe(false);
+      expect(rows.some(r => r.kind === 'seat' && r.seat.name === 'Nova')).toBe(true);
+    });
+    it('no kernel row in Ledge mode, even when OpenRig answers; in OpenRig mode the kernel shows', () => {
+      expect(ledgeRows().some(r => r.kind === 'kernel')).toBe(false);
+      expect(rowsOf().some(r => r.kind === 'kernel')).toBe(true);
+      expect(rowsOf({ engine: 'openrig' }).some(r => r.kind === 'kernel')).toBe(true);
+    });
+    it('an OpenRig rig is never marked resting', () => {
+      expect(rowsOf().filter(r => r.kind === 'rig').every(r => (r as Extract<LeftRow, { kind: 'rig' }>).resting === false)).toBe(true);
+    });
+  });
+
   it('focusOrder walks Ledge, À toi, the sessions, the rigs and their seats, the kernel', () => {
     const order = focusOrder(rowsOf());
     expect(order[0]).toEqual({ kind: 'ledge' });

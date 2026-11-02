@@ -32,7 +32,7 @@ const QUEUE_W = 44;
  * The kernel's room (`target.kind === 'kernel'`) is the same, its plate saying OpenRig's daemon, advisor and the human's terminal
  * tucked away, Ledge's orders to the operator and the queue of every rig. Its keys go through `keys`, its key bar through `onBar`:
  * j k the seats (past the ends, the home's left column), ↵ the seat's session, a attaches it, w writes to it through Ledge.
- * A rig's life goes through OpenRig (rig.act, rig.adopt): r restarts the chosen seat, S stops the rig or only that seat, u resumes a
+ * A rig's life goes through rig.act / rig.adopt (OpenRig's, or the team's own for a Ledge team): r restarts the chosen seat, S stops the rig or only that seat, u resumes a
  * stopped rig (`up`), p files an off-project rig in a project; each asks first (but u), and ends in a toast.
  */
 export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTarget; side: boolean; height: number; keys: MutableRefObject<KeyHandler | null>; onBar(b: Keys): void }) {
@@ -196,7 +196,7 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
   const midH = side ? Math.max(6, Math.min(15, Math.floor(rest / 2))) : Math.max(4, Math.floor(rest / 3));
 
   const exchangeBox = (
-    <TitledBox title={kernel ? t.room.orders : t.room.exchanges(where)} {...(kernel ? {} : { mark: { text: `· ${t.room.rigSend}`, color: C.faint } })}
+    <TitledBox title={kernel ? t.room.orders : t.room.exchanges(where)} {...(kernel || rig?.engine === 'ledge' ? {} : { mark: { text: `· ${t.room.rigSend}`, color: C.faint } })}
       flexGrow={1} {...(side ? {} : { height: midH })}>
       {own === undefined || own === null ? <Text color={C.faint}>{rig ? t.room.loading : t.overview.noExchange}</Text>
         : own.length === 0 ? <Text color={C.faint}>{t.overview.noExchange}</Text>
@@ -204,7 +204,7 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
     </TitledBox>
   );
   const queueBox = (
-    <TitledBox title={t.room.queue(kernel ? t.room.all : where)} mark={{ text: `· ${queue.length}`, color: C.faint }} {...(side ? { width: QUEUE_W } : { height: midH })} flexShrink={0}>
+    <TitledBox title={(rig?.engine === 'ledge' ? t.room.teamQueue : t.room.queue)(kernel ? t.room.all : where)} mark={{ text: `· ${queue.length}`, color: C.faint }} {...(side ? { width: QUEUE_W } : { height: midH })} flexShrink={0}>
       {queue.length === 0 ? <Text color={C.faint}>{t.room.emptyQueue}</Text> : queue.flatMap(q => {
         const [glyph, gc] = q.glyph === 'approval' ? [g.approval, C.yellow] : q.glyph === 'ok' ? [g.ok, C.green] : [g.task, C.green];
         const sc = q.state === 'à toi' ? C.red : q.state === 'fait' ? C.green : C.blue;
@@ -246,14 +246,14 @@ export function RigRoom({ target, side, height, keys, onBar }: { target: RoomTar
         ) : null}
         {buttons && rig ? <>
           <Text> </Text>
-          {dialog?.kind === 'restart' ? <RestartLine seat={dialog.seat} /> : (
+          {dialog?.kind === 'restart' ? <RestartLine seat={dialog.seat} ledge={rig.engine === 'ledge'} /> : (
             <Box columnGap={2}>
               <Button label={t.rigAct.restartSeat} k="r" off={!acts} />
               {filing ? <Button label={t.rigAct.adoptRig} k="p" primary off={!acts} /> : null}
               {stopped ? <Button label={t.rigAct.resumeRig} k="u" primary off={!acts} /> : <Button label={t.rigAct.stopRig} k="S" danger off={!acts} />}
             </Box>
           )}
-          <Text color={C.faint} wrap="truncate">{t.rigAct.viaOpenRig}</Text>
+          <Text color={C.faint} wrap="truncate">{rig.engine === 'ledge' ? t.rigAct.viaLedge : t.rigAct.viaOpenRig}</Text>
         </> : null}
       </TitledBox>
       {repos ? (

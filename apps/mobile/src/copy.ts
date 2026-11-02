@@ -61,7 +61,7 @@ export const copy = {
       answerDraft: (title: string, id: string, name: string) => `Réponse à la décision « ${title} » (${id}) de ${name} : `
     },
     team: {
-      label: 'Équipe proposée', team: 'Équipe', seats: 'Postes', newTable: (project: string) => `nouvelle table dans la pièce ${project}`,
+      label: 'Équipe proposée', team: 'Équipe', seats: 'Postes', newTable: (project: string) => `sa propre pièce dans ${project}`,
       launch: 'Lancer l’équipe', launched: (at: string) => `Équipe lancée à ${at}`, byKey: 'confirmé avec la clé de l’appareil',
       notLaunched: 'Pas lancée.', autonomy: { ask: 'ask', edits: 'edits', auto: 'auto' },
       autoWarning: (who: string) => `${who} travaillera sans demander.`, openAgents: 'Voir la table'

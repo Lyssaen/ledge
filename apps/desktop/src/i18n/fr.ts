@@ -1239,7 +1239,7 @@ export const fr = {
       pill: { yours: 'à toi', working: 'travaille', waiting: 'attend ta réponse', stopped: 'arrêtée' }
     },
     team: {
-      label: 'Équipe proposée', folder: 'Dossier', table: (project: string) => `Table`, newTable: (project: string) => `nouvelle table dans la pièce ${project}`, seats: 'Sièges',
+      label: 'Équipe proposée', folder: 'Dossier', table: (project: string) => `Table`, newTable: (project: string) => `sa propre pièce dans ${project}`, seats: 'Sièges',
       autonomy: { ask: 'demande avant d’agir', edits: 'modifie sans demander', auto: 'autonome' },
       autoWarning: (roles: string) => `${roles} travaillera sans demander : modifications et commandes sans ton accord.`,
       launch: 'Lancer l’équipe', launching: 'Lancement…', retry: 'Réessayer', save: 'Enregistrer', saved: (path: string) => `Enregistrée : ${path}`, notSaved: (why: string) => `Non enregistrée : ${why}`,

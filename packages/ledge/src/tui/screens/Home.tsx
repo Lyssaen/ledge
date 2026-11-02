@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { sayToLedge, useAsks, useContextNear, useTasks, useTeams } from '@ledge/fleet';
-import { askShown, decisionEscalationId, isDecisionEscalation, type Escalation, type Rig, type RigSeat, type Task } from '@ledge/protocol';
+import { askShown, decisionEscalationId, isDecisionEscalation, projectOf as projectIdOf, type Escalation, type Rig, type RigSeat, type Task } from '@ledge/protocol';
 import { revisitDecision } from '../brain.js';
 import { LEDGE_FOCUS, useEditing, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
 import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
@@ -64,15 +64,14 @@ export function Home() {
     setTimeout(off, 10_000);
     tui.client.send({ type: 'action.run', rid, action: 'task.answer', args: { task: x.id, answer: text }, confirmed: true });
   };
-  // The Ledge teams (roles spec §3.9) of the tree: J seats the selected session in one of its project's teams, R resumes a resting one.
+  // The Ledge teams (rig rows of engine `ledge`): J seats the selected session in a live one of its project, R resumes a resting one.
   const teams = useTeams(tui.client);
   const [joining, setJoining] = useState<{ index: number } | null>(null);
-  const teamRows = rows.filter((r): r is Extract<LeftRow, { kind: 'team' }> => r.kind === 'team');
-  const projectOf = (at: number) => { for (let i = at; i >= 0; i--) if (rows[i]!.kind === 'project') return i; return -1; };
-  const selectedAt = selected ? rows.findIndex(r => r.kind === 'session' && r.s.id === selected.id) : -1;
-  const sameProject = (r: LeftRow) => selectedAt >= 0 && projectOf(rows.indexOf(r)) === projectOf(selectedAt);
-  const choices = teamRows.filter(sameProject).map(r => r.team).filter(x => x.state !== 'dissolved' && x.id !== selected?.team);
-  const seatTeam = selected?.team ? teams?.find(x => x.id === selected.team && x.state !== 'dissolved') : undefined;
+  const ledgeTeams = useMemo(() => rows.filter((r): r is Extract<LeftRow, { kind: 'rig' }> => r.kind === 'rig' && r.rig.engine === 'ledge').map(r => r.rig), [rows]);
+  const selectedProject = selected && tui.projects ? projectIdOf({ machineId: selected.machineId ?? 'local', cwd: selected.cwd }, tui.projects) : null;
+  const choices = selected ? ledgeTeams.filter(r => r.lifecycle !== 'stopped' && r.id !== selected.team && r.machine === (selected.machineId ?? 'local') && r.projectId === selectedProject
+    && teams?.find(x => x.id === r.id)?.state !== 'dissolved') : [];
+  const resting = ledgeTeams.filter(r => r.lifecycle === 'stopped');
   // Ledge's conversation is on the right for Ledge and for an escalation of « À toi »; it has the keyboard once ↵ or / opened
   // its field (`ledgeFocus` past the left column). Narrow, it then takes the whole screen.
   const yoursEsc = focus.kind === 'yours' ? rows.find((r): r is Extract<LeftRow, { kind: 'yours' }> => r.kind === 'yours' && r.item.id === focus.id)?.item.escalation : undefined;
@@ -117,7 +116,7 @@ export function Home() {
       if (input === 'k' || key.upArrow) { setJoining({ index: (joining.index + choices.length - 1) % Math.max(1, choices.length) }); return true; }
       if (key.return && selected && choices[joining.index]) {
         const team = choices[joining.index]!;
-        const role = selected.role ?? team.seats.find(x => x.sessionId === null)?.role;
+        const role = selected.role ?? teams?.find(x => x.id === team.id)?.seats.find(x => x.sessionId === null)?.role;
         setJoining(null);
         if (!role) { tui.toast({ text: t.overview.noTeamHere, tone: 'info' }); return true; }
         tui.client.send({ type: 'team.join', team: team.id, session: selected.id, role });
@@ -163,10 +162,16 @@ export function Home() {
       if (input === 'j' || input === 'k' || key.upArrow || key.downArrow) return true;
     }
     if (input === 'J' && selected) { if (choices.length) setJoining({ index: 0 }); else tui.toast({ text: t.overview.noTeamHere, tone: 'info' }); return true; }
-    // R, off Ledge (where it sums up the day): resume a resting team, the selected seat's, else its project's first, else the first.
+    // R, off Ledge (where it sums up the day): resume a resting team through rig.act up: the chosen team's own row, else the selected
+    // session's team, else its project's first, else the first.
     if (input === 'R') {
-      const resting = (seatTeam?.state === 'resting' ? seatTeam : undefined) ?? teamRows.find(r => r.team.state === 'resting' && sameProject(r))?.team ?? teamRows.find(r => r.team.state === 'resting')?.team;
-      if (resting) { tui.client.send({ type: 'team.resume', team: resting.id }); tui.toast({ text: t.toast.resumed(resting.name), tone: 'ok' }); }
+      const chosenRig = focus.kind === 'rig' ? resting.find(r => r.machine === focus.machine && r.id === focus.rigId) : undefined;
+      const mine = selected?.team ? resting.find(r => r.id === selected.team) : undefined;
+      const target = chosenRig ?? mine ?? resting.find(r => selectedProject !== null && r.projectId === selectedProject) ?? resting[0];
+      if (target) {
+        tui.client.send({ type: 'rig.act', rid: randomUUID(), machine: target.machine, rigId: target.id, verb: 'up' });
+        tui.toast({ text: t.toast.resumed(target.name), tone: 'ok' });
+      }
       return true;
     }
     if (input === 'H') {
@@ -206,7 +211,7 @@ export function Home() {
     ...(decisions.length ? [['D', t.keys.answerDecision] as const] : []),
     ['j k', t.keys.navigate], ['↵', ledgeish ? t.keys.write : t.keys.open], ...(showConv ? convBar : []), ...(yoursCount ? [['tab', t.keys.next] as const] : []), ...(selected?.pending ? [['y n', t.keys.answer] as const] : []),
     ...(selected ? [['a', t.keys.attach] as const] : []), ...(choices.length ? [['J', t.keys.join] as const] : []),
-    ...(!ledgeish && teamRows.some(r => r.team.state === 'resting') ? [['R', t.keys.resume] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
+    ...(!ledgeish && resting.length ? [['R', t.keys.resume] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ...(ledgeish && folded ? [[']', railOpen ? t.keys.close : t.keys.point] as const] : []), ...(ledgeish ? [['R', t.keys.summarize] as const] : []),
     ['1 2 3', t.keys.screens], ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]
   ];

@@ -41,7 +41,7 @@ function Row({ on, children, right }: { on: boolean; children: ReactNode; right?
  * decisions seats put to the user (`ledge task give ledge`), two lines each in « À toi » (who asks and what, then the options).
  */
 export function LeftColumn({ rows, width, height, asks, near, decisions = [] }: { rows: readonly LeftRow[]; width: number; height: number; asks: readonly FleetAsk[]; near: readonly Session[]; decisions?: readonly Task[] }) {
-  const { t, g, focus, rigs, escalations, machines, openrig } = useTui();
+  const { t, g, focus, rigs, escalations, machines, openrig, engine } = useTui();
   const chosen = focusKey(focus);
   const on = (r: LeftRow) => { const f = rowFocus(r); return !!f && focusKey(f) === chosen; };
   const inner = width - 4;
@@ -49,9 +49,10 @@ export function LeftColumn({ rows, width, height, asks, near, decisions = [] }: 
 
   const ledge = rows.find((r): r is Extract<LeftRow, { kind: 'ledge' }> => r.kind === 'ledge');
   const yours = rows.filter((r): r is Extract<LeftRow, { kind: 'yours' }> => r.kind === 'yours');
-  const tree = rows.filter(r => r.kind === 'project' || r.kind === 'common' || r.kind === 'team' || r.kind === 'branch' || r.kind === 'session');
+  const tree = rows.filter(r => r.kind === 'project' || r.kind === 'branch' || r.kind === 'session');
   const rigRows = rows.filter(r => r.kind === 'rig' || r.kind === 'seat' || r.kind === 'idle' || r.kind === 'kernel');
-  const installed = hasOpenRig(rigs, openrig);
+  // Ledge's own teams need no OpenRig: its « not installed » line is for OpenRig mode only.
+  const installed = engine === 'ledge' || hasOpenRig(rigs, openrig);
 
   const yoursCount = yours.length + decisions.length + asks.length + near.length;
   // An ask or a decision takes two rows: the question, then how to answer it (an ask) or its options (a decision).
@@ -93,17 +94,13 @@ export function LeftColumn({ rows, width, height, asks, near, decisions = [] }: 
     switch (r.kind) {
       case 'project': return <Text key={key} wrap="truncate"> <Text color={r.color}>{g.project}</Text> <Text color={C.fg} bold>{r.label}</Text> <Text color={C.faint}>{t.overview.sessions(r.count)}</Text></Text>;
       case 'branch': return <Text key={key} wrap="truncate" color={C.faint}>{' '.repeat(3 + (r.indent ?? 0))}{g.branch} {r.branch}</Text>;
-      case 'common': return <Text key={key} wrap="truncate" color={C.faint}>   {g.common} {t.overview.common}</Text>;
-      case 'team': return (
-        <Text key={key} wrap="truncate"><Text>   </Text><Text color={C.coral}>{g.team}</Text> <Text color={r.team.state === 'resting' ? C.dim : C.fg} bold>{r.team.name}</Text> <Text color={C.faint}>{r.team.state === 'resting' ? t.overview.resting : t.overview.teamLine(r.done, r.given)}</Text></Text>
-      );
       case 'session': return <Box key={key}>{sessionRow(r.s, on(r), r.indent ?? 0)}</Box>;
       case 'rig': {
         const where = [r.place.kind === 'project' ? t.home.inProject(r.place.name) : r.place.kind === 'off' ? t.home.offProject : '', r.rig.machine !== 'local' ? t.home.onMachine(machineName(r.rig.machine)) : ''].filter(Boolean);
         return (
           <Box key={key}><Row on={on(r)}>
-            <Text color={projectColor(rigColor(r.rig))}>{g.rig}</Text> <Text color={C.fg} bold>{r.rig.name}</Text>
-            <Text color={C.dim}> {t.home.working(r.working, r.total)}</Text>
+            <Text color={projectColor(rigColor(r.rig))}>{g.rig}</Text> <Text color={r.resting ? C.dim : C.fg} bold>{r.rig.name}</Text>
+            {r.resting ? <Text color={C.dim}> {t.home.resting}</Text> : <Text color={C.dim}> {t.home.working(r.working, r.total)}</Text>}
             {where.map(w => <Text key={w} color={C.faint}> · {w}</Text>)}
           </Row></Box>
         );
@@ -188,7 +185,7 @@ export function LeftColumn({ rows, width, height, asks, near, decisions = [] }: 
   );
   const rigsBox = (
     <TitledBox title={t.home.rigs} flexGrow={1} minHeight={rigsH + 2}>
-      {!installed ? notInstalled.map(l => <Text key={l} color={C.faint} wrap="truncate">{l}</Text>) : windowed(keyed(rigRows), chosen, rigsH).map(({ key, r }) => draw(r, key))}
+      {!installed ? notInstalled.map(l => <Text key={l} color={C.faint} wrap="truncate">{l}</Text>) : engine === 'ledge' && rigRows.length === 0 ? <Text color={C.faint}>{t.rail.noRig}</Text> : windowed(keyed(rigRows), chosen, rigsH).map(({ key, r }) => draw(r, key))}
     </TitledBox>
   );
   return <Box flexDirection="column" width={width} flexShrink={0}>{ledgeBox}{yoursBox}{treeBox}{rigsBox}</Box>;

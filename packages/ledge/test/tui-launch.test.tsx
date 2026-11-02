@@ -42,7 +42,7 @@ async function rigForm(tui: Tui, goal = 'Réparer la reconnexion ssh') {
   await tui.press('+');
   await until(() => tui.frame().includes('NOUVELLE SESSION'));
   await tui.press(CTRL_T);
-  await until(() => tui.frame().includes('NOUVEAU RIG · LE BUT, LA SPEC, OÙ'));
+  await until(() => tui.frame().includes('NOUVELLE ÉQUIPE · LE BUT, LA SPEC, OÙ'));
   await tui.press(goal);
   await until(() => tui.frame().includes(goal) && /◂ starter ▸/.test(tui.frame()));
 }
@@ -57,13 +57,13 @@ describe('ledge tui: launch a rig', () => {
       await tui.resize(160, 46);
       await rigForm(tui);
       expect(tui.frame()).toContain('Plan facultatif');
-      expect(tui.frame()).toMatch(/▣ .* · rig starter · dans Ledge · 2 sièges · /);
+      expect(tui.frame()).toMatch(/▣ .* · équipe starter · dans Ledge · 2 sièges · /);
       await tui.press(CTRL_S);
       await until(() => sent(tui.daemon.received, 'rig.launch').length === 1);
       expect(sent(tui.daemon.received, 'rig.prepare')).toEqual([expect.objectContaining({ machine: 'local', spec: 'starter', goal: 'Réparer la reconnexion ssh',
         where: { kind: 'project', projectId: 'ledge', repo: '/w/ledge', branch: 'feat/starter', copy: true } })]);
       expect(sent(tui.daemon.received, 'rig.launch')[0]).toMatchObject({ planId: 'plan-1' });
-      await until(() => tui.frame().includes('NOUVEAU RIG · LE DÉMARRAGE'));
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE · LE DÉMARRAGE'));
       expect(tui.frame()).toMatch(/◐ OpenRig/);
       // The rig comes up: its seats one by one, then the launch's answer.
       tui.daemon.push({ type: 'rig.updated', rig: launched('plan-1', ['working', 'starting']) });
@@ -72,7 +72,7 @@ describe('ledge tui: launch a rig', () => {
       tui.daemon.reply({ type: 'rig.result', rid: sent(tui.daemon.received, 'rig.launch')[0]!.rid, ok: true });
       await until(() => /✓ Sièges +2\/2 prêts/.test(tui.frame()));
       await tui.press('\r');
-      await until(() => tui.frame().includes('▣ RECONNEXION · RIG'));
+      await until(() => tui.frame().includes('▣ RECONNEXION · ÉQUIPE'));
     } finally { await tui.cleanup(); }
   });
 
@@ -85,11 +85,11 @@ describe('ledge tui: launch a rig', () => {
       // tab down to the copy, space unticks it: the plan is imposed.
       for (let i = 0; i < 20 && !/▌Copie/.test(tui.frame()); i++) await tui.press('\t');
       await tui.press(' ');
-      await until(() => tui.frame().includes('Le plan est demandé une fois : le rig écrirait dans ton dépôt.'));
+      await until(() => tui.frame().includes('Le plan est demandé une fois : l’équipe écrirait dans ton dépôt.'));
       expect(tui.frame()).toMatch(/Voir le plan ctrl\+s/);
       expect(tui.frame()).not.toMatch(/Lancer ctrl\+s/);
       await tui.press(CTRL_S);
-      await until(() => tui.frame().includes('NOUVEAU RIG · LE PLAN DE LEDGE'));
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE · LE PLAN DE LEDGE'));
       expect(tui.frame()).toContain('CLAUDE.md');
       expect(tui.frame()).toContain('rig up starter');
       expect(sent(tui.daemon.received, 'rig.prepare')[0]!.where).toMatchObject({ copy: false });
@@ -109,7 +109,7 @@ describe('ledge tui: launch a rig', () => {
       await rigForm(tui);
       await tui.press(CTRL_S);
       await until(() => tui.frame().includes('Refusé : rig up a échoué'));
-      expect(tui.frame()).toContain('NOUVEAU RIG · LE BUT, LA SPEC, OÙ');
+      expect(tui.frame()).toContain('NOUVELLE ÉQUIPE · LE BUT, LA SPEC, OÙ');
       await tui.press(CTRL_S);
       await until(() => sent(tui.daemon.received, 'rig.launch').length === 2);
       expect(sent(tui.daemon.received, 'rig.prepare')).toHaveLength(2);
@@ -152,20 +152,20 @@ describe('ledge tui: launch a rig', () => {
     } finally { await tui.cleanup(); }
   });
 
-  it('« Lance un rig… » and + on a rig open the rig mode directly; ctrl+t goes back to the session', async () => {
+  it('« Lance une équipe… » and + on a rig open the rig mode directly; ctrl+t goes back to the session', async () => {
     const tui = await startTui({ openrig: {} });
     openRigDaemon(tui);
     try {
       await tui.press('2'); // a rig chosen in the left column
       await tui.press('+');
-      await until(() => tui.frame().includes('NOUVEAU RIG · LE BUT, LA SPEC, OÙ'));
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE · LE BUT, LA SPEC, OÙ'));
       await tui.press(CTRL_T);
       await until(() => tui.frame().includes('NOUVELLE SESSION'));
       await tui.press(ESC);
       await until(() => !tui.frame().includes('NOUVELLE SESSION'));
       await tui.press('/');
       await tui.press(`${ESC}1`); // alt+1: the first suggestion
-      await until(() => tui.frame().includes('NOUVEAU RIG · LE BUT, LA SPEC, OÙ'));
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE · LE BUT, LA SPEC, OÙ'));
     } finally { await tui.cleanup(); }
   });
 });

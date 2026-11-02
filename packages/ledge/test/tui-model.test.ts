@@ -342,20 +342,13 @@ describe('tui settings', () => {
 describe('tui overview with teams (roles spec §3.9)', () => {
   const team = { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active' as const, seats: [{ role: 'build', sessionId: 'nova' }], createdAt: '2026-10-09T16:00:00.000Z', updatedAt: '2026-10-09T16:00:00.000Z' };
   const task = (id: string, extra: object) => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'nova', ownerName: 'Nova', team: 'team-a1b2', state: 'open' as const, at: '2026-10-09T16:05:00.000Z', updatedAt: '2026-10-09T16:05:00.000Z', log: [], ...extra });
-  it('a project lists its common table’s branches, then its teams with their seats; Ledge’s progress per team', () => {
-    const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s));
-    const v = overview(sessions, PROJECTS, [], [], [], [team, { ...team, id: 'team-c3d4', name: 'mobile', state: 'resting', seats: [] }, { ...team, id: 'team-e5f6', state: 'dissolved' }], [task('t000001', { state: 'done' }), task('t000002', {})]);
-    const ledge = v.tree[0]!;
-    expect(ledge.branches.flatMap(b => b.sessions.map(s => s.name))).toEqual(['Otto', 'Bix']);
-    expect(ledge.teams.map(x => [x.team.name, x.team.state, x.sessions.map(s => s.name), `${x.done}/${x.given}`])).toEqual([['ledge-roles', 'active', ['Nova'], '1/2'], ['mobile', 'resting', [], '0/0']]);
-    expect(v.order).toEqual(['otto', 'bix', 'nova', 'luna']);
-  });
-  it('lot F: a live team projected as a rig keeps its seats in its row (until task 3 reworks the TUI), and their waits in « À toi »', () => {
+  it('lot F task 3: a Ledge team seat is no team row: it leaves Projets for its team’s rig, and its waits stay in « À toi »', () => {
     const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build', state: 'waiting_permission' as const, pending: { kind: 'permission' as const, text: 'npm test', source: 'hook' as const } } : s));
     const rig = { id: 'team-a1b2', name: 'ledge-roles', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running' as const, kernel: false, engine: 'ledge' as const, repos: [],
       seats: [{ ref: 'build@team-a1b2', address: '@build', name: 'Nova', runtime: 'codex', state: 'attention' as const, sessionId: 'nova' }] };
-    const v = overview(sessions, PROJECTS, [], [rig], [], [team], []);
-    expect(v.tree[0]!.teams.map(x => x.sessions.map(s => s.name))).toEqual([['Nova']]);
+    const v = overview(sessions, PROJECTS, [], [rig], []);
+    expect(v.tree.flatMap(n => n.branches.flatMap(b => b.sessions.map(s => s.name)))).not.toContain('Nova');
+    expect('teams' in v.tree[0]!).toBe(false);
     expect(v.yours.map(s => s.name)).toContain('Nova');
   });
   it('Ledge is a sender in the exchanges; the closed tasks Ledge gave are items of « À toi » until seen', () => {

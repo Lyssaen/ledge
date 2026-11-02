@@ -31,7 +31,7 @@ describe('ledge tui: launching a rig (model)', () => {
     // Before the daemon names the rig, OpenRig works and the rest waits.
     const before = startingLines(undefined, plan());
     expect(before.map(l => l.glyph)).toEqual(['running', 'held', 'held', 'held', 'held', 'held']);
-    expect(before.map(l => l.label)).toEqual(['OpenRig', 'Copie', 'Ledge, humain du rig', 'rig up factory', 'Sièges', 'Premières tâches']);
+    expect(before.map(l => l.label)).toEqual(['OpenRig', 'Copie', 'Ledge, humain de l’équipe', 'rig up factory', 'Sièges', 'Premières tâches']);
     expect(before[1]!.detail).toBe('/w/ledge/.worktrees/rig-factory · ⎇ feat/reboot');
     expect(before[4]!.detail).toBe('0/6 prêt');
 

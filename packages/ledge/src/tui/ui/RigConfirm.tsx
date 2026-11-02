@@ -25,9 +25,9 @@ function Choice({ on, label, note, glyph }: { on: boolean; label: string; note?:
 }
 
 /** « Relancer build par OpenRig ? ↵ oui · esc non », in place of the room's buttons. */
-export function RestartLine({ seat }: { seat: RigSeat }) {
+export function RestartLine({ seat, ledge = false }: { seat: RigSeat; ledge?: boolean }) {
   const { t } = useTui();
-  return <Text wrap="truncate"><Text color={C.yellow}>{t.rigAct.restartAsk(seat.name)}</Text><Text color={C.dim}>  {t.rigAct.yes} · {t.rigAct.no}</Text></Text>;
+  return <Text wrap="truncate"><Text color={C.yellow}>{(ledge ? t.rigAct.restartAskLedge : t.rigAct.restartAsk)(seat.name)}</Text><Text color={C.dim}>  {t.rigAct.yes} · {t.rigAct.no}</Text></Text>;
 }
 
 /** « Arrêter factory ? »: a red double box, « Arrêter le rig » or « Seulement ce siège » (the chosen one), ↵ or esc. */
@@ -38,7 +38,7 @@ export function StopBox({ rig, seat, on }: { rig: Rig; seat: RigSeat | undefined
     <TitledBox title={t.rigAct.stopTitle(rig.name)} color={C.red} titleColor={C.red} double flexShrink={0}>
       <Choice on={on === 0} label={t.rigAct.stopAll} />
       {seat ? <Choice on={on === 1} label={t.rigAct.stopSeat(seat.name)} /> : null}
-      <Text color={C.faint} wrap="truncate">{t.rigAct.stopBody(live)}</Text>
+      <Text color={C.faint} wrap="truncate">{(rig.engine === 'ledge' ? t.rigAct.stopBodyLedge : t.rigAct.stopBody)(live)}</Text>
       <Box columnGap={2}><Button label={on === 0 ? t.rigAct.stopAll : t.rigAct.stopSeat(seat?.name ?? '')} k="↵" danger /><Button label={t.rigAct.cancel} k="esc" /></Box>
     </TitledBox>
   );

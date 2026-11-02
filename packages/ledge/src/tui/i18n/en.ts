@@ -8,10 +8,10 @@ export const en: Messages = {
   lang: { fr: 'Français', en: 'English' },
   state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only' },
   time: { now: 'just now', decimal: '.', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
-  tabs: { overview: 'Home', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', teams: 'Teams' },
+  tabs: { overview: 'Home', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', teams: 'Templates' },
   bar: {
     machines: n => `${n} ${plural(n, 'machine', 'machines')}`,
-    rigs: n => `${n} ${plural(n, 'rig', 'rigs')}`,
+    rigs: n => `${n} ${plural(n, 'team', 'teams')}`,
     agents: n => `${n} ${plural(n, 'agent', 'agents')}`,
     solo: n => `${n} ${plural(n, 'standalone session', 'standalone sessions')}`,
     waiting: n => `${n} waiting for you`,
@@ -33,34 +33,34 @@ export const en: Messages = {
     line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
     applyRow: 'apply the line', apply: 'apply', applyAll: 'apply all', deny: 'deny', ignore: 'ignore', review: 'review',
     openSession: name => `open ${name}`,
-    screens: 'Ledge · rig · session · teams',
+    screens: 'Ledge · team · session · templates',
     decide: 'decide', revisit: 'revisit', fold: 'fold', talk: 'talk it over', complete: 'complete',
     tabs: 'tabs', summarize: 'sum up', point: 'the summary', close: 'close', mandate: 'the mandate',
     rolesTemplates: 'roles / templates', folder: 'folder', launchRole: 'launch with this role', launchTeam: 'launch this team', openFile: 'open the file', ignored: 'ignored', reread: 'read again'
   },
   home: {
-    ledge: 'Ledge', crumb: '1 Ledge · 2 Rig · 3 Session',
+    ledge: 'Ledge', crumb: '1 Ledge · 2 Team · 3 Session · 4 Templates',
     decision: n => (n > 1 ? `${n} decisions wait for you` : 'A decision waits for you'),
     grace: 'Ledge is on it…', calm: 'Nothing to decide.',
-    projects: 'Projects · standalone sessions', rigs: 'Rigs',
+    projects: 'Projects · standalone sessions', rigs: 'Teams', resting: 'resting',
     working: (w, n) => `${w}/${n} working`,
     inProject: name => `in ${name}`, offProject: 'outside any project', onMachine: m => `on ${m}`,
     available: names => `${names} · available`,
     kernel: 'OpenRig kernel',
     kernelState: { idle: 'resting', working: 'working', absent: 'absent', stopped: 'stopped', starting: 'starting', unsupported: 'unsupported', error: 'in error', unreachable: 'unreachable' },
-    noOpenRig: 'OpenRig is not installed · + to launch a rig',
+    noOpenRig: 'OpenRig is not installed · + to launch a team',
     conversation: 'Ledge · Conversation',
     noSeat: 'No seat.', seatAlone: 'This seat has no Ledge session: nothing to show here yet.'
   },
-  ledgeTabs: { conversation: 'Conversation', rigs: 'Rigs', mandat: 'Mandate' },
+  ledgeTabs: { conversation: 'Conversation', rigs: 'Teams', mandat: 'Mandate' },
   rail: {
-    rigs: n => `Rigs · ${n}`, kernel: 'kernel', room: '2 · the rig’s room',
+    rigs: n => `Teams · ${n}`, kernel: 'kernel', room: '2 · the team’s room',
     settled: n => `Settled today · ${n}`, revisit: 'u revisit',
     mandate: 'Mandate', alone: 'Ledge settles alone:', always: 'Always yours:', more: 'm the mandate and its memories',
     summary: 'Sum up the day',
-    summaryAsk: 'Sum up my day: what the rigs did, what I settled, what awaits me.',
+    summaryAsk: 'Sum up my day: what the teams did, what I settled, what awaits me.',
     folded: n => `${n} settled`, detail: 'detail',
-    noRig: 'No rig.', spec: s => `spec ${s}`,
+    noRig: 'No team.', spec: s => `spec ${s}`,
     coming: 'The mandate comes with Ledge’s brain.', rules: 'Rules', toValidate: 'to approve',
     applied: n => `applied ${n} ${plural(n, 'time', 'times')}`
   },
@@ -81,17 +81,17 @@ export const en: Messages = {
     about: summary => `Question · about ${summary}`
   },
   compose: {
-    title: 'Write to Ledge', placeholder: 'Write to Ledge… (@build for an agent of a rig)',
+    title: 'Write to Ledge', placeholder: 'Write to Ledge… (@build for an agent of a team)',
     foot: 'decides within its mandate · design, architecture and critique are yours', footShort: 'design, architecture, critique are yours',
-    launchRig: 'Launch a rig…', whereIs: rig => `Where is ${rig}?`, decided: 'What did you decide?', needsMe: 'Who needs me?',
-    alt: n => `alt+1…${n}`, mentionTitle: '@ an agent of a rig'
+    launchRig: 'Launch a team…', whereIs: rig => `Where is ${rig}?`, decided: 'What did you decide?', needsMe: 'Who needs me?',
+    alt: n => `alt+1…${n}`, mentionTitle: '@ an agent of a team'
   },
   room: {
-    rig: 'rig', mark: 'its room, its table', seats: (n: number) => `${n} ${n > 1 ? 'seats' : 'seat'}`, since: (at: string) => `since ${at}`,
+    rig: 'team', mark: 'its room', seats: (n: number) => `${n} ${n > 1 ? 'seats' : 'seat'}`, since: (at: string) => `since ${at}`,
     lead: (seat: string) => `lead ${seat}`, unreachable: 'unreachable',
     head: { seat: 'SEAT', name: 'NAME', state: 'STATE', agent: 'AGENT', context: 'CONTEXT', on: 'ON', role: 'ROLE' },
     exchanges: (rig: string) => `Exchanges · ${rig}`, rigSend: 'rig send', loading: 'Loading the exchanges…',
-    queue: (scope: string) => `OpenRig queue · ${scope}`, all: 'all', emptyQueue: 'Queue empty.',
+    queue: (scope: string) => `OpenRig queue · ${scope}`, teamQueue: (scope: string) => `Queue · ${scope}`, all: 'all', emptyQueue: 'Queue empty.',
     queueState: { 'en cours': 'in progress', 'à toi': 'yours', fait: 'done' },
     terminal: (seat: string, where: string) => `Terminal · ${seat} · ${where}`, noTerminal: 'No terminal followed yet.',
     kernel: 'OpenRig core · the machinery', kernelMark: 'always on', kernelWhere: 'core', orders: 'Ledge’s orders to the operator',
@@ -103,10 +103,13 @@ export const en: Messages = {
   },
   rigAct: {
     keys: { restart: 'restart', stop: 'stop…', adopt: 'file in a project…', resume: 'resume', choose: 'choose', confirm: 'confirm', cancel: 'cancel' },
-    restartSeat: 'Restart a seat…', stopRig: 'Stop the rig…', adoptRig: 'File in a project…', resumeRig: 'Resume',
+    restartSeat: 'Restart a seat…', stopRig: 'Stop the team…', adoptRig: 'File in a project…', resumeRig: 'Resume',
     viaOpenRig: 'Restarting and stopping go through OpenRig: a kill on Ledge’s side would read as a crash.',
     restartAsk: seat => `Restart ${seat} through OpenRig?`, yes: '↵ yes', no: 'esc no',
-    stopTitle: rig => `Stop ${rig}?`, stopAll: 'Stop the rig', stopSeat: seat => `Only this seat · ${seat}`,
+    stopTitle: rig => `Stop ${rig}?`, stopAll: 'Stop the team', stopSeat: seat => `Only this seat · ${seat}`,
+    stopBodyLedge: n => `${n > 1 ? `Its ${n} seats stop` : 'Its seat stops'}. The team goes to rest: its conversations are kept, R or u resumes it.`,
+    restartAskLedge: seat => `Restart ${seat}?`,
+    viaLedge: 'Stopping puts the team to rest: its conversations are kept.',
     stopBody: n => `${n > 1 ? `Its ${n} seats stop` : 'Its seat stops'}. OpenRig keeps a snapshot to resume it. The files stay.`,
     adoptTitle: rig => `File ${rig} in a project?`, holds: repos => `already holds ${repos}`, leaveOut: 'Leave outside any project',
     adoptNote: (rig, project) => `${rig} keeps its room; its plate will say “in ${project}”. It does not become a second table of ${project}.`,
@@ -116,7 +119,7 @@ export const en: Messages = {
     already: (repo, project) => `${repo} is already a repo of the project ${project}.`, noRepo: 'No repo found yet.',
     done: { down: rig => `${rig} is stopping`, stop: seat => `${seat} is stopping`, restart: seat => `${seat} is restarting`, up: rig => `${rig} is resuming`, adopted: (rig, project) => `${rig} filed in ${project}` },
     refused: {
-      rig_managed: 'This seat belongs to its rig: stop or restart it from its room.', openrig_down: 'OpenRig is not answering.',
+      rig_managed: 'This seat belongs to its team: stop or restart it from its room.', openrig_down: 'OpenRig is not answering.',
       unreachable: 'Machine unreachable.', failed: 'The action failed.', timeout: 'OpenRig did not answer (5 s).'
     }
   },
@@ -129,7 +132,6 @@ export const en: Messages = {
     wantsToRun: 'Wants to run:', asks: 'Asks:', plan: 'Proposes a plan:', diff: 'Wants to edit:',
     allow: 'Allow', deny: 'Deny', always: 'Always', denyWithNote: 'Deny with a note',
     askLine: (name, question) => `? ${name} : ${question}`, askHint: (id) => `ledge decide ${id} "<answer>"`,
-    common: 'common table', teamLine: (done, given) => `team · ${done}/${given}`, resting: 'resting · R to resume',
     tasks: team => `Tasks · ${team}`, noTask: 'No task.', ledge: 'Ledge',
     near: (name, pct) => `${name} · ctx ${pct} % · H hand over`,
     reliefFailed: (name, why) => `The relief of ${name} failed: ${why}`,
@@ -170,7 +172,7 @@ export const en: Messages = {
     steps: { sessions: 'the sessions', pane: n => `${n}'s terminal`, reply: n => `${n}'s reply`, git: n => `${n}'s git state`, repo: p => p },
     operator: (s, m) => `Ledge · Operator · sees ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
     teamCard: name => `Team · ${name}`, taskCard: 'Tasks to give', launchTeam: 'Launch the team', save: 'Save', saved: 'saved',
-    seats: 'Seats', table: 'Table', newTable: project => `new table in the ${project} room`,
+    seats: 'Seats', table: 'Table', newTable: project => `its own room in ${project}`,
     autonomy: { ask: 'asks', edits: 'edits without asking', auto: 'autonomous' },
     autoWarning: roles => `${roles} will work without asking.`, teamLaunched: at => `✓ Team launched at ${at}`,
     give: 'Give', waitTeam: 'active once the team is launched',
@@ -210,7 +212,7 @@ export const en: Messages = {
     launching: 'Launching…', launched: name => `✓ ${name} is started`,
     teamTitle: 'New team', mode: 'Mode', session: 'session', team: 'team', template: 'Template', custom: 'seats chosen one by one', seats: 'Seats',
     teamName: 'Name', noRole: 'no role: write ~/.ledge/roles/<id>.md', loadingRoles: 'reading the roles…',
-    teamPreview: (team, project) => `Team ${team} will sit at a new table in the ${project} room.`,
+    teamPreview: (team, project) => `Team ${team} will get its own room in ${project}.`,
     teamLaunched: name => `✓ Team ${name} launched`, teamFailed: why => `Team not launched: ${why}`, noSeat: 'Choose at least one seat.'
   },
   catalog: {
@@ -229,20 +231,20 @@ export const en: Messages = {
     role: 'Role'
   },
   rigLaunch: {
-    title: 'New rig · the goal, the spec, where', planTitle: 'New rig · Ledge’s plan', startTitle: 'New rig · the start',
-    crumb: 'Launch › the goal · (the plan) · the start', mode: 'Mode', rig: 'rig', session: 'session',
+    title: 'New team · the goal, the spec, where', planTitle: 'New team · Ledge’s plan', startTitle: 'New team · the start',
+    crumb: 'Launch › the goal · (the plan) · the start', mode: 'Mode', rig: 'team', session: 'session',
     goal: 'Goal', goalHint: 'Ledge uses it to propose the plan, then to decide along the way.',
     spec: 'Spec', specsLoading: 'reading the specs…', specsFailed: 'The specs could not be read.', noSpec: 'no spec', recommended: 'recommended by Ledge',
     seatsOf: (n, names, runtimes) => `${n} ${plural(n, 'seat', 'seats')}: ${names} · ${runtimes}`,
     where: 'Where', inProject: 'in a project', offProject: 'off any project (new space)',
-    whereHint: project => `The rig gets its own room, “in ${project}” on its plate.`, offHint: 'Ledge makes an empty space, named after the goal.',
+    whereHint: project => `The team gets its own room, “in ${project}” on its plate.`, offHint: 'Ledge makes an empty space, named after the goal.',
     repo: 'Repository', noRepo: (project, machine) => `${project} has no repository on ${machine}`,
     branch: 'Branch', newBranch: '(new)', copyRow: 'Copy', copy: 'Work in a copy', machine: 'Machine',
     name: 'Name', nameHint: '(from the goal · ctrl+r for another)', preview: 'Preview',
-    previewLine: (spec, where, n, machine) => ` · rig ${spec} · ${where} · ${n} ${plural(n, 'seat', 'seats')} · ${machine}`,
+    previewLine: (spec, where, n, machine) => ` · team ${spec} · ${where} · ${n} ${plural(n, 'seat', 'seats')} · ${machine}`,
     inProjectOf: project => `in ${project}`, offPlace: 'off any project',
-    launch: 'Launch', seePlan: 'See the plan', cancel: 'Cancel', launchRig: 'Launch the rig', back: 'Back',
-    planOptional: 'Optional plan: the rig writes in a .worktrees/ copy.', planImposed: 'The plan is asked once: the rig would write in your repository.',
+    launch: 'Launch', seePlan: 'See the plan', cancel: 'Cancel', launchRig: 'Launch the team', back: 'Back',
+    planOptional: 'Optional plan: the team writes in a .worktrees/ copy.', planImposed: 'The plan is asked once: the team would write in your repository.',
     why: {
       absent: m => `OpenRig is not installed on ${m}`, unsupported: m => `The OpenRig version on ${m} is not supported`,
       offline: m => `${m} is offline`, unreachable: m => `OpenRig is unreachable on ${m}`
@@ -251,12 +253,12 @@ export const en: Messages = {
     missing: { goal: 'Give the lead a goal.', spec: 'Pick a spec.', repo: 'Pick a repository.', branch: 'Name the new branch.', name: 'Invalid name: lowercase letters, digits and dashes.' },
     preparing: 'Ledge is preparing the plan…', launching: 'Launching…', refused: why => `Refused: ${why}`, timeout: s => `no answer after ${s} s`,
     plan: {
-      intro: 'Here is how I would set the rig up. Nothing is launched.', head: { seat: 'SEAT', agent: 'AGENT', autonomy: 'AUTONOMY' },
+      intro: 'Here is how I would set the team up. Nothing is launched.', head: { seat: 'SEAT', agent: 'AGENT', autonomy: 'AUTONOMY' },
       folder: 'Folder', writes: 'Adds to the folder:', command: 'Command'
     },
     starting: {
       openrig: 'OpenRig', preparing: 'preparing the launch…', running: 'running', copy: 'Copy', folder: 'Folder', space: 'Space',
-      human: 'Ledge, the rig’s human', humanCommand: 'rig gateway human add ledge', up: name => `rig up ${name}`,
+      human: 'Ledge, the team’s human', humanCommand: 'rig gateway human add ledge', up: name => `rig up ${name}`,
       upDetail: (spec, n) => `spec ${spec} · ${n} ${plural(n, 'seat', 'seats')}`,
       seats: 'Seats', ready: (k, n) => `${k}/${n} ready`,
       coming: names => `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} ${names.length > 1 ? 'are' : 'is'} starting…`,
@@ -265,12 +267,12 @@ export const en: Messages = {
     },
     trust: seat => `${seat} waits for your trust in the folder · ↵ open the prompt`,
     openRoom: 'Open its room', cancelLaunch: 'Cancel the launch', backToLedge: 'Back to Ledge',
-    leave: 'You can go: Ledge will tell you if the start gets stuck.', notNamed: 'The rig has no name yet: nothing to cancel for now.',
+    leave: 'You can go: Ledge will tell you if the start gets stuck.', notNamed: 'The team has no name yet: nothing to cancel for now.',
     cancelled: name => `${name}: launch cancelled`,
-    keys: { mode: 'rig or session', seePlan: 'see the plan', openRoom: 'open its room', trust: 'open the prompt', cancelLaunch: 'cancel the launch', ledge: 'Ledge' }
+    keys: { mode: 'team or session', seePlan: 'see the plan', openRoom: 'open its room', trust: 'open the prompt', cancelLaunch: 'cancel the launch', ledge: 'Ledge' }
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Home', ledge: 'Ledge screen', rig: 'A rig’s room', session: 'Session', launch: 'Launch', settings: 'Settings', screens: 'switch screen', teams: 'Teams', teamKeys: 'Teams and decisions (home)', resumeTeam: 'resume the team (its row chosen)', writeToSeat: 'write (local rig)', suggestions: 'suggestions', foldExchanges: 'fold exchanges', backNarrow: 'back (narrow)', launchRig: 'new rig/session', resumeSent: 'resume', answerFocus: 'decide', tabsKeys: 'tabs', rail: 'the summary · 100-139', fileIn: 'file (off-project)', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Home', ledge: 'Ledge screen', rig: 'A team’s room', session: 'Session', launch: 'Launch', settings: 'Settings', screens: 'switch screen', teams: 'Templates', teamKeys: 'Teams and decisions (home)', resumeTeam: 'resume the team (its row chosen)', writeToSeat: 'write (local team)', suggestions: 'suggestions', foldExchanges: 'fold exchanges', backNarrow: 'back (narrow)', launchRig: 'new team/session', resumeSent: 'resume', answerFocus: 'decide', tabsKeys: 'tabs', rail: 'the summary · 100-139', fileIn: 'file (off-project)', field: 'Typing', wordBefore: 'delete the word before',
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
     capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,

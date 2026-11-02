@@ -1203,14 +1203,14 @@ describe('ledge tui: ask Ledge scrolls, in Markdown (#95 lot C)', () => {
     try {
       await tui.resize(160, 60);
       await tui.press('?');
-      await until(() => tui.frame().includes('PIÈCE D’UN RIG') || tui.frame().includes('Pièce d’un rig'));
+      await until(() => tui.frame().includes('PIÈCE D’UNE ÉQUIPE') || tui.frame().includes('Pièce d’une équipe'));
       const f = tui.frame();
       expect(f).toContain('Écran Ledge');
       expect(f).toMatch(/1-9 +trancher/);
       expect(f).toMatch(/S +arrêter…/);
       expect(f).toMatch(/alt\+1…4/);
       expect(f).not.toMatch(/Nouvelle session/);
-      expect(f).toMatch(/1 2 3 4 +Ledge · rig · session/);
+      expect(f).toMatch(/1 2 3 4 +Ledge · équipe · sess/);
       expect(f).toContain('Équipes');
       expect(f).toContain('Équipes et décisions (accueil)');
       expect(f).toMatch(/D +répondre à la décision/);
@@ -1296,31 +1296,50 @@ describe('ledge tui: settings', () => {
 });
 
 describe('ledge tui: teams (roles spec §3.9)', () => {
-  it('the overview draws ▭ the common table and ▣ a team with its seats’ roles; J joins, R resumes', async () => {
+  it('lot F task 3: a team is one ▣ row of « Équipes », a resting one « au repos »; R resumes it with rig.act up; J keeps its chooser', async () => {
     const sessions = mockupSessions().map(s => (s.id === 'nova' ? { ...s, team: 'team-a1b2', role: 'build' } : s));
     const tui = await startTui({ sessions });
     try {
-      // Tall enough for the whole tree in Joffrey's Home (its « Projets » box shares the column with Ledge, « À toi » and « Rigs »).
       await tui.resize(160, 50);
+      const rig = (id: string, name: string, resting: boolean) => ({ id, name, machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: resting ? 'stopped' as const : 'running' as const, kernel: false, engine: 'ledge' as const, repos: [],
+        seats: resting ? [] : [{ ref: `build@${id}`, address: '@build', name: 'Nova', runtime: 'codex', state: 'working' as const, sessionId: 'nova' }, { ref: `qa@${id}`, address: '@qa', name: 'qa', runtime: 'codex', state: 'stopped' as const }] });
+      tui.daemon.push({ type: 'teams.engine', engine: 'ledge', openrigAvailable: true, running: true });
+      tui.daemon.push({ type: 'rig.snapshot', machine: 'local', rigs: [rig('team-a1b2', 'ledge-roles', false), rig('team-c3d4', 'mobile', true)] });
       tui.daemon.push({ type: 'teams', teams: [
         { id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'nova' }, { role: 'qa', sessionId: null }], createdAt: T(0), updatedAt: T(0) },
         { id: 'team-c3d4', name: 'mobile', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'resting', seats: [], createdAt: T(1), updatedAt: T(1) }
       ] });
-      await until(() => tui.frame().includes('▣ ledge-roles'));
-      expect(tui.frame()).toContain('▭ table commune');
-      expect(tui.frame()).toContain('@build');
-      expect(tui.frame()).toContain('au repos · R pour reprendre');
-      // On Ledge, R sums up the day (Joffrey's Home): the team keys act from the tree, Otto chosen.
+      await until(() => tui.frame().includes('▣ ledge-roles') && tui.frame().includes('▣ mobile'));
+      const f = tui.frame();
+      expect(f).toContain('ÉQUIPES');
+      expect(f).not.toContain('table commune');
+      expect(f).not.toContain('OpenRig n’est pas installé');
+      expect(f).not.toContain('Noyau OpenRig');
+      expect(f).toMatch(/mobile.*au repos/);
+      // On Ledge, R sums up the day; off Ledge, with Otto chosen, it resumes the resting team.
       await tui.pick('Otto');
       await tui.press('R');
-      await until(() => sent(tui.daemon.received, 'team.resume').length === 1);
-      expect(sent(tui.daemon.received, 'team.resume')[0]).toEqual({ type: 'team.resume', team: 'team-c3d4' });
+      await until(() => sent(tui.daemon.received, 'rig.act').length === 1);
+      expect(sent(tui.daemon.received, 'rig.act')[0]).toMatchObject({ type: 'rig.act', machine: 'local', rigId: 'team-c3d4', verb: 'up' });
+      expect(sent(tui.daemon.received, 'team.resume')).toHaveLength(0);
       // Otto joins ledge-roles in its first free role.
       await tui.press('J');
       await until(() => tui.frame().includes('OTTO REJOINT QUELLE ÉQUIPE'));
       await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'team.join').length === 1);
       expect(sent(tui.daemon.received, 'team.join')[0]).toEqual({ type: 'team.join', team: 'team-a1b2', session: 'otto', role: 'qa' });
+    } finally { await tui.cleanup(); }
+  });
+
+  it('lot F task 3: the navigation bar says « 2 Équipe », and screen 4 is « Modèles »', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(160, 50);
+      await until(() => tui.frame().includes('2 Équipe'));
+      expect(tui.frame()).toContain('1 Ledge · 2 Équipe · 3 Session');
+      await tui.press('4');
+      await until(() => tui.frame().includes('MODÈLES') || tui.frame().includes('Modèles'));
+      expect(tui.frame()).not.toContain('ÉQUIPES');
     } finally { await tui.cleanup(); }
   });
 
@@ -1335,7 +1354,7 @@ describe('ledge tui: teams (roles spec §3.9)', () => {
       await until(() => tui.frame().includes('NOUVELLE SESSION'));
       await tui.press('\u0014'); // ctrl+t
       await until(() => tui.frame().includes('NOUVELLE ÉQUIPE'));
-      await until(() => tui.frame().includes('L’équipe workshop s’installera à une nouvelle table de la pièce Ledge.'));
+      await until(() => tui.frame().includes('L’équipe workshop aura sa propre pièce dans Ledge.'));
       expect(tui.frame()).toContain('@review travaillera sans demander.');
       await tui.press('\u0013'); // ctrl+s
       await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
@@ -1530,7 +1549,7 @@ describe('ledge tui: « Équipes » (4), the roles and templates catalog (#97)',
       await until(() => tui.frame().includes('▣ WORKSHOP'));
       await tui.press('\r');
       await until(() => tui.frame().includes('NOUVELLE ÉQUIPE'));
-      await until(() => tui.frame().includes('L’équipe workshop s’installera'));
+      await until(() => tui.frame().includes('L’équipe workshop aura sa propre pièce'));
       await tui.press('\u0013'); // ctrl+s
       await until(() => sent(tui.daemon.received, 'team.launch').length === 1);
       expect(sent(tui.daemon.received, 'team.launch')[0]).toMatchObject({ cwd: '/w/ledge', template: 'workshop' });
@@ -1717,14 +1736,14 @@ describe('ledge tui: a rig seat\'s session screen (lot 8 task 11)', () => {
     await until(() => tui.frame().includes('factory'));
     await tui.pick('build');
     await tui.press('\r');
-    await until(() => tui.frame().includes('Rigs › ▣ factory › @build'));
+    await until(() => tui.frame().includes('Équipes › ▣ factory › @build'));
   };
 
   it('shows its rig crumb and writes through Ledge, never into the pane', async () => {
     const tui = await startTui({ openrig: {} });
     try {
       await openBuild(tui);
-      expect(tui.frame()).toContain('Rigs › ▣ factory › @build › build · Local');
+      expect(tui.frame()).toContain('Équipes › ▣ factory › @build › build · Local');
       expect(tui.frame()).toMatch(/BUILD · @BUILD · ▣ FACTORY · CLAUDE CODE/);
       await tui.press('\r');
       await until(() => tui.frame().includes('ÉCRIRE À BUILD · @BUILD · FACTORY'));
@@ -1758,7 +1777,7 @@ describe('ledge tui: a rig seat\'s session screen (lot 8 task 11)', () => {
       await openBuild(tui);
       await tui.press('\x1b[D');
       await until(() => tui.frame().includes('SIÈGE') && tui.frame().includes('orch-lead'));
-      expect(tui.frame()).not.toContain('Rigs › ▣ factory › @build');
+      expect(tui.frame()).not.toContain('Équipes › ▣ factory › @build');
     } finally { await tui.cleanup(); }
   });
 

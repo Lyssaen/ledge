@@ -23,7 +23,7 @@ async function openRoom(tui: Awaited<ReturnType<typeof startTui>>, name: string)
   await tui.resize(160, 46);
   await until(() => tui.frame().includes('factory'));
   await tui.press('2');
-  const title = `▣ ${name.toUpperCase()} · RIG`;
+  const title = `▣ ${name.toUpperCase()} · ÉQUIPE`;
   for (let i = 0; i < 40 && !tui.frame().includes(title); i++) await tui.press('j');
   await until(() => tui.frame().includes(title));
 }
@@ -35,7 +35,7 @@ const answer = (daemon: Awaited<ReturnType<typeof startTui>>['daemon'], result: 
 describe('ledge tui: a rig\'s actions through OpenRig', () => {
   afterEach(() => { vi.useRealTimers(); });
 
-  it('S then « Arrêter le rig » sends rig.act down after confirmation', async () => {
+  it('S then « Arrêter l’équipe » sends rig.act down after confirmation', async () => {
     const tui = await startTui({ openrig: {} });
     answer(tui.daemon, { ok: true });
     try {
@@ -43,7 +43,7 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
       expect(tui.frame()).toMatch(/S +arrêter…/);
       await tui.press('S');
       await until(() => tui.frame().includes('ARRÊTER FACTORY ?'));
-      expect(tui.frame()).toContain('◉ Arrêter le rig');
+      expect(tui.frame()).toContain('◉ Arrêter l’équipe');
       expect(tui.frame()).toContain('○ Seulement ce siège · orch-lead');
       await new Promise(r => setTimeout(r, 50));
       expect(sent(tui.daemon.received, 'rig.act')).toEqual([]);
@@ -65,7 +65,7 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
       await until(() => tui.frame().includes('ARRÊTER FACTORY ?'));
       await tui.press(ESC);
       await until(() => !tui.frame().includes('ARRÊTER FACTORY ?'));
-      expect(tui.frame()).toContain('▣ FACTORY · RIG');
+      expect(tui.frame()).toContain('▣ FACTORY · ÉQUIPE');
       await tui.press('S');
       await until(() => tui.frame().includes('ARRÊTER FACTORY ?'));
       await tui.press('j');
@@ -139,7 +139,7 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
     try {
       await openRoom(tui, 'atlas');
       const f = tui.frame();
-      expect(f).toContain('▣ ATLAS · RIG · HORS PROJET');
+      expect(f).toContain('▣ ATLAS · ÉQUIPE · HORS PROJET');
       expect(f).toContain('DÉPÔTS TROUVÉS EN ROUTE · 2');
       expect(f).toMatch(/⎇ api +github\.com\/lyssaen\/atlas-api +cloné par dev · ⎇ feat\/client/);
       expect(f).toMatch(/⎇ web +\/w\/website +ouvert par dev · ⎇ feat\/WEB-20-api/);
@@ -150,7 +150,7 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
       expect(tui.frame()).toMatch(/◉ ■ Website +contient déjà web/);
       expect(tui.frame()).toContain('○ ■ Ledge');
       expect(tui.frame()).toContain('○ Laisser hors projet');
-      expect(tui.frame()).toContain('atlas garde sa pièce ; sa plaque dira « dans Website ». Il ne devient pas une seconde table de Website.');
+      expect(tui.frame()).toContain('atlas garde sa pièce ; sa plaque dira « dans Website ». Elle ne devient pas une seconde table de Website.');
       await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'rig.adopt').length === 1);
       expect(sent(tui.daemon.received, 'rig.adopt')[0]).toMatchObject({ machine: 'local', rigId: 'atlas', projectId: 'website' });
@@ -170,8 +170,8 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
       await tui.press('\r');
       await until(() => !tui.frame().includes('RANGER ATLAS DANS UN PROJET ?'));
       expect(sent(tui.daemon.received, 'rig.adopt')).toEqual([]);
-      for (let i = 0; i < 40 && !tui.frame().includes('▣ FAR · RIG'); i++) await tui.press('j');
-      await until(() => tui.frame().includes('▣ FAR · RIG'));
+      for (let i = 0; i < 40 && !tui.frame().includes('▣ FAR · ÉQUIPE'); i++) await tui.press('j');
+      await until(() => tui.frame().includes('▣ FAR · ÉQUIPE'));
       expect(tui.frame()).not.toMatch(/p +ranger dans un projet…/);
       await tui.press('p');
       await new Promise(r => setTimeout(r, 100));
@@ -204,7 +204,7 @@ describe('ledge tui: a rig\'s actions through OpenRig', () => {
       // Changing its model resumes the session: OpenRig's to do, not Ledge's.
       expect(f).not.toMatch(/m +modèle/);
       tui.daemon.push({ type: 'error', message: 'this session is a seat of an OpenRig rig: stop or restart it through its rig', request: 'session.model', code: 'rig_managed' } as ServerMessage);
-      await until(() => tui.frame().includes('Ce siège appartient à son rig'));
+      await until(() => tui.frame().includes('Ce siège appartient à son équipe'));
     } finally { await tui.cleanup(); }
   });
 });

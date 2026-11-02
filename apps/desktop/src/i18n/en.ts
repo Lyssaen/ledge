@@ -1178,7 +1178,7 @@ export const en: Messages = {
       pill: { yours: 'your turn', working: 'working', waiting: 'waiting for you', stopped: 'stopped' }
     },
     team: {
-      label: 'Proposed team', folder: 'Folder', table: (project: string) => `Table`, newTable: (project: string) => `new table in the ${project} room`, seats: 'Seats',
+      label: 'Proposed team', folder: 'Folder', table: (project: string) => `Table`, newTable: (project: string) => `its own room in ${project}`, seats: 'Seats',
       autonomy: { ask: 'asks before acting', edits: 'edits without asking', auto: 'autonomous' },
       autoWarning: (roles: string) => `${roles} will work without asking: edits and commands without your approval.`,
       launch: 'Launch the team', launching: 'Launching…', retry: 'Retry', save: 'Save', saved: (path: string) => `Saved: ${path}`, notSaved: (why: string) => `Not saved: ${why}`,

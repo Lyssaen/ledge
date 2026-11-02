@@ -1,15 +1,12 @@
 import { isPending, liveHelpers, splitId } from '@ledge/fleet';
 import type { FleetAsk } from '@ledge/fleet';
-import { askShown, contextNear, decisionMirrored, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmissions, type Escalation, type Project, type ProjectColor, type Projects, type Rig, type Session, type Task, type Team } from '@ledge/protocol';
+import { askShown, contextNear, decisionMirrored, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmissions, type Escalation, type Project, type ProjectColor, type Projects, type Rig, type Session, type Task } from '@ledge/protocol';
 import { isLedgeTeamSeat, isStandalone } from '@ledge/ui/rigs/model';
 
 /** A session row of the tree under its branch. */
 export interface BranchRow { branch: string; sessions: Session[] }
 /** A project of the tree: a project of the daemon's list, or a repository outside any (`color` absent). */
-export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number;
-  /** The project's live teams (roles spec §3.9), after its common table: each with its live seats and Ledge's tasks done of given. */
-  teams: TeamRow[] }
-export interface TeamRow { key: string; team: Team; sessions: Session[]; done: number; given: number }
+export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number }
 export interface Overview {
   /** The standalone sessions waiting for the user, the oldest request first. */
   yours: Session[];
@@ -35,41 +32,28 @@ export const openEscalations = (escalations: readonly Escalation[]): Escalation[
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 
 /** The tree: the daemon's projects in their order, then repositories outside any project in the order their first session
- *  started; inside each, branches in the order their first session started, then its live teams. A session without a branch
- *  sits under « - ». Only standalone sessions are listed: a seat's session goes under its rig. */
-export function overview(sessions: readonly Session[], projects: Projects | null, asks: readonly FleetAsk[] = [], rigs: readonly Rig[] = [], escalations: readonly Escalation[] = [],
-  teams: readonly Team[] = [], tasks: readonly Task[] = []): Overview {
-  // A Ledge team's seat stays in its team's row (and its waits in « À toi ») while lot F task 3 has not reworked the TUI's teams.
-  const live = listed(sessions).filter(s => isLedgeTeamSeat(s) || isStandalone(s, rigs));
-  const yours = live.filter(isPending).sort((a, b) => a.lastActivityAt.localeCompare(b.lastActivityAt) || a.id.localeCompare(b.id));
+ *  started; inside each, branches in the order their first session started. A session without a branch sits under « - ». Only
+ *  standalone sessions are listed: a seat's session goes under its team's (or rig's) row. A Ledge team's seat stays in « À toi »
+ *  while it waits (Ledge answers for no seat of a team): `yours` lists it, the tree does not. */
+export function overview(sessions: readonly Session[], projects: Projects | null, asks: readonly FleetAsk[] = [], rigs: readonly Rig[] = [], escalations: readonly Escalation[] = []): Overview {
+  const all = listed(sessions);
+  const live = all.filter(s => isStandalone(s, rigs));
+  const yours = all.filter(s => isLedgeTeamSeat(s) || isStandalone(s, rigs)).filter(isPending).sort((a, b) => a.lastActivityAt.localeCompare(b.lastActivityAt) || a.id.localeCompare(b.id));
   const nodes = new Map<string, ProjectNode>();
   const known = new Map<string, Project>((projects?.projects ?? []).map(p => [p.id, p]));
-  for (const p of projects?.projects ?? []) nodes.set(`p:${p.id}`, { key: `p:${p.id}`, label: p.name, color: p.color, branches: [], count: 0, teams: [] });
-  // A team's room is the project its folder falls in (the atelier's rule).
-  const rooms = new Map<string, TeamRow>();
-  for (const team of teams) {
-    if (team.state === 'dissolved') continue;
-    const pid = projects ? projectOf({ machineId: team.machine, cwd: team.cwd }, projects) ?? team.project : team.project;
-    const node = pid ? nodes.get(`p:${pid}`) : undefined;
-    if (!node) continue;
-    const mine = tasks.filter(x => x.team === team.id && x.giver === LEDGE_GIVER);
-    const row: TeamRow = { key: `${node.key}|team:${team.id}`, team, sessions: [], done: mine.filter(x => x.state === 'done').length, given: mine.length };
-    node.teams.push(row); rooms.set(team.id, row);
-  }
+  for (const p of projects?.projects ?? []) nodes.set(`p:${p.id}`, { key: `p:${p.id}`, label: p.name, color: p.color, branches: [], count: 0 });
   for (const s of live) {
     const pid = projects ? projectOf({ machineId: machineOf(s), cwd: s.cwd }, projects) : null;
     const key = pid && known.has(pid) ? `p:${pid}` : `r:${machineOf(s)}:${s.repoPath ?? s.cwd}`;
     let node = nodes.get(key);
-    if (!node) { node = { key, label: s.repo ?? s.project, branches: [], count: 0, teams: [] }; nodes.set(key, node); }
-    const seat = s.team ? rooms.get(s.team) : undefined;
-    if (seat && node.teams.includes(seat)) { seat.sessions.push(s); node.count += 1; continue; }
+    if (!node) { node = { key, label: s.repo ?? s.project, branches: [], count: 0 }; nodes.set(key, node); }
     const branch = s.branch ?? '-';
     let row = node.branches.find(b => b.branch === branch);
     if (!row) { row = { branch, sessions: [] }; node.branches.push(row); }
     row.sessions.push(s); node.count += 1;
   }
-  const tree = [...nodes.values()].filter(n => n.count > 0 || n.teams.length > 0);
-  const order = tree.flatMap(n => [...n.branches.flatMap(b => b.sessions.map(s => s.id)), ...n.teams.flatMap(x => x.sessions.map(s => s.id))]);
+  const tree = [...nodes.values()].filter(n => n.count > 0);
+  const order = tree.flatMap(n => n.branches.flatMap(b => b.sessions.map(s => s.id)));
   return { yours, escalations: openEscalations(escalations), asks: asks.filter(askShown).sort((a, b) => a.at.localeCompare(b.at)), tree, order, machines: new Set(live.map(machineOf)).size };
 }
 

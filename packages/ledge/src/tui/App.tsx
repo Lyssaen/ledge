@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, useStdout, useWindowSize } from 'ink';
-import { isPending, useDaemon, useEscalations, useLedgeThread, useMachines, useOpenRig, useProjects, useRigs, useTasks, useTeams, type DaemonClient, type Fleet } from '@ledge/fleet';
+import { isPending, useDaemon, useEscalations, useLedgeThread, useMachines, useOpenRig, useProjects, useRigs, useTasks, useTeamsEngine, type DaemonClient, type Fleet } from '@ledge/fleet';
 import { ledgeLine } from '@ledge/ui/rigs/model';
-import type { Session } from '@ledge/protocol';
+import type { Session, TeamsEngine } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
 import { readClipboardImage, type ClipboardImage } from './clipboard.js';
@@ -70,7 +70,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const openrig = useOpenRig(client);
   const thread = useLedgeThread(client).items;
   const tasks = useTasks(client);
-  const teams = useTeams(client);
+  // The teams engine as the local daemon says it; before it speaks (an older daemon never does), OpenRig's, as Desktop reads it.
+  const engine: TeamsEngine = useTeamsEngine(client)?.engine ?? 'openrig';
   const fleet = client.fleet as Fleet;
   const t = MESSAGES[lang];
   const [screen, setScreen] = useState<Screen>('home');
@@ -104,7 +105,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     const preview = p.kind === 'decision' ? t.home.decision(p.count) + on : p.kind === 'grace' ? t.home.grace + on : p.kind === 'said' ? p.text : t.home.calm;
     return { preview, ...(l.at ? { at: l.at } : {}), unread: l.unread };
   }, [escalations, rigs, said, t]);
-  const left = useMemo(() => leftRows({ sessions: d.sessions, projects, rigs, escalations, openrig, ledge, t, teams: teams ?? [], tasks }), [d.sessions, projects, rigs, escalations, openrig, ledge, t, teams, tasks]);
+  const left = useMemo(() => leftRows({ sessions: d.sessions, projects, rigs, escalations, openrig, ledge, t, engine }), [d.sessions, projects, rigs, escalations, openrig, ledge, t, engine]);
   // The focus follows its row; a row gone, the one now at its place.
   const order = useMemo(() => focusOrder(left), [left]);
   const lastOrder = useRef(order);
@@ -163,7 +164,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const size = screenSize(useWindowSize(), env);
   const small = size.columns < MIN.columns || size.rows < MIN.rows;
   const tui: Tui = {
-    client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, launchMode, setLaunchMode, focus, setFocus, selected, select, left, rigs, escalations, openrig,
+    client, fleet, d, machines, projects, t, lang, setLang, theme, setTheme, tone, background, g: glyphs, screen, go, launchMode, setLaunchMode, focus, setFocus, selected, select, left, rigs, escalations, openrig, engine,
     ledgeFocus, setLedgeFocus, brain, toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, catalog, keys, kept,
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
@@ -204,7 +205,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
       return;
     }
     if (input === '3') { if (selected) go('session'); return; }
-    // 4 the live teams (roles spec §3.9).
+    // 4 the templates and roles catalogue (« Modèles »).
     if (input === '4') { go('teams'); return; }
   });
 

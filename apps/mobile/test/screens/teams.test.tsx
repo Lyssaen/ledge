@@ -80,7 +80,7 @@ describe('« Ledge » on the phone (ledge home spec §2.4)', () => {
     t.deliver(chat.history(chat.turn(QID, { answer: 'Je propose l’équipe.', answeredAt: NOW, team: card, tasks: [{ to: '@build', title: 'Implémenter les rôles' }] })));
     render(<Chat store={t.store} />);
     const region = screen.getByRole('region', { name: 'Équipe proposée' });
-    expect(within(region).getByText('nouvelle table dans la pièce Ledge')).toBeInTheDocument();
+    expect(within(region).getByText('sa propre pièce dans Ledge')).toBeInTheDocument();
     expect(within(region).getByText('@qa')).toBeInTheDocument();
     expect(within(region).getByRole('note')).toHaveTextContent('@qa travaillera sans demander.');
     const taskCard = screen.getByRole('region', { name: 'Tâche à confier' });

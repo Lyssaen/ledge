@@ -16,7 +16,7 @@ describe('ledge tui: home', () => {
     const tui = await startTui({ openrig: {} });
     try {
       await tui.resize(160, 46);
-      await until(() => tui.frame().includes('RIGS') && tui.frame().includes('factory'));
+      await until(() => tui.frame().includes('ÉQUIPES') && tui.frame().includes('factory'));
       const f = tui.frame();
       expect(f).toContain('LEDGE');
       expect(f).toContain('Une décision t’attend · factory');
@@ -28,7 +28,7 @@ describe('ledge tui: home', () => {
       expect(f).toContain('◈ Noyau OpenRig au repos · operator, queue');
       expect(f).toContain('LEDGE · CONVERSATION');
       // The status bar counts the rigs, their agents, the standalone sessions and the machines, then who waits.
-      expect(f).toContain('2 rigs · 8 agents · 4 sessions seules · 1 machine · 3 t’attendent');
+      expect(f).toContain('2 équipes · 8 agents · 4 sessions seules · 1 machine · 3 t’attendent');
       await tui.press('2');
       await until(() => tui.frame().includes('▣ FACTORY'));
       await tui.press('1');
@@ -59,8 +59,8 @@ describe('ledge tui: home', () => {
     try {
       // 44 columns wide at 100: the line goes on two.
       await until(() => tui.frame().includes('OpenRig n’est pas installé'));
-      expect(tui.frame()).toContain('+ pour lancer un rig');
-      expect(tui.frame()).toContain('0 rig · 0 agent · 4 sessions seules');
+      expect(tui.frame()).toContain('+ pour lancer une équipe');
+      expect(tui.frame()).toContain('0 équipe · 0 agent · 4 sessions seules');
     } finally { await tui.cleanup(); }
   });
 
@@ -219,9 +219,9 @@ describe('ledge tui: writing to Ledge', () => {
       await tui.resize(200, 46);
       await until(() => tui.frame().includes('ÉCRIRE À LEDGE'));
       const f = tui.frame();
-      expect(f).toContain('Écrire à Ledge… (@build pour un agent d’un rig)');
+      expect(f).toContain('Écrire à Ledge… (@build pour un agent d’une équipe)');
       expect(f).toContain('tranche dans son mandat · design, architecture et critique te reviennent');
-      expect(f).toMatch(/Lance un rig… +Où en est factory \? +Qu’as-tu tranché \? +Qui a besoin de moi \? +alt\+1…4/);
+      expect(f).toMatch(/Lance une équipe… +Où en est factory \? +Qu’as-tu tranché \? +Qui a besoin de moi \? +alt\+1…4/);
       // Under 80 columns for the field, the short foot.
       await tui.resize(110, 40);
       await until(() => tui.frame().includes('design, architecture, critique te reviennent'));
@@ -241,7 +241,7 @@ describe('ledge tui: writing to Ledge', () => {
       await until(() => sent(tui.daemon.received, 'ledge.say').length === 2);
       expect(sent(tui.daemon.received, 'ledge.say')[1]).toMatchObject({ text: 'Qui a besoin de moi ?' });
       await tui.press(ALT('1'));
-      await until(() => tui.frame().includes('NOUVEAU RIG · LE BUT, LA SPEC, OÙ'));
+      await until(() => tui.frame().includes('NOUVELLE ÉQUIPE · LE BUT, LA SPEC, OÙ'));
       expect(sent(tui.daemon.received, 'ledge.say')).toHaveLength(2);
     } finally { await tui.cleanup(); }
   });
@@ -252,11 +252,11 @@ describe('ledge tui: writing to Ledge', () => {
       await tui.resize(160, 46);
       await tui.press('/');
       await tui.press('@bu');
-      await until(() => tui.frame().includes('@ UN AGENT D’UN RIG'));
+      await until(() => tui.frame().includes('@ UN AGENT D’UNE ÉQUIPE'));
       expect(tui.frame()).toMatch(/@build +factory · Reprise après reboot · Au travail/);
       expect(tui.frame()).toMatch(/↑ ↓ +choisir +tab +compléter +↵ +envoyer +esc +garder et sortir/);
       await tui.press(TAB);
-      await until(() => tui.frame().includes('❯ @build ') && !tui.frame().includes('@ UN AGENT D’UN RIG'));
+      await until(() => tui.frame().includes('❯ @build ') && !tui.frame().includes('@ UN AGENT D’UNE ÉQUIPE'));
       // The completion keeps the focus in the field.
       await tui.press('relance les tests');
       await tui.press('\r');
@@ -280,10 +280,10 @@ describe('ledge tui: writing to Ledge', () => {
       await until(() => tui.frame().includes('❯ @build@starter '));
       await tui.press('\u0015'); // ctrl+u: the field emptied
       await tui.press('@bu');
-      await until(() => tui.frame().includes('@ UN AGENT D’UN RIG'));
+      await until(() => tui.frame().includes('@ UN AGENT D’UNE ÉQUIPE'));
       await tui.press(DOWN); await tui.press(UP);
       await tui.press(ESC);
-      await until(() => !tui.frame().includes('@ UN AGENT D’UN RIG'));
+      await until(() => !tui.frame().includes('@ UN AGENT D’UNE ÉQUIPE'));
       expect(tui.frame()).toContain('❯ @bu');
       // Still in the field: what is typed goes on.
       await tui.press('ild');
@@ -333,7 +333,7 @@ describe('ledge tui: a rig\'s room and the kernel\'s', () => {
       await tui.resize(160, 46);
       await until(() => tui.frame().includes('factory'));
       await tui.press('2');
-      await until(() => tui.frame().includes('▣ FACTORY · RIG · DANS LEDGE'));
+      await until(() => tui.frame().includes('▣ FACTORY · ÉQUIPE · DANS LEDGE'));
       await until(() => tui.frame().includes('Patch daemon'));
       const f = tui.frame();
       expect(f).toContain('● 4/6 au travail ████████░░░░  ⎇ feat/rigs · spec factory · 6 sièges · depuis 14:02 · Local · lead orch-lead');
@@ -365,7 +365,7 @@ describe('ledge tui: a rig\'s room and the kernel\'s', () => {
       await tui.resize(160, 46);
       await until(() => tui.frame().includes('factory'));
       await tui.press('2');
-      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      await until(() => tui.frame().includes('▣ FACTORY · ÉQUIPE'));
       for (let i = 0; i < 3; i++) await tui.press('j');
       await until(() => tui.frame().includes('TERMINAL · REVIEW-A · FACTORY'));
       await tui.press('w');
@@ -385,7 +385,7 @@ describe('ledge tui: a rig\'s room and the kernel\'s', () => {
       await tui.resize(160, 46);
       await until(() => tui.frame().includes('factory'));
       await tui.press('2');
-      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      await until(() => tui.frame().includes('▣ FACTORY · ÉQUIPE'));
       await tui.press('a');
       await until(() => runs.length === 1);
       expect(runs[0]!.join(' ')).toContain('orch-lead@factory');
@@ -400,13 +400,13 @@ describe('ledge tui: a rig\'s room and the kernel\'s', () => {
       await tui.resize(160, 46);
       await until(() => tui.frame().includes('factory'));
       await tui.press('2');
-      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      await until(() => tui.frame().includes('▣ FACTORY · ÉQUIPE'));
       expect(tui.frame()).toMatch(/○ injoignable/);
       expect(tui.frame()).not.toMatch(/a +attacher/);
       await tui.press('w');
       await tui.press('a');
       await new Promise(r => setTimeout(r, 100));
-      expect(tui.frame()).toContain('▣ FACTORY · RIG');
+      expect(tui.frame()).toContain('▣ FACTORY · ÉQUIPE');
       expect(tui.frame()).not.toContain('❯ @lead');
       expect(runs).toEqual([]);
     } finally { await tui.cleanup(); }
@@ -418,13 +418,13 @@ describe('ledge tui: a rig\'s room and the kernel\'s', () => {
       await tui.resize(90, 40);
       await until(() => tui.frame().includes('factory'));
       await tui.press('2');
-      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
+      await until(() => tui.frame().includes('▣ FACTORY · ÉQUIPE'));
       expect(tui.frame()).not.toContain('PROJETS · SESSIONS SEULES');
       expect(tui.frame()).toMatch(/esc +retour/);
       // j k choose its seats, and stay in the room past them.
       for (let i = 0; i < 8; i++) await tui.press('j');
       await until(() => tui.frame().includes('TERMINAL · DESIGN · FACTORY'));
-      expect(tui.frame()).toContain('▣ FACTORY · RIG');
+      expect(tui.frame()).toContain('▣ FACTORY · ÉQUIPE');
       await tui.press(ESC);
       await until(() => tui.frame().includes('PROJETS · SESSIONS SEULES'));
       // The kernel's row, ↵: its room.
@@ -444,14 +444,14 @@ describe('ledge tui: a rig\'s room and the kernel\'s', () => {
       await tui.resize(160, 46);
       await until(() => tui.frame().includes('remote'));
       await tui.press('2');
-      await until(() => tui.frame().includes('▣ FACTORY · RIG'));
-      for (let i = 0; i < 40 && !tui.frame().includes('▣ REMOTE · RIG'); i++) await tui.press('j');
-      await until(() => tui.frame().includes('▣ REMOTE · RIG'));
+      await until(() => tui.frame().includes('▣ FACTORY · ÉQUIPE'));
+      for (let i = 0; i < 40 && !tui.frame().includes('▣ REMOTE · ÉQUIPE'); i++) await tui.press('j');
+      await until(() => tui.frame().includes('▣ REMOTE · ÉQUIPE'));
       expect(tui.frame()).toMatch(/a +attacher/);
       expect(tui.frame()).not.toMatch(/w +écrire/);
       await tui.press('w');
       await new Promise(r => setTimeout(r, 100));
-      expect(tui.frame()).toContain('▣ REMOTE · RIG');
+      expect(tui.frame()).toContain('▣ REMOTE · ÉQUIPE');
       expect(tui.frame()).not.toContain('❯ @build');
     } finally { await tui.cleanup(); }
   });

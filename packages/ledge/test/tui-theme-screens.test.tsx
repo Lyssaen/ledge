@@ -112,7 +112,7 @@ describe('ledge tui: the theme (#95 lot D)', () => {
       expect(tui.frame()).toContain(fgOf(PALETTES.light.coral));
       noDark(tui.frame());
       await tui.press('2');
-      await until(() => tui.frame().includes(' · RIG'));
+      await until(() => tui.frame().includes(' · ÉQUIPE'));
       expect(tui.frame()).toContain('▣ ');
       noDark(tui.frame());
       tui.daemon.thread('omp1', [

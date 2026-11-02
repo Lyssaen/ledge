@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
 import { useWindowSize, type Key } from 'ink';
 import type { DaemonClient, DaemonState, Fleet, MachineState } from '@ledge/fleet';
-import type { Escalation, OpenRigStatus, Projects, Rig, Session } from '@ledge/protocol';
+import type { Escalation, OpenRigStatus, Projects, Rig, Session, TeamsEngine } from '@ledge/protocol';
 import type { Actions, Toast } from './actions.js';
 import type { Asked } from './model/chat.js';
 import type { LeftRow } from './model/left.js';
@@ -49,6 +49,8 @@ export interface Tui {
   selected: Session | null; select(id: string | null): void;
   /** The home's left column, and what it is drawn from. */
   left: LeftRow[]; rigs: Rig[]; escalations: Escalation[]; openrig: OpenRigStatus[];
+  /** The teams engine in force (the local daemon's): `ledge` shows no OpenRig kernel nor its install line. */
+  engine: TeamsEngine;
   /** Where the keyboard is in Ledge's conversation (`LEDGE_FOCUS`, or a card's index): `/` puts it in the field from anywhere. */
   ledgeFocus: number; setLedgeFocus(f: number | ((f: number) => number)): void;
   /** What Ledge's brain sent: its decisions, rules and mandate (undefined until the daemon sends them). */
