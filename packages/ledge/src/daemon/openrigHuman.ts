@@ -69,6 +69,7 @@ const RowShape = z.object({
   tsCreated: z.string(), tsUpdated: z.string()
 }).passthrough();
 const AnswerShape = z.object({
+  verb: z.literal('answer'), qitemId: z.string(),
   answer: z.object({ outcome: z.enum(['recorded', 'answered']), unanswered: z.array(z.string()), message: z.string().optional() }).passthrough(),
   createdQitemId: z.string().nullable().optional()
 }).passthrough();
@@ -235,7 +236,8 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     if (kept && at && kept.at === at) return { row: kept.row };
     const r = await http('GET', `${url}/api/queue/${encodeURIComponent(id)}`);
     if (r.status === 404) return 'gone';
-    if (r.status !== 200 || !RowShape.safeParse(r.json).success) return 'failed';
+    // A row that is not the one asked for is no read of it: it never stands in for it.
+    if (r.status !== 200 || !RowShape.safeParse(r.json).success || obj(r.json).qitemId !== id) return 'failed';
     rows.set(id, { at: str(obj(r.json).tsUpdated) ?? at ?? '', row: r.json });
     return { row: r.json };
   };
@@ -339,7 +341,9 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     const b = await base();
     if ('channel' in b) return { qitemId, ok: false, error: b.channel.state === 'openrig_stopped' ? 'openrig_stopped' : 'unreachable', message: b.channel.message ?? b.channel.state };
     const r = await http('GET', `${b.url}/api/queue/${encodeURIComponent(qitemId)}`);
-    if (r.status !== 200 || !RowShape.safeParse(r.json).success) return { qitemId, ok: false, ...answerError(r.status, r.json) };
+    if (r.status !== 200 || !RowShape.safeParse(r.json).success || obj(r.json).qitemId !== qitemId) {
+      return { qitemId, ok: false, ...(r.status === 200 ? { error: 'unreachable' as const, message: `OpenRig did not answer with row ${qitemId}` } : answerError(r.status, r.json)) };
+    }
     const q = obj(r.json), intent = str(q.humanIntent), state = str(q.state) ?? '';
     const parked = state === 'blocked';
     const fits = ans.kind === 'seen' ? intent === 'update' : ans.kind === 'resolve' ? parked : intent !== 'update' && !parked;
@@ -372,11 +376,13 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     if (res.status >= 500) return uncertain(str(obj(res.json).message) ?? `OpenRig answered HTTP ${res.status}`);
     if (res.status !== 200) return { qitemId, ok: false, ...answerError(res.status, res.json) };
     if (ans.kind === 'seen' || ans.kind === 'resolve') {
+      // Proof is OpenRig's account of this very action: the verb sent, on this row.
       const acted = ActedShape.safeParse(res.json);
-      return acted.success && acted.data.qitemId === qitemId ? { qitemId, ok: true, outcome: 'answered' } : uncertain('OpenRig answered something Ledge cannot read');
+      return acted.success && acted.data.qitemId === qitemId && acted.data.verb === action.verb ? { qitemId, ok: true, outcome: 'answered' } : uncertain('OpenRig answered with another action than this one');
     }
     const parsed = AnswerShape.safeParse(res.json);
     if (!parsed.success) return uncertain('OpenRig answered something Ledge cannot read');
+    if (parsed.data.qitemId !== qitemId) return uncertain('OpenRig answered with another action than this one');
     const told = parsed.data.answer, replyId = parsed.data.createdQitemId ?? undefined;
     if (told.outcome === 'recorded') {
       // OpenRig names what still waits by its questions' text: their ids come from the row read before answering, no second read. A text
