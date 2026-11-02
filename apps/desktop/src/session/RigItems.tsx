@@ -283,14 +283,29 @@ export const foldable = (i: ReceivedItem | NoticeItem): i is RigNotice => i.kind
 /** The raw of an item, given the others in its exchange: an item of a packet shows none but the packet's last, which shows
  *  all of them joined; a repeated delivery says how many. */
 export function rawOf(item: { rig: RigInfo }, all: ReadonlyArray<{ rig?: RigInfo }>, label: { one: string; many(k: number): string; deliveries(k: number): string }): { text: string; label: string } | null {
-  const p = item.rig.packet;
-  if (p) {
-    const same = all.filter(o => o.rig?.packet?.id === p.id);
-    const lastIndex = Math.max(...same.map(o => o.rig!.packet!.index));
-    if (p.index !== lastIndex) return null;
-    return { text: same.sort((a, b) => a.rig!.packet!.index - b.rig!.packet!.index).map(o => o.rig!.raw).join('\n'), label: label.many(p.count) };
-  }
+  // A packet's blocks show none: its one raw follows the group (packetRaw).
+  if (item.rig.packet && all.filter(o => o.rig?.packet?.id === item.rig.packet!.id).length > 1) return null;
   return { text: item.rig.raw, label: item.rig.count ? label.deliveries(item.rig.count) : label.one };
+}
+
+/** After the last block of a packet the thread shows: the packet's one raw, its blocks' raws joined in order. */
+export function packetRaw(item: { rig?: RigInfo }, all: ReadonlyArray<{ rig?: RigInfo }>, many: (k: number) => string): { text: string; label: string } | null {
+  const p = item.rig?.packet;
+  if (!p) return null;
+  const same = all.filter(o => o.rig?.packet?.id === p.id).sort((a, b) => a.rig!.packet!.index - b.rig!.packet!.index);
+  if (same.length < 2 || same.at(-1) !== item) return null;
+  return { text: same.map(o => o.rig!.raw).join('\n'), label: many(p.count) };
+}
+
+/** The packet's raw as a row of its own, under the group (the mockup's « 2 messages collés ensemble · brut »). */
+export function PacketRawRow({ raw }: { raw: { text: string; label: string } }): JSX.Element {
+  return (
+    <li className="r rig-row rig-packet-raw">
+      <span className="n" />
+      <div><RawDetails raw={raw.text} label={raw.label} /></div>
+      <span className="tm" />
+    </li>
+  );
 }
 
 /** For tests and the page: the qualified id of a raw peer on the thread's machine. */

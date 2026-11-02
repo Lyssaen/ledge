@@ -19,7 +19,7 @@ import { UserAvatar } from '../shell/UserAvatar';
 import { ActionGroup, KIND_ICON, Spin } from './ActionGroup';
 import { firstLine, MessageCard } from './MessageCard';
 import { NoticeLine } from './NoticeLine';
-import { foldable, rawOf, RigBubble, RigNoticeFold, RigNoticeLine, RigTaskCard, RigUnreadable, seatSession, type RigNotice } from './RigItems';
+import { foldable, packetRaw, PacketRawRow, rawOf, RigBubble, RigNoticeFold, RigNoticeLine, RigTaskCard, RigUnreadable, seatSession, type RigNotice } from './RigItems';
 import { nameOf } from './changedFiles';
 import { PlanCard } from './PlanCard';
 import { WaitLine } from './WaitLine';
@@ -426,7 +426,7 @@ const Turn = memo(function Turn({ client, session, helper, items, x, at, last, f
         )}
         {openerRows(x.openers).map(g => Array.isArray(g)
           ? <Fragment key={g[0]!.id}>{g[0]!.id !== opener && marker(g[0]!.id)}<RigNoticeFold items={g} raws={n => rawOf(n, rigAll, rigLabel)} /></Fragment>
-          : <Fragment key={g.id}>{g.id !== opener && marker(g.id)}{g.kind === 'received' ? message(g) : notice(g)}</Fragment>)}
+          : <Fragment key={g.id}>{g.id !== opener && marker(g.id)}{g.kind === 'received' ? message(g) : notice(g)}{(() => { const pr = packetRaw(g, rigAll, t.session.rig.rawMany); return pr && <PacketRawRow raw={pr} />; })()}</Fragment>)}
         {grouped(x.segments).map(segment)}
         {wait && <WaitLine wait={wait} seedKey={x.key} now={now} />}
         {last && waiting && (

@@ -173,8 +173,11 @@ describe('OpenRig messages in a seat’s thread', () => {
     const first = thread().getByText('« Oui, now ».').closest<HTMLElement>('[data-message="k1"]')!;
     const second = thread().getByText('Ligne créée pour toi.').closest<HTMLElement>('[data-message="k2"]')!;
     expect(first.querySelector('details')).toBeNull();
-    expect(within(second).getByText('2 messages collés ensemble · brut')).toBeVisible();
-    expect(second.querySelector('pre')!.textContent).toBe('BLOCK ONE\nBLOCK TWO');
+    expect(second.querySelector('details')).toBeNull();
+    // One raw for the packet, after the group, as its own row.
+    const packet = thread().getByText('2 messages collés ensemble · brut').closest<HTMLElement>('.rig-packet-raw')!;
+    expect(packet.previousElementSibling).toBe(second.closest('li'));
+    expect(packet.querySelector('pre')!.textContent).toBe('BLOCK ONE\nBLOCK TWO');
     const bad = thread().getByText('Message OpenRig illisible · affiché tel quel').closest<HTMLElement>('[data-rig="unreadable"]')!;
     expect(bad.querySelector('.rawbox')).toHaveTextContent('Relance : la maquette est-elle prête ?');
     // The user's own words stay « Vous ».
