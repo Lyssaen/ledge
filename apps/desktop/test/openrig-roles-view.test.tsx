@@ -101,7 +101,7 @@ describe('the Roles view', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'YAML source' }));
     const panel = screen.getByRole('tabpanel');
     expect(await within(panel).findByText('ledge-developer')).toHaveClass('orr-v');
-    expect(within(panel).getByText(/Membre dev.front dans ~?\/home\/u\/.ledge\/rigs\/ledge-dev\/rig.yaml/)).toBeInTheDocument();
+    expect(within(panel).getByText('Membre dev.front dans ~/.ledge/rigs/ledge-dev/rig.yaml')).toBeInTheDocument();
     expect(await within(panel).findByText('shared')).toHaveClass('orr-v');
   });
 

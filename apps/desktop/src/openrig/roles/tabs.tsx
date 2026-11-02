@@ -9,6 +9,8 @@ import { appliesOf, baseName, channelOf, formatSize, isMissing, keyOf, lineDiff,
 /** What every tab reads: the role, the lens (a seat or the spec) and the profile shown. */
 export interface TabCtx { client: DaemonClient; machine: string; detail: RoleDetail; seat: RoleSeat | undefined; profile: RoleProfile | undefined; raw: boolean; setRaw: (raw: boolean) => void }
 const roleIdOf = (c: TabCtx) => c.detail.summary.id;
+/** Where a launch took a value from (`runtime_default`, `saved_choice`…). */
+const launchRef = (o: RoleDetail['defaults']['runtime']['origin']): string | undefined => (o.kind === 'inherited' && o.from === 'launch' ? o.ref : undefined);
 
 export function RawSeg({ raw, setRaw }: { raw: boolean; setRaw: (raw: boolean) => void }) {
   const { t } = useI18n();
@@ -93,7 +95,7 @@ export function ParamsTab({ c, onLens }: { c: TabCtx; onLens: (seat: RoleSeat) =
   const exec = seat ? [
     <Sourced key="rt" label={r.fRuntime} v={seat.runtime} hint={profile?.runtime.value ? <>defaults.runtime : <span className="mono">{profile.runtime.value}</span></> : undefined} />,
     <Sourced key="model" label={r.fModel} v={seat.model} />,
-    <Sourced key="effort" label={r.fEffort} v={seat.effort} empty={r.effortDefault} />,
+    <Sourced key="effort" label={r.fEffort} v={seat.effort} empty={launchRef(seat.effort.origin) === 'runtime_default' ? r.effortDefault : undefined} />,
     <Row key="profile" prov="inh" label={r.fProfile} yamlKey="member.profile" badge={<Pv kind="inh" source={`${r.from.member} ${seat.logicalId}`} />}><span className="mono">{seat.profile}</span></Row>,
     <Sourced key="cwd" label={r.fCwd} v={seat.cwd} />,
     <Sourced key="culture" label={r.fCulture} v={seat.cultureFile} />

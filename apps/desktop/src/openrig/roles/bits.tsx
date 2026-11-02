@@ -5,7 +5,7 @@ import type { Origin, OpenRigRoleFileContent } from '@ledge/protocol';
 import { ThreadMarkdown } from '@ledge/ui/documents/markdown';
 import { useI18n } from '../../i18n/lang';
 import { cls } from '../../shell/cls';
-import { provOf, type Prov } from './model';
+import { provOf, tilde, type Prov } from './model';
 
 /** The four provenance glyphs: written here, inherited, not declared, unknown. */
 const GLYPH: Record<Prov, string> = { here: '●', inh: '↳', abs: '○', unk: '?' };
@@ -15,7 +15,8 @@ export function useProvLabel(): (o: Origin) => string | undefined {
   const { t } = useI18n();
   const r = t.openrig.roles;
   return o => {
-    if (o.kind === 'inherited') return [r.from[o.from] ?? o.from, o.ref].filter(Boolean).join(' ');
+    // A launch names its source in `ref` (runtime_default, saved_choice…): the value says it, the badge says « lancement ».
+    if (o.kind === 'inherited') return [r.from[o.from] ?? o.from, o.from === 'launch' ? undefined : o.ref].filter(Boolean).join(' ');
     if (o.kind === 'unknown') return r.why[o.why] ?? o.why;
     return undefined;
   };
@@ -123,7 +124,7 @@ export function FileText({ state, raw, path, markdown = true }: { state: FileSta
   const r = t.openrig.roles;
   if (state.status === 'loading') return <p className="orr-muted" role="status">{r.reading}</p>;
   if (state.status === 'error') return (
-    <div className="orr-err-box">{state.error === 'missing' || state.error === 'not_a_file' ? r.fileMissing : r.fileUnreadable}{path && <code>{path}</code>}</div>
+    <div className="orr-err-box">{state.error === 'missing' || state.error === 'not_a_file' ? r.fileMissing : r.fileUnreadable}{path && <code>{tilde(path)}</code>}</div>
   );
   return <>
     {state.truncated && <p className="orr-muted">{r.fileTruncated('512 ko')}</p>}
