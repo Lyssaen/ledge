@@ -110,18 +110,23 @@ describe('captures on tool rows', () => {
     return env;
   };
 
-  it('shows a tool row capture with its size and opens the lightbox when the page has no viewer of its own', async () => {
+  const rowCaptures = () => [...document.querySelectorAll<HTMLElement>('.action-captures [data-thumb="ready"]')];
+
+  it('shows a tool row capture with its size; a click opens the Browser tab, whose « Enlarge » opens the lightbox', async () => {
     const { user } = await open([tool('u1', { images: [A] })]);
-    const btn = await screen.findByRole('button', { name: /capture/i });
+    await waitFor(() => expect(rowCaptures()).toHaveLength(1));
     expect(document.querySelector('.action-captures [data-thumb-size]')).toHaveTextContent('1440×900');
-    await user.click(btn);
+    await user.click(rowCaptures()[0]!);
+    const pane = within(screen.getByRole('complementary', { name: 'Reading pane' }));
+    expect(pane.getByText('Browser')).toBeVisible();
+    await user.click(within(document.querySelector<HTMLElement>('.browser-meta')!).getByRole('button', { name: 'Enlarge' }));
     expect(await screen.findByRole('dialog', { name: 'Capture · Nova, 14:02' })).toBeInTheDocument();
   });
 
   it('shows the captures of a folded group', async () => {
     const rows = Array.from({ length: 7 }, (_, i) => tool(`g${i}`, i === 1 ? { images: [A] } : i === 5 ? { images: [B] } : {}));
     await open(rows);
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /capture/i })).toHaveLength(2));
+    await waitFor(() => expect(rowCaptures()).toHaveLength(2));
   });
 
   it('says when a capture was too large', async () => {

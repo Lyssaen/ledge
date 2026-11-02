@@ -1,7 +1,7 @@
 import { useState, type JSX } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import type { AttachmentRef, ChatTurn } from '@ledge/protocol';
-import { Thumbs as SharedThumbs, type ThumbAction } from '@ledge/ui/images';
+import { Thumbs as SharedThumbs, ThumbsViewer, type ThumbAction, type ThumbsCopy } from '@ledge/ui/images';
 import { useI18n } from '../i18n/lang';
 import { clock } from '../session/exchanges';
 
@@ -35,10 +35,22 @@ function Actions({ url, image, fileName }: ThumbAction): JSX.Element {
 
 /** A message's images with Desktop's words and the lightbox's Copy / Save… actions. Sizes: the thread's thumbnails 420 × 260, the chat's 200 × 130. */
 export function Thumbs({ client, refs, route, max, who, at, align, className, onOpen, alt, tag }: { client: DaemonClient; refs: AttachmentRef[]; route: { id?: string; machine?: string }; max: { w: number; h: number }; who: string; at: string; align?: 'start' | 'end'; className?: string; onOpen?(index: number): void; alt?: string; tag?: boolean }): JSX.Element | null {
+  const { lang, copy } = useThumbsCopy();
+  return <SharedThumbs client={client} refs={refs} route={route} max={max} who={who} at={at} align={align} className={className} onOpen={onOpen} alt={alt} tag={tag} lang={lang}
+    copy={copy} actions={a => <Actions {...a} />} />;
+}
+
+function useThumbsCopy(): { lang: 'fr' | 'en'; copy: ThumbsCopy } {
   const { t } = useI18n();
   const i = t.images;
-  return <SharedThumbs client={client} refs={refs} route={route} max={max} who={who} at={at} align={align} className={className} onOpen={onOpen} alt={alt} tag={tag} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'}
-    copy={{ capture: i.capture, unavailable: i.unavailable, close: i.close, prev: i.prev, next: i.next }} actions={a => <Actions {...a} />} />;
+  return { lang: t.time.locale.startsWith('fr') ? 'fr' : 'en', copy: { capture: i.capture, unavailable: i.unavailable, close: i.close, prev: i.prev, next: i.next } };
+}
+
+/** The lightbox alone, with Desktop's words and Copy / Save…, for images shown elsewhere than as thumbnails (the Navigateur tab's « Agrandir »).
+ *  Titled « Capture · `who`, `at` ». */
+export function ImageViewer({ client, refs, route, index, onIndex, onClose, who, at }: { client: DaemonClient; refs: AttachmentRef[]; route: { id?: string; machine?: string }; index: number; onIndex(i: number): void; onClose(): void; who: string; at: string }): JSX.Element {
+  const { lang, copy } = useThumbsCopy();
+  return <ThumbsViewer client={client} refs={refs} route={route} index={index} onIndex={onIndex} onClose={onClose} title={`${copy.capture} · ${who}, ${at}`} at={at} lang={lang} copy={copy} actions={a => <Actions {...a} />} />;
 }
 
 /** The images a question to Ledge carried, over its bubble: from the machine that holds them (`machineId`; the local one when absent). */

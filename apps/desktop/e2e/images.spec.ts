@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import { fakeDaemon, twoProjects, openAtelier } from './daemon';
-import { at, fleet, ottoThread } from './thread';
+import { at, fleet, ottoThread, tool } from './thread';
 
 test('a pasted image rides the reply, shows as a thumbnail, opens and saves', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { nova: ottoThread.map(i => ({ ...i })) } });
@@ -38,4 +38,29 @@ test('a pasted image rides the reply, shows as a thumbnail, opens and saves', as
   expect(download.suggestedFilename()).toMatch(/^capture-\d{4}\.(png|jpg|webp)$/);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
+});
+
+test('a capture opens the Navigateur tab', async ({ page }) => {
+  // An 8 × 5 PNG the daemon holds, on a Playwright screenshot row after a navigation that names the page.
+  const id = 'c'.repeat(64);
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAFCAIAAAD38zoCAAAAEUlEQVR4nGMwTjuDFTHQQQIAh6w3yVmZr3wAAAAASUVORK5CYII=';
+  const thread = [
+    ...ottoThread.map(i => ({ ...i })),
+    tool('nav-1', -10, 'mcp__playwright__browser_navigate', 'localhost:5173', { output: '- Page URL: http://localhost:5173/\n- Page Title: Factur' }),
+    tool('shot-1', -5, 'mcp__playwright__browser_take_screenshot', 'viewport', { images: [{ id, mime: 'image/png', width: 1280, height: 800, bytes: 90, preview: false }] })
+  ];
+  await fakeDaemon(page, fleet, { projects: twoProjects, threads: { nova: thread }, images: { [id]: { mime: 'image/png', data: png } } });
+  await page.goto('/'); await openAtelier(page);
+  await page.getByRole('tree').getByRole('button', { name: /^Nova/ }).click();
+
+  const thumb = page.locator('[data-tool="shot-1"] [data-thumb="ready"]');
+  await expect(thumb).toBeVisible();
+  await thumb.click();
+  const pane = page.getByRole('complementary', { name: 'Reading pane' });
+  await expect(pane.locator('.side-title strong')).toHaveText('Browser');
+  await expect(pane.locator('.browser-meta')).toContainText('localhost:5173/');
+  const big = pane.locator('.browser-big img');
+  await expect(big).toBeVisible();
+  await expect.poll(() => big.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBe(8);
+  await expect(pane.locator('[data-capture="shot-1:0"]')).toHaveAttribute('aria-current', 'true');
 });

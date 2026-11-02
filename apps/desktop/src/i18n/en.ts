@@ -814,6 +814,13 @@ export const en: Messages = {
       to: 'To', from: 'From', seeTheirs: 'see their thread', seen: 'read'
     },
     /** The « Conversation » tab: the exchange between this agent and one other, merged from both threads, in the side pane. */
+    browser: {
+      tab: 'Browser', pill: (n) => `Browser, ${pluralEn(n, '1 capture', `${n} captures`)}`,
+      compare: 'Compare', compareOn: 'Comparing · Exit', pick: 'Pick the two captures to compare',
+      enlarge: 'Enlarge', inThread: 'in the thread',
+      count: (n, x) => `${pluralEn(n, '1 capture', `${n} captures`)} · ${pluralEn(x, '1 exchange', `${x} exchanges`)}`,
+      none: 'No captures left in the thread'
+    },
     conversation: {
       follow: 'follow the conversation',
       followTitle: (b) => `Follow the conversation with ${b} beside the thread`,
