@@ -245,7 +245,7 @@ describe('OpenRig roles: one role, from its spec', () => {
     expect(r.imports).toEqual([{ ref: 'local:../shared', key: 'imports[0].ref', name: 'shared', path: `${LIB}/agents/shared/agent.yaml`, resolved: true }]);
     const p = r.profiles[0]!;
     expect(p.name).toBe('default');
-    expect(p.runtime).toEqual({ value: 'claude-code', origin: { kind: 'inherited', from: 'defaults', key: 'defaults.runtime' } });
+    expect(p.runtime).toEqual({ value: 'claude-code', origin: { kind: 'here', key: 'defaults.runtime' } });
     // A written [] is « empty », not « not declared ».
     expect(p.uses.skills).toEqual({ declared: true, key: 'profiles.default.uses.skills', items: [] });
     expect(p.uses.plugins.items).toEqual([{ category: 'plugin', id: 'shared:openrig-core', path: 'openrig-home:plugins/openrig-core', absolutePath: `${H}/.openrig/plugins/openrig-core`,
@@ -270,7 +270,7 @@ describe('OpenRig roles: one role, from its spec', () => {
     expect(r.profiles.map(p => p.name)).toEqual(['default', 'advisor']);
     const [def, adv] = r.profiles as [typeof r.profiles[0], typeof r.profiles[0]];
     expect(def.model).toEqual({ value: 'claude-sonnet-4-6', origin: { kind: 'here', key: 'profiles.default.preferences.model' } });
-    expect(adv.model).toEqual({ value: 'claude-opus-4-6', origin: { kind: 'inherited', from: 'defaults', key: 'defaults.model' } });
+    expect(adv.model).toEqual({ value: 'claude-opus-4-6', origin: { kind: 'here', key: 'defaults.model' } });
     expect(def.uses.guidance).toEqual({ declared: false, key: 'profiles.default.uses.guidance', items: [] });
     expect(def.uses.skills.items.map(i => [i.id, i.origin])).toEqual([
       ['office-hours', { kind: 'unknown', why: 'resolved_at_launch' }],
@@ -359,7 +359,7 @@ describe('OpenRig roles: one role, from its seats', () => {
     const shown = { ...SPEC_SHOW, pods: SPEC_SHOW.pods.map(p => ({ ...p, members: p.members.map(({ runtime: _r, ...m }) => m) })) };
     const w = world({ files: { [`${RIG}/rig.yaml`]: noRuntime }, specShow: shown, nodeRuntime: null });
     const s = (await w.rig.role('2158')).role!.seats[0]!;
-    expect(s.runtime).toEqual({ value: 'claude-code', origin: { kind: 'inherited', from: 'defaults', key: 'defaults.runtime' } });
+    expect(s.runtime).toEqual({ value: 'claude-code', origin: { kind: 'here', key: 'defaults.runtime' } });
     const merged = s.live!.startup.filter(e => e.delivery === 'guidance_merge');
     expect(merged.every(e => e.into === `${REPO}/CLAUDE.md`)).toBe(true);
     expect(merged.find(e => e.path === 'CULTURE.md')!.delivered).toBe(true);

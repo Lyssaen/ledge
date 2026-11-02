@@ -183,7 +183,8 @@ export interface PluginInfo { version?: string; skills: string[]; hooks: number 
 export function resolveProfile(name: string, spec: Spec, imports: ResolvedImports, ctx: Ctx, plugins: Map<string, PluginInfo>): RoleProfile {
   const p = obj(obj(spec.doc.profiles)[name]), prefs = obj(p.preferences), defaults = obj(spec.doc.defaults), uses = obj(p.uses);
   const pref = (k: string): SourcedString => str(prefs[k]) ? { value: str(prefs[k])!, origin: { kind: 'here', key: `profiles.${name}.preferences.${k}` } }
-    : str(defaults[k]) ? { value: str(defaults[k])!, origin: { kind: 'inherited', from: 'defaults', key: `defaults.${k}` } } : ABSENT;
+    // `defaults` sits in the same file: written here (OpenRig takes no defaults from an import).
+    : str(defaults[k]) ? { value: str(defaults[k])!, origin: { kind: 'here', key: `defaults.${k}` } } : ABSENT;
   const own = declared(spec, ctx);
   const list = (cat: RoleResourceCategory, key: string): RoleUsesList => ({
     declared: has(uses, key), key: `profiles.${name}.uses.${key}`,
