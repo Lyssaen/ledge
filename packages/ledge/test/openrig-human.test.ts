@@ -285,7 +285,7 @@ describe('« À toi » answering', () => {
   };
 
   it('a button is OpenRig\'s answer verb, as the primary user, and says what still waits', async () => {
-    const { f, h } = answering(() => ({ status: 200, json: { verb: 'answer', answer: { outcome: 'recorded', unanswered: ['Quelle taille ?'] }, createdQitemId: null } }));
+    const { f, h } = answering(() => ({ status: 200, json: { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'recorded', unanswered: ['Quelle taille ?'] }, createdQitemId: null } }));
     const r = await h.answer('qitem-1', { kind: 'choice', questionId: 'couleur', optionId: 'bleu' });
     expect(OpenRigAnsweredSchema.parse({ type: 'openrig.answered', requestId: 'r', ...r })).toBeTruthy();
     expect(r).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'recorded', remaining: ['taille'] });
@@ -296,24 +296,24 @@ describe('« À toi » answering', () => {
   it('what still waits comes from OpenRig\'s answer and the row read before, never from a second read; unknown stays unknown', async () => {
     let after = false;
     const f = fake({ detail: id => (after && id === 'qitem-1' ? { status: 503, json: {} } : undefined),
-      post: () => { after = true; return { status: 200, json: { answer: { outcome: 'recorded', unanswered: ['Quelle taille ?'] } } }; } });
+      post: () => { after = true; return { status: 200, json: { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'recorded', unanswered: ['Quelle taille ?'] } } }; } });
     const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
     expect(await h.answer('qitem-1', { kind: 'choice', questionId: 'couleur', optionId: 'bleu' })).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'recorded', remaining: ['taille'] });
     // Nothing is read after the answer went (the reads before it check the row and who the person is).
     expect(f.calls.slice(f.calls.findIndex(c => c.method === 'POST') + 1)).toEqual([]);
-    const g = fake({ post: () => ({ status: 200, json: { answer: { outcome: 'recorded', unanswered: ['Une question que la ligne ne porte pas'] } } }) });
+    const g = fake({ post: () => ({ status: 200, json: { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'recorded', unanswered: ['Une question que la ligne ne porte pas'] } } }) });
     const r = await createHumanChannel({ state: async () => RUNNING, run: g.run, http: g.http }).answer('qitem-1', { kind: 'choice', questionId: 'couleur', optionId: 'bleu' });
     expect(r).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'recorded' });
   });
 
   it('the last answer goes back to the seat: answered, with the reply row', async () => {
-    const { f, h } = answering(() => ({ status: 200, json: { answer: { outcome: 'answered', unanswered: [] }, createdQitemId: 'qitem-reply' } }));
+    const { f, h } = answering(() => ({ status: 200, json: { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'answered', unanswered: [] }, createdQitemId: 'qitem-reply' } }));
     expect(await h.answer('qitem-1', { kind: 'words', text: 'Plutôt vert' })).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'answered', replyId: 'qitem-reply' });
     expect(f.calls.find(c => c.method === 'POST')!.body).toMatchObject({ verb: 'answer', decision: 'Plutôt vert' });
   });
 
   it('a second send is « already », nothing new', async () => {
-    const { h } = answering(() => ({ status: 200, json: { answer: { outcome: 'answered', unanswered: [], message: 'Already answered; the original answer went to dev-review@starter as qitem-reply. No new reply was sent.' }, createdQitemId: 'qitem-reply' } }));
+    const { h } = answering(() => ({ status: 200, json: { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'answered', unanswered: [], message: 'Already answered; the original answer went to dev-review@starter as qitem-reply. No new reply was sent.' }, createdQitemId: 'qitem-reply' } }));
     expect(await h.answer('qitem-1', { kind: 'words', text: 'Plutôt vert' })).toMatchObject({ ok: true, outcome: 'already' });
   });
 
@@ -382,15 +382,45 @@ describe('« À toi » answering', () => {
     expect(await answering(() => ({ status: 200, json: { verb: 'approve', qitemId: 'other' } })).h.answer('qitem-2', { kind: 'seen' })).toMatchObject({ error: 'uncertain' });
   });
 
+  it('an answer from OpenRig about another row or another action, or without its row, is uncertain, never this one\'s success', async () => {
+    const ok = { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'answered', unanswered: [] }, createdQitemId: 'reply-of-1' };
+    for (const json of [{ ...ok, qitemId: 'qitem-B', createdQitemId: 'reply-of-B' }, { ...ok, verb: 'approve' }, (({ qitemId: _q, ...rest }) => rest)(ok)]) {
+      expect(await answering(() => ({ status: 200, json })).h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'uncertain' });
+    }
+    for (const json of [{ verb: 'resolve', qitemId: 'qitem-2' }, { verb: 'approve' }, { verb: 'approve', qitemId: 'qitem-B' }]) {
+      expect(await answering(() => ({ status: 200, json })).h.answer('qitem-2', { kind: 'seen' })).toMatchObject({ ok: false, error: 'uncertain' });
+    }
+    expect(await answering(() => ({ status: 200, json: ok })).h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: true, outcome: 'answered', replyId: 'reply-of-1' });
+  });
+
+  it('a read that brings back another row never stands in for the one asked', async () => {
+    const other = { ...ASK, qitemId: 'qitem-B', body: 'Texte de B', summary: 'Demande de B' };
+    let swap = false;
+    const f = fake({ detail: id => (swap && id === 'qitem-1' ? { status: 200, json: other } : undefined), post: () => ({ status: 200, json: {} }) });
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
+    await h.list();
+    swap = true;
+    ATTENTION.items[0]!.at = '2026-11-02T19:59:00.000Z';
+    try {
+      const l = await h.list();
+      expect(l.partial).toBe(true);
+      expect(l.asks.find(a => a.id === 'qitem-1')).toMatchObject({ body: ASK.body, summary: ASK.summary });
+      expect(l.asks.some(a => a.id === 'qitem-B')).toBe(false);
+      // Before answering, the same: nothing is sent on the strength of another row.
+      expect(await h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'unreachable' });
+      expect(f.calls.some(c => c.method === 'POST')).toBe(false);
+    } finally { ATTENTION.items[0]!.at = ASK.tsUpdated; }
+  });
+
   it('several questions of the same text leave what still waits unknown rather than guessed', async () => {
     const twins = { ...ASK, humanAnswers: {}, humanQuestions: [
       { id: 'a', question: 'Laquelle ?', options: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }] },
       { id: 'b', question: 'Laquelle ?', options: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }] },
       { id: 'c', question: 'Autre ?', options: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }] }] };
-    const f = fake({ rows: { 'qitem-1': twins }, post: () => ({ status: 200, json: { answer: { outcome: 'recorded', unanswered: ['Laquelle ?'] } } }) });
+    const f = fake({ rows: { 'qitem-1': twins }, post: () => ({ status: 200, json: { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'recorded', unanswered: ['Laquelle ?'] } } }) });
     const r = await createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http }).answer('qitem-1', { kind: 'choice', questionId: 'a', optionId: 'x' });
     expect(r).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'recorded' });
-    const g = fake({ rows: { 'qitem-1': twins }, post: () => ({ status: 200, json: { answer: { outcome: 'recorded', unanswered: ['Autre ?'] } } }) });
+    const g = fake({ rows: { 'qitem-1': twins }, post: () => ({ status: 200, json: { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'recorded', unanswered: ['Autre ?'] } } }) });
     expect(await createHumanChannel({ state: async () => RUNNING, run: g.run, http: g.http }).answer('qitem-1', { kind: 'choice', questionId: 'a', optionId: 'x' })).toMatchObject({ remaining: ['c'] });
   });
 
