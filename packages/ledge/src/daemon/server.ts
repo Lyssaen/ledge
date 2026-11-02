@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction } from '@ledge/protocol';
+import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -46,7 +46,8 @@ import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
 import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
-import { createMailbox, type MailJournal } from './mailbox.js';
+import { createMailbox, type MailboxDeps, type MailJournal } from './mailbox.js';
+import { broadcastFromSession, broadcastFromUser } from './broadcast.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
@@ -352,10 +353,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   } : threads;
   /** `replyTo` for the mailbox and the relay, which keep the refusal's text. */
   const replyText = async (id: string, text: string) => (await replyTo(id, text))?.message ?? null;
+  /** The « sent » cards in the senders' threads: the mailbox's, and a broadcast's single one. */
+  const mailSent: MailboxDeps['sent'] = { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) };
   const mailbox = createMailbox({
     store, replyTo: replyText, typing, closing, now, ...(opts.mail ? { journal: opts.mail } : {}),
     relayQueued: id => cardThreads.queuedRelays().some(q => q.relay.id === id),
-    sent: { record: (id, m) => { history?.recordSent(id, m); }, mark: (id, rid, status) => history?.markSent(id, rid, status) }
+    sent: mailSent
   });
   // The relay keeps the refusal's code too: a phone words its card's failure from it, never from the PC's text.
   const relay = createRelay({ threads: cardThreads, store, replyTo: async (id, text) => { const r = await replyTo(id, text); return r && { message: r.message, code: r.code }; }, now, typing, closing, next: id => mailbox.kick(id) });
@@ -1284,7 +1287,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       // An agent's message to another session: acked at once, typed when the target is free.
-      case 'session.message': return reply(mailbox.submit(msg));
+      // To a project or a list (`@projet:x`, `Pim,Nova`): one message per recipient, one card, an ack that names who got it.
+      case 'session.message': {
+        const to = parseBroadcastAddress(msg.to);
+        return reply(to ? broadcastFromSession({ store, projects, mailbox, sent: mailSent, now }, msg, to) : mailbox.submit(msg));
+      }
+      // The user's own: a notice to each recipient.
+      case 'session.broadcast': return reply(broadcastFromUser({ store, projects, mailbox }, msg));
       case 'message.read': return reply(mailbox.read(msg));
       case 'session.handover': {
         const reason = handovers.start(msg.id);

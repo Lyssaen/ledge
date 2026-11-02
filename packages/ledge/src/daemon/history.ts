@@ -298,10 +298,11 @@ export class History {
       summary: said ? `${task.title}\n${quote(said)}` : task.title, text: `Tâche « ${task.title} » ${what} ${tr.toName}${tr.op === 'done' ? ' (terminée)' : ''}` });
   }
 
-  /** The mailbox's outcome for a card; a `read` card stays read. */
+  /** The mailbox's outcome for a card; a `read` card stays read, a `delivered` one is not failed (a broadcast's card: one
+   *  recipient got it, another could not). */
   markSent(senderId: string, rid: string, status: 'delivered' | 'failed'): void {
     const sent = this.items(senderId).find((i): i is SentItem => i.kind === 'sent' && i.id === rid);
-    if (sent && sent.status !== 'read') this.put(senderId, { ...sent, status });
+    if (sent && sent.status !== 'read' && !(status === 'failed' && sent.status === 'delivered')) this.put(senderId, { ...sent, status });
   }
 
   /** A SendMessage's card, from its input: `to` the address used, `peer` the Ledge session that address is. */
