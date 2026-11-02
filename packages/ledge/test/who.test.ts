@@ -26,6 +26,16 @@ describe('ledge who', () => {
     expect(formatWho([s('c3', { state: 'exited' })])).toBe('aucune autre session');
   });
 
+  it('shows the daemon\'s project, the name @projet: takes, when the session is in one', () => {
+    const projects = { projects: [{ id: 'p1', name: 'Ledge Desktop', color: 'blue' as const, description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
+    const out = formatWho([
+      s('a1', { name: 'Pim', repo: 'ledge', worktree: true, cwd: '/w/ledge/wt' }),
+      s('b2', { name: 'Nova', project: 'api', cwd: '/w/api' })
+    ], undefined, projects).split('\n');
+    expect(out[1]).toMatch(/^ {2}Pim\s+claude\s+idle\s+Ledge Desktop\s+-/);
+    expect(out[2]).toMatch(/^ {2}Nova\s+claude\s+idle\s+api\s+-/);
+  });
+
   it('says so when the daemon is not running', async () => {
     expect(await printWho({ port: 1 })).toMatch(/daemon/);
   });

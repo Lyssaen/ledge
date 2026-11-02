@@ -36,6 +36,8 @@ export interface AtelierProps {
   tools?: ReactNode;
   /** The tasks the daemon knows: the messages layer draws each recent hand-over. */
   tasks?: readonly Task[];
+  /** The local daemon takes a broadcast: each room's menu offers to write to its project. */
+  broadcast?: boolean;
 }
 
 /** The filtered project has no agent yet: say where its table will appear, and offer to start a session there. */
@@ -57,7 +59,7 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu, tools, tasks }: AtelierProps): JSX.Element {
+export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf, filing, actions, menu, tools, tasks, broadcast }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   const { reduced } = useMotionPreferences();
   const { place } = nav;
@@ -158,7 +160,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
           <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
           <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
             {scene.rooms.map(({ project, tables, rig }) => (
-              <ProjectRoom key={project.id} project={project} tables={tables} rig={rig} sessions={sessions} width={roomTileWidth(tables, seats)} dispatch={dispatch}>
+              <ProjectRoom key={project.id} project={project} tables={tables} rig={rig} sessions={sessions} width={roomTileWidth(tables, seats)} dispatch={dispatch} broadcast={broadcast}>
                 {tables.map(table => (
                   <ProjectTable key={table.key} table={table} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
                     isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}

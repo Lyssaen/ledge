@@ -530,6 +530,13 @@ export const fr = {
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',
   close: 'Fermer',
   modalTitles: { launch: 'Nouvelle session' },
+  /** Writing to a whole project, or to the sessions selected in the sidebar (broadcast spec): one message, each recipient gets it in its queue. */
+  broadcast: {
+    project: 'Écrire à tout le projet…', selection: (n: number) => `Écrire aux ${n} sessions…`, title: (label: string) => `Écrire à ${label}`,
+    send: 'Envoyer', cancel: 'Annuler', field: 'Message', picked: 'Sessions sélectionnées',
+    sent: (n: number, names: string) => `Remis à ${n} ${plural(n, 'session', 'sessions')} : ${names}`, refused: (list: string) => `Refusé : ${list}`,
+    silent: 'Aucune machine n’a répondu. Envoyer à nouveau ne l’écrira pas deux fois.'
+  },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
     browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap'

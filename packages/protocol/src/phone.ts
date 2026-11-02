@@ -8,6 +8,7 @@ import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
 import type { TodoStatus } from './todos.js';
 import { MESSAGE_MAX, RefusalCodeSchema, SEMVER, UpdateFailureSchema } from './messages.js';
+import { BROADCAST_SESSIONS_MAX } from './broadcast.js';
 import { PushSubscriptionSchema } from './push.js';
 import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } from './models.js';
 import { SlashCommandSchema } from './commands.js';
@@ -301,6 +302,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.resume'), op: OperationIdSchema, id: sessionId, assertion: AssertionSchema.optional() }),
   /** Changes a live session's model and effort, `null` for the agent's own default; answered by `operation.result` and, when refused, `session.model.failed`. */
   z.object({ type: z.literal('session.model'), op: OperationIdSchema, id: sessionId, model: ModelIdSchema.nullable(), effort: EffortSchema.nullable() }),
+  /** One message to several sessions (ids); answered by `operation.result` with `sent` and `refused`. */
+  z.object({ type: z.literal('session.broadcast'), op: OperationIdSchema, sessions: z.array(sessionId).min(1).max(BROADCAST_SESSIONS_MAX), text: z.string().trim().min(1).max(MESSAGE_MAX) }).strict(),
   /** The models an agent offers on the PC. */
   z.object({ type: z.literal('models.list'), tool: ToolSchema }),
   /** The slash commands of a session's agent, for the « / » list of its field. */
@@ -375,7 +378,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional(),
     /** The daemon streams a session's terminal (`term.open`). */ terminal: z.literal(true).optional(),
     /** The PC lets a phone type into a terminal (`term.hold`): its setting is on. */ terminalInput: z.literal(true).optional(),
-    /** The daemon answers `session.commands`. */ commands: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
+    /** The daemon answers `session.commands`. */ commands: z.literal(true).optional(),
+    /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
@@ -388,7 +392,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.thread'), id: z.string(), items: z.array(ThreadItemSchema), cut: z.array(z.string()), more: z.boolean() }),
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema, cut: z.literal(true).optional() }),
   z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(),
-    /** How an applied `session.close` ended the agent: `killed` when it had to be forced. */ how: CloseHowSchema.optional() }),
+    /** How an applied `session.close` ended the agent: `killed` when it had to be forced. */ how: CloseHowSchema.optional(),
+    /** An applied `session.broadcast`: the names that got it and those that did not. */ sent: z.array(z.string().max(100)).max(BROADCAST_SESSIONS_MAX).optional(), refused: z.array(z.object({ name: z.string().max(100), reason: z.string().max(200) })).max(BROADCAST_SESSIONS_MAX).optional() }),
   /** The models an agent offers; `error`: it could not be asked, `models` is then what Ledge knows without it. */
   z.object({ type: z.literal('models.listing'), tool: ToolSchema, models: z.array(PhoneModelChoiceSchema).max(40), error: z.literal(true).optional() }),
   /** A model change that was accepted and then failed (the agent could not restart). */

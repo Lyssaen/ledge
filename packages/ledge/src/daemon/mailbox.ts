@@ -27,7 +27,10 @@ export interface MailboxDeps {
   now?: () => string;
 }
 export interface Mailbox {
-  submit(m: Extract<ClientMessage, { type: 'session.message' }>): MessageAck;
+  /** `card`: the message is one recipient's part of a broadcast whose single card, of that rid, the caller records; no card of
+   *  its own, and its outcome goes to that card (delivered once any part is, failed once none can be). `target`: the session id
+   *  already resolved by the caller, used instead of looking `to` up again (another session may share the name). */
+  submit(m: Extract<ClientMessage, { type: 'session.message' }>, o?: { card?: string; target?: string }): MessageAck;
   read(m: Extract<ClientMessage, { type: 'message.read' }>): Extract<ServerMessage, { type: 'message.body' }>;
   /** Ledge's own line for a session (a task's pointer), typed at its next free moment (`first`: before anything waiting); false when it cannot be typed into. Never told back on failure. */
   notify(target: string, text: string, rid: string, o?: { first?: boolean }): boolean;
@@ -36,11 +39,11 @@ export interface Mailbox {
 }
 
 /** A message to type (`from` its sender's session id), or a notice telling a sender one of its messages failed (`from` empty). */
-interface Queued { kind: 'message' | 'notice'; id: string; rid: string; from: string; sender: { name: string; tool: Tool }; target: string; to: string; text: string; summary?: string; alone?: true }
+interface Queued { kind: 'message' | 'notice'; id: string; rid: string; from: string; sender: { name: string; tool: Tool }; target: string; to: string; text: string; summary?: string; alone?: true; card?: string }
 /** A message's body as `ledge read` gives it: `from`/`target` the session ids allowed to read it, `fromName`/`to` their names. */
 interface Body { id: string; rid: string; from: string; fromName: string; target: string; to: string; at: string; text: string }
 /** How many rids are remembered for the dedupe: past it the oldest are forgotten. */
-const MAX_SEEN = 1000;
+export const MAX_SEEN = 1000;
 /** Bodies kept for `ledge read`: a pointer typed into a session may be read days later. */
 const BODY_MAX = 200;
 const BODY_TTL_MS = 7 * 24 * 3600 * 1000;
@@ -54,8 +57,18 @@ const PASSING = [/^a decision is already in progress$/, /^an? \w+ prompt takes a
 const GONE = "la session n'existe plus";
 const ENDED = "la session s'est terminée avant de le recevoir";
 
+/** The live session by that name, else the relief of the last one relieved under it (names rotate on relief). */
+export function sessionNamed(store: Pick<Store, 'get' | 'all'>, to: string): Session | undefined {
+  const name = bareName(to);
+  const all = store.all();
+  const live = all.find(s => s.name === name && s.state !== 'exited' && !isArchived(s));
+  if (live) return live;
+  const relieved = all.filter(s => s.name === name && s.handover?.state === 'done').sort((a, b) => b.handover!.at.localeCompare(a.handover!.at))[0];
+  return relieved ? reliefOf(id => store.get(id), relieved) : undefined;
+}
+
 /** A session Ledge can type into, live: a notice to it can be delivered. */
-const reachable = (s: Session | undefined): s is Session =>
+export const reachable = (s: Session | undefined): s is Session =>
   !!s && s.source === 'launcher' && s.state !== 'exited' && !isArchived(s) && (!!s.tmuxSession || backendOf(s) === 'omp-rpc');
 
 /**
@@ -80,7 +93,8 @@ export function createMailbox(d: MailboxDeps): Mailbox {
   function fail(m: Queued, reason: string): void {
     log(`${m.kind} ${m.rid} to ${m.target} failed: ${reason}`);
     if (m.kind === 'notice') return; // never a notice about a notice
-    d.sent.mark(m.from, m.rid, 'failed');
+    // A broadcast's card fails only once no part of it is still waiting (a delivered one keeps it delivered: history).
+    if (!m.card || !queue.some(q => q.card === m.card && q.from === m.from)) d.sent.mark(m.from, m.card ?? m.rid, 'failed');
     const sender = d.store.get(m.from);
     if (!reachable(sender)) return;
     notice(sender, formatLedgeNotice({ to: m.to, text: m.text, reason }), `${m.rid}:notice`);
@@ -109,7 +123,7 @@ export function createMailbox(d: MailboxDeps): Mailbox {
       if (refused && batch.length > 1) { log(`batch to ${target} refused (${refused}): each tried alone`); queue.unshift(...batch.map(m => ({ ...m, alone: true as const }))); }
       else for (const m of batch) {
         if (refused) fail(m, refused);
-        else if (m.kind === 'message') d.sent.mark(m.from, m.rid, 'delivered');
+        else if (m.kind === 'message') d.sent.mark(m.from, m.card ?? m.rid, 'delivered');
       }
       save();
       // A refusal leaves the session's state unchanged, so a queued relay card waits for the next store change; only the mailbox retries at once.
@@ -149,15 +163,7 @@ export function createMailbox(d: MailboxDeps): Mailbox {
     kick(id);
   });
 
-  /** The live session by that name, else the relief of the last one relieved under it (names rotate on relief). */
-  const target = (to: string): Session | undefined => {
-    const name = bareName(to);
-    const all = d.store.all();
-    const live = all.find(s => s.name === name && s.state !== 'exited' && !isArchived(s));
-    if (live) return live;
-    const relieved = all.filter(s => s.name === name && s.handover?.state === 'done').sort((a, b) => b.handover!.at.localeCompare(a.handover!.at))[0];
-    return relieved ? reliefOf(id => d.store.get(id), relieved) : undefined;
-  };
+  const target = (to: string) => sessionNamed(d.store, to);
   const remember = (rid: string, ack: MessageAck): MessageAck => {
     seen.set(rid, ack);
     if (seen.size > MAX_SEEN) seen.delete(seen.keys().next().value!);
@@ -185,10 +191,10 @@ export function createMailbox(d: MailboxDeps): Mailbox {
   }
 
   return {
-    submit(m) {
+    submit(m, o = {}) {
       const first = seen.get(m.rid);
       if (first) return first;
-      const t = target(m.to);
+      const t = o.target ? d.store.get(o.target) : target(m.to);
       if (m.intercept && (!t || t.tool === 'claude')) return remember(m.rid, { type: 'message.ack', rid: m.rid, outcome: 'native' });
       const refuse = (reason: string): MessageAck => ({ type: 'message.ack', rid: m.rid, outcome: 'refused', reason });
       if (!t) return refuse(`aucune session Ledge nommée ${m.to}`);
@@ -197,11 +203,11 @@ export function createMailbox(d: MailboxDeps): Mailbox {
       // An OMP session has no pane: its messages travel as instructions over its protocol (server `replyTo`).
       if (t.source === 'hook_only' || (!t.tmuxSession && backendOf(t) !== 'omp-rpc')) return refuse(`${t.name} n'a pas été lancée par Ledge : impossible de lui écrire`);
       const at = now(); const id = idFor(m.rid);
-      d.sent.record(m.from, { rid: m.rid, at, to: t.name, peer: t.id, text: m.text, ...(m.summary ? { summary: m.summary } : {}) });
+      if (!o.card) d.sent.record(m.from, { rid: m.rid, at, to: t.name, peer: t.id, text: m.text, ...(m.summary ? { summary: m.summary } : {}) });
       // Only a body typed as a pointer needs keeping: a short one is in the receiver's prompt whole.
       if (!inline(m.text)) bodies.set(id, { id, rid: m.rid, from: sender.id, fromName: sender.name, target: t.id, to: t.name, at, text: m.text });
       const outcome = ready(t.id) ? 'accepted' : 'queued';
-      queue.push({ kind: 'message', id, rid: m.rid, from: m.from, sender: { name: sender.name, tool: sender.tool }, target: t.id, to: t.name, text: m.text, ...(m.summary ? { summary: m.summary } : {}) });
+      queue.push({ kind: 'message', id, rid: m.rid, from: m.from, sender: { name: sender.name, tool: sender.tool }, target: t.id, to: t.name, text: m.text, ...(m.summary ? { summary: m.summary } : {}), ...(o.card ? { card: o.card } : {}) });
       save();
       const ack = remember(m.rid, { type: 'message.ack', rid: m.rid, outcome });
       if (outcome === 'accepted') kick(t.id);

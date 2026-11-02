@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import type { MachineState } from '@ledge/fleet';
-import type { Project, Projects, Session } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX, type Project, type Projects, type Session } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
@@ -35,7 +35,12 @@ export function Sidebar(p: {
   order: readonly Session[]; projectIdOf: (s: Session) => string | null;
   filing: Filing; actions: SessionActions; decisions: Decisions;
   waits: ReadonlyMap<string, Wait>;
-  menu: { open(id: string, at: { x: number; y: number }, opener?: HTMLElement): void };
+  /** `opened`: a session's menu shows; Échap is its own then, the selection stays. */
+  menu: { open(id: string, at: { x: number; y: number }, opener?: HTMLElement): void; opened?: boolean };
+  /** The local daemon takes a broadcast: the ✉ of a project row and the Ctrl/⌘ + click selection are offered. */
+  broadcast?: boolean;
+  /** Bumped by each broadcast that reached someone: the selection is kept until then, emptied then. */
+  broadcastSent?: number;
   onAsk(text: string): void;
   onTerminal(s: Session): void;
   revealArchives: number; revealCurrent: number;
@@ -50,6 +55,17 @@ export function Sidebar(p: {
   const keysTip = useId();
   const [ask, setAsk] = useState('');
   const [prefs, setPrefs] = useStored(loadSidebarPrefs, saveSidebarPrefs);
+  // The sessions picked with Ctrl/⌘ + click, in the order picked: from two, the bar below writes to them (broadcast spec).
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  const pick = (id: string) => setPicked(was => {
+    const next = new Set(was);
+    if (next.has(id)) next.delete(id); else if (next.size < BROADCAST_SESSIONS_MAX) next.add(id);
+    return next;
+  });
+  // A session gone from the list is no longer picked.
+  const pickedIds = [...picked].filter(id => p.sessions.some(s => s.id === id));
+  // Sent: the selection has done its job.
+  useEffect(() => { if (p.broadcastSent) setPicked(new Set()); }, [p.broadcastSent]);
   const { place } = p.nav;
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
@@ -70,7 +86,7 @@ export function Sidebar(p: {
   const decisions = useMemo(() => (p.tasksApi ? openDecisions(p.tasksApi.tasks) : []), [p.tasksApi]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
-  keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };
+  keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null || !!p.menu.opened };
   // Alt ↓ opens the next waiting session. Ctrl ⇧ E focuses its tree row, or the first row when none is open.
   // A dialog, a confirmation, the chat, or a text field already owns the key (same rule as the window shortcuts).
   useEffect(() => {
@@ -95,6 +111,20 @@ export function Sidebar(p: {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  // Échap empties the selection first, before the window's Escape goes back anywhere (a dialog or a field keeps it).
+  const anyPicked = picked.size > 0;
+  useEffect(() => {
+    if (!anyPicked) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || keys.current.quiet) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && (active.matches('input, textarea, select') || active.isContentEditable)) return;
+      e.preventDefault(); e.stopPropagation();
+      setPicked(new Set());
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [anyPicked]);
   const projectOf = (s: Session): { id: string; name: string; color: Project['color'] } | null => {
     const id = p.projectIdOf(s);
     const found = id ? p.projects?.projects.find(x => x.id === id) : undefined;
@@ -155,6 +185,8 @@ export function Sidebar(p: {
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
             onLaunch={project => p.dispatch({ type: 'modal', modal: { kind: 'launch', ...(project !== undefined ? { project } : {}) } })}
+            onBroadcast={p.broadcast ? project => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project } } }) : undefined}
+            picked={picked} onPick={p.broadcast ? pick : undefined}
             onMenu={(id, e) => {
               const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
               p.menu.open(id, { x: e.clientX, y: e.clientY }, host?.querySelector<HTMLElement>('[data-tree-key]') ?? host);
@@ -170,6 +202,15 @@ export function Sidebar(p: {
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
           onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />
       </div>
+      {p.broadcast && pickedIds.length >= 2 && (
+        <div className="st-picked" role="region" aria-label={t.broadcast.picked}>
+          <button type="button" className="st-picked-write" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { sessions: pickedIds } } })}>
+            <Icon d={SHELL_ICONS.mail} size={13} /><span>{t.broadcast.selection(pickedIds.length)}</span>
+          </button>
+          <span className="st-fill" />
+          <button type="button" className="st-picked-cancel" onClick={() => setPicked(new Set())}>{t.broadcast.cancel}</button>
+        </div>
+      )}
       <div className="st-foot">
         {p.machines.map(m => {
           // A daemon restarting for its update (#48) is said as such, not offline.

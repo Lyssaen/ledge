@@ -504,6 +504,12 @@ export const en: Messages = {
   chunkFailed: 'This part of Ledge could not load. Restart the app.',
   close: 'Close',
   modalTitles: { launch: 'New session' },
+  broadcast: {
+    project: 'Write to the whole project…', selection: n => `Write to the ${n} sessions…`, title: label => `Write to ${label}`,
+    send: 'Send', cancel: 'Cancel', field: 'Message', picked: 'Selected sessions',
+    sent: (n, names) => `Delivered to ${n} ${n === 1 ? 'session' : 'sessions'}: ${names}`, refused: list => `Refused: ${list}`,
+    silent: 'No machine answered. Sending again will not write it twice.'
+  },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
     browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'
