@@ -372,7 +372,9 @@ export async function seatView(s: KnownSeat, spec: Spec, profile: RoleProfile | 
   const base = s.rigRoot ?? (s.rigSpecPath ? dirname(s.rigSpecPath) : '/');
   const memberStartup = writtenStartup(m.startup, 'startup', 'member', base, key => memberOrigin(key));
   const pod = s.written?.pod ?? {};
-  const into = cwdV ? join(cwdV, guidanceFile(runtimeV, s.rigDoc)) : undefined;
+  // The runtime OpenRig launched, else the one resolved (member, profile, defaults): a member that writes none still has one.
+  const effectiveRuntime = str(node.runtime) ?? runtime.value ?? undefined;
+  const into = cwdV ? join(cwdV, guidanceFile(effectiveRuntime, s.rigDoc)) : undefined;
   const profileName = str(m.profile) ?? str(shown.profile) ?? 'default';
   const lc: LayerCtx = {
     agentDir: s.agentDir, rigRoot: s.rigRoot, ...(cultureV ? { cultureFile: cultureV } : {}),

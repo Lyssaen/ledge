@@ -156,7 +156,7 @@ const CLAUDE = ['CULTURE-default.md', 'CULTURE.md', 'openrig-onboarding-01.md'].
 const PLUGIN = { entry: { id: 'openrig-core', version: '0.1.23' }, skills: [{ name: 'queue-handoff', relativePath: 'skills/queue-handoff' }, { name: 'refocusing', relativePath: 'skills/refocusing' }], hooks: [{ runtime: 'claude' }, { runtime: 'codex' }] };
 const LOADOUT = { seat: {}, storage: '/x', skills: [{ id: 'queue-handoff', trigger: 'Use when ending a turn', path: '/x/SKILL.md' }] };
 
-function world(over: { files?: Record<string, string>; http?: boolean } = {}) {
+function world(over: { files?: Record<string, string>; http?: boolean; specShow?: unknown; nodeRuntime?: string | null } = {}) {
   const files: Record<string, string> = {
     [`${LIB}/agents/lead/agent.yaml`]: LEAD, [`${LIB}/agents/lead/guidance/role.md`]: '# Rôle : lead\n',
     [`${LIB}/agents/developer/agent.yaml`]: DEV, [`${LIB}/agents/developer/guidance/role.md`]: '# Rôle : développeur\n',
@@ -185,7 +185,7 @@ function world(over: { files?: Record<string, string>; http?: boolean } = {}) {
       { rigId: '01R', rigName: 'ledge-dev', logicalId: 'dev.front', canonicalSessionName: 'dev-front@ledge-dev', runtime: 'claude-code', sessionStatus: 'running', lifecycleState: 'running', agentActivity: { state: 'idle' } }]);
     if (a === 'specs ls --kind agent --json') return ok(LIBRARY.filter(e => e.kind === 'agent'));
     if (a === 'specs ls --json') return ok(LIBRARY);
-    if (a === 'spec show 01R --json') return ok(SPEC_SHOW);
+    if (a === 'spec show 01R --json') return ok(over.specShow ?? SPEC_SHOW);
     if (a === 'plugin show openrig-core --json') return ok(PLUGIN);
     if (args[0] === 'skill' && args[1] === 'loadout') return ok(LOADOUT);
     return { code: 1, stdout: '', stderr: `unexpected ${a}` };
@@ -199,7 +199,10 @@ function world(over: { files?: Record<string, string>; http?: boolean } = {}) {
     httpCalls.push(path);
     if (over.http === false) return undefined;
     const m = /^\/api\/rigs\/01R\/nodes\/(.+)$/.exec(path);
-    return m ? NODES[decodeURIComponent(m[1]!)] : undefined;
+    const n = m ? NODES[decodeURIComponent(m[1]!)] as Record<string, unknown> | undefined : undefined;
+    if (!n || over.nodeRuntime === undefined) return n;
+    const { runtime: _r, ...rest } = n;
+    return over.nodeRuntime === null ? rest : { ...rest, runtime: over.nodeRuntime };
   };
   const fs = { read: async (p: string) => { if (p in files) return files[p]!; throw new Error('ENOENT'); }, exists: (p: string) => p in files, copyDir: async () => {}, write: async () => {} };
   const rig = createOpenRig({ run, fs, roleIo, http, home: H, rigsDir: `${H}/.ledge/rigs`, openrigHome: `${H}/.openrig` });
@@ -348,6 +351,23 @@ describe('OpenRig roles: one role, from its seats', () => {
     // The Role tab: role.md, then what is the seat's own, in delivery order.
     expect(s.roleDocs.map(e => [e.path, e.layer, e.absolutePath])).toEqual([
       ['guidance/role.md', 'agent', `${LIB}/agents/developer/guidance/role.md`], ['guidance/scope-front.md', 'member', `${RIG}/guidance/scope-front.md`]]);
+  });
+  it('a member that writes no runtime: its blocks go where the resolved runtime puts them (the profile’s, the defaults’)', async () => {
+    const noRuntime = RIG_YAML.replace('        runtime: claude-code\n        model: claude-opus-5-5\n        cwd: ~/Workspace/ledge\n        startup:', '        model: claude-opus-5-5\n        cwd: ~/Workspace/ledge\n        startup:');
+    expect(noRuntime).not.toBe(RIG_YAML);
+    const shown = { ...SPEC_SHOW, pods: SPEC_SHOW.pods.map(p => ({ ...p, members: p.members.map(({ runtime: _r, ...m }) => m) })) };
+    const w = world({ files: { [`${RIG}/rig.yaml`]: noRuntime }, specShow: shown, nodeRuntime: null });
+    const s = (await w.rig.role('2158')).role!.seats[0]!;
+    expect(s.runtime).toEqual({ value: 'claude-code', origin: { kind: 'inherited', from: 'defaults', key: 'defaults.runtime' } });
+    const merged = s.live!.startup.filter(e => e.delivery === 'guidance_merge');
+    expect(merged.every(e => e.into === `${REPO}/CLAUDE.md`)).toBe(true);
+    expect(merged.find(e => e.path === 'CULTURE.md')!.delivered).toBe(true);
+  });
+  it('the runtime OpenRig launched decides over the spec: a Codex node writes into AGENTS.md', async () => {
+    const w = world({ files: { [`${REPO}/AGENTS.md`]: '<!-- BEGIN OpenRig MANAGED BLOCK: CULTURE.md -->' }, nodeRuntime: 'codex' });
+    const s = (await w.rig.role('2158')).role!.seats[0]!;
+    const culture = s.live!.startup.find(e => e.path === 'CULTURE.md')!;
+    expect(culture).toMatchObject({ into: `${REPO}/AGENTS.md`, delivered: true });
   });
   it('the node detail leaves only through named fields: no resume token, recovery command, process line or events', async () => {
     const r = (await world().rig.role('2158')).role!;
