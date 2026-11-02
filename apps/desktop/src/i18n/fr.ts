@@ -36,6 +36,7 @@ export const fr = {
     notSent: (why: string) => `Pas envoyée : ${why}`, retry: 'Réessayer',
     stopped: 'OpenRig est arrêté',
     sentTo: 'Envoyé à', already: 'Déjà réglée ailleurs',
+    partial: 'Liste peut-être incomplète : OpenRig n’a pas répondu à la dernière lecture.',
     channel: {
       no_person: { title: 'Ledge n’est pas encore le canal humain d’OpenRig.', body: 'Les rigs passent encore par Max, ou par le TUI du kernel. Leurs demandes n’arrivent pas ici.' },
       openrig_stopped: { title: 'OpenRig est arrêté : les rigs ne peuvent pas t’écrire.', body: 'Les sessions de tes projets passent toujours par ici.' },

@@ -6,7 +6,9 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { HumanAsk, HumanChannel, OpenRigAnswered, Session } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
 import { AsksColumn } from '../src/asks/AsksColumn';
-import { bySection, endOf, sectionOf } from '../src/asks/model';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { bySection, endOf, markOf, sectionOf } from '../src/asks/model';
 import { Attention } from '../src/shell/sidebar/Attention';
 import { RigGroups } from '../src/shell/sidebar/RigGroups';
 
@@ -25,9 +27,9 @@ const BIX: Session = fakeSession('bix', { name: 'Bix', cwd: '/w/ledge', state: '
 const ready: HumanChannel = { state: 'ready', person: { address: 'ledge@external', name: 'Ledge' }, slack: false };
 const answered = (o: Partial<OpenRigAnswered> = {}): OpenRigAnswered => ({ type: 'openrig.answered', requestId: 'r', qitemId: 'qitem-1', ok: true, outcome: 'answered', ...o });
 
-function mount(asks: HumanAsk[], o: { channel?: HumanChannel | null; answer?: OpenRigAsksView['answer']; sessions?: Session[]; lang?: 'fr' | 'en'; onSource?: (a: HumanAsk, p: string) => void } = {}) {
+function mount(asks: HumanAsk[], o: { partial?: boolean; channel?: HumanChannel | null; answer?: OpenRigAsksView['answer']; sessions?: Session[]; lang?: 'fr' | 'en'; onSource?: (a: HumanAsk, p: string) => void } = {}) {
   const answer = o.answer ?? vi.fn(async () => answered());
-  const view: OpenRigAsksView = { channel: o.channel === undefined ? ready : o.channel, asks, truncated: false, answer, refresh: vi.fn() };
+  const view: OpenRigAsksView = { channel: o.channel === undefined ? ready : o.channel, asks, truncated: false, partial: o.partial ?? false, answer, refresh: vi.fn() };
   const r = render(<LangProvider lang={o.lang ?? 'fr'}><AsksColumn view={view} sessions={o.sessions ?? [BIX]} machineLabel="WSL" {...(o.onSource ? { onSource: o.onSource } : {})} /></LangProvider>);
   const rerender = (next: HumanAsk[]) => r.rerender(<LangProvider lang={o.lang ?? 'fr'}><AsksColumn view={{ ...view, asks: next }} sessions={o.sessions ?? [BIX]} machineLabel="WSL" /></LangProvider>);
   return { answer, rerender };
@@ -208,6 +210,32 @@ describe('the channel’s banners (no button at lot 1)', () => {
   });
 });
 
+describe('a partial read and the counts (design-ux)', () => {
+  it('a failed read: one grey line atop the column; none under a banner', () => {
+    mount([ask()], { partial: true });
+    const line = document.querySelector('.ask-partial')!;
+    expect(line).toHaveTextContent('Liste peut-être incomplète : OpenRig n’a pas répondu à la dernière lecture.');
+    expect(line.nextElementSibling).toHaveClass('ask-sec');
+    expect(document.querySelectorAll('.ask-partial')).toHaveLength(1);
+    cleanup();
+    mount([], { partial: true, channel: { state: 'openrig_stopped', person: null, slack: false } });
+    expect(document.querySelector('.ask-partial')).toBeNull();
+  });
+  it('Nouvelles counts in grey; Décisions and Questions in red', () => {
+    mount([ask(), ask({ id: 'b', kind: 'update', questions: [] })]);
+    expect(screen.getByRole('region', { name: 'Nouvelles' }).querySelector('.ask-n')).toHaveClass('neutral');
+    expect(screen.getByRole('region', { name: 'Décisions' }).querySelector('.ask-n')).not.toHaveClass('neutral');
+  });
+  it('« Le point » takes half the zone at most and scrolls inside, its head and section titles staying up', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/shell.css'), 'utf8');
+    expect(css).toMatch(/\.home-body \{[^}]*container-type: size/);
+    expect(css).toMatch(/\.le-point \{[^}]*max-height: 50cqh;[^}]*overflow-y: auto/);
+    expect(css).toMatch(/\.le-point \.lp-head \{[^}]*position: sticky; top: 0/);
+    expect(css).toMatch(/\.le-point \.ask-sec-title \{[^}]*position: sticky; top: var\(--lp-head\)/);
+    expect(css).toMatch(/\.le-point\.lp-more::after \{[^}]*height: 16px/);
+  });
+});
+
 describe('the sidebar', () => {
   it('« À toi »: one compact line per ask, the seat’s mascot or the rig’s hexagon, « Voir » opens the card; no answer here', () => {
     const onSeeAsk = vi.fn();
@@ -224,6 +252,15 @@ describe('the sidebar', () => {
     fireEvent.click(within(rows[0]!).getByRole('button', { name: 'Voir' }));
     expect(onSeeAsk).toHaveBeenCalledWith('qitem-1');
     expect(screen.getByRole('region', { name: 'À toi' })).toHaveTextContent('2');
+  });
+
+  it('the seat’s mark: only what waits on an answer, the most pressing first; news marks nothing', () => {
+    expect(markOf([ask({ kind: 'update', questions: [] })])).toBeNull();
+    expect(markOf([ask({ questions: [] }), ask({ kind: 'parked', questions: [] })])).toBe('parked');
+    expect(markOf([ask({ kind: 'parked', questions: [] }), ask()])).toBe('decision');
+    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[BIX]} current={null} paused dispatch={vi.fn()} asks={[ask({ kind: 'update', questions: [] })]} /></aside></LangProvider>);
+    expect(document.querySelector('.st-ask-mark')).toBeNull();
+    expect(document.querySelector('.st-rig .t-need')).toBeNull();
   });
 
   it('Rigs: the asking seat’s row says « décision » in red, and its rig counts it', () => {

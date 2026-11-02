@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type JSX } from 'react';
 import type { HumanAsk, Session } from '@ledge/protocol';
-import { pillOf } from '../../asks/model';
+import { markOf } from '../../asks/model';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
 import type { NavAction } from '../../nav/state';
@@ -24,7 +24,7 @@ export function RigGroups({ sessions, current, paused, dispatch, asks = [] }: { 
   const kernel = live.filter(s => s.rig!.name === KERNEL);
   const rigs = new Map<string, Session[]>();
   for (const s of live) if (s.rig!.name !== KERNEL) rigs.set(s.rig!.name, [...(rigs.get(s.rig!.name) ?? []), s]);
-  const askOf = (s: Session) => asks.find(a => a.from.seat === s.rig?.seat);
+  const askOf = (s: Session) => markOf(asks.filter(a => a.from.seat === s.rig?.seat));
   const row = (s: Session, depth: number) => (
     <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel')} style={{ '--d': depth } as CSSProperties}>
       <span className="st-gap" />
@@ -33,7 +33,7 @@ export function RigGroups({ sessions, current, paused, dispatch, asks = [] }: { 
         <strong>{s.name}</strong><span className="mono">{[s.rig!.role?.replace(/\.agent$|\.lead$|\.worker$/, '') ?? s.rig!.seat, s.tool].join(' · ')}</span>
       </button>
       {(() => { const a = askOf(s); return a && !s.offline
-        ? <span className="st-time t-approval st-ask-mark">{t.asks.pill[pillOf(a)]}</span>
+        ? <span className="st-time t-approval st-ask-mark">{t.asks.pill[a]}</span>
         : <span className={cls('st-time', waiting(s) && (s.state === 'waiting_permission' ? 't-approval' : s.state === 'waiting_input' ? 't-question' : 't-error'))}>{s.offline ? t.side.offline : ''}</span>; })()}
     </div>
   );
@@ -47,7 +47,7 @@ export function RigGroups({ sessions, current, paused, dispatch, asks = [] }: { 
             {[...rigs].sort(([a], [b]) => a.localeCompare(b)).map(([name, seats]) => {
               const open = !closed.has(name);
               const flip = () => setClosed(c => { const n = new Set(c); if (n.has(name)) n.delete(name); else n.add(name); return n; });
-              const ask = seats.filter(x => waiting(x) || askOf(x) !== undefined).length, working = seats.filter(x => x.state === 'working').length;
+              const ask = seats.filter(x => waiting(x) || askOf(x) !== null).length, working = seats.filter(x => x.state === 'working').length;
               return [
                 <div key={`rig:${name}`} role="treeitem" aria-level={1} aria-expanded={open} className="st-row st-project st-rig" style={{ '--d': 0 } as CSSProperties}>
                   <button type="button" className="st-chev" aria-label={open ? t.side.fold(name) : t.side.unfold(name)} onClick={flip}><span className={open ? 'open' : undefined}><Icon d={ICONS.chevronRight.d} size={12} /></span></button>

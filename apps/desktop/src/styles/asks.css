@@ -79,3 +79,8 @@
 /* The sidebar's « À toi » line for an ask: the same urgency pill, smaller. */
 .st-ask-urgent { flex: none; font: 500 9.5px 'Geist Mono', monospace; padding: 0 5px; border-radius: 999px; background: var(--sidebar-primary); color: #fff; }
 .st-rig-ask .st-bot { display: grid; place-items: center; }
+
+/* A piece of news waits on no answer: its section's count is neutral (design-ux). */
+.ask-n.neutral { background: var(--muted); color: var(--muted-foreground); }
+/* One line atop the column when a read of OpenRig failed and the list kept the known asks (design-ux). */
+.ask-partial { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); }

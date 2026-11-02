@@ -58,14 +58,15 @@ export function AsksColumn({ view, sessions, machineLabel, focus, onSource, onOp
   const gone = [...done.values()].filter(d => !view.asks.some(x => x.id === d.ask.id));
   for (const d of gone) groups[sectionOf(d.ask)].push(d.ask);
   const shown = ASK_SECTIONS.filter(s => groups[s].length > 0);
-  if (!banner && shown.length === 0) return null;
+  if (!banner && shown.length === 0 && !view.partial) return null;
   const count = (s: AskSection) => groups[s].filter(x => !done.has(x.id)).length;
   return (
     <div className="ask-col" aria-label={t.side.yours}>
       {banner}
+      {!banner && view.partial && <p className="ask-partial" role="status"><Icon d={ALERT} size={12} />{a.partial}</p>}
       {shown.map(s => (
         <section key={s} className="ask-sec" aria-label={a.sections[s]}>
-          <h4 className="ask-sec-title">{a.sections[s]}{count(s) > 0 && <b className="ask-n">{count(s)}</b>}</h4>
+          <h4 className="ask-sec-title">{a.sections[s]}{count(s) > 0 && <b className={cls('ask-n', s === 'updates' && 'neutral')}>{count(s)}</b>}</h4>
           {groups[s].map(ask => {
             const session = sessionOfAsk(ask, sessions);
             const d = done.get(ask.id);

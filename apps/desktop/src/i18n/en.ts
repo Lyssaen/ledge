@@ -21,6 +21,7 @@ export const en: Messages = {
     notSent: (why) => `Not sent: ${why}`, retry: 'Retry',
     stopped: 'OpenRig is stopped',
     sentTo: 'Sent to', already: 'Already settled elsewhere',
+    partial: 'List may be incomplete: OpenRig did not answer the last read.',
     channel: {
       no_person: { title: 'Ledge is not OpenRig’s human channel yet.', body: 'Rigs still go through Max, or the kernel’s TUI. Their requests don’t arrive here.' },
       openrig_stopped: { title: 'OpenRig is stopped: rigs cannot write to you.', body: 'Your projects’ sessions still come here.' },

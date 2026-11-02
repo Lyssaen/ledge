@@ -46,6 +46,7 @@ for (const theme of ['dark', 'light'] as const) {
     await expect(col(page).getByRole('region', { name: 'Décisions' })).toBeVisible();
     await page.screenshot({ path: info.outputPath(`home-${theme}.png`) });
     await col(page).screenshot({ path: info.outputPath(`column-${theme}.png`) });
+    await page.locator('.le-point').screenshot({ path: info.outputPath(`point-${theme}.png`) });
     await page.locator('.st-attn').screenshot({ path: info.outputPath(`sidebar-yours-${theme}.png`) });
     await page.locator('article[data-ask="qitem-192556"]').screenshot({ path: info.outputPath(`card-decision-${theme}.png`) });
     await page.locator('article[data-ask="qitem-two"]').screenshot({ path: info.outputPath(`card-two-${theme}.png`) });

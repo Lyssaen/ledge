@@ -211,10 +211,14 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .home-tabs { display: flex; gap: 2px; padding: 6px 10px 0; flex: none; border-bottom: 1px solid var(--sidebar-border); }
 .home-tabs button { padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted-foreground); font-size: 12.5px; cursor: pointer; }
 .home-tabs button.on { color: var(--sidebar-foreground); border-bottom-color: var(--sidebar-primary); font-weight: 600; }
-.home-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.home-body { flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: size; }
 .home-body > [data-layer="chat"] { flex: 1; }
-.le-point { padding: 10px 16px 12px; font-size: 12.5px; }
-.le-point .lp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+/* « Le point » takes half the zone at most and scrolls inside (lot 1 À toi, design-ux): its head and the asks' section titles stay up,
+   a 16 px fade says there is more below; the conversation keeps the rest, its field always in view. */
+.le-point { --lp-head: 34px; position: relative; max-height: 50cqh; overflow-y: auto; padding: 0 16px 12px; font-size: 12.5px; }
+.le-point .lp-head { display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 3; height: var(--lp-head); margin-bottom: 0; background: var(--sidebar); }
+.le-point .ask-sec-title { position: sticky; top: var(--lp-head); z-index: 2; margin: 0; padding: 2px 0 4px; background: var(--sidebar); }
+.le-point.lp-more::after { content: ''; position: sticky; bottom: -12px; display: block; height: 16px; margin: -16px -16px -12px; background: linear-gradient(transparent, var(--sidebar)); pointer-events: none; }
 .le-point .lp-head strong { font-size: 13px; }
 .lp-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 @media (max-width: 1100px) { .lp-cols { grid-template-columns: 1fr; gap: 8px; } }

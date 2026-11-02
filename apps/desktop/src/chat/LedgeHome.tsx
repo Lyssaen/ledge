@@ -69,8 +69,22 @@ export function LePoint({ view, api, decisions, waits, dispatch, onAsk, onShowTa
   const state = (x: Task) => t.chat.task.state[x.state];
   const rigAsks = asks?.asks.length ?? 0;
   const count = attn.length + asked.length + closed.length + near.length + rigAsks;
+  // The fade at the bottom while « Le point » has more below than it shows.
+  const pointRef = useRef<HTMLElement>(null);
+  const [more, setMore] = useState(false);
+  const measure = useCallback(() => { const el = pointRef.current; if (el) setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 1); }, []);
+  useEffect(() => {
+    measure();
+    const el = pointRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const cols = el.querySelector('.lp-cols');
+    if (cols) ro.observe(cols);
+    return () => ro.disconnect();
+  }, [measure]);
   return (
-    <section className="le-point" aria-label={p.title}>
+    <section ref={pointRef} className={cls('le-point', more && 'lp-more')} aria-label={p.title} onScroll={measure}>
       <div className="lp-head">
         <strong>{p.title}</strong>
         <span className="st-fill" />
