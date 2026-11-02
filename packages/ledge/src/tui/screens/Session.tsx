@@ -7,7 +7,8 @@ import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js'
 import { ChipsLine, useChips, useOpenImage, usePaste } from '../images.js';
 import { machineLabel, modelLabel, paneName, TOOL_NAME } from '../model/labels.js';
 import { cells, pad, row, type Line } from '../model/cells.js';
-import { anchorLine, threadImages, threadView } from '../model/thread.js';
+import { anchorLine, markRig, selectedRig, threadImages, threadView } from '../model/thread.js';
+import { aboutDraft, type Peer } from '../model/rigLines.js';
 import { ago, oneLine } from '../model/time.js';
 import { C, STATE_COLOR } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
@@ -32,15 +33,18 @@ export function SessionScreen() {
 }
 
 function SessionView({ s }: { s: Session }) {
-  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone } = useTui();
+  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone, select, go } = useTui();
   const { columns, rows } = useScreenSize();
-  const [mode, setMode] = useState<Mode>('read');
+  // Opened by key r on an OpenRig message elsewhere: on the composer, its draft already there.
+  const [mode, setMode] = useState<Mode>(() => { if (kept.openReply !== s.id) return 'read'; kept.openReply = undefined; return 'reply'; });
   // The draft outlives the field, the screen and ctrl+c: it is kept by the TUI, by session.
   const [draft, setDraftState] = useState(() => kept.drafts.get(s.id) ?? '');
   const setDraft = (x: string) => { setDraftState(x); if (x) kept.drafts.set(s.id, x); else kept.drafts.delete(s.id); };
   const [browsing, setBrowsing] = useState(false);
   const [diffs, setDiffs] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
+  // The OpenRig elements whose raw is open (key b).
+  const [raws, setRaws] = useState<ReadonlySet<string>>(() => new Set());
   const [terminal, setTerminal] = useState(false);
   // The line at the top of the box once scrolled, as an item and a line in it, so that a resize, a fold or new lines below
   // keep it in place; null follows the bottom of the thread.
@@ -52,8 +56,18 @@ function SessionView({ s }: { s: Session }) {
   useEffect(() => { if (!items && !s.offline) client.send({ type: 'session.thread', id: s.id }); }, [items === undefined, s.id, d.snapshotSeq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const width = Math.max(20, columns - 6);
+  const machine = splitId(s.id)?.machine ?? 'local';
+  // An OpenRig sender's Ledge session (its `peer`, as the daemon names it): on this machine first.
+  const sessions = d.sessions;
+  const peer = useMemo(() => {
+    const bare = (id: string) => splitId(id)?.id ?? id;
+    return (id: string): Peer | undefined => {
+      const x = d.byId.get(id) ?? sessions.find(y => bare(y.id) === bare(id) && (splitId(y.id)?.machine ?? 'local') === machine) ?? sessions.find(y => bare(y.id) === bare(id));
+      return x ? { id: x.id, name: x.name } : undefined;
+    };
+  }, [sessions, machine]); // eslint-disable-line react-hooks/exhaustive-deps
   // The clock is not in here: a running action's spinner and time tick on their own (ui/Lines.tsx).
-  const thread = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded }) : { lines: [] as Line[], keys: [] as string[], turns: new Map<string, string>() }, [items, t, g, width, diffs, unfolded, tone]);
+  const thread = useMemo(() => items ? threadView(items, { t, g, width, diffs, unfolded, peer, raws }) : { lines: [] as Line[], keys: [] as string[], turns: new Map<string, string>(), rig: new Map(), heads: new Map() }, [items, t, g, width, diffs, unfolded, tone, peer, raws]);
   const { lines, keys: lineKeys } = thread;
   const p = s.pending;
   const [view, setView] = useState(10);
@@ -68,12 +82,26 @@ function SessionView({ s }: { s: Session }) {
     setAnchor({ key, offset: top - lineKeys.indexOf(key) });
   };
 
+  // The OpenRig element b and r act on: the lowest one in view.
+  const rigKey = selectedRig(thread, lines.length - view - up, lines.length - 1 - up);
+  const rigEl = rigKey ? thread.rig.get(rigKey) : undefined;
+  const shown = useMemo(() => markRig(thread, rigKey, g), [thread, rigKey, g]);
+  const replyTo = (target: Peer, text: string) => {
+    const other = d.byId.get(target.id);
+    if (other?.offline) { toast({ text: t.toast.offline(target.name), tone: 'info' }); return; }
+    if (other?.source === 'hook_only') { toast({ text: t.toast.readOnly(target.name), tone: 'info' }); return; }
+    // A draft already kept there stays, after the quote (once: r again does not quote twice).
+    const quote = aboutDraft(text, t, g), was = kept.drafts.get(target.id) ?? '';
+    kept.drafts.set(target.id, was.startsWith(quote) ? was : `${quote}${was}`);
+    kept.openReply = target.id;
+    select(target.id); go('session');
+  };
+
   const images = useMemo(() => (items ? threadImages(items, unfolded) : []).map(ref => ({ ref, route: { id: s.id } })), [items, unfolded, s.id]);
   const chips = useChips(image => putImage(client, image, { id: s.id }));
   const paste = usePaste(chips);
   const openImage = useOpenImage();
 
-  const machine = splitId(s.id)?.machine ?? 'local';
   const canSwitch = machines.find(m => m.id === machine)?.daemon?.modelSwitch === true;
 
   /** false when refused at once: the field keeps the text. */
@@ -127,6 +155,10 @@ function SessionView({ s }: { s: Session }) {
       if (!canSwitch) toast({ text: t.toast.modelSwitch, tone: 'info' }); else setMode('model');
       return true;
     }
+    if (input === 'b' && rigKey) { setRaws(x => { const n = new Set(x); if (n.has(rigKey)) n.delete(rigKey); else n.add(rigKey); return n; }); return true; }
+    // r on an OpenRig message whose sender has a Ledge session answers the sender, there (↵ still writes here); a request
+    // waiting keeps r for itself.
+    if (input === 'r' && !p && rigEl?.reply) { replyTo(rigEl.reply.peer, rigEl.reply.text); return true; }
     if (input === 'r' || key.return) {
       if (s.offline) { toast({ text: t.toast.offline(s.name), tone: 'info' }); return true; }
       if (s.source === 'hook_only') { toast({ text: t.toast.readOnly(s.name), tone: 'info' }); return true; }
@@ -149,7 +181,7 @@ function SessionView({ s }: { s: Session }) {
   const keys: Array<readonly [string, string]> = mode === 'model' ? [['↑ ↓', t.keys.choose], ['← →', t.launch.effort], ['↵', t.keys.choose], ['esc', t.keys.cancel]]
     : mode !== 'read' && browsing ? [['↵', t.keys.resend], ['↑ ↓', t.keys.history], ['esc', t.keys.backToDraft]]
     : mode !== 'read' ? [['↵', t.keys.sendOnly], ...(mode === 'reply' ? [['alt+v', t.keys.image] as const] : []), ['alt+↵', t.keys.newLine], ['esc', t.keys.keepAndLeave], ['↑ ↓', t.keys.lineHistory], ['ctrl ← →', t.keys.word], ['ctrl+u', t.keys.clear]]
-    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ['r', t.keys.write], ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
+    : [['esc', t.keys.back], ...(p ? [['y n A', t.keys.answer] as const] : []), ...(rigEl ? [['↵', t.keys.write] as const, ...(!p && rigEl.reply ? [['r', t.keys.replyTo(rigEl.reply.peer.name)] as const] : []), ['b', t.keys.raw] as const] : [['r', t.keys.write] as const]), ['j k', t.keys.scroll], [t.keys.space, t.keys.unfold], ['d', t.keys.diffs], ['t', t.keys.terminal], ['a', t.keys.attach], ['m', t.keys.model], ['i', t.keys.interrupt], ...(images.length ? [['o', t.keys.openImage] as const] : [])];
   // The rows, in this order: the request (its keys left out while writing), the field, the thread with what is left, drawn
   // only with room for a line. The request is cut only when even that does not fit.
   const editing = mode === 'reply' || mode === 'note';
@@ -172,7 +204,7 @@ function SessionView({ s }: { s: Session }) {
           : terminal ? <Tail lines={d.previews.get(s.id) ?? []} color={C.dim} empty={t.overview.noPreview} emptyColor={C.faint} />
           : !items ? <Text color={C.faint}>{t.session.loading}</Text>
           : lines.length === 0 ? <Text color={C.faint}>{t.session.empty}</Text>
-          : <Lines lines={lines} up={up} onHeight={setView} />}
+          : <Lines lines={shown} up={up} onHeight={setView} />}
       </TitledBox> : null}
       {p && request ? <PendingBox s={s} a={request} /> : null}
       <ChipsLine chips={chips.items} />

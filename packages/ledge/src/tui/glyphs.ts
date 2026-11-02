@@ -14,7 +14,9 @@ const UNICODE = {
   /** A task handed between sessions in « Échanges » (#92). */
   task: '▤',
   /** A role's value: written here, inherited, not declared, unknown; the margin's rail (docs/mockups/ledge-openrig-roles-tui.html). */
-  pvHere: '●', pvInh: '↳', pvAbs: '○', pvUnk: '?', rail: '▎'
+  pvHere: '●', pvInh: '↳', pvAbs: '○', pvUnk: '?', rail: '▎',
+  /** OpenRig's blocks in a thread (docs/mockups/openrig-messages): a message, a queue row, a notice; the raw's box. */
+  rigMessage: '✉', rigRow: '▤', rigNotice: '·', boxTL: '┌', boxTR: '┐', boxBL: '└', boxBR: '┘', boxH: '─', boxV: '│'
 };
 export type Glyphs = typeof UNICODE;
 const ASCII: Glyphs = {
@@ -26,10 +28,15 @@ const ASCII: Glyphs = {
   running: '~', held: '.', stale: '!',
   task: '[=]',
   pvHere: '*', pvInh: '>', pvAbs: 'o', pvUnk: '?', rail: '|',
+  rigMessage: '@', rigRow: '=', rigNotice: '-', boxTL: '+', boxTR: '+', boxBL: '+', boxBR: '+', boxH: '-', boxV: '|',
   links: false
 };
 
+/** Without colour (NO_COLOR, https://no-color.org: set and not empty), OpenRig's blocks tell themselves apart by their glyph. */
+const NO_COLOR_RIG = { rigMessage: '@', rigRow: '=', rigNotice: '-' } as const;
+
 export function glyphsFor(env: NodeJS.ProcessEnv): Glyphs {
+  if (env.NO_COLOR) return { ...glyphsFor({ ...env, NO_COLOR: '' }), ...NO_COLOR_RIG };
   if (env.LEDGE_TUI_ASCII === '1') return ASCII;
   // A terminal that shows the escape of a link as text: LEDGE_TUI_LINKS=0.
   if (env.LEDGE_TUI_LINKS === '0') return { ...glyphsFor({ ...env, LEDGE_TUI_LINKS: '1' }), links: false };

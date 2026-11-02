@@ -32,7 +32,9 @@ export const fr = {
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
     applyRow: 'appliquer la ligne', apply: 'appliquer', applyAll: 'tout appliquer', deny: 'refuser', ignore: 'ignorer', review: 'revoir',
-    openSession: (name: string) => `ouvrir ${name}`
+    openSession: (name: string) => `ouvrir ${name}`,
+    /** An OpenRig element of the thread (docs/mockups/openrig-messages): its raw, and the reply to its sender. */
+    raw: 'brut', replyTo: (name: string) => `répondre à ${name}`
   },
   overview: { rigsGroup: 'RIGS', kernelGroup: 'KERNEL', 
     rigSeat: (rig: string, role: string) => `rig ${rig} · ${role}`,
@@ -66,7 +68,16 @@ export const fr = {
     replyTitle: (name: string) => `Répondre à ${name}`, noteTitle: (name: string) => `Refuser en expliquant à ${name}`, writeDraft: 'Écrire · brouillon',
     draftLines: (n: number) => `${n} ${plural(n, 'ligne', 'lignes')} · r pour reprendre`,
     loading: 'Chargement du fil…', empty: 'Rien encore dans ce fil.', noSession: 'Choisissez une session dans la vue d’ensemble.',
-    model: (m: string) => `modèle : ${m}`, defaultModel: 'par défaut', notice: 'Ledge'
+    model: (m: string) => `modèle : ${m}`, defaultModel: 'par défaut', notice: 'Ledge',
+    /** OpenRig's messages in a seat's thread (docs/mockups/openrig-messages, validated 2026-11-02). */
+    rowIn: 'ligne confiée par', rowOut: 'ligne passée à', handedAt: (time: string) => `confiée ${time}`, passedAt: (time: string) => `passée ${time}`,
+    notHanded: 'non transmise', notHandedBy: 'non transmise par OpenRig', openrigSaid: (line: string) => `OpenRig : ${line}`,
+    untracked: 'état non suivi', reply: 'répondre', raw: 'brut', close: 'fermer', times: (k: number) => `reçu ${k} fois`,
+    unreadable: 'message OpenRig illisible, affiché tel quel', openrig: 'OpenRig',
+    unblocked: (id: string) => `blocage levé : la ligne ${id} est de nouveau à faire`,
+    stalled: (id: string, d: string) => `ligne ${id} prise il y a ${d}, sans suite`,
+    folded: (k: number) => `${k} avis OpenRig repliés`, rawMany: (k: number) => `${k} messages collés ensemble · brut`,
+    about: (line: string) => `À propos de : « ${line} »`
   },
   ask: {
     title: (s: number, m: number) => `Ledge · voit ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
@@ -116,6 +127,7 @@ export const fr = {
   help: {
     title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig', rigLaunch: 'Lancer un rig',
     screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    writeHere: 'écrire à cette session', replySender: "répondre à l'expéditeur du message sélectionné", rigRaw: "afficher ou masquer le texte brut d'un message OpenRig",
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
   field: {
