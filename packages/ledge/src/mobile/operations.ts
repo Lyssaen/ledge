@@ -19,7 +19,9 @@ export function fingerprint(m: PhoneOperation): string {
     ...(f.row !== undefined || f.task !== undefined ? [f.row ?? null, f.task ?? null] : []),
     ...(f.attachments?.length ? [f.attachments] : []),
     // A model change is its model and effort: the same id for another model is another operation (null, the agent's default, too).
-    ...(m.type === 'session.model' ? [m.model, m.effort] : [])]);
+    ...(m.type === 'session.model' ? [m.model, m.effort] : []),
+    // A hold is its terminal: the same id for another terminal is another operation.
+    ...(m.type === 'term.hold' ? [m.tid] : [])]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */

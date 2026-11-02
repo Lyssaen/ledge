@@ -18,6 +18,7 @@ import { CloseRefused } from '../chat/close.js';
 import { ActRefused } from '../chat/act.js';
 import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
+import { createTerminalHost, type SpawnControl, type TerminalHost } from './terminal.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation } from './operations.js';
 import { capabilities, clip, forPhone, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneThread } from './project.js';
 import { canSwitch, toPhoneModels } from './project.js';
@@ -31,6 +32,12 @@ export interface PhoneGateway {
   forward(m: ServerMessage): void;
   /** Whether the device's app is in front right now (it said so, and its channel is still up). */
   visible(deviceId: string): boolean;
+  /** The PC takes the hand back on the session's terminal. */
+  terminalRelease(sessionId: string): void;
+  /** The PC's « Taper dans les terminaux » changed: turned off, every hand is taken back; each phone hears the new setting. */
+  terminalInputChanged(): void;
+  /** The device typing into the session's terminal, if any. */
+  terminalHolder(sessionId: string): string | undefined;
   stop(): void;
 }
 
@@ -108,6 +115,11 @@ export function createPhoneGateway(deps: {
    * way. With it the phone offers « Fermer » and « Reprendre » on a session's page; it rejects with the daemon's refusal.
    */
   closeSession?: (id: string) => Promise<{ how: CloseHow }>;
+  /**
+   * The agent's terminal on the phone (spec 2026-11-02 mobile terminal): a read-only control client per open terminal, and typing
+   * while the PC's setting allows it (`inputAllowed`) and the phone holds the hand after its passkey.
+   */
+  terminal?: { controlArgs(tmuxName: string): string[] | null; inputAllowed(): boolean; typing?: Set<string>; onHolder?(sessionId: string, deviceId: string | null): void; spawn?: SpawnControl };
 }): PhoneGateway {
   const { mobile, log } = deps;
   /** The read mark of a session no device marked: what was replied before the gateway started counts as read. */
@@ -127,6 +139,7 @@ export function createPhoneGateway(deps: {
     return f;
   };
   const forget = (deviceId: string) => {
+    terminals?.deviceGone(deviceId);
     followers.delete(deviceId);
     outbox.drop(deviceId);
     dropThread(deviceId);
@@ -188,7 +201,8 @@ export function createPhoneGateway(deps: {
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}) },
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
+      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}) },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
@@ -206,6 +220,7 @@ export function createPhoneGateway(deps: {
     send: (deviceId, text) => mobile.send(deviceId, text),
     onGone: deviceId => {
       log(`phone: device ${deviceId} gone`);
+      terminals?.deviceGone(deviceId);
       followers.delete(deviceId);
     },
     onOverflow: deviceId => {
@@ -222,6 +237,13 @@ export function createPhoneGateway(deps: {
   });
 
   const push = (deviceId: string, msg: PhoneServerMessage, key?: string) => { if (!stopped) outbox.push(deviceId, msg, key); };
+  /** The terminals the phones opened; none without the daemon's terminal. A session no longer live ended, one still live lost its tmux. */
+  const terminals: TerminalHost | null = deps.terminal ? createTerminalHost({
+    controlArgs: n => deps.terminal!.controlArgs(n), spawn: deps.terminal.spawn, typing: deps.terminal.typing, onHolder: deps.terminal.onHolder,
+    send: (deviceId, msg, key) => push(deviceId, msg, key), queued: (deviceId, key) => outbox.queued(deviceId, key),
+    exitWhy: id => { const s = live(id); return !s || s.state === 'exited' ? 'ended' : 'gone'; },
+    log
+  }) : null;
   /** After a snapshot: the kept model failures of the sessions still there. */
   const replayModelFailures = (deviceId: string) => {
     for (const [id, f] of modelFailures) if (live(id)) push(deviceId, { type: 'session.model.failed', id, reason: f.reason });
@@ -246,7 +268,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'term.open' | 'term.hold' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -259,7 +281,7 @@ export function createPhoneGateway(deps: {
     `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
 
   /** The device check: the challenge is spent first, whatever the verdict, then the signature is verified and the counter kept. */
-  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'pc', subject: string | undefined): Outcome | undefined => {
+  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'pc' | 'terminal', subject: string | undefined): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
     if (!cred || !rp || !assertion || subject === undefined) return { status: 'rejected', reason: 'confirm_required' };
@@ -601,6 +623,30 @@ export function createPhoneGateway(deps: {
     return { status: 'applied' };
   };
 
+  /** Streams a session's pane: a session Ledge started, live, with a tmux pane of its own. */
+  const termOpen = (deviceId: string, msg: Extract<PhoneOperation, { type: 'term.open' }>): Outcome => {
+    if (!terminals) return { status: 'rejected', reason: 'unavailable' };
+    const s = live(msg.id);
+    if (!s) return { status: 'rejected', reason: 'unknown_session' };
+    if (s.source === 'hook_only' || s.source === 'rig') return { status: 'rejected', reason: 'read_only' };
+    if (s.state === 'exited' || !s.tmuxSession || backendOf(s) === 'omp-rpc') return { status: 'rejected', reason: 'unavailable' };
+    terminals.open(deviceId, msg.op, { id: s.id, tmuxName: s.tmuxSession });
+    return { status: 'applied' };
+  };
+
+  /** « Prendre la main »: the PC's setting, then the passkey over the terminal's session, then no other holder. */
+  const termHold = (deviceId: string, msg: Extract<PhoneOperation, { type: 'term.hold' }>): Outcome => {
+    if (!terminals || !deps.terminal?.inputAllowed()) return { status: 'rejected', reason: 'unavailable' };
+    const sessionId = terminals.sessionOf(deviceId, msg.tid);
+    if (sessionId === undefined) return { status: 'rejected', reason: 'invalid' };
+    const refused = checkAssertion(deviceId, msg.assertion, 'terminal', sessionId);
+    if (refused) return refused;
+    const held = terminals.hold(deviceId, msg.tid);
+    if (held === 'unknown') return { status: 'rejected', reason: 'invalid' };
+    if (held) return { status: 'rejected', reason: held };
+    return { status: 'applied' };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'daemon.update' || msg.type === 'daemon.restart') return pcOperation(deviceId, msg);
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
@@ -629,6 +675,8 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
     if (msg.type === 'session.close' || msg.type === 'session.resume') return sessionEnd(deviceId, msg);
+    if (msg.type === 'term.open') return termOpen(deviceId, msg);
+    if (msg.type === 'term.hold') return termHold(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -735,7 +783,12 @@ export function createPhoneGateway(deps: {
         return;
       case 'presence':
         follower(deviceId).visible = msg.visible;
+        if (!msg.visible) terminals?.deviceHidden(deviceId);
         return;
+      case 'term.input': terminals?.input(deviceId, msg.tid, msg.n, msg.data); return;
+      case 'term.release': terminals?.release(deviceId, msg.tid); return;
+      case 'term.resync': terminals?.resync(deviceId, msg.tid); return;
+      case 'term.close': terminals?.close(deviceId, msg.tid); return;
       case 'models.list':
         // Ignored by a gateway that does not say `models`: the phone never offers the switch there.
         if (!deps.models) return;
@@ -821,6 +874,14 @@ export function createPhoneGateway(deps: {
           const challenge = deps.challenges.issue({ deviceId, purpose: 'pc', subject: pcSubject(msg.action, msg.version) });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'pc', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
+        if (msg.purpose === 'terminal') {
+          // Bound to the session: a hold proven for one terminal covers no other session's.
+          if (msg.id === undefined || !terminals || !deps.terminal?.inputAllowed() || !live(msg.id)) return invalid();
+          const cred = deps.credential(deviceId);
+          if (!cred || cred.rpId !== rp.rpId) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'terminal', subject: msg.id });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'terminal', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
         // A purpose added to the enum without a branch above fails to compile here.
         const unhandled: never = msg.purpose;
         void unhandled;
@@ -853,7 +914,7 @@ export function createPhoneGateway(deps: {
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
       // A model change the schema refuses (#58) is answered the same way.
       if (request === 'session.model' && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
-      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.task' || request === 'task.seen' || request === 'session.close' || request === 'session.resume') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.task' || request === 'task.seen' || request === 'session.close' || request === 'session.resume' || request === 'term.open' || request === 'term.hold') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;
@@ -878,7 +939,7 @@ export function createPhoneGateway(deps: {
     for (const [deviceId, f] of [...followers]) {
       const d = devices.get(deviceId);
       if (!d) { forget(deviceId); continue; }
-      if (!d.online) f.visible = false;
+      if (!d.online) { f.visible = false; terminals?.deviceGone(deviceId); }
       if (f.subscribed && f.pushStatus !== undefined && f.pushStatus !== pushStatus(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     }
   };
@@ -915,6 +976,9 @@ export function createPhoneGateway(deps: {
     forward(m) {
       if (!stopped) try { keepModelFailure(m); } catch (e) { log(`phone model failure of ${m.type} failed (${e instanceof Error ? e.name : 'error'})`); }
       if (stopped) return;
+      // A terminal outlives no session, whoever follows the list.
+      if (m.type === 'session.removed') terminals?.sessionEnded(m.id);
+      if (m.type === 'session.updated' && (isArchived(m.session) || m.session.state === 'exited')) terminals?.sessionEnded(m.session.id);
       // Nothing is kept for nobody: a device that comes back gets the checklists computed afresh.
       if (followers.size === 0) { checklists.clear(); return; }
       try {
@@ -972,9 +1036,17 @@ export function createPhoneGateway(deps: {
       }
     },
     visible: deviceId => followers.get(deviceId)?.visible === true,
+    terminalRelease: sessionId => terminals?.releaseSession(sessionId),
+    terminalInputChanged() {
+      if (stopped || !terminals) return;
+      if (!deps.terminal?.inputAllowed()) terminals.releaseAll();
+      for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
+    },
+    terminalHolder: sessionId => terminals?.holder(sessionId),
     stop() {
       if (stopped) return;
       stopped = true;
+      terminals?.stop();
       unsubscribeMessage();
       unsubscribeChange();
       outbox.close();

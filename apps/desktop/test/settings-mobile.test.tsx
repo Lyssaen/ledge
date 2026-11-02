@@ -53,6 +53,16 @@ describe('Settings › Accès mobile', () => {
     expect(screen.getByText(/trop ancien/)).toBeVisible();
   });
 
+  it('« Taper dans les terminaux » shows only for a daemon that knows it, and sends mobile.terminal', async () => {
+    const { sent, update, user } = show(ONLINE);
+    expect(screen.queryByRole('switch', { name: 'Taper dans les terminaux depuis le téléphone' })).toBeNull();
+    update({ ...ONLINE, terminalInput: false });
+    const sw = screen.getByRole('switch', { name: 'Taper dans les terminaux depuis le téléphone' });
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    await user.click(sw);
+    expect(sent).toEqual([{ type: 'mobile.terminal', input: true }]);
+  });
+
   it('a refused mobile command is said in an alert under the header', () => {
     show(ONLINE, { mobileError: { request: 'mobile.pairing.approve', message: 'gone' } });
     expect(screen.getByRole('alert')).toHaveTextContent('gone');

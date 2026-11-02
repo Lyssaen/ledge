@@ -8,6 +8,8 @@ import { BackHeader, linkView } from '../ui/Header';
 import { useNow } from '../useNow';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
+import type { PhoneLink } from '../link/link';
+import { TerminalLive } from './TerminalLive';
 
 const SIZE_KEY = 'ledge.mobile.terminalSize';
 export const SIZE_MIN = 11;
@@ -28,8 +30,16 @@ const STEP = iconButtonClass({ variant: 'outline', className: 'text-body font-me
 
 type Interrupt = Op & { message: Extract<Op['message'], { type: 'session.interrupt' }> };
 
+/** The live terminal when the PC streams it (`daemon.terminal`), the preview of an older PC otherwise. */
+export function Terminal({ store, link, sessionId, storage }: { store: MobileStore; link?: PhoneLink; sessionId: string; storage?: Storage }) {
+  const state = useMobile(store);
+  const session = state.sessions.get(sessionId);
+  if (link && session && state.daemon?.terminal) return <TerminalLive key={sessionId} store={store} link={link} session={session} {...(storage ? { storage } : {})} />;
+  return <TerminalPreview store={store} sessionId={sessionId} {...(storage ? { storage } : {})} />;
+}
+
 /** What a session prints, read-only, while it is watched; and the one thing the phone may do to it: interrupt the agent. */
-export function Terminal({ store, sessionId, storage }: { store: MobileStore; sessionId: string; storage?: Storage }) {
+function TerminalPreview({ store, sessionId, storage }: { store: MobileStore; sessionId: string; storage?: Storage }) {
   const state = useMobile(store);
   const now = useNow();
   const { fresh, ops } = state;

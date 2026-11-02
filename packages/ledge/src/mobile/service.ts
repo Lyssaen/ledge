@@ -338,7 +338,8 @@ export async function createMobileService(opts: {
         devices: devices.map((d) => ({
           id: d.id, label: d.label, approvedAt: d.approvedAt, online: online.has(d.id), ...(d.lastSeenAt ? { lastSeenAt: d.lastSeenAt } : {})
         })),
-        pairings: pairing.views()
+        pairings: pairing.views(),
+        terminalInput: config.terminalInput === true
       };
     },
 
@@ -398,7 +399,7 @@ export async function createMobileService(opts: {
       if (stopped) throw new Error('mobile access is stopped');
       switch (msg.type) {
         case 'mobile.set': {
-          const next: MobileConfig = { enabled: msg.enabled, relayUrl: msg.relayUrl };
+          const next: MobileConfig = { enabled: msg.enabled, relayUrl: msg.relayUrl, ...(config.terminalInput ? { terminalInput: true } : {}) };
           const moved = next.relayUrl !== config.relayUrl;
           writeMobileConfig(next); // first: a failing write leaves the state unchanged and reaches the sender
           config = next;
@@ -414,6 +415,13 @@ export async function createMobileService(opts: {
           } else {
             openLink();
           }
+          changed();
+          return;
+        }
+        case 'mobile.terminal': {
+          const next: MobileConfig = { enabled: config.enabled, relayUrl: config.relayUrl, ...(msg.input ? { terminalInput: true } : {}) };
+          writeMobileConfig(next);
+          config = next;
           changed();
           return;
         }

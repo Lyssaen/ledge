@@ -146,7 +146,7 @@ La machine locale (WSL) et les serveurs SSH : « Ajouter une machine » (un alia
 
 #### Accès mobile (`mobile`)
 
-Activer l'accès mobile, choisir le serveur relais, se connecter avec GitHub, voir l'état, gérer les appareils liés (« Comparer le code », « Révoquer »). Y renvoyer l'utilisateur pour lier un téléphone.
+Activer l'accès mobile, choisir le serveur relais, se connecter avec GitHub, voir l'état, gérer les appareils liés (« Comparer le code », « Révoquer »). « Taper dans les terminaux depuis le téléphone » (désactivé par défaut) permet à un téléphone de prendre la main sur le terminal d'un agent ; le panneau terminal de la session affiche alors « Téléphone au clavier » avec « Reprendre la main ». Y renvoyer l'utilisateur pour lier un téléphone.
 
 #### Projets (`projects`)
 
@@ -210,7 +210,7 @@ Les échanges avec un agent et le champ pour lui écrire. « Examiner la demande
 
 ### Terminal (`terminal`)
 
-Le terminal d'un agent, en direct et en lecture seule, avec « Interrompre ».
+Le terminal d'un agent, en direct et en couleurs, à la taille du PC : « Lisible » (suit le curseur) ou « Ajusté » (toute la largeur), pincer pour zoomer. « Interrompre » reste là. « Prendre la main » (passkey de l'appareil, et le réglage « Taper dans les terminaux depuis le téléphone » activé sur le PC) ouvre le clavier avec une rangée de touches : Échap, Tab, Ctrl et Alt collants, flèches, ↵, ^C, Coller et « Ligne » pour la dictée. La main est rendue après 5 minutes sans frappe, au bout de 30 minutes, ou dès que l'appli passe en arrière-plan. Sans ce réglage, le terminal reste en lecture seule.
 
 ### Demande (`request`)
 

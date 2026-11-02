@@ -203,7 +203,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'agents': return <Agents store={store} onReconnect={retry} />;
       case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
       case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
-      case 'terminal': return <Terminal key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} />;
+      case 'terminal': return <Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />;
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
       case 'request': return <RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />;
       case 'connection': return <Connection store={store} fetchImpl={fetchImpl} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} />;
