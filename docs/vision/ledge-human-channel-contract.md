@@ -36,7 +36,9 @@ type HumanAsk = {
     id: string;
     question: string;
     options: Array<{ id: string; label: string; recommended: boolean }>;
-    answer: string | null;    // l'option déjà choisie (id), ou les mots déjà donnés ; null tant qu'elle attend
+    answer: { kind: 'option'; id: string }   // l'option déjà choisie
+          | { kind: 'words'; text: string } // la réponse libre déjà donnée (OpenRig la range sous la 1re question sans réponse)
+          | null;                           // elle attend encore
   }>;
   createdAt: string;          // ISO
   updatedAt: string;          // ISO, pour le « il y a 4 min »
@@ -52,9 +54,10 @@ type HumanChannel = {
   //  no_person       : OpenRig tourne, mais aucune personne n'est enregistrée → « Ledge n'est pas encore le canal humain d'OpenRig »
   //  no_default      : plusieurs personnes enregistrées, aucune par défaut : Ledge ne sait pas laquelle tu es ; rien n'est montré
   //                    (message : « rig gateway default <id> »)
-  //  openrig_stopped : daemon OpenRig arrêté → « OpenRig est arrêté : les rigs ne peuvent pas t'écrire »
+  //  openrig_stopped : daemon OpenRig arrêté, et OpenRig le confirme → « OpenRig est arrêté : les rigs ne peuvent pas t'écrire »
   //  not_installed   : pas de commande rig sur la machine
-  //  unreachable     : le daemon OpenRig tourne mais son API ne répond pas (le message dit pourquoi)
+  //  unreachable     : OpenRig ne répond pas, répond quelque chose d'illisible, ou son état n'a pas pu être lu ;
+  //                    les demandes connues restent (partial)
   person: { address: string; name: string } | null;  // "ledge@external", "Ledge"
   slack: boolean;             // Slack est-il encore actif pour cette personne (copie) ? Faux aujourd'hui
   message?: string;           // pour unreachable et no_default : la raison, en anglais court
@@ -116,6 +119,9 @@ Règles :
   (`refused`). Pas de « refuser » au lot 1 : le `deny` d'OpenRig ferme la ligne sans rien rendre au siège ; un
   refus se dit en mots (`words`).
 - `text` : 1 à 8 000 caractères.
+- **`words` règle toute la demande**, même avec plusieurs questions (constaté sur OpenRig 0.7.7) : OpenRig range le texte sous la
+  première question sans réponse, rend la réponse au siège et ferme la ligne ; les autres questions restent sans réponse. « Répondre
+  autrement… » est donc une réponse à la demande entière, pas à une question. Un bouton envoyé ensuite donne `already`.
 - Seule une ligne adressée à la personne par défaut (ou parquée sur elle) est répondue : une autre est `refused`.
 - Avec plusieurs questions, chaque `choice` est enregistré tout de suite (`outcome: 'recorded'`). La réponse
   ne part au siège qu'à la dernière (`outcome: 'answered'`).
@@ -131,16 +137,19 @@ Règles :
   //  recorded : choix enregistré, d'autres questions attendent (remaining)
   //  answered : réponse rendue au siège, qui est réveillé ; la demande est close
   //  already  : déjà répondue (ailleurs ou par un envoi précédent) ; rien de nouveau n'est parti
-  remaining?: string[],       // ids des questions qui attendent encore (recorded) ; absent si OpenRig ne permet pas de les nommer :
+  remaining?: string[],       // ids des questions qui attendent encore (recorded) ; absent si OpenRig ne permet pas de les nommer
+                              // sûrement (texte introuvable, plusieurs questions au même texte) :
                               // « d'autres questions attendent », jamais « plus rien n'attend »
   replyId?: string,           // la ligne-réponse créée vers le siège (answered)
-  error?: 'not_found' | 'closed' | 'refused' | 'not_closed' | 'unreachable' | 'openrig_stopped' | 'offline' | 'outdated',
+  error?: 'not_found' | 'closed' | 'refused' | 'not_closed' | 'unreachable' | 'openrig_stopped' | 'uncertain' | 'offline' | 'outdated',
   //  not_found       : la ligne n'existe pas (plus)
   //  closed          : la ligne est déjà close : la retirer, sans Réessayer
   //  refused         : OpenRig refuse cette réponse (mauvais type, texte vide…) ; message dit pourquoi
   //  not_closed      : la réponse est partie mais la ligne a changé entre-temps ; Réessayer est sûr
-  //  unreachable     : l'API OpenRig n'a pas répondu → « Pas envoyée : … », Réessayer
+  //  unreachable     : rien n'est parti (connexion refusée, personne non vérifiable, ligne illisible) → « Pas envoyée : … », Réessayer
   //  openrig_stopped : daemon OpenRig arrêté → « Pas envoyée : OpenRig est arrêté », Réessayer
+  //  uncertain       : peut-être partie : la réponse d'OpenRig s'est perdue (délai, coupure), est une erreur serveur ou est illisible.
+  //                    Ni « Envoyé » ni « Pas envoyée » : Réessayer est sûr et dit ce qu'il en est (answered, already ou closed)
   //  offline / outdated : posés par la flotte
   message?: string            // la raison lisible (anglais, telle qu'OpenRig la donne), pour « Pas envoyée : {raison} »
 }

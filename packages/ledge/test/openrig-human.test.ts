@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { OpenRigAnsweredSchema, OpenRigAsksChangedSchema, parseClientMessage, type OpenRigState } from '@ledge/protocol';
-import { answerError, attentionRef, createHumanChannel, samePerson, seatParts, toAsk, type HumanList, type RigHttp, type RigSse } from '../src/daemon/openrigHuman.js';
+import { answerError, answerOf, attentionRef, createHumanChannel, samePerson, seatParts, toAsk, type HumanList, type RigHttp, type RigSse } from '../src/daemon/openrigHuman.js';
 import type { RigRun } from '../src/daemon/openrig.js';
 
 // Shapes read from OpenRig 0.7.7 on 2026-11-02 (GET /api/attention, GET /api/queue/<id>), trimmed to what Ledge reads.
@@ -60,7 +60,7 @@ describe('« À toi » reading', () => {
     const ask = l.asks.find(a => a.id === 'qitem-1')!;
     expect(ask).toMatchObject({ alert: true, from: { seat: 'dev-review@starter', rig: 'starter', role: 'dev.review' }, summary: 'Choisir une couleur', evidenceRef: '/tmp/evidence.md', bodyTruncated: false });
     expect(ask.questions).toEqual([
-      { id: 'couleur', question: 'Quelle couleur ?', options: [{ id: 'bleu', label: 'Bleu', recommended: true }, { id: 'vert', label: 'Vert', recommended: false }], answer: 'bleu' },
+      { id: 'couleur', question: 'Quelle couleur ?', options: [{ id: 'bleu', label: 'Bleu', recommended: true }, { id: 'vert', label: 'Vert', recommended: false }], answer: { kind: 'option', id: 'bleu' } },
       { id: 'taille', question: 'Quelle taille ?', options: [{ id: 's', label: 'S', recommended: false }, { id: 'm', label: 'M', recommended: false }], answer: null }
     ]);
     // A piece of news without a summary takes its first line; a parked row comes from its owner.
@@ -173,6 +173,50 @@ describe('« À toi » reading', () => {
     expect(b.asks).toHaveLength(3);
   });
 
+  it('reads a typed reply as the person\'s words, apart from an option, and never an inherited key', () => {
+    expect(answerOf({ couleur: 'bleu' }, 'couleur')).toEqual({ kind: 'option', id: 'bleu' });
+    expect(answerOf({ couleur: { kind: 'typed-reply', text: 'Plutôt vert', unansweredCount: 1 } }, 'couleur')).toEqual({ kind: 'words', text: 'Plutôt vert' });
+    expect(answerOf({}, 'constructor')).toBeNull();
+    expect(answerOf({ couleur: { kind: 'other' } }, 'couleur')).toBeNull();
+    const a = toAsk({ ...ASK, humanAnswers: { couleur: { kind: 'typed-reply', text: 'Plutôt vert', unansweredCount: 1 } } }, 'decision')!;
+    expect(a.questions.map(q => q.answer)).toEqual([{ kind: 'words', text: 'Plutôt vert' }, null]);
+  });
+
+  it('an OpenRig state Ledge could not read is not a stop: the asks known stay, partial, and nothing is answered', async () => {
+    const f = fake();
+    let st: OpenRigState = RUNNING;
+    const h = createHumanChannel({ state: async () => st, run: f.run, http: f.http });
+    await h.list();
+    st = { ...RUNNING, daemon: { state: 'unknown' } };
+    const l = await h.list();
+    expect(l).toMatchObject({ channel: { state: 'unreachable', message: "OpenRig's state is unknown" }, partial: true });
+    expect(l.asks).toHaveLength(3);
+    expect(await h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'unreachable' });
+    expect(f.calls.some(c => c.method === 'POST')).toBe(false);
+    st = { ...RUNNING, daemon: { state: 'stopped' } };
+    expect((await h.list()).asks).toEqual([]);
+  });
+
+  it('a 200 Ledge cannot read keeps what was known, partial: attention and a row alike', async () => {
+    const f = fake();
+    let garbled: 'none' | 'attention' | 'row' = 'none';
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: async (m, u, b) => {
+      if (garbled === 'attention' && u.includes('/api/attention')) return { status: 200, json: { items: 'nope' } };
+      if (garbled === 'row' && u.endsWith('/api/queue/qitem-1')) return { status: 200, json: { qitemId: 'qitem-1' } };
+      return f.http(m, u, b);
+    } });
+    await h.list();
+    garbled = 'attention';
+    expect(await h.list()).toMatchObject({ channel: { state: 'unreachable', message: 'attention answered something Ledge cannot read' }, partial: true });
+    garbled = 'row';
+    ATTENTION.items[0]!.at = '2026-11-02T19:59:00.000Z';
+    try {
+      const l = await h.list();
+      expect(l.partial).toBe(true);
+      expect(l.asks.find(a => a.id === 'qitem-1')!.body).toBe(ASK.body);
+    } finally { ATTENTION.items[0]!.at = ASK.tsUpdated; }
+  });
+
   it('reads a row again only when it changed', async () => {
     const f = fake();
     const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
@@ -228,7 +272,7 @@ describe('« À toi » reading', () => {
       emit!('43', { type: 'mission_control.action_executed' });
       await vi.advanceTimersByTimeAsync(500);
       expect(seen).toHaveLength(2);
-      expect(seen[1]!.asks.find(a => a.id === 'qitem-1')!.questions[1]!.answer).toBe('m');
+      expect(seen[1]!.asks.find(a => a.id === 'qitem-1')!.questions[1]!.answer).toEqual({ kind: 'option', id: 'm' });
       h.stop();
     } finally { ATTENTION.items[0]!.at = ASK.tsUpdated; vi.useRealTimers(); }
   });
@@ -274,7 +318,7 @@ describe('« À toi » answering', () => {
   });
 
   it('« Vu » approves a piece of news; a parked row is resolved with words', async () => {
-    const { f, h } = answering(() => ({ status: 200, json: {} }));
+    const { f, h } = answering(b => ({ status: 200, json: { actionId: 'a', verb: b.verb, qitemId: b.qitemId, closedQitem: {}, createdQitemId: null } }));
     expect(await h.answer('qitem-2', { kind: 'seen' })).toEqual({ qitemId: 'qitem-2', ok: true, outcome: 'answered' });
     expect(await h.answer('qitem-3', { kind: 'resolve', text: 'Oui, pousse' })).toEqual({ qitemId: 'qitem-3', ok: true, outcome: 'answered' });
     expect(f.calls.filter(c => c.method === 'POST').map(c => [(c.body as { verb: string }).verb, (c.body as { actorSession: string }).actorSession])).toEqual([['approve', 'ledge@external'], ['resolve', 'ledge@external']]);
@@ -317,7 +361,7 @@ describe('« À toi » answering', () => {
       'q-seat': { ...ASK, qitemId: 'q-seat', destinationSession: 'ledge@some-rig' },
       'q-park': { ...PARKED, qitemId: 'q-park', blockedOn: 'ledge@other-rig' },
       'q-bob': { ...ASK, qitemId: 'q-bob', destinationSession: 'bob@some-rig' }
-    }, post: () => ({ status: 200, json: { answer: { outcome: 'answered', unanswered: [] }, createdQitemId: 'r' } }) });
+    }, post: b => ({ status: 200, json: { verb: b.verb, qitemId: b.qitemId, answer: { outcome: 'answered', unanswered: [] }, createdQitemId: 'r' } }) });
     const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
     expect(await h.answer('q-seat', { kind: 'words', text: 'Oui' })).toMatchObject({ ok: true, outcome: 'answered' });
     expect(await h.answer('q-park', { kind: 'resolve', text: 'Oui' })).toMatchObject({ ok: true, outcome: 'answered' });
@@ -329,6 +373,27 @@ describe('« À toi » answering', () => {
     expect(samePerson('ledge@', 'ledge')).toBe(false);
   });
 
+  it('an unreadable or failed answer from OpenRig after sending is uncertain, never answered nor « not sent »', async () => {
+    for (const reply of [{ status: 200, json: { nope: true } }, { status: 200, json: undefined }, { status: 500, json: { error: 'internal_error', message: 'boom' } }, { status: 502, json: undefined }]) {
+      expect(await answering(() => reply).h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'uncertain' });
+      expect(await answering(() => reply).h.answer('qitem-2', { kind: 'seen' })).toMatchObject({ ok: false, error: 'uncertain' });
+    }
+    // An action on another row than asked is not this answer's proof either.
+    expect(await answering(() => ({ status: 200, json: { verb: 'approve', qitemId: 'other' } })).h.answer('qitem-2', { kind: 'seen' })).toMatchObject({ error: 'uncertain' });
+  });
+
+  it('several questions of the same text leave what still waits unknown rather than guessed', async () => {
+    const twins = { ...ASK, humanAnswers: {}, humanQuestions: [
+      { id: 'a', question: 'Laquelle ?', options: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }] },
+      { id: 'b', question: 'Laquelle ?', options: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }] },
+      { id: 'c', question: 'Autre ?', options: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }] }] };
+    const f = fake({ rows: { 'qitem-1': twins }, post: () => ({ status: 200, json: { answer: { outcome: 'recorded', unanswered: ['Laquelle ?'] } } }) });
+    const r = await createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http }).answer('qitem-1', { kind: 'choice', questionId: 'a', optionId: 'x' });
+    expect(r).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'recorded' });
+    const g = fake({ rows: { 'qitem-1': twins }, post: () => ({ status: 200, json: { answer: { outcome: 'recorded', unanswered: ['Autre ?'] } } }) });
+    expect(await createHumanChannel({ state: async () => RUNNING, run: g.run, http: g.http }).answer('qitem-1', { kind: 'choice', questionId: 'a', optionId: 'x' })).toMatchObject({ remaining: ['c'] });
+  });
+
   it('maps OpenRig\'s refusals', async () => {
     expect(await answering(() => ({ status: 200, json: {} })).h.answer('nope', { kind: 'seen' })).toMatchObject({ ok: false, error: 'not_found' });
     expect(answerError(409, { error: 'qitem_already_terminal', message: 'already terminal' })).toEqual({ error: 'closed', message: 'already terminal' });
@@ -336,8 +401,9 @@ describe('« À toi » answering', () => {
     expect(answerError(400, { error: 'answer_not_recorded', message: 'not an ask' })).toEqual({ error: 'refused', message: 'not an ask' });
     expect(answerError(500, {}).error).toBe('unreachable');
     expect(answerError(0, undefined).error).toBe('unreachable');
-    const { h } = answering(() => ({ status: 0, json: undefined }));
-    expect(await h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'unreachable' });
+    // Refused before it left: not sent. Lost after it may have left: uncertain, never « not sent ».
+    expect(await answering(() => ({ status: 0, json: undefined, unsent: true })).h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'unreachable' });
+    expect(await answering(() => ({ status: 0, json: undefined })).h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: false, error: 'uncertain' });
   });
 
   it('says « not sent » when OpenRig is stopped', async () => {

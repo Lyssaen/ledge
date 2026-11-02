@@ -1,4 +1,5 @@
-import { HUMAN_ASK_BODY_MAX, HUMAN_ASKS_MAX, type HumanAnswer, type HumanAnswerError, type HumanAsk, type HumanChannel, type OpenRigAnswered, type OpenRigState } from '@ledge/protocol';
+import { z } from 'zod';
+import { HUMAN_ASK_BODY_MAX, HUMAN_ASKS_MAX, type HumanAnswer, type HumanAnswerError, type HumanAsk, type HumanChannel, type HumanQuestionAnswer, type OpenRigAnswered, type OpenRigState } from '@ledge/protocol';
 import { log } from '../log.js';
 import type { RigRun } from './openrig.js';
 
@@ -10,8 +11,9 @@ import type { RigRun } from './openrig.js';
  * no seat header, so OpenRig records the person as the actor, returns the answer to the asking seat and wakes it.
  */
 
-/** The OpenRig daemon's answer to one HTTP call: `status` 0 when it could not be reached. */
-export type RigHttp = (method: 'GET' | 'POST', url: string, body?: unknown) => Promise<{ status: number; json: unknown }>;
+/** The OpenRig daemon's answer to one HTTP call: `status` 0 when none came; `unsent` then when the request surely never left (the
+ *  connection was refused), as opposed to a timeout or a dropped connection, after which it may have been acted on. */
+export type RigHttp = (method: 'GET' | 'POST', url: string, body?: unknown) => Promise<{ status: number; json: unknown; unsent?: boolean }>;
 /** Follows an SSE stream: `onEvent` for each event (its `id` and parsed `data`); resolves when the stream ends or fails. */
 export type RigSse = (url: string, lastEventId: string | null, onEvent: (id: string | null, data: unknown) => void, signal: AbortSignal) => Promise<void>;
 
@@ -49,8 +51,29 @@ export const fetchHttp: RigHttp = async (method, url, body) => {
       ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
     });
     return { status: res.status, json: parse(await res.text()) };
-  } catch { return { status: 0, json: undefined }; }
+  } catch (e) {
+    const code = str(obj(obj(e).cause).code);
+    return { status: 0, json: undefined, ...(code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'EAI_AGAIN' ? { unsent: true } : {}) };
+  }
 };
+
+// What Ledge needs of OpenRig's answers, checked before use: an HTTP 200 whose body is not this is unreadable, never an empty answer.
+// Fields beyond these are kept (OpenRig's JSON grows between versions).
+const AttentionShape = z.object({
+  perspective: z.object({ actingAs: z.object({ person: z.string().nullable() }).passthrough() }).passthrough().optional(),
+  items: z.array(z.object({ id: z.string() }).passthrough()),
+  sources: z.array(z.object({ source: z.string(), state: z.string() }).passthrough()).optional()
+}).passthrough();
+const RowShape = z.object({
+  qitemId: z.string(), state: z.string(), body: z.string(), sourceSession: z.string(), destinationSession: z.string(),
+  tsCreated: z.string(), tsUpdated: z.string()
+}).passthrough();
+const AnswerShape = z.object({
+  answer: z.object({ outcome: z.enum(['recorded', 'answered']), unanswered: z.array(z.string()), message: z.string().optional() }).passthrough(),
+  createdQitemId: z.string().nullable().optional()
+}).passthrough();
+/** `approve` and `resolve` answer with the action done on that row. */
+const ActedShape = z.object({ verb: z.string(), qitemId: z.string() }).passthrough();
 
 /** A minimal SSE reader: `id:` and `data:` lines, events separated by a blank line. */
 export const fetchSse: RigSse = async (url, lastEventId, onEvent, signal) => {
@@ -83,13 +106,24 @@ export function seatParts(seat: string): { rig: string | null; role: string | nu
 const PRIORITIES = new Set(['routine', 'urgent', 'critical']);
 const RANK: Record<HumanAsk['priority'], number> = { critical: 0, urgent: 1, routine: 2 };
 
+/** A recorded answer as OpenRig keeps it in `humanAnswers`: an option id, or the person's typed reply `{ kind: 'typed-reply', text }`.
+ *  Own keys only, as OpenRig reads them: a question id like `constructor` never reads an inherited member. */
+export function answerOf(answers: unknown, questionId: string): HumanQuestionAnswer | null {
+  const a = obj(answers);
+  if (!Object.hasOwn(a, questionId)) return null;
+  const v = a[questionId];
+  if (typeof v === 'string') return { kind: 'option', id: v };
+  const o = obj(v);
+  return o.kind === 'typed-reply' && typeof o.text === 'string' ? { kind: 'words', text: o.text } : null;
+}
+
 /** One OpenRig row (`GET /api/queue/<id>`) as « À toi » shows it; null when it is not something waiting on a person. */
 export function toAsk(raw: unknown, kind: HumanAsk['kind']): HumanAsk | null {
   const q = obj(raw);
   const id = str(q.qitemId), body = str(q.body) ?? '';
   if (!id) return null;
   const seat = (kind === 'parked' ? str(q.destinationSession) : str(q.sourceSession)) ?? 'unknown';
-  const answers = obj(q.humanAnswers);
+  const answers = q.humanAnswers;
   const questions = (Array.isArray(q.humanQuestions) ? q.humanQuestions : []).flatMap(x => {
     const o = obj(x), qid = str(o.id), question = str(o.question);
     if (!qid || !question) return [];
@@ -97,7 +131,7 @@ export function toAsk(raw: unknown, kind: HumanAsk['kind']): HumanAsk | null {
       const p = obj(y), oid = str(p.id), label = str(p.label);
       return oid && label ? [{ id: oid, label, recommended: p.recommended === true }] : [];
     });
-    return [{ id: qid, question, options, answer: str(answers[qid]) }];
+    return [{ id: qid, question, options, answer: answerOf(answers, qid) }];
   });
   const priority = str(q.priority);
   return {
@@ -116,12 +150,12 @@ export function fromAttention(raw: unknown, kind: HumanAsk['kind']): HumanAsk | 
   const i = obj(raw), ref = attentionRef(raw);
   if (!ref) return null;
   const seat = str(i.asker) ?? 'unknown', summary = str(i.summary) ?? ref.id, at = str(i.at) ?? '';
-  const answers = obj(i.humanAnswers), urgency = str(i.urgency);
+  const answers = i.humanAnswers, urgency = str(i.urgency);
   const questions = (Array.isArray(i.humanQuestions) ? i.humanQuestions : []).flatMap(x => {
     const o = obj(x), qid = str(o.id), question = str(o.question);
     if (!qid || !question) return [];
     const options = (Array.isArray(o.options) ? o.options : []).flatMap(y => { const p = obj(y), oid = str(p.id), label = str(p.label); return oid && label ? [{ id: oid, label, recommended: p.recommended === true }] : []; });
-    return [{ id: qid, question, options, answer: str(answers[qid]) }];
+    return [{ id: qid, question, options, answer: answerOf(answers, qid) }];
   });
   return { id: ref.id, kind, alert: false, priority: urgency && PRIORITIES.has(urgency) ? urgency as HumanAsk['priority'] : 'routine',
     from: { seat, ...seatParts(seat) }, summary, body: summary, bodyTruncated: true, detail: null, evidenceRef: null, questions, createdAt: at, updatedAt: at };
@@ -154,6 +188,7 @@ export function answerError(status: number, json: unknown): { error: HumanAnswer
   if (code === 'qitem_already_terminal') return { error: 'closed', message };
   if (code === 'answer_not_closed') return { error: 'not_closed', message };
   if (status >= 500) return { error: 'unreachable', message: message ?? `OpenRig answered HTTP ${status}` };
+  if (status === 200) return { error: 'unreachable', message: 'OpenRig answered something Ledge cannot read' };
   return { error: 'refused', message: message ?? code ?? `OpenRig answered HTTP ${status}` };
 }
 
@@ -174,7 +209,9 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     const st = await deps.state();
     const none = (state: HumanChannel['state'], message?: string) => ({ channel: { state, person: null, slack: false, ...(message ? { message } : {}) } });
     if (!st.installed) return none('not_installed');
-    if (st.daemon.state !== 'running') return none('openrig_stopped');
+    // Only a stop OpenRig confirms is one: `rig status` failing or printing nothing readable (`unknown`, `stale`) is not knowing.
+    if (st.daemon.state === 'stopped') return none('openrig_stopped');
+    if (st.daemon.state !== 'running') return none('unreachable', `OpenRig's state is ${st.daemon.state}`);
     if (!st.daemon.port) return none('unreachable', 'OpenRig did not say its port');
     return { url: `http://127.0.0.1:${st.daemon.port}` };
   };
@@ -198,7 +235,7 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     if (kept && at && kept.at === at) return { row: kept.row };
     const r = await http('GET', `${url}/api/queue/${encodeURIComponent(id)}`);
     if (r.status === 404) return 'gone';
-    if (r.status !== 200) return 'failed';
+    if (r.status !== 200 || !RowShape.safeParse(r.json).success) return 'failed';
     rows.set(id, { at: str(obj(r.json).tsUpdated) ?? at ?? '', row: r.json });
     return { row: r.json };
   };
@@ -223,8 +260,9 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     // `view=default`: the default person's queue only. Without it OpenRig's Feed shows every registered person's asks, and an answer
     // here would settle someone else's with the primary user's authority.
     const a = await http('GET', `${b.url}/api/attention?view=default`);
-    if (a.status !== 200) {
-      const channel: HumanChannel = { state: 'unreachable', person: null, slack: false, message: a.status ? `attention answered HTTP ${a.status}` : "OpenRig's daemon did not answer" };
+    if (a.status !== 200 || !AttentionShape.safeParse(a.json).success) {
+      const message = a.status === 200 ? 'attention answered something Ledge cannot read' : a.status ? `attention answered HTTP ${a.status}` : "OpenRig's daemon did not answer";
+      const channel: HumanChannel = { state: 'unreachable', person: null, slack: false, message };
       return sorted(channel, [...known.values()], known.size > 0);
     }
     const perspective = obj(obj(a.json).perspective);
@@ -301,7 +339,7 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     const b = await base();
     if ('channel' in b) return { qitemId, ok: false, error: b.channel.state === 'openrig_stopped' ? 'openrig_stopped' : 'unreachable', message: b.channel.message ?? b.channel.state };
     const r = await http('GET', `${b.url}/api/queue/${encodeURIComponent(qitemId)}`);
-    if (r.status !== 200) return { qitemId, ok: false, ...answerError(r.status, r.json) };
+    if (r.status !== 200 || !RowShape.safeParse(r.json).success) return { qitemId, ok: false, ...answerError(r.status, r.json) };
     const q = obj(r.json), intent = str(q.humanIntent), state = str(q.state) ?? '';
     const parked = state === 'blocked';
     const fits = ans.kind === 'seen' ? intent === 'update' : ans.kind === 'resolve' ? parked : intent !== 'update' && !parked;
@@ -326,18 +364,29 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     if (!actorSession || !samePerson(actorSession, entityId)) return { qitemId, ok: false, error: 'refused', message: `this row is not addressed to ${me.address}` };
     const res = await http('POST', `${b.url}/api/mission-control/action`, { ...action, qitemId, actorSession, authority: 'primary-user', auditNotes: { client: 'ledge' } });
     soon();
+    // Once the request may have left, only OpenRig's own readable answer says what happened: a lost answer (timeout, dropped connection),
+    // a server error or an unreadable 200 is `uncertain`, never « sent » nor « not sent ». Sending again is safe: OpenRig records an
+    // answer once and says so.
+    const uncertain = (message: string) => ({ qitemId, ok: false, error: 'uncertain' as const, message });
+    if (res.status === 0) return res.unsent ? { qitemId, ok: false, error: 'unreachable' as const, message: "OpenRig's daemon refused the connection" } : uncertain("OpenRig's answer was lost");
+    if (res.status >= 500) return uncertain(str(obj(res.json).message) ?? `OpenRig answered HTTP ${res.status}`);
     if (res.status !== 200) return { qitemId, ok: false, ...answerError(res.status, res.json) };
-    const out = obj(res.json), told = obj(out.answer), replyId = str(out.createdQitemId) ?? undefined;
-    if (ans.kind === 'seen' || ans.kind === 'resolve') return { qitemId, ok: true, outcome: 'answered' };
-    if (str(told.outcome) === 'recorded') {
-      // OpenRig names what still waits by its questions' text: their ids come from the row read before answering, no second read. A
-      // text it does not find leaves `remaining` out (unknown), never an empty list that would say nothing waits.
-      const waiting = Array.isArray(told.unanswered) ? told.unanswered.map(str) : null;
-      const questions = toAsk(r.json, 'decision')?.questions ?? [];
-      const ids = waiting?.map(t => questions.find(x => x.question === t)?.id ?? null) ?? null;
-      return { qitemId, ok: true, outcome: 'recorded', ...(ids && ids.length && ids.every(Boolean) ? { remaining: ids as string[] } : {}) };
+    if (ans.kind === 'seen' || ans.kind === 'resolve') {
+      const acted = ActedShape.safeParse(res.json);
+      return acted.success && acted.data.qitemId === qitemId ? { qitemId, ok: true, outcome: 'answered' } : uncertain('OpenRig answered something Ledge cannot read');
     }
-    const already = (str(told.message) ?? '').startsWith('Already answered');
+    const parsed = AnswerShape.safeParse(res.json);
+    if (!parsed.success) return uncertain('OpenRig answered something Ledge cannot read');
+    const told = parsed.data.answer, replyId = parsed.data.createdQitemId ?? undefined;
+    if (told.outcome === 'recorded') {
+      // OpenRig names what still waits by its questions' text: their ids come from the row read before answering, no second read. A text
+      // it does not find, or one several questions share, leaves `remaining` out (unknown), never a guess nor an empty list.
+      const questions = toAsk(r.json, 'decision')?.questions ?? [];
+      const ids = told.unanswered.map(t => { const same = questions.filter(x => x.question === t); return same.length === 1 ? same[0]!.id : null; });
+      const known = ids.length > 0 && ids.every(Boolean) && new Set(ids).size === ids.length;
+      return { qitemId, ok: true, outcome: 'recorded', ...(known ? { remaining: ids as string[] } : {}) };
+    }
+    const already = (told.message ?? '').startsWith('Already answered');
     return { qitemId, ok: true, outcome: already ? 'already' : 'answered', ...(replyId ? { replyId } : {}) };
   };
 

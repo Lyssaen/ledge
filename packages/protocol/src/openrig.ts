@@ -238,11 +238,17 @@ export const HUMAN_ASK_BODY_MAX = 16_000;
 /** At most this many open requests are sent, the most recent first. */
 export const HUMAN_ASKS_MAX = 200;
 
-/** A question with buttons (`--human-questions-file`): `answer` is the option chosen, or the words given, null while it waits. */
+/** A question's answer: the option chosen (`option`, its id), or the person's own words (`words`, OpenRig's typed reply); null while it waits. */
+export const HumanQuestionAnswerSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('option'), id: z.string() }),
+  z.object({ kind: z.literal('words'), text: z.string() })
+]);
+export type HumanQuestionAnswer = z.infer<typeof HumanQuestionAnswerSchema>;
+/** A question with buttons (`--human-questions-file`). */
 export const HumanQuestionSchema = z.object({
   id: z.string(), question: z.string(),
   options: z.array(z.object({ id: z.string(), label: z.string(), recommended: z.boolean() })),
-  answer: z.string().nullable()
+  answer: HumanQuestionAnswerSchema.nullable()
 });
 /** One open OpenRig row for the person. `decision`: an ask addressed to them; `update`: a piece of news, closed by « Vu »;
  *  `parked`: a seat's own row blocked on them, settled with their words. `from.seat`: who asked (the parked row's owner). */
@@ -292,8 +298,9 @@ export const OpenRigAnswerSchema = z.object({
 });
 /** Why an answer was not taken. `closed`: the row is already closed (drop it, no retry); `not_closed`: the answer went back but the
  *  row changed meanwhile (retry is safe); `refused`: OpenRig refused it (`message` says why); `unreachable` / `openrig_stopped`: not
- *  sent, retry; `offline` / `outdated`: the fleet's. */
-export const HumanAnswerErrorSchema = z.enum(['not_found', 'closed', 'refused', 'not_closed', 'unreachable', 'openrig_stopped', 'offline', 'outdated']);
+ *  sent, retry; `uncertain`: it may have gone (OpenRig's answer was lost or unreadable): sending it again is safe and says what became
+ *  of it; `offline` / `outdated`: the fleet's. */
+export const HumanAnswerErrorSchema = z.enum(['not_found', 'closed', 'refused', 'not_closed', 'unreachable', 'openrig_stopped', 'uncertain', 'offline', 'outdated']);
 export type HumanAnswerError = z.infer<typeof HumanAnswerErrorSchema>;
 /** An answer's end. `recorded`: a choice kept, other questions wait (`remaining`, their ids; absent when they could not be told); `answered`: returned to the seat as `replyId`, which
  *  is woken, and the row closed; `already`: answered before, nothing new went. Retrying is sending the same answer again. */
