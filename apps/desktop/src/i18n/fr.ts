@@ -792,6 +792,7 @@ export const fr = {
       // `unknown` : seul un historique écrit avant le lot 6b le porte (un Decided sans décision ne marque plus de permission).
       decided: { accept: 'Accordé', always: 'Toujours autorisé', deny: 'Refusé', unknown: 'Répondu dans le terminal', denyByClose: 'Refusé par la fermeture' } as Record<'accept' | 'always' | 'deny' | 'unknown' | 'denyByClose', string>,
       questionByClose: 'Refusée par la fermeture',
+      captureDropped: 'Capture trop lourde pour Ledge',
       seeChange: 'Voir la modification', seeChangeShort: 'Voir',
       read: 'Lire',
       unread: 'Nouveau depuis votre dernière visite', latest: 'Aller au dernier message',
@@ -849,6 +850,14 @@ export const fr = {
       to: 'À', from: 'De', seeTheirs: 'voir son fil', seen: 'lu'
     },
     /** The « Conversation » tab: the exchange between this agent and one other, merged from both threads, in the side pane. */
+    /** The « Navigateur » tab: the captures the thread's tool rows hold. */
+    browser: {
+      tab: 'Navigateur', pill: (n: number) => `Navigateur, ${plural(n, '1 capture', `${n} captures`)}`,
+      compare: 'Comparer', compareOn: 'Comparaison · Quitter', pick: 'Choisis les deux captures à comparer',
+      enlarge: 'Agrandir', inThread: 'dans le fil',
+      count: (n: number, x: number) => `${plural(n, `${n} capture`, `${n} captures`)} · ${plural(x, `${x} échange`, `${x} échanges`)}`,
+      none: 'Plus aucune capture dans le fil'
+    },
     conversation: {
       follow: 'suivre la conversation',
       followTitle: (b: string) => `Suivre la conversation avec ${b} à côté du fil`,

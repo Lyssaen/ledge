@@ -10,3 +10,4 @@ target/
 
 # Local state of the oh-my-claudecode tool
 .omc/
+.playwright-mcp/

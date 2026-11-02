@@ -5,6 +5,8 @@ import { MESSAGE_MAX, PROTOCOL_PORT, SUMMARY_MAX, parseServerMessage, type Clien
 export interface Client {
   send(msg: ClientMessage): void;
   next<T extends ServerMessage['type']>(type: T, timeoutMs?: number): Promise<Extract<ServerMessage, { type: T }>>;
+  /** The first message of any of `types`, in arrival order. */
+  nextOf<T extends ServerMessage['type']>(types: readonly T[], timeoutMs?: number): Promise<Extract<ServerMessage, { type: T }>>;
   /** Resolves once the close handshake completes (so queued sends are flushed). */
   close(): Promise<void>;
 }
@@ -29,21 +31,22 @@ export function connect(opts: { port?: number; host?: string; timeoutMs?: number
   const ws = new WebSocket(`ws://${host}:${port}`, token ? { headers: { authorization: `Bearer ${token}` } } : {});
   const queue: ServerMessage[] = [];
   const MAX_QUEUED = 100;
-  const waiters: Array<{ type: string; resolve: (m: ServerMessage) => void }> = [];
+  const waiters: Array<{ types: readonly string[]; resolve: (m: ServerMessage) => void }> = [];
   ws.on('message', data => {
     let msg: ServerMessage;
     try { msg = parseServerMessage(JSON.parse(String(data))); } catch { return; }
-    const i = waiters.findIndex(w => w.type === msg.type);
+    const i = waiters.findIndex(w => w.types.includes(msg.type));
     if (i >= 0) waiters.splice(i, 1)[0]!.resolve(msg); else { queue.push(msg); if (queue.length > MAX_QUEUED) queue.shift(); }
   });
   const client: Client = {
     send: msg => ws.send(JSON.stringify(msg)),
-    next(type, timeoutMs = 1500) {
-      const i = queue.findIndex(m => m.type === type);
+    next(type, timeoutMs = 1500) { return client.nextOf([type], timeoutMs); },
+    nextOf(types, timeoutMs = 1500) {
+      const i = queue.findIndex(m => types.includes(m.type as never));
       if (i >= 0) return Promise.resolve(queue.splice(i, 1)[0] as never);
       return new Promise((resolve, reject) => {
-        const w = { type, resolve: (m: ServerMessage) => { clearTimeout(t); resolve(m as never); } };
-        const t = setTimeout(() => { waiters.splice(waiters.indexOf(w), 1); reject(new Error(`timeout waiting for ${type}`)); }, timeoutMs);
+        const w = { types, resolve: (m: ServerMessage) => { clearTimeout(t); resolve(m as never); } };
+        const t = setTimeout(() => { waiters.splice(waiters.indexOf(w), 1); reject(new Error(`timeout waiting for ${types.join(' or ')}`)); }, timeoutMs);
         waiters.push(w);
       });
     },

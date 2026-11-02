@@ -4,7 +4,10 @@ import { defineConfig } from 'tsup';
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 export default defineConfig({
-  entry: ['src/cli/index.ts'],
+  // The reduce worker is its own file beside the CLI (daemon/captureReducer.ts starts `./reduceWorker.js` from the bundle);
+  // no splitting, so each stays one self-contained file.
+  entry: { index: 'src/cli/index.ts', reduceWorker: 'src/daemon/reduceWorker.ts' },
+  splitting: false,
   format: ['esm'],
   target: 'node22',
   outDir: 'dist/cli',

@@ -591,6 +591,28 @@ describe('History images on prompts', () => {
   });
 });
 
+describe('History images on tool rows', () => {
+  const id = 'e'.repeat(64);
+  const ref: AttachmentRef = { id, mime: 'image/jpeg', width: 1600, height: 1000, bytes: 100, preview: true };
+  const shot = (h: History, extra: Partial<SessionEvent> = {}) => {
+    h.record('s1', ev('PreToolUse', { tool: 'mcp__playwright__browser_take_screenshot', toolUseId: 'u1' }));
+    return h.record('s1', ev('PostToolUse', { tool: 'mcp__playwright__browser_take_screenshot', toolUseId: 'u1', ...extra }, 1));
+  };
+  it('PostToolUse with attachments puts images on the row, skipping unknown ids', () => {
+    const h = new History({ refOf: x => (x === id ? ref : null) });
+    expect(shot(h, { attachments: [id, 'f'.repeat(64)], imagesDropped: true })).toMatchObject({ kind: 'tool', id: 'u1', images: [ref], imagesDropped: true });
+  });
+  it('adds no images key without known attachments', () => {
+    const h = new History({ refOf: () => null });
+    expect(shot(h, { attachments: [id] })).not.toHaveProperty('images');
+  });
+  it('keeps a tool row image through the sweep', async () => {
+    const h = new History({ dir: join(dir, 'h'), refOf: x => (x === id ? ref : null) });
+    shot(h, { attachments: [id] });
+    expect(await h.attachmentIds()).toContain(id);
+  });
+});
+
 describe('History.attachmentIds', () => {
   it('finds the images a previous run journaled on a prompt', async () => {
     const id = 'a'.repeat(64); const other = 'b'.repeat(64);

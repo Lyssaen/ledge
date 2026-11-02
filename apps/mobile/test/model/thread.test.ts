@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PhoneSession, ThreadItem } from '@ledge/protocol';
+import type { AttachmentRef, PhoneSession, ThreadItem } from '@ledge/protocol';
 import { composerState, threadItems } from '../../src/model/thread';
 import type { Op } from '../../src/state/operations';
 import { pending, session } from './fixtures';
@@ -127,5 +127,16 @@ describe('threadItems with images', () => {
   it('an unmatched own op carries its attachment ids', () => {
     const items = threadItems([], s(), ops({ ...withImages([IMG.id]), phase: 'sending' }));
     expect(items[0]).toMatchObject({ kind: 'me', delivery: 'sending', attachments: [IMG.id] });
+  });
+
+  it('makes a capture entry only for tool rows with images', () => {
+    const REF: AttachmentRef = { id: 'c'.repeat(64), mime: 'image/png', width: 1280, height: 800, bytes: 30_000, preview: true };
+    const toolRow = (id: string, extra: Partial<Extract<ThreadItem, { kind: 'tool' }>> = {}): ThreadItem =>
+      ({ kind: 'tool', ...base(id, 1), tool: 'mcp__plugin_playwright_playwright__browser_take_screenshot', label: 'shot', status: 'success', files: [], ...extra });
+    const out = threadItems([toolRow('t1'), toolRow('t2', { images: [REF] }), toolRow('t3', { imagesDropped: true }), toolRow('t4', { tool: 'mcp__x__snap', images: [REF] })], s(), {});
+    expect(out.filter(i => i.kind === 'capture')).toEqual([
+      { key: 't2', kind: 'capture', label: 'Capture', at: T(1), images: [REF] },
+      { key: 't4', kind: 'capture', label: 'snap', at: T(1), images: [REF] }
+    ]);
   });
 });

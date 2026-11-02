@@ -9,6 +9,8 @@ import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
+import { BrowserTab, type CaptureFocus } from './BrowserTab';
+import type { Capture } from './captures';
 import { findFile, nameOf, relativeTo, type ChangedFile } from './changedFiles';
 import { ConversationTab } from './ConversationTab';
 import { Delta, FileDiffs } from './DiffView';
@@ -17,8 +19,9 @@ import type { PlanDoc } from './exchanges';
 import type { ConversationView } from './useConversations';
 import { useDocument } from './useDocument';
 
-export type PaneTab = { kind: 'doc'; path: string } | { kind: 'diff'; path: string } | { kind: 'plan'; key: string } | { kind: 'conv'; peer: string };
-export const tabId = (t: PaneTab): string => `${t.kind}:${t.kind === 'plan' ? t.key : t.kind === 'conv' ? t.peer : t.path}`;
+export type PaneTab = { kind: 'doc'; path: string } | { kind: 'diff'; path: string } | { kind: 'plan'; key: string } | { kind: 'conv'; peer: string } | { kind: 'browser' };
+/** One « Navigateur » tab per page: 'browser'. */
+export const tabId = (t: PaneTab): string => (t.kind === 'browser' ? 'browser' : `${t.kind}:${t.kind === 'plan' ? t.key : t.kind === 'conv' ? t.peer : t.path}`);
 
 /** A plan the pane can show, by its key (a card's action id, or 'pending' for the request's own). */
 export interface PanePlan {
@@ -67,6 +70,10 @@ export interface SidePaneProps {
   onLight(id: string, covered: boolean): void;
   /** « voir son fil »: the peer's page, on `item` when given. */
   onOpenPeer(peer: Session, item?: string): void;
+  /** The « Navigateur » tab: the page's captures, where it is asked to open, a subagent's name by its id. */
+  captures: readonly Capture[]; captureFocus: CaptureFocus; helperName(id: string): string | undefined;
+  /** « dans le fil » on a capture: its tool row lit in the thread; `covered` as for onLight. */
+  onShowInThread(toolId: string, covered: boolean): void;
 }
 
 /** The side pane (session.tsx `sidePane`, `paneDoc`, `dragSplit`): the handle, then the documents and changes opened beside
@@ -81,13 +88,14 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
   // A change is named by its file as it is now (a renamed one by its new name), below the cwd.
   const plan = (key: string) => p.plans.get(key);
   const pathOf = (x: PaneTab) => {
-    if (x.kind === 'conv') return '';
+    if (x.kind === 'conv' || x.kind === 'browser') return '';
     if (x.kind !== 'plan') return x.kind === 'doc' ? x.path : shownOf(files, x.path, session.cwd);
     const by = plan(x.key)?.by;
     return by === undefined ? '' : t.session.plan.by(by);
   };
   const labelOf = (x: PaneTab) => (x.kind === 'doc' ? nameOf(x.path) : x.kind === 'diff' ? tp.diffLabel(nameOf(pathOf(x)))
     : x.kind === 'conv' ? t.session.conversation.tab(p.convs.get(x.peer)?.name ?? x.peer)
+    : x.kind === 'browser' ? t.session.browser.tab
     : t.session.plan.tab(plan(x.key)?.plan.title || t.session.plan.fallback));
 
   // Dragged: the pane takes what is right of the pointer (the pointer captured, so leaving the handle does not let go); the
@@ -120,10 +128,10 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
       </Button>
     </>
   );
-  const head = (title: string, path: string) => (
+  const head = (title: string, path: string, extra?: ReactNode) => (
     <div className="side-head">
       <span className="side-title"><strong>{title}</strong>{path && <code title={path}>{path}</code>}</span>
-      {buttons}
+      {extra}{buttons}
     </div>
   );
   // In the narrow layout the pane is laid over the thread (session.css: @container session ≤ 860 px).
@@ -147,7 +155,7 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
                 <div key={id} className={cls('pane-tab', id === active && 'current')}>
                   <button type="button" role="tab" aria-selected={id === active} onClick={() => p.onActive(id)} title={pathOf(x) || undefined}
                     aria-label={view && unseen > 0 ? t.session.conversation.tabNew(view.name, unseen) : undefined}>
-                    <Icon d={x.kind === 'diff' ? SHELL_ICONS.diff : x.kind === 'plan' ? SHELL_ICONS.plan : x.kind === 'conv' ? SHELL_ICONS.mail : SHELL_ICONS.file} size={12} /><span>{label}</span>
+                    <Icon d={x.kind === 'diff' ? SHELL_ICONS.diff : x.kind === 'plan' ? SHELL_ICONS.plan : x.kind === 'conv' ? SHELL_ICONS.mail : x.kind === 'browser' ? SHELL_ICONS.browser : SHELL_ICONS.file} size={12} /><span>{label}</span>
                     {unseen > 0 && <i className="conv-tab-dot" aria-hidden="true" />}
                   </button>
                   <button type="button" className="tab-close" aria-label={tp.closeTab(label)} onClick={() => p.onClose(id)}><Icon d={ICONS.close.d} size={11} /></button>
@@ -160,6 +168,8 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
         {tab.kind === 'doc' ? <DocTab key={active} path={tab.path} head={head} session={session} client={p.client} onDocument={p.onDocument} />
           : tab.kind === 'diff' ? <DiffTab key={active} path={tab.path} head={head} files={files} cwd={session.cwd} onAllChanges={p.onAllChanges} />
           : tab.kind === 'plan' ? <PlanTab key={active} entry={plan(tab.key)} path={pathOf(tab)} head={head} onDocument={p.onDocument} />
+          : tab.kind === 'browser' ? <BrowserTab key={active} captures={p.captures} focus={p.captureFocus} client={p.client} session={session} helperName={p.helperName}
+              head={head} onShowInThread={id => p.onShowInThread(id, covered())} onClose={() => p.onClose(active)} />
           : conv && <ConversationTab key={active} self={session} view={conv} buttons={buttons}
               onLight={id => p.onLight(id, covered())} onOpenPeer={item => conv.peer && p.onOpenPeer(conv.peer, item)} />}
       </aside>

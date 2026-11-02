@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClientMessage, parseServerMessage, AttachmentRefSchema, b64Max, ATTACHMENT_MAX, ATTACHMENT_LOCAL_MAX } from '../src/index.js';
+import { parseClientMessage, parseServerMessage, AttachmentRefSchema, b64Max, ATTACHMENT_MAX, ATTACHMENT_LOCAL_MAX, CAPTURE_RAW_MAX, AttachmentCaptureSchema } from '../src/index.js';
 
 const ID = 'a'.repeat(64);
 
@@ -39,5 +39,13 @@ describe('attachments', () => {
     expect(b64Max(3)).toBe(4);
     expect(b64Max(4)).toBe(8);
     expect(Buffer.from(Buffer.alloc(ATTACHMENT_MAX)).toString('base64').length).toBeLessThanOrEqual(b64Max(ATTACHMENT_MAX));
+  });
+});
+
+describe('attachment.capture', () => {
+  it('accepts a capture up to CAPTURE_RAW_MAX', () => {
+    const data = 'A'.repeat(b64Max(CAPTURE_RAW_MAX));
+    expect(AttachmentCaptureSchema.safeParse({ type: 'attachment.capture', requestId: 'r1', image: { mime: 'image/png', data } }).success).toBe(true);
+    expect(AttachmentCaptureSchema.safeParse({ type: 'attachment.capture', requestId: 'r1', image: { mime: 'image/png', data: data + 'AAAA' } }).success).toBe(false);
   });
 });

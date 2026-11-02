@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import type { ThreadItem } from '@ledge/protocol';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { AttachmentRef, ThreadItem } from '@ledge/protocol';
 import { describe, expect, it } from 'vitest';
 import { Thread } from '../../src/screens/Thread';
 import { pending, session } from '../model/fixtures';
@@ -109,5 +109,17 @@ describe('the checklist on the thread', () => {
     const t = flagged(false);
     act(() => t.deliver({ type: 'session.checklist', id: 'a', checklist }));
     expect(screen.queryByRole('button', { name: /Plan de travail/ })).not.toBeInTheDocument();
+  });
+
+  it('shows the capture line and thumbnail, opening full screen on tap', async () => {
+    const REF: AttachmentRef = { id: 'c'.repeat(64), mime: 'image/png', width: 1280, height: 800, bytes: 30_000, preview: true };
+    const t = opened();
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [{ kind: 'tool', id: 't2', at: '2026-10-14T10:00:00.000Z', turn: 1, tool: 'mcp__plugin_playwright_playwright__browser_take_screenshot', label: 'shot', status: 'success', files: [], images: [REF] }], cut: [], more: false }));
+    expect(screen.getByText('Capture')).toBeVisible();
+    expect(screen.getByText('1280×800')).toBeVisible();
+    await waitFor(() => expect(t.of('attachment.get')).toHaveLength(1));
+    act(() => t.deliver({ type: 'attachment.data', requestId: t.of('attachment.get')[0]!.requestId, attachment: REF.id, mime: 'image/png', data: 'AAAA' }));
+    fireEvent.click(await waitFor(() => { const el = document.querySelector<HTMLElement>('[data-thumb=ready]'); expect(el).not.toBeNull(); return el!; }));
+    expect(screen.getByRole('dialog')).toBeVisible();
   });
 });
