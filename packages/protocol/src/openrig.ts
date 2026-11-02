@@ -295,7 +295,7 @@ export const OpenRigAnswerSchema = z.object({
  *  sent, retry; `offline` / `outdated`: the fleet's. */
 export const HumanAnswerErrorSchema = z.enum(['not_found', 'closed', 'refused', 'not_closed', 'unreachable', 'openrig_stopped', 'offline', 'outdated']);
 export type HumanAnswerError = z.infer<typeof HumanAnswerErrorSchema>;
-/** An answer's end. `recorded`: a choice kept, other questions wait (`remaining`); `answered`: returned to the seat as `replyId`, which
+/** An answer's end. `recorded`: a choice kept, other questions wait (`remaining`, their ids; absent when they could not be told); `answered`: returned to the seat as `replyId`, which
  *  is woken, and the row closed; `already`: answered before, nothing new went. Retrying is sending the same answer again. */
 export const OpenRigAnsweredSchema = z.object({
   type: z.literal('openrig.answered'), requestId: z.string(), machineId: z.string().optional(), qitemId: z.string(), ok: z.boolean(),

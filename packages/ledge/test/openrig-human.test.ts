@@ -249,6 +249,19 @@ describe('« À toi » answering', () => {
       body: { verb: 'answer', questionId: 'couleur', optionId: 'bleu', qitemId: 'qitem-1', actorSession: 'ledge@external', authority: 'primary-user', auditNotes: { client: 'ledge' } } });
   });
 
+  it('what still waits comes from OpenRig\'s answer and the row read before, never from a second read; unknown stays unknown', async () => {
+    let after = false;
+    const f = fake({ detail: id => (after && id === 'qitem-1' ? { status: 503, json: {} } : undefined),
+      post: () => { after = true; return { status: 200, json: { answer: { outcome: 'recorded', unanswered: ['Quelle taille ?'] } } }; } });
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
+    expect(await h.answer('qitem-1', { kind: 'choice', questionId: 'couleur', optionId: 'bleu' })).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'recorded', remaining: ['taille'] });
+    // Nothing is read after the answer went (the reads before it check the row and who the person is).
+    expect(f.calls.slice(f.calls.findIndex(c => c.method === 'POST') + 1)).toEqual([]);
+    const g = fake({ post: () => ({ status: 200, json: { answer: { outcome: 'recorded', unanswered: ['Une question que la ligne ne porte pas'] } } }) });
+    const r = await createHumanChannel({ state: async () => RUNNING, run: g.run, http: g.http }).answer('qitem-1', { kind: 'choice', questionId: 'couleur', optionId: 'bleu' });
+    expect(r).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'recorded' });
+  });
+
   it('the last answer goes back to the seat: answered, with the reply row', async () => {
     const { f, h } = answering(() => ({ status: 200, json: { answer: { outcome: 'answered', unanswered: [] }, createdQitemId: 'qitem-reply' } }));
     expect(await h.answer('qitem-1', { kind: 'words', text: 'Plutôt vert' })).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'answered', replyId: 'qitem-reply' });

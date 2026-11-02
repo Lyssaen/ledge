@@ -330,8 +330,12 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     const out = obj(res.json), told = obj(out.answer), replyId = str(out.createdQitemId) ?? undefined;
     if (ans.kind === 'seen' || ans.kind === 'resolve') return { qitemId, ok: true, outcome: 'answered' };
     if (str(told.outcome) === 'recorded') {
-      const after = toAsk((await http('GET', `${b.url}/api/queue/${encodeURIComponent(qitemId)}`)).json, 'decision');
-      return { qitemId, ok: true, outcome: 'recorded', remaining: after?.questions.filter(x => x.answer === null).map(x => x.id) ?? [] };
+      // OpenRig names what still waits by its questions' text: their ids come from the row read before answering, no second read. A
+      // text it does not find leaves `remaining` out (unknown), never an empty list that would say nothing waits.
+      const waiting = Array.isArray(told.unanswered) ? told.unanswered.map(str) : null;
+      const questions = toAsk(r.json, 'decision')?.questions ?? [];
+      const ids = waiting?.map(t => questions.find(x => x.question === t)?.id ?? null) ?? null;
+      return { qitemId, ok: true, outcome: 'recorded', ...(ids && ids.length && ids.every(Boolean) ? { remaining: ids as string[] } : {}) };
     }
     const already = (str(told.message) ?? '').startsWith('Already answered');
     return { qitemId, ok: true, outcome: already ? 'already' : 'answered', ...(replyId ? { replyId } : {}) };

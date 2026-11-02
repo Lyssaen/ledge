@@ -131,7 +131,8 @@ Règles :
   //  recorded : choix enregistré, d'autres questions attendent (remaining)
   //  answered : réponse rendue au siège, qui est réveillé ; la demande est close
   //  already  : déjà répondue (ailleurs ou par un envoi précédent) ; rien de nouveau n'est parti
-  remaining?: string[],       // ids des questions qui attendent encore (recorded)
+  remaining?: string[],       // ids des questions qui attendent encore (recorded) ; absent si OpenRig ne permet pas de les nommer :
+                              // « d'autres questions attendent », jamais « plus rien n'attend »
   replyId?: string,           // la ligne-réponse créée vers le siège (answered)
   error?: 'not_found' | 'closed' | 'refused' | 'not_closed' | 'unreachable' | 'openrig_stopped' | 'offline' | 'outdated',
   //  not_found       : la ligne n'existe pas (plus)
