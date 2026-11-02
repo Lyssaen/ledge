@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Agents } from '../../src/screens/Agents';
 import { pending, session } from '../model/fixtures';
@@ -86,6 +86,46 @@ describe('the agents', () => {
       expect(screen.queryByText('3/7')).toBeNull();
       expect(screen.queryByLabelText(/tâches faites/)).toBeNull();
       expect(screen.queryByText('Ajout du test')).toBeNull();
+    });
+  });
+
+  describe('write to the group', () => {
+    const two = () => {
+      const t = setup();
+      t.deliver(snapshot([session('a', { name: 'Kai', repo: 'ledge' }), session('c', { name: 'Zoé', repo: 'ledge' }), session('b', { name: 'Ada', repo: 'relay' })]));
+      render(<Agents store={t.store} />);
+      return t;
+    };
+
+    it('the head of a group opens a field; sending sends the ids of the group and shows who got it and who did not', async () => {
+      const t = two();
+      const ledge = within(screen.getByRole('region', { name: 'ledge' }));
+      fireEvent.click(ledge.getByRole('button', { name: 'Écrire au groupe' }));
+      fireEvent.change(ledge.getByRole('textbox'), { target: { value: 'Pause café' } });
+      fireEvent.click(ledge.getByRole('button', { name: 'Envoyer' }));
+      const [m] = t.of('session.broadcast');
+      expect(m).toMatchObject({ type: 'session.broadcast', sessions: ['a', 'c'], text: 'Pause café' });
+      await act(async () => { t.deliver({ type: 'operation.result', op: m!.op, status: 'received' }); });
+      await act(async () => { t.deliver({ type: 'operation.result', op: m!.op, status: 'applied', sent: ['Kai'], refused: [{ name: 'Zoé', reason: "Zoé s'est terminée" }] }); });
+      expect(await screen.findByText(/Envoyé à Kai/)).toBeInTheDocument();
+      expect(screen.getByText(/Zoé s'est terminée/)).toBeInTheDocument();
+    });
+
+    it('cancelling closes the field and sends nothing', () => {
+      const t = two();
+      const ledge = within(screen.getByRole('region', { name: 'ledge' }));
+      fireEvent.click(ledge.getByRole('button', { name: 'Écrire au groupe' }));
+      fireEvent.click(ledge.getByRole('button', { name: 'Annuler' }));
+      expect(ledge.queryByRole('textbox')).toBeNull();
+      expect(t.of('session.broadcast')).toEqual([]);
+    });
+
+    it('an empty text cannot be sent', () => {
+      const t = two();
+      const ledge = within(screen.getByRole('region', { name: 'ledge' }));
+      fireEvent.click(ledge.getByRole('button', { name: 'Écrire au groupe' }));
+      expect(ledge.getByRole('button', { name: 'Envoyer' })).toBeDisabled();
+      expect(t.of('session.broadcast')).toEqual([]);
     });
   });
 });

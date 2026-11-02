@@ -24,7 +24,7 @@ export const en: Messages = {
     interrupt: 'interrupt', next: 'next waiting', unfold: 'unfold', send: 'send / launch', nextCard: 'next card',
     newChat: 'new conversation', stopAnswer: 'stop the answer', nextField: 'next field', choose: 'choose', tick: 'tick',
     start: 'launch', cancel: 'cancel', change: 'change', scroll: 'scroll', space: 'space', redraw: 'another name',
-    handover: 'hand over', decide: 'answer the decision', sendAnswer: 'send the answer', edit: 'edit',
+    handover: 'hand over', writeProject: 'write to the whole project', decide: 'answer the decision', sendAnswer: 'send the answer', edit: 'edit',
     sendOnly: 'send', newLine: 'new line', keepAndLeave: 'keep and leave', lineHistory: 'line · history', history: 'history',
     word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
     line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
@@ -46,6 +46,7 @@ export const en: Messages = {
     relievedBy: name => `relieved by ${name}`, relieves: name => `relieves ${name}`,
     ledgeTask: (owner, title, state) => `${owner} ${state === 'done' ? 'finished' : state === 'refused' ? 'refused' : 'dropped'} “${title}” · Ledge’s task`,
     decision: (giver, title) => `${giver} asks you: ${title}`,
+    writeProjectTitle: project => `Write to the whole project ${project}`, writeProjectHint: 'Your message, as each session will read it…',
     decisionTitle: (giver, title) => `Answer ${giver} · ${title}`, decisionHint: 'Your answer, as the session will read it…',
     confirmAnswer: giver => `Send to ${giver}? An answer cannot be taken back`
   },
@@ -122,6 +123,9 @@ export const en: Messages = {
   },
   toast: {
     answerFailed: why => `Answer not sent: ${why}`,
+    noProject: 'this session is in no project',
+    broadcastSent: (names, refused) => `✓ Sent to ${names}${refused ? ` · ${refused}` : ''}`,
+    broadcastNobody: why => `Not sent: ${why}`,
     handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,
     accept: n => `✓ ${n}: allowed`, deny: n => `✓ ${n}: denied`, always: n => `✓ ${n}: always allowed`,
     option: (n, k) => `✓ ${n}: option ${k} sent`, reply: n => `✓ Reply sent to ${n}`,

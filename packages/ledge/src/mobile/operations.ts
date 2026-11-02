@@ -5,9 +5,12 @@ import type { CloseHow, OperationReason, OperationStatus, PhoneClientMessage } f
 export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
 
 /** What an operation came to: the answer the phone gets. `how`: how a `session.close` ended the agent. */
-export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; how?: CloseHow };
+export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; how?: CloseHow; report?: Report };
 
-export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; how?: CloseHow; at: number }
+/** An applied `session.broadcast`: the names that got it, and those that did not, with why. */
+export interface Report { sent: string[]; refused: { name: string; reason: string }[] }
+
+export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; how?: CloseHow; report?: Report; at: number }
 
 export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } | { kind: 'conflict' };
 
@@ -19,7 +22,8 @@ export function fingerprint(m: PhoneOperation): string {
     ...(f.row !== undefined || f.task !== undefined ? [f.row ?? null, f.task ?? null] : []),
     ...(f.attachments?.length ? [f.attachments] : []),
     // A model change is its model and effort: the same id for another model is another operation (null, the agent's default, too).
-    ...(m.type === 'session.model' ? [m.model, m.effort] : [])]);
+    ...(m.type === 'session.model' ? [m.model, m.effort] : []),
+    ...(m.type === 'session.broadcast' ? [m.sessions] : [])]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */
@@ -49,9 +53,10 @@ export class OperationRegistry {
   }
 
   /** An operation already forgotten (expired) is left forgotten. */
-  finish(op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow): void {
+  finish(op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow, report?: Report): void {
     const r = this.records.get(op);
     if (!r) return;
+    if (report) r.report = report; else delete r.report;
     r.status = status;
     if (reason) r.reason = reason; else delete r.reason;
     if (how) r.how = how; else delete r.how;

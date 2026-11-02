@@ -18,7 +18,7 @@ import { CloseRefused } from '../chat/close.js';
 import { ActRefused } from '../chat/act.js';
 import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
-import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation } from './operations.js';
+import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation, type Report } from './operations.js';
 import { capabilities, clip, forPhone, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneThread } from './project.js';
 import { canSwitch, toPhoneModels } from './project.js';
 import { checklistSummary, toPhoneChecklist } from './project.js';
@@ -239,10 +239,10 @@ export function createPhoneGateway(deps: {
     const s = live(m.id);
     if (reason.success && s) modelFailures.set(m.id, { reason: reason.data, model: s.model, effort: s.effort });
   };
-  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow) => {
+  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow, report?: Report) => {
     // A device revoked while its operation ran hears nothing more.
     if (stopped || !approved(deviceId)) return;
-    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(how ? { how } : {}) });
+    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(how ? { how } : {}), ...(report ? { sent: report.sent, refused: report.refused } : {}) });
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
@@ -601,6 +601,21 @@ export function createPhoneGateway(deps: {
     return { status: 'applied' };
   };
 
+  /** One message to the sessions of a group: the daemon's broadcast by ids; applied when at least one got it, with who did and who did not. */
+  const broadcast = async (msg: Extract<PhoneOperation, { type: 'session.broadcast' }>): Promise<Outcome> => {
+    const rid = msg.op;
+    let answer: Extract<ServerMessage, { type: 'session.broadcast.result' }> | undefined;
+    const out = await ask({ type: 'session.broadcast', rid, to: { sessions: msg.sessions }, text: msg.text }, m => {
+      if (m.type !== 'session.broadcast.result' || m.rid !== rid) return undefined;
+      answer = m;
+      return true;
+    }, { silent: { status: 'failed' } });
+    if (!answer) return out;
+    const report: Report = { sent: answer.sent.map(s => s.name), refused: answer.refused.map(r => ({ name: r.name.slice(0, 100), reason: r.reason.slice(0, 200) })) };
+    log(`phone: device broadcast to ${report.sent.length} session(s), ${report.refused.length} refused`);
+    return { status: report.sent.length ? 'applied' : 'failed', report };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'daemon.update' || msg.type === 'daemon.restart') return pcOperation(deviceId, msg);
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
@@ -629,8 +644,7 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
     if (msg.type === 'session.close' || msg.type === 'session.resume') return sessionEnd(deviceId, msg);
-    // Task 5 wires the broadcast; until then the phone is refused.
-    if (msg.type === 'session.broadcast') return { status: 'rejected', reason: 'invalid' };
+    if (msg.type === 'session.broadcast') return broadcast(msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);
@@ -645,7 +659,7 @@ export function createPhoneGateway(deps: {
   const write = async (deviceId: string, msg: PhoneOperation) => {
     const begun = registry.begin(deviceId, msg.op, fingerprint(msg));
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
-    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.how);
+    if (begun.kind === 'replay') return result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.how, begun.record.report);
     let outcome: Outcome;
     try {
       result(deviceId, msg.op, 'received');
@@ -655,8 +669,8 @@ export function createPhoneGateway(deps: {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
     }
-    registry.finish(msg.op, outcome.status, outcome.reason, outcome.how);
-    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how);
+    registry.finish(msg.op, outcome.status, outcome.reason, outcome.how, outcome.report);
+    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how, outcome.report);
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {
@@ -855,7 +869,7 @@ export function createPhoneGateway(deps: {
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
       // A model change the schema refuses (#58) is answered the same way.
       if (request === 'session.model' && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
-      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.task' || request === 'task.seen' || request === 'session.close' || request === 'session.resume') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.task' || request === 'task.seen' || request === 'session.close' || request === 'session.resume' || request === 'session.broadcast') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

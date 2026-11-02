@@ -3,10 +3,10 @@ import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useState } from 'react';
 import { isPending, useContextNear, useTasks } from '@ledge/fleet';
-import { LEDGE_GIVER, type Session, type Task } from '@ledge/protocol';
+import { LEDGE_GIVER, projectOf, type Session, type Task } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
-import { closedLedgeTasks, exchanges, helperCount, nearContext, nextWaiting, openDecisions, overview, step } from '../model/overview.js';
+import { closedLedgeTasks, exchanges, helperCount, machineOf, nearContext, nextWaiting, openDecisions, overview, step } from '../model/overview.js';
 import { wrap } from '../model/thread.js';
 import { fit, machineLabel, paneName } from '../model/labels.js';
 import { rigTag, seatSecond } from '../model/rigSeat.js';
@@ -53,7 +53,19 @@ export function Overview() {
   const decision = deciding ? decisions.find(x => x.id === deciding.id) : undefined;
   // Answered elsewhere meanwhile (the phone, Desktop, the chat): the field goes with it.
   useEffect(() => { if (deciding && !decision) setDeciding(null); }, [deciding, decision]);
-  useEditing(!!deciding && !deciding.confirm);
+  // m: one message to every live session of the selected one's project, sent as session.broadcast; the toast says who got it.
+  const [writing, setWriting] = useState<{ project: string; draft: string } | null>(null);
+  useEditing((!!deciding && !deciding.confirm) || !!writing);
+  const broadcast = (project: string, text: string) => {
+    const rid = randomUUID();
+    const off = tui.client.onMessage(m => {
+      if (m.type !== 'session.broadcast.result' || m.rid !== rid) return;
+      off();
+      tui.toast(m.sent.length ? { text: t.toast.broadcastSent(m.sent.map(s => s.name).join(', '), m.refused.map(r => r.reason).join(' · ')), tone: 'ok' } : { text: t.toast.broadcastNobody(m.reason ?? m.refused[0]?.reason ?? '?'), tone: 'error' });
+    });
+    setTimeout(off, 10_000);
+    tui.client.send({ type: 'session.broadcast', rid, to: { project }, text });
+  };
   const answer = (x: Task, text: string) => {
     const rid = randomUUID();
     const off = tui.client.onMessage(m => {
@@ -74,6 +86,13 @@ export function Overview() {
       if (!deciding.confirm) { if (key.escape) setDeciding(null); return true; }
       if (input === 'y' && decision) { setDeciding(null); answer(decision, deciding.draft.trim()); return true; }
       if (input === 'n' || key.escape) { setDeciding({ ...deciding, confirm: false }); return true; }
+      return true;
+    }
+    if (writing) { if (key.escape) setWriting(null); return true; }
+    if (input === 'm' && selected) {
+      const id = projects ? projectOf({ machineId: machineOf(selected), cwd: selected.cwd }, projects) : null;
+      const name = id ? projects?.projects.find(p => p.id === id)?.name : undefined;
+      if (name) setWriting({ project: name, draft: '' }); else tui.toast({ text: t.toast.noProject, tone: 'info' });
       return true;
     }
     if (input === 'D') { if (decisions[0]) setDeciding({ id: decisions[0].id, draft: '', confirm: false }); return true; }
@@ -119,7 +138,7 @@ export function Overview() {
   // The status bar, the key bar, the toast, the boxes' borders and titles.
   // The answer's field, or the answer read again whole, across the screen under the boxes.
   const answerLines = deciding?.confirm ? wrap(deciding.draft.trim(), Math.max(10, columns - 4)) : [];
-  const decideHeight = !deciding ? 0 : deciding.confirm ? Math.min(answerLines.length, Math.max(1, height - 12)) + 2 : fieldRows(columns, height) + 2;
+  const decideHeight = writing ? fieldRows(columns, height) + 2 : !deciding ? 0 : deciding.confirm ? Math.min(answerLines.length, Math.max(1, height - 12)) + 2 : fieldRows(columns, height) + 2;
   const allHeight = Math.max(3, height - 3 - (yoursHeight + 2) - decideHeight - 3);
   // The rigs' and the kernel's boxes take what their rows need (up to a few), the projects' the rest.
   const kernelHeight = kernelRows.length ? Math.min(kernelRows.length, 5) : 0;
@@ -173,10 +192,10 @@ export function Overview() {
   const rigsBox = groupBox(t.overview.rigsGroup, rigRows, rigsHeight);
   const kernelBox = groupBox(t.overview.kernelGroup, kernelRows, kernelHeight);
 
-  const keys: Array<readonly [string, string]> = deciding?.confirm ? [['y', t.keys.sendAnswer], ['n esc', t.keys.edit]]
+  const keys: Array<readonly [string, string]> = writing ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]] : deciding?.confirm ? [['y', t.keys.sendAnswer], ['n esc', t.keys.edit]]
     : deciding ? [['↵', t.keys.review], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]] : [
     ['j k', t.keys.navigate], ['↵', t.keys.open], ...(view.yours.length ? [['tab', t.keys.next] as const, ['y n', t.keys.answer] as const] : []),
-    ['a', t.keys.attach],
+    ['a', t.keys.attach], ['m', t.keys.writeProject],
     ...(decisions.length ? [['D', t.keys.decide] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]
   ];
@@ -207,7 +226,10 @@ export function Overview() {
           </Box>
         ) : null}
       </Box>
-      {deciding && decision ? (deciding.confirm
+      {writing ? (
+        <Field title={t.overview.writeProjectTitle(writing.project)} value={writing.draft} onChange={v => setWriting(x => (x ? { ...x, draft: v } : x))}
+          onSubmit={v => { if (!v.trim()) return false; setWriting(null); broadcast(writing.project, v.trim()); }} onEscape={() => setWriting(null)} active placeholder={t.overview.writeProjectHint} />
+      ) : deciding && decision ? (deciding.confirm
         ? <TitledBox title={t.overview.confirmAnswer(decision.giverName)} color={C.red} titleColor={C.red} height={decideHeight} flexShrink={0}>
           {answerLines.slice(0, decideHeight - 2).map((l, i) => <Text key={i} color={C.fg} wrap="truncate">{l || ' '}</Text>)}
         </TitledBox>
