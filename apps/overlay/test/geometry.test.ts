@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layout, scaledLayout, awakeWidth, filetWidth, NOTCH, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
+import { layout, scaledLayout, awakeWidth, filetWidth, NOTCH, OPEN_MAX_SHARE, SIZES, SURFACE_CHROME_Y } from '../src/surface/geometry';
 import { frameOf } from '../src/surface/frame';
 const bots = (n: number, pending: number[] = []) => Array.from({ length: n }, (_, i) => ({ id: String(i), pending: pending.includes(i) }));
 const W = 1920, H = 1080;
@@ -34,15 +34,24 @@ describe('island geometry', () => {
     expect(list.h).toBe(SIZES.headerH + 16 + 3 * SIZES.rowH + SIZES.footerH + SURFACE_CHROME_Y);
     expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500 })).toMatchObject({ top: 0, w: 480, h: 500, left: (W - 480) / 2 });
     expect(layout({ bots: bots(2), mode: 'session', screenH: H, screenW: W, sessionH: 500, reading: true }).w).toBe(1152); // 60% of W
-    expect(layout({ bots: bots(2), mode: 'launch', screenH: H, screenW: W })).toMatchObject({ w: SIZES.listW, h: SIZES.launchH });
-    expect(layout({ bots: bots(2), mode: 'launch', screenH: H, screenW: W, detailH: 700 }).h).toBe(700);
+    expect(layout({ bots: bots(2), mode: 'launch', screenH: 1440, screenW: W })).toMatchObject({ w: SIZES.listW, h: SIZES.launchH });
+    expect(layout({ bots: bots(2), mode: 'launch', screenH: 1440, screenW: W, detailH: 700 }).h).toBe(700);
     expect(layout({ bots: [], mode: 'chat', screenH: 1000, screenW: W, detailH: 500 })).toMatchObject({ w: SIZES.sessionW, h: 500 });
-    expect(layout({ bots: [], mode: 'chat', screenH: 1000, screenW: W }).h).toBe(SIZES.chatH);
+    expect(layout({ bots: [], mode: 'chat', screenH: 1200, screenW: W }).h).toBe(SIZES.chatH);
     expect(layout({ bots: [], mode: 'list', screenH: H, screenW: W }).h).toBe(SIZES.headerH + SIZES.emptyH + SIZES.footerH + SURFACE_CHROME_Y);
   });
-  it('heights are capped at the work area minus the bottom margin', () => {
-    expect(layout({ bots: bots(30), mode: 'list', screenH: 600, screenW: W }).h).toBe(600 - SIZES.margin);
-    expect(layout({ bots: bots(0), mode: 'launch', screenH: 300, screenW: W }).h).toBe(300 - SIZES.margin);
+  it('an open view takes half the work area at most (the closed notch is not concerned)', () => {
+    expect(OPEN_MAX_SHARE).toBe(0.5);
+    // A long chat: 540 px on a 1080 work area, 720 on a 1440 one; its thread scrolls past that.
+    expect(layout({ bots: [], mode: 'chat', screenH: 1080, screenW: W, detailH: 2000 }).h).toBe(540);
+    expect(layout({ bots: [], mode: 'chat', screenH: 1440, screenW: 2560, detailH: 2000 }).h).toBe(720);
+    // Under a 150 % window size the cap stays half of the real screen.
+    expect(scaledLayout({ bots: [], mode: 'chat', screenH: 1440, screenW: 2560, detailH: 2000 }, { handle: 1, panel: 1.5 }).h).toBeCloseTo(720, 0);
+    for (const mode of ['session', 'reader', 'settings', 'help', 'launch', 'list', 'helper'] as const)
+      expect(layout({ bots: bots(30), mode, screenH: 1080, screenW: W, sessionH: 2000, helperH: 2000, detailH: 2000 }).h).toBe(540);
+    expect(layout({ bots: bots(30), mode: 'handle', screenH: 1080, screenW: W, awake: true }).h).toBe(38);
+    expect(layout({ bots: bots(30), mode: 'list', screenH: 600, screenW: W }).h).toBe(300);
+    expect(layout({ bots: bots(0), mode: 'launch', screenH: 300, screenW: W }).h).toBe(150);
     expect(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W, listExtraH: 42 }).h).toBe(layout({ bots: bots(3), mode: 'list', screenH: H, screenW: W }).h + 42);
   });
   it('the empty list also grows by the extra height (the update card, the notice)', () => {
@@ -54,8 +63,8 @@ describe('island geometry', () => {
     expect(layout({ bots: bots(5, [4]), mode: 'bubble', screenH: H, screenW: W, bubbleH: 160 }).h).toBe(160);
   });
   it('the reader is 560 or 800, shrunk to the work area minus 24, and its frame stays on screen', () => {
-    expect(layout({ bots: [], mode: 'reader', screenH: H, screenW: 1200 })).toMatchObject({ w: 560, h: 760, top: 0 });
-    expect(layout({ bots: [], mode: 'reader', screenH: 600, screenW: 1200, readerExpanded: true })).toMatchObject({ w: 800, h: 560 });
+    expect(layout({ bots: [], mode: 'reader', screenH: 1600, screenW: 1200 })).toMatchObject({ w: 560, h: 760, top: 0 });
+    expect(layout({ bots: [], mode: 'reader', screenH: 600, screenW: 1200, readerExpanded: true })).toMatchObject({ w: 800, h: 300 });
     const narrow = layout({ bots: [], mode: 'reader', screenH: 900, screenW: 700, readerExpanded: true });
     expect(narrow.w).toBe(676); expect(narrow.left).toBe(12);
     for (const panel of [1, 1.5, 2]) {

@@ -1,3 +1,5 @@
+/** The share of the work area's height an open view may take (the closed notch is not concerned). */
+export const OPEN_MAX_SHARE = 0.5;
 export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, readingW: 800, readerW: 560, readerExpandedW: 800, expandedMaxW: 1200, readerH: 760, rowH: 58, headerH: 72, footerH: 44, margin: 40, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
 /** The compact island, a row along the top edge (spec 2026-10-12 §3): margins, the Ledge mascot, the separator, the
  *  companions, the "+n" pill past six, the DND moon; and the discreet strip with one dot per session. */
@@ -52,7 +54,8 @@ export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machi
 export function layout(input: LayoutInput): Layout {
   const { bots, mode, screenH, screenW } = input;
   const n = bots.length;
-  const maxH = screenH - SIZES.margin;
+  // An open view never takes more than half the work area's height (user's rule, 2026-11-02): past it, its content scrolls.
+  const maxH = Math.min(screenH - SIZES.margin, Math.floor(screenH * OPEN_MAX_SHARE));
   const axis = islandAxis(screenW, input.position);
   const place = (w: number) => clamp(Math.round(axis - w / 2), 0, Math.max(0, screenW - w));
   // At rest the notch is the filet; awake it is Ledge, the line and the music, as wide as they are (measured).
