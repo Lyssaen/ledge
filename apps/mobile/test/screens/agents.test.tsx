@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { BROADCAST_SESSIONS_MAX } from '@ledge/protocol';
 import { Agents } from '../../src/screens/Agents';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
@@ -90,12 +91,42 @@ describe('the agents', () => {
   });
 
   describe('write to the group', () => {
-    const two = () => {
+    /** The PC's snapshot, from a daemon that takes a broadcast unless `flag` is false. */
+    const deliver = (sessions: Parameters<typeof snapshot>[0], flag = true) => {
       const t = setup();
-      t.deliver(snapshot([session('a', { name: 'Kai', repo: 'ledge' }), session('c', { name: 'Zoé', repo: 'ledge' }), session('b', { name: 'Ada', repo: 'relay' })]));
+      const m = snapshot(sessions);
+      if (m.type === 'snapshot' && flag) m.daemon = { ...m.daemon, broadcast: true };
+      t.deliver(m);
       render(<Agents store={t.store} />);
       return t;
     };
+    const two = () => deliver([session('a', { name: 'Kai', repo: 'ledge' }), session('c', { name: 'Zoé', repo: 'ledge' }), session('b', { name: 'Ada', repo: 'relay' })]);
+
+    it('a PC that does not take a broadcast: no « Écrire au groupe »', () => {
+      deliver([session('a', { name: 'Kai', repo: 'ledge' }), session('c', { name: 'Zoé', repo: 'ledge' })], false);
+      expect(screen.queryByRole('button', { name: 'Écrire au groupe' })).toBeNull();
+    });
+
+    it('sends to the live sessions only; a group with none has no button', async () => {
+      const t = deliver([session('a', { name: 'Kai', repo: 'ledge', state: 'exited' }), session('c', { name: 'Zoé', repo: 'ledge' }), session('b', { name: 'Ada', repo: 'relay', state: 'exited' })]);
+      expect(within(screen.getByRole('region', { name: 'relay' })).queryByRole('button', { name: 'Écrire au groupe' })).toBeNull();
+      const ledge = within(screen.getByRole('region', { name: 'ledge' }));
+      fireEvent.click(ledge.getByRole('button', { name: 'Écrire au groupe' }));
+      fireEvent.change(ledge.getByRole('textbox'), { target: { value: 'Salut' } });
+      fireEvent.click(ledge.getByRole('button', { name: 'Envoyer' }));
+      expect(t.of('session.broadcast')).toMatchObject([{ sessions: ['c'] }]);
+    });
+
+    it('more live sessions than one broadcast takes: refused in words, nothing sent, nothing cut', () => {
+      const many = Array.from({ length: BROADCAST_SESSIONS_MAX + 1 }, (_, i) => session(`s${i}`, { name: `S${i}`, repo: 'ledge' }));
+      const t = deliver(many);
+      const ledge = within(screen.getByRole('region', { name: 'ledge' }));
+      fireEvent.click(ledge.getByRole('button', { name: 'Écrire au groupe' }));
+      fireEvent.change(ledge.getByRole('textbox'), { target: { value: 'Salut' } });
+      fireEvent.click(ledge.getByRole('button', { name: 'Envoyer' }));
+      expect(t.of('session.broadcast')).toEqual([]);
+      expect(ledge.getByRole('status')).toHaveTextContent(`${BROADCAST_SESSIONS_MAX + 1} sessions dans ce groupe, ${BROADCAST_SESSIONS_MAX} au plus`);
+    });
 
     it('the head of a group opens a field; sending sends the ids of the group and shows who got it and who did not', async () => {
       const t = two();

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useState } from 'react';
-import { isPending, useContextNear, useTasks } from '@ledge/fleet';
+import { BROADCAST_SILENT, canBroadcast, isPending, useContextNear, useTasks } from '@ledge/fleet';
 import { LEDGE_GIVER, projectOf, type Session, type Task } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
@@ -53,18 +53,16 @@ export function Overview() {
   const decision = deciding ? decisions.find(x => x.id === deciding.id) : undefined;
   // Answered elsewhere meanwhile (the phone, Desktop, the chat): the field goes with it.
   useEffect(() => { if (deciding && !decision) setDeciding(null); }, [deciding, decision]);
-  // m: one message to every live session of the selected one's project, sent as session.broadcast; the toast says who got it.
-  const [writing, setWriting] = useState<{ project: string; draft: string } | null>(null);
+  // m: one message to every live session of the selected one's project, through the fleet's broadcast (each machine that
+  // holds them answers, merged, always within its timeout); the toast says who got it. Only a local daemon that takes it offers m.
+  const writable = canBroadcast(tui.machines);
+  const [writing, setWriting] = useState<{ id: string; project: string; draft: string } | null>(null);
   useEditing((!!deciding && !deciding.confirm) || !!writing);
-  const broadcast = (project: string, text: string) => {
-    const rid = randomUUID();
-    const off = tui.client.onMessage(m => {
-      if (m.type !== 'session.broadcast.result' || m.rid !== rid) return;
-      off();
-      tui.toast(m.sent.length ? { text: t.toast.broadcastSent(m.sent.map(s => s.name).join(', '), m.refused.map(r => r.reason).join(' · ')), tone: 'ok' } : { text: t.toast.broadcastNobody(m.reason ?? m.refused[0]?.reason ?? '?'), tone: 'error' });
+  const broadcast = (id: string, text: string) => {
+    void tui.fleet.broadcast({ project: id }, text, randomUUID()).then(m => {
+      const why = m.reason === BROADCAST_SILENT ? t.toast.broadcastSilent : m.reason ?? m.refused[0]?.reason ?? '?';
+      tui.toast(m.sent.length ? { text: t.toast.broadcastSent(m.sent.map(s => s.name).join(', '), m.refused.map(r => r.reason).join(' · ')), tone: 'ok' } : { text: t.toast.broadcastNobody(why), tone: 'error' });
     });
-    setTimeout(off, 10_000);
-    tui.client.send({ type: 'session.broadcast', rid, to: { project }, text });
   };
   const answer = (x: Task, text: string) => {
     const rid = randomUUID();
@@ -89,10 +87,10 @@ export function Overview() {
       return true;
     }
     if (writing) { if (key.escape) setWriting(null); return true; }
-    if (input === 'm' && selected) {
+    if (input === 'm' && selected && writable) {
       const id = projects ? projectOf({ machineId: machineOf(selected), cwd: selected.cwd }, projects) : null;
       const name = id ? projects?.projects.find(p => p.id === id)?.name : undefined;
-      if (name) setWriting({ project: name, draft: '' }); else tui.toast({ text: t.toast.noProject, tone: 'info' });
+      if (id && name) setWriting({ id, project: name, draft: '' }); else tui.toast({ text: t.toast.noProject, tone: 'info' });
       return true;
     }
     if (input === 'D') { if (decisions[0]) setDeciding({ id: decisions[0].id, draft: '', confirm: false }); return true; }
@@ -195,7 +193,7 @@ export function Overview() {
   const keys: Array<readonly [string, string]> = writing ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]] : deciding?.confirm ? [['y', t.keys.sendAnswer], ['n esc', t.keys.edit]]
     : deciding ? [['↵', t.keys.review], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]] : [
     ['j k', t.keys.navigate], ['↵', t.keys.open], ...(view.yours.length ? [['tab', t.keys.next] as const, ['y n', t.keys.answer] as const] : []),
-    ['a', t.keys.attach], ['m', t.keys.writeProject],
+    ['a', t.keys.attach], ...(writable ? [['m', t.keys.writeProject] as const] : []),
     ...(decisions.length ? [['D', t.keys.decide] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]
   ];
@@ -228,7 +226,7 @@ export function Overview() {
       </Box>
       {writing ? (
         <Field title={t.overview.writeProjectTitle(writing.project)} value={writing.draft} onChange={v => setWriting(x => (x ? { ...x, draft: v } : x))}
-          onSubmit={v => { if (!v.trim()) return false; setWriting(null); broadcast(writing.project, v.trim()); }} onEscape={() => setWriting(null)} active placeholder={t.overview.writeProjectHint} />
+          onSubmit={v => { if (!v.trim()) return false; setWriting(null); broadcast(writing.id, v.trim()); }} onEscape={() => setWriting(null)} active placeholder={t.overview.writeProjectHint} />
       ) : deciding && decision ? (deciding.confirm
         ? <TitledBox title={t.overview.confirmAnswer(decision.giverName)} color={C.red} titleColor={C.red} height={decideHeight} flexShrink={0}>
           {answerLines.slice(0, decideHeight - 2).map((l, i) => <Text key={i} color={C.fg} wrap="truncate">{l || ' '}</Text>)}

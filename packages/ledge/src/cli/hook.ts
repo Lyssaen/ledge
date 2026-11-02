@@ -13,7 +13,7 @@ import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 import { broadcastLine, parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
 import { taskOnClient } from './task.js';
 import { handoverOnClient } from './handover.js';
-import { formatWho } from './who.js';
+import { whoOnClient } from './who.js';
 import { takeImages } from '../attachmentText.js';
 import { paths } from '../paths.js';
 import { toolImages } from './toolImages.js';
@@ -470,7 +470,7 @@ async function relayMessage(client: Client, from: string, toolUseId: string | un
 async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeof parseLedgeCommand>>, from: string, deadline: number): Promise<string | undefined> {
   const left = () => Math.max(0, deadline - Date.now());
   let line: string;
-  if (cmd.cmd === 'who') line = formatWho((await client.next('snapshot', left())).sessions, from);
+  if (cmd.cmd === 'who') line = await whoOnClient(client, from, left());
   else if (cmd.cmd === 'read') line = (await readOnClient(client, cmd.args, from, left())).line;
   else if (cmd.cmd === 'task') line = (await taskOnClient(client, cmd.args, from, left())).line;
   else if (cmd.cmd === 'handover') line = (await handoverOnClient(client, cmd.args, from, left())).line;

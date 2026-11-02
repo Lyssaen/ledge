@@ -25,7 +25,7 @@ export type Modal =
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }
-  // to : un projet (son id) ou les sessions choisies dans la barre latérale (ids qualifiés) ; le message part par le daemon local (broadcast)
+  // to : un projet (son id) ou les sessions choisies dans la barre latérale (ids qualifiés) ; la flotte envoie à chaque machine qui en a sa part (broadcast)
   | { kind: 'broadcast'; to: { project: string } | { sessions: string[] } }
   | null;
 /** Every place and dialog kind, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new kind fails to compile until it is listed here. */

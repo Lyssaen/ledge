@@ -10,6 +10,7 @@ import { History } from '../src/daemon/history.js';
 import { writeProjects } from '../src/daemon/projects.js';
 import { connect } from '../src/client.js';
 import { runHook, identityContext } from '../src/cli/hook.js';
+import { printWho } from '../src/cli/who.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
 
@@ -110,7 +111,7 @@ describe('broadcast from a session (session.message)', () => {
   it('an unknown project, a project with nobody else, a list with nobody to write to: refused, no card (Review Focus 3)', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.message', rid: 'r4', from: 'a', to: '@projet:nope', text: 'Salut' });
-    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'r4', outcome: 'refused', reason: 'aucun projet nope' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'r4', outcome: 'refused', reason: 'aucun projet nope (connus : billing, Solo, x)' });
     c.send({ type: 'session.message', rid: 'r5', from: 'sol', to: '@projet:solo', text: 'Salut' });
     expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'r5', outcome: 'refused', reason: "personne d'autre dans le projet Solo" });
     // The id works too.
@@ -207,7 +208,7 @@ describe('broadcast: the recipient is the resolved session, not its name again',
   it('a project id is matched exactly, not lowercased', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.message', rid: 'd2', from: 'sol', to: '@projet:SOLO-1', text: 'Salut' });
-    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'd2', outcome: 'refused', reason: 'aucun projet SOLO-1' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'd2', outcome: 'refused', reason: 'aucun projet SOLO-1 (connus : billing, Solo, x)' });
     c.close();
   });
 });
@@ -257,7 +258,72 @@ describe('broadcast from the user (session.broadcast)', () => {
   it('to an unknown project: refused with its reason', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.broadcast', rid: 'u3', to: { project: 'nope' }, text: 'Salut' });
-    expect(await c.next('session.broadcast.result', 3000)).toEqual({ type: 'session.broadcast.result', rid: 'u3', sent: [], refused: [], reason: 'aucun projet nope' });
+    expect(await c.next('session.broadcast.result', 3000)).toEqual({ type: 'session.broadcast.result', rid: 'u3', sent: [], refused: [], reason: 'aucun projet nope (connus : billing, Solo, x)' });
+    c.close();
+  });
+});
+
+describe('a project found where the sessions are: their folder, when no registry project matches (I-3)', () => {
+  beforeEach(() => {
+    store.upsert(mk('f1', 'Fay', '/tmp/scratch', { project: 'scratch', tmuxSession: 'ledge-f1' }));
+    store.upsert(mk('f2', 'Gus', '/home/g/scratch', { project: 'scratch', tmuxSession: 'ledge-f2' }));
+    tmux.sent.length = 0;
+  });
+  it('a session writes @projet:<folder>, any case: the other live sessions in a folder of that name', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.message', rid: 'f1', from: 'f1', to: '@projet:SCRATCH', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'f1', outcome: 'accepted', recipients: { sent: ['Gus'], refused: [] } });
+    await until(() => typed('ledge-f2').length === 1, 3000);
+    expect(typed('ledge-f2')[0]).toContain(') (à tout le projet scratch) Salut</ledge-message>');
+    expect(typed('ledge-a')).toEqual([]);
+    c.close();
+  });
+  it('the user writes to { project: <folder> }: a notice to each', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.broadcast', rid: 'f2', to: { project: 'scratch' }, text: 'Salut' });
+    expect(await c.next('session.broadcast.result', 3000)).toEqual({ type: 'session.broadcast.result', rid: 'f2', sent: [{ id: 'f1', name: 'Fay' }, { id: 'f2', name: 'Gus' }], refused: [] });
+    await until(() => typed('ledge-f1').length === 1, 3000);
+    expect(typed('ledge-f1')).toEqual(["Message de l'utilisateur (à tout le projet scratch) : Salut"]);
+    c.close();
+  });
+  it('a registry project wins over a folder of the same name', async () => {
+    store.upsert(mk('f3', 'Hal', '/tmp/billing', { project: 'billing', tmuxSession: 'ledge-f3' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.broadcast', rid: 'f3', to: { project: 'billing' }, text: 'Salut' });
+    expect((await c.next('session.broadcast.result', 3000)).sent.map(x => x.name)).toEqual(['Pim', 'Nova']);
+    c.close();
+  });
+  it('the folder with nobody else: said so; the unknown name lists the known ones, ended sessions left out, ten at most', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    store.remove('f2');
+    c.send({ type: 'session.message', rid: 'f4', from: 'f1', to: '@projet:scratch', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'f4', outcome: 'refused', reason: "personne d'autre dans le projet scratch" });
+    store.upsert(mk('f5', 'Ivy', '/tmp/ended', { project: 'ended', state: 'exited' }));
+    c.send({ type: 'session.message', rid: 'f5', from: 'f1', to: '@projet:nope', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'f5', reason: 'aucun projet nope (connus : billing, Solo, x, scratch)' });
+    for (let i = 0; i < 10; i++) store.upsert(mk(`g${i}`, `G${i}`, `/g/d${i}`, { project: `d${i}` }));
+    c.send({ type: 'session.message', rid: 'f6', from: 'f1', to: '@projet:nope', text: 'Salut' });
+    expect(await c.next('message.ack', 3000)).toMatchObject({ rid: 'f6', reason: 'aucun projet nope (connus : billing, Solo, x, scratch, d0, d1, d2, d3, d4, d5)' });
+    c.close();
+  });
+});
+
+describe('ledge who names the project @projet: takes', () => {
+  it('the registry project of a session in one, its folder else', async () => {
+    const lines = (await printWho({ port: srv.port })).split('\n');
+    expect(lines.find(l => l.includes('Pim'))).toMatch(/\sbilling\s/);
+    expect(lines.find(l => l.includes('Sol '))).toMatch(/\sSolo\s/);
+    expect(lines.find(l => l.includes('Otto'))).toMatch(/\sx\s/);
+  });
+});
+
+describe('session.broadcast label: the fleet\'s name for a remote project part', () => {
+  it('the recipients are told the label, not their names', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.broadcast', rid: 'l1', to: { sessions: ['a', 'b'] }, text: 'Salut', label: 'tout le projet Billing' });
+    expect((await c.next('session.broadcast.result', 3000)).sent.length).toBe(2);
+    await until(() => typed('ledge-a').length === 1 && typed('ledge-b').length === 1, 3000);
+    expect(typed('ledge-b')).toEqual(["Message de l'utilisateur (à tout le projet Billing) : Salut"]);
     c.close();
   });
 });

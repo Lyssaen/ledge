@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatTasksSchema, ChatActionsSchema, ChatActionSchema } from './chat.js';
-import { BROADCAST_SESSIONS_MAX } from './broadcast.js';
+import { BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX } from './broadcast.js';
 import { ActionIdSchema } from './actions.js';
 import { ATTACHMENTS_MAX, AttachmentCaptureSchema, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
@@ -90,7 +90,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Takes `session.model`: a live session's model and effort changed (#58, lot 2). */ modelSwitch: z.boolean().optional(),
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
-  /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional() });
+  /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
+  /** Takes `session.broadcast` (its `ledge bridge` too, on this machine): a client sends it only when this is set. */ broadcast: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -300,7 +301,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.message'), rid: z.string().min(1), from: z.string().min(1), to: z.string().min(1), text: z.string().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional(), intercept: z.boolean().optional() }),
   /** The user writing to every session of a project, or to several sessions (ids or names). */
   z.object({ type: z.literal('session.broadcast'), rid: z.string().min(1).max(100), to: z.union([z.object({ project: z.string().min(1).max(80) }), z.object({ sessions: z.array(z.string().min(1)).min(1).max(BROADCAST_SESSIONS_MAX) })]),
-    text: z.string().trim().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional() }),
+    text: z.string().trim().min(1).max(MESSAGE_MAX), summary: z.string().max(SUMMARY_MAX).optional(),
+    /** How the recipients are told who it went to (« (à <label>) »), instead of the names: a project the fleet turned into sessions. */ label: z.string().min(1).max(BROADCAST_LABEL_MAX).optional() }),
   /** `ledge read <id>`: a message's whole body, for its receiver or its sender (`by`, a session id). */
   z.object({ type: z.literal('message.read'), id: z.string().min(1).max(40), by: z.string().min(1) }),
   TaskCmdSchema,

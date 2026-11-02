@@ -1,4 +1,4 @@
-import { backendOf, BROADCAST_SESSIONS_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
+import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -15,14 +15,36 @@ type PendingRoute = { qid: string; text: string; tool?: Tool; images?: ImageUplo
  *  rid is answered once by each daemon). */
 export const BROADCAST_TIMEOUT_MS = 8000;
 export const BROADCAST_SILENT = 'silent';
+/** A silent machine's refusal ends with it (`<machine> : pas de réponse`): the request may have gone, a resend keeps its rid. */
+export const BROADCAST_NO_ANSWER = 'pas de réponse';
 let broadcastSeq = 0;
 type Refusal = { name: string; reason: string };
-/** One broadcast in flight across machines: each asked machine with its own rid (`${rid}:${machine}`) and its timer, until
+/** One broadcast in flight across machines: each asked machine with its own rid (`parts`, `partRid`) and its timer, until
  *  every one has answered, refused or timed out; then the merged result goes out under `rid`. */
-type PendingBroadcast = { rid: string; waiting: Map<string, ReturnType<typeof setTimeout>>; sent: { id: string; name: string }[]; refused: Refusal[]; reasons: string[]; silent: number; asked: number; empty?: string };
-/** Whom a broadcast reaches on a machine, as its daemon's mailbox says (`reachable`, and no OpenRig seat): the fleet uses it to
- *  pick a project's sessions on a remote machine, whose own project registry is private to it. */
-const broadcastable = (s: Session) => s.source === 'launcher' && s.state !== 'exited' && !isArchived(s) && (!!s.tmuxSession || backendOf(s) === 'omp-rpc') && !s.rig;
+type PendingBroadcast = { rid: string; waiting: Map<string, ReturnType<typeof setTimeout>>; parts: Map<string, string>; sent: { id: string; name: string }[]; refused: Refusal[]; reasons: string[]; silent: number; asked: number; empty?: string };
+type BroadcastMessage = Extract<ClientMessage, { type: 'session.broadcast' }>;
+/** The longest rid a `session.broadcast` takes (its schema). */
+const RID_MAX = 100;
+/** FNV-1a, 64 bits, as 16 hex characters: a long part rid made short, the same each time (so a resend is deduped). */
+function fnv1a64(text: string): string {
+  let h = 0xcbf29ce484222325n;
+  for (const byte of new TextEncoder().encode(text)) h = BigInt.asUintN(64, (h ^ BigInt(byte)) * 0x100000001b3n);
+  return h.toString(16).padStart(16, '0');
+}
+/** A machine's part rid: `${rid}:${machine}`, or its hash when that is longer than the schema takes. Never cut. */
+const partRid = (rid: string, machine: string) => { const r = `${rid}:${machine}`; return r.length > RID_MAX ? fnv1a64(r) : r; };
+/** Why the protocol refuses a part, in words: what the daemon would have refused, said before anything is sent. */
+function partRefusal(part: BroadcastMessage): { why: string; whole: boolean } | null {
+  const r = ClientMessageSchema.safeParse(part);
+  if (r.success) return null;
+  const issue = r.error.issues[0]!;
+  if (issue.path[0] === 'text') {
+    const n = part.text.length;
+    return { why: n > MESSAGE_MAX ? `message trop long (${n} caractères, ${MESSAGE_MAX} au plus)` : 'message vide', whole: true };
+  }
+  if (issue.path[0] === 'to' && issue.code === 'too_big') return { why: `plus de ${BROADCAST_SESSIONS_MAX} sessions à la fois`, whole: false };
+  return { why: 'requête invalide', whole: issue.path[0] !== 'to' };
+}
 
 export interface FleetOptions {
   /** Storage key prefix: `ledge` (island) or `desktop` (spec §7). */
@@ -320,7 +342,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       // An `error` names no rid: it answers this machine's oldest broadcast still waiting (an older daemon does not know the message).
       if (m.request === 'session.broadcast') {
         const b = [...broadcasts.values()].find(x => x.waiting.has(machine));
-        if (b) { b.refused.push(machineRefusal(machine, m.code === 'invalid' || m.message === 'invalid message' ? 'version trop ancienne' : m.message)); settleBroadcast(b, machine); }
+        // Only a daemon (or the gateway before it) that does not know the message refuses it for its version; one that knows it refused this request.
+        if (b) { b.refused.push(machineRefusal(machine, knowsBroadcast(machine) ? 'requête refusée' : 'version trop ancienne')); settleBroadcast(b, machine); }
         return;
       }
       if (p.restarting) return;
@@ -344,18 +367,19 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     }
     // A relief's answer comes from the machine the session runs on (context handover spec §3.3).
     if (m.type === 'session.handover.result') { emit(m); return; }
-    // A machine's part of a broadcast (`${rid}:${machine}`): merged, its recipients qualified; a stray or late one is dropped.
+    // A machine's part of a broadcast (the rid it was sent): merged, its recipients qualified; a stray or late one is dropped.
     if (m.type === 'session.broadcast.result') {
-      const suffix = `:${machine}`;
-      if (!m.rid.endsWith(suffix)) return;
-      const b = broadcasts.get(m.rid.slice(0, -suffix.length));
-      if (!b || !b.waiting.has(machine)) return;
+      const b = [...broadcasts.values()].find(x => x.waiting.has(machine) && x.parts.get(machine) === m.rid);
+      if (!b) return;
       b.sent.push(...m.sent.map(x => ({ ...x, id: qualify(machine, x.id) }))); b.refused.push(...m.refused);
       if (m.reason) b.reasons.push(m.reason);
       settleBroadcast(b, machine); return;
     }
     if (machine === 'local') emit(m);
   }
+  /** The machine's daemon announces `session.broadcast`; a remote one is reached through the local daemon's SSH gateway, which must know it too. */
+  const announces = (machine: string) => !!peers.get(machine)?.snapshot?.daemon?.broadcast;
+  const knowsBroadcast = (machine: string) => announces(machine) && (machine === 'local' || announces('local'));
   const labelOf = (machine: string) => peers.get(machine)?.config.label ?? configs.find(c => c.id === machine)?.label ?? machine;
   const machineRefusal = (machine: string, why: string): Refusal => ({ name: labelOf(machine), reason: `${labelOf(machine)} : ${why}` });
   /** A machine's part is over (answered, refused, timed out or dropped); the last one sends the merged result. */
@@ -375,11 +399,12 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
    * - sessions: grouped by machine (a qualified id), each machine sent its own ids; an unqualified entry is a name, the local daemon's;
    * - a project: the local daemon by the project (its registry is the app's); each other machine where the registry places the
    *   project (its repos and rules), by the ids of its sessions that the registry files there and that a broadcast can reach.
-   * An unavailable machine is one refusal naming it. Each part has its own rid (`${rid}:${machine}`), so each daemon's dedupe holds.
+   * An unavailable machine is one refusal naming it, a machine that does not announce `broadcast` too (never sent: C-1), a part the
+   * protocol refuses too (its reason said). Each part has its own rid (`partRid`), so each daemon's dedupe holds.
    */
-  function sendBroadcast(msg: Extract<ClientMessage, { type: 'session.broadcast' }>) {
-    const parts = new Map<string, Extract<ClientMessage, { type: 'session.broadcast' }>['to']>();
-    const b: PendingBroadcast = { rid: msg.rid, waiting: new Map(), sent: [], refused: [], reasons: [], silent: 0, asked: 0 };
+  function sendBroadcast(msg: BroadcastMessage) {
+    const parts = new Map<string, { to: BroadcastMessage['to']; label?: string }>();
+    const b: PendingBroadcast = { rid: msg.rid, waiting: new Map(), parts: new Map(), sent: [], refused: [], reasons: [], silent: 0, asked: 0 };
     const offline = new Set<string>();
     if ('sessions' in msg.to) {
       const byMachine = new Map<string, string[]>();
@@ -390,32 +415,43 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const [m, id] = known ? [o!.machine, o!.id] : ['local', raw];
         byMachine.set(m, [...(byMachine.get(m) ?? []), id]);
       }
-      for (const [m, ids] of byMachine) parts.set(m, { sessions: ids });
+      for (const [m, ids] of byMachine) parts.set(m, { to: { sessions: ids } });
     } else {
       const reg = projects, q = msg.to.project;
       const project = reg?.projects.find(x => x.id === q) ?? reg?.projects.find(x => x.name.toLowerCase() === q.toLowerCase());
-      if (!reg || !project) parts.set('local', msg.to);   // the local daemon says it knows no such project
+      if (!reg || !project) parts.set('local', { to: msg.to });   // the local daemon finds it (a folder its sessions work in) or says it knows none
       else {
         b.empty = `personne à qui écrire dans le projet ${project.name}`;
         const where = new Set([...project.repos.map(r => r.machine), ...reg.rules.filter(r => r.project === project.id).map(r => r.machine)]);
         for (const m of where) {
-          if (m === 'local') { parts.set('local', { project: project.id }); continue; }
+          if (m === 'local') { parts.set('local', { to: { project: project.id } }); continue; }
           const p = peers.get(m); if (!p) continue;   // not a machine connected to (disabled, or gone from the list)
           if (!available(p)) { offline.add(m); continue; }
-          const ids = p.snapshot!.sessions.filter(s => broadcastable(s) && projectOf({ machineId: m, cwd: s.cwd }, reg) === project.id).map(s => s.id);
-          if (ids.length) parts.set(m, { sessions: ids.slice(0, BROADCAST_SESSIONS_MAX) });
+          const ids = p.snapshot!.sessions.filter(s => broadcastRecipient(s) && projectOf({ machineId: m, cwd: s.cwd }, reg) === project.id).map(s => s.id);
+          if (ids.length > BROADCAST_SESSIONS_MAX) b.refused.push(machineRefusal(m, `${ids.length - BROADCAST_SESSIONS_MAX} session(s) de plus non atteintes (${BROADCAST_SESSIONS_MAX} au plus)`));
+          // Its recipients are told the project, not each other's names.
+          if (ids.length) parts.set(m, { to: { sessions: ids.slice(0, BROADCAST_SESSIONS_MAX) }, label: broadcastLabel({ project: project.name }).slice(0, BROADCAST_LABEL_MAX) });
         }
       }
     }
     // The same rid sent again while still in flight replaces it: the older parts' timers are dropped.
     for (const t of broadcasts.get(msg.rid)?.waiting.values() ?? []) clearTimeout(t);
     broadcasts.set(msg.rid, b);
-    for (const [m, to] of parts) {
-      const p = peers.get(m);
-      if (!available(p)) { offline.add(m); continue; }
-      b.asked++;
-      b.waiting.set(m, setTimeout(() => { b.silent++; b.refused.push(machineRefusal(m, 'pas de réponse')); settleBroadcast(b, m); }, BROADCAST_TIMEOUT_MS));
-      p!.client.send({ ...msg, rid: `${msg.rid}:${m}`, to });
+    const partOf = (m: string, to: BroadcastMessage['to'], label?: string): BroadcastMessage =>
+      ({ type: 'session.broadcast', rid: partRid(msg.rid, m), to, text: msg.text, ...(msg.summary !== undefined ? { summary: msg.summary } : {}), ...(label ? { label } : {}) });
+    // The text itself refused (too long, empty): nothing goes anywhere, and the result says why.
+    const whole = partRefusal(partOf('local', { sessions: ['-'] }));
+    if (whole?.whole) { b.reasons.push(whole.why); finishBroadcast(b); return; }
+    for (const [m, { to, label }] of parts) {
+      if (!available(peers.get(m))) { offline.add(m); continue; }
+      // An old daemon, or an old bridge behind it, does not know the message: its SSH link would drop on it. Never sent.
+      if (!knowsBroadcast(m)) { b.refused.push(machineRefusal(m, 'version trop ancienne')); b.reasons.push('version trop ancienne'); continue; }
+      const part = partOf(m, to, label);
+      const bad = partRefusal(part);
+      if (bad) { b.refused.push(machineRefusal(m, bad.why)); b.reasons.push(bad.why); continue; }
+      b.asked++; b.parts.set(m, part.rid);
+      b.waiting.set(m, setTimeout(() => { b.silent++; b.refused.push(machineRefusal(m, BROADCAST_NO_ANSWER)); settleBroadcast(b, m); }, BROADCAST_TIMEOUT_MS));
+      peers.get(m)!.client.send(part);
     }
     for (const m of offline) b.refused.push(machineRefusal(m, 'hors ligne'));
     if (!b.waiting.size) finishBroadcast(b);

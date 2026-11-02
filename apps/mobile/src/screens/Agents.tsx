@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX, CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
 import { agentsOf, type AgentRow } from '../model/agents';
 import { closingHere, endedAtLabel } from '../model/sessionEnd';
@@ -62,18 +62,17 @@ function Row({ row, session, offline, threshold, plan, closing, now }: { row: Ag
   );
 }
 
-/** At most this many sessions in one broadcast (the PC refuses more). */
-const GROUP_MAX = 32;
-
-/** « Écrire au groupe »: a field under the head of a group; the answer says who got the message and who did not. */
+/** « Écrire au groupe »: a field under the head of a group; the answer says who got the message and who did not. `ids`: the
+ *  group's live sessions; more than one broadcast takes is refused in words, never cut. */
 function GroupWrite({ store, label, ids, offline }: { store: MobileStore; label: string; ids: string[]; offline: boolean }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<{ lines: string[]; error: boolean } | null>(null);
   const send = async () => {
+    if (ids.length > BROADCAST_SESSIONS_MAX) { setReport({ lines: [copy.agents.tooMany(ids.length, BROADCAST_SESSIONS_MAX)], error: true }); return; }
     setBusy(true);
-    const done = await store.broadcast(ids.slice(0, GROUP_MAX), text.trim());
+    const done = await store.broadcast(ids, text.trim());
     setBusy(false);
     if (done.sent) {
       const sent = done.sent;
@@ -119,7 +118,11 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
           <section key={g.rows[0]!.sessionId} aria-label={g.label}>
             <div className="py-3 text-meta tracking-[.4px] text-muted">{g.label}</div>
-            <GroupWrite store={store} label={g.label} ids={g.rows.map(r => r.sessionId)} offline={offline} />
+            {state.daemon?.broadcast && (() => {
+              // Only the live ones: an ended session cannot be written to, the phone already knows it.
+              const live = g.rows.map(r => r.sessionId).filter(id => { const st = state.sessions.get(id)?.state; return st !== undefined && st !== 'exited'; });
+              return live.length > 0 && <GroupWrite store={store} label={g.label} ids={live} offline={offline} />;
+            })()}
             {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} closing={closing.has(r.sessionId)} now={now} />)}
           </section>
         ))}

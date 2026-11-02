@@ -134,6 +134,7 @@ export const fr = {
     noProject: "cette session n'est dans aucun projet",
     broadcastSent: (names: string, refused: string) => `✓ Envoyé à ${names}${refused ? ` · ${refused}` : ''}`,
     broadcastNobody: (why: string) => `Non envoyé : ${why}`,
+    broadcastSilent: "aucune machine n'a répondu : il est peut-être parti, vérifie avant de renvoyer",
     handover: (n: string) => `${n} écrit son bilan : une nouvelle session prendra sa place`, handoverRefused: (why: string) => `Relève refusée : ${why}`,
     accept: (n: string) => `✓ ${n} : autorisé`, deny: (n: string) => `✓ ${n} : refusé`, always: (n: string) => `✓ ${n} : toujours autorisé`,
     option: (n: string, k: number) => `✓ ${n} : option ${k} envoyée`, reply: (n: string) => `✓ Réponse envoyée à ${n}`,

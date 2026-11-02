@@ -22,7 +22,7 @@ describe('tui: m writes to the whole project of the selected session', () => {
       await tui.press('\r');
       await until(() => sent(tui.daemon.received, 'session.broadcast').length === 1);
       const m = sent(tui.daemon.received, 'session.broadcast')[0]!;
-      expect(m).toMatchObject({ type: 'session.broadcast', to: { project: 'ledge' }, text: 'Pause café' }); // the fleet files the project by its id for the local daemon
+      expect(m).toMatchObject({ type: 'session.broadcast', to: { project: 'ledge' }, text: 'Pause café' }); // the project's id, as the TUI resolved it
       await until(() => !tui.frame().includes('ÉCRIRE À TOUT LE PROJET'));
       tui.daemon.push({ type: 'session.broadcast.result', rid: m.rid, sent: [{ id: 'nova', name: 'Nova' }, { id: 'bix', name: 'Bix' }], refused: [{ name: 'Zed', reason: "Zed s'est terminée" }] });
       await until(() => tui.frame().includes('Envoyé à Nova, Bix'));
@@ -58,6 +58,36 @@ describe('tui: m writes to the whole project of the selected session', () => {
       await tui.press('m');
       await until(() => tui.frame().includes("cette session n'est dans aucun projet"));
       expect(tui.frame()).not.toContain('ÉCRIRE À TOUT LE PROJET');
+      expect(sent(tui.daemon.received, 'session.broadcast')).toEqual([]);
+    } finally { await tui.cleanup(); }
+  }, 20_000);
+
+  it('every machine silent: said in words, not as the code', async () => {
+    const tui = await startTui();
+    try {
+      await until(() => tui.frame().includes('Otto') && tui.frame().includes('Ledge'));
+      await tui.press('m');
+      await until(() => tui.frame().includes('ÉCRIRE À TOUT LE PROJET'));
+      await tui.press('Salut');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'session.broadcast').length === 1);
+      const m = sent(tui.daemon.received, 'session.broadcast')[0]!;
+      tui.daemon.push({ type: 'session.broadcast.result', rid: m.rid, sent: [], refused: [], reason: 'silent' });
+      await until(() => tui.frame().includes("Non envoyé : aucune machine n'a répondu"));
+      expect(tui.frame()).not.toContain('Non envoyé : silent');
+    } finally { await tui.cleanup(); }
+  }, 20_000);
+
+  it('a local daemon that does not take a broadcast: no m in the key bar, m does nothing', async () => {
+    const tui = await startTui({ broadcast: false });
+    try {
+      await tui.resize(160, 40);
+      await until(() => tui.frame().includes('Otto') && tui.frame().includes('Ledge'));
+      expect(tui.frame()).not.toMatch(/m +écrire à tout le projet/);
+      await tui.press('m');
+      await new Promise(r => setTimeout(r, 200));
+      expect(tui.frame()).not.toContain('ÉCRIRE À TOUT LE PROJET');
+      expect(tui.frame()).not.toContain("cette session n'est dans aucun projet");
       expect(sent(tui.daemon.received, 'session.broadcast')).toEqual([]);
     } finally { await tui.cleanup(); }
   }, 20_000);

@@ -1,8 +1,16 @@
 /** Broadcast: one message to several sessions. Pure helpers; the message schemas live in `messages.ts` and `phone.ts`. */
+import { backendOf, isArchived, type Session } from './session.js';
 
 /** The most names a comma list may hold, and the most sessions a `session.broadcast` may name. */
 export const BROADCAST_LIST_MAX = 8;
 export const BROADCAST_SESSIONS_MAX = 32;
+/** The longest `session.broadcast.label`. */
+export const BROADCAST_LABEL_MAX = 120;
+
+/** Whom a broadcast reaches: launched by Ledge, live, with a terminal (or OMP's protocol), never an OpenRig seat. The daemon
+ *  writes to these only; the fleet picks a remote project's sessions with it, so both always agree. */
+export const broadcastRecipient = (s: Pick<Session, 'source' | 'state' | 'archivedAt' | 'tmuxSession' | 'backend' | 'rig'>): boolean =>
+  s.source === 'launcher' && s.state !== 'exited' && !isArchived(s) && (!!s.tmuxSession || backendOf(s) === 'omp-rpc') && !s.rig;
 
 export type BroadcastAddress = { project: string } | { names: string[] };
 

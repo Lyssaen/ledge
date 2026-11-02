@@ -9,6 +9,7 @@ import {
 } from '@ledge/protocol';
 import { ModelRefusalSchema, type ModelRefusal, type Tool } from '@ledge/protocol';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -188,7 +189,7 @@ export function createPhoneGateway(deps: {
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
-    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}) },
+    type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}), broadcast: true as const },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
@@ -602,7 +603,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** One message to the sessions of a group: the daemon's broadcast by ids; applied when at least one got it, with who did and who did not. */
-  const broadcast = async (msg: Extract<PhoneOperation, { type: 'session.broadcast' }>): Promise<Outcome> => {
+  const broadcast = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'session.broadcast' }>): Promise<Outcome> => {
     const rid = msg.op;
     let answer: Extract<ServerMessage, { type: 'session.broadcast.result' }> | undefined;
     const out = await ask({ type: 'session.broadcast', rid, to: { sessions: msg.sessions }, text: msg.text }, m => {
@@ -611,8 +612,9 @@ export function createPhoneGateway(deps: {
       return true;
     }, { silent: { status: 'failed' } });
     if (!answer) return out;
-    const report: Report = { sent: answer.sent.map(s => s.name), refused: answer.refused.map(r => ({ name: r.name.slice(0, 100), reason: r.reason.slice(0, 200) })) };
-    log(`phone: device broadcast to ${report.sent.length} session(s), ${report.refused.length} refused`);
+    // Clipped to the phone schema's bounds: one name too long would make the phone drop the whole answer.
+    const report: Report = { sent: answer.sent.slice(0, BROADCAST_SESSIONS_MAX).map(s => s.name.slice(0, 100)), refused: answer.refused.slice(0, BROADCAST_SESSIONS_MAX).map(r => ({ name: r.name.slice(0, 100), reason: r.reason.slice(0, 200) })) };
+    log(`phone: device ${deviceId} broadcast to ${report.sent.length} session(s), ${report.refused.length} refused`);
     return { status: report.sent.length ? 'applied' : 'failed', report };
   };
 
@@ -644,7 +646,7 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
     if (msg.type === 'session.close' || msg.type === 'session.resume') return sessionEnd(deviceId, msg);
-    if (msg.type === 'session.broadcast') return broadcast(msg);
+    if (msg.type === 'session.broadcast') return broadcast(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
     const out = local(msg);

@@ -172,6 +172,7 @@ export const copy = {
     send: 'Envoyer', cancel: 'Annuler', sending: 'Envoi…',
     sentTo: (names: string[]) => `Envoyé à ${names.join(', ')}`,
     refusedLine: (name: string, reason: string) => `${name} : ${reason}`,
+    tooMany: (n: number, max: number) => `${n} sessions dans ce groupe, ${max} au plus : écrivez-leur depuis le PC`,
     nobody: 'Personne à qui écrire', notSent: 'Message non envoyé', uncertain: 'Message envoyé ; vérifiez sur le PC',
     /** A session's context and relief (context handover spec §3.2): shown here, started from the PC. */
     context: (pct: number) => `contexte ${pct} %`,

@@ -35,7 +35,12 @@ export function Sidebar(p: {
   order: readonly Session[]; projectIdOf: (s: Session) => string | null;
   filing: Filing; actions: SessionActions; decisions: Decisions;
   waits: ReadonlyMap<string, Wait>;
-  menu: { open(id: string, at: { x: number; y: number }, opener?: HTMLElement): void };
+  /** `opened`: a session's menu shows; Échap is its own then, the selection stays. */
+  menu: { open(id: string, at: { x: number; y: number }, opener?: HTMLElement): void; opened?: boolean };
+  /** The local daemon takes a broadcast: the ✉ of a project row and the Ctrl/⌘ + click selection are offered. */
+  broadcast?: boolean;
+  /** Bumped by each broadcast that reached someone: the selection is kept until then, emptied then. */
+  broadcastSent?: number;
   onAsk(text: string): void;
   onTerminal(s: Session): void;
   revealArchives: number; revealCurrent: number;
@@ -59,6 +64,8 @@ export function Sidebar(p: {
   });
   // A session gone from the list is no longer picked.
   const pickedIds = [...picked].filter(id => p.sessions.some(s => s.id === id));
+  // Sent: the selection has done its job.
+  useEffect(() => { if (p.broadcastSent) setPicked(new Set()); }, [p.broadcastSent]);
   const { place } = p.nav;
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
@@ -79,7 +86,7 @@ export function Sidebar(p: {
   const decisions = useMemo(() => (p.tasksApi ? openDecisions(p.tasksApi.tasks) : []), [p.tasksApi]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
-  keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };
+  keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null || !!p.menu.opened };
   // Alt ↓ opens the next waiting session. Ctrl ⇧ E focuses its tree row, or the first row when none is open.
   // A dialog, a confirmation, the chat, or a text field already owns the key (same rule as the window shortcuts).
   useEffect(() => {
@@ -178,8 +185,8 @@ export function Sidebar(p: {
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
             onLaunch={project => p.dispatch({ type: 'modal', modal: { kind: 'launch', ...(project !== undefined ? { project } : {}) } })}
-            onBroadcast={project => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project } } })}
-            picked={picked} onPick={pick}
+            onBroadcast={p.broadcast ? project => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project } } }) : undefined}
+            picked={picked} onPick={p.broadcast ? pick : undefined}
             onMenu={(id, e) => {
               const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
               p.menu.open(id, { x: e.clientX, y: e.clientY }, host?.querySelector<HTMLElement>('[data-tree-key]') ?? host);
@@ -195,9 +202,9 @@ export function Sidebar(p: {
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
           onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />
       </div>
-      {pickedIds.length >= 2 && (
+      {p.broadcast && pickedIds.length >= 2 && (
         <div className="st-picked" role="region" aria-label={t.broadcast.picked}>
-          <button type="button" className="st-picked-write" onClick={() => { setPicked(new Set()); p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { sessions: pickedIds } } }); }}>
+          <button type="button" className="st-picked-write" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { sessions: pickedIds } } })}>
             <Icon d={SHELL_ICONS.mail} size={13} /><span>{t.broadcast.selection(pickedIds.length)}</span>
           </button>
           <span className="st-fill" />

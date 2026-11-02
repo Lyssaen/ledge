@@ -126,6 +126,7 @@ export const en: Messages = {
     noProject: 'this session is in no project',
     broadcastSent: (names, refused) => `✓ Sent to ${names}${refused ? ` · ${refused}` : ''}`,
     broadcastNobody: why => `Not sent: ${why}`,
+    broadcastSilent: 'no machine answered: it may have gone, check before sending again',
     handover: n => `${n} is writing its brief: a fresh session will take its place`, handoverRefused: why => `Relief refused: ${why}`,
     accept: n => `✓ ${n}: allowed`, deny: n => `✓ ${n}: denied`, always: n => `✓ ${n}: always allowed`,
     option: (n, k) => `✓ ${n}: option ${k} sent`, reply: n => `✓ Reply sent to ${n}`,
