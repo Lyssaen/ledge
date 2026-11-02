@@ -217,6 +217,35 @@ describe('« À toi » reading', () => {
     } finally { ATTENTION.items[0]!.at = ASK.tsUpdated; }
   });
 
+  it('a choice OpenRig records without moving the row\'s time is read: attention\'s answers are part of the cache key', async () => {
+    const f = fake();
+    const item = ATTENTION.items[0] as Record<string, unknown>;
+    item.humanAnswers = { couleur: 'bleu' };
+    try {
+      const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
+      const first = await h.list();
+      expect(first.asks.find(a => a.id === 'qitem-1')!.questions[1]!.answer).toBeNull();
+      // OpenRig records « taille » (from Slack, another window, the TUI): humanAnswers changes, tsUpdated does not.
+      f.rows['qitem-1'] = { ...ASK, humanAnswers: { couleur: 'bleu', taille: 'm' } };
+      item.humanAnswers = { couleur: 'bleu', taille: 'm' };
+      const second = await h.list();
+      expect(second.asks.find(a => a.id === 'qitem-1')!.questions[1]!.answer).toEqual({ kind: 'option', id: 'm' });
+      // A fresh reader (another window asking, a remount) gets the same, from the same daemon.
+      expect((await h.list()).asks.find(a => a.id === 'qitem-1')!.questions[1]!.answer).toEqual({ kind: 'option', id: 'm' });
+    } finally { delete item.humanAnswers; f.rows['qitem-1'] = ASK; }
+  });
+
+  it('after answering from here the row is read afresh, even if attention showed nothing new yet', async () => {
+    const f = fake({ post: () => ({ status: 200, json: { verb: 'answer', qitemId: 'qitem-1', answer: { outcome: 'recorded', unanswered: ['Quelle taille ?'] } } }) });
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
+    await h.list();
+    await h.answer('qitem-1', { kind: 'choice', questionId: 'couleur', optionId: 'vert' });
+    f.rows['qitem-1'] = { ...ASK, humanAnswers: { couleur: 'vert' } };
+    try {
+      expect((await h.list()).asks.find(a => a.id === 'qitem-1')!.questions[0]!.answer).toEqual({ kind: 'option', id: 'vert' });
+    } finally { f.rows['qitem-1'] = ASK; }
+  });
+
   it('reads a row again only when it changed', async () => {
     const f = fake();
     const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });

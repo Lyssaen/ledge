@@ -238,7 +238,7 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     if (r.status === 404) return 'gone';
     // A row that is not the one asked for is no read of it: it never stands in for it.
     if (r.status !== 200 || !RowShape.safeParse(r.json).success || obj(r.json).qitemId !== id) return 'failed';
-    rows.set(id, { at: str(obj(r.json).tsUpdated) ?? at ?? '', row: r.json });
+    rows.set(id, { at: at ?? '', row: r.json });
     return { row: r.json };
   };
 
@@ -284,7 +284,12 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     const sourcePartial = sources.some(s => /^queue/.test(str(obj(s).source) ?? '') && str(obj(s).state) !== 'available');
     let partial = sourcePartial;
     const items = Array.isArray(obj(a.json).items) ? obj(a.json).items as unknown[] : [];
-    const refs = items.flatMap(i => { const r = attentionRef(i); return r ? [{ ...r, at: str(obj(i).at), item: i }] : []; });
+    // A row's cache key is its time AND its answers as attention gives them: OpenRig records a choice without moving `tsUpdated`, so the
+    // time alone would keep showing a question as unanswered after it was answered (here, in another window, or by another surface).
+    const refs = items.flatMap(i => {
+      const r = attentionRef(i);
+      return r ? [{ ...r, at: `${str(obj(i).at) ?? ''}|${JSON.stringify(obj(i).humanAnswers ?? null)}`, item: i }] : [];
+    });
     const next = new Map<string, HumanAsk>();
     for (const r of refs) {
       const got = await row(b.url, r.id, r.at);
@@ -367,6 +372,7 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     const entityId = (await people()).get(me.address)?.entityId ?? me.address.slice(0, me.address.indexOf('@'));
     if (!actorSession || !samePerson(actorSession, entityId)) return { qitemId, ok: false, error: 'refused', message: `this row is not addressed to ${me.address}` };
     const res = await http('POST', `${b.url}/api/mission-control/action`, { ...action, qitemId, actorSession, authority: 'primary-user', auditNotes: { client: 'ledge' } });
+    rows.delete(qitemId); // whatever came back, the next read takes the row afresh
     soon();
     // Once the request may have left, only OpenRig's own readable answer says what happened: a lost answer (timeout, dropped connection),
     // a server error or an unreadable 200 is `uncertain`, never « sent » nor « not sent ». Sending again is safe: OpenRig records an
