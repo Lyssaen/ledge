@@ -22,8 +22,10 @@ import { TitledBox } from '../ui/TitledBox.js';
 /** Under this many columns the overview is one column: the session card opens with ↵. */
 export const WIDE = 100;
 
-type Row = { kind: 'project'; key: string; label: string; color: string; count: number; rig?: boolean }
-  | { kind: 'branch'; key: string; branch: string; indent: number; head?: boolean } | { kind: 'session'; key: string; s: Session; indent: number };
+type Row = { kind: 'project'; key: string; label: string; color: string; count: number; rig?: boolean; folder?: string }
+  | { kind: 'branch'; key: string; branch: string; indent: number } | { kind: 'session'; key: string; s: Session; indent: number; group?: 'rig' | 'kernel' };
+/** A rig's folder by its last name (`/w/ledge` -> `ledge`). */
+const folderOf = (cwd: string | undefined): string => (cwd ?? '').split('/').filter(Boolean).at(-1) ?? '';
 
 /** The rows of the tree box that fit in `height`, scrolled so that the selected session shows. */
 export function windowed<T extends { key: string }>(rows: readonly T[], selectedKey: string | null, height: number): T[] {
@@ -100,12 +102,13 @@ export function Overview() {
     return false;
   });
 
-  const tree: Row[] = view.tree.flatMap((n, i) => {
-    // RIGS and KERNEL each open with their header, after the projects (docs/mockups/ledge-openrig-groups.html, view 3).
-    const head = n.kind && view.tree[i - 1]?.kind !== n.kind ? [{ kind: 'branch' as const, key: `head:${n.kind}`, branch: n.kind === 'kernel' ? t.overview.kernelGroup : t.overview.rigsGroup, indent: 0, head: true }] : [];
-    if (n.kind) return [...head,
-      { kind: 'project' as const, key: n.key, label: n.label, color: n.kind === 'kernel' ? C.violet : C.blue, count: n.count, rig: true },
-      ...n.branches.flatMap(b => b.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: 0 })))];
+  // PROJETS, RIGS and KERNEL, each in its own box (docs/mockups/ledge-openrig-groups.html, view 3).
+  const groupRows = (kind: 'rig' | 'kernel'): Row[] => view.tree.filter(n => n.kind === kind).flatMap(n => [
+    ...(kind === 'rig' ? [{ kind: 'project' as const, key: n.key, label: n.label, color: C.blue, count: n.count, rig: true, folder: folderOf(n.branches[0]?.sessions[0]?.cwd) }] : []),
+    ...n.branches.flatMap(b => b.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: kind === 'rig' ? 2 : 0, group: kind })))
+  ]);
+  const rigRows = groupRows('rig'), kernelRows = groupRows('kernel');
+  const tree: Row[] = view.tree.filter(n => !n.kind).flatMap(n => {
     return [
       { kind: 'project' as const, key: n.key, label: n.label, color: projectColor(n.color), count: n.count },
       ...n.branches.flatMap(b => [{ kind: 'branch' as const, key: `${n.key}|${b.branch}`, branch: b.branch, indent: 2 }, ...b.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: 0 }))])
@@ -117,7 +120,11 @@ export function Overview() {
   // The answer's field, or the answer read again whole, across the screen under the boxes.
   const answerLines = deciding?.confirm ? wrap(deciding.draft.trim(), Math.max(10, columns - 4)) : [];
   const decideHeight = !deciding ? 0 : deciding.confirm ? Math.min(answerLines.length, Math.max(1, height - 12)) + 2 : fieldRows(columns, height) + 2;
-  const treeHeight = Math.max(3, height - 3 - (yoursHeight + 2) - decideHeight - 3);
+  const allHeight = Math.max(3, height - 3 - (yoursHeight + 2) - decideHeight - 3);
+  // The rigs' and the kernel's boxes take what their rows need (up to a few), the projects' the rest.
+  const kernelHeight = kernelRows.length ? Math.min(kernelRows.length, 5) : 0;
+  const rigsHeight = rigRows.length ? Math.min(rigRows.length, Math.max(3, Math.floor(allHeight / 3))) : 0;
+  const treeHeight = Math.max(3, allHeight - (rigsHeight ? rigsHeight + 2 : 0) - (kernelHeight ? kernelHeight + 2 : 0));
   // Inside the box (borders and padding: 4): a row's fixed parts, then what is left for its text.
   const inner = left - 4, nameW = 7;
   const stateW = Math.max(...Object.values(t.state).map(x => x.length)) + 1;
@@ -147,12 +154,23 @@ export function Overview() {
   const treeBox = (
     <TitledBox title={t.overview.projects} flexGrow={1}>
       {tree.length === 0 ? <Text color={C.faint}>{t.overview.noSession}</Text> : windowed(tree, sel, treeHeight).map(r => r.kind === 'project'
-        ? <Text key={r.key} wrap="truncate"><Text color={r.color}>{r.rig ? '⬡' : g.project}</Text> <Text color={C.fg} bold>{r.label}</Text> <Text color={C.faint}>{t.overview.sessions(r.count)}</Text></Text>
+        ? <Text key={r.key} wrap="truncate"><Text color={r.color}>{g.project}</Text> <Text color={C.fg} bold>{r.label}</Text> <Text color={C.faint}>{t.overview.sessions(r.count)}</Text></Text>
         : r.kind === 'branch'
-          ? r.head ? <Text key={r.key} wrap="truncate" color={C.dim} bold>{r.branch}</Text> : <Text key={r.key} wrap="truncate" color={C.faint}>{' '.repeat(r.indent)}{g.branch} {r.branch}</Text>
+          ? <Text key={r.key} wrap="truncate" color={C.faint}>{' '.repeat(r.indent)}{g.branch} {r.branch}</Text>
           : <SessionRow key={r.key} s={r.s} on={r.s.id === sel} nameW={nameW} topicW={Math.max(6, topicW - r.indent)} stateW={stateW} indent={r.indent} />)}
     </TitledBox>
   );
+  const groupBox = (title: string, rows: Row[], rowsHeight: number) => rows.length === 0 ? null : (
+    <TitledBox title={title} height={rowsHeight + 2}>
+      {windowed(rows, sel, rowsHeight).map(r => r.kind === 'project'
+        ? <Text key={r.key} wrap="truncate"><Text color={r.color}>⬡</Text> <Text color={C.fg} bold>{r.label}</Text>{r.folder ? <Text color={C.faint}>  {r.folder}</Text> : null}<Text color={C.faint}>  {t.overview.sessions(r.count)}</Text></Text>
+        : r.kind === 'session'
+          ? <SessionRow key={r.key} s={r.s} on={r.s.id === sel} nameW={nameW} topicW={Math.max(6, topicW - r.indent)} stateW={stateW} indent={r.indent} group={r.group} />
+          : null)}
+    </TitledBox>
+  );
+  const rigsBox = groupBox(t.overview.rigsGroup, rigRows, rigsHeight);
+  const kernelBox = groupBox(t.overview.kernelGroup, kernelRows, kernelHeight);
 
   const keys: Array<readonly [string, string]> = deciding?.confirm ? [['y', t.keys.sendAnswer], ['n esc', t.keys.edit]]
     : deciding ? [['↵', t.keys.review], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]] : [
@@ -164,7 +182,7 @@ export function Overview() {
   return (
     <Frame crumb={tui.machines.map(m => `${m.label} ${m.ready ? g.machine : '○'}`).join('  ')} keys={keys}>
       <Box flexGrow={1}>
-        <Box flexDirection="column" width={left} flexShrink={0}>{yoursBox}{treeBox}</Box>
+        <Box flexDirection="column" width={left} flexShrink={0}>{yoursBox}{treeBox}{rigsBox}{kernelBox}</Box>
         {wide ? (
           <Box flexDirection="column" flexGrow={1}>
             {selected ? (
@@ -198,7 +216,7 @@ export function Overview() {
   );
 }
 
-function SessionRow({ s, on, nameW, topicW, stateW, indent = 0 }: { s: Session; on: boolean; nameW: number; topicW: number; stateW: number; indent?: number }) {
+function SessionRow({ s, on, nameW, topicW, stateW, indent = 0, group }: { s: Session; on: boolean; nameW: number; topicW: number; stateW: number; indent?: number; group?: 'rig' | 'kernel' }) {
   const { t, g } = useTui();
   const st = botState(s);
   const n = helperCount(s);
@@ -209,8 +227,11 @@ function SessionRow({ s, on, nameW, topicW, stateW, indent = 0 }: { s: Session; 
       <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{g[st]} </Text>
       <Text color={s.offline ? C.dim : C.fg} bold>{fit(s.name, nameW)}</Text>
       {/* A seat: its tag whole, then its role and the topic in what is left (the topic goes first). */}
-      {s.rig ? <Text color={C.blue}>{rigTag(s)}</Text> : null}
-      <Text color={C.dim}>{fit(seatSecond(s, oneLine(s.topic ?? s.title)), s.rig ? Math.max(0, topicW - rigTag(s).length) : topicW)} </Text>
+      {/* In the rigs' and the kernel's boxes the box says the rig: the role (and, for the kernel, the harness) instead. */}
+      {group ? <Text color={C.dim}>{fit(group === 'kernel' ? `${(s.rig?.role ?? '').replace(/\.(agent|lead|worker)$/, '').padEnd(10)}${s.tool}` : s.rig?.role ?? '', topicW)} </Text> : <>
+        {s.rig ? <Text color={C.blue}>{rigTag(s)}</Text> : null}
+        <Text color={C.dim}>{fit(seatSecond(s, oneLine(s.topic ?? s.title)), s.rig ? Math.max(0, topicW - rigTag(s).length) : topicW)} </Text>
+      </>}
       <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{fit(s.offline ? t.overview.offline : t.state[st], stateW).trimEnd()}</Text>
       {n > 0 ? <Text color={C.violet}> +{n}</Text> : null}
       {s.machineName && s.machineId !== 'local' ? <Text color={C.faint}> · {machineLabel(s)}</Text> : null}

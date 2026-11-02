@@ -34,17 +34,16 @@ describe('ledge tui: rig seats in the overview and the session card', () => {
       const f = tui.frame();
       if (process.env.LEDGE_TUI_CAPTURE) writeFileSync(process.env.LEDGE_TUI_CAPTURE, f);
       const line = (name: string) => f.split('\n').filter(l => l.includes(name));
-      // « À TOI »: Bix waits; the projects: the three.
+      // « À TOI »: Bix waits, tagged; the RIGS box: the two seats by their role, the box saying the rig.
       expect(line('Bix')[0]).toMatch(/Bix.*\[first-factory\] dev\.build/);
-      expect(line('Nova').some(l => /\[first-factory\] dev\.review/.test(l))).toBe(true);
+      expect(line('Nova').some(l => /Nova\s+dev\.review/.test(l))).toBe(true);
       expect(line('Otto').some(l => l.includes('Supprimer la branche') && !l.includes('['))).toBe(true);
       // The selected session's card: Bix, a seat.
       expect(f).toContain('rig first-factory · dev.build');
-      // Narrower, the tree has no room for the role: the tag stays whole, the plain session keeps its topic.
+      // Narrower: the RIGS box keeps the role (no tag to make room for), the plain session keeps its topic.
       await tui.resize(120, 30);
-      await until(() => !(tui.frame().split('\n').find(l => l.includes('Nova')) ?? '').includes('dev.review'));
       const n = tui.frame().split('\n');
-      expect(n.find(l => l.includes('Nova'))).toContain('[first-factory]');
+      expect(n.find(l => l.includes('Nova'))).toContain('dev.review');
       expect(n.find(l => l.includes('Otto'))).toContain('Supprimer la br');
     } finally { await tui.cleanup(); }
   });
@@ -60,5 +59,30 @@ describe('OpenRig groups in the overview', () => {
       ['ledge', 'project', ['otto']], ['ff', 'rig', ['bix']], ['Kernel', 'kernel', ['lu']]
     ]);
     expect(v.order).toEqual(['otto', 'bix', 'lu']);
+  });
+});
+
+describe('the overview\'s RIGS and KERNEL boxes', () => {
+  it('each group in its own bordered box under the projects', async () => {
+    const { startTui, mockupSessions } = await import('./tui-fixture.js');
+    const T = '2026-11-02T10:00:00.000Z';
+    const seat = (id: string, name: string, tool: 'claude' | 'codex', cwd: string, rig: { seat: string; name: string; role: string }, state: 'idle' | 'working' | 'waiting_permission' = 'idle') =>
+      ({ id, name, tool, cwd, project: 'x', title: name, tmuxSession: rig.seat, state, helpers: [], startedAt: T, lastActivityAt: T, source: 'rig' as const, rig, ...(state === 'waiting_permission' ? { pending: { kind: 'permission' as const, text: 'npm test', tool: 'Bash', source: 'hook' as const } } : {}) });
+    const tui = await startTui({ sessions: [...mockupSessions().slice(0, 2),
+      seat('b', 'Bix', 'claude', '/w/ledge', { seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' }, 'waiting_permission'),
+      seat('n', 'Nova', 'claude', '/w/ledge', { seat: 'dev-review@first-factory', name: 'first-factory', role: 'dev.review' }, 'working'),
+      seat('l', 'Lu', 'codex', '/w/rigdev', { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' }),
+      seat('a', 'Ada', 'claude', '/w/rigdev', { seat: 'advisor-lead@kernel', name: 'kernel', role: 'advisor.lead' }, 'working'),
+      seat('s', 'Sol', 'codex', '/w/rigdev', { seat: 'queue-worker@kernel', name: 'kernel', role: 'queue.worker' })] });
+    try {
+      await tui.resize(130, 40);
+      const f = tui.frame();
+      if (process.env.LEDGE_SHOW_FRAME) console.log(f);
+      expect(f).toMatch(/╭─ RIGS ─/);
+      expect(f).toMatch(/╭─ KERNEL ─/);
+      expect(f).toMatch(/⬡ first-factory\s+ledge/);
+      expect(f).toMatch(/Lu\s+operator\s+codex/);
+      expect(f.split('\n').filter(l => l.includes('◆ Bix')).length).toBe(2); // « À TOI » and RIGS, never PROJETS
+    } finally { await tui.cleanup(); }
   });
 });
