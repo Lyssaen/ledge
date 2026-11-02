@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PhoneSession, ThreadItem } from '@ledge/protocol';
 import { threadItems } from '../../src/model/thread';
-import { replyDraft, rigWho } from '../../src/model/rigThread';
+import { replyDraft, rigWho, rowView } from '../../src/model/rigThread';
 import { session } from './fixtures';
 import { at, prompt, rigHandoff, rigNotice, rigReceived, rigSent } from './rig-fixtures';
 
@@ -61,6 +61,24 @@ describe('OpenRig in the phone thread', () => {
     expect(of([passed(`${cmd}\nqitem-new`, 'delivered')])[1]).not.toHaveProperty('refused');
     // a row handed to this seat is never « refused »
     expect(of([{ ...rigHandoff('h', at(19, 2), 'x'), status: 'refused' } as ThreadItem])[1]).not.toHaveProperty('refused');
+  });
+
+  it('asks the row of a handoff, never of one OpenRig refused', () => {
+    expect(of([rigHandoff('h', at(19, 2), 'x')])[1]).toMatchObject({ qitem: 'qitem-20261102190205-c0704682203041b9' });
+    const refused = { ...rigHandoff('h', at(19, 4), 'x', { to: 'a@b' }, { outgoing: true }), status: 'refused' } as ThreadItem;
+    expect(of([refused])[1]).not.toHaveProperty('qitem');
+  });
+
+  it('says a row\'s state and short log as the desktop does', () => {
+    const r = { id: 'qitem-x', from: 'a@r', to: 'b@r', createdAt: at(19, 2), updatedAt: at(19, 3), at: at(19, 5) };
+    expect(rowView(undefined, false)).toEqual({ key: 'unknown', text: 'état non suivi' });
+    expect(rowView({ ...r, state: 'pending' }, false)).toEqual({ key: 'pending', text: 'en attente', log: 'confiée 19:02 · pas encore prise' });
+    expect(rowView({ ...r, state: 'pending' }, true).log).toBe('passée 19:02 · pas encore prise');
+    expect(rowView({ ...r, state: 'in-progress', claimedAt: at(19, 2) }, false)).toMatchObject({ key: 'taken', text: 'prise', log: 'confiée 19:02 · prise 19:02' });
+    expect(rowView({ ...r, state: 'handed-off', handedOffTo: 'dev-front@ledge-dev-2' }, false)).toMatchObject({ key: 'passed', text: 'passée à dev-front' });
+    expect(rowView({ ...r, state: 'blocked' }, false)).toMatchObject({ key: 'blocked', text: 'bloquée' });
+    expect(rowView({ ...r, state: 'done', claimedAt: at(19, 2) }, false)).toMatchObject({ key: 'done', text: 'terminée', log: 'confiée 19:02 · prise 19:02 · terminée 19:03' });
+    expect(rowView({ ...r, state: 'parked' }, false)).toMatchObject({ key: 'unknown', text: 'parked' });
   });
 
   it('turns the seat\'s own rig send into a sent bubble with its delivery', () => {

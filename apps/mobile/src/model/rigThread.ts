@@ -1,4 +1,4 @@
-import type { PhoneSession, RigInfo, ThreadItem as PcItem } from '@ledge/protocol';
+import type { PhoneRigRow, PhoneSession, RigInfo, ThreadItem as PcItem } from '@ledge/protocol';
 import { copy } from '../copy';
 
 /**
@@ -21,7 +21,8 @@ export type RigElement =
       /** « Répondre »: the sender's session, and what its composer is prefilled with. */ reply?: { sessionId: string; draft: string };
       raw?: RigRaw; cut?: true }
   | { key: string; kind: 'rig-task'; at: string; outgoing: boolean; who: RigWho; title: string; raw?: RigRaw; cut?: true;
-      /** The seat's own handoff OpenRig did not take (`status: 'refused'`): the card's short log line. */ refused?: { log: string } }
+      /** The seat's own handoff OpenRig did not take (`status: 'refused'`): the card's short log line. */ refused?: { log: string };
+      /** The row whose live state the card shows while it is visible; absent when there is none to ask (refused, no id). */ qitem?: string }
   | { key: string; kind: 'rig-notice'; at: string; tone: 'plain' | 'task' | 'warn'; title: string; raw?: RigRaw; cut?: true }
   | { key: string; kind: 'rig-fold'; at: string; notices: Extract<RigElement, { kind: 'rig-notice' }>[] }
   /** The one raw of blocks pasted together, its own row after the packet. */
@@ -87,7 +88,8 @@ export function rigElement(i: PcItem, sessions: ReadonlyMap<string, PhoneSession
     const outgoing = !!i.outgoing;
     const who = rigWho(outgoing ? rig.to : rig.from ?? i.name, i.peer, sessions);
     const refused = outgoing && i.status === 'refused' ? { refused: { log: refusalLog(rig.raw, i.at) } } : {};
-    return { key: i.id, kind: 'rig-task', at, outgoing, who, title: rig.summary ?? i.summary ?? i.text, raw: raw(outgoing ? R.command : R.raw), ...refused, ...mark };
+    const ask = !('refused' in refused) && rig.qitem ? { qitem: rig.qitem } : {};
+    return { key: i.id, kind: 'rig-task', at, outgoing, who, title: rig.summary ?? i.summary ?? i.text, raw: raw(outgoing ? R.command : R.raw), ...refused, ...ask, ...mark };
   }
   if (rig.kind === 'unblocked') return { key: i.id, kind: 'rig-notice', at, tone: 'task', title: R.unblocked(shortRow(rig.qitem)), raw: raw(), ...mark };
   if (rig.kind === 'openrig' && rig.alert === 'stalled') return { key: i.id, kind: 'rig-notice', at, tone: 'warn', title: R.stalled(shortRow(rig.qitem), rig.minutes ?? 0), raw: raw(), ...mark };
@@ -141,4 +143,23 @@ export function foldNotices<T extends { key: string; kind: string }>(list: (T | 
   }
   flush();
   return out;
+}
+
+/** A row's state as the card's pill says it (the mockup's `.st` variants), as on the desktop. */
+export type RowStateKey = 'pending' | 'taken' | 'passed' | 'blocked' | 'done' | 'unknown';
+const STATE_OF: Record<string, RowStateKey> = { pending: 'pending', 'in-progress': 'taken', 'handed-off': 'passed', blocked: 'blocked', done: 'done' };
+
+/**
+ * What a task card says of its row, read live: the pill (OpenRig's word as is when the phone does not know it) and the
+ * short log (« confiée 19:02 · prise 19:02 · terminée 19:03 »; passed by this seat: « passée … »; pending: « pas encore prise »).
+ * No row: « état non suivi », no log. `passée à` names the seat it went to (the phone does not map seats to sessions).
+ */
+export function rowView(row: PhoneRigRow | undefined, outgoing: boolean): { key: RowStateKey; text: string; log?: string } {
+  if (!row) return { key: 'unknown', text: R.rowState.unknown };
+  const key = STATE_OF[row.state] ?? 'unknown';
+  const text = !STATE_OF[row.state] ? row.state : key === 'passed' ? R.rowState.passed(rigWho(row.handedOffTo, undefined, new Map()).name) : R.rowState[key as Exclude<RowStateKey, 'passed' | 'unknown'>];
+  const log = [outgoing ? R.log.passed(clock(row.createdAt)) : R.log.handed(clock(row.createdAt)),
+    row.claimedAt ? R.log.taken(clock(row.claimedAt)) : key === 'pending' ? R.log.notTaken : null,
+    key === 'done' ? R.log.done(clock(row.updatedAt)) : null].filter(Boolean).join(' · ');
+  return { key, text, log };
 }

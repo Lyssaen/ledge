@@ -341,7 +341,9 @@ export const copy = {
       about: (line: string) => `À propos de : « ${line} »`,
       sent: { sending: 'envoi…', delivered: '✓ remis', read: '✓ lu', failed: 'non remis' },
       rowIn: (n: string) => `Confiée par ${n}`, rowOut: (n: string) => `Passée à ${n}`,
-      rowState: { unknown: 'état non suivi', refused: 'non transmise' },
+      rowState: { unknown: 'état non suivi', refused: 'non transmise', pending: 'en attente', taken: 'prise', passed: (n: string) => `passée à ${n}`, blocked: 'bloquée', done: 'terminée' },
+      /** A row's short log, read live. */
+      log: { handed: (t: string) => `confiée ${t}`, passed: (t: string) => `passée ${t}`, taken: (t: string) => `prise ${t}`, done: (t: string) => `terminée ${t}`, notTaken: 'pas encore prise' },
       /** The short log of a handoff OpenRig refused: when it was passed, and what OpenRig said. */
       refusedSaid: (time: string, said: string) => `passée ${time} · OpenRig : ${said}`,
       refusedSilent: (time: string) => `passée ${time} · non transmise par OpenRig`,

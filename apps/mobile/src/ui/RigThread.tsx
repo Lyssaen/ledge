@@ -1,10 +1,12 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { RIG_ROW_REFRESH_MS, type PhoneRigRow } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { poseFor } from '@ledge/ui/bots/poseFor';
 import { copy } from '../copy';
-import type { RigElement, RigRaw, RigWho } from '../model/rigThread';
+import { rowView, type RigElement, type RigRaw, type RigWho, type RowStateKey } from '../model/rigThread';
 import { href } from '../router';
 import { prefillDraft } from '../state/drafts';
+import { useMobile, type MobileStore } from '../state/store';
 import { useTheme } from '../theme';
 import { Icon } from './icons';
 
@@ -81,22 +83,62 @@ function Message({ e, storage }: { e: Extract<RigElement, { kind: 'rig-message' 
   );
 }
 
-function Task({ e }: { e: Extract<RigElement, { kind: 'rig-task' }> }) {
+const PILL = 'inline-flex h-5 items-center rounded-full px-2 text-meta font-medium whitespace-nowrap';
+/** The mockup's `.st` variants. */
+const STATE_PILL: Record<RowStateKey, string> = {
+  pending: 'bg-raised text-muted', taken: 'bg-[var(--status-info-soft)] text-info', passed: 'bg-task/14 text-task',
+  blocked: 'bg-[var(--status-warning-soft)] text-attention', done: 'bg-[var(--status-success-soft)] text-ok', unknown: 'border border-dashed border-line text-muted'
+};
+
+/** Whether the card is on screen: always, where the browser has no IntersectionObserver. */
+function useVisible(el: RefObject<HTMLElement | null>): boolean {
+  const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const node = el.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(entries => setVisible(entries.some(x => x.isIntersecting)));
+    io.observe(node);
+    return () => io.disconnect();
+  }, [el]);
+  return visible;
+}
+
+/** A row's live state, when the PC reads rows (`daemon.rigRows`): asked when the card shows, then every 30 s while it does. */
+function useRigRow(store: MobileStore, qitem: string | undefined, visible: boolean): PhoneRigRow | undefined {
+  const state = useMobile(store);
+  const available = state.daemon?.rigRows === true;
+  // Asked again once the link is back (`fresh`): a read in flight on a lost link never comes.
+  const on = !!qitem && visible && available && state.fresh;
+  useEffect(() => {
+    if (!on) return;
+    store.requestRigRow(qitem!);
+    const timer = setInterval(() => store.requestRigRow(qitem!), RIG_ROW_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [on, store, qitem]);
+  return qitem && available ? state.rigRows[qitem]?.row : undefined;
+}
+
+function Task({ e, store }: { e: Extract<RigElement, { kind: 'rig-task' }>; store: MobileStore }) {
   const { toggle, box } = useRaw(e.raw);
+  const card = useRef<HTMLElement>(null);
+  const visible = useVisible(card);
+  const row = useRigRow(store, e.qitem, visible);
+  const view = e.refused ? null : rowView(row, e.outgoing);
+  const log = e.refused ? e.refused.log : view?.log;
   return (
     <div className="flex flex-col gap-1">
-      <section aria-label={e.outgoing ? R.rowOut(e.who.name) : R.rowIn(e.who.name)}
+      <section ref={card} aria-label={e.outgoing ? R.rowOut(e.who.name) : R.rowIn(e.who.name)}
         className="flex w-full flex-col gap-1.5 rounded-[10px] border border-l-[3px] border-task/35 border-l-task bg-surface px-3.5 py-2.5">
         <div className="flex items-center gap-1.5 text-small font-medium text-task">
           <Icon name="task" className="size-3.5" />
           <span className="min-w-0 truncate">{e.outgoing ? R.rowOut(e.who.name) : R.rowIn(e.who.name)}</span>
           <span className="flex-1" />
-          {e.refused
-            ? <span className="inline-flex h-5 items-center rounded-full bg-danger-bg px-2 text-meta font-medium whitespace-nowrap text-danger-fg">{R.rowState.refused}</span>
-            : <span className="inline-flex h-5 items-center rounded-full border border-dashed border-line px-2 text-meta font-medium whitespace-nowrap text-muted">{R.rowState.unknown}</span>}
+          {view
+            ? <span data-state={view.key} className={`${PILL} ${STATE_PILL[view.key]}`}>{view.text}</span>
+            : <span data-state="refused" className={`${PILL} bg-danger-bg text-danger-fg`}>{R.rowState.refused}</span>}
         </div>
         <h4 className="line-clamp-2 text-[0.90625rem] leading-[1.3125rem] font-semibold [overflow-wrap:anywhere]">{e.title}</h4>
-        {e.refused && <p className="text-small text-muted [overflow-wrap:anywhere]">{e.refused.log}</p>}
+        {log && <p className="text-small text-muted [overflow-wrap:anywhere]">{log}</p>}
         {toggle && <div className="flex items-center border-t border-dashed border-line pt-1.5"><span className="flex-1" />{toggle}</div>}
         {box}
       </section>
@@ -151,10 +193,10 @@ function PacketRaw({ e }: { e: Extract<RigElement, { kind: 'rig-raw' }> }) {
   return <div className="-mt-2 flex flex-col items-start">{toggle}{box && <div className="w-full">{box}</div>}</div>;
 }
 
-export function RigItem({ e, storage }: { e: RigElement; storage?: Storage | undefined }) {
+export function RigItem({ e, storage, store }: { e: RigElement; storage?: Storage | undefined; store: MobileStore }) {
   switch (e.kind) {
     case 'rig-message': return <Message e={e} storage={storage} />;
-    case 'rig-task': return <Task e={e} />;
+    case 'rig-task': return <Task e={e} store={store} />;
     case 'rig-notice': return <NoticeLine e={e} />;
     case 'rig-fold': return <Fold e={e} />;
     case 'rig-unreadable': return <Unreadable e={e} />;
