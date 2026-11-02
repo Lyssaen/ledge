@@ -4,9 +4,14 @@ import type { PhoneEscalation, PhoneRig, PhoneTeam, PhoneThreadItem } from '@led
 export const teamsEngine = (daemon: { teamsEngine?: 'ledge' | 'openrig' } | null): 'ledge' | 'openrig' => daemon?.teamsEngine ?? 'openrig';
 /** What a card says of the definition a team came from: a Ledge team's template (« modèle »), an OpenRig rig's spec. */
 export const specLabel = (r: PhoneRig): string => r.spec ? `${r.engine === 'ledge' ? 'modèle' : 'spec'} ${r.spec}` : '';
-/** A Ledge team's id, for its live-team screen: the one the daemon sends, else the live team of that name in that project. */
-export const teamIdOf = (r: PhoneRig, teams: readonly PhoneTeam[] | null): string | undefined =>
-  r.engine !== 'ledge' ? undefined : r.teamId ?? teams?.find(t => t.name === r.name && t.project === r.project)?.id;
+/** A Ledge team's id, for its live-team screen: the one the daemon sends, else the one live team of that name in that project
+ *  (two of the same name match none: better no link than the wrong team). */
+export const teamIdOf = (r: PhoneRig, teams: readonly PhoneTeam[] | null): string | undefined => {
+  if (r.engine !== 'ledge') return undefined;
+  if (r.teamId) return r.teamId;
+  const same = (teams ?? []).filter(t => t.name === r.name && t.project === r.project);
+  return same.length === 1 ? same[0]!.id : undefined;
+};
 
 export const rigPlace = (r: PhoneRig): string => r.project ? `dans ${r.project}` : 'hors projet';
 export const rigProgress = (r: PhoneRig) => ({ working: r.seats.filter(s => ['working', 'starting', 'trust'].includes(s.state)).length, total: r.seats.length });
