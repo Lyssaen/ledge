@@ -121,6 +121,17 @@ You are parked (arbitrated: idle at prompt) while holding 1 open obligation: qit
     expect(parseRigPrompt(`${cut}\n${lead('suite')}`, AT)!.map(x => x.kind)).toEqual(['unreadable', 'message']);
   });
 
+  it('keeps a From / To quoted in a message\'s body, and still finds an envelope cut short before a whole one', () => {
+    const quoted = lead('Voici le message précédent :\nFrom: other@rig\nTo: pilot@rig\nÇa disait : on y va.');
+    expect(one(quoted)).toMatchObject({ kind: 'message', body: 'Voici le message précédent :\nFrom: other@rig\nTo: pilot@rig\nÇa disait : on y va.' });
+    // a quoted header with its Sent line, but no `---` after it: still the body
+    expect(one(lead('Cité :\nFrom: other@rig\nTo: pilot@rig\nSent: 11-02 19:00Z\nfin'))).toMatchObject({ kind: 'message' });
+    // cut short, then a whole envelope (with or without Sent)
+    const cut = 'From: a@rig\nTo: b@rig\nSent: 11-02 19:00Z\n---\nQueue handoff: qitem-1';
+    expect(parseRigPrompt(`${cut}\n${lead('suite')}`, AT)!.map(x => x.kind)).toEqual(['unreadable', 'message']);
+    expect(parseRigPrompt(`${cut}\nFrom: c@rig\nTo: b@rig\n---\nsuite\n---\n↩ Reply: rig send c@rig "..."`, AT)!.map(x => x.kind)).toEqual(['unreadable', 'message']);
+  });
+
   it('leaves the user\'s prompts alone', () => {
     expect(parseRigPrompt('Corrige le test', AT)).toBeUndefined();
     expect(parseRigPrompt('', AT)).toBeUndefined();
@@ -159,6 +170,8 @@ describe('rigCommand', () => {
   it('reads its handoffs and creates', () => {
     expect(rigCommand('rig queue handoff qitem-20261102205801-ae61eb9d7f1f4b49 --to pilot-lead@ledge-dev-2 --body-file /tmp/r.md --tags overlay-activity --summary "Installateur NSIS 0.36.0 construit" --note "ok"'))
       .toEqual({ kind: 'handoff', op: 'handoff', to: 'pilot-lead@ledge-dev-2', from: 'qitem-20261102205801-ae61eb9d7f1f4b49', summary: 'Installateur NSIS 0.36.0 construit' });
+    expect(rigCommand('rig queue handoff-and-complete qitem-source --to dev@rig --summary test'))
+      .toEqual({ kind: 'handoff', op: 'handoff-and-complete', to: 'dev@rig', from: 'qitem-source', summary: 'test' });
     expect(rigCommand('rig queue create --source me@r --destination review-qa@ledge-dev-2 --summary="Revue 3" --body "voir commit"'))
       .toEqual({ kind: 'handoff', op: 'create', to: 'review-qa@ledge-dev-2', summary: 'Revue 3', body: 'voir commit' });
   });
@@ -175,8 +188,24 @@ describe('rigCommand', () => {
     expect(rigCommandResult(send, 'Retained, not delivered to a@b.', false)).toEqual({ status: 'failed' });
     expect(rigCommandResult(send, '{"ok":true}', false)).toEqual({ status: 'delivered' });
     expect(rigCommandResult(send, 'error', true)).toEqual({ status: 'failed' });
-    const handoff = rigCommand('rig queue handoff qitem-1-a --to a@b')!;
-    expect(rigCommandResult(handoff, '{"closed":{"qitemId":"qitem-1-a"},"qitemId":"qitem-2-b"}', false)).toEqual({ status: 'delivered', qitem: 'qitem-2-b' });
+    const handoff = rigCommand('rig queue handoff qitem-1-source --to dev@rig')!;
+    // `--json` receipt (queue-receipt.js): the closed row cites its parents and its blocker before the created row
+    const json = JSON.stringify({ closed: { qitemId: 'qitem-1-source', state: 'handed-off', handedOffFrom: 'qitem-0-parent', chainOfRecord: ['qitem-0-root', 'qitem-0-parent'], blockedOn: 'qitem-0-blocker', handedOffTo: 'dev@rig' },
+      created: { qitemId: 'qitem-2-new', state: 'pending', handedOffFrom: 'qitem-1-source' }, receipt: { fullCommands: ['rig queue show qitem-1-source --full --json', 'rig queue show qitem-2-new --full --json'] } });
+    expect(rigCommandResult(handoff, json, false)).toEqual({ status: 'delivered', qitem: 'qitem-2-new' });
+    // the same, pretty-printed (the whole response, when the receipt is not projected)
+    expect(rigCommandResult(handoff, JSON.stringify(JSON.parse(json), null, 2), false)).toEqual({ status: 'delivered', qitem: 'qitem-2-new' });
+    // the text receipt
+    const text = ['closed qitem-1-source · handed-off · owner me@rig', '  created 2026-11-02T20:58:01.114Z · updated 2026-11-02T21:00:00.000Z · body 861 bytes · from lead@rig',
+      '  handed off from qitem-0-parent', '  handed off to dev@rig', 'created qitem-2-new · pending · owner dev@rig', '  handed off from qitem-1-source',
+      'receipt: full rows: rig queue show qitem-1-source --full --json · rig queue show qitem-2-new --full --json'].join('\n');
+    expect(rigCommandResult(handoff, text, false)).toEqual({ status: 'delivered', qitem: 'qitem-2-new' });
+    // an output that names no created row: no row, rather than a wrong one
+    expect(rigCommandResult(handoff, 'handed off from qitem-0-parent', false)).toEqual({ status: 'delivered' });
+    expect(rigCommandResult(handoff, json, true)).toEqual({ status: 'failed' });
+    const create = rigCommand('rig queue create --destination dev@rig --summary x')!;
+    expect(rigCommandResult(create, JSON.stringify({ qitemId: 'qitem-3-made', state: 'pending', blockedOn: 'qitem-0-blocker' }), false)).toEqual({ status: 'delivered', qitem: 'qitem-3-made' });
+    expect(rigCommandResult(create, 'created qitem-3-made · pending · owner dev@rig\n  blocked on qitem-0-blocker', false)).toEqual({ status: 'delivered', qitem: 'qitem-3-made' });
   });
 });
 

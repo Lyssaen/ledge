@@ -136,6 +136,10 @@ const PASTE_TAG = /^<\/?pasted_content(?: [^>]*)?>$/;
 
 /** An envelope starts here: a `From:` line, then a `To:` line. */
 const startsEnvelope = (lines: string[], i: number): boolean => lines[i]!.startsWith('From: ') && (lines[i + 1] ?? '').startsWith('To: ');
+/** A whole envelope header starts here: From, To, an optional Sent, then `---`. Inside a body, only such a header ends the
+ *  envelope being read (it was cut short); a From / To quoted in a message does not. */
+const headerAt = (lines: string[], i: number): boolean =>
+  startsEnvelope(lines, i) && (lines[i + 2] === '---' || (SENT.test(lines[i + 2] ?? '') && lines[i + 3] === '---'));
 
 /**
  * Reads a seat's prompt. Returns its blocks in order, or undefined when it holds no OpenRig envelope (a prompt of the
@@ -180,7 +184,7 @@ export function parseRigPrompt(prompt: string, at: string): RigBlock[] | undefin
     let end = -1, footer = '', glued = '';
     if (lines[j] === '---') {
       for (let k = j + 1; k + 1 < lines.length; k++) {
-        if (startsEnvelope(lines, k)) break; // the next envelope: this one has no end
+        if (headerAt(lines, k)) break; // the next envelope: this one has no end
         if (lines[k] !== '---' || !lines[k + 1]!.startsWith('↩ ')) continue;
         const f = lines[k + 1]!;
         const m = FOOTERS.map(re => re.exec(f)).find(Boolean);
@@ -191,7 +195,7 @@ export function parseRigPrompt(prompt: string, at: string): RigBlock[] | undefin
     }
     if (end < 0) { // not to its end: up to the next envelope
       let k = i + 1;
-      while (k < lines.length && !startsEnvelope(lines, k) && !(RECOVERED.test(lines[k]!) && k + 1 < lines.length && startsEnvelope(lines, k + 1))) k++;
+      while (k < lines.length && !headerAt(lines, k) && !(RECOVERED.test(lines[k]!) && k + 1 < lines.length && headerAt(lines, k + 1))) k++;
       if (!opensOnEnvelope && out.every(b => b.kind === 'text')) return undefined; // the user's words, then something that only looks like an envelope
       out.push({ kind: 'unreadable', raw: lines.slice(start, k).join('\n').trimEnd() });
       recovered = false; i = k; continue;
@@ -221,7 +225,7 @@ export function rigKey(b: { from?: string; to?: string; sentAt?: string; gen?: s
  *  `body`: the message (a send) or the --body (a row), when given inline; `summary`: --summary. */
 export type RigCommand =
   | { kind: 'message'; to: string; body?: string }
-  | { kind: 'handoff'; op: 'handoff' | 'create'; to: string; from?: string; summary?: string; body?: string };
+  | { kind: 'handoff'; op: 'handoff' | 'handoff-and-complete' | 'create'; to: string; from?: string; summary?: string; body?: string };
 
 /** Splits a shell command into words: single and double quotes, backslash escapes. Undefined on what it does not read
  *  as one plain command (an unclosed quote, a pipe, `;`, a substitution, a redirection, a heredoc). `&&` is kept as a word. */
@@ -280,23 +284,42 @@ export function rigCommand(command: string): RigCommand | undefined {
     const body = fanOut ? positional[0] : positional[1];
     return { kind: 'message', to, ...(body !== undefined ? { body } : {}) };
   }
-  if (w[1] === 'queue' && (w[2] === 'handoff' || w[2] === 'create')) {
+  if (w[1] === 'queue' && (w[2] === 'handoff' || w[2] === 'handoff-and-complete' || w[2] === 'create')) {
     const args = w.slice(3);
-    const to = w[2] === 'handoff' ? option(args, '--to') : option(args, '--destination');
+    const to = w[2] === 'create' ? option(args, '--destination') : option(args, '--to');
     if (!to) return undefined;
-    const from = w[2] === 'handoff' ? args.find(a => /^qitem-/.test(a)) : undefined;
+    const from = w[2] === 'create' ? undefined : args.find(a => /^qitem-/.test(a));
     const summary = option(args, '--summary'), body = option(args, '--body');
     return { kind: 'handoff', op: w[2], to, ...(from ? { from } : {}), ...(summary ? { summary } : {}), ...(body && body !== '-' ? { body } : {}) };
   }
   return undefined;
 }
 
+/** The row a `rig queue handoff|handoff-and-complete|create` made, from what it printed (`@openrig/cli` 0.7, `queue-receipt.js`):
+ *  its JSON (`created.qitemId` for a handoff, `qitemId` for a create, receipt or whole response), else its text receipt
+ *  (`created <id> · <state> · owner <seat>`). Never another id of the output: a closed row cites its parents. */
+function createdRow(cmd: Extract<RigCommand, { kind: 'handoff' }>, output: string): string | undefined {
+  const id = (v: unknown): string | undefined => (typeof v === 'string' && QitemIdSchema.safeParse(v).success ? v : undefined);
+  const trimmed = output.trim();
+  const start = trimmed.indexOf('{');
+  if (start >= 0) {
+    try {
+      const j = JSON.parse(trimmed.slice(start)) as Record<string, unknown>;
+      const created = j.created && typeof j.created === 'object' ? (j.created as Record<string, unknown>).qitemId : undefined;
+      const got = cmd.op === 'create' ? id(j.qitemId) ?? id(created) : id(created);
+      if (got) return got;
+    } catch { /* not JSON: the text receipt */ }
+  }
+  return new RegExp(`^created (${QITEM}) · `, 'm').exec(output)?.[1];
+}
+
 /** What the command printed, read: `failed` when it failed or `rig send` kept the message (`Retained, not delivered`),
- *  else `delivered`; and the row a handoff or a create made (the first queue id in its output that is not the handed one). */
+ *  else `delivered`; and the row a handoff or a create made. */
 export function rigCommandResult(cmd: RigCommand, output: string, failed: boolean): { status: 'delivered' | 'failed'; qitem?: string } {
   if (cmd.kind === 'message') return { status: failed || /^Retained, not delivered\b/m.test(output) ? 'failed' : 'delivered' };
-  const ids = [...output.matchAll(new RegExp(QITEM, 'g'))].map(m => m[0]).filter(id => id !== cmd.from);
-  return { status: failed ? 'failed' : 'delivered', ...(!failed && ids[0] ? { qitem: ids[0] } : {}) };
+  if (failed) return { status: 'failed' };
+  const qitem = createdRow(cmd, output);
+  return { status: 'delivered', ...(qitem ? { qitem } : {}) };
 }
 
 // ── A queue row's state, read live (decision 2: re-read every 30 s while its card is visible) ──

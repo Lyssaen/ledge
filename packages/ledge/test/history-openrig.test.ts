@@ -107,6 +107,19 @@ describe('OpenRig in a seat\'s thread', () => {
     valid(h.items('s'));
   });
 
+  it('makes a handoff-and-complete an outgoing row card too', () => {
+    const h = new History();
+    const command = 'rig queue handoff-and-complete qitem-20261102205801-ae61eb9d7f1f4b49 --to dev-front@ledge-dev-2 --summary "Front à reprendre"';
+    h.record('s', ev('PreToolUse', { tool: 'Bash', toolUseId: 'toolu_4', toolInput: { command } }));
+    expect(h.items('s')[0]).toMatchObject({ kind: 'notice', outgoing: true, name: 'dev-front@ledge-dev-2', rig: { kind: 'handoff', to: 'dev-front@ledge-dev-2', command } });
+    const output = ['closed qitem-20261102205801-ae61eb9d7f1f4b49 · done · owner dev-back@ledge-dev-2', '  handed off from qitem-20261102184222-c844fa05df894750',
+      'created qitem-20261102213800-feedfacecafe0001 · pending · owner dev-front@ledge-dev-2'].join('\n');
+    h.record('s', ev('PostToolUse', { tool: 'Bash', toolUseId: 'toolu_4', toolInput: { command }, output }, 1));
+    expect(h.items('s')).toHaveLength(1);
+    expect(h.items('s')[0]).toMatchObject({ status: 'delivered', rig: { qitem: 'qitem-20261102213800-feedfacecafe0001' } });
+    valid(h.items('s'));
+  });
+
   it('keeps any other Bash call an action row', () => {
     const h = new History();
     for (const [k, command] of ['rig queue show qitem-1 --json', 'rig send a@b "x" | tail -1', 'pnpm test'].entries()) {
