@@ -34,6 +34,9 @@ export const fr = {
     send: 'Envoyer', cancel: 'Annuler', keys: 'Ctrl Entrée · Échap', seen: 'Vu',
     progress: (n: number, total: number) => `${n}/${total} répondues · la réponse part à la dernière`,
     notSent: (why: string) => `Pas envoyée : ${why}`, retry: 'Réessayer',
+    // Pending the user's validation (design-ux 20:49Z, lead): do not ship before.
+    uncertain: 'Envoi incertain : la réponse est peut-être partie. Réessayer ne l’enverra pas deux fois.',
+    settlesAll: 'Cette réponse règle toute la demande, y compris les questions sans réponse.',
     stopped: 'OpenRig est arrêté',
     sentTo: 'Envoyé à', already: 'Déjà réglée ailleurs',
     partial: 'Liste peut-être incomplète : OpenRig n’a pas répondu à la dernière lecture.',

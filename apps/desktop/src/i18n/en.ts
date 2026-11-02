@@ -19,6 +19,8 @@ export const en: Messages = {
     send: 'Send', cancel: 'Cancel', keys: 'Ctrl Enter · Esc', seen: 'Seen',
     progress: (n, total) => `${n}/${total} answered · the answer goes with the last one`,
     notSent: (why) => `Not sent: ${why}`, retry: 'Retry',
+    uncertain: 'Uncertain: the answer may have been sent. Retrying won’t send it twice.',
+    settlesAll: 'This answer settles the whole request, including unanswered questions.',
     stopped: 'OpenRig is stopped',
     sentTo: 'Sent to', already: 'Already settled elsewhere',
     partial: 'List may be incomplete: OpenRig did not answer the last read.',

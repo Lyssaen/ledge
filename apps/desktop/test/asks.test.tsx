@@ -297,3 +297,51 @@ describe('Markdown bodies (the lead: folded = words without syntax, unfolded = r
     expect(document.querySelectorAll('.ask-detail li')).toHaveLength(2);
   });
 });
+
+describe('contract e9e276cd: typed answers, uncertain, words settle all', () => {
+  const two = (answer: HumanAsk['questions'][number]['answer'] = null) => ask({ summary: 'Deux choix', questions: [
+    { id: 'q1', question: 'Un modèle ?', options: [{ id: 'one', label: 'Un seul modèle', recommended: false }, { id: 'two', label: 'Deux', recommended: false }], answer },
+    { id: 'q2', question: 'Délai ?', options: [{ id: '3', label: '3 s', recommended: false }, { id: '5', label: '5 s', recommended: true }], answer: null }
+  ] });
+
+  it('an answer already given shows its option’s label, or the person’s words', () => {
+    mount([two({ kind: 'option', id: 'two' })]);
+    expect(document.querySelector('.ask-chosen')).toHaveTextContent('Deux');
+    cleanup();
+    mount([two({ kind: 'words', text: 'Plutôt un seul' })]);
+    expect(document.querySelector('.ask-chosen')).toHaveTextContent('Plutôt un seul');
+  });
+
+  it('uncertain: amber « Envoi incertain… », Réessayer; a retry that finds it already answered says « Envoyé à »', async () => {
+    const answer = vi.fn()
+      .mockResolvedValueOnce(answered({ ok: false, error: 'uncertain' }))
+      .mockResolvedValueOnce(answered({ outcome: 'already' }));
+    mount([ask()], { answer });
+    await userEvent.click(screen.getByRole('button', { name: 'Un plus fort' }));
+    const line = screen.getByRole('alert');
+    expect(line).toHaveClass('ask-uncertain');
+    expect(line).toHaveTextContent('Envoi incertain : la réponse est peut-être partie. Réessayer ne l’enverra pas deux fois.');
+    await userEvent.click(within(line).getByRole('button', { name: 'Réessayer' }));
+    expect(answer.mock.calls[1]).toEqual(answer.mock.calls[0]);
+    expect(screen.getByRole('status')).toHaveTextContent('Envoyé à Bix · pilot');
+  });
+
+  it('words on several questions: the field takes the foot, the questions stay with their buttons greyed, a warning while one waits', async () => {
+    const { answer } = mount([two({ kind: 'option', id: 'one' })]);
+    await userEvent.click(screen.getByRole('button', { name: 'Répondre autrement…' }));
+    expect(screen.getByText('2. Délai ?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '5 s · recommandé' })).toBeDisabled();
+    expect(screen.getByText('Cette réponse règle toute la demande, y compris les questions sans réponse.')).toBeInTheDocument();
+    expect(screen.queryByText(/répondues · la réponse part/)).toBeNull();
+    await userEvent.type(screen.getByRole('textbox'), 'Un seul, 5 s');
+    await userEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+    expect(answer).toHaveBeenCalledWith('qitem-1', { kind: 'words', text: 'Un seul, 5 s' });
+    cleanup();
+    // Every question answered: no warning.
+    const all = two({ kind: 'option', id: 'one' });
+    all.questions[1] = { ...all.questions[1]!, answer: { kind: 'option', id: '5' } };
+    mount([all]);
+    await userEvent.click(screen.getByRole('button', { name: 'Répondre autrement…' }));
+    expect(screen.queryByText(/règle toute la demande/)).toBeNull();
+  });
+});

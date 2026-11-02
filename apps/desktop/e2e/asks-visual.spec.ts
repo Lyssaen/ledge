@@ -22,7 +22,7 @@ const ASKS: HumanAsk[] = [
     questions: [{ id: 'q', question: 'Un modèle ?', options: [{ id: 'one', label: 'Un seul modèle', recommended: true }, { id: 'two', label: 'Un plus fort pour décider seul', recommended: false }], answer: null }] },
   { ...base, id: 'qitem-two', kind: 'decision', from: from('pilot.lead'), summary: 'Deux choix pour l’écran de réglage', body: '',
     questions: [
-      { id: 'q1', question: 'Un modèle pour tout, ou un plus fort pour décider seul ?', options: [{ id: 'one', label: 'Un seul modèle', recommended: false }, { id: 'two', label: 'Deux', recommended: false }], answer: 'one' },
+      { id: 'q1', question: 'Un modèle pour tout, ou un plus fort pour décider seul ?', options: [{ id: 'one', label: 'Un seul modèle', recommended: false }, { id: 'two', label: 'Deux', recommended: false }], answer: { kind: 'option', id: 'one' } },
       { id: 'q2', question: 'Délai avant envoi par défaut ?', options: [{ id: '3', label: '3 s', recommended: false }, { id: '5', label: '5 s', recommended: true }, { id: '10', label: '10 s', recommended: false }], answer: null }
     ] },
   { ...base, id: 'qitem-parked', kind: 'parked', from: from('dev.front'), summary: 'Je reste bloquée sur la carte « Pas envoyée » : je garde la carte ou je la remplace ?',

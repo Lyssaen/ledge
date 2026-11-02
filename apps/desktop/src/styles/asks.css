@@ -90,3 +90,8 @@
 .ask-md .ledge-thread-md { font-size: 12.5px; line-height: 18px; color: var(--muted-foreground); }
 .ask-md .ledge-thread-md > :first-child { margin-top: 0; }
 .ask-md .ledge-thread-md > :last-child { margin-bottom: 0; }
+
+/* « Envoi incertain » (the answer may have gone): amber, not red (design-ux). */
+.ask-err.ask-uncertain { color: var(--warning); }
+/* Words on a request with several questions settle all of it: said before Send. */
+.ask-warn { margin: 0; font-size: 12px; line-height: 17px; color: var(--warning); }

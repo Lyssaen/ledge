@@ -44,7 +44,8 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   const [composing, setComposing] = useState(false);
   const [text, setText] = useState('');
   const [sending, setSending] = useState<Sending | null>(null);
-  const [failed, setFailed] = useState<{ why: string; retry: Sending } | null>(null);
+  // `uncertain`: the answer may have gone (design-ux: amber, « Envoi incertain… »); a retry that comes back « already » is then our own send.
+  const [failed, setFailed] = useState<{ why: string; retry: Sending; uncertain: boolean } | null>(null);
   // Choices this card recorded, before the next push says so (a question answered shows « ✓ label », for good).
   const [recorded, setRecorded] = useState<ReadonlyMap<string, string>>(new Map());
   const [all, setAll] = useState(false);
@@ -70,18 +71,27 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
     cardRef.current?.focus({ preventScroll: true });
   }, [focus]);
 
-  const answerOf = (questionId: string) => recorded.get(questionId) ?? ask.questions.find(q => q.id === questionId)?.answer ?? null;
+  /** What a question was answered with, as shown (« ✓ … »): the option's label, or the person's words; null while it waits. */
+  const answerOf = (questionId: string): string | null => {
+    const q = ask.questions.find(x => x.id === questionId);
+    const mine = recorded.get(questionId);
+    if (mine !== undefined) return q?.options.find(o => o.id === mine)?.label ?? mine;
+    const given = q?.answer;
+    if (!given) return null;
+    return given.kind === 'words' ? given.text : q?.options.find(o => o.id === given.id)?.label ?? given.id;
+  };
   const go = async (s: Sending) => {
+    const wasUncertain = failed?.uncertain === true && failed.retry === s;
     setSending(s); setFailed(null);
     const end: AnswerEnd = endOf(await answer(ask.id, s.answer));
     setSending(null);
-    if (end.kind === 'sent' || end.kind === 'already') { onDone(end.kind); return; }
+    if (end.kind === 'sent' || end.kind === 'already') { onDone(end.kind === 'already' && wasUncertain ? 'sent' : end.kind); return; }
     if (end.kind === 'recorded') {
       if (s.answer.kind === 'choice') { const { questionId, optionId } = s.answer; setRecorded(r => new Map(r).set(questionId, optionId)); }
       return;
     }
     const why = end.error === 'openrig_stopped' ? a.stopped : end.error === 'offline' ? t.side.offline : end.message ?? end.error;
-    setFailed({ why, retry: s });
+    setFailed({ why, retry: s, uncertain: end.error === 'uncertain' });
   };
   const sendWords = () => {
     const words = text.trim();
@@ -99,14 +109,13 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   const urgent = ask.priority === 'routine' ? null : a.priority[ask.priority];
   const answered = ask.questions.filter(q => answerOf(q.id) !== null).length;
   const several = ask.questions.length > 1;
-  const textOf = (q: HumanAsk['questions'][number], id: string) => q.options.find(o => o.id === id)?.label ?? id;
 
   const options = (q: HumanAsk['questions'][number], small: boolean) => (
     <div className="ask-acts">
       {q.options.map(o => {
         const key = `${q.id}:${o.id}`;
         return (
-          <button key={o.id} type="button" className={cls('ask-btn', small && 'sm', o.recommended && 'pri')} disabled={busy}
+          <button key={o.id} type="button" className={cls('ask-btn', small && 'sm', o.recommended && 'pri')} disabled={busy || composing}
             title={o.recommended ? a.recommendedBy(who.name) : undefined}
             onClick={() => void go({ key, answer: { kind: 'choice', questionId: q.id, optionId: o.id } })}>
             {wheel(key)}{o.recommended ? a.recommended(o.label) : o.label}
@@ -126,6 +135,8 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendWords(); }
           else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setComposing(false); }
         }} />
+      {/* Words on a request with several questions settle all of it, the unanswered ones too (dev-back, design-ux). */}
+      {several && answered < ask.questions.length && <p className="ask-warn">{a.settlesAll}</p>}
       <div className="ask-acts">
         <button type="button" className="ask-btn pri" disabled={busy || !text.trim()} onClick={sendWords}>{sending?.key === 'words' ? wheel('words') : <Icon d={SEND} size={12} />}{a.send}</button>
         <button type="button" className="ask-btn ghost" disabled={busy} onClick={() => setComposing(false)}>{a.cancel}</button>
@@ -163,7 +174,7 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
         <button type="button" className="ask-btn sm ghost" disabled={busy} onClick={() => void go({ key: 'seen', answer: { kind: 'seen' } })}>{wheel('seen')}{a.seen}</button>
       </div>
       {source}
-      {failed && <Failed why={failed.why} onRetry={() => void go(failed.retry)} busy={busy} />}
+      {failed && <Failed why={failed.why} uncertain={failed.uncertain} onRetry={() => void go(failed.retry)} busy={busy} />}
     </article>
   );
 
@@ -185,7 +196,7 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
         </>}
         {source}
       </>}
-      {composing ? compose
+      {composing && !several ? compose
         : ask.questions.length === 0
           ? <div className="ask-acts"><button type="button" className="ask-btn" disabled={busy} onClick={() => setComposing(true)}>{ask.kind === 'parked' ? a.answerParked : a.writeAnswer}</button></div>
           : several
@@ -196,28 +207,28 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
                     <div key={q.id} className="ask-q">
                       <span className="ask-qt">{i + 1}. {q.question}</span>
                       {chosen !== null
-                        ? <span className="ask-chosen"><Icon d={ICONS.check.d} size={13} />{textOf(q, chosen)}</span>
+                        ? <span className="ask-chosen"><Icon d={ICONS.check.d} size={13} />{chosen}</span>
                         : options(q, true)}
                     </div>
                   );
                 })}
-                <div className="ask-acts ask-foot">
+                {composing ? <div className="ask-foot">{compose}</div> : <div className="ask-acts ask-foot">
                   <span className="ask-fine">{a.progress(answered, ask.questions.length)}</span>
                   <span className="ask-fill" />
                   <button type="button" className="ask-btn sm ghost" disabled={busy} onClick={() => setComposing(true)}>{a.answerOther}</button>
-                </div>
+                </div>}
               </>
             : options(ask.questions[0]!, false)}
-      {failed && <Failed why={failed.why} onRetry={() => void go(failed.retry)} busy={busy} />}
+      {failed && <Failed why={failed.why} uncertain={failed.uncertain} onRetry={() => void go(failed.retry)} busy={busy} />}
     </article>
   );
 }
 
-function Failed({ why, onRetry, busy }: { why: string; onRetry(): void; busy: boolean }): JSX.Element {
+function Failed({ why, uncertain, onRetry, busy }: { why: string; uncertain: boolean; onRetry(): void; busy: boolean }): JSX.Element {
   const { t } = useI18n();
   return (
-    <div className="ask-err" role="alert">
-      <Icon d={ALERT} size={13} /><span>{t.asks.notSent(why)}</span><span className="ask-fill" />
+    <div className={cls('ask-err', uncertain && 'ask-uncertain')} role="alert">
+      <Icon d={ALERT} size={13} /><span>{uncertain ? t.asks.uncertain : t.asks.notSent(why)}</span><span className="ask-fill" />
       <button type="button" className="ask-btn sm" disabled={busy} onClick={onRetry}>{t.asks.retry}</button>
     </div>
   );
