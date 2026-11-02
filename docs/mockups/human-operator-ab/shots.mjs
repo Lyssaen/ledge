@@ -10,8 +10,8 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1900, height: 1100 }, deviceScaleFactor: 1.5 });
 const url = pathToFileURL(resolve(out, 'ledge-human-operator-ab.html')).href;
 const name = n => resolve(out, `ledge-human-operator-ab-${n}.png`);
-const SCREENS = ['homeDay1', 'homeLater', 'decision', 'decisionRaw', 'countdown', 'goalAsk', 'goalDone', 'settings', 'empty', 'stopped', 'notChannel'];
-const LIGHT = ['homeLater', 'decision', 'countdown', 'goalAsk', 'settings', 'notChannel'];
+const SCREENS = ['homeDay1', 'homeLater', 'decision', 'decisionRaw', 'countdown', 'goalAsk', 'goalDone', 'settings', 'settingsMissing', 'empty', 'stopped', 'notChannel'];
+const LIGHT = ['homeLater', 'decision', 'countdown', 'goalAsk', 'settings', 'settingsMissing', 'notChannel'];
 for (const theme of ['dark', 'light']) {
   await page.goto(`${url}?theme=${theme}`);
   await page.waitForLoadState('networkidle');

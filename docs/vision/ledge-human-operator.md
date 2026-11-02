@@ -77,6 +77,15 @@ et B s'ouvre par réglage, quand la confiance est là.
 - Réglage de départ : tout sur « Toujours moi », sauf « Questions techniques » sur « Ledge propose ».
 - Délai avant envoi : 5 s par défaut, réglable 3/5/10/30 s ; il s'applique aussi quand Ledge confirme l'équipe de Max.
 - Ledge : harness et modèle au choix, défaut Sonnet 5.5.
+- Les réglages Toujours moi / Ledge propose / Ledge décide valent aussi pour les sessions hors rig (Otto, permissions
+  des projets) : un seul endroit (« 5. Oui », 19:38Z).
+- Complément de maquette validé (19:41Z, « Validé pour le reste ») : Slack retiré partout ; Réglages › Ledge propose
+  harness + modèle (défaut Claude Code + Sonnet 5.5) ; le harness de Ledge tourne sur la machine locale ; s'il manque,
+  Ledge ne recommande rien mais les demandes arrivent quand même dans À toi.
+- Piste à évaluer (pas une décision) : le modèle de l'outil de démo po-web (messages humains = lignes de queue
+  ordinaires, réponses en notes) pour les messages ordinaires et l'objectif donné à Max ; le canal humain d'OpenRig
+  pour les décisions bloquantes.
+- Rapport à l'équipe OpenRig (`openrig-report-human-channel.md`) : « Ok pour moi » ; l'opérateur l'envoie.
 - **Plus de Slack** : Ledge remplace Slack comme point de contact (le binding `slack:ledge-decoy` est à remplacer).
   Tout changement de config OpenRig (gateway human, binding) passe par l'opérateur, avec l'accord de l'utilisateur.
 - Test réel sur OpenRig autorisé pendant le lot 1 ; signaler à l'équipe OpenRig ce qui manque (rapport montré à

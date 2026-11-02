@@ -464,6 +464,13 @@ h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing
 .set-sec h4{margin:0;font-size:13px;font-weight:600}
 .set-sec .hint{font-size:12px;color:var(--muted-foreground);line-height:17px}
 .set-row{display:flex;align-items:center;gap:10px;font-size:12.5px}
+.hns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:1}
+.hn{border:1px solid var(--border);border-radius:var(--radius-md);padding:7px 10px;display:flex;flex-direction:column;gap:1px;background:var(--card)}
+.hn b{font-size:12.5px;font-weight:600;display:flex;align-items:center}
+.hn small{font-size:11px;color:var(--muted-foreground)}
+.hn.on{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.hn.absent{opacity:.55}.hn.absent small{color:var(--danger-text)}
+.hn.bad{opacity:1;border-color:var(--danger-text);box-shadow:0 0 0 1px var(--danger-text)}
 /* Strip of card states at real size */
 .strip{display:grid;grid-template-columns:repeat(4,380px);gap:16px;margin-top:6px}
 .strip .app-bg{padding:14px;border-radius:12px;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;display:flex;flex-direction:column;gap:8px}
@@ -567,7 +574,8 @@ h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing
       <li><b>Carte de décision</b> : recommandation de Ledge, sources en pastilles, « Pourquoi c'est à toi » (le réglage qui s'applique, avec un lien pour le changer).</li>
       <li><b>Carte « Ledge répond… »</b> pendant le délai : barre qui se vide, « Annuler ». Puis « Envoyé » (pastille <i>auto</i>), « Annulé » (la question revient dans À toi), ou « Pas envoyée » (avec Réessayer).</li>
       <li><b>Objectif</b> : écrit à Ledge, qui le transmet à Max. La proposition d'équipe arrive comme une carte de Max (violet du kernel) : Confirmer / Changer d'équipe / Lancer un rig plutôt.</li>
-      <li><b>Réglages › Ledge</b> : sujets, modèle (même liste déroulante que le choix du modèle d'une session), délai, sources, état du canal humain.</li>
+      <li><b>Réglages › Ledge</b> : sujets ; harnais (mêmes tuiles que le lancement : Claude Code, Codex, Cursor Agent, OMP) et modèle (liste qui suit le harnais), par défaut Claude Code et Sonnet 5.5 ; délai ; sources ; état du canal humain (Ledge actif · TUI du kernel disponible).</li>
+      <li><b>Harnais absent</b> : tuile grisée « pas installé sur {machine} ». Si c'est celui choisi, un bandeau dans Réglages, et Ledge ne résume, ne recommande et ne décide plus rien ; les demandes arrivent quand même dans À toi, sans recommandation.</li>
       <li><b>Fil du rig</b> : les cartes OpenRig (ledge-dev-2) au centre ; « n messages bruts » se déplie en texte mono.</li>
     </ul>
     <h3>Textes nouveaux (FR · EN)</h3>
@@ -578,7 +586,7 @@ h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing
       <li>Ledge répond à {siège} · envoi dans {n} s · Ledge answers {seat} · sending in {n} s — Annuler · Cancel — Envoyé · Sent — Annulé : la question revient dans À toi · Cancelled: the question is back in Yours — Pas envoyée : {raison} · Not sent: {reason} — Réessayer · Retry</li>
       <li>Max propose · Max suggests — Confirmer l'équipe · Confirm the team — Changer d'équipe · Change team — Lancer un rig plutôt · Launch a rig instead</li>
       <li>Toujours moi · Always me — Ledge propose · Ledge suggests — Ledge décide · Ledge decides — Verrouillé · Locked</li>
-      <li>Modèle de Ledge · Ledge's model — Délai avant envoi · Delay before sending — Sources que Ledge peut citer · Sources Ledge may cite — Canal humain d'OpenRig · OpenRig's human channel</li>
+      <li>Harnais et modèle de Ledge · Ledge's harness and model — pas installé sur {machine} · not installed on {machine} — Revenir à Claude Code · Back to Claude Code — Délai avant envoi · Delay before sending — Sources que Ledge peut citer · Sources Ledge may cite — Canal humain d'OpenRig · OpenRig's human channel</li>
       <li>Rien ne t'attend. · Nothing is waiting for you. — OpenRig est arrêté : les rigs ne peuvent pas t'écrire. · OpenRig is stopped: rigs cannot write to you. — Ledge n'est pas encore le canal humain d'OpenRig. · Ledge is not OpenRig's human channel yet.</li>
     </ul>
     <h3>Comportements</h3>
@@ -594,16 +602,16 @@ h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing
       <li><b>« Choix de l'équipe » chevauche Max.</b> La note met Max sur le dispatch, mais le réglage « Choix de l'équipe pour un objectif » de la maquette précédente laissait Ledge choisir. Dans celle-ci, le sujet devient « <b>Confirmer l'équipe proposée par Max</b> » (Toujours moi / Ledge confirme). Max propose toujours ; Ledge ne fait que confirmer à ta place, si tu le règles ainsi.</li>
       <li><b>« À toi » contient aussi les sessions hors rig</b> (permissions, questions des sessions de projets). La note ne parle que des lignes OpenRig. Les deux arrivent au même endroit ; le réglage « Permissions des sièges » vaut-il aussi pour les sessions hors rig ?</li>
       <li><b>Le délai « Annuler » ne protège que si tu regardes.</b> Absent, tu ne verras pas les 5 s passer. La maquette le relaie à l'île et au téléphone, mais le vrai garde-fou reste le réglage par sujet. À dire dans la note.</li>
-      <li><b>Slack</b> : la note dit que l'humain « ledge » passe aujourd'hui par Slack. Une fois Ledge canal humain, Slack reste-t-il en parallèle (copie), en secours, ou disparaît-il ? L'écran Réglages montre « Slack : copie » comme hypothèse.</li>
+      <li><b>Slack</b> : tranché, Slack disparaît. Ledge est le seul point de contact ; le TUI du kernel reste disponible.</li>
       <li><b>« Le modèle est au choix de l'utilisateur »</b> : la note ne dit pas lequel par défaut, ni s'il se règle par sujet. La maquette propose un seul modèle pour Ledge, dans Réglages › Ledge.</li>
     </ul>
     <h3>Questions ouvertes pour l'utilisateur</h3>
     <ol>
       <li>Réglage de départ : je mets tout sur « Toujours moi », sauf « Questions techniques avec réponse dans le dépôt » sur « Ledge propose ». D'accord, ou vraiment tout sur « Toujours moi » ?</li>
       <li>Délai avant envoi : 5 s par défaut, réglable 3 / 5 / 10 / 30 s. Ça te va ?</li>
-      <li>Modèle de Ledge par défaut : Sonnet 5.5 (rapide, peu coûteux), ou Opus 5.5 ? Un seul modèle pour tout, ou un modèle plus fort pour « décider seul » ?</li>
+      <li><i>Tranché :</i> harnais et modèle au choix, par défaut Claude Code et Sonnet 5.5 (section 5).</li>
       <li>« Permissions des sièges » s'applique-t-il aussi aux sessions hors rig (Claude Code lancé à la main) ?</li>
-      <li>Slack, une fois Ledge canal humain : copie, secours, ou retiré ?</li>
+      <li><i>Tranché :</i> plus de Slack, Ledge le remplace.</li>
       <li>Quand Max propose une équipe et que tu as réglé « Ledge confirme », la confirmation passe-t-elle aussi par le délai « Annuler » ? (Je propose oui.)</li>
     </ol>
     <h3>Non montré ici</h3>
@@ -788,23 +796,8 @@ const S = {
         <div class="txt" style="font-size:12.5px;color:var(--muted-foreground)">Je te remonterai la maquette dans À toi dès qu'elle sera prête.</div>`)}
       ${composer('Réponds à Ledge…', false)}
     </div></div>`),
-  settings: () => app(sidebar({ settingsOn: true }), `
-    <div class="mh">${ic(P.gear, 15)}<h3>Réglages</h3><span class="sub">› Ledge</span></div>
-    <div class="mc"><div class="col" style="gap:0;padding-top:6px">
-      <div class="set-sec" style="padding-top:6px"><h4>Ce que Ledge décide seul</h4>
-        <div>
-        <div class="lvl head"><div>Sujet</div><div>Toujours moi</div><div>Ledge propose</div><div>Ledge décide</div></div>
-        ${[['Questions techniques','réponse dans le dépôt : CLAUDE.md, config, conventions',1],['Permissions des sièges','lecture, tests, commandes du projet',0],['Confirmer l\'équipe proposée par Max','Max propose toujours l\'équipe',0],['Choix de produit et textes de l\'app','mots, écrans, priorités',0],['Valider une maquette','toujours la tienne',0,1],['Push, PR, merge, release','jamais délégable',0,1]].map(r => `<div class="lvl" style="min-height:40px"><div class="what"><b>${r[0]}${r[3] ? ` <span class="lock" style="display:inline-flex;vertical-align:-2px">${ic(P.lock, 12)}</span>` : ''}</b><small>${r[1]}</small></div>${[0,1,2].map(i => `<div>${r[3] && i > 0 ? '<span class="lock">—</span>' : `<span class="radio${r[2] === i ? ' on' : ''}"></span>`}</div>`).join('')}</div>`).join('')}
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 28px">
-        <div class="set-sec"><h4>Modèle de Ledge</h4><div class="combo"><i class="mascot s" style="width:16px;height:16px"></i>Sonnet 5.5<span class="sp"></span><small>claude-sonnet-5-5</small>${ic(P.chevDown, 12)}</div><div class="hint">Pour résumer, recommander et décider seul. Même liste que le choix du modèle d'une session.</div></div>
-        <div class="set-sec"><h4>Délai avant envoi</h4><div class="seg"><span>3 s</span><span class="on">5 s</span><span>10 s</span><span>30 s</span></div><div class="hint">Pour ce que Ledge décide seul. « Annuler » reste possible pendant ce délai, ensuite l'envoi est définitif.</div></div>
-        <div class="set-sec"><h4>Sources que Ledge peut citer</h4><div class="set-row"><span class="check on">${ic(P.check, 10)}</span>Le dépôt (CLAUDE.md, config, conventions)</div><div class="set-row"><span class="check on">${ic(P.check, 10)}</span>Les maquettes validées</div><div class="set-row"><span class="check"></span>Ses propres réponses passées</div></div>
-        <div class="set-sec"><h4>Canal humain d'OpenRig</h4><div class="set-row"><span class="pill ok">Ledge · actif</span><span class="fine">les lignes adressées à l'humain arrivent dans À toi</span></div><div class="set-row"><span class="pill">Slack · copie</span><span class="pill">TUI du kernel · disponible</span></div></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;padding-top:12px"><span class="fine">Ce que Ledge décide seul apparaît dans « Réglé par Ledge », avec sa source.</span><span style="flex:1"></span><button class="btn sm ghost">Journal · 26 cette semaine</button></div>
-    </div></div>`),
+  settings: () => settingsScreen(false),
+  settingsMissing: () => settingsScreen(true),
   empty: () => app(sidebar({ ledgeOn: true, ledgeLine: 'rien pour toi' }), `${homeHead(1)}
     <div class="mc"><div class="col">
       <div class="empty-box" style="padding:22px 20px;align-items:flex-start"><b style="font-size:14px">Rien ne t'attend.</b><p>Les rigs avancent. Ce qu'ils te demanderont arrivera ici, et sur l'île.</p></div>
@@ -820,12 +813,46 @@ const S = {
     </div><div class="col side">${ledgeSays(`<div class="txt" style="font-size:12.5px">OpenRig est arrêté depuis 18:12. Je peux le démarrer si tu veux.</div>`)}${composer('Écrire à Ledge…', false)}</div></div>`),
   notChannel: () => app(sidebar({ ledgeOn: true, ledgeLine: '1 à toi' }), `${homeHead(0).replace('<b>0 sujet</b>', '<b>aucun sujet</b>')}
     <div class="mc"><div class="col">
-      <div class="banner err">${ic(P.alert, 16)}<div class="bt"><b>Ledge n'est pas encore le canal humain d'OpenRig.</b><p>Les rigs t'écrivent par Slack, ou passent par Max. Leurs décisions n'arrivent pas ici, et Ledge ne peut ni les recommander ni les régler.</p></div><button class="btn sm pri">Brancher Ledge</button></div>
+      <div class="banner err">${ic(P.alert, 16)}<div class="bt"><b>Ledge n'est pas encore le canal humain d'OpenRig.</b><p>Les rigs passent encore par Max, ou par le TUI du kernel. Leurs décisions n'arrivent pas ici, et Ledge ne peut ni les recommander ni les régler.</p></div><button class="btn sm pri">Brancher Ledge</button></div>
       <div class="sec">Accords <span class="n">1</span></div>${sessionAsk()}
       <div class="sec">Ce que Max t'a relayé</div>
       <div class="card" style="gap:4px"><div class="who">${hx(true)}<strong>Max</strong> · relais<span class="sp"></span><time>19:32</time></div><p>« Bix demande : un modèle pour tout, ou un plus fort pour décider seul ? »</p><p class="fine">Lecture seule : réponds à Max dans le TUI du kernel.</p></div>
     </div><div class="col side">${ledgeSays(`<div class="txt" style="font-size:12.5px">Une fois branché, je recevrai directement les lignes adressées à l'humain, et Max n'aura plus à te les relayer.</div>`)}${composer('Écrire à Ledge…', false)}</div></div>`)
 };
+
+/* Réglages › Ledge: harness and model (default Claude Code + Sonnet 5.5); `missing` = the chosen harness is not installed. */
+const HARNESS = [['claude','Claude Code','Conception, revue'],['codex','Codex','Code et tests'],['cursor','Cursor Agent','Dans l’éditeur'],['omp','OMP','Piloté en natif']];
+function settingsScreen(missing) {
+  const chosen = missing ? 'codex' : 'claude';
+  const tiles = HARNESS.map(([id, name, sub]) => {
+    const absent = id === 'omp' || (missing && id === 'codex');
+    const on = id === chosen;
+    return `<div class="hn${on ? ' on' : ''}${absent ? ' absent' : ''}${on && absent ? ' bad' : ''}"><b>${name}${id === 'claude' ? ' <span class="pill" style="margin-left:4px">défaut</span>' : ''}</b><small>${absent ? 'pas installé sur WSL' : sub}</small></div>`;
+  }).join('');
+  const model = missing
+    ? `<div class="combo" style="opacity:.5"><span>—</span><span class="sp"></span><small>aucun modèle tant que Codex manque</small>${ic(P.chevDown, 12)}</div>`
+    : `<div class="combo"><span class="hex" style="color:#d97757">●</span>Sonnet 5.5<span class="sp"></span><small>claude-sonnet-5-5 · défaut</small>${ic(P.chevDown, 12)}</div>`;
+  const warn = missing ? `<div class="banner err" style="padding:9px 12px">${ic(P.alert, 15)}<div class="bt"><b style="font-size:12.5px">Codex n'est pas installé sur WSL.</b><p>Tant qu'il manque, Ledge ne résume, ne recommande et ne décide rien. Les demandes arrivent quand même dans À toi, sans recommandation.</p></div><div class="acts" style="flex-direction:column;align-items:stretch"><button class="btn sm pri">Revenir à Claude Code</button><button class="btn sm ghost">Comment l'installer</button></div></div>` : '';
+  return app(sidebar({ settingsOn: true }), `
+    <div class="mh">${ic(P.gear, 15)}<h3>Réglages</h3><span class="sub">› Ledge</span></div>
+    <div class="mc"><div class="col" style="gap:0;padding-top:4px">
+      <div class="set-sec" style="padding-top:4px;gap:4px"><h4>Ce que Ledge décide seul</h4>
+        <div>
+        <div class="lvl head"><div>Sujet</div><div>Toujours moi</div><div>Ledge propose</div><div>Ledge décide</div></div>
+        ${[['Questions techniques','réponse dans le dépôt : CLAUDE.md, config, conventions',1],['Permissions des sièges','lecture, tests, commandes du projet',0],['Confirmer l\'équipe proposée par Max','Max propose toujours l\'équipe',0],['Choix de produit et textes de l\'app','mots, écrans, priorités',0],['Valider une maquette','toujours la tienne',0,1],['Push, PR, merge, release','jamais délégable',0,1]].map(r => `<div class="lvl" style="min-height:35px"><div class="what"><b>${r[0]}${r[3] ? ` <span class="lock" style="display:inline-flex;vertical-align:-2px">${ic(P.lock, 12)}</span>` : ''}</b><small>${r[1]}</small></div>${[0,1,2].map(i => `<div>${r[3] && i > 0 ? '<span class="lock">—</span>' : `<span class="radio${r[2] === i ? ' on' : ''}"></span>`}</div>`).join('')}</div>`).join('')}
+        </div>
+      </div>
+      <div class="set-sec" style="gap:7px"><h4>Harnais et modèle de Ledge</h4>
+        <div style="display:flex;gap:16px;align-items:flex-start"><div class="hns">${tiles}</div><div style="display:flex;flex-direction:column;gap:5px"><span class="fine">Modèle</span>${model}</div></div>
+        ${warn || `<div class="hint">Pour résumer, recommander et décider seul. Mêmes harnais que le lancement d'une session ; la liste des modèles suit le harnais.</div>`}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 24px">
+        <div class="set-sec"><h4>Délai avant envoi</h4><div class="seg"><span>3 s</span><span class="on">5 s</span><span>10 s</span><span>30 s</span></div><div class="hint">« Annuler » reste possible pendant ce délai.</div></div>
+        <div class="set-sec"><h4>Sources citables</h4><div class="set-row"><span class="check on">${ic(P.check, 10)}</span>Le dépôt</div><div class="set-row"><span class="check on">${ic(P.check, 10)}</span>Les maquettes validées</div><div class="set-row"><span class="check"></span>Ses réponses passées</div></div>
+        <div class="set-sec"><h4>Canal humain d'OpenRig</h4><div class="set-row"><span class="pill ok">Ledge · actif</span></div><div class="set-row"><span class="pill">TUI du kernel · disponible</span></div><div class="hint">Ledge est ton seul point de contact.</div></div>
+      </div>
+    </div></div>`);
+}
 const CAP = {
   homeDay1: '<b>Premier jour.</b> Tout est sur « Toujours moi » : « Réglé par Ledge » est vide et le dit. Un accord d’une session hors rig (Otto) arrive au même endroit.',
   homeLater: '<b>Plus tard</b>, un sujet confié à Ledge. Les réglages du jour, chacun avec sa source. La question d’Ida porte la proposition de Ledge, à envoyer d’un clic.',
@@ -834,17 +861,18 @@ const CAP = {
   countdown: 'Ledge répond seul à Ida (sujet « Questions techniques » sur « Ledge décide ») : la carte reste en tête d’À toi pendant le délai, avec « Annuler ».',
   goalAsk: 'Tu écris l’objectif à Ledge. Ledge le met en forme et le passe à Max. Max répond avec l’équipe : tu confirmes, tu changes, ou tu lances un rig.',
   goalDone: 'Après confirmation : l’objectif suit son trajet (confiée › prise › passée à Lu), avec un lien vers le fil du rig.',
-  settings: 'Réglages › Ledge. Au départ, tout est sur « Toujours moi », sauf les questions techniques sur « Ledge propose » (question 1). Modèle, délai, sources et canal humain sont au même endroit.',
+  settingsMissing: '<b>Harnais pas installé.</b> Codex est choisi mais absent de la machine : Ledge se tait (ni résumé, ni recommandation, ni décision seul) ; les demandes arrivent quand même dans À toi. Un clic pour revenir à Claude Code. Les harnais absents sont grisés dans la liste.',
+  settings: 'Réglages › Ledge. Au départ, tout est sur « Toujours moi », sauf les questions techniques sur « Ledge propose » (question 1). Harnais et modèle (par défaut Claude Code et Sonnet 5.5), délai, sources et canal humain sont au même endroit.',
   empty: '<b>Rien ne t’attend.</b> « Réglé par Ledge » et les nouvelles restent visibles.',
   stopped: '<b>OpenRig arrêté.</b> Les sessions de projets continuent ; la sidebar montre l’état vide de <code>sidebar-tidy</code>.',
-  notChannel: '<b>Ledge pas encore canal humain.</b> Les décisions arrivent encore par Max ou Slack : Ledge les montre en lecture seule et propose de se brancher.'
+  notChannel: '<b>Ledge pas encore canal humain.</b> Les décisions passent encore par Max (ou le TUI du kernel) : Ledge montre en lecture seule ce que Max relaie, et propose de se brancher.'
 };
 const shot = (k) => `<div class="cell"><div class="shot" id="s-${k}">${S[k]()}</div><div class="shot-cap">${CAP[k]}</div></div>`;
 document.getElementById('r1').innerHTML = shot('homeDay1') + shot('homeLater');
 document.getElementById('r2').innerHTML = shot('decision') + shot('decisionRaw');
 document.getElementById('r3').innerHTML = shot('countdown');
 document.getElementById('r4').innerHTML = shot('goalAsk') + shot('goalDone');
-document.getElementById('r5').innerHTML = shot('settings');
+document.getElementById('r5').innerHTML = shot('settings') + shot('settingsMissing');
 document.getElementById('r6').innerHTML = shot('empty') + shot('stopped') + shot('notChannel');
 
 /* Strip: the auto-answer card's four states, real size */
