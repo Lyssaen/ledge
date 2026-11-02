@@ -158,7 +158,7 @@ function MusicSlot({ music, open, t, onToggle, onOpen, onClose, pulse }: { music
     const why = key === 'prev' ? t.cantPrev : key === 'next' ? t.cantNext : t.cantPlay;
     return <button type="button" className="na-ctl" data-play={key === 'play' || undefined} aria-label={label} aria-disabled={!allowed || undefined} title={allowed ? label : why} tabIndex={open ? 0 : -1}
       onClick={() => { if (allowed && key === 'play') onToggle?.(); }}>
-      {key === 'play' ? <span className="na-disc">{music.playing ? Ico.pause : Ico.play}</span> : Ico[key]}
+      {key === 'play' ? (music.playing ? Ico.pause : Ico.play) : Ico[key]}
     </button>;
   };
   return <div className="na-music" data-open={open || undefined} onMouseEnter={onOpen} onMouseLeave={onClose} onFocus={onOpen} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) onClose?.(); }}>
@@ -457,7 +457,7 @@ function Page() {
       <div className="na-grid">
         <Pair lang={lang} tag="M1" title="Changement de morceau" note="Symbole note dans la couleur d’accent, titre en 600, artiste en gris." awake line={L.track} music={TRACK_B} />
         <Pair lang={lang} tag="M2" title="Pochette pas encore arrivée" note="Carré neutre avec une note, puis la pochette en fondu quand elle arrive." awake line={L.track} music={noCover} />
-        <Pair lang={lang} tag="M3" title="Survol de la pochette" note="L’encoche s’élargit vers la droite : titre et artiste sur deux lignes (168 px max), puis précédent, lecture/pause, suivant (28 px). La ligne d’activité se coupe davantage." awake line={L.tool} music={TRACK_A} open />
+        <Pair lang={lang} tag="M3" title="Survol de la pochette" note="L’encoche s’élargit vers la droite : titre et artiste sur deux lignes (168 px max), puis précédent, lecture/pause, suivant : trois icônes simples de 15 px, sans fond rond, dans des zones de 28 px. La ligne d’activité se coupe davantage." awake line={L.tool} music={TRACK_A} open />
         <Pair lang={lang} tag="M4" title="Bouton refusé par le lecteur" note="Désactivé, pas caché : opacité 0,35, curseur normal, info-bulle « Ce lecteur ne permet pas de revenir en arrière »." awake line={null} music={TRACK_WEB} open />
         <Pair lang={lang} tag="M5" title="En pause, au survol" note="Pochette grisée avec le signe pause, « En pause » sous l’artiste, bouton Lecture." awake line={null} music={paused} open />
         <Pair lang={lang} tag="M6" title="En pause, éveillée par un agent" note="La pochette reste grisée. Après 5 min de pause, elle disparaît avec son filet." awake line={L.thinking} music={paused} />

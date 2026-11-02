@@ -7,11 +7,11 @@ body { overflow: auto; background: var(--background); color: var(--foreground); 
 .th-light { --notch: #fff; --foreground: oklch(0.145 0 0); --muted-foreground: oklch(0.556 0 0); --sidebar-border: oklch(0.922 0 0);
   --sidebar-accent: oklch(0.97 0 0); --sidebar-primary: oklch(0.577 0.245 27.325); --task: #7c3aed; --success: #059669; --warning: #b45309;
   --info: #2563eb; --danger-text: oklch(0.505 0.213 27.518); --na-desk: #cfd6de; --na-desk-2: radial-gradient(120% 90% at 20% 110%, #e9c9c3 0%, transparent 60%), radial-gradient(90% 80% at 90% 0%, #b9cfdc 0%, transparent 65%);
-  --na-ctl-hover: oklch(0.95 0 0); --na-disc: oklch(0.145 0 0); --na-disc-fg: #fff; color: var(--foreground); }
+  --na-ctl-hover: oklch(0.95 0 0); color: var(--foreground); }
 .th-dark { --notch: #000; --foreground: oklch(0.985 0 0); --muted-foreground: oklch(0.708 0 0); --sidebar-border: #ffffff1a;
   --sidebar-accent: oklch(0.269 0 0); --sidebar-primary: oklch(0.637 0.237 25.331); --task: #a78bfa; --success: #34d399; --warning: #fbbf24;
   --info: #60a5fa; --danger-text: oklch(0.704 0.191 22.216); --na-desk: #141821; --na-desk-2: radial-gradient(120% 90% at 20% 110%, #3b2a4a 0%, transparent 60%), radial-gradient(90% 80% at 90% 0%, #1f3b4d 0%, transparent 65%);
-  --na-ctl-hover: #1d1e21; --na-disc: oklch(0.985 0 0); --na-disc-fg: #000; color: var(--foreground); }
+  --na-ctl-hover: #1d1e21; color: var(--foreground); }
 
 /* ---- page ---- */
 .na-page { max-width: 1240px; margin: 0 auto; padding: 24px 16px 64px; display: grid; gap: 44px; box-sizing: border-box; }
@@ -107,8 +107,6 @@ body { overflow: auto; background: var(--background); color: var(--foreground); 
 .na-ctl:hover { background: var(--na-ctl-hover); }
 .na-ctl[aria-disabled] { cursor: default; color: var(--muted-foreground); }
 .na-ctl[aria-disabled]:hover { background: transparent; }
-.na-disc { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--na-disc); color: var(--na-disc-fg); }
-.na-disc svg { width: 11px; height: 11px; }
 .na-music[data-open] .na-titles { max-width: 168px; opacity: 1; margin: 0 8px 0 8px; }
 .na-music[data-open] .na-ctl { width: 28px; opacity: 1; }
 .na-music[data-open] .na-ctl[aria-disabled] { opacity: .35; }
