@@ -81,11 +81,15 @@ for (const theme of ['dark', 'light'] as const) {
     await page.screenshot({ path: info.outputPath(`seats-sessions-${theme}.png`) });
     await page.locator('aside.sidebar').screenshot({ path: info.outputPath(`zoom-sidebar-${theme}.png`) });
     for (const name of ['Bix', 'Nova']) await page.locator('.agent-seat', { hasText: name }).screenshot({ path: info.outputPath(`zoom-seat-${name}-${theme}.png`) });
-    await page.locator('.app-header').screenshot({ path: info.outputPath(`zoom-toggle-rigs-${theme}.png`) });
-    await page.getByRole('radio', { name: 'Projets' }).click();
-    await expect(page.getByRole('radio', { name: 'Projets' })).toHaveAttribute('aria-checked', 'true');
+    // « Projets | Rigs » in the sidebar: one view or the other.
+    const side = page.locator('aside.sidebar');
+    await expect(side.getByRole('region', { name: 'Projets' })).toHaveCount(0);
+    await side.getByRole('radio', { name: 'Projets' }).click();
+    await expect(side.getByRole('radio', { name: 'Projets' })).toHaveAttribute('aria-checked', 'true');
+    await expect(side.getByText('Kernel', { exact: true })).toHaveCount(0);
+    await side.screenshot({ path: info.outputPath(`zoom-sidebar-projects-${theme}.png`) });
     await page.screenshot({ path: info.outputPath(`grouping-projects-${theme}.png`) });
-    await page.getByRole('radio', { name: 'Rigs' }).click();
+    await side.getByRole('radio', { name: 'Rigs' }).click();
   });
 }
 
@@ -105,7 +109,7 @@ for (const theme of ['dark', 'light'] as const) {
     await page.getByRole('button', { name: 'Voir les sièges de starter' }).click();
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: info.outputPath(`kernel-seats-${theme}.png`) });
-    await page.getByRole('region', { name: 'Kernel' }).screenshot({ path: info.outputPath(`zoom-kernel-${theme}.png`) });
+    await page.locator('section.or-card', { hasText: 'Kernel' }).first().screenshot({ path: info.outputPath(`zoom-kernel-${theme}.png`) });
     await page.getByRole('button', { name: 'Réglages de operator.agent' }).click();
     const dlg = page.getByRole('dialog', { name: 'Réglages du siège operator.agent · kernel' });
     await dlg.getByRole('radio', { name: 'Claude Code' }).click();

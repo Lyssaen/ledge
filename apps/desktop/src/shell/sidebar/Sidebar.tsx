@@ -22,7 +22,7 @@ import { attentionOf, treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
 import { RigGroups } from './RigGroups';
-import { useGrouping } from '../../openrig/grouping';
+import { setGrouping, useGrouping } from '../../openrig/grouping';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
 
 /** The explorer shell: Session, Ask Ledge, Atelier, Your turn, the project tree, Archives, then the foot. */
@@ -55,7 +55,10 @@ export function Sidebar(p: {
   const current = base.kind === 'session' ? base.id : null;
   // OpenRig's seats have their own groups (Rigs, Kernel), away from the projects.
   const grouping = useGrouping();
-  const groups = useMemo(() => treeModel(grouping === 'rigs' ? p.sessions.filter(s => !s.rig) : p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf, grouping]);
+  const hasRigs = p.sessions.some(s => s.rig && s.state !== 'exited');
+  // « Projets » or « Rigs »: one or the other (while Ledge follows no OpenRig seat, the projects).
+  const byRig = hasRigs && grouping === 'rigs';
+  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
   // A project without a session stays out of the tree; it shows again while a session is dragged (to be dropped on it)
   // and while it is the filter.
   const shownGroups = useMemo(() => groups.filter(g => g.branches.some(b => b.sessions.length > 0) || !!p.filing.dragging || (g.id !== null && base.project === g.id)),
@@ -140,7 +143,12 @@ export function Sidebar(p: {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
           }} />
-        <section aria-label={t.side.projects}>
+        {hasRigs && (
+          <div className="st-grouping" role="radiogroup" aria-label={t.top.grouping}>
+            {(['projects', 'rigs'] as const).map(g => <button key={g} type="button" role="radio" aria-checked={grouping === g} title={t.top.groupingHint[g]} onClick={() => setGrouping(g)}>{t.top.groupingBy[g]}</button>)}
+          </div>
+        )}
+        {!byRig && <section aria-label={t.side.projects}>
           <Tree groups={shownGroups} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
             hideDone={prefs.hideDone} dense={prefs.dense} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
@@ -154,8 +162,8 @@ export function Sidebar(p: {
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
             onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
-        </section>
-        {grouping === 'rigs' && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} />}
+        </section>}
+        {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} />}
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}

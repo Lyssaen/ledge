@@ -307,7 +307,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
-          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} hasRigs={sessions.some(x => x.rig && x.state !== 'exited')} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
+          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
