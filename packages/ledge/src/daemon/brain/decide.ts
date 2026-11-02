@@ -1,8 +1,7 @@
-import { MandateCategorySchema, type Escalation, type MandateCategory, type RigResultCode } from '@ledge/protocol';
+import { isDecisionEscalationId, MandateCategorySchema, type Escalation, type MandateCategory, type RigResultCode } from '@ledge/protocol';
 import { log } from '../../log.js';
 import type { Answers } from '../openrig/answer.js';
 import type { EscalationPatch } from '../openrig/bridge.js';
-import { taskEscalation } from '../openrig/decisions.js';
 import type { LedgeThread } from '../ledgeThread.js';
 import { GRACE_MS, guardDecide, validAnswers } from './guard.js';
 import type { BrainEvent } from './inbox.js';
@@ -60,12 +59,12 @@ const closed = (e: Escalation): boolean => e.state === 'answered' || e.state ===
 /** « <question> → <label> » per answered question: what the decision says, for the thread and the memory; a lead's question
  *  (`task-…`) as « <question> → <free text> ». */
 const summaryOf = (e: Escalation, answers: Record<string, string>): string => {
-  if (taskEscalation(e.id) && answers.text?.trim()) return `${e.summary} → ${answers.text.trim()}`;
+  if (isDecisionEscalationId(e.id) && answers.text?.trim()) return `${e.summary} → ${answers.text.trim()}`;
   const parts = e.questions.flatMap(q => answers[q.id] === undefined ? [] : [`${q.question} → ${q.options.find(o => o.id === answers[q.id])?.label ?? answers[q.id]}`]);
   return parts.length ? parts.join(' ; ') : e.summary;
 };
 /** What the brain settles in grace: a decision with questions (OpenRig's), or a lead's question in free text (`task-…`); not an ask. */
-const settles = (e: Escalation): boolean => e.intent === 'decision' && (taskEscalation(e.id) || (e.source !== 'ask' && e.questions.length > 0));
+const settles = (e: Escalation): boolean => e.intent === 'decision' && (isDecisionEscalationId(e.id) || (e.source !== 'ask' && e.questions.length > 0));
 
 /**
  * Grace and the brain's decisions. Everything here lives in memory only: a daemon restart drops the grace overlays (the bridge's
@@ -208,7 +207,7 @@ export function createDeciding(d: DecidingDeps): Deciding {
 
     rearm(list) {
       for (const x of list) {
-        if (!taskEscalation(x.id) || told.has(x.id)) continue;
+        if (!isDecisionEscalationId(x.id) || told.has(x.id)) continue;
         const e = d.escalations.escalation(x.id);
         if (e && e.state === 'pending') api.arrived(e);
       }

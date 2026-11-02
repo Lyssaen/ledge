@@ -8,7 +8,8 @@ export const DECIDE_USAGE = `ledge decide                       les décisions q
 ledge decide <id> "<réponse>"      y répondre : la session qui l'a demandée reprend`;
 /** An ask's id (`ledge ask`, a lone session) or a task's (`ledge task give ledge …`, a team seat): the prefix routes the answer. */
 const ASK_ID = /^a[0-9a-f]{6}$/;
-const TASK_ID = /^t[0-9a-f]{6}$/;
+/** A task's id, bare or as the escalation `task-<id>` Desktop, the thread and the brain's events show. */
+const TASK_ID = /^(?:task-)?(t[0-9a-f]{6})$/;
 const DECIDE_MS = 4000;
 
 /** The arguments of `ledge decide`, or `undefined` when they do not fit its usage. */
@@ -17,7 +18,8 @@ export function decideArgs(args: string[]): { op: 'list' } | { op: 'answer'; id:
   const [id, text] = args;
   if (args.length !== 2 || !text!.trim()) return undefined;
   if (ASK_ID.test(id!)) return text!.length <= ASK_ANSWER_MAX ? { op: 'answer', id: id!, text: text! } : undefined;
-  if (TASK_ID.test(id!)) return text!.length <= TASK_TEXT_MAX ? { op: 'done', task: id!, text: text! } : undefined;
+  const task = TASK_ID.exec(id!)?.[1];
+  if (task) return text!.length <= TASK_TEXT_MAX ? { op: 'done', task, text: text! } : undefined;
   return undefined;
 }
 

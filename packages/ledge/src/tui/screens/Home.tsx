@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { sayToLedge, useAsks, useContextNear, useTasks, useTeams } from '@ledge/fleet';
-import { askShown, type Escalation, type Rig, type RigSeat, type Task } from '@ledge/protocol';
+import { askShown, decisionEscalationId, isDecisionEscalation, type Escalation, type Rig, type RigSeat, type Task } from '@ledge/protocol';
 import { revisitDecision } from '../brain.js';
 import { LEDGE_FOCUS, useEditing, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
 import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
@@ -125,7 +125,13 @@ export function Home() {
       }
       return true;
     }
-    if (!active && input === 'D') { if (decisions[0]) setDeciding({ id: decisions[0].id, draft: '', confirm: false }); return true; }
+    // D answers the selected lead's question (its `task-` row), else the oldest decision.
+    if (!active && input === 'D') {
+      const mine = yoursEsc && isDecisionEscalation(yoursEsc) ? decisions.find(x => decisionEscalationId(x.id) === yoursEsc.id) : undefined;
+      const target = mine ?? decisions[0];
+      if (target) setDeciding({ id: target.id, draft: '', confirm: false });
+      return true;
+    }
     // The rail opened over the left column: esc closes it before anything else.
     if (railOpen && key.escape) { setRailOpen(false); return true; }
     // + on Ledge's Rigs tab launches a rig.

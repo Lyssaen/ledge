@@ -147,7 +147,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const watching = useRef<() => string | null>(() => null);
   // The brain session is in no list, but its asks (folder trust, a permission) reach the user: alerts, « À toi », its page (lot 7).
   const attend = useMemo(() => attending(fleetView), [fleetView.sessions, fleetView.brains]); // eslint-disable-line react-hooks/exhaustive-deps
-  const alerts = useAlerts({ sessions: attend, machines, status, daemonUpdating: daemonUpdates.updating.has('local'), tasks: teams.tasks }, { watching: () => watching.current() });
+  const alerts = useAlerts({ sessions: attend, machines, status, daemonUpdating: daemonUpdates.updating.has('local'), tasks: teams.tasks, escalations }, { watching: () => watching.current() });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.

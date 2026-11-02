@@ -109,6 +109,34 @@ describe('tui: the decisions a session puts to the user', () => {
     } finally { await tui.cleanup(); }
   }, 20_000);
 
+  it('D answers the selected lead\'s question (its task- row), not the oldest decision', async () => {
+    const tui = await startTui();
+    try {
+      await tui.resize(160, 40);
+      tui.daemon.push({ type: 'task.updated', task: task('t000001', { title: 'Premier choix ?', at: '2026-10-09T10:00:00.000Z' }) });
+      const second = task('t000002', { title: 'Second choix ?', team: 'api', at: '2026-10-09T16:05:00.000Z' });
+      tui.daemon.push({ type: 'task.updated', task: second });
+      tui.daemon.push({ type: 'escalation.updated', escalation: { id: 'task-t000002', source: 'ask', machine: 'local', rigId: 'api', from: 'Otto', intent: 'decision', summary: 'Second choix ?', questions: [], createdAt: second.at, state: 'pending' } });
+      await until(() => tui.frame().includes('Premier choix') && tui.frame().includes('Second choix'));
+      // Without a selection on it, D takes the oldest.
+      await tui.press('D');
+      await until(() => /RÉPONDRE À OTTO · PREMIER CHOIX/.test(tui.frame()));
+      await tui.press('\u001b');
+      await until(() => !tui.frame().includes('RÉPONDRE À OTTO'));
+      // Walking down « À toi », D on the lead's row answers that question.
+      let found = false;
+      for (let k = 0; k < 8 && !found; k++) {
+        await tui.press('j');
+        await tui.press('D');
+        await until(() => tui.frame().includes('RÉPONDRE À OTTO'));
+        found = /RÉPONDRE À OTTO · SECOND CHOIX/.test(tui.frame());
+        await tui.press('\u001b');
+        await until(() => !tui.frame().includes('RÉPONDRE À OTTO'));
+      }
+      expect(found).toBe(true);
+    } finally { await tui.cleanup(); }
+  }, 30_000);
+
   it('listedDecisions: a decision with its escalation is left to the escalation, one without stays', () => {
     const a = task('t000001'); const b = task('t000002');
     const e = { id: 'task-t000001' } as Escalation;

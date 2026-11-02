@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LEDGE_GIVER, TASK_TEXT_MAX, taskClosed, type Escalation, type OpenRigStatus, type RigResultCode } from '@ledge/protocol';
+import { DECISION_ESCALATION_PREFIX, isDecisionEscalationId, LEDGE_GIVER, TASK_TEXT_MAX, taskClosed, type Escalation, type OpenRigStatus, type RigResultCode } from '@ledge/protocol';
 import { log } from '../../log.js';
 import type { Asks } from '../asks.js';
 import type { Tasks } from '../tasks.js';
@@ -9,7 +9,6 @@ import type { EscalationPatch } from './bridge.js';
 import type { RigCli } from './cli.js';
 import type { OpenRigHttp } from './http.js';
 import { HUMAN_ADDRESS, type AnswerPathKind } from './facts.js';
-import { TASK_ESCALATION, taskEscalation } from './decisions.js';
 
 /** What the lot 0 facts sheet settled (`ANSWER_PATH` in facts.ts). */
 export type AnswerPath = { kind: AnswerPathKind };
@@ -105,7 +104,7 @@ export function readAnswerPath(factsMarkdown: string): AnswerPath {
 
 /** A refusal before anything is sent; null when the answer is complete. An `update` answered with nothing is a « seen ». */
 function invalid(e: Escalation, answers: Record<string, string>): string | null {
-  if (taskEscalation(e.id) && (answers.text?.trim().length ?? 0) > TASK_TEXT_MAX) return `la réponse dépasse ${TASK_TEXT_MAX} caractères`;
+  if (isDecisionEscalationId(e.id) && (answers.text?.trim().length ?? 0) > TASK_TEXT_MAX) return `la réponse dépasse ${TASK_TEXT_MAX} caractères`;
   if (e.intent === 'update' && e.source !== 'ask' && Object.keys(answers).length === 0) return null;
   if (!e.questions.length) return blank(answers.text) ? 'la réponse est vide' : null;
   const missing = e.questions.filter(q => blank(answers[q.id]));
@@ -177,7 +176,7 @@ export function createAnswers(d: AnswersDeps): Answers {
   function viaTask(e: Escalation, answers: Record<string, string>, by: 'user' | 'ledge'): AnswerResult | null {
     if (!d.tasks) return refuse('failed', "les décisions d'équipe ne sont pas branchées");
     const text = `${by === 'ledge' ? 'Réponse de Ledge : ' : "Réponse de l'utilisateur : "}${answerBody(e, answers)}`;
-    const task = e.id.slice(TASK_ESCALATION.length);
+    const task = e.id.slice(DECISION_ESCALATION_PREFIX.length);
     // Closed meanwhile (answered elsewhere, cancelled, dropped with its lead): already answered; gone: a failure.
     const t = d.tasks.all().find(x => x.id === task);
     if (!t) return refuse('failed', `aucune tâche ${task}`);
@@ -234,13 +233,13 @@ export function createAnswers(d: AnswersDeps): Answers {
     async answer(id, answers, by, o) {
       const e = d.port.escalation(id);
       // An unread remote queue is not a definite unknown escalation.
-      if (!e) return !id.startsWith('ask-') && !taskEscalation(id) && d.port.humanRead?.() === false ? refuse('openrig_down', "les escalades d'OpenRig ne sont pas encore lues") : refuse('failed', `aucune escalade ${id}`);
+      if (!e) return !id.startsWith('ask-') && !isDecisionEscalationId(id) && d.port.humanRead?.() === false ? refuse('openrig_down', "les escalades d'OpenRig ne sont pas encore lues") : refuse('failed', `aucune escalade ${id}`);
       if (e.correcting) return by === 'user' ? correct(id, answers) : refuse('already_answered', "l'utilisateur revient sur cette décision");
       // Check and mark, synchronously (no await before inFlight.add): the first answer wins, whatever a later one holds.
       if (inFlight.has(id) || e.state === 'answered' || e.state === 'closed') return refuse('already_answered', 'déjà répondue');
       const bad = invalid(e, answers); if (bad) return refuse('invalid', bad);
       if (e.machine !== d.localMachine) return refuse('unreachable', 'réponse à distance : lot 6');
-      const ask = e.source === 'ask'; const task = taskEscalation(id);
+      const ask = e.source === 'ask'; const task = isDecisionEscalationId(id);
       // A stored reply row is keyed only by escalation: its author and answer are not proof of this operation.
       let uncertainRow = false;
       if (!ask && d.port.status().state !== 'running') return refuse('openrig_down', "OpenRig n'est pas lancé");

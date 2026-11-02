@@ -28,6 +28,9 @@ describe('askArgs and decideArgs', () => {
     expect(decideArgs([])).toEqual({ op: 'list' });
     expect(decideArgs(['a1b2c3d', 'B'])).toEqual({ op: 'answer', id: 'a1b2c3d', text: 'B' });
     expect(decideArgs(['t1b2c3d', 'B'])).toEqual({ op: 'done', task: 't1b2c3d', text: 'B' });
+    // The escalation's id, as Desktop, the thread and the brain's events show it: the same task.
+    expect(decideArgs(['task-t1b2c3d', 'B'])).toEqual({ op: 'done', task: 't1b2c3d', text: 'B' });
+    expect(decideArgs(['task-a1b2c3d', 'B'])).toBeUndefined();
     expect(decideArgs(['x1b2c3d', 'B'])).toBeUndefined();
     expect(decideArgs(['a1b2c3d', '  '])).toBeUndefined();
   });

@@ -130,8 +130,23 @@ describe('a lead\'s question mirrored as its escalation (lot E)', () => {
     await env.user.click(within(card).getByRole('button', { name: 'Oui, fusionne' }));
     await env.user.type(within(card).getByRole('textbox', { name: 'Your answer' }), ' après la CI');
     await env.user.click(send);
+    // Read back whole, then confirmed: nothing is sent before.
+    expect(within(card).getByText('Oui, fusionne après la CI')).toBeVisible();
+    expect(env.d.received.filter(m => m.type === 'escalation.answer')).toEqual([]);
+    await env.user.click(within(card).getByRole('button', { name: 'Confirm and send' }));
     await waitFor(() => expect(env.d.received).toContainEqual({ type: 'escalation.answer', rid: expect.any(String), id: 'task-t00000d', answers: { text: 'Oui, fusionne après la CI' }, by: 'user' }));
     expect(answers(env.d.received)).toEqual([]);
+  });
+
+  it('shows the options once (as buttons, not also as a paragraph), Ledge\'s advice, and keeps View', async () => {
+    const env = await openHome();
+    env.d.push({ type: 'escalation.updated', escalation: mirror({ advice: 'Je dirais oui, la CI est verte.' }) });
+    await waitFor(() => expect(side().getByText('Fusionner feat/roles ?').closest('[data-escalation]')).not.toBeNull());
+    const card = side().getByText('Fusionner feat/roles ?').closest('.st-card') as HTMLElement;
+    expect(within(card).getByText(/Je dirais oui, la CI est verte\./)).toBeVisible();
+    expect(within(card).getByRole('button', { name: 'View' })).toBeVisible();
+    expect(within(card).getAllByText('Oui, fusionne')).toHaveLength(1);
+    expect(within(card).queryByText(/Oui, fusionne\s+- Non/)).toBeNull();
   });
 
   it('a decision without its escalation stays its own card', async () => {

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { DaemonStatus, MachineState } from '@ledge/fleet';
-import type { Session, Task } from '@ledge/protocol';
+import type { Escalation, Session, Task } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { TOAST_WINDOW_MS, useAlerts, type AlertDeps } from '../src/notify/useAlerts';
 import { resetDndForTests, resetSoundPrefsForTests, setDnd, setNotifyMode, setSounds } from '../src/notify/prefs';
 import { machine } from './fleet-helpers';
 
-type Props = { sessions: Session[]; machines: MachineState[]; status: DaemonStatus; daemonUpdating?: boolean; tasks?: Task[] };
+type Props = { sessions: Session[]; machines: MachineState[]; status: DaemonStatus; daemonUpdating?: boolean; tasks?: Task[]; escalations?: Escalation[] };
 const ask = (id: string, name: string, state: Session['state'] = 'waiting_permission') => fakeSession(id, { name, state, ...(state.startsWith('waiting') ? { pending: { kind: state === 'waiting_input' ? 'question' : 'permission', source: 'hook', text: `${name} asks` } } : {}) });
 let now = 100_000;
 function setup(focused = false) {
@@ -283,5 +283,26 @@ describe('a decision a session puts to the user (`ledge task give ledge …`)', 
     await Promise.resolve(); await Promise.resolve();
     expect(dnd.deps.toast).not.toHaveBeenCalled();
     expect(dnd.deps.player.play).not.toHaveBeenCalled();
+  });
+  const mirror = (id: string, state: Escalation['state']): Escalation => ({ id: `task-${id}`, source: 'ask', machine: 'local', from: 'Otto', intent: 'decision', summary: 'Fusionner feat/roles ?', questions: [], createdAt: new Date(now + 1).toISOString(), state });
+  it('a mirrored one alerts once its escalation is pending, not while the brain holds it in grace', async () => {
+    const { deps, local, h } = connected();
+    const t = [decision('t00000d', now + 1)];
+    h.rerender({ sessions: [], machines: [local], status: 'open', tasks: t, escalations: [mirror('t00000d', 'grace')] });
+    await new Promise(r => setTimeout(r, 450));
+    expect(deps.toast).not.toHaveBeenCalled();
+    expect(deps.player.play).not.toHaveBeenCalled();
+    // The brain hands it up: now it is the user's.
+    h.rerender({ sessions: [], machines: [local], status: 'open', tasks: t, escalations: [mirror('t00000d', 'pending')] });
+    await vi.waitFor(() => expect(deps.toast).toHaveBeenCalledWith('Otto needs your decision', 'Fusionner feat/roles ?'));
+    expect(deps.toast).toHaveBeenCalledTimes(1);
+  });
+  it('a mirrored one the brain settles (the task closes in grace) never alerts', async () => {
+    const { deps, local, h } = connected();
+    h.rerender({ sessions: [], machines: [local], status: 'open', tasks: [decision('t00000d', now + 1)], escalations: [mirror('t00000d', 'grace')] });
+    h.rerender({ sessions: [], machines: [local], status: 'open', tasks: [decision('t00000d', now + 1, { state: 'done' })], escalations: [] });
+    await new Promise(r => setTimeout(r, 450));
+    expect(deps.toast).not.toHaveBeenCalled();
+    expect(deps.player.play).not.toHaveBeenCalled();
   });
 });

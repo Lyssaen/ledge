@@ -172,6 +172,14 @@ describe('attentionOf, escalations', () => {
   });
 });
 
+describe('attentionOf, a lead\'s question (task-<id>)', () => {
+  it('is an escalation card; the session\'s own wait stays listed beside it (it works on), unlike an ask\'s', () => {
+    const otto = waiting('otto', 'Otto');
+    const q = esc('task-t00000d', { source: 'ask', from: 'Otto', rigId: undefined, questions: [] });
+    expect(attentionOf([otto], new Map(), [q], [FACTORY]).map(i => (i.kind === 'escalation' ? i.escalation.id : i.session.name)).sort()).toEqual(['Otto', 'task-t00000d']);
+  });
+});
+
 describe('Your turn, escalations', () => {
   const boot1 = async (e: Escalation) => {
     const env = await boot({ sessions: [], home: true });

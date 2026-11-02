@@ -1,7 +1,7 @@
 import { useState, type JSX, type MouseEvent } from 'react';
 import { Button } from '@ledge/ui/ui/Button';
 import { useAnswerState, type FleetAsk } from '@ledge/fleet';
-import { isDecisionEscalation, type Escalation, type Project, Rig, Session, Task } from '@ledge/protocol';
+import { isDecisionEscalation, type Escalation, type Project, type Rig, type Session, type Task } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { seatName } from '@ledge/ui/chat/ledge/threadModel';
 import { seatSession } from '@ledge/ui/rigs/model';
@@ -44,6 +44,7 @@ function EscalationRow(p: {
   // A lead's question (`task-<id>`, no question of its own): answered with free text, the lead's options filling the field on a click.
   const free = isDecisionEscalation(e) && e.questions.length === 0;
   const [text, setText] = useState('');
+  const [step, setStep] = useState<'write' | 'confirm'>('write');
   const options = free ? decisionOptions(e.detail) : [];
   const note = answer.state === 'refused' ? (answer.code === 'already_answered' ? copy.escalation.alreadyAnswered : copy.escalation.refused(answer.code ?? 'failed', answer.reason)) : e.state === 'grace' ? copy.escalation.grace : '';
   return (
@@ -60,22 +61,32 @@ function EscalationRow(p: {
           {q && q.options.length > 0 && q.options.length <= 2 ? q.options.map(o => (
             <button key={o.id} type="button" className={cls('st-qa', o.recommended && 'pri')} disabled={busy}
               onClick={() => p.onAnswer?.(e.id, { [q.id]: o.id })}>{o.label}</button>
-          )) : free ? null : <button type="button" className="st-qa" onClick={() => p.onSee?.(e)}>{t.side.see}</button>}
+          )) : <button type="button" className="st-qa" onClick={() => p.onSee?.(e)}>{t.side.see}</button>}
         </div>
+        {free && e.advice && <p className="st-decision-options">{copy.escalation.advice(e.advice)}</p>}
         {free && (
+          // Read back whole, then confirmed, as DecisionAnswer and the TUI do: a lead's answer cannot be taken back.
           <form className="decision-answer" aria-label={t.decision.form(e.summary)}
-            onSubmit={ev => { ev.preventDefault(); const a = text.trim(); if (a && !busy) p.onAnswer?.(e.id, { text: a }); }}>
-            {e.detail && <p className="st-decision-options">{e.detail}</p>}
-            {options.length > 0 && (
-              <div className="decision-options" role="group" aria-label={t.decision.options}>
-                {options.map(o => <button key={o} type="button" className="st-qa" onClick={() => setText(o)}>{o}</button>)}
+            onSubmit={ev => { ev.preventDefault(); if (step === 'write' && text.trim()) setStep('confirm'); }}>
+            {step === 'write' ? <>
+              {options.length > 0
+                ? <div className="decision-options" role="group" aria-label={t.decision.options}>
+                  {options.map(o => <button key={o} type="button" className="st-qa" onClick={() => setText(o)}>{o}</button>)}
+                </div>
+                : e.detail && <p className="st-decision-options">{e.detail}</p>}
+              <textarea className="st-decision-field" rows={2} value={text} placeholder={t.side.ask.placeholder} aria-label={t.decision.field}
+                disabled={busy} onChange={ev => setText(ev.target.value)} />
+              <div className="decision-actions">
+                <Button type="submit" variant="primary" size="sm" disabled={!text.trim() || busy}>{t.decision.send}</Button>
               </div>
-            )}
-            <textarea className="st-decision-field" rows={2} value={text} placeholder={t.side.ask.placeholder} aria-label={t.decision.field}
-              disabled={busy} onChange={ev => setText(ev.target.value)} />
-            <div className="decision-actions">
-              <Button type="submit" variant="primary" size="sm" disabled={!text.trim() || busy}>{busy ? t.side.ask.sending : t.decision.send}</Button>
-            </div>
+            </> : <>
+              <p className="decision-review">{t.decision.review(e.from)}</p>
+              <blockquote className="decision-text">{text.trim()}</blockquote>
+              <div className="decision-actions">
+                <Button variant="primary" size="sm" disabled={busy} onClick={() => { p.onAnswer?.(e.id, { text: text.trim() }); }}>{busy ? t.decision.sending : t.decision.confirm}</Button>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => setStep('write')}>{t.decision.edit}</Button>
+              </div>
+            </>}
           </form>
         )}
         {note && <div className="st-l2"><span className="st-where" role="status">{note}</span></div>}

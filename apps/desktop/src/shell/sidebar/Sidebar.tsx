@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import type { FleetAsk, MachineState } from '@ledge/fleet';
-import { decisionMirrored, type Escalation, type OpenRigStatus, type Project, Projects, Rig, Session } from '@ledge/protocol';
+import { decisionMirrored, type Escalation, type OpenRigStatus, type Project, type Projects, type Rig, type Session } from '@ledge/protocol';
 import { isStandalone, ledgeLine, rigsModel } from '@ledge/ui/rigs/model';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';

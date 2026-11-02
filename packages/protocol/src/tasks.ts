@@ -61,7 +61,8 @@ export const openDecision = (t: Pick<Task, 'owner' | 'state'>): boolean => t.own
 export const DECISION_ESCALATION_PREFIX = 'task-';
 export const decisionEscalationId = (taskId: string): string => `${DECISION_ESCALATION_PREFIX}${taskId}`;
 /** Whether an escalation is a decision task's mirror (`task-<taskId>`): a lead's question, answered with free text. */
-export const isDecisionEscalation = (e: { id: string }): boolean => e.id.startsWith(DECISION_ESCALATION_PREFIX);
+export const isDecisionEscalationId = (id: string): boolean => id.startsWith(DECISION_ESCALATION_PREFIX);
+export const isDecisionEscalation = (e: { id: string }): boolean => isDecisionEscalationId(e.id);
 /** Whether the decision `t` is also an escalation of the list (a daemon with the OpenRig bridge mirrors it): « À toi » then shows the
  *  escalation only, so the one question is one card and one count on every front. A decision with no escalation stays a decision. */
 export const decisionMirrored = (t: Pick<Task, 'id'>, escalations: readonly { id: string }[]): boolean => {

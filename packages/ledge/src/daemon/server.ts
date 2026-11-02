@@ -1192,23 +1192,25 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const setAside = (qid: string) => cardThreads.all().some(([, c]) => c.ignored(qid));
   const SET_ASIDE = 'ignored card: open it again first';
   /** What a front may still send as `ledge` (#142): its lists, a task shown, a closed one marked seen. */
+  /** Whether the decision task has its escalation `task-<id>` still to answer (the bridge's book). */
+  const mirroredOpen = (taskId: string): boolean => {
+    const e = bridge?.escalation(decisionEscalationId(taskId));
+    return e !== undefined && e.state !== 'answered' && e.state !== 'closed';
+  };
   const LEDGE_READS: ReadonlySet<Extract<ClientMessage, { type: 'task.cmd' }>['op']> = new Set(['list', 'show', 'seen']);
   /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `team.saved` or
    *  `task.result` carries; `path` the template a `team.save` wrote. Ledge's own task commands go straight to the tasks:
    *  `by: 'ledge'` is never taken from a client (handle refuses it). */
   async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string; path?: string }> {
     const out = actionMessage(row, rid);
+    // A decision a lead's question mirrored as `task-<id>` is answered through that escalation: one memory record, the brain told, then
+    // the task closed (answers.ts). Without one (no bridge, or already answered), the task closes directly. Ledge's own, in both engines.
+    if (out.type === 'task.cmd' && row.action === 'task.answer' && out.task !== undefined && answers && mirroredOpen(out.task)) {
+      const r = await answers.answer(decisionEscalationId(out.task), { text: out.text ?? '' }, 'user');
+      return r.ok ? {} : { failure: r.reason };
+    }
     // A card's row is the engine's too (a card made before a switch, or applied from the phone): refused as action.run would be.
     const off = engineRefusal(teamsEngine, out); if (off !== null) return { failure: off };
-    // A decision a lead's question mirrored as `task-<id>` is answered through that escalation: one memory record, the brain told, then
-    // the task closed (answers.ts). Without one (no bridge, or already answered), the task closes directly.
-    if (out.type === 'task.cmd' && row.action === 'task.answer' && out.task !== undefined && answers) {
-      const id = decisionEscalationId(out.task); const e = bridge?.escalation(id);
-      if (e && e.state !== 'answered' && e.state !== 'closed') {
-        const r = await answers.answer(id, { text: out.text ?? '' }, 'user');
-        return r.ok ? {} : { failure: r.reason };
-      }
-    }
     if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
     let failure: string | undefined; let path: string | undefined;
     await handle(out, m => {
@@ -2257,7 +2259,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * is only a session's (a mobile.* id names a pairing or a device). Never rejects.
    */
   function dispatch(msg: ClientMessage, reply: Reply): Promise<void> {
-    const refused = engineRefusal(teamsEngine, msg);
+    const refused = engineRefusal(teamsEngine, msg, mirroredOpen);
     if (refused !== null) { refuseForEngine(msg, refused, reply); return Promise.resolve(); }
     if (teamsEngine === 'ledge') { const answered = ledgeTeamRig(msg, reply); if (answered) return answered; }
     return (rigRouter && isRigCommand(msg) ? rigRouter.route(msg, reply) : handle(msg, reply)).catch(e => {

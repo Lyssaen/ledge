@@ -1,5 +1,4 @@
-import { ALWAYS_USER, MandateCategorySchema, TASK_TEXT_MAX, type Escalation, type MandateCategory } from '@ledge/protocol';
-import { taskEscalation } from '../openrig/decisions.js';
+import { ALWAYS_USER, isDecisionEscalationId, MandateCategorySchema, TASK_TEXT_MAX, type Escalation, type MandateCategory } from '@ledge/protocol';
 import type { Mandate } from './mandate.js';
 
 export const GRACE_MS = 60_000;
@@ -37,7 +36,7 @@ export function guardDecide(e: Escalation, claimed: string, answers: Record<stri
 
 /** null when every question has a valid option id (a lead's question, `task-…`: one non-empty free text); otherwise why not. */
 export function validAnswers(e: Escalation, answers: Record<string, string>): string | null {
-  if (taskEscalation(e.id)) {
+  if (isDecisionEscalationId(e.id)) {
     if (Object.keys(answers).some(k => k !== 'text')) return 'une question du lead se tranche en texte libre : --text "<réponse>"';
     const text = answers.text?.trim() ?? '';
     if (!text) return 'la réponse est vide';

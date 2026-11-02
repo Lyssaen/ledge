@@ -1,5 +1,5 @@
 import { isBusy, type FleetAsk } from '@ledge/fleet';
-import { isDecisionEscalation, type Escalation, type Helper, Projects, Rig, Session, Team } from '@ledge/protocol';
+import { isDecisionEscalation, type Escalation, type Helper, type Projects, type Rig, type Session, type Team } from '@ledge/protocol';
 import { isStandalone } from '@ledge/ui/rigs/model';
 import { teamProject } from '../../atelier/layout';
 import { fold, taskOf } from '../../nav/agents';
@@ -113,8 +113,9 @@ const byAge = (a: { since: string }, b: { since: string }): number => (a.since <
 
 /**
  * « À toi »: the standalone sessions waiting on the user (rig seats are relieved by OpenRig, not Ledge: spec §8.1) and the pending or
- * grace `decision` escalations, oldest first. An `ask` is shown by the ask card (free-text reply), never here, and while a session has an
- * open ask its own line is dropped (matched by session name and machine).
+ * grace `decision` escalations, oldest first. An `ask` (`ask-<id>`) is shown by the ask card (free-text reply), never here, and while a
+ * session has an open ask its own line is dropped (matched by session name and machine). A lead's question (`task-<id>`, the mirror of
+ * its decision task) is an escalation card here with a free-text form; its session works on, so its own waits (a permission) still show.
  */
 export function attentionOf(
   sessions: readonly Session[],
@@ -127,7 +128,7 @@ export function attentionOf(
   const open = (e: Escalation) => e.state === 'pending' || e.state === 'grace';
   const asking = new Set<string>([
     ...asks.filter(a => a.state === 'open').map(a => `${a.machine}\u0000${a.fromName}`),
-    ...escalations.filter(e => e.source === 'ask' && open(e)).map(e => `${e.machine}\u0000${e.from}`)
+    ...escalations.filter(e => e.source === 'ask' && !isDecisionEscalation(e) && open(e)).map(e => `${e.machine}\u0000${e.from}`)
   ]);
   const items: AttnItem[] = [];
   for (const session of sessions) {

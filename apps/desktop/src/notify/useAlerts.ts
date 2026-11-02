@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { DaemonStatus, MachineState, SessionChange } from '@ledge/fleet';
-import { openDecision, type MobileState, type Session, type Task } from '@ledge/protocol';
+import { decisionEscalationId, openDecision, type Escalation, type MobileState, type Session, type Task } from '@ledge/protocol';
 import type { Cue } from '@ledge/ui/sounds/cues';
 import { decideSound } from '@ledge/ui/sounds/decide';
 import type { SoundPlayer } from '@ledge/ui/sounds/player';
@@ -18,6 +18,8 @@ export interface Alerts { user(cue: 'accept' | 'deny'): void; test(): 'played' |
 
 /** The fleet emits one update per session: toast-worthy changes are gathered this long, then shown as one toast. */
 export const TOAST_WINDOW_MS = 1000;
+/** A decision with no escalation after this long is not mirrored (no bridge): it alerts on its own. */
+export const MIRROR_WAIT_MS = 300;
 
 const nativeToast = (title: string, body: string) => { void showToast(title, body); };
 const windowFocused = () => document.hasFocus();
@@ -29,7 +31,7 @@ const windowFocused = () => document.hasFocus();
  * is running, so the local daemon's restart is expected and silent (final review M3). `tasks`: the local daemon's, whose new
  * decisions (a session asking the user) alert as a question does.
  */
-export function useAlerts(input: { sessions: readonly Session[]; machines: readonly MachineState[]; status: DaemonStatus; daemonUpdating?: boolean; tasks?: readonly Task[] }, deps: AlertDeps = {}): Alerts {
+export function useAlerts(input: { sessions: readonly Session[]; machines: readonly MachineState[]; status: DaemonStatus; daemonUpdating?: boolean; tasks?: readonly Task[]; escalations?: readonly Escalation[] }, deps: AlertDeps = {}): Alerts {
   const { finished, sounds } = useSoundPrefs();
   const [dnd] = useDnd();
   const { t } = useI18n();
@@ -106,19 +108,40 @@ export function useAlerts(input: { sessions: readonly Session[]; machines: reado
 
   // A decision a session puts to the user (`ledge task give ledge …`) is a request: the question's cue (« Un bot a besoin de
   // vous ») and a toast, once per decision. Those given before the local daemon's connection come with its task list, silent.
+  // A decision also mirrored as its escalation `task-<id>` calls only once that one is pending: while the brain holds it in grace
+  // it may settle it within its mandate, and the user is not rung for that. One with no escalation (no bridge) alerts as soon as
+  // the escalation had time to arrive (MIRROR_WAIT_MS: the task is sent first).
   const decisionsSeen = useRef(new Set<string>());
+  const escalationsNow = useRef<readonly Escalation[]>([]);
+  escalationsNow.current = input.escalations ?? [];
+  const mirrorTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   useEffect(() => {
     const since = connectedAt.current;
-    const news = (input.tasks ?? []).filter(x => openDecision(x) && !decisionsSeen.current.has(x.id));
-    for (const x of news) decisionsSeen.current.add(x.id);
-    const fresh = since === null ? [] : news.filter(x => Date.parse(x.at) >= since);
-    if (fresh.length === 0) return;
-    api.play('question');
-    const l = live.current;
-    if (l.dnd || (l.deps.focused ?? windowFocused)()) return;
-    const toast = decisionToast(fresh, l.copy);
-    if (toast) (l.deps.toast ?? nativeToast)(toast.title, toast.body);
-  }, [input.tasks, api]);
+    const ring = (fresh: Task[]) => {
+      if (fresh.length === 0) return;
+      api.play('question');
+      const l = live.current;
+      if (l.dnd || (l.deps.focused ?? windowFocused)()) return;
+      const toast = decisionToast(fresh, l.copy);
+      if (toast) (l.deps.toast ?? nativeToast)(toast.title, toast.body);
+    };
+    const settle = (x: Task): boolean => { decisionsSeen.current.add(x.id); return since !== null && Date.parse(x.at) >= since; };
+    const ready: Task[] = [];
+    for (const x of input.tasks ?? []) {
+      if (!openDecision(x) || decisionsSeen.current.has(x.id)) continue;
+      const e = escalationsNow.current.find(y => y.id === decisionEscalationId(x.id));
+      if (e) { if (e.state === 'pending' && settle(x)) ready.push(x); }
+      else if (!mirrorTimers.current.has(x.id)) {
+        mirrorTimers.current.set(x.id, setTimeout(() => {
+          mirrorTimers.current.delete(x.id);
+          if (decisionsSeen.current.has(x.id) || escalationsNow.current.some(y => y.id === decisionEscalationId(x.id))) return;
+          if (settle(x)) ring([x]);
+        }, MIRROR_WAIT_MS));
+      }
+    }
+    ring(ready);
+  }, [input.tasks, input.escalations, api]);
+  useEffect(() => () => { for (const t of mirrorTimers.current.values()) clearTimeout(t); }, []);
 
   return useMemo(() => ({ user: api.user, test: api.test }), [api]);
 }

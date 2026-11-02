@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { Escalation, LedgeDecision, LedgeRule, LedgeThreadItem } from '@ledge/protocol';
+import { isDecisionEscalationId, type Escalation, type LedgeDecision, LedgeRule, LedgeThreadItem } from '@ledge/protocol';
 import { ledgeBody } from '../crossSession.js';
 import type { Mailbox } from '../mailbox.js';
-import { taskEscalation } from '../openrig/decisions.js';
 
 /** What the brain is told: each event becomes one line typed into its session. */
 export type BrainEvent =
@@ -32,7 +31,7 @@ function leadQuestion(e: Escalation, rules: LedgeRule[]): string {
 }
 
 function escalation(e: Escalation, rules: LedgeRule[]): string {
-  if (taskEscalation(e.id)) return leadQuestion(e, rules);
+  if (isDecisionEscalationId(e.id)) return leadQuestion(e, rules);
   const asked = e.source === 'ask';
   const qs = e.questions.map(q => `${f(q.id)} « ${f(q.question)} » : ${q.options.map(o => `${f(o.id)} = ${f(o.label)}${o.recommended ? ' (recommandée)' : ''}`).join(' ; ')}`).join(' || ');
   return wrap('escalation', e.id, [

@@ -1,4 +1,4 @@
-import type { ClientMessage, TeamsEngine } from '@ledge/protocol';
+import { isDecisionEscalationId, type ClientMessage, type TeamsEngine } from '@ledge/protocol';
 
 /** Said in Ledge mode to an OpenRig rig command. */
 export const ENGINE_LEDGE = "le moteur d'équipes est Ledge : les rigs OpenRig sont coupés (Réglages › Équipes)";
@@ -18,17 +18,19 @@ export function actionAllowed(engine: TeamsEngine, id: string): boolean {
 }
 
 /** Ledge's own escalations (its asks, `ask-…`, and its leads' decisions, `task-…`) are answered without OpenRig, in either mode. */
-const ledgeEscalation = (id: string) => id.startsWith('ask-') || id.startsWith('task-');
+const ledgeEscalation = (id: string) => id.startsWith('ask-') || isDecisionEscalationId(id);
 /** A Ledge team as the Rigs tab shows it (task 4): its id is the team's. */
 const ledgeTeamRig = (rigId: string | undefined) => rigId?.startsWith('team-') === true;
 
 /** Why the engine in force refuses this message (the text is shown as is), or null. */
-export function engineRefusal(engine: TeamsEngine, msg: ClientMessage): string | null {
+export function engineRefusal(engine: TeamsEngine, msg: ClientMessage, mirrored?: (taskId: string) => boolean): string | null {
   if (engine === 'ledge') {
     if (msg.type === 'escalation.answer' && ledgeEscalation(msg.id)) return null;
     if (msg.type === 'rig.act' && ledgeTeamRig(msg.rigId)) return null;
     return RIG_COMMANDS.has(msg.type) ? ENGINE_LEDGE : null;
   }
+  // A decision a session put to Ledge is Ledge's own, like an ask: answered through its mirrored escalation in either mode.
+  if (msg.type === 'action.run' && msg.action === 'task.answer' && typeof msg.args?.task === 'string' && mirrored?.(msg.args.task) === true) return null;
   if (msg.type === 'action.run') return actionAllowed(engine, msg.action) ? null : ENGINE_OPENRIG;
   return TEAM_COMMANDS.has(msg.type) ? ENGINE_OPENRIG : null;
 }
