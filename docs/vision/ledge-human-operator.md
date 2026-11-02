@@ -95,7 +95,11 @@ et B s'ouvre par réglage, quand la confiance est là.
 
 1. **Lot 1 — « À toi » canal humain** (back B1 lire + B2 répondre, puis front) : les demandes OpenRig arrivent dans
    À toi, on y répond, tout sur « Toujours moi ». C'est la direction A, utilisable seule.
-2. **Lot 2 — Objectif via Ledge et Max** : écrire l'objectif à Ledge, proposition d'équipe de Max, confirmer.
+1 bis. **Nouvel accueil** (maquette `ledge-human-operator-ab-home.html`, validée 20:04Z) : au centre les onglets À toi
+   et Tâches, « Le point » fondu dans À toi, la conversation toujours à droite avec Historique dans son en-tête,
+   trois onglets sous 1 180 px. Après le lot 1.
+2. **Lot 2 — Objectif via Ledge et Max** (modèle po-web : l'objectif est une ligne de queue `--source ledge@external`
+   vers Max, qui répond dans À toi) : écrire l'objectif à Ledge, proposition d'équipe de Max, confirmer.
 3. **Lot 3 — Flotte, relais, mobile, TUI** (back B3).
 4. **Lot 4 — Ledge décide seul** (back B5) : Réglages › Ledge, « Réglé par Ledge », délai Annuler, modèle.
 5. **B4** (réglages Slack, test réel) se place quand l'utilisateur l'autorise.

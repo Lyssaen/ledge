@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Accueil Ledge, mise en page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+
+/* ===== Real Lyssaën tokens (packages/ui/src/styles/tokens.css), scoped per theme by build.mjs ===== */
+.th-light {
+  --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0); --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0); --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.505 0.213 27.518); --primary-foreground: oklch(0.971 0.013 17.38); --primary-hover: oklch(0.444 0.177 26.899);
+  --secondary: oklch(0.967 0.001 286.375); --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0); --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325); --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0); --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0);
+  --radius: 0.625rem; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px;
+  --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0); --sidebar-primary: oklch(0.577 0.245 27.325);
+  --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0);
+  /* The notch itself: pure white (light) or pure black (dark), borderless, so it merges with the screen edge. */
+  --notch: #fff;
+  --task: #7c3aed; /* a task handed between seats (issue #92): no seat state wears violet */
+  --success: #059669; --warning: #b45309; --info: #2563eb; --danger-text: oklch(0.505 0.213 27.518);
+  --status-success-soft: #ecfdf5; --status-warning-soft: #fffbeb; --status-info-soft: #eff6ff; --status-danger-soft: #fef2f2;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25);
+  --well: oklch(0.97 0 0);
+  /* The embedded terminal (apps/desktop term/theme.ts): its background, text, sixteen ANSI colours, cursor and selection. */
+  --term-bg: oklch(0.99 0 0); --term-fg: oklch(0.22 0 0);
+  --term-ansi-0: #24292f; --term-ansi-1: #b91c1c; --term-ansi-2: #047857; --term-ansi-3: #a16207;
+  --term-ansi-4: #1d4ed8; --term-ansi-5: #8250df; --term-ansi-6: #1b7c83; --term-ansi-7: #6e7781;
+  --term-ansi-8: oklch(0.52 0 0); --term-ansi-9: #a40e26; --term-ansi-10: #1a7f37; --term-ansi-11: #9a6700;
+  --term-ansi-12: #0550ae; --term-ansi-13: #6639ba; --term-ansi-14: #136061; --term-ansi-15: #424a53;
+  --term-cursor: oklch(0.145 0 0); --term-selection: #0969da33;
+  --edge-hot: rgba(0,0,0,.06);
+}
+.th-dark {
+  --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0); --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0); --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.444 0.177 26.899); --primary-foreground: oklch(0.971 0.013 17.38); --primary-hover: oklch(0.396 0.141 25.723);
+  --secondary: oklch(0.274 0.006 286.033); --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0); --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216); --destructive-foreground: oklch(0.985 0 0);
+  --border: #ffffff1a; --input: #ffffff26; --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0); --sidebar-primary: oklch(0.637 0.237 25.331);
+  --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.269 0 0); --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: #ffffff1a; --sidebar-ring: oklch(0.556 0 0);
+  --notch: #000;
+  --task: #a78bfa;
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa; --danger-text: oklch(0.704 0.191 22.216);
+  --status-success-soft: #052e16; --status-warning-soft: #422006; --status-info-soft: #172554; --status-danger-soft: #450a0a;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7);
+  --well: oklch(0.145 0 0);
+  --term-bg: #0c0c0d; --term-fg: #e5e5e5;
+  --term-ansi-0: #484f58; --term-ansi-1: #f87171; --term-ansi-2: #4ade80; --term-ansi-3: #facc15;
+  --term-ansi-4: #7cb3fb; --term-ansi-5: #bc8cff; --term-ansi-6: #39c5cf; --term-ansi-7: #b1bac4;
+  --term-ansi-8: #8f8f8f; --term-ansi-9: #ffa198; --term-ansi-10: #56d364; --term-ansi-11: #e3b341;
+  --term-ansi-12: #79c0ff; --term-ansi-13: #d2a8ff; --term-ansi-14: #56d4dd; --term-ansi-15: #ffffff;
+  --term-cursor: oklch(0.985 0 0); --term-selection: #58a6ff40;
+  --edge-hot: rgba(255,255,255,.08);
+}
+
+/* Mascots (spec section 6). Material follows the theme: Galet (light) / Signal (dark).
+   A bot's own data-material wins over the root theme so its theme prop is authoritative. */
+@property --bot-shell-top { syntax: '<color>'; inherits: true; initial-value: #f0eee6; }
+@property --bot-shell-bottom { syntax: '<color>'; inherits: true; initial-value: #b7b7b0; }
+@property --bot-shell-line { syntax: '<color>'; inherits: true; initial-value: #ffffff99; }
+@property --bot-visor { syntax: '<color>'; inherits: true; initial-value: #22292b; }
+@property --bot-shine { syntax: '<color>'; inherits: true; initial-value: #ffffff77; }
+.th-light, [data-material="pebble"] {
+  --bot-shell-top: #f0eee6; --bot-shell-bottom: #b7b7b0; --bot-shell-line: #ffffff99; --bot-visor: #22292b;
+  --bot-shine: #ffffff77;
+}
+.th-dark, [data-material="signal"] {
+  --bot-shell-top: #34434b; --bot-shell-bottom: #273238; --bot-shell-line: #859397; --bot-visor: #172124;
+  --bot-shine: #ffffff00;
+}
+/* Halo (docs/mockups/mascots-halo.html, "Contour" rendering): a glow in the state's badge colour hugging the
+   silhouette. Full strength for a bot that waits or errs, softer for a live bot, none for done or read-only. */
+@property --bot-halo-a { syntax: '<number>'; inherits: false; initial-value: 0; }
+:root { --bot-halo-alpha: .55; --bot-halo-alpha-soft: .3; --bot-halo-spread: .32; }
+:root {
+  --bot-visor-line: #00000055; --bot-reflection: #ffffff; --bot-ground: #000000; --bot-readonly-line: #adb3b2;
+  --bot-eye-starting: #90c7f2; --bot-eye-working: #90c7f2; --bot-eye-approval: #f2b09c; --bot-eye-question: #f6d487;
+  --bot-eye-idle: #a9dfc7; --bot-eye-error: #ffab9f; --bot-eye-done: #a3aaa9;
+}
+
+/* ===== Real sidebar stylesheet (apps/desktop/src/styles/sidebar.css, main 0c47f61b) ===== */
+/* The sidebar as an IDE explorer, from docs/mockups/session-management/sidebar-tree.css: ask field, views,
+   « À toi », the project › branch › session tree. No search row, no auto-hide, no word mark (the titlebar owns the brand).
+   `.side-swatch` and `.machine-dot` stay: they are used across the app; `.side-footer` is an alias of `.st-foot`. */
+.sidebar.st{position:relative;width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
+.st button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+.st button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:var(--radius-sm)}
+.st .mono{font-family:'Geist Mono',monospace}
+.st-fill{flex:1}
+.st-ask{margin:10px 10px 0;height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);cursor:text}
+.st-ask:focus-within,.st-ask.on{border-color:var(--ring)}
+.st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
+.st-ask input::placeholder{color:var(--muted-foreground)}
+.st .st-mascot{display:inline-flex;flex:none}
+.st-views{display:flex;flex-direction:column;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-views button:hover{color:var(--sidebar-foreground)}
+.st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st .st-views button.on svg{color:var(--sidebar-primary)}
+.st-views small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-scroll{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:10px}
+.st-label{display:flex;align-items:center;gap:4px;height:26px;padding:0 2px 0 8px;font-size:11px;color:var(--muted-foreground)}
+.st-badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:grid;place-items:center;font:600 10px 'Geist Mono',monospace;background:var(--sidebar-primary);color:var(--sidebar-primary-foreground,var(--primary-foreground))}
+.st .st-icon{width:24px;height:24px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st .st-icon:hover,.st .st-icon.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+/* « À toi » */
+.st-card{display:flex;gap:8px;padding:6px 6px 6px 8px;border-radius:var(--radius-md)}
+.st-card:hover,.st-card.sel{background:var(--sidebar-accent)}
+.st-card-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.st-l1{display:flex;align-items:center;gap:6px;font-size:13px}
+.st .st-name{font-weight:500;color:var(--sidebar-foreground)}
+.st .st-name:hover{text-decoration:underline}
+.st-where{flex:1;min-width:0;display:flex;align-items:center;gap:2px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-task .st-where{display:block}
+.st-where .side-swatch{width:7px;height:7px;margin:0 3px 0 0}
+.st-l2{display:flex;align-items:center;gap:5px}
+.st-req{flex:1;min-width:0;font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .st-qa{height:22px;padding:0 8px;border-radius:var(--radius-sm);font-size:11px;font-weight:500;border:1px solid var(--input);color:var(--sidebar-foreground)}
+.st .st-qa:hover{background:var(--sidebar-accent)}
+.st .st-qa.pri{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.st .st-qa.pri:hover{background:var(--primary-hover)}
+.st .st-showall{margin:2px 0 0 34px;font-size:12px;color:var(--muted-foreground)}
+.st .st-showall:hover{color:var(--sidebar-foreground)}
+/* The tree */
+.st-tree{display:flex;flex-direction:column;gap:1px}
+.st-row{--d:0;position:relative;display:flex;align-items:center;gap:6px;min-height:28px;padding:0 6px 0 calc(4px + var(--d) * 14px);border-radius:var(--radius-sm);font-size:13px;color:var(--muted-foreground)}
+.st-row:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.sel{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));outline:1.5px solid var(--sidebar-primary)}
+.st-project.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));color:var(--foreground);outline:1.5px solid var(--sidebar-primary)}
+.is-dragging .st-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
+.st .st-chev{width:16px;height:16px;flex:none;display:grid;place-items:center;color:var(--muted-foreground);border-radius:4px}
+.st .st-chev:hover{color:var(--sidebar-foreground)}
+.st-chev span{display:grid;transition:transform .15s}
+.st-chev span.open{transform:rotate(90deg)}
+.st-gap{width:16px;flex:none}
+.st-none{background:none!important;border:1px dashed var(--muted-foreground)}
+.st .st-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;padding:4px 0}
+.st-main strong{font-weight:500;color:var(--sidebar-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-main span{font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-project .st-main{flex-direction:row;align-items:baseline;gap:6px}
+.st-project .st-main strong{font-weight:600;flex:none;max-width:60%}
+.st-project .st-main span{font-size:11px}
+.st-branch{color:var(--muted-foreground)}
+.st-branch .st-main span{font:12px 'Geist Mono',monospace;color:var(--sidebar-foreground)}
+.st-wt{font:500 9px 'Geist Mono',monospace;padding:1px 4px;border-radius:4px;border:1px solid var(--input);color:var(--muted-foreground);flex:none}
+.st-count{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-tally{display:flex;gap:7px;flex:none;font:500 10px 'Geist Mono',monospace}
+.st-tally span{display:flex;align-items:center;gap:3px}
+.st-tally i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-need{color:var(--sidebar-primary)}.t-work{color:var(--info)}.t-done{color:var(--muted-foreground)}
+.t-off{color:var(--muted-foreground)}.t-off i{background:none;border:1px solid currentColor}
+.st-agent{align-items:flex-start;min-height:40px}
+.st-agent>.st-chev,.st-agent>.st-gap{margin-top:7px}
+.st-bot{width:18px;height:18px;flex:none;display:grid;place-items:center;margin-top:5px}
+.st-card .st-bot{margin-top:1px}
+.st-agent.helper{min-height:28px;align-items:center}
+.st-agent.helper .st-main{flex-direction:row;gap:6px;align-items:baseline}
+.st-agent.helper .st-main strong,.st-dense .st-agent .st-main strong{flex:none}
+.st-agent.helper>.st-chev,.st-agent.helper>.st-gap,.st-agent.helper .st-bot,.st-agent.helper .st-time,.st-agent.helper .st-kids{margin-top:0}
+.st-agent.done{opacity:.6}
+.st-agent.off .st-main strong{color:var(--muted-foreground)}
+.st-time{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);flex:none;margin-top:6px}
+.st-time.t-approval{color:var(--sidebar-primary)}.st-time.t-question{color:var(--warning)}.st-time.t-error{color:var(--danger-text)}
+.st-kids{flex:none;margin-top:5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;border:1px solid var(--input);display:grid;place-items:center;font:500 10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-acts{position:absolute;right:4px;top:4px;display:none;gap:1px;padding:1px;border-radius:var(--radius-sm);background:var(--sidebar-accent)}
+.st-project .st-acts,.st-branch .st-acts,.st-agent.helper .st-acts{top:2px}
+.st-row:hover .st-acts,.st-row:focus-within .st-acts{display:flex}
+.st .st-acts button{width:22px;height:22px;display:grid;place-items:center;border-radius:5px;color:var(--muted-foreground)}
+.st .st-acts button:hover{background:color-mix(in srgb,var(--foreground) 8%,transparent);color:var(--sidebar-foreground)}
+.st-more{min-height:26px;font-size:12px}
+.st .st-more button{color:var(--muted-foreground)}
+.st .st-more button:hover{color:var(--sidebar-foreground)}
+/* Archives, at the foot of the tree: folded, filterable, each session read, put back, resumed or deleted from its row. */
+.st-archives{border-top:1px solid var(--sidebar-border);padding-top:6px}
+.st .st-arch-toggle{display:flex;align-items:center;gap:6px;height:24px;font-size:11px;color:var(--muted-foreground)}
+.st .st-arch-toggle:hover{color:var(--sidebar-foreground)}
+.st-arch-toggle>span{display:grid;transition:transform .15s}
+.st-arch-toggle>span.open{transform:rotate(90deg)}
+.st-arch-toggle small{font:10px 'Geist Mono',monospace}
+.st-arch-q{display:flex;align-items:center;gap:6px;height:28px;margin:2px 4px 4px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st-arch-q input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:12px 'Geist',system-ui,sans-serif;outline:none}
+.st-arch{padding-left:8px}
+.st-arch .st-main strong{display:flex;align-items:center;gap:0;color:var(--muted-foreground)}
+.st-arch .st-main strong .side-swatch{width:7px;height:7px;margin:0 6px 0 0}
+.st-arch.sel .st-main strong{color:var(--sidebar-foreground)}
+.st-arch .st-bot{opacity:.7}
+.st .st-acts button.danger:hover{color:var(--danger-text)}
+.st-help{margin:6px 8px 0;font-size:11px;line-height:15px;color:var(--muted-foreground)}
+/* Compact: one line per session. */
+.st-dense .st-agent{min-height:26px;align-items:center}
+.st-dense .st-agent .st-main{flex-direction:row;gap:6px;align-items:baseline;padding:2px 0}
+.st-dense .st-agent>.st-chev,.st-dense .st-agent>.st-gap,.st-dense .st-bot,.st-dense .st-time,.st-dense .st-kids{margin-top:0}
+.st-dense .st-acts{top:1px}
+/* Machines and Settings at the foot. */
+.st-foot{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground);overflow:hidden}
+.st .st-mach{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.st .st-mach:hover{color:var(--sidebar-foreground)}
+.st-mach small{font:10px 'Geist Mono',monospace}
+.st-mach .machine-dot{margin:0}
+/* The ? beside Settings: its tooltip lists the shortcuts (t.shortcuts.rows), on hover and on keyboard focus. It hangs from the
+   aside (position:relative), above the foot, so the foot's overflow:hidden does not clip it. */
+.st-keys-tip{position:absolute;left:8px;bottom:48px;z-index:30;width:max-content;max-width:320px;display:none;flex-direction:column;gap:5px;padding:10px 12px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);font-size:11px;line-height:15px;pointer-events:none}
+.st-keys:hover .st-keys-tip,.st-keys:focus-within .st-keys-tip{display:flex}
+.st-keys-tip>span{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.st-keys-tip kbd{flex:none;font-size:10px!important}
+.side-footer{padding:0;border:0} /* alias: Settings' test reads this selector; the foot is .st-foot */
+.side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
+.machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
+.machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
+/* A daemon restarting for its update (#48): neither online nor offline. */
+.machine-dot.updating{background:var(--warning);box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 18%,transparent)}
+@media(max-width:1250px){.sidebar.st{width:256px}}
+/* A narrow window: a 64 px rail, the projects as swatches with their tally, the rest behind icons. */
+@media(max-width:850px){
+ .sidebar.st{width:64px}
+ .st kbd{display:none!important}
+ .st .st-keys-tip kbd{display:inline-flex!important}
+ .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
+ .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
+ .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
+ .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
+ .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
+ .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
+ .st-project .side-swatch{width:16px;height:16px;border-radius:5px}
+ .st-tally{position:absolute;top:2px;right:6px}.st-tally span:not(.t-need){display:none}
+ .st-foot{flex-direction:column;height:auto;padding:8px 0;gap:8px}.st .st-mach{font-size:0}.st-mach small{display:none}.st-foot .st-fill{display:none}
+}
+
+/* Ledge's entry (ledge home spec §2.1): the resident, « Ledge. », the live line and /, the question field under it; lit while the home view shows. */
+.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:4px;padding:6px 8px 6px;cursor:default}
+.st-ledge .st-ledge-entry{display:flex;align-items:center;gap:8px;width:100%;padding:2px 0;border:0;background:none;color:var(--sidebar-foreground);text-align:left;cursor:pointer}
+.st-ledge .st-ledge-names{display:flex;flex-direction:column;flex:1;min-width:0;line-height:14px}
+.st-ledge .st-ledge-brand{font-size:13px;font-weight:650}
+.st-ledge .st-ledge-line{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
+.st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
+@media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
+.st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}
+.st-card.st-near .st-task-mark{color:var(--warning,#e5b85c)}
+.st-card.st-decision .st-task-mark{color:var(--sidebar-primary);font-weight:700}
+
+/* OpenRig's groups (docs/mockups/ledge-openrig-groups.html): a rig's hexagon, the kernel's. */
+.st-rig-hex{display:inline-grid;place-items:center;color:var(--info);flex:none}
+.st-kernel-hex{display:inline-grid;place-items:center;color:#8b5cf6;margin-right:4px}
+.st-grouping{display:flex;gap:2px;margin:6px 10px 2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-grouping button{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 8px;height:24px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-grouping button[aria-checked=true]{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+
+/* ===== Sidebar as proposed in ledge-sidebar-tidy.html (pending validation): kept as is in every direction ===== */
+.v2 .st-ask.st-ledge{padding:8px 14px;gap:0}
+.v2 .st-views{padding:4px;gap:2px;margin:10px 10px 8px}
+.v2.st .st-views button{height:30px;padding:0 10px;gap:9px}
+.v2 .st-grouping{margin:0 10px 8px;padding:4px;flex:none}
+.v2.st .st-grouping button{height:26px}
+.st-kernel-box{--kv:#8b5cf6;margin:0 2px;padding:2px 4px 4px;border:1px solid color-mix(in srgb,var(--kv) 34%,var(--border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--kv) 7%,var(--sidebar))}
+.th-dark .st-kernel-box{--kv:#a78bfa;background:color-mix(in srgb,var(--kv) 9%,var(--sidebar))}
+.st-kernel-box .st-label{padding:0 6px}
+.st-kernel-box .st-kernel-name{color:var(--sidebar-foreground);font-weight:600}
+.st-kernel-tag{display:flex;align-items:center;gap:5px;font:500 10px 'Geist Mono',monospace;color:color-mix(in srgb,var(--kv) 75%,var(--muted-foreground))}
+.st-kernel-tag i{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.st-kernel-box .st-row{padding-left:6px}
+.sidebar.st{width:264px;flex:none}
+
+/* ===== The app frame and its parts (mockup of the proposals, built on the tokens) ===== */
+*{box-sizing:border-box}
+.app{--task:#6d4fc4;width:1200px;height:740px;display:flex;flex-direction:column;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',system-ui,sans-serif;overflow:hidden;position:relative}
+.th-dark .app,.th-dark.app{--task:#b9a2f0}
+.app button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.tb{height:32px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--sidebar-border);background:var(--sidebar)}
+.tb b{font-weight:650;font-size:13px}.tb b i{font-style:normal;color:var(--sidebar-primary)}
+.tb .sp{flex:1}.tb .wc{display:flex;gap:18px;color:var(--muted-foreground);font-size:12px}
+.tb .badge{font:600 10px 'Geist Mono',monospace;color:var(--sidebar-primary)}
+.body{flex:1;min-height:0;display:flex}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--background)}
+.mh{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border)}
+.mh h3{margin:0;font-size:14px;font-weight:600}
+.mh .sub{font-size:12px;color:var(--muted-foreground)}
+.mh .sp{flex:1}
+.mc{flex:1;min-height:0;overflow:hidden;display:flex}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;padding:18px 20px;overflow:hidden}
+.col.side{flex:none;width:300px;border-left:1px solid var(--border);background:color-mix(in srgb,var(--sidebar) 60%,var(--background))}
+.sec{font:500 11px 'Geist',sans-serif;color:var(--muted-foreground);display:flex;align-items:center;gap:6px;margin-top:2px}
+.sec .n{font:600 10px 'Geist Mono',monospace;min-width:16px;height:16px;padding:0 4px;border-radius:999px;display:inline-grid;place-items:center;background:var(--sidebar-primary);color:var(--primary-foreground)}
+.sec .sp{flex:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.card.hot{border-color:color-mix(in srgb,var(--sidebar-primary) 45%,var(--border))}
+.card .who{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-foreground)}
+.card .who strong{color:var(--foreground);font-weight:600}
+.card .who .sp{flex:1}
+.card .who time{font:11px 'Geist Mono',monospace}
+.card h4{margin:0;font-size:14px;line-height:20px;font-weight:600}
+.card p{margin:0;font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.card p b{color:var(--foreground);font-weight:500}
+.acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{height:28px;padding:0 11px;border-radius:var(--radius-sm);border:1px solid var(--input)!important;font-size:12px!important;font-weight:500;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.pri{background:var(--primary)!important;border-color:var(--primary)!important;color:var(--primary-foreground)!important}
+.btn.ghost{border-color:transparent!important;color:var(--muted-foreground)!important}
+.btn.sm{height:24px;padding:0 8px;font-size:11px!important}
+.app .btn{padding:0 11px}.app .btn.sm{padding:0 8px}.app .chip{padding:0 8px}.app .btn.pri{color:var(--primary-foreground)}
+.fine{font-size:11px;color:var(--muted-foreground)}
+.pill{font:500 10px 'Geist Mono',monospace;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:var(--muted-foreground);white-space:nowrap}
+.pill.dec{border-color:color-mix(in srgb,var(--sidebar-primary) 50%,var(--border));color:var(--sidebar-primary)}
+.pill.q{border-color:color-mix(in srgb,var(--warning) 50%,var(--border));color:var(--warning)}
+.pill.ok{border-color:color-mix(in srgb,var(--success) 50%,var(--border));color:var(--success)}
+.pill.auto{border-color:color-mix(in srgb,var(--info) 50%,var(--border));color:var(--info)}
+.pill.task{border-color:color-mix(in srgb,var(--task) 50%,var(--border));color:var(--task)}
+.hex{display:inline-grid;place-items:center;color:var(--info)}
+.hex.k{color:#8b5cf6}
+.mono{font-family:'Geist Mono',monospace}
+.field{border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);padding:9px 12px;font-size:13px;color:var(--muted-foreground);display:flex;align-items:center;gap:8px}
+.field.tall{align-items:flex-start;min-height:64px;color:var(--foreground);line-height:19px}
+.composer{margin-top:auto;border:1px solid var(--input);border-radius:var(--radius-lg);background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.composer .ph{color:var(--muted-foreground);font-size:13px}
+.composer .row{display:flex;align-items:center;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground);background:var(--well)}
+.chip b{color:var(--foreground);font-weight:500}
+.mini-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)}
+.mini-row:last-child{border-bottom:0}
+.mini-row .sp{flex:1}
+.mini-row .t{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.bar{height:4px;border-radius:2px;background:var(--muted);overflow:hidden}.bar i{display:block;height:100%;background:var(--info)}
+/* Chat */
+.msg{display:flex;gap:10px;align-items:flex-start}
+.msg .body2{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.msg .name{font-size:12px;font-weight:600}.msg .name small{font-weight:400;color:var(--muted-foreground);margin-left:6px;font-family:'Geist Mono',monospace;font-size:10.5px}
+.msg .txt{font-size:13px;line-height:19px}
+.msg.me{justify-content:flex-end}
+.msg.me .txt{background:var(--muted);border-radius:12px 12px 4px 12px;padding:8px 12px;max-width:70%}
+.folded{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
+.folded b{color:var(--foreground);font-weight:500}
+/* OpenRig traffic as interpreted cards (place reserved for ledge-dev-2) */
+.orm{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--muted-foreground);padding:6px 10px;border-left:2px solid color-mix(in srgb,var(--task) 60%,transparent);background:color-mix(in srgb,var(--task) 5%,transparent);border-radius:0 6px 6px 0}
+.orm b{color:var(--foreground);font-weight:500}
+.orm .t{margin-left:auto;font:10.5px 'Geist Mono',monospace;flex:none}
+.reserve{position:relative;outline:1.5px dashed #d99a00;outline-offset:4px;border-radius:6px}
+.reserve::after{content:attr(data-r);position:absolute;right:-4px;top:-14px;font:600 9.5px 'Geist Mono',monospace;color:#1b1b1b;background:#ffc94d;padding:1px 6px;border-radius:4px;white-space:nowrap}
+/* Mascots and bots (simplified) */
+.mascot{width:26px;height:26px;flex:none;border-radius:8px 8px 6px 6px;background:linear-gradient(#c43a32,#8e1f1a);position:relative;display:inline-block}
+.mascot::after{content:"";position:absolute;left:6px;right:6px;top:9px;height:6px;border-radius:3px;background:#1b1414;box-shadow:inset 3px 0 0 -1px #ffb0a6,inset -3px 0 0 -1px #ffb0a6}
+.mascot.s{width:20px;height:20px}.mascot.s::after{left:4px;right:4px;top:7px;height:5px}
+.bot{width:18px;height:18px;flex:none;position:relative;display:inline-block}
+.bot::before{content:"";position:absolute;inset:1px 1px 3px;border-radius:5px 5px 4px 4px;background:linear-gradient(var(--bt,#d58a62),var(--bb,#a65a3a))}
+.bot::after{content:"";position:absolute;left:4px;right:4px;top:5px;height:4px;border-radius:2px;background:#1b2224;box-shadow:inset 2px 0 0 -.5px var(--e,#a9dfc7),inset -2px 0 0 -.5px var(--e,#a9dfc7)}
+.bot.codex{--bt:#8189ea;--bb:#5359c4}.bot.work{--e:#90c7f2}.bot.ap{--e:#f2b09c}.bot.q{--e:#f6d487}
+.bot.big{transform:scale(1.4);margin:3px}
+.max{--bt:#9b82e8;--bb:#6a4fc8}
+kbd.k{display:inline-flex;align-items:center;min-width:16px;height:16px;padding:0 4px;border-radius:4px;border:1px solid var(--border);color:var(--muted-foreground);font:10px 'Geist Mono',monospace}
+/* Dialog */
+.scrim{position:absolute;inset:0;background:color-mix(in srgb,#000 40%,transparent);display:grid;place-items:center;z-index:10}
+.dlg{width:560px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:0 20px 60px rgba(0,0,0,.35);display:flex;flex-direction:column}
+.dlg .dh{padding:16px 20px 4px;display:flex;align-items:center;gap:8px}.dlg .dh h3{margin:0;font-size:15px}
+.dlg .db{padding:10px 20px 14px;display:flex;flex-direction:column;gap:10px}
+.dlg .df{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.dlg label{font-size:11.5px;font-weight:500;color:var(--muted-foreground);display:flex;flex-direction:column;gap:5px}
+.cmd{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);background:var(--well);border:1px solid var(--border);border-radius:6px;padding:6px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Delegation settings */
+.lvl{display:grid;grid-template-columns:1fr 92px 92px 92px;align-items:center;border-bottom:1px solid var(--border);font-size:12.5px;min-height:44px}
+.lvl.head{min-height:30px;font-size:11px;color:var(--muted-foreground);font-weight:500}
+.lvl>div:not(:first-child){text-align:center}
+.lvl .what b{display:block;font-weight:500}
+.lvl .what small{color:var(--muted-foreground);font-size:11.5px}
+.radio{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--input);display:inline-block;vertical-align:middle}
+.radio.on{border:4.5px solid var(--primary)}
+.lock{font-size:11px;color:var(--muted-foreground)}
+/* Island / atelier vignettes */
+.vigs{display:flex;flex-direction:column;gap:14px}
+.vig{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.vig h5{margin:0;font-size:12px;font-weight:600;display:flex;gap:6px;align-items:center}
+.vig p{margin:0;font-size:12px;color:var(--muted-foreground);line-height:17px}
+.island{align-self:center;display:flex;align-items:center;gap:10px;background:#0b0b0c;color:#f2f2f2;border-radius:0 0 18px 18px;padding:8px 16px 10px;font-size:12px;min-width:360px;max-width:520px}
+.island .sp{flex:1}
+.island .ib{height:22px;padding:0 9px;border-radius:999px;background:#2a2a2d;color:#f2f2f2;font-size:11px;display:inline-flex;align-items:center}
+.island .ib.pri{background:#c4342c}
+.island small{color:#a3a3a3}
+.floor{height:120px;border-radius:10px;background:linear-gradient(160deg,color-mix(in srgb,var(--info) 10%,var(--well)),var(--well));border:1px solid var(--border);position:relative;overflow:hidden}
+.floor .tbl{position:absolute;left:36%;top:44%;width:30%;height:26%;border-radius:8px;background:color-mix(in srgb,#b88a4a 45%,var(--card));border:1px solid var(--border)}
+.floor .s{position:absolute;display:flex;flex-direction:column;align-items:center;font-size:9.5px;gap:1px}
+.floor .flag{position:absolute;font:600 9.5px 'Geist',sans-serif;padding:2px 6px;border-radius:5px;background:var(--sidebar-primary);color:#fff}
+.floor .bubble{position:absolute;font-size:10px;line-height:13px;padding:5px 8px;border-radius:8px;background:var(--card);border:1px solid var(--border);max-width:190px;color:var(--foreground)}
+
+/* ===== Page furniture ===== */
+html,body{margin:0}
+body{font-family:'Geist',system-ui,sans-serif;font-size:14px;line-height:21px;background:#e9e7e2;color:#1b1b1b}
+body.dark-page{background:#141414;color:#e8e8e8}
+.page{max-width:1880px;margin:0 auto;padding:30px 28px 90px}
+header.top{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap}
+h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing:-.01em}
+.lead{max-width:980px;margin:0;color:inherit;opacity:.8}
+.switch{margin-left:auto;display:flex;gap:4px;padding:3px;border-radius:9px;background:rgba(0,0,0,.08)}
+.switch button{border:0;background:none;padding:5px 12px;border-radius:7px;font:500 12px 'Geist',sans-serif;color:inherit;cursor:pointer}
+.switch button.on{background:#fff;color:#1b1b1b;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.grid{display:grid;grid-template-columns:repeat(3,600px);gap:24px;margin-top:22px}
+.colhead{border-radius:12px;padding:16px 18px;background:#fff;color:#1b1b1b;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:19px}
+.dark-page .colhead{background:#1f1f1f;color:#e8e8e8}
+.colhead h2{margin:0;font-size:17px;display:flex;gap:8px;align-items:baseline}
+.colhead h2 .tag{font:600 11px 'Geist Mono',monospace;padding:1px 7px;border-radius:999px;background:#e0322a;color:#fff}
+.colhead .tagline{font-size:13.5px;font-weight:500}
+.colhead dl{margin:4px 0 0;display:grid;grid-template-columns:118px 1fr;gap:4px 10px}
+.colhead dt{font-weight:600;font-size:12px;opacity:.65}
+.colhead dd{margin:0}
+.rowtitle{grid-column:1/-1;margin:26px 0 -8px;font-size:16px;font-weight:600;display:flex;gap:10px;align-items:baseline}
+.rowtitle small{font-weight:400;font-size:13px;opacity:.7}
+.shot{width:600px;height:370px;overflow:hidden;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(0,0,0,.14);cursor:zoom-in;position:relative}
+.shot>.app{transform:scale(.5);transform-origin:0 0}
+.shot-cap{font-size:12.5px;line-height:18px;opacity:.8;margin-top:8px}
+.cell{display:flex;flex-direction:column}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:100;cursor:zoom-out}
+.lightbox.on{display:grid}
+.lightbox .app{box-shadow:0 20px 80px rgba(0,0,0,.5);border-radius:10px}
+.notes{max-width:1240px;margin-top:40px;background:#fff;color:#1b1b1b;border-radius:12px;padding:24px 28px}
+.dark-page .notes{background:#1f1f1f;color:#e8e8e8}
+.notes h2{font-size:18px;margin:0 0 10px}
+.notes h3{font-size:15px;margin:22px 0 8px}
+.notes ol,.notes ul{margin:0;padding-left:22px;font-size:13.5px;line-height:21px}
+.notes li{margin:4px 0}
+.notes code{font:12px 'Geist Mono',monospace;background:rgba(127,127,127,.15);padding:1px 4px;border-radius:4px}
+.fact{border-left:3px solid #e0322a;padding:6px 12px;margin:10px 0;font-size:13.5px}
+
+
+/* ===== A+B additions ===== */
+.app .chip{padding:0 8px}
+.app .btn{padding:0 11px}.app .btn.sm{padding:0 8px}.app .btn.pri{color:var(--primary-foreground)}
+.max-card{border-color:color-mix(in srgb,#8b5cf6 40%,var(--border));background:color-mix(in srgb,#8b5cf6 5%,var(--card))}
+.th-dark .max-card{border-color:color-mix(in srgb,#a78bfa 40%,var(--border));background:color-mix(in srgb,#a78bfa 7%,var(--card))}
+.max-card .who strong{color:#7c4ddb}.th-dark .max-card .who strong{color:#c4b0fb}
+.seatline{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 0}
+.seatline .mono{color:var(--muted-foreground);font-size:11.5px}
+.countdown{border-color:color-mix(in srgb,var(--info) 45%,var(--border))}
+.cd-bar{height:3px;border-radius:2px;background:var(--muted);overflow:hidden}.cd-bar i{display:block;height:100%;background:var(--info)}
+.src{display:inline-flex;align-items:center;gap:4px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);border:1px solid var(--border);border-radius:5px;padding:0 6px;height:20px;background:var(--well)}
+.banner{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--well)}
+.banner.warn{border-color:color-mix(in srgb,var(--warning) 45%,var(--border));background:color-mix(in srgb,var(--warning) 7%,var(--card))}
+.banner.err{border-color:color-mix(in srgb,var(--danger-text) 45%,var(--border));background:color-mix(in srgb,var(--danger-text) 6%,var(--card))}
+.banner .bt{flex:1;display:flex;flex-direction:column;gap:3px}
+.banner b{font-size:13px;font-weight:600}
+.banner p{margin:0;font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.empty-box{border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.empty-box b{font-size:13px;font-weight:500}
+.empty-box p{margin:0;font-size:12.5px;color:var(--muted-foreground);line-height:18px}
+.raw{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--well);font:11px/16px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.fold-btn{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted-foreground)}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.seg span{height:24px;display:inline-flex;align-items:center;padding:0 10px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.seg span.on{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+.combo{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);font-size:12.5px;min-width:280px}
+.combo .sp{flex:1}.combo small{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.check{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--input);display:inline-grid;place-items:center;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.set-sec{display:flex;flex-direction:column;gap:8px;padding:14px 0;border-bottom:1px solid var(--border)}
+.set-sec h4{margin:0;font-size:13px;font-weight:600}
+.set-sec .hint{font-size:12px;color:var(--muted-foreground);line-height:17px}
+.set-row{display:flex;align-items:center;gap:10px;font-size:12.5px}
+.hns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:1}
+.hn{border:1px solid var(--border);border-radius:var(--radius-md);padding:7px 10px;display:flex;flex-direction:column;gap:1px;background:var(--card)}
+.hn b{font-size:12.5px;font-weight:600;display:flex;align-items:center}
+.hn small{font-size:11px;color:var(--muted-foreground)}
+.hn.on{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.hn.absent{opacity:.55}.hn.absent small{color:var(--danger-text)}
+.hn.bad{opacity:1;border-color:var(--danger-text);box-shadow:0 0 0 1px var(--danger-text)}
+/* Strip of card states at real size */
+.strip{display:grid;grid-template-columns:repeat(4,380px);gap:16px;margin-top:6px}
+.strip .app-bg{padding:14px;border-radius:12px;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;display:flex;flex-direction:column;gap:8px}
+.strip .lbl{font:600 11px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.strip .app-bg .btn{padding:0 11px}.strip .app-bg .btn.sm{padding:0 8px}
+.strip .app-bg button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+/* Phone */
+.phone{width:360px;height:740px;border-radius:40px;border:10px solid #0d0d0e;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;overflow:hidden;display:flex;flex-direction:column;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.phone button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.phone .btn{padding:0 11px}.phone .btn.sm{padding:0 8px}.phone .btn.pri{color:var(--primary-foreground)}
+.phone .sb{height:30px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font:600 12px 'Geist',sans-serif}
+.phone .ph-h{display:flex;align-items:center;gap:8px;padding:6px 16px 10px}
+.phone .ph-h h3{margin:0;font-size:20px;font-weight:650}
+.phone .ph-c{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:10px;padding:0 12px}
+.phone .card{padding:11px 12px}
+.phone .card h4{font-size:13.5px;line-height:19px}
+.phone .tabs{height:62px;flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border);background:var(--sidebar);padding-bottom:8px}
+.phone .tabs span{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10.5px;color:var(--muted-foreground);position:relative}
+.phone .tabs span.on{color:var(--sidebar-primary);font-weight:600}
+.phone .tabs .dot{position:absolute;top:8px;right:28%;min-width:15px;height:15px;border-radius:999px;background:var(--sidebar-primary);color:#fff;font:600 9px/15px 'Geist Mono',monospace;text-align:center;padding:0 3px}
+.phone .composer{margin:8px 12px 10px}
+/* TUI */
+.term{width:760px;border-radius:10px;overflow:hidden;font:12.5px/18px 'Geist Mono',monospace;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.term .tt{height:28px;display:flex;align-items:center;gap:6px;padding:0 12px;font:11px 'Geist',sans-serif}
+.term .tt i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.term pre{margin:0;padding:12px 16px 16px;white-space:pre}
+.th-dark .term,.term.dark{background:#0c0c0d;color:#e5e5e5}.th-dark .term .tt{background:#1b1b1d;color:#9b9b9b}
+.th-light .term{background:#fbfbfa;color:#1d1d1f}.th-light .term .tt{background:#ececea;color:#666}
+.term .r{color:#f87171}.term .y{color:#e3b341}.term .b{color:#79c0ff}.term .g{color:#56d364}.term .m{color:#bc8cff}.term .d{opacity:.55}.term .inv{background:#f87171;color:#0c0c0d}
+.th-light .term .r{color:#c4342c}.th-light .term .y{color:#9a6700}.th-light .term .b{color:#0969da}.th-light .term .g{color:#1a7f37}.th-light .term .m{color:#8250df}.th-light .term .inv{background:#c4342c;color:#fff}
+.app .chip,.phone .chip{white-space:nowrap}
+.col.side .composer .chip:nth-of-type(2){display:none}
+.phone .card .who .mono,.phone .card .who time{display:none}
+.phone .card .who{flex-wrap:wrap}
+/* Page */
+.sec-title{margin:40px 0 4px;font-size:19px;font-weight:650;display:flex;gap:10px;align-items:baseline}
+.sec-title .num{font:600 12px 'Geist Mono',monospace;opacity:.6}
+.sec-note{max-width:1100px;margin:0 0 14px;font-size:13.5px;opacity:.8}
+.rowx{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.cell{width:600px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.toc a{font-size:12.5px;color:inherit;text-decoration:none;padding:4px 10px;border-radius:999px;background:rgba(127,127,127,.14)}
+
+/* ===== Home layout ===== */
+.tabs2{display:flex;gap:2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.tabs2 span{height:26px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:var(--radius-sm);font-size:12.5px;color:var(--muted-foreground)}
+.tabs2 span.on{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+.tabs2 .n{font:600 10px 'Geist Mono',monospace;min-width:16px;height:16px;padding:0 4px;border-radius:999px;display:inline-grid;place-items:center;background:var(--sidebar-primary);color:var(--primary-foreground)}
+.tabs2 .c{font:500 10.5px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.ch{display:flex;align-items:center;gap:6px;padding:0 0 10px;border-bottom:1px solid var(--border)}
+.ch h5{margin:0;font-size:13px;font-weight:600}
+.ch .sp{flex:1}
+.icon-btn{width:26px;height:26px;display:inline-grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.icon-btn.on{background:var(--sidebar-accent);color:var(--foreground)}
+.trow{display:grid;grid-template-columns:96px 1fr 120px 80px;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--border);font-size:12.5px}
+.trow code{font:11px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.trow small{color:var(--muted-foreground)}
+.trow.sel{background:var(--sidebar-accent);border-radius:6px}
+.filters{display:flex;gap:6px;align-items:center}
+.sel-box{height:26px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--input);border-radius:var(--radius-sm);font-size:12px;background:var(--well)}
+.hrow{display:flex;flex-direction:column;gap:2px;padding:8px 6px;border-bottom:1px solid var(--border);font-size:12.5px}
+.hrow small{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.map{border-collapse:collapse;width:100%;font-size:13px}
+.map th,.map td{border-bottom:1px solid rgba(127,127,127,.25);padding:7px 10px;text-align:left;vertical-align:top}
+.map th{font-weight:600;opacity:.7;font-size:12px}
+.app.narrow{width:900px}
+.shot.n900{width:450px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Accueil Ledge : où vont Tâches, Historique et « Le point »</h1>
+      <p class="lead">Complément à <code>ledge-human-operator-ab.html</code> (direction A+B, validée), pour le lot de refonte de l'accueil, qui est à part.
+        Aujourd'hui, l'accueil a trois onglets (Conversation · Tâches · Historique), et « Le point » est épinglé en tête de la conversation.
+        Proposition : <b>la colonne centrale garde « À toi » et prend « Tâches » en second onglet</b> ; <b>la conversation reste à droite et porte l'Historique dans son en-tête</b>.
+        « Le point » se fond dans « À toi ». Clique sur un écran pour le voir en taille réelle.</p>
+    </div>
+    <div class="switch" role="radiogroup" aria-label="Thème"><button data-th="dark" class="on">Sombre</button><button data-th="light">Clair</button></div>
+  </header>
+
+  <h2 class="rowtitle" style="margin:30px 0 10px">Avant → après</h2>
+  <div class="notes" style="margin-top:0;max-width:1240px">
+    <table class="map">
+      <tr><th>Aujourd'hui (LedgeHome)</th><th>Dans le nouvel accueil</th><th>Pourquoi</th></tr>
+      <tr><td>Onglet <b>Conversation</b></td><td>Toujours visible, colonne de droite. Plus d'onglet.</td><td>On parle à Ledge pendant qu'on lit À toi : les deux restent ensemble.</td></tr>
+      <tr><td>« Le point » › <b>À toi</b> (accords, décisions, tâches closes, relais de contexte)</td><td>La colonne centrale « À toi » elle-même (onglet par défaut). Les tâches closes de Ledge y arrivent dans « Nouvelles », avec « Voir » et « Ranger ».</td><td>Une seule liste de ce qui t'attend, au lieu de deux.</td></tr>
+      <tr><td>« Le point » › <b>Confiées par Ledge</b></td><td>Onglet <b>Tâches</b>, filtre « Ledge ». Une tâche qui se ferme remonte aussi dans À toi › Nouvelles.</td><td>Ce sont des tâches en cours, pas des demandes pour toi.</td></tr>
+      <tr><td>« Le point » › <b>Résumer la journée</b></td><td>Pastille du champ de la conversation, à côté de « Nouvel objectif ».</td><td>C'est une question posée à Ledge.</td></tr>
+      <tr><td>Onglet <b>Tâches · n</b> (filtres état et donneur, détail, Répondre)</td><td>Second onglet de la colonne centrale : <b>À toi · n | Tâches · n</b>. Mêmes filtres et même détail. Les décisions ouvertes restent dans À toi ; le filtre « Décisions » montre leur historique.</td><td>Les tâches sont du suivi : à côté d'À toi, sans le remplacer.</td></tr>
+      <tr><td>Onglet <b>Historique</b> (questions du jour)</td><td>Bouton horloge dans l'en-tête de la conversation : la liste remplace le fil, avec « ← Conversation ». Un clic rouvre le fil sur la question.</td><td>L'historique appartient à la conversation.</td></tr>
+      <tr><td>Bouton <b>Nouvelle conversation</b> de l'en-tête</td><td>En-tête de la colonne conversation, à côté de l'Historique.</td><td>Même endroit que l'Historique.</td></tr>
+      <tr><td>Fenêtre étroite</td><td>Moins de 1 180 px : la conversation passe en troisième onglet, <b>À toi · Tâches · Ledge</b>.</td><td>Deux colonnes ne tiennent plus.</td></tr>
+    </table>
+  </div>
+
+  <div class="grid" id="grid" style="grid-template-columns:repeat(2,600px)"></div>
+
+  <section class="notes">
+    <h2>Fiche</h2>
+    <h3>Textes (FR · EN)</h3>
+    <ul>
+      <li>Onglets du centre : « À toi » · « Yours » ; « Tâches » · « Tasks » (clés existantes <code>home.tabs.tasks(n)</code> et <code>home.point.yours</code>). Troisième onglet en fenêtre étroite : « Ledge » · « Ledge ».</li>
+      <li>En-tête de la conversation : « Ledge » ; boutons « Historique » · « History » (<code>home.tabs.history</code>) et « Nouvelle conversation » (existant).</li>
+      <li>Historique ouvert : « ← Conversation » · « ← Conversation » ; vide : <code>home.history.none</code> (existant).</li>
+      <li>Pastille du champ : « Résumer la journée » (<code>home.point.summarize</code>, existant).</li>
+    </ul>
+    <h3>Comportements</h3>
+    <ul>
+      <li><kbd class="k">/</kbd> ouvre l'accueil, onglet À toi, et met le focus dans le champ de la conversation (comme aujourd'hui avec l'onglet Conversation).</li>
+      <li>La navigation <code>{ kind: 'home', tab }</code> garde <code>'tasks'</code> ; <code>'conversation'</code> devient l'onglet À toi (conversation visible à droite), et <code>'history'</code> ouvre À toi avec l'historique dans la colonne de droite.</li>
+      <li>« Voir » sur une tâche close (dans À toi) ouvre l'onglet Tâches sur son détail, comme <code>onShowTask</code> aujourd'hui.</li>
+    </ul>
+    <h3>Questions ouvertes pour l'utilisateur</h3>
+    <ol>
+      <li>Tâches en <b>second onglet du centre</b> (ma proposition), ou en <b>section repliée au bas d'À toi</b> ? L'onglet garde À toi court ; la section évite un clic.</li>
+      <li>Historique dans l'en-tête de la conversation : d'accord ? (Alternative : dans Tâches, mais ce ne sont pas des tâches.)</li>
+      <li>Seuil de la fenêtre étroite : 1 180 px, à vérifier sur ton écran.</li>
+    </ol>
+  </section>
+</div>
+<div class="lightbox" id="lb"></div>
+<script>
+const P = {
+  grid: ['M3 3h7v7H3z','M14 3h7v7h-7z','M3 14h7v7H3z','M14 14h7v7h-7z'],
+  rig: ['M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5z','M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7'],
+  dense: ['M4 4h16','M4 8h16','M4 12h16','M4 16h16','M4 20h16'],
+  fold: ['m7 20 5-5 5 5','m7 4 5 5 5-5'],
+  plus: ['M12 5v14','M5 12h14'],
+  chev: ['m9 18 6-6-6-6'],
+  chevDown: ['m6 9 6 6 6-6'],
+  back: ['m15 18-6-6 6-6'],
+  help: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6','M12 17h.01'],
+  gear: ['M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6','M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z'],
+  send: ['M5 12h14','m13 6 6 6-6 6'],
+  target: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8','M12 12h.01'],
+  clock: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M12 7v5l3 2'],
+  newc: ['M4 20h4L19 9l-4-4L4 16z','M14 6l4 4'],
+  check: ['m5 12 5 5 9-10'],
+  file: ['M6 3h8l4 4v14H6z','M14 3v4h4']
+};
+const ic = (d, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d.map(x => `<path d="${x}"/>`).join('')}</svg>`;
+const hx = (k = false, s = 13) => `<span class="hex${k ? ' k' : ''}">${ic(P.rig, s)}</span>`;
+const src = t => `<span class="src">${ic(P.file, 11)}${t}</span>`;
+const RIG = [['Bix','pilot','claude','work'],['Lu','design.ux','claude'],['Ida','dev.front','claude','work'],['Pim','review.qa','codex'],['Pim','dev.back','claude']];
+const KERNEL = [['Nova','advisor','claude'],['Max','operator','claude'],['Rex','queue','claude']];
+const seat = (s, d, ask) => `<div class="st-row st-agent" style="--d:${d}"><span class="st-gap"></span><span class="st-bot"><i class="bot ${s[2] === 'codex' ? 'codex' : ''} ${ask ? 'ap' : s[3] || ''}"></i></span><button class="st-main"><strong>${s[0]}</strong><span class="mono">${s[1]} · ${s[2]}</span></button><span class="st-time${ask ? ' t-approval' : ''}">${ask || ''}</span></div>`;
+const sidebar = () => `<aside class="sidebar st v2 st-dense">
+  <div class="st-ask st-ledge on"><button class="st-ledge-entry"><span class="st-mascot"><i class="mascot s"></i></span><span class="st-ledge-names"><span class="st-ledge-brand">Ledge<span style="color:var(--sidebar-primary)">.</span></span><small class="st-ledge-line">2 à toi</small></span><kbd class="k">/</kbd></button></div>
+  <nav class="st-views"><button>${ic(P.grid, 13)}<span>Atelier</span><span class="st-fill"></span><small>9 actifs</small></button><button>${ic(P.rig, 13)}<span>OpenRig</span></button></nav>
+  <div class="st-grouping"><button aria-checked="false">Projets</button><button aria-checked="true">Rigs</button></div>
+  <div class="st-scroll"><section class="st-kernel-box"><div class="st-label">${hx(true, 12)}<span class="st-kernel-name" style="margin-left:4px">Kernel</span><span class="st-fill"></span><span class="st-kernel-tag"><i></i>opérationnel</span></div><div>${KERNEL.map(s => seat(s, 0)).join('')}</div></section>
+  <section><div class="st-label"><span>Rigs</span><span class="st-fill"></span><button class="st-icon on">${ic(P.dense)}</button><button class="st-icon">${ic(P.fold)}</button><button class="st-icon">${ic(P.plus)}</button></div><div><div class="st-row st-project st-rig" style="--d:0"><button class="st-chev"><span class="open">${ic(P.chev, 12)}</span></button><span class="st-rig-hex">${ic(P.rig, 13)}</span><button class="st-main"><strong>ledge-dev</strong><span class="mono">ledge</span></button><span class="st-tally"><span class="t-need"><i></i>1</span><span class="t-work"><i></i>2</span></span></div>${RIG.map((s, i) => seat(s, 1, i === 0 ? 'décision' : '')).join('')}</div></section></div>
+  <div class="st-foot"><button class="st-mach"><i class="machine-dot"></i>WSL<small>9</small></button><span class="st-fill"></span><button class="st-icon">${ic(P.help, 15)}</button><button class="st-icon">${ic(P.gear, 15)}</button></div></aside>`;
+const app = (main, narrow = false) => `<div class="app${narrow ? ' narrow' : ''}"><div class="tb"><b>Ledge<i>.</i></b><span class="sp"></span><span class="badge">● 2</span><span class="wc">— ▢ ✕</span></div><div class="body">${sidebar()}<div class="main">${main}</div></div></div>`;
+const tabs = (on, narrow = false) => `<div class="tabs2"><span class="${on === 'yours' ? 'on' : ''}">À toi <b class="n">2</b></span><span class="${on === 'tasks' ? 'on' : ''}">Tâches <span class="c">5</span></span>${narrow ? `<span class="${on === 'ledge' ? 'on' : ''}"><i class="mascot s" style="width:14px;height:14px"></i>Ledge</span>` : ''}</div>`;
+const head = (on, narrow) => `<div class="mh"><i class="mascot s"></i>${tabs(on, narrow)}<span class="sp"></span>${narrow ? '' : `<span class="sub">Ledge décide seul : aucun sujet</span>`}</div>`;
+const decision = () => `<div class="card hot"><div class="who">${hx()}<strong>ledge-dev</strong> · Bix <span class="mono">pilot</span><span class="pill dec">décision</span><span class="sp"></span><time>4 min</time></div><h4>Tâches dans l'accueil : onglet ou section repliée ?</h4><div class="acts">${src('ledge-human-operator-ab-home.html')}</div><div class="acts"><button class="btn pri">Onglet · recommandé</button><button class="btn">Section repliée</button><button class="btn ghost">Répondre autrement…</button></div></div>`;
+const accord = () => `<div class="card"><div class="who"><i class="bot ap"></i><strong>Otto</strong> · Ledge <span class="mono">main</span><span class="pill dec">accord</span><span class="sp"></span><time>2 min</time></div><h4 style="font-size:13px">Lancer <span class="mono">pnpm test</span> ?</h4><div class="acts"><button class="btn pri sm">Oui</button><button class="btn sm">Non</button></div></div>`;
+const news = () => `<div class="card" style="gap:0;padding:4px 14px">${[['Otto a fini « Câbler la liste des sessions »','tâche de Ledge · 18:50',true],['Lu a rendu la maquette A+B','design.ux · 19:40',false]].map(u => `<div class="mini-row">${ic(P.check, 13)}<span>${u[0]}</span><span class="sp"></span><span class="t">${u[1]}</span>${u[2] ? '<button class="btn sm ghost">Voir</button><button class="btn sm ghost">Ranger</button>' : ''}</div>`).join('')}</div>`;
+const convo = (history = false) => history
+  ? `<div class="col side"><div class="ch"><button class="icon-btn">${ic(P.back, 14)}</button><h5>Conversation</h5><span class="sp"></span><button class="icon-btn on" title="Historique">${ic(P.clock, 14)}</button><button class="icon-btn" title="Nouvelle conversation">${ic(P.newc, 14)}</button></div>
+     <div class="sec">Aujourd'hui</div>${[['Résume la journée : ce qui a avancé…','19:12'],['Qui a besoin de moi ?','17:40'],['Confie une tâche à Otto : câbler la liste…','15:03'],['Pourquoi Ida est bloquée ?','11:26']].map(h => `<div class="hrow"><span>${h[0]}</span><small>${h[1]}</small></div>`).join('')}</div>`
+  : `<div class="col side"><div class="ch"><i class="mascot s"></i><h5>Ledge</h5><span class="sp"></span><button class="icon-btn" title="Historique">${ic(P.clock, 14)}</button><button class="icon-btn" title="Nouvelle conversation">${ic(P.newc, 14)}</button></div>
+     <div class="msg"><i class="mascot s"></i><div class="body2"><div class="name">Ledge</div><div class="txt" style="font-size:12.5px">ledge-dev attend une décision de toi, et Otto ton accord pour lancer les tests.</div></div></div>
+     <div class="composer"><span class="ph">Écrire à Ledge…</span><div class="row"><span class="chip">${ic(P.target, 11)} Objectif</span><span class="chip">Résumer la journée</span></div></div></div>`;
+const yours = () => `<div class="sec">Décisions <span class="n">1</span></div>${decision()}<div class="sec">Accords <span class="n">1</span></div>${accord()}<div class="sec">Nouvelles</div>${news()}`;
+const tasksList = () => `<div class="filters"><span class="sel-box">Ouvertes ${ic(P.chevDown, 11)}</span><span class="sel-box">Donneur : tous ${ic(P.chevDown, 11)}</span><span class="sp" style="flex:1"></span><span class="fine">5 ouvertes · 3 closes aujourd'hui</span></div>
+  <div>${[['t91b0d4','Pochette dans l’encoche','de Ledge à ledge-dev','prise'],['t77c2a1','Câbler la liste des sessions','de Ledge à Otto','terminée',1],['qitem-…1955','Lot 1 À toi : cartes','de Bix à Ida','prise'],['t55e910','Tests des notifications','de Nova à Echo','ouverte'],['qitem-…1926','Maquette A+B','de Bix à Lu','terminée']].map(r => `<div class="trow${r[4] ? ' sel' : ''}"><code>${r[0]}</code><span><b style="font-weight:500">${r[1]}</b></span><small>${r[2]}</small><span class="pill${r[3] === 'terminée' ? ' ok' : ' task'}">${r[3]}</span></div>`).join('')}</div>
+  <div class="card" style="gap:5px"><h4 style="font-size:13px">t77c2a1 · Câbler la liste des sessions</h4><p>de Ledge à Otto · terminée</p><p><b>Résultat</b> · la liste des sessions est câblée sur le flux du daemon, tests verts.</p><p class="fine">Historique : confiée 15:03 · prise 15:04 · terminée 18:50</p></div>`;
+
+const SCREENS = {
+  yours: ['Onglet « À toi » (par défaut)', 'La colonne centrale garde « À toi ». « Le point » s’y fond : les tâches closes de Ledge arrivent dans Nouvelles, avec « Voir » et « Ranger ». La conversation est à droite, avec Historique et Nouvelle conversation dans son en-tête.', () => app(`${head('yours')}<div class="mc"><div class="col">${yours()}</div>${convo()}</div>`)],
+  tasks: ['Onglet « Tâches »', 'Les filtres (état, donneur) et le détail actuels. Les décisions ouvertes restent dans À toi ; le filtre « Décisions » sert à retrouver celles qui sont réglées. La conversation reste à droite.', () => app(`${head('tasks')}<div class="mc"><div class="col">${tasksList()}</div>${convo()}</div>`)],
+  history: ['Historique ouvert', 'Le bouton horloge remplace le fil par les questions du jour. Un clic rouvre le fil sur la question ; « ← » revient à la conversation.', () => app(`${head('yours')}<div class="mc"><div class="col">${yours()}</div>${convo(true)}</div>`)],
+  narrow: ['Fenêtre étroite (900 px)', 'Sous 1 180 px, la colonne de droite ne tient plus : la conversation devient le troisième onglet « Ledge ».', () => app(`${head('yours', true)}<div class="mc"><div class="col">${yours()}</div></div>`, true)]
+};
+document.getElementById('grid').innerHTML = Object.entries(SCREENS).map(([k, [t, cap, f]]) => `<div class="cell"><div class="rowtitle" style="margin:18px 0 8px">${t}</div><div class="shot${k === 'narrow' ? ' n900' : ''}" id="s-${k}">${f()}</div><div class="shot-cap">${cap}</div></div>`).join('');
+const setTheme = th => {
+  document.body.classList.toggle('dark-page', th === 'dark');
+  document.querySelectorAll('.shot, #lb').forEach(s => { s.classList.remove('th-dark', 'th-light'); s.classList.add('th-' + th); });
+  document.querySelectorAll('.switch button').forEach(b => b.classList.toggle('on', b.dataset.th === th));
+};
+document.querySelectorAll('.switch button').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.th)));
+setTheme(new URLSearchParams(location.search).get('theme') || 'dark');
+const lb = document.getElementById('lb');
+document.addEventListener('click', e => { const s = e.target.closest('.shot'); if (s) { lb.innerHTML = s.innerHTML; lb.classList.add('on'); return; } if (e.target.closest('#lb')) lb.classList.remove('on'); });
+window.openShot = id => { const s = document.getElementById(id); lb.innerHTML = s.innerHTML; lb.classList.add('on'); };
+</script>
+</body>
+</html>
