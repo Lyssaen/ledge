@@ -66,6 +66,7 @@ export const fr = {
     dnd: 'Ne pas déranger', dndOn: 'Ne pas déranger : activé', minimize: 'Réduire', maximize: 'Agrandir', restore: 'Restaurer', close: 'Fermer'
   },
   openrig: {
+    seatOf: (rig: string, role?: string) => (role ? `Siège ${role} du rig ${rig}` : `Siège du rig ${rig}`),
     title: 'OpenRig', side: 'OpenRig', refresh: 'Actualiser', updated: (time: string) => `mis à jour à ${time}`, version: (v: string) => `OpenRig ${v}`,
     machines: 'Machines', machineOffline: 'hors ligne',
     start: 'Démarrer', stop: 'Arrêter', restart: 'Redémarrer', log: 'Journal',

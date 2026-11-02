@@ -191,6 +191,20 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
   // OpenRig on this machine (docs/mockups/ledge-openrig.html): `rig` runs with the login shell's PATH, as an agent would.
   const openrig = opts.openrig ?? createOpenRig({ env: agentEnv });
+  /**
+   * A session whose hooks come from an OpenRig seat (`dev-build@starter`) is that seat: its rig at once, its role (`dev.build`)
+   * once OpenRig's listing names it. Read only when the seat is new to the session or its role is still unknown.
+   */
+  const tagRigSeat = (id: string, seat: string) => {
+    const cur = store.get(id)?.rig;
+    if (cur?.seat === seat && cur.role) return;
+    const name = seat.slice(seat.lastIndexOf('@') + 1);
+    store.patch(id, { rig: { seat, name, ...(cur?.seat === seat && cur.role ? { role: cur.role } : {}) } });
+    void openrig.state().then(st => {
+      const role = st.rigs.flatMap(r => r.nodes).find(n => n.session === seat)?.logicalId;
+      if (role && store.get(id)?.rig?.seat === seat) store.patch(id, { rig: { seat, name, role } });
+    }).catch(e => log(`openrig: seat ${seat} not read: ${(e as Error).message}`));
+  };
   const models = opts.models ?? createModels({ env: agentEnv, omp: async () => ompChoices(await omp.catalog(opts.home ?? homedir())) });
   const token = await ensureDaemonToken();
   const httpServer = createServer(unauthorized);
@@ -1096,6 +1110,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           settleByHook(msg.id, ev); store.apply(msg.id, msg.event);
         }
         logDroppedRequest(msg.id, msg.event, before, store.get(msg.id));
+        if (msg.rigSeat) tagRigSeat(msg.id, msg.rigSeat);
         return;
       }
       case 'session.thread':

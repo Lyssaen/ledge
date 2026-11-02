@@ -9,6 +9,7 @@ import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js'
 import { closedLedgeTasks, exchanges, helperCount, nearContext, nextWaiting, openDecisions, overview, step } from '../model/overview.js';
 import { wrap } from '../model/thread.js';
 import { fit, machineLabel, paneName } from '../model/labels.js';
+import { rigTag, seatSecond } from '../model/rigSeat.js';
 import { clock, oneLine } from '../model/time.js';
 import { Ago } from '../ui/Ago.js';
 import { C, projectColor, STATE_COLOR } from '../theme.js';
@@ -125,7 +126,7 @@ export function Overview() {
         return (
           <Text key={s.id} wrap="truncate" backgroundColor={s.id === sel ? C.sel : undefined}>
             <Text color={STATE_COLOR[st]}>{g[st]} </Text><Text color={C.fg} bold>{fit(s.name, nameW)}</Text>
-            <Text color={C.dim}>{fit(s.repo ?? s.project, 9)}</Text><Text color={STATE_COLOR[st]}>{fit(oneLine(s.pending?.text ?? ''), askW)}</Text>
+            {s.rig ? <><Text color={C.blue}>{rigTag(s)}</Text><Text color={C.dim}>{seatSecond(s, '')} </Text></> : <Text color={C.dim}>{fit(s.repo ?? s.project, 9)}</Text>}<Text color={STATE_COLOR[st]}>{fit(oneLine(s.pending?.text ?? ''), s.rig ? Math.max(6, askW + 9 - rigTag(s).length - seatSecond(s, '').length - 1) : askW)}</Text>
             <Text color={C.faint}> <Ago iso={s.lastActivityAt} /></Text>
           </Text>
         );
@@ -163,7 +164,7 @@ export function Overview() {
           <Box flexDirection="column" flexGrow={1}>
             {selected ? (
               <>
-                <TitledBox title={`${selected.name} · ${oneLine(selected.topic ?? selected.title)}`} color={isPending(selected) ? C.red : C.line} titleColor={isPending(selected) ? C.red : C.dim}>
+                <TitledBox title={`${selected.name}${selected.rig ? ` · ${t.overview.rigSeat(selected.rig.name, selected.rig.role ?? selected.rig.seat)}` : ''} · ${oneLine(selected.topic ?? selected.title)}`} color={isPending(selected) ? C.red : C.line} titleColor={isPending(selected) ? C.red : C.dim}>
                   <SessionCard s={selected} note />
                 </TitledBox>
                 <TitledBox title={t.overview.terminal(paneName(selected))} flexGrow={1}>
@@ -202,7 +203,9 @@ function SessionRow({ s, on, nameW, topicW, stateW, indent = 0 }: { s: Session; 
       <Text>{' '.repeat(2 + indent)}</Text>
       <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{g[st]} </Text>
       <Text color={s.offline ? C.dim : C.fg} bold>{fit(s.name, nameW)}</Text>
-      <Text color={C.dim}>{fit(oneLine(s.topic ?? s.title), topicW)} </Text>
+      {/* A seat: its tag whole, then its role and the topic in what is left (the topic goes first). */}
+      {s.rig ? <Text color={C.blue}>{rigTag(s)}</Text> : null}
+      <Text color={C.dim}>{fit(seatSecond(s, oneLine(s.topic ?? s.title)), s.rig ? Math.max(0, topicW - rigTag(s).length) : topicW)} </Text>
       <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{fit(s.offline ? t.overview.offline : t.state[st], stateW).trimEnd()}</Text>
       {n > 0 ? <Text color={C.violet}> +{n}</Text> : null}
       {s.machineName && s.machineId !== 'local' ? <Text color={C.faint}> · {machineLabel(s)}</Text> : null}

@@ -84,9 +84,9 @@ export class Store {
   }
 
   /** Facts no event carries (the session's repository): the changed fields only, nothing emitted when they are equal. */
-  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId' | 'lastMessage' | 'workdir' | 'modelNext'>>): void {
+  patch(id: string, fields: Partial<Pick<Session, 'repo' | 'repoPath' | 'branch' | 'worktree' | 'repoId' | 'lastMessage' | 'workdir' | 'modelNext' | 'rig'>>): void {
     const cur = this.sessions.get(id); if (!cur) return;
-    if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => cur[k] === fields[k])) return;
+    if ((Object.keys(fields) as Array<keyof typeof fields>).every(k => JSON.stringify(cur[k]) === JSON.stringify(fields[k]))) return;
     this.upsert({ ...cur, ...fields });
   }
 

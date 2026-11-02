@@ -9,6 +9,9 @@ import { z } from 'zod';
 /** A rig's name as `rig up` / `rig down` take it: never a leading `-`, which `rig` would read as a flag. */
 export const RigNameSchema = z.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'not a rig name');
 
+/** An OpenRig seat's session name, `pod-member@rig` (`dev-build@starter`). */
+export const RigSeatNameSchema = z.string().min(3).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$/, 'not a seat');
+
 /** The kernel's own rig, which OpenRig starts with its daemon unless told `--no-kernel`. */
 export const KERNEL_RIG = 'kernel';
 

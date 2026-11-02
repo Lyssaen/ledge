@@ -32,6 +32,7 @@ export const en: Messages = {
     openSession: name => `open ${name}`
   },
   overview: {
+    rigSeat: (rig, role) => `rig ${rig} · ${role}`,
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
     nobodyWaits: 'Nobody is waiting for you.', noSession: 'No session. Press + to start one.', noPreview: 'No preview.', noExchange: 'No message yet.',
     sessions: n => `${n} ${plural(n, 'session', 'sessions')}`, outside: 'No project', offline: 'offline', readOnly: 'read-only',

@@ -52,6 +52,7 @@ export const en: Messages = {
     dnd: 'Do not disturb', dndOn: 'Do not disturb: on', minimize: 'Minimize', maximize: 'Maximize', restore: 'Restore', close: 'Close'
   },
   openrig: {
+    seatOf: (rig, role) => (role ? `Seat ${role} of the rig ${rig}` : `Seat of the rig ${rig}`),
     title: 'OpenRig', side: 'OpenRig', refresh: 'Refresh', updated: (time) => `updated at ${time}`, version: (v) => `OpenRig ${v}`,
     machines: 'Machines', machineOffline: 'offline',
     start: 'Start', stop: 'Stop', restart: 'Restart', log: 'Log',

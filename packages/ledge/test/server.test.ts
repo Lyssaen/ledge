@@ -2573,6 +2573,27 @@ describe('server: OpenRig', () => {
   });
 });
 
+describe('server: OpenRig seats as sessions', () => {
+  it('a hook from an OpenRig seat tags its session with the rig, then the role OpenRig gives it', async () => {
+    const node = { logicalId: 'dev.build', session: 'dev-build@first-factory', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'running', stopped: false, work: 0 };
+    const srv2 = await startServer({ store, tmux, port: 0, openrig: {
+      async state() { return { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, at: '2026-11-02T09:00:00.000Z', rigs: [{ id: 'R', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] }; },
+      async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'seat-1', agent: 'claude', cwd: '/w/ledge', rigSeat: 'dev-build@first-factory', event: { name: 'UserPromptSubmit', at: '2026-11-02T10:57:00.000Z', source: 'hook', text: 'go' } });
+    await vi.waitFor(() => expect(store.get('seat-1')?.rig).toEqual({ seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' }));
+    expect(store.get('seat-1')?.source).toBe('hook_only');
+    // A seat name rig could not have made is not taken.
+    c.send({ type: 'session.event', id: 'seat-2', agent: 'claude', cwd: '/w', rigSeat: '--x', event: { name: 'UserPromptSubmit', at: '2026-11-02T10:57:00.000Z', source: 'hook', text: 'go' } } as never);
+    await new Promise(r => setTimeout(r, 50));
+    expect(store.get('seat-2')).toBeUndefined();
+    c.close(); await srv2.close();
+  });
+});
+
 describe('close a session', () => {
   const CLOSE = { freeMs: 200, exitMs: 200 };
   /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */

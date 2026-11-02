@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
 import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
+import { RigTag } from '../../openrig/RigTag';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
 import { AutoMark, HelperBot, SessionBot } from '../SessionBot';
@@ -172,7 +173,7 @@ export function Tree(p: {
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
           onClick={() => helper ? p.onOpen(s.id, helper.id) : p.onOpen(s.id)}>
-          <strong>{name}{!helper && <AutoMark session={s} />}</strong>{task && <span>{task}</span>}
+          <strong>{name}{!helper && <AutoMark session={s} />}{!helper && <RigTag session={s} />}</strong>{task && <span>{task}</span>}
         </button>
         {subs.length > 0 && !open && <span className="st-kids" title={t.side.kids(subs.length)}>{subs.length}</span>}
         <span className={cls('st-time', waiting && timeClass)}>{s.offline ? t.side.offline : shortWhen(s.lastActivityAt, t.list.when.units, t.list.when.now)}</span>

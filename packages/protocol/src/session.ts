@@ -85,6 +85,8 @@ export const SessionSchema =z.object({
   worktree: z.boolean().optional(),
   /** The folder the agent works in now, as its last hook reported it: `cwd` stays where it started, this follows a worktree it entered. */
   workdir: z.string().optional(),
+  /** The OpenRig seat this agent is: its session name (`dev-build@starter`), its rig, and its role (`dev.build`) once OpenRig named it. */
+  rig: z.object({ seat: z.string(), name: z.string(), role: z.string().optional() }).optional(),
   tmuxSession: z.string().nullable(),
   /** Left out for a tmux session. `omp-rpc`: no pane, nothing to attach to; the daemon holds the process (see `agentSessionFile`). */
   backend: BackendSchema.optional(),

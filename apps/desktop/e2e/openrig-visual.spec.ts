@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { fakeDaemon, session } from './daemon';
+import { fakeDaemon, openAtelier, session, twoProjects } from './daemon';
 
 // Visual review of the OpenRig screens (not an assertion suite): full screens in both themes, and zooms on the controls.
 // LEDGE_VISUAL=1 pnpm --filter desktop exec playwright test e2e/openrig-visual.spec.ts
@@ -58,5 +58,25 @@ for (const theme of ['dark', 'light'] as const) {
     await dialog.getByRole('button', { name: 'Un siège de plus pour dev.build' }).click();
     await dialog.getByRole('button', { name: 'Un siège de moins pour dev.review' }).click();
     await dialog.screenshot({ path: info.outputPath(`seats-${theme}.png`) });
+  });
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`seats as sessions, ${theme}`, async ({ page }, info) => {
+    await page.addInitScript(t => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
+    const T = new Date(Date.now() - 60_000).toISOString();
+    await fakeDaemon(page, [
+      session('otto', { cwd: '/w/ledge', project: 'ledge', name: 'Otto', state: 'idle' }),
+      session('s1', { cwd: '/w/ledge', project: 'ledge', name: 'Bix', state: 'waiting_permission', source: 'hook_only', rig: { seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' },
+        pending: { kind: 'permission' as const, text: 'npm test', tool: 'Bash', source: 'hook' as const } }),
+      session('s2', { cwd: '/w/ledge', project: 'ledge', name: 'Nova', state: 'working', source: 'hook_only', rig: { seat: 'dev-review@first-factory', name: 'first-factory', role: 'dev.review' } })
+    ], { projects: twoProjects });
+    await page.goto('/');
+    await openAtelier(page);
+    await expect(page.locator('.agent-seat').first()).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: info.outputPath(`seats-sessions-${theme}.png`) });
+    await page.locator('aside.sidebar').screenshot({ path: info.outputPath(`zoom-sidebar-${theme}.png`) });
+    for (const name of ['Bix', 'Nova']) await page.locator('.agent-seat', { hasText: name }).screenshot({ path: info.outputPath(`zoom-seat-${name}-${theme}.png`) });
   });
 }

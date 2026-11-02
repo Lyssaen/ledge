@@ -5,6 +5,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { machineOf, taskOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
+import { RigTag, seatLine } from '../openrig/RigTag';
 import { cls } from '../shell/cls';
 import type { SessionActions } from '../manage/useSessionActions';
 import { Menu, MenuItem } from '../shell/Menu';
@@ -172,7 +173,8 @@ export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, 
               className={cls('agent-seat', `place-${side}`, seated === s.id && 'just-seated', focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
               {bot(s, 64)}
               <strong><span className="seat-name" title={s.name}>{s.name}</span>{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>
-              <span className="seat-machine" title={machineOf(s)}>{machineOf(s)}</span>
+              {s.rig && <span className="seat-rig-tag"><RigTag session={s} /></span>}
+              <span className="seat-machine" title={seatLine(s, machineOf(s))}>{s.rig?.role ?? machineOf(s)}</span>
               <StateBadge state={state} offline={!!s.offline} />
             </button>
             <button type="button" className={cls('seat-more', `place-${side}`)} style={{ left: at(x + 56 - 30) }} aria-label={t.manage.menu.label(s.name)} title={t.manage.menu.more}

@@ -33,6 +33,7 @@ export function SessionCard({ s, note }: { s: Session; note?: boolean }) {
     <Box flexDirection="column">
       <Text wrap="truncate">
         <Text color={STATE_COLOR[state]}>{g[state]} {t.state[state]}</Text>
+        {s.rig ? <Text color={C.blue}>  {t.overview.rigSeat(s.rig.name, s.rig.role ?? s.rig.seat)}</Text> : null}
         <Text color={C.dim}>  {TOOL_NAME[s.tool]} · {modelLabel(s, t.session.defaultModel)}</Text>
         {/* Its context, before what is cut first on a narrow terminal (context handover spec §3.2). */}
         {s.context ? <Text color={contextNear(s.context, threshold) ? C.yellow : C.dim}> · {t.overview.context(Math.round((s.context.used / s.context.window) * 100))}</Text> : null}
