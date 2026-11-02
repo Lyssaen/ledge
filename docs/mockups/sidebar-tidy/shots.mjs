@@ -17,6 +17,7 @@ await shot('#s-light', 'after-light');
 await shot('#s-zoom', 'rigs-options');
 await shot('#s-empty', 'empty-states');
 await shot('#s-en', 'english');
+await shot('#s-multi', 'multi-machine');
 // Alignment check: views box vs toggle box, ledge mascot vs views icon.
 const m = await page.evaluate(() => {
   const a = document.querySelector('#f-after');

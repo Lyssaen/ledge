@@ -30,6 +30,8 @@
 .st-kernel-box .st-kernel-name{color:var(--sidebar-foreground);font-weight:600}
 .st-kernel-tag{display:flex;align-items:center;gap:5px;font:500 10px 'Geist Mono',monospace;color:color-mix(in srgb,var(--kv) 75%,var(--muted-foreground))}
 .st-kernel-tag i{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.st-kernel-tag[data-state="offline"] i{background:var(--muted-foreground)}
+.ktip{top:28px;right:6px;white-space:pre-line;line-height:16px}
 .st-kernel-box .st-row{padding-left:6px}
 .st-kernel-box .st-row:hover,.st-kernel-box .st-row.sel{background:color-mix(in srgb,var(--kv) 14%,var(--sidebar))}
 /* 3 · Empty states: a quiet box in the list, its one action as an outline button. */
@@ -122,6 +124,13 @@ kbd.k{display:inline-flex;align-items:center;justify-content:center;min-width:18
     Le sélecteur Projets/Rigs reste visible même sans rig : sinon ces états n'auraient pas d'endroit où s'afficher.</p>
   <div class="row" id="s-empty"></div>
 
+  <h2>4 bis. États multi-machines (nés des revues)</h2>
+  <p class="sec-note">Complément du 2 novembre, validé à 20 h 11 avec deux ajustements (« hors ligne · n/m », phrase de l'état 3). Ces trois états existent déjà dans l'implémentation (<code>feat/sidebar-tidy</code> f2a01506) ; ils sont dessinés tels quels. Les écrans au-dessus ne changent pas.
+    (1) Kernel sur deux machines, EC2 injoignable : le pire état gagne (arrêté &gt; hors ligne &gt; démarrage &gt; opérationnel), donc « hors ligne · n/m » (n machines du Kernel hors ligne sur m) avec un point gris. L'infobulle donne une ligne par machine ; les sièges d'EC2 sont grisés, avec « hors ligne ».
+    (2) Au chargement, tant que toutes les machines du Kernel n'ont pas répondu : « Kernel » seul, sans point ni mot.
+    (3) Aucun daemon actif, OpenRig installé seulement sur une machine distante : « OpenRig est arrêté. », « Il est installé sur {machine} : démarre-le depuis sa page. », puis le lien « Ouvrir la page OpenRig ». Pas de bouton Démarrer : la sidebar ne démarre que la machine locale.</p>
+  <div class="row" id="s-multi"></div>
+
   <h2>5. Anglais</h2>
   <div class="row" id="s-en"></div>
 
@@ -143,6 +152,8 @@ kbd.k{display:inline-flex;align-items:center;justify-content:center;min-width:18
     <table>
       <tr><th>Clé proposée</th><th>FR</th><th>EN</th></tr>
       <tr><td><code>side.kernelTag</code></td><td>opérationnel</td><td>operational</td></tr>
+      <tr><td><code>side.kernelOffline(n, m)</code></td><td>hors ligne · {n}/{m}</td><td>offline · {n}/{m}</td></tr>
+      <tr><td><code>side.empty.stoppedElsewhere(machine)</code></td><td>Il est installé sur {machine} : démarre-le depuis sa page.</td><td>It’s installed on {machine}: start it from its page.</td></tr>
       <tr><td><code>side.empty.sessions</code></td><td>Aucune session pour l'instant.</td><td>No session yet.</td></tr>
       <tr><td><code>side.empty.sessionsBody</code></td><td>Une session lance un agent dans un dossier ou un projet.</td><td>A session runs an agent in a folder or a project.</td></tr>
       <tr><td><code>side.empty.newSession</code></td><td>Créer une session</td><td>Create a session</td></tr>
@@ -207,7 +218,7 @@ const P = {
 const ic = (d, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d.map(x => `<path d="${x}"/>`).join('')}</svg>`;
 
 const T = {
-  fr: { ledgeLine: n => `${n} à toi`, ask: 'Demander à Ledge…', atelier: 'Atelier', active: n => `${n} actifs`, openrig: 'OpenRig', projects: 'Projets', rigs: 'Rigs', kernel: 'Kernel', kernelTag: 'opérationnel', archives: 'Archives',
+  fr: { ledgeLine: n => `${n} à toi`, ask: 'Demander à Ledge…', atelier: 'Atelier', active: n => `${n} actifs`, openrig: 'OpenRig', projects: 'Projets', rigs: 'Rigs', kernel: 'Kernel', kernelTag: 'opérationnel', offline: 'hors ligne', kernelOffline: (n, m) => `hors ligne · ${n}/${m}`, stoppedElsewhere: mc => `Il est installé sur ${mc} : démarre-le depuis sa page.`, archives: 'Archives',
     dense: 'Mode compact (D)', foldAll: 'Tout replier', hideDone: 'Masquer les sessions terminées (H)', newProject: 'Nouveau projet', launchRig: 'Lancer un rig…', reseat: r => `Changer les sièges de ${r}`,
     emptySessions: 'Aucune session pour l’instant.', emptySessionsBody: 'Une session lance un agent dans un dossier ou un projet.', newSession: 'Créer une session',
     stopped: 'OpenRig est arrêté.', stoppedBody: 'Le démarrer lance aussi le kernel : l’opérateur, l’advisor et la file.', start: 'Démarrer OpenRig', starting: 'Démarrage d’OpenRig…',
@@ -215,7 +226,7 @@ const T = {
     noRig: 'Aucun rig pour l’instant.', noRigBody: 'Un rig est une équipe d’agents. Max, l’opérateur du kernel, peut t’aider à en composer un.',
     notInstalledTitle: 'OpenRig n’est pas installé', notInstalled: 'La commande rig est introuvable sur cette machine. Ledge n’installe rien lui-même.', howToInstall: 'Comment l’installer',
     why: 'le port 7433 est déjà utilisé' },
-  en: { ledgeLine: n => `${n} yours`, ask: 'Ask Ledge…', atelier: 'Atelier', active: n => `${n} active`, openrig: 'OpenRig', projects: 'Projects', rigs: 'Rigs', kernel: 'Kernel', kernelTag: 'operational', archives: 'Archives',
+  en: { ledgeLine: n => `${n} yours`, ask: 'Ask Ledge…', atelier: 'Atelier', active: n => `${n} active`, openrig: 'OpenRig', projects: 'Projects', rigs: 'Rigs', kernel: 'Kernel', kernelTag: 'operational', offline: 'offline', kernelOffline: (n, m) => `offline · ${n}/${m}`, stoppedElsewhere: mc => `It’s installed on ${mc}: start it from its page.`, archives: 'Archives',
     dense: 'Compact mode (D)', foldAll: 'Fold all', hideDone: 'Hide finished sessions (H)', newProject: 'New project', launchRig: 'Launch a rig…', reseat: r => `Change ${r}’s seats`,
     emptySessions: 'No session yet.', emptySessionsBody: 'A session runs an agent in a folder or a project.', newSession: 'Create a session',
     stopped: 'OpenRig is stopped.', stoppedBody: 'Starting it also starts the kernel: the operator, the advisor and the queue.', start: 'Start OpenRig', starting: 'Starting OpenRig…',
@@ -236,6 +247,15 @@ const rigRow = (t, o = {}) => `<div class="st-row st-project st-rig${o.hoverRig 
 const kernelSec = (t, boxed) => boxed
   ? `<section class="st-kernel-box" data-k="kernelbox"><div class="st-label"><span class="st-kernel-hex">${ic(P.rig, 12)}</span><span class="st-kernel-name">${t.kernel}</span><span class="st-fill"></span><span class="st-kernel-tag"><i></i>${t.kernelTag}</span></div><div>${KERNEL.map(s => seat(s, 0)).join('')}</div></section>`
   : `<section>${kernelLabel(t)}<div>${KERNEL.map(s => seat(s, 0)).join('')}</div></section>`;
+/* 8 · Multi-machine states (reference: feat/sidebar-tidy f2a01506). The kernel's seats on two machines: WSL (read) and EC2. */
+const KERNEL_EC2 = [['Ada','advisor','claude'],['Sol','operator','claude']];
+const offSeat = s => `<div class="st-row st-agent off" style="--d:0"><span class="st-gap"></span><span class="st-bot"><i class="bot" style="opacity:.5"></i></span><button class="st-main"><strong>${s[0]}</strong><span class="mono">${s[1]} · ${s[2]}</span></button><span class="st-time">${'{off}'}</span></div>`;
+const kernelMulti = (t, mode, tip) => {
+  const tag = mode === 'offline' ? `<span class="st-kernel-tag" data-state="offline" data-k="ktag"><i></i>${t.kernelOffline(1, 2)}</span>` : '';
+  const ec2 = mode === 'offline' ? KERNEL_EC2.map(s => offSeat(s).replace('{off}', t.offline)).join('') : '';
+  const tipHtml = tip && mode === 'offline' ? `<div class="tip ktip">WSL · ${t.kernelTag}<br>EC2 · ${t.offline}</div>` : '';
+  return `<section class="st-kernel-box" data-k="kernelbox" style="position:relative"><div class="st-label"><span class="st-kernel-hex">${ic(P.rig, 12)}</span><span class="st-kernel-name">${t.kernel}</span><span class="st-fill"></span>${tag}</div>${tipHtml}<div>${KERNEL.map(s => seat(s, 0)).join('')}${ec2}</div></section>`;
+};
 const rigsSec = (t, o) => `<section>${label(`<span>${t.rigs}</span>`, o.after ? rigIcons(t, o) : '')}<div>${rigRow(t, o)}${RIG.map(s => seat(s, 1)).join('')}</div></section>`;
 
 const projectsTree = t => `<section>${label(`<span>${t.projects}</span>`, `<button class="st-icon" title="${t.hideDone}">${ic(P.eyeOff)}</button><button class="st-icon" title="${t.dense}">${ic(P.dense)}</button><button class="st-icon" title="${t.foldAll}">${ic(P.fold)}</button><button class="st-icon" title="${t.newProject}">${ic(P.plus)}</button>`)}
@@ -257,6 +277,7 @@ const empty = (t, kind) => {
     case 'starting': return `<div class="st-empty" data-k="empty"><strong>${t.stopped}</strong><p>${t.stoppedBody}</p>${btn(t.starting, '<i class="st-spin"></i>', 'disabled')}</div>`;
     case 'failed': return `<div class="st-empty" data-k="empty"><strong>${t.stopped}</strong><p class="err">${t.failed(t.why)}</p>${btn(t.retry, ic(P.play, 12))}<button class="st-empty-link">${t.openPage}</button></div>`;
     case 'norig': return `<div class="st-empty" data-k="empty"><strong>${t.noRig}</strong><p>${t.noRigBody}</p>${btn(t.launchRig, ic(P.plus, 13))}</div>`;
+    case 'remote': return `<div class="st-empty" data-k="empty" role="status"><strong>${t.stopped}</strong><p>${t.stoppedElsewhere('EC2')}</p><button class="st-empty-link">${t.openPage}</button></div>`;
     case 'absent': return `<div class="st-empty" data-k="empty"><strong>${t.notInstalledTitle}</strong><p>${t.notInstalled}</p>${btn(t.howToInstall, '')}</div>`;
   }
 };
@@ -272,11 +293,12 @@ function sidebar(o) {
   let body = '';
   if (tab === 'projects') body = o.state === 'empty' ? `<section>${label(`<span>${t.projects}</span>`, `<button class="st-icon" title="${t.newProject}">${ic(P.plus)}</button>`)}${empty(t, 'sessions')}</section>` : projectsTree(t);
   else if (!after) body = rigsSec(t, Object.assign({}, o, { after: false })) + kernelSec(t);
-  else if (o.state === 'stopped' || o.state === 'starting' || o.state === 'failed' || o.state === 'absent') body = empty(t, o.state);
+  else if (o.state === 'stopped' || o.state === 'starting' || o.state === 'failed' || o.state === 'absent' || o.state === 'remote') body = empty(t, o.state);
+  else if (o.state === 'kOffline' || o.state === 'kLoading') body = kernelMulti(t, o.state === 'kOffline' ? 'offline' : 'loading', o.tip) + rigsSec(t, Object.assign({}, o, { after: true }));
   else if (o.state === 'norig') body = kernelSec(t, true) + `<section>${label(`<span>${t.rigs}</span>`, rigIcons(t, Object.assign({}, o, { dense: o.dense })))}${empty(t, 'norig')}</section>`;
   else body = kernelSec(t, true) + rigsSec(t, Object.assign({}, o, { after: true }));
   const archives = `<div class="st-archives"><button class="st-arch-toggle"><span>${ic(P.chev, 12)}</span>${ic(P.archive, 13)} ${t.archives} <small>${o.archived ?? 149}</small></button></div>`;
-  const foot = `<div class="st-foot"><button class="st-mach"><i class="machine-dot"></i>WSL<small>${o.machineCount ?? 9}</small></button><span class="st-fill"></span><button class="st-icon">${ic(P.help, 15)}</button><button class="st-icon">${ic(P.gear, 15)}</button></div>`;
+  const foot = `<div class="st-foot"><button class="st-mach"><i class="machine-dot"></i>WSL<small>${o.machineCount ?? 9}</small></button>${o.ec2 ? `<button class="st-mach"><i class="machine-dot${o.ec2 === 'off' ? ' off' : ''}"></i>EC2${o.ec2 === 'off' ? '' : `<small>${o.ec2}</small>`}</button>` : ''}<span class="st-fill"></span><button class="st-icon">${ic(P.help, 15)}</button><button class="st-icon">${ic(P.gear, 15)}</button></div>`;
   const scroll = `<div class="st-scroll">${after ? '' : toggle}${body}${archives}</div>`;
   return `<aside class="sidebar st${after ? ' v2' : ''}${o.dense ? ' st-dense' : ''}">${ledge}${views}${after ? toggle : ''}${scroll}${foot}</aside>`;
 }
@@ -317,6 +339,16 @@ document.getElementById('s-empty').innerHTML =
   frame({ id: 'f-norig', title: 'Rigs · daemon actif, aucun rig', v: 'after', theme: 'dark', state: 'norig', active: 5, machineCount: 5, short: true }) +
   frame({ title: 'Rigs · daemon actif, aucun rig', v: 'after', theme: 'light', state: 'norig', active: 5, machineCount: 5, short: true }) +
   frame({ title: 'Rigs · OpenRig absent (variante, Q4)', v: 'after', theme: 'light', state: 'absent', active: 2, machineCount: 2, short: true });
+
+document.getElementById('s-multi').innerHTML =
+  frame({ id: 'f-koff', title: '(1) Kernel · EC2 injoignable, infobulle', v: 'after', theme: 'dark', state: 'kOffline', tip: true, ec2: 'off', machineCount: 8, short: true }) +
+  frame({ title: '(1) Kernel · EC2 injoignable', v: 'after', theme: 'light', state: 'kOffline', ec2: 'off', machineCount: 8, short: true }) +
+  frame({ title: '(2) Kernel · au chargement', v: 'after', theme: 'dark', state: 'kLoading', ec2: '…', machineCount: 8, short: true }) +
+  frame({ title: '(2) Kernel · au chargement', v: 'after', theme: 'light', state: 'kLoading', ec2: '…', machineCount: 8, short: true }) +
+  frame({ title: '(3) OpenRig seulement sur EC2, arrêté', v: 'after', theme: 'dark', state: 'remote', ec2: 2, active: 2, machineCount: 2, short: true }) +
+  frame({ title: '(3) OpenRig seulement sur EC2, arrêté', v: 'after', theme: 'light', state: 'remote', ec2: 2, active: 2, machineCount: 2, short: true }) +
+  frame({ title: '(1) EN', v: 'after', theme: 'dark', lang: 'en', state: 'kOffline', tip: true, ec2: 'off', machineCount: 8, short: true }) +
+  frame({ title: '(3) EN', v: 'after', theme: 'light', lang: 'en', state: 'remote', ec2: 2, active: 2, machineCount: 2, short: true });
 
 document.getElementById('s-en').innerHTML =
   frame({ title: 'Rigs', v: 'after', theme: 'dark', lang: 'en', yours: 2 }) +

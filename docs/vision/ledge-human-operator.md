@@ -106,6 +106,15 @@ et B s'ouvre par réglage, quand la confiance est là.
 
 ledge-dev-2 (messages OpenRig en cartes) avance en parallèle dans la zone réservée du fil du rig.
 
+## Suivi technique (hors lot 1, relevé par review-qa le 2026-11-02)
+
+- La personne par défaut peut changer entre la vérification et l'envoi d'une réponse (autorité `primary-user`
+  d'OpenRig) : il faudrait une garantie atomique côté OpenRig. Ne se produit pas avec une seule personne.
+- Lectures sérialisées : sous fort volume, des détails lents peuvent retarder les autres demandes et les réponses ;
+  mesurer, puis concurrence bornée si besoin.
+- Après un `resolve` réussi dont la réponse réseau est perdue, le nouvel essai est refusé au lieu de dire « déjà
+  appliqué » : à traiter dans l'expérience de reprise.
+
 ## Hors périmètre
 
 - Remplacer Max ou le kernel.
