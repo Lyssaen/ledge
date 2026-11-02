@@ -474,7 +474,7 @@ describe('multi-machine connections', () => {
     client.send({ type: 'openrig.asks', requestId: 'g3', machineId: 'server' });
     client.send({ type: 'openrig.goal.reply', requestId: 'g4', machineId: 'server', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', text: 'y' });
     server.emit({ type: 'error', message: 'invalid message', request: 'openrig.goal.reply' });
-    expect(goals().at(-1)).toEqual({ type: 'openrig.goal.replied', requestId: 'g4', machineId: 'server', goalId: 'abcdef12-0000', ok: false, error: 'outdated' });
+    expect(goals().at(-1)).toEqual({ type: 'openrig.goal.replied', requestId: 'g4', machineId: 'server', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', ok: false, error: 'outdated' });
     expect(got.some(m => m.type === 'openrig.asksChanged' && m.requestId === 'g3')).toBe(false); // still pending
     server.set('unreachable');
     client.send({ type: 'openrig.goal.send', requestId: 'g5', machineId: 'server', goalId: 'abcdef12-0001', text: 'z' });

@@ -120,28 +120,31 @@ describe('reading the goals', () => {
   function serve(routes: Record<string, unknown>): { http: RigHttp; calls: string[] } {
     const calls: string[] = [];
     return { calls, http: async (_m, url) => {
-      calls.push(url.slice(BASE.length));
-      const hit = routes[url.slice(BASE.length)];
+      // Routes are named without their limit (`limit=…` is the reader's own bound).
+      const path = url.slice(BASE.length).replace(/[?&]limit=\d+$/, '');
+      calls.push(path);
+      const hit = routes[path];
       return hit === undefined ? { status: 200, json: [] } : hit === 503 ? { status: 503, json: {} } : { status: 200, json: hit };
     } };
   }
   const run: RigRun = async () => ({ code: 0, stdout: '{}', stderr: '' });
   const L = (q: string) => `/api/queue/list?${q}`;
+  const ASKS = (since: string) => L(`destinationSession=ledge%40external&updatedSince=${encodeURIComponent(since)}`);
 
   it('a goal handed on: its trail from sent to the last seat, the answered proposal, the chain\'s current row', async () => {
     const g1 = goalRow('g1', 'handed-off', '2026-11-02T19:41:00.000Z', { handedOffTo: 'pilot-lead@ledge-dev' });
     const lead = { qitemId: 'q-lead', sourceSession: MAX, destinationSession: 'pilot-lead@ledge-dev', state: 'handed-off', tags: ['ledge-goal:qitem-ledge-goal-g1'], tsCreated: '2026-11-02T19:44:00.000Z', tsUpdated: '2026-11-02T19:46:00.000Z', claimedAt: '2026-11-02T19:45:00.000Z' };
     const lu = { qitemId: 'q-lu', sourceSession: 'pilot-lead@ledge-dev', destinationSession: 'design-ux@ledge-dev', state: 'in-progress', tags: ['ledge-goal:qitem-ledge-goal-g1'], tsCreated: '2026-11-02T19:46:00.000Z', tsUpdated: '2026-11-02T19:47:00.000Z', claimedAt: '2026-11-02T19:47:00.000Z' };
     const s = serve({
-      [L('sourceSession=ledge%40external&limit=500')]: [g1, { ...goalRow('x', 'done', '2026-11-02T10:00:00.000Z'), tags: ['human-answer'] }],
-      [L('destinationSession=ledge%40external&limit=500')]: [proposal('p1', 'g1', 'done', '2026-11-02T19:42:00.000Z', { team: 'confirm' })],
+      [L('sourceSession=ledge%40external')]: [g1, { ...goalRow('x', 'done', '2026-11-02T10:00:00.000Z'), tags: ['human-answer'] }],
+      [ASKS('2026-11-02T19:41:00.000Z')]: [proposal('p1', 'g1', 'done', '2026-11-02T19:42:00.000Z', { team: 'confirm' })],
       [`/api/queue/${goalQitemId('g1')}/transitions`]: [
         { state: 'pending', ts: '2026-11-02T19:41:00.000Z', actorSession: 'ledge@external', transitionNote: 'created' },
         { state: 'in-progress', ts: '2026-11-02T19:41:30.000Z', actorSession: MAX, transitionNote: 'claimed' },
         { state: 'in-progress', ts: '2026-11-02T19:41:40.000Z', actorSession: MAX, transitionNote: 'Je regarde les rigs' },
         { state: 'handed-off', ts: '2026-11-02T19:44:00.000Z', actorSession: MAX, transitionNote: 'handoff' }],
-      [L(`handedOffFrom=${goalQitemId('g1')}&limit=5`)]: [lead],
-      [L('handedOffFrom=q-lead&limit=5')]: [lu]
+      [L(`handedOffFrom=${goalQitemId('g1')}`)]: [lead],
+      [L('handedOffFrom=q-lead')]: [lu]
     });
     const { goals } = await createGoals({ state: async () => RUNNING, run, http: s.http }).list();
     expect(OpenRigGoalsChangedSchema.parse({ type: 'openrig.goalsChanged', goals })).toBeTruthy();
@@ -158,10 +161,10 @@ describe('reading the goals', () => {
 
   it('a proposal waiting, Max\'s question waiting, a new goal, one closed without handoff, and the latest proposal after a change of team', async () => {
     const s = serve({
-      [L('sourceSession=ledge%40external&limit=500')]: [
+      [L('sourceSession=ledge%40external')]: [
         goalRow('a', 'in-progress', '2026-11-02T19:50:00.000Z'), goalRow('b', 'in-progress', '2026-11-02T19:51:00.000Z'),
         goalRow('c', 'pending', '2026-11-02T19:52:00.000Z'), goalRow('d', 'done', '2026-11-02T19:53:00.000Z', { resolution: 'Réglé autrement' })],
-      [L('destinationSession=ledge%40external&limit=500')]: [
+      [ASKS('2026-11-02T19:50:00.000Z')]: [
         proposal('pa-old', 'a', 'done', '2026-11-02T19:50:10.000Z', { team: { kind: 'typed-reply', text: 'Prends plutôt Ida' } }),
         proposal('pa-new', 'a', 'pending', '2026-11-02T19:50:20.000Z'),
         { qitemId: 'qb', sourceSession: MAX, destinationSession: 'ledge@external', state: 'pending', tags: ['ledge-goal:qitem-ledge-goal-b'], body: 'Dans quel dossier ?', summary: 'Quel dossier ?', tsCreated: '2026-11-02T19:51:10.000Z', tsUpdated: '2026-11-02T19:51:10.000Z' }]
@@ -177,8 +180,8 @@ describe('reading the goals', () => {
 
   it('a goal Max closed and continued with a tagged row is followed by its tag', async () => {
     const s = serve({
-      [L('sourceSession=ledge%40external&limit=500')]: [goalRow('t', 'done', '2026-11-02T19:41:00.000Z')],
-      [L(`updatedSince=${encodeURIComponent('2026-11-02T19:41:00.000Z')}&limit=500`)]: [
+      [L('sourceSession=ledge%40external')]: [goalRow('t', 'done', '2026-11-02T19:41:00.000Z')],
+      [L(`updatedSince=${encodeURIComponent('2026-11-02T19:41:00.000Z')}`)]: [
         { qitemId: 'q-new', sourceSession: MAX, destinationSession: 'pilot-lead@ledge-dev', state: 'done', tags: ['ledge-goal:qitem-ledge-goal-t'], tsCreated: '2026-11-02T19:44:00.000Z', tsUpdated: '2026-11-02T19:50:00.000Z', resolution: 'Livré' }]
     });
     const [g] = (await createGoals({ state: async () => RUNNING, run, http: s.http }).list()).goals;
@@ -186,9 +189,56 @@ describe('reading the goals', () => {
     expect(g!.trail.at(-1)).toMatchObject({ kind: 'closed', text: 'Livré' });
   });
 
+  it('a chain handed on with handoff-and-complete (done, with a successor) goes on to the seat that works now', async () => {
+    const g1 = goalRow('h', 'done', '2026-11-02T19:41:00.000Z', { handedOffTo: 'pilot-lead@ledge-dev', closureReason: 'handed_off_to' });
+    const lead = { qitemId: 'q-lead', sourceSession: MAX, destinationSession: 'pilot-lead@ledge-dev', state: 'done', handedOffTo: 'dev-front@ledge-dev', closureReason: 'handed_off_to', tags: [], tsCreated: '2026-11-02T19:44:00.000Z', tsUpdated: '2026-11-02T19:46:00.000Z', claimedAt: '2026-11-02T19:45:00.000Z' };
+    const dev = { qitemId: 'q-dev', sourceSession: 'pilot-lead@ledge-dev', destinationSession: 'dev-front@ledge-dev', state: 'in-progress', tags: [], tsCreated: '2026-11-02T19:46:00.000Z', tsUpdated: '2026-11-02T19:47:00.000Z', claimedAt: '2026-11-02T19:47:00.000Z' };
+    const s = serve({
+      [L('sourceSession=ledge%40external')]: [g1],
+      [`/api/queue/${goalQitemId('h')}/transitions`]: [
+        { state: 'pending', ts: '2026-11-02T19:41:00.000Z', actorSession: 'ledge@external', transitionNote: 'created' },
+        { state: 'done', ts: '2026-11-02T19:44:00.000Z', actorSession: MAX, transitionNote: 'handoff', closureReason: 'handed_off_to' }],
+      [L(`handedOffFrom=${goalQitemId('h')}`)]: [lead],
+      [L('handedOffFrom=q-lead')]: [dev]
+    });
+    const [g] = (await createGoals({ state: async () => RUNNING, run, http: s.http }).list()).goals;
+    expect(g).toMatchObject({ state: 'running', current: { qitemId: 'q-dev', seat: 'dev-front@ledge-dev', state: 'in-progress' } });
+    expect(g!.trail.some(t => t.kind === 'closed')).toBe(false);
+  });
+
+  it('a chain longer than what is followed is never shown complete: running, partial', async () => {
+    const hop = (i: number, state: string) => ({ qitemId: `q${i}`, sourceSession: `s${i}@r`, destinationSession: `s${i + 1}@r`, state, handedOffTo: state === 'done' ? `s${i + 2}@r` : undefined, tags: [], tsCreated: `2026-11-02T20:0${i}:00.000Z`, tsUpdated: `2026-11-02T20:0${i}:00.000Z` });
+    const routes: Record<string, unknown> = { [L('sourceSession=ledge%40external')]: [goalRow('long', 'handed-off', '2026-11-02T19:41:00.000Z')], [L(`handedOffFrom=${goalQitemId('long')}`)]: [hop(0, 'handed-off')] };
+    for (let i = 0; i < 9; i++) routes[L(`handedOffFrom=q${i}`)] = [hop(i + 1, i === 8 ? 'done' : 'handed-off')];
+    const l = await createGoals({ state: async () => RUNNING, run, http: serve(routes).http }).list();
+    expect(l.partial).toBe(true);
+    expect(l.goals[0]!.state).toBe('running');
+  });
+
+  it('a read of Max\'s asks that fails keeps each goal as it was known; a full list is partial; Max gone does not hide the goals', async () => {
+    let asksDown = false;
+    const routes: Record<string, unknown> = {
+      [L('sourceSession=ledge%40external')]: [goalRow('a', 'in-progress', '2026-11-02T19:50:00.000Z')],
+      [ASKS('2026-11-02T19:50:00.000Z')]: [proposal('pa', 'a', 'pending', '2026-11-02T19:50:20.000Z')]
+    };
+    const base = serve(routes);
+    let st: OpenRigState = RUNNING;
+    const g = createGoals({ state: async () => st, run, http: async (m, u, b) => (asksDown && u.includes('destinationSession') ? { status: 503, json: {} } : base.http(m, u, b)) });
+    expect((await g.list()).goals[0]).toMatchObject({ state: 'proposed', proposal: { askId: 'pa' } });
+    asksDown = true;
+    const l = await g.list();
+    expect(l.partial).toBe(true);
+    expect(l.goals[0]).toMatchObject({ state: 'proposed', proposal: { askId: 'pa' } });
+    asksDown = false; st = { ...RUNNING, rigs: [] }; // no operator.agent: reading does not need Max
+    expect((await g.list()).goals[0]).toMatchObject({ goalId: 'a', state: 'proposed' });
+    // A list read that fills its limit may leave rows out: partial.
+    const full = serve({ [L('sourceSession=ledge%40external')]: Array.from({ length: 2000 }, (_, i) => ({ qitemId: `other-${i}`, tags: [] })) });
+    expect(await createGoals({ state: async () => RUNNING, run, http: full.http }).list()).toEqual({ goals: [], partial: true });
+  });
+
   it('a list that cannot be read keeps the goals known, partial; a stop empties them', async () => {
     let fail = false, st: OpenRigState = RUNNING;
-    const ok = serve({ [L('sourceSession=ledge%40external&limit=500')]: [goalRow('k', 'pending', '2026-11-02T19:41:00.000Z')] });
+    const ok = serve({ [L('sourceSession=ledge%40external')]: [goalRow('k', 'pending', '2026-11-02T19:41:00.000Z')] });
     const g = createGoals({ state: async () => st, run, http: async (m, u, b) => (fail ? { status: 503, json: {} } : ok.http(m, u, b)) });
     expect((await g.list()).goals).toHaveLength(1);
     fail = true;

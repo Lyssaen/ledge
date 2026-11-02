@@ -16,6 +16,8 @@ export const PERSON = 'ledge@external';
 export const GOALS_MAX = 20;
 /** How far a goal's chain of handoffs is followed. */
 const CHAIN_MAX = 8;
+/** How many rows one OpenRig list read takes; a read that fills it may leave some out, and says so (partial). */
+const LIST_LIMIT = 2000;
 const TERMINAL = new Set(['done', 'handed-off', 'canceled', 'failed', 'denied']);
 const SYSTEM_NOTES = new Set(['created', 'claimed']);
 
@@ -130,92 +132,109 @@ export function createGoals(deps: GoalsDeps): GoalsService {
     return create(at.operator, qitemId, `Réponse via Ledge : ${firstLine(text).slice(0, 100)}`, body, `${GOAL_TAG}-reply:${goal}`);
   };
 
-  /** The goals last read: a read that fails keeps them (partial), it never empties the list. */
-  let known: Goal[] = [];
+  /** The goals last read, by id: a read that fails, whole or for one goal, keeps what it had (partial); it never empties the list. */
+  let known = new Map<string, Goal>();
   const list: GoalsService['list'] = async () => {
-    const at = await reach();
-    if ('error' in at) {
-      if (at.error !== 'unreachable') known = [];
-      return { goals: known, ...(at.error === 'unreachable' && known.length ? { partial: true } : {}) };
-    }
-    let partial = false;
-    const get = async (path: string): Promise<unknown> => {
-      const r = await http('GET', `${at.url}${path}`);
-      if (r.status !== 200) { partial = true; return undefined; }
-      return r.json;
+    // Reading needs OpenRig only, not Max: only a stop OpenRig confirms (or no OpenRig at all) empties the list.
+    const st = await deps.state();
+    if (!st.installed || st.daemon.state === 'stopped') { known = new Map(); return { goals: [] }; }
+    const kept = (): GoalsList => ({ goals: [...known.values()], ...(known.size ? { partial: true } : {}) });
+    if (st.daemon.state !== 'running' || !st.daemon.port) return kept();
+    const url = `http://127.0.0.1:${st.daemon.port}`;
+    let partial = false, missed = false;
+    /** A list read, or undefined when it failed; a list that fills its limit may leave rows out, so the result is partial. */
+    const rows = async (path: string, limit: number | null = LIST_LIMIT): Promise<Json[] | undefined> => {
+      const r = await http('GET', `${url}${path}${limit === null ? '' : `${path.includes('?') ? '&' : '?'}limit=${limit}`}`);
+      if (r.status !== 200 || !Array.isArray(r.json)) { partial = missed = true; return undefined; }
+      if (limit !== null && r.json.length >= limit) partial = true;
+      return rowsOf(r.json);
     };
-    const listed = await get(`/api/queue/list?sourceSession=${encodeURIComponent(PERSON)}&limit=500`);
-    if (!Array.isArray(listed)) return { goals: known, partial: true };
-    const mine = rowsOf(listed)
+    const listed = await rows(`/api/queue/list?sourceSession=${encodeURIComponent(PERSON)}`);
+    if (!listed) return kept();
+    const mine = listed
       .filter(r => str(r.qitemId)?.startsWith('qitem-ledge-goal-') && !str(r.qitemId)!.startsWith('qitem-ledge-goal-reply-') && tagsOf(r).includes(GOAL_TAG))
       .sort((a, b) => (str(b.tsCreated) ?? '').localeCompare(str(a.tsCreated) ?? ''))
       .slice(0, GOALS_MAX);
-    if (!mine.length) return { goals: [], ...(partial ? { partial } : {}) };
-    // Max's asks about goals (proposals and questions), the answered ones included.
-    const asks = rowsOf(await get(`/api/queue/list?destinationSession=${encodeURIComponent(PERSON)}&limit=500`)).filter(r => goalOf(r.tags));
+    if (!mine.length) { known = new Map(); return { goals: [], ...(partial ? { partial } : {}) }; }
     const since = mine.map(r => str(r.tsCreated) ?? '').sort()[0]!;
-    let tagged: Json[] | null = null;
-    const taggedRows = async () => (tagged ??= rowsOf(await get(`/api/queue/list?updatedSince=${encodeURIComponent(since)}&limit=500`)));
+    // Max's asks about goals (proposals and questions, the answered ones included), from the oldest goal on.
+    const asksRead = await rows(`/api/queue/list?destinationSession=${encodeURIComponent(PERSON)}&updatedSince=${encodeURIComponent(since)}`);
+    const asks = (asksRead ?? []).filter(r => goalOf(r.tags));
+    let tagged: Json[] | undefined | null = null;
+    const taggedRows = async () => (tagged === null ? (tagged = await rows(`/api/queue/list?updatedSince=${encodeURIComponent(since)}`)) : tagged) ?? [];
 
-    const goals: Goal[] = [];
+    const next = new Map<string, Goal>();
     for (const g of mine) {
+      missed = !asksRead;
       const qitemId = str(g.qitemId)!, goalId = qitemId.slice('qitem-ledge-goal-'.length);
       const { text, folder } = readGoalBody(str(g.body) ?? '');
       const trail: Goal['trail'] = [];
-      const steps = rowsOf(await get(`/api/queue/${encodeURIComponent(qitemId)}/transitions`));
+      const steps = await rows(`/api/queue/${encodeURIComponent(qitemId)}/transitions`, null) ?? [];
       let prev: string | null = null;
       for (const t of steps) {
         const st = str(t.state), actor = str(t.actorSession) ?? '', note = str(t.transitionNote), ts = str(t.ts) ?? '';
         if (prev === null) trail.push({ at: ts, kind: 'sent', seat: PERSON, to: str(g.destinationSession) ?? undefined, qitemId });
         else if (st === 'in-progress' && prev === 'pending') trail.push({ at: ts, kind: 'taken', seat: actor, qitemId });
         else if (st === prev && note && !SYSTEM_NOTES.has(note) && actor === str(g.destinationSession)) trail.push({ at: ts, kind: 'note', seat: actor, text: note, qitemId });
-        else if (st && TERMINAL.has(st) && st !== 'handed-off') trail.push({ at: ts, kind: 'closed', seat: actor, ...(str(g.resolution) ? { text: str(g.resolution)! } : {}), qitemId });
+        // A close that hands on (`handoff`, `handoff-and-complete`) is the next « handed » step, not an end.
+        else if (st && TERMINAL.has(st) && st !== 'handed-off' && str(t.closureReason) !== 'handed_off_to') trail.push({ at: ts, kind: 'closed', seat: actor, ...(str(g.resolution) ? { text: str(g.resolution)! } : {}), qitemId });
         prev = st;
       }
-      // The chain the goal went down: handoffs from the goal row, else the first seat row tagged with it.
+      // The chain the goal went down: its successors by `handedOffFrom` (a row handed on with `handoff-and-complete` is `done` and still
+      // has one), else the first seat row tagged with the goal.
+      const successor = async (id: string) => (await rows(`/api/queue/list?handedOffFrom=${encodeURIComponent(id)}`, 5))?.[0];
       const chain: Json[] = [];
-      let first = rowsOf(await get(`/api/queue/list?handedOffFrom=${encodeURIComponent(qitemId)}&limit=5`))[0];
-      if (!first && TERMINAL.has(str(g.state) ?? '')) {
+      let first = await successor(qitemId);
+      if (!first && TERMINAL.has(str(g.state) ?? '') && !str(g.handedOffTo)) {
         first = (await taggedRows()).filter(r => goalOf(r.tags) === qitemId && r.destinationSession !== PERSON && r.sourceSession !== PERSON)
           .sort((a, b) => (str(a.tsCreated) ?? '').localeCompare(str(b.tsCreated) ?? ''))[0];
       }
-      for (let row = first; row && chain.length < CHAIN_MAX; ) {
+      let cut = false;
+      for (let row = first; row; ) {
+        if (chain.length >= CHAIN_MAX) { cut = true; break; }
         chain.push(row);
         const id = str(row.qitemId)!;
         trail.push({ at: str(row.tsCreated) ?? '', kind: 'handed', seat: str(row.sourceSession) ?? '', to: str(row.destinationSession) ?? undefined, qitemId: id });
         if (str(row.claimedAt)) trail.push({ at: str(row.claimedAt)!, kind: 'taken', seat: str(row.destinationSession) ?? '', qitemId: id });
-        if (str(row.state) !== 'handed-off') {
-          if (TERMINAL.has(str(row.state) ?? '')) trail.push({ at: str(row.tsUpdated) ?? '', kind: 'closed', seat: str(row.destinationSession) ?? '', ...(str(row.resolution) ? { text: str(row.resolution)! } : {}), qitemId: id });
+        const handedOn = str(row.state) === 'handed-off' || !!str(row.handedOffTo) || str(row.closureReason) === 'handed_off_to';
+        const after = handedOn ? await successor(id) : undefined;
+        if (!after) {
+          if (TERMINAL.has(str(row.state) ?? '') && !handedOn) trail.push({ at: str(row.tsUpdated) ?? '', kind: 'closed', seat: str(row.destinationSession) ?? '', ...(str(row.resolution) ? { text: str(row.resolution)! } : {}), qitemId: id });
+          // Handed on, but its successor not found (not read, or out of reach): the chain is not known to its end.
+          if (handedOn) missed = partial = true;
           break;
         }
-        row = rowsOf(await get(`/api/queue/list?handedOffFrom=${encodeURIComponent(id)}&limit=5`))[0];
+        row = after;
       }
+      if (cut) partial = true;
       trail.sort((a, b) => a.at.localeCompare(b.at));
       // Max's asks about this goal: the latest proposal (a « team » question), and a question of his still open.
       const about = asks.filter(r => goalOf(r.tags) === qitemId).sort((a, b) => (str(b.tsCreated) ?? '').localeCompare(str(a.tsCreated) ?? ''));
       const isProposal = (r: Json) => rowsOf(r.humanQuestions).some(q => q.id === 'team');
       const p = about.find(isProposal);
       const q = about.find(r => !isProposal(r) && str(r.state) === 'pending');
-      const answer = p ? answerOf(p.humanAnswers, 'team') : null;
       const proposal = p ? {
         askId: str(p.qitemId)!, team: parseTeam(str(p.body) ?? ''), text: withoutTeam(str(p.body) ?? ''),
-        answer, answeredAt: str(p.state) === 'done' ? str(p.tsUpdated) : null
+        answer: answerOf(p.humanAnswers, 'team'), answeredAt: str(p.state) === 'done' ? str(p.tsUpdated) : null
       } : null;
       const last = chain.at(-1);
       const current = last ? { qitemId: str(last.qitemId)!, seat: str(last.destinationSession) ?? '', state: str(last.state) ?? '' }
         : TERMINAL.has(str(g.state) ?? '') ? null : { qitemId, seat: str(g.destinationSession) ?? '', state: str(g.state) ?? '' };
+      const lastOpen = last && (cut || missed || !TERMINAL.has(str(last.state) ?? ''));
       const state: Goal['state'] = q ? 'asking'
         : p && str(p.state) === 'pending' ? 'proposed'
-        : last ? (str(last.state) === 'done' ? 'done' : TERMINAL.has(str(last.state) ?? '') ? 'closed' : 'running')
+        : last ? (lastOpen ? 'running' : str(last.state) === 'done' ? 'done' : 'closed')
         : str(g.state) === 'pending' ? 'sent'
         : TERMINAL.has(str(g.state) ?? '') ? 'closed' : 'taken';
-      goals.push({
+      const read: Goal = {
         goalId, qitemId, text, folder, sentAt: str(g.tsCreated) ?? '', to: str(g.destinationSession) ?? '', state, proposal,
         question: q ? { askId: str(q.qitemId)!, text: str(q.summary) || firstLine(str(q.body) ?? '') } : null, trail, current
-      });
+      };
+      // A goal some of whose reads failed keeps what was read of it before, whole, rather than a state made of what was missing.
+      next.set(goalId, missed && known.has(goalId) ? known.get(goalId)! : read);
     }
-    known = goals;
-    return { goals, ...(partial ? { partial } : {}) };
+    known = next;
+    return { goals: [...next.values()], ...(partial ? { partial } : {}) };
   };
 
   return { send, reply, list };

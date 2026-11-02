@@ -147,6 +147,15 @@ type TeamProposal = {
 
 On garde les 20 objectifs les plus récents, le plus récent en premier. `role` se déduit du nom du siège (`pod.member`).
 
+`partial` : une lecture a échoué (OpenRig injoignable ou d'état illisible, une liste, une transition ou un successeur non lu),
+une liste a rempli sa limite (2 000 lignes), ou une chaîne dépasse 8 transmissions. Les objectifs connus sont alors gardés tels
+qu'ils étaient lus, sans état fabriqué à partir de ce qui manque, et une chaîne non suivie jusqu'au bout n'est jamais annoncée
+`done`. Seul un arrêt confirmé d'OpenRig vide la liste ; l'absence de Max n'empêche pas de la lire. Le trajet suit aussi une ligne
+transmise par `handoff-and-complete` (close `done`, mais avec un successeur).
+
+Le hook `useOpenRigGoals` termine toujours un envoi : `offline` si la connexion n'était pas ouverte (rien n'est parti),
+`uncertain` si elle tombe pendant l'attente ou si rien ne revient en 45 s (renvoyer avec le même `goalId` / `replyId` est sûr).
+
 ### Une proposition dans « À toi »
 
 `HumanAsk` (lot 1) gagne deux champs optionnels :
@@ -164,7 +173,8 @@ La carte violette se répond avec `openrig.answer` : `choice` `team`/`confirm`, 
 ```ts
 { type: 'openrig.goal.reply', requestId: string, machineId?: string, goalId: string, replyId: string,  // replyId : uuid, stable pour un renvoi
   text: string }
-→ { type: 'openrig.goal.replied', requestId, machineId?, goalId, ok: boolean, qitemId?: string, error?: (comme goal.sent), message?: string }
+→ { type: 'openrig.goal.replied', requestId, machineId?, goalId, replyId: string, ok: boolean, qitemId?: string, error?: (comme goal.sent), message?: string }
+// replyId est toujours rendu, même en erreur : renvoyer avec lui après `uncertain` ne réveille jamais Max deux fois.
 ```
 
 Cela crée une nouvelle ligne vers Max (`--source ledge@external`, tags `ledge-goal-reply:<id d'objectif>`), qui le réveille.

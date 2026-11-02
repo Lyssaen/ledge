@@ -2159,7 +2159,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigAsks: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigAsks: true, openrigGoals: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2674,7 +2674,7 @@ describe('server: goals to Max', () => {
     expect(await c.next('openrig.goal.sent')).toEqual({ type: 'openrig.goal.sent', requestId: 'g2', goalId: 'abcdef12-0000', ok: true, qitemId: 'qitem-ledge-goal-abcdef12-0000' });
     expect((await other.next('openrig.goalsChanged', 3000)).goals).toEqual([goal('abcdef12-0000')]);
     c.send({ type: 'openrig.goal.reply', requestId: 'g3', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', text: 'Prends Ida' });
-    expect(await c.next('openrig.goal.replied')).toEqual({ type: 'openrig.goal.replied', requestId: 'g3', goalId: 'abcdef12-0000', ok: false, error: 'uncertain', message: 'lost' });
+    expect(await c.next('openrig.goal.replied')).toEqual({ type: 'openrig.goal.replied', requestId: 'g3', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', ok: false, error: 'uncertain', message: 'lost' });
     expect(sent).toEqual(['send abcdef12-0000 La pochette', 'reply abcdef12-0000 fedcba98-0000']);
     c.close(); other.close(); await srv2.close();
   });

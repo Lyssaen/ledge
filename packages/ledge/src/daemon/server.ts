@@ -1117,7 +1117,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply({ type: 'openrig.goalsChanged', requestId: msg.requestId, ...l });
       }
       case 'openrig.goal.send': { const r = await goals.send(msg.goalId, msg.text, msg.folder); pushGoals(); return reply({ type: 'openrig.goal.sent', requestId: msg.requestId, goalId: msg.goalId, ...r }); }
-      case 'openrig.goal.reply': { const r = await goals.reply(msg.goalId, msg.replyId, msg.text); pushGoals(); return reply({ type: 'openrig.goal.replied', requestId: msg.requestId, goalId: msg.goalId, ...r }); }
+      case 'openrig.goal.reply': { const r = await goals.reply(msg.goalId, msg.replyId, msg.text); pushGoals(); return reply({ type: 'openrig.goal.replied', requestId: msg.requestId, goalId: msg.goalId, replyId: msg.replyId, ...r }); }
       case 'openrig.act': {
         const done = await openrig.act(msg.action);
         reply({ type: 'openrig.done', requestId: msg.requestId, ...done });

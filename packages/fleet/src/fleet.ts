@@ -48,7 +48,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** `session.commands` requestId -> the machine asked and the session's qualified id, so only its listing answers it (a drop or a refusal answers « offline » or « outdated »). */
   const commandLists = new Map<string, { machine: string; id: string }>();
   type RigKind = 'status' | 'act' | 'specs' | 'launch' | 'seats' | 'roles' | 'role' | 'roleFile' | 'asks' | 'answer' | 'goals' | 'goalSend' | 'goalReply';
-  type RigAsk = { machine: string; kind: RigKind; roleId?: string; path?: string; qitemId?: string; goalId?: string };
+  type RigAsk = { machine: string; kind: RigKind; roleId?: string; path?: string; qitemId?: string; goalId?: string; replyId?: string };
   const rigFailure = (a: RigAsk, requestId: string, machineId: string, error: 'offline' | 'outdated'): ServerMessage =>
     a.kind === 'act' ? { type: 'openrig.done', requestId, machineId, ok: false, commands: [], error }
     : a.kind === 'specs' ? { type: 'openrig.specList', requestId, machineId, specs: [], error }
@@ -61,7 +61,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     : a.kind === 'answer' ? { type: 'openrig.answered', requestId, machineId, qitemId: a.qitemId ?? '', ok: false, error }
     : a.kind === 'goals' ? { type: 'openrig.goalsChanged', requestId, machineId, goals: [], error }
     : a.kind === 'goalSend' ? { type: 'openrig.goal.sent', requestId, machineId, goalId: a.goalId ?? '', ok: false, error }
-    : a.kind === 'goalReply' ? { type: 'openrig.goal.replied', requestId, machineId, goalId: a.goalId ?? '', ok: false, error }
+    : a.kind === 'goalReply' ? { type: 'openrig.goal.replied', requestId, machineId, goalId: a.goalId ?? '', replyId: a.replyId ?? '', ok: false, error }
     : { type: 'openrig.state', requestId, machineId, error };
   /** The OpenRig writes whose end is told `uncertain` when their machine drops after they were sent (a refusal before sending stays `offline`). */
   const SENT_WRITES: ReadonlySet<RigKind> = new Set(['answer']);
@@ -469,7 +469,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
           : msg.type === 'openrig.asks' ? 'asks' : msg.type === 'openrig.answer' ? 'answer'
           : msg.type === 'openrig.goals' ? 'goals' : msg.type === 'openrig.goal.send' ? 'goalSend' : msg.type === 'openrig.goal.reply' ? 'goalReply' : 'launch';
         const ask: RigAsk = { machine, kind, ...(msg.type === 'openrig.role' || msg.type === 'openrig.roleFile' ? { roleId: msg.roleId } : {}), ...(msg.type === 'openrig.roleFile' ? { path: msg.path } : {}), ...(msg.type === 'openrig.answer' ? { qitemId: msg.qitemId } : {}),
-          ...(msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply' ? { goalId: msg.goalId } : {}) };
+          ...(msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply' ? { goalId: msg.goalId } : {}), ...(msg.type === 'openrig.goal.reply' ? { replyId: msg.replyId } : {}) };
         if (!available(peers.get(machine))) { emit(rigFailure(ask, msg.requestId, machine, 'offline')); return; }
         rigAsks.set(msg.requestId, ask);
       }

@@ -376,7 +376,8 @@ export const OpenRigGoalReplySchema = z.object({
   goalId: GoalIdSchema, replyId: GoalIdSchema, text: z.string().trim().min(1).max(8000)
 });
 export const OpenRigGoalRepliedSchema = z.object({
-  type: z.literal('openrig.goal.replied'), requestId: z.string(), machineId: z.string().optional(), goalId: z.string(), ok: z.boolean(),
+  type: z.literal('openrig.goal.replied'), requestId: z.string(), machineId: z.string().optional(), goalId: z.string(),
+  /** The reply's own id, always: sending it again after `uncertain` reuses it, and never wakes Max twice. */ replyId: z.string(), ok: z.boolean(),
   qitemId: z.string().optional(), error: GoalErrorSchema.optional(), message: z.string().optional()
 });
 export type OpenRigGoalSend = z.infer<typeof OpenRigGoalSendSchema>;
