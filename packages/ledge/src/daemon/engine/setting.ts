@@ -23,8 +23,10 @@ export function engineRunning(engine: TeamsEngine, d: { teams: Team[]; rigs: Rig
   return d.rigs.some(r => !r.kernel && (r.lifecycle === 'running' || r.lifecycle === 'partial' || r.lifecycle === 'launching'));
 }
 
-/** OpenRig is installed somewhere when at least one machine's state is not `absent`. */
-export const openrigAvailable = (statuses: OpenRigStatus[]): boolean => statuses.some(s => s.state !== 'absent');
+/** States that say nothing of OpenRig being there: not installed, a Ledge that does not know it, a machine out of reach. */
+const NOT_THERE: ReadonlySet<OpenRigStatus['state']> = new Set(['absent', 'unsupported', 'unreachable']);
+/** OpenRig is installed somewhere when at least one machine's state is another one (running, stopped, starting, error). */
+export const openrigAvailable = (statuses: OpenRigStatus[]): boolean => statuses.some(s => !NOT_THERE.has(s.state));
 
 /** Why the engine cannot be switched now (the text is shown as is), or null. */
 export function switchRefusal(from: TeamsEngine, to: TeamsEngine, d: { teams: Team[]; rigs: Rig[]; statuses: OpenRigStatus[] }): string | null {

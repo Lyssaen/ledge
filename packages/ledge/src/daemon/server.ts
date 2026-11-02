@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { type TeamObjective, type TeamsEngine, TEAM_ADDRESS, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { type TeamObjective, type TeamsEngine, type TeamsEnginePeer, type Rig, TEAM_ADDRESS, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf, MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -38,6 +38,8 @@ import { readProjects, writeProjects } from './projects.js';
 import { readTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal } from './engine/setting.js';
 import { engineRefusal, ENGINE_LEDGE } from './engine/guard.js';
 import { createLedgeEngine } from './engine/ledge.js';
+import { createOpenRigEngine } from './engine/openrig.js';
+import type { TeamEngine } from './engine/types.js';
 import { readContextPrefs, readIsland, writeContextPrefs, writeIsland } from './island.js';
 import { readDocument } from './documents.js';
 import { createModels, type Models } from './models.js';
@@ -257,8 +259,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const mirror = opts.openrig;
   const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), teams: () => teams.all(), tasks: () => tasks.all(), engine: () => teamsEngine,
-    // Every machine's rigs and escalations (the aggregate, made further down once the server listens).
-    ...(mirror ? { openrig: () => ({ rigs: aggregate?.rigs() ?? mirror.rigs(), escalations: aggregate?.escalations() ?? mirror.escalations() }) } : {}) });
+    // The teams of the engine in force (activeTeams: Ledge's projected, or every machine's rigs) and the escalations (the
+    // aggregate's, made further down once the server listens).
+    ...(mirror ? { openrig: () => ({ rigs: activeTeams(), escalations: aggregate?.escalations() ?? mirror.escalations() }) } : {}) });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -413,11 +416,34 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The engine not chosen is off: under Ledge, OpenRig is only probed and nothing of its rigs reaches the fronts. The aggregate
    *  first (it takes OpenRig's escalations off the fronts while the bridge still holds them). Same engine again: nothing. */
   const engines = { apply: (e: TeamsEngine): void => {
+    // First, while OpenRig's escalations are still seen: the graces the local brain holds go back to pending (none dropped unsaid).
+    if (e === 'ledge') deciding?.release("moteur d'équipes Ledge");
     aggregate?.setEngine(e); bridge?.setProbeOnly(e === 'ledge');
+    if (e !== 'ledge') return;
     // The other machines' OpenRig escalations this brain holds go back to them: the local brain must not decide a stale one.
-    if (e === 'ledge') remoteBrainCoordinator?.releaseAll();
+    remoteBrainCoordinator?.releaseAll();
+    // No rig under Ledge: a session paired with a seat is a plain one again, which its user can end (back under OpenRig, its
+    // hook's seat name or its folder pairs it again).
+    unpairGone(store, []);
   } };
+  /** One machine asked to take engine `e` (best effort): its answer, a refusal logged (a team runs there, it is out of reach…). */
+  const alignPeer = async (machine: string, e: TeamsEngine): Promise<TeamsEnginePeer> => {
+    const r = await (remote?.setTeamsEngine?.(machine, e) ?? Promise.resolve({ ok: false, reason: 'hors ligne' }));
+    if (!r.ok) log(`teams engine: ${machine} keeps its own, not ${e}: ${r.reason ?? 'refused'}`);
+    return { machine, ok: r.ok, ...(r.reason ? { reason: r.reason } : {}) };
+  };
+  /** One engine for every machine (lot D final review I1): every peer whose daemon knows the engine and runs another one is asked
+   *  to take `e`. A peer without it (an older Ledge) is left as it is; one already on `e` has nothing to do. */
+  async function alignPeers(e: TeamsEngine): Promise<TeamsEnginePeer[]> {
+    const said = (id: string) => remote?.teamsEngine?.(id);
+    const targets = machines.filter(m => m.id !== 'local' && said(m.id) !== undefined && said(m.id) !== e);
+    return Promise.all(targets.map(m => alignPeer(m.id, e)));
+  }
+  // A peer that connects running another engine is given this one, once per connection.
+  const unsubscribePeerEngine = remote?.onTeamsEngine?.((machine, e, first) => { if (first && e !== teamsEngine) void alignPeer(machine, teamsEngine); });
   const aggregate = bridge && remote ? createRigAggregate({ bridge, remote, machines: () => machines, projects: () => projects }) : null;
+  /** The OpenRig side of the one read path (activeEngine, below): the aggregate as a TeamEngine. */
+  const openrigEngine = aggregate ? createOpenRigEngine(aggregate) : null;
   const unsubscribeAggregate = aggregate?.onMessage(m => {
     broadcast(m);
     if (m.type === 'openrig.status' || m.type.startsWith('rig.')) broadcastEngine();
@@ -463,8 +489,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const unsubscribeTeams = teams.onChange(team => { broadcast({ type: 'team.updated', team }); broadcastEngine(); });
   /** The Ledge engine (lot D task 4): the live teams in the common team shape, on the local machine. It records under either
    *  engine; the fronts hear it only under Ledge (under OpenRig, never a Ledge rig; under Ledge, never an OpenRig one). */
-  const ledgeEngine = createLedgeEngine({ store, teams, now });
+  const ledgeEngine = createLedgeEngine({ store, teams, now, active: () => teamsEngine === 'ledge' });
   ledgeEngine.onMessage(m => { if (teamsEngine === 'ledge') broadcast(m); }); // its close() drops the listener
+  /**
+   * The one read path of the teams inside the daemon (lot D final review I2): the engine in force. Every reader of the teams (the
+   * hello, the phone, the brain, the chat) goes through it, never through the aggregate or the Ledge engine directly.
+   */
+  const activeEngine = (): TeamEngine | null => (teamsEngine === 'ledge' ? ledgeEngine : openrigEngine);
+  /** The teams in the common shape: Ledge's projected, or OpenRig's rigs (every machine's). */
+  const activeTeams = (): Rig[] => activeEngine()?.teams() ?? [];
+  /** What brings a client up to date: OpenRig's whole replay; under Ledge, the aggregate's (its statuses, empty snapshots and
+   *  Ledge's asks), then Ledge's teams. */
+  const activeReplay = (): ServerMessage[] => (teamsEngine === 'ledge' ? [...(aggregate?.replay() ?? []), ...ledgeEngine.replay()] : openrigEngine?.replay() ?? []);
   /** The local machine's rigs as the engine in force shows them: Ledge's teams, or nothing until the bridge's own snapshot. */
   const localTeamsSnapshot = (): ServerMessage => ({ type: 'rig.snapshot', machine: 'local', rigs: teamsEngine === 'ledge' ? ledgeEngine.teams() : [] });
   // The engine read at start, before the daemon starts the bridge (index.ts): under Ledge, its first turn is a probe already.
@@ -639,8 +675,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
-    if (aggregate) for (const m of aggregate.replay()) reply(m);
-    if (teamsEngine === 'ledge') for (const m of ledgeEngine.replay()) reply(m); // after the aggregate's empty local snapshot
+    for (const m of activeReplay()) reply(m);
     { const m = engineMsg(); engineSent = JSON.stringify(m); reply(m); } // after the OpenRig mirror, then the teams engine
     reply({ type: 'brain.status', status: brain.status() });
     reply(mandateMsg()); reply(rulesMsg()); reply(decisionsMsg());
@@ -1198,7 +1233,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
   }
   /** `ledge brain …` (Lot 7): what the brain session may do, once the daemon knows it is the brain. */
-  const brainCommands = createBrainCommands({ deciding: brainDecisionRouting, thread, seatSend, memory, rigs: () => aggregate?.rigs() ?? bridge?.rigs() ?? [], escalations: () => [...(bridge?.escalations() ?? []), ...(remoteBrainCoordinator?.list() ?? [])],
+  const brainCommands = createBrainCommands({ deciding: brainDecisionRouting, thread, seatSend, memory, rigs: activeTeams, escalations: () => [...(bridge?.escalations() ?? []), ...(remoteBrainCoordinator?.list() ?? [])],
     sessions: () => store.all(), projects: () => projects, chat, emit: broadcast, rigAct, rigPrepare: msg => rigPrepare(msg, false),
     rigsOff: () => (teamsEngine === 'ledge' ? ENGINE_LEDGE : null),
     handover: (by, text) => handovers.brief(by, text) });
@@ -1674,17 +1709,20 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return broadcast(contextMsg());
       }
       case 'teams.engine.set': {
-        const reason = switchRefusal(teamsEngine, msg.engine, engineData());
-        if (reason) return reply({ type: 'teams.engine.result', rid: msg.rid, ok: false, reason });
-        try { writeTeamsEngine(paths().teamsEngine, msg.engine); } // first: a failing write leaves memory unchanged
-        catch (e) { return reply({ type: 'teams.engine.result', rid: msg.rid, ok: false, reason: (e as Error).message }); }
-        teamsEngine = msg.engine;
-        reply({ type: 'teams.engine.result', rid: msg.rid, ok: true });
-        broadcastEngine();
-        engines.apply(teamsEngine);
-        // After the aggregate's own snapshots: the local machine shows Ledge's teams, or none of them under OpenRig.
-        broadcast(localTeamsSnapshot());
-        return;
+        if (msg.engine !== teamsEngine) {
+          const reason = switchRefusal(teamsEngine, msg.engine, engineData());
+          if (reason) return reply({ type: 'teams.engine.result', rid: msg.rid, ok: false, reason });
+          try { writeTeamsEngine(paths().teamsEngine, msg.engine); } // first: a failing write leaves memory unchanged
+          catch (e) { return reply({ type: 'teams.engine.result', rid: msg.rid, ok: false, reason: (e as Error).message }); }
+          teamsEngine = msg.engine;
+          broadcastEngine();
+          engines.apply(teamsEngine);
+          // After the aggregate's own snapshots: the local machine shows Ledge's teams, or none of them under OpenRig.
+          broadcast(localTeamsSnapshot());
+        }
+        // One engine for every machine: the other daemons that know it take the same one (best effort, each refusal said).
+        const peers = await alignPeers(msg.engine);
+        return reply({ type: 'teams.engine.result', rid: msg.rid, ok: true, ...(peers.length ? { peers } : {}) });
       }
       case 'island.set': {
         writeIsland(msg.prefs, islandFile); // first: a failing write leaves memory unchanged and reaches the sender
@@ -2285,7 +2323,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   }
   if (mobile) gateway = createPhoneGateway({
     mobile, answerReceipts,
-    ...(aggregate ? { openrig: { rigs: aggregate.rigs, statuses: aggregate.statuses, escalations: aggregate.escalations, escalation: aggregate.escalation, escalationAmbiguous: aggregate.escalationAmbiguous, exchanges: aggregate.exchanges, rules: memory.rules, decisions: () => memory.decisions({ limit: 200 }), projects: () => projects, thread: (before?: string) => thread.page(before) } } : {}),
+    // The phone reads the teams through the one read path: Ledge's teams under Ledge, every machine's rigs under OpenRig.
+    ...(aggregate ? { openrig: { rigs: activeTeams, statuses: aggregate.statuses, escalations: aggregate.escalations, escalation: aggregate.escalation, escalationAmbiguous: aggregate.escalationAmbiguous, exchanges: (machine: string, rigId: string) => activeEngine()?.exchanges(rigId, machine) ?? null, rules: memory.rules, decisions: () => memory.decisions({ limit: 200 }), projects: () => projects, thread: (before?: string) => thread.page(before) } } : {}),
     // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
     chats: { ...threads, async drop(id: string) {
       const waiting = [...new Set(threads.queuedRelays().filter(q => q.thread === `device:${id}`).map(q => q.relay.id))];
@@ -2471,6 +2510,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     asks,
     projects: () => projects,
     say: text => { thread.append({ kind: 'ledge', text }); },
-    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); clearInterval(thoughtTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeAnswerSettled?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); tasks.close(); handovers.close(); unsubscribeTeams(); ledgeEngine.close(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
+    close: () => new Promise<void>(res => { clearInterval(sweepTimer); clearInterval(brainDayTimer); clearInterval(thoughtTimer); unsubscribe(); unsubscribeBrain(); unsubscribeMemory(); deciding?.dispose(); unsubscribeRemoteSettled?.(); remoteBrainCoordinator?.close(); remoteBrainOwner?.close(); brain.dispose(); unsubscribeBridge?.(); unsubscribeAggregate?.(); unsubscribePeerEngine?.(); rigRouter?.close(); remote?.close(); launches?.close(); stopRepoWatch?.(); unsubscribeThread(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); unsubscribeAnswerSettled?.(); unsubscribePhoneSync?.(); unsubscribeEscalationPush?.(); unsubscribeDecisionPush?.(); decisionPushBatch?.close(); gateway?.stop(); relay.close(); mailbox.close(); asks.close(); tasks.close(); handovers.close(); unsubscribeTeams(); ledgeEngine.close(); teams.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); }).then(() => thread.flush())
   };
 }

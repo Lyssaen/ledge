@@ -103,6 +103,8 @@ export function createPhoneGateway(deps: {
   log: (line: string) => void;
   now?: () => string;
   outbox?: { now?: () => number; frames?: number; bytes?: number; windowMs?: number };
+  /** How long a burst of Ledge team changes is gathered into one snapshot (default 250 ms). */
+  teamsCoalesceMs?: number;
   /** The chat threads: each device talks to its own. Without them the phone has no chat. */
   chats?: Pick<ChatThreads, 'device' | 'peek' | 'deviceTool' | 'owner' | 'drop' | 'setEmitter'>;
   /** The chat relay: hands a turn's instruction to its session. */
@@ -285,6 +287,14 @@ export function createPhoneGateway(deps: {
   });
 
   const push = (deviceId: string, msg: PhoneServerMessage, key?: string) => { if (!stopped) outbox.push(deviceId, msg, key); };
+  const snapshotAll = () => { for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot'); };
+  /** A Ledge team's changes come in bursts (each seat's working/idle flip is one): one snapshot per burst, not one per frame. */
+  let teamsSoon: ReturnType<typeof setTimeout> | null = null;
+  const snapshotSoon = () => {
+    if (teamsSoon) return;
+    teamsSoon = setTimeout(() => { teamsSoon = null; if (!stopped) snapshotAll(); }, deps.teamsCoalesceMs ?? 250);
+    teamsSoon.unref?.();
+  };
   /** After a snapshot: the kept model failures of the sessions still there. */
   const replayModelFailures = (deviceId: string) => {
     for (const [id, f] of modelFailures) if (live(id)) push(deviceId, { type: 'session.model.failed', id, reason: f.reason });
@@ -1132,8 +1142,8 @@ export function createPhoneGateway(deps: {
         switch (m.type) {
           case 'rig.snapshot': case 'rig.updated': case 'rig.removed': case 'escalation.updated': case 'escalation.removed': case 'decisions': case 'rules': case 'projects': case 'openrig.status':
             if (!deps.openrig) return;
-            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, snapshot(deviceId), 'snapshot');
-            return;
+            if ((m.type === 'rig.updated' && m.rig.engine === 'ledge') || (m.type === 'rig.removed' && m.rigId.startsWith('team-'))) return snapshotSoon();
+            return snapshotAll();
           case 'ledge.thread.item': {
             if (!deps.openrig) return;
             const item = toPhoneThreadItem(m.item, threadContext()); if (!item) return;
@@ -1223,6 +1233,7 @@ export function createPhoneGateway(deps: {
     stop() {
       if (stopped) return;
       stopped = true;
+      if (teamsSoon) { clearTimeout(teamsSoon); teamsSoon = null; }
       unsubscribeMessage();
       unsubscribeChange();
       outbox.close();

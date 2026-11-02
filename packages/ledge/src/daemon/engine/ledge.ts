@@ -8,6 +8,9 @@ export interface LedgeEngineDeps {
   store: Pick<Store, 'get' | 'onChange'>;
   teams: Pick<TeamsLive, 'all' | 'get' | 'teamOf' | 'onChange'>;
   now?: () => string;
+  /** The Ledge engine is the one in force (default: always). When not, nothing reads its teams nor their exchanges: they keep
+   *  recording, and come back as they are once it is chosen again. */
+  active?: () => boolean;
 }
 
 export interface LedgeEngine extends TeamEngine {
@@ -35,6 +38,7 @@ const liveSession = (s: Session | undefined): s is Session => !!s && s.state !==
  */
 export function createLedgeEngine(d: LedgeEngineDeps): LedgeEngine {
   const now = d.now ?? (() => new Date().toISOString());
+  const active = d.active ?? (() => true);
   const listeners = new Set<(m: TeamEngineMessage) => void>();
   const emit = (m: TeamEngineMessage) => { for (const l of listeners) l(m); };
   const kept = new Map<string, Exchange[]>();
@@ -103,11 +107,11 @@ export function createLedgeEngine(d: LedgeEngineDeps): LedgeEngine {
 
   return {
     kind: 'ledge',
-    teams: () => shown().map(project),
-    exchanges: id => [...(kept.get(id) ?? [])],
+    teams: () => (active() ? shown().map(project) : []),
+    exchanges: (id, machine) => (active() && (machine ?? 'local') === 'local' ? [...(kept.get(id) ?? [])] : []),
     running: () => d.teams.all().some(t => t.state === 'active'),
     onMessage(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
-    replay: () => [{ type: 'rig.snapshot', machine: 'local', rigs: shown().map(project) }],
+    replay: () => [{ type: 'rig.snapshot', machine: 'local', rigs: active() ? shown().map(project) : [] }],
     recordTask(t, tr) {
       const team = teamShown(t.team); if (!team) return;
       record({ id: `${t.id}:${tr.index}`, rigId: team.id, from: tr.fromName || tr.from, to: tr.toName || tr.to, kind: 'task', text: t.title });

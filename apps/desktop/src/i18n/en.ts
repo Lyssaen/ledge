@@ -290,7 +290,9 @@ export const en: Messages = {
       openrigAbsent: 'OpenRig is not installed on any machine',
       running: 'A team is running: stop it to change engines',
       outdated: 'The local daemon is too old to choose the team engine: update it.',
-      refused: { offline: 'The local daemon is offline: nothing changed.' },
+      refused: { offline: 'The local daemon is offline: nothing changed.', timeout: 'The daemon did not answer.' },
+      sep: ': ',
+      peersRefused: (list: string) => `Changed here, but not on ${list}.`,
       saved: (name: string) => `Team engine: ${name}`
     },
     island: {

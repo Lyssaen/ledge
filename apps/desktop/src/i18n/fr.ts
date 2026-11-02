@@ -307,7 +307,11 @@ export const fr = {
       openrigAbsent: 'OpenRig n’est installé sur aucune machine',
       running: 'Une équipe tourne : arrête-la pour changer de moteur',
       outdated: 'Le daemon local est trop ancien pour choisir le moteur d’équipes : mettez-le à jour.',
-      refused: { offline: 'Le daemon local est hors ligne : rien n’a changé.' },
+      refused: { offline: 'Le daemon local est hors ligne : rien n’a changé.', timeout: 'Le daemon n’a pas répondu.' },
+      /** Between a choice and its hint. */
+      sep: ' : ',
+      /** The engine changed here, but not on these machines (each « machine : raison »). */
+      peersRefused: (list: string) => `Changé ici, mais pas sur ${list}.`,
       saved: (name: string) => `Moteur d’équipes : ${name}`
     },
     island: {

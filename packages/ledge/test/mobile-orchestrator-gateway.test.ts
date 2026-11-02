@@ -12,6 +12,20 @@ const rigs = [rig('local'), rig('remote')];
 const data = () => ({ rigs: () => rigs, escalations: () => [escalation], escalation: (id: string) => id === escalation.id ? escalation : undefined, escalationAmbiguous: () => false, rules: () => [], decisions: () => [], projects: () => project, thread: () => ({ items: [] }), exchanges: () => [] });
 afterEach(stopAll);
 describe('phone OpenRig gateway', () => {
+  it('a burst of Ledge team changes is one snapshot; an OpenRig rig change still sends its own at once (lot D M4)', async () => {
+    const g = setup({ deps: { openrig: data(), teamsCoalesceMs: 40 } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
+    const snaps = () => g.got('dev1').filter(m => m.type === 'snapshot').length;
+    const before = snaps();
+    const team: Rig = { ...rig('local'), id: 'team-abcd', engine: 'ledge' };
+    for (let i = 0; i < 5; i++) g.gw.forward({ type: 'rig.updated', rig: { ...team, name: `api-${i}` } });
+    g.gw.forward({ type: 'rig.removed', machine: 'local', rigId: 'team-abcd' });
+    await flush();
+    expect(snaps()).toBe(before);
+    await new Promise(r => setTimeout(r, 80)); await flush();
+    expect(snaps()).toBe(before + 1);
+    g.gw.forward({ type: 'rig.updated', rig: rig('local') }); await flush();
+    expect(snaps()).toBe(before + 2);
+  });
   it('sends bounded snapshots without routing or path information', async () => {
     const g = setup({ deps: { openrig: data() } }); g.send('dev1', { type: 'snapshot.request' }); await flush();
     const snap = g.got('dev1').find(m => m.type === 'snapshot'); expect(snap).toMatchObject({ daemon: { openrig: true }, rigs: [{ key: rigKey('local', 'same') }, { key: rigKey('remote', 'same') }] });

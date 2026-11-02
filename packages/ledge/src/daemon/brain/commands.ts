@@ -160,7 +160,7 @@ export interface BrainCommandDeps {
   rigAct: (msg: RigActMsg) => Promise<RigResult>;
   /** The brain's relief brief (`ledge brain handover`), handed to the reliefs as `ledge handover` would (daemon/handover.ts): null once taken, else why not. */
   handover?: (by: string, text: string) => string | null;
-  /** Why the rigs are off (the Ledge teams engine: its text), or null: `rig …` and `propose rig` then fail with it. */
+  /** Why the rigs are off (the Ledge teams engine: its text), or null: `rig …`, `send` and `propose rig` then fail with it. */
   rigsOff?: () => string | null;
   /** The daemon's `rig.prepare` handler, without keeping the plan. */
   rigPrepare: (msg: RigPrepareMsg) => Promise<RigPlan | { code: RigResultCode; reason: string }>;
@@ -283,6 +283,8 @@ export function createBrainCommands(d: BrainCommandDeps): { run(call: BrainCall,
         const text = c.text.trim();
         if (!text) return fail('invalid', 'Le message est vide.');
         if (c.to.startsWith('-')) return fail('invalid', `Siège invalide : ${c.to}`);
+        // Under Ledge the teams listed are Ledge's: writing to their seats is not OpenRig's (seatSend).
+        { const off = d.rigsOff?.(); if (off) return fail('refused', off); }
         if (!d.seatSend) return fail('openrig_down', OPENRIG_OFF);
         const t = seatOf(c.to); if (!t.ok) return fail('invalid', t.reason);
         const r = await d.seatSend.send(t.rig.machine, t.seat.ref, text);

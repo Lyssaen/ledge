@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { Machines, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
@@ -61,7 +61,25 @@ describe('team engine from the local daemon', () => {
     local.emit(state('ledge'));
     const p = api.fleet!.setTeamsEngine('openrig');
     local.set('unreachable');
-    expect(await p).toEqual({ ok: false, reason: 'hors ligne' });
+    expect(await p).toEqual({ ok: false, reason: 'offline' });
+  });
+  it('a request the daemon never answers settles with the code timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const { api, local } = setup();
+      local.emit(state('ledge'));
+      const p = api.fleet!.setTeamsEngine('openrig');
+      vi.advanceTimersByTime(4001);
+      expect(await p).toEqual({ ok: false, reason: 'timeout' });
+    } finally { vi.useRealTimers(); }
+  });
+  it('the machines the daemon passed the engine on to come with the answer', async () => {
+    const { api, local } = setup();
+    local.emit(state('ledge'));
+    const p = api.fleet!.setTeamsEngine('openrig');
+    const [set] = setsOf(local);
+    local.emit({ type: 'teams.engine.result', rid: set!.rid, ok: true, peers: [{ machine: 'server', ok: false, reason: 'une équipe tourne' }] });
+    expect(await p).toEqual({ ok: true, peers: [{ machine: 'server', ok: false, reason: 'une équipe tourne' }] });
   });
   it('useTeamsEngine follows the fleet', () => {
     const { api, local } = setup();

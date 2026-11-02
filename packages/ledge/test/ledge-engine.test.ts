@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EXCHANGES_MAX, transmissions, type Rig, type ServerMessage, type Session, type Team } from '@ledge/protocol';
+import { EXCHANGES_MAX, TEAM_ADDRESS, transmissions, type Rig, type ServerMessage, type Session, type Team } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createTeamsLive, type TeamsLive } from '../src/daemon/teamsLive.js';
 import { createTasks, type Tasks } from '../src/daemon/tasks.js';
@@ -122,8 +122,28 @@ describe('the Ledge engine, alone', () => {
   });
 });
 
+describe('the Ledge engine not in force (lot D final review I2)', () => {
+  it('reads no team nor exchange while another engine is chosen, and finds them as they were once chosen again', () => {
+    const store = new Store(); store.upsert(mk('pim', 'Pim'));
+    const teams = createTeamsLive({ store, now: () => T0 });
+    let on = false;
+    const engine = createLedgeEngine({ store, teams, now: () => T0, active: () => on });
+    const team = teams.create({ name: 'api', project: 'api', cwd: '/w/api', roles: ['leader'] });
+    teams.seat(team.id, 'leader', store.get('pim')!, 'Chef');
+    engine.recordMessage(store.get('pim')!, TEAM_ADDRESS, 'Pause', 'k1');
+    expect(engine.teams()).toEqual([]);
+    expect(engine.exchanges(team.id)).toEqual([]);
+    expect(engine.replay()).toEqual([{ type: 'rig.snapshot', machine: 'local', rigs: [] }]);
+    on = true;
+    expect(engine.teams().map(r => r.id)).toEqual([team.id]);
+    expect(engine.exchanges(team.id).map(x => x.text)).toEqual(['Pause']);
+    expect(engine.exchanges(team.id, 'ec2')).toEqual([]);
+    engine.close(); teams.close();
+  });
+});
+
 describe('the OpenRig adapter', () => {
-  it('its teams are the aggregate’s rigs as they are; only rig messages pass', () => {
+  it('its teams are the aggregate’s rigs as they are; only rig messages pass; its replay is the aggregate’s whole one', () => {
     const rig: Rig = { id: 'r1', name: 'starter', machine: 'local', cwd: '/w', projectId: null, offProject: true, lifecycle: 'running', kernel: false, seats: [], repos: [] };
     let fn: ((m: never) => void) | undefined;
     const aggregate = { rigs: () => [rig], exchanges: (machine: string, id: string) => (machine === 'local' && id === 'r1' ? [] : null),
@@ -134,7 +154,7 @@ describe('the OpenRig adapter', () => {
     expect(e.teams()).toEqual([rig]);
     expect(e.running()).toBe(true);
     expect(e.exchanges('r1')).toEqual([]);
-    expect(e.replay()).toEqual([{ type: 'rig.snapshot', machine: 'local', rigs: [rig] }]);
+    expect(e.replay()).toEqual([{ type: 'openrig.status', status: { machine: 'local', state: 'running' } }, { type: 'rig.snapshot', machine: 'local', rigs: [rig] }]);
     const seen: unknown[] = []; e.onMessage(m => { seen.push(m); });
     fn!({ type: 'openrig.status', status: { machine: 'local', state: 'running' } } as never);
     fn!({ type: 'rig.removed', machine: 'local', rigId: 'r1' } as never);

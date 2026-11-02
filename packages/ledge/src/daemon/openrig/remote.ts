@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import type { ClientMessage, Machine, Machines, ServerMessage } from '@ledge/protocol';
+import type { ClientMessage, Machine, Machines, ServerMessage, TeamsEngine } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from '@ledge/fleet/client';
 import { createTokenSource, type TokenRead } from '@ledge/fleet/token';
 import { readDaemonToken } from '../../auth.js';
@@ -17,6 +17,13 @@ export interface RemotePeers {
   supportsBrainDelegate?(machine: string): boolean;
   /** `machine` already rewritten to 'local' by the caller; false when the peer is not open. */
   send(machine: string, msg: ClientMessage): boolean;
+  /** The teams engine the peer's daemon last said (`teams.engine`, since its snapshot); undefined for one that does not know it. */
+  teamsEngine?(machine: string): TeamsEngine | undefined;
+  /** Asks the peer's daemon to switch engine: its `teams.engine.result`, or not ok when it is not open, does not know the engine,
+   *  drops, or says nothing within `ms`. */
+  setTeamsEngine?(machine: string, engine: TeamsEngine, ms?: number): Promise<{ ok: boolean; reason?: string }>;
+  /** Each `teams.engine` of a peer; `first`: the first since its snapshot (it has just connected). */
+  onTeamsEngine?(fn: (machine: string, engine: TeamsEngine, first: boolean) => void): () => void;
   /** `machine` = the peer's id; the content is already rewritten. */
   onMessage(fn: (machine: string, m: RemoteMessage) => void): () => void;
   onStatus(fn: (machine: string, s: 'open' | 'unreachable' | 'unsupported' | 'removed') => void): () => void;
@@ -54,7 +61,12 @@ async function readToken(): Promise<TokenRead> {
   catch { return { kind: 'unavailable' }; }
 }
 
-interface Peer { machine: Machine; client: DaemonClient; status: PeerStatus; version?: string; brainDelegate?: boolean; off: Array<() => void> }
+type EngineAnswer = { ok: boolean; reason?: string };
+interface Peer { machine: Machine; client: DaemonClient; status: PeerStatus; version?: string; brainDelegate?: boolean; engine?: TeamsEngine; engineWaits: Map<string, (r: EngineAnswer) => void>; off: Array<() => void> }
+
+/** How long a peer's daemon has to answer a `teams.engine.set` (under the fleet's 4 s for the request that caused it). */
+const ENGINE_ANSWER_MS = 3000;
+const OFFLINE = 'hors ligne';
 
 /** `port` may be a function: the server creates its peers after it listens. Peers dial the local daemon's own `/ssh/<alias>`. */
 export function createRemotePeers(opts: { port: number | (() => number); connect?: (machine: Machine, url: string) => DaemonClient; labelOf?: (id: string) => string }): RemotePeers {
@@ -63,6 +75,10 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
   const peers = new Map<string, Peer>();
   const msgFns = new Set<(machine: string, m: RemoteMessage) => void>(), stFns = new Set<(machine: string, s: 'open' | 'unreachable' | 'unsupported' | 'removed') => void>();
   const emitStatus = (id: string, s: 'open' | 'unreachable' | 'unsupported' | 'removed') => stFns.forEach(f => f(id, s));
+  const engFns = new Set<(machine: string, engine: TeamsEngine, first: boolean) => void>();
+  let engineSeq = 0;
+  /** Every `teams.engine.set` in flight to that peer is answered at once: it dropped. */
+  const settleEngines = (p: Peer) => { for (const settle of [...p.engineWaits.values()]) settle({ ok: false, reason: OFFLINE }); };
 
   const setStatus = (p: Peer, s: PeerStatus) => {
     if (p.status === s) return;
@@ -72,15 +88,19 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
   function start(machine: Machine) {
     const port = typeof opts.port === 'function' ? opts.port() : opts.port;
     const client = connect(machine, `ws://127.0.0.1:${port}/ssh/${machine.ssh}`);
-    const p: Peer = { machine, client, status: 'connecting', off: [] };
+    const p: Peer = { machine, client, status: 'connecting', engineWaits: new Map(), off: [] };
     p.off.push(client.onStatus((s: DaemonStatus) => {
+      if (s !== 'open') { p.engine = undefined; settleEngines(p); }
       // `open` is only the socket: the peer is open at its snapshot, which says whether it knows OpenRig.
       if (s === 'unreachable') setStatus(p, 'unreachable');
       else if (s === 'connecting' && p.status !== 'connecting') { setStatus(p, 'unreachable'); p.status = 'connecting'; }
     }));
     p.off.push(client.onMessage(m => {
       if (peers.get(machine.id) !== p) return;
-      if (m.type === 'snapshot') { p.version = m.daemon?.version; p.brainDelegate = m.daemon?.brainDelegate === true; setStatus(p, m.daemon?.openrig ? 'open' : 'unsupported'); return; }
+      if (m.type === 'snapshot') { p.version = m.daemon?.version; p.brainDelegate = m.daemon?.brainDelegate === true; p.engine = undefined; setStatus(p, m.daemon?.openrig ? 'open' : 'unsupported'); return; }
+      // The teams engine: a daemon that knows it says it after its snapshot, and again at each change.
+      if (m.type === 'teams.engine') { const first = p.engine === undefined; p.engine = m.engine; engFns.forEach(f => f(machine.id, m.engine, first)); return; }
+      if (m.type === 'teams.engine.result') { p.engineWaits.get(m.rid)?.({ ok: m.ok, ...(m.reason ? { reason: m.reason } : {}) }); return; }
       if (p.status !== 'open') return;
       const out = rewriteFromPeer(machine.id, m);
       if (out) msgFns.forEach(f => f(machine.id, out));
@@ -90,7 +110,7 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
   }
   /** `removed`: the machine left the list; `unreachable`: it stays, reached another way (its ssh alias changed). */
   function drop(p: Peer, why: 'removed' | 'unreachable') {
-    p.off.forEach(f => f()); peers.delete(p.machine.id); p.client.close();
+    p.off.forEach(f => f()); peers.delete(p.machine.id); p.client.close(); settleEngines(p);
     if (why === 'removed' || p.status !== 'unreachable') emitStatus(p.machine.id, why);
   }
 
@@ -110,8 +130,22 @@ export function createRemotePeers(opts: { port: number | (() => number); connect
       p.client.send(msg);
       return true;
     },
+    teamsEngine: machine => peers.get(machine)?.engine,
+    setTeamsEngine(machine, engine, ms = ENGINE_ANSWER_MS) {
+      const p = peers.get(machine);
+      if (!p || p.client.status() !== 'open') return Promise.resolve({ ok: false, reason: OFFLINE });
+      if (p.engine === undefined) return Promise.resolve({ ok: false, reason: 'son Ledge ne connaît pas le moteur d’équipes' });
+      const rid = `peer-engine-${++engineSeq}`;
+      return new Promise(resolve => {
+        const timer = setTimeout(() => settle({ ok: false, reason: 'pas de réponse de son daemon' }), ms); timer.unref?.();
+        const settle = (r: EngineAnswer) => { clearTimeout(timer); p.engineWaits.delete(rid); resolve(r); };
+        p.engineWaits.set(rid, settle);
+        p.client.send({ type: 'teams.engine.set', rid, engine });
+      });
+    },
+    onTeamsEngine(fn) { engFns.add(fn); return () => { engFns.delete(fn); }; },
     onMessage(fn) { msgFns.add(fn); return () => { msgFns.delete(fn); }; },
     onStatus(fn) { stFns.add(fn); return () => { stFns.delete(fn); }; },
-    close() { for (const p of peers.values()) { p.off.forEach(f => f()); p.client.close(); } peers.clear(); }
+    close() { for (const p of peers.values()) { p.off.forEach(f => f()); p.client.close(); settleEngines(p); } peers.clear(); }
   };
 }

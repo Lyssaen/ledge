@@ -9,7 +9,7 @@ import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { paths } from '../src/paths.js';
 import { rigManaged, RigManagedError, RIG_MANAGED } from '../src/daemon/openrig/guard.js';
 import type { Tmux } from '../src/tmux.js';
-import { authHeaders, until } from './helpers.js';
+import { authHeaders, until, openrigEngine } from './helpers.js';
 
 const T0 = '2026-10-30T10:00:00.000Z';
 const SEAT_RIG = { machine: 'local', rigId: 'r1', rigName: 'starter', seat: 'dev-build@starter', pod: 'dev', member: 'build' };
@@ -29,7 +29,8 @@ function fakeTmux(): Tmux & { killed: string[] } {
 }
 
 let srv: ServerHandle | null = null; let tmux: ReturnType<typeof fakeTmux>; let home: string;
-beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'ledge-guard-')); process.env.LEDGE_HOME = home; });
+// A seat of a rig exists only under the OpenRig engine: under Ledge the daemon unpairs every session (lot D final review I3).
+beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'ledge-guard-')); process.env.LEDGE_HOME = home; openrigEngine(); });
 afterEach(async () => { await srv?.close(); srv = null; rmSync(home, { recursive: true, force: true }); });
 
 async function serverWith(sessions: Session[]) {

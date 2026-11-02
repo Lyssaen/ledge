@@ -11,10 +11,12 @@ export interface TeamEngine {
   readonly kind: TeamsEngine;
   /** The common shape; a Ledge team carries `engine: 'ledge'`. */
   teams(): Rig[];
-  exchanges(teamId: string): Exchange[];
+  /** A team's exchanges; `machine` names its machine when known (a Ledge team is the local machine's only). */
+  exchanges(teamId: string, machine?: string): Exchange[];
   /** A team of this engine runs. */
   running(): boolean;
   onMessage(fn: (m: TeamEngineMessage) => void): () => void;
-  /** What brings a client that just connected up to date with the teams. */
+  /** What brings a client that just connected up to date with the teams. OpenRig's is the aggregate's whole replay (its statuses
+   *  and escalations too); Ledge's is its teams' snapshot only (the statuses and Ledge's asks come from the aggregate either way). */
   replay(): ServerMessage[];
 }
