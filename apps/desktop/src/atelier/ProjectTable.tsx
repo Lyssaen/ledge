@@ -1,5 +1,5 @@
 import { Fragment, useState, type CSSProperties, type DragEvent, type JSX, type MouseEvent } from 'react';
-import { PROJECT_COLORS, taskClosed, type Project, type Session, type Task } from '@ledge/protocol';
+import { PROJECT_COLORS, type Project, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -40,17 +40,12 @@ export interface ProjectTableProps {
   menuId: string | null;
   /** A right click on a seat, or its « … »: the session menu. */
   onMenu(s: Session, e: MouseEvent<HTMLElement>): void;
-  /** Which table of its room this is (atelier rooms spec §3.1): the common one or a team's. */
+  /** The project room's table. */
   table: AtelierTable;
-  /** The room has team tables: the common table says it is the common one. */
-  roomHasTeams?: boolean;
-  /** A team table's tasks (every state): its sheets and its heading's count. */
-  teamTasks?: readonly Task[];
-  /** A team table's actions: resume a resting team, dissolve it (asks first), see its tasks. */
-  teamActions?: { resume(teamId: string): void; dissolve(teamId: string, name: string): void; tasks(teamId: string): void };
-  /** A seat dragged to another table (to join or leave a team), and this table as the place it lands. */
+  /** A seat dragged elsewhere (onto a Ledge team's room to join it, onto another table), and this table as the place it lands
+   *  (`leave`: the seat carried is in a team, which it leaves here). */
   seatDrag?(s: Session): { draggable: true; onDragStart(e: DragEvent): void; onDragEnd(): void } | undefined;
-  tableDrop?: DropTarget & { over: boolean };
+  tableDrop?: DropTarget & { over: boolean; leave?: boolean };
 }
 
 /** The mockup's « … » glyph (observatory.tsx, room-heading). */
@@ -87,15 +82,9 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
 
 /** One project's table in the atelier (observatory.tsx, `project-room` in atelier mode): the rug with its label and
  *  « +N », the plants, the chairs, the table with its sheets and post-its, the seats and the sub-agents at the ends. */
-export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, paused, isolated, focusedId, seated, dispatch, filing, actions, menuId, onMenu, table, roomHasTeams, teamTasks = [], teamActions, seatDrag, tableDrop }: ProjectTableProps): JSX.Element {
+export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, paused, isolated, focusedId, seated, dispatch, filing, actions, menuId, onMenu, table, seatDrag, tableDrop }: ProjectTableProps): JSX.Element {
   const { t } = useI18n();
   const { id, name } = project;
-  const team = table.team;
-  const resting = team?.state === 'resting';
-  // A team's sheets are its open tasks, each in front of the seat that holds it (§3.2).
-  const openTask = (s: Session) => teamTasks.find(x => x.owner === s.id && !taskClosed(x));
-  const ledgeTasks = teamTasks.filter(x => x.giver === 'ledge');
-  const [teamMenu, setTeamMenu] = useState(false);
   const color = PROJECT_COLORS[project.color];
   const layout = layoutTable(mains, helpers, maxSeats);
   const { length, width, seats, ends, notes, extra, extraCount } = layout;
@@ -111,39 +100,14 @@ export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, 
   const bot = (s: Session, size: number) => <SessionBot session={s} size={size} paused={paused} />;
   const helperBot = (h: Session['helpers'][number], parent: Session, size: number) => <HelperBot helper={h} parent={parent} size={size} paused={paused} />;
 
-  const teamHeading = team && (
-    <div className={cls('room-heading', 'team-heading', resting && 'team-resting')}>
-      <span className="team-flag" aria-hidden="true">⚑</span>
-      <span className="heading-names">
-        <strong className="team-name" title={team.name}>{team.name}</strong>
-        <span className="heading-team-line">{resting ? t.rooms.restingLine : t.rooms.teamLine(ledgeTasks.filter(x => x.state === 'done').length, ledgeTasks.length)}</span>
-      </span>
-      {resting && teamActions && <button type="button" className="team-resume" onClick={() => teamActions.resume(team.id)}>{t.rooms.resume}</button>}
-      {tableDrop?.over && <span className="drop-hint">{t.rooms.dropJoin}</span>}
-      <span className="spacer" />
-      {teamActions && (
-        <Menu open={teamMenu} onOpenChange={setTeamMenu} label={t.rooms.teamMenu(team.name)} className="room-menu-wrap" menuClassName="assign-menu room-menu"
-          trigger={tr => (
-            <button className="icon-action" aria-label={t.rooms.teamMenu(team.name)} title={t.rooms.teamMenuTitle} {...tr}>
-              <Icon d={[]} fill={SHELL_ICONS.dots} size={14} />
-            </button>
-          )}>
-          <MenuItem onSelect={() => teamActions.tasks(team.id)}><span>{t.rooms.openTasks}</span></MenuItem>
-          {resting && <MenuItem onSelect={() => teamActions.resume(team.id)}><span>{t.rooms.resume}</span></MenuItem>}
-          <MenuItem onSelect={() => teamActions.dissolve(team.id, team.name)}><span><Icon d={SHELL_ICONS.archive} size={13} />{t.rooms.dissolve}</span></MenuItem>
-        </Menu>
-      )}
-    </div>
-  );
-  const heading = teamHeading || (
+  const heading = (
     <div className="room-heading">
       <ProjectSwatch project={project} />
       <span className="heading-names">
         <button className="project-conversations" title={name} aria-label={t.atelier.conversations(name)} onClick={showProject}>{name}</button>
         {branch !== null && <span className="heading-branch" title={branch}>⎇ {branch}</span>}
-        {roomHasTeams && <span className="heading-common">{t.rooms.common}</span>}
       </span>
-      {tableDrop?.over && !filing.dragging && <span className="drop-hint">{t.rooms.dropLeave}</span>}
+      {tableDrop?.over && tableDrop.leave && !filing.dragging && <span className="drop-hint">{t.rooms.dropLeave}</span>}
       {filing.dragging && <span className="drop-hint">{filing.over === id ? t.filing.dropNow(filing.dragging.name) : t.filing.dropHere}</span>}
       <span className="spacer" />
       <Menu open={menu} onOpenChange={setMenu} label={t.atelier.actions(name)} className="room-menu-wrap" menuClassName="assign-menu room-menu"
@@ -171,16 +135,15 @@ export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, 
   const faces = [...extra.mains.map(s => ({ key: s.id, el: bot(s, 18) })), ...extra.helpers.map(({ helper, parent }) => ({ key: `${parent.id}:${helper.id}`, el: helperBot(helper, parent, 18) }))].slice(0, 3);
   const sheets: Sheet[] = seats.map(({ session: s, x, side }) => {
     const n = notes.get(s.id);
-    const held = team ? openTask(s) : undefined;
     return {
-      id: s.id, task: held ? t.rooms.sheet(held.id, held.title, held.giverName) : taskOf(s), state: sheetState(botState(s), s.offline), slot: side, x,
+      id: s.id, task: taskOf(s), state: sheetState(botState(s), s.offline), slot: side, x,
       note: n && { task: n.helper.task, state: sheetState(helperState(n.helper), s.offline), more: n.more }
     };
   });
 
   return (
-    <section className={cls('atelier-table', (filing.over === id || tableDrop?.over) && 'drop-over', team && 'team-table', resting && 'table-resting')}
-      data-project={id} data-table={table.key} aria-label={team ? t.rooms.teamTable(team.name) : t.atelier.table(name)}
+    <section className={cls('atelier-table', (filing.over === id || tableDrop?.over) && 'drop-over')}
+      data-project={id} data-table={table.key} aria-label={t.atelier.table(name)}
       onDragOver={(e: DragEvent) => { filing.dropProps(id).onDragOver(e); tableDrop?.onDragOver(e); }}
       onDragLeave={(e: DragEvent) => { filing.dropProps(id).onDragLeave(e); tableDrop?.onDragLeave(e); }}
       onDrop={(e: DragEvent) => { filing.dropProps(id).onDrop(e); tableDrop?.onDrop(e); }}
@@ -207,7 +170,7 @@ export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, 
           return (
             <Fragment key={s.id}>
             <button style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))} onClick={() => dispatch({ type: 'open', id: s.id })} onContextMenu={e => onMenu(s, e)}
-              title={s.role ? machineOf(s) : undefined} {...(resting ? {} : seatDrag?.(s))}
+              title={s.role ? machineOf(s) : undefined} {...seatDrag?.(s)}
               className={cls('agent-seat', `place-${side}`, seated === s.id && 'just-seated', focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
               {bot(s, 64)}
               <strong><span className="seat-name" title={s.name}>{s.name}</span>{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>

@@ -85,8 +85,10 @@ Y renvoyer l'utilisateur pour régler ce que Ledge peut décider sans lui, ou re
 
 On y vient par Échap depuis l'accueil ou une session, par « Retour à l'atelier », ou par la vue « Atelier » de la barre latérale. Chaque projet est une table, avec ses agents assis autour et leurs sous-agents en petits bots. Une équipe a sa pièce.
 - Le menu d'une table propose « Nouvelle session », « Modifier le projet » et « Isoler cette table ».
-- Le menu d'une pièce propose « Nouvelle équipe ici… ».
-- Le menu d'une équipe propose « Voir les tâches » et « Dissoudre l'équipe ».
+- Une équipe au repos garde sa pièce, vide, marquée « au repos », avec « Reprendre ».
+- Le menu d'une équipe propose « Terminaux », « Fil de l'équipe » et « Dissoudre l'équipe ».
+- Glisser une session sur la pièce d'une équipe la fait rejoindre (son rôle est demandé) ; la glisser hors de la pièce la fait quitter.
+- La salle technique est celle du moteur actif : « Équipes · Ledge » (une baie par machine) ou « Équipes · OpenRig » (une baie par noyau).
 - On range une session en la glissant sur une table.
 - Le zoom se règle au clavier (+, −, 0) ou avec `Ctrl` + molette.
 - Le bureau « Parler à Ledge » ouvre le chat ancré.

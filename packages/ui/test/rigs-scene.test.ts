@@ -75,6 +75,24 @@ describe('sceneOf', () => {
     expect(sceneOf(order, twoProjects, pid, 'none', RIGS, byId)).toMatchObject({ rooms: [], unassigned: [{ id: 'local:kit' }] });
     expect(sceneOf(order, twoProjects, pid, 'docs', RIGS, byId)).toMatchObject({ rooms: [], empty: { id: 'docs' } });
   });
+  // Lot F (Review Focus 4): a Ledge team is a projected rig, drawn once, as its own room; no team table left in its project's room.
+  it('a Ledge team is its own room; its seats leave the project room, which keeps one common table', () => {
+    const member = (id: string) => ({ ...sess(`local:${id}`, '/w/ledge'), team: 'team-a1b2' }) as Session;
+    const lea = member('lea'), max = member('max');
+    const team = rig('local', 'team-a1b2', { name: 'roles', engine: 'ledge', projectId: 'ledge', seats: [
+      seat('leader', { ref: 'leader@team-a1b2', sessionId: 'local:lea', state: 'working' }), seat('review', { ref: 'review@team-a1b2', sessionId: 'local:max', state: 'idle' })
+    ] });
+    const all = [otto, nova, lea, max];
+    const scene = sceneOf(all, twoProjects, pid, 'all', [team], new Map(all.map(s => [s.id, s])));
+    expect(scene.rooms.map(r => [r.key, r.tables.map(t => `${t.kind}:${t.mains.map(m => m.name).join(',')}`)])).toEqual([
+      ['ledge', ['common:local:otto']], ['pay', ['common:local:nova']], ['local/team-a1b2', ['rig:local:lea,local:max']]
+    ]);
+  });
+  it('a Ledge team at rest keeps its room, empty (Review Focus 2)', () => {
+    const resting = rig('local', 'team-c3d4', { name: 'mobile', engine: 'ledge', lifecycle: 'stopped', projectId: 'ledge', seats: [seat('build', { state: 'stopped', sessionId: 'local:arlo' })] });
+    const scene = sceneOf([otto], twoProjects, pid, 'all', [resting], byId);
+    expect(scene.rooms.map(r => [r.kind, r.key, r.tables[0].mains.length])).toEqual([['project', 'ledge', 1], ['rig', 'local/team-c3d4', 0]]);
+  });
 });
 
 describe('tableSeats', () => {

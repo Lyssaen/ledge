@@ -427,14 +427,11 @@
 .office-shell .atelier-table{position:relative;flex:0 0 var(--room);min-width:min(var(--room),100%);margin:0 0 8px}
 .atelier-table:has(.room-menu),.atelier-room:has(.room-plaque .room-menu){z-index:6}
 .is-dragging .atelier-table.drop-over .room-heading,.atelier-table.drop-over .room-heading{border-color:var(--sidebar-primary)}
-.atelier-table.table-resting{opacity:.6}
-.atelier-table.table-resting:hover,.atelier-table.table-resting:focus-within{opacity:.85}
-.room-heading .heading-common,.room-heading .heading-team-line{color:var(--muted-foreground);font-size:11px;white-space:nowrap}
-.room-heading .team-flag{color:var(--project);font-size:13px;line-height:1}
-.room-heading .team-name{font-weight:600}
-.room-heading.team-heading .heading-names{display:flex;align-items:baseline;gap:6px;min-width:0}
-.room-heading .team-resume{font-size:11px;padding:2px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--secondary);color:var(--foreground);cursor:pointer}
-.room-heading .team-resume:hover{border-color:var(--sidebar-primary)}
+/* A Ledge team's room (lot F): at rest it is dimmed with « Reprendre » on its plaque; a session carried over it lights the plaque. */
+.rig-room.rig-resting .room-walls,.rig-room.rig-resting .room-tables{opacity:.6}
+.rig-room.drop-over .room-plaque{border-color:var(--sidebar-primary)}
+.room-plaque .team-resume{font-size:11px;padding:2px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--secondary);color:var(--foreground);cursor:pointer}
+.room-plaque .team-resume:hover{border-color:var(--sidebar-primary)}
 /* One @role pill for every place (seat, sidebar, top bar, catalog, forms); shell.css and sidebar.css only adapt it. */
 .office-shell .agent-seat .seat-role,.role-pill{display:inline-block;font:10px/14px 'Geist Mono',monospace;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--project,var(--sidebar-primary)) 16%,transparent);color:color-mix(in srgb,var(--project,var(--sidebar-primary)) 70%,var(--foreground));margin-bottom:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .role-menu .role-label{margin-left:8px;color:var(--muted-foreground);font-size:11px}

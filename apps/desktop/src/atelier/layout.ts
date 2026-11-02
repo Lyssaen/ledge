@@ -80,12 +80,11 @@ export const helperState = (h: Helper): BotState => HELPER_STATE[h.state];
 
 /** The scene (rooms, « Sans projet », the empty project) is pure and shared: `@ledge/ui/rigs/scene`. */
 export { sceneOf, type AtelierRoom, type AtelierScene, type AtelierTable } from '@ledge/ui/rigs/scene';
-export { teamProject } from '@ledge/ui/rigs/scene';
 
 /** Room, then table, then seat (Alt ←/→, Alt 1…9, J / K): the seats a table draws (`tableSeats`: those with a session before the
- *  placeholders, `maxSeats` per table), placeholders skipped, then « Sans projet ». A resting team's seats are not walked. */
+ *  placeholders, `maxSeats` per table), placeholders skipped, then « Sans projet ». A resting team's room has no seat to walk. */
 export function walkOrder(scene: AtelierScene, maxSeats = MAX_SEATS): Session[] {
-  return [...scene.rooms.flatMap(r => r.tables.flatMap(t => (t.team?.state === 'resting' ? [] : tableSeats(t.mains, maxSeats).seated))).filter(s => !isSeatPlaceholder(s.id)), ...scene.unassigned];
+  return [...scene.rooms.flatMap(r => r.tables.flatMap(t => tableSeats(t.mains, maxSeats).seated)).filter(s => !isSeatPlaceholder(s.id)), ...scene.unassigned];
 }
 
 /** Room margins (atelier units, before zoom): 110 px at the sides and front, 150 px at the back; 70 px between tables. */

@@ -1,16 +1,19 @@
 /** Pure layout of the Bureaux floor. Coordinates are in sprite pixels. */
 export const ROOM_HEIGHT = 192, SPINE = 44, EXT = 9, CORRIDOR = 60;
 export type RoomSize = 'ledge' | 'tech' | 's' | 'm' | 'l' | 'o2' | 'o4' | 'o6' | 'rs' | 'rm' | 'rl';
-export type Team = { id: string; name: string; kind: 'project' | 'rig' | 'none'; sessionIds: string[] };
-export type Room = { key: string; name: string; size: RoomSize; sessionIds: string[]; x: number; y: number; door: 'N' | 'S'; win: boolean; corY: number };
+/** `resting`: a Ledge team at rest (lot F, Review Focus 2), whose office stays, empty. */
+export type Team = { id: string; name: string; kind: 'project' | 'rig' | 'none'; sessionIds: string[]; resting?: boolean };
+export type Room = { key: string; name: string; size: RoomSize; sessionIds: string[]; x: number; y: number; door: 'N' | 'S'; win: boolean; corY: number; resting?: boolean };
 export type Zone = { id: string; kind: string; x: number; y: number; corY: number; capacity: number };
 export type FloorLayout = { rooms: Room[]; zones: Zone[]; corridors: { y: number; wing: number }[]; width: number; height: number; wings: number };
 const WIDTH: Record<RoomSize, number> = { ledge: 160, tech: 144, s: 176, m: 208, l: 240, o2: 208, o4: 272, o6: 320, rs: 144, rm: 272, rl: 384 };
 const REST_CAP: Record<'rs' | 'rm' | 'rl', number> = { rs: 5, rm: 9, rl: 13 };
 const ZONES = [ ['lounge', 112, 5], ['cafe', 104, 4], ['games', 112, 4], ['reading', 96, 3] ] as const;
 const NOOKS = [ ['nook-coffee', 48, 1], ['nook-chair', 48, 1], ['nook-bench', 56, 2], ['nook-poufs', 56, 2] ] as const;
-type Draft = Pick<Room, 'key' | 'name' | 'size' | 'sessionIds'> & { x?: number };
+type Draft = Pick<Room, 'key' | 'name' | 'size' | 'sessionIds' | 'resting'> & { x?: number };
+/** A team's offices, six seats each (twelve for « Sans projet »); a team with nobody has none, but a Ledge team at rest keeps a small one. */
 export function roomsOf(team: Team): Draft[] {
+  if (team.resting && team.sessionIds.length === 0) return [{ key: team.id, name: team.name, size: 's', sessionIds: [], resting: true }];
   const cap = team.kind === 'none' ? 12 : 6, out: Draft[] = [];
   for (let i = 0; i < team.sessionIds.length; i += cap) {
     const ids = team.sessionIds.slice(i, i + cap), part = i / cap + 1;
@@ -27,7 +30,8 @@ export function planRest(need: number): ('rs' | 'rm' | 'rl')[] {
 export function buildLayout(width: number, teams: readonly Team[], cores: number, rest: readonly ('rs' | 'rm' | 'rl')[] = []): FloorLayout {
   const bw = Math.max(width, SPINE + WIDTH.rl + 16);
   const offices: Draft[] = [{ key: '__ledge', name: 'Ledge', size: 'ledge', sessionIds: [] }];
-  for (let i = 0; i < cores; i += 4) offices.push({ key: `__tech${i}`, name: 'OpenRig', size: 'tech', sessionIds: [] });
+  // The tech room of the active engine (spec §6.6): four bays a room, its plate is OfficeFloor's.
+  for (let i = 0; i < cores; i += 4) offices.push({ key: `__tech${i}`, name: 'tech', size: 'tech', sessionIds: [] });
   offices.push(...teams.flatMap(roomsOf));
   const rows: Draft[][] = [], left: number[] = [];
   for (const room of offices) {

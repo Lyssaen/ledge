@@ -30,6 +30,18 @@ describe('isStandalone', () => {
     expect(isStandalone(brain, [])).toBe(false);
     expect(isStandalone(brain, [STARTER])).toBe(false);
   });
+  // Lot F: a Ledge team's seat is a session of that team (`team`), not paired by `rig`; it lives in its team's room only while its seat runs.
+  describe('a seat of a Ledge team', () => {
+    const team = (state: RigSeat['state'], over: Partial<Rig> = {}) => rig('local', 'team-a1b2', { engine: 'ledge', seats: [seat('build', { ref: 'build@team-a1b2', state, sessionId: 'otto' })], ...over });
+    const otto = { ...sess('otto', 'working'), team: 'team-a1b2', role: 'build' } as Session;
+    it('its seat running: not standalone', () => expect(isStandalone(otto, [team('working')])).toBe(false));
+    it('its team at rest (seat stopped): standalone', () => expect(isStandalone(otto, [team('stopped', { lifecycle: 'stopped' })])).toBe(true));
+    it('another team, or an OpenRig rig of that id: standalone', () => {
+      expect(isStandalone({ ...otto, team: 'team-c3d4' } as Session, [team('working')])).toBe(true);
+      const { engine: _, ...openrig } = team('working', { id: 'r-team' });
+      expect(isStandalone({ ...otto, team: 'r-team' } as Session, [openrig as Rig])).toBe(true);
+    });
+  });
 });
 
 describe('rigsModel', () => {
@@ -57,6 +69,12 @@ describe('rigsModel', () => {
   });
   it('same name: ordered by machine', () => {
     expect(rigsModel([rig('b', 'x', { name: 'f' }), rig('a', 'y', { name: 'f' })], new Map(), null).rigs.map(r => r.rig.machine)).toEqual(['a', 'b']);
+  });
+  it('a Ledge team at rest keeps its row, with no seat (Review Focus 2)', () => {
+    const resting = rig('local', 'team-c3d4', { name: 'mobile', engine: 'ledge', lifecycle: 'stopped', seats: [seat('build', { state: 'stopped', sessionId: 'arlo' })] });
+    const rows = rigsModel([resting], new Map(), null).rigs;
+    expect(rows.map(r => r.rig.name)).toEqual(['mobile']);
+    expect(rows[0]!.seats).toEqual([]);
   });
   it('one kernel per machine', () => {
     const k2 = rig('local', 'k2', { kernel: true });

@@ -101,13 +101,16 @@ export function seatAt(rigs: readonly Rig[], machine: string, rigId: string, who
  * Whether a session belongs in Projets: false only when a rig of the same machine has a running seat (any seat of a kernel, hidden
  * ones included) paired to this very session id. Everything else stays (no rig, unknown rig, stopped seat, pairing race, seat paired
  * to another session), so a session is never missing from both Projets and Rigs. The brain session (`brain: true`) is never standalone.
+ * A seat of a Ledge team (lot F) names its team (`team`), not a rig: it leaves Projets while its team's projected rig has its seat
+ * running, so it is drawn once, in its team's room (Review Focus 4).
  */
 export function isStandalone(s: Session, rigs: readonly Rig[]): boolean {
   // Ledge's own brain (lot 7) is never a session of the user's: no list shows it (C27).
   if (s.brain) return false;
+  const seated = (x: Rig) => x.seats.some(seat => seat.sessionId === s.id && seat.state !== 'stopped');
   const r = s.rig;
-  if (!r) return true;
-  return !rigs.some(x => x.machine === r.machine && x.seats.some(seat => seat.sessionId === s.id && seat.state !== 'stopped'));
+  if (!r) return !s.team || !rigs.some(x => x.engine === 'ledge' && x.id === s.team && seated(x));
+  return !rigs.some(x => x.machine === r.machine && seated(x));
 }
 
 /** A choice of the `@` completion: what the list shows and what the field gets. */
@@ -137,7 +140,11 @@ export function seatMentions(rigs: readonly Rig[], query: string): SeatMention[]
 export interface RigRow { key: string; rig: Rig; place: RigPlace; seats: Session[]; working: number; waiting: number; remote: boolean }
 export interface KernelRow { key: string; rig: Rig; shown: Session[]; hiddenCount: number }
 
-/** The sidebar's Rigs section: rigs by name (kernels apart, one per machine, after them); seats still running, in the rig's order. */
+/** A Ledge team at rest (lot F, Review Focus 2): its projected rig is `stopped`, every seat with it. It keeps its row and its room, empty. */
+export const isRestingTeam = (r: Pick<Rig, 'engine' | 'lifecycle'>): boolean => r.engine === 'ledge' && r.lifecycle === 'stopped';
+
+/** The sidebar's Rigs section: rigs by name (kernels apart, one per machine, after them); seats still running, in the rig's order.
+ *  Every rig keeps its row whatever its lifecycle: a Ledge team at rest (`isRestingTeam`) is a row with no seat. */
 export function rigsModel(rigs: readonly Rig[], byId: ReadonlyMap<string, Session>, projects: Projects | null): { rigs: RigRow[]; kernels: KernelRow[] } {
   const rows = rigs.filter(r => !r.kernel).sort((a, b) => a.name.localeCompare(b.name) || a.machine.localeCompare(b.machine)).map((rig): RigRow => {
     const seats = rig.seats.filter(s => s.state !== 'stopped').map(s => seatSession(s, rig, byId));

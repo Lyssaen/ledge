@@ -39,10 +39,15 @@
 .bureaux-bubble{transform:none;box-shadow:0 2px 3px #0008}
 .bureaux-rack{position:absolute;z-index:2;height:46px;border:2px solid #25282e;background:linear-gradient(#303944,#171e26);box-shadow:inset 0 0 0 2px #515b65;color:#f1eee9;font-size:6px;text-align:center}
 .bureaux-rack span{position:absolute;left:50%;top:-14px;transform:translateX(-50%);max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#1f2226;padding:1px 3px}
-.bureaux-rack i{display:block;width:5px;height:5px;margin:24px auto 0;background:#e25751;box-shadow:0 0 4px #e25751}
+/* One LED per state of a bay (rigs/engine.ts `Core`): running green and breathing, starting amber, stopped red, unreachable off. */
+.bureaux-rack i{display:block;width:5px;height:5px;margin:24px auto 0;background:#333;box-shadow:none}
 .bureaux-rack.running i{background:#60de8b;box-shadow:0 0 5px #60de8b;animation:bureaux-led 1.4s infinite alternate}
 .bureaux-rack.starting i{background:#e7b45e;box-shadow:0 0 5px #e7b45e}
+.bureaux-rack.stopped i{background:#e25751;box-shadow:0 0 4px #e25751}
 .bureaux-rack.unreachable i{background:#333;box-shadow:none}
+.bureaux-resting>img{filter:grayscale(.6) brightness(.85)}
+.bureaux-resume{position:absolute;z-index:7;left:50%;top:50%;transform:translate(-50%,-50%);padding:3px 7px;border:1px solid #b56d54;background:#303033;color:#f7f0e7;font-size:8px;line-height:12px;cursor:pointer;box-shadow:0 2px 0 #171819}
+.bureaux-resume:hover,.bureaux-resume:focus-visible{outline:2px solid #e7ae5c;outline-offset:1px}
 @keyframes bureaux-led{to{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.bureaux-rack.running i{animation:none}}
 .bureaux-dim{opacity:.22;filter:grayscale(.5)}

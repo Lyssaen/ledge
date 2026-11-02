@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import type { Exchange, OpenRigStatus, Rig, Session } from '@ledge/protocol';
+import type { Exchange, Rig, Session } from '@ledge/protocol';
 import type { DaemonClient } from '@ledge/fleet';
 import type { AtelierScene } from '@ledge/ui/rigs/scene';
-import { seatAt, seatSession, type Arc } from '@ledge/ui/rigs/model';
+import { isRestingTeam, seatAt, seatSession, type Arc } from '@ledge/ui/rigs/model';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { LogoBot } from '@ledge/ui/bots/LogoBot';
 import { LedgeSketch } from '@ledge/ui/bots/LedgeSketch';
 import { useTheme } from '../../shell/theme';
 import { useMotionPreferences } from '../../motionPreferences';
+import { useI18n } from '../../i18n/lang';
+import type { Core } from '../../rigs/engine';
 import { helperState } from '../layout';
 import { peerIdOf } from '../MessageLayer';
 import { EXT, layout, ROOM_HEIGHT, type Room, type Team } from './layout';
@@ -27,9 +29,10 @@ const styleAt = (x: number, y: number, w?: number): React.CSSProperties => ({ le
 const fileFor = (room: Room): Variant | null => room.size === 'ledge' ? null : room.size === 'tech' ? GEO.tech.variants[room.door] ?? null : GEO.rest[room.size]?.variants[`${room.door}-${room.win ? 'win' : 'wall'}`] ?? GEO.sizes[room.size]?.variants[`${room.door}-${room.win ? 'win' : 'wall'}`] ?? null;
 const stateRank = (s: Session) => s.state === 'waiting_permission' ? 0 : s.state === 'waiting_input' ? 1 : s.state === 'working' ? 2 : s.state === 'starting' ? 3 : 4;
 
-/** Sprite room with layered bots and a keyboard accessible button for each live session. */
-type Core = { machine: string; state: OpenRigStatus['state'] };
-function OfficeRoom({ room, byId, presence, visiting, cores, theme, reduced, onOpen, onMenu, onChat }: { room: Room; byId: Map<string, Session>; presence: ReadonlyMap<string, Presence>; visiting: ReadonlySet<string>; cores: readonly Core[]; theme: 'dark' | 'light'; reduced: boolean; onOpen(id: string): void; onMenu(session: Session, event: MouseEvent<HTMLElement>): void; onChat(): void }) {
+/** Sprite room with layered bots and a keyboard accessible button for each live session. The tech room carries the active engine's
+ *  `plate` and one bay per core; a Ledge team at rest is its office, empty, « {nom} · au repos », with « Reprendre » (`onResume`). */
+function OfficeRoom({ room, byId, presence, visiting, cores, plate, theme, reduced, onOpen, onMenu, onChat, onResume }: { room: Room; byId: Map<string, Session>; presence: ReadonlyMap<string, Presence>; visiting: ReadonlySet<string>; cores: readonly Core[]; plate: string; theme: 'dark' | 'light'; reduced: boolean; onOpen(id: string): void; onMenu(session: Session, event: MouseEvent<HTMLElement>): void; onChat(): void; onResume?(key: string): void }) {
+  const { t } = useI18n();
   const src = (name: string) => `/offices/${theme === 'dark' ? 'night' : 'day'}/${name}`;
   const base = styleAt(EXT + room.x, room.y);
   if (room.size === 'ledge') return <div className="bureaux-room bureaux-ledge" style={base}>
@@ -44,8 +47,16 @@ function OfficeRoom({ room, byId, presence, visiting, cores, theme, reduced, onO
     const start = Number(room.key.replace('__tech', '')) || 0;
     return <div className="bureaux-room" style={base}><img src={src(variant.file)} alt="" />
       {cores.slice(start, start + 4).map((core, i) => { const rack = variant.racks?.[i]; return rack ? <div key={core.machine} className={`bureaux-rack ${core.state}`} style={styleAt(rack.x, rack.y, rack.w)} title={`${core.machine} · ${core.state}`}><span>{core.machine}</span><i /></div> : null; })}
-      <span className="bureaux-plate">OpenRig · Salle technique</span></div>;
+      <span className="bureaux-plate">{plate}</span></div>;
   }
+  const plateTop = { top: room.door === 'S' ? ROOM_HEIGHT + 4 : -23 };
+  if (room.resting) return <div className="bureaux-room bureaux-resting" style={base}>
+    <img src={src(variant.file)} alt="" />
+    {variant.table_file && <img className="bureaux-table" src={src(variant.table_file)} alt="" />}
+    {variant.front_file && <img className="bureaux-front" src={src(variant.front_file)} alt="" />}
+    {onResume && <button type="button" className="bureaux-resume" onClick={() => onResume(room.key)}>{t.rigActions.resume}</button>}
+    <span className="bureaux-plate" style={plateTop}>{room.name} · {t.atelier.resting}</span>
+  </div>;
   if (room.size === 'rs' || room.size === 'rm' || room.size === 'rl') return <div className="bureaux-room" style={base}><img src={src(variant.file)} alt="" /><span className="bureaux-plate">Repos</span></div>;
   const sessions = room.sessionIds.map(id => byId.get(id)).filter((s): s is Session => !!s && present(s));
   const table = variant.table ?? [0, 96, 0, 40];
@@ -69,7 +80,7 @@ function OfficeRoom({ room, byId, presence, visiting, cores, theme, reduced, onO
       const end = variant.ends?.filter(e => e.end === (i < 2 ? 'left' : 'right'))[i % 2];
       return end ? <button key={`${parent.id}:${helper.id}`} type="button" className="bureaux-helper" title={`${helper.kind} · ${parent.name}`} aria-label={`${helper.kind} · sous-agent de ${parent.name}`} style={styleAt(end.x - 1, end.y - 6)} onClick={() => onOpen(parent.id)}><LogoBot tool={parent.tool} state={helperState(helper)} size={18} theme={theme} seed={`${parent.id}:${helper.id}`} reducedMotion={reduced} branded /></button> : null;
     })}
-    <span className={`bureaux-plate ${led?.state ?? ''}`} style={{ top: room.door === 'S' ? ROOM_HEIGHT + 4 : -23 }}>{room.name} · {sessions.length}</span>
+    <span className={`bureaux-plate ${led?.state ?? ''}`} style={plateTop}>{room.name} · {sessions.length}</span>
   </div>;
 }
 
@@ -87,7 +98,9 @@ function Visitor({ session, path, theme, reduced, onOpen }: { session: Session; 
   return <button ref={ref} type="button" className="bureaux-walker bureaux-visitor" data-agent={session.id} style={styleAt(first.x - 13, first.y - 26)} aria-label={`${session.name} · en visite`} onClick={onOpen}><LogoBot tool={session.tool} state={botState(session)} size={26} theme={theme} seed={session.id} reducedMotion={reduced} branded /></button>;
 }
 
-export function OfficeFloor({ client, scene, sessions, rigs = [], exchanges = new Map(), arcs = [], cores, onOpen, onMenu, onChat, viewportWidth }: { client?: DaemonClient; scene: AtelierScene; sessions: readonly Session[]; rigs?: readonly Rig[]; exchanges?: ReadonlyMap<string, readonly Exchange[]>; arcs?: readonly Arc[]; cores: readonly Core[]; onOpen(id: string): void; onMenu(session: Session, event: MouseEvent<HTMLElement>): void; onChat(): void; viewportWidth: number }) {
+/** The Bureaux. `cores` and `plate`: the tech room of the active engine (spec §6.6, `techCores`); `onResume`: « Reprendre » on a Ledge
+ *  team at rest. */
+export function OfficeFloor({ client, scene, sessions, rigs = [], exchanges = new Map(), arcs = [], cores, plate, onOpen, onMenu, onChat, onResume, viewportWidth }: { client?: DaemonClient; scene: AtelierScene; sessions: readonly Session[]; rigs?: readonly Rig[]; exchanges?: ReadonlyMap<string, readonly Exchange[]>; arcs?: readonly Arc[]; cores: readonly Core[]; plate: string; onOpen(id: string): void; onMenu(session: Session, event: MouseEvent<HTMLElement>): void; onChat(): void; onResume?(rig: Rig): void; viewportWidth: number }) {
   const theme = useTheme(), { reduced } = useMotionPreferences();
   const [now, setNow] = useState(Date.now());
   const [thoughts, setThoughts] = useState<Map<string, { text: string; seen: number }>>(new Map());
@@ -101,7 +114,8 @@ export function OfficeFloor({ client, scene, sessions, rigs = [], exchanges = ne
   const byId = useMemo(() => new Map([...sessions, ...scene.rooms.flatMap(r => r.tables.flatMap(t => t.mains))].map(s => [s.id, s])), [sessions, scene]);
   const allSessions = useMemo(() => [...byId.values()], [byId]);
   const botCount = allSessions.filter(present).reduce((n, s) => n + 1 + s.helpers.filter(h => h.state !== 'exited').length, 0);
-  const teams: Team[] = [...scene.rooms.filter(r => r.kind !== 'kernel').map(r => ({ id: r.key, name: r.kind === 'project' ? r.project.name : r.rig.name, kind: r.kind as 'project' | 'rig', sessionIds: r.tables.flatMap(t => t.mains).filter(present).map(s => s.id) })), { id: '__loose', name: 'Sans projet', kind: 'none', sessionIds: scene.unassigned.filter(present).map(s => s.id) }];
+  const teams: Team[] = [...scene.rooms.filter(r => r.kind !== 'kernel').map(r => ({ id: r.key, name: r.kind === 'project' ? r.project.name : r.rig.name, kind: r.kind as 'project' | 'rig', sessionIds: r.tables.flatMap(t => t.mains).filter(present).map(s => s.id), ...(r.kind === 'rig' && isRestingTeam(r.rig) ? { resting: true } : {}) })), { id: '__loose', name: 'Sans projet', kind: 'none', sessionIds: scene.unassigned.filter(present).map(s => s.id) }];
+  const resume = onResume && ((key: string) => { const room = scene.rooms.find(r => r.key === key); if (room?.kind === 'rig') onResume(room.rig); });
   const restNeed = sessions.filter(s => present(s) && s.state === 'idle' && now - Date.parse(s.lastActivityAt) >= 300_000).length;
   const scale = Math.min(4, Math.max(1, Math.round(Math.max(320, viewportWidth) / 640)));
   const bw = Math.max(444, Math.floor(Math.max(320, viewportWidth) / scale) - 2 * EXT);
@@ -138,7 +152,7 @@ export function OfficeFloor({ client, scene, sessions, rigs = [], exchanges = ne
       {Array.from({ length: Math.max(0, Math.floor((floor.width - 100) / 80)) }, (_, i) => <i key={i} className="bureaux-lamp" style={{ left: 90 + i * 80 }} />)}
     </div>)}
     {floor.zones.map(z => <img key={z.id} className="bureaux-zone" src={`/offices/${theme === 'dark' ? 'night' : 'day'}/zone-${z.kind}.png`} alt="" style={styleAt(EXT + z.x, z.y)} />)}
-    {floor.rooms.map(r => <div key={r.key} className={focusOnly && !followKeys.has(r.key) ? 'bureaux-dim' : undefined}><OfficeRoom room={r} byId={byId} presence={presence} visiting={visiting} cores={cores} theme={theme} reduced={reduced} onOpen={onOpen} onMenu={onMenu} onChat={onChat} /></div>)}
+    {floor.rooms.map(r => <div key={r.key} className={focusOnly && !followKeys.has(r.key) ? 'bureaux-dim' : undefined}><OfficeRoom room={r} byId={byId} presence={presence} visiting={visiting} cores={cores} plate={plate} theme={theme} reduced={reduced} onOpen={onOpen} onMenu={onMenu} onChat={onChat} onResume={resume} /></div>)}
     {!reduced && botCount <= 40 && visits.map(v => { const s = byId.get(v.fromId), from = world.seats.get(v.fromId), to = world.seats.get(v.toId); return s && from && to ? <Visitor key={v.id} session={s} path={route(from, to)} theme={theme} reduced={reduced} onOpen={() => onOpen(s.id)} /> : null; })}
     {!reduced && botCount <= 40 && invitations.map(v => <Visitor key={v.id} session={v.session} path={route(v.from, v.to)} theme={theme} reduced={reduced} onOpen={() => onOpen(v.session.id)} />)}
     {invitations.length > 0 && <div className="bureaux-bubble bureaux-ledge-bubble" style={styleAt(EXT + (floor.rooms.find(r => r.size === 'ledge')?.x ?? 44) + 15, 16)}>{invitations[0]!.text.slice(0, 80)}</div>}

@@ -493,6 +493,7 @@ export const fr = {
     watching: (n: number) => plural(n, `Je veille sur ${n} agent.`, `Je veille sur ${n} agents.`),
     orchestrating: (n: number, d: number) => `J’orchestre ${n} ${plural(n, 'équipe', 'équipes')}${d > 0 ? ` · ${d} ${plural(d, 'décision', 'décisions')} pour toi` : ''}.`,
     exchangeTicket: (n: string) => `ticket pour ${n}`,
+    techPlate: (engine: string) => `Équipes · ${engine}`, resting: 'au repos',
     listening: 'Je vous écoute.',
     assistant: 'Votre assistant',
     unassignedHint: 'Ledge ne relie ces sessions à aucun projet. Glissez-les vers une table, ou utilisez « Ranger dans… ».',
@@ -542,7 +543,6 @@ export const fr = {
       summarise: 'Résumer la journée', summarisePrompt: "Résume ma journée : ce que les équipes ont fait, ce que j'ai tranché, ce qui m'attend."
     },
     point: {
-      progress: (done: number, given: number) => `${done}/${given} ${plural(given, 'tâche', 'tâches')} de Ledge`,
       dismiss: 'Ranger',
       closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} a fini « ${title} »` : state === 'refused' ? `${owner} a refusé « ${title} »` : `${owner} a abandonné « ${title} »`,
       ofLedge: 'tâche de Ledge'
@@ -719,32 +719,24 @@ export const fr = {
     failed: (why: string) => `L’équipe n’a pas été lancée : ${why}`, partial: (reason: string) => `Équipe lancée en partie : ${reason}`, noAnswer: 'Ledge n’a pas répondu.', launched: (team: string, project: string) => `L’équipe ${team} s’installe dans la pièce ${project}.`
   },
   rooms: {
-    tables: (n: number) => plural(n, `${n} table`, `${n} tables`),
-    tree: 'équipe', treeResting: 'au repos',
-    common: 'table commune',
     room: (name: string) => `Pièce ${name}`,
     plaqueCounts: (tables: number, sessions: number) => `${plural(tables, `${tables} table`, `${tables} tables`)} · ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}`,
     waiting: (n: number) => plural(n, `${n} attend`, `${n} attendent`), working: (n: number) => plural(n, `${n} au travail`, `${n} au travail`),
     roomMenu: (name: string) => `Actions de la pièce ${name}`, roomMenuTitle: 'Actions de la pièce',
-    newSessionHere: 'Nouvelle session ici', newTeamHere: 'Nouvelle équipe ici…', entrance: 'ENTRÉE',
+    newSessionHere: 'Nouvelle session ici', entrance: 'ENTRÉE',
     rigSeats: (n: number) => `équipe · ${n} ${plural(n, 'siège', 'sièges')}`,
     inProject: (name: string) => `dans ${name}`, offProject: (cwd: string) => `hors projet · ${cwd}`, onMachine: (m: string) => `sur ${m}`,
     kernelWhat: 'la mécanique · operator et queue',
     rigMenu: (name: string) => `Actions de l’équipe ${name}`, rigMenuTitle: 'Actions de l’équipe',
     terminals: 'Terminaux', rigThread: 'Fil de l’équipe',
     hidden: (n: number) => plural(n, `${n} siège rangé (advisor, terminal)`, `${n} sièges rangés (advisor, terminal)`),
-    teamTable: (name: string) => `Équipe ${name}`,
-    teamLine: (done: number, given: number) => `équipe · opérateur Ledge · ${done}/${given} ${plural(given, 'tâche', 'tâches')}`,
-    restingLine: 'équipe au repos', resume: 'Reprendre',
-    teamMenu: (name: string) => `Actions de l'équipe ${name}`, teamMenuTitle: "Actions de l'équipe",
-    openTasks: 'Voir les tâches', dissolve: "Dissoudre l'équipe",
+    dissolve: "Dissoudre l'équipe",
     dissolveTitle: (name: string) => `Dissoudre l'équipe ${name} ?`,
-    dissolveBody: 'Sa table disparaît de la pièce ; ses sessions restent, à la table commune ou dans les archives, et ses tâches restent à leurs sessions.',
-    dropJoin: 'Lâcher pour rejoindre', dropLeave: 'Lâcher pour revenir à la table commune',
-    sheet: (id: string, title: string, giver: string) => `${id} · ${title} · ${giver}`,
+    dissolveBody: 'Sa pièce disparaît ; ses sessions restent, dans leur projet ou dans les archives, et ses tâches restent à leurs sessions.',
+    dropJoin: 'Lâcher pour rejoindre', dropLeave: 'Lâcher pour quitter l’équipe',
     chooseRole: (name: string, team: string) => `Rôle de ${name} dans ${team}`, otherRole: 'autre rôle…', loadingRoles: 'Lecture des rôles…', noRole: 'Aucun autre rôle',
     joined: (name: string, team: string, role: string) => `${name} rejoint ${team} comme @${role}.`,
-    left: (name: string) => `${name} revient à la table commune.`
+    left: (name: string) => `${name} quitte l’équipe.`
   },
   zoom: {
     bar: "Zoom de l'atelier", out: 'Dézoomer', outTitle: 'Dézoomer (−)', in: 'Zoomer', inTitle: 'Zoomer (+)',

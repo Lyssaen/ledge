@@ -6,6 +6,12 @@ describe('Bureaux placement', () => {
     expect(roomsOf(team('p', 13)).map(r => r.sessionIds.length)).toEqual([6, 6, 1]);
     expect(roomsOf(team('free', 25, 'none')).map(r => r.sessionIds.length)).toEqual([12, 12, 1]);
   });
+  it('a Ledge team at rest keeps an empty office; any other empty team has none (Review Focus 2)', () => {
+    expect(roomsOf({ id: 'local/team-c3d4', name: 'mobile', kind: 'rig', sessionIds: [], resting: true })).toEqual([{ key: 'local/team-c3d4', name: 'mobile', size: 's', sessionIds: [], resting: true }]);
+    expect(roomsOf(team('empty', 0, 'rig'))).toEqual([]);
+    const floor = buildLayout(500, [{ id: 'local/team-c3d4', name: 'mobile', kind: 'rig', sessionIds: [], resting: true }], 0);
+    expect(floor.rooms.find(r => r.key === 'local/team-c3d4')).toMatchObject({ resting: true, sessionIds: [] });
+  });
   it('places small offices in the first row with space', () => {
     const floor = buildLayout(500, [team('large', 6), team('medium', 4), team('small', 1)], 0);
     expect(floor.rooms.find(r => r.key === 'small')!.y).toBe(floor.rooms.find(r => r.key === 'medium')!.y);

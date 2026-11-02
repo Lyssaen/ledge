@@ -13,6 +13,7 @@ import { ApprovalBadge, HelperBot, SessionBot, StateBadge } from './SessionBot';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 import { useRigControls } from '../rigs/useRigActions';
 import { isUnfiled } from '../rigs/proposal';
+import { teamRoomFilter } from '../rigs/engine';
 
 /** An isolated rig room's bar (maquette w-3): « Fil du rig », then, off any project, « Dépôts · n » and « Ranger dans un projet… », then
  *  « Arrêter le rig… » (its confirmation). Without the app's rig gestures, only the thread. */
@@ -51,8 +52,8 @@ export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], pr
   onRevealArchives?: () => void;
   /** « Détacher l'Atelier » (#21), on the overview: only in Tauri, while the Atelier is in this window. */
   onDetach?: () => void;
-  /** A seat's team in its breadcrumb (atelier rooms spec §3.5): `Atelier / <project> / ⚑ <team> / <bot>`. */
-  teamOf?: (s: Session) => { name: string } | undefined;
+  /** A seat's team in its breadcrumb (atelier rooms spec §3.5): `Atelier / <project> / ⚑ <team> / <bot>`; the team opens its own room (lot F). */
+  teamOf?: (s: Session) => { id: string; name: string } | undefined;
 }) {
   const { t } = useI18n();
   const { place } = nav;
@@ -75,7 +76,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, rigs = [], pr
         <span className="muted">/</span>
         <button className="crumb-link" onClick={() => dispatch({ type: 'home', project: pid })} title={filterName(pid)}>{filterName(pid)}</button>
         <span className="muted">/</span>
-        {team && <><button className="crumb-link crumb-team" onClick={() => dispatch({ type: 'home', project: pid })} title={team.name}>⚑ {team.name}</button><span className="muted">/</span></>}
+        {team && <><button className="crumb-link crumb-team" onClick={() => dispatch({ type: 'home', project: teamRoomFilter(rigs, team.id) })} title={team.name}>⚑ {team.name}</button><span className="muted">/</span></>}
         {helper ? <>
           <button className="crumb-link crumb-parent" onClick={() => dispatch({ type: 'open', id: session.id })} title={t.crumb.openParent(session.name)}>
             <SessionBot session={session} size={18} paused={nav.paused} />{session.name}

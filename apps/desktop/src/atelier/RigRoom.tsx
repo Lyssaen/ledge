@@ -1,7 +1,7 @@
-import { Fragment, useState, type CSSProperties, type JSX, type MouseEvent, type ReactNode } from 'react';
+import { Fragment, useState, type CSSProperties, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
 import { PROJECT_COLORS, type RigSeat, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
-import { isSeatPlaceholder, rigColor, shortCwd, workingCount } from '@ledge/ui/rigs/model';
+import { isRestingTeam, isSeatPlaceholder, rigColor, shortCwd, workingCount } from '@ledge/ui/rigs/model';
 import { tableSeats } from '@ledge/ui/rigs/scene';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -14,6 +14,7 @@ import { SessionBot, StateBadge } from '../shell/SessionBot';
 import { useRigControls } from '../rigs/useRigActions';
 import { isUnfiled } from '../rigs/proposal';
 import { ROOM_BACK, ROOM_SIDE, RUG_SIDE, layoutTable, type AtelierRoom } from './layout';
+import type { DropTarget } from './filing';
 
 export type RigAtelierRoom = Extract<AtelierRoom, { kind: 'rig' | 'kernel' }>;
 
@@ -24,9 +25,12 @@ const colorOf = (room: RigAtelierRoom) => (room.kind === 'kernel' ? 'var(--muted
  * (swatch, name, « rig · n sièges », where it works, « sur {machine} » when remote, « injoignable », « n au travail », « … »), the table
  * inside (`children`). The « … » offers « Terminaux » (one item per running seat) and « Fil du rig », then `extraActions`, then (with the
  * app's rig gestures) « Arrêter… » and, off any project, « Ranger dans un projet… ».
+ * A Ledge team at rest (lot F, Review Focus 2) keeps its room, empty: « {nom} · au repos » and « Reprendre » (`rig.act up`). A Ledge
+ * team's room takes a session dropped on it (`drop`: the app asks its role, then joins).
  */
-export function RigRoom({ room, width, dispatch, onTerminal, children, extraActions }: {
+export function RigRoom({ room, width, dispatch, onTerminal, children, extraActions, drop }: {
   room: RigAtelierRoom; width: number; dispatch: (a: NavAction) => void; onTerminal(seat: RigSeat): void; children: ReactNode; extraActions?: ReactNode;
+  drop?: DropTarget & { over: boolean };
 }): JSX.Element {
   const { t } = useI18n();
   const [menu, setMenu] = useState(false);
@@ -39,8 +43,10 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
   const seats = rig.seats.filter(s => s.state !== 'stopped');
   const label = t.rooms.rigMenu(name);
   const controls = useRigControls();
+  const resting = room.kind === 'rig' && isRestingTeam(rig);
   return (
-    <section className={cls('project-room atelier-room rig-room', rig.lifecycle === 'unreachable' && 'rig-unreachable')} data-room={room.key} data-kind={room.kind} aria-label={t.rooms.room(name)}
+    <section className={cls('project-room atelier-room rig-room', rig.lifecycle === 'unreachable' && 'rig-unreachable', resting && 'rig-resting', drop?.over && 'drop-over')} data-room={room.key} data-kind={room.kind} aria-label={t.rooms.room(name)}
+      {...(drop ? { onDragOver: (e: DragEvent) => drop.onDragOver(e), onDragLeave: (e: DragEvent) => drop.onDragLeave(e), onDrop: (e: DragEvent) => drop.onDrop(e) } : {})}
       style={{ '--room': `${width}px`, '--project': color, '--room-side': `${ROOM_SIDE}px`, '--room-back': `${ROOM_BACK}px` } as CSSProperties}>
       <div className="room-walls" aria-hidden="true"><i className="wall-back" /><i className="wall-left" /><i className="wall-right" /><i className="wall-front" /></div>
       <div className="room-plaque">
@@ -48,6 +54,7 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
         <strong className="plaque-name" title={name}>{name}</strong>
         {kernel
           ? <span className="plaque-counts">{t.rooms.kernelWhat}</span>
+          : resting ? <span className="plaque-counts">{t.atelier.resting}</span>
           : <span className="plaque-counts">{t.rooms.rigSeats(room.tables[0].mains.length)}</span>}
         {room.kind === 'rig' && room.place.kind === 'project' && <span className="plaque-counts">{t.rooms.inProject(room.place.name)}</span>}
         {room.kind === 'rig' && room.place.kind === 'off' && <span className="plaque-counts" title={room.place.cwd}>{t.rooms.offProject(shortCwd(room.place.cwd))}</span>}
@@ -57,6 +64,8 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
         {rig.machine !== 'local' && <span className="plaque-counts">{t.rooms.onMachine(rig.machine)}</span>}
         {rig.lifecycle === 'unreachable' && <span className="plaque-counts plaque-off">{t.side.rigs.unreachable}</span>}
         {working > 0 && <span className="plaque-working"><i className="live-dot" />{t.rooms.working(working)}</span>}
+        {resting && controls && <button type="button" className="team-resume" disabled={controls.busy(rig.machine, rig.id)} onClick={() => { void controls.act(rig.machine, 'up', { rigId: rig.id }); }}>{t.rigActions.resume}</button>}
+        {drop?.over && <span className="drop-hint">{t.rooms.dropJoin}</span>}
         <Menu open={menu} onOpenChange={o => { setMenu(o); if (!o) setTerminals(false); }} label={label} className="room-menu-wrap" menuClassName="assign-menu room-menu"
           trigger={tr => (
             <button className="icon-action" aria-label={label} title={t.rooms.rigMenuTitle} {...tr}>
@@ -91,9 +100,11 @@ export function RigRoom({ room, width, dispatch, onTerminal, children, extraActi
  * a project's table (opens its page, its menu on right click and « … »); a placeholder is only drawn: no `data-agent`, no click, no menu,
  * no drag (it carries `data-seat` so the exchanges can still start or end on it).
  */
-export function RigTable({ room, maxSeats, paused, focusedId, order, dispatch, menuId, onMenu }: {
+export function RigTable({ room, maxSeats, paused, focusedId, order, dispatch, menuId, onMenu, seatDrag }: {
   room: RigAtelierRoom; maxSeats: number; paused: boolean; focusedId: string | null; order: readonly Session[];
   dispatch: (a: NavAction) => void; menuId: string | null; onMenu(s: Session, e: MouseEvent<HTMLElement>): void;
+  /** A Ledge team's seat dragged out of its room (to leave the team). */
+  seatDrag?(s: Session): { draggable: true; onDragStart(e: DragEvent): void; onDragEnd(): void } | undefined;
 }): JSX.Element {
   const { t } = useI18n();
   const table = room.tables[0];
@@ -137,7 +148,7 @@ export function RigTable({ room, maxSeats, paused, focusedId, order, dispatch, m
           return (
             <Fragment key={s.id}>
               <button style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))}
-                onClick={() => dispatch({ type: 'open', id: s.id })} onContextMenu={e => onMenu(s, e)}
+                onClick={() => dispatch({ type: 'open', id: s.id })} onContextMenu={e => onMenu(s, e)} {...seatDrag?.(s)}
                 className={cls('agent-seat', `place-${side}`, focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
                 <SessionBot session={s} size={64} paused={paused} />
                 <strong><span className="seat-name" title={s.name}>{s.name}</span>{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>

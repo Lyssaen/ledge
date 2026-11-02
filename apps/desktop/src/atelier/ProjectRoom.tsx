@@ -20,7 +20,7 @@ const waitingOf = (s: Session) => s.state === 'waiting_permission' || s.state ==
 export function ProjectRoom({ project, tables, width, dispatch, children }: { project: Project; tables: readonly AtelierTable[]; width: number; dispatch: (a: NavAction) => void; children: ReactNode }): JSX.Element {
   const { t } = useI18n();
   const [menu, setMenu] = useState(false);
-  const sessions = tables.filter(x => x.team?.state !== 'resting').flatMap(x => x.mains);
+  const sessions = tables.flatMap(x => x.mains);
   const waiting = sessions.filter(waitingOf).length;
   const working = sessions.filter(s => s.state === 'working').length;
   return (
@@ -41,9 +41,6 @@ export function ProjectRoom({ project, tables, width, dispatch, children }: { pr
           )}>
           <MenuItem onSelect={() => dispatch({ type: 'modal', modal: { kind: 'launch', project: project.id } })}>
             <span><Icon d={ICONS.plus.d} size={13} />{t.rooms.newSessionHere}</span>
-          </MenuItem>
-          <MenuItem onSelect={() => dispatch({ type: 'modal', modal: { kind: 'launch', project: project.id, team: true } })}>
-            <span><Icon d={ICONS.plus.d} size={13} />{t.rooms.newTeamHere}</span>
           </MenuItem>
           <MenuItem onSelect={() => dispatch({ type: 'modal', modal: { kind: 'project', edit: project.id } })}>
             <span><Icon d={PENCIL} size={13} />{t.atelier.edit}</span>

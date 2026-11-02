@@ -1,13 +1,23 @@
+// Lot F, task 2: a Ledge team arrives as a rig (`engine: 'ledge'`) and lives in the atelier as its own room, at rest included; main's
+// team tables are gone (Review Focus 4). Dropping a session on the room still asks its role (RoleChooser) and joins; dragging a seat
+// out of it leaves.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { Role, Team } from '@ledge/protocol';
+import type { Rig, RigSeat, Role, Session, Team } from '@ledge/protocol';
 import { boot, closeDaemons, PROJECTS, transfer } from './helpers';
 
 const T0 = '2026-10-26T08:00:00.000Z';
 const team = (extra: Partial<Team> = {}): Team => ({ id: 'team-a1b2', name: 'ledge-roles', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active',
   seats: [{ role: 'build', sessionId: 'otto' }, { role: 'qa', sessionId: null }], createdAt: T0, updatedAt: T0, ...extra });
-const sessions = () => [
+/** The team as the Ledge engine projects it (lot D): a free seat is `stopped`, a seat's session its `sessionId`. */
+const projected = (t: Team): Rig => ({
+  id: t.id, name: t.name, machine: 'local', cwd: t.cwd, projectId: t.project, offProject: t.project === null, kernel: false, engine: 'ledge', repos: [],
+  lifecycle: t.state === 'resting' ? 'stopped' : 'partial',
+  seats: t.seats.map((x): RigSeat => ({ ref: `${x.role}@${t.id}`, address: `@${x.role}`, name: x.role, runtime: 'claude',
+    ...(x.sessionId ? { sessionId: x.sessionId } : {}), state: x.sessionId && t.state !== 'resting' ? 'working' : 'stopped' }))
+});
+const sessions = (): Session[] => [
   fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', team: 'team-a1b2', role: 'build', roleLabel: 'Build' }),
   fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'idle' }),
   fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working' })
@@ -17,48 +27,45 @@ const role = (id: string): Role => ({ id, label: id.toUpperCase(), prompt: '', s
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
-async function withTeam(t: Team = team()) {
-  const env = await boot({ sessions: sessions(), projects: PROJECTS });
+async function withTeam(t: Team = team(), extra: Session[] = []) {
+  const env = await boot({ sessions: [...sessions(), ...extra], projects: PROJECTS });
+  env.d.push({ type: 'teams.engine', engine: 'ledge', openrigAvailable: false, running: true });
   env.d.push({ type: 'teams', teams: [t] });
-  await screen.findByRole('region', { name: 'Team ledge-roles' });
+  env.d.push({ type: 'rig.snapshot', machine: 'local', rigs: [projected(t)] });
+  await screen.findByRole('region', { name: `${t.name} room` });
   return env;
 }
+const room = (name: string) => screen.getByRole('region', { name: `${name} room` });
 
-describe('the atelier’s rooms (atelier rooms spec)', () => {
-  it('a room per project with its plaque; a table per team, the others at the common table; the role pill on a seat', async () => {
-    await withTeam();
-    const room = screen.getByRole('region', { name: 'Ledge room' });
-    expect(within(room).getByText('2 tables · 2 sessions')).toBeVisible();
-    expect(within(room).getByText('ENTRANCE')).toBeInTheDocument();
-    const teamTable = within(room).getByRole('region', { name: 'Team ledge-roles' });
-    expect(within(teamTable).getByText('team · operator Ledge · 0/0 tasks')).toBeVisible();
-    const otto = within(teamTable).getByRole('button', { name: /^Otto,/ });
-    expect(within(otto).getByText('@build')).toBeVisible();
-    const common = within(room).getByRole('region', { name: 'Ledge table' });
-    expect(within(common).getByText('common table')).toBeVisible();
-    expect(within(common).getByRole('button', { name: /^Pim,/ })).toBeVisible();
-    // A room with no team looks as before, inside its walls: no « common table ».
-    const pay = screen.getByRole('region', { name: /Payment Service Platform Migration Europe room/ });
-    expect(within(pay).queryByText('common table')).toBeNull();
+describe('a Ledge team in the atelier: its own room (Review Focus 4)', () => {
+  it('one room for the team with its seat; the project room keeps one table, no team table; the sidebar names the team once', async () => {
+    const { side } = await withTeam();
+    const teamRoom = within(room('ledge-roles'));
+    expect(teamRoom.getByText('team · 1 seat')).toBeVisible();
+    expect(teamRoom.getByRole('button', { name: /^Otto,/ })).toBeVisible();
+    const project = within(room('Ledge'));
+    expect(project.getByText('1 table · 1 session')).toBeVisible();
+    expect(project.getByRole('button', { name: /^Pim,/ })).toBeVisible();
+    expect(project.queryByRole('button', { name: /^Otto,/ })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Team ledge-roles' })).toBeNull();
+    expect(screen.queryByText('common table')).toBeNull();
+    // Each seat once in the whole atelier.
+    expect(screen.getAllByRole('button', { name: /^Otto,/ })).toHaveLength(1);
+    // The sidebar: one row, the Teams section's; no team row in the tree, Otto not in the tree.
+    expect(side.getAllByText('ledge-roles')).toHaveLength(1);
+    expect(document.querySelector('.st-team')).toBeNull();
+    expect(within(side.getByRole('tree', { name: 'Projects, branches and sessions' })).queryByText('Otto')).toBeNull();
   });
 
-  it('the team’s sheets are its open tasks; its heading counts Ledge’s', async () => {
-    const { d } = await withTeam();
-    d.push({ type: 'task.updated', task: { id: 't5c7e2a', title: 'Relire le candidat', giver: 'ledge', giverName: 'Ledge', owner: 'otto', ownerName: 'Otto', team: 'team-a1b2', state: 'taken', at: T0, updatedAt: T0, log: [] } });
-    const teamTable = screen.getByRole('region', { name: 'Team ledge-roles' });
-    await waitFor(() => expect(within(teamTable).getByText('t5c7e2a · Relire le candidat · Ledge')).toBeVisible());
-    expect(within(teamTable).getByText('team · operator Ledge · 0/1 task')).toBeVisible();
-  });
-
-  it('a seat dropped on a team table asks its role, then joins; dropped back on the common table, it leaves', async () => {
+  it('a seat dropped on the team’s room asks its role, then joins; dragged out of it to a project table, it leaves', async () => {
     const { d, user } = await withTeam();
     const pim = screen.getByRole('button', { name: /^Pim,/ });
-    const teamTable = screen.getByRole('region', { name: 'Team ledge-roles' });
+    const target = room('ledge-roles');
     const dt = transfer();
     fireEvent.dragStart(pim, { dataTransfer: dt });
-    fireEvent.dragOver(teamTable, { dataTransfer: dt });
-    expect(within(teamTable).getByText('Drop to join')).toBeVisible();
-    fireEvent.drop(teamTable, { dataTransfer: dt, clientX: 200, clientY: 200 });
+    fireEvent.dragOver(target, { dataTransfer: dt });
+    expect(within(target).getByText('Drop to join')).toBeVisible();
+    fireEvent.drop(target, { dataTransfer: dt, clientX: 200, clientY: 200 });
     const menu = await screen.findByRole('menu', { name: 'Pim\'s role in ledge-roles' });
     // The free role first; « another role… » reads the folder's roles from the daemon.
     expect(within(menu).getByRole('menuitem', { name: '@qa' })).toBeVisible();
@@ -66,48 +73,47 @@ describe('the atelier’s rooms (atelier rooms spec)', () => {
     await user.click(within(menu).getByRole('menuitem', { name: 'another role…' }));
     await user.click(await within(menu).findByRole('menuitem', { name: /@review/ }));
     await waitFor(() => expect(d.received).toContainEqual({ type: 'team.join', team: 'team-a1b2', session: 'pim', role: 'review' }));
-    // Otto, back to the common table: it leaves the team.
-    const otto = screen.getByRole('button', { name: /^Otto,/ });
-    const common = screen.getByRole('region', { name: 'Ledge table' });
+    // Otto, out of the team's room onto the Ledge project's table: it leaves the team.
+    const otto = within(room('ledge-roles')).getByRole('button', { name: /^Otto,/ });
+    const table = screen.getByRole('region', { name: 'Ledge table' });
     fireEvent.dragStart(otto, { dataTransfer: dt });
-    fireEvent.dragOver(common, { dataTransfer: dt });
-    fireEvent.drop(common, { dataTransfer: dt });
+    fireEvent.dragOver(table, { dataTransfer: dt });
+    expect(within(table).getByText('Drop to leave the team')).toBeVisible();
+    fireEvent.drop(table, { dataTransfer: dt });
     await waitFor(() => expect(d.received).toContainEqual({ type: 'team.leave', team: 'team-a1b2', session: 'otto' }));
   });
 
-  it('a resting team is drawn dimmed with « Resume »; « Dissolve the team » asks first', async () => {
-    const archived = fakeSession('arlo', { name: 'Arlo', cwd: '/w/ledge', state: 'exited', team: 'team-c3d4', role: 'build', archivedAt: T0 });
-    const env = await boot({ sessions: [...sessions(), archived], projects: PROJECTS });
-    env.d.push({ type: 'teams', teams: [team({ id: 'team-c3d4', name: 'mobile', state: 'resting', seats: [{ role: 'build', sessionId: 'arlo' }] })] });
-    const table = await screen.findByRole('region', { name: 'Team mobile' });
-    expect(table).toHaveClass('table-resting');
-    expect(within(table).getByText('team resting')).toBeVisible();
-    expect(within(table).getByRole('button', { name: /^Arlo,/ })).not.toHaveAttribute('draggable');
-    await env.user.click(within(table).getByRole('button', { name: 'Resume' }));
-    await waitFor(() => expect(env.d.received).toContainEqual({ type: 'team.resume', team: 'team-c3d4' }));
-    await env.user.click(within(table).getByRole('button', { name: 'Actions of team mobile' }));
-    await env.user.click(screen.getByRole('menuitem', { name: /Dissolve the team/ }));
-    const confirm = screen.getByRole('alertdialog', { name: 'Dissolve team mobile?' });
-    expect(env.d.received.some(m => m.type === 'team.dissolve')).toBe(false);
-    await env.user.click(within(confirm).getByRole('button', { name: 'Dissolve the team' }));
-    await waitFor(() => expect(env.d.received).toContainEqual({ type: 'team.dissolve', team: 'team-c3d4' }));
+  it('a seat dropped back on its own team’s room asks nothing', async () => {
+    const { d } = await withTeam();
+    const otto = within(room('ledge-roles')).getByRole('button', { name: /^Otto,/ });
+    const dt = transfer();
+    fireEvent.dragStart(otto, { dataTransfer: dt });
+    fireEvent.dragOver(room('ledge-roles'), { dataTransfer: dt });
+    fireEvent.drop(room('ledge-roles'), { dataTransfer: dt, clientX: 200, clientY: 200 });
+    expect(screen.queryByRole('menu', { name: /role in ledge-roles/ })).toBeNull();
+    expect(d.received.some(m => m.type === 'team.join' || m.type === 'team.leave')).toBe(false);
   });
 
-  it('« New team here… » opens the team form on the room’s folder: a template or chosen seats, the preview, the launch', async () => {
+  it('« Dissolve the team » in the room’s menu asks first', async () => {
     const { d, user } = await withTeam();
-    d.onMessage(m => {
-      if (m.type === 'roles.list') d.push({ type: 'roles.listing', requestId: m.requestId, roles: [role('lead'), { ...role('review'), autonomy: 'auto' }], templates: [{ id: 'workshop', name: 'workshop', seats: [{ role: 'lead' }, { role: 'review', tool: 'codex' }], source: 'home', path: '/h/w.yaml' }], problems: [] });
-      if (m.type === 'team.launch') d.push({ type: 'team.launched', rid: m.rid, team: team({ id: 'team-e5f6', name: 'workshop' }) });
-    });
-    const room = screen.getByRole('region', { name: 'Ledge room' });
-    await user.click(within(room).getByRole('button', { name: 'Actions of the Ledge room' }));
-    await user.click(screen.getByRole('menuitem', { name: /New team here/ }));
-    const form = await screen.findByRole('dialog', { name: 'New team · Ledge' });
-    const preview = await within(form).findByRole('status');
-    expect(preview).toHaveTextContent('Team workshop will sit at a new table in the Ledge room.');
-    expect(within(form).getByRole('note')).toHaveTextContent('@review will work without asking');
-    await user.click(within(form).getByRole('button', { name: 'Launch the team' }));
-    await waitFor(() => expect(d.received).toContainEqual({ type: 'team.launch', rid: expect.any(String), cwd: '/w/ledge', name: 'workshop', template: 'workshop' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New team · Ledge' })).toBeNull());
+    await user.click(within(room('ledge-roles')).getByRole('button', { name: 'Actions of the ledge-roles team' }));
+    await user.click(screen.getByRole('menuitem', { name: /Dissolve the team/ }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Dissolve team ledge-roles?' });
+    expect(d.received.some(m => m.type === 'team.dissolve')).toBe(false);
+    await user.click(within(confirm).getByRole('button', { name: 'Dissolve the team' }));
+    await waitFor(() => expect(d.received).toContainEqual({ type: 'team.dissolve', team: 'team-a1b2' }));
+  });
+});
+
+describe('a Ledge team at rest (Review Focus 2)', () => {
+  it('keeps its room, empty, « at rest »; « Resume » sends rig.act up', async () => {
+    const archived = fakeSession('arlo', { name: 'Arlo', cwd: '/w/ledge', state: 'exited', team: 'team-c3d4', role: 'build', archivedAt: T0 });
+    const { d, user } = await withTeam(team({ id: 'team-c3d4', name: 'mobile', state: 'resting', seats: [{ role: 'build', sessionId: 'arlo' }] }), [archived]);
+    const resting = room('mobile');
+    expect(resting.querySelector('.room-plaque')).toHaveTextContent(/mobile.*at rest/);
+    expect(resting.querySelectorAll('.agent-seat')).toHaveLength(0);
+    await user.click(within(resting).getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(d.received).toContainEqual(expect.objectContaining({ type: 'rig.act', machine: 'local', verb: 'up', rigId: 'team-c3d4' })));
+    expect(d.received.some(m => m.type === 'team.resume')).toBe(false);
   });
 });

@@ -61,13 +61,20 @@ describe('the sidebar shell', () => {
     await waitFor(() => expect(d.received).toContainEqual({ type: 'ask.answer', rid: expect.any(String), id: 'a1b2c34', text: 'B' }));
   });
 
-  it('the tree draws a team row, its seats under it; the project’s other sessions sit by branch', async () => {
+  it('a Ledge team is one row, the Teams section’s: no team row in the tree, its seats out of the tree (Review Focus 4)', async () => {
     const seat = (id: string, name: string, branch: string) => fakeSession(id, { name, cwd: '/w/ledge', state: 'working', branch, ...{ team: 'team-a1b2', role: 'build' } });
-    const { d, side } = await boot({ projects: TWO_PROJECTS, sessions: [seat('otto', 'Otto', 'desktop'), seat('nova', 'Nova', 'main')] });
-    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }, { role: 'build', sessionId: 'nova' }], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] });
-    const tree = within(side.getByRole('tree'));
-    expect(await tree.findByText('ledge-dev')).toBeVisible();
-    expect(document.querySelector('.st-team')).not.toBeNull();
+    const { d, side } = await boot({ projects: TWO_PROJECTS, sessions: [seat('otto', 'Otto', 'desktop'), seat('nova', 'Nova', 'main'), fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working' })] });
+    d.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'build', sessionId: 'otto' }, { role: 'review', sessionId: 'nova' }], createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:00:00.000Z' }] });
+    d.push({ type: 'rig.snapshot', machine: 'local', rigs: [{ id: 'team-a1b2', name: 'ledge-dev', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, engine: 'ledge', repos: [],
+      seats: [{ ref: 'build@team-a1b2', address: '@build', name: 'Otto', runtime: 'claude', state: 'working', sessionId: 'otto' }, { ref: 'review@team-a1b2', address: '@review', name: 'Nova', runtime: 'claude', state: 'working', sessionId: 'nova' }] }] });
+    const teams = within(await side.findByRole('tree', { name: 'Teams' }));
+    expect(await teams.findByText('ledge-dev')).toBeVisible();
+    expect(side.getAllByText('ledge-dev')).toHaveLength(1);
+    expect(document.querySelector('.st-team')).toBeNull();
+    const tree = within(side.getByRole('tree', { name: 'Projects, branches and sessions' }));
+    expect(tree.getByText('Pim')).toBeVisible();
+    await waitFor(() => expect(tree.queryByText('Otto')).toBeNull());
+    expect(tree.queryByText('Nova')).toBeNull();
   });
 
   it('no question field in the sidebar any more: / goes home, its composer focused, and Enter there sends ledge.say', async () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react';
-import { answerEscalation, revisitDecision, sayToLedge, setBrain, useAnswerState, useBrainStatus, useDaemon, useEscalations, useLedgeDecisionList, useLedgeDecisions, useLedgeRules, useLedgeThread, useOpenRig, useRigs, useTeams, type DaemonClient } from '@ledge/fleet';
+import { answerEscalation, revisitDecision, sayToLedge, setBrain, useAnswerState, useBrainStatus, useDaemon, useEscalations, useLedgeDecisionList, useLedgeDecisions, useLedgeRules, useLedgeThread, useOpenRig, useRigs, type DaemonClient } from '@ledge/fleet';
 import { hideProposal, type ChatRigLaunch, type Escalation, type Projects } from '@ledge/protocol';
 import { ChatAnswer, TurnCards } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
@@ -27,7 +27,7 @@ import { visibleRigs } from '../rigs/RigsTab';
 import { useRigExchanges } from '../rigs/useRigExchanges';
 import { useChatCards } from './useChatCards';
 import { useTeamCards } from './useTeamCards';
-import { teamProject } from '../atelier/layout';
+import { teamRoomFilter } from '../rigs/engine';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
 import { decisionsToday } from './mandate/model';
@@ -119,14 +119,9 @@ export function LedgeConversation(p: LedgeConversationProps): JSX.Element {
   const cards = useChatCards({ send, chat, lastLaunched: view.lastLaunched, errors: view.errors, sessions: view.sessions, turnReady, turnMachine, onLaunched: p.onLaunched ?? noop });
   const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const project = useProjectReview({ chat, projects: p.projects ?? null, machines: view.machines, notify: p.notify ?? noop, onProposal: p.onProposal ?? noop });
-  // The team and task cards (roles spec §3.8), as main's home drew them: « Ouvrir la table » goes to the team's room.
+  // The team and task cards (roles spec §3.8), as main's home drew them: « Ouvrir la table » goes to the team's own room (lot F).
   const teamCards = useTeamCards({ send, onMessage, chat });
-  const teams = useTeams(client);
-  const openTable = (teamId: string) => {
-    const team = teams?.find(x => x.id === teamId);
-    const room = team ? teamProject(team, p.projects ?? null) : null;
-    dispatch({ type: 'home', ...(room ? { project: room } : {}) });
-  };
+  const openTable = (teamId: string) => dispatch({ type: 'home', project: teamRoomFilter(allRigs, teamId) });
   const open = (id: string) => dispatch({ type: 'open', id });
   // « Lancer ce rig » (the brain's card): the lot-5 launch window, prefilled; it prepares the plan again.
   const launchRig = useCallback((c: ChatRigLaunch) => dispatch({ type: 'modal', modal: rigLaunchModal(c) }), [dispatch]);

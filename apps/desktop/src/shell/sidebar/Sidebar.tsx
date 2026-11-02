@@ -55,7 +55,7 @@ export function Sidebar(p: {
   engine?: TeamsEngine;
   /** Answers an escalation of « À toi » (`answerEscalation`, one send through the daemon). */
   onAnswerEscalation?(id: string, answers: Record<string, string>): void;
-  /** The live teams and Ledge's tasks: the tree's team rows (atelier rooms spec §3.4), « À toi »'s closed Ledge tasks (§3.7) and decisions (0.30). */
+  /** The live teams and Ledge's tasks: « À toi »'s closed Ledge tasks (§3.7) and decisions (0.30). A Ledge team is a row of the Teams section (lot F). */
   teams?: TeamsApi;
 }): JSX.Element {
   const { t } = useI18n();
@@ -65,7 +65,7 @@ export function Sidebar(p: {
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
   const rigs = p.rigs ?? NO_RIGS;
-  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf, rigs, p.teams?.teams ?? []), [p.sessions, p.projects, p.projectIdOf, rigs, p.teams?.teams]);
+  const groups = useMemo(() => treeModel(p.sessions, p.projects, p.projectIdOf, rigs), [p.sessions, p.projects, p.projectIdOf, rigs]);
   const byId = useMemo(() => new Map(p.sessions.map(s => [s.id, s])), [p.sessions]);
   const rigRows = useMemo(() => rigsModel(rigs, byId, p.projects), [rigs, byId, p.projects]);
   const line = useMemo(() => ledgeLine(p.escalations ?? NO_ESCALATIONS, rigs), [p.escalations, rigs]);
@@ -154,7 +154,7 @@ export function Sidebar(p: {
             }}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
-            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} tasks={p.teams?.tasks} />
+            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>
         <RigsSection model={rigRows} openrig={p.openrig ?? NO_STATUSES} engine={p.engine ?? 'openrig'} current={current} byId={byId} paused={p.nav.paused} dense={prefs.dense}

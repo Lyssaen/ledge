@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { daemonStore, useDaemon, useTeams, type DaemonClient } from '@ledge/fleet';
+import { daemonStore, useDaemon, useRigs, type DaemonClient } from '@ledge/fleet';
 import { ChatView } from '@ledge/ui/chat/ChatView';
 import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { useActionCards } from '@ledge/ui/chat/useActionCards';
@@ -16,7 +16,7 @@ import { useChatCards } from './useChatCards';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
 import { useTeamCards } from './useTeamCards';
-import { teamProject } from '../atelier/layout';
+import { teamRoomFilter } from '../rigs/engine';
 
 export interface ChatPanelProps {
   client: DaemonClient; view: FleetView;
@@ -35,8 +35,8 @@ export interface ChatPanelProps {
   onProposal(pid: string): void;
   /** « Lancer ce rig » on a card Ledge's brain posted (lot 7): the app opens the launch window prefilled. */
   onRigLaunch?(card: ChatRigLaunch): void;
-  /** A team card's « Ouvrir la table »: the atelier on the team's room (its project id, null when it has none). */
-  onOpenTeam?(project: string | null): void;
+  /** A team card's « Ouvrir la table »: the atelier on the team's own room (lot F), `filter` its rig filter (`rig:<machine>/team-…`). */
+  onOpenTeam?(filter: string): void;
 }
 
 /** Desktop's Ledge chat, docked on the right (observatory.tsx, `ledge-chat-panel`): the island's ChatView in its docked mode, on
@@ -61,8 +61,8 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const onMessage = useCallback((fn: Parameters<DaemonClient['onMessage']>[0]) => client.onMessage(fn), [client]);
   const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const teamCards = useTeamCards({ send, onMessage, chat });
-  const teams = useTeams(client);
-  const openTeam = (id: string) => { const team = teams?.find(x => x.id === id); onOpenTeam?.(team ? teamProject(team, projects) : null); };
+  const rigs = useRigs(client);
+  const openTeam = (id: string) => onOpenTeam?.(teamRoomFilter(rigs, id));
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
   // Every way in (/, the sidebar, the top bar, the footer, Ledge's desk) mounts the panel: the field takes the focus; asked for

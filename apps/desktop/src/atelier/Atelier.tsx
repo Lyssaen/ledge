@@ -1,7 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent, type JSX, type MouseEvent, type ReactNode } from 'react';
-import type { Escalation, Exchange, OpenRigStatus, Project, Projects, Rig, RigSeat, Session } from '@ledge/protocol';
-import type { DaemonClient } from '@ledge/fleet';
+import type { Escalation, Exchange, OpenRigStatus, Project, Projects, Rig, RigSeat, Session, TeamsEngine } from '@ledge/protocol';
+import type { DaemonClient, MachineState } from '@ledge/fleet';
 import { isSeatPlaceholder, ledgeLine } from '@ledge/ui/rigs/model';
+import { MenuItem } from '../shell/Menu';
+import { SHELL_ICONS } from '../shell/icons';
+import { engineName, techCores } from '../rigs/engine';
+import { useRigControls } from '../rigs/useRigActions';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -10,8 +14,8 @@ import { activeCount } from '../nav/agents';
 import type { SessionMenuState } from '../manage/useSessionMenu';
 import type { SessionActions } from '../manage/useSessionActions';
 import { useScreenKeys } from '../nav/screenKeys';
-import { TO_TEAMS, type NavAction, type NavState } from '../nav/state';
-import { roomTileWidth, sceneOf, walkOrder, type AtelierTable } from './layout';
+import type { NavAction, NavState } from '../nav/state';
+import { roomTileWidth, sceneOf, walkOrder, type AtelierRoom } from './layout';
 import { ProjectRoom } from './ProjectRoom';
 import { RoleChooser, type RoleChoice } from './RoleChooser';
 import type { TeamsApi } from '../teams/useTeamsApi';
@@ -35,6 +39,10 @@ export interface AtelierProps {
   /** OpenRig's rigs (lot 3): a room per rig, then the kernel's; their paired sessions leave the project rooms. */
   rigs?: readonly Rig[];
   openrig?: readonly OpenRigStatus[];
+  /** The teams engine in force and the fleet's machines (lot F): the Bureaux' tech room is the engine's, a bay per kernel (OpenRig) or
+   *  per machine (Ledge). */
+  engine?: TeamsEngine;
+  machines?: readonly MachineState[];
   /** The escalations (Ledge's desk counts the decisions waiting) and the rigs' exchanges by rigKey (bubbles between seats). */
   escalations?: readonly Escalation[];
   exchanges?: ReadonlyMap<string, readonly Exchange[]>;
@@ -49,10 +57,9 @@ export interface AtelierProps {
   menu: SessionMenuState;
   /** More buttons at the end of the zoom bar (the detached Atelier's way out of full screen). */
   tools?: ReactNode;
-  /** The live teams and Ledge's tasks (atelier rooms spec): a table per team, drag a seat to join or leave. */
+  /** The live teams and Ledge's tasks (atelier rooms spec): a Ledge team is its projected rig's room (lot F); a session dropped on it
+   *  joins (RoleChooser), a seat dragged out of it leaves; its room's menu dissolves it. */
   teams?: TeamsApi;
-  /** The archived sessions: a resting team's seats are drawn from them. */
-  archived?: readonly Session[];
   /** Says what happened (a join, a leave) in the shell's toast. */
   notify?: (text: string) => void;
 }
@@ -73,12 +80,12 @@ function EmptyProject({ project, dispatch }: { project: Project; dispatch: (a: N
   );
 }
 
-const NO_RIGS: readonly Rig[] = [], NO_ESCALATIONS: readonly Escalation[] = [], NO_EXCHANGES: ReadonlyMap<string, readonly Exchange[]> = new Map();
+const NO_RIGS: readonly Rig[] = [], NO_MACHINES: readonly MachineState[] = [], NO_ESCALATIONS: readonly Escalation[] = [], NO_EXCHANGES: ReadonlyMap<string, readonly Exchange[]> = new Map();
 
 /** The atelier (observatory.tsx, atelier mode): Ledge's desk, a table per project with agents, the filtered project's
  *  empty state, « Sans projet », then the legend; the zoom bar beside it. The mosaic is fitted to the space, zoomed and panned
  *  (useAtelierView). J / K (or ↓ / ↑) walk the agents shown, Entrée opens the chosen one; + / − / 0 zoom, Space pans. */
-export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_RIGS, openrig = [], escalations = NO_ESCALATIONS, exchanges = NO_EXCHANGES, onSeatTerminal, order, projectIdOf, filing, actions, menu, tools, teams, archived = [], notify }: AtelierProps): JSX.Element {
+export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_RIGS, openrig = [], engine = 'openrig', machines = NO_MACHINES, escalations = NO_ESCALATIONS, exchanges = NO_EXCHANGES, onSeatTerminal, order, projectIdOf, filing, actions, menu, tools, teams, notify }: AtelierProps): JSX.Element {
   const { t } = useI18n();
   // Compatibility view for the existing Atelier test journeys; the Bureaux are the default in Desktop.
   const legacy = import.meta.env.MODE === 'test' || localStorage.getItem('desktop.legacyAtelier') === '1';
@@ -86,10 +93,11 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
   const byId = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions]);
-  const lookup = useMemo(() => { const all = new Map([...archived, ...sessions].map(s => [s.id, s])); return (id: string) => all.get(id); }, [archived, sessions]);
-  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter, rigs, byId, teams?.teams ?? [], lookup), [order, projects, projectIdOf, filter, rigs, byId, teams?.teams, lookup]);
-  // A seat carried to another table: a team table asks the role (§3.3), another room's table files it in that project (the
-  // folder rule) and, with teams, takes it out of its team; the room's common table takes it out of its team.
+  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter, rigs, byId), [order, projects, projectIdOf, filter, rigs, byId]);
+  const controls = useRigControls();
+  const cores = useMemo(() => techCores(engine, rigs, openrig, machines), [engine, rigs, openrig, machines]);
+  // A seat carried elsewhere: dropped on a Ledge team's room it asks the role (§3.3) and joins; dropped on a project's table it is
+  // filed in that project (the folder rule) and, in a team, leaves it.
   const carried = useRef<Session | null>(null);
   const [overTable, setOverTable] = useState<string | null>(null);
   const [choosing, setChoosing] = useState<RoleChoice | null>(null);
@@ -99,24 +107,32 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
     onDragStart(e: DragEvent) { e.dataTransfer.setData('text/plain', s.id); e.dataTransfer.effectAllowed = 'move'; carried.current = s; },
     onDragEnd() { carried.current = null; setOverTable(null); }
   });
-  const tableDrop = (table: AtelierTable, projectId: string) => ({
-    over: overTable === table.key,
-    onDragOver(e: DragEvent) { if (!carried.current) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverTable(table.key); },
-    onDragLeave(e: DragEvent) { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverTable(o => (o === table.key ? null : o)); },
+  const dropOn = (key: string, land: (s: Session, e: DragEvent) => void) => ({
+    over: overTable === key,
+    onDragOver(e: DragEvent) { if (!carried.current) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverTable(key); },
+    onDragLeave(e: DragEvent) { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverTable(o => (o === key ? null : o)); },
     onDrop(e: DragEvent) {
       const s = carried.current; carried.current = null; setOverTable(null);
       if (!s) return;
       e.preventDefault(); e.stopPropagation();
-      if (table.kind === 'team' && table.team) {
-        if (s.team === table.team.id || !teams) return;
-        setChoosing({ session: s, team: table.team, at: { x: e.clientX, y: e.clientY } });
-        return;
-      }
-      // Another room: filed in that project (the folder rule), and out of its team.
-      if (projectIdOf(s) !== projectId) filing.file(s, projectId);
-      if (s.team && teams) { teams.leave(s.team, s.id); notify?.(t.rooms.left(s.name)); }
+      land(s, e);
     }
   });
+  // A project's table: filed in that project (the folder rule), and out of its team.
+  const tableDrop = (projectId: string) => ({
+    ...dropOn(projectId, s => {
+      if (projectIdOf(s) !== projectId) filing.file(s, projectId);
+      if (s.team && teams) { teams.leave(s.team, s.id); notify?.(t.rooms.left(s.name)); }
+    }),
+    // The hint « Lâcher pour quitter l'équipe » only for a seat of a team.
+    leave: !!carried.current?.team && !!teams
+  });
+  // A Ledge team's room (its projected rig): the role, then `team.join`; a seat of that team stays where it is.
+  const teamOf = (room: AtelierRoom) => (room.kind === 'rig' && room.rig.engine === 'ledge' ? teams?.teams?.find(x => x.id === room.rig.id) : undefined);
+  const roomDrop = (room: AtelierRoom) => {
+    const team = teamOf(room);
+    return team && dropOn(room.key, (s, e) => { if (s.team !== team.id) setChoosing({ session: s, team, at: { x: e.clientX, y: e.clientY } }); });
+  };
   const [seats] = useSeats();
   const walk = useMemo(() => legacy ? walkOrder(scene, seats)
     : [...scene.rooms.flatMap(r => r.tables.flatMap(t => t.mains)), ...scene.unassigned].filter(s => !isSeatPlaceholder(s.id) && !s.offline && s.state !== 'exited'), [scene, seats, legacy]);
@@ -196,7 +212,8 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
     </div>
     <div className="overview-scroll atelier bureaux-scroll" id="view-panel-atelier" role="region" aria-label={t.side.atelier} ref={view.scrollRef}>
       <div ref={view.floorRef} className="atelier-floor"><div ref={view.shellRef} className="bureaux-shell">
-        <Suspense fallback={null}><OfficeFloor client={client} scene={scene} sessions={sessions} rigs={rigs} exchanges={exchanges} arcs={arcs} cores={rigs.filter(r => r.kernel).map(r => ({ machine: r.machine, state: openrig.find(s => s.machine === r.machine)?.state ?? 'unreachable' }))} viewportWidth={viewportWidth}
+        <Suspense fallback={null}><OfficeFloor client={client} scene={scene} sessions={sessions} rigs={rigs} exchanges={exchanges} arcs={arcs} cores={cores} plate={t.atelier.techPlate(engineName(engine))} viewportWidth={viewportWidth}
+          onResume={controls ? rig => { void controls.act(rig.machine, 'up', { rigId: rig.id }); } : undefined}
           onOpen={id => {
             const found = rigs.flatMap(r => r.seats.map(seat => ({ rig: r, seat }))).find(x => id === `seat:${x.rig.machine}/${x.rig.id}/${x.seat.ref}`);
             if (found) onSeatTerminal?.(found.rig, found.seat);
@@ -226,22 +243,23 @@ export function Atelier({ client, nav, dispatch, sessions, projects, rigs = NO_R
           <LedgeDesk count={activeCount(sessions)} rigs={rigCount} decisions={line.unread} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
           <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
             {scene.rooms.map(room => {
-              if (room.kind !== 'project') return (
-                <RigRoom key={room.key} room={room} width={roomTileWidth(room.tables, seats)} dispatch={dispatch} onTerminal={seat => onSeatTerminal?.(room.rig, seat)}>
-                  <RigTable room={room} maxSeats={seats} paused={nav.paused} focusedId={focusedId} order={order} dispatch={dispatch} menuId={menu.menu?.id ?? null} onMenu={menuAt} />
-                </RigRoom>
-              );
-              const { project, tables } = room;
+              if (room.kind !== 'project') {
+                const team = teamOf(room);
+                return (
+                  <RigRoom key={room.key} room={room} width={roomTileWidth(room.tables, seats)} dispatch={dispatch} onTerminal={seat => onSeatTerminal?.(room.rig, seat)} drop={roomDrop(room)}
+                    extraActions={team && <MenuItem onSelect={() => setDissolving({ id: team.id, name: team.name })}><span><Icon d={SHELL_ICONS.archive} size={13} />{t.rooms.dissolve}</span></MenuItem>}>
+                    <RigTable room={room} maxSeats={seats} paused={nav.paused} focusedId={focusedId} order={order} dispatch={dispatch} menuId={menu.menu?.id ?? null} onMenu={menuAt}
+                      seatDrag={team ? seatDrag : undefined} />
+                  </RigRoom>
+                );
+              }
+              const { project, tables: [table] } = room;
               return (
-              <ProjectRoom key={project.id} project={project} tables={tables} width={roomTileWidth(tables, seats)} dispatch={dispatch}>
-                {tables.map(table => (
-                  <ProjectTable key={table.key} table={table} roomHasTeams={tables.some(x => x.kind === 'team')} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
-                    isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
-                    actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt}
-                    teamTasks={table.team ? teams?.tasks.filter(x => x.team === table.team!.id) : undefined}
-                    teamActions={teams && { resume: teams.resume, dissolve: (id, name) => setDissolving({ id, name }), tasks: () => dispatch(TO_TEAMS) }}
-                    seatDrag={seatDrag} tableDrop={tableDrop(table, project.id)} />
-                ))}
+              <ProjectRoom key={project.id} project={project} tables={room.tables} width={roomTileWidth(room.tables, seats)} dispatch={dispatch}>
+                <ProjectTable key={table.key} table={table} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
+                  isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
+                  actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt}
+                  seatDrag={seatDrag} tableDrop={tableDrop(project.id)} />
               </ProjectRoom>
               );
             })}

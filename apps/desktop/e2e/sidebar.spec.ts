@@ -48,25 +48,29 @@ test('an ask from the fake daemon shows in Your turn and is answered', async ({ 
   await expect(page.getByRole('region', { name: 'Your turn' })).toHaveCount(0);
 });
 
-// #98: a team is one row; in the rail (< 850 px) team and common-table rows hide, as branches and seats do, and the project keeps its swatch.
-test('teams in the tree: one row each, hidden in the rail', async ({ page }) => {
+// #98, lot F: a Ledge team is one row, the Teams section's (its projected rig); the tree has no team row and its seats leave it. In the
+// rail (< 850 px) the project keeps its swatch and nothing scrolls sideways.
+test('a Ledge team: one row in the Teams section, none in the tree; the rail', async ({ page }) => {
   const seat = (id: string, name: string, role: string) => session(id, { name, title: `${name} · ledge`, cwd: '/w/ledge', project: 'ledge', team: 'team-a1b2', role });
   const daemon = await fakeDaemon(page, [seat('nova', 'Nova', 'review'), seat('pim', 'Pim', 'lead'), otto], { projects: twoProjects });
   const T = new Date().toISOString();
   await page.goto('/'); await openAtelier(page);
   daemon.push({ type: 'teams', teams: [{ id: 'team-a1b2', name: 'ledge-dev', project: 'ledge', machine: 'local', cwd: '/w/ledge', state: 'active', seats: [{ role: 'lead', sessionId: 'pim' }, { role: 'review', sessionId: 'nova' }], createdAt: T, updatedAt: T }] });
-  const tree = page.getByRole('tree');
-  const team = tree.locator('.st-team');
-  await expect(team).toHaveCount(1);
-  const name = await team.locator('strong').boundingBox(), tag = await team.locator('.st-main span').boundingBox();
-  expect(Math.abs((name!.y + name!.height) - (tag!.y + tag!.height))).toBeLessThan(4);
+  daemon.push({ type: 'rig.snapshot', machine: 'local', rigs: [{ id: 'team-a1b2', name: 'ledge-dev', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, engine: 'ledge', repos: [],
+    seats: [{ ref: 'lead@team-a1b2', address: '@lead', name: 'Pim', runtime: 'claude', state: 'working', sessionId: 'pim' }, { ref: 'review@team-a1b2', address: '@review', name: 'Nova', runtime: 'claude', state: 'working', sessionId: 'nova' }] }] });
+  const side = page.locator('aside.sidebar');
+  const teams = page.getByRole('tree', { name: 'Teams' });
+  await expect(teams.getByText('ledge-dev')).toHaveCount(1);
+  await expect(side.getByText('ledge-dev')).toHaveCount(1);
+  const tree = page.getByRole('tree', { name: /Projects, branches and sessions/ });
+  await expect(tree.locator('.st-team')).toHaveCount(0);
+  await expect(tree.getByRole('button', { name: /^Otto/ })).toBeVisible();
+  await expect(tree.getByRole('button', { name: /^(Pim|Nova)/ })).toHaveCount(0);
   if (process.env.LEDGE_RAIL_SHOTS) await page.screenshot({ path: `${process.env.LEDGE_RAIL_SHOTS}/wide.png` });
   await page.setViewportSize({ width: 800, height: 800 });
-  await expect(team).toBeHidden();
-  await expect(tree.locator('.st-common')).toBeHidden();
   await expect(tree.locator('.st-project').first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const rail = await page.locator('aside.sidebar').boundingBox();
+  const rail = await side.boundingBox();
   expect(rail!.width).toBeLessThan(90);
   if (process.env.LEDGE_RAIL_SHOTS) await page.screenshot({ path: `${process.env.LEDGE_RAIL_SHOTS}/rail.png` });
 });

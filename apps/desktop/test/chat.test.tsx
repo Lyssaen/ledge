@@ -704,3 +704,18 @@ describe('useChatCards', () => {
     expect(send).toHaveBeenLastCalledWith({ type: 'session.relay.cancel', qid: 'q-1' });
   });
 });
+
+// Lot F, task 2: a launched team's card opens the team's own room (its projected rig `team-…`), main's team table being gone.
+describe('a team card of the chat', () => {
+  it('« Open the table » opens the atelier on the team’s room', async () => {
+    const env = await openChat({ sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge/app', state: 'working', team: 'team-a1b2', role: 'build' }), fakeSession('pim', { name: 'Pim', cwd: '/w/ledge/app', state: 'idle' })] });
+    const at = new Date().toISOString();
+    env.d.push({ type: 'rig.snapshot', machine: 'local', rigs: [{ id: 'team-a1b2', name: 'ledge-roles', machine: 'local', cwd: '/w/ledge/app', projectId: 'ledge', offProject: false, lifecycle: 'running', kernel: false, engine: 'ledge', repos: [],
+      seats: [{ ref: 'build@team-a1b2', address: '@build', name: 'Otto', runtime: 'claude', state: 'working', sessionId: 'otto' }] }] });
+    env.d.push({ type: 'chat.history', turns: [{ qid: 'q-team', question: 'Une équipe ?', askedAt: at, steps: [], answer: 'Voici.', answeredAt: at,
+      team: { cwd: '/w/ledge/app', project: 'ledge', name: 'ledge-roles', seats: [{ role: 'build', label: 'Build', tool: 'claude' }], teamId: 'team-a1b2', launchedAt: at } }] });
+    await env.user.click(await panel().findByRole('button', { name: 'Open the table' }));
+    expect(await screen.findByRole('region', { name: 'ledge-roles room' })).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Ledge room' })).toBeNull();
+  });
+});

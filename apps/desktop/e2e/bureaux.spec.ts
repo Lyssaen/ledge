@@ -59,7 +59,24 @@ test('Bureaux: OpenRig racks and a Ledge invitation', async ({ page }) => {
   const daemon = await fakeDaemon(page, [build], { projects: twoProjects, rigs: [rig, kernel], openrig: { machine: 'local', state: 'running' } });
   await page.goto('/'); await openAtelier(page, true);
   await expect(page.locator('.bureaux-rack.running')).toHaveCount(1);
+  // No teams.engine from this daemon (before lot D): OpenRig's tech room.
+  await expect(page.locator('.bureaux-plate', { hasText: 'Teams · OpenRig' })).toBeVisible();
   daemon.exchange({ id: 'invite-1', machine: 'local', rigId: 'factory', from: 'ledge', to: '@build', kind: 'ledge', text: 'Passe me voir, build', at: new Date().toISOString() });
   await expect(page.locator('.bureaux-visitor')).toBeVisible();
   await expect(page.locator('.bureaux-ledge-bubble')).toContainText('Passe me voir');
+});
+
+// Lot F (spec §6.6, Review Focus 2): in Ledge mode the tech room is Ledge's, a bay per machine; a Ledge team at rest keeps its office.
+test('Bureaux: Ledge’s tech room and a team at rest', async ({ page }) => {
+  const resting = { id: 'team-c3d4', name: 'mobile', machine: 'local', cwd: '/w/ledge', projectId: 'ledge', offProject: false, lifecycle: 'stopped' as const, kernel: false, engine: 'ledge' as const, repos: [],
+    seats: [{ ref: 'build@team-c3d4', address: '@build', name: 'build', runtime: 'claude', state: 'stopped' as const }] };
+  const daemon = await fakeDaemon(page, eight, { projects: twoProjects, rigs: [resting] });
+  await page.goto('/'); await openAtelier(page, true);
+  daemon.push({ type: 'teams.engine', engine: 'ledge', openrigAvailable: false, running: true });
+  await expect(page.locator('.bureaux-plate', { hasText: 'Teams · Ledge' })).toBeVisible();
+  await expect(page.locator('.bureaux-rack.running')).toHaveCount(1);
+  const office = page.locator('.bureaux-resting');
+  await expect(office.locator('.bureaux-plate')).toHaveText('mobile · at rest');
+  await office.getByRole('button', { name: 'Resume' }).click();
+  await expect.poll(() => daemon.received.filter(m => m.type === 'rig.act')).toEqual([expect.objectContaining({ type: 'rig.act', verb: 'up', rigId: 'team-c3d4' })]);
 });

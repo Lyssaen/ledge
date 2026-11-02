@@ -1,7 +1,6 @@
 import { isBusy, type FleetAsk } from '@ledge/fleet';
-import { isDecisionEscalation, type Escalation, type Helper, type Projects, type Rig, type Session, type Team } from '@ledge/protocol';
+import { isDecisionEscalation, type Escalation, type Helper, type Projects, type Rig, type Session } from '@ledge/protocol';
 import { isStandalone } from '@ledge/ui/rigs/model';
-import { teamProject } from '../../atelier/layout';
 import { fold, taskOf } from '../../nav/agents';
 
 const UNASSIGNED = 'Sans projet';
@@ -23,12 +22,9 @@ export interface ProjectGroup {
   name: string;
   repo?: string;
   flatten: boolean;
-  /** The common table's sessions, by branch (all of them when the project has no team). */
+  /** The project's sessions, by branch. A Ledge team is a row of the Teams section (lot F), not of the tree. */
   branches: BranchGroup[];
-  /** The project's live teams (atelier rooms spec §3.4), each with its seats' sessions, after the common table. */
-  teams: TeamGroup[];
 }
-export interface TeamGroup { team: Team; sessions: Session[] }
 
 function branchGroups(sessions: readonly Session[]): BranchGroup[] {
   const byBranch = new Map<string, Session[]>();
@@ -47,35 +43,29 @@ function branchGroups(sessions: readonly Session[]): BranchGroup[] {
   });
 }
 
-function projectGroup(id: string | null, name: string, sessions: readonly Session[], teams: readonly Team[] = []): ProjectGroup {
-  const seated = (s: Session) => teams.some(t => t.id === s.team);
-  const common = sessions.filter(s => !seated(s));
-  const branches = branchGroups(common);
+function projectGroup(id: string | null, name: string, sessions: readonly Session[]): ProjectGroup {
+  const branches = branchGroups(sessions);
   const repo = sessions.find(s => s.repo)?.repo;
   return {
     id,
     name,
     ...(repo !== undefined ? { repo } : {}),
     flatten: id === null || branches.length <= 1,
-    branches,
-    teams: teams.map(team => ({ team, sessions: sessions.filter(s => s.team === team.id) }))
+    branches
   };
 }
 
-/** `rigs`: the seats of a known rig leave the tree (they live in the Rigs section); without it only the brain session leaves. */
+/** `rigs`: the seats of a known rig leave the tree (they live in the Rigs section), a Ledge team's running seats included (lot F);
+ *  without it only the brain session leaves. */
 export function treeModel(
   sessions: readonly Session[],
   projects: Projects | null,
   projectIdOf: (s: Session) => string | null,
-  rigs?: readonly Rig[],
-  teams: readonly Team[] = []
+  rigs?: readonly Rig[]
 ): ProjectGroup[] {
   sessions = sessions.filter(s => isStandalone(s, rigs ?? []));
   if (!projects) return [projectGroup(null, UNASSIGNED, sessions)];
-  const live = teams.filter(t => t.state !== 'dissolved');
-  const groups = projects.projects.map(p =>
-    projectGroup(p.id, p.name, sessions.filter(s => projectIdOf(s) === p.id), live.filter(t => teamProject(t, projects) === p.id))
-  );
+  const groups = projects.projects.map(p => projectGroup(p.id, p.name, sessions.filter(s => projectIdOf(s) === p.id)));
   const loose = sessions.filter(s => projectIdOf(s) === null);
   if (loose.length) groups.push(projectGroup(null, UNASSIGNED, loose));
   return groups;

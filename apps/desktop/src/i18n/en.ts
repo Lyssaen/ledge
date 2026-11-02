@@ -469,6 +469,7 @@ export const en: Messages = {
     watching: (n) => pluralEn(n, `I'm watching over ${n} agent.`, `I'm watching over ${n} agents.`),
     orchestrating: (n, d) => `I'm orchestrating ${n} ${pluralEn(n, 'team', 'teams')}${d > 0 ? ` · ${d} ${pluralEn(d, 'decision', 'decisions')} for you` : ''}.`,
     exchangeTicket: (n) => `ticket for ${n}`,
+    techPlate: (engine) => `Teams · ${engine}`, resting: 'at rest',
     listening: "I'm listening.",
     assistant: 'Your assistant',
     unassignedHint: 'Ledge links these sessions to no project. Drag them onto a table, or use “Move to…”.',
@@ -513,7 +514,6 @@ export const en: Messages = {
       summarise: 'Summarise the day', summarisePrompt: 'Summarise my day: what the teams did, what I settled, what is waiting for me.'
     },
     point: {
-      progress: (done: number, given: number) => `${done}/${given} Ledge ${given === 1 ? 'task' : 'tasks'}`,
       dismiss: 'Dismiss',
       closed: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => state === 'done' ? `${owner} finished “${title}”` : state === 'refused' ? `${owner} refused “${title}”` : `${owner} dropped “${title}”`,
       ofLedge: 'Ledge’s task'
@@ -682,32 +682,24 @@ export const en: Messages = {
     failed: (why: string) => `The team was not launched: ${why}`, partial: (reason: string) => `Team partly launched: ${reason}`, noAnswer: 'Ledge did not answer.', launched: (team: string, project: string) => `Team ${team} settles in the ${project} room.`
   },
   rooms: {
-    tables: (n: number) => `${n} ${n === 1 ? 'table' : 'tables'}`,
-    tree: 'team', treeResting: 'resting',
-    common: 'common table',
     room: (name: string) => `${name} room`,
     plaqueCounts: (tables: number, sessions: number) => `${tables} ${tables === 1 ? 'table' : 'tables'} · ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
     waiting: (n: number) => `${n} waiting`, working: (n: number) => `${n} working`,
     roomMenu: (name: string) => `Actions of the ${name} room`, roomMenuTitle: 'Room actions',
-    newSessionHere: 'New session here', newTeamHere: 'New team here…', entrance: 'ENTRANCE',
+    newSessionHere: 'New session here', entrance: 'ENTRANCE',
     rigSeats: (n) => `team · ${n} ${pluralEn(n, 'seat', 'seats')}`,
     inProject: (name) => `in ${name}`, offProject: (cwd) => `off project · ${cwd}`, onMachine: (m) => `on ${m}`,
     kernelWhat: 'the machinery · operator and queue',
     rigMenu: (name) => `Actions of the ${name} team`, rigMenuTitle: 'Team actions',
     terminals: 'Terminals', rigThread: 'Team thread',
     hidden: (n) => pluralEn(n, `${n} seat tucked away (advisor, terminal)`, `${n} seats tucked away (advisor, terminal)`),
-    teamTable: (name: string) => `Team ${name}`,
-    teamLine: (done: number, given: number) => `team · operator Ledge · ${done}/${given} ${given === 1 ? 'task' : 'tasks'}`,
-    restingLine: 'team resting', resume: 'Resume',
-    teamMenu: (name: string) => `Actions of team ${name}`, teamMenuTitle: 'Team actions',
-    openTasks: 'See the tasks', dissolve: 'Dissolve the team',
+    dissolve: 'Dissolve the team',
     dissolveTitle: (name: string) => `Dissolve team ${name}?`,
-    dissolveBody: 'Its table leaves the room; its sessions stay, at the common table or in the archives, and its tasks stay with their sessions.',
-    dropJoin: 'Drop to join', dropLeave: 'Drop to go back to the common table',
-    sheet: (id: string, title: string, giver: string) => `${id} · ${title} · ${giver}`,
+    dissolveBody: 'Its room goes; its sessions stay, in their project or in the archives, and its tasks stay with their sessions.',
+    dropJoin: 'Drop to join', dropLeave: 'Drop to leave the team',
     chooseRole: (name: string, team: string) => `${name}'s role in ${team}`, otherRole: 'another role…', loadingRoles: 'Reading the roles…', noRole: 'No other role',
     joined: (name: string, team: string, role: string) => `${name} joins ${team} as @${role}.`,
-    left: (name: string) => `${name} goes back to the common table.`
+    left: (name: string) => `${name} leaves the team.`
   },
   zoom: {
     bar: 'Atelier zoom', out: 'Zoom out', outTitle: 'Zoom out (−)', in: 'Zoom in', inTitle: 'Zoom in (+)',
