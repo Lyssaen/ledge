@@ -310,7 +310,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null) }}
           onAsk={askLedge} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
-          asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge' }); }} />
+          asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}

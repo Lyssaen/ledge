@@ -94,9 +94,10 @@ export function LePoint({ view, api, decisions, waits, dispatch, onAsk, onShowTa
         <div className="lp-col" aria-label={p.yours}>
           <h3>{p.yours} {count > 0 && <b className="st-badge">{count}</b>}</h3>
           {asks && <AsksColumn view={asks} sessions={view.sessions} machineLabel={machineLabel} focus={askFocus ?? null}
-            onSource={(ask, path) => { const s = sessionOfAsk(ask, view.sessions); if (s) dispatch({ type: 'open', id: s.id, doc: path }); }}
+            sourceOf={ask => { const s = sessionOfAsk(ask, view.sessions); return s ? (path: string) => dispatch({ type: 'open', id: s.id, doc: path }) : null; }}
             onOpenSeat={id => dispatch({ type: 'open', id })} />}
-          {count === 0 && !(asks?.channel && asks.channel.state !== 'ready') && <p className="lp-none">{p.nothingYours}</p>}
+          {/* Never « Rien ne t'attend » when the list is not known whole (a banner, or a failed read: review). */}
+          {count === 0 && !(asks?.channel && asks.channel.state !== 'ready') && !asks?.partial && <p className="lp-none">{p.nothingYours}</p>}
           {attn.map(item => (
             <div key={item.session.id} className="lp-row">
               <SessionBot session={item.session} size={16} paused />
@@ -256,7 +257,12 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   useEffect(() => { if (p.task) setShownTask(p.task); }, [p.task]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-  useEffect(() => { if (tab === 'conversation') inputRef.current?.focus({ preventScroll: true }); }, [p.focus, tab]);
+  // The composer takes the focus on the conversation tab, unless the sidebar's « Voir » just sent the focus to a card (review P1).
+  const seenAsk = useRef(p.askFocus?.n ?? 0);
+  useEffect(() => {
+    if (p.askFocus && p.askFocus.n !== seenAsk.current) { seenAsk.current = p.askFocus.n; return; }
+    if (tab === 'conversation') inputRef.current?.focus({ preventScroll: true });
+  }, [p.focus, tab, p.askFocus]);
   const busy = chat.some(x => x.answeredAt === undefined && x.error === undefined);
 
   // Images pasted or dropped on the field travel inline with the field's question only (not a suggestion's or « Résumer »).

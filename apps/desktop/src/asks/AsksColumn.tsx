@@ -16,11 +16,12 @@ type Done = { ask: HumanAsk; end: 'sent' | 'already' };
  * OpenRig's asks in « À toi » (docs/mockups/ledge-human-operator-ab-lot1.html): the channel's banner when the rigs cannot reach the
  * person, then « Décisions », « Questions », « Nouvelles », each in the daemon's order (critical, urgent, then the most recent).
  */
-export function AsksColumn({ view, sessions, machineLabel, focus, onSource, onOpenSeat }: {
+export function AsksColumn({ view, sessions, machineLabel, focus, sourceOf, onOpenSeat }: {
   view: OpenRigAsksView; sessions: readonly Session[]; machineLabel: string;
   /** The ask « Voir » (sidebar) brings into view, and how many times it was asked. */
   focus?: { id: string; n: number } | null;
-  onSource?(ask: HumanAsk, path: string): void;
+  /** How to open a file this ask names (its source, its Markdown links), or null when nothing can open it (no session follows the seat). */
+  sourceOf?(ask: HumanAsk): ((path: string) => void) | null;
   onOpenSeat?(sessionId: string): void;
 }): JSX.Element | null {
   const { t } = useI18n();
@@ -74,7 +75,7 @@ export function AsksColumn({ view, sessions, machineLabel, focus, onSource, onOp
             return (
               <AskCard key={ask.id} ask={ask} session={session} answer={view.answer} onDone={end => finish(ask, end)}
                 focus={focus?.id === ask.id ? focus.n : 0}
-                {...(onSource ? { onSource: (path: string) => onSource(ask, path) } : {})}
+                {...(() => { const open = sourceOf?.(ask); return open ? { onSource: open } : {}; })()}
                 {...(onOpenSeat ? { onOpenSeat } : {})} />
             );
           })}

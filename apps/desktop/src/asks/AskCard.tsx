@@ -14,6 +14,10 @@ const FILE = ['M6 3h8l4 4v14H6z', 'M14 3v4h4'];
 const ALERT = ['M12 3 2 20h20z', 'M12 10v4', 'M12 17h.01'];
 const SEND = ['M5 12h14', 'm13 6 6 6-6 6'];
 
+/** The document reader opens Markdown only; an anchor (« file.md#section ») opens the file. */
+const readable = (path: string): boolean => /\.(md|markdown)(#.*)?$/i.test(path);
+const fileOf = (path: string): string => path.replace(/#.*$/, '');
+
 /** What the card sends, and which control shows the wheel while it goes. */
 type Sending = { key: string; answer: HumanAnswer };
 
@@ -67,18 +71,23 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   useEffect(() => { if (composing) fieldRef.current?.focus(); }, [composing]);
   useEffect(() => {
     if (!focus) return;
-    cardRef.current?.scrollIntoView?.({ block: 'nearest' });
-    cardRef.current?.focus({ preventScroll: true });
+    // A frame later: arriving on the home, the conversation's field takes the focus when it mounts, after this card (review P1).
+    const id = requestAnimationFrame(() => {
+      cardRef.current?.scrollIntoView?.({ block: 'nearest' });
+      cardRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(id);
   }, [focus]);
 
   /** What a question was answered with, as shown (« ✓ … »): the option's label, or the person's words; null while it waits. */
   const answerOf = (questionId: string): string | null => {
     const q = ask.questions.find(x => x.id === questionId);
-    const mine = recorded.get(questionId);
-    if (mine !== undefined) return q?.options.find(o => o.id === mine)?.label ?? mine;
+    // What the daemon says wins: a choice changed elsewhere (another window, the TUI) shows as it is (review). This card's own
+    // choice only fills the gap until the daemon has one.
     const given = q?.answer;
-    if (!given) return null;
-    return given.kind === 'words' ? given.text : q?.options.find(o => o.id === given.id)?.label ?? given.id;
+    if (given) return given.kind === 'words' ? given.text : q?.options.find(o => o.id === given.id)?.label ?? given.id;
+    const mine = recorded.get(questionId);
+    return mine === undefined ? null : q?.options.find(o => o.id === mine)?.label ?? mine;
   };
   const go = async (s: Sending) => {
     const wasUncertain = failed?.uncertain === true && failed.retry === s;
@@ -100,6 +109,8 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   };
 
   const busy = sending !== null;
+  // The Markdown's links to files open like the source does (a session's side pane), when something can open them.
+  const docProps = onSource ? { onDocument: (ref: { path: string }) => { if (readable(ref.path)) onSource(fileOf(ref.path)); } } : {};
   const wheel = (key: string) => (sending?.key === key ? <span className="ask-spin" aria-hidden="true" /> : null);
   const time = (() => {
     if (pill === 'update') return new Date(ask.updatedAt).toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -159,9 +170,27 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
   );
   const source = ask.evidenceRef && (
     <div className="ask-acts">
-      <button type="button" className="ask-src" onClick={() => onSource?.(ask.evidenceRef!)}><Icon d={FILE} size={11} />{ask.evidenceRef}</button>
+      {readable(ask.evidenceRef) && onSource
+        ? <button type="button" className="ask-src" onClick={() => onSource(fileOf(ask.evidenceRef!))}><Icon d={FILE} size={11} />{ask.evidenceRef}</button>
+        // Nothing here can open it (not Markdown, or no session knows the seat's folder): shown, not offered (review).
+        : <span className="ask-src ask-src-inert" title={ask.evidenceRef}><Icon d={FILE} size={11} />{ask.evidenceRef}</span>}
     </div>
   );
+
+  // The body, folded then « Tout lire », and « Détails »: the decision's pattern, for a piece of news too (review, design-ux).
+  const bodyBlock = <>
+    {body && (all || (measured && !clamped)
+      // Unfolded, or short enough to show whole: the Markdown rendered.
+      ? <div className="ask-body ask-md"><ThreadMarkdown text={body} {...docProps} /></div>
+      : <p ref={bodyRef} className={cls('ask-body', pill === 'parked' || pill === 'update' ? 'clamp2' : 'clamp3')}>{plain}</p>)}
+    {clamped && !all && <button type="button" className="ask-more" onClick={() => setAll(true)}>{a.readAll}</button>}
+    {ask.detail && <>
+      <button type="button" className="ask-fold" aria-expanded={details} onClick={() => setDetails(d => !d)}>
+        <span className={cls('ask-chev', details && 'open')}><Icon d={ICONS.chevronRight.d} size={11} /></span>{a.details}
+      </button>
+      {details && <div className="ask-body ask-md ask-detail"><ThreadMarkdown text={ask.detail} {...docProps} /></div>}
+    </>}
+  </>;
 
   if (pill === 'update') return (
     <article ref={cardRef} tabIndex={-1} className="ask-card ask-update" aria-label={ask.summary} data-ask={ask.id}>
@@ -169,7 +198,7 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
       <div className="ask-update-row">
         <div className="ask-update-text">
           <b>{ask.summary}</b>
-          {plain && <p ref={bodyRef} className="ask-body clamp2">{plain}</p>}
+          {bodyBlock}
         </div>
         <button type="button" className="ask-btn sm ghost" disabled={busy} onClick={() => void go({ key: 'seen', answer: { kind: 'seen' } })}>{wheel('seen')}{a.seen}</button>
       </div>
@@ -183,17 +212,7 @@ export function AskCard({ ask, session, answer, onDone, onSource, onOpenSeat, fo
       {head}
       <h4>{ask.summary}</h4>
       {!composing && <>
-        {body && (all || (measured && !clamped)
-          // Unfolded, or short enough to show whole: the Markdown rendered.
-          ? <div className="ask-body ask-md"><ThreadMarkdown text={body} /></div>
-          : <p ref={bodyRef} className={cls('ask-body', pill === 'parked' ? 'clamp2' : 'clamp3')}>{plain}</p>)}
-        {clamped && !all && <button type="button" className="ask-more" onClick={() => setAll(true)}>{a.readAll}</button>}
-        {ask.detail && <>
-          <button type="button" className="ask-fold" aria-expanded={details} onClick={() => setDetails(d => !d)}>
-            <span className={cls('ask-chev', details && 'open')}><Icon d={ICONS.chevronRight.d} size={11} /></span>{a.details}
-          </button>
-          {details && <div className="ask-body ask-md ask-detail"><ThreadMarkdown text={ask.detail} /></div>}
-        </>}
+        {bodyBlock}
         {source}
       </>}
       {composing && !several ? compose

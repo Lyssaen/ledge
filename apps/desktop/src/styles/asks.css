@@ -95,3 +95,7 @@
 .ask-err.ask-uncertain { color: var(--warning); }
 /* Words on a request with several questions settle all of it: said before Send. */
 .ask-warn { margin: 0; font-size: 12px; line-height: 17px; color: var(--warning); }
+
+/* A source nothing here can open: shown, not offered. */
+.ask-col .ask-src-inert { cursor: default; }
+.ask-col .ask-src-inert:hover { color: var(--muted-foreground); }

@@ -30,7 +30,7 @@ const answered = (o: Partial<OpenRigAnswered> = {}): OpenRigAnswered => ({ type:
 function mount(asks: HumanAsk[], o: { partial?: boolean; channel?: HumanChannel | null; answer?: OpenRigAsksView['answer']; sessions?: Session[]; lang?: 'fr' | 'en'; onSource?: (a: HumanAsk, p: string) => void } = {}) {
   const answer = o.answer ?? vi.fn(async () => answered());
   const view: OpenRigAsksView = { channel: o.channel === undefined ? ready : o.channel, asks, truncated: false, partial: o.partial ?? false, answer, refresh: vi.fn() };
-  const r = render(<LangProvider lang={o.lang ?? 'fr'}><AsksColumn view={view} sessions={o.sessions ?? [BIX]} machineLabel="WSL" {...(o.onSource ? { onSource: o.onSource } : {})} /></LangProvider>);
+  const r = render(<LangProvider lang={o.lang ?? 'fr'}><AsksColumn view={view} sessions={o.sessions ?? [BIX]} machineLabel="WSL" {...(o.onSource ? { sourceOf: (x: HumanAsk) => (p: string) => o.onSource!(x, p) } : {})} /></LangProvider>);
   const rerender = (next: HumanAsk[]) => r.rerender(<LangProvider lang={o.lang ?? 'fr'}><AsksColumn view={{ ...view, asks: next }} sessions={o.sessions ?? [BIX]} machineLabel="WSL" /></LangProvider>);
   return { answer, rerender };
 }
@@ -132,14 +132,14 @@ describe('a decision card', () => {
 
   it('a long body: three lines, « Tout lire »; « Détails » folds the detail; the source opens its file', async () => {
     const onSource = vi.fn();
-    mount([ask({ body: 'a\nb\nc\nd\ne', detail: 'Le détail.', evidenceRef: 'docs/mockups/x.html' })], { onSource });
+    mount([ask({ body: 'a\nb\nc\nd\ne', detail: 'Le détail.', evidenceRef: 'docs/mockups/x.md' })], { onSource });
     await userEvent.click(screen.getByRole('button', { name: 'Tout lire' }));
     expect(screen.queryByRole('button', { name: 'Tout lire' })).toBeNull();
     expect(screen.queryByText('Le détail.')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Détails' }));
     expect(screen.getByText('Le détail.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'docs/mockups/x.html' }));
-    expect(onSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'qitem-1' }), 'docs/mockups/x.html');
+    await userEvent.click(screen.getByRole('button', { name: 'docs/mockups/x.md' }));
+    expect(onSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'qitem-1' }), 'docs/mockups/x.md');
   });
 
   it('an ask never read whole (its body is its summary) shows no body', () => {
@@ -343,5 +343,55 @@ describe('contract e9e276cd: typed answers, uncertain, words settle all', () => 
     mount([all]);
     await userEvent.click(screen.getByRole('button', { name: 'Répondre autrement…' }));
     expect(screen.queryByText(/règle toute la demande/)).toBeNull();
+  });
+});
+
+describe('review of 2f4cacdb (qitem-20261102211602-6b4204ae)', () => {
+  it('P3: what the daemon says wins over this card’s own choice, a change made elsewhere included', async () => {
+    const two = (answer: HumanAsk['questions'][number]['answer']) => ask({ summary: 'Deux choix', questions: [
+      { id: 'q1', question: 'Un modèle ?', options: [{ id: 'a', label: 'Choix A', recommended: false }, { id: 'b', label: 'Choix B', recommended: false }], answer },
+      { id: 'q2', question: 'Délai ?', options: [{ id: '3', label: '3 s', recommended: false }], answer: null }
+    ] });
+    const { rerender } = mount([two(null)], { answer: vi.fn(async () => answered({ outcome: 'recorded', remaining: ['q2'] })) });
+    await userEvent.click(screen.getByRole('button', { name: 'Choix A' }));
+    expect(document.querySelector('.ask-chosen')).toHaveTextContent('Choix A');
+    // Another window, or the TUI, changes it to B: the push says so.
+    rerender([two({ kind: 'option', id: 'b' })]);
+    expect(document.querySelector('.ask-chosen')).toHaveTextContent('Choix B');
+  });
+
+  it('P2: an HTML source, or one no session can open, is shown inert with its path as tooltip; a Markdown anchor opens the file', async () => {
+    const opened = vi.fn();
+    const r1 = render(<LangProvider lang="fr"><AsksColumn view={{ channel: ready, asks: [ask({ evidenceRef: 'docs/mockups/x.html' })], truncated: false, partial: false, answer: vi.fn(), refresh: vi.fn() }} sessions={[BIX]} machineLabel="WSL" sourceOf={() => opened} /></LangProvider>);
+    expect(screen.queryByRole('button', { name: 'docs/mockups/x.html' })).toBeNull();
+    expect(screen.getByText('docs/mockups/x.html').closest('.ask-src-inert')).toHaveAttribute('title', 'docs/mockups/x.html');
+    r1.unmount();
+    const r2 = render(<LangProvider lang="fr"><AsksColumn view={{ channel: ready, asks: [ask({ evidenceRef: 'docs/vision/note.md#regles' })], truncated: false, partial: false, answer: vi.fn(), refresh: vi.fn() }} sessions={[BIX]} machineLabel="WSL" sourceOf={() => opened} /></LangProvider>);
+    await userEvent.click(screen.getByRole('button', { name: 'docs/vision/note.md#regles' }));
+    expect(opened).toHaveBeenCalledWith('docs/vision/note.md');
+    r2.unmount();
+    // No session follows the seat: nothing can open it.
+    render(<LangProvider lang="fr"><AsksColumn view={{ channel: ready, asks: [ask({ evidenceRef: 'docs/vision/note.md' })], truncated: false, partial: false, answer: vi.fn(), refresh: vi.fn() }} sessions={[]} machineLabel="WSL" sourceOf={() => null} /></LangProvider>);
+    expect(screen.queryByRole('button', { name: 'docs/vision/note.md' })).toBeNull();
+  });
+
+  it('P2: a Markdown link to a file in the body opens like the source', async () => {
+    const opened = vi.fn();
+    render(<LangProvider lang="fr"><AsksColumn view={{ channel: ready, asks: [ask({ body: 'Voir [la note](docs/vision/note.md).' })], truncated: false, partial: false, answer: vi.fn(), refresh: vi.fn() }} sessions={[BIX]} machineLabel="WSL" sourceOf={() => opened} /></LangProvider>);
+    await userEvent.click(screen.getByText('la note'));
+    expect(opened).toHaveBeenCalledWith('docs/vision/note.md');
+  });
+
+  it('P1: a long piece of news can be read whole, its details too, before « Vu »', async () => {
+    const { answer } = mount([ask({ kind: 'update', questions: [], summary: 'Rendu', body: '## Fait\n- a\n- b\n- c', detail: 'Le **détail**.' })]);
+    const card = screen.getByRole('article', { name: 'Rendu' });
+    expect(card.querySelector('.ask-body.clamp2')?.textContent).toBe('Fait\na\nb\nc');
+    await userEvent.click(within(card).getByRole('button', { name: 'Tout lire' }));
+    expect(card.querySelectorAll('.ask-md li')).toHaveLength(3);
+    await userEvent.click(within(card).getByRole('button', { name: 'Détails' }));
+    expect(card.querySelector('.ask-detail strong')).toHaveTextContent('détail');
+    expect(answer).not.toHaveBeenCalled();
+    await userEvent.click(within(card).getByRole('button', { name: 'Vu' }));
+    expect(answer).toHaveBeenCalledWith('qitem-1', { kind: 'seen' });
   });
 });
