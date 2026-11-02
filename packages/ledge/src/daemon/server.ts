@@ -342,7 +342,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
   ] : [];
   // Mobile access: local fronts only, never a remote peer.
-  const unsubscribeMobile = mobile?.onChange(() => broadcast({ type: 'mobile', state: mobile.state() }));
+  // A change of « Taper dans les terminaux » reaches the gateway: turned off, the phones lose the hand; each hears the new setting.
+  let terminalInput = mobile?.state().terminalInput === true;
+  const unsubscribeMobile = mobile?.onChange(() => {
+    const state = mobile.state();
+    broadcast({ type: 'mobile', state });
+    if ((state.terminalInput === true) !== terminalInput) { terminalInput = state.terminalInput === true; gateway?.terminalInputChanged(); }
+  });
+  /** The sessions a phone types into, by the device's label: Desktop shows « Téléphone au clavier ». */
+  const terminalHolders = new Map<string, string>();
+  const holdersMsg = (): ServerMessage => ({ type: 'terminal.holders', holds: [...terminalHolders].map(([id, deviceId]) => ({ id, device: mobile?.state().devices.find(d => d.id === deviceId)?.label ?? deviceId })) });
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
@@ -424,7 +433,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
-    if (mobile) reply({ type: 'mobile', state: mobile.state() }); // then mobile access
+    if (mobile) { reply({ type: 'mobile', state: mobile.state() }); reply(holdersMsg()); } // then mobile access, and who types from a phone
     else if (unavailable) reply({ type: 'mobile', state: unavailable });
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
@@ -1380,7 +1389,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'session.focus':
         return; // handled by the overlay plan via wt.exe; the daemon only acknowledges
       // A refusal of the service (an unknown pairing, a sign-in while disabled) reaches the sender as an `error`.
-      case 'mobile.set': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
+      case 'terminal.release':
+        // Nothing to take back is no error: the phone may have let go already.
+        gateway?.terminalRelease(msg.id);
+        return;
+      case 'mobile.set': case 'mobile.terminal': case 'mobile.signin': case 'mobile.signin.cancel': case 'mobile.signout': case 'mobile.retry':
       case 'mobile.pairing.approve': case 'mobile.pairing.deny': case 'mobile.device.revoke':
         if (!mobile) return refuse(new Refusal('mobile access is not available', 'unavailable'));
         return mobile.handle(msg);
@@ -1450,6 +1463,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     models: true,
     // A session's « Fermer » on the phone: the cards' close, so a close under way (a card's, another phone's) is shared.
     closeSession: closeForCard,
+    // The agent's terminal on the phone: read-only control clients on Ledge's tmux, typing behind the PC's setting and the shared lock.
+    ...(opts.tmux.controlArgs ? {
+      terminal: {
+        controlArgs: (n: string) => opts.tmux.controlArgs?.(n) ?? null,
+        inputAllowed: () => mobile.state().terminalInput === true,
+        typing,
+        onHolder: (id: string, deviceId: string | null) => {
+          if (deviceId) terminalHolders.set(id, deviceId); else terminalHolders.delete(id);
+          broadcast(holdersMsg());
+        }
+      }
+    } : {}),
     // The phone's « Mettre à jour le PC » and « Redémarrer le daemon »: the updater Desktop's `update.daemon` uses, progress broadcast.
     ...(opts.updater && opts.daemon ? {
       pc: {
