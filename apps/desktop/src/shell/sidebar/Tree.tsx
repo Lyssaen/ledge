@@ -288,6 +288,23 @@ export function Tree(p: {
     }
   }
 
+  // No session at all (docs/mockups/ledge-sidebar-tidy.html, point 3): the header keeps only « + », and the box offers a session.
+  if (p.groups.length === 0) return (
+    <>
+      <div className="st-label">
+        <span>{t.side.projects}</span><span className="st-fill" />
+        <button type="button" className="st-icon" aria-label={t.side.newProject} title={t.side.newProject} onClick={p.onNewProject}>
+          <Icon d={ICONS.plus.d} size={14} />
+        </button>
+      </div>
+      <div className="st-empty" role="status">
+        <strong>{t.side.empty.sessions}</strong>
+        <p>{t.side.empty.sessionsBody}</p>
+        <button type="button" className="st-empty-btn" onClick={() => p.onLaunch()}><Icon d={ICONS.plus.d} size={13} />{t.side.empty.newSession}</button>
+      </div>
+    </>
+  );
+
   return (
     <>
       <div className="st-label">

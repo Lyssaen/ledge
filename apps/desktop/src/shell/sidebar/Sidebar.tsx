@@ -23,9 +23,10 @@ import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
 import { RigGroups } from './RigGroups';
 import { setGrouping, useGrouping } from '../../openrig/grouping';
+import type { SidebarOpenRig } from '../../openrig/sidebarState';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
 
-/** The explorer shell: Session, Ask Ledge, Atelier, Your turn, the project tree, Archives, then the foot. */
+/** The explorer shell: Ledge's entry, Atelier / OpenRig, Projets / Rigs, Your turn, the project tree or the rigs, Archives, then the foot. */
 export function Sidebar(p: {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; archived: readonly Session[];
@@ -41,7 +42,8 @@ export function Sidebar(p: {
   broadcast?: boolean;
   /** Bumped by each broadcast that reached someone: the selection is kept until then, emptied then. */
   broadcastSent?: number;
-  onAsk(text: string): void;
+  /** OpenRig across the followed machines: the toggle, the Rigs view's empty states and the kernel's state. */
+  openrig?: SidebarOpenRig;
   onTerminal(s: Session): void;
   revealArchives: number; revealCurrent: number;
   /** Ledge's entry's live line (ledge home spec §2.1): the closed tasks Ledge gave not put away. */
@@ -53,7 +55,6 @@ export function Sidebar(p: {
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const keysTip = useId();
-  const [ask, setAsk] = useState('');
   const [prefs, setPrefs] = useStored(loadSidebarPrefs, saveSidebarPrefs);
   // The sessions picked with Ctrl/⌘ + click, in the order picked: from two, the bar below writes to them (broadcast spec).
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
@@ -72,8 +73,10 @@ export function Sidebar(p: {
   // OpenRig's seats have their own groups (Rigs, Kernel), away from the projects.
   const grouping = useGrouping();
   const hasRigs = p.sessions.some(s => s.rig && s.state !== 'exited');
-  // « Projets » or « Rigs »: one or the other (while Ledge follows no OpenRig seat, the projects).
-  const byRig = hasRigs && grouping === 'rigs';
+  // The toggle shows once OpenRig is installed on a followed machine, even without a seat (its empty states live in « Rigs »).
+  const offerRigs = hasRigs || p.openrig?.installed === true;
+  // « Projets » or « Rigs »: one or the other (while OpenRig is nowhere, the projects).
+  const byRig = offerRigs && grouping === 'rigs';
   // An OpenRig seat is never in the projects' tree: the « Rigs » view shows it (« À toi » too, when it waits).
   const groups = useMemo(() => treeModel(p.sessions.filter(s => !s.rig), p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
   // A project without a session stays out of the tree; it shows again while a session is dragged (to be dropped on it)
@@ -134,11 +137,6 @@ export function Sidebar(p: {
   const atelierOn = place.kind === 'overview' && place.view === 'atelier';
   const inSettings = place.kind === 'settings';
   const active = activeCount(p.sessions);
-  const submitAsk = () => {
-    const q = ask.trim();
-    p.dispatch({ type: 'ledge', tab: 'conversation' });
-    if (q) { p.onAsk(q); setAsk(''); }
-  };
   const homeOn = place.kind === 'home';
   return (
     <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}>
@@ -151,8 +149,6 @@ export function Sidebar(p: {
           </span>
           <Kbd>/</Kbd>
         </button>
-        <input data-ask-input="" type="text" aria-label={t.side.ask} placeholder={t.side.askPlaceholder} value={ask} onChange={e => setAsk(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAsk(); } else if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.blur(); } }} />
       </div>
       <nav className="st-views" aria-label={t.side.views}>
         <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
@@ -162,6 +158,12 @@ export function Sidebar(p: {
           <Icon d={SHELL_ICONS.rig} size={13} /><span>{t.openrig.side}</span>
         </button>
       </nav>
+      {/* Out of the scrolling list, so it keeps the views' width (docs/mockups/ledge-sidebar-tidy.html, point 4). */}
+      {offerRigs && (
+        <div className="st-grouping" role="radiogroup" aria-label={t.top.grouping}>
+          {(['projects', 'rigs'] as const).map(g => <button key={g} type="button" role="radio" aria-checked={grouping === g} title={t.top.groupingHint[g]} onClick={() => setGrouping(g)}>{t.top.groupingBy[g]}</button>)}
+        </div>
+      )}
       <div className="st-scroll">
         <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
@@ -174,11 +176,6 @@ export function Sidebar(p: {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
           }} />
-        {hasRigs && (
-          <div className="st-grouping" role="radiogroup" aria-label={t.top.grouping}>
-            {(['projects', 'rigs'] as const).map(g => <button key={g} type="button" role="radio" aria-checked={grouping === g} title={t.top.groupingHint[g]} onClick={() => setGrouping(g)}>{t.top.groupingBy[g]}</button>)}
-          </div>
-        )}
         {!byRig && <section aria-label={t.side.projects}>
           <Tree groups={shownGroups} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
             hideDone={prefs.hideDone} dense={prefs.dense} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
@@ -196,7 +193,8 @@ export function Sidebar(p: {
             onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>}
-        {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} />}
+        {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
+          dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} />}
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}

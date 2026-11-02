@@ -75,6 +75,39 @@ export function useOpenRig(client: DaemonClient, machine: string | null, pollMs 
   return { state: shown.state, ...('error' in shown && shown.error ? { error: shown.error } : {}), pending, last, act, refresh: ask };
 }
 
+/**
+ * Several machines' OpenRig, as last read (the sidebar: is OpenRig installed somewhere, does a daemon run, the kernel's
+ * state). Each machine is asked every `pollMs`; a state an action broadcasts is taken at once. A machine that could not
+ * answer, or not yet, is absent.
+ */
+export function useOpenRigStates(client: DaemonClient, machines: readonly string[], pollMs = OPENRIG_POLL_MS): ReadonlyMap<string, OpenRigState> {
+  const [states, setStates] = useState<ReadonlyMap<string, OpenRigState>>(() => new Map());
+  const key = [...machines].sort().join('\u0000');
+  useEffect(() => {
+    const ids = key ? key.split('\u0000') : [];
+    setStates(was => new Map([...was].filter(([m]) => ids.includes(m))));
+    if (ids.length === 0) return;
+    const asked = new Map<string, string>();
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.state') return;
+      const machine = m.machineId ?? 'local';
+      if (!ids.includes(machine)) return;
+      // Our own asks, and broadcasts; another screen's answer is its own.
+      if (m.requestId !== undefined && m.requestId !== asked.get(machine)) return;
+      setStates(was => {
+        const n = new Map(was);
+        if (m.state) n.set(machine, m.state); else if (m.error) n.delete(machine);
+        return n;
+      });
+    });
+    const ask = () => { for (const machine of ids) { const requestId = `openrig-${++next}`; asked.set(machine, requestId); client.send({ type: 'openrig.status', requestId, machineId: machine }); } };
+    ask();
+    const timer = setInterval(ask, pollMs);
+    return () => { off(); clearInterval(timer); };
+  }, [client, key, pollMs]);
+  return states;
+}
+
 export interface RigSpecsView { status: 'idle' | 'loading' | 'ready'; specs: readonly RigSpec[]; error?: string; reload(): void }
 
 /** The machine's rig specs, asked once per machine (and again on `reload`): `error` `daemon_stopped` while OpenRig is off. */

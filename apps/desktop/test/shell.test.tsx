@@ -163,9 +163,16 @@ describe('the Atelier shell', () => {
     expect(declarations('sidebar.css', '.st-time.t-error')).toBe('color:var(--danger-text)');
   });
 
-  it('Ask Ledge and the Atelier view are set apart, as far as the field is from the title bar', () => {
+  it('Ledge’s entry and the Atelier view are set apart, as far as the entry is from the title bar; the views breathe (sidebar tidy, point 1)', () => {
     expect(declarations('sidebar.css', '.st-ask')).toContain('margin:10px10px0');
-    expect(declarations('sidebar.css', '.st-views')).toContain('margin:10px10px6px');
+    expect(declarations('sidebar.css', '.st-views')).toContain('margin:10px10px8px');
+    expect(declarations('sidebar.css', '.st-views')).toContain('padding:4px');
+    expect(declarations('sidebar.css', '.st .st-views button')).toContain('height:30px');
+    // The toggle has the views' side margins and padding: the same width (point 4).
+    expect(declarations('sidebar.css', '.st-grouping')).toContain('margin:010px8px');
+    expect(declarations('sidebar.css', '.st-grouping')).toContain('padding:4px');
+    // The list keeps its scrollbar's gutter: the kernel box keeps its width when the list scrolls.
+    expect(declarations('sidebar.css', '.st-scroll')).toContain('scrollbar-gutter:stable');
   });
 
   it('the toast sits above a dialog and the narrow chat', () => {

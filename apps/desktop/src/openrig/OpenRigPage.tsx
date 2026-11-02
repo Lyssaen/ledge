@@ -5,7 +5,7 @@ import type { OpenRigAction, OpenRigState, Projects, Rig, RigSeat, RoleSummary, 
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import type { NavAction } from '../nav/state';
+import type { NavAction, OpenRigOpen } from '../nav/state';
 import { cls } from '../shell/cls';
 import { Modal } from '../shell/Modal';
 import { openUrl } from '../tauri/bridge';
@@ -27,7 +27,7 @@ const Dot = ({ tone }: { tone: Tone }) => <span className={`or-dot or-${tone}`} 
  * OpenRig on a machine (docs/mockups/ledge-openrig.html, view 1): the machines on top, the daemon and the kernel, then
  * the rigs, each unfolding its seats. A stop or a restart asks first (view 2); every action shows the `rig` command it runs.
  */
-export function OpenRigPage({ client, machines, machine, section = 'rigs', role, seat, projects = null, sessions = [], dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; section?: 'rigs' | 'roles'; role?: string; seat?: string; projects?: Projects | null; sessions?: readonly Session[]; dispatch: (a: NavAction) => void }) {
+export function OpenRigPage({ client, machines, machine, section = 'rigs', role, seat, open, projects = null, sessions = [], dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; section?: 'rigs' | 'roles'; role?: string; seat?: string; open?: OpenRigOpen | undefined; projects?: Projects | null; sessions?: readonly Session[]; dispatch: (a: NavAction) => void }) {
   const { t, lang } = useI18n();
   const o = t.openrig;
   const shown = machines.find(m => m.id === machine) ?? machines.find(m => m.id === 'local') ?? machines[0];
@@ -44,6 +44,11 @@ export function OpenRigPage({ client, machines, machine, section = 'rigs', role,
   const [reseating, setReseating] = useState<string | null>(null);
   const [reseated, setReseated] = useState<string | null>(null);
   const [settings, setSettings] = useState<{ seat: RigSeat; rig: string } | null>(null);
+  // Arriving with a dialog to open (the sidebar's « Lancer un rig… » and a rig row's « + »): each arrival opens it once.
+  useEffect(() => {
+    if (!open) return;
+    if ('launch' in open) { setLaunched(null); setLaunching(true); } else { setReseated(null); setReseating(open.reseat); }
+  }, [open]);
   const run = (a: OpenRigAction) => { if (asksFirst(a)) setAsk(a); else void rig.act(a); };
   const label = shown?.label ?? id;
   const time = (at: number | string) => new Date(at).toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-GB');
