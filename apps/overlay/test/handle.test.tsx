@@ -160,6 +160,8 @@ describe('the line in words', () => {
     expect(describeLine({ kind: 'tool', session: 'nova', at, tool: 'Task', label: 'Task' }, name, en).text).toBe('Nova uses Task');
     expect(describeLine({ kind: 'thinking', session: 'nova', at }, name, en).text).toBe('Nova is thinking…');
     expect(describeLine({ kind: 'notification', session: 'pim', at, reason: 'permission', text: 'pnpm up' }, name, en).text).toBe('Pim needs your approval · pnpm up');
+    expect(describeLine({ kind: 'notification', session: 'pim', at, reason: 'permission', text: 'pnpm up' }, name, en).parts.at(-1)).toEqual({ k: 'code', s: 'pnpm up' });
+    expect(describeLine({ kind: 'notification', session: 'bix', at, reason: 'question', text: 'Backfill ?' }, name, en).parts.at(-1)).toEqual({ k: 'text', s: 'Backfill ?' });
     expect(describeLine({ kind: 'notification', session: 'otto', at, reason: 'plan' }, name, en).text).toBe('Otto has a plan for you');
     expect(describeLine({ kind: 'notification', session: 'otto', at, reason: 'finished' }, MESSAGES.fr ? name : name, MESSAGES.fr).text).toBe('Otto a terminé');
   });

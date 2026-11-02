@@ -179,7 +179,7 @@ describe('prototype parity', () => {
     snapshot(bots);
     const big = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={() => {}} />);
     // Ledge alone, whatever the fleet: no dash per session; its mark says a permission waits.
-    expect(within(layer('handle')).getAllByRole('button', { name: /open$/ })).toHaveLength(1);
+    expect(within(layer('handle')).getAllByRole('button')).toHaveLength(1);
     expect(surface()).toHaveStyle({ width: `${filetWidth()}px` });
     expect(layer('handle').querySelector('[data-ledge-mark]')).toHaveAttribute('data-pending', 'permission');
     const left = parseFloat(surface().style.left), w = parseFloat(surface().style.width);
@@ -231,7 +231,8 @@ describe('prototype parity', () => {
   it('a chat draft survives a disconnect, and an offline ask cannot be decided', () => {
     snapshot([otto(), pim(asks('git push')), lu({ ...asks('rm -rf /tmp/x'), source: 'hook_only' })]);
     render(<Harness client={rec.client} dnd />);
-    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    // Requests wait, so Ledge would reopen the oldest (choice A): the shortcut's second press opens the chat.
+    shortcut(); shortcut();
     tick(180);
     const field = screen.getByRole('textbox', { name: 'Ask Ledge' }) as HTMLInputElement;
     fireEvent.change(field, { target: { value: 'keep going, then rebase' } });

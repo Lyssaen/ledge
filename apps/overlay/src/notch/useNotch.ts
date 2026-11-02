@@ -19,6 +19,8 @@ export function useNowPlaying(onTrack: (np: NowPlaying) => void): NowPlaying | n
   const onTrackRef = useRef(onTrack); onTrackRef.current = onTrack;
   useEffect(() => {
     let disposed = false;
+    /** Bumped by every event: a read that started before the latest event is older than it, and is dropped. */
+    let seq = 0;
     const apply = (next: NowPlayingState, initial: boolean) => {
       if (disposed) return;
       const was = last.current;
@@ -26,9 +28,12 @@ export function useNowPlaying(onTrack: (np: NowPlaying) => void): NowPlaying | n
       if (!initial && next && !sameTrack(was, next)) onTrackRef.current(next);
       setNp(next);
     };
-    // A change that arrives before the first read is the state as it stands at start (already playing): no wake.
-    const off = onNowPlaying(s => { const initial = !read.current; read.current = true; apply(s, initial); });
-    void nowPlaying().then(s => { if (!read.current) apply(s, true); read.current = true; });
+    // Listen first, read once listening: a change between the two is then an event, never lost. The state read at start
+    // (already playing) wakes nothing.
+    const off = onNowPlaying(s => { seq++; const initial = !read.current; read.current = true; apply(s, initial); }, () => {
+      const at = seq;
+      void nowPlaying().then(s => { if (seq !== at || read.current) return; read.current = true; apply(s, true); });
+    });
     return () => { disposed = true; off(); };
   }, []);
   // The pause clock: it starts with the pause, a play or a new track resets it.

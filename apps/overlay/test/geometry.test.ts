@@ -47,6 +47,9 @@ describe('island geometry', () => {
     expect(layout({ bots: [], mode: 'chat', screenH: 1440, screenW: 2560, detailH: 2000 }).h).toBe(720);
     // Under a 150 % window size the cap stays half of the real screen.
     expect(scaledLayout({ bots: [], mode: 'chat', screenH: 1440, screenW: 2560, detailH: 2000 }, { handle: 1, panel: 1.5 }).h).toBeCloseTo(720, 0);
+    // The reader, 760 px tall before the cap: 540 on a 1080 work area, expanded or not; its page scrolls (document-view.test).
+    expect(layout({ bots: [], mode: 'reader', screenH: 1080, screenW: W })).toMatchObject({ w: SIZES.readerW, h: 540 });
+    expect(layout({ bots: [], mode: 'reader', screenH: 1080, screenW: W, readerExpanded: true }).h).toBe(540);
     for (const mode of ['session', 'reader', 'settings', 'help', 'launch', 'list', 'helper'] as const)
       expect(layout({ bots: bots(30), mode, screenH: 1080, screenW: W, sessionH: 2000, helperH: 2000, detailH: 2000 }).h).toBe(540);
     expect(layout({ bots: bots(30), mode: 'handle', screenH: 1080, screenW: W, awake: true }).h).toBe(38);

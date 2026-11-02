@@ -14,7 +14,8 @@
 .nt-eq i:nth-child(1) { height: 2px; } .nt-eq i:nth-child(2) { height: 4px; } .nt-eq i:nth-child(3) { height: 3px; }
 
 .nt-moon { flex: none; margin-left: 6px; }
-.nt-line-btn { min-width: 0; flex: 0 1 auto; max-width: 420px; margin-left: 10px; padding: 0 4px; height: 26px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+/* The line gives way to the music controls at their pace (.18s): the cover then stays under a pointer that has not moved. */
+.nt-line-btn { min-width: 0; flex: 0 1 auto; max-width: 420px; transition: max-width .18s ease; margin-left: 10px; padding: 0 4px; height: 26px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .nt-line-btn[data-track] { cursor: default; }
 .nt-line-btn:not([data-track]):hover { background: var(--sidebar-accent); }
 .nt-line-btn:focus-visible, .nt-cover-btn:focus-visible, .nt-ctl:focus-visible, .nt-awake [data-resident]:focus-visible { outline: 2px solid var(--sidebar-primary); outline-offset: 1px; }
@@ -65,8 +66,8 @@
 .nt-awake:has(.nt-music[data-open]) .nt-line-btn { max-width: 220px; }
 
 [data-still] .nt-cover[data-pulse], [data-still] .nt-cover img, [data-still] .nt-dots i { animation: none; }
-[data-still] .nt-titles, [data-still] .nt-ctl, [data-still] .nt-cover { transition: none; }
+[data-still] .nt-titles, [data-still] .nt-ctl, [data-still] .nt-cover, [data-still] .nt-line-btn { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   .nt-dots i, .nt-cover[data-pulse], .nt-cover img { animation: none; }
-  .nt-ctl, .nt-titles { transition: none; }
+  .nt-ctl, .nt-titles, .nt-line-btn { transition: none; }
 }

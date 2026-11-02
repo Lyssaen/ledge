@@ -244,18 +244,27 @@ describe('<Surface>', () => {
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     await act(async () => { vi.advanceTimersByTime(5000); });
     expect(mark()).toHaveAttribute('data-pending', 'permission');
+    // Ledge names the request a click reopens, the oldest, and how many wait; awake, the dot takes the update dot's place.
+    const ledge = () => document.querySelector('[data-resident]') as HTMLElement;
+    expect(ledge()).toHaveAccessibleName('Ledge, 2 requests are waiting: reopen Otto’s question');
+    expect(ledge()).toHaveAttribute('title', 'Otto has a question (+1 more). Click to reopen the request.');
+    fireEvent.mouseEnter(surface());
+    expect(document.querySelector('[data-pending-dot]')).toHaveAttribute('data-pending-dot', 'permission');
+    fireEvent.mouseLeave(surface());
     // The oldest first: Otto's question, then Pim's permission once Otto's is answered.
-    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    fireEvent.click(ledge());
     await act(async () => { vi.advanceTimersByTime(200); });
     expect(surface()).toHaveAttribute('data-mode', 'bubble');
     expect(bubble()).toHaveTextContent('Which?');
     fireEvent.click(screen.getByRole('button', { name: /^Later/ }));
     await act(async () => { mock.upsert(fakeSession('a')); await sleep(50); });
-    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    expect(ledge()).toHaveAccessibleName('Ledge, a request is waiting: reopen Pim’s approval request');
+    fireEvent.click(ledge());
     await act(async () => { vi.advanceTimersByTime(200); });
     expect(bubble()).toHaveTextContent('npm test');
     fireEvent.click(screen.getByRole('button', { name: /^Later/ }));
     await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); });
+    expect(document.querySelector('[data-pending-dot]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
     await act(async () => { vi.advanceTimersByTime(200); });
     expect(surface()).toHaveAttribute('data-mode', 'chat');

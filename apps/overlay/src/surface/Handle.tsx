@@ -29,6 +29,8 @@ export interface HandleProps {
   /** What plays on the PC (null: nothing, or paused for over 5 min); `trackKey` bumps on a new track (the cover's bounce). */
   music?: NowPlaying | null; trackKey?: number; musicOpen?: boolean; onMusicOpen?: (open: boolean) => void; onMedia?: (command: MediaCommand) => void;
   pending?: PendingTone;
+  /** The request a click on Ledge reopens (the oldest waiting), and how many wait: its tooltip and label. */
+  waiting?: { kind: 'permission' | 'question'; who: string; count: number } | null;
   updatePip?: PipTone; updateVersion?: string; onUpdate?: () => void;
   /** The global shortcut as Desktop shows it, named in Ledge's tooltip. */
   shortcut?: string;
@@ -49,6 +51,7 @@ const layerStyle = (visible: boolean): CSSProperties => ({ position: 'absolute',
 function useResidentTip(p: HandleProps) {
   const { t } = useI18n();
   const pipText = p.updatePip === 'new' ? t.update.pip.new(p.updateVersion ?? '') : p.updatePip ? t.update.pip[p.updatePip] : null;
+  if (p.waiting) return { pipText, title: t.notch.pending.tip(p.waiting.kind, p.waiting.who, p.waiting.count), label: t.notch.pending.aria(p.waiting.kind, p.waiting.who, p.waiting.count) };
   const title = `${pipText ? `${pipText}. ` : ''}${p.frozen ? t.resident.offline : p.unread ? t.resident.unreadTip : t.resident.tip(p.sessionCount ?? 0)}${p.shortcut ? ` · ${p.shortcut}` : ''}`;
   const label = p.unread ? `${t.resident.name} ${t.resident.unread}, ${t.open}` : `${t.resident.name}, ${t.open}`;
   return { pipText, title, label };
@@ -61,7 +64,7 @@ function Filet(p: HandleProps) {
   const { pipText, title, label } = useResidentTip(p);
   const playing = !!p.music?.playing;
   return (
-    <div ref={p.contentRef} data-layer="handle" data-filet data-strip={p.strip || undefined} inert={!p.visible} className="nt-filet" style={layerStyle(p.visible)}>
+    <div ref={p.contentRef} data-layer="handle" data-sessions={p.sessionCount ?? 0} data-filet data-strip={p.strip || undefined} inert={!p.visible} className="nt-filet" style={layerStyle(p.visible)}>
       <button data-resident type="button" aria-label={label} title={title} onClick={() => p.onOpenHome?.()}
         style={{ display: 'grid', placeItems: 'center', flexShrink: 0, width: 9, height: 6, padding: 0, border: 0, background: 'transparent', cursor: 'pointer' }}>
         <span data-ledge-mark className="nt-mark" data-dnd={p.dnd || undefined} data-pending={p.pending ?? undefined} />
@@ -84,7 +87,7 @@ function AwakeNotch(p: HandleProps) {
   const d = p.described;
   const track = p.line?.kind === 'track';
   return (
-    <div ref={p.contentRef} data-layer="handle" data-awake data-still={still || undefined} inert={!p.visible} className="nt-awake" style={layerStyle(p.visible)} onMouseLeave={() => { if (p.musicOpen) p.onMusicOpen?.(false); }}>
+    <div ref={p.contentRef} data-layer="handle" data-sessions={p.sessionCount ?? 0} data-awake data-still={still || undefined} inert={!p.visible} className="nt-awake" style={layerStyle(p.visible)}>
       <span style={{ position: 'relative', display: 'grid', flexShrink: 0, width: ISLAND.resident, height: ISLAND.resident }}>
         <button data-resident type="button" aria-label={label} title={title} onClick={() => { setBoopKey(k => k + 1); clearTimeout(opening.current); opening.current = setTimeout(() => p.onOpenHome?.(), still ? 0 : 180); }}
           style={{ display: 'grid', placeItems: 'center', width: ISLAND.resident, height: ISLAND.resident, padding: 0, border: 0, borderRadius: 6, background: 'transparent', cursor: 'pointer' }}>
@@ -92,7 +95,9 @@ function AwakeNotch(p: HandleProps) {
             <ResidentMascot size={ISLAND.resident} theme={p.theme ?? 'dark'} paused={!p.visible} frozen={p.frozen} reducedMotion={p.reducedMotion} dnd={p.dnd} center={{ x: (p.left ?? 0) + (ISLAND.padL + ISLAND.resident / 2) * (p.scale ?? 1), y: (ISLAND.h / 2) * (p.scale ?? 1) }} pointer={p.pointer ?? null} gestureKey={p.residentSignal?.key} gestureKind={p.residentSignal?.kind} boopKey={boopKey} />
           </span>
         </button>
-        {p.updatePip && <UpdateDot tone={p.updatePip} version={p.updateVersion ?? ''} onUpdate={p.onUpdate} reducedMotion={still} />}
+        {/* A waiting request takes the update dot's place (the update stays on the filet's dash) until it is answered. */}
+        {p.waiting && p.pending ? <span data-pending-dot={p.pending} aria-hidden="true" style={{ position: 'absolute', top: 0, right: -2, width: 9, height: 9, borderRadius: 9999, border: '2px solid var(--notch)', boxSizing: 'content-box', background: p.pending === 'permission' ? 'var(--danger-text)' : 'var(--warning)', pointerEvents: 'none' }} />
+          : p.updatePip && <UpdateDot tone={p.updatePip} version={p.updateVersion ?? ''} onUpdate={p.onUpdate} reducedMotion={still} />}
       </span>
       {p.dnd && <svg data-dnd-moon className="nt-moon" aria-hidden="true" width={ISLAND.moon} height={ISLAND.moon} viewBox="0 0 24 24" fill="none" stroke="var(--muted-foreground)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>}
       {p.line && d && <button type="button" data-line className="nt-line-btn" data-track={track || undefined} title={d.text}
@@ -155,6 +160,8 @@ const ICO = {
 /** A control the player refuses is greyed only once it has refused it for this long: right after a « next », some players
  *  (Chrome) report previous/next off for an instant, and the buttons must not blink. Allowing again is immediate. */
 export const CAN_SETTLE_MS = 600;
+/** How long the controls stay open once the pointer or the focus has left the cover's slot. */
+export const MUSIC_LEAVE_MS = 250;
 type Can = NowPlaying['can'];
 function useSteadyCan(can: Can): Can {
   const [steady, setSteady] = useState(can);
@@ -185,10 +192,14 @@ function MusicSlot({ music, open, trackKey, onOpen, onMedia }: { music: NowPlayi
       {key === 'play' ? (music.playing ? ICO.pause : ICO.play) : ICO[key]}
     </button>;
   };
-  // Hovering the cover opens the controls; they close when the pointer leaves the whole row (AwakeNotch), not the slot:
-  // opening shortens the line, so the cover slides from under a pointer that has not moved.
-  return <div className="nt-music" data-music data-open={open || undefined} onMouseEnter={() => onOpen?.(true)} onFocus={() => onOpen?.(true)}
-    onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onOpen?.(false); }}>
+  // Hovering or focusing the cover opens the controls; leaving the slot (pointer or focus) closes them after a short delay,
+  // so a quick out-and-back keeps them open (mockup « Comportements »).
+  const leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(leaving.current), []);
+  const enter = () => { clearTimeout(leaving.current); onOpen?.(true); };
+  const leave = () => { clearTimeout(leaving.current); leaving.current = setTimeout(() => onOpen?.(false), MUSIC_LEAVE_MS); };
+  return <div className="nt-music" data-music data-open={open || undefined} onMouseEnter={enter} onMouseLeave={leave} onFocus={enter}
+    onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) leave(); }}>
     <button type="button" className="nt-cover-btn" aria-label={`${M.label(music.title, music.artist)}${music.playing ? '' : ` (${M.paused})`}`} aria-expanded={open}>
       <span key={trackKey} data-cover className="nt-cover" data-paused={!music.playing || undefined} data-pulse={trackKey > 0 || undefined}>
         {music.artwork ? <img src={music.artwork} alt="" draggable={false} /> : NOTE}

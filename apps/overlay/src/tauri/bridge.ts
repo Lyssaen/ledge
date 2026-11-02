@@ -235,18 +235,21 @@ export async function nowPlaying(): Promise<NowPlayingState> {
   return invoke<unknown>(NOW_PLAYING_COMMAND).then(parseNowPlaying, () => null);
 }
 
-/** Every change of what plays. The shell broadcasts it to every window (`app.emit`), so this listens app-wide. In the
- *  browser, a `ledge:now-playing` CustomEvent on `window` (dev previews and e2e) stands in for the shell. */
-export function onNowPlaying(fn: (state: NowPlayingState) => void): () => void {
+/** Every change of what plays. The shell broadcasts it to every window (`app.emit`), so this listens app-wide. `onReady`
+ *  fires once the listener is in place: only then is a `nowPlaying()` read sure not to miss a change made meanwhile (the
+ *  shell sends changes only). In the browser, a `ledge:now-playing` CustomEvent on `window` (dev previews and e2e)
+ *  stands in for the shell, and it is ready at once. */
+export function onNowPlaying(fn: (state: NowPlayingState) => void, onReady?: () => void): () => void {
   if (!inTauri()) {
     const h = (e: Event) => fn(parseNowPlaying((e as CustomEvent<unknown>).detail));
     window.addEventListener('ledge:now-playing', h);
+    onReady?.();
     return () => window.removeEventListener('ledge:now-playing', h);
   }
   let off = () => {}; let disposed = false;
   void import('@tauri-apps/api/event').then(({ listen }) => listen<unknown>(NOW_PLAYING_EVENT, e => { if (!disposed) fn(parseNowPlaying(e.payload)); })).then(un => {
     off = un;
-    if (disposed) un();
+    if (disposed) un(); else onReady?.();
   }).catch(() => {});
   return () => { disposed = true; off(); };
 }

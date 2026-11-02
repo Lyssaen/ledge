@@ -260,6 +260,11 @@ const fr = {
       prev: 'Précédent', pause: 'Pause', play: 'Lecture', next: 'Suivant',
       cantPrev: 'Ce lecteur ne permet pas de revenir en arrière', cantNext: 'Ce lecteur ne permet pas de passer au suivant', cantPlay: 'Ce lecteur ne se met pas en pause depuis Ledge',
       paused: 'En pause'
+    },
+    /** A request waits: Ledge's dot, its tooltip and label (mockup complement 673aea87). */
+    pending: {
+      tip: (kind: 'permission' | 'question', who: string, n: number) => `${kind === 'permission' ? `${who} attend votre accord` : `${who} vous pose une question`}${n > 1 ? ` (+${n - 1} autre${n > 2 ? 's' : ''})` : ''}. Cliquer pour rouvrir la demande.`,
+      aria: (kind: 'permission' | 'question', who: string, n: number) => `Ledge, ${n > 1 ? `${n} demandes attendent` : 'une demande attend'} : rouvrir ${kind === 'permission' ? `l’accord demandé par ${who}` : `la question de ${who}`}`
     }
   },
   shortcut: 'Ctrl Alt L'
@@ -513,6 +518,10 @@ const en: Messages = {
       prev: 'Previous', pause: 'Pause', play: 'Play', next: 'Next',
       cantPrev: 'This player can’t go back', cantNext: 'This player can’t skip ahead', cantPlay: 'This player can’t be paused from Ledge',
       paused: 'Paused'
+    },
+    pending: {
+      tip: (kind: 'permission' | 'question', who: string, n: number) => `${kind === 'permission' ? `${who} needs your approval` : `${who} has a question`}${n > 1 ? ` (+${n - 1} more)` : ''}. Click to reopen the request.`,
+      aria: (kind: 'permission' | 'question', who: string, n: number) => `Ledge, ${n > 1 ? `${n} requests are waiting` : 'a request is waiting'}: reopen ${kind === 'permission' ? `${who}’s approval request` : `${who}’s question`}`
     }
   },
   shortcut: 'Ctrl Alt L'

@@ -51,6 +51,10 @@ for (const theme of ['dark', 'light'] as const) {
     await shot(page, `wake-permission-dnd-${theme}`);
     await expect(surface(page)).not.toHaveAttribute('data-awake', 'true', { timeout: 8000 });
     await shot(page, `rest-pending-${theme}`);
+    // Hovered: the request's dot takes the update dot's place on Ledge.
+    await surface(page).hover();
+    await expect(layer(page, 'handle').locator('[data-pending-dot]')).toBeVisible();
+    await shot(page, `reopen-${theme}`);
   });
 
   test(`awake: a message, then an action replaces it after its 3 s (${theme})`, async ({ page }) => {

@@ -57,7 +57,9 @@ export function describe(line: NotchLine, name: (id: string) => string, t: Messa
       return { parts: [{ k: 'name', s: who }, ...sub, { k: 'verb', s: L.thinking }], text: `${who} ${L.thinking}`, open: line.session, who };
     case 'notification': {
       const verb = L.reason[line.reason];
-      return { parts: [{ k: 'name', s: who }, { k: 'verb', s: verb }, ...(line.text ? [{ k: 'text' as const, s: line.text.replace(/\s+/g, ' ') }] : [])], text: `${who} ${verb}${line.text ? ` · ${line.text}` : ''}`, open: line.session, who };
+      // A permission's text is the command it asks to run: in mono, as the mockup's « Demande d'accord ».
+      const k: Part['k'] = line.reason === 'permission' ? 'code' : 'text';
+      return { parts: [{ k: 'name', s: who }, { k: 'verb', s: verb }, ...(line.text ? [{ k, s: line.text.replace(/\s+/g, ' ') }] : [])], text: `${who} ${verb}${line.text ? ` · ${line.text}` : ''}`, open: line.session, who };
     }
   }
 }

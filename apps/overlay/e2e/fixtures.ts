@@ -32,8 +32,8 @@ export async function received<T extends ClientMessage['type']>(list: ClientMess
   return found!;
 }
 /** The app is up and showing the daemon's sessions on the handle. */
-/** The page is up with `sessions` sessions known: Ledge is the notch's only mascot, its tooltip counts them. */
+/** The page is up with `sessions` sessions known (Ledge is the notch's only mascot: the layer carries the count). */
 export async function ready(page: Page, sessions: number) {
   await page.goto('/');
-  await expect(layer(page, 'handle').locator('[data-resident]')).toHaveAttribute('title', sessions === 0 ? /No sessions|Aucune session/ : new RegExp(`(^|\\. )${sessions} sessions?`));
+  await expect(layer(page, 'handle')).toHaveAttribute('data-sessions', String(sessions));
 }
