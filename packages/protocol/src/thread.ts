@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { TRANSMISSION_OPS } from './tasks.js';
 import { ATTACHMENTS_MAX, AttachmentRefSchema } from './attachments.js';
+import { RigInfoSchema } from './rigMessages.js';
 
 /** Native session tracking (spec 2026-10-13 §3): what a session's thread is made of. */
 export const ToolStatusSchema = z.enum(['running', 'success', 'failed', 'unknown']);
@@ -27,9 +28,13 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('reply'), ...base, text: z.string() }),
   z.object({ kind: z.literal('helper'), ...base, task: z.string(), agentType: z.string().optional(), state: z.enum(['working', 'exited']) }),
   /** A message this session sent to another agent; `id` is the tool_use_id, `to` the address it used, `peer` the Ledge session id, `received` the paired item's id in the peer's thread, `via` set when Ledge's mailbox carries it. */
-  z.object({ kind: z.literal('sent'), ...base, to: z.string(), peer: z.string().optional(), summary: z.string().optional(), text: z.string(), status: z.enum(['sending', 'delivered', 'read', 'failed']), received: z.string().optional(), via: z.literal('ledge').optional() }),
+  z.object({ kind: z.literal('sent'), ...base, to: z.string(), peer: z.string().optional(), summary: z.string().optional(), text: z.string(), status: z.enum(['sending', 'delivered', 'read', 'failed']), received: z.string().optional(), via: z.literal('ledge').optional(),
+    /** The seat's own `rig send` (its Bash call), docs/mockups/ledge-openrig-messages.html: `rig.command` is what it ran. */
+    rig: RigInfoSchema.optional() }),
   /** A message another agent sent to this session; `from` is its from-name (else its address), `sent` the paired item's id in the peer's thread. */
-  z.object({ kind: z.literal('received'), ...base, from: z.string(), peer: z.string().optional(), text: z.string(), sent: z.string().optional() }),
+  z.object({ kind: z.literal('received'), ...base, from: z.string(), peer: z.string().optional(), text: z.string(), sent: z.string().optional(),
+    /** An OpenRig `rig send` typed into this seat (`rig.kind` `message`): `from` is the envelope's sender, `text` its body. */
+    rig: RigInfoSchema.optional() }),
   /** An automated notice of the agent's harness about messages between sessions (Claude Code's `[Cross-session idle
    *  notice]` / `[Cross-session delivery notice]`): a system event, never the user's words. `name` is the session it is
    *  about as quoted, `peer` its Ledge session id; a delivery notice says the outcome of `count` messages to `recipients`. */
@@ -41,7 +46,10 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
     taskOp: z.enum(TRANSMISSION_OPS).optional(), outgoing: z.literal(true).optional(),
     name: z.string().optional(), peer: z.string().optional(), time: z.string().optional(), summary: z.string().optional(),
     status: z.enum(['held', 'denied', 'expired', 'delivered', 'refused', 'dropped', 'unknown']).optional(),
-    count: z.number().int().positive().optional(), recipients: z.array(z.string()).optional(), reason: z.string().optional(), text: z.string()
+    count: z.number().int().positive().optional(), recipients: z.array(z.string()).optional(), reason: z.string().optional(), text: z.string(),
+    /** An OpenRig block that is not a message: a row handed to this seat or passed by it (`handoff`, `outgoing` for its own),
+     *  a row unblocked, OpenRig's own notice, or an unreadable block; `text` is the body (unreadable: the block as is). */
+    rig: RigInfoSchema.optional()
   })
 ]);
 export type ThreadItem = z.infer<typeof ThreadItemSchema>;

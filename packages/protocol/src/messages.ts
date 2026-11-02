@@ -9,6 +9,7 @@ import { SessionCommandsSchema, SessionCommandsListingSchema } from './commands.
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { RigSeatNameSchema, OpenRigActSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
+import { OpenRigRowSchema, OpenRigRowStateSchema } from './rigMessages.js';
 import { OpenRigRoleDetailSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
@@ -95,6 +96,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
   /** Answers `openrig.roles`, `openrig.role` and `openrig.roleFile`: reads OpenRig's roles (agent specs). */ openrigRoles: z.boolean().optional(),
+  /** Answers `openrig.row`: a queue row's state, for the OpenRig task cards of a thread. */ openrigRows: z.boolean().optional(),
   /** Takes `session.broadcast` (its `ledge bridge` too, on this machine): a client sends it only when this is set. */ broadcast: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
@@ -113,6 +115,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ModelsListingSchema,
   SessionCommandsListingSchema,
   OpenRigStateMessageSchema,
+  OpenRigRowStateSchema,
   OpenRigDoneSchema,
   OpenRigSpecListSchema,
   OpenRigLaunchedSchema,
@@ -207,6 +210,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ModelsListSchema,
   SessionCommandsSchema,
   OpenRigStatusSchema,
+  OpenRigRowSchema,
   OpenRigActSchema,
   OpenRigSpecsSchema,
   OpenRigLaunchSchema,
