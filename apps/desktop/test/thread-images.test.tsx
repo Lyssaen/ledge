@@ -98,3 +98,34 @@ describe('the same image attached twice', () => {
     warn.mockRestore();
   });
 });
+
+describe('captures on tool rows', () => {
+  const tool = (id: string, extra: Partial<Extract<ThreadItem, { kind: 'tool' }>> = {}): ThreadItem => ({ kind: 'tool', id, at, turn: 1, tool: 'mcp__browser__screenshot', label: 'screenshot', status: 'success', files: [], ...extra } as ThreadItem);
+  const open = async (list: ThreadItem[]) => {
+    const env = await boot({ sessions: listSessions(), list: true });
+    answerGets(env.d);
+    env.d.thread('nova', [{ kind: 'prompt', id: 'p1', at, turn: 1, text: 'Look at this' }, ...list]);
+    await env.user.click(screen.getByRole('button', { name: /^Nova,/ }));
+    await screen.findByText('Look at this');
+    return env;
+  };
+
+  it('shows a tool row capture with its size and opens the lightbox when the page has no viewer of its own', async () => {
+    const { user } = await open([tool('u1', { images: [A] })]);
+    const btn = await screen.findByRole('button', { name: /capture/i });
+    expect(document.querySelector('.action-captures [data-thumb-size]')).toHaveTextContent('1440×900');
+    await user.click(btn);
+    expect(await screen.findByRole('dialog', { name: 'Capture · Nova, 14:02' })).toBeInTheDocument();
+  });
+
+  it('shows the captures of a folded group', async () => {
+    const rows = Array.from({ length: 7 }, (_, i) => tool(`g${i}`, i === 1 ? { images: [A] } : i === 5 ? { images: [B] } : {}));
+    await open(rows);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /capture/i })).toHaveLength(2));
+  });
+
+  it('says when a capture was too large', async () => {
+    await open([tool('u1', { imagesDropped: true })]);
+    expect(await screen.findByText('Capture too large for Ledge')).toBeVisible();
+  });
+});

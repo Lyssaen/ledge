@@ -34,10 +34,10 @@ function Actions({ url, image, fileName }: ThumbAction): JSX.Element {
 }
 
 /** A message's images with Desktop's words and the lightbox's Copy / Save… actions. Sizes: the thread's thumbnails 420 × 260, the chat's 200 × 130. */
-export function Thumbs({ client, refs, route, max, who, at, align, className }: { client: DaemonClient; refs: AttachmentRef[]; route: { id?: string; machine?: string }; max: { w: number; h: number }; who: string; at: string; align?: 'start' | 'end'; className?: string }): JSX.Element | null {
+export function Thumbs({ client, refs, route, max, who, at, align, className, onOpen, alt, tag }: { client: DaemonClient; refs: AttachmentRef[]; route: { id?: string; machine?: string }; max: { w: number; h: number }; who: string; at: string; align?: 'start' | 'end'; className?: string; onOpen?(index: number): void; alt?: string; tag?: boolean }): JSX.Element | null {
   const { t } = useI18n();
   const i = t.images;
-  return <SharedThumbs client={client} refs={refs} route={route} max={max} who={who} at={at} align={align} className={className} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'}
+  return <SharedThumbs client={client} refs={refs} route={route} max={max} who={who} at={at} align={align} className={className} onOpen={onOpen} alt={alt} tag={tag} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'}
     copy={{ capture: i.capture, unavailable: i.unavailable, close: i.close, prev: i.prev, next: i.next }} actions={a => <Actions {...a} />} />;
 }
 

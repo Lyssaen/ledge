@@ -164,6 +164,8 @@ button.tg:disabled{cursor:default}
 .lnk:hover{color:var(--foreground)}
 .pre{margin:6px 0 0;padding:8px 10px;background:var(--well);border:1px solid var(--border);border-radius:var(--radius-md);font:12px/18px 'Geist Mono',monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted-foreground)}
 .action-output{max-height:200px;overflow:auto}
+.action-captures{margin-top:6px}
+.action-dropped{margin:4px 0 0;font-size:12px;font-style:italic;color:var(--muted-foreground)}
 .action-output.is-error{color:var(--danger-text);border-color:color-mix(in srgb,var(--destructive) 35%,var(--border))}
 .delta{display:inline-flex;gap:6px;font-size:11px;white-space:nowrap}
 .delta .plus{color:var(--success)}.delta .minus{color:var(--danger-text)}

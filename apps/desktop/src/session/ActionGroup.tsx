@@ -3,13 +3,15 @@ import { type ToolItem, doneCount, todosOf } from '@ledge/protocol';
 import { Badge } from '@ledge/ui/ui/Badge';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { elapsedMs, SPINNER, SPINNER_STILL, target } from '@ledge/ui/thread/tools';
+import type { DaemonClient } from '@ledge/fleet';
+import { Thumbs } from '../images/Thumbs';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { parseDiff } from './diff';
 import { Delta } from './DiffView';
-import { fmtDur, kindOf, summarize, verbOf, type Summary as Sum, type ToolKind } from './exchanges';
+import { clock, fmtDur, kindOf, summarize, verbOf, type Summary as Sum, type ToolKind } from './exchanges';
 
 const KINDS: readonly ToolKind[] = ['read', 'search', 'command', 'edit'];
 export const KIND_ICON: Record<ToolKind, readonly string[]> = { read: SHELL_ICONS.file, search: SHELL_ICONS.search, command: SHELL_ICONS.terminal, edit: SHELL_ICONS.pencil };
@@ -63,7 +65,21 @@ function FoldRow({ s, open, onToggle }: { s: Sum; open: boolean; onToggle(): voi
   );
 }
 
+/** Where a tool row's captures come from and who shows them: the session's daemon, its name in the lightbox's title, and (when the page has
+ *  its own viewer) what a click does. */
+interface Shots { client: DaemonClient; sessionId: string; who: string; onCapture?(toolId: string, index: number): void }
+
+/** A row's captures as thumbnails (420 × 260, their size on them). */
+function Captures({ tool, shots }: { tool: ToolItem; shots: Shots }): JSX.Element | null {
+  const { t } = useI18n();
+  if (!tool.images?.length) return null;
+  const { onCapture } = shots;
+  return <Thumbs className="action-captures" client={shots.client} refs={tool.images} route={{ id: shots.sessionId }} max={{ w: 420, h: 260 }} who={shots.who} at={clock(tool.at)} alt={t.images.capture} tag
+    onOpen={onCapture && (i => onCapture(tool.id, i))} />;
+}
+
 interface RowProps {
+  shots: Shots;
   tool: ToolItem; now: number; live: boolean;
   /** Its output shown under it (a failed one shows its own until the reader hides it). */
   expanded: boolean; onExpand(): void;
@@ -76,7 +92,7 @@ interface RowProps {
 /** One action as a rail row. Quiet (a pip) when it went well; a pencil node for a change, with its +/− and « Voir la
  *  modification » (a sibling of the target, so the keyboard reaches it even when the target is disabled); the info node
  *  and its ring while it runs; the danger node, « Échec » and its output when it failed. The target opens the output. */
-function ActionRow({ tool, now, live, expanded, onExpand, flash, onChange }: RowProps): JSX.Element {
+function ActionRow({ shots, tool, now, live, expanded, onExpand, flash, onChange }: RowProps): JSX.Element {
   const { t, lang } = useI18n();
   const th = t.session.thread;
   const k = kindOf(tool.tool);
@@ -108,6 +124,8 @@ function ActionRow({ tool, now, live, expanded, onExpand, flash, onChange }: Row
           {change && <button type="button" className="lnk action-link" data-short={th.seeChangeShort} onClick={() => onChange(f.path)}><Icon d={SHELL_ICONS.diff} size={12} /><span>{th.seeChange}</span></button>}
         </div>
         {expanded && detail && <pre className={cls('pre action-output', !!tool.error && 'is-error')}>{detail}</pre>}
+        <Captures tool={tool} shots={shots} />
+        {tool.imagesDropped && <p className="action-dropped">{th.captureDropped}</p>}
       </div>
       {/* The ticking time of a running action is left out of what the live region announces. */}
       <span className="tm action-time" aria-hidden={running || undefined}>{tool.status === 'unknown' ? th.interrupted : fmtDur(elapsedMs(tool, now), lang)}</span>
@@ -138,7 +156,12 @@ function TodoRow({ tool }: { tool: ToolItem }): JSX.Element {
 /** A run of consecutive actions, as rail rows: up to FOLD_AT of them one row each, more folded under one row. The work plan's
  *  updates in it are no actions: one row for the last of them, counted in the fold's row. Folded, the failed, interrupted and
  *  running ones stay in sight. `live` false (offline): nothing runs live, and `now` is the instant the thread froze. */
-export function ActionGroup({ tools, todos, now, live, marker, flash = null, onChange }: {
+export function ActionGroup({ client, sessionId, who, onCapture, tools, todos, now, live, marker, flash = null, onChange }: {
+  client: DaemonClient; sessionId: string;
+  /** The session's name, in its captures' lightbox title. */
+  who: string;
+  /** A capture clicked, by its action and place: the page's own viewer. Absent, the thumbnail opens its own lightbox. */
+  onCapture?(toolId: string, index: number): void;
   tools: ToolItem[];
   /** The work plan's updates that fell in this run (the segment's `todos`). */
   todos: ToolItem[];
@@ -149,19 +172,27 @@ export function ActionGroup({ tools, todos, now, live, marker, flash = null, onC
   flash?: string | null;
   onChange(path: string): void;
 }): JSX.Element {
+  const th = useI18n().t.session.thread;
   const [open, setOpen] = useState(() => flash !== null);
   // Before the page looks for the action to scroll it into view.
   useLayoutEffect(() => { if (flash !== null) setOpen(true); }, [flash]);
   // The outputs the reader opened, and the failed ones they closed.
   const [flipped, setFlipped] = useState<ReadonlySet<string>>(() => new Set());
   const flip = (id: string) => setFlipped(s => { const n = new Set(s); if (!n.delete(id)) n.add(id); return n; });
-  const row = (x: ToolItem) => <ActionRow key={x.id} tool={x} now={now} live={live} expanded={flipped.has(x.id) !== (x.status === 'failed')} onExpand={() => flip(x.id)} flash={x.id === flash} onChange={onChange} />;
+  const shots: Shots = { client, sessionId, who, onCapture };
+  const row = (x: ToolItem) => <ActionRow key={x.id} shots={shots} tool={x} now={now} live={live} expanded={flipped.has(x.id) !== (x.status === 'failed')} onExpand={() => flip(x.id)} flash={x.id === flash} onChange={onChange} />;
   const plan = todos.at(-1);
   const all = <>{tools.map(row)}{plan && <TodoRow key={plan.id} tool={plan} />}</>;
   if (tools.length <= FOLD_AT) return <>{marker}{all}</>;
   return <>
     {marker}
     <FoldRow s={summarize(tools, now, live, todos)} open={open} onToggle={() => setOpen(o => !o)} />
-    {open ? all : tools.filter(x => settled(x) || x.status === 'running').map(row)}
+    {open ? all : <>
+      {tools.filter(x => settled(x) || x.status === 'running').map(row)}
+      {/* The folded rows' captures, in order, under the fold (the shown rows carry their own). */}
+      {tools.some(x => x.images?.length || x.imagesDropped) && tools.filter(x => !(settled(x) || x.status === 'running') && (x.images?.length || x.imagesDropped)).map(x => (
+        <li key={x.id} className="r action-row action-folded-captures"><span className="n pip" aria-hidden="true" /><div className="act-col"><Captures tool={x} shots={shots} />{x.imagesDropped && <p className="action-dropped">{th.captureDropped}</p>}</div><span className="tm" /></li>
+      ))}
+    </>}
   </>;
 }
