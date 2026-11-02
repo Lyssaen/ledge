@@ -457,6 +457,7 @@ describe('multi-machine connections', () => {
     expect(end('w2')).toMatchObject({ type: 'openrig.asksChanged', error: 'offline' });
     client.send({ type: 'openrig.answer', requestId: 'w3', machineId: 'server', qitemId: 'q2', answer: { kind: 'seen' } });
     expect(end('w3')).toMatchObject({ type: 'openrig.answered', ok: false, error: 'offline' });
+  });
   it('routes goals, a goal sent and a reply to Max to their machine; an older daemon refuses only those', () => {
     const { client, server, got } = setup();
     const goals = () => got.filter(m => m.type === 'openrig.goalsChanged' || m.type === 'openrig.goal.sent' || m.type === 'openrig.goal.replied');
