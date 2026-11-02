@@ -260,6 +260,16 @@ mod platform {
         if name.is_empty() { None } else { Some(name) }
     }
 
+    /// One read as the watcher makes it, for the live test.
+    #[cfg(test)]
+    pub fn snapshot() -> Option<NowPlaying> {
+        mta();
+        let mgr = manager().ok()?;
+        let sessions: Vec<Session> = mgr.GetSessions().map(|v| v.into_iter().collect()).unwrap_or_default();
+        let ids: Vec<String> = sessions.iter().map(id_of).collect();
+        read(&mgr, &sessions, &ids, &mut HashMap::new(), &mut None)
+    }
+
     pub fn command(player: &str, cmd: Command) -> bool {
         mta();
         let Ok(mgr) = manager() else { return false };
@@ -308,6 +318,16 @@ mod tests {
         assert_eq!(pick(&[c(false, true), c(true, false)]), Some(1));
         assert_eq!(pick(&[c(false, false), c(false, true)]), Some(1));
         assert_eq!(pick(&[c(false, false), c(false, false)]), Some(0));
+    }
+
+    /// Reads this PC's media session for real: `cargo test -- --ignored live_media --nocapture` while something plays.
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn live_media_read() {
+        let state = platform::snapshot();
+        let json = serde_json::to_string(&state).unwrap();
+        println!("now playing: {}", json.chars().take(400).collect::<String>());
     }
 
     #[test]
