@@ -245,7 +245,10 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
       : ans.kind === 'words' ? { verb: 'answer', decision: ans.text }
       : ans.kind === 'resolve' ? { verb: 'resolve', decision: ans.text }
       : { verb: 'approve', reason: 'seen in Ledge' };
-    const res = await http('POST', `${b.url}/api/mission-control/action`, { ...action, qitemId, authority: 'primary-user', auditNotes: { client: 'ledge' } });
+    // OpenRig needs a declared actor without a seat header: the person asked (the row's destination, or the person it is parked on), as its
+    // TUI sends it; the primary user's authority then records the default person whoever that is.
+    const actorSession = (parked ? str(q.blockedOn) : str(q.destinationSession)) ?? undefined;
+    const res = await http('POST', `${b.url}/api/mission-control/action`, { ...action, qitemId, actorSession, authority: 'primary-user', auditNotes: { client: 'ledge' } });
     soon();
     if (res.status !== 200) return { qitemId, ok: false, ...answerError(res.status, res.json) };
     const out = obj(res.json), told = obj(out.answer), replyId = str(out.createdQitemId) ?? undefined;

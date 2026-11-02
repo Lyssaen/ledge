@@ -136,7 +136,7 @@ describe('« À toi » answering', () => {
     expect(OpenRigAnsweredSchema.parse({ type: 'openrig.answered', requestId: 'r', ...r })).toBeTruthy();
     expect(r).toEqual({ qitemId: 'qitem-1', ok: true, outcome: 'recorded', remaining: ['taille'] });
     expect(f.calls.find(c => c.method === 'POST')).toEqual({ method: 'POST', url: `${BASE}/api/mission-control/action`,
-      body: { verb: 'answer', questionId: 'couleur', optionId: 'bleu', qitemId: 'qitem-1', authority: 'primary-user', auditNotes: { client: 'ledge' } } });
+      body: { verb: 'answer', questionId: 'couleur', optionId: 'bleu', qitemId: 'qitem-1', actorSession: 'ledge@external', authority: 'primary-user', auditNotes: { client: 'ledge' } } });
   });
 
   it('the last answer goes back to the seat: answered, with the reply row', async () => {
@@ -154,7 +154,7 @@ describe('« À toi » answering', () => {
     const { f, h } = answering(() => ({ status: 200, json: {} }));
     expect(await h.answer('qitem-2', { kind: 'seen' })).toEqual({ qitemId: 'qitem-2', ok: true, outcome: 'answered' });
     expect(await h.answer('qitem-3', { kind: 'resolve', text: 'Oui, pousse' })).toEqual({ qitemId: 'qitem-3', ok: true, outcome: 'answered' });
-    expect(f.calls.filter(c => c.method === 'POST').map(c => (c.body as { verb: string }).verb)).toEqual(['approve', 'resolve']);
+    expect(f.calls.filter(c => c.method === 'POST').map(c => [(c.body as { verb: string }).verb, (c.body as { actorSession: string }).actorSession])).toEqual([['approve', 'ledge@external'], ['resolve', 'ledge@external']]);
   });
 
   it('refuses an answer that does not fit the row, without asking OpenRig', async () => {
