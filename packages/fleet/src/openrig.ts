@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigState, RigLaunch, RigSpec } from '@ledge/protocol';
+import type { OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigLaunch, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
 /** How often a screen that shows a machine's OpenRig asks it again. */
@@ -119,5 +119,67 @@ export function reseatRig(client: DaemonClient, machine: string, rig: string, se
       off(); resolve(m);
     });
     client.send({ type: 'openrig.seats', requestId, machineId: machine, rig, seats, ...(delegation ? { delegation } : {}) });
+  });
+}
+
+// ── Roles (docs/mockups/ledge-openrig-roles.html), read-only: one ask per machine (and per `reload`), no polling. ──
+
+export interface RolesView { status: 'idle' | 'loading' | 'ready'; roles: readonly RoleSummary[]; openrigVersion?: string; error?: string; reload(): void }
+
+/** The machine's roles: `error` `daemon_stopped` / `not_installed`, or the fleet's `offline` / `outdated` (its Ledge does not read roles). */
+export function useOpenRigRoles(client: DaemonClient, machine: string | null): RolesView {
+  const [answer, setAnswer] = useState<{ machine: string; roles: readonly RoleSummary[]; openrigVersion?: string; error?: string } | null>(null);
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    if (machine === null) return;
+    const requestId = `openrig-roles-${++next}`;
+    setAnswer(a => (a?.machine === machine ? a : null));
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.roleList' || m.requestId !== requestId) return;
+      setAnswer({ machine, roles: m.roles, ...(m.openrigVersion ? { openrigVersion: m.openrigVersion } : {}), ...(m.error ? { error: m.error } : {}) });
+    });
+    client.send({ type: 'openrig.roles', requestId, machineId: machine });
+    return off;
+  }, [client, machine, round]);
+  const reload = useCallback(() => setRound(r => r + 1), []);
+  if (machine === null) return { status: 'idle', roles: [], reload };
+  if (!answer || answer.machine !== machine) return { status: 'loading', roles: [], reload };
+  return { status: 'ready', roles: answer.roles, ...(answer.openrigVersion ? { openrigVersion: answer.openrigVersion } : {}), ...(answer.error ? { error: answer.error } : {}), reload };
+}
+
+export interface RoleView { status: 'idle' | 'loading' | 'ready'; role: RoleDetail | null; error?: string; reload(): void }
+
+/** One role of the machine by library id (`id` null: nothing asked). A previous role stays shown while the next one loads only if it is the same id. */
+export function useOpenRigRole(client: DaemonClient, machine: string | null, id: string | null): RoleView {
+  const [answer, setAnswer] = useState<{ key: string; role: RoleDetail | null; error?: string } | null>(null);
+  const [round, setRound] = useState(0);
+  const key = machine !== null && id !== null ? `${machine}\u0000${id}` : null;
+  useEffect(() => {
+    if (machine === null || id === null) return;
+    const requestId = `openrig-role-${++next}`;
+    const k = `${machine}\u0000${id}`;
+    setAnswer(a => (a?.key === k ? a : null));
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.roleDetail' || m.requestId !== requestId) return;
+      setAnswer({ key: k, role: m.role ?? null, ...(m.error ? { error: m.error } : {}) });
+    });
+    client.send({ type: 'openrig.role', requestId, machineId: machine, roleId: id });
+    return off;
+  }, [client, machine, id, round]);
+  const reload = useCallback(() => setRound(r => r + 1), []);
+  if (key === null) return { status: 'idle', role: null, reload };
+  if (!answer || answer.key !== key) return { status: 'loading', role: null, reload };
+  return { status: 'ready', role: answer.role, ...(answer.error ? { error: answer.error } : {}), reload };
+}
+
+/** A file of a role (one its detail lists); resolves with its content or why not (`not_allowed`, `missing`, `offline`…). */
+export function readRoleFile(client: DaemonClient, machine: string, id: string, path: string): Promise<OpenRigRoleFileContent> {
+  const requestId = `openrig-role-file-${++next}`;
+  return new Promise(resolve => {
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.roleFileContent' || m.requestId !== requestId) return;
+      off(); resolve(m);
+    });
+    client.send({ type: 'openrig.roleFile', requestId, machineId: machine, roleId: id, path });
   });
 }

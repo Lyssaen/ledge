@@ -418,7 +418,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -1042,6 +1042,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return reply({ type: 'openrig.state', requestId: msg.requestId, state });
       }
       case 'openrig.specs': return reply({ type: 'openrig.specList', requestId: msg.requestId, ...await openrig.specs() });
+      // Read-only, to the asker only (docs/mockups/ledge-openrig-roles.html).
+      case 'openrig.roles': return reply({ type: 'openrig.roleList', requestId: msg.requestId, ...await openrig.roles() });
+      case 'openrig.role': return reply({ type: 'openrig.roleDetail', requestId: msg.requestId, roleId: msg.roleId, ...await openrig.role(msg.roleId) });
+      case 'openrig.roleFile': return reply({ type: 'openrig.roleFileContent', requestId: msg.requestId, roleId: msg.roleId, path: msg.path, ...await openrig.roleFile(msg.roleId, msg.path) });
       case 'openrig.launch': {
         const done = await openrig.launch(msg.launch);
         reply({ type: 'openrig.launched', requestId: msg.requestId, ...done });

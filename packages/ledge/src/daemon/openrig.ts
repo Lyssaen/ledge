@@ -1,12 +1,13 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, open as openFile, readFile, stat as statFile, writeFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
 import { changesSpec, composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir } from 'node:os';
-import { basename, delimiter, dirname, isAbsolute, join } from 'node:path';
-import { KERNEL_RIG, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
+import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { KERNEL_RIG, ROLE_FILE_MAX, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
 import { log } from '../log.js';
+import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
 /**
  * OpenRig on this machine (docs/mockups/ledge-openrig.html): its state read from `rig status --json` and `rig ps --json`,
@@ -137,6 +138,9 @@ export interface OpenRigDeps {
   /** Where Ledge writes the specs it composes (`~/.ledge/rigs`), one folder per rig. */ rigsDir?: string;
   /** The person's home, for a `~` in a launch's folder. */ home?: string;
   /** Files, for tests. */ fs?: { read(p: string): Promise<string>; exists(p: string): boolean; copyDir(from: string, to: string): Promise<void>; write(p: string, text: string): Promise<void> };
+  /** Files the roles are read from, for tests. */ roleIo?: RoleIo & { head(p: string, max: number): Promise<string | null> };
+  /** A GET on the OpenRig daemon's HTTP API (its node detail has no CLI); undefined when it does not answer. */ http?: (path: string) => Promise<unknown>;
+  /** OpenRig's home (`$OPENRIG_HOME`, `~/.openrig`). */ openrigHome?: string;
 }
 export interface LaunchResult { ok: boolean; plan: boolean; commands: string[]; yaml?: string; seats?: number; output?: string; error?: string; check?: { status: string; errors: string[]; warnings: string[] } }
 
@@ -160,8 +164,32 @@ export interface OpenRig {
   /** Brings a running rig's roles to `seats` (role -> count): copies of each role's first seat added, the last copies removed,
    *  the spec's links ensured where this OpenRig can, then a snapshot so a restart keeps the new size. */
   reseat(rig: string, seats: Record<string, number>, delegation?: 'pairs' | 'all'): Promise<ReseatResult>;
+  /** The machine's roles (agent specs), read-only. */
+  roles(): Promise<RolesResult>;
+  /** One role by library id: from its spec and from each seat that runs it. */
+  role(id: string): Promise<RoleResult>;
+  /** A file of a role: only a path its detail lists (`not_allowed` otherwise), `ROLE_FILE_MAX` bytes at most. */
+  roleFile(id: string, path: string): Promise<RoleFileResult>;
 }
+export interface RolesResult { roles: RoleSummary[]; openrigVersion?: string; error?: string }
+export interface RoleResult { role?: RoleDetail; error?: string }
+export interface RoleFileResult { content?: string; size?: number; truncated?: boolean; error?: string }
 export interface ReseatResult { ok: boolean; commands: string[]; added: string[]; removed: string[]; output?: string; error?: string; links?: number; linksUnsupported?: boolean }
+
+const realRoleIo = {
+  read: (p: string) => readFile(p, 'utf8').catch(() => null),
+  stat: (p: string) => statFile(p).then(st => ({ size: st.size, mtimeMs: st.mtimeMs, file: st.isFile() })).catch(() => null),
+  head: async (p: string, max: number): Promise<string | null> => {
+    const h = await openFile(p, 'r').catch(() => null);
+    if (!h) return null;
+    try { const buf = Buffer.alloc(max); const { bytesRead } = await h.read(buf, 0, max, 0); return buf.subarray(0, bytesRead).toString('utf8'); } finally { await h.close(); }
+  }
+};
+
+/** How long a read of the rigs' members, and the files a role detail listed, are reused. */
+const SEATS_TTL_MS = 5_000;
+const FILES_TTL_MS = 5 * 60_000;
+const HTTP_MS = 3_000;
 
 const realFs = {
   read: (p: string) => readFile(p, 'utf8'),
@@ -176,6 +204,16 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   const home = deps.home ?? homedir();
   const rigsDir = deps.rigsDir ?? join(home, '.ledge', 'rigs');
   const now = deps.now ?? Date.now;
+  const roleIo = deps.roleIo ?? realRoleIo;
+  const openrigHome = deps.openrigHome ?? process.env.OPENRIG_HOME ?? join(home, '.openrig');
+  const http = deps.http ?? (async (path: string) => {
+    const port = (await state()).daemon.port;
+    if (!port) return undefined;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(HTTP_MS) });
+      return res.ok ? await res.json() : undefined;
+    } catch { return undefined; }
+  });
   let version: string | undefined, versionAt = 0, last: { at: number; state: OpenRigState } | undefined;
   let reading: Promise<OpenRigState> | undefined, acting = false;
   const absent = (): OpenRigState => ({ installed: false, daemon: { state: 'unknown' }, kernel: { state: 'unknown' }, rigs: [], at: new Date(now()).toISOString() });
@@ -357,5 +395,107 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     }
   }
 
-  return { state, act, specs, launch, reseat };
+  // ── Roles (docs/superpowers/specs/2026-11-02-openrig-roles-data.md) ──
+
+  async function library(): Promise<{ entries: LibraryEntry[]; error?: string }> {
+    const r = await run(['specs', 'ls', '--kind', 'agent', '--json'], STATUS_MS);
+    if (r.code === null) return { entries: [], error: 'not_installed' };
+    if (r.code !== 0) return { entries: [], error: /daemon not running/i.test(`${r.stdout}${r.stderr}`) ? 'daemon_stopped' : failure(r) };
+    return { entries: readLibrary(parse(r.stdout)) };
+  }
+
+  /** The members of the rigs known to the daemon, each with the agent folder it runs. */
+  let seatsRead: { at: number; seats: KnownSeat[] } | undefined;
+  async function knownSeats(): Promise<KnownSeat[]> {
+    if (seatsRead && now() - seatsRead.at < SEATS_TTL_MS) return seatsRead.seats;
+    const st = await state();
+    const out: KnownSeat[] = [];
+    for (const rig of st.rigs) {
+      const r = await run(['spec', 'show', rig.id, '--json'], STATUS_MS);
+      if (r.code !== 0) continue;
+      const root = rig.name === KERNEL_RIG ? null : await rootOf(rig.name).catch(() => null);
+      const specFile = root ? join(root, 'rig.yaml') : null;
+      const text = specFile ? await roleIo.read(specFile) : null;
+      const written = parseSpec(text);
+      const shown = obj(parse(r.stdout));
+      const rigDoc = written.ok ? written.doc : shown;
+      for (const m of rigMembers(shown, root)) {
+        const n = rig.nodes.find(x => x.logicalId === m.logicalId);
+        out.push({ rig: rig.name, rigId: rig.id, rigRoot: root ? resolve(root) : null, ...(written.ok && specFile ? { rigSpecPath: specFile } : {}),
+          composed: !!root && (resolve(root) + sep).startsWith(resolve(rigsDir) + sep),
+          rigDoc, pod: m.pod, member: m.member, written: written.ok ? writtenMember(written.doc, m.logicalId) : null,
+          logicalId: m.logicalId, agentDir: m.agentDir, ...(n ? { session: n.session } : {}),
+          running: !!n && !n.stopped && n.sessionStatus === 'running', activity: n?.activity ?? 'unknown', node: undefined, loadout: undefined });
+      }
+    }
+    seatsRead = { at: now(), seats: out };
+    return out;
+  }
+  const seatsOf = (entry: LibraryEntry, seats: KnownSeat[]) => seatsFor(dirname(resolve(entry.path)), seats);
+  const seatsFor = (dir: string, seats: KnownSeat[]) => seats.filter(s => s.agentDir === dir);
+
+  async function roles(): Promise<RolesResult> {
+    const lib = await library();
+    if (lib.error) return { roles: [], error: lib.error };
+    const seats = await knownSeats();
+    const out: RoleSummary[] = [];
+    for (const e of lib.entries) {
+      const mine = seatsOf(e, seats);
+      out.push(summarize(e, parseSpec(await roleIo.read(e.path)), seatCounts(mine)));
+    }
+    return { roles: out, ...(version ? { openrigVersion: version } : {}) };
+  }
+
+  const pluginCache = new Map<string, PluginInfo | null>();
+  async function plugin(id: string): Promise<PluginInfo | null> {
+    if (pluginCache.has(id)) return pluginCache.get(id)!;
+    const r = await run(['plugin', 'show', id, '--json'], STATUS_MS);
+    const info = r.code === 0 ? readPlugin(parse(r.stdout)) : null;
+    pluginCache.set(id, info);
+    return info;
+  }
+
+  const allowed = new Map<string, { at: number; files: Set<string> }>();
+  async function role(id: string): Promise<RoleResult> {
+    const lib = await library();
+    if (lib.error) return { error: lib.error };
+    const entry = lib.entries.find(e => e.id === id);
+    if (!entry) return { error: 'role_not_found' };
+    const text = await roleIo.read(entry.path);
+    const parsed = parseSpec(text);
+    const plugins = new Map<string, PluginInfo>();
+    if (parsed.ok) {
+      const imports = await resolveImports({ path: entry.path, dir: dirname(entry.path), doc: parsed.doc }, roleIo);
+      for (const p of declaredPlugins(parsed.doc, entry.path, imports, home, openrigHome)) { const info = await plugin(p); if (info) plugins.set(p, info); }
+    }
+    const seats = await Promise.all(seatsOf(entry, await knownSeats()).map(async s => ({
+      ...s,
+      node: await http(`/api/rigs/${encodeURIComponent(s.rigId)}/nodes/${encodeURIComponent(s.logicalId)}`),
+      loadout: s.session ? await run(['skill', 'loadout', '--seat', s.session, '--json'], STATUS_MS).then(r => (r.code === 0 ? parse(r.stdout) : undefined)) : undefined
+    })));
+    const others = await Promise.all(lib.entries.filter(e => e.id !== id).map(async e => ({ entry: e, parsed: parseSpec(await roleIo.read(e.path)) })));
+    const { detail, files } = await buildDetail({ entry, text, seats, library: others, plugins, home, openrigHome, ...(version ? { openrigVersion: version } : {}), io: roleIo });
+    allowed.set(id, { at: now(), files });
+    return { role: detail };
+  }
+
+  async function roleFile(id: string, path: string): Promise<RoleFileResult> {
+    if (!isAbsolute(path)) return { error: 'not_allowed' };
+    let known = allowed.get(id);
+    // A path the last detail did not list is checked again against a fresh one (a seat started, a copy appeared) once it is a few seconds old.
+    if (!known || now() - known.at > FILES_TTL_MS || (!known.files.has(resolve(path)) && now() - known.at > SEATS_TTL_MS)) {
+      const r = await role(id);
+      if (r.error) return { error: r.error };
+      known = allowed.get(id);
+    }
+    if (!known?.files.has(resolve(path))) return { error: 'not_allowed' };
+    const st = await roleIo.stat(path);
+    if (!st) return { error: 'missing' };
+    if (!st.file) return { error: 'not_a_file' };
+    const content = await roleIo.head(path, ROLE_FILE_MAX);
+    if (content === null) return { error: 'missing' };
+    return { content, size: st.size, ...(st.size > ROLE_FILE_MAX ? { truncated: true } : {}) };
+  }
+
+  return { state, act, specs, launch, reseat, roles, role, roleFile };
 }
