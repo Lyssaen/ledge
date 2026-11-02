@@ -32,6 +32,9 @@ export const ICONS = {
   /** A clipboard with a check: an agent's checklist. */
   plan: ['M9 4h6v3H9z', 'M7 5H5v16h14V5h-2', 'm9 12 1.5 1.5L14 10', 'M9 17h6'],
   keyboard: ['M3 7h18v10H3z', 'M7 11h.01', 'M11 11h.01', 'M15 11h.01', 'M8 14h8'],
+  /** OpenRig's messages (docs/mockups/openrig-messages): a queue row's card, and « Répondre ». */
+  task: ['M6.9 3.75h10.2a2.4 2.4 0 0 1 2.4 2.4v11.7a2.4 2.4 0 0 1-2.4 2.4H6.9a2.4 2.4 0 0 1-2.4-2.4V6.15a2.4 2.4 0 0 1 2.4-2.4z', 'M8.25 9h7.5', 'M8.25 13.5h5.25'],
+  reply: ['M9.75 6 3.75 12l6 6', 'M4.5 12h9.75a6 6 0 0 1 6 6v.75'],
   passkey: ['M12 3a6 6 0 0 0-6 6v3h12V9a6 6 0 0 0-6-6z', 'M5 12h14v9H5z']
 } as const satisfies Record<string, readonly string[]>;
 

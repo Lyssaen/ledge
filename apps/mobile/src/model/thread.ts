@@ -3,6 +3,7 @@ import { copy } from '../copy';
 import type { LinkState } from '../link/link';
 import type { Op } from '../state/operations';
 import { requestsOf, type InboxItem } from './requests';
+import { clock, foldNotices, packetRaws, rigElement, type RigElement } from './rigThread';
 import { closedHere, endedClock } from './sessionEnd';
 
 export { MESSAGE_MAX } from '@ledge/protocol';
@@ -18,7 +19,10 @@ export type ThreadItem =
   | { key: string; kind: 'agent'; text: string; at: string; cut?: true }
   | { key: string; kind: 'event'; label: string; at: string }
   | { key: string; kind: 'capture'; label: string; at: string; images: AttachmentRef[] }
-  | { key: string; kind: 'awaiting'; item: InboxItem };
+  | { key: string; kind: 'awaiting'; item: InboxItem }
+  /** The centred time before OpenRig's elements (the mockup's `.pt`). */
+  | { key: string; kind: 'time'; label: string }
+  | RigElement;
 
 type Instruction = Op & { message: Extract<Op['message'], { type: 'session.reply' }> };
 
@@ -59,10 +63,12 @@ const sameText = (prompt: string, sent: string, shortened: boolean) => {
  * this phone sent that the PC's thread does not show yet in its place in time, what is still on its way, then the
  * request still waiting. A taken instruction the PC never lists (a command such as `/new`, or a prompt that fell off its
  * window) goes once the PC lists something `TAKEN_WINDOW` past it: the PC moved on without it. Of the tools only those that returned images show, as a
- * capture; helpers and messages between agents are left to the terminal; a permission shows once decided.
+ * capture; helpers and messages between agents are left to the terminal, but for OpenRig's (the items that carry `rig`:
+ * a bubble, a task card, a notice line, each after its time); a permission shows once decided. `sessions`: the phone's,
+ * to name the seat an OpenRig block is from.
  */
-export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<string, Op>, now: number = Date.now(), cut: string[] = []): ThreadItem[] {
-  const out: ThreadItem[] = [];
+export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<string, Op>, now: number = Date.now(), cut: string[] = [], sessions: ReadonlyMap<string, PhoneSession> = new Map()): ThreadItem[] {
+  let out: ThreadItem[] = [];
   const shortened = new Set(cut);
   const mark = (id: string) => shortened.has(id) ? { cut: true as const } : {};
   const mine = messagesOf(session.id, ops);
@@ -75,7 +81,24 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
     const hit = items.find(i => i.kind === 'prompt' && sameText(i.text, o.message.text, shortened.has(i.id)) && !claimed.has(i.id) && sameIds(i.images?.map(x => x.id) ?? [], ids));
     if (hit) { claimed.add(hit.id); shown.add(o.op); }
   }
+  const packets = packetRaws(items);
+  // The last time said before an OpenRig element, and the packet it opened: none once something else came in between.
+  let lastTime: string | null = null, lastPacket: string | null = null;
   for (const i of items) {
+    const rig = rigElement(i, sessions, shortened.has(i.id));
+    if (rig) {
+      const packet = (i.kind === 'received' || i.kind === 'sent' || i.kind === 'notice') ? i.rig?.packet?.id ?? null : null;
+      const label = clock(rig.at);
+      if (!(packet && packet === lastPacket) && label !== lastTime) out.push({ key: `time-${i.id}`, kind: 'time', label });
+      lastTime = label; lastPacket = packet;
+      if (packets.has(i.id)) {
+        const raw = packets.get(i.id);
+        const { raw: _own, ...rest } = rig as RigElement & { raw?: unknown };
+        out.push((raw ? { ...rest, raw } : rest) as RigElement);
+      } else out.push(rig);
+      continue;
+    }
+    const before = out.length;
     if (i.kind === 'prompt') out.push({ key: i.id, kind: 'me', text: i.text, at: i.at, ...(i.images?.length ? { images: i.images } : {}), ...(claimed.has(i.id) ? { delivery: 'taken' as const } : {}), ...mark(i.id) });
     else if (i.kind === 'reply') out.push({ key: i.id, kind: 'agent', text: i.text, at: i.at, ...mark(i.id) });
     else if (i.kind === 'tool' && i.images?.length) out.push({ key: i.id, kind: 'capture', label: isBrowserCapture(i.tool) ? copy.thread.capture : toolShortName(i.tool), at: i.at, images: i.images });
@@ -83,7 +106,9 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
       const label = eventLabel(i, session.id, ops);
       if (label) out.push({ key: i.id, kind: 'event', label, at: i.at });
     }
+    if (out.length > before) { lastTime = null; lastPacket = null; }
   }
+  out = foldNotices(out) as ThreadItem[];
   const newest = Math.max(...items.map(i => Date.parse(i.at)));
   for (const o of mine) {
     const at = Date.parse(o.at);
@@ -92,8 +117,10 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
     else if (o.phase === 'uncertain') out.push({ ...base, delivery: 'uncertain' });
     else if (o.phase === 'applied' && !shown.has(o.op) && !(newest - at > TAKEN_WINDOW)) {
       // Before the first of the PC's rows that came after it (a live one stays last: it is the newest).
-      const next = out.findIndex(i => i.kind !== 'awaiting' && !(i.kind === 'me' && i.delivery && i.delivery !== 'taken') && Date.parse(i.at) > at);
-      out.splice(next < 0 ? out.length : next, 0, { ...base, delivery: 'taken', ...(now - at < TAKEN_WINDOW ? { fresh: true } : {}) });
+      const next = out.findIndex(i => i.kind !== 'awaiting' && i.kind !== 'time' && !(i.kind === 'me' && i.delivery && i.delivery !== 'taken') && Date.parse(i.at) > at);
+      // never between an OpenRig element and its time
+      const place = next < 0 ? out.length : next > 0 && out[next - 1]!.kind === 'time' ? next - 1 : next;
+      out.splice(place, 0, { ...base, delivery: 'taken', ...(now - at < TAKEN_WINDOW ? { fresh: true } : {}) });
     }
   }
   // This phone's close, at the moment the session ended: last, since nothing comes after an end.

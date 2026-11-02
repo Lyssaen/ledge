@@ -331,6 +331,25 @@ export const copy = {
       fromPc: 'le PC', fromPhone: 'le téléphone'
     },
     delivery: { sending: 'Envoi au PC…', taken: 'Pris par le terminal', takenNow: 'Pris par le terminal · à l’instant', uncertain: 'Réception non confirmée' },
+    /** OpenRig's messages in a seat's thread (docs/mockups/openrig-messages, section « Téléphone » and its copy table). */
+    rig: {
+      from: 'De', to: 'À', reply: 'Répondre', replyTo: (n: string) => `Répondre à ${n}`,
+      raw: 'Brut', command: 'Commande', rawMany: (k: number) => `${k} messages collés ensemble · brut`,
+      twice: (k: number) => `reçu ${k} fois`,
+      unreadable: 'Message OpenRig illisible · affiché tel quel',
+      /** Put in the composer of the sender's session: ordinary text the person edits. */
+      about: (line: string) => `À propos de : « ${line} »`,
+      sent: { sending: 'envoi…', delivered: '✓ remis', read: '✓ lu', failed: 'non remis' },
+      rowIn: (n: string) => `Confiée par ${n}`, rowOut: (n: string) => `Passée à ${n}`,
+      rowState: { unknown: 'état non suivi', refused: 'non transmise' },
+      /** The short log of a handoff OpenRig refused: when it was passed, and what OpenRig said. */
+      refusedSaid: (time: string, said: string) => `passée ${time} · OpenRig : ${said}`,
+      refusedSilent: (time: string) => `passée ${time} · non transmise par OpenRig`,
+      openrig: 'OpenRig',
+      unblocked: (id: string) => `Blocage levé : la ligne ${id} est de nouveau à faire`,
+      stalled: (id: string, min: number) => `Ligne ${id} sans suite depuis ${min} min`,
+      folded: (k: number) => `${k} avis OpenRig`
+    },
     slash: {
       label: (tool: string) => `Commandes de ${tool}`, count: (tool: string, n: number) => `${tool} · ${n} commande${n > 1 ? 's' : ''}`,
       loading: (tool: string) => `${tool} · lecture des commandes…`,
