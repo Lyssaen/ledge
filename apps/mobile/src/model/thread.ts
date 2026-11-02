@@ -1,4 +1,4 @@
-import type { AttachmentRef, PhoneSession, ThreadItem as PcItem } from '@ledge/protocol';
+import { isBrowserCapture, toolShortName, type AttachmentRef, type PhoneSession, type ThreadItem as PcItem } from '@ledge/protocol';
 import { copy } from '../copy';
 import type { LinkState } from '../link/link';
 import type { Op } from '../state/operations';
@@ -17,6 +17,7 @@ export type ThreadItem =
     /** The ids of the images of this phone's own instruction not yet shown by the PC. */ attachments?: string[] }
   | { key: string; kind: 'agent'; text: string; at: string; cut?: true }
   | { key: string; kind: 'event'; label: string; at: string }
+  | { key: string; kind: 'capture'; label: string; at: string; images: AttachmentRef[] }
   | { key: string; kind: 'awaiting'; item: InboxItem };
 
 type Instruction = Op & { message: Extract<Op['message'], { type: 'session.reply' }> };
@@ -57,8 +58,8 @@ const sameText = (prompt: string, sent: string, shortened: boolean) => {
  * The thread in the PC's order (a row updated in place keeps its place; the PC's rows are not sorted by time), what
  * this phone sent that the PC's thread does not show yet in its place in time, what is still on its way, then the
  * request still waiting. A taken instruction the PC never lists (a command such as `/new`, or a prompt that fell off its
- * window) goes once the PC lists something `TAKEN_WINDOW` past it: the PC moved on without it. Tools, helpers and
- * messages between agents are left to the terminal; a permission shows once decided.
+ * window) goes once the PC lists something `TAKEN_WINDOW` past it: the PC moved on without it. Of the tools only those that returned images show, as a
+ * capture; helpers and messages between agents are left to the terminal; a permission shows once decided.
  */
 export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<string, Op>, now: number = Date.now(), cut: string[] = []): ThreadItem[] {
   const out: ThreadItem[] = [];
@@ -77,6 +78,7 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
   for (const i of items) {
     if (i.kind === 'prompt') out.push({ key: i.id, kind: 'me', text: i.text, at: i.at, ...(i.images?.length ? { images: i.images } : {}), ...(claimed.has(i.id) ? { delivery: 'taken' as const } : {}), ...mark(i.id) });
     else if (i.kind === 'reply') out.push({ key: i.id, kind: 'agent', text: i.text, at: i.at, ...mark(i.id) });
+    else if (i.kind === 'tool' && i.images?.length) out.push({ key: i.id, kind: 'capture', label: isBrowserCapture(i.tool) ? copy.thread.capture : toolShortName(i.tool), at: i.at, images: i.images });
     else if (i.kind === 'permission') {
       const label = eventLabel(i, session.id, ops);
       if (label) out.push({ key: i.id, kind: 'event', label, at: i.at });
