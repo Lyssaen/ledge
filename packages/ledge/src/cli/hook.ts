@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MESSAGE_MAX, TEAM_ADDRESS, taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
+import { LEADER_ROLE, MESSAGE_MAX, TEAM_ADDRESS, taskClosed, type Session, type SessionEvent, type Task, type Team, type Tool } from '@ledge/protocol';
 import { findRole } from '../daemon/roles.js';
 import { resolveRoleAddress, seatContext, seatKey, seatView, teamChangeLine, teammates } from '../daemon/seat.js';
 import { connect, sendMessageAndAwaitAck, type Client } from '../client.js';
@@ -374,6 +374,8 @@ function mapCursorEvent(eventName: string, p: Payload, at: string, launched: boo
 type Identity = Pick<Session, 'name' | 'tool' | 'project' | 'cwd'> & Partial<Pick<Session, 'repo' | 'branch' | 'worktree'>> & {
   /** Its role and team, as `seatContext` words them (roles spec §3.5): rebuilt at every start from the live team. */
   seat?: string;
+  /** Its role id, when it holds a seat: only the lead puts its questions to Ledge. */
+  role?: string;
   /** The tasks it holds, open (context handover spec §2): kept by Ledge, not in its conversation. */
   tasks?: Task[];
   /** The session it relieves (§3.3): its brief is one command away. */
@@ -411,7 +413,8 @@ export function identityContext(s: Identity): string {
       : 'Pour écrire à une autre session Ledge, lance `ledge send <nom> "<message>"` (seul, sans && ni |). Ledge exécute lui-même `ledge send`, `ledge read`, `ledge ask` et `ledge who` : leur résultat t\'arrive comme « Command blocked by PreToolUse hook: … », c\'est la réponse, pas une erreur.',
     s.seat ? 'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne (ta consigne de rôle, ton équipe).'
       : 'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne.',
-    s.seat ? 'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`). Une décision qui revient à l\'utilisateur se pose avec `ledge task give ledge "<question>" "<options, ta recommandation>"` : sa réponse te réveille, inutile d\'attendre la fin pour la poser.'
+    s.seat ? 'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`). ' + (s.role === LEADER_ROLE ? 'Une question que tu ne peux pas trancher se pose à Ledge avec ledge task give ledge "<question>" "<options, ta recommandation>" : Ledge la tranche selon le mandat de l\'utilisateur ou la lui remonte, et sa réponse te réveille.'
+        : 'Une question que tu ne peux pas trancher se pose à ton lead (ledge task give @leader "<question>" "<options>") : lui seul s\'adresse à Ledge.')
       : 'Un message sert à prévenir. Une décision qui revient à l\'utilisateur se pose avec `ledge ask "<question>" "<options, ta recommandation>"` : sa réponse te réveille (une `<ledge-answer>`), inutile d\'attendre la fin pour la poser.',
     ...(s.seat ? [s.seat] : []),
     ...(s.relieves ? [`Tu as pris la relève de ${s.relieves.name}, dont le contexte était plein : relis son bilan avec \`ledge handover show\`.`] : []),
@@ -436,14 +439,14 @@ async function identity(agent: Tool, cwd: string | undefined, known: Session | u
 }
 
 /** The role and team lines of a seat: its role file read again (it may have changed), its teammates as they are now. */
-function seatOf(known: Session | undefined, dir: string, live: { sessions: Session[]; teams: Team[] }): { seat?: string } {
+function seatOf(known: Session | undefined, dir: string, live: { sessions: Session[]; teams: Team[] }): { seat?: string; role?: string } {
   const roleId = known?.role ?? process.env.LEDGE_ROLE;
   if (!roleId) return {};
   let role;
   try { role = findRole(roleId, dir); } catch { role = undefined; }
   const team = known?.team ? live.teams.find(t => t.id === known.team && t.state !== 'dissolved') : undefined;
   const seat = seatContext({ ...(role ? { role } : {}), roleId, roleLabel: known?.roleLabel, ...(team ? { team: { name: team.name, members: teammates(team, live.sessions).filter(m => m.name !== known?.name) } } : {}) });
-  return seat ? { seat } : {};
+  return seat ? { seat, role: roleId } : {};
 }
 
 /** A turn's look at its team waits this long for the snapshot: past it, the turn goes on and the next one looks again. */

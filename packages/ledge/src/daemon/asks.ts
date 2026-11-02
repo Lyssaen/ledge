@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { AskSchema, backendOf, isArchived, type Ask, type AskRefusal, type Session } from '@ledge/protocol';
+import { AskSchema, LEADER_ROLE, backendOf, isArchived, type Ask, type AskRefusal, type Session, type Team } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { formatLedgeAnswer } from './crossSession.js';
@@ -7,6 +7,8 @@ import { jsonJournal, type Journal } from './journal.js';
 import { log } from '../log.js';
 
 export type AsksJournal = Journal<Ask[]>;
+/** What a team seat other than the lead is told when it puts a question to Ledge (`ledge task give ledge`, `ledge ask`). */
+export const ASK_YOUR_LEAD = 'seul le lead pose les questions à Ledge : pose la tienne à ton lead (ledge task give @leader "<question>" "<options>")';
 type Refusal = { code: AskRefusal; reason: string };
 
 export interface AsksDeps {
@@ -15,6 +17,8 @@ export interface AsksDeps {
   mailbox: Pick<Mailbox, 'notify'>;
   now?: () => string;
   journal?: AsksJournal;
+  /** The seats' teams: a seat of a live team does not `ledge ask`, it puts its question through `ledge task`. */
+  teams?: { teamOf(session: string): Team | undefined };
   /** Every change of every ask: the fronts show it. */
   onAsk?(a: Ask): void;
 }
@@ -83,6 +87,9 @@ export function createAsks(d: AsksDeps): Asks {
       if (!question.trim()) return { code: 'invalid', reason: 'la question est vide' };
       const s = d.store.get(by);
       if (!reachable(s)) return { code: 'not_session', reason: 'seule une session lancée par Ledge pose une décision' };
+      const team = d.teams?.teamOf(by);
+      if (team) return { code: 'not_session', reason: team.seats.some(x => x.sessionId === by && x.role === LEADER_ROLE)
+        ? 'dans une équipe, pose ta question avec ledge task give ledge "<question>" "<options>" : Ledge la tranche selon le mandat ou la remonte' : ASK_YOUR_LEAD };
       const at = now();
       return put({ id: newId(), from: s!.id, fromName: s!.name, question: question.trim(), options: options.trim(), at, state: 'open' });
     },

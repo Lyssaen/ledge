@@ -374,7 +374,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // The relay keeps the refusal's code too: a phone words its card's failure from it, never from the PC's text.
   const relay = createRelay({ threads: cardThreads, store, replyTo: async (id, text) => { const r = await replyTo(id, text); return r && { message: r.message, code: r.code }; }, now, typing, closing, next: id => mailbox.kick(id) });
   /** The decisions lone sessions ask the user (`ledge ask`): every change reaches the local fronts. */
-  const asks = createAsks({ store, mailbox, now, ...(opts.asks ? { journal: opts.asks } : {}), onAsk: ask => broadcast({ type: 'ask.updated', ask }) });
+  const asks = createAsks({ store, mailbox, now, teams: { teamOf: id => teams.teamOf(id) }, ...(opts.asks ? { journal: opts.asks } : {}), onAsk: ask => broadcast({ type: 'ask.updated', ask }) });
   /** The local OpenRig mirror: every change reaches the fronts; a rig gone takes its sessions' seats with it (never on a mere disconnect). */
   const bridge = opts.openrig;
   /** Ledge's thread (with or without OpenRig): every item, new or grown, reaches the local fronts. */

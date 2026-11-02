@@ -605,7 +605,11 @@ describe('session identity (SessionStart additionalContext)', () => {
     for (const t of [text, codex]) expect(t).toContain('Une `<ledge-notice>` vient de Ledge : soit un de tes messages n\'a pas pu être remis, soit un changement te concerne.');
     // A seat gives work that must not get lost, and puts a decision to the user, with `ledge task`.
     expect(seat).toContain('`ledge task give <nom> "<titre>" "<détail>"`');
-    expect(seat).toContain('`ledge task give ledge "<question>" "<options, ta recommandation>"`');
+    expect(seat).toContain('Une question que tu ne peux pas trancher se pose à ton lead (ledge task give @leader "<question>" "<options>") : lui seul s\'adresse à Ledge.');
+    expect(seat).not.toContain('ledge task give ledge');
+    const lead = identityContext({ name: 'Nova', tool: 'codex', project: 'api', cwd: '/w/api', seat: 'Tu tiens le siège @leader de l\'équipe api.', role: 'leader' });
+    expect(lead).toContain('Une question que tu ne peux pas trancher se pose à Ledge avec ledge task give ledge "<question>" "<options, ta recommandation>" : Ledge la tranche selon le mandat de l\'utilisateur ou la lui remonte, et sa réponse te réveille.');
+    expect(lead).not.toContain('ton lead');
     // A lone session asks the user with `ledge ask`.
     for (const t of [text, codex]) expect(t).toContain('ledge ask "<question>" "<options, ta recommandation>"');
     for (const t of [text, codex]) expect(t).not.toContain('ledge task give');

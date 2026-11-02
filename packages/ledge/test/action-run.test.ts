@@ -72,7 +72,7 @@ describe('action.run', () => {
 
   it('task.answer: the user answers a decision a session put to it, confirmed; never a session, not even the @leader asking', async () => {
     const t = await team();
-    const lead = t.seats[0]!.sessionId!;
+    const lead = t.seats.find(s => s.role === 'leader')!.sessionId!;
     c.send({ type: 'task.cmd', rid: 'ask', by: lead, op: 'give', to: 'ledge', title: 'Fusionner ?', text: 'oui / non' });
     const d = (await c.next('task.result', 3000)).task!;
     expect(await run('task.answer', { task: d.id, answer: 'oui' })).toMatchObject({ code: 'confirm_required', row: { risk: 'destructive', detail: 'oui' } });

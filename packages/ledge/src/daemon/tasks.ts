@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { backendOf, givenByLedge, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry, type Team, type TeamObjective } from '@ledge/protocol';
+import { backendOf, givenByLedge, isArchived, LEADER_ROLE, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry, type Team, type TeamObjective } from '@ledge/protocol';
+import { ASK_YOUR_LEAD } from './asks.js';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { noTeamReason } from './seat.js';
@@ -177,7 +178,10 @@ export function createTasks(d: TasksDeps): Tasks {
       // A decision for the user: Ledge holds it, nobody is typed to, the fronts show it; its answer (done) wakes the asker.
       if (cmd.to.trim().toLowerCase() === LEDGE_GIVER) {
         if (ledge) return refuse('tu ne peux pas te confier une tâche');
-        const at = now(); const askerTeam = teamOf(me.id)?.id;
+        const asking = teamOf(me.id);
+        // In a team only the lead puts questions to Ledge; the others ask their lead.
+        if (asking && !asking.seats.some(x => x.sessionId === me.id && x.role === LEADER_ROLE)) return refuse(ASK_YOUR_LEAD);
+        const at = now(); const askerTeam = asking?.id;
         const task: Task = { id: newId(), title: cmd.title.trim(), ...(cmd.text?.trim() ? { text: cmd.text.trim() } : {}), giver: me.id, giverName: me.name,
           owner: LEDGE_GIVER, ownerName: 'Ledge', ...(askerTeam ? { team: askerTeam } : {}), state: 'open', at, updatedAt: at,
           log: [{ at, by: me.name, what: 'confiée à Ledge (décision)', ...sides('give', me, { id: LEDGE_GIVER, name: 'Ledge' }) }] };
