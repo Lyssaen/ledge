@@ -60,6 +60,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     : a.kind === 'asks' ? { type: 'openrig.asksChanged', requestId, machineId, asks: [], error }
     : a.kind === 'answer' ? { type: 'openrig.answered', requestId, machineId, qitemId: a.qitemId ?? '', ok: false, error }
     : { type: 'openrig.state', requestId, machineId, error };
+  /** The OpenRig writes whose end is told `uncertain` when their machine drops after they were sent (a refusal before sending stays `offline`). */
+  const SENT_WRITES: ReadonlySet<RigKind> = new Set(['answer']);
+  const rigUncertain = (a: RigAsk, requestId: string, machineId: string): ServerMessage =>
+    ({ type: 'openrig.answered', requestId, machineId, qitemId: a.qitemId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' });
   /** `openrig.status` / `openrig.act` requestId -> the machine asked, so only its answer is emitted (a drop or a refusal answers « offline » or « outdated »). */
   const rigAsks = new Map<string, RigAsk>();
   /** Each pending OpenRig ask of `machine` (of `kinds` only, when given) is answered with `error`: 'offline' when it dropped,
@@ -67,7 +71,9 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const answerFailedRigs = (machine: string, error: 'offline' | 'outdated', kinds?: readonly RigKind[]) => {
     for (const [requestId, a] of rigAsks) if (a.machine === machine && (!kinds || kinds.includes(a.kind))) {
       rigAsks.delete(requestId);
-      emit(rigFailure(a, requestId, machine, error));
+      // A write already handed to the machine (an answer to OpenRig) that drops before its end may have been done there: `uncertain`,
+      // never `offline`, which says nothing left (sending it again is safe: OpenRig records an answer once).
+      emit(error === 'offline' && SENT_WRITES.has(a.kind) ? rigUncertain(a, requestId, machine) : rigFailure(a, requestId, machine, error));
     }
   };
   const operations = new Map<string, string>();
