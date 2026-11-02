@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { Ask, BrainStatus, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, Escalation, Exchange, FoundRepo, LedgeThreadItem, LedgeDecision, LedgeRule, IslandPrefs, MandateCategory, Machines, ModelChoice, OpenRigStatus, Projects, Recent, Rig, RigPlan, RigResultCode, RigSpecInfo, Session, Team, ThreadItem, Tool } from '@ledge/protocol';
+import { decisionEscalationId, LEADER_ROLE, LEDGE_GIVER, TRANSMISSION_OPS, type Ask, type BrainStatus, type ChatProjectProposal, type ChatProposal, type ChatStep, type ChatTurn, type ClientMessage, type DaemonInfo, type Escalation, type Exchange, type FoundRepo, type LedgeThreadItem, type LedgeDecision, type LedgeRule, type IslandPrefs, type MandateCategory, type Machines, type ModelChoice, type OpenRigStatus, type Projects, type Recent, type Rig, type RigPlan, type RigResultCode, type RigSeat, type RigSpecInfo, type Seat, type Session, type Task, type TaskOp, type Team, type TeamsEngine, type ThreadItem, type Tool } from '@ledge/protocol';
 import type { RolesListing } from '../src/teams/useTeamsApi';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
@@ -52,6 +52,42 @@ export interface ChatReply { steps?: ChatStep[]; text: string; proposal?: ChatPr
 /** A machine's answer to `repos.scan`: its repositories, or the fleet's `error` for a machine it cannot ask. */
 export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'outdated';
 
+/** How a launched team plays in the fake daemon (lot G): the pause between two steps, and what its lead asks Ledge on the way, each
+ *  question settled by the brain (`answered`, by `ledge`) or left to the user (`pending`). */
+export interface TeamScript { stepMs?: number; asks?: { title: string; settled: boolean }[] }
+
+/** The daemon's refusals, word for word (packages/ledge/src/daemon/engine/setting.ts, guard.ts, leader.ts). */
+const NO_OPENRIG = "OpenRig n'est installé sur aucune machine : installe-le (npm i -g @openrig/cli) avant de le choisir";
+const LEDGE_RUNS = 'une équipe Ledge tourne : mets-la au repos ou dissous-la avant de changer de moteur';
+const RIG_RUNS = 'un rig OpenRig tourne : arrête-le avant de changer de moteur';
+const ENGINE_OPENRIG = "le moteur d'équipes est OpenRig : ledge team et ledge task sont coupés (Réglages › Équipes)";
+const NO_LEADER = `il manque le siège @${LEADER_ROLE} : une équipe a exactement un lead (ajoute un siège de rôle ${LEADER_ROLE})`;
+/** The bot names the fake daemon gives a team's seats, in seat order. */
+const SEAT_NAMES = ['Otto', 'Pim', 'Nova', 'Bix', 'Luna', 'Milo', 'Echo', 'Rio'];
+/** OpenRig states that say nothing of OpenRig being there (setting.ts). */
+const NOT_THERE: ReadonlySet<OpenRigStatus['state']> = new Set(['absent', 'unsupported', 'unreachable']);
+const isTransmission = (op: TaskOp) => (TRANSMISSION_OPS as readonly string[]).includes(op);
+const SEAT_STATE: Record<Session['state'], RigSeat['state']> = {
+  starting: 'starting', idle: 'idle', working: 'working', waiting_permission: 'attention', waiting_input: 'attention', exited: 'stopped', error: 'crashed'
+};
+
+/** A Ledge team as the Ledge engine projects it (packages/ledge/src/daemon/engine/ledge.ts): `team-…`, a seat per role (`role@team`,
+ *  its session's name and agent), `running` while every seat is live, `stopped` at rest, its template as `spec`. */
+function projectTeam(team: Team, byId: ReadonlyMap<string, Session>): Rig {
+  const live = (id: string | null) => { const s = id ? byId.get(id) : undefined; return !!s && s.state !== 'exited'; };
+  return {
+    id: team.id, name: team.name, machine: 'local', cwd: team.cwd, projectId: team.project, offProject: team.project === null,
+    ...(team.template ? { spec: team.template } : {}),
+    lifecycle: team.state === 'resting' ? 'stopped' : team.seats.every(x => live(x.sessionId)) ? 'running' : 'partial',
+    kernel: false, engine: 'ledge', repos: [],
+    seats: team.seats.map(x => {
+      const s = x.sessionId ? byId.get(x.sessionId) : undefined;
+      return { ref: `${x.role}@${team.id}`, address: `@${x.role}`, name: s?.name ?? x.role, runtime: s?.tool ?? x.tool ?? 'claude',
+        ...(s ? { sessionId: s.id } : {}), state: s && live(x.sessionId) ? SEAT_STATE[s.state] : 'stopped' };
+    })
+  };
+}
+
 /** Simulates the local ledge daemon inside the page: a snapshot, then the machines list, and a `push` for later updates.
  *  Like the daemon (spec §5.3) it keeps the machines list: `machines.set` replaces it and is broadcast back as `machines`,
  *  and every new connection (reload, reconnect) gets the current list. A `document.read` is answered from `extras.documents` by its path
@@ -88,8 +124,19 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  user's decision and marks the old one `revisitedBy` it (`decisions`).
  *  With `extras.teams` it speaks of teams (`teams` after the snapshot), and a `roles.list` is answered from `extras.roles` by its `cwd`
  *  (`~` without one), an unknown folder with nothing.
+ *  The teams engine (lots D to F), only with `extras.teamsEngine`: `teams.engine` after the snapshot and at each change (`openrigAvailable` from
+ *  `extras.openrig`, `running` from the engine's own teams), and only that engine's rigs (Ledge: its teams projected, `engine: 'ledge'`; OpenRig:
+ *  the others, kernels included). `teams.engine.set` is answered `teams.engine.result`, refused with the daemon's words while a team of the
+ *  engine runs or when OpenRig is installed nowhere. In Ledge mode a `team.launch` (seats, or a template of `extras.roles`) seats a session per
+ *  role (`team`, `role`, names from SEAT_NAMES), broadcasts the team (`team.updated`), its projection (`rig.updated`) and its objective task
+ *  (Ledge's, owned by the lead), then answers `team.launched` with `objectiveTask`; a team with no `leader` seat, or any team in OpenRig mode,
+ *  is refused (`team.failed`). Then, every `teamScript.stepMs`, the lead takes its objective and gives « Relis le README » to the next seat,
+ *  puts each of `teamScript.asks` to Ledge (a decision task mirrored as the `task-<id>` escalation, settled by the brain or left pending),
+ *  the seat hands its task back done, and the lead closes the objective, which lands in « À toi ». In OpenRig mode a launched rig gets its
+ *  seats' sessions and runs, then its lead and second seat exchange three messages. Every hand-over within a team is a `rig.exchange`, grouped
+ *  in Ledge's thread as the daemon does (`ledge.thread.item` `exchanges`). A `task.cmd` `list` is answered from the tasks, `seen` puts one away.
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>>; rigAct?: { ok: false; code: RigResultCode; reason?: string }; brain?: { status: BrainStatus; mandate?: string; rules?: LedgeRule[]; decisions?: LedgeDecision[] }; teams?: Team[]; roles?: Record<string, Omit<RolesListing, 'silent'>> } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; asks?: Ask[]; rigs?: Rig[]; escalations?: Escalation[]; openrig?: OpenRigStatus; specs?: RigSpecInfo[]; exchanges?: Record<string, Exchange[]>; thread?: LedgeThreadItem[]; answerDelayMs?: number; plans?: Record<string, Partial<RigPlan>>; rigAct?: { ok: false; code: RigResultCode; reason?: string }; brain?: { status: BrainStatus; mandate?: string; rules?: LedgeRule[]; decisions?: LedgeDecision[] }; teams?: Team[]; roles?: Record<string, Omit<RolesListing, 'silent'>>; teamsEngine?: TeamsEngine; teamScript?: TeamScript } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -111,6 +158,128 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let items = 0;
   const turns = new Map<string, ChatTurn>();
   const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>();
+  // The teams engine (lot G): its teams, Ledge's tasks, and the open exchange group of each rig in the thread.
+  let engine = extras.teamsEngine;
+  let teams: Team[] | undefined = extras.teams ? [...extras.teams] : engine ? [] : undefined;
+  const tasks = new Map<string, Task>();
+  const groups = new Map<string, string>();
+  let teamSeq = 0, taskSeq = 0;
+  /** Sends to the page when it is still there (the scripted steps run on timers). */
+  const say = (m: unknown) => { try { socket?.send(JSON.stringify(m)); } catch { /* the page is gone */ } };
+  const openrigAvailable = () => !!extras.openrig && !NOT_THERE.has(extras.openrig.state);
+  const engineRunning = (e: TeamsEngine) => e === 'ledge'
+    ? (teams ?? []).some(t => t.state === 'active')
+    : [...rigs.values()].some(r => r.engine !== 'ledge' && !r.kernel && (r.lifecycle === 'running' || r.lifecycle === 'partial' || r.lifecycle === 'launching'));
+  const engineState = (e: TeamsEngine) => ({ type: 'teams.engine', engine: e, openrigAvailable: openrigAvailable(), running: engineRunning(e) });
+  /** The rigs the engine in force shows: Ledge's teams, or OpenRig's rigs; without an engine (a daemon before lot D), all of them. */
+  const shown = (r: Rig) => engine === undefined || (engine === 'ledge') === (r.engine === 'ledge');
+  const snapshots = () => {
+    const byMachine = new Map<string, Rig[]>([['local', []]]);
+    for (const r of rigs.values()) if (shown(r)) byMachine.set(r.machine, [...(byMachine.get(r.machine) ?? []), r]);
+    return [...byMachine].map(([machine, list]) => ({ type: 'rig.snapshot', machine, rigs: list }));
+  };
+  /** Adds or replaces a thread item, broadcast as `ledge.thread.item`. */
+  const putThread = (item: LedgeThreadItem) => { const at = thread.findIndex(i => i.id === item.id); if (at >= 0) thread[at] = item; else thread.push(item); say({ type: 'ledge.thread.item', item }); };
+  /** An exchange within a team, as the daemon records it: kept for `rig.exchanges.request`, broadcast, and grouped in the thread
+   *  (packages/ledge/src/daemon/ledgeThread.ts; the script is far shorter than a group's ten minutes). */
+  const record = (x: Omit<Exchange, 'machine' | 'at'>) => {
+    const e: Exchange = { ...x, machine: 'local', at: new Date().toISOString() };
+    exchanges.set(e.rigId, [...(exchanges.get(e.rigId) ?? []), e]);
+    say({ type: 'rig.exchange', exchange: e });
+    const open = thread.find(i => i.id === groups.get(`local/${e.rigId}`));
+    const group: LedgeThreadItem = open?.kind === 'exchanges' ? { ...open, to: e.at, exchangeIds: [...open.exchangeIds, e.id] }
+      : { kind: 'exchanges', id: `group-${++items}`, at: e.at, machine: 'local', rigId: e.rigId, from: e.at, to: e.at, exchangeIds: [e.id] };
+    groups.set(`local/${e.rigId}`, group.id);
+    putThread(group);
+  };
+  const putRig = (rig: Rig) => { rigs.set(`${rig.machine}/${rig.id}`, rig); if (shown(rig)) say({ type: 'rig.updated', rig }); };
+  const putSession = (s: Session) => { sessions.set(s.id, s); say({ type: 'session.updated', session: s }); };
+  const putTeam = (team: Team) => { teams = [...(teams ?? []).filter(t => t.id !== team.id), team]; say({ type: 'team.updated', team }); };
+  /** A task's step, as the daemon's registry writes it: its log, its state, `task.updated`; a hand-over of a team's task is one of
+   *  its exchanges (`<task>:<index>`, its title, from its sender's name to its receiver's). */
+  const taskStep = (t: Task, op: TaskOp, from: { id: string; name: string }, to: { id: string; name: string }, change: Partial<Task> = {}): Task => {
+    const at = new Date().toISOString();
+    const next: Task = { ...t, ...change, updatedAt: at, log: [...t.log, { at, by: from.name, what: op, op, from: from.id, to: to.id, fromName: from.name, toName: to.name }] };
+    tasks.set(next.id, next);
+    say({ type: 'task.updated', task: next });
+    if (next.team && isTransmission(op)) record({ id: `${next.id}:${next.log.length - 1}`, rigId: next.team, from: from.name, to: to.name, kind: 'task', text: next.title });
+    return next;
+  };
+  const newTask = (fields: Pick<Task, 'title' | 'giver' | 'giverName' | 'owner' | 'ownerName' | 'team'> & Partial<Task>): Task => {
+    const at = new Date().toISOString();
+    return { id: `t${(++taskSeq).toString(16).padStart(6, '0')}`, state: 'open', at, updatedAt: at, log: [], ...fields };
+  };
+  const ledgeSide = { id: LEDGE_GIVER, name: 'Ledge' };
+  /** Ledge mode: the team launched, its seats' sessions, its objective given to the lead; then its script, a step every `stepMs`. */
+  const launchTeam = (msg: { rid: string; qid?: string; cwd?: string; name?: string; template?: string; seats?: Seat[]; objective?: { goal: string } }): void => {
+    const fail = (reason: string) => say({ type: 'team.failed', rid: msg.rid, reason });
+    if (engine === 'openrig') return fail(ENGINE_OPENRIG);
+    if (msg.qid !== undefined) return fail("carte d'équipe inconnue"); // the chat's team cards are not played here
+    const cwd = msg.cwd ?? '';
+    const template = msg.template ? extras.roles?.[cwd]?.templates.find(x => x.id === msg.template) : undefined;
+    const seats = msg.seats ?? template?.seats ?? [];
+    if (!seats.length) return fail('il faut des sièges');
+    if (!seats.some(x => x.role === LEADER_ROLE)) return fail(NO_LEADER);
+    const id = `team-${(++teamSeq).toString(16).padStart(4, '0')}`;
+    const at = new Date().toISOString();
+    const folder = cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || cwd;
+    const seated = seats.map((x, i) => {
+      const name = x.name ?? SEAT_NAMES[i % SEAT_NAMES.length]!;
+      return session(`${x.role}-${id}`, { name, tool: x.tool ?? 'claude', cwd, project: folder, title: `${name} · ${folder}`, team: id, role: x.role, startedAt: at, lastActivityAt: at });
+    });
+    for (const s of seated) putSession(s);
+    const lead = seated[seats.findIndex(x => x.role === LEADER_ROLE)]!;
+    const objective = msg.objective ? newTask({ title: msg.objective.goal, text: msg.objective.goal, giver: LEDGE_GIVER, giverName: 'Ledge', owner: lead.id, ownerName: lead.name, team: id, objective: true }) : undefined;
+    const project = projects?.projects.find(p => p.repos.some(r => r.machine === 'local' && r.path === cwd))?.id ?? null;
+    const team: Team = { id, name: msg.name ?? template?.name ?? folder, ...(template ? { template: template.id } : {}), project, machine: 'local', cwd, state: 'active',
+      ...(objective ? { objectiveTask: objective.id } : {}), seats: seats.map((x, i) => ({ role: x.role, sessionId: seated[i]!.id, ...(x.tool ? { tool: x.tool } : {}) })), createdAt: at, updatedAt: at };
+    putTeam(team);
+    putRig(projectTeam(team, sessions));
+    let goal = objective && taskStep(objective, 'give', ledgeSide, lead);
+    say({ type: 'team.launched', rid: msg.rid, team });
+    say(engineState('ledge'));
+    if (!goal) return;
+    const peer = seated.find(s => s.id !== lead.id);
+    const steps: (() => void)[] = [];
+    let review: Task | undefined;
+    steps.push(() => {
+      goal = taskStep(goal!, 'take', lead, lead, { state: 'taken' });
+      if (peer) review = taskStep(newTask({ title: 'Relis le README', giver: lead.id, giverName: lead.name, owner: peer.id, ownerName: peer.name, team: id }), 'give', lead, peer);
+    });
+    for (const ask of extras.teamScript?.asks ?? []) steps.push(() => {
+      // A lead's question: a decision task owned by Ledge, mirrored as the escalation `task-<id>` (packages/ledge/src/daemon/openrig/decisions.ts).
+      const question = taskStep(newTask({ title: ask.title, giver: lead.id, giverName: lead.name, owner: LEDGE_GIVER, ownerName: 'Ledge', team: id }), 'give', lead, ledgeSide);
+      const escalation: Escalation = { id: decisionEscalationId(question.id), source: 'ask', machine: 'local', rigId: id, from: lead.name, intent: 'decision',
+        summary: question.title, questions: [], createdAt: question.at, state: 'pending' };
+      escalations.set(escalation.id, escalation);
+      say({ type: 'escalation.updated', escalation });
+      if (!ask.settled) return;
+      // Settled by the brain within its mandate: the escalation answered by Ledge, the decision task done.
+      const settled: Escalation = { ...escalation, state: 'answered', answer: { by: 'ledge', answers: { text: 'Oui' }, at: new Date().toISOString() } };
+      escalations.set(settled.id, settled);
+      say({ type: 'escalation.updated', escalation: settled });
+      taskStep(question, 'done', ledgeSide, lead, { state: 'done', result: 'Oui' });
+    });
+    steps.push(() => { if (review && peer) review = taskStep(review, 'done', peer, lead, { state: 'done', result: 'Relu, rien à redire' }); });
+    steps.push(() => { goal = taskStep(goal!, 'done', lead, ledgeSide, { state: 'done', result: 'README ajouté et relu' }); });
+    steps.forEach((step, i) => setTimeout(step, (i + 1) * (extras.teamScript?.stepMs ?? 300)));
+  };
+  /** OpenRig mode: a launched rig gets its seats' sessions and runs, then its lead and second seat exchange. */
+  const playRig = (rig: Rig): void => {
+    const stepMs = extras.teamScript?.stepMs ?? 300;
+    setTimeout(() => {
+      const at = new Date().toISOString();
+      const seated = rig.seats.map(x => session(`${x.name}-${rig.id}`, { name: x.name, tool: x.runtime === 'codex' ? 'codex' : 'claude', cwd: rig.cwd, project: rig.name, title: `${x.name} · ${rig.name}`,
+        startedAt: at, lastActivityAt: at, rig: { machine: rig.machine, rigId: rig.id, rigName: rig.name, seat: x.ref, pod: 'dev', member: x.name } }));
+      for (const s of seated) putSession(s);
+      putRig({ ...rig, lifecycle: 'running', ...(rig.launch ? { launch: { ...rig.launch, goalSentAt: at } } : {}), seats: rig.seats.map((x, i) => ({ ...x, sessionId: seated[i]!.id, state: 'working' as const })) });
+      say(engineState('openrig'));
+    }, stepMs);
+    const [lead, peer] = rig.seats;
+    if (!lead || !peer) return;
+    const lines: [RigSeat, RigSeat, Exchange['kind'], string][] = [[lead, peer, 'task', 'Relis le README'], [peer, lead, 'message', 'README relu'], [lead, peer, 'message', 'README commité']];
+    lines.forEach(([from, to, kind, text], i) => setTimeout(() => record({ id: `${rig.id}-x${i + 1}`, rigId: rig.id, from: from.ref, to: to.address, kind, text }), (i + 2) * stepMs));
+  };
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
@@ -119,10 +288,9 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     if (projects) ws.send(JSON.stringify({ type: 'projects', projects }));
     if (island !== 'unknown') ws.send(JSON.stringify({ type: 'island', prefs: island }));
     ws.send(JSON.stringify({ type: 'asks', asks: [...asks.values()] }));
+    if (engine) ws.send(JSON.stringify(engineState(engine)));
     if (extras.openrig) ws.send(JSON.stringify({ type: 'openrig.status', status: extras.openrig }));
-    const byMachine = new Map<string, Rig[]>([['local', []]]);
-    for (const r of rigs.values()) byMachine.set(r.machine, [...(byMachine.get(r.machine) ?? []), r]);
-    for (const [machine, list] of byMachine) ws.send(JSON.stringify({ type: 'rig.snapshot', machine, rigs: list }));
+    for (const m of snapshots()) ws.send(JSON.stringify(m));
     for (const escalation of escalations.values()) ws.send(JSON.stringify({ type: 'escalation.updated', escalation }));
     if (brain) {
       ws.send(JSON.stringify({ type: 'brain.status', status: brain.status }));
@@ -131,7 +299,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       ws.send(JSON.stringify({ type: 'decisions', items: brain.decisions }));
     }
     ws.send(JSON.stringify({ type: 'ledge.thread.history', items: thread }));
-    if (extras.teams) ws.send(JSON.stringify({ type: 'teams', teams: extras.teams }));
+    if (teams) ws.send(JSON.stringify({ type: 'teams', teams }));
     ws.onMessage(m => {
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
@@ -202,6 +370,34 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
             launch: { planId: plan.id, goal: plan.goal, lead: plan.seats[0]?.address ?? '', startedAt: new Date().toISOString() } };
           rigs.set(`local/${rig.id}`, rig);
           ws.send(JSON.stringify({ type: 'rig.updated', rig }));
+          if (engine === 'openrig') { ws.send(JSON.stringify(engineState('openrig'))); playRig(rig); }
+        }
+      }
+      // The teams engine (lot G): a switch answered as the daemon does, then the new engine and its rigs; a Ledge team, its tasks.
+      if (msg.type === 'teams.engine.set' && engine) {
+        const reason = msg.engine === engine ? null
+          : msg.engine === 'openrig' && !openrigAvailable() ? NO_OPENRIG
+          : engineRunning(engine) ? (engine === 'ledge' ? LEDGE_RUNS : RIG_RUNS) : null;
+        ws.send(JSON.stringify({ type: 'teams.engine.result', rid: msg.rid, ok: reason === null, ...(reason ? { reason } : {}) }));
+        if (reason === null && msg.engine !== engine) {
+          engine = msg.engine;
+          ws.send(JSON.stringify(engineState(engine)));
+          for (const m of snapshots()) ws.send(JSON.stringify(m));
+        }
+      }
+      if (msg.type === 'team.launch' && engine) launchTeam(msg);
+      if (msg.type === 'task.cmd' && msg.op === 'list') {
+        const list = [...tasks.values()].filter(t => (msg.all || !['done', 'refused', 'dropped'].includes(t.state)) && (!msg.team || t.team === msg.team));
+        ws.send(JSON.stringify({ type: 'task.result', rid: msg.rid, tasks: list }));
+      }
+      if (msg.type === 'task.cmd' && msg.op === 'seen') {
+        const t = msg.task ? tasks.get(msg.task) : undefined;
+        if (!t) ws.send(JSON.stringify({ type: 'task.result', rid: msg.rid, reason: 'tâche inconnue' }));
+        else {
+          const seen = { ...t, seen: true };
+          tasks.set(t.id, seen);
+          ws.send(JSON.stringify({ type: 'task.updated', task: seen }));
+          ws.send(JSON.stringify({ type: 'task.result', rid: msg.rid, task: seen }));
         }
       }
       // A rig action (lot 5) is accepted (`rig.result` ok), or refused as `extras.rigAct` says; the rig itself is left as it is.
@@ -396,7 +592,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     /** Adds or replaces an escalation, broadcast as `escalation.updated` (an `answered` one stops later answers: they get `already_answered`). */
     pushEscalation(e: Escalation) { escalations.set(e.id, e); push({ type: 'escalation.updated', escalation: e }); },
     /** Adds an item to Ledge's thread, broadcast as `ledge.thread.item`. */
-    threadItem(item: LedgeThreadItem) { const at = thread.findIndex(i => i.id === item.id); if (at >= 0) thread[at] = item; else thread.push(item); push({ type: 'ledge.thread.item', item }); },
+    threadItem: putThread,
     /** Answers a `session.launch` as the daemon does: the session is broadcast first, then `session.launched` with its raw id. */
     launched(s: Session) { sessions.set(s.id, s); push({ type: 'session.updated', session: s }); push({ type: 'session.launched', id: s.id }); },
     /** Refuses a launch as the daemon does: an `error` with no id, naming its request (spec §9.2). */
