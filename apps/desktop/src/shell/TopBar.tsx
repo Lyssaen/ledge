@@ -3,6 +3,7 @@ import { botState } from '@ledge/ui/bots/poseFor';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { helperState } from '../atelier/layout';
+import { setGrouping, useGrouping } from '../openrig/grouping';
 import { useI18n } from '../i18n/lang';
 import { taskOf } from '../nav/agents';
 import type { NavAction, NavState, ProjectFilter } from '../nav/state';
@@ -17,7 +18,9 @@ const MENU_WIDTH = 260;
 /** The mockup's top bar: the breadcrumb on the left (no page title; on a subagent's page, its parent before it); on the right,
  *  icons only, in groups: display (overview only), or the open agent's state, the terminal toggle and the session menu; then
  *  shortcuts and full screen (search and chat are in the title bar). */
-export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage, onRevealArchives, onDetach }: {
+export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, terminal, onTerminal, manage, onRevealArchives, onDetach, hasRigs = false }: {
+  /** Ledge follows OpenRig seats: the atelier offers to group them by project or by rig. */
+  hasRigs?: boolean;
   nav: NavState; dispatch: (a: NavAction) => void; session: Session | null; projects: Projects | null; projectIdOf: (s: Session) => string | null;
   /** The subagent whose page is open (session is then its parent). */
   helper: Helper | null; terminal: boolean; onTerminal(): void;
@@ -102,6 +105,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
           )}
         </div>
       )}
+      {overview && hasRigs && <GroupingToggle />}
       {overview && (
         <div className="header-view">
           <Button variant="ghost" size="icon" aria-pressed={nav.helpers} aria-label={nav.helpers ? t.top.helpersHide : t.top.helpersShow} title={nav.helpers ? t.top.helpersHide : t.top.helpersShow} onClick={() => dispatch({ type: 'helpers' })}>
@@ -126,5 +130,18 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
         </Button>
       </div>
     </header>
+  );
+}
+
+/** « Projets | Rigs »: OpenRig's seats at their project's table, or in their rig's room (docs/mockups/ledge-openrig-groups.html). */
+function GroupingToggle() {
+  const { t } = useI18n();
+  const grouping = useGrouping();
+  return (
+    <div className="header-view grouping-toggle" role="radiogroup" aria-label={t.top.grouping}>
+      {(['projects', 'rigs'] as const).map(g => (
+        <button key={g} type="button" role="radio" aria-checked={grouping === g} title={t.top.groupingHint[g]} onClick={() => setGrouping(g)}>{t.top.groupingBy[g]}</button>
+      ))}
+    </div>
   );
 }

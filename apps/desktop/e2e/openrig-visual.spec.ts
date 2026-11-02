@@ -81,6 +81,11 @@ for (const theme of ['dark', 'light'] as const) {
     await page.screenshot({ path: info.outputPath(`seats-sessions-${theme}.png`) });
     await page.locator('aside.sidebar').screenshot({ path: info.outputPath(`zoom-sidebar-${theme}.png`) });
     for (const name of ['Bix', 'Nova']) await page.locator('.agent-seat', { hasText: name }).screenshot({ path: info.outputPath(`zoom-seat-${name}-${theme}.png`) });
+    await page.locator('.app-header').screenshot({ path: info.outputPath(`zoom-toggle-rigs-${theme}.png`) });
+    await page.getByRole('radio', { name: 'Projets' }).click();
+    await expect(page.getByRole('radio', { name: 'Projets' })).toHaveAttribute('aria-checked', 'true');
+    await page.screenshot({ path: info.outputPath(`grouping-projects-${theme}.png`) });
+    await page.getByRole('radio', { name: 'Rigs' }).click();
   });
 }
 

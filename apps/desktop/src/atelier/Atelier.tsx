@@ -10,6 +10,7 @@ import type { SessionActions } from '../manage/useSessionActions';
 import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
 import { roomTileWidth, sceneOf, walkOrder, type AtelierTable } from './layout';
+import { useGrouping } from '../openrig/grouping';
 import { ProjectRoom } from './ProjectRoom';
 import { LedgeDesk } from './LedgeDesk';
 import { MessageLayer, useMessageClock } from './MessageLayer';
@@ -61,7 +62,8 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
   const { reduced } = useMotionPreferences();
   const { place } = nav;
   const filter = place.kind === 'settings' ? place.back.project : place.project;
-  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter), [order, projects, projectIdOf, filter]);
+  const grouping = useGrouping();
+  const scene = useMemo(() => sceneOf(order, projects, projectIdOf, filter, grouping === 'rigs'), [order, projects, projectIdOf, filter, grouping]);
   // A seat carried to another room's table is filed in that project (the folder rule).
   const carried = useRef<Session | null>(null);
   const [overTable, setOverTable] = useState<string | null>(null);

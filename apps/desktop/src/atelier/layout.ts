@@ -87,19 +87,19 @@ export interface AtelierRoom { project: Project; tables: AtelierTable[]; rig?: R
 export interface AtelierScene { rooms: AtelierRoom[]; unassigned: Session[]; empty: Project | null }
 
 /** The rooms of the atelier (atelier rooms spec §3.1): a project with sessions has a room, its sessions at its common table. */
-export function sceneOf(order: readonly Session[], projects: Projects | null, projectIdOf: (s: Session) => string | null, filter: ProjectFilter): AtelierScene {
+export function sceneOf(order: readonly Session[], projects: Projects | null, projectIdOf: (s: Session) => string | null, filter: ProjectFilter, byRig = true): AtelierScene {
   const list = projects?.projects ?? [];
   const known = new Set(list.map(p => p.id));
   const idOf = (s: Session) => { const id = projectIdOf(s); return id !== null && known.has(id) ? id : null; };
   // An OpenRig seat sits in its rig's room (the kernel's its own), never at a project's table.
-  const own = order.filter(s => !s.rig);
+  const own = byRig ? order.filter(s => !s.rig) : order;
   const showTables = filter === 'all' || filter !== 'none';
   const projectRooms = showTables
     ? list.filter(p => filter === 'all' || p.id === filter)
       .map(project => ({ project, tables: [{ key: `common:${project.id}`, mains: own.filter(s => idOf(s) === project.id) }] }))
       .filter(r => r.tables[0]!.mains.length > 0)
     : [];
-  const rigs = filter === 'all' ? rigRooms(order.filter(s => s.rig), id => list.find(p => p.id === id)?.name ?? null, projectIdOf) : [];
+  const rigs = byRig && filter === 'all' ? rigRooms(order.filter(s => s.rig), id => list.find(p => p.id === id)?.name ?? null, projectIdOf) : [];
   const rooms = [...rigs.filter(r => r.rig!.kind === 'kernel'), ...projectRooms, ...rigs.filter(r => r.rig!.kind === 'rig')];
   const unassigned = filter === 'all' || filter === 'none' ? own.filter(s => idOf(s) === null) : [];
   const target = filter === 'all' || filter === 'none' ? undefined : list.find(p => p.id === filter);
