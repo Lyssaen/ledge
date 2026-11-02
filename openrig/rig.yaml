@@ -20,6 +20,7 @@ pods:
         agent_ref: "local:agents/lead"
         profile: default
         runtime: claude-code
+        model: claude-opus-5-5
         cwd: "~/Workspace/ledge"
     edges: []
 
@@ -32,6 +33,7 @@ pods:
         agent_ref: "local:agents/ux"
         profile: default
         runtime: claude-code
+        model: claude-opus-5-5
         cwd: "~/Workspace/ledge"
     edges: []
 
@@ -44,6 +46,7 @@ pods:
         agent_ref: "local:agents/developer"
         profile: default
         runtime: claude-code
+        model: claude-opus-5-5
         cwd: "~/Workspace/ledge"
         startup:
           files:
@@ -55,6 +58,7 @@ pods:
         agent_ref: "local:agents/developer"
         profile: default
         runtime: claude-code
+        model: claude-opus-5-5
         cwd: "~/Workspace/ledge"
         startup:
           files:
@@ -75,6 +79,7 @@ pods:
         agent_ref: "local:agents/reviewer"
         profile: default
         runtime: codex
+        model: gpt-6.1-terra
         cwd: "~/Workspace/ledge"
     edges: []
 
