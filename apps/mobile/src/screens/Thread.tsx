@@ -209,7 +209,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
         <p className="mt-2 ml-[46px] text-meta [overflow-wrap:anywhere] text-muted phone-side:hidden">{where}</p>
       </header>
       <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4 phone-side:pt-3 phone-side:pb-3">
-        {session.rig && <p className="text-small text-muted">Ce siège appartient au rig {session.rig.rigName} : OpenRig s’occupe de son cycle de vie.</p>}
+        {session.rig && <p className="text-small text-muted">Ce siège appartient à l’équipe {session.rig.rigName} : son moteur s’occupe de son cycle de vie.</p>}
         {state.daemon?.checklist && state.checklists.get(sessionId) && <Checklist checklist={state.checklists.get(sessionId)!} current={session?.checklist?.current} />}
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}

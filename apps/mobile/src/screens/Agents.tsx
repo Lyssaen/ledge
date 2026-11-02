@@ -123,7 +123,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
           <section key={g.rows[0]?.sessionId ?? `rigs:${g.label}`} aria-label={g.label}>
             <div className="py-3 text-meta tracking-[.4px] text-muted">{g.label}</div>
-            {state.openrig && rigsIn(g.label, rigs).length > 0 && <a href={href({ name: 'rigs' })} className="block py-2 text-small text-muted">{rigsIn(g.label, rigs).length} rigs travaillent aussi ici : {rigsIn(g.label, rigs).map(r => r.name).join(', ')} · Rigs ›</a>}
+            {state.openrig && rigsIn(g.label, rigs).length > 0 && <a href={href({ name: 'rigs' })} className="block py-2 text-small text-muted">{rigsIn(g.label, rigs).length} équipes travaillent aussi ici : {rigsIn(g.label, rigs).map(r => r.name).join(', ')} · Équipes ›</a>}
             {g.rows.map(r => <Row key={r.sessionId} row={r} session={state.sessions.get(r.sessionId)} offline={offline} threshold={state.device?.contextNear ?? CONTEXT_NEAR} plan={!!state.daemon?.checklist} closing={closing.has(r.sessionId)} now={now} />)}
           </section>
         ))}

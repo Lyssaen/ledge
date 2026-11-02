@@ -175,7 +175,7 @@ export function Teams({ store, onReconnect }: { store: MobileStore; onReconnect?
           </>
         )}
       </main>
-      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="teams" chat={!!state.device?.chat} />
+      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active={state.openrig ? 'rigs' : 'teams'} chat={!!state.device?.chat} openrig={state.openrig} />
       {leveling && catalog && <LeverSheet store={store} catalog={catalog} template={leveling} canConfirm={canConfirm} onClose={() => setLeveling(null)} onLaunched={setLaunched} />}
     </>
   );

@@ -36,6 +36,18 @@ function open(c: PhoneCatalog | null = catalog(), { confirm = true, teams = fals
   return { ...t, view };
 }
 
+describe('the Équipes tab on an OpenRig phone', () => {
+  it('shows the OpenRig bar with the Équipes tab active', () => {
+    const t = setup();
+    const snap = snapshot([], 'PC-Desan', undefined, { confirm: true, chat: true });
+    t.deliver(snap.type === 'snapshot' ? { ...snap, daemon: { ...snap.daemon, openrig: true as const } } : snap);
+    render(<Teams store={t.store} />);
+    const bar = screen.getByRole('navigation', { name: 'Navigation principale' });
+    expect(within(bar).getAllByRole('link').map(a => a.textContent)).toEqual(['Ledge', 'À toi', 'Équipes', 'Projets']);
+    expect(within(bar).getByRole('link', { name: 'Équipes' })).toHaveAttribute('aria-current', 'page');
+  });
+});
+
 describe('the Équipes tab', () => {
   it('counts the teams and roles, and tells each team its scope and roles, with « Lever » and « Nouvelle équipe »', () => {
     open();

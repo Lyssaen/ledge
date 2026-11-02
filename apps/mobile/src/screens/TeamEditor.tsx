@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { EffortSchema, ModelIdSchema, TEAM_SEATS_MAX, TeamNameSchema, TemplateIdSchema, ToolSchema, type PhoneRole, type PhoneTeam, type PhoneTemplate } from '@ledge/protocol';
+import { EffortSchema, LEADER_ROLE, ModelIdSchema, TEAM_SEATS_MAX, TeamNameSchema, TemplateIdSchema, ToolSchema, type PhoneRole, type PhoneTeam, type PhoneTemplate } from '@ledge/protocol';
 import { copy } from '../copy';
 import { autoSeats, catalogKey, parseCatalogKey, rolesNotSeated, roleFor, scopeLabel } from '../model/catalog';
 import { outcomeNote, seatModelNote, type OutcomeNote } from '../model/teamsOutcome';
@@ -169,7 +169,9 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
   const canConfirm = !!state.device?.confirm;
   const online = canConfirm && state.fresh && !busy;
   // Writing a definition: its storage is known (a Dépôt names its project), and no « changed » is waiting for the file to be read again.
-  const canWrite = online && nameOk && seatsOk && (scope === 'home' || project !== '') && !changed.waiting && !gone && !handNamed;
+  // The lead rule is the daemon's too (it refuses the write with its own words); this is only the early notice.
+  const hasLeader = seats.some(s => s.role === LEADER_ROLE);
+  const canWrite = online && nameOk && seatsOk && hasLeader && (scope === 'home' || project !== '') && !changed.waiting && !gone && !handNamed;
   const canLaunch = online && nameOk && seatsOk && project !== '';
   const canCompose = online && seatsOk && !teamGone;
 
@@ -306,6 +308,9 @@ function Form({ store, mode, initial }: { store: MobileStore; mode: TeamEditorMo
             );
           })}
         </ul>
+
+        <p className="mt-2 text-meta text-muted">{t.leaderRule}</p>
+        {isTemplate && !hasLeader && <p role="note" className="mt-1 text-small text-attention">{t.noLeader}</p>}
 
         {seats.length < TEAM_SEATS_MAX && (
           <section aria-label={t.addRole}>

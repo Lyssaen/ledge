@@ -30,10 +30,10 @@ export const copy = {
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
   nav: {
-    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge', teams: 'Équipes', toYou: 'À toi', rigs: 'Rigs', projects: 'Projets',
+    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge', teams: 'Équipes', toYou: 'À toi', rigs: 'Équipes', projects: 'Projets',
     /** « Retour », named after the screen it leads to; plain when that screen is not known (after a reload). */
     back: 'Retour',
-    backTo: { rigs: 'Retour aux rigs', toYou: 'Retour à À toi', inbox: 'Retour aux demandes', agents: 'Retour aux agents', teams: 'Retour aux équipes', chat: 'Retour à Ledge', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
+    backTo: { rigs: 'Retour aux équipes', toYou: 'Retour à À toi', inbox: 'Retour aux demandes', agents: 'Retour aux agents', teams: 'Retour aux équipes', chat: 'Retour à Ledge', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
   },
   images: {
     attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',
@@ -227,6 +227,7 @@ export const copy = {
       fixedScope: (scope: string) => `Rangée dans : ${scope}.`,
       launchNote: 'Votre passkey confirme le lancement.', saveNote: 'Votre passkey confirme l’écriture sur le PC.', composeNote: 'Votre passkey confirme le changement de composition.',
       save: 'Enregistrer', delete: 'Supprimer', deleteTitle: (name: string) => `Supprimer ${name} ?`, deleteHint: 'Les équipes déjà levées ne changent pas.',
+      leaderRule: 'Une équipe a exactement un siège leader : son lead.', noLeader: 'Il manque le siège @leader : ajoute-le pour enregistrer.',
       notSaved: 'Pas enregistré.', notDeleted: 'Pas supprimée.', exists: 'Une équipe de ce nom existe déjà.', invalid: 'Cette équipe ne peut pas être enregistrée telle quelle.',
       composed: 'Composition enregistrée.',
       /** Saved, but the seats named (or one, when none can be) did not start. */

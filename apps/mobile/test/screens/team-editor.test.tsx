@@ -27,7 +27,7 @@ const catalog = (extra: Partial<PhoneCatalog> = {}): PhoneCatalog => ({
     role('dev', { label: 'Développeur', tool: 'codex', model: 'gpt-5', autonomy: 'auto' }),
     ...ROLES.slice(2).map(id => role(id))
   ],
-  templates: [template(), template({ id: 'feature-tdd', name: 'Feature TDD', scope: 'repo', project: 'paper-service', seats: [{ role: 'dev' }] })],
+  templates: [template(), template({ id: 'feature-tdd', name: 'Feature TDD', scope: 'repo', project: 'paper-service', seats: [{ role: 'leader' }, { role: 'dev' }] })],
   problems: [],
   ...extra
 });
@@ -158,18 +158,18 @@ describe('the team editor, a definition', () => {
   it('saves a new Dépôt team on the project picked', async () => {
     const t = open(NEW);
     type('Nom', 'Ma revue');
-    add('qa');
+    add('leader');
     pickProject('paper-service');
     expect(screen.getAllByRole('radio').map(r => (r as HTMLInputElement).labels?.[0]?.textContent)).toEqual(['Maison', 'Dépôt paper-service']);
     fireEvent.click(screen.getByRole('radio', { name: 'Dépôt paper-service' }));
     await click('Enregistrer');
-    expect(t.define.mock.calls[0]![0]).toStrictEqual({ type: 'template.write', scope: 'repo', project: 'paper-service', name: 'Ma revue', seats: [{ role: 'qa' }], base: null });
+    expect(t.define.mock.calls[0]![0]).toStrictEqual({ type: 'template.write', scope: 'repo', project: 'paper-service', name: 'Ma revue', seats: [{ role: 'leader' }], base: null });
   });
 
   it('a Dépôt team with no project picked cannot be saved', () => {
     open(NEW);
     type('Nom', 'Ma revue');
-    add('qa');
+    add('leader');
     fireEvent.click(screen.getByRole('radio', { name: 'Dépôt' }));
     expect(save()).toBeDisabled();
     pickProject('ledge');
@@ -282,7 +282,7 @@ describe('the team editor, a definition', () => {
     const t = open(NEW);
     t.define.mockResolvedValueOnce({ status: 'rejected', reason: 'exists' }).mockResolvedValueOnce({ status: 'cancelled' });
     type('Nom', 'Ma revue');
-    add('qa');
+    add('leader');
     await click('Enregistrer');
     expect(screen.getByRole('status')).toHaveTextContent('Une équipe de ce nom existe déjà.');
     await click('Enregistrer');
@@ -644,5 +644,23 @@ describe('the team editor, a live composition naming seat models', () => {
     await click('Enregistrer');
     expect(screen.getByText('Enregistré ; appliqué à Otto')).toBeInTheDocument();
     expect(screen.queryByText('au prochain démarrage du siège')).toBeNull();
+  });
+});
+
+describe('the team editor, the lead rule', () => {
+  it('says a team has exactly one leader seat under the seats', () => {
+    open(NEW);
+    expect(screen.getByText('Une équipe a exactement un siège leader : son lead.')).toBeInTheDocument();
+  });
+
+  it('without a leader seat « Enregistrer » is disabled and the reason is shown; with one it is enabled', () => {
+    open(NEW);
+    type('Nom', 'Ma revue');
+    add('qa');
+    expect(save()).toBeDisabled();
+    expect(screen.getByText('Il manque le siège @leader : ajoute-le pour enregistrer.')).toBeInTheDocument();
+    add('leader');
+    expect(save()).toBeEnabled();
+    expect(screen.queryByText('Il manque le siège @leader : ajoute-le pour enregistrer.')).toBeNull();
   });
 });

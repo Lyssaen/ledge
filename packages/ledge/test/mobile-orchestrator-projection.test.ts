@@ -10,6 +10,15 @@ describe('phone OpenRig projections', () => {
  it('removes routing, sanitises paths and preserves queued delivery', () => { const p = toPhoneEscalation(esc, [], [rig]); expect(PhoneEscalationSchema.safeParse(p).success).toBe(true); expect(JSON.stringify(p)).not.toMatch(/machine|evidenceRef|\/home\/private/); expect(p.answer?.delivery).toBe('queued'); });
 });
 
+it('carries the engine of a projected Ledge team, and says openrig for an OpenRig rig', () => {
+  const team: Rig = { id: 'team-a1b2', machine: 'local', name: 'Revue', cwd: '', projectId: null, offProject: true, lifecycle: 'running', kernel: false, repos: [], seats: [], engine: 'ledge' };
+  const p = toPhoneRig(team, () => undefined);
+  expect(PhoneRigSchema.safeParse(p).success).toBe(true);
+  expect(p.engine).toBe('ledge');
+  expect(p.spec).toBeUndefined();
+  expect(toPhoneRig(rig, () => undefined).engine).toBe('openrig');
+});
+
 it('does not silently change an id the phone would later send back', () => {
   expect(() => toPhoneEscalation({ ...esc, id: 'q'.repeat(121) }, [], [rig])).toThrow(/unsafe phone identifier/);
 });

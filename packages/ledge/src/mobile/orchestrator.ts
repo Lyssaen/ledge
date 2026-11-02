@@ -13,7 +13,7 @@ const safe = (s: string, max = 120) => text(s, max) || '?';
 const stable = (s: string, max = 120): string => { if (!s || s.length > max || text(s, max) !== s) throw new Error('unsafe phone identifier'); return s; };
 
 export function toPhoneRig(r: Rig, projectName: (id: string) => string | undefined): PhoneRig {
-  return { key: rigKey(r.machine, r.id), name: safe(r.name, 80), ...(r.spec ? { spec: safe(r.spec, 80) } : {}), project: r.projectId ? safe(projectName(r.projectId) ?? r.projectId, 80) : null,
+  return { key: rigKey(r.machine, r.id), name: safe(r.name, 80), ...(r.spec ? { spec: safe(r.spec, 80) } : {}), engine: r.engine ?? 'openrig', project: r.projectId ? safe(projectName(r.projectId) ?? r.projectId, 80) : null,
     offProject: r.offProject, ...(r.branch ? { branch: text(r.branch, 200) } : {}), lifecycle: r.lifecycle, kernel: r.kernel,
     seats: r.seats.slice(0, 16).map(s => ({ ref: stable(s.ref), address: stable(s.address), name: safe(s.name, 80), runtime: safe(s.runtime, 80), ...(s.model ? { model: safe(s.model) } : {}), state: s.state,
       ...(s.contextPct !== undefined ? { contextPct: s.contextPct } : {}), ...(r.machine === 'local' && s.sessionId ? { sessionId: stable(s.sessionId) } : {}) })), repos: r.repos.length,

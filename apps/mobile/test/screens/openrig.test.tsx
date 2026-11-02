@@ -30,6 +30,24 @@ describe('OpenRig screens', () => {
    expect(screen.getAllByText('Fusionner feat/roles ?')).toHaveLength(1);
  });
 
+ it('the Équipes screen says Équipes, links « Modèles » to #/teams and keeps the Équipes tab active', () => {
+   const t = setup(); t.deliver(initial()); render(<Rigs store={t.store} />);
+   expect(screen.getByRole('heading', { name: 'Équipes' })).toBeInTheDocument();
+   expect(screen.getByRole('link', { name: 'Modèles' })).toHaveAttribute('href', '#/teams');
+   expect(screen.getByRole('link', { name: 'Équipes' })).toHaveAttribute('aria-current', 'page');
+   expect(screen.getByRole('link', { name: 'Lancer une équipe…' })).toBeInTheDocument();
+ });
+ it('the Inbox card of a lead\'s question has a free-text field that answers with { text }', () => {
+   const t = setup();
+   const q: PhoneEscalation = { id: 'task-t5d6e7f', source: 'ask', rigKey: 'abc', rigName: 'factory', from: 'Otto', intent: 'decision', summary: 'Fusionner feat/roles ?', questions: [], createdAt: at, state: 'pending' };
+   t.deliver({ ...initial(), escalations: [q] });
+   render(<Inbox store={t.store} />);
+   const send = screen.getByRole('button', { name: 'Répondre' });
+   expect(send).toBeDisabled();
+   fireEvent.change(screen.getByLabelText('Votre réponse à Otto · factory'), { target: { value: 'Oui, fusionne' } });
+   fireEvent.click(send);
+   expect(t.of('escalation.answer')).toMatchObject([{ id: 'task-t5d6e7f', answers: { text: 'Oui, fusionne' } }]);
+ });
  it('shows and links a rig', () => { const t = setup(); t.deliver(initial()); render(<Rigs store={t.store} />); expect(screen.getByRole('link', { name: /factory/ })).toHaveAttribute('href', '#/rig/abc/seats'); });
  it('loads the latest rig exchange for its card', () => {
    const t = setup(); t.deliver(initial()); render(<Rigs store={t.store} />);
@@ -59,7 +77,7 @@ describe('OpenRig screens', () => {
    t.deliver({ type: 'teams', teams: [] });
    render(<Agents store={t.store} />);
    expect(screen.getByRole('region', { name: 'Website' })).toBeInTheDocument();
-   expect(screen.getByRole('link', { name: /1 rigs travaillent aussi ici : factory · Rigs ›/ })).toHaveAttribute('href', '#/rigs');
+   expect(screen.getByRole('link', { name: /1 équipes travaillent aussi ici : factory · Équipes ›/ })).toHaveAttribute('href', '#/rigs');
  });
  it('offers a project even when it has no active rig', () => { const t = setup(); t.deliver({ ...initial(), projects: [{ id: 'website', name: 'Website', hasLocalRepo: true }] }); render(<NewRig store={t.store} />); expect(screen.getByRole('option', { name: 'Website' })).toHaveValue('website'); });
  it('sends a free-text ask and shows a recorded option label', () => {
@@ -73,14 +91,14 @@ describe('OpenRig screens', () => {
    const t = setup(); const snap = initial(); snap.rigs[0]!.seats = [{ ref: 's', address: '@build', name: 'build', runtime: 'codex', state: 'attention', contextPct: 74 }];
    t.deliver(snap); const view = render(<RigPage store={t.store} rigKey="abc" view="seats" />);
    expect(screen.getByText('attention')).toBeInTheDocument(); expect(screen.getByRole('progressbar')).toHaveValue(74); view.rerender(<RigPage store={t.store} rigKey="abc" view="exchanges" />);
-   expect(t.of('rig.exchanges.request')).toMatchObject([{ key: 'abc' }]); act(() => t.deliver({ type: 'rig.removed', key: 'abc' })); expect(screen.getByText('Ce rig est arrêté')).toBeInTheDocument();
+   expect(t.of('rig.exchanges.request')).toMatchObject([{ key: 'abc' }]); act(() => t.deliver({ type: 'rig.removed', key: 'abc' })); expect(screen.getByText('Cette équipe est arrêtée')).toBeInTheDocument();
  });
  it('requires plan review and offers to ask again when a plan expired', async () => {
    const t = setup(); t.deliver(initial());
    t.deliver({ type: 'ledge.thread.item', item: { kind: 'plan', id: 'p-item', at, plan: { id: 'p1', spec: 'web-63', goal: 'Créer le site', where: { kind: 'project', project: 'Website', branch: 'main', copy: true }, seats: [{ address: '@lead', runtime: 'codex', autonomy: 'normal' }], writes: ['Copie créée'], required: true } } });
    const action = vi.spyOn(t.store, 'rigAction').mockResolvedValue({ status: 'rejected', reason: 'invalid' }); render(<LedgeThread store={t.store} />);
-   expect(screen.getByText('.worktrees/rig-web-63')).toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Lancer le rig' }));
-   expect(action).not.toHaveBeenCalled(); expect(screen.getByRole('dialog', { name: 'Plan du rig' })).toBeInTheDocument();
+   expect(screen.getByText('.worktrees/rig-web-63')).toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Lancer l’équipe' }));
+   expect(action).not.toHaveBeenCalled(); expect(screen.getByRole('dialog', { name: 'Plan de l’équipe' })).toBeInTheDocument();
    fireEvent.click(screen.getByRole('button', { name: 'Lancer · confirmer avec la clé d’accès' }));
    await waitFor(() => expect(screen.getByText(/Plan expiré/)).toBeInTheDocument());
    fireEvent.click(screen.getByRole('button', { name: 'Redemander à Ledge' })); expect(t.of('ledge.say')).toMatchObject([{ text: 'Créer le site' }]);

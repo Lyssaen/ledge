@@ -11,6 +11,9 @@ describe('phone OpenRig protocol', () => {
   });
   it('rejects private rig paths and machine fields', () => {
     expect(PhoneRigSchema.safeParse(rig).success).toBe(true);
+    expect(PhoneRigSchema.safeParse({ ...rig, engine: 'ledge' }).success).toBe(true);
+    expect(PhoneRigSchema.safeParse({ ...rig, engine: 'openrig' }).success).toBe(true);
+    expect(PhoneRigSchema.safeParse({ ...rig, engine: 'other' }).success).toBe(false);
     expect(PhoneRigSchema.safeParse({ ...rig, cwd: '/private' }).success).toBe(false);
     expect(PhoneRigSchema.safeParse({ ...rig, machine: 'remote' }).success).toBe(false);
   });
