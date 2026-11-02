@@ -6,10 +6,11 @@ import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
+import { reduceCapture } from './reduce.js';
 import { withImages } from '../attachmentText.js';
 import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
@@ -1353,6 +1354,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'attachment.put':
         try { return reply({ type: 'attachment.stored', requestId: msg.requestId, ref: await storeUpload(msg.image) }); }
         catch (e) { if (e instanceof AttachmentError) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: e.reason }); throw e; }
+      case 'attachment.capture':
+        try { // reduced before answering: the hook waits for the ref, so there is nothing to defer
+          const { image, preview } = reduceCapture(Buffer.from(msg.image.data, 'base64'));
+          return reply({ type: 'attachment.stored', requestId: msg.requestId, ref: await attachments.put(image, preview, ATTACHMENT_MAX) });
+        } catch (e) { if (e instanceof AttachmentError) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: e.reason }); throw e; }
       case 'attachment.get': {
         const found = await attachments.read(msg.attachment, msg.preview === true);
         if (!found) return reply({ type: 'attachment.error', requestId: msg.requestId, reason: 'not_found' });

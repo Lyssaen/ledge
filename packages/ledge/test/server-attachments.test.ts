@@ -12,6 +12,7 @@ import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import type { OmpHost } from '../src/daemon/omp/host.js';
 import type { Session } from '@ledge/protocol';
+import { PNG } from 'pngjs';
 import { withImages } from '../src/attachmentText.js';
 
 const u32 = (n: number) => Buffer.from([n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255]);
@@ -26,6 +27,35 @@ beforeEach(async () => {
   srv = await startServer({ store: new Store(), tmux, port: 0, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
 });
 afterEach(async () => { await srv.close(); });
+
+/** A real PNG (the reducer decodes it): a gradient with a 4 px grain so it stays heavy like a busy page. */
+function realPng(w: number, h: number): Buffer {
+  const p = new PNG({ width: w, height: h });
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4; const v = ((x * 192) / w + (((x >> 2) * 31 + (y >> 2) * 17) & 63)) & 255;
+    p.data[i] = v; p.data[i + 1] = (v * 3) & 255; p.data[i + 2] = 255 - v; p.data[i + 3] = 255;
+  }
+  return PNG.sync.write(p);
+}
+
+describe('attachment.capture', () => {
+  it('stores a capture reduced, with its preview', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'attachment.capture', requestId: 'c1', image: { mime: 'image/png', data: realPng(1920, 1200).toString('base64') } });
+    const { ref } = await c.next('attachment.stored', 25000); // pure-JS reduction of a 4 MP page
+    expect(ref).toMatchObject({ mime: 'image/jpeg', preview: true });
+    expect(ref.width).toBeLessThanOrEqual(1600); expect(ref.width / ref.height).toBeCloseTo(1.6, 1); expect(ref.bytes).toBeLessThanOrEqual(400_000);
+    c.send({ type: 'attachment.get', requestId: 'g1', attachment: ref.id, preview: true });
+    expect((await c.next('attachment.data')).mime).toBe('image/jpeg');
+    await c.close();
+  }, 30_000);
+  it('refuses a capture that is not an image', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'attachment.capture', requestId: 'c2', image: { mime: 'image/png', data: Buffer.from('nope').toString('base64') } });
+    expect(await c.next('attachment.error')).toMatchObject({ requestId: 'c2', reason: 'not_image' });
+    await c.close();
+  });
+});
 
 describe('attachments', () => {
   it('stores an image and serves it back by id', async () => {
