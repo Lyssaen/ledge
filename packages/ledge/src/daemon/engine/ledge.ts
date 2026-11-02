@@ -21,12 +21,23 @@ export interface LedgeEngine extends TeamEngine {
    * `key` (the message's rid) records it once however many times it is submitted; nothing between two teams or outside one.
    */
   recordMessage(from: Session, to: Session | typeof TEAM_ADDRESS, text: string, key?: string): void;
+  /** The user's `team.broadcast` to team `teamId`: a `message` exchange from USER_SENDER to TEAM_ADDRESS, once per `key` (its rid). */
+  recordUserBroadcast(teamId: string, text: string, key: string): void;
   close(): void;
 }
 
 const SEAT_STATE: Record<SessionState, SeatState> = {
   starting: 'starting', idle: 'idle', working: 'working', waiting_permission: 'attention', waiting_input: 'attention', exited: 'stopped', error: 'crashed'
 };
+
+/** Who the user is in a team's exchanges (the thread and the Bureaux read it as is). */
+export const USER_SENDER = 'Toi';
+/** The most of a task's result or reason a `done` or `refuse` exchange carries after its title. */
+export const TASK_RESULT_MAX = 200;
+const cut = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+/** A hand-over's exchange text: the title; a `done` or `refuse` adds what came of it (branch review M1). */
+export const taskExchangeText = (t: Pick<Task, 'title' | 'result'>, op: TaskTransmission['op']): string =>
+  (op === 'done' || op === 'refuse') && t.result ? `${t.title} — ${cut(t.result, TASK_RESULT_MAX)}` : t.title;
 
 const liveSession = (s: Session | undefined): s is Session => !!s && s.state !== 'exited' && !isArchived(s);
 
@@ -116,12 +127,16 @@ export function createLedgeEngine(d: LedgeEngineDeps): LedgeEngine {
     replay: () => [{ type: 'rig.snapshot', machine: 'local', rigs: active() ? shown().map(project) : [] }],
     recordTask(t, tr) {
       const team = teamShown(t.team); if (!team) return;
-      record({ id: `${t.id}:${tr.index}`, rigId: team.id, from: tr.fromName || tr.from, to: tr.toName || tr.to, kind: 'task', text: t.title });
+      record({ id: `${t.id}:${tr.index}`, rigId: team.id, from: tr.fromName || tr.from, to: tr.toName || tr.to, kind: 'task', text: taskExchangeText(t, tr.op) });
     },
     recordMessage(from, to, text, key) {
       const team = d.teams.teamOf(from.id); if (!team) return;
       if (to !== TEAM_ADDRESS && d.teams.teamOf(to.id)?.id !== team.id) return;
       record({ id: key ? `m-${key}` : freshId(), rigId: team.id, from: from.name, to: to === TEAM_ADDRESS ? TEAM_ADDRESS : to.name, kind: 'message', text });
+    },
+    recordUserBroadcast(teamId, text, key) {
+      const team = teamShown(teamId); if (!team) return;
+      record({ id: `u-${key}`, rigId: team.id, from: USER_SENDER, to: TEAM_ADDRESS, kind: 'message', text });
     },
     close() { unsubscribeTeams(); unsubscribeStore(); listeners.clear(); }
   };

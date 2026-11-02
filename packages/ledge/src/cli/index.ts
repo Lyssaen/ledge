@@ -14,6 +14,7 @@ ledge task <give|list|show|take|done|refuse|pass> …         give another sessi
 ledge decide [<id> "<réponse>"]                               the decisions sessions wait for from you; answer one
 ledge handover "<bilan>" | show                              the relief brief, when Ledge asks for it; show: read your predecessor's
 ledge team <up|list|join|leave|resume|dissolve|save> …       start, list and run teams (ledge team: details; --json for agents)
+ledge teams engine [ledge|openrig]                           the teams engine in force; switch it (Ledge's own teams or OpenRig)
 ledge close <session>… [--json]                              close sessions cleanly (their conversation stays resumable)
 ledge tui [--notify bell|osc9|off] [--here]                  follow and answer the sessions (in a Ledge tab of Windows Terminal unless --here)
 ledge bridge                                                 exchange Ledge messages over SSH stdio
@@ -61,6 +62,7 @@ async function main(argv: string[]): Promise<number> {
     case 'handover': { const { runHandover } = await import('./handover.js'); const r = await runHandover(rest); console.log(r.line); return r.code; }
     case 'close': { const { runClose } = await import('./action.js'); const r = await runClose(rest); console.log(r.line); return r.code; }
     case 'team': { const { runTeam } = await import('./team.js'); const r = await runTeam(rest); console.log(r.line); return r.code; }
+    case 'teams': { const { runTeams } = await import('./team.js'); const r = await runTeams(rest); console.log(r.line); return r.code; }
     case 'tui': { const { runTui } = await import('../tui/index.js'); return runTui(rest); }
     case 'brain': { const { runBrain } = await import('./brain.js'); const r = await runBrain(rest); console.log(r.line); return r.code; }
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }

@@ -108,6 +108,20 @@ describe('the Ledge engine, alone', () => {
     tasks.close();
   });
 
+  it('a done or refuse exchange carries the result after the title, cut at 200 characters; give and pass the title only (branch review M1)', () => {
+    const tasks: Tasks = createTasks({ store, mailbox: { notify: () => true }, teams, now: () => T0,
+      onTask: (t, entry) => { const tr = transmissions(t).find(x => x.index === (entry ? t.log.lastIndexOf(entry) : -1)); if (tr && t.team) engine.recordTask(t, tr); } });
+    const a = tasks.run({ type: 'task.cmd', rid: 'g1', by: 'pim', op: 'give', to: '@review', title: 'Relire la PR' }).task!;
+    tasks.run({ type: 'task.cmd', rid: 'd1', by: 'nova', op: 'done', task: a.id, text: 'Deux remarques, corrigées' });
+    const long = 'x'.repeat(300);
+    const b = tasks.run({ type: 'task.cmd', rid: 'g2', by: 'pim', op: 'give', to: '@review', title: 'Tester' }).task!;
+    tasks.run({ type: 'task.cmd', rid: 'r1', by: 'nova', op: 'refuse', task: b.id, text: long });
+    const texts = engine.exchanges(team.id).map(e => e.text);
+    expect(texts).toEqual(['Relire la PR', 'Relire la PR — Deux remarques, corrigées', 'Tester', `Tester — ${'x'.repeat(199)}…`]);
+    expect(texts[3]!.length).toBe('Tester — '.length + 200);
+    tasks.close();
+  });
+
   it('a message between two seats is a message exchange, @team goes to @team; outside the team nothing', () => {
     store.upsert(mk('otto', 'Otto'));
     engine.recordMessage(store.get('pim')!, store.get('nova')!, 'Tu peux relire ?', 'm1');
@@ -272,6 +286,44 @@ describe('the Ledge engine in the daemon', () => {
     expect((await c.next('rig.exchanges')).items.map(x => x.text)).toEqual(['Écrire les tests', 'Pause', 'Fait']);
     c.send({ type: 'rig.exchanges.request', machine: 'local', rigId: 'starter' });
     expect((await c.next('rig.exchanges')).items).toEqual([]);
+    await c.close();
+  });
+
+  it('a task given inside a Ledge team reaches Ledge’s thread as an exchanges group (branch review C1)', async () => {
+    await start();
+    const { c } = await client();
+    c.send({ type: 'team.launch', rid: 'l1', cwd: work, name: 'api', seats: [{ role: 'leader' }, { role: 'build' }], objective: { goal: 'Ajoute un README' } });
+    const team = (await c.next('team.launched', 5000)).team;
+    const lead = team.seats.find(s => s.role === 'leader')!.sessionId!;
+    for (const s of team.seats) idle(s.sessionId!);
+    c.send({ type: 'task.cmd', rid: 't1', by: lead, op: 'give', to: '@build', title: 'Relis le README' });
+    const given = (await c.next('task.result')).task!;
+    let item: Extract<ServerMessage, { type: 'ledge.thread.item' }>['item'];
+    do item = (await c.next('ledge.thread.item', 3000)).item; while (item.kind !== 'exchanges' || !item.exchangeIds.some(id => id.startsWith(`${given.id}:`)));
+    expect(item).toMatchObject({ machine: 'local', rigId: team.id });
+    c.send({ type: 'ledge.thread.request' });
+    let page; do page = await c.next('ledge.thread.history', 3000); while (!page.items.length); // the snapshot's own (empty) page first
+    const groups = page.items.filter(i => i.kind === 'exchanges');
+    expect(groups.flatMap(g => g.kind === 'exchanges' ? g.exchangeIds : [])).toEqual(expect.arrayContaining([`${team.objectiveTask}:0`, `${given.id}:0`]));
+    await c.close();
+  });
+
+  it('the user’s team.broadcast is a message exchange from Toi to @team, in the exchanges and the thread (branch review I2)', async () => {
+    await start();
+    const { c } = await client();
+    const team = await launch(c);
+    for (const s of team.seats) idle(s.sessionId!);
+    c.send({ type: 'team.broadcast', rid: 'b1', team: team.id, text: 'On fusionne à 17h' });
+    expect((await c.next('team.broadcast.result')).sent).toBe(2);
+    const x = (await c.next('rig.exchange', 3000)).exchange;
+    expect(x).toMatchObject({ rigId: team.id, kind: 'message', from: 'Toi', to: TEAM_ADDRESS, text: 'On fusionne à 17h' });
+    let item: Extract<ServerMessage, { type: 'ledge.thread.item' }>['item'];
+    do item = (await c.next('ledge.thread.item', 3000)).item; while (item.kind !== 'exchanges' || !item.exchangeIds.includes(x.id));
+    c.send({ type: 'rig.exchanges.request', machine: 'local', rigId: team.id });
+    expect((await c.next('rig.exchanges')).items.map(e => [e.from, e.to, e.text])).toEqual([['Toi', TEAM_ADDRESS, 'On fusionne à 17h']]);
+    c.send({ type: 'team.broadcast', rid: 'b2', team: 'team-ffff', text: 'Personne' }); // refused: no exchange
+    expect((await c.next('team.broadcast.result')).reason).toBeTruthy();
+    await expect(c.next('rig.exchange', 300)).rejects.toThrow('timeout');
     await c.close();
   });
 

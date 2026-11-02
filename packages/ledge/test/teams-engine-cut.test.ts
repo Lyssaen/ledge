@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn as nodeSpawn } from 'node:child_process';
 import WebSocket from 'ws';
-import { ACTIONS, parseServerMessage, type ClientMessage, type ServerMessage, type Session, type Team } from '@ledge/protocol';
+import { ACTIONS, parseServerMessage, type ClientMessage, type ServerMessage, type Session, type Task, type Team } from '@ledge/protocol';
 import { engineRefusal, ENGINE_LEDGE, ENGINE_OPENRIG } from '../src/daemon/engine/guard.js';
 import { writeTeamsEngine } from '../src/daemon/engine/setting.js';
 import { actionsFor, buildPersona } from '../src/chat/persona.js';
@@ -14,6 +14,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
 import { teamsJournal } from '../src/daemon/teamsLive.js';
+import { tasksJournal } from '../src/daemon/tasks.js';
 import type { Tmux } from '../src/tmux.js';
 import { createFakeOpenRig, fakeRigCli, type FakeOpenRig, type FakeRig } from './fakes/openrig.js';
 import { paths } from '../src/paths.js';
@@ -66,6 +67,11 @@ describe('engineRefusal (the engine not chosen is off)', () => {
       { type: 'action.run', rid: 'c', action: 'session.close', args: {} }
     ];
     for (const m of always) expect(engineRefusal('openrig', m), JSON.stringify(m)).toBeNull();
+  });
+  it('OpenRig mode lets Ledge\'s own list, show and seen of its tasks through, nothing else of task.cmd (branch review M3)', () => {
+    for (const op of ['list', 'show', 'seen'] as const) expect(engineRefusal('openrig', { type: 'task.cmd', rid: 'a', by: 'ledge', op, task: 't1' }), op).toBeNull();
+    for (const op of ['give', 'cancel', 'done'] as const) expect(engineRefusal('openrig', { type: 'task.cmd', rid: 'a', by: 'ledge', op, task: 't1', to: 's1', title: 'x' }), op).toBe(ENGINE_OPENRIG);
+    for (const op of ['list', 'show', 'seen'] as const) expect(engineRefusal('openrig', { type: 'task.cmd', rid: 'a', by: 's1', op, task: 't1' }), op).toBe(ENGINE_OPENRIG);
   });
 });
 
@@ -140,7 +146,7 @@ describe('the daemon with the engine not chosen off', () => {
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ledge-cut-')); process.env.LEDGE_HOME = dir; panes.clear(); });
   afterEach(async () => { for (const s of sockets.splice(0)) s.terminate(); await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await fake?.stop(); fake = null; rmSync(dir, { recursive: true, force: true }); });
 
-  async function boot(o: { engine?: 'ledge' | 'openrig'; rigs?: FakeRig[]; teams?: Team[]; answer?: string } = {}) {
+  async function boot(o: { engine?: 'ledge' | 'openrig'; rigs?: FakeRig[]; teams?: Team[]; tasks?: true; answer?: string } = {}) {
     if (o.engine) writeTeamsEngine(paths().teamsEngine, o.engine);
     fake = await createFakeOpenRig(); for (const r of o.rigs ?? []) fake.rigs.push(r);
     bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: fakeRigCli(fake), projects: () => ({ version: 1, projects: [], rules: [] }) as never, home: dir, file: join(dir, 'openrig.json'),
@@ -148,7 +154,7 @@ describe('the daemon with the engine not chosen off', () => {
     if (o.teams) writeFileSync(paths().teams, JSON.stringify(o.teams));
     store = new Store();
     srv = await startServer({ store, tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env, ...(o.answer ? { FAKE_ANSWER: o.answer } : {}) }),
-      claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))], ...(o.teams ? { teams: teamsJournal(paths().teams) } : {}), openrig: bridge });
+      claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))], ...(o.teams ? { teams: teamsJournal(paths().teams) } : {}), ...(o.tasks ? { tasks: tasksJournal(paths().tasks) } : {}), openrig: bridge });
     await bridge.start(); await until(() => bridge!.status().state === 'running');
     const ws = new WebSocket(`ws://127.0.0.1:${srv.port}`, { headers: authHeaders() }); sockets.push(ws);
     const got: ServerMessage[] = [];
@@ -207,6 +213,21 @@ describe('the daemon with the engine not chosen off', () => {
     c.send({ type: 'team.dissolve', team: 'team-abcd' });
     await c.answer('team.updated', m => m.team.id === 'team-abcd' && m.team.state === 'dissolved');
     expect(c.got.some(m => m.type === 'error' && m.message === ENGINE_OPENRIG && m.request === 'team.dissolve')).toBe(false);
+  });
+
+  it('a result closed under Ledge is listed and put away from « À toi » after the switch to OpenRig (branch review M3)', async () => {
+    // Ledge gave it (a card) and Nova closed it under Ledge: an item of « À toi ».
+    const t: Task = { id: 't-a1b2', title: 'Relire', giver: 'ledge', giverName: 'Ledge', owner: 's1', ownerName: 'Nova', state: 'done', result: 'Relu', at: T, updatedAt: T,
+      log: [{ at: T, by: 'Ledge', what: 'donnée', op: 'give', from: 'ledge', to: 's1', fromName: 'Ledge', toName: 'Nova' }, { at: T, by: 'Nova', what: 'terminée : Relu', op: 'done', from: 's1', to: 'ledge', fromName: 'Nova', toName: 'Ledge' }] };
+    writeFileSync(paths().tasks, JSON.stringify([t]));
+    const c = await boot({ engine: 'openrig', tasks: true });
+    store.upsert(mkS('s1', 'Nova'));
+    c.send({ type: 'task.cmd', rid: 'l1', by: 'ledge', op: 'list', all: true });
+    expect((await c.answer('task.result', m => m.rid === 'l1')).tasks?.map(x => x.id)).toContain(t.id);
+    c.send({ type: 'task.cmd', rid: 'v1', by: 'ledge', op: 'seen', task: t.id });
+    expect((await c.answer('task.result', m => m.rid === 'v1')).task).toMatchObject({ id: t.id, seen: true });
+    c.send({ type: 'task.cmd', rid: 'g2', by: 'ledge', op: 'give', to: 'Nova', title: 'Encore' });
+    expect(await c.answer('task.result', m => m.rid === 'g2')).toEqual({ type: 'task.result', rid: 'g2', reason: ENGINE_OPENRIG });
   });
 
   it('a chat card made under Ledge, applied after the switch to OpenRig, is refused by the engine (fix round 1)', async () => {

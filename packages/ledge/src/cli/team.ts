@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { RoleIdSchema, SeatsSchema, ToolSchema, type ActionId, type Seat, type TeamObjective, type Session, type Team } from '@ledge/protocol';
+import { RoleIdSchema, SeatsSchema, TeamsEngineSchema, ToolSchema, type ActionId, type Seat, type TeamObjective, type Session, type Team } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { listDefinitions } from '../daemon/teams.js';
 import { actionArgs, callerOf, DAEMON_DOWN, resultLine, runOnClient, type ActionResult, type Caller } from './action.js';
@@ -175,6 +175,36 @@ async function runVerb(cmd: Extract<TeamCmd, { op: 'run' }>, port: number | unde
     if (!(await step(await runOnClient(client, cmd.action, cmd.args, { by, confirmed: true })))) return { line: lines.join('\n'), code: 1 };
     if (self && !(await step(await runOnClient(client, 'session.close', { session: self.id }, { by })))) return { line: lines.join('\n'), code: 1 };
     return { line: lines.join('\n'), code: 0 };
+  } catch (e) {
+    return { line: `pas de réponse de Ledge : ${(e as Error).message}`, code: 1 };
+  } finally { await client.close(); }
+}
+
+export const TEAMS_USAGE = `ledge teams engine                                          le moteur d'équipes en force (Ledge ou OpenRig), s'il tourne, si OpenRig est là
+ledge teams engine <ledge|openrig>                          changer de moteur d'équipes (refusé tant qu'une équipe ou un rig tourne)`;
+
+/** `ledge teams engine [ledge|openrig]` (branch review I1): reads the engine in force, or switches it through `teams.engine.set`,
+ *  the way Réglages › Équipes does; the only way out for a client without that screen. */
+export async function runTeams(args: string[], opts: { port?: number } = {}): Promise<{ line: string; code: number }> {
+  const [verb, engine, ...more] = args;
+  const parsed = engine === undefined ? null : TeamsEngineSchema.safeParse(engine);
+  if (verb !== 'engine' || more.length || (parsed && !parsed.success)) return { line: TEAMS_USAGE, code: args.length ? 1 : 0 };
+  let client;
+  try { client = await connect({ port: opts.port, timeoutMs: 1500 }); }
+  catch { return { line: DAEMON_DOWN, code: 1 }; }
+  try {
+    if (!parsed) {
+      await client.next('snapshot');
+      const s = await client.next('teams.engine', 1500);
+      const running = s.engine === 'ledge' ? 'une équipe tourne' : 'un rig tourne';
+      return { line: `moteur d'équipes : ${s.engine} · ${running} : ${s.running ? 'oui' : 'non'} · OpenRig disponible : ${s.openrigAvailable ? 'oui' : 'non'}`, code: 0 };
+    }
+    const rid = randomUUID();
+    client.send({ type: 'teams.engine.set', rid, engine: parsed.data });
+    let r; do r = await client.next('teams.engine.result', 10_000); while (r.rid !== rid);
+    if (!r.ok) return { line: `refusé : ${r.reason ?? 'refusé'}`, code: 1 };
+    const kept = (r.peers ?? []).filter(p => !p.ok).map(p => `  ${p.machine} garde le sien : ${p.reason ?? 'refusé'}`);
+    return { line: [`moteur d'équipes : ${parsed.data}`, ...kept].join('\n'), code: 0 };
   } catch (e) {
     return { line: `pas de réponse de Ledge : ${(e as Error).message}`, code: 1 };
   } finally { await client.close(); }

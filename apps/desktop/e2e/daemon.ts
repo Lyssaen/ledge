@@ -196,15 +196,17 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   const putSession = (s: Session) => { sessions.set(s.id, s); say({ type: 'session.updated', session: s }); };
   const putTeam = (team: Team) => { teams = [...(teams ?? []).filter(t => t.id !== team.id), team]; say({ type: 'team.updated', team }); };
   /** A task's step, as the daemon's registry writes it: its log, its state, `task.updated`; a hand-over of a team's task is one of
-   *  its exchanges (`<task>:<index>`, its title, from its sender's name to its receiver's). */
+   *  its exchanges (`<task>:<index>`, from its sender's name to its receiver's): its title, and for a done or refuse « — » its
+   *  result cut at 200 characters (packages/ledge/src/daemon/engine/ledge.ts, taskExchangeText). */
   const taskStep = (t: Task, op: TaskOp, from: { id: string; name: string }, to: { id: string; name: string }, change: Partial<Task> = {}): Task => {
     const at = new Date().toISOString();
     const next: Task = { ...t, ...change, updatedAt: at, log: [...t.log, { at, by: from.name, what: op, op, from: from.id, to: to.id, fromName: from.name, toName: to.name }] };
     tasks.set(next.id, next);
     say({ type: 'task.updated', task: next });
-    if (next.team && isTransmission(op)) record({ id: `${next.id}:${next.log.length - 1}`, rigId: next.team, from: from.name, to: to.name, kind: 'task', text: next.title });
+    if (next.team && isTransmission(op)) record({ id: `${next.id}:${next.log.length - 1}`, rigId: next.team, from: from.name, to: to.name, kind: 'task', text: exchangeText(next, op) });
     return next;
   };
+  const exchangeText = (t: Task, op: TaskOp) => (op === 'done' || op === 'refuse') && t.result ? `${t.title} — ${t.result.length > 200 ? `${t.result.slice(0, 199)}…` : t.result}` : t.title;
   const newTask = (fields: Pick<Task, 'title' | 'giver' | 'giverName' | 'owner' | 'ownerName' | 'team'> & Partial<Task>): Task => {
     const at = new Date().toISOString();
     return { id: `t${(++taskSeq).toString(16).padStart(6, '0')}`, state: 'open', at, updatedAt: at, log: [], ...fields };

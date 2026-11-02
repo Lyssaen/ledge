@@ -35,8 +35,8 @@ import { paths } from '../paths.js';
 import { ensureDaemonToken, hostAllowed, requestAuthorized, selectDaemonProtocol, sessionKey, tokenEquals } from '../auth.js';
 import { readMachines, writeMachines } from './machines.js';
 import { readProjects, writeProjects } from './projects.js';
-import { readTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal } from './engine/setting.js';
-import { engineRefusal, ENGINE_LEDGE } from './engine/guard.js';
+import { initialTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal } from './engine/setting.js';
+import { engineRefusal, ENGINE_LEDGE, LEDGE_TASK_READS } from './engine/guard.js';
 import { createLedgeEngine } from './engine/ledge.js';
 import { createOpenRigEngine } from './engine/openrig.js';
 import type { TeamEngine } from './engine/types.js';
@@ -412,7 +412,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const remote = bridge ? createRemotePeers({ port, ...(opts.remoteConnect ? { connect: opts.remoteConnect } : {}) }) : null;
   /** The teams engine (`teams.engine`): Ledge's own or OpenRig; one global setting, in teams-engine.json. Made before the
    *  aggregate's subscription, which broadcasts it; `teams` is read lazily (made below, before anything emits). */
-  let teamsEngine = readTeamsEngine(paths().teamsEngine);
+  let teamsEngine = initialTeamsEngine(paths().teamsEngine, paths().openrig);
   const engineData = () => ({ teams: teams.all(), rigs: aggregate?.rigs() ?? bridge?.rigs() ?? [], statuses: aggregate?.statuses() ?? (bridge ? [bridge.status()] : []) });
   const engineMsg = (): ServerMessage => { const d = engineData(); return { type: 'teams.engine', engine: teamsEngine, openrigAvailable: openrigAvailable(d.statuses), running: engineRunning(teamsEngine, d) }; };
   let engineSent = '';
@@ -496,7 +496,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The Ledge engine (lot D task 4): the live teams in the common team shape, on the local machine. It records under either
    *  engine; the fronts hear it only under Ledge (under OpenRig, never a Ledge rig; under Ledge, never an OpenRig one). */
   const ledgeEngine = createLedgeEngine({ store, teams, now, active: () => teamsEngine === 'ledge' });
-  ledgeEngine.onMessage(m => { if (teamsEngine === 'ledge') broadcast(m); }); // its close() drops the listener
+  // Under Ledge, its exchanges also enter Ledge's thread, as the bridge's and the peers' do (branch review C1): the thread is the
+  // one place a team's exchanges read as text. Its close() drops the listener.
+  ledgeEngine.onMessage(m => { if (teamsEngine !== 'ledge') return; broadcast(m); if (m.type === 'rig.exchange') thread.exchange(m.exchange); });
   /**
    * The one read path of the teams inside the daemon (lot D final review I2): the engine in force. Every reader of the teams (the
    * hello, the phone, the brain, the chat) goes through it, never through the aggregate or the Ledge engine directly.
@@ -1191,13 +1193,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
   const setAside = (qid: string) => cardThreads.all().some(([, c]) => c.ignored(qid));
   const SET_ASIDE = 'ignored card: open it again first';
-  /** What a front may still send as `ledge` (#142): its lists, a task shown, a closed one marked seen. */
   /** Whether the decision task has its escalation `task-<id>` still to answer (the bridge's book). */
   const mirroredOpen = (taskId: string): boolean => {
     const e = bridge?.escalation(decisionEscalationId(taskId));
     return e !== undefined && e.state !== 'answered' && e.state !== 'closed';
   };
-  const LEDGE_READS: ReadonlySet<Extract<ClientMessage, { type: 'task.cmd' }>['op']> = new Set(['list', 'show', 'seen']);
   /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `team.saved` or
    *  `task.result` carries; `path` the template a `team.save` wrote. Ledge's own task commands go straight to the tasks:
    *  `by: 'ledge'` is never taken from a client (handle refuses it). */
@@ -1970,7 +1970,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         recordSent(ack, msg.from, r.to, msg.text, msg.rid);
         return reply(ack);
       }
-      case 'team.broadcast': return reply(broadcastFromUser({ store, teams, mailbox }, msg));
+      case 'team.broadcast': {
+        const r = broadcastFromUser({ store, teams, mailbox }, msg);
+        // What the user told the whole team is one of its exchanges, as the lead's @team is (branch review I2).
+        if (r.sent) ledgeEngine.recordUserBroadcast(msg.team, msg.text, msg.rid);
+        return reply(r);
+      }
       case 'message.read': return reply(mailbox.read(msg));
       case 'session.handover': {
         const reason = handovers.start(msg.id);
@@ -1997,7 +2002,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (msg.qid !== undefined && msg.op === 'give') return setAside(msg.qid) ? reply({ type: 'task.result', rid: msg.rid, reason: SET_ASIDE }) : giveFromCard(msg, reply);
         // A client naming itself `ledge` only reads (#142): Ledge acts from its chat's cards (giveFromCard above, actOnCard) and
         // answers a decision through task.answer (the user's, confirmed), both straight to the tasks, never through here.
-        if (msg.by === LEDGE_GIVER && !LEDGE_READS.has(msg.op)) return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge' });
+        if (msg.by === LEDGE_GIVER && !LEDGE_TASK_READS.has(msg.op)) // what a front may still send as `ledge` (#142)
+          return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge' });
         return reply(tasks.run(msg));
       }
       case 'roles.list': {

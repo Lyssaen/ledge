@@ -187,8 +187,9 @@ describe('« Templates »: main’s catalog, its templates, roles and skipped fi
     const { d, user } = await openHome('ledge', { rigs: [LEDGE_TEAM], openrig: ABSENT });
     listing(d);
     await user.click(homeTabs().getByRole('tab', { name: 'Templates' }));
-    const views = within(home().getByRole('tablist', { name: 'Template views' }));
-    expect(views.getAllByRole('tab').map(t => t.textContent)).toEqual(['Templates · 1', 'Roles · 2']);
+    const views = within(await home().findByRole('tablist', { name: 'Template views' }));
+    // The counts come with definitions.listing, after the click: waited for, never read at once (branch review M6).
+    await waitFor(() => expect(views.getAllByRole('tab').map(t => t.textContent)).toEqual(['Templates · 1', 'Roles · 2']));
     const tpl = within(await home().findByRole('region', { name: 'workshop' }));
     expect(tpl.getByText('A team has exactly one leader seat: its lead, who receives the objective.')).toBeVisible();
     await user.click(home().getByRole('button', { name: /1 file not read/ }));

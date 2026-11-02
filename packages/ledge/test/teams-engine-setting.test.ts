@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OpenRigStatus, Rig, Team } from '@ledge/protocol';
-import { readTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal } from '../src/daemon/engine/setting.js';
+import { readTeamsEngine, writeTeamsEngine, engineRunning, openrigAvailable, switchRefusal, initialTeamsEngine } from '../src/daemon/engine/setting.js';
+import { runTeams } from '../src/cli/team.js';
 import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { createBridge, type Bridge } from '../src/daemon/openrig/bridge.js';
@@ -102,5 +103,85 @@ describe('the daemon', () => {
     let seen = await c.next('teams.engine'); // the snapshot's may still be queued
     if (seen.engine !== 'openrig') seen = await c.next('teams.engine');
     expect(seen).toMatchObject({ engine: 'openrig', openrigAvailable: true });
+  });
+});
+
+// Branch review I1: an OpenRig user who upgrades keeps OpenRig; `ledge teams engine` reads and switches the engine.
+describe('the first start without teams-engine.json', () => {
+  let srv: ServerHandle | null = null;
+  afterEach(async () => { await srv?.close(); srv = null; rmSync(dir, { recursive: true, force: true }); });
+  const openrigFile = (local: { lastEventId: number | null; rigs: string[] }) =>
+    writeFileSync(join(dir, 'openrig.json'), JSON.stringify({ version: 1, machines: { local: { ...local, at: '2026-10-30T08:00:00.000Z' } } }));
+  async function boot() {
+    srv = await startServer({ store: new Store(), tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))] });
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    return (await c.next('teams.engine')).engine;
+  }
+
+  it('rigs OpenRig mirrored on this machine before: OpenRig, written to the file', async () => {
+    openrigFile({ lastEventId: 41, rigs: ['starter'] });
+    expect(initialTeamsEngine(paths().teamsEngine, paths().openrig)).toBe('openrig');
+    expect(JSON.parse(readFileSync(paths().teamsEngine, 'utf8')).engine).toBe('openrig');
+    rmSync(paths().teamsEngine);
+    expect(await boot()).toBe('openrig');
+    expect(readTeamsEngine(paths().teamsEngine)).toBe('openrig');
+  });
+  it('a cursor alone (OpenRig ran here, no rig kept) is OpenRig too', async () => {
+    openrigFile({ lastEventId: 7, rigs: [] });
+    expect(await boot()).toBe('openrig');
+    expect(existsSync(paths().teamsEngine)).toBe(true);
+  });
+  it('no openrig.json, or one with nothing of this machine: Ledge, and nothing written', async () => {
+    expect(await boot()).toBe('ledge');
+    expect(existsSync(paths().teamsEngine)).toBe(false);
+    await srv!.close(); srv = null;
+    writeFileSync(join(dir, 'openrig.json'), JSON.stringify({ version: 1, machines: { legion: { lastEventId: 3, rigs: ['far'], at: '2026-10-30T08:00:00.000Z' } } }));
+    expect(await boot()).toBe('ledge');
+    expect(existsSync(paths().teamsEngine)).toBe(false);
+  });
+  it('a choice already in the file is kept, whatever openrig.json says', async () => {
+    openrigFile({ lastEventId: 41, rigs: ['starter'] });
+    writeTeamsEngine(paths().teamsEngine, 'ledge');
+    expect(await boot()).toBe('ledge');
+    expect(readTeamsEngine(paths().teamsEngine)).toBe('ledge');
+  });
+});
+
+describe('ledge teams engine', () => {
+  let srv: ServerHandle | null = null; let bridge: Bridge | null = null; let fake: FakeOpenRig | null = null;
+  afterEach(async () => { await bridge?.stop(); bridge = null; await srv?.close(); srv = null; await fake?.stop(); fake = null; rmSync(dir, { recursive: true, force: true }); });
+  async function boot(withBridge: boolean) {
+    if (withBridge) {
+      fake = await createFakeOpenRig();
+      bridge = createBridge({ env: async () => ({ OPENRIG_PORT: String(fake!.port) }), exec: fakeRigCli(fake), projects: () => ({ version: 1, projects: [], rules: [] }) as never, home: dir, file: join(dir, 'openrig.json'),
+        asks: { all: () => srv!.asks.all(), onChange: f => srv!.asks.onChange(f) }, sessionName: () => undefined, probeMs: 20, outboxMs: 30, resyncMs: 50 });
+    }
+    srv = await startServer({ store: new Store(), tmux: noTmux, port: 0, home: dir, daemon: { version: '0.0.0', install: 'git', systemd: false }, agentEnv: async () => ({ ...process.env }), claudeBin: [process.execPath, fileURLToPath(new URL('./fake-claude.mjs', import.meta.url))], ...(bridge ? { openrig: bridge } : {}) });
+    if (bridge) { await bridge.start(); await until(() => bridge!.status().state === 'running'); }
+    return { port: srv.port };
+  }
+
+  it('prints the engine in force, whether a team runs and whether OpenRig is there', async () => {
+    const o = await boot(false);
+    expect(await runTeams(['engine'], o)).toEqual({ line: "moteur d'équipes : ledge · une équipe tourne : non · OpenRig disponible : non", code: 0 });
+  });
+  it('a refused switch says why and exits 1; the file is not written', async () => {
+    const o = await boot(false);
+    expect(await runTeams(['engine', 'openrig'], o)).toEqual({ line: "refusé : OpenRig n'est installé sur aucune machine : installe-le (npm i -g @openrig/cli) avant de le choisir", code: 1 });
+    expect(existsSync(paths().teamsEngine)).toBe(false);
+  });
+  it('switches to OpenRig and back through teams.engine.set', async () => {
+    const o = await boot(true);
+    expect(await runTeams(['engine', 'openrig'], o)).toEqual({ line: "moteur d'équipes : openrig", code: 0 });
+    expect(readTeamsEngine(paths().teamsEngine)).toBe('openrig');
+    expect((await runTeams(['engine'], o)).line).toBe("moteur d'équipes : openrig · un rig tourne : non · OpenRig disponible : oui");
+    expect(await runTeams(['engine', 'ledge'], o)).toEqual({ line: "moteur d'équipes : ledge", code: 0 });
+    expect(readTeamsEngine(paths().teamsEngine)).toBe('ledge');
+  });
+  it('a bad engine or verb prints the usage and exits 1; no daemon is said', async () => {
+    expect((await runTeams(['engine', 'bogus'], { port: 1 })).code).toBe(1);
+    expect((await runTeams(['nope'], { port: 1 })).code).toBe(1);
+    expect((await runTeams(['engine', 'bogus'], { port: 1 })).line).toMatch(/ledge teams engine <ledge\|openrig>/);
+    expect(await runTeams(['engine'], { port: 1 })).toMatchObject({ code: 1, line: expect.stringMatching(/daemon/i) });
   });
 });

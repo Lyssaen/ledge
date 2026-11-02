@@ -12,8 +12,10 @@ const safe = (s: string, max = 120) => text(s, max) || '?';
 /** An identifier is routed back to the daemon unchanged: never clip or redact it into another identifier. */
 const stable = (s: string, max = 120): string => { if (!s || s.length > max || text(s, max) !== s) throw new Error('unsafe phone identifier'); return s; };
 
+/** `engine` and `teamId` only for a Ledge team (branch review M2): the phone reads an absent engine as OpenRig, and a PWA built
+ *  before the engine (strict rig records) refuses a rig that carries one. */
 export function toPhoneRig(r: Rig, projectName: (id: string) => string | undefined): PhoneRig {
-  return { key: rigKey(r.machine, r.id), name: safe(r.name, 80), ...(r.spec ? { spec: safe(r.spec, 80) } : {}), engine: r.engine ?? 'openrig', ...(r.engine === 'ledge' ? { teamId: stable(r.id, 40) } : {}), project: r.projectId ? safe(projectName(r.projectId) ?? r.projectId, 80) : null,
+  return { key: rigKey(r.machine, r.id), name: safe(r.name, 80), ...(r.spec ? { spec: safe(r.spec, 80) } : {}), ...(r.engine === 'ledge' ? { engine: 'ledge' as const, teamId: stable(r.id, 40) } : {}), project: r.projectId ? safe(projectName(r.projectId) ?? r.projectId, 80) : null,
     offProject: r.offProject, ...(r.branch ? { branch: text(r.branch, 200) } : {}), lifecycle: r.lifecycle, kernel: r.kernel,
     seats: r.seats.slice(0, 16).map(s => ({ ref: stable(s.ref), address: stable(s.address), name: safe(s.name, 80), runtime: safe(s.runtime, 80), ...(s.model ? { model: safe(s.model) } : {}), state: s.state,
       ...(s.contextPct !== undefined ? { contextPct: s.contextPct } : {}), ...(r.machine === 'local' && s.sessionId ? { sessionId: stable(s.sessionId) } : {}) })), repos: r.repos.length,

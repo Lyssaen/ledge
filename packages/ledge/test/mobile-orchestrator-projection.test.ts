@@ -10,13 +10,15 @@ describe('phone OpenRig projections', () => {
  it('removes routing, sanitises paths and preserves queued delivery', () => { const p = toPhoneEscalation(esc, [], [rig]); expect(PhoneEscalationSchema.safeParse(p).success).toBe(true); expect(JSON.stringify(p)).not.toMatch(/machine|evidenceRef|\/home\/private/); expect(p.answer?.delivery).toBe('queued'); });
 });
 
-it('carries the engine of a projected Ledge team, and says openrig for an OpenRig rig', () => {
+it('carries the engine of a projected Ledge team, and none for an OpenRig rig (branch review M2: a strict older PWA refuses it)', () => {
   const team: Rig = { id: 'team-a1b2', machine: 'local', name: 'Revue', cwd: '', projectId: null, offProject: true, lifecycle: 'running', kernel: false, repos: [], seats: [], engine: 'ledge' };
   const p = toPhoneRig(team, () => undefined);
   expect(PhoneRigSchema.safeParse(p).success).toBe(true);
   expect(p.engine).toBe('ledge');
   expect(p.spec).toBeUndefined();
-  expect(toPhoneRig(rig, () => undefined).engine).toBe('openrig');
+  const openrig = toPhoneRig(rig, () => undefined);
+  expect(openrig).not.toHaveProperty('engine'); expect(openrig).not.toHaveProperty('teamId');
+  expect(PhoneRigSchema.safeParse(openrig).success).toBe(true);
 });
 
 it('does not silently change an id the phone would later send back', () => {

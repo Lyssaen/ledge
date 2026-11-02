@@ -1,5 +1,7 @@
-import { readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { DEFAULT_TEAMS_ENGINE, TeamsEngineSchema, type OpenRigStatus, type Rig, type Team, type TeamsEngine } from '@ledge/protocol';
+import { log } from '../../log.js';
+import { readOpenRigFile } from '../openrig/cursor.js';
 
 /** The engine in force (teams.engine): 'ledge' when the file is missing or invalid. */
 export function readTeamsEngine(path: string): TeamsEngine {
@@ -8,6 +10,29 @@ export function readTeamsEngine(path: string): TeamsEngine {
     const parsed = TeamsEngineSchema.safeParse(raw?.engine);
     return parsed.success ? parsed.data : DEFAULT_TEAMS_ENGINE;
   } catch { return DEFAULT_TEAMS_ENGINE; }
+}
+
+/** Whether the OpenRig bridge followed OpenRig on this machine before: openrig.json keeps, for `local`, the rigs it mirrored
+ *  or the cursor of the event stream it read (only kept while OpenRig ran and the bridge mirrored it, never in probe only). */
+export function openrigUsedHere(openrigPath: string): boolean {
+  const local = readOpenRigFile(openrigPath).machines.local;
+  return !!local && (local.rigs.length > 0 || local.lastEventId !== null);
+}
+
+/**
+ * The engine at the daemon's start (branch review I1). The file is the user's choice. Without it, a machine where OpenRig was
+ * used before keeps OpenRig, written down so this seeding happens once; any other machine gets Ledge, the default, and nothing
+ * is written (a later OpenRig use is no reason to switch it). Said in one line of the log either way.
+ */
+export function initialTeamsEngine(enginePath: string, openrigPath: string): TeamsEngine {
+  if (existsSync(enginePath)) return readTeamsEngine(enginePath);
+  if (!openrigUsedHere(openrigPath)) {
+    log(`teams engine: no ${enginePath}, none of OpenRig in openrig.json: ${DEFAULT_TEAMS_ENGINE} (the default)`);
+    return DEFAULT_TEAMS_ENGINE;
+  }
+  try { writeTeamsEngine(enginePath, 'openrig'); log(`teams engine: no ${enginePath}, OpenRig was used on this machine (openrig.json): openrig, written`); }
+  catch (e) { log(`teams engine: OpenRig was used on this machine: openrig, not written (${(e as Error).message})`); }
+  return 'openrig';
 }
 
 /** Written whole, through a temporary file and a rename, as the island's. */

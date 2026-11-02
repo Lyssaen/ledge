@@ -1,6 +1,6 @@
 // Lot G, task 1 (spec §6.7): the two-seat team scenario end to end, once per engine, against the fake daemon. A lead (claude) and a
 // reviewer (codex) get « Ajoute un README »; the team shows once in each place, its exchanges reach the thread in order, the result
-// reaches « Your turn », and the tech room names the engine. The lead's questions: one settled by the brain leaves no card, one left
+// reaches « Your turn », and the tech room names the engine (never the other one's). The lead's questions: one settled by the brain leaves no card, one left
 // pending leaves exactly one. Settings › Teams: OpenRig greyed when absent, no switch while a team runs.
 import type { OpenRigStatus, Rig, RigSpecInfo, Role } from '@ledge/protocol';
 import { test, expect } from './fixtures';
@@ -45,6 +45,8 @@ async function teamOnceEverywhere(page: Page, engine: 'Ledge' | 'OpenRig') {
   await expect(floor.locator('.bureaux-plate', { hasText: /^readme · / })).toHaveCount(1);
   await expect(floor.locator('.bureaux-plate', { hasText: /^readme · / })).toHaveText('readme · 2');
   await expect(floor.locator('.bureaux-plate', { hasText: `Teams · ${engine}` })).toHaveCount(1);
+  // Never the other engine's tech room.
+  await expect(floor.locator('.bureaux-plate', { hasText: `Teams · ${engine === 'Ledge' ? 'OpenRig' : 'Ledge'}` })).toHaveCount(0);
   await page.keyboard.press('/');
   await home(page).getByRole('tab', { name: 'Teams · 1' }).click();
   const card = home(page).getByRole('article', { name: 'readme' });
@@ -70,7 +72,7 @@ test('Ledge engine: a two-seat team with its objective, once on every screen, it
   // A Ledge team's own: the field that writes to the whole team.
   await expect(card.getByRole('textbox', { name: 'Write to the whole team…' })).toBeVisible();
   // The objective's hand-over, the lead's task to @review, its done, then the lead's done to Ledge.
-  await exchangesInOrder(page, [/^Ledge → Otto · task .*Ajoute un README$/, /^Otto → Pim · task .*Relis le README$/, /^Pim → Otto · task .*Relis le README$/, /^Otto → Ledge · task .*Ajoute un README$/]);
+  await exchangesInOrder(page, [/^Ledge → Otto · task .*Ajoute un README$/, /^Otto → Pim · task .*Relis le README$/, /^Pim → Otto · task .*Relis le README — Relu, rien à redire$/, /^Otto → Ledge · task .*Ajoute un README — README ajouté et relu$/]);
   await expect(yours(page).locator('.st-task')).toHaveText([/Otto finished “Ajoute un README”.*Ledge’s task/]);
   // Nothing was asked of the user on the way.
   await expect(yours(page).locator('.st-esc, .st-decision')).toHaveCount(0);
@@ -107,14 +109,16 @@ test('OpenRig engine: the same team by plan gives the same screens, its exchange
   await expect(dialog).toHaveCount(0);
   expect(daemon.received.find(m => m.type === 'rig.prepare')).toMatchObject({ spec: 'readme', goal: 'Ajoute un README', where: { kind: 'project', projectId: 'ledge' } });
   const card = await teamOnceEverywhere(page, 'OpenRig');
-  // OpenRig's words on an OpenRig rig (its spec, its goal handed over), nothing of Ledge's own teams: no template, no field to the whole team.
+  // OpenRig's words on an OpenRig rig (its spec), nothing of Ledge's own teams: no template, no field to the whole team, no
+  // Ledge tech room (above), no Ledge task in « Your turn ».
   await expect(card).toContainText('spec readme');
   await expect(card).not.toContainText('template');
-  await expect(card).not.toContainText('The goal waits');
   await expect(card.getByRole('textbox', { name: 'Write to the whole team…' })).toHaveCount(0);
   await exchangesInOrder(page, [/^leader → @review · task .*Relis le README$/, /^review → @leader · message .*README relu$/, /^leader → @review · message .*README commité$/]);
-  // No Ledge team went to the daemon.
+  await expect(yours(page).locator('.st-task')).toHaveCount(0);
+  // No Ledge team nor task went to the daemon.
   expect(daemon.received.some(m => m.type === 'team.launch')).toBe(false);
+  expect(daemon.received.some(m => m.type === 'task.cmd' && m.op !== 'list')).toBe(false);
 });
 
 test('Settings › Teams: OpenRig greyed while it is installed nowhere', async ({ page }) => {
@@ -128,7 +132,7 @@ test('Settings › Teams: OpenRig greyed while it is installed nowhere', async (
   await expect(page.getByText('OpenRig is not installed on any machine')).toBeVisible();
 });
 
-test('Settings › Teams: no switch while a Ledge team runs, and the daemon says why when asked anyway', async ({ page }) => {
+test('Settings › Teams: no switch while a Ledge team runs; asked anyway, the front shows the daemon’s refusal', async ({ page }) => {
   const daemon = await fakeDaemon(page, [], { projects: twoProjects, teamsEngine: 'ledge', openrig: RUNNING, roles: ROLES });
   await page.goto('/');
   await launchLedgeTeam(page);
