@@ -1,0 +1,102 @@
+version: "0.2"
+name: ledge-dev
+summary: >
+  Équipe de développement de Ledge. Le lead reçoit les objectifs et les découpe ; tout écran
+  (Desktop, île, mobile, TUI) passe d'abord par une maquette de l'UX/UI, validée par l'utilisateur,
+  avant qu'un dev l'implémente ; un reviewer Codex vérifie chaque livraison contre le diff et la maquette.
+
+culture_file: CULTURE.md
+
+docs:
+  - path: README.md
+
+pods:
+  - id: pilot
+    label: Pilotage
+    summary: Reçoit les objectifs, découpe, route, tient la branche et rend compte.
+    members:
+      - id: lead
+        label: Lead
+        agent_ref: "local:agents/lead"
+        profile: default
+        runtime: claude-code
+        cwd: ".."
+    edges: []
+
+  - id: design
+    label: UX/UI
+    summary: Maquettes avant toute implémentation front-end.
+    members:
+      - id: ux
+        label: UX/UI
+        agent_ref: "local:agents/ux"
+        profile: default
+        runtime: claude-code
+        cwd: ".."
+    edges: []
+
+  - id: dev
+    label: Développement
+    summary: Un dev front-end (apps, packages/ui) et un dev back-end (daemon, protocole, relais, Rust).
+    members:
+      - id: front
+        label: Dev front
+        agent_ref: "local:agents/developer"
+        profile: default
+        runtime: claude-code
+        cwd: ".."
+        startup:
+          files:
+            - path: guidance/scope-front.md
+              delivery_hint: send_text
+              required: true
+      - id: back
+        label: Dev back
+        agent_ref: "local:agents/developer"
+        profile: default
+        runtime: claude-code
+        cwd: ".."
+        startup:
+          files:
+            - path: guidance/scope-back.md
+              delivery_hint: send_text
+              required: true
+    edges:
+      - kind: collaborates_with
+        from: front
+        to: back
+
+  - id: review
+    label: Revue
+    summary: Revue indépendante du diff et vérification par l'effet, captures Playwright pour les écrans.
+    members:
+      - id: qa
+        label: Reviewer
+        agent_ref: "local:agents/reviewer"
+        profile: default
+        runtime: codex
+        cwd: ".."
+    edges: []
+
+edges:
+  - kind: delegates_to
+    from: pilot.lead
+    to: design.ux
+  - kind: delegates_to
+    from: pilot.lead
+    to: dev.front
+  - kind: delegates_to
+    from: pilot.lead
+    to: dev.back
+  - kind: delegates_to
+    from: dev.front
+    to: review.qa
+  - kind: delegates_to
+    from: dev.back
+    to: review.qa
+  - kind: collaborates_with
+    from: design.ux
+    to: dev.front
+  - kind: can_observe
+    from: review.qa
+    to: design.ux

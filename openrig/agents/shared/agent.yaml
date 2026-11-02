@@ -1,0 +1,31 @@
+name: shared
+version: "1.0"
+description: >
+  Ressources communes aux agents de ledge-dev. Le plugin openrig-core vient de l'installation OpenRig du daemon
+  (openrig-home:) ; les fragments runtime sont copiés de la spec shared livrée avec OpenRig 0.7.7.
+
+resources:
+  plugins:
+    - id: openrig-core
+      source:
+        kind: local
+        path: "openrig-home:plugins/openrig-core"
+  runtime_resources:
+    - id: claude-activity-hooks
+      path: runtime/claude-activity-hooks.json
+      runtime: claude-code
+      type: claude_activity_hooks
+    - id: claude-default-settings
+      path: runtime/claude-settings.fragment.json
+      runtime: claude-code
+      type: claude_settings_fragment
+    - id: claude-default-mcp
+      path: runtime/claude-mcp.fragment.json
+      runtime: claude-code
+      type: claude_mcp_fragment
+    - id: codex-default-config
+      path: runtime/codex-config.fragment.toml
+      runtime: codex
+      type: codex_config_fragment
+
+profiles: {}
