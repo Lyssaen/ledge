@@ -56,6 +56,12 @@ describe('reduceCapture', { timeout: 30_000 }, () => {
     expect(px.data[0]).toBeGreaterThan(245);
     expect(px.data[1]).toBeGreaterThan(245);
   });
+  it('composites alpha on white without downscaling too', () => {
+    const px = decode(reduceCapture(png(300, 200, 'flat', 0)).preview!, { useTArray: true });
+    expect(px.data[0]).toBeGreaterThan(245);
+    expect(px.data[1]).toBeGreaterThan(245);
+    expect(px.data[2]).toBeGreaterThan(245);
+  });
   it('averages the covered pixels', () => {
     const p = new PNG({ width: 3200, height: 2 });
     for (let i = 0; i < p.width * 2; i++) { const v = (i % 2) * 255; p.data.set([v, v, v, 255], i * 4); }

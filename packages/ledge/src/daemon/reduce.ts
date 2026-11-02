@@ -10,15 +10,26 @@ const MIN_SIDE = 16;
 
 interface Raster { width: number; height: number; data: Uint8Array }
 
+/** jpeg-js ignores alpha, so transparent pixels must become white before any encode, resized or not. */
+function flattenOnWhite(data: Uint8Array): Uint8Array {
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3]!;
+    if (a === 255) continue;
+    for (let c = 0; c < 3; c++) data[i + c] = Math.round((data[i + c]! * a + 255 * (255 - a)) / 255);
+    data[i + 3] = 255;
+  }
+  return data;
+}
+
 function decodeRaster(raw: Buffer, mime: string): Raster {
   try {
-    if (mime === 'image/png') { const p = PNG.sync.read(raw); return { width: p.width, height: p.height, data: p.data }; }
+    if (mime === 'image/png') { const p = PNG.sync.read(raw); return { width: p.width, height: p.height, data: flattenOnWhite(p.data) }; }
     const j = decode(raw, { useTArray: true, formatAsRGBA: true });
     return { width: j.width, height: j.height, data: j.data };
   } catch { throw new AttachmentError('not_image'); }
 }
 
-/** Area average: each output pixel is the mean of the source pixels it covers (fractional edges weighted), alpha composited on white. Rows are reduced one at a time to keep memory flat on tall pages. */
+/** Area average: each output pixel is the mean of the source pixels it covers (fractional edges weighted). Rows are reduced one at a time to keep memory flat on tall pages. */
 function resize(src: Raster, width: number, height: number): Raster {
   const { width: sw, height: sh, data } = src;
   const sx = sw / width, sy = sh / height;
@@ -33,8 +44,8 @@ function resize(src: Raster, width: number, height: number): Raster {
       let r = 0, g = 0, b = 0;
       for (let x = Math.floor(x0); x < Math.min(sw, Math.ceil(x1)); x++) {
         const w = Math.min(x + 1, x1) - Math.max(x, x0);
-        const i = (y * sw + x) * 4, a = data[i + 3]! / 255;
-        r += w * (data[i]! * a + 255 * (1 - a)); g += w * (data[i + 1]! * a + 255 * (1 - a)); b += w * (data[i + 2]! * a + 255 * (1 - a));
+        const i = (y * sw + x) * 4;
+        r += w * data[i]!; g += w * data[i + 1]!; b += w * data[i + 2]!;
       }
       row[ox * 3] = r / sx; row[ox * 3 + 1] = g / sx; row[ox * 3 + 2] = b / sx;
     }
@@ -65,7 +76,7 @@ function toJpeg(src: Raster, long: number, max: number, from: number, floor: num
     const scale = side / Math.max(src.width, src.height);
     const r = scale < 1 ? resize(src, Math.max(1, Math.round(src.width * scale)), Math.max(1, Math.round(src.height * scale))) : src;
     for (let q = from; q >= floor; q -= 10) {
-      const jpg = Buffer.from(encode({ data: r.data, width: r.width, height: r.height }, q).data);
+      const jpg = encode({ data: r.data, width: r.width, height: r.height }, q).data;
       if (jpg.length <= max) return jpg;
     }
     side = Math.floor(side * 0.8);
