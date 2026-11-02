@@ -228,8 +228,10 @@ lot 1.
   machine) n'était pas ouverte, rien n'est parti. `uncertain` : elle est partie, mais sa fin n'est pas revenue (connexion tombée,
   45 s sans réponse, écran quitté) ; renvoyer la même réponse est sûr. `qitemId` et `machineId` sont toujours rendus. Changer la
   liste des machines suivies n'interrompt pas une réponse en cours.
-- `useOpenRigAsksAll` suit aussi la connexion de chaque machine : une machine qui tombe est marquée tout de suite
-  (`machines[id].error = 'offline'`, ses demandes gardées), puis redemandée à son retour.
+- `useOpenRigAsksAll` suit aussi la disponibilité de chaque machine. Une machine qui tombe est marquée tout de suite
+  (`machines[id].error = 'offline'`, ses demandes gardées), puis redemandée quand elle reprend les requêtes. Dans une flotte,
+  c'est quand elle est connectée **et** que son snapshot frais est arrivé (`ready`). Avec un client direct sans flotte, c'est sa
+  propre connexion qui vaut pour les machines suivies.
 - Téléphone :
   - `HumanAsk.detailTruncated: true` quand le complément est coupé ;
   - l'empreinte d'un `op` `openrig.answer` comprend la ligne et la réponse, si bien qu'un même `op` pour autre chose donne

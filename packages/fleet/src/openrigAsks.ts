@@ -7,6 +7,9 @@ export const OPENRIG_ASKS_POLL_MS = 60_000;
 /** How long an answer waits for its end before it is told `uncertain`: it may have gone, and sending it again is safe. */
 export const OPENRIG_ANSWER_WAIT_MS = 45_000;
 
+/** A fleet machine that takes requests: connected and its fresh snapshot in (the fleet refuses a request before that). */
+const usable = (m: { status: string; ready?: boolean } | undefined): boolean => m?.status === 'open' && m.ready !== false;
+
 type AnswerWait = { qitemId: string; machineId: string; resolve: (a: OpenRigAnswered) => void; timer: ReturnType<typeof setTimeout> };
 
 /**
@@ -32,7 +35,7 @@ function useAnswers(client: DaemonClient, waitMs: number) {
   }, [client]);
   return useCallback((machineId: string, qitemId: string, a: HumanAnswer): Promise<OpenRigAnswered> => {
     const requestId = `openrig-answer-${++next}`;
-    const down = client.status() !== 'open' || (client.fleet ? client.fleet.machines().find(x => x.id === machineId)?.status !== 'open' : false);
+    const down = client.status() !== 'open' || (client.fleet ? !usable(client.fleet.machines().find(x => x.id === machineId)) : false);
     if (down) return Promise.resolve({ type: 'openrig.answered', requestId, machineId, qitemId, ok: false, error: 'offline' });
     return new Promise<OpenRigAnswered>(resolve => {
       const w: AnswerWait = { qitemId, machineId, resolve, timer: setTimeout(() => lost(requestId, w, 'uncertain'), waitMs) };
@@ -160,23 +163,27 @@ export function useOpenRigAsksAll(client: DaemonClient, machines: readonly strin
         ? { ...(s[machine] ?? blank), error: m.error }
         : { channel: m.channel ?? null, asks: m.asks, partial: m.partial === true, truncated: m.truncated === true } }));
     });
-    // A machine whose connection drops between two reads is marked now, not at the next poll; back, it is asked again.
+    // A machine that stops taking requests between two reads is marked now, not at the next poll; once it takes them again (in a fleet:
+    // connected AND its fresh snapshot in, `ready`), it is asked again. Without a fleet, the client's own connection stands for every
+    // machine followed.
     const down = new Set<string>();
+    const mark = (id: string, up: boolean) => {
+      if (!up) {
+        if (down.has(id)) return;
+        down.add(id);
+        setState(s => ({ ...s, [id]: { ...(s[id] ?? blank), error: 'offline' } }));
+      } else if (down.delete(id)) askOne(id);
+    };
     const watch = () => {
-      for (const mc of client.fleet?.machines() ?? []) {
-        if (!wanted.has(mc.id)) continue;
-        if (mc.status !== 'open') {
-          if (down.has(mc.id)) continue;
-          down.add(mc.id);
-          setState(s => ({ ...s, [mc.id]: { ...(s[mc.id] ?? blank), error: 'offline' } }));
-        } else if (down.delete(mc.id)) askOne(mc.id);
-      }
+      if (client.fleet) { for (const mc of client.fleet.machines()) if (wanted.has(mc.id)) mark(mc.id, usable(mc)); }
+      else for (const id of wanted) mark(id, client.status() === 'open');
     };
     const offFleet = client.fleet?.subscribe(watch);
+    const offStatus = client.fleet ? undefined : client.onStatus(watch);
     watch();
     ask();
     const timer = setInterval(ask, pollMs);
-    return () => { off(); offFleet?.(); clearInterval(timer); };
+    return () => { off(); offFleet?.(); offStatus?.(); clearInterval(timer); };
   }, [client, key, ask, askOne, pollMs]);
 
   // Derived once per change, so a screen's effects on them do not run on every render.

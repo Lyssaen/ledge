@@ -6,19 +6,20 @@ import type { DaemonClient, DaemonStatus } from '../src/client';
 import { useOpenRigAsks, useOpenRigAsksAll } from '../src/openrigAsks';
 
 /** A client with a fleet: `status` is the connection's; `machine(id, s)` sets one machine's connection, as the fleet publishes it. */
-function fake(initial: DaemonStatus = 'open') {
+function fake(initial: DaemonStatus = 'open', noFleet = false) {
   const listeners = new Set<(m: ServerMessage) => void>(), statuses = new Set<(s: DaemonStatus) => void>(), fleetSubs = new Set<() => void>(), sent: ClientMessage[] = [];
   let status = initial;
-  const machines = new Map<string, DaemonStatus>([['local', 'open'], ['server', 'open']]);
+  const machines = new Map<string, { status: DaemonStatus; ready: boolean }>([['local', { status: 'open', ready: true }], ['server', { status: 'open', ready: true }]]);
   const client = {
     send: (m: ClientMessage) => { sent.push(m); }, status: () => status,
     onMessage: (f: (m: ServerMessage) => void) => { listeners.add(f); return () => { listeners.delete(f); }; },
     onStatus: (f: (s: DaemonStatus) => void) => { statuses.add(f); return () => { statuses.delete(f); }; },
-    fleet: { machines: () => [...machines].map(([id, st]) => ({ id, status: st })), subscribe: (f: () => void) => { fleetSubs.add(f); return () => { fleetSubs.delete(f); }; } }
+    fleet: noFleet ? undefined : { machines: () => [...machines].map(([id, m]) => ({ id, ...m })), subscribe: (f: () => void) => { fleetSubs.add(f); return () => { fleetSubs.delete(f); }; } }
   } as unknown as DaemonClient;
   return { client, sent, listeners, emit: (m: ServerMessage) => act(() => listeners.forEach(f => f(m))),
     drop: () => act(() => { status = 'connecting'; statuses.forEach(f => f(status)); }),
-    machine: (id: string, st: DaemonStatus) => act(() => { machines.set(id, st); fleetSubs.forEach(f => f()); }) };
+    back: () => act(() => { status = 'open'; statuses.forEach(f => f(status)); }),
+    machine: (id: string, st: DaemonStatus, ready = st === 'open') => act(() => { machines.set(id, { status: st, ready }); fleetSubs.forEach(f => f()); }) };
 }
 const rid = (m: ClientMessage | undefined) => (m as { requestId: string }).requestId;
 const CHANNEL: HumanChannel = { state: 'ready', person: { address: 'ledge@external', name: 'Ledge' }, slack: false };
@@ -171,8 +172,25 @@ describe('« À toi » answers always end', () => {
     f.machine('server', 'unreachable');
     expect(result.current.machines.server).toMatchObject({ error: 'offline', asks: [ASK] });
     expect(result.current.partial).toBe(true);
+    // Connected again but its snapshot not in yet: the fleet would refuse, so nothing is asked; ready, it is asked again.
     const before = f.sent.length;
-    f.machine('server', 'open');
+    f.machine('server', 'open', false);
+    expect(f.sent.slice(before)).toEqual([]);
+    expect(result.current.machines.server!.error).toBe('offline');
+    f.machine('server', 'open', true);
     expect(f.sent.slice(before)).toEqual([{ type: 'openrig.asks', requestId: expect.any(String), machineId: 'server' }]);
+  });
+
+  it('without a fleet, the client\'s own connection marks the machines followed and asks again when back', () => {
+    const f = fake('open', true);
+    const { result } = renderHook(() => useOpenRigAsksAll(f.client, ['local']));
+    f.emit({ type: 'openrig.asksChanged', requestId: rid(f.sent.find(m => m.type === 'openrig.asks')), machineId: 'local', channel: CHANNEL, asks: [] });
+    expect(result.current.partial).toBe(false);
+    f.drop();
+    expect(result.current.partial).toBe(true);
+    expect(result.current.machines.local!.error).toBe('offline');
+    const before = f.sent.length;
+    f.back();
+    expect(f.sent.slice(before)).toEqual([{ type: 'openrig.asks', requestId: expect.any(String), machineId: 'local' }]);
   });
 });
