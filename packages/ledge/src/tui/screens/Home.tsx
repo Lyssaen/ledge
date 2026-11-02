@@ -6,7 +6,7 @@ import { askShown, type Escalation, type Rig, type RigSeat, type Task } from '@l
 import { revisitDecision } from '../brain.js';
 import { LEDGE_FOCUS, useEditing, useScreenKeys, useScreenSize, useTui, type Focus, type KeyHandler } from '../context.js';
 import { focusOrder, nextYours, seatStateLabel, stepFocus, unmirroredAsks, type LeftRow } from '../model/left.js';
-import { nearContext, openDecisions } from '../model/overview.js';
+import { listedDecisions, nearContext, openDecisions } from '../model/overview.js';
 import { wrap } from '../model/thread.js';
 import { Field, fieldRows } from '../ui/Field.js';
 import { C } from '../theme.js';
@@ -47,6 +47,8 @@ export function Home() {
   // whole, then confirmed (y). Only the task.answer action answers one: an answer cannot be taken back.
   const tasks = useTasks(tui.client);
   const decisions = useMemo(() => openDecisions(tasks), [tasks]);
+  // What the column lists: a decision mirrored as an escalation is already one of its items.
+  const shownDecisions = useMemo(() => listedDecisions(tasks, tui.escalations), [tasks, tui.escalations]);
   const [deciding, setDeciding] = useState<{ id: string; draft: string; confirm: boolean } | null>(null);
   const decision = deciding ? decisions.find(x => x.id === deciding.id) : undefined;
   // Answered elsewhere meanwhile (the phone, Desktop, the chat): the field goes with it.
@@ -211,7 +213,7 @@ export function Home() {
   return (
     <Frame crumb={crumb} keys={keys} kept={tui.kept.drafts.has('ledge')}>
       <Box flexGrow={1}>
-        {(wide ? !(railShown && folded) : !active && !roomShown) ? <LeftColumn rows={rows} width={leftW} height={bodyHeight} asks={shownAsks} near={near} decisions={decisions} /> : null}
+        {(wide ? !(railShown && folded) : !active && !roomShown) ? <LeftColumn rows={rows} width={leftW} height={bodyHeight} asks={shownAsks} near={near} decisions={shownDecisions} /> : null}
         {showConv ? <LedgeTabs tab={tab} width={!wide ? columns : columns - (railShown ? RAIL_W : 0) - (railShown && folded ? 0 : leftW)} folded={folded && !railShown}
           {...(yoursEsc ? { escalation: yoursEsc } : {})} keys={conv} onBar={setConvBar} onTab={moveTab} />
           : wide || roomShown ? <Box flexDirection="column" flexGrow={1}><Content focus={focus} room={room} onRoomBar={setRoomBar} side={three} height={bodyHeight} /></Box> : null}

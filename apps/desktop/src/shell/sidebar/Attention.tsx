@@ -1,6 +1,7 @@
 import { useState, type JSX, type MouseEvent } from 'react';
+import { Button } from '@ledge/ui/ui/Button';
 import { useAnswerState, type FleetAsk } from '@ledge/fleet';
-import type { Escalation, Project, Rig, Session, Task } from '@ledge/protocol';
+import { isDecisionEscalation, type Escalation, type Project, Rig, Session, Task } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { seatName } from '@ledge/ui/chat/ledge/threadModel';
 import { seatSession } from '@ledge/ui/rigs/model';
@@ -10,7 +11,7 @@ import { spanOf } from '../../list/time';
 import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { DecisionAnswer } from '../../teams/DecisionAnswer';
-import type { TeamsApi } from '../../teams/useTeamsApi';
+import { decisionOptions, type TeamsApi } from '../../teams/useTeamsApi';
 import { cls } from '../cls';
 import { HelperBot, SessionBot } from '../SessionBot';
 import { AskCard } from './AskCard';
@@ -40,6 +41,10 @@ function EscalationRow(p: {
   const lead = [e.category ? copy.category(e.category) : null, e.summary].filter(Boolean).join(' · ');
   const q = e.questions.length === 1 ? e.questions[0]! : null;
   const busy = answer.state === 'sending' || answer.state === 'done';
+  // A lead's question (`task-<id>`, no question of its own): answered with free text, the lead's options filling the field on a click.
+  const free = isDecisionEscalation(e) && e.questions.length === 0;
+  const [text, setText] = useState('');
+  const options = free ? decisionOptions(e.detail) : [];
   const note = answer.state === 'refused' ? (answer.code === 'already_answered' ? copy.escalation.alreadyAnswered : copy.escalation.refused(answer.code ?? 'failed', answer.reason)) : e.state === 'grace' ? copy.escalation.grace : '';
   return (
     <div className="st-card st-esc" data-escalation={e.id}>
@@ -55,8 +60,24 @@ function EscalationRow(p: {
           {q && q.options.length > 0 && q.options.length <= 2 ? q.options.map(o => (
             <button key={o.id} type="button" className={cls('st-qa', o.recommended && 'pri')} disabled={busy}
               onClick={() => p.onAnswer?.(e.id, { [q.id]: o.id })}>{o.label}</button>
-          )) : <button type="button" className="st-qa" onClick={() => p.onSee?.(e)}>{t.side.see}</button>}
+          )) : free ? null : <button type="button" className="st-qa" onClick={() => p.onSee?.(e)}>{t.side.see}</button>}
         </div>
+        {free && (
+          <form className="decision-answer" aria-label={t.decision.form(e.summary)}
+            onSubmit={ev => { ev.preventDefault(); const a = text.trim(); if (a && !busy) p.onAnswer?.(e.id, { text: a }); }}>
+            {e.detail && <p className="st-decision-options">{e.detail}</p>}
+            {options.length > 0 && (
+              <div className="decision-options" role="group" aria-label={t.decision.options}>
+                {options.map(o => <button key={o} type="button" className="st-qa" onClick={() => setText(o)}>{o}</button>)}
+              </div>
+            )}
+            <textarea className="st-decision-field" rows={2} value={text} placeholder={t.side.ask.placeholder} aria-label={t.decision.field}
+              disabled={busy} onChange={ev => setText(ev.target.value)} />
+            <div className="decision-actions">
+              <Button type="submit" variant="primary" size="sm" disabled={!text.trim() || busy}>{busy ? t.side.ask.sending : t.decision.send}</Button>
+            </div>
+          </form>
+        )}
         {note && <div className="st-l2"><span className="st-where" role="status">{note}</span></div>}
       </div>
     </div>

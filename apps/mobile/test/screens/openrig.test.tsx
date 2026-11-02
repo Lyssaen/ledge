@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { PhoneEscalation, PhoneRig } from '@ledge/protocol';
+import { decisionMirrored, type PhoneEscalation, type PhoneRig, type PhoneTask } from '@ledge/protocol';
 import { Inbox } from '../../src/screens/Inbox';
 import { Agents } from '../../src/screens/Agents';
 import { EscalationPage, LedgeThread, NewRig, RigPage, Rigs } from '../../src/screens/OpenRig';
@@ -10,6 +10,17 @@ const at = '2026-11-01T10:00:00.000Z';
 const e: PhoneEscalation = { id: 'e1', source: 'rig', rigKey: 'abc', from: '@build', intent: 'decision', summary: 'Choisir', questions: [{ id: 'q1', question: 'Base ?', options: [{ id: 'x', label: 'SQLite' }, { id: 'y', label: 'Postgres' }] }, { id: 'q2', question: 'Cache ?', options: [{ id: 'a', label: 'Oui' }, { id: 'b', label: 'Non' }] }], createdAt: at, state: 'pending' };
 function initial() { const m = snapshot([]); if (m.type !== 'snapshot') throw new Error(); return { ...m, daemon: { version: '1', name: 'PC', openrig: true as const }, rigs: [{ key: 'abc', name: 'factory', project: null, offProject: true, lifecycle: 'running' as const, kernel: false, seats: [] as PhoneRig['seats'], repos: 0 }], escalations: [e] }; }
 describe('OpenRig screens', () => {
+ it('a lead\'s question (its decision task and its task- escalation) is one entry and one count in À toi', () => {
+   const t = setup();
+   const mirrored: PhoneEscalation = { id: 'task-t5d6e7f', source: 'ask', rigKey: 'abc', from: 'Otto', intent: 'decision', summary: 'Fusionner feat/roles ?', questions: [], createdAt: at, state: 'pending' };
+   const task: PhoneTask = { id: 't5d6e7f', title: 'Fusionner feat/roles ?', owner: 'ledge', ownerName: 'Ledge', giver: 'otto', giverName: 'Otto', state: 'open', at, updatedAt: at };
+   t.deliver({ ...initial(), escalations: [mirrored] }); t.deliver({ type: 'tasks', tasks: [task] });
+   render(<Inbox store={t.store} />);
+   expect(decisionMirrored(task, [mirrored])).toBe(true); expect(decisionMirrored(task, [e])).toBe(false);
+   expect(screen.getByText(/1 décision\./)).toBeInTheDocument();
+   expect(screen.getAllByText('Fusionner feat/roles ?')).toHaveLength(1);
+ });
+
  it('shows and links a rig', () => { const t = setup(); t.deliver(initial()); render(<Rigs store={t.store} />); expect(screen.getByRole('link', { name: /factory/ })).toHaveAttribute('href', '#/rig/abc/seats'); });
  it('loads the latest rig exchange for its card', () => {
    const t = setup(); t.deliver(initial()); render(<Rigs store={t.store} />);

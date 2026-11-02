@@ -1,5 +1,5 @@
 import { isBusy, type FleetAsk } from '@ledge/fleet';
-import type { Escalation, Helper, Projects, Rig, Session, Team } from '@ledge/protocol';
+import { isDecisionEscalation, type Escalation, type Helper, Projects, Rig, Session, Team } from '@ledge/protocol';
 import { isStandalone } from '@ledge/ui/rigs/model';
 import { teamProject } from '../../atelier/layout';
 import { fold, taskOf } from '../../nav/agents';
@@ -148,7 +148,8 @@ export function attentionOf(
     });
   }
   for (const escalation of escalations) {
-    if (escalation.intent !== 'decision' || escalation.source === 'ask' || !open(escalation)) continue;
+    // An ask's own card (`ask-<id>`) is the AskCard's; a lead's question (`task-<id>`) is this list's escalation card, its decision task's mirror.
+    if (escalation.intent !== 'decision' || (escalation.source === 'ask' && !isDecisionEscalation(escalation)) || !open(escalation)) continue;
     items.push({ kind: 'escalation', escalation, since: escalation.createdAt });
   }
   return items.sort(byAge);

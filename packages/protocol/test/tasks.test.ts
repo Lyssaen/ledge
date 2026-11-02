@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TaskSchema, ThreadItemSchema, transmissions, type Task } from '../src/index.js';
+import { decisionEscalationId, decisionMirrored, isDecisionEscalation, TaskSchema, ThreadItemSchema, transmissions, type Task } from '../src/index.js';
 
 const A = '2026-10-26T10:00:00.000Z', B = '2026-10-26T10:00:01.000Z', C = '2026-10-26T10:00:02.000Z';
 const task = (over: Partial<Task>): Task => ({
@@ -26,5 +26,16 @@ describe('task transmissions', () => {
   it('parses a notice carrying taskOp and outgoing', () => {
     const n = { kind: 'notice', id: 'task-t1-0', at: A, turn: 3, notice: 'other', task: 't1', taskOp: 'give', outgoing: true, name: 'Nova', text: 'x' };
     expect(ThreadItemSchema.parse(n)).toMatchObject({ taskOp: 'give', outgoing: true });
+  });
+});
+
+describe('decisionMirrored', () => {
+  it('is true when the task\'s escalation task-<id> exists, false for another one or none', () => {
+    const t = task({ id: 't5d6e7f', owner: 'ledge' });
+    expect(decisionEscalationId(t.id)).toBe('task-t5d6e7f');
+    expect(decisionMirrored(t, [{ id: 'ask-1' }, { id: 'task-t5d6e7f' }])).toBe(true);
+    expect(decisionMirrored(t, [{ id: 'task-t000000' }, { id: 'ask-t5d6e7f' }])).toBe(false);
+    expect(decisionMirrored(t, [])).toBe(false);
+    expect(isDecisionEscalation({ id: 'task-t5d6e7f' })).toBe(true); expect(isDecisionEscalation({ id: 'ask-1' })).toBe(false);
   });
 });

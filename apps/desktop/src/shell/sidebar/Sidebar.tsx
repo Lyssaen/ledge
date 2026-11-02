@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import type { FleetAsk, MachineState } from '@ledge/fleet';
-import type { Escalation, OpenRigStatus, Project, Projects, Rig, Session } from '@ledge/protocol';
+import { decisionMirrored, type Escalation, type OpenRigStatus, type Project, Projects, Rig, Session } from '@ledge/protocol';
 import { isStandalone, ledgeLine, rigsModel } from '@ledge/ui/rigs/model';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
@@ -76,7 +76,8 @@ export function Sidebar(p: {
   const attn = useMemo(() => attentionOf(p.brains?.length ? [...p.sessions, ...p.brains] : p.sessions, p.waits, p.escalations ?? NO_ESCALATIONS, rigs, p.asks, now), [p.sessions, p.brains, p.waits, p.escalations, rigs, p.asks, now]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
   const near = useMemo(() => nearLimit(standalone, p.relief?.later, p.relief?.near), [standalone, p.relief?.later, p.relief?.near]);
-  const decisions = useMemo(() => (p.teams ? openDecisions(p.teams.tasks) : []), [p.teams]);
+  // A lead's question is also its escalation `task-<id>`, one card of the list: its decision card would show it twice.
+  const decisions = useMemo(() => (p.teams ? openDecisions(p.teams.tasks).filter(x => !decisionMirrored(x, p.escalations ?? NO_ESCALATIONS)) : []), [p.teams, p.escalations]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
   keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null };

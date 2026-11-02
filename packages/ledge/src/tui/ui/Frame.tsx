@@ -5,7 +5,7 @@ import { useScreenSize, useTui } from '../context.js';
 import { cells } from '../model/cells.js';
 import { C } from '../theme.js';
 import { fitKeys, KeyBar } from './KeyBar.js';
-import { listed, openDecisions } from '../model/overview.js';
+import { listed, listedDecisions } from '../model/overview.js';
 import { waitingCount } from '../model/left.js';
 
 /** The smallest terminal the screens are drawn in; below, the frame says so (the screen keeps its state). */
@@ -16,12 +16,12 @@ export const MIN = { columns: 60, rows: 16 } as const;
 export function Frame({ crumb, crumbShort, keys, kept, children }: {
   crumb: string; crumbShort?: string; keys: ReadonlyArray<readonly [string, string]>; kept?: boolean; children: ReactNode;
 }) {
-  const { d, machines, t, g, lastToast, editing, left: home, rigs, client } = useTui();
+  const { d, machines, t, g, lastToast, editing, left: home, rigs, client, escalations } = useTui();
   const { rows, columns } = useScreenSize();
   const live = listed(d.sessions);
   const pending = live.filter(isPending);
   // Who waits: what « À toi » lists for an answer (escalations pending, standalone sessions waiting), and the decisions seats put to the user.
-  const waiting = waitingCount(home) + openDecisions(useTasks(client)).length;
+  const waiting = waitingCount(home) + listedDecisions(useTasks(client), escalations).length;
   const crew = rigs.filter(r => !r.kernel);
   const counts = [t.bar.rigs(crew.length), t.bar.agents(crew.reduce((n, r) => n + r.seats.filter(s => s.state !== 'stopped').length, 0)),
     t.bar.solo(home.filter(r => r.kind === 'session').length), t.bar.machines(Math.max(1, machines.length))].join(' · ');

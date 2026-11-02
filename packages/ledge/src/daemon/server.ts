@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { type TeamObjective, type TeamsEngine, type TeamsEnginePeer, type Rig, TEAM_ADDRESS, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
+import { type TeamObjective, type TeamsEngine, type TeamsEnginePeer, type Rig, TEAM_ADDRESS, actionById, autonomyArgs, contextNear, ompApprovalFor, askShown, isArchived, RoleIdSchema, TemplateIdSchema, type DefinitionCode, givenByLedge, LEDGE_GIVER, openDecision, decisionEscalationId, decisionMirrored, transmissions, type Task, projectOf, type ChatAction, type Autonomy, type Role, type Seat, type Team } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type RigPlan, type RigResultCode, type DaemonInfo, type Projects, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Machine, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf, MANDATE_CATEGORY_LABEL } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -1200,6 +1200,15 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const out = actionMessage(row, rid);
     // A card's row is the engine's too (a card made before a switch, or applied from the phone): refused as action.run would be.
     const off = engineRefusal(teamsEngine, out); if (off !== null) return { failure: off };
+    // A decision a lead's question mirrored as `task-<id>` is answered through that escalation: one memory record, the brain told, then
+    // the task closed (answers.ts). Without one (no bridge, or already answered), the task closes directly.
+    if (out.type === 'task.cmd' && row.action === 'task.answer' && out.task !== undefined && answers) {
+      const id = decisionEscalationId(out.task); const e = bridge?.escalation(id);
+      if (e && e.state !== 'answered' && e.state !== 'closed') {
+        const r = await answers.answer(id, { text: out.text ?? '' }, 'user');
+        return r.ok ? {} : { failure: r.reason };
+      }
+    }
     if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
     let failure: string | undefined; let path: string | undefined;
     await handle(out, m => {
@@ -2410,7 +2419,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   if (mobile) {
     const notifier = createNotifier({ mobile, presence: id => gateway?.visible(id) ?? false, log });
     /** Waiting sessions, pending escalations and open task decisions: the one badge every push carries. */
-    const badgeExtra = () => (aggregate?.escalations().filter(e => e.state === 'pending').length ?? 0) + tasks.all().filter(openDecision).length;
+    const badgeExtra = () => {
+      const esc = aggregate?.escalations() ?? [];
+      return esc.filter(e => e.state === 'pending').length + tasks.all().filter(t => openDecision(t) && !decisionMirrored(t, esc)).length;
+    };
     const appBadge = () => badgeOf(store.all(), badgeExtra());
     notifyChatEnd = (deviceId, code) => {
       const badge = appBadge();
@@ -2443,10 +2455,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       });
       unsubscribeDecisionPush = memory.onChange(() => decisionPushBatch?.changed());
     }
-    notifyDecision = task => {
+    // A decision mirrored as `task-<id>` is pushed by its escalation (once it is pending), not here: one push per question.
+    notifyDecision = task => queueMicrotask(() => {
+      if (aggregate?.escalation(decisionEscalationId(task.id))) return;
       const badge = appBadge();
       void notifier.notify(decisionPayload(task, badge), undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
-    };
+    });
     unsubscribePush = store.onApply((before, after) => {
       const p = pushFor(before, after, store.all(), badgeExtra());
       if (p) void notifier.notify(p, after.id).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));

@@ -11,7 +11,7 @@ import { useBrain } from './brain.js';
 import { LEDGE_FOCUS, screenSize, TuiContext, type Focus, type Kept, type KeyHandler, type LaunchMode, type Screen, type Tui } from './context.js';
 import type { Glyphs } from './glyphs.js';
 import { I18nProvider, MESSAGES, type Lang } from './i18n/lang.js';
-import { listed, openDecisions } from './model/overview.js';
+import { listed, listedDecisions } from './model/overview.js';
 import { focusKey, focusOrder, focusSession, keepFocus, leftRows } from './model/left.js';
 import { asked, notification, title, type NotifyMode } from './notify.js';
 import { Home } from './screens/Home.js';
@@ -122,9 +122,9 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (seen.current) for (const text of asked(seen.current, d.sessions, t.notify)) write(notification(text, notify, env));
     seen.current = d.byId;
     // Written again only when it changes: every session update would otherwise send it. The decisions waiting count too.
-    const next = title(t.notify.title(listed(d.sessions).filter(isPending).length + openDecisions(tasks).length));
+    const next = title(t.notify.title(listed(d.sessions).filter(isPending).length + listedDecisions(tasks, escalations).length));
     if (next !== titled.current) { titled.current = next; write(next); }
-  }, [d.byId, tasks]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [d.byId, tasks, escalations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const actions = useActions({ client, sessions: d.sessions, errors: d.errors, t, toast });
 

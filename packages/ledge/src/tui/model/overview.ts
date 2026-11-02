@@ -1,6 +1,6 @@
 import { isPending, liveHelpers, splitId } from '@ledge/fleet';
 import type { FleetAsk } from '@ledge/fleet';
-import { askShown, contextNear, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmissions, type Escalation, type Project, type ProjectColor, type Projects, type Rig, type Session, type Task, type Team } from '@ledge/protocol';
+import { askShown, contextNear, decisionMirrored, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmissions, type Escalation, type Project, type ProjectColor, type Projects, type Rig, type Session, type Task, type Team } from '@ledge/protocol';
 import { isStandalone } from '@ledge/ui/rigs/model';
 
 /** A session row of the tree under its branch. */
@@ -125,3 +125,6 @@ export const closedLedgeTasks = (tasks: readonly Task[]): Task[] => tasks.filter
 
 /** The decisions sessions put to the user (`ledge task give ledge …`) not answered yet, oldest first: items of « À toi », answered with D. */
 export const openDecisions = (tasks: readonly Task[]): Task[] => tasks.filter(openDecision);
+/** The decisions « À toi » draws and counts as a decision: a lead's question also mirrored as its escalation `task-<id>` is that
+ *  escalation's item (one card, one count); the decision stays here only without one (a daemon without OpenRig's bridge). */
+export const listedDecisions = (tasks: readonly Task[], escalations: readonly Escalation[]): Task[] => openDecisions(tasks).filter(x => !decisionMirrored(x, escalations));

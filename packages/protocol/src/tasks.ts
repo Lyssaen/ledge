@@ -57,6 +57,17 @@ export const givenByLedge = (t: Pick<Task, 'giver'>): boolean => t.giver === LED
 export const taskClosed = (t: Pick<Task, 'state'>): boolean => t.state === 'done' || t.state === 'refused' || t.state === 'dropped';
 /** A decision a session put to the user (`ledge task give ledge …`), not answered yet: an item of « À toi » on every front. */
 export const openDecision = (t: Pick<Task, 'owner' | 'state'>): boolean => t.owner === LEDGE_GIVER && !taskClosed(t);
+/** The id of the escalation that mirrors a decision task (`task-<taskId>`, source `ask`, lot E). */
+export const DECISION_ESCALATION_PREFIX = 'task-';
+export const decisionEscalationId = (taskId: string): string => `${DECISION_ESCALATION_PREFIX}${taskId}`;
+/** Whether an escalation is a decision task's mirror (`task-<taskId>`): a lead's question, answered with free text. */
+export const isDecisionEscalation = (e: { id: string }): boolean => e.id.startsWith(DECISION_ESCALATION_PREFIX);
+/** Whether the decision `t` is also an escalation of the list (a daemon with the OpenRig bridge mirrors it): « À toi » then shows the
+ *  escalation only, so the one question is one card and one count on every front. A decision with no escalation stays a decision. */
+export const decisionMirrored = (t: Pick<Task, 'id'>, escalations: readonly { id: string }[]): boolean => {
+  const id = decisionEscalationId(t.id);
+  return escalations.some(e => e.id === id);
+};
 
 /** `ledge task …`, as its session `by`; a front (Desktop, the TUI, the phone, the chat's card) gives as `ledge`.
  *  `cancel`: by its giver, or by Ledge for any task. `seen` (Ledge only) puts a closed task of Ledge's away from « À toi ». `team` filters a `list`; `qid` and `row` name

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { ClientMessage, Task } from '@ledge/protocol';
+import type { ClientMessage, Escalation, Task } from '@ledge/protocol';
 import { boot, closeDaemons, PROJECTS } from './helpers';
 import { decisionOptions } from '../src/teams/useTeamsApi';
 
@@ -100,5 +100,42 @@ describe('decisionOptions', () => {
     expect(decisionOptions('1. Oui\n2) Non\n\n* Plus tard')).toEqual(['Oui', 'Non', 'Plus tard']);
     expect(decisionOptions('Oui ou non ?')).toEqual([]);
     expect(decisionOptions(undefined)).toEqual([]);
+  });
+});
+
+describe('a lead\'s question mirrored as its escalation (lot E)', () => {
+  const mirror = (extra: Partial<Escalation> = {}): Escalation => ({ id: 'task-t00000d', source: 'ask', machine: 'local', rigId: 'team-api', from: 'Otto', intent: 'decision', summary: 'Fusionner feat/roles ?', detail: '- Oui, fusionne\n- Non, attends la revue', questions: [], createdAt: T0, state: 'pending', ...extra });
+  const TEAM = { id: 'team-api', name: 'api', machine: 'local', cwd: '/w/ledge', projectId: null, offProject: false, lifecycle: 'running', kernel: false, repos: [], seats: [] } as never;
+
+  it('is one card and a count of 1: the escalation, with the team\'s name, and no decision card beside it', async () => {
+    const env = await openHome();
+    env.d.push({ type: 'rig.snapshot', machine: 'local', rigs: [TEAM] });
+    env.d.push({ type: 'escalation.updated', escalation: mirror() });
+    const bar = within(side().getByRole('region', { name: 'Your turn' }));
+    await waitFor(() => expect(side().getByText('Fusionner feat/roles ?').closest('[data-escalation]')).not.toBeNull());
+    expect(side().getAllByText('Fusionner feat/roles ?')).toHaveLength(1);
+    expect(side().queryByRole('button', { name: 'Answer' })).toBeNull();
+    const card = side().getByText('Fusionner feat/roles ?').closest('.st-card') as HTMLElement;
+    expect(within(card).getByText('api')).toBeVisible();
+    expect(bar.getByText('1')).toBeVisible();
+  });
+
+  it('a free text answers through escalation.answer, answers: { text }', async () => {
+    const env = await openHome();
+    env.d.push({ type: 'escalation.updated', escalation: mirror() });
+    await waitFor(() => expect(side().getByText('Fusionner feat/roles ?').closest('[data-escalation]')).not.toBeNull());
+    const card = side().getByText('Fusionner feat/roles ?').closest('.st-card') as HTMLElement;
+    const send = within(card).getByRole('button', { name: 'Send the answer' });
+    expect(send).toBeDisabled();
+    await env.user.click(within(card).getByRole('button', { name: 'Oui, fusionne' }));
+    await env.user.type(within(card).getByRole('textbox', { name: 'Your answer' }), ' après la CI');
+    await env.user.click(send);
+    await waitFor(() => expect(env.d.received).toContainEqual({ type: 'escalation.answer', rid: expect.any(String), id: 'task-t00000d', answers: { text: 'Oui, fusionne après la CI' }, by: 'user' }));
+    expect(answers(env.d.received)).toEqual([]);
+  });
+
+  it('a decision without its escalation stays its own card', async () => {
+    await openHome();
+    expect(side().getByRole('button', { name: 'Answer' })).toBeVisible();
   });
 });
