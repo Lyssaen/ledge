@@ -61,6 +61,7 @@ function toolLines(it: ToolItem, o: Opts): Line[] {
       .forEach((x, k) => out.push([{ text: `      ${g.bar} `, color: C.faint }, ...(k ? [{ text: `${g.cont} `, color: C.faint }] : []), ...x]));
     if (lines.length > DIFF_MAX) out.push([{ text: `      ${g.bar} ${g.ellipsis} ${lines.length - DIFF_MAX}`, color: C.faint }]);
   }
+  for (const r of it.images ?? []) out.push(imageLine(r, t, 'o'));
   return out;
 }
 

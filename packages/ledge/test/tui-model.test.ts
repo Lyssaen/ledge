@@ -482,5 +482,19 @@ describe('tui image lines', () => {
       { kind: 'reply', id: 'r1', at, turn: 1, text: 'ok' }
     ];
     expect(threadImages(items, true)).toEqual([ref, other]);
+    const folded: ThreadItem[] = [
+      { kind: 'tool', id: 't0', at, turn: 1, tool: 'browser', label: 'Navigateur', status: 'success', files: [], images: [ref] },
+      ...[2, 3, 4].map((n): ThreadItem => ({ kind: 'prompt', id: `p${n}`, at, turn: n, text: 'x' }))
+    ];
+    expect(threadImages(folded, false)).toEqual([]);
+    expect(threadImages(folded, true)).toEqual([ref]);
+  });
+
+  it('a tool row shows one image line per capture, with the o hint, and none without images', () => {
+    const withImage: ThreadItem = { kind: 'tool', id: 't1', at, turn: 1, tool: 'browser', label: 'Navigateur', status: 'success', files: [], images: [ref] };
+    const without: ThreadItem = { kind: 'tool', id: 't2', at, turn: 1, tool: 'Read', label: 'a.ts', status: 'success', files: [] };
+    expect(text(threadLines([withImage], { ...o, t: fr }))).toEqual(expect.arrayContaining(['  ▣ capture 1440×900 · 212 Ko · o ouvrir dans la visionneuse']));
+    expect(text(threadLines([withImage], { ...o, t: en }))).toContain('  ▣ capture 1440×900 · 212 KB · o open in viewer');
+    expect(text(threadLines([without], { ...o, t: fr })).some(l => l.includes('▣'))).toBe(false);
   });
 });
