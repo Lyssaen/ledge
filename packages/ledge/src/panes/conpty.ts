@@ -1,5 +1,5 @@
-import { spawn as ptySpawn, type IPty } from 'node-pty';
-import xterm from '@xterm/headless';
+import type { IPty, spawn as PtySpawn } from 'node-pty';
+import type { Terminal } from '@xterm/headless';
 import { execFile } from 'node:child_process';
 import type { Tmux } from '../tmux.js';
 import { keyBytes } from './keys.js';
@@ -10,7 +10,14 @@ import { resolveCommand } from './resolve.js';
 const SLICE = 256, SLICE_GAP_MS = 20;
 
 /** One agent: its pseudo-terminal (ConPTY on Windows) and the headless terminal its output is rendered in. */
-interface Pane { pty: IPty; term: xterm.Terminal; exited: Promise<void> }
+interface Pane { pty: IPty; term: Terminal; exited: Promise<void> }
+
+/** node-pty (a native module, no Linux prebuild) and the xterm bundle load on the first pane, never in a process that
+ *  starts none: a hook, the CLI, or the daemon on Linux. */
+async function load(spawn?: typeof PtySpawn): Promise<{ spawn: typeof PtySpawn; Terminal: typeof Terminal }> {
+  const xterm = await import('@xterm/headless');
+  return { spawn: spawn ?? (await import('node-pty')).spawn, Terminal: (xterm.default ?? xterm).Terminal };
+}
 
 export type PanesTmux = Tmux & {
   /** The code a pane's program exited with; `undefined` while it runs or for a name never seen. */
@@ -29,19 +36,21 @@ function killTree(pane: Pane): void {
  * The `Tmux` contract on node-pty and @xterm/headless, inside this process: what Ledge needs from tmux on a machine
  * without tmux (Windows). Spike: no attach, no control client, no option, no pane cwd.
  */
-export function conptyPanes(opts: { cols?: number; rows?: number; spawn?: typeof ptySpawn } = {}): PanesTmux {
+export function conptyPanes(opts: { cols?: number; rows?: number; spawn?: typeof PtySpawn } = {}): PanesTmux {
   const cols = opts.cols ?? 200, rows = opts.rows ?? 50;
-  const spawn = opts.spawn ?? ptySpawn;
+  let loaded: ReturnType<typeof load> | undefined;
   const live = new Map<string, Pane>();
   const codes = new Map<string, number | null>();
   const get = (name: string) => live.get(name);
-  const settle = (term: xterm.Terminal) => new Promise<void>(r => term.write('', r));
+  const settle = (term: Terminal) => new Promise<void>(r => term.write('', r));
   return {
     async newSession({ name, cwd, env, unset = [], command }) {
       if (live.has(name)) throw new Error(`pane ${name} exists`);
+      const { spawn, Terminal } = await (loaded ??= load(opts.spawn));
+      if (live.has(name)) throw new Error(`pane ${name} exists`);
       const childEnv: Record<string, string> = {};
       for (const [k, v] of Object.entries(env)) if (!unset.includes(k)) childEnv[k] = v;
-      const term = new xterm.Terminal({ cols, rows, scrollback: 5000, allowProposedApi: true });
+      const term = new Terminal({ cols, rows, scrollback: 5000, allowProposedApi: true });
       const pty = spawn(resolveCommand(command[0]!, childEnv), command.slice(1), { name: 'xterm-256color', cols, rows, cwd, env: childEnv });
       codes.delete(name);
       let done!: () => void;
