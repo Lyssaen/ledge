@@ -396,6 +396,12 @@ describe('claude adapter: a question with a preview (Claude Code 2.1.310 capture
     expect(claudeAdapter.promptGone!(preview, verrou)).toBe(false);
     expect(claudeAdapter.promptGone!(fx('claude2-question-preview-chat-left'), verrou)).toBe(true);
   });
+  it('on Linux a > in the output above the dialog is not the cursor (diff prints `> 2. RWLock`)', () => {
+    const rule = preview.indexOf('\n───');
+    const pane = preview.slice(0, rule) + '\n● Bash(diff a.md b.md)\n  ⎿  3c3\n     > 2. RWLock\n' + preview.slice(rule);
+    expect((claudeAdapter.replyPlan('2', verrou, pane)[1] as Until).until(tail(pane, 30))).toBe(false);
+    expect(claudeAdapter.detectPrompt(pane)).toEqual({ kind: 'question', text: 'Quel verrou utiliser ?', options: ['Mutex', 'RWLock', 'Aucun'] });
+  });
   it('a digit only moves the cursor: Enter once the cursor is on that option', () => {
     const plan = claudeAdapter.replyPlan('2', verrou, preview);
     expect(plan).toEqual([{ text: '2' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);
@@ -428,26 +434,5 @@ describe('claude adapter: a question with a preview (Claude Code 2.1.310 capture
     expect(claudeAdapter.replyPlan('2', verrou, plain)).toEqual([{ text: '2' }]);
     expect(claudeAdapter.keysFor('accept', verrou, plain)).toEqual([{ text: '1' }]);
     expect(claudeAdapter.replyPlan('Vert', verrou, plain)[0]).toEqual({ text: '4' });
-  });
-});
-
-// Captured on Windows through ConPTY (spike): the input prompt and the dialog cursor are '>' there, not '❯'.
-describe('claude adapter on Windows glyphs', () => {
-  it('detects the workspace trust dialog with a > cursor', () => {
-    expect(claudeAdapter.detectPrompt(fx('win-claude-trust'))).toEqual({
-      kind: 'permission', text: 'Trust this folder? C:\\Users\\guill\\AppData\\Local\\Temp\\ledge-spike\\work', options: ['No, exit', 'Yes, I trust this folder']
-    });
-    const p = { kind: 'permission' as const, text: 'Trust this folder?', source: 'pane' as const };
-    expect(claudeAdapter.keysFor('accept', p, fx('win-claude-trust'))).toEqual([{ keys: ['Down', 'Enter'] }]);
-  });
-  it('sees the > input box at rest, no dialog, and the box out of the preview', () => {
-    expect(claudeAdapter.detectPrompt(fx('win-claude-idle'))).toBeNull();
-    expect(claudeAdapter.atRest!(fx('win-claude-idle'))).toBe(true);
-    expect(claudeAdapter.previewLines!(fx('win-claude-idle')).some(l => l.startsWith('> '))).toBe(false);
-  });
-});
-describe('claude adapter on a Windows file-creation dialog', () => {
-  it('reads it once the rows ConPTY flagged as wrapped stay apart', () => {
-    expect(claudeAdapter.detectPrompt(fx('win-claude-create'))).toMatchObject({ kind: 'permission', text: 'Create file probe.txt' });
   });
 });

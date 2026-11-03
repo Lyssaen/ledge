@@ -43,13 +43,15 @@ import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, bottomLines, flatten, show
 //   ────────────────────────
 //     Chat about this
 //   Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel
-/** The cursor that marks the input line and the selected option: ❯, or > where the console lacks the glyph (Windows). */
-const CURSOR = /^[❯>]\s*/;
-const OPTION = /^\s*(?:[❯>]\s*)?(\d+)\.\s+(\S.*?)\s*$/;
+/** The cursor that marks the input line and the selected option: ❯, and on Windows > (its console lacks the glyph:
+ *  spike, ConPTY). Only there: on Linux a '> ' line is ordinary output (a diff, a quote) and must not pass for the cursor. */
+const CUR = process.platform === 'win32' ? '[❯>]' : '❯';
+const CURSOR = new RegExp(`^${CUR}\\s*`);
+const OPTION = new RegExp(`^\\s*(?:${CUR}\\s*)?(\\d+)\\.\\s+(\\S.*?)\\s*$`);
 const FOOTER = /^\s*(?:(?:Enter to select\b.*)?Esc to cancel\b|ctrl\+g to edit\b)/;
 const PLAN_FOOTER = /^\s*ctrl\+g to edit\b/;
 const PREVIEW_FOOTER = /\bn to add notes\b/;
-const CHAT_LINE = /^\s*(?:[❯>]\s*)?Chat about this$/;
+const CHAT_LINE = new RegExp(`^\\s*(?:${CUR}\\s*)?Chat about this$`);
 /** Where the preview box starts on a line: two spaces at least, then its left edge. */
 const PREVIEW_EDGE = /\s{2,}[┌│└]/;
 const GUTTER = /^│\s*/;
@@ -330,7 +332,7 @@ const BUSY = /\besc to interrupt\b/;
 //   ✶ Newspapering… (20s · ↓ 1.2k tokens)     working
 //   ✽ Waddling…                               working, its first second
 //   ✻ Sautéed for 25s · done 10:10 AM         at rest
-const SPINNER = /^[^\s❯>●⎿│─]\s\S+…(?: \(|$)/;
+const SPINNER = new RegExp(`^[^\\s❯${process.platform === 'win32' ? '>' : ''}●⎿│─]\\s\\S+…(?: \\(|$)`);
 
 function spinning(lines: string[], top: number): boolean {
   for (let i = top - 1; i >= 0; i--) if (/^\S/.test(lines[i]!)) return SPINNER.test(lines[i]!);
@@ -349,7 +351,7 @@ function atRest(pane: string): boolean {
 const digit = (n: number): KeyPlan => [{ text: String(n) }];
 
 /** The cursor ❯ is on option `n` (1-based). */
-const focused = (n: number) => { const row = new RegExp(`^\\s*[❯>]\\s*${n}\\.\\s`, 'm'); return (p: string) => row.test(p); };
+const focused = (n: number) => { const row = new RegExp(`^\\s*${CUR}\\s*${n}\\.\\s`, 'm'); return (p: string) => row.test(p); };
 
 /**
  * Option `n` of the dialog on screen. A question with a preview only moves the cursor on a digit: Enter selects, once the
@@ -373,7 +375,7 @@ function optionNumber(text: string, pending: Pending | undefined): number | null
 const FREE_ROW = /^Type something\.?$/;
 // A question with a preview has no such row: « Chat about this », under the last option, declines it and gives the input
 // box back while Claude answers. Typed then, the text is queued and goes after that turn (2.1.310, seen in tmux).
-const CHAT_FOCUSED = /^\s*[❯>]\s*Chat about this\s*$/m;
+const CHAT_FOCUSED = new RegExp(`^\\s*${CUR}\\s*Chat about this\\s*$`, 'm');
 const NO_FREE_ROW = 'no free-text row in this dialog, answer in the terminal';
 
 // Ctrl+U empties the field the cursor is in before a text goes in: a row's text, or the input's draft typed in the
@@ -397,7 +399,7 @@ function sentFrom(text: string): (pane: string) => boolean {
     const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
     const box = inputBox(lines);
     if (!box) return true;
-    const draft = lines.slice(box.top + 1, box.bottom).join('').replace(/\s+/g, '').replace(/^[❯>]/, '');
+    const draft = lines.slice(box.top + 1, box.bottom).join('').replace(/\s+/g, '').replace(CURSOR, '');
     return !draft.includes('[Pastedtext#') && !(head && draft.startsWith(head));
   };
 }
