@@ -68,8 +68,30 @@ the 4 failures of the capture worker and the flaky TUI tests already failed befo
    checked; `CLAUDE_CODE_GIT_BASH_PATH` pointed at PortableGit's bash).
    `ledge setup` on Windows must write the two forms.
 
+## Final review fixes (before any snapshot build)
+
+A fresh reviewer read the branch. Its findings, fixed with a test that failed first:
+
+- **node-pty and @xterm/headless are optional dependencies, imported only when a pane starts** (`panes/conpty.ts`,
+  `external` in `tsup.config.ts`). As plain dependencies every `ledge` process loaded them, hooks included, and an
+  install on Linux needed a compiler (node-pty has no Linux prebuild).
+- **Claude's `>` cursor only on Windows.** Accepted everywhere, a `> 2. RWLock` line of a diff above a question with a
+  preview passed for the cursor on option 2 and Enter could take option 1. On Linux the adapter is as on `main`.
+- **The Windows Codex reply compares its draft on letters and digits**, so a reply starting with `→` or `·` (dropped by
+  Codex) is still sent.
+
+After them: Linux suite 2839 pass (only the failures that predate the spike); Windows unit tests 93 pass, 1 skipped (the
+tmux reply plan); a full Claude pass 8/8 and the Codex checks 1, 2, 3, 6, 7, 8 on the rebuilt daemon.
+
+Left for the product (reviewer's minor findings): a per-pane queue so an interrupt cannot land inside a sliced reply;
+log a failed or slow kill and fall back to `pty.kill()`; kill gently first (SessionEnd hooks, Codex's resume lock);
+don't dispose the terminal while a capture is pending; read only the last rows on capture; a wide-character capture
+test; count leftover `node.exe` too after a kill.
+
 ## Other findings
 
+- **A question named by the hook before Claude draws it**: the daemon rightly refuses to type (« no prompt visible in
+  the terminal ») until the dialog is on screen; a front answering at once must retry (the driver does, once a second).
 - **Start-up race**: text typed within ~2 s of Claude's input box appearing can be lost entirely (probe without a settle
   delay: 2 of 5 pastes, 1 of 1 big write). Ledge types only once the session is `idle`, later than that; keep it so.
 - **Codex on Windows drops some non-ASCII input**: `·`, `→`, `✓` vanish, `é`, `à`, `É`, `€` pass. It is Codex's own
