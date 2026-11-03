@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { boot, closeDaemons, PROJECTS } from './helpers';
+import { boot, closeDaemons, PROJECTS, TWO_PROJECTS } from './helpers';
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); await closeDaemons(); });
@@ -68,11 +68,44 @@ describe('the eye of « Projets »', () => {
     await user.click(within(empty).getByRole('button', { name: 'Show every project' }));
     expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'false');
     expect(heads()).toEqual(['Ledge', 'Payment Service Platform Migration Europe', 'Docs']);
+    // H from the box's button, or from the eye, releases it too: that state has no tree to take the key (review).
+    await user.click(box.getByRole('button', { name: EYE }));
+    expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'true');
+    within(box.getByRole('status')).getByRole('button', { name: 'Show every project' }).focus();
+    await user.keyboard('h');
+    expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'false');
+    box.getByRole('button', { name: EYE }).focus();
+    await user.keyboard('h');
+    expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'true');
+    await user.keyboard('h');
+    expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'false');
     // H in the tree presses it again.
     box.getByRole('button', { name: /^Ledge/ }).focus();
     await user.keyboard('h');
     expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'true');
     expect(box.getByRole('status')).toHaveTextContent('No live agent.');
+  });
+
+  it('projects but no session: the header whole, « Create a session », « +2 projects » under it; released, every project (design-ux, 11:42Z)', async () => {
+    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: [] });
+    const box = projectsBox(side);
+    // The projects come after the snapshot: until then the tree knows none.
+    const more = await box.findByRole('button', { name: '+2 projects with no live agent' });
+    const empty = box.getByRole('status');
+    expect(empty).toHaveTextContent('No session yet.A session runs an agent in a folder or a project.Create a session');
+    const header = empty.previousElementSibling as HTMLElement;
+    expect(within(header).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([EYE, 'Compact mode (D)', 'Fold all', 'New project']);
+    expect(more).toHaveAttribute('tabindex', '0');
+    // H from the box releases the eye, as its row would.
+    within(empty).getByRole('button', { name: 'Create a session' }).focus();
+    await user.keyboard('h');
+    expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'false');
+    expect(heads()).toEqual(['Ledge', 'Payment Service Platform Migration Europe']);
+    expect(document.querySelectorAll('.st-tree .st-project .st-chev')).toHaveLength(0);
+    expect(box.queryByRole('status')).toBeNull();
+    await user.click(box.getByRole('button', { name: EYE }));
+    await user.click(box.getByRole('button', { name: '+2 projects with no live agent' }));
+    expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('its texts in French and English', async () => {

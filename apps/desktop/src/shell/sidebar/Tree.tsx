@@ -69,6 +69,8 @@ export function Tree(p: {
   hideDone: boolean;
   /** The projects the pressed eye hides: « +N projets sans agent actif » under the tree, or « Aucun agent actif. » alone. */
   hiddenProjects: number;
+  /** Some session is in the projects' tree, shown or not: without any, its box offers one (sidebar tidy, point 3). */
+  anySession: boolean;
   dense: boolean;
   filing: Filing;
   revealCurrent: number;
@@ -309,19 +311,25 @@ export function Tree(p: {
     }
   }
 
-  // The pressed eye hides projects: a last row says how many, and opens them all (the eye released).
-  if (p.hideDone && p.hiddenProjects > 0 && p.groups.length > 0) {
-    const moreKey = 'more-projects';
-    nav.current.set(moreKey, {});
-    rows.push(
-      <div key={moreKey} className="st-row st-more st-more-projects" style={{ '--d': 0 } as CSSProperties}>
-        <span className="st-gap" />
-        <button type="button" data-tree-key={moreKey} tabIndex={tabOf(moreKey)} aria-expanded={false} onClick={p.onToggleHide}>{t.side.moreProjects(p.hiddenProjects)}</button>
-      </div>
-    );
-  }
+  // The pressed eye hides projects: a last row says how many, and opens them all (the eye released). Alone under the
+  // « Aucune session » box, it is the tree's only tab stop.
+  const moreKey = 'more-projects';
+  const moreRow = p.hideDone && p.hiddenProjects > 0 ? (
+    <div key={moreKey} className="st-row st-more st-more-projects" style={{ '--d': 0 } as CSSProperties}>
+      <span className="st-gap" />
+      <button type="button" data-tree-key={moreKey} tabIndex={p.groups.length === 0 ? 0 : tabOf(moreKey)} aria-expanded={false} onClick={p.onToggleHide}>{t.side.moreProjects(p.hiddenProjects)}</button>
+    </div>
+  ) : null;
+  if (moreRow) { nav.current.set(moreKey, {}); if (p.groups.length > 0) rows.push(moreRow); }
+  // H and D from the header's buttons and the « Aucun agent actif. » box too, as in the tree: that box has no tree to take them.
+  const headKeys = (e: ReactKeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'h') p.onToggleHide(); else if (k === 'd') p.onToggleDense(); else return;
+    e.preventDefault(); e.stopPropagation();
+  };
   const header = (
-    <div className="st-label">
+    <div className="st-label" onKeyDown={headKeys}>
       <span>{t.side.projects}</span><span className="st-fill" />
       <button type="button" className={cls('st-icon', p.hideDone && 'on')} aria-pressed={p.hideDone} aria-label={t.side.hideDone} title={t.side.hideDone} onClick={p.onToggleHide}>
         <Icon d={SHELL_ICONS.eyeOff} size={14} />
@@ -337,11 +345,23 @@ export function Tree(p: {
       </button>
     </div>
   );
-  // Projects, but none with a live agent and the eye pressed: the header, and a box that releases the eye.
-  if (p.groups.length === 0 && p.hideDone && p.hiddenProjects > 0) return (
+  // Projects, no session at all, the eye pressed: the header whole, the box that offers a session, and what the eye hides.
+  if (p.groups.length === 0 && moreRow && !p.anySession) return (
     <>
       {header}
-      <div className="st-empty" role="status">
+      <div className="st-empty" role="status" onKeyDown={headKeys}>
+        <strong>{t.side.empty.sessions}</strong>
+        <p>{t.side.empty.sessionsBody}</p>
+        <button type="button" className="st-empty-btn" onClick={() => p.onLaunch()}><Icon d={ICONS.plus.d} size={13} />{t.side.empty.newSession}</button>
+      </div>
+      <div ref={treeRef} role="tree" aria-label={t.side.tree} className={cls('st-tree', p.dense && 'st-dense')} onKeyDown={onTreeKey}>{moreRow}</div>
+    </>
+  );
+  // Sessions, but none live and the eye pressed: the header, and a box that releases the eye.
+  if (p.groups.length === 0 && moreRow) return (
+    <>
+      {header}
+      <div className="st-empty" role="status" onKeyDown={headKeys}>
         <strong>{t.side.empty.noActive}</strong>
         <p>{t.side.empty.noActiveBody}</p>
         <button type="button" className="st-empty-btn" onClick={p.onToggleHide}>{t.side.empty.showAll}</button>
@@ -349,7 +369,7 @@ export function Tree(p: {
     </>
   );
 
-  // No session at all (docs/mockups/ledge-sidebar-tidy.html, point 3): the header keeps only « + », and the box offers a session.
+  // No project and no session (docs/mockups/ledge-sidebar-tidy.html, point 3): the header keeps only « + », the box offers a session.
   if (p.groups.length === 0) return (
     <>
       <div className="st-label">

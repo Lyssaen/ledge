@@ -48,6 +48,11 @@ for (const theme of ['dark', 'light'] as const) for (const dense of [false, true
     await expect(projects(page).getByRole('button', { name: /^Doccle Channel/ })).toBeVisible();
     await projects(page).screenshot({ path: info.outputPath(`eye-released-${mode}-${theme}.png`) });
   });
+  test(`projects but no session — ${mode}, ${theme}`, async ({ page }, info) => {
+    await open(page, theme, dense, true, []);
+    await expect(projects(page).getByRole('button', { name: '+6 projets sans agent actif' })).toBeVisible({ timeout: 30_000 });
+    await projects(page).screenshot({ path: info.outputPath(`eye-nosession-${mode}-${theme}.png`) });
+  });
   test(`nobody live — ${mode}, ${theme}`, async ({ page }, info) => {
     await open(page, theme, dense, true, QUIET);
     await expect(projects(page).getByText('Aucun agent actif.')).toBeVisible({ timeout: 30_000 });

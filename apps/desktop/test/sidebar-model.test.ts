@@ -99,10 +99,11 @@ describe('filterArchived / helpers', () => {
     // A project dragged onto, or the filter, still shows.
     expect(names(eyeGroups(groups, true, { dragging: true }))).toEqual(['Ledge', 'Paper', 'Empty']);
     expect(names(eyeGroups(groups, true, { dragging: false, filter: 'paper' }))).toEqual(['Ledge', 'Paper']);
-    // Nobody live: nothing shows, all counted; no session at all: nothing hidden (the tree's « no session yet »).
+    // Nobody live, or no session at all: nothing shows, every project counted (the tree picks its box).
     const quiet = treeModel(sessions.slice(1), projects, idOf);
     expect([names(eyeGroups(quiet, true, { dragging: false })), eyeGroups(quiet, true, { dragging: false }).hidden]).toEqual([[], 4]);
-    expect(eyeGroups(treeModel([], projects, idOf), true, { dragging: false })).toEqual({ shown: [], hidden: 0 });
+    expect(eyeGroups(treeModel([], projects, idOf), true, { dragging: false })).toEqual({ shown: [], hidden: 3 });
+    expect(names(eyeGroups(treeModel([], projects, idOf), false, { dragging: false }))).toEqual(['Ledge', 'Paper', 'Empty']);
   });
   it('filterArchived matches name, task and project', () => {
     const old = fakeSession('old', { name: 'Nova', topic: 'Migration', archivedAt: '2026-10-18T10:00:00.000Z' });

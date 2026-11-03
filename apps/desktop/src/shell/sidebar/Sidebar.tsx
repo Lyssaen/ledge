@@ -190,7 +190,7 @@ export function Sidebar(p: {
           }} />
         {!byRig && <section aria-label={t.side.projects}>
           <Tree groups={shownGroups} closed={closed} onClosed={setClosed} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
-            hideDone={prefs.hideDone} hiddenProjects={hiddenProjects} dense={prefs.dense} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
+            hideDone={prefs.hideDone} hiddenProjects={hiddenProjects} anySession={groups.some(g => g.branches.some(b => b.sessions.length > 0))} dense={prefs.dense} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
             onLaunch={project => p.dispatch({ type: 'modal', modal: { kind: 'launch', ...(project !== undefined ? { project } : {}) } })}
