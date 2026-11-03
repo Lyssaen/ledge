@@ -29,7 +29,7 @@ import { createOmpSeats, isOmpSeat, type OmpSeats } from './omp/seats.js';
 import { inspectRepos } from './repos.js';
 import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
-import { loginShellEnv } from '../shell-path.js';
+import { userEnv } from '../shell-path.js';
 import { log } from '../log.js';
 import { tooWide, type Chat } from '../chat/service.js';
 import { createChatThreads } from '../chat/threads.js';
@@ -200,7 +200,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
-  const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
+  const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await userEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const reducer = new CaptureReducer();
   const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all() });

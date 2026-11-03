@@ -40,3 +40,46 @@ export function loginShellEnv(opts: { shell?: string; timeoutMs?: number; comman
     });
   });
 }
+
+/** The string values of one `reg query <key>` output: `    NAME    REG_SZ    value` (names may hold spaces). */
+type RegValues = Record<string, { type: string; value: string }>;
+export function parseRegQuery(out: string): RegValues {
+  const values: RegValues = {};
+  for (const line of out.split(/\r?\n/)) {
+    const m = /^ {4}(.+?) {4}(REG_SZ|REG_EXPAND_SZ)(?: {4}(.*))?$/.exec(line);
+    if (m) values[m[1]!] = { type: m[2]!, value: m[3] ?? '' };
+  }
+  return values;
+}
+
+const MACHINE_ENV = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment';
+const USER_ENV = 'HKCU\\Environment';
+const regQuery = (key: string) => new Promise<string>((resolve, reject) => {
+  execFile('reg', ['query', key], { windowsHide: true, timeout: 5000 }, (err, stdout) => (err ? reject(err) : resolve(String(stdout))));
+});
+
+/**
+ * Windows: the environment a new process of the user gets, read where Windows keeps it (machine, then user, which wins;
+ * `Path` is both joined), `%NAME%` expanded against `base` then those values, an unknown one kept as written. What a
+ * tool installed after the daemon started added to the PATH is there.
+ */
+export async function windowsRegistryEnv(run: (key: string) => Promise<string> = regQuery, base: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
+  const none = (): RegValues => ({});
+  const [machine, user] = await Promise.all([run(MACHINE_ENV).then(parseRegQuery, none), run(USER_ENV).then(parseRegQuery, none)]);
+  const lookup = new Map<string, string>();
+  for (const [k, v] of Object.entries(base)) if (v !== undefined) lookup.set(k.toUpperCase(), v);
+  for (const src of [machine, user]) for (const [k, v] of Object.entries(src)) if (v.type === 'REG_SZ') lookup.set(k.toUpperCase(), v.value);
+  const expand = (s: string) => s.replace(/%([^%;]+)%/g, (all, name: string) => lookup.get(name.toUpperCase()) ?? all);
+  const value = (v: { type: string; value: string }) => (v.type === 'REG_EXPAND_SZ' ? expand(v.value) : v.value);
+  const env: Record<string, string> = {};
+  for (const src of [machine, user]) for (const [k, v] of Object.entries(src)) if (k.toUpperCase() !== 'PATH') env[k] = value(v);
+  const path = (src: RegValues) => { const k = Object.keys(src).find(n => n.toUpperCase() === 'PATH'); return k ? value(src[k]!) : ''; };
+  const joined = [path(machine), path(user)].filter(Boolean).join(';');
+  if (joined) env.Path = joined;
+  return env;
+}
+
+/** The environment a fresh terminal would give the user: the registry's on Windows, the login shell's elsewhere. */
+export function userEnv(platform: NodeJS.Platform = process.platform, deps: { registry?: () => Promise<Record<string, string>>; shell?: () => Promise<Record<string, string>> } = {}): Promise<Record<string, string>> {
+  return platform === 'win32' ? (deps.registry ?? (() => windowsRegistryEnv()))() : (deps.shell ?? (() => loginShellEnv()))();
+}

@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 import type { DaemonInfo, ServerMessage } from '@ledge/protocol';
 import { runFile } from '../tmux.js';
-import { loginShellEnv } from '../shell-path.js';
+import { userEnv } from '../shell-path.js';
 import { log } from '../log.js';
 import { tmuxServerAtRisk, SERVICE } from './guard.js';
 
@@ -85,7 +85,7 @@ export function realUpdaterDeps(opts: { info: DaemonInfo; save: () => Promise<vo
     info: () => opts.info,
     atRisk: async () => (opts.ownedLive?.() ?? 0) > 0 || await tmuxServerAtRisk(),
     npm: async cmd => {
-      const env = npmEnv(process.execPath, { ...process.env, ...(await loginShellEnv()) });
+      const env = npmEnv(process.execPath, { ...process.env, ...(await userEnv()) });
       const r = await runFile(cmd.file, cmd.args, env, { timeoutMs: NPM_TIMEOUT_MS });
       const output = `${r.stdout}\n${r.stderr}`;
       return r.code === 124 ? { code: 124, output: `npm timed out after 3 minutes\n${output}` } : { code: r.code, output };
