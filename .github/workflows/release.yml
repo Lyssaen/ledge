@@ -2,6 +2,7 @@
 # The tag is annotated: its subject is the release title, its body the release notes. The install block and the
 # SHA-256 of the installer are appended, with the phone app's fingerprint (its build.json is a release asset too). Re-running on an existing release replaces the asset and the notes.
 # The tag (vMAJOR.MINOR.PATCH) is the version: it is stamped into the build, whatever the repository says.
+# Once npm and the installer are published, the tagged commit is fast-forwarded onto the branch `production`, which Railway deploys.
 name: Release
 
 on:
@@ -69,6 +70,55 @@ jobs:
         working-directory: packages/ledge
         run: npm pack --dry-run
 
+  # Railway deploys the branch `production`: the relay and the phone app at app.kl-ledge.dev (apps/relay/README.md,
+  # "Deploy on Railway"). A real tag only, once the release is whole: the daemon on npm and the installer with the phone
+  # app's build.json on the GitHub release. Nothing when either fails or the run is cancelled.
+  # Fast-forward only, never forced. The push uses the secret PRODUCTION_PUSH_TOKEN (fine-grained PAT on this
+  # repository, Contents and Workflows read and write): the workflow's own token may not push a release that changed
+  # .github/workflows. A PAT's push does start workflows, but none listens to a branch: Release runs on `v*` tags only.
+  production:
+    needs: [npm, windows-installer]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check the push token
+        env:
+          PRODUCTION_PUSH_TOKEN: ${{ secrets.PRODUCTION_PUSH_TOKEN }}
+        run: |
+          if [ -z "$PRODUCTION_PUSH_TOKEN" ]; then
+            echo "::error::secret PRODUCTION_PUSH_TOKEN is missing (fine-grained PAT on this repository, Contents and Workflows read and write): production left alone"; exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PRODUCTION_PUSH_TOKEN }}
+      - name: Fast-forward production to the release commit
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          # Railway builds the phone app from the repository, unstamped: only the `chore: X.Y.Z` commit serves the
+          # release's fingerprint.
+          v="$(node -p "require('./packages/ledge/package.json').version")"
+          if [ "v$v" != "$TAG" ]; then
+            echo "::error::packages/ledge/package.json says $v at $TAG, not ${TAG#v}: production left alone"; exit 1
+          fi
+          if git ls-remote --exit-code --heads origin production >/dev/null; then
+            git fetch --no-tags origin +refs/heads/production:refs/remotes/origin/production
+            prod="$(git rev-parse refs/remotes/origin/production)"
+            if ! git merge-base --is-ancestor "$prod" "$sha"; then
+              echo "::error::production (${prod:0:8}) is not an ancestor of $TAG (${sha:0:8}): not a fast-forward, production left alone"; exit 1
+            fi
+            if [ "$prod" = "$sha" ]; then echo "production is already at $TAG"; exit 0; fi
+          fi
+          if ! git push origin "$sha:refs/heads/production"; then
+            echo "::error::push to production refused (see above): check PRODUCTION_PUSH_TOKEN (expiry, Contents and Workflows write on this repository)"; exit 1
+          fi
+          echo "production -> $TAG (${sha:0:8})"
+
   windows-installer:
     needs: npm
     runs-on: windows-latest
@@ -128,6 +178,7 @@ jobs:
           $desktopSha = (Get-FileHash $desktopExe -Algorithm SHA256).Hash.ToLower()
           # actions/checkout leaves a lightweight tag on the commit: fetch the annotated one back before reading it.
           git fetch --force origin "refs/tags/$($env:TAG):refs/tags/$($env:TAG)"
+          if ($LASTEXITCODE -ne 0) { throw "could not fetch the annotated tag $env:TAG" }
           $title = (git tag -l --format='%(contents:subject)' $env:TAG).Trim()
           if (-not $title) { $title = "Ledge $env:TAG" }
           $body = (git tag -l --format='%(contents:body)' $env:TAG).Trim()
@@ -150,13 +201,19 @@ jobs:
           # The updater manifest carries the tag's own notes, without the install block.
           Set-Content -Path release-notes.md -Value $body -Encoding utf8
           node scripts/latest-json.mjs $env:TAG $desktopExe release-notes.md | Set-Content -Path latest-desktop.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw "latest-json failed: no updater manifest" }
           $assets = @($desktopExe, "$desktopExe.sig", 'latest-desktop.json', 'ledge-mobile-build.json')
+          # PowerShell does not stop on a failing command, and the step's result is the last one's: each is checked, so a
+          # failed upload cannot pass for a published release (the job production waits on this one).
           gh release view $env:TAG *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $env:TAG @assets --clobber
+            if ($LASTEXITCODE -ne 0) { throw "gh release upload failed: the release's assets are not all published" }
             gh release edit $env:TAG --title $title --notes-file notes.md
+            if ($LASTEXITCODE -ne 0) { throw "gh release edit failed" }
           } else {
             gh release create $env:TAG @assets --title $title --notes-file notes.md
+            if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
           }
       - name: Show the updater manifest
         if: env.PUBLISH != 'true'
