@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { posix } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type { Tmux } from '../tmux.js';
 
@@ -46,5 +46,5 @@ export function frameLines(onLine: (line: string) => void): (chunk: Buffer | str
  *  never share one), a socket inside the folder elsewhere. */
 export function panehostPath(platform: NodeJS.Platform, _env: NodeJS.ProcessEnv, ledgeDir: string): string {
   if (platform === 'win32') return `\\\\.\\pipe\\ledge-panes-${createHash('sha256').update(ledgeDir).digest('hex').slice(0, 16)}`;
-  return join(ledgeDir, 'panes.sock');
+  return posix.join(ledgeDir, 'panes.sock');
 }
