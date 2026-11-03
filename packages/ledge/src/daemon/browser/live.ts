@@ -41,7 +41,8 @@ interface Track {
   pageSeq: number;
   image?: Image;
   watchers: Set<BrowserSink>;
-  film?: { targetId: string; sessionId: string; lastCastAt: number; lastData?: string; delay: number };
+  /** `nav`: the navigation of its tab it was started on; a film is started anew on each later one. */
+  film?: { targetId: string; sessionId: string; nav: number; lastCastAt: number; lastData?: string; delay: number };
   filming?: Promise<void>;
   captureTimer?: NodeJS.Timeout; stillTimer?: NodeJS.Timeout;
   lastCaptureAt: number; capturing: boolean;
@@ -145,7 +146,14 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       if (!agentPage(info)) { if (was) { t.pages.delete(info.targetId); settle(t); } return; }
       const url = info.url ?? '', title = info.title ?? '';
       if (was && was.url === url && was.title === title) return;
+      const nav = was?.nav;
       see(t, info.targetId, url, title);
+      // The filmed tab went to another address: filmed anew, so that what its film sends next is of the new page.
+      const f = t.film;
+      if (f && f.targetId === info.targetId && nav !== undefined && t.pages.get(info.targetId)!.nav !== nav && t.cdp) {
+        const cdp = t.cdp; delete t.film; stopStill(t);
+        void cdp.call('Page.stopScreencast', {}, f.sessionId).catch(() => {}).then(() => cdp.call('Target.detachFromTarget', { sessionId: f.sessionId }).catch(() => {}));
+      }
       settle(t);
       scheduleCapture(t);
     } else if (e.method === 'Target.targetDestroyed') {
@@ -272,12 +280,16 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     if (t.cdp) await refresh(t, t.cdp);
     const cdp = t.cdp, top = active(t);
     if (!cdp || !top) return null;
-    const { sessionId } = await cdp.call('Target.attachToTarget', { targetId: top[0], flatten: true }) as { sessionId: string };
+    // The page as it is now: an image of it is said to be of it, and is let go if the tab moves on while it is taken.
+    const [targetId, p] = top;
+    const of = { url: p.url, title: p.title, page: pageId(p), nav: p.nav };
+    const { sessionId } = await cdp.call('Target.attachToTarget', { targetId, flatten: true }) as { sessionId: string };
     try {
       const r = await cdp.call('Page.captureScreenshot', { format: 'jpeg', quality: 60 }, sessionId);
       const data = typeof r.data === 'string' ? r.data : '';
       if (!data || data.length > BROWSER_FRAME_MAX) return null;
-      return { data, at: iso(), url: top[1].url, title: top[1].title, page: pageId(top[1]) };
+      if (t.pages.get(targetId) !== p || p.nav !== of.nav) return null;
+      return { data, at: iso(), url: of.url, title: of.title, page: of.page };
     } finally { await cdp.call('Target.detachFromTarget', { sessionId }).catch(() => {}); }
   }
 
@@ -303,11 +315,14 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     void cdp.call('Page.screencastFrameAck', { sessionId: e.params.sessionId }, f.sessionId).catch(() => {});
     const data = e.params.data, meta = e.params.metadata as { deviceWidth?: number; deviceHeight?: number; timestamp?: number } | undefined;
     if (typeof data !== 'string' || !data || data.length > BROWSER_FRAME_MAX) return;
-    f.lastCastAt = now(); f.lastData = data;
     // The film's own tab, not the one in front now; a frame Chrome drew before the tab's last navigation is of the one before.
     const p = t.pages.get(f.targetId);
     if (!p) return;
     const drawn = typeof meta?.timestamp === 'number' ? meta.timestamp * 1000 : undefined;
+    // Undated (its time is optional in CDP) on a film started on an earlier navigation of its tab: of which page, nobody
+    // can say; let go. The film is started anew on each navigation, and the images taken while it is quiet fill in.
+    if (drawn === undefined && f.nav !== p.nav) return;
+    f.lastCastAt = now(); f.lastData = data;
     const nav = drawn !== undefined && drawn < p.navAt && p.nav > 0 ? p.nav - 1 : p.nav;
     frame(t, data, { url: p.url, title: p.title, page: pageId(p, nav) }, meta?.deviceWidth, meta?.deviceHeight);
   }
@@ -341,10 +356,19 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       }
       if (!want || !cdp) return;
       try {
+        const nav = t.pages.get(want)?.nav ?? 0;
         const { sessionId } = await cdp.call('Target.attachToTarget', { targetId: want, flatten: true }) as { sessionId: string };
-        t.film = { targetId: want, sessionId, lastCastAt: now(), delay: fastMs };
+        const f = { targetId: want, sessionId, nav, lastCastAt: now(), delay: fastMs };
+        t.film = f;
         await cdp.call('Page.startScreencast', { format: 'jpeg', quality: 60, maxWidth: 1280, maxHeight: 800 }, sessionId);
         scheduleStill(t, quietMs);
+        // The tab navigated while its film was being started: started anew, on the navigation it is at now.
+        if (t.film === f && t.pages.get(want) && t.pages.get(want)!.nav !== nav) {
+          delete t.film; stopStill(t);
+          await cdp.call('Page.stopScreencast', {}, sessionId).catch(() => {});
+          await cdp.call('Target.detachFromTarget', { sessionId }).catch(() => {});
+          void refilm(t);
+        }
       } catch (e) { log(`browser of ${t.id}: no film (${(e as Error).message})`); delete t.film; }
     };
     // One change of film at a time, in order.
