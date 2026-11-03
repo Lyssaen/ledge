@@ -449,6 +449,8 @@ button.tg:disabled{cursor:default}
 .seat-note strong{color:var(--foreground);font-weight:500}
 .seat-note svg{flex:none;margin-top:1px}
 .seat-note>div{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.seat-note .message-link{color:var(--info);font-size:12.5px}
+.seat-note .message-link:hover{text-decoration:underline}
 
 /* An archived session: the banner over the page, the pill in the header (the mockup's manage.css). */
 .archived-banner{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--secondary) 70%,transparent);font-size:12px}

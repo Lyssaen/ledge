@@ -292,7 +292,7 @@ export const fr = {
     grouping: 'Regrouper les sièges OpenRig', groupingBy: { projects: 'Projets', rigs: 'Rigs' }, groupingHint: { projects: 'Les sessions de tes projets, sans les sièges OpenRig', rigs: 'Les sièges OpenRig : chaque rig, le kernel à part' }, 
     viewTabs: 'Vue des agents', helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
     chat: 'Chat Ledge', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
-    terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)'
+    terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)', terminalGone: 'Siège arrêté : plus de terminal'
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
@@ -802,7 +802,7 @@ export const fr = {
     meta: 'Machine et dépôts',
     /** An OMP seat of OpenRig: no thread, its terminal alongside; stopped, its terminal gone (docs/mockups/ledge-openrig-omp.html). */
     rigTerminalOnly: { title: 'Pas de fil pour ce siège.', body: 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Son terminal est ouvert à côté : ce que tu y tapes lui est envoyé.' },
-    rigStopped: { title: 'Siège arrêté.', body: 'Son terminal n’existe plus : la page OpenRig montre son rig.' },
+    rigStopped: { title: 'Siège arrêté.', body: 'Son terminal n’existe plus : la page OpenRig montre son rig.' }, badgeStopped: 'Arrêté',
     subagent: 'Sous-agent',
     kidsPill: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`), kidsPillTitle: 'Voir les sous-agents dans la barre latérale',
     views: { label: 'Vue de la session', thread: 'Fil', changes: 'Modifications' },

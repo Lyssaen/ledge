@@ -26,10 +26,10 @@ export function HelperBot({ helper, parent, size, paused }: { helper: Helper; pa
   return <Bot tool={parent.tool} state={state} pose={poseFor(seed, state)} size={size} theme={theme} seed={seed} frozen={!!parent.offline} paused={paused} reducedMotion={reduced} readOnly={parent.source === 'hook_only'} />;
 }
 
-/** Offline reads « Offline » whatever the state; otherwise the state's badge. */
-export function StateBadge({ state, offline }: { state: BotState; offline?: boolean }): JSX.Element {
+/** Offline reads « Offline » whatever the state; a stopped OMP seat « Arrêté » (docs/mockups/ledge-openrig-omp.html); otherwise the state's badge. */
+export function StateBadge({ state, offline, stopped }: { state: BotState; offline?: boolean; stopped?: boolean }): JSX.Element {
   const { t } = useI18n();
-  return offline ? <Badge state="readonly" label={t.atelier.offline} /> : <Badge state={state} />;
+  return offline ? <Badge state="readonly" label={t.atelier.offline} /> : stopped ? <Badge state={state} label={t.session.badgeStopped} /> : <Badge state={state} />;
 }
 
 const ZAP = ['M13 2 3 14h9l-1 8 10-12h-9l1-8z'];

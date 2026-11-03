@@ -88,6 +88,8 @@ describe('an OMP seat’s page', () => {
     await waitFor(() => expect(document.querySelector('.seat-note')).toHaveTextContent('No thread for this seat. Ledge does not read the conversation of an OMP seat launched by OpenRig. Its terminal is open alongside: what you type there is sent to it.'));
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('tablist', { name: /Thread|Fil/ })).toBeNull();
+    expect(screen.getByRole('banner').querySelector('.crumb-task')).toHaveTextContent(/^dev\.agent$/);
+    expect(screen.getByRole('banner').querySelector('[data-badge]')).toHaveAttribute('data-badge', 'working');
     const term = within(await screen.findByRole('region', { name: 'Terminal' }));
     // The test build has no PTY: the pane shows the seat's screen as the daemon last read it.
     expect(await term.findByText('you > Story ST7-412')).toBeVisible();
@@ -106,6 +108,14 @@ describe('an OMP seat’s page', () => {
     await waitFor(() => expect(document.querySelector('.seat-note')).toHaveTextContent('Seat stopped. Its terminal is gone: the OpenRig page shows its rig.'));
     expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
     await user.keyboard('o');
+    expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
+    // The top bar: « Stopped », the seat's role after its name, the terminal toggle in its place but disabled.
+    const banner = within(screen.getByRole('banner'));
+    expect(screen.getByRole('banner').querySelector('[data-badge]')).toHaveTextContent('Stopped');
+    expect(screen.getByRole('banner').querySelector('.crumb-task')).toHaveTextContent(/^split\.splitter$/);
+    const toggle = banner.getByRole('button', { name: 'Seat stopped: no terminal' });
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    await user.click(toggle);
     expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Open the OpenRig page' }));
     await waitFor(() => expect(document.querySelector('.or-page')).not.toBeNull());

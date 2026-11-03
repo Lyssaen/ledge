@@ -266,7 +266,7 @@ export const en: Messages = {
     grouping: 'Group OpenRig’s seats', groupingBy: { projects: 'Projects', rigs: 'Rigs' }, groupingHint: { projects: 'Your projects’ sessions, without OpenRig’s seats', rigs: 'OpenRig’s seats: each rig, the kernel apart' }, 
     viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
     chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
-    terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)'
+    terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)', terminalGone: 'Seat stopped: no terminal'
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
@@ -763,7 +763,7 @@ export const en: Messages = {
   session: {
     meta: 'Machine and repositories',
     rigTerminalOnly: { title: 'No thread for this seat.', body: 'Ledge does not read the conversation of an OMP seat launched by OpenRig. Its terminal is open alongside: what you type there is sent to it.' },
-    rigStopped: { title: 'Seat stopped.', body: 'Its terminal is gone: the OpenRig page shows its rig.' },
+    rigStopped: { title: 'Seat stopped.', body: 'Its terminal is gone: the OpenRig page shows its rig.' }, badgeStopped: 'Stopped',
     subagent: 'Subagent',
     kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the sidebar',
     views: { label: 'Session view', thread: 'Thread', changes: 'Changes' },

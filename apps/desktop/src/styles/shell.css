@@ -121,6 +121,8 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .crumb-task:before { content: '·'; margin-right: 7px; color: var(--muted-foreground); }
 .header-session { gap: 6px; }
 .header-session .ledge-btn[aria-pressed=true] { background: var(--accent); color: var(--foreground); }
+/* A stopped OMP seat's terminal toggle: in its place, disabled (docs/mockups/ledge-openrig-omp.html). */
+.header-session .ledge-btn[aria-disabled=true] { opacity: .45; cursor: not-allowed; background: none; }
 .app-header .breadcrumb { flex: 1 1 auto; }
 
 /* settings.css: the crumb link's size and corners. */
