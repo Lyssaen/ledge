@@ -161,3 +161,14 @@ describe('ledge uninstall: the Windows hook commands', () => {
     expect(JSON.stringify(codex.settings)).not.toContain('@paradow');
   });
 });
+
+describe('ledge uninstall on Windows', () => {
+  it('runs no systemctl (there is no service there) and says so', async () => {
+    const root = (await import('node:fs')).mkdtempSync(join(tmpdir(), 'ledge-unwin-'));
+    process.env.LEDGE_HOME = join(root, '.ledge');
+    const calls: string[] = [];
+    const r = await runUninstall({ platform: 'win32', settingsPath: join(root, 'settings.json'), codexDir: join(root, '.codex'), cursorDir: join(root, '.cursor'), link: join(root, 'bin', 'ledge'), unitDir: join(root, 'systemd'), run: async (cmd: string, args: string[]) => { calls.push(`${cmd} ${args.join(' ')}`); return { code: 0, stdout: '', stderr: '' }; } });
+    expect(calls.filter(c => c.startsWith('systemctl'))).toEqual([]);
+    expect(r.lines.join('\n')).toMatch(/no service on Windows/);
+  });
+});

@@ -114,6 +114,8 @@ export function uninstallArgs(args: string[]): { purge: boolean } | null {
 
 export interface UninstallOptions {
   purge?: boolean;
+  /** On Windows there is no service to remove (Ledge Desktop starts the daemon). */
+  platform?: NodeJS.Platform;
   settingsPath?: string;
   codexDir?: string;
   cursorDir?: string;
@@ -148,7 +150,8 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<{ lines
     });
   }
 
-  if (opts.service ?? true) await step(async () => { lines.push(...await removeService({ unitDir: opts.unitDir, run })); });
+  if ((opts.platform ?? process.platform) === 'win32') lines.push('no service on Windows: Ledge Desktop starts the daemon');
+  else if (opts.service ?? true) await step(async () => { lines.push(...await removeService({ unitDir: opts.unitDir, run })); });
 
   await step(async () => {
     const n = await runningSessions(run, opts.tmuxSocket ?? 'ledge');
