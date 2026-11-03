@@ -65,17 +65,16 @@ it('a document card under the message; several items become closable tabs; « Vi
   expect(side().queryAllByRole('tab')).toHaveLength(0);                              // one tab left: no tab bar
   expect(side().getByText('Guide de Ledge')).toBeVisible();
 });
-it('« All changes » opens the Changes view on that file; the pane waits under it, back on the thread', async () => {
+it('« All changes » opens the panel on Modifications, on that file; the reading pane stays beside the thread', async () => {
   const { user } = await openOtto();
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
   expect(side().getByText('Change · App.tsx')).toBeVisible();
   expect(side().getByText('1 / 1')).toHaveClass('file-pos');
   expect([...document.querySelectorAll('.side-diff .diff-line .code')].map(c => c.textContent)).toEqual(['a', 'b']);
   await user.click(side().getByRole('button', { name: 'All changes' }));
-  expect(screen.getByRole('tab', { name: /^Changes/ })).toHaveAttribute('aria-selected', 'true');
-  expect(document.querySelector('.file-title code')).toHaveTextContent('src/App.tsx');
-  expect(screen.queryByRole('complementary', { name: 'Reading pane' })).toBeNull();
-  await user.click(screen.getByRole('tab', { name: /^Thread/ }));
+  const panel = within(screen.getByRole('region', { name: 'Panel: shells and changes' }));
+  expect(panel.getByRole('tab', { name: /^Changes/ })).toHaveAttribute('aria-selected', 'true');
+  expect(document.querySelector('.right-panel .file-title code')).toHaveTextContent('src/App.tsx');
   expect(side().getByText('Change · App.tsx')).toBeVisible();
 });
 it('Enlarge and the keyboard on the handle move the split, bounded and remembered', async () => {

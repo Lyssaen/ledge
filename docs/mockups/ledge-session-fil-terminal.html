@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge fil ou terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Tokens: packages/ui/src/styles/tokens.css (light + dark). */
+:root,:root[data-theme=light]{
+  --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(1 0 0);--muted:oklch(0.97 0 0);--secondary:oklch(0.967 0.001 286.375);
+  --muted-foreground:oklch(0.556 0 0);--primary:oklch(0.505 0.213 27.518);--border:oklch(0.922 0 0);--input:oklch(0.88 0 0);--ring:oklch(0.708 0 0);
+  --sidebar:oklch(0.985 0 0);--success:#059669;--warning:#b45309;--info:#2563eb;--danger-text:oklch(0.505 0.213 27.518);
+  --s-ok:#ecfdf5;--s-warn:#fffbeb;--s-info:#eff6ff;--s-danger:#fef2f2;--well:oklch(0.975 0 0);--chrome:oklch(0.96 0 0);--page:#e9e9e9;
+  --term-bg:oklch(0.99 0 0);--term-fg:oklch(0.22 0 0);--t-dim:#8a8a8a;--t-acc:#c2410c;--t-blue:#2563eb;--t-green:#047857;--scrim:#0006;--hl:#fde68a;--del:#fecaca55;
+}
+:root[data-theme=dark]{
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--muted:oklch(0.269 0 0);--secondary:oklch(0.274 0.006 286.033);
+  --muted-foreground:oklch(0.708 0 0);--primary:oklch(0.444 0.177 26.899);--border:#ffffff1a;--input:#ffffff26;--ring:oklch(0.556 0 0);
+  --sidebar:oklch(0.205 0 0);--success:#34d399;--warning:#fbbf24;--info:#60a5fa;--danger-text:oklch(0.704 0.191 22.216);
+  --s-ok:#052e16;--s-warn:#422006;--s-info:#172554;--s-danger:#450a0a;--well:#0c0c0d;--chrome:#0d0d0d;--page:#000;
+  --term-bg:#0c0c0d;--term-fg:#e5e5e5;--t-dim:#8f8f8f;--t-acc:#f0a17a;--t-blue:#7cb3fb;--t-green:#4ade80;--scrim:#000a;--hl:#facc1540;--del:#f8717122;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Geist',system-ui,sans-serif;background:var(--page);color:var(--foreground);font-size:14px;line-height:20px;min-height:100vh}
+.mono,code,kbd{font-family:'Geist Mono',ui-monospace,monospace}
+button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--info);outline-offset:1px}
+
+/* Mockup chrome (not product) */
+.mk-bar{position:sticky;top:0;z-index:20;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--chrome);border-bottom:1px solid var(--border)}
+.mk-bar strong{margin-right:10px;font-weight:600}
+.mk-bar .sp{flex:1}
+.mk-bar button{border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:13px;color:var(--muted-foreground)}
+.mk-bar button[aria-pressed=true]{background:var(--muted);color:var(--foreground);border-color:var(--input)}
+.mk-bar .seg{display:flex;gap:2px;border:1px solid var(--border);border-radius:9px;padding:2px}
+.mk-bar .seg button{border:0;padding:3px 9px}
+.note{max-width:1280px;margin:14px auto 12px;padding:0 16px;color:var(--muted-foreground);font-size:13px}
+.note b{color:var(--foreground);font-weight:500}
+.note code{font-size:12px}
+.cap{max-width:1280px;margin:18px auto 6px;padding:0 16px;font-size:12px;color:var(--muted-foreground)}
+#screens{padding:0 16px 40px}
+
+/* Window */
+.win{max-width:1280px;height:760px;margin:0 auto;border:1px solid var(--border);border-radius:10px;overflow:hidden;display:grid;grid-template-rows:32px 1fr;background:var(--background);position:relative}
+.win.short{height:520px}
+.titlebar{display:flex;align-items:center;padding:0 14px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border);background:var(--chrome)}
+.main{display:grid;grid-template-columns:250px 1fr;min-height:0}
+.side{background:var(--sidebar);border-right:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:4px;font-size:13px;overflow:hidden}
+.side .ask{border:1px solid var(--input);border-radius:9px;padding:7px 10px;color:var(--muted-foreground);margin-bottom:6px}
+.side .sec{font-size:11.5px;color:var(--muted-foreground);padding:8px 4px 2px}
+.side .s{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px}
+.side .s small{margin-left:auto;font-size:11px;color:var(--muted-foreground);font-family:'Geist Mono',monospace}
+.side .s.cur{background:var(--muted)}
+.mascot{width:18px;height:12px;border-radius:8px 8px 3px 3px;background:#c2564f;flex:none}
+.content{display:flex;flex-direction:column;min-width:0;min-height:0}
+.topbar{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--border);font-size:13.5px}
+.topbar .crumb{color:var(--muted-foreground)}
+.topbar .sp{flex:1}
+.topbar .acc{font-size:12px;padding:1px 8px;border-radius:5px;background:var(--s-danger);color:var(--danger-text)}
+.tbtn{width:30px;height:30px;display:inline-grid;place-items:center;border-radius:7px;color:var(--muted-foreground);font-family:'Geist Mono',monospace;font-size:13px}
+.tbtn[aria-pressed=true]{background:var(--muted);color:var(--foreground)}
+.pane-heading{height:43px;flex:none;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 20px;font-size:12px}
+.pane-meta{margin-left:10px;font-size:10.5px;color:var(--muted-foreground);font-family:'Geist Mono',monospace}
+.pane-heading .sp{flex:1}
+.kids{font-size:12px;color:var(--muted-foreground)}
+.view-switch{display:flex;gap:2px;padding:2px;border:1px solid var(--input);border-radius:9px;background:var(--muted)}
+.view-switch button{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:7px;font-size:12px;font-weight:500;color:var(--muted-foreground);white-space:nowrap}
+.view-switch button[aria-selected=true]{background:var(--sidebar);color:var(--foreground);box-shadow:0 1px 2px rgb(0 0 0/.18)}
+.view-switch .ic{font-family:'Geist Mono',monospace;font-size:11px;width:13px;text-align:center}
+.view-switch .badge{min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--primary);color:#fff;font-size:10.5px;line-height:16px;text-align:center}
+.view-switch .tdot{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.view-switch .tdot.off{background:var(--muted-foreground)}.view-switch .tdot.wait{background:var(--warning)}
+.focusring{outline:2px solid var(--info);outline-offset:1px}
+
+/* Thread view */
+.thread{flex:1;overflow:hidden;padding:24px 0 0;display:flex;flex-direction:column;align-items:center;min-height:0}
+.tcol{width:min(780px,92%);display:flex;flex-direction:column;gap:16px;font-size:13.5px}
+.row{display:grid;grid-template-columns:28px 1fr auto;gap:12px;align-items:center}
+.row .t{font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--muted-foreground)}
+.circ{width:24px;height:24px;border-radius:50%;border:1px solid var(--input);display:grid;place-items:center;font-size:11px;color:var(--muted-foreground)}
+.circ.me{background:var(--foreground);color:var(--background);border:0}
+.circ.wait{border-color:var(--danger-text);color:var(--danger-text)}
+.red{color:var(--danger-text)}.blue{color:var(--info)}
+.grow{flex:1}
+.reqcard{width:min(780px,92%);border:1px solid var(--danger-text);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;font-size:13px;margin-top:auto}
+.reqcard .h{display:flex;gap:10px;align-items:center}
+.reqcard .h small{margin-left:auto;color:var(--muted-foreground);font-size:12px}
+.pilltag{font-size:12px;padding:1px 8px;border-radius:5px;background:var(--s-danger);color:var(--danger-text)}
+.code{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-family:'Geist Mono',monospace;font-size:12.5px;background:var(--well)}
+.btns{display:flex;gap:8px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;font-size:12.5px;border-radius:7px;border:1px solid var(--input)}
+.btn.primary{background:var(--primary);border-color:transparent;color:#fff}
+.btn.sm{height:28px;font-size:12px;padding:0 10px}
+.btn kbd{font-size:10.5px;border:1px solid currentColor;border-radius:4px;padding:0 4px;opacity:.7}
+.composer{width:min(780px,92%);border:1px solid var(--input);border-radius:12px;padding:10px 12px;margin:10px 0 16px;color:var(--muted-foreground);font-size:13px;height:84px;display:flex;flex-direction:column;justify-content:space-between}
+
+/* Terminal view (TermPane, full frame) */
+.tview{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--well)}
+.term-heading{height:38px;flex:none;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;padding:0 8px 0 0;font-size:12px}
+.term-tab{display:flex;align-items:center;gap:6px;height:100%;padding:0 12px;border-right:1px solid var(--border);color:var(--muted-foreground);font-size:12px}
+.term-tab.current{background:var(--term-bg);color:var(--foreground);box-shadow:inset 0 -2px 0 var(--ring)}
+.term-tab{white-space:nowrap;flex:0 1 auto;min-width:0;max-width:190px;overflow:hidden}.term-heading{overflow:hidden}
+.term-tab .x{font-size:11px;opacity:.6;margin-left:4px}
+.term-add{width:30px;text-align:center;color:var(--muted-foreground);font-size:15px}
+.term-chip{font-size:10.5px;padding:2px 7px;border:1px solid var(--border);border-radius:5px;color:var(--muted-foreground);font-family:'Geist Mono',monospace}
+.term-icon{width:28px;height:28px;display:inline-grid;place-items:center;color:var(--muted-foreground);border-radius:6px;font-size:13px}
+.term-banner{display:flex;align-items:center;gap:10px;padding:9px 14px 9px 20px;border-bottom:1px solid var(--border);background:var(--secondary);font-size:12px;line-height:18px;flex:none}
+.term-banner.warn{background:var(--s-warn)}.term-banner.info{background:var(--s-info)}
+.term-banner > span:first-child{flex:1}.term-banner .btn{flex:none}
+.screen{flex:1;min-height:0;background:var(--term-bg);color:var(--term-fg);padding:12px 16px;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:19px;white-space:pre;overflow:hidden}
+.screen.focused{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--info) 55%,transparent)}
+.screen .d{color:var(--t-dim)}.screen .a{color:var(--t-acc)}.screen .b{color:var(--t-blue)}.screen .g{color:var(--t-green)}
+.cursor{display:inline-block;width:8px;height:15px;background:var(--term-fg);vertical-align:-3px}
+.screen.ro{color:var(--muted-foreground)}
+.empty{flex:1;display:grid;place-items:center;background:var(--term-bg)}
+.empty div{max-width:440px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;font-size:13px;color:var(--muted-foreground)}
+.empty b{color:var(--foreground);font-weight:500}
+.terminal-footer{flex:none;border-top:1px solid var(--border);padding:9px 20px;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted-foreground)}
+.terminal-footer .sp{flex:1}.terminal-footer{white-space:nowrap;overflow:hidden}
+.dot.on{color:var(--success)}.dot.wait{color:var(--warning)}.dot.off{color:var(--muted-foreground)}
+.footkey{color:var(--foreground)}
+
+/* Changes column (the old split, now Modifications) */
+.split{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 7px minmax(0,var(--cw,46%));min-height:0}
+.split>*{min-width:0;min-height:0}
+.handle{background:var(--border);position:relative;cursor:col-resize}
+.handle::after{content:'';position:absolute;top:50%;left:2px;width:3px;height:34px;margin-top:-17px;border-radius:2px;background:var(--ring)}
+.chgbtn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--input);border-radius:9px;font-size:12px;font-weight:500;color:var(--muted-foreground)}
+.chgbtn[aria-pressed=true]{background:var(--muted);color:var(--foreground)}
+.tab-count{font-family:'Geist Mono',monospace;font-size:10.5px;padding:0 5px;border-radius:4px;background:var(--secondary);color:var(--muted-foreground)}
+.chg{display:flex;flex-direction:column;background:var(--background);overflow:hidden}
+.chg-head{height:38px;flex:none;display:flex;align-items:center;gap:8px;padding:0 6px 0 14px;border-bottom:1px solid var(--border);font-size:12.5px;white-space:nowrap}
+.chg-head b{font-weight:500}
+.delta{font-family:'Geist Mono',monospace;font-size:11px;white-space:nowrap}.delta .p{color:var(--success)}.delta .m{color:var(--danger-text);margin-left:4px}
+.muted{color:var(--muted-foreground)}
+.ftoggle{display:flex;align-items:center;gap:6px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted-foreground)}
+.flist{border-bottom:1px solid var(--border);padding:4px 0 6px;font-size:12.5px}
+.fdir{padding:5px 14px 2px;font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted-foreground)}
+.frow{display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:center;padding:4px 14px 4px 24px}
+.frow.cur{background:var(--muted)}
+.letter{font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600}.letter.M{color:var(--warning)}.letter.A{color:var(--success)}.letter.D{color:var(--danger-text)}
+.ftitle{padding:10px 14px 4px;display:flex;align-items:center;gap:8px;font-size:12px;min-width:0}
+.ftitle code{font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.badge-ch{font-size:10.5px;padding:0 6px;border-radius:4px;background:var(--s-warn);color:var(--warning);flex:none}
+.facts{display:flex;align-items:center;gap:6px;padding:2px 10px 6px 8px;font-size:12px;color:var(--muted-foreground)}
+.facts .sp{flex:1}
+.nb{width:28px;height:28px;border:1px solid var(--input);border-radius:7px;display:inline-grid;place-items:center;font-size:12px}
+.touches{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 14px 10px;font-size:11.5px;color:var(--muted-foreground);border-bottom:1px solid var(--border)}
+.touch{border:1px solid var(--border);border-radius:6px;padding:0 6px;color:var(--info)}
+.diff{flex:1;overflow:hidden;font-family:'Geist Mono',monospace;font-size:11.5px;line-height:19px;background:var(--well);padding:6px 0}
+.dl{display:grid;grid-template-columns:34px 14px 1fr;white-space:pre;padding-right:10px}
+.dl .n{color:var(--muted-foreground);text-align:right;padding-right:8px;opacity:.7}
+.dl.add{background:color-mix(in srgb,var(--success) 14%,transparent)}.dl.del{background:color-mix(in srgb,var(--danger-text) 14%,transparent)}
+.dl.add .s{color:var(--success)}.dl.del .s{color:var(--danger-text)}
+.dl.gap{color:var(--muted-foreground);grid-template-columns:1fr;padding-left:14px;background:var(--muted)}
+.chg-empty{flex:1;display:grid;place-items:center;text-align:center;font-size:13px;color:var(--muted-foreground);padding:20px}
+.chg-empty b{display:block;color:var(--foreground);font-weight:500;margin-bottom:6px}
+
+/* Panels (states) */
+.grid{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.panel{border:1px solid var(--border);border-radius:10px;overflow:hidden;height:330px;display:flex;flex-direction:column;background:var(--background)}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-foreground);margin-bottom:6px}
+.lbl small{text-transform:none;letter-spacing:0;font-size:11.5px;margin-left:6px}
+
+/* Keys card */
+.keys{max-width:1280px;margin:0 auto;border:1px solid var(--border);border-radius:12px;background:var(--card);overflow:hidden}
+.keys table{width:100%;border-collapse:collapse;font-size:13px}
+.keys th,.keys td{text-align:left;padding:9px 14px;border-top:1px solid var(--border);vertical-align:top}
+.keys th{font-size:11.5px;color:var(--muted-foreground);font-weight:500;border-top:0;background:var(--muted)}
+.keys kbd,.help kbd{font-size:11.5px;border:1px solid var(--input);border-bottom-width:2px;border-radius:5px;padding:0 6px;background:var(--well);white-space:nowrap}
+.keys .muted{color:var(--muted-foreground)}
+
+/* Help dialog */
+.scrim{position:absolute;inset:0;background:var(--scrim);display:grid;place-items:center;z-index:5}
+.help{width:560px;max-height:690px;overflow:hidden;background:var(--card);border:1px solid var(--input);border-radius:14px;padding:16px 20px;box-shadow:0 20px 40px -12px #000b;font-size:13px}
+.help h4{font-size:15px;font-weight:600;margin-bottom:6px}
+.help p{color:var(--muted-foreground);font-size:12px;margin:6px 0}
+.help .r{display:flex;justify-content:space-between;align-items:center;padding:3.5px 0;border-top:1px solid var(--border)}
+.help .r.del{background:var(--del);text-decoration:line-through;color:var(--muted-foreground)}
+.help .r.new{background:var(--hl)}
+.cmp{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cmp .win{height:760px}.cmp .main{grid-template-columns:1fr}.cmp .side{display:none}
+.topbar,.pane-heading{white-space:nowrap;overflow:hidden}
+@media (max-width:900px){.grid,.cmp{grid-template-columns:1fr}.main{grid-template-columns:1fr}.side{display:none}}
+</style>
+</head>
+<body>
+<div class="mk-bar" role="toolbar" aria-label="Vues de la maquette">
+  <strong>Maquette · Session : Fil ou Terminal · v3</strong>
+  <button data-v="thread" aria-pressed="true">1 · Fil + panneau</button>
+  <button data-v="term" aria-pressed="false">2 · Terminal (écran de l’agent)</button>
+  <button data-v="keys" aria-pressed="false">3 · Bascule au clavier</button>
+  <button data-v="cases" aria-pressed="false">4 · Cas limites</button>
+  <button data-v="help" aria-pressed="false">5 · Aide clavier</button>
+  <span class="sp"></span>
+  <span class="seg"><button data-theme-btn="dark" aria-pressed="true">Sombre</button><button data-theme-btn="light" aria-pressed="false">Clair</button></span>
+  <span class="seg"><button data-lang-btn="fr" aria-pressed="true">FR</button><button data-lang-btn="en" aria-pressed="false">EN</button></span>
+</div>
+<p class="note" id="note"></p>
+<div id="screens"></div>
+
+<script>
+const T = {
+fr:{
+  n_thread:'<b>Le sélecteur de la session devient « Fil | Terminal »</b>, une bascule plein cadre (clé <code>session.views</code> : <code>thread</code>, <code>terminal</code>). <b>Modifications n\'est plus un onglet : elle devient la colonne de droite</b>, à la place où le terminal se scindait. Un bouton <b>« ± Modifications 3 »</b> à droite de l\'en-tête l\'ouvre et la ferme (enfoncé quand elle est ouverte ; touche <code>M</code> proposée). La largeur se règle avec la même poignée qu\'avant. Le contenu est celui de la vue Modifications actuelle, en disposition étroite : la liste des fichiers se replie au-dessus du diff, puis viennent ‹ ›, « Modifié par · tour n » et le diff. L\'onglet Terminal porte un point d\'état. La barre latérale ne montre plus rien d\'OpenRig.',
+  n_term:'<b>Vue Terminal, plein cadre</b> : le terminal remplace le fil sous le sélecteur, au lieu de se mettre à côté. Ce qu\'il avait déjà reste en place : les onglets (l\'agent et vos shells, <code>+</code>), la puce <code>wsl</code> ou <code>ssh · hôte</code>, « ouvrir dans un terminal externe », les bandeaux et le pied de page. Ce qui disparaît : la poignée de largeur, « Agrandir » et la croix (c\'est le sélecteur qui ramène au fil). La colonne Modifications reste ouverte d\'une vue à l\'autre, à côté du terminal comme à côté du fil. La zone de réponse est masquée : on tape dans le terminal. Si l\'agent attend une réponse pendant que vous êtes sur Terminal, l\'onglet Fil porte une pastille rouge (« Votre accord » reste en haut).',
+  n_keys:'<b>Bascule au clavier</b> : <code>O</code> et <code>Ctrl ²</code> deviennent la bascule. En arrivant sur Terminal, <b>le clavier va tout de suite au terminal</b> : on tape sans cliquer. En revenant sur le fil, le focus retourne au fil. <code>J / K</code> parcourt toujours les fichiers, quand la colonne Modifications est ouverte et que le clavier n\'est ni dans la saisie ni dans le terminal. <code>M</code> (proposée) ouvre et ferme la colonne. Le pied du terminal rappelle la touche.',
+  n_cases:'<b>Quand il n\'y a pas de terminal à taper</b>, l\'onglet Terminal reste là et s\'ouvre quand même : il montre ce qui existe (dernières lignes, écran du parent, shells), avec le bandeau actuel qui dit pourquoi. Seul cas nouveau : une session pilotée par Ledge (OMP), qui n\'a pas d\'écran d\'agent. Elle a un texte à elle et propose d\'ouvrir un shell. Dans ces cas, la bascule ne donne pas le clavier à un écran en lecture seule : le focus va au bouton du bandeau.',
+  n_help:'<b>Aide clavier (?)</b>, avant / après : <code>J / K</code> reste (fichier suivant / précédent, colonne Modifications) ; <code>M</code> s\'ajoute ; <code>O</code> et <code>Ctrl ²</code> sont réécrites pour la bascule. Même changement dans Réglages › Raccourcis clavier, qui lit les mêmes lignes.',
+  chgName:'Modifications', chgOpen:'Afficher les modifications (M)', chgClose:'Fermer les modifications (M)', chgWidth:'Largeur des modifications',
+  filesN:n=>n>1?`${n} fichiers`:`${n} fichier`, filesToggle:n=>`Fichiers · ${n}`, edited:'Modifié', copyPath:'Copier le chemin', prevF:'Fichier précédent', nextF:'Fichier suivant',
+  changedBy:'Modifié par', turn:n=>`tour ${n}`, seeInThread:'· voir dans le fil', gap:(n,a,b)=>`⋯ ${n} lignes non modifiées (lignes ${a}–${b})`,
+  chEmpty:'Aucun fichier modifié', chEmptyBody:n=>`${n} n’a encore rien modifié dans cette session.`,
+  c1m:'Vue Fil + Modifications à droite (bouton « ± Modifications » enfoncé, ou M)', c1l:'Modifications · la liste des fichiers dépliée au-dessus du diff', c1e:'Modifications · aucun fichier modifié',
+  c2m:'Vue Terminal + Modifications : la même colonne, à côté du terminal',
+  views:{thread:'Fil',terminal:'Terminal'}, viewsLabel:'Vue de la session',
+  crumb:['Atelier','Ledge'], agent:'Otto', task:'Câbler la liste des sessions', accord:'Votre accord', kids:'1 sous-agent',
+  ask:'Demander à Ledge…', toi:'À toi', projects:'Projets',
+  x1:'Échange de 16:39', x1b:' · Câble la liste · 4 actions · 1 fichier modifié', you:'Vous', fix:'Corrige-les', cmd:'Commande', waits:'Otto attend votre accord pour une commande. Le fil reprend après votre réponse.',
+  req:'Otto veut exécuter une commande', since:'depuis 5 min', allow:'Autoriser', deny:'Refuser', always:'Toujours autoriser dans ce projet', composer:'Ou refusez en expliquant quoi faire autrement…', write:'écrire',
+  agentTab:'Otto · agent', shell:'Shell · ~/w/ledge', shell2:'Shell 2 · ~/w/ledge', external:'Ouvrir dans un terminal externe', add:'Nouveau shell',
+  attached:'Attaché', attachedSsh:'Attaché par SSH', readOnly:'Lecture seule', preview:'Aperçu · lecture seule', offline:'Hors ligne', reconnecting:'Reconnexion…',
+  toThread:k=>`Le clavier va au terminal · revenir au fil : Ctrl ${k}`, toTerminal:k=>`Donner le clavier au terminal · Ctrl ${k}`,
+  outside:n=>`${n} a été lancée hors de Ledge : pas d’écran à rattacher. Voici ses dernières lignes, en lecture seule. Votre shell reste disponible.`,
+  ended:n=>`${n} est terminée : voici ses dernières lignes, en lecture seule. Votre shell reste disponible.`,
+  subagent:(h,p)=>`${h} est un sous-agent de ${p} et n’a pas de terminal à lui : voici l’écran de ${p}, en lecture seule.`, goParent:p=>`Aller à ${p}`,
+  offlineB:h=>`${h} ne répond plus. Dernière sortie conservée ; rien ne peut être tapé.`, retry:'Réessayer',
+  lost:(h,s,a,n)=>`Connexion à ${h} perdue. Nouvelle tentative dans ${s} s (essai ${a}). ${n} continue de travailler sur le serveur.`, reconnect:'Reconnecter',
+  nativeT:n=>`Ledge pilote ${n} directement : il n’a pas d’écran d’agent.`, nativeB:'Son travail se lit dans le fil. Ici, vous pouvez ouvrir un shell dans son dossier.', nativeBtn:'Ouvrir un shell',
+  phone:(d,n)=>`Téléphone au clavier : ${d} tape dans le terminal de ${n}.`, takeBack:'Reprendre la main',
+  c1:'Vue Fil · une demande en attente', c2:'Vue Terminal · local, attaché, clavier dans le terminal', c2b:'Vue Terminal · l’agent attend votre accord : pastille sur Fil', c2c:'Vue Terminal · un shell ouvert à côté de l’agent',
+  cs:{ssh:'Session distante · attachée par SSH',sshLost:'Session distante · connexion perdue',off:'Session distante · machine hors ligne',outside:'Lecture seule · lancée hors de Ledge',sub:'Lecture seule · page d’un sous-agent',ended:'Lecture seule · session terminée',native:'Sans terminal · session OMP (nouveau texte)',phone:'Un téléphone tient le clavier'},
+  keysH:['Touche','Depuis','Résultat','Le clavier va'],
+  keyRows:[['O','le fil (hors saisie)','vue Terminal','au terminal (écran de l’agent ou shell actif)'],['Ctrl ²','le fil, la saisie ou n’importe où dans la session','vue Terminal','au terminal'],['Ctrl ²','le terminal','vue Fil','au fil, où vous l’aviez laissé'],['← / →','le sélecteur (focus sur un onglet)','l’autre vue','à l’onglet choisi, puis Tab entre dans la vue'],['Clic sur Fil / Terminal','—','la vue cliquée','Terminal : au terminal ; Fil : au fil'],['>_ (barre du haut)','—','bascule','comme O'],['J / K','la session, colonne Modifications ouverte (hors saisie et hors terminal)','fichier suivant / précédent','reste où il était'],['M (proposée)','la session (hors saisie et hors terminal)','ouvre / ferme la colonne Modifications','reste où il était'],['O','le terminal','—','tapé dans le terminal (comme aujourd’hui)']],
+  keysRO:'Terminal en lecture seule (aperçu, sous-agent, hors ligne, OMP) : la bascule ouvre la vue, et le focus va au bouton du bandeau (Aller à Otto, Réessayer, Ouvrir un shell). Il ne va pas sur un écran où l’on ne peut rien taper.',
+  ck1:'Arrivée par O ou Ctrl ² : le clavier est dans le terminal (contour bleu)', ck2:'Clavier ailleurs (après un clic dans le fil, par exemple) : le pied propose Ctrl ²',
+  helpT:'Raccourcis clavier', helpIntro:'Actifs lorsque la fenêtre a le focus. Les touches de navigation restent disponibles pour la saisie et le terminal lorsqu’ils ont le focus.',
+  before:'Avant', after:'Après',
+  rowsBefore:[['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['…','(lignes de l’atelier inchangées)'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal','del'],['Ctrl ²','Passer du fil au terminal et retour','del'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']],
+  rowsAfter:[['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['…','(lignes de l’atelier inchangées)'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['M','Afficher ou masquer les modifications','new'],['O','Passer au terminal (vue Terminal)','new'],['Ctrl ²','Basculer entre le fil et le terminal, le clavier suit','new'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']],
+  key:'²',
+},
+en:{
+  n_thread:'<b>The session switch becomes “Thread | Terminal”</b>, a full-frame toggle (key <code>session.views</code>: <code>thread</code>, <code>terminal</code>). <b>Changes is no longer a tab: it becomes the right-hand column</b>, where the terminal used to split. A <b>“± Changes 3”</b> button on the right of the heading opens and closes it (pressed while open; key <code>M</code> proposed). Its width uses the same handle as before. Its content is today\'s Changes view in its narrow layout: the file list folds over the diff, then ‹ ›, “Changed by · turn n” and the diff. The Terminal tab carries a state dot. The sidebar no longer shows anything from OpenRig.',
+  n_term:'<b>Terminal view, full frame</b>: the terminal replaces the thread under the switch instead of sitting beside it. What it already had stays: tabs (the agent and your shells, <code>+</code>), the <code>wsl</code> or <code>ssh · host</code> chip, “open in an external terminal”, the banners and the footer. What goes: the width handle, “Enlarge” and the close cross (the switch takes you back to the thread). The Changes column stays open from one view to the other, beside the terminal as beside the thread. The reply area is hidden: you type in the terminal. If the agent waits for an answer while you are on Terminal, the Thread tab carries a red badge (“Your approval” stays at the top).',
+  n_keys:'<b>Switching from the keyboard</b>: <code>O</code> and <code>Ctrl `</code> become the switch. Arriving on Terminal, <b>the keyboard goes straight into the terminal</b>: you type without clicking. Back on the thread, the focus goes back to the thread. <code>J / K</code> still walks the files, while the Changes column is open and the keyboard is neither in the reply box nor in the terminal. <code>M</code> (proposed) opens and closes the column. The terminal\'s footer reminds the key.',
+  n_cases:'<b>When there is no terminal to type into</b>, the Terminal tab stays and still opens: it shows what exists (last lines, the parent\'s screen, shells), with today\'s banner saying why. One new case: a session Ledge drives itself (OMP), which has no agent screen. It gets its own text and offers to open a shell. In these cases the switch does not hand the keyboard to a read-only screen: the focus goes to the banner\'s button.',
+  n_help:'<b>Keyboard help (?)</b>, before / after: <code>J / K</code> stays (next / previous file, Changes column); <code>M</code> is added; <code>O</code> and <code>Ctrl `</code> are rewritten for the switch. Same change in Settings › Keyboard shortcuts, which reads the same rows.',
+  chgName:'Changes', chgOpen:'Show changes (M)', chgClose:'Close changes (M)', chgWidth:'Changes width',
+  filesN:n=>n>1?`${n} files`:`${n} file`, filesToggle:n=>`Files · ${n}`, edited:'Modified', copyPath:'Copy path', prevF:'Previous file', nextF:'Next file',
+  changedBy:'Changed by', turn:n=>`turn ${n}`, seeInThread:'· see in the thread', gap:(n,a,b)=>`⋯ ${n} unchanged lines (lines ${a}–${b})`,
+  chEmpty:'No file changed', chEmptyBody:n=>`${n} has not changed anything in this session yet.`,
+  c1m:'Thread view + Changes on the right (“± Changes” pressed, or M)', c1l:'Changes · the file list unfolded over the diff', c1e:'Changes · no file changed',
+  c2m:'Terminal view + Changes: the same column, beside the terminal',
+  views:{thread:'Thread',terminal:'Terminal'}, viewsLabel:'Session view',
+  crumb:['Workshop','Ledge'], agent:'Otto', task:'Wire the session list', accord:'Your approval', kids:'1 subagent',
+  ask:'Ask Ledge…', toi:'Yours', projects:'Projects',
+  x1:'Exchange at 16:39', x1b:' · Wires the list · 4 actions · 1 file changed', you:'You', fix:'Fix them', cmd:'Command', waits:'Otto waits for your approval to run a command. The thread resumes after your answer.',
+  req:'Otto wants to run a command', since:'for 5 min', allow:'Allow', deny:'Deny', always:'Always allow in this project', composer:'Or deny and explain what to do instead…', write:'write',
+  agentTab:'Otto · agent', shell:'Shell · ~/w/ledge', shell2:'Shell 2 · ~/w/ledge', external:'Open in an external terminal', add:'New shell',
+  attached:'Attached', attachedSsh:'Attached over SSH', readOnly:'Read only', preview:'Preview · read only', offline:'Offline', reconnecting:'Reconnecting…',
+  toThread:k=>`The keyboard goes to the terminal · back to the thread: Ctrl ${k}`, toTerminal:k=>`Give the keyboard to the terminal · Ctrl ${k}`,
+  outside:n=>`${n} was started outside Ledge: no screen to attach. Here are its last lines, read only. Your shell is still available.`,
+  ended:n=>`${n} has ended: here are its last lines, read only. Your shell is still available.`,
+  subagent:(h,p)=>`${h} is a subagent of ${p} and has no terminal of its own: here is ${p}’s screen, read only.`, goParent:p=>`Go to ${p}`,
+  offlineB:h=>`${h} no longer answers. Last output kept; nothing can be typed.`, retry:'Retry',
+  lost:(h,s,a,n)=>`Connection to ${h} lost. Retrying in ${s} s (attempt ${a}). ${n} keeps working on the server.`, reconnect:'Reconnect',
+  nativeT:n=>`Ledge drives ${n} itself: it has no agent screen.`, nativeB:'Its work reads in the thread. Here you can open a shell in its folder.', nativeBtn:'Open a shell',
+  phone:(d,n)=>`Phone at the keyboard: ${d} types in ${n}’s terminal.`, takeBack:'Take it back',
+  c1:'Thread view · a request waiting', c2:'Terminal view · local, attached, keyboard in the terminal', c2b:'Terminal view · the agent waits for approval: badge on Thread', c2c:'Terminal view · a shell open next to the agent',
+  cs:{ssh:'Remote session · attached over SSH',sshLost:'Remote session · connection lost',off:'Remote session · machine offline',outside:'Read only · started outside Ledge',sub:'Read only · a subagent’s page',ended:'Read only · session ended',native:'No terminal · OMP session (new text)',phone:'A phone holds the keyboard'},
+  keysH:['Key','From','Result','The keyboard goes'],
+  keyRows:[['O','the thread (not typing)','Terminal view','to the terminal (agent screen or active shell)'],['Ctrl `','the thread, the reply box or anywhere in the session','Terminal view','to the terminal'],['Ctrl `','the terminal','Thread view','to the thread, where you left it'],['← / →','the switch (a tab focused)','the other view','to the chosen tab, then Tab enters the view'],['Click Thread / Terminal','—','that view','Terminal: to the terminal; Thread: to the thread'],['>_ (top bar)','—','switch','as O'],['J / K','the session, Changes column open (not typing, not in the terminal)','next / previous file','stays where it was'],['M (proposed)','the session (not typing, not in the terminal)','opens / closes the Changes column','stays where it was'],['O','the terminal','—','typed in the terminal (as today)']],
+  keysRO:'Read-only terminal (preview, subagent, offline, OMP): the switch opens the view and the focus goes to the banner’s button (Go to Otto, Retry, Open a shell). It never lands on a screen where nothing can be typed.',
+  ck1:'Arriving with O or Ctrl `: the keyboard is in the terminal (blue outline)', ck2:'Keyboard elsewhere (after a click in the thread, say): the footer offers Ctrl `',
+  helpT:'Keyboard shortcuts', helpIntro:'Active while the window has focus. Navigation keys stay available to the reply box and the terminal when they have focus.',
+  before:'Before', after:'After',
+  rowsBefore:[['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['…','(workshop rows unchanged)'],['/','Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a proposed answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal','del'],['Ctrl `','Move between thread and terminal','del'],['Esc','Close the panel or back to the workshop'],['?','Show these shortcuts']],
+  rowsAfter:[['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['…','(workshop rows unchanged)'],['/','Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a proposed answer'],['J / K','Next / previous file (Changes)'],['M','Show or hide the changes','new'],['O','Go to the terminal (Terminal view)','new'],['Ctrl `','Switch between thread and terminal, the keyboard follows','new'],['Esc','Close the panel or back to the workshop'],['?','Show these shortcuts']],
+  key:'`',
+}};
+let theme='dark', lang='fr', view='thread', L;
+
+/* ---------- pieces ---------- */
+const side = () => `<aside class="side"><div class="ask">${L.ask}</div>
+  <div class="sec">${L.projects}</div><div class="s">Ledge</div><div class="s" style="padding-left:22px">Echo<small>5 min</small></div><div class="s" style="padding-left:22px">Nova<small>5 min</small></div><div class="s cur" style="padding-left:22px"><span class="mascot"></span>Otto<small>5 min</small></div><div class="s" style="padding-left:22px">Pim<small>5 min</small></div><div class="s">Website</div></aside>`;
+function sw(v,{badge=0,tdot='on',focus=null}={}){
+  return `<div class="view-switch" role="tablist" aria-label="${L.viewsLabel}">
+    <button role="tab" aria-selected="${v==='thread'}" class="${focus==='thread'?'focusring':''}"><span class="ic">≡</span>${L.views.thread}${badge?`<span class="badge" aria-label="1">${badge}</span>`:''}</button>
+    <button role="tab" aria-selected="${v==='terminal'}" class="${focus==='terminal'?'focusring':''}"><span class="ic">&gt;_</span>${L.views.terminal}<span class="tdot ${tdot==='on'?'':tdot}" aria-hidden="true"></span></button></div>`;
+}
+function head(v,o={}){
+  return `<div class="topbar"><span class="crumb">${L.crumb[0]}</span><span class="crumb">/</span><span class="crumb">${L.crumb[1]}</span><span class="crumb">/</span><span class="mascot"></span><b style="font-weight:500">${L.agent}</b><span class="crumb">· ${L.task}</span><span class="sp"></span>${o.accord!==false?`<span class="acc">${L.accord}</span>`:''}<span class="tbtn" aria-pressed="${v==='terminal'}" title="${v==='terminal'?L.views.thread:L.views.terminal} (O)">&gt;_</span><span class="tbtn">···</span></div>
+  <div class="pane-heading">${sw(v,o)}<span class="pane-meta">${o.meta??'Local · ledge'}</span><span class="sp"></span><span class="kids">⑂ ${L.kids}</span><button class="chgbtn" aria-pressed="${!!o.chg}" title="${o.chg?L.chgClose:L.chgOpen}"><span class="mono" style="font-size:11px">±</span>${L.chgName}<span class="tab-count">${o.empty?0:3}</span></button></div>`;
+}
+const threadBody = () => `<div class="thread"><div class="tcol">
+  <div class="row"><span class="circ">›</span><span><b style="font-weight:500">${L.x1}</b><span style="color:var(--muted-foreground)">${L.x1b}</span></span><span class="t">16:39</span></div>
+  <div class="row"><span class="circ me">●</span><span><small style="color:var(--muted-foreground)">${L.you}</small><br><b style="font-weight:500;font-size:15px">${L.fix}</b></span><span class="t">16:49</span></div>
+  <div class="row"><span class="circ blue">◌</span><span><span class="blue">&gt;_ ${L.cmd}</span> <span class="mono" style="color:var(--muted-foreground);font-size:12.5px">npm test</span></span><span class="t blue">5 min 12 s</span></div>
+  <div class="row"><span class="circ wait">▢</span><span class="red">${L.waits}</span><span></span></div></div>
+  <div class="grow"></div>
+  <div class="reqcard"><div class="h"><span class="pilltag">${L.accord}</span><b style="font-weight:500">${L.req}</b><small>${L.since}</small></div><div class="code"><span style="font-size:10.5px;border:1px solid var(--input);border-radius:4px;padding:0 4px;margin-right:6px">Bash</span>npm test</div>
+  <div class="btns"><span class="btn primary">${L.allow} <kbd>Y</kbd></span><span class="btn">${L.deny} <kbd>N</kbd></span><span style="color:var(--muted-foreground);margin-left:10px">${L.always}</span></div></div>
+  <div class="composer"><span>${L.composer}</span><span style="font-size:12px"><kbd style="font-size:10.5px;border:1px solid var(--input);border-radius:4px;padding:0 4px">R</kbd> ${L.write}</span></div></div>`;
+const CLAUDE = () => `<span class="a">✻</span> <b>Claude Code</b> <span class="d">v2.3 · claude-opus-5-5</span>
+  <span class="d">~/Workspace/ledge-wt/release-LEDGE-41</span>
+
+<span class="d">&gt;</span> ${lang==='fr'?'Corrige-les':'Fix them'}
+
+<span class="g">●</span> Update(apps/desktop/src/list/SessionList.tsx)
+  <span class="d">└  Updated 2 lines</span>
+
+<span class="b">●</span> Bash(npm test)
+  <span class="d">└  Running…</span>
+
+ <b>Do you want to proceed?</b>
+ <span class="a">❯ 1. Yes</span>
+   2. Yes, and don't ask again for <b>npm test</b> commands in this project
+   3. No, and tell Claude what to do differently <span class="d">(esc)</span>
+`;
+const SHELL = () => `<span class="d">${lang==='fr'?'Shell ouvert dans le dossier de Otto : ~/w/ledge':'Shell opened in Otto’s folder: ~/w/ledge'}</span>
+<span class="g">jde@wsl</span>:<span class="b">~/w/ledge</span>$ git status --short
+ M apps/desktop/src/list/SessionList.tsx
+<span class="g">jde@wsl</span>:<span class="b">~/w/ledge</span>$ <span class="cursor"></span>`;
+const LAST = () => `<span class="d">…</span>
+● Bash(pnpm --filter desktop test)
+  └  Test Files  42 passed (42)
+       Tests  611 passed (611)
+● ${lang==='fr'?'Tout passe. J’ai poussé rien, tout est local sur la branche.':'All green. Nothing pushed, everything is local on the branch.'}
+<span class="d">&gt;</span>`;
+function termView({tabs=['agent'],cur='agent',chip='wsl',banner='',body=null,dot='on',state=null,where='tmux · ledge-otto',foot='in',ext=true,plus=true}={}){
+  const tabHTML=tabs.map(x=>{ const lab=x==='agent'?L.agentTab:x==='shell'?L.shell:L.shell2; return `<span class="term-tab ${x===cur?'current':''}"><span class="mono" style="font-size:11px">&gt;_</span>${lab}${x!=='agent'?'<span class="x">✕</span>':''}</span>`; }).join('');
+  const k=L.key;
+  const hint = foot==='in'?L.toThread(k):foot==='out'?L.toTerminal(k):'';
+  return `<div class="tview"><div class="term-heading">${tabHTML}${plus?`<span class="term-add" title="${L.add}">+</span>`:''}<span class="sp" style="flex:1"></span><span class="term-chip">${chip}</span>${ext?`<span class="term-icon" title="${L.external}">↗</span>`:''}</div>
+  ${banner}${body??`<div class="screen ${foot==='in'?'focused':''}">${cur==='agent'?CLAUDE():SHELL()}${cur==='agent'&&foot!=='none'?'<span class="cursor"></span>':''}</div>`}
+  <div class="terminal-footer"><span class="dot ${dot}">●</span><span>${state??L.attached}</span>${where?`<span class="mono">${where}</span>`:''}${hint?`<span class="sp"></span><span class="${foot==='in'?'footkey':''}">${hint}</span>`:''}</div></div>`;
+}
+const banner = (text,btn='',tone='') => `<div class="term-banner ${tone}"><span>${text}</span>${btn?`<span class="btn sm">${btn}</span>`:''}</div>`;
+const delta=(p,m)=>`<span class="delta"><span class="p">+${p}</span><span class="m">−${m}</span></span>`;
+function chg({list=false,empty=false}={}){
+  const head=`<div class="chg-head"><b><span class="mono" style="font-size:11px">± </span>${L.chgName}</b>${empty?'':`<span class="muted">${L.filesN(3)}</span>${delta(19,5)}`}<span style="flex:1"></span><span class="term-icon" title="${L.chgClose}">✕</span></div>`;
+  if(empty) return `<div class="chg">${head}<div class="chg-empty"><div><b>${L.chEmpty}</b>${L.chEmptyBody('Otto')}</div></div></div>`;
+  const files=[['apps/desktop/src/list/',[['M','SessionList.tsx',12,3,true],['A','sessionSort.ts',6,0]]],['apps/desktop/src/i18n/',[['M','fr.ts',1,2]]]];
+  const fl=list?`<div class="flist">${files.map(([d,fs])=>`<div class="fdir">${d}</div>${fs.map(([l,n,a,m,c])=>`<div class="frow ${c?'cur':''}"><span class="letter ${l}">${l}</span><span class="mono" style="font-size:12px">${n}</span>${delta(a,m)}</div>`).join('')}`).join('')}</div>`:'';
+  const D=[['gap',L.gap(18,1,18)],['',19,' ','export function SessionList({ sessions }: Props) {'],['del',20,'−','  const shown = sessions.filter(s => !s.archived);'],['add',20,'+','  const shown = sortSessions(sessions.filter(s => !isArchived(s)));'],['',21,' ','  return ('],['',22,' ','    <ul className="session-list">'],['del',23,'−','      {shown.map(s => <Row key={s.name} session={s} />)}'],['add',23,'+','      {shown.map(s => <Row key={s.id} session={s} />)}'],['',24,' ','    </ul>'],['gap',L.gap(9,25,33)],['',34,' ','function Row({ session }: { session: Session }) {'],['add',35,'+','  const when = whenOf(session);']];
+  return `<div class="chg" role="region" aria-label="${L.chgName}">${head}
+  <div class="ftoggle">${L.filesToggle(3)} ${list?'▴':'▾'}</div>${fl}
+  <div class="ftitle"><span class="badge-ch">${L.edited}</span><code>apps/desktop/src/list/SessionList.tsx</code>${delta(12,3)}</div>
+  <div class="facts"><span class="btn sm" style="border-color:transparent">${L.copyPath}</span><span class="sp"></span><span class="mono" style="font-size:11px">1 / 3</span><span class="nb" title="${L.prevF} (K)">‹</span><span class="nb" title="${L.nextF} (J)">›</span></div>
+  <div class="touches">${L.changedBy}<span class="touch">Edit · ${L.turn(2)} ${delta(10,2)}</span><span class="touch">Edit · ${L.turn(3)} ${delta(2,1)}</span>${L.seeInThread}</div>
+  <div class="diff">${D.map(r=>r[0]==='gap'?`<div class="dl gap">${r[1]}</div>`:`<div class="dl ${r[0]}"><span class="n">${r[1]}</span><span class="s">${r[2]}</span><span>${r[3].replace(/</g,'&lt;')}</span></div>`).join('')}</div></div>`;
+}
+const withChg=(body,o={})=>`<div class="split" style="--cw:${o.cw??'46%'}">${body}<div class="handle" role="separator" aria-label="${L.chgWidth}"></div>${chg(o)}</div>`;
+function win(v,body,o={}){ return `<div class="win ${o.short?'short':''}"><div class="titlebar">Ledge<span style="color:var(--danger-text)">.</span></div><div class="main">${side()}<div class="content">${head(v,o)}${body}</div></div>${o.overlay??''}</div>`; }
+function panel(lbl,v,body,o={}){ return `<div><p class="lbl">${lbl}</p><div class="panel"><div class="pane-heading">${sw(v,o)}<span class="pane-meta">${o.meta??'Local · ledge'}</span></div>${body}</div></div>`; }
+
+function helpDlg(rows,title){
+  return `<div class="scrim"><div class="help" role="dialog"><h4>${L.helpT} <small style="font-weight:400;color:var(--muted-foreground);font-size:12px">· ${title}</small></h4><p>${L.helpIntro}</p>
+  ${rows.map(([k,a,m])=>`<div class="r ${m??''}"><span>${a}</span><kbd>${k}</kbd></div>`).join('')}</div></div>`;
+}
+
+const VIEWS = {
+  thread:()=>[[L.c1, win('thread',threadBody())],[L.c1m, win('thread',withChg(threadBody()),{chg:true})],[L.c1l, win('thread',withChg(threadBody(),{list:true}),{chg:true})],[L.c1e, win('thread',withChg(threadBody(),{empty:true,cw:'36%'}),{chg:true,empty:true,short:true})]],
+  term:()=>[
+    [L.c2, win('terminal',termView(),{accord:false,tdot:'on'})],
+    [L.c2m, win('terminal',withChg(termView({foot:'out'})),{accord:false,chg:true})],
+    [L.c2b, win('terminal',termView({foot:'in'}),{badge:1})],
+    [L.c2c, win('terminal',termView({tabs:['agent','shell'],cur:'shell',state:L.attached.replace(/.*/,lang==='fr'?'Shell':'Shell'),where:'wsl'}),{accord:false})],
+  ],
+  keys:()=>[
+    ['', `<div class="keys"><table><thead><tr>${L.keysH.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${L.keyRows.map(r=>`<tr><td><kbd>${r[0].replace('Ctrl ²','Ctrl '+L.key).replace('Ctrl `','Ctrl '+L.key)}</kbd></td><td class="muted">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}<tr><td colspan="4" class="muted">${L.keysRO}</td></tr></tbody></table></div>`],
+    [L.ck1, win('terminal',termView({foot:'in'}),{accord:false,short:true})],
+    [L.ck2, win('terminal',termView({foot:'out'}),{accord:false,short:true,focus:'terminal'})],
+  ],
+  cases:()=>[['', `<div class="grid">
+    ${panel(L.cs.ssh,'terminal',termView({chip:'ssh · gpu-box',state:L.attachedSsh,where:'ssh gpu-box · tmux · ledge-otto',foot:'in'}),{meta:'gpu-box · ledge'})}
+    ${panel(L.cs.sshLost,'terminal',termView({chip:'ssh · gpu-box',banner:banner(L.lost('gpu-box',6,2,'Otto'),L.reconnect,'warn'),dot:'wait',state:L.reconnecting,where:'ssh gpu-box · tmux · ledge-otto',foot:'none'}),{meta:'gpu-box · ledge',tdot:'wait'})}
+    ${panel(L.cs.off,'terminal',termView({chip:'ssh · gpu-box',ext:false,banner:banner(L.offlineB('gpu-box'),L.retry),body:`<div class="screen ro">${LAST()}</div>`,dot:'off',state:L.offline,where:'gpu-box',foot:'none'}),{meta:'gpu-box · ledge',tdot:'off'})}
+    ${panel(L.cs.outside,'terminal',termView({banner:banner(L.outside('Otto')),body:`<div class="screen ro">${LAST()}</div>`,dot:'off',state:L.preview,where:lang==='fr'?'aucune session tmux':'no tmux session',foot:'none'}),{tdot:'off'})}
+    ${panel(L.cs.sub,'terminal',termView({banner:banner(L.subagent('Explore','Otto'),L.goParent('Otto')),body:`<div class="screen ro">${CLAUDE()}</div>`,dot:'off',state:L.readOnly,foot:'none'}),{tdot:'off'})}
+    ${panel(L.cs.ended,'terminal',termView({banner:banner(L.ended('Otto')),body:`<div class="screen ro">${LAST()}</div>`,dot:'off',state:L.preview,foot:'none'}),{tdot:'off'})}
+    ${panel(L.cs.native,'terminal',termView({tabs:[],ext:false,body:`<div class="empty"><div><b>${L.nativeT('Pim')}</b><span>${L.nativeB}</span><span class="btn sm">+ ${L.nativeBtn}</span></div></div>`,dot:'off',state:lang==='fr'?'Pas d’écran d’agent':'No agent screen',where:null,foot:'none'}),{tdot:'off'})}
+    ${panel(L.cs.phone,'terminal',termView({banner:banner(L.phone('Pixel 9','Otto'),L.takeBack,'info'),foot:'none'}),{})}
+  </div>`]],
+  help:()=>[['', `<div class="cmp">${win('thread',threadBody(),{overlay:helpDlg(L.rowsBefore,L.before)})}${win('thread',threadBody(),{overlay:helpDlg(L.rowsAfter,L.after)})}</div>`]],
+};
+
+/* ======================= v3 (2026-11-03 08:31) =======================
+   Left: « Fil | Terminal » = Ledge's thread OR the harness's own screen (the agent), full frame.
+   Right: the split panel stays, its tabs: « ± Modifications » first, then the shells, then « + ». The agent tab leaves it. */
+Object.assign(T.fr, {
+  n_thread:'<b>À gauche, « Fil | Terminal »</b> passe du fil Ledge à <b>l\'écran de l\'agent</b> (Claude Code, Codex…), en plein cadre. <b>À droite, le panneau scindé reste</b> (poignée de largeur, <code>O</code> l\'affiche ou le masque, comme aujourd\'hui). Ses onglets : <b>« ± Modifications 3 »</b> en premier, fixe (sans croix), puis vos shells, puis <code>+</code>. L\'onglet de l\'agent le quitte : il est devenu la vue Terminal de gauche. L\'onglet Modifications est la vue Modifications actuelle en disposition étroite. Sans shell, le panneau s\'ouvre sur Modifications, avec <code>+</code> pour ouvrir un shell.',
+  n_term:'<b>Vue Terminal = l\'écran de l\'agent</b>, seul et plein cadre à gauche : ses bandeaux, son écran, son pied (état, cible tmux, rappel de touche). La puce <code>wsl</code> / <code>ssh · hôte</code> et « ouvrir dans un terminal externe » passent dans l\'en-tête, à côté du sélecteur. Le panneau de droite ne change pas d\'une vue à l\'autre. La zone de réponse est masquée sur Terminal (on tape dans l\'écran de l\'agent). Si l\'agent attend votre accord, l\'onglet Fil porte une pastille rouge.',
+  n_keys:'<b>Clavier</b> : <code>Ctrl ²</code> bascule Fil ⇄ écran de l\'agent, et le clavier suit (sur Terminal, il est tout de suite dans l\'écran de l\'agent). <code>O</code> affiche ou masque le panneau de droite, comme aujourd\'hui. <code>J / K</code> parcourt les fichiers quand l\'onglet Modifications est affiché, hors saisie et hors terminal, comme aujourd\'hui dans la vue Modifications. Dans un shell du panneau, <code>Ctrl ²</code> rend le clavier à la vue de gauche, sans la changer.',
+  n_cases:'<b>Quand l\'agent n\'a pas d\'écran à taper</b>, l\'onglet Terminal s\'ouvre quand même, avec le bandeau actuel qui dit pourquoi (textes inchangés). Les shells et Modifications, à droite, restent disponibles. Seul texte nouveau : une session OMP, pilotée par Ledge, sans écran d\'agent. Son bouton ouvre un shell dans le panneau de droite. La bascule ne donne jamais le clavier à un écran en lecture seule : le focus va au bouton du bandeau.',
+  n_help:'<b>Aide clavier (?)</b>, avant / après : <code>J / K</code> gardé (onglet Modifications), <code>O</code> renommé (le panneau : shells et modifications), <code>Ctrl ²</code> réécrit (fil ⇄ écran de l\'agent). Même changement dans Réglages › Raccourcis clavier.',
+  views:{thread:'Fil',terminal:'Terminal'},
+  rpOpen:'Afficher le panneau : shells et modifications (O)', rpClose:'Masquer le panneau (O)', rpWidth:'Largeur du panneau', max:'Agrandir le panneau',
+  shellR:'Shell · gpu-box:~/ledge',
+  nativeB:'Son travail se lit dans le fil. Vous pouvez ouvrir un shell dans son dossier, dans le panneau de droite.', nativeBtn:'Ouvrir un shell',
+  agentFoot:'Pas d’écran d’agent',
+  a1:'Fil + panneau ouvert sur Modifications (aucun shell encore : Modifications et +)', a2:'Fil + panneau sur un shell', a3:'Fil, panneau masqué (O ou >_ l’affiche)', a4:'Fil + Modifications, liste des fichiers dépliée',
+  b1:'Terminal (écran de l’agent) + panneau sur un shell', b2:'Terminal + panneau sur Modifications · l’agent attend votre accord : pastille sur Fil', b3:'Terminal, panneau masqué : l’écran de l’agent sur toute la largeur',
+  cs:{ssh:'Session distante · écran de l’agent par SSH, shell distant à droite',sshLost:'Session distante · connexion perdue',off:'Session distante · machine hors ligne',outside:'Lecture seule · lancée hors de Ledge',sub:'Lecture seule · page d’un sous-agent',ended:'Lecture seule · session terminée',native:'Sans écran d’agent · session OMP (nouveau texte)',phone:'Un téléphone tient le clavier',chEmpty:'Onglet Modifications · aucun fichier modifié'},
+  keysH:['Touche','Depuis','Résultat','Le clavier va'],
+  keyRows:[['Ctrl ²','le fil ou la saisie','vue Terminal (écran de l’agent)','dans l’écran de l’agent'],['Ctrl ²','l’écran de l’agent','vue Fil','au fil, où vous l’aviez laissé'],['Ctrl ²','un shell du panneau de droite','— (la vue de gauche ne change pas)','à la vue de gauche'],['O','la session (hors saisie et hors terminal)','affiche / masque le panneau de droite','reste où il était'],['J / K','onglet Modifications affiché (hors saisie et hors terminal)','fichier suivant / précédent','reste où il était'],['← / →','le sélecteur Fil | Terminal','l’autre vue','à l’onglet choisi'],['>_ (barre du haut)','—','affiche / masque le panneau','comme O']],
+  keysRO:'Écran de l’agent en lecture seule (aperçu, sous-agent, hors ligne, OMP) : Ctrl ² ouvre la vue Terminal et le focus va au bouton du bandeau.',
+  ck1:'Arrivée par Ctrl ² : le clavier est dans l’écran de l’agent (contour bleu)',
+  rowsAfter:[['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['…','(lignes de l’atelier inchangées)'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (onglet Modifications)','new'],['O','Afficher ou masquer le panneau : shells et modifications','new'],['Ctrl ²','Basculer entre le fil et l’écran de l’agent, le clavier suit','new'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']],
+});
+Object.assign(T.en, {
+  n_thread:'<b>On the left, “Thread | Terminal”</b> switches between Ledge\'s thread and <b>the agent\'s own screen</b> (Claude Code, Codex…), full frame. <b>On the right, the split panel stays</b> (width handle, <code>O</code> shows or hides it, as today). Its tabs: <b>“± Changes 3”</b> first, fixed (no cross), then your shells, then <code>+</code>. The agent tab leaves it: it has become the Terminal view on the left. The Changes tab is today\'s Changes view in its narrow layout. With no shell, the panel opens on Changes, with <code>+</code> to open one.',
+  n_term:'<b>Terminal view = the agent\'s screen</b>, alone and full frame on the left: its banners, its screen, its footer (state, tmux target, key reminder). The <code>wsl</code> / <code>ssh · host</code> chip and “open in an external terminal” move to the heading, next to the switch. The right panel does not change from one view to the other. The reply area is hidden on Terminal (you type in the agent\'s screen). If the agent waits for your approval, the Thread tab carries a red badge.',
+  n_keys:'<b>Keyboard</b>: <code>Ctrl `</code> switches Thread ⇄ agent screen and the keyboard follows (on Terminal it is straight in the agent\'s screen). <code>O</code> shows or hides the right panel, as today. <code>J / K</code> walks the files while the Changes tab is shown, not typing and not in a terminal, as today in the Changes view. In a panel shell, <code>Ctrl `</code> gives the keyboard back to the left view without changing it.',
+  n_cases:'<b>When the agent has no screen to type into</b>, the Terminal tab still opens, with today\'s banner saying why (texts unchanged). Shells and Changes on the right stay available. One new text: an OMP session, driven by Ledge, with no agent screen. Its button opens a shell in the right panel. The switch never hands the keyboard to a read-only screen: the focus goes to the banner\'s button.',
+  n_help:'<b>Keyboard help (?)</b>, before / after: <code>J / K</code> kept (Changes tab), <code>O</code> renamed (the panel: shells and changes), <code>Ctrl `</code> rewritten (thread ⇄ agent screen). Same change in Settings › Keyboard shortcuts.',
+  rpOpen:'Show the panel: shells and changes (O)', rpClose:'Hide the panel (O)', rpWidth:'Panel width', max:'Enlarge the panel',
+  shellR:'Shell · gpu-box:~/ledge',
+  nativeB:'Its work reads in the thread. You can open a shell in its folder, in the right panel.', nativeBtn:'Open a shell',
+  agentFoot:'No agent screen',
+  a1:'Thread + panel open on Changes (no shell yet: Changes and +)', a2:'Thread + panel on a shell', a3:'Thread, panel hidden (O or >_ shows it)', a4:'Thread + Changes, file list unfolded',
+  b1:'Terminal (agent screen) + panel on a shell', b2:'Terminal + panel on Changes · the agent waits for approval: badge on Thread', b3:'Terminal, panel hidden: the agent\'s screen full width',
+  cs:{ssh:'Remote session · agent screen over SSH, remote shell on the right',sshLost:'Remote session · connection lost',off:'Remote session · machine offline',outside:'Read only · started outside Ledge',sub:'Read only · a subagent’s page',ended:'Read only · session ended',native:'No agent screen · OMP session (new text)',phone:'A phone holds the keyboard',chEmpty:'Changes tab · no file changed'},
+  keyRows:[['Ctrl `','the thread or the reply box','Terminal view (agent screen)','into the agent’s screen'],['Ctrl `','the agent’s screen','Thread view','to the thread, where you left it'],['Ctrl `','a shell in the right panel','— (the left view does not change)','to the left view'],['O','the session (not typing, not in a terminal)','shows / hides the right panel','stays where it was'],['J / K','Changes tab shown (not typing, not in a terminal)','next / previous file','stays where it was'],['← / →','the Thread | Terminal switch','the other view','to the chosen tab'],['>_ (top bar)','—','shows / hides the panel','as O']],
+  keysRO:'Read-only agent screen (preview, subagent, offline, OMP): Ctrl ` opens the Terminal view and the focus goes to the banner’s button.',
+  ck1:'Arriving with Ctrl `: the keyboard is in the agent’s screen (blue outline)',
+  rowsAfter:[['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['…','(workshop rows unchanged)'],['/','Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a proposed answer'],['J / K','Next / previous file (Changes tab)','new'],['O','Show or hide the panel: shells and changes','new'],['Ctrl `','Switch between the thread and the agent’s screen, the keyboard follows','new'],['Esc','Close the panel or back to the workshop'],['?','Show these shortcuts']],
+});
+/* « before » = today's real rows: nothing struck except what is rewritten. */
+T.fr.rowsBefore = T.fr.rowsBefore.map(r => r[0]==='J / K' ? [r[0],r[1]] : r[0]==='O'||r[0]==='Ctrl ²' ? [r[0],r[1],'del'] : r);
+T.en.rowsBefore = T.en.rowsBefore.map(r => r[0]==='J / K' ? [r[0],r[1]] : r[0]==='O'||r[0]==='Ctrl `' ? [r[0],r[1],'del'] : r);
+
+/* The heading: the switch, then (Terminal) the agent's chip and « terminal externe », then the subagents. */
+function head(v,o={}){
+  const agentBits = v==='terminal' && o.chip!==false ? `<span class="term-chip">${o.chip??'wsl'}</span>${o.ext===false?'':`<span class="term-icon" title="${L.external}">↗</span>`}` : '';
+  return `<div class="topbar"><span class="crumb">${L.crumb[0]}</span><span class="crumb">/</span><span class="crumb">${L.crumb[1]}</span><span class="crumb">/</span><span class="mascot"></span><b style="font-weight:500">${L.agent}</b><span class="crumb">· ${L.task}</span><span class="sp"></span>${o.accord!==false?`<span class="acc">${L.accord}</span>`:''}<span class="tbtn" aria-pressed="${o.rp!==false}" title="${o.rp!==false?L.rpClose:L.rpOpen}">&gt;_</span><span class="tbtn">···</span></div>
+  <div class="pane-heading">${sw(v,o)}<span class="pane-meta">${o.meta??'Local · ledge'}</span>${agentBits}<span class="sp"></span><span class="kids">⑂ ${L.kids}</span></div>`;
+}
+/* The agent's screen, alone on the left. */
+function agentView({banner:b='',body=null,dot='on',state=null,where='tmux · ledge-otto',foot='in'}={}){
+  const k=L.key, hint = foot==='in'?L.toThread(k):foot==='out'?L.toTerminal(k):'';
+  return `<div class="tview">${b}${body??`<div class="screen ${foot==='in'?'focused':''}">${CLAUDE()}${foot!=='none'?'<span class="cursor"></span>':''}</div>`}
+  <div class="terminal-footer"><span class="dot ${dot}">●</span><span>${state??L.attached}</span>${where?`<span class="mono">${where}</span>`:''}${hint?`<span class="sp"></span><span class="${foot==='in'?'footkey':''}">${hint}</span>`:''}</div></div>`;
+}
+/* The right panel: « ± Modifications » first, the shells, « + »; its chip, enlarge, hide. */
+function rpanel({tab='chg',shells=1,remote=false,list=false,empty=false}={}){
+  const sh=[...Array(shells)].map((_,i)=>({id:'s'+i,lab:remote?L.shellR:(i?L.shell2:L.shell)}));
+  const tabs=`<span class="term-tab ${tab==='chg'?'current':''}"><span class="mono" style="font-size:11px">±</span>${L.chgName}<span class="tab-count">${empty?0:3}</span></span>`
+    + sh.map((x,i)=>`<span class="term-tab ${tab===x.id?'current':''}"><span class="mono" style="font-size:11px">&gt;_</span>${x.lab}<span class="x">✕</span></span>`).join('')
+    + `<span class="term-add" title="${L.add}">+</span>`;
+  let body;
+  if(tab==='chg') body = chgBody({list,empty});
+  else body = `<div class="screen focused" style="box-shadow:none">${remote?SHELL().replaceAll('jde@wsl','jde@gpu-box').replaceAll('~/w/ledge','~/ledge').replace(/Shell ouvert dans le dossier de Otto : ~\/ledge|Shell opened in Otto’s folder: ~\/ledge/, lang==='fr'?'Shell sur gpu-box, dans le dossier de Otto : ~/ledge':'Shell on gpu-box, in Otto’s folder: ~/ledge'):SHELL()}</div><div class="terminal-footer"><span class="dot on">●</span><span>Shell</span><span class="mono">${remote?'ssh gpu-box':'wsl'}</span></div>`;
+  return `<div class="tview" style="background:var(--background)"><div class="term-heading">${tabs}<span style="flex:1"></span>${tab!=='chg'?`<span class="term-chip">${remote?'ssh · gpu-box':'wsl'}</span>`:''}<span class="term-icon" title="${L.max}">⤢</span><span class="term-icon" title="${L.rpClose}">✕</span></div>${body}</div>`;
+}
+/* The Changes content without its own head (the tab names it). */
+function chgBody(o){ const h=chg(o); return h.replace(/^<div class="chg"[^>]*>/,'<div class="chg" style="flex:1">').replace(/<div class="chg-head">[\s\S]*?<\/div>/,''); }
+const split=(left,right,cw='44%')=>`<div class="split" style="--cw:${cw}">${left}<div class="handle" role="separator" aria-label="${L.rpWidth}"></div>${right}</div>`;
+
+const V3 = {
+  thread:()=>[
+    [L.a1, win('thread',split(threadBody(),rpanel({tab:'chg',shells:0})))],
+    [L.a2, win('thread',split(threadBody(),rpanel({tab:'s0',shells:2})))],
+    [L.a3, win('thread',threadBody(),{rp:false})],
+    [L.a4, win('thread',split(threadBody(),rpanel({tab:'chg',shells:1,list:true})),{short:false})],
+  ],
+  term:()=>[
+    [L.b1, win('terminal',split(agentView({foot:'out'}),rpanel({tab:'s0',shells:1})),{accord:false})],
+    [L.b2, win('terminal',split(agentView({foot:'in'}),rpanel({tab:'chg',shells:1})),{badge:1})],
+    [L.b3, win('terminal',agentView({foot:'in'}),{accord:false,rp:false})],
+  ],
+  keys:()=>[
+    ['', `<div class="keys"><table><thead><tr>${L.keysH.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${L.keyRows.map(r=>`<tr><td><kbd>${r[0]}</kbd></td><td class="muted">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}<tr><td colspan="4" class="muted">${L.keysRO}</td></tr></tbody></table></div>`],
+    [L.ck1, win('terminal',split(agentView({foot:'in'}),rpanel({tab:'s0',shells:1})),{accord:false,short:true})],
+  ],
+  cases:()=>[['', `<div class="grid">
+    ${panel3(L.cs.ssh,split(agentView({state:L.attachedSsh,where:'ssh gpu-box · tmux · ledge-otto',foot:'in'}),rpanel({tab:'s0',shells:1,remote:true}),'46%'),{meta:'gpu-box · ledge',chip:'ssh · gpu-box',wide:true})}
+    ${panel3(L.cs.sshLost,agentView({banner:banner(L.lost('gpu-box',6,2,'Otto'),L.reconnect,'warn'),dot:'wait',state:L.reconnecting,where:'ssh gpu-box · tmux · ledge-otto',foot:'none'}),{meta:'gpu-box · ledge',tdot:'wait',chip:'ssh · gpu-box'})}
+    ${panel3(L.cs.off,agentView({banner:banner(L.offlineB('gpu-box'),L.retry),body:`<div class="screen ro">${LAST()}</div>`,dot:'off',state:L.offline,where:'gpu-box',foot:'none'}),{meta:'gpu-box · ledge',tdot:'off',chip:'ssh · gpu-box',ext:false})}
+    ${panel3(L.cs.outside,agentView({banner:banner(L.outside('Otto').replace(/ Votre shell reste disponible\.| Your shell is still available\./,'')),body:`<div class="screen ro">${LAST()}</div>`,dot:'off',state:L.preview,where:lang==='fr'?'aucune session tmux':'no tmux session',foot:'none'}),{tdot:'off'})}
+    ${panel3(L.cs.sub,agentView({banner:banner(L.subagent('Explore','Otto'),L.goParent('Otto')),body:`<div class="screen ro">${CLAUDE()}</div>`,dot:'off',state:L.readOnly,foot:'none'}),{tdot:'off'})}
+    ${panel3(L.cs.ended,agentView({banner:banner(L.ended('Otto').replace(/ Votre shell reste disponible\.| Your shell is still available\./,'')),body:`<div class="screen ro">${LAST()}</div>`,dot:'off',state:L.preview,foot:'none'}),{tdot:'off'})}
+    ${panel3(L.cs.native,agentView({body:`<div class="empty"><div><b>${L.nativeT('Pim')}</b><span>${L.nativeB}</span><span class="btn sm">+ ${L.nativeBtn}</span></div></div>`,dot:'off',state:L.agentFoot,where:null,foot:'none'}),{tdot:'off',chip:false})}
+    ${panel3(L.cs.phone,agentView({banner:banner(L.phone('Pixel 9','Otto'),L.takeBack,'info'),foot:'none'}),{})}
+    ${panel3(L.cs.chEmpty,split(threadMini(),rpanel({tab:'chg',shells:0,empty:true}),'52%'),{v:'thread'})}
+  </div>`]],
+  help: VIEWS.help,
+};
+function panel3(lbl,body,o={}){ const v=o.v??'terminal'; const wide=o.wide?' style="grid-column:1/-1"':''; const bits = v==='terminal'&&o.chip!==false?`<span class="term-chip">${o.chip??'wsl'}</span>${o.ext===false?'':`<span class="term-icon">↗</span>`}`:''; return `<div${wide}><p class="lbl">${lbl}</p><div class="panel"><div class="pane-heading">${sw(v,o)}<span class="pane-meta">${o.meta??'Local · ledge'}</span>${bits}</div>${body}</div></div>`; }
+const threadMini=()=>`<div class="thread" style="padding-top:14px"><div class="tcol" style="gap:10px"><div class="row"><span class="circ me">●</span><span><b style="font-weight:500">${L.fix}</b></span><span class="t">16:49</span></div><div class="row"><span class="circ blue">◌</span><span class="blue">&gt;_ ${L.cmd}</span><span></span></div></div></div>`;
+for (const k of Object.keys(VIEWS)) delete VIEWS[k];
+Object.assign(VIEWS, V3);
+
+function render(){
+  L=T[lang];
+  document.documentElement.dataset.theme=theme; document.documentElement.lang=lang;
+  document.getElementById('note').innerHTML=L['n_'+view].replaceAll('Ctrl ²','Ctrl '+L.key);
+  document.getElementById('screens').innerHTML=VIEWS[view]().map(([c,h])=>`${c?`<p class="cap">${c}</p>`:'<div style="height:6px"></div>'}${h}`).join('');
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.mk-bar button'); if(!b) return;
+  if(b.dataset.v){ view=b.dataset.v; }
+  else if(b.dataset.themeBtn){ theme=b.dataset.themeBtn; }
+  else if(b.dataset.langBtn){ lang=b.dataset.langBtn; }
+  else return;
+  sync(); render();
+});
+function sync(){
+  document.querySelectorAll('[data-v]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.v===view)));
+  document.querySelectorAll('[data-theme-btn]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.themeBtn===theme)));
+  document.querySelectorAll('[data-lang-btn]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.langBtn===lang)));
+}
+const q=new URLSearchParams(location.search); if(q.get('v')) view=q.get('v'); if(q.get('theme')) theme=q.get('theme'); if(q.get('lang')) lang=q.get('lang');
+sync(); render();
+</script>
+</body>
+</html>

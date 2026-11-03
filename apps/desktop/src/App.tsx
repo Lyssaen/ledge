@@ -60,10 +60,10 @@ import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { ptyBackend } from './term/backend';
-import { agentTabId, TermStore } from './term/store';
+import { TermStore } from './term/store';
+import { focusAgentView } from './session/agentFocus';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
-import { isNative } from './term/mode';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 
@@ -74,24 +74,24 @@ const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement)
 
 /** The app's one terminal store: its shells and the agent's screen live as long as the window, whatever the place. Its xterms
  *  follow the theme once the root has taken it (`data-theme`, set by useAppearance after this component's own effects). */
-function useTermStore(client: DaemonClient): TermStore {
+function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
   const [store] = useState(() => new TermStore({
     backend: ptyBackend(),
     // xterm comes with the session page's chunk (out of the first bundle): only its pane and Workspace make the store draw, so
-    // the chunk is there by then. Its Ctrl + ² gives the keyboard back to the thread.
+    // the chunk is there by then. Its Ctrl + ² gives the keyboard back to the session's left view (App's termThread).
     surface: () => {
       const chunk = loadedWorkspace();
       if (!chunk) throw new Error('a terminal is drawn only once the session page has loaded');
-      return chunk.createSurface({ theme: rootTermTheme(), onThread: focusThread, openUrl });
+      return chunk.createSurface({ theme: rootTermTheme(), onThread, openUrl });
     },
     agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
     shellArgv: id => client.fleet?.shell(id) ?? null,
-    // Shell 1 opens where the session works (its worktree, else its folder), over ssh when its machine is reached that way.
+    // A first shell opens where the session works (its worktree, else its folder), over ssh when its machine is reached that way.
     shellPlace: id => {
       const { sessions, archived } = daemonStore.getState();
       const s = sessions.find(x => x.id === id) ?? archived.find(x => x.id === id);
       const machine = client.fleet?.machines().find(m => m.id === s?.machineId);
-      return { dir: s ? s.workdir ?? s.cwd : '~', remote: !!machine?.ssh, native: !!s && isNative(s) };
+      return { dir: s ? s.workdir ?? s.cwd : '~', remote: !!machine?.ssh };
     }
   }));
   useEffect(() => {
@@ -112,7 +112,9 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
 function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): Promise<'ok' | 'failed'> }) {
   const fleetView = useFleet(client);
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
-  const termStore = useTermStore(fleetClient);
+  // Ctrl + ² inside an xterm, set below once the place is known (the store's surfaces are made once).
+  const termThread = useRef<() => void>(focusThread);
+  const termStore = useTermStore(fleetClient, () => termThread.current());
   const projects = useProjects(fleetClient);
   const tasksApi = useTasksApi(fleetClient);
   // « À toi »: what OpenRig's rigs ask the person, on this computer (lot 1: one machine), once its daemon reads them.
@@ -151,12 +153,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }), []);
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
-  // Every « Terminal » (the session menu, a chat card, the island) opens the session's page with its pane, on the agent's tab.
+  // Every « Terminal » (the session menu, a chat card, the island) opens the session's page on its Terminal view, the agent's screen.
   const showTerminal = useCallback((id: string) => {
     dispatch({ type: 'open', id });
-    setSessionPrefs(x => ({ ...x, terminal: true }));
-    termStore.select(id, agentTabId(id));
-  }, [setSessionPrefs, termStore]);
+    setSessionPrefs(x => ({ ...x, view: 'terminal' }));
+  }, [setSessionPrefs]);
   // « Open in Ledge » from the island: the shell has already brought the window forward; this shows what was asked.
   useEffect(() => onOpenTarget(raw => {
     const target = parseTarget(raw);
@@ -210,20 +211,30 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // Ledge shows the agent's screen (focused window, pane open, agent tab active): that is the terminal in front, no sound.
-  watching.current = () => (place.kind === 'session' && session ? watchedSession({ focused: document.hasFocus(), terminal: sessionPrefs.terminal, placeId: place.id, helper: place.helper, active: termStore.active(place.id), agentTab: agentTabId(place.id) }) : null);
+  watching.current = () => (place.kind === 'session' && session ? watchedSession({ focused: document.hasFocus(), agentView: sessionPrefs.view === 'terminal', placeId: place.id, helper: place.helper }) : null);
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   useEffect(preloadPlaces, []);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
-  // Ctrl + ² from outside the terminal: it shows if hidden, then its open tab takes the keyboard. A pane just asked for draws
-  // its xterm in the renders this key starts, so the focus waits for the next frame.
+  // Ctrl + ² from outside a terminal (the thread, the reply, the panel's Modifications): the Terminal view, and the keyboard
+  // into the agent's screen (or its banner's button when it cannot be typed into). A view just asked for draws its xterm in
+  // the renders this key starts, so the focus waits for the next frame.
   const toTerminal = () => {
     if (place.kind !== 'session' || !session) return false;
-    const id = place.id;
-    if (!sessionPrefs.terminal) setSessionPrefs(p => ({ ...p, terminal: true }));
-    requestAnimationFrame(() => termStore.surface(termStore.active(id))?.focus());
+    if (sessionPrefs.view !== 'terminal') setSessionPrefs(p => ({ ...p, view: 'terminal' }));
+    requestAnimationFrame(() => focusAgentView(termStore, session.id));
     return true;
+  };
+  // Ctrl + ² inside a terminal. From the agent's screen: back to the thread, where the keyboard was left. From a shell of the
+  // panel: the keyboard goes back to the left view, which does not change.
+  termThread.current = () => {
+    const fromAgent = document.activeElement?.closest('.agent-view') !== null;
+    if (fromAgent && sessionPrefs.view === 'terminal') {
+      setSessionPrefs(p => ({ ...p, view: 'thread' }));
+      requestAnimationFrame(focusThread);
+    } else if (sessionPrefs.view === 'terminal' && session) focusAgentView(termStore, session.id);
+    else focusThread();
   };
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null, toTerminal });

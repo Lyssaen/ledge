@@ -6,6 +6,12 @@ import { boot, closeDaemons, declarations, listSessions, ottoThread, unfoldPast 
 afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
 
 const tab = (name: RegExp) => screen.getByRole('tab', { name });
+type User = Awaited<ReturnType<typeof boot>>['user'];
+/** Fil | Terminal v3: Modifications is the right panel's first tab (the top bar's >_, or O), the keyboard on it. */
+async function showChanges(user: User) {
+  await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Show the panel: shells and changes' }));
+  await user.click(tab(/^Changes/));
+}
 const pane = () => document.querySelector<HTMLElement>('.file-pane')!;
 const more: ThreadItem[] = [
   { kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 2, tool: 'Write', label: '/w/ledge/docs/guide.md', status: 'success', files: [{ path: '/w/ledge/docs/guide.md', change: 'write', diff: '+ # Guide\n+ Bonjour' }] },
@@ -22,8 +28,8 @@ async function openOtto(extra: ThreadItem[] = more, tool: Session['tool'] = 'cla
 
 it('Thread / Changes with the count; files grouped by folder; the diff with its signs', async () => {
   const { user } = await openOtto();
+  await showChanges(user);
   expect(tab(/^Changes/)).toHaveTextContent('Changes2');
-  await user.click(tab(/^Changes/));
   expect(tab(/^Changes/)).toHaveAttribute('aria-selected', 'true');
   const list = within(screen.getByRole('navigation', { name: 'Changed files' }));
   expect([...document.querySelectorAll('.dir-name')].map(e => e.textContent)).toEqual(['src', 'docs']);
@@ -35,7 +41,7 @@ it('Thread / Changes with the count; files grouped by folder; the diff with its 
 });
 it('J / K walk the files, never while typing; Copy the path says so', async () => {
   const { user } = await openOtto();
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   await user.keyboard('j');
   expect(pane().querySelector('.file-title code')).toHaveTextContent('docs/guide.md');
   expect(within(pane()).getByText('2 / 2')).toHaveClass('file-pos');
@@ -50,7 +56,7 @@ it('J / K walk the files, never while typing; Copy the path says so', async () =
 });
 it('« turn 2 » goes back to the action in the thread and flashes it; « View the change » opens the file', async () => {
   const { user } = await openOtto();
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
   expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
   expect(document.querySelector('[data-tool="e9"]')).toHaveClass('flash');
@@ -58,12 +64,21 @@ it('« turn 2 » goes back to the action in the thread and flashes it; « View t
   expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
   expect(within(screen.getByRole('complementary', { name: 'Reading pane' })).getByText('Change · guide.md')).toBeVisible();
 });
+it('from the Terminal view, « turn 2 » brings the thread back, the action lit; the panel stays', async () => {
+  const { user } = await openOtto();
+  await user.click(tab(/^Terminal/));
+  await showChanges(user);
+  await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
+  expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
+  expect(document.querySelector('[data-tool="e9"]')).toHaveClass('flash');
+  expect(tab(/^Changes/)).toHaveAttribute('aria-selected', 'true');
+});
 it('« View the change » on an absolute path finds the file a relative path opened', async () => {
   const { user } = await openOtto([
     { kind: 'tool', id: 'k1', at: new Date().toISOString(), turn: 2, tool: 'apply_patch', label: 'src/b.ts', status: 'success', files: [{ path: 'src/b.ts', change: 'edit', diff: '@@\n-x\n+y' }] },
     { kind: 'tool', id: 'k2', at: new Date().toISOString(), turn: 2, tool: 'Edit', label: '/w/ledge/src/b.ts', status: 'success', files: [{ path: '/w/ledge/src/b.ts', change: 'edit', diff: '- y\n+ z' }] }
   ]);
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   await user.click(within(screen.getByRole('navigation', { name: 'Changed files' })).getByRole('button', { name: /b\.ts/ }));
   await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="k2"]')!).getByRole('button', { name: 'View the change' }));
@@ -73,7 +88,7 @@ it('« View the change » on an absolute path finds the file a relative path ope
 });
 it('on a narrow page, Escape closes the file list and the page stays; the next Escape leaves it', async () => {
   const { user } = await openOtto();
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   await user.click(within(pane()).getByRole('button', { name: 'Files · 2' }));
   const nav = screen.getByRole('navigation', { name: 'Changed files' });
   expect(nav).toHaveClass('open');
@@ -85,7 +100,7 @@ it('on a narrow page, Escape closes the file list and the page stays; the next E
 });
 it('a held J does not walk the files: only a new press does', async () => {
   const { user } = await openOtto();
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   fireEvent.keyDown(document.body, { key: 'j', repeat: true });
   expect(pane().querySelector('.file-title code')).toHaveTextContent('src/App.tsx');
   fireEvent.keyDown(document.body, { key: 'j' });
@@ -95,8 +110,8 @@ it('before the thread is there, Changes says what the thread says, and the tab g
   const { user } = await boot({ sessions: listSessions().map(s => (s.name === 'Otto' ? { ...s, offline: true } : s)), list: true });
   await user.click(screen.getByRole('button', { name: /^Otto,/ }));
   await screen.findByText('The thread was not loaded before the connection was lost.');
+  await showChanges(user);
   expect(tab(/^Changes/).querySelector('.tab-count')).toBeNull();
-  await user.click(tab(/^Changes/));
   expect(document.querySelector('.changes-empty')).toHaveTextContent('The thread was not loaded before the connection was lost.');
   expect(screen.queryByText('No file changed')).toBeNull();
 });
@@ -106,7 +121,7 @@ it('a file without a diff, a cut diff, a renamed file', async () => {
     { kind: 'tool', id: 'c1', at: new Date().toISOString(), turn: 2, tool: 'Write', label: '/w/ledge/big.txt', status: 'success', files: [{ path: '/w/ledge/big.txt', change: 'write', diff: [...Array.from({ length: 80 }, (_, i) => `+ l${i}`), '…'].join('\n') }] },
     { kind: 'tool', id: 'r1', at: new Date().toISOString(), turn: 2, tool: 'apply_patch', label: 'src/b.ts', status: 'success', files: [{ path: 'src/b.ts', from: 'src/a.ts', change: 'edit', diff: '@@\n-x\n+y' }] }
   ]);
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   const list = within(screen.getByRole('navigation', { name: 'Changed files' }));
   await user.click(list.getByRole('button', { name: /a\.ipynb/ }));
   expect(within(pane()).getByText('This file has no recorded difference.')).toBeVisible();
@@ -118,7 +133,7 @@ it('a file without a diff, a cut diff, a renamed file', async () => {
 });
 it('nothing changed: said plainly, and Cursor named as the one that does not tell', async () => {
   const { user } = await openOtto([], 'cursor', ottoThread().filter(i => i.id !== 't3'));
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   expect(screen.getByText('Cursor Agent does not report the files it touches.')).toBeVisible();
 });
 it('a renamed file wears the colour of an edited one', () => {
@@ -136,7 +151,7 @@ it('« turn 2 » aims at the action: the thread growing as its fold opens does n
     Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => g.height });
     Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
     Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => g.top, set: (v: number) => { g.top = v; } });
-    await user.click(tab(/^Changes/));
+    await showChanges(user);
     await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
     g.top = 900;                                         // the flash brought the action to the middle
     g.height = 2200;                                     // its fold opened
@@ -150,7 +165,7 @@ it('a touch without a diff among several says so under its header', async () => 
   const { user } = await openOtto([
     { kind: 'tool', id: 'n1', at: new Date().toISOString(), turn: 2, tool: 'NotebookEdit', label: '/w/ledge/src/App.tsx', status: 'success', files: [{ path: '/w/ledge/src/App.tsx', change: 'edit' }] }
   ]);
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   expect(touchHeads().map(h => h.textContent)).toEqual(['Edit · turn 1', 'NotebookEdit · turn 2']);
   expect(touchHeads()[1]!.nextElementSibling).toHaveTextContent('No recorded difference for this action.');
   expect(touchHeads()[0]!.nextElementSibling).toHaveRole('table');
@@ -160,7 +175,7 @@ it('the diff is a table of rows, each with cells; a line says whether it was add
     { kind: 'tool', id: 'k1', at: new Date().toISOString(), turn: 2, tool: 'apply_patch', label: 'src/c.ts', status: 'success',
       files: [{ path: 'src/c.ts', change: 'edit', diff: `@@ -1,12 +1,12 @@ fn x\n-a\n+b\n${Array.from({ length: 10 }, (_, i) => ` c${i}`).join('\n')}\n-y\n+z\n@@ -40,1 +40,1 @@\n-p\n+q` }] }
   ]);
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   await user.click(within(screen.getByRole('navigation', { name: 'Changed files' })).getByRole('button', { name: /c\.ts/ }));
   const table = within(pane()).getByRole('table', { name: 'Differences' });
   const rows = within(table).getAllByRole('row');
@@ -183,7 +198,7 @@ it('a file touched by five actions: added, edited, renamed, edited, deleted by a
     { kind: 'tool', id: 'f4', at, turn: 2, tool: 'Edit', label: '/w/ledge/src/b.ts', status: 'success', files: [{ path: '/w/ledge/src/b.ts', change: 'edit', diff: '- two\n+ deux' }] },
     { kind: 'tool', id: 'f5', at, turn: 2, tool: 'apply_patch', label: 'src/b.ts', status: 'success', files: [{ path: 'src/b.ts', change: 'delete' }] }
   ]);
-  await user.click(tab(/^Changes/));
+  await showChanges(user);
   const file = within(screen.getByRole('navigation', { name: 'Changed files' })).getByRole('button', { name: /b\.ts/ });
   expect(file.querySelector('.change-letter')).toHaveTextContent('D');
   await user.click(file);

@@ -271,7 +271,7 @@ describe('the terminal and the keyboard', () => {
     onTestFinished(() => { delete (navigator as unknown as Record<string, unknown>).keyboard; });
     render(<LangProvider lang="fr"><ShortcutsHelp onClose={() => {}} /></LangProvider>);
     const key = await screen.findByText('Ctrl ²');
-    expect(key.parentElement).toHaveTextContent('Passer du fil au terminal et retour');
+    expect(key.parentElement).toHaveTextContent('Basculer entre le fil et l’écran de l’agent, le clavier suit');
     expect(screen.queryByText('Ctrl `')).toBeNull();
   });
 });

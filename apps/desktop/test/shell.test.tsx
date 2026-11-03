@@ -8,7 +8,6 @@ import { boot, closeDaemons, declarations, openProjectEditor, TWO_PROJECTS } fro
 import { LangProvider } from '../src/i18n/lang';
 import { initialNav } from '../src/nav/state';
 import { TopBar } from '../src/shell/TopBar';
-import { agentTabId, TermStore } from '../src/term/store';
 
 // « Open in Ledge » from the island, delivered by hand: the shell's event never fires outside Tauri.
 const island = vi.hoisted(() => ({ open: null as null | ((raw: string) => void) }));
@@ -21,19 +20,14 @@ beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
 describe('the Atelier shell', () => {
-  it('« Voir l\'onglet du terminal » from the island opens the session with its pane', async () => {
-    const select = vi.spyOn(TermStore.prototype, 'select');
-    try {
-      await boot({ projects: TWO_PROJECTS });
-      await waitFor(() => expect(island.open).not.toBeNull());
-      act(() => island.open!('{"kind":"terminal","id":"local:otto"}'));
-      await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible());
-      expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
-      expect(JSON.parse(localStorage.getItem('desktop.session')!)).toMatchObject({ terminal: true });
-      expect(select).toHaveBeenCalledWith('local:otto', agentTabId('local:otto'));
-      const store = select.mock.contexts.at(-1) as TermStore;
-      expect(store.active('local:otto')).toBe(agentTabId('local:otto'));
-    } finally { select.mockRestore(); }
+  it('« Voir l\'onglet du terminal » from the island opens the session on its Terminal view, the agent\'s screen', async () => {
+    await boot({ projects: TWO_PROJECTS });
+    await waitFor(() => expect(island.open).not.toBeNull());
+    act(() => island.open!('{"kind":"terminal","id":"local:otto"}'));
+    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible());
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: /^Terminal/ })).toHaveAttribute('aria-selected', 'true');
+    expect(JSON.parse(localStorage.getItem('desktop.session')!)).toMatchObject({ view: 'terminal' });
   });
 
   it('sidebar: views, projects with their tallies, Sans projet, machines, settings', async () => {

@@ -96,7 +96,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
             ? <button type="button" className="archived-pill" onClick={() => onRevealArchives?.()}><Icon d={SHELL_ICONS.archive} size={12} />{t.manage.archivedBanner.pill}</button>
             : <>{!helper && <ApprovalBadge session={session} />}<StateBadge state={helper ? helperState(helper) : botState(session)} offline={!!session.offline} /></>}
           <span className="view-actions-sep" />
-          <Button variant="ghost" size="icon" aria-pressed={terminal} aria-label={terminal ? t.top.terminalHide : t.top.terminalShow} title={terminal ? t.top.terminalHideTitle : t.top.terminalShowTitle} onClick={onTerminal}>
+          <Button variant="ghost" size="icon" aria-pressed={terminal} aria-label={terminal ? t.top.panelHide : t.top.panelShow} title={terminal ? t.top.panelHideTitle : t.top.panelShowTitle} onClick={onTerminal}>
             <Icon d={SHELL_ICONS.terminal} size={16} />
           </Button>
           {manage && !helper && !isArchived(session) && (
