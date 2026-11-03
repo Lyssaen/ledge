@@ -1,33 +1,36 @@
-import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent } from 'react';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { ptyBackend } from '../term/backend';
 import { agentMode } from '../term/mode';
+import { changesTabId } from '../term/store';
 import { TermStoreContext } from '../term/useTerms';
-import { clampTermWidth, type SessionPrefs } from './prefs';
+import { changedFiles, findFile } from './changedFiles';
+import { Changes } from './Changes';
+import { clampTermWidth, type SessionPrefs, type SessionView } from './prefs';
 import { memoKey } from './memory';
-import { SessionPage, type SessionPageProps } from './SessionPage';
-import { TermPane } from './TermPane';
+import { openShell, RightPanel, useShellIntro } from './RightPanel';
+import { SessionPage, type PageApi, type SessionPageProps } from './SessionPage';
 import { subagentOf } from './exchanges';
 import { useThread } from './useThread';
 
 /** The terminal's xterm comes with this chunk, never in the first bundle: App's terminal store makes them through it. */
 export { createSurface } from '../term/surface';
 
-/** ← / → on the terminal's handle move it this much. */
+/** ← / → on the panel's handle move it this much. */
 const TERM_STEP = 0.02;
 
-export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper' | 'onShowKids' | 'onTerminal' | 'split' | 'onSplit'> {
+export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper' | 'onShowKids' | 'onPanel' | 'split' | 'onSplit' | 'view' | 'onView' | 'files' | 'changes' | 'onAllChanges' | 'api' | 'onOpenShell'> {
   prefs: SessionPrefs; setPrefs(fn: (p: SessionPrefs) => SessionPrefs): void;
   /** « N sous-agents »: the sidebar tree unfolds this session and scrolls to it. */
   onRevealCurrent(): void;
 }
 
-/** The session place (the mockup's conversation-workspace): the page, and the terminal's column when asked for (O), as wide
- *  as its handle says, or alone once enlarged. The project's agents and their subagents are the sidebar tree's.
- *  It asks for the thread and finds the subagent of the place: live in session.helpers, else its thread row; a subagent
- *  known by neither (its thread not there yet, or gone) still gets its page, named by what is known. It lives as long as the
- *  session place: switching agent changes its props (useThread follows the id) and mounts a new SessionPage only. */
+/** The session place (Fil | Terminal v3): the page, whose left view is the thread or the agent's screen, and the right panel
+ *  when asked for (O), « ± Modifications » and the shells, as wide as its handle says, or alone once enlarged. It asks for the
+ *  thread and finds the subagent of the place: live in session.helpers, else its thread row; a subagent known by neither (its
+ *  thread not there yet, or gone) still gets its page, named by what is known. It lives as long as the session place:
+ *  switching agent changes its props (useThread follows the id) and mounts a new SessionPage only. */
 export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: WorkspaceProps): JSX.Element {
   const items = useThread(client, p.session);
   const { t } = useI18n();
@@ -35,41 +38,81 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   const id = p.nav.place.kind === 'session' ? p.nav.place.helper : undefined;
   // The same object while nothing it is read from changes: the thread is memoised on it.
   const helper = useMemo(() => (id === undefined ? null : subagentOf(p.session, items, id, unnamed)), [p.session, items, id, unnamed]);
+  const key = memoKey(p.session.id, helper?.id);
   // « N sous-agents »: the subagents show (if hidden) and the sidebar tree unfolds this session.
   const showKids = () => {
     if (!p.nav.helpers) p.dispatch({ type: 'helpers' });
     onRevealCurrent();
   };
   const store = useContext(TermStoreContext);
-  // The same answer as the pane's own, so the store attaches in the mode the pane shows.
+  // The same answer as the view's own, so the store attaches in the mode the view shows.
   const [hasBackend] = useState(() => ptyBackend() !== null);
-  // The agent's screen is attached while the pane shows it (re-asking in the same mode keeps the attachment), detached once hidden.
+  const view = prefs.view;
+  // The agent's screen is attached while the Terminal view shows it (re-asking in the same mode keeps the attachment), detached once left.
   useEffect(() => {
-    if (prefs.terminal) store?.showAgent(p.session.id, agentMode(p.session, helper, hasBackend));
+    if (view === 'terminal') store?.showAgent(p.session.id, agentMode(p.session, helper, hasBackend));
     else store?.hideAgent();
-  }, [store, prefs.terminal, p.session, helper, hasBackend]);
+  }, [store, view, p.session, helper, hasBackend]);
   useEffect(() => () => store?.hideAgent(), [store]);
-  // « Agrandir le terminal » lasts while the pane shows: hiding it forgets it.
+  // « Agrandir le panneau » lasts while the panel shows: hiding it forgets it.
   const [maxed, setMaxed] = useState(false);
   if (maxed && !prefs.terminal) setMaxed(false);
-  // The pane names a subagent as the top bar does, by its kind.
-  const sub = useMemo(() => (helper ? { id: helper.id, name: helper.kind } : null), [helper]);
-  const toggleTerminal = () => setPrefs(x => ({ ...x, terminal: !x.terminal }));
+  const togglePanel = () => setPrefs(x => ({ ...x, terminal: !x.terminal }));
+  const onView = useCallback((v: SessionView) => setPrefs(x => (x.view === v ? x : { ...x, view: v })), [setPrefs]);
+
+  /* « ± Modifications »: the files the shown agent changed, the one shown and the narrow list, for each page anew. */
+  const loaded = items !== undefined;
+  const files = useMemo(() => (items ? changedFiles(items, p.session.cwd, helper?.id) : []), [items, p.session.cwd, helper?.id]);
+  const [chg, setChg] = useState<{ key: string; file: string | null; listOpen: boolean }>({ key, file: null, listOpen: false });
+  const own = chg.key === key ? chg : { key, file: null, listOpen: false };
+  // Functional: a row clicked sets the file and closes the list in the same event.
+  const setOwn = (patch: Partial<typeof own>) => setChg(c => ({ ...(c.key === key ? c : { key, file: null, listOpen: false }), ...patch }));
+  // The file asked for (findFile), else the first.
+  const current = (own.file === null ? undefined : findFile(files, own.file, p.session.cwd)) ?? files[0];
+  const subscribe = useCallback((fn: () => void) => (store ? store.subscribe(fn) : () => {}), [store]);
+  const panelTab = useSyncExternalStore(subscribe, () => store?.active(p.session.id) ?? null);
+  const changesShown = prefs.terminal && loaded && panelTab === changesTabId(p.session.id);
+  const stepFile = (d: 1 | -1) => {
+    if (!current) return;
+    setOwn({ file: files[(files.indexOf(current) + d + files.length) % files.length]!.path });
+  };
+  // « Toutes les modifications » (the side pane's change): the panel, on Modifications, on that file.
+  const onAllChanges = (path: string) => {
+    setOwn({ file: path, listOpen: false });
+    store?.select(p.session.id, changesTabId(p.session.id));
+    if (!prefs.terminal) setPrefs(x => ({ ...x, terminal: true }));
+  };
+  // « Edit · tour 2 »: the page lights the action in the thread (it owns the thread).
+  const api = useRef<PageApi | null>(null);
+  const intro = useShellIntro(client, p.session);
+  // OMP's « Ouvrir un shell »: a shell in the right panel, shown, and the keyboard in it.
+  const onOpenShell = () => {
+    if (!store) return;
+    const shellId = openShell(store, p.session, intro);
+    if (!prefs.terminal) setPrefs(x => ({ ...x, terminal: true }));
+    requestAnimationFrame(() => store.surface(shellId)?.focus());
+  };
+  const changes = !loaded
+    ? <div className="changes-empty"><p className="muted">{p.session.offline ? t.session.thread.notLoaded : t.session.thread.loading}</p></div>
+    : <Changes files={files} current={current?.path ?? null} onFile={f => setOwn({ file: f })} onTouch={tool => api.current?.showInThread(tool)}
+        listOpen={own.listOpen} onListOpen={o => setOwn({ listOpen: o })} session={p.session} name={helper?.kind ?? p.session.name} notify={p.notify} />;
   return (
     <div className={cls('conversation-workspace', prefs.terminal && 'with-terminal', prefs.terminal && maxed && 'term-maxed')} style={{ '--term-width': prefs.termWidth } as CSSProperties}>
-      {/* Only the page starts over for each agent (its key): the terminal stays. */}
-      <SessionPage key={memoKey(p.session.id, helper?.id)} {...p} items={items} helper={helper} onShowKids={showKids} onTerminal={toggleTerminal}
-        client={client} split={prefs.split} onSplit={v => setPrefs(x => ({ ...x, split: v }))} />
-      {prefs.terminal && !maxed && <TermHandle label={t.session.terminal.resize} width={prefs.termWidth} onWidth={v => setPrefs(x => ({ ...x, termWidth: v }))} />}
+      {/* Only the page starts over for each agent (its key): the panel stays. */}
+      <SessionPage key={key} {...p} items={items} helper={helper} onShowKids={showKids} onPanel={togglePanel}
+        client={client} split={prefs.split} onSplit={v => setPrefs(x => ({ ...x, split: v }))} view={view} onView={onView} files={files}
+        changes={{ shown: changesShown, listOpen: own.listOpen, closeList: () => setOwn({ listOpen: false }), step: stepFile }}
+        onAllChanges={onAllChanges} api={api} onOpenShell={onOpenShell} />
+      {prefs.terminal && !maxed && <TermHandle label={t.session.panel.resize} width={prefs.termWidth} onWidth={v => setPrefs(x => ({ ...x, termWidth: v }))} />}
       {prefs.terminal && (
-        <TermPane client={client} session={p.session} helper={sub} notify={p.notify} maxed={maxed} onMax={() => setMaxed(m => !m)}
-          onClose={() => setPrefs(x => ({ ...x, terminal: false }))} onGoParent={() => p.dispatch({ type: 'open', id: p.session.id })} />
+        <RightPanel client={client} session={p.session} changes={changes} count={loaded ? files.length : null}
+          maxed={maxed} onMax={() => setMaxed(m => !m)} onClose={() => setPrefs(x => ({ ...x, terminal: false }))} />
       )}
     </div>
   );
 }
 
-/** The terminal column's left edge: dragged, or ← / → once focused (the column grows to the left). Each width it reaches is
+/** The right panel's left edge: dragged, or ← / → once focused (the column grows to the left). Each width it reaches is
  *  written once, bounded. */
 function TermHandle({ label, width, onWidth }: { label: string; width: number; onWidth(v: number): void }): JSX.Element {
   // Compared with the width as last written (a drag's moves come between renders).

@@ -61,13 +61,13 @@ test('Reply from the sidebar lands in the field; Enter sends the reply', async (
   await page.keyboard.press('Enter');
   await expect.poll(() => daemon.received.filter(m => m.type === 'session.reply')).toEqual([{ type: 'session.reply', id: 'luna', text: 'Port 3000' }]);
 });
-test('the terminal on O follows from agent to agent and survives a reload', async ({ page }) => {
+test('the Terminal view follows from agent to agent and survives a reload', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects });
   await page.goto('/'); await openAtelier(page);
   await open(page, 'Otto');
   await expect(page.locator('.session-page')).toBeVisible();
   daemon.preview('otto', ['$ npm test']); daemon.preview('nova', ['$ git status']);
-  await page.keyboard.press('o');
+  await page.getByRole('tab', { name: /^Terminal/ }).click();
   await expect(page.getByRole('region', { name: 'Terminal' }).getByText('$ npm test')).toBeVisible();
   await page.getByRole('tree', { name: 'Projects, branches and sessions' }).getByRole('button', { name: /^Nova/ }).click();
   // Agents run in project order, oldest first then by id: bix, echo, nova, otto, pim.
@@ -80,7 +80,7 @@ test('the terminal on O follows from agent to agent and survives a reload', asyn
   await page.keyboard.press('Alt+ArrowLeft');
   await expect(terminal.getByText('$ git status')).toBeVisible();
   await expect(terminal.getByText('$ npm test')).toHaveCount(0);
-  await page.reload();
+  await page.reload(); await openAtelier(page);
   await open(page, 'Otto');
   await expect(page.getByRole('region', { name: 'Terminal' })).toBeVisible();
 });

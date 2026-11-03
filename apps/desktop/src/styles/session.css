@@ -7,22 +7,38 @@
 /* The session place (observatory.css: .conversation-workspace, .conversation, .pane-heading, .messages, the terminal; office.css:
    the « N sous-agents » pill, .pane-meta). Departure: no rail of the project's agents on the left, the sidebar tree has them.
    First, so the session's own rules below win as in the mockup. The mockup's !important (office.css over observatory.css)
-   is not needed: the grid is declared once, here. The terminal's column is --term-width of the place (Workspace), its handle
-   in a zero-wide track on the thread's border; enlarged, the column is alone. */
+   is not needed: the grid is declared once, here. The right panel's column (Fil | Terminal v3: Modifications and shells) is
+   --term-width of the place (Workspace), its handle in a zero-wide track on the page's border. Enlarged, the panel takes the
+   whole width under the page's heading, which stays (its Fil | Terminal switch): the page lends the grid its heading alone. */
 .conversation-workspace{display:grid;grid-template-columns:minmax(0,1fr);flex:1;min-height:0}
 .conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr) 0 minmax(0,calc(var(--term-width) * 100%))}
-.conversation-workspace.term-maxed{grid-template-columns:minmax(0,1fr)}
-.term-maxed>.conversation{display:none}
+.conversation-workspace.term-maxed{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+.term-maxed>.conversation{display:contents}
+.term-maxed>.conversation>:not(.pane-heading){display:none}
+.term-maxed>.conversation>.pane-heading{background:var(--sidebar)}
 .term-handle{width:7px;margin-left:-4px;z-index:4;cursor:col-resize;position:relative;outline:none}
 .term-handle:after{content:'';position:absolute;inset:0 3px;transition:background .15s}
 .term-handle:hover:after,.term-handle:focus-visible:after,.term-handle:active:after{background:var(--ring)}
-.conversation,.terminal-pane{min-width:0;min-height:0;display:flex;flex-direction:column}
+.conversation,.right-panel,.agent-view{min-width:0;min-height:0;display:flex;flex-direction:column}
 .conversation{border-right:1px solid var(--border);background:var(--sidebar)}
 .pane-heading{height:43px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 20px;font-size:12px}
 .pane-heading>.muted{font-size:10px}
 .messages{overflow:auto;padding:24px;flex:1}
 .pane-meta{margin-left:10px;font-size:10px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.terminal-pane{background:var(--well)}
+.right-panel{background:var(--background)}
+/* The Terminal view: the agent's screen alone, full frame under the switch (Fil | Terminal v3). */
+.agent-view{flex:1;background:var(--well)}
+.agent-native{flex:1;display:grid;place-items:center;background:var(--term-bg)}
+.agent-native>div{max-width:440px;display:flex;flex-direction:column;gap:10px;align-items:center;text-align:center;font-size:13px;color:var(--muted-foreground)}
+.agent-native strong{color:var(--foreground);font-weight:500}
+.terminal-footer .footkey{color:var(--foreground)}
+/* The panel's « ± Modifications »: today's Changes view, in its narrow layout (the panel is under 640 px). */
+.panel-changes{flex:1;min-height:0;display:flex;flex-direction:column}
+.panel-changes>.changes-view,.panel-changes>.changes-empty{flex:1;min-height:0}
+/* The mockup keeps « Copier le chemin » spelled out in the panel (its narrow layout otherwise keeps the icon alone). */
+.panel-changes .file-actions .ledge-btn[data-variant=ghost]{font-size:12px!important;gap:6px!important;width:auto;padding:0 8px!important}
+/* The keyboard in the agent's screen: a blue outline (the mockup's .screen.focused). */
+.agent-view .terminal-screen:focus-within{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--info) 55%,transparent)}
 .terminal-content{padding:18px 20px;flex:1;overflow:auto;font-size:11px;line-height:21px}
 .terminal-content>.muted:first-child{font-size:10px}
 .terminal-output{white-space:pre-wrap;overflow-wrap:anywhere;margin:25px 0}
@@ -59,7 +75,7 @@
 .pane-relief{font-size:11px;color:var(--muted-foreground);white-space:nowrap}
 .pane-relief.failed{color:var(--destructive)}
 @media(max-width:1000px){.conversation-workspace.with-terminal{grid-template-columns:minmax(0,1fr)}.term-handle{display:none}}
-@media(max-width:850px){.conversation-workspace{grid-template-columns:1fr;overflow:auto;display:flex;flex-direction:column}.conversation{min-height:520px;flex-shrink:0}.terminal-pane{min-height:310px;flex-shrink:0;border-top:1px solid var(--border)}.messages{max-height:480px}}
+@media(max-width:850px){.conversation-workspace{grid-template-columns:1fr;overflow:auto;display:flex;flex-direction:column}.conversation{min-height:520px;flex-shrink:0}.right-panel{min-height:310px;flex-shrink:0;border-top:1px solid var(--border)}.messages{max-height:480px}}
 @media(max-width:540px){.messages{padding:18px}}
 
 /* Session page content */
@@ -72,6 +88,14 @@
 .view-switch button{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:calc(var(--radius-md) - 2px);font-size:12px;font-weight:500;color:var(--muted-foreground);white-space:nowrap}
 .view-switch button:hover{color:var(--foreground)}
 .view-switch button[aria-selected=true]{background:var(--sidebar);color:var(--foreground);box-shadow:0 1px 2px rgb(0 0 0/.18)}
+/* « Fil »'s badge while the agent waits for an answer on Terminal; « Terminal »'s state dot (on, reconnecting, nothing to type into). */
+.view-badge{min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--primary);color:var(--primary-foreground,#fff);font-size:10.5px;line-height:16px;text-align:center}
+.view-dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.view-dot.wait{background:var(--warning)}
+.view-dot.off{background:var(--muted-foreground)}
+/* On Terminal, the heading names where the agent's screen runs and opens it in an external terminal. */
+.session-page .pane-heading .term-chip{flex-shrink:0}
+.session-page .pane-heading .term-icon{width:28px!important;height:28px!important;color:var(--muted-foreground);flex-shrink:0;margin-left:-6px}
 .tab-count{font-size:10px;line-height:16px;min-width:18px;padding:0 5px;border-radius:4px;text-align:center;background:color-mix(in srgb,currentColor 12%,transparent)}
 .session-body{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
 /* Focused by the page when a pane tab closes (SessionPage): a landing place, not a control. */

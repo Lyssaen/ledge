@@ -80,14 +80,14 @@ describe('the main window with the Atelier detached (#21)', () => {
     expect(screen.getByRole('dialog', { name: 'New session' })).toBeVisible();
   });
 
-  it('a « Terminal » from the detached Atelier shows the session here with its pane, the window brought forward', async () => {
+  it('a « Terminal » from the detached Atelier shows the session here on its Terminal view, the window brought forward', async () => {
     const { user } = await boot();
     await user.click(screen.getByRole('button', { name: 'Detach the Atelier' }));
     await screen.findByRole('region', { name: 'The Atelier is in its own window' });
     act(() => win.hub!.terminal('local:nova'));
     expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible();
     expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
-    expect(JSON.parse(localStorage.getItem('desktop.session')!)).toMatchObject({ terminal: true });
+    expect(JSON.parse(localStorage.getItem('desktop.session')!)).toMatchObject({ view: 'terminal' });
     expect(win.show).toHaveBeenCalled();
   });
 

@@ -33,7 +33,8 @@ function page(items: ThreadItem[]) {
   return (
     <LangProvider lang="fr">
       <SessionPage session={session} helper={null} items={[prompt, ...items]} nav={nav} dispatch={() => {}} decisions={decisions} waits={new Map()}
-        actions={{} as SessionActions} memory={memory} notify={() => {}} onShowKids={() => {}} onTerminal={() => {}} split={0.5} onSplit={() => {}} client={client} />
+        actions={{} as SessionActions} memory={memory} notify={() => {}} onShowKids={() => {}} onPanel={() => {}} split={0.5} onSplit={() => {}} client={client}
+        view="thread" onView={() => {}} files={[]} changes={{ shown: false, listOpen: false, closeList: () => {}, step: () => {} }} onAllChanges={() => {}} api={{ current: null }} onOpenShell={() => {}} />
     </LangProvider>
   );
 }

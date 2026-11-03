@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import { contextShare, isArchived, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
@@ -11,11 +11,17 @@ import type { NavAction, NavState } from '../nav/state';
 import { useScreenKeys, type ScreenKeyHandler } from '../nav/screenKeys';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
-import { changedFiles, findFile } from './changedFiles';
-import { Changes } from './Changes';
+import { findFile, type ChangedFile } from './changedFiles';
+import { focusThread } from '../nav/useKeys';
+import { TermStoreContext } from '../term/useTerms';
+import { AgentView, useAgent } from './AgentView';
+import { focusAgentView } from './agentFocus';
+import { openSessionTerminal } from './terminal';
+import { Button } from '@ledge/ui/ui/Button';
+import { ICONS } from '@ledge/ui/ui/icons';
 import { memoKey, type SessionMemory } from './memory';
 import { aboutLine } from './RigItems';
-import { clampSplit } from './prefs';
+import { clampSplit, type SessionView } from './prefs';
 import { ArchivedBanner } from '../manage/ArchivedBanner';
 import type { SessionActions } from '../manage/useSessionActions';
 import { Reply } from './Reply';
@@ -44,8 +50,20 @@ export interface SessionPageProps {
   memory: SessionMemory; notify(text: string): void;
   /** « N sous-agents »: show this agent's subagents in the sidebar tree. */
   onShowKids(): void;
-  /** O: show or hide the terminal. */
-  onTerminal(): void;
+  /** O: show or hide the right panel (Modifications and shells). */
+  onPanel(): void;
+  /** The left view, the thread or the agent's screen (Fil | Terminal v3): the same for every session (desktop.session). */
+  view: SessionView; onView(v: SessionView): void;
+  /** The files the shown agent changed (Workspace, which shows them in the panel). */
+  files: readonly ChangedFile[];
+  /** The panel's « ± Modifications » tab: shown (J / K walk it), its narrow list open (Escape closes it first). */
+  changes: { shown: boolean; listOpen: boolean; closeList(): void; step(d: 1 | -1): void };
+  /** « Toutes les modifications » on the side pane's change: the panel's Modifications, on that file. */
+  onAllChanges(path: string): void;
+  /** What the panel asks of the page: « Edit · tour 2 » lights the action in the thread. */
+  api: MutableRefObject<PageApi | null>;
+  /** OMP's « Ouvrir un shell », from the Terminal view: a shell in the right panel. */
+  onOpenShell(): void;
   /** The side pane's share of the page (desktop.session, written by the Workspace's owner). */
   split: number; onSplit(v: number): void;
   /** The documents beside the thread are read through it. */
@@ -56,16 +74,17 @@ export interface SessionPageProps {
 const SETTLE_MS = 250;
 /** The « Nouveau » marker opens this far below the top of the thread. */
 const MARKER_OFFSET = 120;
-/** An action reached from the Changes view stays lit this long (session.css: session-flash). */
+/** An action reached from the Modifications tab stays lit this long (session.css: session-flash). */
 const FLASH_MS = 1800;
 
-type View = 'thread' | 'changes';
-const VIEWS: ReadonlyArray<{ view: View; icon: readonly string[] }> = [{ view: 'thread', icon: SHELL_ICONS.thread }, { view: 'changes', icon: SHELL_ICONS.diff }];
+export interface PageApi { showInThread(toolId: string): void }
 
-/** A session's page, or one of its subagents' (session.tsx SessionPage): the heading and its Thread / Changes switch, the flat
- *  thread or the changed files, the pinned request and the reply, and beside the thread the side pane's documents and
- *  changes, and on top of the thread the agent's work plan. Mounted again for each agent (Workspace's key), so what belongs
- *  to a page (unfolded actions, the view, the file shown, the pane's tabs, the work plan unfolded) starts over. */
+const VIEWS: ReadonlyArray<{ view: SessionView; icon: readonly string[] }> = [{ view: 'thread', icon: SHELL_ICONS.thread }, { view: 'terminal', icon: SHELL_ICONS.terminal }];
+
+/** A session's page, or one of its subagents' (session.tsx SessionPage): the heading and its Fil | Terminal switch, then the
+ *  flat thread, the pinned request and the reply, beside the thread the side pane's documents and changes, and on top of it
+ *  the agent's work plan; or, on Terminal, the agent's own screen alone. Mounted again for each agent (Workspace's key), so
+ *  what belongs to a page (unfolded actions, the pane's tabs, the work plan unfolded) starts over; the view does not. */
 export function SessionPage(p: SessionPageProps): JSX.Element {
   const { session, helper, items, memory } = p;
   const { t, lang } = useI18n();
@@ -96,37 +115,32 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   else if (!offline && frozenAt !== null) setFrozenAt(null);
   const times = offline ? frozenAt ?? now : now;
 
-  /* Thread / Changes. The thread stays mounted under the Changes view (hidden), its folds as the reader left them. */
-  const [view, setView] = useState<View>('thread');
-  const [file, setFile] = useState<string | null>(null);
-  const [listOpen, setListOpen] = useState(false);
+  /* Fil | Terminal. The thread stays mounted under the Terminal view (hidden), its folds and its place as the reader left them. */
+  const { view, onView, files } = p;
+  const store = useContext(TermStoreContext);
+  const agent = useAgent(session, helper);
   // A new object each time: the same row lit again (« dans le fil » twice) comes into view again.
   const [flash, setFlash] = useState<{ id: string } | null>(null);
-  const files = useMemo(() => (items ? changedFiles(items, session.cwd, helper?.id) : []), [items, session.cwd, helper?.id]);
-  // The file asked for (findFile), else the first.
-  const current = useMemo(() => (file === null ? undefined : findFile(files, file, session.cwd)) ?? files[0], [files, file, session.cwd]);
   // Back on the thread: where the reader left it, or (from « tour 2 ») the action, which the flash brings into view.
   const returning = useRef<'restore' | 'aim' | null>(null);
-  const switchView = (v: View) => {
+  const viewNow = useRef(view);
+  viewNow.current = view;
+  // A view changed from here: the thread comes back where it was left. `focus`: the keyboard follows (a click; the arrows
+  // keep it on the switch): into the agent's screen, or back to the thread.
+  const switchView = (v: SessionView, focus: boolean) => {
     if (v === view) return;
     if (v === 'thread') returning.current = 'restore';
-    setListOpen(false);
-    setView(v);
+    onView(v);
+    if (focus) requestAnimationFrame(() => (v === 'terminal' ? focusAgentView(store, session.id) : focusThread()));
   };
-  // Stable: the pane's « Toutes les modifications » (and the thread before it).
-  const showChanges = useCallback((path: string) => { setFile(path); setView('changes'); }, []);
   const showInThread = useCallback((toolId: string) => {
     returning.current = 'aim';
     // Aimed at an action, the reader no longer follows the end: the thread growing around it must not take the view away.
     follow.current = false;
-    setListOpen(false);
     setFlash({ id: toolId });
-    setView('thread');
-  }, []);
-  const stepFile = (d: 1 | -1) => {
-    if (!current) return;
-    setFile(files[(files.indexOf(current) + d + files.length) % files.length]!.path);
-  };
+    onView('thread');
+  }, [onView]);
+  p.api.current = { showInThread };
 
   /* The work plan: the shown thread's latest list (a subagent's own), folded until the reader unfolds it. */
   const todos = useMemo(() => (items ? latestTodos(items, helper?.id) : null), [items, helper?.id]);
@@ -136,18 +150,16 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const toggleTodos = useCallback(() => setTodoOpen(o => !o), []);
   const todoShown = todoOpen && todos !== null && view === 'thread';
 
-  /* The side pane: a tab per document or change opened from the thread (or from Changes, which gives way to the thread). */
+  /* The side pane: a tab per document or change opened from the thread. */
   const [tabs, setTabs] = useState<readonly PaneTab[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
-  const viewNow = useRef(view);
-  viewNow.current = view;
   // Stable: the thread is memoised on what opens a tab.
   const openTab = useCallback((tab: PaneTab) => {
     const id = tabId(tab);
     setTabs(ts => (ts.some(x => tabId(x) === id) ? ts : [...ts, tab]));
     setActiveTab(id);
-    if (viewNow.current !== 'thread') { returning.current = 'restore'; setListOpen(false); setView('thread'); }
-  }, []);
+    if (viewNow.current !== 'thread') { returning.current = 'restore'; onView('thread'); }
+  }, [onView]);
   const openDoc = useCallback((path: string) => openTab({ kind: 'doc', path }), [openTab]);
   // Arriving with a file to show (« À toi »'s source, docs/mockups/ledge-human-operator-ab-lot1.html): each arrival opens it once.
   const arrivedDoc = p.nav.place.kind === 'session' ? p.nav.place.doc : undefined;
@@ -393,28 +405,31 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   useScreenKeys(e => {
     // Taken (true): a false would hand it to navigation, which goes back.
     if (e.key === 'Escape' && e.repeat) return true;
-    if (e.key === 'Escape' && view === 'changes' && listOpen) { setListOpen(false); return true; }
+    if (e.key === 'Escape' && p.changes.listOpen) { p.changes.closeList(); return true; }
     if (e.key === 'Escape' && todoShown) { setTodoOpen(false); return true; }
     if (e.key === 'Escape' && paneShown) { closeTab(activeTab!); return true; }
     if (replyKeys.current?.(e)) return true;
-    if (e.key === 'o' || e.key === 'O') { p.onTerminal(); return true; }
+    if (e.key === 'o' || e.key === 'O') { p.onPanel(); return true; }
     const k = e.key.toLowerCase();
     if (k !== 'j' && k !== 'k') return false;
-    const walk = view === 'changes' ? files.length > 0 : paneShown && active.kind === 'diff' && files.length > 0;
+    // The panel's Modifications first, else the side pane's change beside the thread.
+    const walk = p.changes.shown ? files.length > 0 : paneShown && active.kind === 'diff' && files.length > 0;
     if (!walk) return false;
     if (e.repeat) return false;
-    (view === 'changes' ? stepFile : stepPane)(k === 'j' ? 1 : -1);
+    (p.changes.shown ? p.changes.step : stepPane)(k === 'j' ? 1 : -1);
     return true;
   });
-  // ← / → on a tab: the other view, and the focus with it.
+  // ← / → on a tab: the other view, and the focus to its tab.
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    // Alt ← / → is the previous / next session (useKeys), not this switch.
+    if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey) return;
     e.preventDefault();
-    const next: View = view === 'thread' ? 'changes' : 'thread';
-    switchView(next);
+    const next: SessionView = view === 'thread' ? 'terminal' : 'thread';
+    switchView(next, false);
     document.getElementById(`session-tab-${next}`)?.focus();
   };
 
+  const external = () => { void openSessionTerminal(p.client, session).then(ok => { if (!ok) p.notify(t.session.terminal.openFailed(session.name)); }); };
   const machine = machineOf(session);
   // The session's current task (§3.5): the one it holds, taken first, the latest.
   const held = helper === null ? (p.tasksApi?.tasks ?? []).filter(x => x.owner === session.id && !taskClosed(x)).sort((a, b) => Number(b.state === 'taken') - Number(a.state === 'taken') || b.updatedAt.localeCompare(a.updatedAt))[0] : undefined;
@@ -429,12 +444,20 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
         <div className="view-switch" role="tablist" aria-label={t.session.views.label}>
           {VIEWS.map(({ view: v, icon }) => (
             <button key={v} type="button" role="tab" id={`session-tab-${v}`} aria-selected={view === v} tabIndex={view === v ? 0 : -1}
-              onClick={() => switchView(v)} onKeyDown={onTabKey}>
-              <Icon d={icon} size={13} />{t.session.views[v]}{v === 'changes' && loaded && <span className="tab-count mono">{files.length}</span>}
+              onClick={() => switchView(v, true)} onKeyDown={onTabKey}>
+              <Icon d={icon} size={13} />{t.session.views[v]}
+              {/* The agent waits for an answer while its screen is shown: the thread, where it is answered, says so. */}
+              {v === 'thread' && view === 'terminal' && waitKind && <span className="view-badge">1</span>}
+              {v === 'terminal' && <span className={cls('view-dot', agent.dot)} aria-hidden="true" />}
             </button>
           ))}
         </div>
         <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(share !== undefined ? [t.handover.gauge(Math.round(share * 100))] : [])].filter(Boolean).join(' · ')}</span>
+        {/* On Terminal, where the agent's screen runs, and « ouvrir dans un terminal externe ». */}
+        {view === 'terminal' && agent.mode.kind !== 'native' && <span className="term-chip mono">{agent.remote ? t.session.terminal.remote(agent.host) : t.session.terminal.local}</span>}
+        {view === 'terminal' && agent.mode.kind !== 'browser' && agent.mode.kind !== 'offline' && agent.mode.kind !== 'native' && (
+          <Button variant="ghost" size="icon" className="term-icon" onClick={external} aria-label={t.session.terminal.external} title={t.session.terminal.external}><Icon d={ICONS.external.d} size={14} /></Button>
+        )}
         {/* Its relief (context handover spec §3.3): under way, done (the relief opens), or the one it relieves. */}
         {session.handover && (session.handover.state === 'done' && session.handover.to
           ? <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.handover!.to! })}>{t.handover.relievedBy(session.handover.toName ?? '')}</button>
@@ -453,7 +476,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
       <div className={cls('session-split', paneShown && 'has-pane')} style={{ '--split': `${p.split * 100}%`, '--reply-h': `${replyH}px` } as CSSProperties}>
         <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
-          <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-changes' })}>
+          <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-terminal' })}>
             <div className="messages session-thread" ref={scroller} data-thread-focus tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
               {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
               {offline && (
@@ -468,27 +491,26 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
                     flash={flash?.id ?? null} onChange={openDiff} onCapture={onCapture} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
                     convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} onReplyTo={replyTo} />}
             </div>
-            {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
-            {view === 'changes' && !loaded && <div className="changes-empty"><p className="muted">{offline ? th.notLoaded : th.loading}</p></div>}
-            {view === 'changes' && loaded && (
-              <Changes files={files} current={current?.path ?? null} onFile={setFile} onTouch={showInThread} listOpen={listOpen} onListOpen={setListOpen}
-                session={session} name={helper?.kind ?? session.name} notify={p.notify} />
+            {view === 'terminal' && (
+              <AgentView client={p.client} session={session} helper={helper ? { id: helper.id, name: helper.kind } : null} agent={agent} notify={p.notify}
+                onGoParent={() => p.dispatch({ type: 'open', id: session.id })} onOpenShell={p.onOpenShell} />
             )}
             {view === 'thread' && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
-          {!archived && held && (
+          {/* On Terminal the agent's screen is alone: the pinned task and the reply come back with the thread (one types in the screen). */}
+          {view === 'thread' && !archived && held && (
             <div className="pinned-task" role="note" aria-label={t.session.heldTask.pinned} data-task={held.id}>
               <span className="kicker mono">{t.session.notice.task}</span>
               <span className="pinned-text">{t.session.heldTask.task(held.id, held.title, held.giverName, t.chat.task.state[held.state])}</span>
               <button type="button" className="message-link" onClick={() => p.dispatch({ type: 'ledge', tab: 'tasks', task: held.id })}>{t.session.heldTask.seeTasks}</button>
             </div>
           )}
-          {!archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
+          {view === 'thread' && !archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
             notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} />}
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
-            onAllChanges={showChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} convs={convs}
+            onAllChanges={p.onAllChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} convs={convs}
             onLight={lightMessage} captures={captures} captureFocus={captureFocus} helperName={helperName} onShowInThread={showCapture} onOpenPeer={(peer, item) => p.dispatch({ type: 'open', id: peer.id, ...(item !== undefined && { item }) })} />
         )}
       </div>
