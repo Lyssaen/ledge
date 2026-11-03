@@ -7,3 +7,9 @@ export function pickTmux(platform: NodeJS.Platform, env: NodeJS.ProcessEnv, sock
   if (platform === 'win32' || env.LEDGE_PANES === 'conpty') return conptyPanes();
   return routedTmux(realTmux(socket), realTmux(null));
 }
+
+/** Agents run in the pane host (`ledge panehost`): on Windows, where there is no tmux, or anywhere with
+ *  `LEDGE_PANES=panehost` (tests). */
+export function usesPaneHost(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): boolean {
+  return platform === 'win32' || env.LEDGE_PANES === 'panehost';
+}

@@ -90,7 +90,7 @@ export function startPoller(opts: {
     if ((deadCheck || !gitSeen.has(s.id)) && s.cwd) { gitSeen.add(s.id); const g = await git(s.cwd); if (g) store.patch(s.id, { ...g, repoId: g.repoId }); }
     if (!s.tmuxSession) return;
     if (deadCheck && !(await tmux.hasSession(s.tmuxSession))) {
-      const code = tmux.exitCode?.(s.tmuxSession);
+      const code = await tmux.exitCode?.(s.tmuxSession);
       store.apply(s.id, code === undefined ? { name: 'PaneGone', at: now(), source: 'daemon' } : { name: 'SessionEnd', at: now(), source: 'daemon', exitCode: code });
       forget(s.id);
       return;
