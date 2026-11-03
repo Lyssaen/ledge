@@ -316,7 +316,7 @@ describe('phone gateway: writes', () => {
     const deny = decide('a', 'deny', PUSH);
     g.send('dev1', deny);
     await flush();
-    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'deny', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) } }]);
+    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'deny', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) }, by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
     expect(g.results('dev1').slice(-2)).toEqual([
       { type: 'operation.result', op: deny.op, status: 'received' },
       { type: 'operation.result', op: deny.op, status: 'applied' }
@@ -328,8 +328,29 @@ describe('phone gateway: writes', () => {
     const m = decide('b', 'accept', LS);
     g.send('dev1', m);
     await flush();
-    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'b', decision: 'accept', expect: { kind: 'permission', text: 'ls src', key: pendingKey(LS) } }]);
+    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'b', decision: 'accept', expect: { kind: 'permission', text: 'ls src', key: pendingKey(LS) }, by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
     expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
+  });
+
+  it('a decide names its device by the name the user gave, and a `by` the device sent is not kept', async () => {
+    const g = setup();
+    g.fm.names.set('dev1', 'iPad de G.');
+    const m = { ...decide('b', 'accept', LS), by: { kind: 'pc' } };
+    g.send('dev1', m);
+    await flush();
+    expect(g.dispatched.at(-1)).toMatchObject({ type: 'session.decide', by: { kind: 'device', id: 'dev1', name: 'iPad de G.' } });
+  });
+
+  it('device.rename names the sender only, and its next snapshot carries its id, kind and name', async () => {
+    const g = setup({ devices: ['dev1', 'dev2'] });
+    const op = randomUUID();
+    g.send('dev1', { type: 'device.rename', op, name: ' iPad salon ' });
+    await flush();
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op, status: 'applied' });
+    expect(g.fm.names.get('dev1')).toBe('iPad salon');
+    expect(g.fm.names.has('dev2')).toBe(false);
+    const snap = g.got('dev1').filter((m) => m.type === 'snapshot').at(-1) as { device?: { id?: string; kind?: string; name?: string } };
+    expect(snap.device).toMatchObject({ id: 'dev1', kind: 'phone', name: 'iPad salon' });
   });
 
   it('maps the reply of dispatch: not_taken failed, a known code rejected, an unknown one invalid, no code failed, a throw failed', async () => {
@@ -397,7 +418,7 @@ describe('phone gateway: writes', () => {
     expect(g.dispatched).toEqual([]);
     g.send('dev1', { ...decide('a', 'deny', PUSH), note: 'not this one' });
     await flush();
-    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'deny', note: 'not this one', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) } }]);
+    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'deny', note: 'not this one', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) }, by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
   });
 
   it('a reply names the request it answers: an older one, or a request it never saw, is stale', async () => {
@@ -762,7 +783,7 @@ describe('phone gateway: a high-impact accept carries a device assertion', () =>
     g.send('dev1', withAssertion(m, auth.get(rp, challenge, { counter: 1 })));
     await flush();
     expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
-    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) } }]);
+    expect(g.dispatched).toEqual([{ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'git push', key: pendingKey(PUSH) }, by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
     expect(g.dispatched[0]).not.toHaveProperty('assertion');
     expect(g.stored).toEqual(['dev1']);
     expect(g.creds.get('dev1')?.counter).toBe(1);

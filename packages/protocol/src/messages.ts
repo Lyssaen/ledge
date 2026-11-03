@@ -18,7 +18,7 @@ import { MachinesSchema } from './machines.js';
 import { IslandPrefsSchema } from './island.js';
 import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
-import { DecisionSchema, NOTE_MAX } from './decisions.js';
+import { DecidedBySchema, DecisionSchema, NOTE_MAX } from './decisions.js';
 import { DeviceNameSchema, MobileStateSchema, RelayUrlSchema } from './mobile.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
@@ -74,6 +74,8 @@ export const SessionEventSchema = z.object({
   decision: DecisionSchema.optional(),
   /** Decided: the request was refused by Ledge closing the session (its interrupt keys), not by the user's answer. */
   byClose: z.literal(true).optional(),
+  /** Decided: who answered, when the daemon typed it (absent: answered in the terminal, or an older daemon). */
+  by: DecidedBySchema.optional(),
   /** The agent's own session id when the hook names it, so the daemon can resume that conversation. */
   agentSessionId: z.string().optional()
 });
@@ -276,7 +278,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('session.decide'), id: z.string(), decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
     /** The request the user saw when deciding: refused (the request changed) unless it is still the pending one. Left out by older fronts and the island.
      *  `key` (pendingKey) covers its whole content; older fronts send kind and text only. */
-    expect: PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().max(64).optional() }).optional()
+    expect: PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().max(64).optional() }).optional(),
+    /** Who decides: set by the phone gateway for a device (over anything the device sent); left out by a local front, which means the PC. */
+    by: DecidedBySchema.optional()
   }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),

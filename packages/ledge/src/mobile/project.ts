@@ -137,7 +137,7 @@ export function toPhoneItem(item: ThreadItem): { item: ThreadItem; cut: boolean 
       break;
     }
     case 'permission':
-      out = { kind: 'permission', ...base, tool: item.tool, text: text(item.text), ...pickSet(item, ['decision']) };
+      out = { kind: 'permission', ...base, tool: item.tool, text: text(item.text), ...pickSet(item, ['decision', 'by']) };
       break;
     case 'helper':
       out = { kind: 'helper', ...base, task: text(item.task), state: item.state, ...pickSet(item, ['agentType']) };

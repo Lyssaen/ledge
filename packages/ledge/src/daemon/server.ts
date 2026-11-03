@@ -6,7 +6,7 @@ import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
-import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
+import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type DecidedBy, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
@@ -555,14 +555,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    */
   const CONFIRM_MS = opts.confirmMs ?? 3000;
   /** The answers typed from Ledge that wait for their hook, by session: the hook that comes settles the request at once. */
-  const awaited = new Map<string, { pending: Pending; decision?: Decision; settled: boolean; byHook: boolean }>();
+  const awaited = new Map<string, { pending: Pending; decision?: Decision; by?: DecidedBy; settled: boolean; byHook: boolean }>();
   /** A hook that confirms an awaited answer settles its request before it is applied: `Decided` (with the decision, so
    *  the thread names it) first, the PostToolUse on top. A request replaced meanwhile is left alone. */
   function settleByHook(id: string, ev: SessionEvent): void {
     const a = awaited.get(id); const cur = store.get(id)?.pending;
     if (!a || a.settled || !answeredBy(a.pending, ev) || !cur || pendingKey(cur) !== pendingKey(a.pending)) return;
     a.settled = true; a.byHook = true;
-    store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(a.decision ? { decision: a.decision } : {}) });
+    store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(a.decision ? { decision: a.decision } : {}), ...(a.by ? { by: a.by } : {}) });
   }
 
   /**
@@ -572,7 +572,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * same capture, so the keys match the dialog actually on screen. True once `Decided` is applied (with `decision`, so
    * the thread names it at once), false when a newer prompt arrived meanwhile and was left alone.
    */
-  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean, decision?: Decision): Promise<boolean> {
+  async function injectAndVerify(id: string, planFor: KeyPlan | ((pane: string) => KeyPlan), requirePrompt: boolean, decision?: Decision, by?: DecidedBy): Promise<boolean> {
     const s = store.get(id);
     if (!s) throw new Refusal(`unknown session ${id}`, 'unknown_session');
     if (inFlight.has(id)) throw new Refusal('a decision is already in progress', 'busy');
@@ -605,7 +605,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // A Claude Code request a hook tied to a tool is confirmed by that tool's PostToolUse or its tool_result (#35); the
       // screen, read meanwhile, still tells a step the tool does not end (question 1 of several). Any other: the screen.
       const tool = s.tool === 'claude' && decided?.source === 'hook' ? pendingTool(decided) : undefined;
-      const answer = tool ? { pending: decided!, ...(decision ? { decision } : {}), settled: false, byHook: false } : undefined;
+      const answer = tool ? { pending: decided!, ...(decision ? { decision } : {}), ...(by ? { by } : {}), settled: false, byHook: false } : undefined;
       const transcript = tool && !decided!.helperId && s.transcriptPath ? s.transcriptPath : undefined;
       const call = transcript ? claudeOpenCall(transcript, tool!) : undefined;
       const promptGone = async (): Promise<boolean> => {
@@ -628,7 +628,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (e instanceof NoteNotTyped) {
           if (await promptGone()) {
             if (answer) answer.settled = true;
-            if (!answer?.byHook && stillTheSame()) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) });
+            if (!answer?.byHook && stillTheSame()) store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}), ...(by ? { by } : {}) });
             throw e;
           }
           e = new Refusal(NOT_TAKEN, 'not_taken');
@@ -641,7 +641,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (answer) answer.settled = true;
       if (answer?.byHook) return true; // its hook settled it
       if (!stillTheSame()) return false; // a newer prompt arrived meanwhile: leave it alone
-      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}) }); return true; }
+      if (gone) { store.apply(id, { name: 'Decided', at: now(), source: 'daemon', ...(decision ? { decision } : {}), ...(by ? { by } : {}) }); return true; }
       // The client gets an `error` reply for that id (via the caller's catch), so a retry from `error` reads as failed.
       store.apply(id, { name: 'InjectFailed', at: now(), source: 'daemon', text: NOT_TAKEN });
       throw new Refusal(NOT_TAKEN, 'not_taken');
@@ -1320,7 +1320,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const { decision, note } = msg;
         // Only a decision the terminal took lands in the thread, through the `Decided` it carries: that settles the
         // permission it answered and no other (an older one answered in the terminal keeps its own state).
-        await injectAndVerify(msg.id, pane => adapter.keysFor(decision, pending, pane, note), true, decision);
+        // Who decides: the device the gateway names, else the PC (a local front).
+        await injectAndVerify(msg.id, pane => adapter.keysFor(decision, pending, pane, note), true, decision, msg.by ?? { kind: 'pc' });
         return;
       }
       case 'session.reply': {

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect as tcp } from 'node:net';
-import type { ChatAction, ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session } from '@ledge/protocol';
+import type { ChatAction, ChatClose, ChatProposal, ChatRelay, Projects, ServerMessage, Session, SessionEvent } from '@ledge/protocol';
 import { DEFAULT_ISLAND_PREFS, pendingKey } from '@ledge/protocol';
 import type { Chat } from '../src/chat/service.js';
 import { sessionKey } from '../src/auth.js';
@@ -439,6 +439,18 @@ describe('server', () => {
     expect(upd.session.state).toBe('working');
     expect(upd.session.pending).toBeUndefined();
     expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
+    c.close();
+  });
+
+  it('a decide from a local front is applied as Decided by the PC', async () => {
+    store.upsert(mk('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } }));
+    const applied: SessionEvent[] = [];
+    const apply = store.apply.bind(store);
+    store.apply = (id, ev) => { applied.push(ev); return apply(id, ev); };
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
+    await c.next('session.updated', 3000);
+    expect(applied.find(e => e.name === 'Decided')).toMatchObject({ decision: 'accept', by: { kind: 'pc' } });
     c.close();
   });
 

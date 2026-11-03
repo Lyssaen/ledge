@@ -33,7 +33,9 @@ export function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
   const messageFns = new Set<(d: string, t: string) => void>();
   const changeFns = new Set<() => void>();
   const offline = new Set<string>();
-  const pushes = new Map<string, { endpoint: string; p256dh: string; auth: string; key: string }>();
+  const pushes = new Map<string, { endpoint: string; p256dh: string; auth: string; key: string; resolved?: true }>();
+  /** The names the user gave, by device; a device's label is its id. */
+  const names = new Map<string, string>();
   let relayKey: string | null | undefined = 'K1';
   return {
     sent,
@@ -43,10 +45,13 @@ export function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
     revoked,
     receive(deviceId: string, text: string) { for (const fn of messageFns) fn(deviceId, text); },
     setDevices(next: string[]) { devices = next; for (const fn of changeFns) fn(); },
+    names,
     mobile: {
+      deviceInfo: (id: string) => (devices.includes(id) ? { label: id, kind: 'phone' as const, ...(names.has(id) ? { name: names.get(id)! } : {}) } : null),
+      rename(id: string, name: string) { if (!devices.includes(id)) throw new Error('no such device'); names.set(id, name.trim()); for (const fn of changeFns) fn(); },
       async send(deviceId: string, text: string) { sent.push([deviceId, text]); return devices.includes(deviceId); },
       pushOf: (id: string) => pushes.get(id) ?? null,
-      setPush(id: string, p: { endpoint: string; p256dh: string; auth: string; key: string } | null) { if (p) pushes.set(id, p); else pushes.delete(id); for (const fn of changeFns) fn(); },
+      setPush(id: string, p: { endpoint: string; p256dh: string; auth: string; key: string; resolved?: true } | null) { if (p) pushes.set(id, p); else pushes.delete(id); for (const fn of changeFns) fn(); },
       relayPushKey: () => relayKey,
       async revoke(id: string) { revoked.push({ id, sentBefore: sent.length }); devices = devices.filter(d => d !== id); for (const fn of changeFns) fn(); },
       onMessage(fn: (d: string, t: string) => void) { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
