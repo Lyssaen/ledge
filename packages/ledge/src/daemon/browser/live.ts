@@ -41,7 +41,7 @@ interface Track {
   pageSeq: number;
   image?: Image;
   watchers: Set<BrowserSink>;
-  film?: { targetId: string; sessionId: string; lastCastAt: number; lastData?: string; delay: number };
+  film?: { targetId: string; sessionId: string; startedAt: number; lastCastAt: number; lastData?: string; delay: number };
   filming?: Promise<void>;
   captureTimer?: NodeJS.Timeout; stillTimer?: NodeJS.Timeout;
   lastCaptureAt: number; capturing: boolean;
@@ -51,8 +51,6 @@ interface Track {
 /** The agent's tabs: pages, not Chrome's own (its omnibox popup, devtools, extensions). */
 const agentPage = (info: { type?: unknown; url?: unknown }): boolean =>
   info.type === 'page' && typeof info.url === 'string' && !/^(?:chrome|chrome-untrusted|chrome-extension|devtools|edge):/i.test(info.url);
-/** An undated frame this soon after its tab's navigation may be of either page. */
-const UNDATED_MS = 500;
 const cut = (s: string | undefined, max: number): string | undefined => (s === undefined ? undefined : s.slice(0, max));
 
 /**
@@ -147,7 +145,14 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       if (!agentPage(info)) { if (was) { t.pages.delete(info.targetId); settle(t); } return; }
       const url = info.url ?? '', title = info.title ?? '';
       if (was && was.url === url && was.title === title) return;
+      const nav = was?.nav;
       see(t, info.targetId, url, title);
+      // The filmed tab went to another address: filmed anew, so that what its film sends next is of the new page.
+      const f = t.film;
+      if (f && f.targetId === info.targetId && nav !== undefined && t.pages.get(info.targetId)!.nav !== nav && t.cdp) {
+        const cdp = t.cdp; delete t.film; stopStill(t);
+        void cdp.call('Page.stopScreencast', {}, f.sessionId).catch(() => {}).then(() => cdp.call('Target.detachFromTarget', { sessionId: f.sessionId }).catch(() => {}));
+      }
       settle(t);
       scheduleCapture(t);
     } else if (e.method === 'Target.targetDestroyed') {
@@ -313,9 +318,9 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     const p = t.pages.get(f.targetId);
     if (!p) return;
     const drawn = typeof meta?.timestamp === 'number' ? meta.timestamp * 1000 : undefined;
-    // Undated (its time is optional in CDP) and just after a navigation: of which page, nobody can say; let go (the
-    // images taken when the film is quiet fill in).
-    if (drawn === undefined && p.nav > 0 && now() - p.navAt < UNDATED_MS) return;
+    // Undated (its time is optional in CDP) on a film started before the tab's last navigation: of which page, nobody can
+    // say; let go. The film is started again on each navigation of its tab, and the images taken while it is quiet fill in.
+    if (drawn === undefined && p.nav > 0 && f.startedAt <= p.navAt) return;
     f.lastCastAt = now(); f.lastData = data;
     const nav = drawn !== undefined && drawn < p.navAt && p.nav > 0 ? p.nav - 1 : p.nav;
     frame(t, data, { url: p.url, title: p.title, page: pageId(p, nav) }, meta?.deviceWidth, meta?.deviceHeight);
@@ -351,7 +356,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       if (!want || !cdp) return;
       try {
         const { sessionId } = await cdp.call('Target.attachToTarget', { targetId: want, flatten: true }) as { sessionId: string };
-        t.film = { targetId: want, sessionId, lastCastAt: now(), delay: fastMs };
+        t.film = { targetId: want, sessionId, startedAt: now(), lastCastAt: now(), delay: fastMs };
         await cdp.call('Page.startScreencast', { format: 'jpeg', quality: 60, maxWidth: 1280, maxHeight: 800 }, sessionId);
         scheduleStill(t, quietMs);
       } catch (e) { log(`browser of ${t.id}: no film (${(e as Error).message})`); delete t.film; }

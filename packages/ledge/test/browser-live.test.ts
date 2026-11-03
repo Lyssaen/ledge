@@ -438,14 +438,21 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
       expect(late.every(m => m.type === 'browser.frame' && m.page === '2.0')).toBe(true);
       await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(2));
       const film1 = b.calls.filter(c => c.method === 'Page.startScreencast')[1]!.sessionId;
-      // The first tab navigates: page 1.1. A frame Chrome drew before the navigation, arriving after it, is still 1.0.
+      // The first tab navigates: page 1.1, and its film starts anew. Whatever its old film still sends, dated or not, is
+      // never shown as the new page; the new film's frames are 1.1.
       await advance(10);
       const before = clock / 1000 - 0.005;
       b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/b', 'B');
       expect(last()).toMatchObject({ url: 'http://localhost/b', page: '1.1' });
       b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/old', sessionId: 3, metadata: { timestamp: before } } });
-      b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/new', sessionId: 4, metadata: { timestamp: clock / 1000 + 0.005 } } });
-      expect(got.filter(m => m.type === 'browser.frame' && m.live).slice(-2).map(m => m.type === 'browser.frame' ? [m.data, m.page] : [])).toEqual([['/9j/old', '1.0'], ['/9j/new', '1.1']]);
+      b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/old-undated', sessionId: 4 } });
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(3));
+      const film1b = b.calls.filter(c => c.method === 'Page.startScreencast')[2]!.sessionId;
+      b.emit({ method: 'Page.screencastFrame', sessionId: film1b, params: { data: '/9j/new', sessionId: 5, metadata: { timestamp: clock / 1000 + 0.005 } } });
+      const frames = got.filter(m => m.type === 'browser.frame' && m.live).map(m => m.type === 'browser.frame' ? [m.data, m.page] : []);
+      expect(frames.filter(([, p]) => p === '1.1')).toEqual([['/9j/new', '1.1']]);
+      expect(frames.some(([d]) => d === '/9j/old-undated')).toBe(false);
+      expect(frames.filter(([d]) => d === '/9j/old').every(([, p]) => p === '1.0')).toBe(true);
       svc.stop();
     });
 
@@ -473,12 +480,18 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
       b.view.release!();
       await advance(10);
       expect(got.filter(m => m.type === 'browser.frame' && m.live)).toEqual([]);
-      // An undated frame right after that navigation: of which page, unknown; not sent. Dated, or later: sent as 1.2.
+      // The film of the tab that navigated is stopped and started anew. An undated frame of the old film, however late, is
+      // of no known page: never sent. An undated frame of the new film is of the new page (1.2).
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(2));
+      expect(b.calls).toContainEqual({ method: 'Page.stopScreencast', params: {}, sessionId: film });
+      const film2 = b.calls.filter(c => c.method === 'Page.startScreencast')[1]!.sessionId;
+      const sent = () => got.filter(m => m.type === 'browser.frame' && m.live).map(m => m.type === 'browser.frame' ? [m.data, m.page] : []);
       b.emit({ method: 'Page.screencastFrame', sessionId: film, params: { data: '/9j/undated', sessionId: 1 } });
-      expect(got.filter(m => m.type === 'browser.frame' && m.live)).toEqual([]);
       await advance(600);
-      b.emit({ method: 'Page.screencastFrame', sessionId: film, params: { data: '/9j/later', sessionId: 2 } });
-      expect(got.filter(m => m.type === 'browser.frame' && m.live).map(m => m.type === 'browser.frame' ? [m.data, m.page] : [])).toEqual([['/9j/later', '1.2']]);
+      b.emit({ method: 'Page.screencastFrame', sessionId: film, params: { data: '/9j/old-late', sessionId: 2 } });
+      expect(sent().filter(([d]) => d === '/9j/undated' || d === '/9j/old-late')).toEqual([]);
+      b.emit({ method: 'Page.screencastFrame', sessionId: film2, params: { data: '/9j/new', sessionId: 3 } });
+      expect(sent().at(-1)).toEqual(['/9j/new', '1.2']);
       svc.stop();
     });
 
