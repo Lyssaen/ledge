@@ -130,7 +130,9 @@ const checks: Check[] = [
     }
     await until(id, idle, 120_000, 'question-answered');
     save(id, 'question-after');
-    const said = (await thread(id)).filter(x => x.kind === 'message').map(x => (x as { text: string }).text).at(-1) ?? '';
+    // The thread gets the answer once the Stop hook ran, which can come seconds after the pane is at rest.
+    let said = '';
+    for (let n = 0; n < 20 && !/bleu/i.test(said); n++) { said = (await thread(id)).filter(x => x.kind === 'message').map(x => (x as { text: string }).text).at(-1) ?? ''; if (!/bleu/i.test(said)) await sleep(500); }
     if (!/bleu/i.test(said)) throw new Error(`answered option ${i + 1}, the agent said ${JSON.stringify(said.slice(0, 80))}`);
     return `option ${i + 1} (Bleu) chosen, the agent said ${JSON.stringify(said.slice(0, 40))}`;
   } },
