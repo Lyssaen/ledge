@@ -1,0 +1,9 @@
+# Text files are checked out with LF everywhere: Git for Windows defaults to CRLF (core.autocrlf=true), which broke the
+# pane fixtures the adapters are tested on (Windows spike).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary

@@ -94,6 +94,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Answers `session.commands`: the slash commands a session's agent offers. */ commands: z.boolean().optional(),
   /** Takes `approval` on an OMP `session.launch` (auto mode). */ ompApproval: z.boolean().optional(),
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
+  /** Node's `process.platform`: `win32` is native Windows, where a front hides what that mode does not offer yet (absent from older daemons). */ platform: z.string().optional(),
   /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
   /** Answers `openrig.roles`, `openrig.role` and `openrig.roleFile`: reads OpenRig's roles (agent specs). */ openrigRoles: z.boolean().optional(),
   /** Answers `openrig.row`: a queue row's state, for the OpenRig task cards of a thread. */ openrigRows: z.boolean().optional(),
