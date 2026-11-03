@@ -27,7 +27,10 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   try { live = new Set(await tmux.listSessions()); }
   catch (e) { log(`startup prune skipped, tmux unavailable: ${(e as Error).message}`); }
   if (live) for (const s of store.all()) {
-    if (s.tmuxSession && !live.has(s.tmuxSession)) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' });
+    if (!s.tmuxSession || live.has(s.tmuxSession) || s.state === 'exited') continue;
+    // The pane host remembers how a pane it kept ended while no daemon ran (Windows); tmux does not.
+    const code = await Promise.resolve(tmux.exitCode?.(s.tmuxSession)).catch(() => undefined);
+    store.apply(s.id, code === undefined ? { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' } : { name: 'SessionEnd', at: new Date().toISOString(), source: 'daemon', exitCode: code });
   }
   // An OMP process lives and dies with this daemon: after a restart its session is over, resumable from its journal.
   for (const s of store.all()) {
