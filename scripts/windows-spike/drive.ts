@@ -80,21 +80,21 @@ async function turn(id: string, text: string, label: string, ms = 180_000) {
   return seen;
 }
 
-const LONG = Array.from({ length: 24 }, (_, i) => `Ligne ${i + 1} : le renard brun et rapide saute par-dessus le chien paresseux, encore et encore, ${'·'.repeat(10)} fin.`).join('\n') + '\nRéponds seulement OK.';
+const LONG = Array.from({ length: 24 }, (_, i) => `Ligne ${i + 1} : le renard brun et rapide saute par-dessus le chien paresseux, encore et encore, à côté du pré, fin.`).join('\n') + '\nRéponds seulement OK.';
 
 const checks: Check[] = [
   { n: 2, name: 'prompt', run: async id => {
     const a = await turn(id, 'Réponds seulement OK.', 'prompt-short');
     const b = await turn(id, LONG, 'prompt-long');
     const prompts = (await thread(id)).filter(i => i.kind === 'prompt').map(i => (i as { text: string }).text);
-    const long = prompts.filter(p => p.includes('Ligne 24'));
-    if (long.length !== 1) throw new Error(`the long prompt arrived ${long.length} times`);
-    if (long[0]!.replace(/\s+/g, ' ').trim() !== LONG.replace(/\s+/g, ' ').trim()) throw new Error(`the long prompt arrived changed (${long[0]!.length} vs ${LONG.length} chars)`);
     // Check 3 rides on these turns: working while it runs, idle after.
     result(3, 'states', a.includes('working') && b.includes('working') && idle(sessions.get(id)!), `short ${a.join('→')}, long ${b.join('→')}`);
     // Check 6: the prompts in the thread come from the agent's hooks.
     const s = sessions.get(id)!;
     result(6, 'hooks', !!s.lastHookAt && prompts.length >= 2, `lastHookAt ${s.lastHookAt ?? 'none'}, ${prompts.length} prompts in the thread`);
+    const long = prompts.filter(p => p.includes('Ligne 24'));
+    if (long.length !== 1) throw new Error(`the long prompt arrived ${long.length} times`);
+    if (long[0]!.replace(/\s+/g, ' ').trim() !== LONG.replace(/\s+/g, ' ').trim()) throw new Error(`the long prompt arrived changed (${long[0]!.length} vs ${LONG.length} chars)`);
     return `2 prompts submitted once each; the 2 KB one whole (${LONG.length} chars)`;
   } },
   { n: 4, name: 'permission', run: async id => {
