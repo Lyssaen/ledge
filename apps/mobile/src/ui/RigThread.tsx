@@ -41,7 +41,7 @@ function Who({ lead, who, children }: { lead: string; who: RigWho; children?: Re
 }
 
 /** « Brut » and the raw it unfolds. */
-function useRaw(raw: RigRaw | undefined) {
+export function useRaw(raw: RigRaw | undefined) {
   const [open, setOpen] = useState(false);
   const toggle = raw && (
     <button type="button" aria-expanded={open} onClick={() => setOpen(o => !o)} className={LINK}>{raw.label}</button>

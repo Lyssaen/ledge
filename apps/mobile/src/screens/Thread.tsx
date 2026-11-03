@@ -13,6 +13,7 @@ import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
 import { ReplyView } from '../ui/ReplyView';
 import { RigItem } from '../ui/RigThread';
+import { TaskCard } from '../ui/TaskCard';
 import { PhoneThumbs } from '../ui/PhoneThumbs';
 import { useAttachments } from '../ui/useAttachments';
 import { Checklist } from './Checklist';
@@ -59,6 +60,7 @@ function Bubble({ item, store, storage }: { item: ThreadItem; store: MobileStore
         {item.cut && <Cut align="start" />}
       </div>
     );
+    case 'task': return <TaskCard task={item.task} cut={item.cut} />;
     case 'capture': {
       const first = item.images[0];
       return (
