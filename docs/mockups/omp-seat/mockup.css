@@ -1,0 +1,65 @@
+/* The mockup's own chrome (bar, notes, frames) and the seat page's proposed « no thread » line. */
+:root { font-family: 'Geist', system-ui, sans-serif; --grow: cubic-bezier(.2,.8,.2,1); }
+:root[data-theme=dark] { color-scheme: dark; }
+:root[data-theme=light] { color-scheme: light; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--background); color: var(--foreground); font-size: 14px; line-height: 20px; }
+button, input { font: inherit; }
+button:not(.ledge-btn) { border: 0; background: none; color: inherit; cursor: pointer; }
+code { font-family: 'Geist Mono', monospace; font-size: .92em; }
+
+.mk-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 10px 20px; background: var(--background); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.mk-bar strong { font-size: 13px; }
+.mk-fill { flex: 1; }
+.mk-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--well); align-self: flex-start; }
+.mk-seg button { padding: 3px 10px; border-radius: var(--radius-sm); font-size: 12px; color: var(--muted-foreground); }
+.mk-seg button[aria-checked=true], .mk-seg button[aria-selected=true] { background: var(--muted); color: var(--foreground); }
+.mk-main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; padding: 18px 20px 40px; align-items: start; }
+.mk-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mk-app { border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--background); overflow: hidden; }
+.mk-notes { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 64px; }
+.mk-card { border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); padding: 14px 16px; font-size: 12.5px; line-height: 18px; }
+.mk-card h3 { margin: 0 0 8px; font-size: 13.5px; }
+.mk-card ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+.mk-kicker { margin: 0 0 4px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); font-weight: 600; }
+.mk-card code { background: var(--well); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+
+/* Desktop: the sidebar beside the seat's page. */
+.mk-desk { display: grid; grid-template-columns: 288px minmax(0, 1fr); height: 600px; }
+.mk-sidebar { width: 288px; height: 100%; }
+.st-row.off .st-main strong { color: var(--muted-foreground); }
+.mk-page { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.mk-page-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.mk-page-id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mk-page-id strong { font-size: 14px; font-weight: 600; }
+.mk-page-id .mono { font: 11.5px 'Geist Mono', monospace; color: var(--muted-foreground); }
+.mk-page-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(220px, .8fr) minmax(0, 1.2fr); }
+/* Proposed: the thread's place, saying why there is none. */
+.mk-nothread { align-self: start; margin: 18px; display: flex; gap: 10px; padding: 12px 14px; border: 1px dashed var(--input); border-radius: var(--radius-lg); color: var(--muted-foreground); font-size: 12.5px; line-height: 18px; }
+.mk-nothread p { margin: 0; }
+.mk-nothread strong { color: var(--foreground); font-weight: 500; }
+.mk-nothread svg { flex: none; margin-top: 1px; }
+.mk-term { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border); background: var(--term-bg); }
+.mk-term-tabs { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--background); font-size: 12px; }
+.mk-term-tab { padding: 3px 9px; border-radius: var(--radius-sm); background: var(--muted); color: var(--foreground); }
+.mk-term-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted-foreground); font: 11px 'Geist Mono', monospace; }
+.mk-term-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+.mk-term-body { flex: 1; margin: 0; padding: 12px 14px; overflow: auto; color: var(--term-fg); font: 12px/17px 'Geist Mono', monospace; white-space: pre-wrap; }
+.mk-caret { color: var(--term-fg); animation: mk-blink 1s steps(1) infinite; }
+@keyframes mk-blink { 50% { opacity: 0; } }
+
+/* TUI frames. */
+.mk-tui { border-radius: var(--radius-xl); overflow: auto; border: 1px solid var(--border); }
+.tui-dark { --t-fg: #e6e0dc; --t-dim: #8f8681; --t-faint: #5f5854; --t-line: #3a3532; --t-sel: #2b2725; --t-coral: #f07a62; --t-blue: #7fb2ec; --t-red: #f0806e; --t-yellow: #e6c46a; --t-green: #86cf9d; --t-violet: #b9a2f0; --t-bar: #1f1d1b; --t-key: #2c2926; background: #141211; }
+.tui-light { --t-fg: #24201d; --t-dim: #6b625d; --t-faint: #9b928c; --t-line: #cfc6be; --t-sel: #e8e1da; --t-coral: #c44a2f; --t-blue: #2c64b0; --t-red: #c2412f; --t-yellow: #8a6100; --t-green: #23824b; --t-violet: #6a4bc4; --t-bar: #ece6e0; --t-key: #e3dcd6; background: #faf7f4; }
+.tt-wrap { padding: 12px 14px; }
+.tt { margin: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; line-height: 17px; white-space: pre; width: max-content; color: var(--t-fg); }
+
+.mk-texts { display: block; }
+.mk-texts table { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 18px; }
+.mk-texts th, .mk-texts td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.mk-texts th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-foreground); }
+.mk-texts td:first-child { width: 28%; }
+.mk-texts td code { font-size: 11px; color: var(--muted-foreground); }
+
+@media (max-width: 1200px) { .mk-main { grid-template-columns: 1fr; } .mk-notes { position: static; } }
