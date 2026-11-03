@@ -15,13 +15,16 @@ for (const d of delays.map(Number)) {
   const t = Date.now();
   await panes.sendText('c', process.env.BRACKET ? `\x1b[200~${LONG}\x1b[201~` : LONG);
   const typedMs = Date.now() - t;
+  // With WAITDRAFT: first wait for Codex to show the whole draft (the paste folded, or the text in the input line).
+  let draftMs = -1;
+  if (process.env.WAITDRAFT) { const t1 = Date.now(); while (Date.now() - t1 < 10000) { const p = (await panes.capture('c', 200)) ?? ''; const input = p.split('\n').filter(l => /^›/.test(l)).at(-1) ?? ''; if (/\[Pasted Content \d+ chars\]/.test(input)) { draftMs = Date.now() - t1; break; } await sleep(50); } }
   await sleep(d);
   await panes.sendKeys('c', ['Enter']);
   await sleep(2500);
   const pane = (await panes.capture('c', 200)) ?? '';
   const submitted = /esc to interrupt|Working|Worked for|^• /m.test(pane) && !/\[Pasted Content/.test(pane.split('\n').filter(l => /^›/.test(l)).at(-1) ?? '');
   const draftHasText = pane.split('\n').some(l => /^›\s+\S/.test(l) && /Ligne/.test(l));
-  console.log(JSON.stringify({ delayMs: d, typedMs, submitted, draftStillHolds: draftHasText && !submitted }));
+  console.log(JSON.stringify({ delayMs: d, typedMs, draftMs, submitted, draftStillHolds: draftHasText && !submitted }));
   if (process.env.SHOW) console.log(pane.split('\n').filter(l => l.trim() && !/[⣿⠿⢸]/.test(l)).slice(-14).map(l => '|' + l.slice(0, 160)).join('\n'));
   await panes.killSession('c');
 }
