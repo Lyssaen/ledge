@@ -205,3 +205,19 @@ describe('SidebarMenuHost on the Archives, some on a machine that cannot archive
     expect(request).toHaveBeenCalledWith('delete', ['a1']);
   });
 });
+
+describe('no native menu in the sidebar', () => {
+  it('a right click on an empty place of the sidebar opens nothing and prevents the native menu', async () => {
+    const { side } = await boot({ sessions: [otto], daemon: CAN });
+    expect(fireEvent.contextMenu(side.getByRole('region', { name: 'Archives' }).parentElement!)).toBe(false);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('a right click in the archive filter keeps the native menu', async () => {
+    const five = ['Nia', 'Ned', 'Noa', 'Nim', 'Nox'].map((name, i) => archived(`a${i}`, name));
+    const { side, user } = await boot({ sessions: [otto, ...five], daemon: CAN });
+    await user.click(archivesHeader(side));
+    expect(fireEvent.contextMenu(archivesOf(side).getByRole('searchbox', { name: 'Filter the archives' }))).toBe(true);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+});

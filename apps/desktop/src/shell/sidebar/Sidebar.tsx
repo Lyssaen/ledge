@@ -149,7 +149,9 @@ export function Sidebar(p: {
   const active = activeCount(p.sessions);
   const homeOn = place.kind === 'home';
   return (
-    <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}>
+    // No webview menu anywhere in the sidebar: a row with a menu opens it, elsewhere a right click does nothing; a text field keeps its own (copy, paste).
+    <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}
+      onContextMenu={e => { if (!(e.target instanceof Element && e.target.closest('input, textarea, [contenteditable="true"]'))) e.preventDefault(); }}>
       <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
         <button type="button" className="st-ledge-entry" aria-current={homeOn ? 'page' : undefined} aria-label={t.side.ledgeHome} title={t.side.ledgeHome} onClick={() => p.dispatch({ type: 'ledge' })}>
           <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
@@ -202,7 +204,8 @@ export function Sidebar(p: {
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>}
         {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
-          dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []} />}
+          dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []}
+          onMenu={(id, at, opener) => p.menu.open(id, at, opener)} />}
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}

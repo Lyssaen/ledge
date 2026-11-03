@@ -7,6 +7,7 @@ import type { NavAction } from '../../nav/state';
 import type { SidebarOpenRig } from '../../openrig/sidebarState';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
+import { menuPoint } from './menuPoint';
 import { SessionBot } from '../SessionBot';
 
 const KERNEL = 'kernel';
@@ -31,11 +32,13 @@ const tagWord = (t: { side: { kernelTag: Record<'ready' | 'starting' | 'stopped'
  * with the kernel's real state; then « Rigs », one row per rig with its seats under it, and the header's options. A seat that ended
  * is left out. Without a seat, the box OpenRig's state calls for: stopped, starting, failed, or no rig yet.
  */
-export function RigGroups({ sessions, current, paused, dispatch, openrig, dense, onToggleDense, asks = [] }: {
+export function RigGroups({ sessions, current, paused, dispatch, openrig, dense, onToggleDense, asks = [], onMenu }: {
   sessions: readonly Session[]; current: string | null; paused: boolean; dispatch: (a: NavAction) => void;
   openrig?: SidebarOpenRig | undefined; dense: boolean; onToggleDense(): void;
   /** What OpenRig's rigs ask the person: the asking seat's row says so in red, and its rig counts it (docs/mockups/ledge-human-operator-ab.html). */
   asks?: readonly HumanAsk[];
+  /** A seat's session menu (right click): the session, where, and the control the focus goes back to. */
+  onMenu?(id: string, at: { x: number; y: number }, opener: HTMLElement | null): void;
 }): JSX.Element | null {
   const { t } = useI18n();
   const o = t.openrig;
@@ -49,7 +52,8 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
   const askOf = (s: Session) => markOf(asks.filter(a => s.rig !== undefined && isAskSeat(s, a.from.seat)));
   const launch = () => dispatch({ type: 'openrig', section: 'rigs', open: { launch: true } });
   const row = (s: Session, depth: number) => (
-    <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel', s.offline && 'off')} style={{ '--d': depth } as CSSProperties}>
+    <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel', s.offline && 'off')} style={{ '--d': depth } as CSSProperties}
+      onContextMenu={onMenu ? e => { e.preventDefault(); onMenu(s.id, menuPoint(e, e.currentTarget), e.currentTarget.querySelector<HTMLElement>('.st-main')); } : undefined}>
       <span className="st-gap" />
       <span className="st-bot"><SessionBot session={s} size={18} paused={paused} /></span>
       <button type="button" className="st-main" onClick={() => dispatch({ type: 'open', id: s.id })}>
