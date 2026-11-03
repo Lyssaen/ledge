@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync, lstatSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { enableLive, playwrightConfigPath } from '../src/daemon/browser/enable.js';
@@ -54,14 +54,27 @@ describe('enableLive: « Activer le direct… », the one line Ledge adds to the
     }
   });
 
+  it('the file keeps its permissions; a new one is the owner\'s only', async () => {
+    settings({ PLAYWRIGHT_MCP_CONFIG: config });
+    const mode = () => statSync(config).mode & 0o777;
+    expect(await enableLive('r', home)).toMatchObject({ outcome: 'enabled' });
+    expect(mode()).toBe(0o600);
+    for (const m of [0o600, 0o640, 0o644]) {
+      writeFileSync(config, '{"browser":{"launchOptions":{"args":[]}}}'); chmodSync(config, m);
+      expect(await enableLive('r', home)).toMatchObject({ outcome: 'enabled' });
+      expect(mode()).toBe(m);
+    }
+  });
+
   it('a config kept elsewhere behind a link: the file it points to changes, the link stays', async () => {
     const real = join(home, 'dotfiles', 'playwright.json');
     mkdirSync(join(home, 'dotfiles')); mkdirSync(join(home, '.config', 'playwright-mcp'), { recursive: true });
-    writeFileSync(real, '{}');
+    writeFileSync(real, '{}'); chmodSync(real, 0o600);
     symlinkSync(real, config);
     settings({ PLAYWRIGHT_MCP_CONFIG: config });
     expect(await enableLive('r', home)).toMatchObject({ outcome: 'enabled' });
     expect(lstatSync(config).isSymbolicLink()).toBe(true);
     expect(JSON.parse(readFileSync(real, 'utf8'))).toEqual({ browser: { launchOptions: { args: ['--remote-debugging-port=0'] } } });
+    expect(statSync(real).mode & 0o777).toBe(0o600);
   });
 });

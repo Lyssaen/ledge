@@ -14,6 +14,15 @@ import { z } from 'zod';
  * `live`: at least one of the agent's tabs is open; a `browser.watch` films it.
  * `closed`: it was live and is not any more; `closed` says how, `image` the last image kept, if any.
  */
+/** The live browser is this machine's only (lot 1): a `ledge bridge` and an SSH link carry none of its messages either way. */
+export const isBrowserMessage = (type: string): boolean => type.startsWith('browser.');
+/** A snapshot crossing a bridge or an SSH link: the peer's browsers are not offered, whatever its daemon can do. */
+export function withoutBrowserLive<T extends { type: string; daemon?: { browserLive?: boolean } }>(msg: T): T {
+  if (msg.type !== 'snapshot' || !msg.daemon?.browserLive) return msg;
+  const { browserLive: _, ...daemon } = msg.daemon;
+  return { ...msg, daemon };
+}
+
 export const BrowserStateSchema = z.enum(['none', 'off', 'live', 'closed']);
 export type BrowserState = z.infer<typeof BrowserStateSchema>;
 

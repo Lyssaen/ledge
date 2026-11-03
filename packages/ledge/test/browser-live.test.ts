@@ -129,6 +129,8 @@ function fakeBrowser(pages: { id: string; url: string; title: string }[] = []) {
   const listeners: ((e: CdpEvent) => void)[] = [];
   const closes: (() => void)[] = [];
   let closed = false, next = 0, shot = 0;
+  /** What the next screenshots show: a new image each time unless the page is set to stand still. */
+  const view = { still: null as string | null };
   const cdp: Cdp = {
     async call(method, params = {}, sessionId) {
       if (!CDP_ALLOWED.has(method)) throw new CdpRefused(method);
@@ -136,7 +138,7 @@ function fakeBrowser(pages: { id: string; url: string; title: string }[] = []) {
       calls.push({ method, params, ...(sessionId ? { sessionId } : {}) });
       if (method === 'Target.getTargets') return { targetInfos: pages.map(p => ({ targetId: p.id, type: 'page', url: p.url, title: p.title })) };
       if (method === 'Target.attachToTarget') return { sessionId: `S${++next}` };
-      if (method === 'Page.captureScreenshot') return { data: `/9j/shot${++shot}` };
+      if (method === 'Page.captureScreenshot') return { data: view.still ?? `/9j/shot${++shot}` };
       return {};
     },
     onEvent(fn) { listeners.push(fn); },
@@ -144,7 +146,7 @@ function fakeBrowser(pages: { id: string; url: string; title: string }[] = []) {
     close() { if (closed) return; closed = true; for (const fn of closes) fn(); }
   };
   return {
-    cdp, calls,
+    cdp, calls, view,
     emit(e: CdpEvent) { for (const fn of listeners) fn(e); },
     tab(method: 'Target.targetCreated' | 'Target.targetInfoChanged', id: string, url: string, title = '', type = 'page') {
       const i = pages.findIndex(p => p.id === id);
@@ -173,7 +175,7 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
 
   function service(fs: ProcFs, browser?: ReturnType<typeof fakeBrowser>, panes: Record<string, number> = { 'ledge-otto': 100 }) {
     const connected: string[] = [];
-    const svc = createBrowserLive({ store, panePid: async n => panes[n] ?? null, emit: m => emitted.push(m), procfs: fs, now, intervalMs: 5000, debounceMs: 1000, captureMinMs: 5000, stillMs: 3000,
+    const svc = createBrowserLive({ store, panePid: async n => panes[n] ?? null, emit: m => emitted.push(m), procfs: fs, now, intervalMs: 5000, debounceMs: 1000, captureMinMs: 5000, quietMs: 1000, fastMs: 500, stillMs: 3000,
       connect: async url => { connected.push(url); if (!browser) throw new Error('ECONNREFUSED'); return browser.cdp; } });
     return { svc, connected };
   }
@@ -284,6 +286,29 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
     svc.stop();
   });
 
+  it('a connection that opens but cannot start following is let go and tried again', async () => {
+    store.upsert(session());
+    const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b\n' });
+    const broken = fakeBrowser([{ id: 'T1', url: 'http://localhost/a', title: 'A' }]);
+    const call = broken.cdp.call.bind(broken.cdp);
+    broken.cdp.call = async (m, p, sid) => { if (m === 'Target.setDiscoverTargets') throw new Error('CDP Target.setDiscoverTargets timed out'); return call(m, p, sid); };
+    const good = fakeBrowser([{ id: 'T1', url: 'http://localhost/a', title: 'A' }]);
+    const given = [broken, good];
+    const closed: string[] = [];
+    broken.cdp.onClose(() => closed.push('broken'));
+    const svc = createBrowserLive({ store, panePid: async () => 100, emit: m => emitted.push(m), procfs: fs, now, connect: async () => given.shift()!.cdp });
+    await svc.tick();
+    expect(closed).toEqual(['broken']);
+    expect(emitted).toEqual([]);
+    await svc.tick();
+    expect(given).toEqual([]);
+    expect(last()).toMatchObject({ state: 'live', url: 'http://localhost/a' });
+    // The broken one going later changes nothing.
+    broken.gone();
+    expect(last()).toMatchObject({ state: 'live' });
+    svc.stop();
+  });
+
   it('a session forgotten by Ledge takes its browser state with it', async () => {
     store.upsert(session());
     const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b\n' });
@@ -345,14 +370,41 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
       svc.stop();
     });
 
-    it('a tab that sends no frame (standing still, or held hidden): one image every few seconds, marked live, never the same twice', async () => {
+    it('a tab whose film stops (OMP\'s, hidden once frozen): filmed by images, fast while it changes, slower while it does not, the film again when it sends', async () => {
       const { svc, b } = await liveOtto();
       const { got, sink } = sinkOf();
       svc.watch('otto', sink);
       await vi.waitFor(() => expect(b.methods()).toContain('Page.startScreencast'));
-      await advance(3100);
-      await vi.waitFor(() => expect(got.filter(m => m.type === 'browser.frame' && m.live)).toHaveLength(1));
-      expect(got.at(-1)).toMatchObject({ type: 'browser.frame', live: true });
+      const film = b.calls.find(c => c.method === 'Page.startScreencast')!;
+      const live = () => got.filter(m => m.type === 'browser.frame' && m.live).length;
+      // The film runs: no image taken besides it.
+      for (let i = 0; i < 4; i++) { b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: `/9j/cast${i}`, sessionId: i } }); await advance(250); }
+      expect(b.methods().filter(m => m === 'Page.captureScreenshot')).toEqual([]);
+      // Frozen, then woken but hidden: the film sends nothing. After 1 s, an image every 0.5 s while the page changes.
+      await advance(1000);
+      const before = live();
+      await advance(2000);
+      expect(live() - before).toBeGreaterThanOrEqual(4);
+      // The page stands still: the same image is not sent again, and asked less and less often (1, 2, 3 s).
+      b.view.still = '/9j/same';
+      await advance(600);
+      const shots = () => b.methods().filter(m => m === 'Page.captureScreenshot').length;
+      const s0 = shots(), l0 = live();
+      await advance(6000);
+      expect(live() - l0).toBeLessThanOrEqual(1);
+      expect(shots() - s0).toBeLessThanOrEqual(4);
+      // It changes again: fast again.
+      b.view.still = null;
+      await advance(3500);
+      const l1 = live();
+      await advance(1500);
+      expect(live() - l1).toBeGreaterThanOrEqual(2);
+      // The film sends again (the tab visible): it takes over, no more images taken.
+      for (let i = 0; i < 6; i++) { b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: `/9j/back${i}`, sessionId: 10 + i } }); await advance(250); }
+      const s1 = shots();
+      for (let i = 0; i < 6; i++) { b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: `/9j/more${i}`, sessionId: 20 + i } }); await advance(250); }
+      expect(shots()).toBe(s1);
+      for (const m of b.methods()) expect(CDP_ALLOWED.has(m)).toBe(true);
       svc.stop();
     });
 

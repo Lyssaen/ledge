@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { BrowserEnabled } from '@ledge/protocol';
 
@@ -56,9 +56,16 @@ export async function enableLive(rid: string, home: string): Promise<BrowserEnab
     // A config kept elsewhere behind a link stays there: the file it points to is the one rewritten.
     const target = await realpath(path).catch(() => path);
     await mkdir(dirname(target), { recursive: true });
+    // The file keeps its permissions; a new one is the owner's only. The copy is made private before anything is in it.
+    const mode = text === null ? 0o600 : (await stat(target)).mode & 0o777;
     const tmp = `${target}.ledge-${process.pid}.tmp`;
-    await writeFile(tmp, `${out}\n`, { mode: 0o644 });
-    await rename(tmp, target);
+    try {
+      await writeFile(tmp, '', { mode: 0o600, flag: 'wx' });
+      await chmod(tmp, 0o600);
+      await writeFile(tmp, `${out}\n`);
+      await chmod(tmp, mode);
+      await rename(tmp, target);
+    } catch (e) { await unlink(tmp).catch(() => {}); throw e; }
   } catch { return { type: 'browser.enabled', rid, outcome: 'refused', reason: 'write_failed', path }; }
   return { type: 'browser.enabled', rid, outcome: 'enabled', path };
 }
