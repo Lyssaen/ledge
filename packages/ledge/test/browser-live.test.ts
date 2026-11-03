@@ -260,6 +260,20 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
     svc.stop();
   });
 
+  it('asks tmux for the pane\'s program once, again only when it is gone', async () => {
+    store.upsert(session());
+    const fs = procOf(claudeTree(['--remote-debugging-pipe']));
+    const asked: string[] = [];
+    const svc = createBrowserLive({ store, panePid: async n => { asked.push(n); return 100; }, emit: m => emitted.push(m), procfs: fs, now });
+    await svc.tick(); await svc.tick(); await svc.tick();
+    expect(asked).toEqual(['ledge-otto']);
+    // The pane and its programs gone (the session restarted in a new pane): asked again.
+    for (const pid of [100, 101, 102, 103, 104, 105]) delete fs.procs[pid];
+    await svc.tick();
+    expect(asked).toEqual(['ledge-otto', 'ledge-otto']);
+    svc.stop();
+  });
+
   it('a port file left by an earlier browser: no connection, no state, tried again later', async () => {
     store.upsert(session());
     const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/old\n' });

@@ -67,6 +67,8 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
   const stillMs = deps.stillMs ?? 3000;
   const tracks = new Map<string, Track>();
   const pokes = new Map<string, NodeJS.Timeout>();
+  /** A pane's program lives as long as its session: asked of tmux once, again only when it is gone from the processes. */
+  const panes = new Map<string, number>();
   let timer: NodeJS.Timeout | null = null, ticking = false, stopped = false;
   const iso = () => new Date(now()).toISOString();
 
@@ -179,8 +181,12 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       return;
     }
     if (!s.tmuxSession || t?.connecting) return;
-    const pid = await deps.panePid(s.tmuxSession);
-    if (pid === null) return;
+    let pid = panes.get(s.tmuxSession);
+    if (pid === undefined || (table && !table.has(pid) && !(await procfs.ppid(pid)))) {
+      const asked = await deps.panePid(s.tmuxSession);
+      if (asked === null) { panes.delete(s.tmuxSession); return; }
+      pid = asked; panes.set(s.tmuxSession, pid);
+    }
     const found = await findBrowsers(pid, procfs, table);
     if (t?.cdp && found.some(b => b.pid === t.browserPid)) return;
     const watchable = found.find(b => b.port !== undefined);
@@ -200,6 +206,8 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       const live = sessions.filter(s => s.tmuxSession && (s.state !== 'exited' || tracks.has(s.id)));
       // A session forgotten by Ledge takes its browser with it.
       for (const [id, t] of tracks) if (!store.get(id)) forget(id, t);
+      const named = new Set(sessions.map(s => s.tmuxSession));
+      for (const name of panes.keys()) if (!named.has(name)) panes.delete(name);
       if (!live.length) return;
       const table = await processTable(procfs);
       for (const s of live) await scan(s, table).catch(e => log(`browser of ${s.id} not searched: ${(e as Error).message}`));
