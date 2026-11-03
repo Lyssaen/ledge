@@ -1,6 +1,7 @@
+import { ledgePort } from './port.js';
 import WebSocket from 'ws';
 import { readDaemonToken } from './auth.js';
-import { MESSAGE_MAX, PROTOCOL_PORT, SUMMARY_MAX, parseServerMessage, type ClientMessage, type MessageAck, type ServerMessage } from '@ledge/protocol';
+import { MESSAGE_MAX, SUMMARY_MAX, parseServerMessage, type ClientMessage, type MessageAck, type ServerMessage } from '@ledge/protocol';
 
 export interface Client {
   send(msg: ClientMessage): void;
@@ -23,7 +24,7 @@ export async function sendMessageAndAwaitAck(client: Client, msg: Extract<Client
 export class DaemonRefusedError extends Error {}
 
 export function connect(opts: { port?: number; host?: string; timeoutMs?: number; token?: string | null } = {}): Promise<Client> {
-  const port = opts.port ?? PROTOCOL_PORT;
+  const port = opts.port ?? ledgePort();
   const host = opts.host ?? '127.0.0.1';
   // `undefined` reads the daemon token file, `null` sends none. A hook must never fail on it: no token, the daemon refuses like a down one.
   let token: string | null | undefined;

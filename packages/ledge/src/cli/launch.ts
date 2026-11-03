@@ -1,8 +1,9 @@
+import { ledgePort } from '../port.js';
 import { spawn } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import type { Session, Tool } from '@ledge/protocol';
-import { PROTOCOL_PORT, namesInUse } from '@ledge/protocol';
+import { namesInUse } from '@ledge/protocol';
 import { connect, DaemonRefusedError, type Client } from '../client.js';
 import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir } from '../paths.js';
@@ -66,7 +67,7 @@ async function probe(port: number, timeoutMs: number): Promise<Probe> {
 
 export async function ensureDaemon(opts: { port?: number; spawnDaemon?: () => void; retryDelayMs?: number; timeoutMs?: number } = {}): Promise<DaemonConnection> {
   await ensureLedgeDir();
-  const port = opts.port ?? PROTOCOL_PORT;
+  const port = opts.port ?? ledgePort();
   const timeoutMs = opts.timeoutMs ?? 2000;
   const first = await probe(port, timeoutMs);
   if (first.client) return { client: first.client };
@@ -147,7 +148,7 @@ const UNTRACKED: Record<'foreign' | 'unauthorized' | 'unresponsive' | 'unreachab
 export async function launch(tool: TmuxTool, argv: string[], opts: LaunchOptions = {}): Promise<number> {
   await ensureLedgeDir();
   const { name, args } = parseLaunchArgs(argv);
-  const port = opts.port ?? PROTOCOL_PORT;
+  const port = opts.port ?? ledgePort();
   const socket = opts.tmuxSocket ?? TMUX_SOCKET;
   const tmux = realTmux(socket);
   const cwd = opts.cwd ?? process.cwd();

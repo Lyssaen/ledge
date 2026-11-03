@@ -1,5 +1,5 @@
+import { ledgePort } from '../port.js';
 import WebSocket from 'ws';
-import { PROTOCOL_PORT } from '@ledge/protocol';
 import { createDaemonClient, createFleetClient, createTokenSource, LOCAL_MACHINE, type DaemonClient, type TokenRead, type TokenSource } from '@ledge/fleet';
 import { readDaemonToken } from '../auth.js';
 
@@ -13,7 +13,7 @@ async function readToken(): Promise<TokenRead> {
  *  machine's sessions kept on screen. `port` and `token` are test hooks (the local URL is pinned by the fleet, so it goes through
  *  `makeClient`; `token: null` sends none, for a mock daemon that asks for none). */
 export function createTuiFleet(opts: { port?: number; minBackoffMs?: number; maxBackoffMs?: number; token?: TokenSource | null } = {}): DaemonClient {
-  const local = LOCAL_MACHINE.url!, port = opts.port ?? PROTOCOL_PORT;
+  const local = LOCAL_MACHINE.url!, port = opts.port ?? ledgePort();
   const backoff = { ...(opts.minBackoffMs ? { minBackoffMs: opts.minBackoffMs } : {}), ...(opts.maxBackoffMs ? { maxBackoffMs: opts.maxBackoffMs } : {}) };
   return createFleetClient(
     [LOCAL_MACHINE],
