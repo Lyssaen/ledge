@@ -493,12 +493,18 @@ export async function createMobileService(opts: {
         case 'mobile.retry':
           link?.retryNow();
           return;
-        case 'mobile.pairing.approve':
+        case 'mobile.pairing.approve': {
           pairingIn(msg.id, ['confirm']);
           // pair_ok would go nowhere while the device is stored: refuse, the pairing stays in confirm.
           if (linkState.state !== 'online') throw new Error('the relay is offline');
+          const before = new Set(devices.map((d) => d.id));
           pairing.approve(msg.id);
+          // The device it replaces goes once the new one is stored (so a relay peer they share stays the new one's), and only
+          // when a new key was approved: the same key approved again is that very device.
+          const added = devices.some((d) => !before.has(d.id));
+          if (msg.replaces !== undefined && added && before.has(msg.replaces)) await revoke(msg.replaces);
           return;
+        }
         case 'mobile.pairing.deny':
           pairingIn(msg.id, ['confirm', 'waiting']);
           pairing.deny(msg.id);

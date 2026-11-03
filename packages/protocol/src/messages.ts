@@ -327,7 +327,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('mobile.signout') }),
   /** While the link is offline: try again now. */
   z.object({ type: z.literal('mobile.retry') }),
-  z.object({ type: z.literal('mobile.pairing.approve'), id: z.string().min(1).max(100) }),
+  /** `replaces`: an approved device this one takes the place of (the same app reinstalled), revoked once this one is stored. */
+  z.object({ type: z.literal('mobile.pairing.approve'), id: z.string().min(1).max(100), replaces: z.string().min(1).max(100).optional() }),
   z.object({ type: z.literal('mobile.pairing.deny'), id: z.string().min(1).max(100) }),
   /** `id`: the device's fingerprint. */
   z.object({ type: z.literal('mobile.device.revoke'), id: z.string().min(1).max(100) }),

@@ -424,7 +424,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   });
   /** The sessions a phone types into, by the device's label: Desktop shows « Téléphone au clavier ». */
   const terminalHolders = new Map<string, string>();
-  const holdersMsg = (): ServerMessage => ({ type: 'terminal.holders', holds: [...terminalHolders].map(([id, deviceId]) => ({ id, device: mobile?.state().devices.find(d => d.id === deviceId)?.label ?? deviceId })) });
+  const holdersMsg = (): ServerMessage => ({ type: 'terminal.holders', holds: [...terminalHolders].map(([id, deviceId]) => ({ id, device: (d => d?.name ?? d?.label)(mobile?.state().devices.find(d => d.id === deviceId)) ?? deviceId })) });
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */

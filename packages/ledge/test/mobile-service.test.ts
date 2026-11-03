@@ -231,6 +231,34 @@ describe('mobile access service', () => {
     expect(ctx.s.state().devices.map((d) => d.id)).toEqual(['new']);
   });
 
+  it('approve with replaces: the new device is stored, then the old one revoked, a peer they share kept', async () => {
+    const OLD = 'd_oldoldoldoldoldo';
+    writeDevices([{ id: 'old', publicKey: 'k1', label: 'Pixel 8', approvedAt: '2026-10-19T00:00:00Z', peers: [OLD, PEER], lastPeer: PEER }]);
+    const ctx = await signedIn();
+    const phone = await fakeDevice({ relayUrl: ctx.relay.url, token: ctx.relay.deviceToken(PEER), peer: PEER, label: 'Pixel 8' });
+    cleanups.push(() => phone.close());
+    const { result } = await phone.pair();
+    await until(() => ctx.s.state().pairings[0]?.state === 'confirm', 'pairing to confirm');
+    await ctx.s.handle({ type: 'mobile.pairing.approve', id: ctx.s.state().pairings[0]!.id, replaces: 'old' });
+    expect(await result).toBe('ok');
+    const id = await fingerprint(phone.publicKey);
+    expect(ctx.s.state().devices.map((d) => d.id)).toEqual([id]);
+    // PEER is the new device's (its pairing came in on it): only the old device's other peer goes on the relay.
+    expect(ctx.calls.revoked.map((c) => c.peer)).toEqual([OLD]);
+  });
+
+  it('approve with replaces naming the very device approved again changes nothing but its label', async () => {
+    const ctx = await signedIn();
+    const phone = await linkedPhone(ctx);
+    const id = await fingerprint(phone.publicKey);
+    const { result } = await phone.pair();
+    await until(() => ctx.s.state().pairings.some((p) => p.state === 'confirm'), 'second pairing to confirm');
+    await ctx.s.handle({ type: 'mobile.pairing.approve', id: ctx.s.state().pairings.find((p) => p.state === 'confirm')!.id, replaces: id });
+    expect(await result).toBe('ok');
+    expect(ctx.s.state().devices.map((d) => d.id)).toEqual([id]);
+    expect(ctx.calls.revoked).toEqual([]);
+  });
+
   it('a confirmed channel adds its peer to the device, once', async () => {
     const ctx = await signedIn();
     const phone = await linkedPhone(ctx);
