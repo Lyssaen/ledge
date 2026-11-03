@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +20,45 @@ afterEach(async () => { for (const s of await panes.listSessions()) await panes.
 // does not do. The panes are Windows' (tmux runs agents elsewhere): without a loadable node-pty these tests skip.
 const pty = await import('node-pty').then(() => true, () => false);
 
-describe('conptyPanes, typing', () => {
+type SpawnFn = NonNullable<NonNullable<Parameters<typeof conptyPanes>[0]>['spawn']>;
+/** A pty that records its writes and exits when told: `exit(code)`. */
+function fakePty(pid = 999_999) {
+  const writes: Array<{ at: number; data: string }> = []; const kills: string[] = [];
+  let onExit: (e: { exitCode: number }) => void = () => {}; let onData: (d: string) => void = () => {};
+  const spawn = (() => ({ pid, onData: (f: typeof onData) => { onData = f; }, onExit: (f: typeof onExit) => { onExit = f; }, write: (data: string) => { writes.push({ at: Date.now(), data }); }, kill: (sig?: string) => { kills.push(sig ?? ''); } })) as unknown as SpawnFn;
+  return { spawn, writes, kills, exit: (exitCode: number) => onExit({ exitCode }), out: (d: string) => onData(d) };
+}
+
+describe('conptyPanes, with a fake pty', () => {
+  it('writes of two sendText calls do not interleave', async () => {
+    const f = fakePty(); const p = conptyPanes({ spawn: f.spawn });
+    await p.newSession({ name: 'q', cwd: tmpdir(), env: {}, command: [node] });
+    await Promise.all([p.sendText('q', 'a'.repeat(600)), p.sendKeys('q', ['Escape']), p.sendText('q', 'b'.repeat(600))]);
+    expect(f.writes.map(w => w.data).join('')).toBe('a'.repeat(600) + '\x1b' + 'b'.repeat(600));
+  });
+  it('a kill that times out falls back to pty.kill, says so, and forgets the pane', async () => {
+    const f = fakePty(); const log = vi.fn(); const p = conptyPanes({ spawn: f.spawn, killWaitMs: 200, log });
+    await p.newSession({ name: 'k', cwd: tmpdir(), env: {}, command: [node] });
+    await p.killSession('k');
+    expect(f.kills.length).toBeGreaterThan(0);
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/k.*did not end/));
+    expect(await p.hasSession('k')).toBe(false);
+  });
+  it('a capture racing the exit answers, and nothing complains of a disposed terminal', async () => {
+    const f = fakePty(); const p = conptyPanes({ spawn: f.spawn });
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {}); const warns = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const writes = vi.spyOn(process.stderr, 'write');
+    await p.newSession({ name: 'c', cwd: tmpdir(), env: {}, command: [node] });
+    f.out('hello\r\n');
+    const pending = p.capture('c', 10);
+    f.exit(0);
+    await expect(pending).resolves.not.toBeUndefined();
+    await new Promise(r => setTimeout(r, 50));
+    const said = [...errors.mock.calls, ...warns.mock.calls, ...writes.mock.calls].map(c => String(c[0])).join('\n');
+    errors.mockRestore(); warns.mockRestore(); writes.mockRestore();
+    expect(said).not.toMatch(/dispos/i);
+  });
+
   it('writes a long text in slices of 256 characters, 20 ms apart (claude.exe keeps only the end of one big write)', async () => {
     const writes: Array<{ at: number; data: string }> = [];
     const fake = (() => ({ pid: 1, onData: () => {}, onExit: () => {}, write: (data: string) => { writes.push({ at: Date.now(), data }); }, kill: () => {} })) as unknown as Parameters<typeof conptyPanes>[0] extends infer O ? O extends { spawn?: infer F } ? F : never : never;
