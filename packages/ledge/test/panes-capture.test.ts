@@ -17,6 +17,10 @@ describe('captureLines', () => {
     const t = await term('a'.repeat(19) + ' b');
     expect(captureLines(t.buffer.active, 10)).toBe('a'.repeat(19) + ' b');
   });
+  it('with join off, keeps a wrapped row apart (ConPTY flags the row after a full one as wrapped)', async () => {
+    const t = await term('─'.repeat(20) + ' Create file');
+    expect(captureLines(t.buffer.active, 10, { join: false }).split('\n')).toEqual(['─'.repeat(20), ' Create file']);
+  });
   it('keeps the last N lines, history included', async () => {
     const t = await term(Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\r\n'));
     expect(captureLines(t.buffer.active, 5)).toBe(['line 56', 'line 57', 'line 58', 'line 59', 'line 60'].join('\n'));

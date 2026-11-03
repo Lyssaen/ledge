@@ -69,7 +69,7 @@ export function conptyPanes(opts: { cols?: number; rows?: number; spawn?: typeof
     async capture(name, lines) {
       const p = get(name); if (!p) return null;
       await settle(p.term);
-      return captureLines(p.term.buffer.active, lines);
+      return captureLines(p.term.buffer.active, lines, { join: false });
     },
     async width(name) { return get(name)?.term.cols ?? null; },
     async paneCwd() { return null; },

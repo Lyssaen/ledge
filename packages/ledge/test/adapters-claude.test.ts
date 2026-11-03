@@ -446,3 +446,8 @@ describe('claude adapter on Windows glyphs', () => {
     expect(claudeAdapter.previewLines!(fx('win-claude-idle')).some(l => l.startsWith('> '))).toBe(false);
   });
 });
+describe('claude adapter on a Windows file-creation dialog', () => {
+  it('reads it once the rows ConPTY flagged as wrapped stay apart', () => {
+    expect(claudeAdapter.detectPrompt(fx('win-claude-create'))).toMatchObject({ kind: 'permission', text: 'Create file probe.txt' });
+  });
+});
