@@ -2159,7 +2159,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, broadcast: true, openrigAsks: true, openrigGoals: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2582,7 +2582,7 @@ describe('server: OpenRig', () => {
   it('answers a status under its requestId; an action answers its sender, then every front gets the fresh state', async () => {
     const acts: unknown[] = []; let fresh = 0;
     const state = (s: 'running' | 'stopped') => ({ installed: true, daemon: { state: s }, kernel: { state: 'stopped' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' });
-    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: {
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: { row: async () => ({ error: 'not_found' }),
       async state(f) { if (f) fresh++; return state(f ? 'stopped' : 'running'); },
       async act(a) { acts.push(a); return { ok: true, commands: ['rig daemon stop'] }; },
       async specs() { return { specs: [] }; },
@@ -2604,7 +2604,7 @@ describe('server: OpenRig', () => {
   it('roles, a role and a role file answer their asker only, under its requestId, with the id and path asked', async () => {
     const asked: string[] = [];
     const summary = { id: 'f95e', name: 'ledge-lead', source: 'user' as const, path: '/s/lead/agent.yaml', importOnly: false, seats: 1, running: 1, skills: [], startupFiles: ['guidance/role.md'], seatRefs: [{ rig: 'ledge-dev', logicalId: 'pilot.lead', session: 'pilot-lead@ledge-dev' }] };
-    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: {
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: { row: async () => ({ error: 'not_found' }),
       async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; },
@@ -2623,6 +2623,27 @@ describe('server: OpenRig', () => {
     expect(await c.next('openrig.roleFileContent')).toEqual({ type: 'openrig.roleFileContent', requestId: 'r3', roleId: 'f95e', path: '/s/lead/guidance/role.md', content: '# Rôle', size: 7 });
     expect(asked).toEqual(['roles', 'role nope', 'file f95e /s/lead/guidance/role.md']);
     await expect(other.next('openrig.roleList', 150)).rejects.toThrow();
+    c.close(); other.close(); await srv2.close();
+  });
+  it('a queue row answers its asker only, under its requestId', async () => {
+    const asked: string[] = [];
+    const row = { id: 'qitem-20261102205801-ae61eb9d7f1f4b49', state: 'in-progress', from: 'pilot-lead@ledge-dev-2', to: 'dev-back@ledge-dev-2', createdAt: 'a', updatedAt: 'b', at: 'c' };
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: {
+      async row(q) { asked.push(q); return q === row.id ? { row } : { error: 'not_found' }; },
+      async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' }; },
+      async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; },
+      async roles() { return { roles: [] }; }, async role() { return { error: 'x' }; }, async roleFile() { return { error: 'x' }; }
+    } });
+    const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
+    expect((await c.next('snapshot')).daemon).toMatchObject({ openrigRows: true });
+    await other.next('snapshot');
+    c.send({ type: 'openrig.row', requestId: 'w1', qitem: row.id });
+    expect(await c.next('openrig.rowState')).toEqual({ type: 'openrig.rowState', requestId: 'w1', qitem: row.id, row });
+    c.send({ type: 'openrig.row', requestId: 'w2', qitem: 'qitem-gone' });
+    expect(await c.next('openrig.rowState')).toEqual({ type: 'openrig.rowState', requestId: 'w2', qitem: 'qitem-gone', error: 'not_found' });
+    expect(asked).toEqual([row.id, 'qitem-gone']);
+    await expect(other.next('openrig.rowState', 150)).rejects.toThrow();
     c.close(); other.close(); await srv2.close();
   });
 });
@@ -2683,7 +2704,7 @@ describe('server: goals to Max', () => {
 describe('server: OpenRig seats as sessions', () => {
   it('a hook from an OpenRig seat tags its session with the rig, then the role OpenRig gives it', async () => {
     const node = { logicalId: 'dev.build', session: 'dev-build@first-factory', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'running', stopped: false, work: 0 };
-    const srv2 = await startServer({ store, tmux, port: 0, openrig: {
+    const srv2 = await startServer({ store, tmux, port: 0, openrig: { row: async () => ({ error: 'not_found' }),
       async state() { return { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, at: '2026-11-02T09:00:00.000Z', rigs: [{ id: 'R', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
@@ -2704,7 +2725,7 @@ describe('server: OpenRig seats as sessions', () => {
 describe('server: an OpenRig seat answered through its pane', () => {
   it('becomes a rig session on its pane: written to like Ledge\'s own, never killed, closed nor resumed by Ledge', async () => {
     const seatTmux = fakeTmux({ 'dev-build@first-factory': ['❯ '] });
-    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: {
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: { row: async () => ({ error: 'not_found' }),
       async state() { return { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, at: '2026-11-02T09:00:00.000Z', rigs: [] }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
@@ -2738,7 +2759,7 @@ describe('server: a seat found again after its rig restarted', () => {
       startedAt: '2026-11-02T10:00:00.000Z', lastActivityAt: '2026-11-02T10:30:00.000Z', exitedAt: '2026-11-02T10:30:00.000Z', source: 'rig', rig: { seat: 'dev-build@first-factory', name: 'first-factory', role: 'dev.build' } });
     const node = { logicalId: 'dev.build', session: 'dev-build@first-factory', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 };
     const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-02T11:00:00.000Z', rigs: [{ id: 'F', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
-    const srv2 = await startServer({ store, tmux: fakeTmux({ 'dev-build@first-factory': ['❯ '] }), port: 0, openrig: {
+    const srv2 = await startServer({ store, tmux: fakeTmux({ 'dev-build@first-factory': ['❯ '] }), port: 0, openrig: { row: async () => ({ error: 'not_found' }),
       async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
     } });
@@ -2761,7 +2782,7 @@ describe('server: OpenRig seats found by Ledge itself', () => {
       { id: 'F', name: 'first-factory', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node('dev.build', 'dev-build@first-factory', 'claude-code')] }
     ] };
     const seatTmux = fakeTmux({ 'operator-agent@kernel': ['› '], 'operator-human@kernel': ['$ '], 'dev-build@first-factory': ['❯ '] });
-    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: {
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, openrig: { row: async () => ({ error: 'not_found' }),
       async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
     } });

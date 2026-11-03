@@ -16,6 +16,7 @@ export * from './models.js';
 export * from './commands.js';
 export * from './openrig.js';
 export * from './openrigRoles.js';
+export * from './rigMessages.js';
 export * from './scan.js';
 export * from './topic.js';
 export * from './routing.js';

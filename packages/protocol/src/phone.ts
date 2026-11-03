@@ -13,6 +13,15 @@ import { PushSubscriptionSchema } from './push.js';
 import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } from './models.js';
 import { SlashCommandSchema } from './commands.js';
 import { HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema } from './openrig.js';
+import { QitemIdSchema, RigRowSchema } from './rigMessages.js';
+
+/** A queue row's state on the phone (docs/mockups/ledge-openrig-messages.html, decision 2): the PC's own, its summary shortened. */
+export const PHONE_ROW_SUMMARY_MAX = 200;
+export const PhoneRigRowSchema = RigRowSchema.extend({ summary: z.string().max(PHONE_ROW_SUMMARY_MAX).optional() });
+export type PhoneRigRow = z.infer<typeof PhoneRigRowSchema>;
+/** Why a row's state could not be read: no such row, or OpenRig could not be asked (never its own words). The card then
+ *  says « état non suivi ». */
+export const PhoneRowErrorSchema = z.enum(['not_found', 'unavailable']);
 
 /** The phone/PC messages have their own schemas: a type or a field that is not here never crosses the relay. */
 export const PHONE_PROTOCOL = 1;
@@ -311,6 +320,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('models.list'), tool: ToolSchema }),
   /** The slash commands of a session's agent, for the « / » list of its field. */
   z.object({ type: z.literal('session.commands'), id: sessionId }),
+  /** A queue row's state, for an OpenRig task card: asked while the card shows and every `RIG_ROW_REFRESH_MS` (`daemon.rigRows`). */
+  z.object({ type: z.literal('openrig.row'), qitem: QitemIdSchema }),
   /** The phone drops its passkey from the daemon. */
   z.object({ type: z.literal('device.forget'), op: OperationIdSchema }),
   /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). */
@@ -387,6 +398,7 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon streams a session's terminal (`term.open`). */ terminal: z.literal(true).optional(),
     /** The PC lets a phone type into a terminal (`term.hold`): its setting is on. */ terminalInput: z.literal(true).optional(),
     /** The daemon answers `session.commands`. */ commands: z.literal(true).optional(),
+    /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
     /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),
     /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
   /** « À toi » on this PC: the answer to `openrig.asks`, then each change, whole. */
@@ -416,6 +428,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.model.failed'), id: z.string(), reason: ModelRefusalSchema }),
   /** A session's slash commands; `error`: they could not be read (the agent is not listed, or did not answer in time): a command typed by hand still goes. */
   z.object({ type: z.literal('session.commands.listing'), id: z.string(), commands: z.array(PhoneSlashCommandSchema).max(PHONE_COMMANDS_MAX), error: z.literal(true).optional() }),
+  /** A queue row's state, answering `openrig.row`: `row`, or `error`. */
+  z.object({ type: z.literal('openrig.rowState'), qitem: z.string(), row: PhoneRigRowSchema.optional(), error: PhoneRowErrorSchema.optional() }),
   z.object({ type: z.literal('chat.history'), turns: z.array(PhoneChatTurnSchema).max(50) }),
   z.object({ type: z.literal('chat.step'), qid: OperationIdSchema, step: PhoneChatStepSchema }),
   /** The whole text so far, not an increment. */

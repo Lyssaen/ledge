@@ -371,4 +371,35 @@ describe('phone protocol end to end', () => {
     expect(sent.indexOf('keys Escape')).toBeLessThan(sent.indexOf('text /exit'));
     expect(tmux.sent.some(x => x[0] === 'keys' && x.includes('1'))).toBe(false);
   }, 20_000);
+  it('a queue row\'s state goes to the phone sealed, its change on the next ask, its absence as not followed', async () => {
+    const ID = 'qitem-20261102211216-d6159d44d566f343';
+    const SUMMARY = 'Résumé secret de la ligne OpenRig';
+    const states = ['in-progress', 'done'];
+    const openrig = {
+      async row(q: string) { return q === ID ? { row: { id: ID, state: states.shift() ?? 'done', summary: SUMMARY, from: 'pilot-lead@ledge-dev-2', to: 'dev-back@ledge-dev-2', createdAt: T0, updatedAt: T0, at: T0 } } : { error: 'not_found' }; },
+      async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: T0 }; },
+      async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; },
+      async roles() { return { roles: [] }; }, async role() { return { error: 'x' }; }, async roleFile() { return { error: 'x' }; }
+    };
+    const { phone } = await linked({ server: { openrig } });
+    await phone.send(JSON.stringify({ type: 'snapshot.request' }));
+    await until(() => parsed(phone).some(m => m.type === 'snapshot'), 'snapshot');
+    expect(parsed(phone).find(m => m.type === 'snapshot')).toMatchObject({ daemon: { rigRows: true } });
+    const rows = () => parsed(phone).flatMap(m => (m.type === 'openrig.rowState' ? [m] : []));
+    await phone.send(JSON.stringify({ type: 'openrig.row', qitem: ID }));
+    await until(() => rows().length === 1, 'first row state');
+    await phone.send(JSON.stringify({ type: 'openrig.row', qitem: ID }));
+    await until(() => rows().length === 2, 'second row state');
+    await phone.send(JSON.stringify({ type: 'openrig.row', qitem: 'qitem-gone' }));
+    await until(() => rows().length === 3, 'missing row');
+    expect(rows().map(r => r.row?.state ?? r.error)).toEqual(['in-progress', 'done', 'not_found']);
+    expect(rows()[0]!.row!.summary).toBe(SUMMARY);
+    // end to end: every frame the relay carried was sealed; neither the summary nor the row id crossed it in clear
+    expect(phone.frames.length).toBeGreaterThan(0);
+    const wire = JSON.stringify(phone.frames);
+    expect(wire).not.toContain(SUMMARY);
+    expect(wire).not.toContain(ID);
+    expect(phone.openFailures).toBe(0);
+  }, 20_000);
 });

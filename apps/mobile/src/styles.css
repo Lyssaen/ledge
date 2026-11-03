@@ -32,6 +32,8 @@
   --color-danger-bg: var(--status-danger-soft);
   /* The agent a task card names: the desktop's sidebar colour. */
   --color-agent: var(--sidebar-primary);
+  /* A queue row handed between seats (OpenRig, issue #92): violet, worn by no session state. */
+  --color-task: var(--task);
   --color-term-bg: var(--term-bg);
   --color-term-fg: var(--term-fg);
 }

@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -35,11 +35,13 @@ export interface MobileState {
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true } | null;
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
   models: Record<string, { models: PhoneModelChoice[]; error?: true }>;
   /** The slash commands of each session's agent, by session id, as `session.commands.listing` said; `at` when they came. `error`: they could not be read. */
   commands: Record<string, { commands: PhoneSlashCommand[]; error?: true; at: number }>;
+  /** OpenRig's queue rows, by id, as `openrig.rowState` said (a task card's live state); `at` when it came. No `row`: not read. */
+  rigRows: Record<string, { row?: PhoneRigRow; error?: string; at: number }>;
   /** Why the last model change of a session failed after the PC accepted it, by session id. Kept until a new change is sent or the session's model or effort changes. */
   modelFailures: Record<string, ModelRefusal>;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
@@ -103,6 +105,8 @@ export interface MobileStore {
   requestModels(tool: string): void;
   /** Asks the PC for a session's slash commands; again after an `error` listing, or once `COMMANDS_KEEP_MS` has passed. They land in `getState().commands`. */
   requestCommands(id: string): void;
+  /** Asks the PC for a queue row's state (`daemon.rigRows`), once at a time per row; it lands in `getState().rigRows`. */
+  requestRigRow(qitem: string): void;
   /** Changes a live session's model and effort (`null`: the agent's own default). Resolves when the PC answers; a late failure lands in `getState().modelFailures`. */
   changeModel(id: string, model: string | null, effort: string | null): Promise<ChatAction>;
   /** Writes one message to several sessions at once (at most 32). Resolves when the PC answers, with who got it (`sent`, names) and who did not. */
@@ -203,6 +207,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     daemon: last?.daemon ?? null,
     models: {},
     commands: {},
+    rigRows: {},
     modelFailures: {},
     fresh: false,
     syncedAt: last?.syncedAt ?? null,
@@ -216,6 +221,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const modelAsks = new Set<string>();
   /** The sessions whose commands were asked on this link and not answered yet. */
   const commandAsks = new Set<string>();
+  /** The rows asked on this link and not answered yet: one read in flight per row. */
+  const rigAsks = new Set<string>();
   /** The PC's boot id of this run, from its snapshot; null until one, and when the PC sends none. Never cached. */
   let boot: string | null = null;
   /** Ends a followed update or restart the PC never came back from: armed by the first step, cleared at the end. */
@@ -344,6 +351,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     // A list asked on the lost channel never comes: it is asked again. Those already answered stay.
     for (const tool of [...modelAsks]) if (!state.models[tool]) modelAsks.delete(tool);
     commandAsks.clear();
+    rigAsks.clear();
     settleForget(false);
     // Requests sent on the lost channel get no answer.
     threadAsks = [];
@@ -368,7 +376,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         // A new boot is a new PC process: what it offered may differ.
         const bootChanged = (m.daemon.boot ?? null) !== boot;
         boot = m.daemon.boot ?? null;
-        if (bootChanged) { modelAsks.clear(); commandAsks.clear(); }
+        if (bootChanged) { modelAsks.clear(); commandAsks.clear(); rigAsks.clear(); }
         const pc = pcSnapshot(state.pc, m.daemon);
         if (!pcRunning(pc)) stopPcWatch();
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
@@ -381,6 +389,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       }
       case 'attachment.stored': case 'attachment.data': case 'attachment.error':
         images.handle(m);
+        return;
+      case 'openrig.rowState':
+        rigAsks.delete(m.qitem);
+        set({ rigRows: { ...state.rigRows, [m.qitem]: { ...(m.row ? { row: m.row } : {}), ...(m.error ? { error: m.error } : {}), at: Date.now() } } });
         return;
       case 'session.commands.listing':
         commandAsks.delete(m.id);
@@ -579,8 +591,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, modelFailures: {} });
-    modelAsks.clear(); commandAsks.clear();
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {} });
+    modelAsks.clear(); commandAsks.clear(); rigAsks.clear();
     stopPcWatch();
   }
 
@@ -642,6 +654,14 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       const m = PhoneClientMessageSchema.safeParse({ type: 'session.commands', id });
       if (!m.success) return;
       commandAsks.add(id);
+      send(m.data);
+    },
+
+    requestRigRow(qitem) {
+      if (closed || !ready() || !state.daemon?.rigRows || rigAsks.has(qitem)) return;
+      const m = PhoneClientMessageSchema.safeParse({ type: 'openrig.row', qitem });
+      if (!m.success) return;
+      rigAsks.add(qitem);
       send(m.data);
     },
 

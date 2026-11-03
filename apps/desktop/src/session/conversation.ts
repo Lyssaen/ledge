@@ -20,7 +20,8 @@ export interface Bubble {
   inB?: string;
 }
 
-const main = (i: ThreadItem): i is SentItem | ReceivedItem => (i.kind === 'sent' || i.kind === 'received') && i.helperId === undefined;
+/** OpenRig's messages (`rig`) are the seats' own bubbles, not a conversation between two Ledge sessions. */
+const main = (i: ThreadItem): i is SentItem | ReceivedItem => (i.kind === 'sent' || i.kind === 'received') && i.helperId === undefined && !i.rig;
 /** A's main messages with the peer `key`. */
 const withPeer = (a: readonly ThreadItem[], key: string) => a.filter(main).filter(i => peerKey(i) === key);
 

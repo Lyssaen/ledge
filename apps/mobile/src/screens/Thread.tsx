@@ -4,7 +4,7 @@ import { copy } from '../copy';
 import { headline } from '../model/requests';
 import { composerState, messagesOf, TAKEN_WINDOW, threadItems, type ThreadItem } from '../model/thread';
 import { href } from '../router';
-import { loadDraft, markCleared, saveDraft, wasCleared } from '../state/drafts';
+import { loadDraft, markCleared, saveDraft, takeFocus, wasCleared } from '../state/drafts';
 import { isLive } from '../state/operations';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
@@ -12,6 +12,7 @@ import { BackLink, LinkStatus, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
 import { ReplyView } from '../ui/ReplyView';
+import { RigItem } from '../ui/RigThread';
 import { PhoneThumbs } from '../ui/PhoneThumbs';
 import { useAttachments } from '../ui/useAttachments';
 import { Checklist } from './Checklist';
@@ -30,8 +31,10 @@ function AgentReply({ text }: { text: string }) {
 
 const Cut = ({ align }: { align: 'start' | 'end' }) => <div className={`text-meta text-muted ${align === 'end' ? 'text-right' : ''}`}>{copy.thread.cut}</div>;
 
-function Bubble({ item, store }: { item: ThreadItem; store: MobileStore }) {
+function Bubble({ item, store, storage }: { item: ThreadItem; store: MobileStore; storage?: Storage | undefined }) {
   switch (item.kind) {
+    case 'time': return <div className="text-center font-mono text-meta text-muted">{item.label}</div>;
+    case 'rig-message': case 'rig-task': case 'rig-notice': case 'rig-fold': case 'rig-unreadable': case 'rig-raw': return <RigItem e={item} storage={storage} store={store} />;
     case 'me': {
       // The PC's prompt carries refs; this phone's own instruction knows the ones it stored.
       const refs = item.images ?? (item.attachments ?? []).flatMap(id => store.knownImage(id) ?? []);
@@ -89,6 +92,8 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
   const thread = state.threads.get(sessionId);
   const { fresh, ops } = state;
   const [draft, setDraft] = useState(() => loadDraft(sessionId, storage));
+  // « Répondre » on an OpenRig message brought the person here: the composer takes the focus, after its prefix.
+  const [focusOnOpen] = useState(() => takeFocus(sessionId));
   const [refused, setRefused] = useState(false);
   // Chips are not persisted: only the draft text is.
   const images = useAttachments(store);
@@ -142,7 +147,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
 
   const scroller = useRef<HTMLElement>(null);
   const gone = thread?.status === 'gone';
-  const items = session && !gone ? threadItems(thread?.items ?? [], session, ops, now, thread?.cut ?? []) : [];
+  const items = session && !gone ? threadItems(thread?.items ?? [], session, ops, now, thread?.cut ?? [], state.sessions) : [];
   const end = items.at(-1)?.key;
   useEffect(() => { const el = scroller.current; if (el) el.scrollTop = el.scrollHeight; }, [end, items.length]);
 
@@ -222,10 +227,10 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
-        {items.map(it => <Bubble key={it.key} item={it} store={store} />)}
+        {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} />)}
       </main>
       {ending.kind === 'open'
-        ? <Reply name={session.name} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
+        ? <Reply name={session.name} focusAtEnd={focusOnOpen} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
           {...(state.daemon?.commands && session.tool === 'claude' && !session.readOnly ? { slash: { tool: copy.tools[session.tool], listing: state.commands[sessionId], ask: () => store.requestCommands(sessionId) } } : {})}
           alert={endError && <EndErrorNotice error={endError} fresh={fresh} onRetry={() => openSheet('close')} onReconnect={onReconnect} />}
           {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />

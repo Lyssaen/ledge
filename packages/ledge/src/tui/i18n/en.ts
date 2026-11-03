@@ -29,7 +29,8 @@ export const en: Messages = {
     word: 'word', clear: 'clear', resend: 'send again', backToDraft: 'back to the draft', keep: 'keep', wipe: 'clear',
     line: 'line', page: 'page', end: 'end', question: 'question', conversation: 'conversation', cycle: 'cards · conversation',
     applyRow: 'apply the line', apply: 'apply', applyAll: 'apply all', deny: 'deny', ignore: 'ignore', review: 'review',
-    openSession: name => `open ${name}`
+    openSession: name => `open ${name}`,
+    raw: 'raw', replyTo: name => `reply to ${name}`
   },
   overview: { rigsGroup: 'RIGS', kernelGroup: 'KERNEL', 
     rigSeat: (rig, role) => `rig ${rig} · ${role}`,
@@ -63,7 +64,17 @@ export const en: Messages = {
     replyTitle: name => `Reply to ${name}`, noteTitle: name => `Deny and tell ${name} why`, writeDraft: 'Write · draft',
     draftLines: n => `${n} ${plural(n, 'line', 'lines')} · r to pick it up`,
     loading: 'Loading the thread…', empty: 'Nothing in this thread yet.', noSession: 'Pick a session in the overview.',
-    model: m => `model: ${m}`, defaultModel: 'default', notice: 'Ledge'
+    model: m => `model: ${m}`, defaultModel: 'default', notice: 'Ledge',
+    rowIn: 'row handed by', rowOut: 'row passed to', handedAt: time => `handed ${time}`, passedAt: time => `passed ${time}`,
+    notHanded: 'not handed off', notHandedBy: 'not handed off by OpenRig', openrigSaid: line => `OpenRig: ${line}`,
+    rowState: { pending: 'waiting', taken: 'taken', passed: n => `passed to ${n}`, blocked: 'blocked', done: 'done' },
+    takenAt: time => `taken ${time}`, doneAt: time => `done ${time}`, notTaken: 'not taken yet', waitingOn: id => `waiting on row ${id}`,
+    untracked: 'state not tracked', reply: 'reply', raw: 'raw', close: 'close', times: k => `received ${k} times`,
+    unreadable: 'unreadable OpenRig message, shown as is', openrig: 'OpenRig',
+    unblocked: id => `blocker cleared: row ${id} is to do again`,
+    stalled: (id, d) => `row ${id} taken ${d} ago, no progress`,
+    folded: k => `${k} OpenRig notices folded`, rawMany: k => `${k} messages pasted together · raw`,
+    about: line => `About: “${line}”`
   },
   ask: {
     title: (s, m) => `Ledge · sees ${s} ${plural(s, 'session', 'sessions')}, ${m} ${plural(m, 'machine', 'machines')}`,
@@ -114,6 +125,7 @@ export const en: Messages = {
   },
   settings: { title: 'Settings', language: 'Language', theme: 'Theme', themes: { auto: 'Auto', dark: 'Dark', light: 'Light' }, themeAuto: tone => `Auto (${tone} background)`, context: 'Max context', contextHint: 'past it: hand over', contextUnknown: 'update the daemon', contextSaved: pct => `Max context: ${pct} %`, saved: 'Setting saved.', saveFailed: m => `Setting applied, but not saved: ${m}` },
   help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', rigLaunch: 'Launch a rig', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+    writeHere: 'write to this session', replySender: 'reply to the sender of the selected message', rigRaw: "show or hide an OpenRig message's raw text",
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
     capture: 'capture', size: (n: number) => formatBytes(n, 'en'), open: (key: string) => `${key} open in viewer`,

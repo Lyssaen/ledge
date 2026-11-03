@@ -1,4 +1,4 @@
-import type { AttachmentRef, ThreadItem, ToolItem } from '@ledge/protocol';
+import type { AttachmentRef, RigRow, ThreadItem, ToolItem } from '@ledge/protocol';
 import { OPEN_TURNS, turns, type Turn } from '@ledge/ui/thread/turns';
 import { rawTarget, SPINNER } from '@ledge/ui/thread/tools';
 import type { Glyphs } from '../glyphs.js';
@@ -7,6 +7,7 @@ import { C, tone, type Tone } from '../theme.js';
 import { cut, pad, row, wrapSegs, type Line, type Seg } from './cells.js';
 import { markdownLines } from './markdown.js';
 import { clock, oneLine, took } from './time.js';
+import { foldedNotices, foldsAway, rawBox, replyOf, rigLines, rigOf, type Peer, type RigItem } from './rigLines.js';
 
 export type { Seg, Line } from './cells.js';
 
@@ -69,7 +70,12 @@ function toolLines(it: ToolItem, o: Opts): Line[] {
 const more = (): Seg => ({ text: ' …', color: C.faint });
 
 /** `now` only for the line's first value: a running action's spinner and time then tick in `ui/Lines.tsx`. */
-interface Opts { t: Messages; g: Glyphs; now?: number; width: number; diffs: boolean; ascii?: boolean; cap(n: number): number }
+/** `peer`: the Ledge session of a thread item's `peer` (an OpenRig sender's name, the reply `r` gives); `raws`: the OpenRig
+ *  elements whose raw is open (key b). */
+interface Opts { t: Messages; g: Glyphs; now?: number; width: number; diffs: boolean; ascii?: boolean; cap(n: number): number;
+  peer?(id: string): Peer | undefined; raws?: ReadonlySet<string>;
+  /** A queue row's state as last read, and a seat's Ledge name (OpenRig's task cards). */
+  row?(qitem: string): RigRow | undefined; seat?(address: string): string | undefined }
 
 /** Each text's lines, by item: the thread is drawn again at each change, and the store keeps the items that did not change.
  *  Past 500 texts the parser's own cache goes round and would parse them all again. */
@@ -84,6 +90,8 @@ function itemLines(it: ThreadItem, o: Opts): Line[] {
     bodies.set(it, { width, g, tone: tone(), lines });
     return lines;
   };
+  const rig = rigOf(it);
+  if (rig) return rigLines(rig, o);
   const message = (head: Line, text: string, meta: Line | null) => row([pad(2), { text: `${g.message} `, color: C.violet }, ...head, pad(2)], [{ text: `« ${oneLine(text)} »`, color: C.dim }], meta, width, { indent: 4, max: o.cap(CAP.message), more: more() });
   switch (it.kind) {
     case 'prompt': return [[{ text: t.session.you, color: C.coral, bold: true }, { text: `  ${clock(it.at)}`, color: C.faint }], ...body(it.text, C.fg), ...(it.images ?? []).map(r => imageLine(r, t, 'o'))];
@@ -115,25 +123,99 @@ export function foldedLine(turn: Turn, o: Pick<Opts, 't' | 'g'>): Line {
   return [{ text: `${o.g.folded} ${clock(turn.prompt?.at ?? turn.items[0]?.at ?? new Date(0).toISOString())}  `, color: C.faint }, { text: parts.join(' · '), color: C.faint }];
 }
 
-export type ThreadView = { lines: Line[]; keys: string[]; turns: Map<string, string> };
+/** An OpenRig element of the thread (docs/mockups/openrig-messages): what key b shows (its raw, or its packet's), and the reply
+ *  key r gives on a received message whose sender has a Ledge session. */
+export type RigElement = { raw: string; title: string; reply?: { peer: Peer; text: string } };
+/** `heads`: each OpenRig element's first line, where its selection mark goes (`markRig`). */
+/** `cards`: the row each OpenRig task card is about, by its key (the rows to read while the card is in view). */
+export type ThreadView = { lines: Line[]; keys: string[]; turns: Map<string, string>; rig: Map<string, RigElement>; heads: Map<string, number>; cards: Map<string, string> };
+
+/** The rows of the task cards with a line between `top` and `bottom` (line indexes), once each. */
+export function cardsInView(v: Pick<ThreadView, 'keys' | 'cards'>, top: number, bottom: number): string[] {
+  const out = new Set<string>();
+  for (let i = Math.max(0, top); i <= Math.min(bottom, v.keys.length - 1); i++) { const q = v.cards.get(v.keys[i]!); if (q) out.add(q); }
+  return [...out];
+}
+
+/** The cells OpenRig's elements keep at their left for the selection mark, so that nothing moves when it moves. */
+export const GUTTER = 2;
+const gutter = (l: Line[]): Line[] => l.map(x => [pad(GUTTER), ...x]);
+
+/** The thread's lines with the selected OpenRig element marked: ▸ in coral, in its reserved cells, on its first line. */
+export function markRig(v: Pick<ThreadView, 'lines' | 'heads'>, key: string | undefined, g: Glyphs): Line[] {
+  const at = key === undefined ? undefined : v.heads.get(key);
+  if (at === undefined) return v.lines;
+  const lines = v.lines.slice();
+  lines[at] = [{ text: `${g.next} `, color: C.coral }, ...lines[at]!.slice(1)];
+  return lines;
+}
+
+/** The raw b shows for an item: its own, or the joined raws of the blocks pasted with it (`rig.packet`), in their order. */
+function rawOf(it: RigItem, packets: Map<string, RigItem[]>, t: Messages): { raw: string; title: string } {
+  const p = it.rig.packet ? packets.get(it.rig.packet.id) : undefined;
+  if (!p || p.length < 2) return { raw: it.rig.raw, title: t.session.raw };
+  return { raw: p.map(x => x.rig.raw).join('\n\n'), title: t.session.rawMany(p.length) };
+}
 
 /** The session's main thread as lines, each with the item it shows (what a scroll stays on), and each item's turn (its first
  *  item's key: the folded turn's line). Past turns folded unless unfolded, the last OPEN_TURNS in full. Each element wraps at the
- *  real width, up to its ceiling unless unfolded. */
+ *  real width, up to its ceiling unless unfolded. OpenRig's cards stand apart by a blank line; its notices in a row fold on
+ *  one line (unless unfolded), a stuck sweep left out. */
 export function threadView(items: ThreadItem[], o: Omit<Opts, 'cap'> & { unfolded: boolean }): ThreadView {
   const all = turns(items);
-  const lines: Line[] = [], keys: string[] = [], turnOf = new Map<string, string>();
+  const lines: Line[] = [], keys: string[] = [], turnOf = new Map<string, string>(), rig = new Map<string, RigElement>(), heads = new Map<string, number>(), cards = new Map<string, string>();
   const opts: Opts = { ...o, cap: n => (o.unfolded ? Infinity : n) };
+  // OpenRig's elements drawn in the width less their gutter.
+  const inner: Opts = { ...opts, width: o.width - GUTTER };
   const push = (key: string, l: Line[]) => { for (const x of l) { lines.push(x); keys.push(key); } };
+  const packets = new Map<string, RigItem[]>();
+  for (const it of items) { const r = rigOf(it); if (r?.rig.packet) packets.set(r.rig.packet.id, [...(packets.get(r.rig.packet.id) ?? []), r]); }
+  for (const p of packets.values()) p.sort((a, b) => a.rig.packet!.index - b.rig.packet!.index);
+  const blank = (l: Line | undefined) => !l || l.every(x => !x.text.trim());
   all.forEach((turn, i) => {
     const recent = i >= all.length - OPEN_TURNS;
     const first = turn.prompt?.id ?? turn.items[0]?.id ?? String(i);
     for (const it of turn.items) turnOf.set(it.id, first);
     if (!recent && !o.unfolded) { push(first, [cut(foldedLine(turn, o), o.width)]); return; }
     if (lines.length) push(first, [[{ text: '' }]]);
-    for (const it of turn.items) push(it.id, itemLines(it, opts));
+    let gap = false;
+    for (let k = 0; k < turn.items.length; k++) {
+      const it = turn.items[k]!, r = rigOf(it);
+      const card = !!r && (r.kind !== 'notice' || r.rig.kind === 'handoff' || r.rig.kind === 'unreadable');
+      // A card, and what follows one, stand apart by a blank line (never two, never at the turn's top).
+      if ((card || gap) && lines.length && !blank(lines[lines.length - 1])) push(it.id, [[{ text: '' }]]);
+      gap = card;
+      if (r && foldsAway(it) && !o.unfolded) {
+        let end = k;
+        while (end + 1 < turn.items.length && foldsAway(turn.items[end + 1]!)) end++;
+        if (end > k) {
+          const run = turn.items.slice(k, end + 1).map(x => rigOf(x)!);
+          heads.set(it.id, lines.length);
+          push(it.id, gutter([foldedNotices(run, inner)]));
+          const raw = run.map(x => x.rig.raw).join('\n\n');
+          rig.set(it.id, { raw, title: o.t.session.rawMany(run.length) });
+          if (o.raws?.has(it.id)) push(it.id, gutter(rawBox(raw, o.t.session.rawMany(run.length), inner)));
+          k = end;
+          continue;
+        }
+      }
+      if (!r) { push(it.id, itemLines(it, opts)); continue; }
+      heads.set(it.id, lines.length);
+      if (r.kind === 'notice' && r.rig.kind === 'handoff' && r.rig.qitem && r.status !== 'refused') cards.set(it.id, r.rig.qitem);
+      push(it.id, gutter(rigLines(r, inner)));
+      const { raw, title } = rawOf(r, packets, o.t);
+      const reply = replyOf(it, opts);
+      rig.set(it.id, { raw, title, ...(reply ? { reply } : {}) });
+      if (o.raws?.has(it.id)) push(it.id, gutter(rawBox(raw, title, inner)));
+    }
   });
-  return { lines, keys, turns: turnOf };
+  return { lines, keys, turns: turnOf, rig, heads, cards };
+}
+
+/** The OpenRig element key b and r act on: the lowest one with a line in the view (`top`…`bottom`, line indexes). */
+export function selectedRig(v: Pick<ThreadView, 'keys' | 'rig'>, top: number, bottom: number): string | undefined {
+  for (let i = Math.min(bottom, v.keys.length - 1); i >= Math.max(0, top); i--) { const k = v.keys[i]!; if (v.rig.has(k)) return k; }
+  return undefined;
 }
 
 /** The line at the top of a scrolled view: its item's, `offset` lines in; the item folded away, its turn's line. -1: gone. */

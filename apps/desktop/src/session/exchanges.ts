@@ -28,6 +28,8 @@ export type Segment =
   | { kind: 'decision'; item: Permission }
   | { kind: 'helper'; item: HelperItem }
   | { kind: 'sent'; item: SentItem }
+  /** A queue row this seat passed with its own `rig queue handoff|create` (docs/mockups/ledge-openrig-messages.html): where it ran. */
+  | { kind: 'rigOut'; item: NoticeItem }
   | { kind: 'plan'; item: ToolItem; plan: PlanDoc };
 export interface Exchange {
   key: string;
@@ -37,6 +39,8 @@ export interface Exchange {
   received: ReceivedItem[];
   /** The harness's cross-session notices that open it (an idle or delivery notice): system events, no segment. */
   notices: NoticeItem[];
+  /** `received` and `notices` together, in the order they came: OpenRig's blocks pasted in one prompt read in order. */
+  openers: Array<ReceivedItem | NoticeItem>;
   segments: Segment[];
 }
 
@@ -61,6 +65,7 @@ function segmentsOf(items: readonly ThreadItem[]): Segment[] {
     else if (it.kind === 'permission') { if (it.decision) out.push({ kind: 'decision', item: it }); }
     else if (it.kind === 'helper') out.push({ kind: 'helper', item: it });
     else if (it.kind === 'sent') out.push({ kind: 'sent', item: it });
+    else if (it.kind === 'notice' && it.rig && it.outgoing) out.push({ kind: 'rigOut', item: it });
   }
   return out;
 }
@@ -126,7 +131,7 @@ function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[
     return [{
       key: helper?.id ?? `helper-${helperId}`, at: helper?.at ?? rest[0]!.at,
       prompt: helper ? { id: helper.id, text: helper.task, from: 'parent' } : null,
-      received: [], notices: [], segments: segmentsOf(rest)
+      received: [], notices: [], openers: [], segments: segmentsOf(rest)
     }];
   }
   return turns([...items]).map(t => {
@@ -135,14 +140,16 @@ function exchangesOf(items: readonly ThreadItem[], helperId?: string): Exchange[
       key: t.prompt?.id ?? `turn-${t.n}`, at: t.prompt?.at ?? t.items[0]!.at,
       prompt: t.prompt ? { id: t.prompt.id, text: t.prompt.text, from: 'you' as const, ...(t.prompt.images?.length ? { images: t.prompt.images } : {}) } : null,
       received: t.items.filter((i): i is ReceivedItem => i.kind === 'received'),
-      notices: t.items.filter((i): i is NoticeItem => i.kind === 'notice'), segments: segmentsOf(rest)
+      notices: t.items.filter((i): i is NoticeItem => i.kind === 'notice' && !(i.rig && i.outgoing)),
+      openers: t.items.filter((i): i is ReceivedItem | NoticeItem => i.kind === 'received' || (i.kind === 'notice' && !(i.rig && i.outgoing))),
+      segments: segmentsOf(rest)
     };
   });
 }
 
 /** Les ids dans l'ordre affiché : consigne, puis les messages reçus, les avis, puis chaque segment (chaque action d'un repli ; ses mises à jour de liste n'y sont pas). */
 export function displayIds(xs: readonly Exchange[]): string[] {
-  return xs.flatMap(x => [...(x.prompt ? [x.prompt.id] : []), ...x.received.map(m => m.id), ...x.notices.map(n => n.id), ...x.segments.flatMap(s => s.kind === 'tools' ? s.tools.map(t => t.id) : [s.item.id])]);
+  return xs.flatMap(x => [...(x.prompt ? [x.prompt.id] : []), ...x.openers.map(m => m.id), ...x.segments.flatMap(s => s.kind === 'tools' ? s.tools.map(t => t.id) : [s.item.id])]);
 }
 
 export interface Summary {

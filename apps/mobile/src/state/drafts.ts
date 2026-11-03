@@ -36,3 +36,19 @@ export function markCleared(op: string, storage?: Storage): void {
     localStore(storage)?.setItem(CLEARED, JSON.stringify([...list, op].slice(-KEEP)));
   } catch { /* blocked storage */ }
 }
+
+/** The session whose composer takes the focus when its thread opens next (« Répondre » on an OpenRig message): once. */
+let focusFor: string | null = null;
+export const askFocus = (sessionId: string): void => { focusFor = sessionId; };
+export function takeFocus(sessionId: string): boolean {
+  if (focusFor !== sessionId) return false;
+  focusFor = null;
+  return true;
+}
+
+/** « Répondre » to an OpenRig message: its prefix put at the head of that session's draft (what was typed stays after it). */
+export function prefillDraft(sessionId: string, prefix: string, storage?: Storage): void {
+  const had = loadDraft(sessionId, storage);
+  saveDraft(sessionId, had.startsWith(prefix) ? had : prefix + had, storage);
+  askFocus(sessionId);
+}

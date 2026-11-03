@@ -95,3 +95,40 @@ describe('useOpenRigRoles / useOpenRigRole / readRoleFile', () => {
     await expect(p).resolves.toMatchObject({ content: '# Rôle' });
   });
 });
+
+describe('useRigRow', () => {
+  const row = { id: 'qitem-1-a', state: 'in-progress', from: 'a@r', to: 'b@r', createdAt: 'x', updatedAt: 'y', at: 'z' };
+  it('asks while the card is visible, again every 30 s, its own answer only; nothing while hidden', async () => {
+    const { useRigRow } = await import('../src/openrig');
+    vi.useFakeTimers();
+    try {
+      const { client, sent, emit, listeners } = fake();
+      const { result, rerender, unmount } = renderHook(({ visible }) => useRigRow(client, 'server', 'qitem-1-a', visible), { initialProps: { visible: false } });
+      expect(sent).toEqual([]);
+      rerender({ visible: true });
+      expect(sent).toEqual([{ type: 'openrig.row', requestId: rid(sent[0]), machineId: 'server', qitem: 'qitem-1-a' }]);
+      expect(result.current).toEqual({ row: null });
+      emit({ type: 'openrig.rowState', requestId: 'other', qitem: 'qitem-1-a', row: { ...row, state: 'done' } });
+      expect(result.current).toEqual({ row: null });
+      emit({ type: 'openrig.rowState', requestId: rid(sent[0]), qitem: 'qitem-1-a', row });
+      expect(result.current).toEqual({ row });
+      act(() => { vi.advanceTimersByTime(30_000); });
+      expect(sent).toHaveLength(2);
+      emit({ type: 'openrig.rowState', requestId: rid(sent[1]), qitem: 'qitem-1-a', error: 'offline' }); // the last state stays, marked
+      expect(result.current).toEqual({ row, error: 'offline' });
+      emit({ type: 'openrig.rowState', requestId: rid(sent[1]), qitem: 'qitem-1-a', error: 'not_found' });
+      expect(result.current).toEqual({ row: null, error: 'not_found' });
+      rerender({ visible: false });
+      act(() => { vi.advanceTimersByTime(90_000); });
+      expect(sent).toHaveLength(2);
+      unmount();
+      expect(listeners.size).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('no row named: nothing is asked', async () => {
+    const { useRigRow } = await import('../src/openrig');
+    const { client, sent } = fake();
+    expect(renderHook(() => useRigRow(client, 'local', null, true)).result.current).toEqual({ row: null });
+    expect(sent).toEqual([]);
+  });
+});

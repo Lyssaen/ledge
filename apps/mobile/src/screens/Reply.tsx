@@ -37,8 +37,9 @@ export function replyFailure(o: Op): { title: string; body: string } {
 /** The « / » list of a field: the session's agent, its commands as the PC said (undefined until it answers), and how to ask them. */
 export interface ReplySlash { tool: string; listing: { commands: readonly PhoneSlashCommand[]; error?: true } | undefined; ask(): void }
 
-export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, checking, error, alert, onReconnect, images, dialog, lead, leadNote, slash }: {
+export function Reply({ name, focusAtEnd = false, composer, draft, onDraft, onSend, fresh, taken, checking, error, alert, onReconnect, images, dialog, lead, leadNote, slash }: {
   /** The « / » list, where the agent's commands can be listed; left out, none. */ slash?: ReplySlash | undefined;
+  /** Focus the field on open, the cursor after its text (« Répondre » on an OpenRig message). */ focusAtEnd?: boolean;
   /** The chip that opens at the head of the quick row, and the line under the row it may need. */ lead?: ReactNode; leadNote?: ReactNode;
   /** Said above the field instead of `error`: why the session was not closed (the composer is back, the draft kept). */ alert?: ReactNode;
   name: string; composer: Composer; draft: string; onDraft: (t: string) => void; onSend: () => void; fresh: boolean;
@@ -51,6 +52,13 @@ export function Reply({ name, composer, draft, onDraft, onSend, fresh, taken, ch
   const problem = replyProblem(draft);
   const ref = useRef<HTMLTextAreaElement>(null);
   const withImages = images.items.length > 0;
+  useEffect(() => {
+    const el = ref.current;
+    if (!focusAtEnd || !el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // « / » at the head of the draft: the agent's commands in the place of the quick instructions, asked once it is typed.
   const query = slash && composer.enabled && !dialog ? slashQuery(draft) : null;
   const open = query !== null;

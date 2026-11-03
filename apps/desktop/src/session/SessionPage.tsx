@@ -14,6 +14,7 @@ import { SHELL_ICONS } from '../shell/icons';
 import { changedFiles, findFile } from './changedFiles';
 import { Changes } from './Changes';
 import { memoKey, type SessionMemory } from './memory';
+import { aboutLine } from './RigItems';
 import { clampSplit } from './prefs';
 import { ArchivedBanner } from '../manage/ArchivedBanner';
 import type { SessionActions } from '../manage/useSessionActions';
@@ -153,7 +154,16 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   useEffect(() => { if (arrivedDoc) openDoc(arrivedDoc); }, [p.nav.place, arrivedDoc, openDoc]);
   const openDiff = useCallback((path: string) => openTab({ kind: 'diff', path }), [openTab]);
   const openPlan = useCallback((key: string) => openTab({ kind: 'plan', key }), [openTab]);
-  const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', peer }), [openTab]);
+    // « Répondre à Bix » on an OpenRig message (decision 1): Bix's composer, prefixed « À propos de : « … » », a blank line,
+  // the cursor under it; what was already typed there stays after it. The user writes as themselves, never as this seat.
+  const replyTo = useCallback((peer: Session, about: string) => {
+    const k = memoKey(peer.id);
+    const was = memory.get(k).draft;
+    const prefix = `${t.session.rig.about(aboutLine(about))}\n\n`;
+    memory.set(k, { draft: was ? `${prefix}${was}` : prefix });
+    p.dispatch({ type: 'open', id: peer.id, focus: 'reply' });
+  }, [memory, p.dispatch, t]); // eslint-disable-line react-hooks/exhaustive-deps
+const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', peer }), [openTab]);
   /* The « Navigateur » tab: every image the thread's tool rows hold, opened on one (a thumbnail) or on the latest (null: the head's button). */
   const captures = useMemo(() => capturesOf(items ?? []), [items]);
   const [captureFocus, setCaptureFocus] = useState<CaptureFocus>({ key: null });
@@ -456,7 +466,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
                 : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
                 : <Thread client={p.client} session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
                     flash={flash?.id ?? null} onChange={openDiff} onCapture={onCapture} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
-                    convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} />}
+                    convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} onReplyTo={replyTo} />}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
             {view === 'changes' && !loaded && <div className="changes-empty"><p className="muted">{offline ? th.notLoaded : th.loading}</p></div>}

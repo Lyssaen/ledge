@@ -19,7 +19,9 @@ export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]>
   /** The machine the OpenRig screen shows, which « Lancer un rig » launches on (null: the first one). */
   rigMachine?: string | null;
   /** The OpenRig screen's view, and the role open in its Roles view (`seat`: `rig/logicalId` it is seen from). */
-  rigView?: 'rigs' | 'roles'; role?: { id: string; seat?: string } }
+  rigView?: 'rigs' | 'roles'; role?: { id: string; seat?: string };
+  /** The session whose screen opens on its composer (key r on an OpenRig message: the reply to its sender), once. */
+  openReply?: string }
 
 /** A screen's keys: true when it took the key (the global keys then leave it alone). */
 export type KeyHandler = (input: string, key: Key) => boolean;

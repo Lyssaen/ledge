@@ -426,6 +426,24 @@ describe('multi-machine connections', () => {
     client.send({ type: 'openrig.specs', requestId: 's2', machineId: 'server' });
     expect(rig().at(-1)).toEqual({ type: 'openrig.specList', requestId: 's2', machineId: 'server', specs: [], error: 'offline' });
   });
+  it('routes a queue row to its machine; an older daemon refuses only that ask', () => {
+    const { client, server, got } = setup();
+    const rows = () => got.filter(m => m.type === 'openrig.rowState' || m.type === 'openrig.roleList');
+    client.send({ type: 'openrig.row', requestId: 'w1', machineId: 'server', qitem: 'qitem-1-a' });
+    expect(server.sent).toEqual([{ type: 'openrig.row', requestId: 'w1', qitem: 'qitem-1-a' }]);
+    server.emit({ type: 'openrig.rowState', requestId: 'w1', qitem: 'qitem-1-a', error: 'not_found' });
+    server.emit({ type: 'openrig.rowState', requestId: 'w1', qitem: 'qitem-1-a', error: 'not_found' }); // once only
+    expect(rows()).toEqual([{ type: 'openrig.rowState', requestId: 'w1', machineId: 'server', qitem: 'qitem-1-a', error: 'not_found' }]);
+    client.send({ type: 'openrig.roles', requestId: 'o1', machineId: 'server' });
+    client.send({ type: 'openrig.row', requestId: 'w2', machineId: 'server', qitem: 'qitem-2-b' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.row' });
+    expect(rows().at(-1)).toEqual({ type: 'openrig.rowState', requestId: 'w2', machineId: 'server', qitem: 'qitem-2-b', error: 'outdated' });
+    server.emit({ type: 'openrig.roleList', requestId: 'o1', roles: [] }); // the roles ask was still pending
+    expect(rows().at(-1)).toEqual({ type: 'openrig.roleList', requestId: 'o1', machineId: 'server', roles: [] });
+    server.set('unreachable');
+    client.send({ type: 'openrig.row', requestId: 'w3', machineId: 'server', qitem: 'qitem-3-c' });
+    expect(rows().at(-1)).toEqual({ type: 'openrig.rowState', requestId: 'w3', machineId: 'server', qitem: 'qitem-3-c', error: 'offline' });
+  });
   it('routes « À toi » asks and answers to their machine; a push carries its machine; an older daemon refuses only those', () => {
     const { client, server, got } = setup();
     const human = () => got.filter(m => m.type === 'openrig.asksChanged' || m.type === 'openrig.answered' || m.type === 'openrig.state');
