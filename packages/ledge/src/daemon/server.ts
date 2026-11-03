@@ -194,7 +194,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; /** What `daemon.stop` does (startDaemon: stop, then exit when run by the CLI). */ onStop?: () => void; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -1464,6 +1464,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
+      case 'daemon.stop':
+        log('daemon.stop asked by a client');
+        opts.onStop?.();
+        return;
       case 'update.daemon':
         if (!opts.updater) return reply({ type: 'update.failed', version: msg.version, reason: 'no-systemd' });
         return opts.updater.update(msg.version, broadcast, reply);

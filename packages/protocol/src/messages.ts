@@ -311,6 +311,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.reset') }),
   /** Installs `@paradow/ledge@version` and restarts the service (spec 2026-10-12 auto-update §6). */
   z.object({ type: z.literal('update.daemon'), version: z.string().regex(SEMVER) }),
+  /** Stops the daemon (Windows has no SIGTERM to catch): Desktop on quit or before an update. The agents stay in the pane host. */
+  z.object({ type: z.literal('daemon.stop') }),
   /** Replaces the daemon's machines list (first connected front wins); refused unless valid. */
   z.object({ type: z.literal('machines.set'), machines: MachinesSchema }),
   /** Replaces the local daemon's projects and rules as a whole; refused unless valid. */

@@ -52,7 +52,7 @@ async function main(argv: string[]): Promise<number> {
       catch (e) { if ((e as NodeJS.ErrnoException).code === 'EADDRINUSE') return 0; throw e; }
       return 0;
     }
-    case 'daemon': { const { startDaemon } = await import('../daemon/index.js'); await startDaemon(); await new Promise(() => {}); return 0; }
+    case 'daemon': { const { startDaemon } = await import('../daemon/index.js'); await startDaemon({ exitOnStop: true }); await new Promise(() => {}); return 0; }
     case '--version': case 'version': { const { LEDGE_VERSION } = await import('../version.js'); console.log(LEDGE_VERSION); return 0; }
     case 'setup': { const { runSetup } = await import('./setup.js'); for (const l of await runSetup()) console.log(l); return 0; }
     case 'uninstall': {

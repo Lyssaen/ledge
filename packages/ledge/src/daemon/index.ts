@@ -19,7 +19,7 @@ import { createMobileService, type MobileService } from '../mobile/service.js';
 import { fileJournal } from './mailbox.js';
 import { tasksJournal } from './tasks.js';
 
-export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
+export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string; /** `daemon.stop` ends the process too (the CLI's daemon). */ exitOnStop?: boolean } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
   const store = new Store();
   const loaded = await store.load();
@@ -64,7 +64,8 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   catch (e) { log(`mobile access not available: ${(e as Error).message}`); mobileUnavailable = (e as Error).message.slice(0, 200); }
   const mail = fileJournal(paths().mail);
   const taskJournal = tasksJournal(paths().tasks);
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, attachments });
+  let onStop = () => {};
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, attachments, onStop: () => onStop() });
   ompLive = () => server.omp.liveCount();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));
@@ -75,6 +76,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
     poller.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await taskJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
+  onStop = () => { void stop().finally(() => { if (opts.exitOnStop) process.exit(0); }); };
   process.once('SIGTERM', onSignal);
   process.once('SIGINT', onSignal);
   return { stop, port: server.port };
