@@ -1,4 +1,4 @@
-import { cleanTopic, parseRigPrompt, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
+import { cleanTopic, pendingKey, parseRigPrompt, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices, ledgeNotice, ledgeTask } from './crossSession.js';
 import { sameQuestion } from '../adapters/types.js';
@@ -265,15 +265,17 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     case 'InjectFailed':
       return { ...s, state: 'error', lastError: ev.text ?? 'injection not confirmed', lastActivityAt: at };
     case 'Decided': {
+      // Who answered the request from Ledge, kept with its key: « Déjà traitée sur … » on the devices that did not.
+      const answer = ev.by && s.pending ? { lastAnswer: { key: pendingKey(s.pending), by: ev.by, at, ...(ev.decision ? { decision: ev.decision } : {}) } } : {};
       const helperId = s.pending?.helperId;
       if (helperId) {
         const state = restored(s);
         const helpers = s.helpers.some(h => h.id === helperId) ? setHelper(s, helperId, { state: 'working' }) : s.helpers;
-        return { ...s, state, helpers, pending: undefined, lastError: state === 'error' ? s.lastError : undefined, lastActivityAt: at };
+        return { ...s, ...answer, state, helpers, pending: undefined, lastError: state === 'error' ? s.lastError : undefined, lastActivityAt: at };
       }
       // Ledge's own keys start the next step as a hook would: the pane, still at rest until the agent redraws (and
       // its prompt hook has run), gets the same grace instead of ending the turn it just started.
-      return { ...s, state: 'working', pending: undefined, lastError: undefined, lastHookAt: at, lastActivityAt: at };
+      return { ...s, ...answer, state: 'working', pending: undefined, lastError: undefined, lastHookAt: at, lastActivityAt: at };
     }
     case 'Stop': {
       // The turn's last message rides on the hook; a Stop without one keeps what the last Stop said.

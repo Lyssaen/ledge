@@ -3337,6 +3337,8 @@ describe('close a session', () => {
         expect(await c.next('chat.acted', 3000)).toEqual({ type: 'chat.acted', rid: 'r1', qid: 'q1', done: [0], failed: [] });
         expect(marks).toEqual(['0:running', '0:denied']);
         expect(tmux.sent[0]).toEqual(['keys', 'ledge-a', 'Escape']);
+        // The PC's own card: the request is said answered by the PC, under its key.
+        expect(store.get('a')?.lastAnswer).toMatchObject({ key: pendingKey(pending), by: { kind: 'pc' }, decision: 'deny' });
         c.close();
       });
       it('refuses an unknown card, and a destructive row without the confirmation', async () => {

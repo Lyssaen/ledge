@@ -20,10 +20,13 @@ const PRIMARY = buttonClass({ variant: 'primary', block: true });
 export function Gone({ store, stale = false, item }: { store: MobileStore; stale?: boolean; item?: InboxItem | undefined }) {
   const state = useMobile(store);
   const link = linkView(state);
-  // The session's thread says who answered (docs/mockups/mobile-multi-device.html, part 1): asked when it is not here yet.
   const sessionId = item?.sessionId;
   const known = sessionId !== undefined && state.threads.has(sessionId);
-  useEffect(() => { if (!stale && sessionId !== undefined && !known) store.openThread(sessionId); }, [stale, sessionId, known, store]);
+  // The PC's own record of who answered this very request (its key), for a permission or a question alike.
+  const last = item ? state.sessions.get(item.sessionId)?.lastAnswer : undefined;
+  const recorded = !!item && !!last && last.key === item.key;
+  // An older PC says it only in the thread, for a permission: asked when it is not here yet.
+  useEffect(() => { if (!stale && !recorded && sessionId !== undefined && !known) store.openThread(sessionId); }, [stale, recorded, sessionId, known, store]);
   const back = href({ name: 'inbox' });
   const backRoute = { name: 'inbox' } as const;
   if (stale) {
@@ -38,6 +41,11 @@ export function Gone({ store, stale = false, item }: { store: MobileStore; stale
       </>
     );
   }
+  if (item && last && recorded) {
+    const where = last.by.kind === 'pc' ? copy.thread.event.fromPc : last.by.id === state.device?.id ? copy.thread.event.fromHere : copy.thread.event.fromDevice(last.by.name);
+    return <Result store={store} title={copy.gone.titleOn(where)} body={last.decision ? copy.gone.decided(last.decision, clock(last.at)) : copy.gone.answered(clock(last.at))} item={item} />;
+  }
+  // An older PC: its thread, for a permission.
   const answered = item && item.kind === 'permission' ? [...(state.threads.get(item.sessionId)?.items ?? [])].reverse()
     .find((i): i is Extract<typeof i, { kind: 'permission' }> => i.kind === 'permission' && i.text === item.text && i.decision !== undefined && i.decision !== 'unknown') : undefined;
   if (!answered || answered.decision === undefined || answered.decision === 'unknown') return <Result store={store} title={copy.gone.titleElsewhere} body={copy.gone.body} item={item} />;

@@ -746,7 +746,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const TYPED_MS = 30_000;
 
   /** session.reply's checks and typing (shared with the chat's relay): null once typed, the refusal otherwise; rejects when the injection fails. */
-  async function replyTo(id: string, text: string, how: { steer?: boolean; attachments?: string[] } = {}): Promise<Refusal | null> {
+  async function replyTo(id: string, text: string, how: { steer?: boolean; attachments?: string[]; by?: DecidedBy } = {}): Promise<Refusal | null> {
     const s = store.get(id); if (!s) return unknownSession();
     if (s.source === 'hook_only') return readOnly();
     if (isOmpSeat(s)) return ompSeatReadOnly(s);
@@ -774,7 +774,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // With no pending (idle, your turn) the text goes to the input line: no prompt to check for.
     // Noted before typing: the agent's hook can land before the injection is verified.
     if (ids.length > 0) typed.set(id, { ids, at: Date.parse(now()) });
-    try { await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending); }
+    // A reply that answers a request says who answered it, as a decision does: the device the gateway names, else the PC.
+    try { await injectAndVerify(id, pane => adapter.replyPlan(text, pending, pane || undefined), !!pending, undefined, pending ? how.by ?? { kind: 'pc' } : undefined); }
     catch (e) { typed.delete(id); throw e; }
     return null;
   }
@@ -979,11 +980,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
    * one place: a row fails on the handler's `error`, or on the reason its `task.result` carries.
    */
-  function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) {
+  function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) {
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
       resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), tasks: tasks.all() }),
-      apply: async row => { const r = await applyRow(row, rid); if (r.failure !== undefined) throw new Error(r.failure); }
+      apply: async row => { const r = await applyRow(row, rid, by); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed, deny);
   }
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
@@ -993,8 +994,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const LEDGE_READS: ReadonlySet<Extract<ClientMessage, { type: 'task.cmd' }>['op']> = new Set(['list', 'show', 'seen']);
   /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `task.result`
    *  carries. Ledge's own task commands go straight to the tasks: `by: 'ledge'` is never taken from a client (handle refuses it). */
-  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string): Promise<{ failure?: string }> {
-    const out = actionMessage(row, rid);
+  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string, by?: DecidedBy): Promise<{ failure?: string }> {
+    const made = actionMessage(row, rid);
+    // A request answered from a device's card is that device's decision (`by`, the gateway's); from the PC's, none: the PC.
+    const out = by && made.type === 'session.decide' ? { ...made, by } : made;
     if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
     let failure: string | undefined;
     await handle(out, m => {
@@ -1325,7 +1328,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'session.reply': {
-        const refused = await replyTo(msg.id, msg.text, { steer: msg.steer, attachments: msg.attachments });
+        const refused = await replyTo(msg.id, msg.text, { steer: msg.steer, attachments: msg.attachments, ...(msg.by ? { by: msg.by } : {}) });
         if (refused) refuse(refused, msg.id);
         return;
       }
@@ -1557,10 +1560,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         close: closeForCard
       }, qid, rows);
     },
-    actChat: (thread, qid, rid, rows, confirmed, deny) => {
+    actChat: (thread, qid, rid, rows, confirmed, deny, by) => {
       const card = cardOf(cardThreads, qid);
       if (!card || card.thread !== thread) return Promise.reject(new ActRefused('unknown action'));
-      return actOnCard(card, qid, rid, rows, confirmed, deny);
+      return actOnCard(card, qid, rid, rows, confirmed, deny, by);
     },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',

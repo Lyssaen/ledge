@@ -96,6 +96,7 @@ export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChec
     ...(canSwitch(s) ? { canSwitch: true as const } : {}),
     helpers: s.helpers.map(h => ({ id: h.id, kind: h.kind, task: h.task, state: h.state, ...pickSet(h, ['finishedAt']) })),
     // A preview only: the whole reply is in the thread.
+    ...(s.lastAnswer ? { lastAnswer: { ...s.lastAnswer, by: s.lastAnswer.by.kind === 'device' ? { ...s.lastAnswer.by, name: clip(s.lastAnswer.by.name, 60).text } : s.lastAnswer.by } } : {}),
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
     ...(pending ? { pending } : {}),
     ...(checklist ? { checklist } : {}),

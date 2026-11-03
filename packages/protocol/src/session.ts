@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ContextSchema, HandoverSchema, RelievesSchema } from './handover.js';
+import { DecidedBySchema, DecisionSchema } from './decisions.js';
 
 export const ToolSchema = z.enum(['claude', 'codex', 'cursor', 'omp']);
 /** OMP's `--approval-mode` as Ledge offers it: ask before writes and executions, approve file writes by themselves, or approve everything (auto). */
@@ -96,6 +97,9 @@ export const SessionSchema =z.object({
   /** OMP: the instructions waiting in its own queue (typed while it works), as it reports them; left out when none. */
   queue: z.array(z.object({ text: z.string(), mode: z.enum(['steer', 'follow_up']) })).optional(),
   lastReply: ReplySchema.optional(),
+  /** The last request answered from Ledge (a decision, or a reply to a question): its key (pendingKey), who answered it
+   *  (the PC or a device, its name then), when, and the decision when it was one. Absent until one is, and from an older daemon. */
+  lastAnswer: z.object({ key: z.string().max(64), by: DecidedBySchema, at: z.string().datetime(), decision: DecisionSchema.optional() }).optional(),
   /** The last message this session sent to another agent: its tool_use_id, the address, the peer's Ledge session id, a one-line summary. */
   lastMessage: z.object({ id: z.string(), to: z.string(), peer: z.string().optional(), summary: z.string(), at: z.string().datetime() }).optional(),
   startedAt: z.string().datetime(),

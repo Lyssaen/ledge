@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Session, SessionEvent, SessionState } from '@ledge/protocol';
+import { pendingKey } from '@ledge/protocol';
 import { reduce, answeredBy, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
@@ -230,6 +231,13 @@ describe('reduce: pending rules', () => {
     const next = reduce(s, ev('Decided', { source: 'daemon' }));
     expect(next.state).toBe('working');
     expect(next.pending).toBeUndefined();
+  });
+  it('Decided by someone records who answered the request, under its key; Decided by no one (the terminal, a close) does not', () => {
+    const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
+    const by = { kind: 'device' as const, id: 'fp-ipad', name: 'iPad' };
+    const next = reduce(s, ev('Decided', { source: 'daemon', decision: 'accept', by, at: later(1000) }));
+    expect(next.lastAnswer).toEqual({ key: pendingKey(s.pending!), by, at: later(1000), decision: 'accept' });
+    expect(reduce(s, ev('Decided', { source: 'daemon', byClose: true })).lastAnswer).toBeUndefined();
   });
   it('InjectFailed keeps pending and records the error', () => {
     const s = reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
