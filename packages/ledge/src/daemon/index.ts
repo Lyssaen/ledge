@@ -10,6 +10,7 @@ import { startPoller } from './poller.js';
 import type { Tmux } from '../tmux.js';
 import { pickTmux } from '../panes/pick.js';
 import { ensureLedgeDir, paths } from '../paths.js';
+import { ensureDaemonToken } from '../auth.js';
 import { log } from '../log.js';
 import { daemonInfo } from '../update/self.js';
 import { createDaemonUpdater, realUpdaterDeps } from '../update/run-update.js';
@@ -22,12 +23,17 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   await ensureLedgeDir();
   const store = new Store();
   const loaded = await store.load();
+  // The pane host (Windows) is named after the token and proves it: the token exists before the panes are asked.
+  await ensureDaemonToken();
   const tmux = opts.tmux ?? pickTmux(process.platform, process.env, opts.tmuxSocket ?? 'ledge');
   let live: Set<string> | null = null;
   try { live = new Set(await tmux.listSessions()); }
   catch (e) { log(`startup prune skipped, tmux unavailable: ${(e as Error).message}`); }
   if (live) for (const s of store.all()) {
-    if (s.tmuxSession && !live.has(s.tmuxSession)) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' });
+    if (!s.tmuxSession || live.has(s.tmuxSession) || s.state === 'exited') continue;
+    // The pane host remembers how a pane it kept ended while no daemon ran (Windows); tmux does not.
+    const code = await Promise.resolve(tmux.exitCode?.(s.tmuxSession)).catch(() => undefined);
+    store.apply(s.id, code === undefined ? { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' } : { name: 'SessionEnd', at: new Date().toISOString(), source: 'daemon', exitCode: code });
   }
   // An OMP process lives and dies with this daemon: after a restart its session is over, resumable from its journal.
   for (const s of store.all()) {

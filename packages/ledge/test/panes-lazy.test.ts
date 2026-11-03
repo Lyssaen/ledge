@@ -10,12 +10,12 @@ const files = (d: string): string[] => readdirSync(d).flatMap(n => { const p = j
 
 describe('the ConPTY packages are loaded only when a pane starts', () => {
   it('no source file imports node-pty or @xterm/headless statically (import type and import() only)', () => {
-    const offenders = files(src).filter(f => /^\s*import\s+(?!type\b)[^;]*from\s+['"](node-pty|@xterm\/headless)['"]/m.test(readFileSync(f, 'utf8')));
+    const offenders = files(src).filter(f => /^\s*import\s+(?!type\b)[^;]*from\s+['"](node-pty|@xterm\/headless|@xterm\/addon-serialize)['"]/m.test(readFileSync(f, 'utf8')));
     expect(offenders.map(f => f.slice(src.length).split(sep).join('/'))).toEqual([]);
   });
   it('they are optional dependencies, so an install where node-pty cannot build still succeeds', () => {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as Record<string, Record<string, string> | undefined>;
-    for (const name of ['node-pty', '@xterm/headless']) {
+    for (const name of ['node-pty', '@xterm/headless', '@xterm/addon-serialize']) {
       expect(pkg.dependencies?.[name]).toBeUndefined();
       expect(pkg.optionalDependencies?.[name]).toBeDefined();
     }
@@ -24,5 +24,6 @@ describe('the ConPTY packages are loaded only when a pane starts', () => {
     const config = readFileSync(new URL('../tsup.config.ts', import.meta.url), 'utf8');
     expect(config).toMatch(/external:\s*\[[^\]]*'node-pty'[^\]]*\]/);
     expect(config).toMatch(/external:\s*\[[^\]]*'@xterm\/headless'[^\]]*\]/);
+    expect(config).toMatch(/external:\s*\[[^\]]*'@xterm\/addon-serialize'[^\]]*\]/);
   });
 });

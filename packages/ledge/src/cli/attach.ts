@@ -4,6 +4,8 @@ import { backendOf } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { isSeatSession, realTmux } from '../tmux.js';
 import { attachEnv } from './launch.js';
+import { usesPaneHost } from '../panes/pick.js';
+import type { PaneHostClient } from '../panes/client.js';
 
 const TMUX_SOCKET = 'ledge';
 
@@ -25,6 +27,10 @@ export interface AttachOptions {
   attach?: (args: string[], env: NodeJS.ProcessEnv) => Promise<number>;
   /** Where the tab title goes (the terminal's stdout by default). */
   write?: (s: string) => void;
+  /** The pane host to attach through (Windows); by default the one of this Ledge folder when `usesPaneHost`. */
+  paneHost?: Pick<PaneHostClient, 'hasSession' | 'attach' | 'close'>;
+  /** The terminal's streams (stdin and stdout by default). */
+  io?: { input: NodeJS.ReadableStream; output: NodeJS.WritableStream };
 }
 
 /** The name of session `id` when the daemon says it has no terminal (OMP), else null (no daemon, no such session, a tmux one). */
@@ -56,6 +62,7 @@ async function nativeSession(id: string, port: number): Promise<string | null> {
  */
 export async function attach(id: string, opts: AttachOptions = {}): Promise<number> {
   if (!id) { console.error('ledge attach: missing session id'); return 2; }
+  if (opts.paneHost || usesPaneHost(process.platform, process.env)) return attachThroughHost(id, opts);
   let tmux = realTmux(opts.tmuxSocket ?? TMUX_SOCKET);
   let tmuxName = `ledge-${id}`;
   // An OpenRig seat runs on the user's default tmux server, under its seat's name (`dev-build@starter`).
@@ -79,4 +86,27 @@ export async function attach(id: string, opts: AttachOptions = {}): Promise<numb
   const write = opts.write ?? (s => { if (process.stdout.isTTY) process.stdout.write(s); });
   write(`\u001b]0;${title}\u0007`); // rename the Windows Terminal tab
   return (opts.attach ?? attachInherit)(tmux.attachArgs(tmuxName, { readOnly: opts.readOnly }), attachEnv(process.env));
+}
+
+/** The pane host's client of this Ledge folder; attach never starts a host: without one there is no pane to show. */
+async function localPaneHost(): Promise<Pick<PaneHostClient, 'hasSession' | 'attach' | 'close'>> {
+  const [{ paneHostClient }, { panehostPath }, { readDaemonToken }, { paths }] = await Promise.all([import('../panes/client.js'), import('../panes/protocol.js'), import('../auth.js'), import('../paths.js')]);
+  return paneHostClient({ path: () => panehostPath(process.platform, paths().dir, readDaemonToken() ?? ''), token: readDaemonToken, start: () => {}, connectMs: 1000 });
+}
+
+/** Windows: the pane streamed through the pane host, this terminal raw while attached. Resolves with the agent's exit
+ *  code when it ends, 0 when the pane is gone without one (as `tmux attach` does). */
+async function attachThroughHost(id: string, opts: AttachOptions): Promise<number> {
+  const host = opts.paneHost ?? await localPaneHost();
+  const name = `ledge-${id}`;
+  try {
+    if (!(await host.hasSession(name).catch(() => false))) { console.error(`ledge attach: no session ${id}`); return 1; }
+    const input = opts.io?.input ?? process.stdin, output = opts.io?.output ?? process.stdout;
+    const tty = input as NodeJS.ReadStream;
+    const raw = tty.isTTY === true && typeof tty.setRawMode === 'function';
+    if (raw) tty.setRawMode(true);
+    try { return (await host.attach(name, { input, output, readOnly: opts.readOnly })) ?? 0; }
+    catch (e) { console.error(`ledge attach: ${(e as Error).message}`); return 1; }
+    finally { if (raw) tty.setRawMode(false); if (!opts.io) process.stdin.pause(); }
+  } finally { if (!opts.paneHost) host.close(); }
 }

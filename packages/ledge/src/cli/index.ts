@@ -39,6 +39,19 @@ async function hookMain(args: string[]): Promise<void> {
 async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   switch (cmd) {
+    case 'panehost': {
+      // The agents' panes on Windows (panes/host.ts): started by the daemon, detached, it outlives it.
+      const [{ startPaneHost }, { panehostPath }, { readDaemonToken }, { paths }] = await Promise.all([import('../panes/host.js'), import('../panes/protocol.js'), import('../auth.js'), import('../paths.js')]);
+      const token = readDaemonToken();
+      if (!token) { console.error('ledge panehost: no daemon token yet (start the daemon first)'); return 1; }
+      // The agents live in this process: a stray error is logged, never allowed to end it and them with it.
+      const { log } = await import('../log.js');
+      process.on('uncaughtException', e => log(`pane host: uncaught ${e.stack ?? e.message}`));
+      process.on('unhandledRejection', e => log(`pane host: unhandled ${(e as Error)?.stack ?? String(e)}`));
+      try { await (await startPaneHost({ path: panehostPath(process.platform, paths().dir, token), token })).closed; }
+      catch (e) { if ((e as NodeJS.ErrnoException).code === 'EADDRINUSE') return 0; throw e; }
+      return 0;
+    }
     case 'daemon': { const { startDaemon } = await import('../daemon/index.js'); await startDaemon(); await new Promise(() => {}); return 0; }
     case '--version': case 'version': { const { LEDGE_VERSION } = await import('../version.js'); console.log(LEDGE_VERSION); return 0; }
     case 'setup': { const { runSetup } = await import('./setup.js'); for (const l of await runSetup()) console.log(l); return 0; }

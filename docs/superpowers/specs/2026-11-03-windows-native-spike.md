@@ -119,3 +119,26 @@ test; count leftover `node.exe` too after a kill.
 - The Codex sandbox choice for the PO: non-admin only; decide whether Ledge asks it or sets it up beforehand.
 - Not covered by the spike: resize, very long sessions, the plan and multi-tab question dialogs on Windows, Cursor/OMP
   (out of scope), the embedded terminal and attach (needs the pane host's pipe).
+
+## Pane host (product phase, step 1)
+
+Plan: [2026-11-03-windows-pane-host.md](../plans/2026-11-03-windows-pane-host.md), branch `feat/windows-pane-host`.
+
+`ledge panehost` keeps the agents' ConPTY panes in a process of its own, served over a named pipe
+(`\\.\pipe\ledge-panes-<hash of the Ledge folder>`, a Unix socket elsewhere), one JSON object per line; a connection
+must present the daemon token before anything else. On Windows the daemon starts it detached when none answers and
+adopts the panes it finds; it closes by itself after 10 min without pane or client. `ledge attach` streams a pane
+through it (screen first, then output; input unless `--read-only`).
+
+Verified on the PC (2026-11-03):
+
+- Windows unit tests of the panes, host, client, attach and daemon adoption: 94 pass, 1 skipped (the tmux reply plan).
+- Through the host, the driver's checks: Claude 8/8, Codex 1, 2, 3, 6, 7, 8. One host process, child of the daemon,
+  one pipe.
+- **Restart**: Claude working on a ~20 s task (daemon 7164, host 14660, claude.exe 4152); `taskkill /PID 7164 /F`
+  (the daemon alone): host and Claude alive; a new daemon (29600) finds the session, which ends its turn `idle`;
+  host 14660 and claude.exe 4152 unchanged.
+- **Attach**: `node dist/cli/index.js attach <id>` in a ConPTY shows Claude's screen at once; `/status` typed there
+  opens Claude's status, Escape closes it, the attach stays (Escape goes to Claude). There is no detach key: closing
+  the terminal ends the attach (Desktop's embedded terminal does that).
+
