@@ -129,7 +129,8 @@ export function useBrowserFrames(client: DaemonClient, id: string, on: boolean, 
     const count = () => {
       const now = Date.now();
       times.current = times.current.filter(x => now - x < FPS_WINDOW_MS);
-      setFps(times.current.length > 0 ? Math.max(1, Math.round(times.current.length / (FPS_WINDOW_MS / 1000))) : null);
+      // A film: two frames at least in the window. A lone frame (OMP's tab frozen between two calls: one every 3 s, dev-back) shows no rate.
+      setFps(times.current.length > 1 ? Math.max(1, Math.round(times.current.length / (FPS_WINDOW_MS / 1000))) : null);
     };
     const off = client.onMessage(m => {
       if (m.type !== 'browser.frame' || m.id !== id) return;
