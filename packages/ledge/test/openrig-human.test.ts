@@ -453,6 +453,19 @@ describe('« À toi » answering', () => {
     expect(await createHumanChannel({ state: async () => RUNNING, run: g.run, http: g.http }).answer('qitem-1', { kind: 'choice', questionId: 'a', optionId: 'x' })).toMatchObject({ remaining: ['c'] });
   });
 
+  it('sent again after uncertain, each answer ends as nothing left to do: choice and words already, « Vu » and resolve closed', async () => {
+    const f = fake({ rows: {
+      'qitem-1': ASK,
+      'qitem-2': { ...NEWS, state: 'done' },                          // the news « Vu » closed
+      'qitem-3': { ...PARKED, state: 'in-progress', blockedOn: null }  // the park the resolve lifted
+    }, post: b => ({ status: 200, json: { verb: b.verb, qitemId: b.qitemId, answer: { outcome: 'answered', unanswered: [], message: 'Already answered; the original answer went to dev-review@starter as qitem-reply. No new reply was sent.' }, createdQitemId: 'qitem-reply' } }) });
+    const h = createHumanChannel({ state: async () => RUNNING, run: f.run, http: f.http });
+    expect(await h.answer('qitem-1', { kind: 'words', text: 'x' })).toMatchObject({ ok: true, outcome: 'already' });
+    expect(await h.answer('qitem-2', { kind: 'seen' })).toMatchObject({ ok: false, error: 'closed' });
+    expect(await h.answer('qitem-3', { kind: 'resolve', text: 'Oui' })).toMatchObject({ ok: false, error: 'closed', message: 'the row is no longer parked on the person (in-progress)' });
+    expect(f.calls.filter(c => c.method === 'POST')).toHaveLength(1);
+  });
+
   it('maps OpenRig\'s refusals', async () => {
     expect(await answering(() => ({ status: 200, json: {} })).h.answer('nope', { kind: 'seen' })).toMatchObject({ ok: false, error: 'not_found' });
     expect(answerError(409, { error: 'qitem_already_terminal', message: 'already terminal' })).toEqual({ error: 'closed', message: 'already terminal' });

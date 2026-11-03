@@ -268,6 +268,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }, 600);
   };
   const human = opts.human ?? createHumanChannel({ state: () => openrig.state(), run: execRun(agentEnv), onEvent: pushGoals });
+  /** « À toi »: OpenRig followed from the first front (desktop, TUI or phone) that asks; each change goes to all of them, and moves the goals. */
   const followAsks = () => human.start(l => { broadcast({ type: 'openrig.asksChanged', ...l }); pushGoals(); });
   /** The seats recognised before and idle since (no hook to bring them): looked for again at start and at each OpenRig read. */
   const adoptSeats = () => { for (const s of store.all()) if (s.rig) adoptSeat(s.id, s.rig.seat); };
@@ -1474,6 +1475,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   if (mobile) gateway = createPhoneGateway({
     mobile,
+    // « À toi » on the phone (lot 3): this PC's OpenRig, as the desktop has it; a phone's answer goes through the same checks.
+    openrig: { list: () => human.list(), answer: (qitemId, answer) => human.answer(qitemId, answer), follow: followAsks },
     // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
     chats: { ...threads, async drop(id: string) {
       const waiting = [...new Set(threads.queuedRelays().filter(q => q.thread === `device:${id}`).map(q => q.relay.id))];

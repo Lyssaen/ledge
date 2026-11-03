@@ -156,8 +156,15 @@ Règles :
 }
 ```
 
-**Réessayer** consiste à renvoyer le même `openrig.answer`. C'est sûr : OpenRig ne crée jamais de deuxième
-réponse (`outcome: 'already'`).
+**Réessayer** consiste à renvoyer le même `openrig.answer`. C'est sûr : OpenRig ne crée jamais de deuxième réponse. Un renvoi
+après `uncertain` dit ce qu'il en est, selon la réponse :
+- `choice` ou `words` déjà rendus : `ok: true`, `outcome: 'already'` ;
+- `seen` déjà fait (la nouvelle est close) : `ok: false`, `error: 'closed'` ;
+- `resolve` déjà fait (la ligne n'est plus parquée sur la personne) : `ok: false`, `error: 'closed'` ;
+- sinon, l'action se fait : `answered` ou `recorded`.
+
+`already` et `closed` veulent dire tous deux qu'il n'y a plus rien à faire : la demande est réglée, par cette réponse ou par une
+autre. On la retire, sans « Pas envoyée ».
 
 ## Hors lot 1
 
@@ -166,3 +173,76 @@ réponse (`outcome: 'already'`).
 - Le délai « Annuler » vit côté daemon au lot B5. Au lot 1, une réponse part tout de suite.
 - Plusieurs machines agrégées et le mobile (relais) : lot 3. La flotte route déjà par `machineId`.
 - « Brancher Ledge » (la configuration OpenRig) : la décision appartient à l'utilisateur.
+
+## Lot 3 — plusieurs machines, le téléphone (dev-back, 2026-11-02, branche `feat/human-multi`)
+
+### Plusieurs machines (desktop, TUI)
+
+Chaque machine suivie a son propre daemon Ledge, qui lit son propre OpenRig. La personne par défaut est donc lue **par
+machine** (`channel.person`), et rien ne se mélange entre machines. La flotte ajoute `machineId` à chaque message et route
+une réponse vers la machine qui porte la demande (lot 1). Rien ne change dans les messages.
+
+Nouveau hook, dans `packages/fleet/src/openrigAsks.ts` (un fichier séparé de `useOpenRig`) :
+
+```ts
+useOpenRigAsksAll(client, machines: string[]) → {
+  asks: Array<HumanAsk & { machineId: string }>,   // toutes les machines : critical, puis urgent, puis le reste, le plus récent d'abord
+  machines: Record<machineId, { channel, asks, partial, truncated, error?: 'offline' | 'outdated' }>,
+  partial: boolean,     // une machine pas encore entendue, partielle ou injoignable : une demande absente n'est pas réglée
+  answer(machineId, qitemId, answer) → Promise<OpenRigAnswered>,   // part vers la machine de la demande
+  refresh()
+}
+```
+
+- **Machine injoignable** (`offline`) ou trop ancienne (`outdated`) : ses demandes connues **restent**, et `machines[id].error`
+  le dit (même règle que `partial` au lot 1).
+- Une machine qui n'est plus suivie sort de la vue.
+- **TUI** : il utilise les hooks de `packages/fleet` avec le même `DaemonClient`, donc ce hook est disponible tel quel. Il n'y
+  a pas d'écran TUI au lot 3.
+
+### Le téléphone (PWA, par le relais chiffré)
+
+Le téléphone parle au daemon de **ce PC** seulement : la passerelle n'atteint jamais une autre machine. Il voit donc les
+demandes OpenRig de ce PC. Montrer celles des autres machines demanderait que ce daemon relaie la flotte : c'est un
+mécanisme nouveau, noté pour plus tard.
+
+Protocole du téléphone (`packages/protocol/src/phone.ts`), ajouts compatibles :
+
+| Sens | Message | Contenu |
+|---|---|---|
+| téléphone → PC | `{ type: 'openrig.asks' }` | demande la liste ; l'appareil reçoit ensuite chaque changement |
+| PC → téléphone | `{ type: 'openrig.asks', channel, asks, partial?, truncated? }` | la liste entière, à la demande puis à chaque changement |
+| téléphone → PC | `{ type: 'openrig.answer', op, qitemId, answer, assertion? }` | une opération : `operation.result` (received, puis applied / rejected / failed) et le registre des `op` (un rejeu ne renvoie rien à OpenRig) |
+| PC → téléphone | `{ type: 'openrig.answered', op, qitemId, ok, outcome?, remaining?, replyId?, error?, message?, rejected? }` | la fin de la réponse, comme `openrig.answered` sur le desktop ; `rejected` : `confirm_required`, `assertion_invalid`, `assertion_expired`, `unavailable` |
+| téléphone → PC | `confirm.prepare` avec `purpose: 'rig'`, `qitem`, `answer` | un défi lié à cette ligne et à **cette réponse exacte** (`choice`, `words` ou `resolve`) |
+
+Snapshot : `daemon.openrig: true` quand le PC sait faire.
+
+**Passkey** : une réponse `choice`, `words` ou `resolve` peut approuver ce qu'un rig attend (un lancement, un push…). Elle
+exige donc l'assertion de l'appareil, de purpose `rig`, liée à la ligne et à un condensé de la réponse : une assertion
+obtenue pour « Un » n'approuve pas « Deux ». « Vu » (`seen`, sur une nouvelle) n'en demande pas. C'est la même règle que pour
+accepter une demande de session non anodine depuis le téléphone (`decide`). **Point à faire valider par l'utilisateur** : la
+règle peut être assouplie, mais elle est stricte au départ.
+
+**Taille** : un message au téléphone doit tenir dans une trame scellée (environ 1 Mo). La liste envoyée au téléphone a donc ses
+corps coupés à 4 000 caractères (`bodyTruncated`) et ses compléments à 2 000. Elle contient au plus 50 demandes, et si
+nécessaire on retire les moins pressantes jusqu'à tenir dans 900 Ko ; `truncated` le dit alors. Le desktop garde les limites du
+lot 1.
+
+### Lot 3 — après revue (`qitem-20261102214819-7e4492a8`)
+
+- `useOpenRigAsks` / `useOpenRigAsksAll` : une réponse se termine toujours. `offline` : la connexion (ou, dans une flotte, la
+  machine) n'était pas ouverte, rien n'est parti. `uncertain` : elle est partie, mais sa fin n'est pas revenue (connexion tombée,
+  45 s sans réponse, écran quitté) ; renvoyer la même réponse est sûr. `qitemId` et `machineId` sont toujours rendus. Changer la
+  liste des machines suivies n'interrompt pas une réponse en cours.
+- `useOpenRigAsksAll` suit aussi la disponibilité de chaque machine. Une machine qui tombe est marquée tout de suite
+  (`machines[id].error = 'offline'`, ses demandes gardées), puis redemandée quand elle reprend les requêtes. Dans une flotte,
+  c'est quand elle est connectée **et** que son snapshot frais est arrivé (`ready`). Avec un client direct sans flotte, c'est sa
+  propre connexion qui vaut pour les machines suivies.
+- Téléphone :
+  - `HumanAsk.detailTruncated: true` quand le complément est coupé ;
+  - l'empreinte d'un `op` `openrig.answer` comprend la ligne et la réponse, si bien qu'un même `op` pour autre chose donne
+    `conflict` ;
+  - le rejeu d'un `op` renvoie aussi son `openrig.answered` gardé, sans refaire l'action.
+  - une réponse `uncertain` (sa fin s'est perdue) se réessaie avec un **nouvel** `op`, car le même `op` rejoue la fin gardée. C'est
+    sûr : OpenRig ne crée jamais deux réponses.

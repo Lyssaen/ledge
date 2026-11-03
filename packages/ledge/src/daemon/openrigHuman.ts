@@ -357,6 +357,10 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
     }
     const q = obj(r.json), intent = str(q.humanIntent), state = str(q.state) ?? '';
     const parked = state === 'blocked';
+    // A resolve on a row no longer parked: it was unparked (by this answer, sent again after `uncertain`, or by someone else), so it no
+    // longer waits on the person, as a closed row: `closed`, never a refusal that would read as a mistake.
+    // (A seat's own row carries no human intent; an ask to the person, which a resolve never fits, does.)
+    if (ans.kind === 'resolve' && !parked && intent === null) return { qitemId, ok: false, error: 'closed', message: `the row is no longer parked on the person (${state})` };
     const fits = ans.kind === 'seen' ? intent === 'update' : ans.kind === 'resolve' ? parked : intent !== 'update' && !parked;
     if (!fits) return { qitemId, ok: false, error: 'refused', message: `a ${ans.kind} answer does not fit this row (${intent ?? 'no intent'}, ${state})` };
     if (TERMINAL.has(state) && ans.kind !== 'choice' && ans.kind !== 'words') return { qitemId, ok: false, error: 'closed', message: `the row is ${state}` };
