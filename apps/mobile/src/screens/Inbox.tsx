@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { PhoneSession, PhoneTask } from '@ledge/protocol';
 import { copy } from '../copy';
 import { ageLabel, filterItems, headline, requestsOf, type Filter, type InboxItem } from '../model/requests';
-import { href } from '../router';
+import { href, useRoute } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
 import { Badge } from '../ui/Badge';
@@ -22,8 +22,11 @@ const FILTERS: InboxFilter[] = ['all', 'permission', 'question', 'tasks'];
 export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
 
 function Row({ item, session, now, offline }: { item: InboxItem; session: PhoneSession | undefined; now: number; offline: boolean }) {
+  const route = useRoute();
+  // The one opened beside the list, on a wide screen.
+  const open = route.name === 'request' && route.sessionId === item.sessionId;
   return (
-    <a href={href({ name: 'request', sessionId: item.sessionId, key: item.key })} className="block rounded-card border border-line bg-surface p-4 transition-colors hover:bg-raised active:bg-raised">
+    <a href={href({ name: 'request', sessionId: item.sessionId, key: item.key })} aria-current={open ? 'page' : undefined} className="block rounded-card border border-line bg-surface p-4 transition-colors hover:bg-raised active:bg-raised aria-[current=page]:border-fg/30 aria-[current=page]:bg-raised">
       <div className="flex items-center gap-2.5">
         <MobileBot tool={item.tool} seed={item.sessionId} state={session?.state ?? 'waiting_permission'} frozen={offline} />
         <span className="min-w-0 flex-1 truncate text-small font-medium">{item.botName} · {item.task}</span>

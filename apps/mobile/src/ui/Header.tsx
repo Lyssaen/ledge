@@ -42,7 +42,7 @@ export function BackLink({ fallback, label }: { fallback: Route; label: string }
   const to = backTarget(fallback);
   const name = !to.inApp ? label : to.known ? copy.nav.backTo[to.route.name] ?? copy.nav.back : copy.nav.back;
   return (
-    <a href={href(to.route)} aria-label={name} title={name} onClick={e => { e.preventDefault(); goBack(fallback); }} className={iconButtonClass({ className: '-ml-2' })}>
+    <a href={href(to.route)} data-back={fallback.name} aria-label={name} title={name} onClick={e => { e.preventDefault(); goBack(fallback); }} className={iconButtonClass({ className: '-ml-2' })}>
       <Icon name="back" />
     </a>
   );

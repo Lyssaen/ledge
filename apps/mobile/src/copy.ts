@@ -459,6 +459,11 @@ export const copy = {
   risk: {
     badge: 'Impact élevé'
   },
+  /** A wide screen's right pane before anything is chosen in the list (docs/mockups/mobile-multi-device.html, part 5). */
+  split: {
+    request: { title: 'Choisissez une demande', body: 'Ses détails et la décision s’ouvrent ici.' },
+    agent: { title: 'Choisissez un agent', body: 'Son fil et son terminal s’ouvrent ici.' }
+  },
   gone: {
     header: 'Demande', title: 'Déjà traitée sur le PC', body: 'Cette demande a été résolue ailleurs. Aucune nouvelle décision n’a été envoyée.', back: 'Retour aux demandes',
     staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.'
