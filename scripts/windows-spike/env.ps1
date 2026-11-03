@@ -2,7 +2,7 @@
 # spike's Codex, never the system's Git for Windows (the PO's PC will not have it).
 $S = Join-Path $env:TEMP 'ledge-spike'
 $env:LEDGE_HOME = Join-Path $S 'home'
-$env:LEDGE_PORT = '47832'
+$env:LEDGE_PORT = '27832'  # under 32768: WSL's mirrored networking reserves Linux's ephemeral range (32768-60999) on Windows
 # Codex keeps its login, config and hooks here: the user's own ~/.codex is never touched.
 $env:CODEX_HOME = Join-Path $S 'codex-home'
 $env:CLAUDE_CODE_GIT_BASH_PATH = Join-Path $S 'git\bin\bash.exe'
