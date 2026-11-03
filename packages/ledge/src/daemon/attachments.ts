@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, stat, unlink, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, unlink, utimes, writeFile } from 'node:fs/promises';
+import { renameRetry } from '../fs-retry.js';
 import { join } from 'node:path';
 import { ATTACHMENT_ID, AttachmentRefSchema, PREVIEW_MAX, type AttachmentRef, type ImageMime } from '@ledge/protocol';
 import { imageInfo } from '../imageInfo.js';
@@ -117,7 +118,7 @@ export class AttachmentStore {
       await writeFile(tmp, data);
       const t = new Date(this.now());
       await utimes(tmp, t, t);
-      await rename(tmp, file);
+      await renameRetry(tmp, file);
     } catch (e) {
       await unlink(tmp).catch(() => {});
       throw e;
