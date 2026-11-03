@@ -65,6 +65,12 @@ describe('conptyPanes', () => {
     await until(() => !alive(child));
   });
 
+  it('runs a program named without its .exe, found on the PATH', async () => {
+    const s = name();
+    await panes.newSession({ name: s, cwd: tmpdir(), env: process.env as Record<string, string>, command: ['node', '-e', 'console.log("by-name"); setTimeout(() => {}, 5000)'] });
+    await until(async () => /by-name/.test((await panes.capture(s, 50)) ?? ''));
+  });
+
   it('refuses a second session with the same name', async () => {
     const s = name();
     const opts = { name: s, cwd: tmpdir(), env: process.env as Record<string, string>, command: [node, '-e', 'setTimeout(() => {}, 5000)'] };
