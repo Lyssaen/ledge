@@ -250,13 +250,27 @@ export const HumanQuestionSchema = z.object({
   options: z.array(z.object({ id: z.string(), label: z.string(), recommended: z.boolean() })),
   answer: HumanQuestionAnswerSchema.nullable()
 });
+/** A team Max proposes for a goal (the ```ledge-team``` block of his ask, docs/vision/ledge-goal-contract.md). */
+export const TeamProposalSchema = z.object({
+  /** `existing`: the goal goes to a team that exists; `launch`: a new rig is launched, with what that does in `launch`. */
+  kind: z.enum(['existing', 'launch']),
+  rig: z.string(), running: z.boolean().nullable(), folder: z.string().nullable(),
+  seats: z.array(z.object({ seat: z.string(), name: z.string().nullable(), role: z.string().nullable(), note: z.string().nullable() })),
+  reason: z.string().nullable(),
+  /** For a launch, before any yes: agents, runtimes, `rig up --plan`'s summary, what it writes in the folder, the seats' permissions. */
+  launch: z.object({ agents: z.number().int().nullable(), runtimes: z.array(z.string()), plan: z.string().nullable(), writes: z.array(z.string()), permissions: z.string().nullable() }).nullable()
+});
+export type TeamProposal = z.infer<typeof TeamProposalSchema>;
+
 /** One open OpenRig row for the person. `decision`: an ask addressed to them; `update`: a piece of news, closed by « Vu »;
  *  `parked`: a seat's own row blocked on them, settled with their words. `from.seat`: who asked (the parked row's owner). */
 export const HumanAskSchema = z.object({
   id: z.string(), kind: z.enum(['decision', 'update', 'parked']), alert: z.boolean(), priority: z.enum(['routine', 'urgent', 'critical']),
   from: z.object({ seat: z.string(), rig: z.string().nullable(), role: z.string().nullable() }),
   summary: z.string(), body: z.string(), bodyTruncated: z.boolean(), detail: z.string().nullable(), evidenceRef: z.string().nullable(),
-  questions: z.array(HumanQuestionSchema), createdAt: z.string(), updatedAt: z.string()
+  questions: z.array(HumanQuestionSchema), createdAt: z.string(), updatedAt: z.string(),
+  /** Max's proposal for this goal (the ask's `ledge-goal:<id>` tag), and the team it names when its block reads. */
+  goalId: z.string().optional(), team: TeamProposalSchema.optional()
 });
 export type HumanAsk = z.infer<typeof HumanAskSchema>;
 
@@ -313,3 +327,61 @@ export type OpenRigAsks = z.infer<typeof OpenRigAsksSchema>;
 export type OpenRigAsksChanged = z.infer<typeof OpenRigAsksChangedSchema>;
 export type OpenRigAnswer = z.infer<typeof OpenRigAnswerSchema>;
 export type OpenRigAnswered = z.infer<typeof OpenRigAnsweredSchema>;
+
+
+// ── Lot 2 : the goal written to Ledge, Max proposes the team (docs/vision/ledge-goal-contract.md) ──
+
+/** Why a goal (or a word to Max about it) did not go: `no_operator` there is no Max (the kernel does not run, or has no operator.agent);
+ *  `uncertain` it may have gone (sending the same id again is safe); the others as for an answer. */
+export const GoalErrorSchema = z.enum(['no_operator', 'openrig_stopped', 'unreachable', 'uncertain', 'refused', 'offline', 'outdated']);
+export type GoalError = z.infer<typeof GoalErrorSchema>;
+const GoalIdSchema = z.string().regex(/^[A-Za-z0-9-]{8,64}$/, 'not a goal id');
+
+export const GoalSchema = z.object({
+  goalId: z.string(), qitemId: z.string(), text: z.string(), folder: z.string().nullable(), sentAt: z.string(), to: z.string(),
+  state: z.enum(['sent', 'taken', 'asking', 'proposed', 'running', 'done', 'closed']),
+  /** The latest proposal: after « Changer d'équipe » Max makes a new one. */
+  proposal: z.object({
+    askId: z.string(), team: TeamProposalSchema.nullable(), text: z.string(),
+    answer: HumanQuestionAnswerSchema.nullable(), answeredAt: z.string().nullable()
+  }).nullable(),
+  /** Max's question still open (no folder, no fitting team): it waits in « À toi ». */
+  question: z.object({ askId: z.string(), text: z.string() }).nullable(),
+  trail: z.array(z.object({
+    at: z.string(), kind: z.enum(['sent', 'taken', 'note', 'handed', 'closed']), seat: z.string(),
+    to: z.string().optional(), text: z.string().optional(), qitemId: z.string()
+  })),
+  current: z.object({ qitemId: z.string(), seat: z.string(), state: z.string() }).nullable()
+});
+export type Goal = z.infer<typeof GoalSchema>;
+
+/** The person gives Ledge a goal, which goes to Max as a queue row. `goalId`: the front's, the same for a retry. */
+export const OpenRigGoalSendSchema = z.object({
+  type: z.literal('openrig.goal.send'), requestId: z.string().min(1).max(100), machineId: z.string().optional(),
+  goalId: GoalIdSchema, text: z.string().trim().min(1).max(8000), folder: z.string().min(1).max(4096).optional()
+});
+export const OpenRigGoalSentSchema = z.object({
+  type: z.literal('openrig.goal.sent'), requestId: z.string(), machineId: z.string().optional(), goalId: z.string(), ok: z.boolean(),
+  qitemId: z.string().optional(), error: GoalErrorSchema.optional(), message: z.string().optional()
+});
+/** A front asks for the goals given to Max; the answer is also pushed when they change. */
+export const OpenRigGoalsSchema = z.object({ type: z.literal('openrig.goals'), requestId: z.string().min(1).max(100), machineId: z.string().optional() });
+export const OpenRigGoalsChangedSchema = z.object({
+  type: z.literal('openrig.goalsChanged'), requestId: z.string().optional(), machineId: z.string().optional(),
+  goals: z.array(GoalSchema), partial: z.boolean().optional(), error: z.enum(['offline', 'outdated']).optional()
+});
+/** The person writes to Max about a goal: a new row to him (a note would wake no one). `replyId`: the front's, the same for a retry. */
+export const OpenRigGoalReplySchema = z.object({
+  type: z.literal('openrig.goal.reply'), requestId: z.string().min(1).max(100), machineId: z.string().optional(),
+  goalId: GoalIdSchema, replyId: GoalIdSchema, text: z.string().trim().min(1).max(8000)
+});
+export const OpenRigGoalRepliedSchema = z.object({
+  type: z.literal('openrig.goal.replied'), requestId: z.string(), machineId: z.string().optional(), goalId: z.string(),
+  /** The reply's own id, always: sending it again after `uncertain` reuses it, and never wakes Max twice. */ replyId: z.string(), ok: z.boolean(),
+  qitemId: z.string().optional(), error: GoalErrorSchema.optional(), message: z.string().optional()
+});
+export type OpenRigGoalSend = z.infer<typeof OpenRigGoalSendSchema>;
+export type OpenRigGoalSent = z.infer<typeof OpenRigGoalSentSchema>;
+export type OpenRigGoalsChanged = z.infer<typeof OpenRigGoalsChangedSchema>;
+export type OpenRigGoalReply = z.infer<typeof OpenRigGoalReplySchema>;
+export type OpenRigGoalReplied = z.infer<typeof OpenRigGoalRepliedSchema>;
