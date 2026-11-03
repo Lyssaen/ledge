@@ -66,9 +66,9 @@ const live = (id: string, extra: Partial<BrowserLive> = {}): Omit<BrowserLive, '
 const closed = (id: string, extra: Partial<BrowserLive> = {}): Omit<BrowserLive, 'type'> =>
   ({ id, state: 'closed', tabs: 0, url: URL, title: TITLE, since: ago(9), closedAt: ago(1), closed: 'browser', image: { at: ago(3), url: URL, title: TITLE }, ...extra });
 
-async function boot(page: Page, theme: 'dark' | 'light', width: number, frames: string[], browsers: Record<string, { live: Omit<BrowserLive, 'type'>; frame?: string }> = {}) {
+async function boot(page: Page, theme: 'dark' | 'light', width: number, frames: string[], browsers: Record<string, { live: Omit<BrowserLive, 'type'>; frame?: string }> = {}, grouping: 'projects' | 'rigs' = 'projects') {
   await page.setViewportSize({ width, height: 860 });
-  await page.addInitScript(([t]) => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t!); } catch { /* ignore */ } }, [theme]);
+  await page.addInitScript(([t, g]) => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t!); localStorage.setItem('desktop.grouping', g!); } catch { /* ignore */ } }, [theme, grouping]);
   const d = await fakeDaemon(page, [OTTO, MIA, TOM], { launcher: ['ledge'], projects: twoProjects, threads: { otto: thread() }, daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true },
     images: { [SHOT_ID]: { mime: 'image/jpeg', data: frames[1]! } }, browsers });
   await page.goto('/'); await openAtelier(page);
@@ -120,7 +120,7 @@ for (const theme of ['dark', 'light'] as const) for (const [width, w] of [[1440,
   test(`OMP seat, live, tabs closed, stopped, ${w}, ${theme}`, async ({ page, browser }, info) => {
     const frames = [await frameOf(browser, 1), await frameOf(browser, 2)];
     const shot = async (n: string) => { await settle(page); await page.screenshot({ path: info.outputPath(`browser-live-omp-${n}-${w}-${theme}.png`) }); };
-    const d = await boot(page, theme, width, frames, { tom: { live: closed('tom', { url: 'about:blank', closed: 'stopped', closedAt: ago(2), image: { at: ago(4) } }), frame: frames[1] } });
+    const d = await boot(page, theme, width, frames, { tom: { live: closed('tom', { url: 'about:blank', closed: 'stopped', closedAt: ago(2), image: { at: ago(4) } }), frame: frames[1] } }, 'rigs');
     await open(page, 'Mia');
     d.preview('mia', ['● ST7-251 · bascule de lien : maquette', '  écrit designs/ST7-251-link-toggle/mockup.html', "● eval · browser.open({ name: 'maq', … })", '  Opened tab "maq2" on headless browser', '● eval · tab.run(({ page }) => page.click(…))', '> _']);
     await shot('none');
