@@ -16,7 +16,27 @@ let n = 0;
 const name = () => `ledge-t${process.pid}-${n++}`;
 afterEach(async () => { for (const s of await panes.listSessions()) await panes.killSession(s); });
 
-describe('conptyPanes', () => {
+// node-pty ships prebuilds for Windows and macOS only: on Linux it loads once built (node-gyp), which a plain install
+// does not do. The panes are Windows' (tmux runs agents elsewhere): without a loadable node-pty these tests skip.
+const pty = await import('node-pty').then(() => true, () => false);
+
+describe('conptyPanes, typing', () => {
+  it('writes a long text in slices of 256 characters, 20 ms apart (claude.exe keeps only the end of one big write)', async () => {
+    const writes: Array<{ at: number; data: string }> = [];
+    const fake = (() => ({ pid: 1, onData: () => {}, onExit: () => {}, write: (data: string) => { writes.push({ at: Date.now(), data }); }, kill: () => {} })) as unknown as Parameters<typeof conptyPanes>[0] extends infer O ? O extends { spawn?: infer F } ? F : never : never;
+    const p = conptyPanes({ spawn: fake });
+    await p.newSession({ name: 'w', cwd: tmpdir(), env: {}, command: [node] });
+    const text = 'é'.repeat(600);
+    await p.sendText('w', text);
+    expect(writes.map(w => w.data.length)).toEqual([256, 256, 88]);
+    expect(writes.map(w => w.data).join('')).toBe(text);
+    for (let i = 1; i < writes.length; i++) expect(writes[i]!.at - writes[i - 1]!.at).toBeGreaterThanOrEqual(15);
+    await p.sendText('w', 'short');
+    expect(writes.at(-1)!.data).toBe('short');
+  });
+});
+
+describe.skipIf(!pty)('conptyPanes', () => {
   it('runs a command with env and cwd, and captures its output', async () => {
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'panes-')));
     const s = name();
@@ -62,19 +82,6 @@ describe('conptyPanes', () => {
     expect(/count=(\d+)/.exec((await panes.capture(s, 50))!)![1]).toBe('5000');
   }, 20_000);
 
-  it('writes a long text in slices of 256 characters, 20 ms apart (claude.exe keeps only the end of one big write)', async () => {
-    const writes: Array<{ at: number; data: string }> = [];
-    const fake = (() => ({ pid: 1, onData: () => {}, onExit: () => {}, write: (data: string) => { writes.push({ at: Date.now(), data }); }, kill: () => {} })) as unknown as Parameters<typeof conptyPanes>[0] extends infer O ? O extends { spawn?: infer F } ? F : never : never;
-    const p = conptyPanes({ spawn: fake });
-    await p.newSession({ name: 'w', cwd: tmpdir(), env: {}, command: [node] });
-    const text = 'é'.repeat(600);
-    await p.sendText('w', text);
-    expect(writes.map(w => w.data.length)).toEqual([256, 256, 88]);
-    expect(writes.map(w => w.data).join('')).toBe(text);
-    for (let i = 1; i < writes.length; i++) expect(writes[i]!.at - writes[i - 1]!.at).toBeGreaterThanOrEqual(15);
-    await p.sendText('w', 'short');
-    expect(writes.at(-1)!.data).toBe('short');
-  });
 
   it('reports exit', async () => {
     const s = name();

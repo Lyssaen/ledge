@@ -18,14 +18,17 @@ const agent = fileURLToPath(new URL('./fake-agent.mjs', import.meta.url));
 const node = process.execPath;
 const cwd = tmpdir();
 const tmux = pickTmux(process.platform, { LEDGE_PANES: 'conpty' });
+// Needs a loadable node-pty, as test/panes-conpty.test.ts.
+const pty = await import('node-pty').then(() => true, () => false);
 let srv: Awaited<ReturnType<typeof startServer>>; let poller: ReturnType<typeof startPoller>; let store: Store;
 
 beforeAll(async () => {
+  if (!pty) return;
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); await ensureLedgeDir();
   store = new Store(); srv = await startServer({ store, tmux, port: 0 });
   poller = startPoller({ store, tmux, intervalMs: 150, deadCheckMs: 300, broadcastPreview: srv.preview });
 });
-afterAll(async () => { poller.stop(); await srv.close(); for (const s of await tmux.listSessions()) await tmux.killSession(s); });
+afterAll(async () => { if (!pty) return; poller.stop(); await srv.close(); for (const s of await tmux.listSessions()) await tmux.killSession(s); });
 
 describe('pickTmux', () => {
   it('takes the panes on Windows or when asked, tmux elsewhere', () => {
@@ -36,7 +39,7 @@ describe('pickTmux', () => {
   });
 });
 
-describe('end to end on ConPTY panes with a fake Claude Code', () => {
+describe.skipIf(!pty)('end to end on ConPTY panes with a fake Claude Code', () => {
   it('tracks a permission, approves it, sees the agent continue and exit', async () => {
     const client = await connect({ port: srv.port }); await client.next('snapshot');
     const s = await createSession({ tool: 'claude', args: [], command: [node, agent, 'permission', 'npm test', 'work', '1500', 'exit', '0'], cwd, tmux, client });
