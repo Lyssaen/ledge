@@ -332,6 +332,14 @@ export const copy = {
       /** Another linked device, by the name it had when it decided. */
       fromDevice: (name: string) => name
     },
+    /** Claude Code's `<task-notification>`, as the desktop's task card says it. */
+    task: {
+      kicker: 'Tâche', statuses: { killed: 'Arrêtée', completed: 'Terminée', failed: 'En échec', other: 'Notifiée' },
+      agent: 'L’agent', command: 'La commande',
+      agentDid: { killed: 'a été arrêté. Il peut reprendre si vous lui écrivez.', completed: 'a terminé en arrière-plan.', failed: 'a échoué en arrière-plan.', other: 's’est arrêté.' },
+      commandDid: { killed: 'a été arrêtée.', completed: 's’est terminée en arrière-plan.', failed: 'a échoué en arrière-plan.', other: 's’est arrêtée.' },
+      code: (c: string) => `code ${c}`, raw: 'Notification brute', label: (status: string) => `Tâche · ${status}`
+    },
     delivery: { sending: 'Envoi au PC…', taken: 'Pris par le terminal', takenNow: 'Pris par le terminal · à l’instant', uncertain: 'Réception non confirmée' },
     /** OpenRig's messages in a seat's thread (docs/mockups/openrig-messages, section « Téléphone » and its copy table). */
     rig: {

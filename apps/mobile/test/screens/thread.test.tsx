@@ -82,6 +82,42 @@ describe('the thread', () => {
   });
 });
 
+describe('a <task-notification> in the thread', () => {
+  const note = (status: string, summary: string, extra = '') =>
+    `<task-notification>\n<task-id>b7x</task-id>\n<status>${status}</status>\n<summary>${summary}</summary>${extra}\n</task-notification>`;
+  const deliver = (t: ReturnType<typeof opened>, text: string) =>
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [prompt('p1', text, '2026-10-14T10:00:00.000Z')], cut: [], more: false }));
+
+  it('shows a stopped agent as a task card, its notification one tap away', () => {
+    const t = opened();
+    deliver(t, note('killed', 'Agent "Explore" was stopped'));
+    const card = screen.getByRole('region', { name: 'Tâche · Arrêtée' });
+    expect(card).toHaveTextContent('L’agent Explore a été arrêté. Il peut reprendre si vous lui écrivez.');
+    expect(card.querySelector('strong')).toHaveTextContent('Explore');
+    expect(card).not.toHaveTextContent('<task-notification>');
+    const raw = screen.getByRole('button', { name: 'Notification brute' });
+    expect(raw).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(raw);
+    expect(raw).toHaveAttribute('aria-expanded', 'true');
+    expect(card.querySelector('pre')?.textContent).toMatch(/^<task-notification>/);
+  });
+
+  it('shows a failed command with its exit code and output file', () => {
+    const t = opened();
+    deliver(t, note('failed', 'Background command "pnpm test" failed (exit code 1)', '\n<output-file>/tmp/b7x.out</output-file>'));
+    const card = screen.getByRole('region', { name: 'Tâche · En échec' });
+    expect(card.querySelector('code')).toHaveTextContent('pnpm test');
+    expect(card).toHaveTextContent('La commande pnpm test a échoué en arrière-plan.');
+    expect(card).toHaveTextContent('code 1 · /tmp/b7x.out');
+  });
+
+  it('an unknown sentence is shown as it came', () => {
+    const t = opened();
+    deliver(t, note('paused', 'Quelque chose'));
+    expect(screen.getByRole('region', { name: 'Tâche · Notifiée' })).toHaveTextContent('Quelque chose');
+  });
+});
+
 describe('the checklist on the thread', () => {
   const checklist = { tasks: [{ text: 'Écrire', status: 'in_progress' as const }], done: 0, total: 1 };
   const flagged = (flag: boolean) => {

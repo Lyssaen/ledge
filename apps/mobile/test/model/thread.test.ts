@@ -151,3 +151,17 @@ describe('threadItems with images', () => {
     ]);
   });
 });
+
+describe('threadItems with a <task-notification>', () => {
+  const note = '<task-notification>\n<task-id>b7x</task-id>\n<status>failed</status>\n<summary>Background command "pnpm test" failed (exit code 1)</summary>\n<output-file>/tmp/b7x.out</output-file>\n</task-notification>';
+
+  it('reads a prompt that is one as a task card, not as an instruction from the person', () => {
+    const items = threadItems([prompt('t1', 0, 'Lance les tests'), prompt('t2', 1, note), reply('t3', 2, 'Je regarde.')], s(), {}, Date.now(), ['t2']);
+    expect(items.map(i => i.kind)).toEqual(['me', 'task', 'agent']);
+    expect(items[1]).toMatchObject({ key: 't2', kind: 'task', at: T(1), cut: true, task: { status: 'failed', output: '/tmp/b7x.out', about: { kind: 'command', command: 'pnpm test', code: '1' } } });
+  });
+
+  it('a prompt that only mentions one stays the person’s', () => {
+    expect(threadItems([prompt('t1', 0, `Regarde ça : ${note}`)], s(), {})).toMatchObject([{ kind: 'me' }]);
+  });
+});

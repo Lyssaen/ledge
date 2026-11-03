@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ThreadItem } from '@ledge/protocol';
 import { exchanges } from '../src/session/exchanges';
-import { marksOf, synapseOf, tagLabel, taskOf } from '../src/session/markers';
+import { marksOf, synapseOf, tagLabel } from '../src/session/markers';
 
 const at = new Date(0).toISOString();
 
@@ -37,29 +37,5 @@ describe('the [synapse-obs] lines', () => {
     expect(byId.get('r1')).toEqual({ text: 'Je m’y mets.', tags: { objectif: 'implementation' }, was: 'analyse' });
     expect(byId.get('r2')).toEqual({ text: 'Toujours.', tags: { objectif: 'implementation' } });   // the same objective: no change
     expect(latest).toEqual({ story: 'hors-story', objectif: 'implementation' });
-  });
-});
-
-describe('a <task-notification>', () => {
-  const note = (status: string, summary: string, extra = '') =>
-    `<task-notification>\n<task-id>b7x</task-id>\n<status>${status}</status>\n<summary>${summary}</summary>${extra}\n</task-notification>`;
-
-  it('is a prompt only when the text opens with it', () => {
-    expect(taskOf('Câble la liste')).toBeNull();
-    expect(taskOf(`Voir ${note('killed', 'x')}`)).toBeNull();
-  });
-
-  it('a stopped agent: its name', () => {
-    expect(taskOf(note('killed', 'Agent "Explore" was stopped'))).toMatchObject({ id: 'b7x', status: 'killed', about: { kind: 'agent', name: 'Explore' } });
-  });
-
-  it('a background command: its command, its exit code and output file', () => {
-    const t = taskOf(note('failed', 'Background command "npm test" failed (exit code 1)', '\n<output-file>/tmp/b7x.out</output-file>'))!;
-    expect(t).toMatchObject({ status: 'failed', output: '/tmp/b7x.out', about: { kind: 'command', command: 'npm test', code: '1' } });
-    expect(t.raw).toMatch(/^<task-notification>/);
-  });
-
-  it('an unknown status or sentence: « other », its summary as it came', () => {
-    expect(taskOf(note('paused', 'Quelque chose'))).toMatchObject({ status: 'other', summary: 'Quelque chose', about: null });
   });
 });

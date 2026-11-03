@@ -1,4 +1,5 @@
 import { isBrowserCapture, toolShortName, type AttachmentRef, type PhoneSession, type ThreadItem as PcItem } from '@ledge/protocol';
+import { taskOf, type TaskNotice } from '@ledge/ui/thread/task';
 import { copy } from '../copy';
 import type { LinkState } from '../link/link';
 import type { Op } from '../state/operations';
@@ -17,6 +18,8 @@ export type ThreadItem =
     /** The images a prompt from the PC carried. */ images?: AttachmentRef[];
     /** The ids of the images of this phone's own instruction not yet shown by the PC. */ attachments?: string[] }
   | { key: string; kind: 'agent'; text: string; at: string; cut?: true }
+  /** A prompt that is Claude Code's `<task-notification>`: a background agent or command that stopped or ended. */
+  | { key: string; kind: 'task'; task: TaskNotice; at: string; cut?: true }
   | { key: string; kind: 'event'; label: string; at: string }
   | { key: string; kind: 'capture'; label: string; at: string; images: AttachmentRef[] }
   | { key: string; kind: 'awaiting'; item: InboxItem }
@@ -72,7 +75,7 @@ const sameText = (prompt: string, sent: string, shortened: boolean) => {
  * this phone sent that the PC's thread does not show yet in its place in time, what is still on its way, then the
  * request still waiting. A taken instruction the PC never lists (a command such as `/new`, or a prompt that fell off its
  * window) goes once the PC lists something `TAKEN_WINDOW` past it: the PC moved on without it. Of the tools only those that returned images show, as a
- * capture; helpers and messages between agents are left to the terminal, but for OpenRig's (the items that carry `rig`:
+ * capture; a prompt that is Claude Code's `<task-notification>` shows as a task card; helpers and messages between agents are left to the terminal, but for OpenRig's (the items that carry `rig`:
  * a bubble, a task card, a notice line, each after its time); a permission shows once decided. `sessions`: the phone's,
  * to name the seat an OpenRig block is from. `self`: this device's id, to tell its own decisions from another device's.
  */
@@ -109,7 +112,9 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
       continue;
     }
     const before = out.length;
-    if (i.kind === 'prompt') out.push({ key: i.id, kind: 'me', text: i.text, at: i.at, ...(i.images?.length ? { images: i.images } : {}), ...(claimed.has(i.id) ? { delivery: 'taken' as const } : {}), ...mark(i.id) });
+    const task = i.kind === 'prompt' ? taskOf(i.text) : null;
+    if (task) out.push({ key: i.id, kind: 'task', task, at: i.at, ...mark(i.id) });
+    else if (i.kind === 'prompt') out.push({ key: i.id, kind: 'me', text: i.text, at: i.at, ...(i.images?.length ? { images: i.images } : {}), ...(claimed.has(i.id) ? { delivery: 'taken' as const } : {}), ...mark(i.id) });
     else if (i.kind === 'reply') out.push({ key: i.id, kind: 'agent', text: i.text, at: i.at, ...mark(i.id) });
     else if (i.kind === 'tool' && i.images?.length) out.push({ key: i.id, kind: 'capture', label: isBrowserCapture(i.tool) ? copy.thread.capture : toolShortName(i.tool), at: i.at, images: i.images });
     else if (i.kind === 'permission') {
