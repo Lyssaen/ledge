@@ -221,15 +221,19 @@ function noteKeys(d: Dialog | null, note: string): KeyPlan {
 
 /** How long Codex may take to show a typed draft behind ConPTY: ~2 s for 2.3 KB (spike), more for longer. */
 const DRAFT_SHOWN_MS = 10_000;
-/** The input line holds the start of `text`, or Codex folded it into a paste. */
+/** Letters and digits only: Codex on Windows drops some other characters it is typed (·, →, ✓: spike). */
+const kept = (s: string) => s.replace(/[^\p{L}\p{N}]/gu, '');
+/** The input line holds the start of `text`, or Codex folded it into a paste. A text with no letter or digit gives
+ *  nothing to look for: the step passes and the pause before Enter is all that is left. */
 function draftShown(text: string): (pane: string) => boolean {
-  const head = text.replace(/\s+/g, '').slice(0, 20);
+  const head = kept(text).slice(0, 20);
   return pane => {
+    if (!head) return true;
     const lines = split(pane);
     const i = inputLine(lines);
     if (i < 0) return false;
     const draft = lines.slice(i).join('').replace(/\s+/g, '').replace(/^›/, '');
-    return /\[PastedContent\d+chars\]/.test(draft) || (head.length > 0 && draft.startsWith(head));
+    return /\[PastedContent\d+chars\]/.test(draft) || kept(draft).startsWith(head);
   };
 }
 

@@ -201,6 +201,13 @@ describe('codex adapter: a reply on Windows (ConPTY)', () => {
     expect(codexReplyPlan('x'.repeat(2000), undefined, 'win32')[1]).toMatchObject({ ms: 10_000 });
     expect((codexReplyPlan('x'.repeat(2000), undefined, 'win32')[1] as { until: (p: string) => boolean }).until('› [Pasted Content 2000 chars]')).toBe(true);
   });
+  it('knows the draft even when Codex dropped characters of it (· → ✓ vanish from its input on Windows)', () => {
+    const shown = (codexReplyPlan('→ Réponds · OK ✓ vite', undefined, 'win32')[1] as { until: (p: string) => boolean }).until;
+    expect(shown('›  Réponds  OK  vite')).toBe(true);
+    expect(shown('› Ask Codex to do anything')).toBe(false);
+    // Nothing Codex surely keeps to look for: wait for no draft, Enter after the pause.
+    expect((codexReplyPlan('→ ✓', undefined, 'win32')[1] as { until: (p: string) => boolean }).until('› Ask Codex to do anything')).toBe(true);
+  });
   it('elsewhere keeps the tmux plan', () => {
     expect(codexReplyPlan('hello', undefined, 'linux')).toEqual([{ text: 'hello' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
   });
