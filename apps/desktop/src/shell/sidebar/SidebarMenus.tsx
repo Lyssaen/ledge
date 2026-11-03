@@ -84,8 +84,34 @@ export function SidebarMenuHost(p: SidebarMenuHostProps): JSX.Element | null {
         {foldItem(projectKey(null))}
       </>;
       break;
-    default:
-      return null;
+    case 'archives': {
+      // Every archive, not only the ones the filter shows; an archive whose machine cannot archive is kept, and said so.
+      const ok = p.archived.filter(s => p.actions.allowed(s.id)).map(s => s.id);
+      const kept = p.archived.length - ok.length;
+      title = t.side.archives;
+      head = <div className="session-menu-head"><strong>{t.side.archives}</strong></div>;
+      items = <>
+        {item(c.deleteAll(ok.length), SHELL_ICONS.trash, () => p.actions.request('delete', ok), { danger: true, disabled: ok.length === 0, ...(kept > 0 ? { note: c.skipped(kept) } : {}) })}
+        {item(c.restoreAll, SHELL_ICONS.restore, () => { for (const id of ok) p.actions.restore(id); p.notify(c.restoredAll(ok.length)); }, { disabled: ok.length === 0 })}
+        {item(p.archivesOpen ? c.fold : c.unfold, ICONS.chevronRight.d, () => p.onArchivesOpen(!p.archivesOpen))}
+      </>;
+      break;
+    }
+    case 'archive': {
+      const s = p.archived.find(x => x.id === target.id);
+      if (!s) return null;
+      const disabled = !p.actions.allowed(s.id);
+      title = s.name;
+      head = <div className="session-menu-head"><strong>{s.name}</strong>{s.topic && <small>{s.topic}</small>}</div>;
+      items = <>
+        {item(c.read, ICONS.external.d, () => go({ type: 'open', id: s.id }))}
+        {item(t.manage.archivedBanner.restore, SHELL_ICONS.restore, () => p.actions.restore(s.id), { disabled })}
+        {item(t.manage.menu.resume, SHELL_ICONS.resume, () => p.actions.resume(s.id), { disabled })}
+        <hr />
+        {item(t.manage.archivedBanner.delete, SHELL_ICONS.trash, () => p.actions.request('delete', [s.id]), { danger: true, disabled })}
+      </>;
+      break;
+    }
   }
   return (
     <Menu key={JSON.stringify(target)} open onOpenChange={o => { if (!o) p.state.close(); }} label={c.label(title)} className="session-menu-wrap" menuClassName="session-menu"

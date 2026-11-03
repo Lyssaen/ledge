@@ -1,7 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { DaemonInfo } from '@ledge/protocol';
-import { boot, closeDaemons, listSessions, PROJECTS } from './helpers';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import { LangProvider } from '../src/i18n/lang';
+import type { ContextMenuState } from '../src/manage/useContextMenu';
+import type { SessionActions } from '../src/manage/useSessionActions';
+import { SidebarMenuHost } from '../src/shell/sidebar/SidebarMenus';
+import { boot, closeDaemons, listSessions, PROJECTS, recordToasts, type MockDaemon } from './helpers';
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
@@ -104,5 +110,98 @@ describe('the menu of No project', () => {
     fireEvent.contextMenu(rowOf(tree.getByRole('button', { name: /^No project/ })));
     await user.click(screen.getByRole('menuitem', { name: 'New project…' }));
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'New project' })).toBeVisible());
+  });
+});
+
+const ARCHIVED_AT = '2026-10-18T10:00:00.000Z';
+const archived = (id: string, name: string) =>
+  fakeSession(id, { name, cwd: '/w/pay', state: 'exited', archivedAt: ARCHIVED_AT, topic: name, agentSessionId: 'u-1' });
+const otto = fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', topic: 'Wire the list' });
+const sent = (d: MockDaemon) => d.received.filter(m => m.type !== 'snapshot.request');
+const archivesOf = (side: ReturnType<typeof within>) => within(side.getByRole('region', { name: 'Archives' }));
+const archivesHeader = (side: ReturnType<typeof within>) => archivesOf(side).getByRole('button', { name: /Archives/ });
+
+describe('the menu of the Archives', () => {
+  it('right click on Archives: Delete all (2)… asks once for the two, confirmed sends two session.delete', async () => {
+    const { d, side, user } = await boot({ sessions: [otto, archived('a1', 'Nia'), archived('a2', 'Ned')], daemon: CAN });
+    fireEvent.contextMenu(archivesHeader(side));
+    const menu = screen.getByRole('menu', { name: 'Actions for Archives' });
+    expect(menuLabels(menu)).toEqual(['Delete all (2)…', 'Restore all', 'Unfold']);
+    await user.click(within(menu).getByRole('menuitem', { name: 'Delete all (2)…' }));
+    const confirm = within(screen.getByRole('alertdialog'));
+    expect(confirm.getByText('Delete these 2 sessions?')).toBeVisible();
+    await user.click(confirm.getByRole('button', { name: /Delete/ }));
+    await waitFor(() => expect(sent(d).filter(m => m.type === 'session.delete')).toEqual([{ type: 'session.delete', id: 'a1' }, { type: 'session.delete', id: 'a2' }]));
+  });
+
+  it('with no allowed archive, Delete all and Restore all are disabled', async () => {
+    const { side } = await boot({ sessions: [otto, archived('a1', 'Nia')], daemon: { version: '0.6.0', install: 'npm', systemd: true } });
+    fireEvent.contextMenu(archivesHeader(side));
+    expect(screen.getByRole('menuitem', { name: 'Delete all (0)…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Restore all' })).toBeDisabled();
+  });
+
+  it('the filter shows one of five archives; Delete all (5)… still asks for the five', async () => {
+    const five = ['Nia', 'Ned', 'Noa', 'Nim', 'Nox'].map((name, i) => archived(`a${i}`, name));
+    const { side, user } = await boot({ sessions: [otto, ...five], daemon: CAN });
+    await user.click(archivesHeader(side));
+    await user.type(archivesOf(side).getByRole('searchbox', { name: 'Filter the archives' }), 'nox');
+    expect(archivesOf(side).queryByRole('button', { name: /Reread Nia/ })).toBeNull();
+    fireEvent.contextMenu(archivesHeader(side));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete all (5)…' }));
+    expect(within(screen.getByRole('alertdialog')).getByText('Delete these 5 sessions?')).toBeVisible();
+  });
+
+  it('Restore all sends one session.restore per archive and says it once', async () => {
+    const toasts = recordToasts();
+    const { d, side, user } = await boot({ sessions: [otto, archived('a1', 'Nia'), archived('a2', 'Ned')], daemon: CAN });
+    fireEvent.contextMenu(archivesHeader(side));
+    await user.click(screen.getByRole('menuitem', { name: 'Restore all' }));
+    await waitFor(() => expect(sent(d).filter(m => m.type === 'session.restore')).toEqual([{ type: 'session.restore', id: 'a1' }, { type: 'session.restore', id: 'a2' }]));
+    expect(toasts.filter(x => x === '2 sessions put back at their table.')).toHaveLength(1);
+  });
+
+  it('Unfold opens the section', async () => {
+    const { side, user } = await boot({ sessions: [otto, archived('a1', 'Nia')], daemon: CAN });
+    fireEvent.contextMenu(archivesHeader(side));
+    await user.click(screen.getByRole('menuitem', { name: 'Unfold' }));
+    expect(archivesHeader(side)).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
+describe('the menu of an archive row', () => {
+  it('right click on an archive row: Read, Restore, Resume, Delete…; Read opens it', async () => {
+    const { side, user } = await boot({ sessions: [otto, archived('a1', 'Nia')], daemon: CAN });
+    await user.click(archivesHeader(side));
+    fireEvent.contextMenu(archivesOf(side).getByRole('button', { name: /Reread Nia/ }));
+    const menu = screen.getByRole('menu', { name: 'Actions for Nia' });
+    expect(menuLabels(menu)).toEqual(['Read', 'Put back at the table', 'Resume session', 'Delete…']);
+    await user.click(within(menu).getByRole('menuitem', { name: 'Read' }));
+    expect(await screen.findByText('Archived session')).toBeVisible();
+  });
+
+  it('an archive deleted elsewhere while its menu is open closes the menu', async () => {
+    const { d, side, user } = await boot({ sessions: [otto, archived('a1', 'Nia')], daemon: CAN });
+    await user.click(archivesHeader(side));
+    fireEvent.contextMenu(archivesOf(side).getByRole('button', { name: /Reread Nia/ }));
+    expect(screen.getByRole('menu', { name: 'Actions for Nia' })).toBeInTheDocument();
+    act(() => d.remove('a1'));
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+});
+
+describe('SidebarMenuHost on the Archives, some on a machine that cannot archive', () => {
+  it('an archive on a machine that cannot archive is left out: Delete all (1)…, and 1 kept is said', async () => {
+    const list = [archived('a1', 'Nia'), archived('a2', 'Ned')];
+    const request = vi.fn();
+    const actions = { request, resume: vi.fn(), restore: vi.fn(), pending: null, confirm: vi.fn(), cancel: vi.fn(), allowed: (id: string) => id === 'a1' } as unknown as SessionActions;
+    const state = { menu: { target: { kind: 'archives' }, at: { x: 0, y: 0 }, opener: null }, session: null, renaming: null, open: vi.fn(), openOn: vi.fn(), close: vi.fn(), terminal: vi.fn(), rename: vi.fn(), closeRename: vi.fn(), sendRename: vi.fn() } as ContextMenuState;
+    const user = userEvent.setup();
+    render(<LangProvider lang="en"><SidebarMenuHost state={state} projects={PROJECTS} groups={[]} archived={list} actions={actions} dispatch={vi.fn()} broadcast={false}
+      closed={new Set()} onClosed={vi.fn()} archivesOpen={false} onArchivesOpen={vi.fn()} notify={vi.fn()} /></LangProvider>);
+    const item = screen.getByRole('menuitem', { name: 'Delete all (1)…' });
+    expect(item).toHaveTextContent('1 kept: their machine must update Ledge');
+    await user.click(item);
+    expect(request).toHaveBeenCalledWith('delete', ['a1']);
   });
 });
