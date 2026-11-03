@@ -22,7 +22,10 @@ export interface BrowserLiveDeps {
   debounceMs?: number;
   /** At most one image kept per this, per session. */
   captureMinMs?: number;
-  /** A watched tab that sends no frame for this long (a page standing still, or a tab Chrome treats as hidden) is sent one image. */
+  /** A watched tab whose film sends nothing for this long is filmed by single images instead. */
+  quietMs?: number;
+  /** Those images: one per `fastMs` while the page changes, less and less often while it does not, down to one per `stillMs`. */
+  fastMs?: number;
   stillMs?: number;
 }
 
@@ -36,7 +39,7 @@ interface Track {
   url?: string; title?: string;
   image?: Image;
   watchers: Set<BrowserSink>;
-  film?: { targetId: string; sessionId: string; lastFrameAt: number; lastData?: string };
+  film?: { targetId: string; sessionId: string; lastCastAt: number; lastData?: string; delay: number };
   filming?: Promise<void>;
   captureTimer?: NodeJS.Timeout; stillTimer?: NodeJS.Timeout;
   lastCaptureAt: number; capturing: boolean;
@@ -64,6 +67,8 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
   const intervalMs = deps.intervalMs ?? 5000;
   const debounceMs = deps.debounceMs ?? 1000;
   const captureMinMs = deps.captureMinMs ?? 5000;
+  const quietMs = deps.quietMs ?? 1000;
+  const fastMs = deps.fastMs ?? 500;
   const stillMs = deps.stillMs ?? 3000;
   const tracks = new Map<string, Track>();
   const pokes = new Map<string, NodeJS.Timeout>();
@@ -140,13 +145,15 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
 
   async function attach(t: Track, port: number, path: string, pid: number): Promise<void> {
     t.connecting = true;
+    let c: Cdp | undefined;
     try {
-      const c = await connect(`ws://127.0.0.1:${port}${path}`);
+      c = await connect(`ws://127.0.0.1:${port}${path}`);
       if (stopped || !store.get(t.id)) { c.close(); return; }
       t.cdp = c; t.browserPid = pid;
+      const conn = c;
       c.onEvent(e => onEvent(t, e));
       c.onClose(() => {
-        if (t.cdp !== c) return;
+        if (t.cdp !== conn) return;
         delete t.cdp; delete t.browserPid; delete t.film; stopStill(t);
         if (t.captureTimer) clearTimeout(t.captureTimer);
         t.pages.clear();
@@ -166,6 +173,8 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       scheduleCapture(t);
     } catch (e) {
       // A port file an earlier browser left in the profile, or a browser closing: found again at the next search if real.
+      // A connection that opened but could not start following is let go, so that the next search tries again.
+      if (c) { if (t.cdp === c) { delete t.cdp; delete t.browserPid; t.pages.clear(); } c.close(); }
       log(`browser of ${t.id}: no CDP connection (${(e as Error).message})`);
     } finally { t.connecting = false; }
   }
@@ -257,8 +266,9 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
   }
 
   async function capture(t: Track): Promise<void> {
-    // While a front watches, the film's frames are the image kept.
-    if (t.capturing || t.film || !t.cdp) return;
+    // While a front watches, the film's frames are the image kept; an image being taken already (the film's), taken after it.
+    if (t.film || !t.cdp) return;
+    if (t.capturing) return scheduleCapture(t);
     t.capturing = true;
     try {
       const img = await shoot(t);
@@ -277,7 +287,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     void cdp.call('Page.screencastFrameAck', { sessionId: e.params.sessionId }, f.sessionId).catch(() => {});
     const data = e.params.data, meta = e.params.metadata as { deviceWidth?: number; deviceHeight?: number } | undefined;
     if (typeof data !== 'string' || !data || data.length > BROWSER_FRAME_MAX) return;
-    f.lastFrameAt = now(); f.lastData = data;
+    f.lastCastAt = now(); f.lastData = data;
     frame(t, data, meta?.deviceWidth, meta?.deviceHeight);
   }
 
@@ -290,7 +300,12 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     if (now() - t.lastCaptureAt >= captureMinMs) { t.lastCaptureAt = now(); publish(t); }
   }
 
-  function stopStill(t: Track): void { if (t.stillTimer) { clearInterval(t.stillTimer); delete t.stillTimer; } }
+  function stopStill(t: Track): void { if (t.stillTimer) { clearTimeout(t.stillTimer); delete t.stillTimer; } }
+  function scheduleStill(t: Track, delay: number): void {
+    stopStill(t);
+    t.stillTimer = setTimeout(() => { delete t.stillTimer; void still(t); }, delay);
+    t.stillTimer.unref?.();
+  }
 
   /** Films the agent's tab while someone watches and the browser is live; follows the tab it works in; stops otherwise. */
   function refilm(t: Track): Promise<void> {
@@ -306,11 +321,9 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       if (!want || !cdp) return;
       try {
         const { sessionId } = await cdp.call('Target.attachToTarget', { targetId: want, flatten: true }) as { sessionId: string };
-        t.film = { targetId: want, sessionId, lastFrameAt: now() };
+        t.film = { targetId: want, sessionId, lastCastAt: now(), delay: fastMs };
         await cdp.call('Page.startScreencast', { format: 'jpeg', quality: 60, maxWidth: 1280, maxHeight: 800 }, sessionId);
-        // A page standing still sends nothing, a tab Chrome holds hidden may send nothing: one image every `stillMs` then.
-        t.stillTimer = setInterval(() => { void still(t); }, stillMs);
-        t.stillTimer.unref?.();
+        scheduleStill(t, quietMs);
       } catch (e) { log(`browser of ${t.id}: no film (${(e as Error).message})`); delete t.film; }
     };
     // One change of film at a time, in order.
@@ -319,22 +332,26 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     return next;
   }
 
+  /**
+   * A tab whose film sends nothing is filmed by single images. Chrome holds a tab hidden once OMP has frozen it between the
+   * agent's calls, even woken again: no animation frame, no film, whatever is restarted (tried); a screenshot still renders
+   * it. While the page changes, one image per `fastMs`; while it does not (or a page simply standing still), less and less
+   * often, down to one per `stillMs`; the same image never twice. As soon as the film sends again, it takes over.
+   */
   async function still(t: Track): Promise<void> {
     const f = t.film;
-    if (!f || t.capturing || now() - f.lastFrameAt < stillMs) return;
+    if (!f) return;
+    if (t.capturing || now() - f.lastCastAt < quietMs) return scheduleStill(t, quietMs);
     t.capturing = true;
+    let changed = false;
     try {
       const img = await shoot(t);
-      // An OMP tab frozen between the agent's calls sends no film again, even woken and filmed anew (tried): its images
-      // then come from here, every `stillMs`, the same one never twice.
-      const f2 = t.film;
-      if (!img || !f2) return;
-      f2.lastFrameAt = now();
-      if (img.data === f2.lastData) return;
-      f2.lastData = img.data;
-      frame(t, img.data);
+      if (img && t.film === f && img.data !== f.lastData) { f.lastData = img.data; frame(t, img.data); changed = true; }
     } catch (e) { log(`browser of ${t.id}: no still image (${(e as Error).message})`); }
     finally { t.capturing = false; }
+    if (t.film !== f) return;
+    f.delay = changed ? fastMs : Math.min(f.delay * 2, stillMs);
+    scheduleStill(t, f.delay);
   }
 
   return {

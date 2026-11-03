@@ -131,6 +131,39 @@ describe('SSH application transport', () => {
     expect(got.map(m => m.type)).toEqual(['snapshot', 'error']); expect(got[1]?.message).toBe('snapshot.request');
     expect(ws.readyState).toBe(WebSocket.OPEN);
   });
+  it('bridge: this machine\'s browsers never cross it, either way, and its snapshot does not offer them', async () => {
+    const { wss, port } = await wsServer(), input = new PassThrough(), output = new PassThrough();
+    const got: unknown[] = []; let text = ''; output.on('data', b => { text += String(b); });
+    const daemon = { version: '0.41.0', install: 'npm', systemd: true, browserLive: true };
+    wss.on('connection', ws => {
+      ws.send(JSON.stringify({ type: 'snapshot', sessions: [], daemon }));
+      ws.send(JSON.stringify({ type: 'browser.live', id: 's', state: 'live', tabs: 1, url: 'http://localhost/secret', title: 'Secret' }));
+      ws.send(JSON.stringify({ type: 'browser.frame', id: 's', data: '/9j/x', at: '2026-11-03T16:00:00.000Z', live: true }));
+      ws.send(JSON.stringify({ type: 'browser.enabled', rid: 'r', outcome: 'enabled' }));
+      ws.send(JSON.stringify({ type: 'error', message: 'after' }));
+      ws.on('message', b => got.push(JSON.parse(String(b))));
+    });
+    const done = bridge({ input, output, port });
+    await until(() => text.includes('after'));
+    expect(text).not.toContain('browser'); expect(text).not.toContain('secret');
+    expect(JSON.parse(text.split('\n')[0]!)).toEqual({ type: 'snapshot', sessions: [], daemon: { version: '0.41.0', install: 'npm', systemd: true } });
+    input.write('{"type":"browser.watch","id":"s"}\n{"type":"browser.unwatch","id":"s"}\n{"type":"browser.enable","rid":"r","confirmed":true}\n{"type":"snapshot.request"}\n');
+    await until(() => got.length === 1); expect(got).toEqual([{ type: 'snapshot.request' }]);
+    input.end(); await done;
+  });
+  it('serveSsh: the peer\'s browsers never reach the front, the front\'s browser messages never reach the peer', async () => {
+    const { wss, port } = await wsServer();
+    wss.on('connection', ws => serveSsh(ws, 'server', { spawn: () => remote(`out({type:'snapshot',sessions:[],daemon:{version:'0.41.0',install:'npm',systemd:true,browserLive:true}}); out({type:'browser.live',id:'s',state:'live',tabs:1,url:'http://localhost/secret'}); out({type:'browser.frame',id:'s',data:'/9j/x',at:'2026-11-03T16:00:00.000Z',live:true}); process.stdin.setEncoding('utf8'); process.stdin.on('data',data=>{for(const l of data.trim().split('\\n')){const m=JSON.parse(l);out({type:'error',message:m.type});}}); keep();`) }));
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`), got: { type: string; message?: string; daemon?: Record<string, unknown> }[] = [];
+    ws.on('message', b => got.push(JSON.parse(String(b)))); cleanup.push(() => ws.terminate());
+    await until(() => got.length >= 1);
+    expect(got[0]).toMatchObject({ type: 'snapshot', sshAlias: 'server' }); expect(got[0]!.daemon).not.toHaveProperty('browserLive');
+    ws.send(JSON.stringify({ type: 'browser.watch', id: 's' }));
+    ws.send(JSON.stringify({ type: 'browser.enable', rid: 'r', confirmed: true }));
+    ws.send(JSON.stringify({ type: 'snapshot.request' }));
+    await until(() => got.some(m => m.type === 'error'));
+    expect(got.map(m => m.type)).toEqual(['snapshot', 'error']); expect(got[1]?.message).toBe('snapshot.request');
+  });
   it('serveSsh drops a remote frame it does not know after the snapshot, logs it once, and stays OPEN', async () => {
     const { wss, port } = await wsServer(), logged: string[] = [];
     wss.on('connection', ws => serveSsh(ws, 'server', { log: line => logged.push(line), spawn: () => remote(`out({type:'snapshot',sessions:[]}); out({type:'future.thing'}); out({type:'future.thing',x:1}); console.log('not json'); out({type:'error',message:'after'}); keep();`) }));

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { WebSocket } from 'ws';
-import { parseClientMessage, parseServerMessage, SshAliasSchema, type ClientMessage, type ServerMessage } from '@ledge/protocol';
+import { isBrowserMessage, parseClientMessage, parseServerMessage, SshAliasSchema, withoutBrowserLive, type ClientMessage, type ServerMessage } from '@ledge/protocol';
 import { log as daemonLog } from '../log.js';
 import { MAX_FRAME, readFrames } from './frames.js';
 import { dropLogger, frameType, unknownRequest } from './unparsed.js';
@@ -41,10 +41,12 @@ export function serveSsh(ws: WebSocket, alias: string, opts: { spawn?: (args: st
     }
     // The remote daemon's machine list, projects and island settings are meaningless to the front (spec §5.2, build spec §5), and an older peer rejects the unknown type (spec §14).
     if (msg.type === 'machines' || msg.type === 'projects' || msg.type === 'island') return;
+    // The peer's browsers are not watched from here (lot 1): an older bridge may still send them.
+    if (isBrowserMessage(msg.type)) return;
     if (!ready && msg.type !== 'snapshot') throw new Error('Remote command did not start the Ledge protocol');
     if (msg.type === 'snapshot') { ready = true; clearTimeout(timer); }
     if (ws.bufferedAmount > MAX_FRAME) throw new Error('Ledge connection is overloaded');
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg.type === 'snapshot' ? { ...msg, sshAlias: alias } : msg));
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg.type === 'snapshot' ? { ...withoutBrowserLive(msg), sshAlias: alias } : msg));
   }, e => stop(`Remote Ledge: ${e.message}`), { onBadLine: (_line, e) => { if (!ready) throw e; dropped('?', e); } });
   ws.on('message', data => {
     if (stopped) return;
@@ -61,6 +63,8 @@ export function serveSsh(ws: WebSocket, alias: string, opts: { spawn?: (args: st
       }
       // The machines list, the projects and the island settings are private to their host (spec §5.2, build spec §5): never written to the remote daemon; the link stays up.
       if (msg.type === 'machines.set' || msg.type === 'projects.set' || msg.type === 'island.set') return;
+      // Nor is the peer's browser watched, or its Playwright config changed, from here.
+      if (isBrowserMessage(msg.type)) return;
       child.stdin.write(`${JSON.stringify(msg)}\n`);
     } catch (e) { stop((e as Error).message); }
   });

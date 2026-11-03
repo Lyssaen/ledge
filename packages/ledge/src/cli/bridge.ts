@@ -1,6 +1,6 @@
 import type { Readable, Writable } from 'node:stream';
 import WebSocket from 'ws';
-import { PROTOCOL_PORT, parseClientMessage, parseServerMessage, type ClientMessage, type ServerMessage } from '@ledge/protocol';
+import { PROTOCOL_PORT, isBrowserMessage, parseClientMessage, parseServerMessage, withoutBrowserLive, type ClientMessage, type ServerMessage } from '@ledge/protocol';
 import { readDaemonToken } from '../auth.js';
 import { MAX_FRAME, readFrames } from '../transport/frames.js';
 import { dropLogger, frameType, unknownRequest } from '../transport/unparsed.js';
@@ -37,6 +37,8 @@ export function bridge(opts: { input?: Readable; output?: Writable; port?: numbe
         try { msg = parseClientMessage(raw); } catch (e) { return refuse(raw, e); }
         // The machines list and the projects are private to their host (spec §5.2, build spec §5): a front's set never reaches this daemon through the bridge.
         if (msg.type === 'machines.set' || msg.type === 'projects.set' || msg.type === 'island.set') return;
+        // Nor may a peer watch this machine's browsers or change its Playwright config.
+        if (isBrowserMessage(msg.type)) return;
         if (ws.bufferedAmount > MAX_FRAME) throw new Error('Ledge bridge is overloaded');
         ws.send(JSON.stringify(msg));
       }, fail, { onBadLine: (_line, e) => refuse(undefined, e) });
@@ -52,7 +54,9 @@ export function bridge(opts: { input?: Readable; output?: Writable; port?: numbe
       }
       // This daemon's machine list and projects are meaningless to the front (spec §5.2, build spec §5), and an older peer rejects the unknown type (spec §14).
       if (msg.type === 'machines' || msg.type === 'projects' || msg.type === 'island') return;
-      try { toFront(msg); } catch (e) { fail(e as Error); }
+      // This machine's browsers (their addresses, titles, images) stay on it.
+      if (isBrowserMessage(msg.type)) return;
+      try { toFront(withoutBrowserLive(msg)); } catch (e) { fail(e as Error); }
     });
     ws.on('error', fail);
     ws.on('close', (code) => finish(code === 1000 || code === 1005 ? undefined : new Error(`Ledge daemon disconnected (${code})`)));
