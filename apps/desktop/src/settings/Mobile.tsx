@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import { RelayUrlSchema, type MobileClientMessage, type MobileState } from '@ledge/protocol';
+import { DEVICE_NAME_MAX, RelayUrlSchema, type MobileClientMessage, type MobileState } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -7,7 +7,7 @@ import { spanOf } from '../list/time';
 import { openUrl } from '../tauri/bridge';
 import { Card, Row, SwitchRow } from './controls';
 import { useEscapeLayer } from './escape';
-import { PHONE } from './PairingDialog';
+import { deviceGlyph, PHONE } from './PairingDialog';
 import { requestPairingDialog, usePairingDialogOpen } from './pairingRequest';
 import type { SettingsContext } from './SettingsPage';
 
@@ -210,17 +210,27 @@ function Devices({ m, send }: { m: MobileState; send: Send }): JSX.Element {
   const c = t.settings.mobile;
   const [confirming, setConfirming] = useState<string | null>(null);
   const [revoked, setRevoked] = useState<string | null>(null);
+  // The device being renamed and its draft (docs/mockups/mobile-multi-device.html, part 4).
+  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   const now = useNow(60_000);
-  useEscapeLayer(() => { if (confirming === null) return false; setConfirming(null); return true; });
+  useEscapeLayer(() => {
+    if (renaming !== null) { setRenaming(null); return true; }
+    if (confirming === null) return false; setConfirming(null); return true;
+  });
   // While the dialog is on screen, its pairing (and the others waiting behind it) leave the list, as in the mockup.
   const dialogOpen = usePairingDialogOpen();
   const asking = m.enabled && !dialogOpen ? m.pairings.filter(p => p.state === 'confirm') : [];
   const date = new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short', year: 'numeric' });
-  const linkedOn = (iso: string) => { const at = Date.parse(iso); return Number.isNaN(at) ? null : c.linkedOn(date.format(at)); };
   const seen = (iso: string | undefined) => {
     if (!iso) return c.offline;
     const span = spanOf(now - (Date.parse(iso) || 0));
     return span === 'now' ? c.seenNow : c.seenAgo(`${span.n} ${t.list.when.units[span.unit]}`);
+  };
+  const rename = () => {
+    if (!renaming) return;
+    const name = renaming.draft.trim();
+    if (!name || name.length > DEVICE_NAME_MAX) return;
+    if (send({ type: 'mobile.device.rename', id: renaming.id, name })) setRenaming(null);
   };
   const revoke = (id: string, label: string) => {
     if (!send({ type: 'mobile.device.revoke', id })) return;
@@ -247,26 +257,42 @@ function Devices({ m, send }: { m: MobileState; send: Send }): JSX.Element {
       ))}
       {m.devices.map(d => {
         const online = d.online && m.enabled;
-        const on = linkedOn(d.approvedAt);
+        const name = d.name ?? d.label;
+        // A name the user gave hides the model: it comes back on the line under it.
+        const at = Date.parse(d.approvedAt);
+        const on = Number.isNaN(at) ? null : d.name ? c.linkedOnAs(d.label, date.format(at)) : c.linkedOn(date.format(at));
         return (
-          <article key={d.id} className="machine-entry" aria-label={d.label}>
-            <span className="machine-glyph" aria-hidden="true"><Icon d={PHONE} size={16} /></span>
+          <article key={d.id} className="machine-entry" aria-label={name}>
+            <span className="machine-glyph" aria-hidden="true"><Icon d={deviceGlyph(d.kind)} size={16} /></span>
             <div className="machine-main">
               <div className="machine-top">
-                <strong>{d.label}</strong><span className="spacer" />
+                <strong>{name}</strong><span className="spacer" />
                 <span className={online ? 'set-status online' : 'set-status'}><i aria-hidden="true" />{online ? c.online : seen(d.lastSeenAt)}</span>
               </div>
               {on && <span className="set-hint">{on}</span>}
               {confirming === d.id ? (
                 <div role="alert" className="set-well warn">
-                  <span>{c.revokeAsk.before}<strong>{d.label}</strong>{c.revokeAsk.after}</span>
+                  <span>{c.revokeAsk.before}<strong>{name}</strong>{c.revokeAsk.after}</span>
                   <div className="set-actions">
-                    <Button size="sm" variant="primary" className="danger-btn" onClick={() => revoke(d.id, d.label)}>{c.revoke}</Button>
+                    <Button size="sm" variant="primary" className="danger-btn" onClick={() => revoke(d.id, name)}>{c.revoke}</Button>
                     <Button size="sm" variant="ghost" autoFocus onClick={() => setConfirming(null)}>{c.cancel}</Button>
                   </div>
                 </div>
+              ) : renaming?.id === d.id ? (
+                <form className="set-actions device-rename" onSubmit={e => { e.preventDefault(); rename(); }}>
+                  <input
+                    className="set-input" aria-label={c.nameLabel} value={renaming.draft} maxLength={DEVICE_NAME_MAX} autoFocus
+                    onChange={e => setRenaming({ id: d.id, draft: e.target.value })}
+                    onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setRenaming(null); } }}
+                  />
+                  <Button size="sm" variant="primary" type="submit" disabled={!renaming.draft.trim()}>{c.save}</Button>
+                  <Button size="sm" variant="ghost" type="button" onClick={() => setRenaming(null)}>{c.cancel}</Button>
+                </form>
               ) : (
-                <div className="set-actions"><Button size="sm" variant="ghost" onClick={() => { setRevoked(null); setConfirming(d.id); }}>{c.revoke}</Button></div>
+                <div className="set-actions">
+                  <Button size="sm" variant="ghost" aria-label={c.renameLabel(name)} onClick={() => { setConfirming(null); setRenaming({ id: d.id, draft: name }); }}>{c.rename}</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setRevoked(null); setRenaming(null); setConfirming(d.id); }}>{c.revoke}</Button>
+                </div>
               )}
             </div>
           </article>
