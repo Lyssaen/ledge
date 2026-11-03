@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge opérateur humain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* ===== Real Lyssaën tokens (packages/ui/src/styles/tokens.css), scoped per theme by build.mjs ===== */
+/*TOKENS*/
+/* ===== Real sidebar stylesheet (apps/desktop/src/styles/sidebar.css, main 0c47f61b) ===== */
+/*SIDEBAR*/
+/* ===== Sidebar as proposed in ledge-sidebar-tidy.html (pending validation): kept as is in every direction ===== */
+.v2 .st-ask.st-ledge{padding:8px 14px;gap:0}
+.v2 .st-views{padding:4px;gap:2px;margin:10px 10px 8px}
+.v2.st .st-views button{height:30px;padding:0 10px;gap:9px}
+.v2 .st-grouping{margin:0 10px 8px;padding:4px;flex:none}
+.v2.st .st-grouping button{height:26px}
+.st-kernel-box{--kv:#8b5cf6;margin:0 2px;padding:2px 4px 4px;border:1px solid color-mix(in srgb,var(--kv) 34%,var(--border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--kv) 7%,var(--sidebar))}
+.th-dark .st-kernel-box{--kv:#a78bfa;background:color-mix(in srgb,var(--kv) 9%,var(--sidebar))}
+.st-kernel-box .st-label{padding:0 6px}
+.st-kernel-box .st-kernel-name{color:var(--sidebar-foreground);font-weight:600}
+.st-kernel-tag{display:flex;align-items:center;gap:5px;font:500 10px 'Geist Mono',monospace;color:color-mix(in srgb,var(--kv) 75%,var(--muted-foreground))}
+.st-kernel-tag i{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.st-kernel-box .st-row{padding-left:6px}
+.sidebar.st{width:264px;flex:none}
+
+/* ===== The app frame and its parts (mockup of the proposals, built on the tokens) ===== */
+*{box-sizing:border-box}
+.app{--task:#6d4fc4;width:1200px;height:740px;display:flex;flex-direction:column;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',system-ui,sans-serif;overflow:hidden;position:relative}
+.th-dark .app,.th-dark.app{--task:#b9a2f0}
+.app button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.tb{height:32px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--sidebar-border);background:var(--sidebar)}
+.tb b{font-weight:650;font-size:13px}.tb b i{font-style:normal;color:var(--sidebar-primary)}
+.tb .sp{flex:1}.tb .wc{display:flex;gap:18px;color:var(--muted-foreground);font-size:12px}
+.tb .badge{font:600 10px 'Geist Mono',monospace;color:var(--sidebar-primary)}
+.body{flex:1;min-height:0;display:flex}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--background)}
+.mh{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border)}
+.mh h3{margin:0;font-size:14px;font-weight:600}
+.mh .sub{font-size:12px;color:var(--muted-foreground)}
+.mh .sp{flex:1}
+.mc{flex:1;min-height:0;overflow:hidden;display:flex}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;padding:18px 20px;overflow:hidden}
+.col.side{flex:none;width:300px;border-left:1px solid var(--border);background:color-mix(in srgb,var(--sidebar) 60%,var(--background))}
+.sec{font:500 11px 'Geist',sans-serif;color:var(--muted-foreground);display:flex;align-items:center;gap:6px;margin-top:2px}
+.sec .n{font:600 10px 'Geist Mono',monospace;min-width:16px;height:16px;padding:0 4px;border-radius:999px;display:inline-grid;place-items:center;background:var(--sidebar-primary);color:var(--primary-foreground)}
+.sec .sp{flex:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.card.hot{border-color:color-mix(in srgb,var(--sidebar-primary) 45%,var(--border))}
+.card .who{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-foreground)}
+.card .who strong{color:var(--foreground);font-weight:600}
+.card .who .sp{flex:1}
+.card .who time{font:11px 'Geist Mono',monospace}
+.card h4{margin:0;font-size:14px;line-height:20px;font-weight:600}
+.card p{margin:0;font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.card p b{color:var(--foreground);font-weight:500}
+.acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{height:28px;padding:0 11px;border-radius:var(--radius-sm);border:1px solid var(--input)!important;font-size:12px!important;font-weight:500;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.pri{background:var(--primary)!important;border-color:var(--primary)!important;color:var(--primary-foreground)!important}
+.btn.ghost{border-color:transparent!important;color:var(--muted-foreground)!important}
+.btn.sm{height:24px;padding:0 8px;font-size:11px!important}
+.app .btn{padding:0 11px}.app .btn.sm{padding:0 8px}.app .chip{padding:0 8px}.app .btn.pri{color:var(--primary-foreground)}
+.fine{font-size:11px;color:var(--muted-foreground)}
+.pill{font:500 10px 'Geist Mono',monospace;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:var(--muted-foreground);white-space:nowrap}
+.pill.dec{border-color:color-mix(in srgb,var(--sidebar-primary) 50%,var(--border));color:var(--sidebar-primary)}
+.pill.q{border-color:color-mix(in srgb,var(--warning) 50%,var(--border));color:var(--warning)}
+.pill.ok{border-color:color-mix(in srgb,var(--success) 50%,var(--border));color:var(--success)}
+.pill.auto{border-color:color-mix(in srgb,var(--info) 50%,var(--border));color:var(--info)}
+.pill.task{border-color:color-mix(in srgb,var(--task) 50%,var(--border));color:var(--task)}
+.hex{display:inline-grid;place-items:center;color:var(--info)}
+.hex.k{color:#8b5cf6}
+.mono{font-family:'Geist Mono',monospace}
+.field{border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);padding:9px 12px;font-size:13px;color:var(--muted-foreground);display:flex;align-items:center;gap:8px}
+.field.tall{align-items:flex-start;min-height:64px;color:var(--foreground);line-height:19px}
+.composer{margin-top:auto;border:1px solid var(--input);border-radius:var(--radius-lg);background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.composer .ph{color:var(--muted-foreground);font-size:13px}
+.composer .row{display:flex;align-items:center;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground);background:var(--well)}
+.chip b{color:var(--foreground);font-weight:500}
+.mini-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)}
+.mini-row:last-child{border-bottom:0}
+.mini-row .sp{flex:1}
+.mini-row .t{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.bar{height:4px;border-radius:2px;background:var(--muted);overflow:hidden}.bar i{display:block;height:100%;background:var(--info)}
+/* Chat */
+.msg{display:flex;gap:10px;align-items:flex-start}
+.msg .body2{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.msg .name{font-size:12px;font-weight:600}.msg .name small{font-weight:400;color:var(--muted-foreground);margin-left:6px;font-family:'Geist Mono',monospace;font-size:10.5px}
+.msg .txt{font-size:13px;line-height:19px}
+.msg.me{justify-content:flex-end}
+.msg.me .txt{background:var(--muted);border-radius:12px 12px 4px 12px;padding:8px 12px;max-width:70%}
+.folded{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
+.folded b{color:var(--foreground);font-weight:500}
+/* OpenRig traffic as interpreted cards (place reserved for ledge-dev-2) */
+.orm{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--muted-foreground);padding:6px 10px;border-left:2px solid color-mix(in srgb,var(--task) 60%,transparent);background:color-mix(in srgb,var(--task) 5%,transparent);border-radius:0 6px 6px 0}
+.orm b{color:var(--foreground);font-weight:500}
+.orm .t{margin-left:auto;font:10.5px 'Geist Mono',monospace;flex:none}
+.reserve{position:relative;outline:1.5px dashed #d99a00;outline-offset:4px;border-radius:6px}
+.reserve::after{content:attr(data-r);position:absolute;right:-4px;top:-14px;font:600 9.5px 'Geist Mono',monospace;color:#1b1b1b;background:#ffc94d;padding:1px 6px;border-radius:4px;white-space:nowrap}
+/* Mascots and bots (simplified) */
+.mascot{width:26px;height:26px;flex:none;border-radius:8px 8px 6px 6px;background:linear-gradient(#c43a32,#8e1f1a);position:relative;display:inline-block}
+.mascot::after{content:"";position:absolute;left:6px;right:6px;top:9px;height:6px;border-radius:3px;background:#1b1414;box-shadow:inset 3px 0 0 -1px #ffb0a6,inset -3px 0 0 -1px #ffb0a6}
+.mascot.s{width:20px;height:20px}.mascot.s::after{left:4px;right:4px;top:7px;height:5px}
+.bot{width:18px;height:18px;flex:none;position:relative;display:inline-block}
+.bot::before{content:"";position:absolute;inset:1px 1px 3px;border-radius:5px 5px 4px 4px;background:linear-gradient(var(--bt,#d58a62),var(--bb,#a65a3a))}
+.bot::after{content:"";position:absolute;left:4px;right:4px;top:5px;height:4px;border-radius:2px;background:#1b2224;box-shadow:inset 2px 0 0 -.5px var(--e,#a9dfc7),inset -2px 0 0 -.5px var(--e,#a9dfc7)}
+.bot.codex{--bt:#8189ea;--bb:#5359c4}.bot.work{--e:#90c7f2}.bot.ap{--e:#f2b09c}.bot.q{--e:#f6d487}
+.bot.big{transform:scale(1.4);margin:3px}
+.max{--bt:#9b82e8;--bb:#6a4fc8}
+kbd.k{display:inline-flex;align-items:center;min-width:16px;height:16px;padding:0 4px;border-radius:4px;border:1px solid var(--border);color:var(--muted-foreground);font:10px 'Geist Mono',monospace}
+/* Dialog */
+.scrim{position:absolute;inset:0;background:color-mix(in srgb,#000 40%,transparent);display:grid;place-items:center;z-index:10}
+.dlg{width:560px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:0 20px 60px rgba(0,0,0,.35);display:flex;flex-direction:column}
+.dlg .dh{padding:16px 20px 4px;display:flex;align-items:center;gap:8px}.dlg .dh h3{margin:0;font-size:15px}
+.dlg .db{padding:10px 20px 14px;display:flex;flex-direction:column;gap:10px}
+.dlg .df{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.dlg label{font-size:11.5px;font-weight:500;color:var(--muted-foreground);display:flex;flex-direction:column;gap:5px}
+.cmd{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);background:var(--well);border:1px solid var(--border);border-radius:6px;padding:6px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Delegation settings */
+.lvl{display:grid;grid-template-columns:1fr 92px 92px 92px;align-items:center;border-bottom:1px solid var(--border);font-size:12.5px;min-height:44px}
+.lvl.head{min-height:30px;font-size:11px;color:var(--muted-foreground);font-weight:500}
+.lvl>div:not(:first-child){text-align:center}
+.lvl .what b{display:block;font-weight:500}
+.lvl .what small{color:var(--muted-foreground);font-size:11.5px}
+.radio{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--input);display:inline-block;vertical-align:middle}
+.radio.on{border:4.5px solid var(--primary)}
+.lock{font-size:11px;color:var(--muted-foreground)}
+/* Island / atelier vignettes */
+.vigs{display:flex;flex-direction:column;gap:14px}
+.vig{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.vig h5{margin:0;font-size:12px;font-weight:600;display:flex;gap:6px;align-items:center}
+.vig p{margin:0;font-size:12px;color:var(--muted-foreground);line-height:17px}
+.island{align-self:center;display:flex;align-items:center;gap:10px;background:#0b0b0c;color:#f2f2f2;border-radius:0 0 18px 18px;padding:8px 16px 10px;font-size:12px;min-width:360px;max-width:520px}
+.island .sp{flex:1}
+.island .ib{height:22px;padding:0 9px;border-radius:999px;background:#2a2a2d;color:#f2f2f2;font-size:11px;display:inline-flex;align-items:center}
+.island .ib.pri{background:#c4342c}
+.island small{color:#a3a3a3}
+.floor{height:120px;border-radius:10px;background:linear-gradient(160deg,color-mix(in srgb,var(--info) 10%,var(--well)),var(--well));border:1px solid var(--border);position:relative;overflow:hidden}
+.floor .tbl{position:absolute;left:36%;top:44%;width:30%;height:26%;border-radius:8px;background:color-mix(in srgb,#b88a4a 45%,var(--card));border:1px solid var(--border)}
+.floor .s{position:absolute;display:flex;flex-direction:column;align-items:center;font-size:9.5px;gap:1px}
+.floor .flag{position:absolute;font:600 9.5px 'Geist',sans-serif;padding:2px 6px;border-radius:5px;background:var(--sidebar-primary);color:#fff}
+.floor .bubble{position:absolute;font-size:10px;line-height:13px;padding:5px 8px;border-radius:8px;background:var(--card);border:1px solid var(--border);max-width:190px;color:var(--foreground)}
+
+/* ===== Page furniture ===== */
+html,body{margin:0}
+body{font-family:'Geist',system-ui,sans-serif;font-size:14px;line-height:21px;background:#e9e7e2;color:#1b1b1b}
+body.dark-page{background:#141414;color:#e8e8e8}
+.page{max-width:1880px;margin:0 auto;padding:30px 28px 90px}
+header.top{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap}
+h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing:-.01em}
+.lead{max-width:980px;margin:0;color:inherit;opacity:.8}
+.switch{margin-left:auto;display:flex;gap:4px;padding:3px;border-radius:9px;background:rgba(0,0,0,.08)}
+.switch button{border:0;background:none;padding:5px 12px;border-radius:7px;font:500 12px 'Geist',sans-serif;color:inherit;cursor:pointer}
+.switch button.on{background:#fff;color:#1b1b1b;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.grid{display:grid;grid-template-columns:repeat(3,600px);gap:24px;margin-top:22px}
+.colhead{border-radius:12px;padding:16px 18px;background:#fff;color:#1b1b1b;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:19px}
+.dark-page .colhead{background:#1f1f1f;color:#e8e8e8}
+.colhead h2{margin:0;font-size:17px;display:flex;gap:8px;align-items:baseline}
+.colhead h2 .tag{font:600 11px 'Geist Mono',monospace;padding:1px 7px;border-radius:999px;background:#e0322a;color:#fff}
+.colhead .tagline{font-size:13.5px;font-weight:500}
+.colhead dl{margin:4px 0 0;display:grid;grid-template-columns:118px 1fr;gap:4px 10px}
+.colhead dt{font-weight:600;font-size:12px;opacity:.65}
+.colhead dd{margin:0}
+.rowtitle{grid-column:1/-1;margin:26px 0 -8px;font-size:16px;font-weight:600;display:flex;gap:10px;align-items:baseline}
+.rowtitle small{font-weight:400;font-size:13px;opacity:.7}
+.shot{width:600px;height:370px;overflow:hidden;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(0,0,0,.14);cursor:zoom-in;position:relative}
+.shot>.app{transform:scale(.5);transform-origin:0 0}
+.shot-cap{font-size:12.5px;line-height:18px;opacity:.8;margin-top:8px}
+.cell{display:flex;flex-direction:column}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:100;cursor:zoom-out}
+.lightbox.on{display:grid}
+.lightbox .app{box-shadow:0 20px 80px rgba(0,0,0,.5);border-radius:10px}
+.notes{max-width:1240px;margin-top:40px;background:#fff;color:#1b1b1b;border-radius:12px;padding:24px 28px}
+.dark-page .notes{background:#1f1f1f;color:#e8e8e8}
+.notes h2{font-size:18px;margin:0 0 10px}
+.notes h3{font-size:15px;margin:22px 0 8px}
+.notes ol,.notes ul{margin:0;padding-left:22px;font-size:13.5px;line-height:21px}
+.notes li{margin:4px 0}
+.notes code{font:12px 'Geist Mono',monospace;background:rgba(127,127,127,.15);padding:1px 4px;border-radius:4px}
+.fact{border-left:3px solid #e0322a;padding:6px 12px;margin:10px 0;font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Ledge, opérateur humain : trois directions</h1>
+      <p class="lead">Ce que Ledge devient entre toi et les rigs. Les trois colonnes montrent les mêmes parcours, sur les mêmes données
+        (le rig ledge-dev et le kernel). Clique sur un écran pour le voir en taille réelle. La sidebar est celle de
+        <code>ledge-sidebar-tidy.html</code>, pas encore validée et gardée telle quelle partout. Les bandes jaunes marquent la place
+        réservée aux messages OpenRig interprétés (travail de ledge-dev-2).</p>
+    </div>
+    <div class="switch" role="radiogroup" aria-label="Thème"><button data-th="dark" class="on">Sombre</button><button data-th="light">Clair</button></div>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <section class="notes">
+    <h2>À trancher</h2>
+    <p class="fact"><b>Fait à prendre en compte :</b> depuis aujourd'hui, tu passes par Max (<code>operator-agent@kernel</code>) comme seul intermédiaire
+      avec l'équipe. C'est déjà la forme de B, mais avec Max à la place de Ledge. La vraie question est donc : <b>qui tient ce rôle,
+      et où le lis-tu ?</b></p>
+    <ol>
+      <li><b>Quelle direction : A, B ou A+B ?</b> Ma lecture : A est la plus sûre et prolonge ce qui existe (l'accueil Ledge « lecture seule · rien sans ton clic »).
+        B change la règle de base de Ledge, qui ne fait rien sans ton clic. A+B garde A par défaut et ouvre B case par case.</li>
+      <li><b>Max reste-t-il ?</b> En A, Max route toujours tes objectifs et Ledge est seulement ta surface. En B, Ledge prend le rôle de Max, et le kernel tourne sans agent opérateur (à vérifier côté OpenRig).
+        En A+B, les deux sont possibles : Ledge propose et Max exécute, ou Ledge remplace Max.</li>
+      <li><b>Ledge devient-il l'adresse humaine d'OpenRig ?</b> Aujourd'hui, <code>operator.human</code> est le terminal partagé du kernel. Les trois directions supposent que les lignes
+        <code>--human-intent</code> arrivent dans Ledge. Le TUI du kernel reste-t-il utilisable en parallèle, ou Ledge le remplace-t-il complètement ?</li>
+      <li><b>En B et A+B : sur quoi Ledge s'appuie pour décider seul ?</b> Les dépôts, CLAUDE.md, les maquettes validées, ses propres décisions passées ? Et avec quel modèle (coût, latence) ?</li>
+      <li><b>Une réponse ne se reprend pas.</b> Une réponse donnée par Ledge à ta place part comme la tienne. Faut-il un délai avant envoi (par exemple 2 min, avec « Annuler ») pour ce que Ledge décide seul ?</li>
+      <li><b>Messages OpenRig bruts</b> (rig send, handoffs) : en A, ils sont au centre du fil d'un rig ; en B, derrière « Voir les échanges ». ledge-dev-2 les rend en cartes dans les deux cas. D'accord sur leur place ?</li>
+      <li><b>Mobile et TUI</b> : je ne les ai pas dessinés. Ils suivent la direction choisie : en A une liste « À toi », en B une conversation. Ça ne change pas le choix, sauf si tu veux B sur le téléphone et A sur le Desktop.</li>
+    </ol>
+    <h3>Hors périmètre, quelle que soit la direction</h3>
+    <ul>
+      <li>Push, PR, merge et release restent à toi (culture ledge-dev). Ledge ne peut pas s'en voir déléguer la décision.</li>
+      <li>Ledge ne code pas et n'écrit pas dans le terminal d'une session. Il passe par la queue OpenRig (<code>rig queue</code>).</li>
+      <li>La forme des cartes de messages OpenRig (ledge-dev-2) : elle a seulement une place réservée ici.</li>
+    </ul>
+  </section>
+</div>
+<div class="lightbox" id="lb"></div>
+
+<script>
+const P = {
+  grid: ['M3 3h7v7H3z','M14 3h7v7h-7z','M3 14h7v7H3z','M14 14h7v7h-7z'],
+  rig: ['M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5z','M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7'],
+  dense: ['M4 4h16','M4 8h16','M4 12h16','M4 16h16','M4 20h16'],
+  fold: ['m7 20 5-5 5 5','m7 4 5 5 5-5'],
+  plus: ['M12 5v14','M5 12h14'],
+  chev: ['m9 18 6-6-6-6'],
+  help: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6','M12 17h.01'],
+  gear: ['M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6','M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z'],
+  archive: ['M3 4h18v4H3z','M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8','M10 12h4'],
+  send: ['M5 12h14','m13 6 6 6-6 6'],
+  target: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8','M12 12h.01'],
+  shield: ['M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z'],
+  inbox: ['M3 13h5l1.5 3h5L16 13h5','M5 5h14l2 8v6H3v-6z'],
+  bell: ['M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z','M10 20a2 2 0 0 0 4 0'],
+  mail: ['M3 6h18v12H3z','m3 7 9 6 9-6'],
+  check: ['m5 12 5 5 9-10']
+};
+const ic = (d, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d.map(x => `<path d="${x}"/>`).join('')}</svg>`;
+const hx = (k = false, s = 13) => `<span class="hex${k ? ' k' : ''}">${ic(P.rig, s)}</span>`;
+
+/* ---------- Sidebar (from ledge-sidebar-tidy, + per-direction touches) ---------- */
+const RIG = [['Bix','pilot','claude','work'],['Lu','design.ux','claude'],['Ida','dev.front','claude','work'],['Pim','review.qa','codex'],['Pim','dev.back','claude']];
+const KERNEL = [['Nova','advisor','claude'],['Max','operator','claude'],['Rex','queue','claude']];
+function seat(s, d, o = {}) {
+  const ask = o.ask && o.ask[s[0] + s[1]];
+  return `<div class="st-row st-agent${o.sel === s[0] + s[1] ? ' sel' : ''}" style="--d:${d}"><span class="st-gap"></span><span class="st-bot"><i class="bot ${s[2] === 'codex' ? 'codex' : ''} ${ask ? 'ap' : s[3] || ''}"></i></span><button class="st-main"><strong>${s[0]}</strong><span class="mono">${s[1]} · ${s[2]}</span></button><span class="st-time${ask ? ' t-approval' : ''}">${ask || ''}</span></div>`;
+}
+function sidebar(o = {}) {
+  const ledgeLine = o.ledgeLine ?? '2 à toi';
+  const kernel = o.noMax
+    ? `<section class="st-kernel-box"><div class="st-label">${hx(true, 12)}<span class="st-kernel-name" style="margin-left:4px">Kernel</span><span class="st-fill"></span><span class="st-kernel-tag"><i></i>opérationnel</span></div><div>${KERNEL.filter(s => s[0] !== 'Max').map(s => seat(s, 0)).join('')}</div></section>`
+    : `<section class="st-kernel-box"><div class="st-label">${hx(true, 12)}<span class="st-kernel-name" style="margin-left:4px">Kernel</span><span class="st-fill"></span><span class="st-kernel-tag"><i></i>opérationnel</span></div><div>${KERNEL.map(s => seat(s, 0, o)).join('')}</div></section>`;
+  const rigLine = o.rigLine ? `<div class="st-row" style="--d:1;min-height:22px;font-size:11.5px;padding-left:24px"><span style="color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.rigLine}</span></div>` : '';
+  const rigs = `<section><div class="st-label"><span>Rigs</span><span class="st-fill"></span><button class="st-icon on">${ic(P.dense)}</button><button class="st-icon">${ic(P.fold)}</button><button class="st-icon">${ic(P.plus)}</button></div>
+    <div><div class="st-row st-project st-rig" style="--d:0"><button class="st-chev"><span class="open">${ic(P.chev, 12)}</span></button><span class="st-rig-hex">${ic(P.rig, 13)}</span><button class="st-main"><strong>ledge-dev</strong><span class="mono">ledge</span></button><span class="st-tally">${o.rigAsk ? `<span class="t-need"><i></i>${o.rigAsk}</span>` : ''}<span class="t-work"><i></i>2</span></span></div>${rigLine}${RIG.map(s => seat(s, 1, o)).join('')}</div></section>`;
+  return `<aside class="sidebar st v2 st-dense">
+    <div class="st-ask st-ledge${o.ledgeOn ? ' on' : ''}"><button class="st-ledge-entry"><span class="st-mascot"><i class="mascot s"></i></span><span class="st-ledge-names"><span class="st-ledge-brand">Ledge<span style="color:var(--sidebar-primary)">.</span></span><small class="st-ledge-line">${ledgeLine}</small></span><kbd class="k">/</kbd></button></div>
+    <nav class="st-views"><button class="${o.atelierOn ? 'on' : ''}">${ic(P.grid, 13)}<span>Atelier</span><span class="st-fill"></span><small>9 actifs</small></button><button>${ic(P.rig, 13)}<span>OpenRig</span></button></nav>
+    <div class="st-grouping"><button aria-checked="false">Projets</button><button aria-checked="true">Rigs</button></div>
+    <div class="st-scroll">${kernel}${rigs}</div>
+    <div class="st-foot"><button class="st-mach"><i class="machine-dot"></i>WSL<small>9</small></button><span class="st-fill"></span><button class="st-icon">${ic(P.help, 15)}</button><button class="st-icon">${ic(P.gear, 15)}</button></div>
+  </aside>`;
+}
+const app = (sb, main, extra = '') => `<div class="app"><div class="tb"><b>Ledge<i>.</i></b><span class="sp"></span><span class="badge">● 2</span><span class="wc">— ▢ ✕</span></div><div class="body">${sb}<div class="main">${main}</div></div>${extra}</div>`;
+
+/* ---------- Shared content ---------- */
+const decisionCard = (opts = {}) => `<div class="card hot">
+  <div class="who">${hx()}<strong>ledge-dev</strong> · Bix <span class="mono">pilot</span><span class="pill dec">décision</span><span class="sp"></span><time>il y a 4 min</time></div>
+  <h4>Maquette sidebar : « Lancer un rig » ou « Lever un rig » ?</h4>
+  <p>Lu a rendu la maquette (7 points). Le mot du bouton reste ouvert : l'app dit « Lancer » partout, ta demande disait « lever ».</p>
+  ${opts.reco ? `<div class="msg" style="gap:8px"><i class="mascot s"></i><div class="txt" style="font-size:12.5px;color:var(--foreground)"><b>Ledge recommande « Lancer »</b> : c'est le mot de 14 textes de l'app et de la page OpenRig. <span class="fine">Sources : fr.ts, ledge-openrig.html</span></div></div>` : ''}
+  <div class="acts"><button class="btn ${opts.reco ? 'pri' : ''}">Lancer${opts.reco ? ' · recommandé' : ''}</button><button class="btn">Lever</button><button class="btn ghost">Répondre autrement…</button><span class="sp" style="flex:1"></span><button class="btn ghost sm">Voir la maquette</button></div>
+  ${opts.foot === false ? '' : `<div class="fine">Une réponse ne se reprend pas · ligne <span class="mono">qitem-…183714</span></div>`}
+</div>`;
+const questionCard = () => `<div class="card">
+  <div class="who">${hx()}<strong>ledge-dev</strong> · Ida <span class="mono">dev.front</span><span class="pill q">question</span><span class="sp"></span><time>12 min</time></div>
+  <h4>Je lance les tests sous Node 18 ou 22 ?</h4>
+  <div class="field" style="padding:6px 10px">Écrire la réponse…<span style="flex:1"></span>${ic(P.send, 13)}</div>
+</div>`;
+const updates = (n = 3) => `<div class="card" style="gap:0;padding:6px 14px">
+  ${[['Lu a rendu la maquette sidebar','design.ux','18:44'],['Ida a fini le lot 2 (slash commands)','dev.front','18:31'],['Pim a relu feat/mobile-terminal : 2 remarques','review.qa','18:02']].slice(0, n).map(u => `<div class="mini-row">${ic(P.check, 13)}<span>${u[0]}</span><span class="sp"></span><span class="t">${u[1]} · ${u[2]}</span></div>`).join('')}
+</div>`;
+const teamsPanel = () => `<div class="sec">Équipes</div>
+  <div class="card" style="gap:6px"><div class="who">${hx()}<strong>ledge-dev</strong><span class="sp"></span><span class="pill ok">en marche</span></div>
+  <p>5 sièges · 2 au travail · 1 décision pour toi</p><div class="bar"><i style="width:62%"></i></div><p class="fine">Objectif : refonte sidebar · 5/8 tâches closes</p></div>
+  <div class="card" style="gap:6px"><div class="who">${hx(true)}<strong>Kernel</strong><span class="sp"></span><span class="pill ok">opérationnel</span></div><p>Max route tes objectifs · Rex tient la file (6 lignes)</p></div>`;
+
+/* ---------- A : Ledge = ta surface ---------- */
+const A = {
+  home: () => app(sidebar({ ledgeOn: true, rigAsk: 2, ask: { Bixpilot: 'décision', Idadev: '' } }), `
+    <div class="mh"><i class="mascot s"></i><h3>À toi</h3><span class="sub">tout ce que les rigs attendent de toi · Ledge transmet, tu décides</span><span class="sp"></span><button class="btn">${ic(P.target, 13)}Nouvel objectif</button></div>
+    <div class="mc"><div class="col">
+      <div class="sec">Décisions <span class="n">1</span></div>${decisionCard()}
+      <div class="sec">Questions <span class="n">1</span></div>${questionCard()}
+      <div class="sec">Nouvelles <span class="sp"></span><span class="fine">3 depuis 18 h</span></div>${updates()}
+    </div><div class="col side">${teamsPanel()}</div></div>`),
+  decision: () => app(sidebar({ rigAsk: 1, sel: 'Bixpilot', ask: { Bixpilot: 'décision' } }), `
+    <div class="mh">${hx()}<h3>ledge-dev</h3><span class="sub">fil du rig · 5 sièges</span><span class="sp"></span><button class="btn sm">Écrire au rig</button><button class="btn sm ghost">Table</button></div>
+    <div class="mc"><div class="col">
+      <div class="reserve" data-r="messages OpenRig interprétés · ledge-dev-2" style="display:flex;flex-direction:column;gap:6px">
+        <div class="orm">${ic(P.mail, 13)}<span><b>Bix → Lu</b> · maquette sidebar : padding, options Rigs, états vides…</span><span class="t">18:37</span></div>
+        <div class="orm">${ic(P.mail, 13)}<span><b>Lu → Bix</b> · rendue : <span class="mono">ledge-sidebar-tidy.html</span> + 5 captures</span><span class="t">18:44</span></div>
+        <div class="orm">${ic(P.mail, 13)}<span><b>Bix → toi</b> · décision demandée (ci-dessous)</span><span class="t">18:45</span></div>
+      </div>
+      ${decisionCard()}
+      <div class="composer"><span class="ph">Écrire à ledge-dev (arrive chez Bix, le pilote)…</span><div class="row"><span class="chip">à <b>pilot-lead@ledge-dev</b></span><span style="flex:1"></span><button class="btn sm pri">${ic(P.send, 12)}Envoyer</button></div></div>
+    </div><div class="col side">
+      <div class="sec">La demande</div>
+      <div class="card" style="gap:6px"><p><b>De</b> Bix · pilot</p><p><b>Ligne</b> <span class="mono">qitem-…183714</span></p><p><b>Attend depuis</b> 4 min</p><p><b>Bloque</b> l'implémentation sidebar</p></div>
+      <div class="sec">Pièces jointes</div>
+      <div class="card" style="gap:4px"><p>ledge-sidebar-tidy.html</p><p class="fine">5 captures · clair et sombre</p></div>
+    </div></div>`),
+  goal: () => app(sidebar({ rigAsk: 2 }), `
+    <div class="mh"><i class="mascot s"></i><h3>À toi</h3><span class="sp"></span></div><div class="mc"><div class="col" style="opacity:.35">${decisionCard({ foot: false })}</div></div>`,
+    `<div class="scrim"><div class="dlg">
+      <div class="dh">${ic(P.target, 16)}<h3>Nouvel objectif</h3></div>
+      <div class="db">
+        <label>Pour<div class="acts"><span class="chip"><b>Max choisit l'équipe</b></span><span class="chip">${hx(false, 11)} ledge-dev</span><span class="chip">+ Lancer un rig…</span></div></label>
+        <label>Objectif<div class="field tall">Afficher la pochette de la musique en cours dans l'encoche fermée.</div></label>
+        <label>Fini quand<div class="field">La pochette s'affiche pour tous les lecteurs Windows ; testé sur la vraie encoche.</div></label>
+        <label>Ce qui reste à moi<div class="acts"><span class="chip"><b>✓</b> maquette</span><span class="chip"><b>✓</b> merge et release</span><span class="chip">+ ajouter</span></div></label>
+        <div class="cmd">rig queue create --to operator-agent@kernel --human-intent update "Afficher la pochette…"</div>
+      </div>
+      <div class="df"><span class="fine">Tu suivras l'objectif dans À toi et dans le fil du rig.</span><span style="flex:1"></span><button class="btn">Annuler</button><button class="btn pri">${ic(P.send, 12)}Envoyer à Max</button></div>
+    </div></div>`),
+  surfaces: () => app(sidebar({ rigAsk: 2, ask: { Bixpilot: 'décision' } }), `
+    <div class="mh"><h3>Ce qui change ailleurs</h3><span class="sub">direction A</span></div>
+    <div class="mc"><div class="col vigs">
+      <div class="vig"><h5>Sidebar</h5><p>Celle de <span class="mono">ledge-sidebar-tidy</span>. L'entrée Ledge devient « À toi » : sa ligne compte les décisions et questions des rigs. Un siège qui t'attend porte « décision » en rouge.</p></div>
+      <div class="vig"><h5>Atelier</h5><div class="floor"><div class="tbl"></div>
+        <div class="s" style="left:20%;top:20%"><i class="bot ap"></i>Bix</div><div class="flag" style="left:13%;top:6%">décision</div>
+        <div class="s" style="left:58%;top:16%"><i class="bot work"></i>Ida</div><div class="s" style="left:74%;top:60%"><i class="bot"></i>Lu</div><div class="s" style="left:22%;top:66%"><i class="bot codex"></i>Pim</div></div>
+        <p>Inchangé : une salle par rig. Un drapeau rouge sur le siège qui t'attend ; clic → la décision.</p></div>
+      <div class="vig"><h5>Île / encoche</h5><div class="island">${hx(false, 12)}<span><b>Bix</b> <small>ledge-dev</small> · Lancer ou Lever ?</span><span class="sp"></span><span class="ib">Lancer</span><span class="ib">Lever</span></div>
+        <p>Comme aujourd'hui pour une permission : la décision s'affiche avec ses boutons. Rien n'est filtré.</p></div>
+    </div></div>`)
+};
+
+/* ---------- B : Ledge parle à ta place ---------- */
+const ledgeSays = (html, sub = 'Ledge') => `<div class="msg"><i class="mascot s"></i><div class="body2"><div class="name">${sub}</div>${html}</div></div>`;
+const meSays = t => `<div class="msg me"><div class="txt">${t}</div></div>`;
+const B = {
+  home: () => app(sidebar({ ledgeOn: true, ledgeLine: '1 décision · 4 réglées', noMax: true, rigLine: 'Ledge : sidebar en implémentation, 1 décision' }), `
+    <div class="mh"><i class="mascot s"></i><h3>Ledge</h3><span class="sub">ton interlocuteur avec les rigs</span><span class="sp"></span><button class="btn sm ghost">Ce que j'ai fait · 4</button></div>
+    <div class="mc"><div class="col">
+      ${ledgeSays(`<div class="txt"><b>Le point de 19 h.</b> ledge-dev avance : Lu a rendu la maquette sidebar, Ida a fini le lot 2. Pim a relu feat/mobile-terminal (2 remarques, déjà transmises à Ida).</div>
+        <div class="folded">${ic(P.check, 13)}<span><b>4 questions réglées sans toi</b> · Node 22 pour les tests, port de dev, nom de branche, format des captures</span><span style="flex:1"></span><button class="btn sm ghost">Voir</button></div>
+        <div class="txt"><b>1 chose demande ta décision</b> : le mot du bouton de rig.</div>`)}
+      ${decisionCard({ reco: true })}
+      <div class="composer"><span class="ph">Parle à Ledge : un objectif, une question, « dis à Ida que… »</span><div class="row"><span class="chip">Qu'est-ce qui bloque ?</span><span class="chip">Nouvel objectif</span><span style="flex:1"></span><button class="btn sm pri">${ic(P.send, 12)}</button></div></div>
+    </div></div>`),
+  decision: () => app(sidebar({ ledgeOn: true, ledgeLine: '1 décision · 4 réglées', noMax: true, rigLine: 'Ledge : sidebar en implémentation, 1 décision' }), `
+    <div class="mh"><i class="mascot s"></i><h3>Ledge</h3><span class="sub">conversation</span><span class="sp"></span><button class="btn sm ghost">Voir les échanges du rig</button></div>
+    <div class="mc"><div class="col">
+      ${ledgeSays(`<div class="txt">Ida demandait Node 18 ou 22 pour les tests. <b>J'ai répondu Node 22</b> : CLAUDE.md le dit, et Node 18 échoue aussi sur main.</div>
+        <div class="acts"><span class="pill auto">réglé par Ledge · 18:52</span><span class="fine">source : CLAUDE.md § Le dépôt</span><span style="flex:1"></span><button class="btn sm ghost">Ne plus décider ça seul</button></div>`)}
+      ${ledgeSays(`<div class="txt">Bix demande <b>« Lancer un rig » ou « Lever un rig »</b> pour la sidebar. C'est un choix de produit, je ne le fais pas à ta place. Je recommande <b>Lancer</b> : c'est le mot de toute l'app.</div>
+        <div class="acts"><button class="btn pri">Lancer · recommandé</button><button class="btn">Lever</button><button class="btn ghost sm">Demande d'origine</button></div>`)}
+      ${meSays('Lancer. Et dis-lui de garder le Kernel encadré.')}
+      ${ledgeSays(`<div class="txt">Transmis à Bix : « Lancer », et garder l'encadré du Kernel.</div><div class="acts"><span class="pill ok">envoyé · 19:03</span><span class="fine mono">qitem-…190312</span></div>`)}
+      <div class="composer"><span class="ph">Réponds à Ledge…</span></div>
+    </div></div>`),
+  goal: () => app(sidebar({ ledgeOn: true, ledgeLine: '1 décision · 4 réglées', noMax: true }), `
+    <div class="mh"><i class="mascot s"></i><h3>Ledge</h3><span class="sub">conversation</span></div>
+    <div class="mc"><div class="col">
+      ${meSays('Je veux la pochette de la musique en cours dans l\'encoche fermée.')}
+      ${ledgeSays(`<div class="txt">Je le confie à <b>ledge-dev</b> : il tourne déjà sur ce dépôt et a un siège design. Voici ce que j'envoie à Bix :</div>
+        <div class="card" style="gap:6px"><div class="who">${ic(P.target, 13)}<strong>Objectif pour ledge-dev</strong><span class="sp"></span><span class="pill task">brouillon</span></div>
+          <p><b>Objectif</b> · pochette de la musique en cours dans l'encoche fermée</p>
+          <p><b>Fini quand</b> · s'affiche pour tous les lecteurs Windows (SMTC), testé sur la vraie encoche</p>
+          <p><b>Je te demanderai</b> · la maquette, le merge et la release</p>
+          <p><b>Je réglerai seul</b> · les questions techniques qui ont une réponse dans le dépôt</p>
+          <div class="acts"><button class="btn pri">${ic(P.send, 12)}Confier à ledge-dev</button><button class="btn">Modifier</button><button class="btn ghost sm">Lancer un nouveau rig plutôt</button></div></div>`)}
+      <div class="composer"><span class="ph">Réponds à Ledge…</span></div>
+    </div></div>`),
+  surfaces: () => app(sidebar({ noMax: true, ledgeLine: '1 décision · 4 réglées', rigLine: 'Ledge : sidebar en implémentation, 1 décision' }), `
+    <div class="mh"><h3>Ce qui change ailleurs</h3><span class="sub">direction B</span></div>
+    <div class="mc"><div class="col vigs">
+      <div class="vig"><h5>Sidebar</h5><p>Ledge en tête, avec « n décisions · n réglées ». Sous chaque rig, une ligne d'état écrite par Ledge. <b>Max disparaît du Kernel</b> : Ledge tient son rôle.</p></div>
+      <div class="vig"><h5>Atelier</h5><div class="floor"><div class="tbl"></div>
+        <div class="s" style="left:20%;top:20%"><i class="bot ap"></i>Bix</div><div class="s" style="left:58%;top:16%"><i class="bot work"></i>Ida</div><div class="s" style="left:74%;top:60%"><i class="bot"></i>Lu</div>
+        <div class="bubble" style="left:4%;top:56%"><b>Ledge</b> · J'ai répondu Node 22 à Ida.</div></div>
+        <p>Ledge commente la salle : ce qu'il a réglé, ce qui t'attend. Les drapeaux restent pour les décisions.</p></div>
+      <div class="vig"><h5>Île / encoche</h5><div class="island"><i class="mascot s"></i><span>1 décision pour toi · <small>4 réglées</small></span><span class="sp"></span><span class="ib pri">Voir</span></div>
+        <p>L'île ne montre plus chaque demande : Ledge parle en une ligne, et seules les décisions sonnent.</p></div>
+    </div></div>`)
+};
+
+/* ---------- A+B : A par défaut, B où tu l'autorises ---------- */
+const AB = {
+  home: () => app(sidebar({ ledgeOn: true, rigAsk: 1, ledgeLine: '1 à toi · 4 réglées', ask: { Bixpilot: 'décision' } }), `
+    <div class="mh"><i class="mascot s"></i><h3>À toi</h3><span class="sp"></span><button class="chip" style="height:26px">${ic(P.shield, 12)} Ledge décide seul : <b>2 sujets</b> · Régler</button><button class="btn">${ic(P.target, 13)}Nouvel objectif</button></div>
+    <div class="mc"><div class="col">
+      <div class="sec">Décisions <span class="n">1</span></div>${decisionCard({ reco: true })}
+      <div class="sec">Réglé par Ledge <span class="sp"></span><span class="fine">selon tes réglages</span></div>
+      <div class="card" style="gap:0;padding:6px 14px">
+        ${[['Ida : Node 22 pour les tests','CLAUDE.md','18:52'],['Ida : port de dev 5174','vite.config.ts','18:40'],['Rex : branche feat/sidebar-tidy','convention du dépôt','18:38']].map(u => `<div class="mini-row"><span class="pill auto">auto</span><span>${u[0]}</span><span class="sp"></span><span class="t">${u[1]} · ${u[2]}</span></div>`).join('')}
+      </div>
+      <div class="sec">Nouvelles</div>${updates(2)}
+    </div><div class="col side">
+      ${ledgeSays(`<div class="txt" style="font-size:12.5px">ledge-dev attend seulement ta décision sur le mot du bouton. Le reste avance.</div>`)}
+      <div class="composer"><span class="ph">Demander à Ledge…</span></div>
+    </div></div>`),
+  decision: () => app(sidebar({ rigAsk: 1, sel: 'Bixpilot', ask: { Bixpilot: 'décision' } }), `
+    <div class="mh">${hx()}<h3>ledge-dev</h3><span class="sub">fil du rig</span><span class="sp"></span><button class="btn sm">Écrire au rig</button></div>
+    <div class="mc"><div class="col">
+      <div class="reserve" data-r="messages OpenRig interprétés · ledge-dev-2" style="display:flex;flex-direction:column;gap:6px">
+        <div class="orm">${ic(P.mail, 13)}<span><b>Lu → Bix</b> · maquette rendue</span><span class="t">18:44</span></div>
+        <div class="orm">${ic(P.mail, 13)}<span><b>Ida → toi</b> · Node 18 ou 22 ? <span class="pill auto">réglé par Ledge : 22</span></span><span class="t">18:52</span></div>
+      </div>
+      ${decisionCard({ reco: true })}
+      <div class="card" style="gap:6px;background:var(--well)"><div class="who">${ic(P.shield, 13)}<strong>Pourquoi c'est à toi</strong></div><p>« Choix de produit et textes de l'app » est réglé sur <b>Toujours moi</b>. Ledge recommande sans répondre.</p><div class="acts"><button class="btn sm ghost">Changer ce réglage</button></div></div>
+    </div></div>`),
+  goal: () => app(sidebar({ ledgeOn: true, ledgeLine: '1 à toi · 4 réglées' }), `
+    <div class="mh"><i class="mascot s"></i><h3>Ce que Ledge décide seul</h3><span class="sub">Réglages › Ledge</span></div>
+    <div class="mc"><div class="col" style="gap:0">
+      <div class="lvl head"><div>Sujet</div><div>Toujours moi</div><div>Ledge propose</div><div>Ledge décide</div></div>
+      ${[['Questions techniques','avec une réponse dans le dépôt (CLAUDE.md, config, conventions)',2],['Permissions des sièges','lecture, tests, commandes du projet',2],['Choix de l\'équipe pour un objectif','quel rig, quels sièges, lancer un rig',1],['Choix de produit et textes de l\'app','mots, écrans, priorités',0],['Valider une maquette','toujours la tienne (culture ledge-dev)',0,'lock'],['Push, PR, merge, release','jamais délégable',0,'lock']].map(r => `<div class="lvl"><div class="what"><b>${r[0]}</b><small>${r[1]}</small></div>${[0,1,2].map(i => `<div>${r[3] && i > 0 ? '<span class="lock">—</span>' : `<span class="radio${r[2] === i ? ' on' : ''}"></span>`}</div>`).join('')}</div>`).join('')}
+      <div style="display:flex;gap:10px;align-items:center;margin-top:14px"><span class="fine">Ce que Ledge décide seul apparaît dans « Réglé par Ledge », avec sa source. Une réponse ne se reprend pas.</span><span style="flex:1"></span><button class="btn ghost sm">Journal · 26 cette semaine</button></div>
+      <div class="sec" style="margin-top:18px">Objectif donné à Ledge, avec ce réglage</div>
+      <div class="card" style="gap:6px;margin-top:8px"><div class="who">${ic(P.target, 13)}<strong>Pochette dans l'encoche</strong><span class="sp"></span><span class="pill task">Ledge propose</span></div><p>Ledge propose <b>ledge-dev</b> (le choix de l'équipe est sur « Ledge propose ») : tu confirmes, puis Max ou Ledge le transmet.</p><div class="acts"><button class="btn pri sm">Confier à ledge-dev</button><button class="btn sm">Changer d'équipe</button></div></div>
+    </div></div>`),
+  surfaces: () => app(sidebar({ rigAsk: 1, ledgeLine: '1 à toi · 4 réglées', ask: { Bixpilot: 'décision' } }), `
+    <div class="mh"><h3>Ce qui change ailleurs</h3><span class="sub">direction A+B</span></div>
+    <div class="mc"><div class="col vigs">
+      <div class="vig"><h5>Sidebar</h5><p>Comme A, et la ligne de Ledge ajoute « n réglées ». Max reste dans le Kernel tant que tu ne délègues pas le choix des équipes à Ledge.</p></div>
+      <div class="vig"><h5>Atelier</h5><div class="floor"><div class="tbl"></div>
+        <div class="s" style="left:20%;top:20%"><i class="bot ap"></i>Bix</div><div class="flag" style="left:13%;top:6%">décision</div><div class="s" style="left:58%;top:16%"><i class="bot work"></i>Ida</div>
+        <div class="bubble" style="left:52%;top:60%"><span class="pill auto">auto</span> Node 22 → Ida</div></div>
+        <p>Drapeau pour ce qui est à toi ; petite étiquette « auto » pour ce que Ledge a réglé, qui s'efface après un moment.</p></div>
+      <div class="vig"><h5>Île / encoche</h5><div class="island">${hx(false, 12)}<span><b>Bix</b> · Lancer ou Lever ?</span><span class="sp"></span><span class="ib pri">Lancer</span><span class="ib">Lever</span></div>
+        <div class="island" style="opacity:.75"><i class="mascot s"></i><span><small>Ledge a répondu Node 22 à Ida</small></span><span class="sp"></span><span class="ib">Voir</span></div>
+        <p>Les décisions s'affichent comme en A. Ce que Ledge règle passe en une ligne discrète, sans son.</p></div>
+    </div></div>`)
+};
+
+/* ---------- Page ---------- */
+const HEAD = {
+  A: { tag: 'A', title: 'Ledge = ta surface', line: 'Ledge affiche et transmet. Tu décides de tout.',
+    serves: 'Une seule boîte pour tout ce que les rigs attendent de toi (décisions, questions, nouvelles), et un endroit pour leur écrire.',
+    replaces: 'Le TUI du kernel comme adresse humaine. Max reste l’opérateur qui route tes objectifs.',
+    out: 'Ledge ne répond jamais à ta place et ne trie pas : tout ce qui t’est adressé t’arrive.' },
+  B: { tag: 'B', title: 'Ledge parle à ta place', line: 'Tu parles à Ledge ; Ledge parle aux rigs.',
+    serves: 'Un interlocuteur unique : il résume, règle les questions simples, et ne te remonte que les décisions.',
+    replaces: 'Max (routage des objectifs, choix et lancement des rigs) et le TUI du kernel.',
+    out: 'Choix de produit, validation des maquettes, push/merge/release : toujours à toi. Ledge ne code pas.' },
+  AB: { tag: 'A+B', title: 'A, plus ce que tu délègues', line: 'A par défaut ; Ledge décide seul seulement les sujets que tu as cochés.',
+    serves: 'La boîte de A, avec un réglage visible par sujet : Toujours moi / Ledge propose / Ledge décide.',
+    replaces: 'Le TUI du kernel. Max, seulement si tu délègues le choix des équipes.',
+    out: 'Les sujets verrouillés (maquettes, push/merge/release) ne se délèguent pas.' }
+};
+const ROWS = [
+  ['home', 'Accueil', 'ce que tu vois en ouvrant Ledge'],
+  ['decision', 'Un rig me demande une décision', ''],
+  ['goal', 'Je donne un objectif à une équipe', 'en A+B : le réglage de ce que Ledge décide seul'],
+  ['surfaces', 'Sidebar, Atelier, île', '']
+];
+const CAPS = {
+  A: { home: 'Décisions, questions et nouvelles, groupées par nature. À droite, l’état des équipes.', decision: 'Le fil du rig : les échanges OpenRig en cartes, la décision dessous, et un champ pour écrire au pilote.', goal: 'Un formulaire : pour qui (Max choisit, ou un rig), objectif, « fini quand », ce qui reste à toi. La commande rig est affichée.', surfaces: '' },
+  B: { home: 'Une conversation. Ledge fait le point, replie ce qu’il a réglé, et met la décision en avant avec sa recommandation.', decision: 'Ce que Ledge a réglé reste visible (avec sa source et « Ne plus décider ça seul »). La décision de produit t’est posée.', goal: 'Tu dis ce que tu veux ; Ledge choisit l’équipe et te montre ce qu’il va envoyer avant de le confier.', surfaces: '' },
+  AB: { home: 'La boîte de A, avec une section « Réglé par Ledge » et le rappel de ce que Ledge décide seul, en haut.', decision: 'La décision avec la recommandation de Ledge, et pourquoi elle est à toi (le réglage qui s’applique).', goal: 'Le réglage par sujet, avec deux lignes verrouillées. Dessous, un objectif traité selon ce réglage.', surfaces: '' }
+};
+function render() {
+  const g = document.getElementById('grid');
+  let html = '';
+  for (const k of ['A', 'B', 'AB']) { const h = HEAD[k]; html += `<div class="colhead"><h2><span class="tag">${h.tag}</span>${h.title}</h2><div class="tagline">${h.line}</div><dl><dt>Ledge sert à</dt><dd>${h.serves}</dd><dt>Remplace</dt><dd>${h.replaces}</dd><dt>Hors périmètre</dt><dd>${h.out}</dd></dl></div>`; }
+  for (const [r, title, sub] of ROWS) {
+    html += `<div class="rowtitle">${title}${sub ? `<small>${sub}</small>` : ''}</div>`;
+    for (const [k, D] of [['A', A], ['B', B], ['AB', AB]]) html += `<div class="cell"><div class="shot" id="s-${k}-${r}" data-k="${k}" data-r="${r}">${D[r]()}</div>${CAPS[k][r] ? `<div class="shot-cap">${CAPS[k][r]}</div>` : ''}</div>`;
+  }
+  g.innerHTML = html;
+}
+render();
+const setTheme = th => {
+  document.body.classList.toggle('dark-page', th === 'dark');
+  document.querySelectorAll('.shot, #lb').forEach(s => { s.classList.remove('th-dark', 'th-light'); s.classList.add('th-' + th); });
+  document.querySelectorAll('.switch button').forEach(b => b.classList.toggle('on', b.dataset.th === th));
+};
+document.querySelectorAll('.switch button').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.th)));
+setTheme(new URLSearchParams(location.search).get('theme') || 'dark');
+const lb = document.getElementById('lb');
+document.addEventListener('click', e => {
+  const s = e.target.closest('.shot');
+  if (s) { lb.innerHTML = s.innerHTML; lb.classList.add('on'); return; }
+  if (e.target.closest('#lb')) lb.classList.remove('on');
+});
+window.openShot = id => { const s = document.getElementById(id); lb.innerHTML = s.innerHTML; lb.classList.add('on'); };
+</script>
+</body>
+</html>

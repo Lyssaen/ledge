@@ -2,6 +2,9 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type Pending, type ServerMessage, type Session, type Task } from '@ledge/protocol';
 import { hostname } from 'node:os';
+import { broadcastFromUser } from '../src/daemon/broadcast.js';
+import { createMailbox } from '../src/daemon/mailbox.js';
+import { Store } from '../src/daemon/store.js';
 import { createPhoneGateway } from '../src/mobile/gateway.js';
 import { challengeOf } from '../src/mobile/webauthn.js';
 import { launchFromChat } from '../src/chat/launch.js';
@@ -2506,5 +2509,101 @@ describe('phone gateway: a session closed or resumed from its page', () => {
     await flush();
     expect(g.got('dev1')).toEqual([{ type: 'operation.result', op, status: 'rejected', reason: 'invalid' }]);
     expect(closed).toEqual([]);
+  });
+});
+
+describe('phone gateway: a message to a group of sessions', () => {
+  /** The daemon's side for real: `broadcastFromUser` over a real Store and the real mailbox, which types into a fake tmux. */
+  function make() {
+    const typed: Array<[string, string]> = [];
+    const seen = new Map<string, Extract<ServerMessage, { type: 'session.broadcast.result' }>>();
+    const store = new Store();
+    const mailbox = createMailbox({ store, typing: new Set(), relayQueued: () => false, sent: { record() {}, mark() {} },
+      replyTo: async (id, text) => { const s = store.get(id); if (!s?.tmuxSession) return 'no terminal'; typed.push([id, text]); return null; } });
+    let g!: ReturnType<typeof setup>;
+    g = setup({
+      dispatch: async (msg, reply) => {
+        if (msg.type !== 'session.broadcast') return;
+        reply(broadcastFromUser({ store, projects: { projects: [], rules: [] }, seen, mailbox }, msg));
+      }
+    });
+    // The daemon's sessions are the gateway's: idle ones are typed into at once.
+    const put = (s: Session) => { g.sessions.set(s.id, s); store.upsert(s); };
+    for (const s of [...g.sessions.values()]) put({ ...s, state: 'idle', pending: undefined });
+    return { g, typed, put, store };
+  }
+
+  it('announces it in the snapshot', async () => {
+    const { g } = make();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const snap = PhoneServerMessageSchema.parse(g.got('dev1')[0]);
+    expect(snap.type === 'snapshot' && snap.daemon.broadcast).toBe(true);
+  });
+
+  it('a busy recipient gets it at its next free moment, through the real mailbox', async () => {
+    const { g, typed, put, store } = make();
+    put({ ...store.get('b')!, state: 'working' });
+    const op = randomUUID();
+    g.send('dev1', { type: 'session.broadcast', op, sessions: ['a', 'b'], text: 'Salut' });
+    await until(() => typed.length === 1);
+    expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'applied', sent: ['a', 'b'] });
+    expect(typed).toEqual([['a', "Message de l'utilisateur (à a, b) : Salut"]]);
+    put({ ...store.get('b')!, state: 'idle' });
+    await until(() => typed.length === 2);
+    expect(typed[1]).toEqual(['b', "Message de l'utilisateur (à a, b) : Salut"]);
+  });
+
+  it('a name longer than the phone takes is clipped, so the answer is not dropped', async () => {
+    const { g, put, store } = make();
+    put({ ...store.get('a')!, name: 'n'.repeat(140) });
+    const op = randomUUID();
+    g.send('dev1', { type: 'session.broadcast', op, sessions: ['a'], text: 'Salut' });
+    await flush();
+    const out = g.results('dev1').at(-1);
+    expect(out).toMatchObject({ op, status: 'applied', sent: ['n'.repeat(100)] });
+    expect(PhoneServerMessageSchema.safeParse(out).success).toBe(true);
+  });
+
+  it('hands the ids to the daemon as a broadcast to sessions and answers with who got it and who did not', async () => {
+    const { g, typed, put } = make();
+    put(mk('x', { state: 'exited' }));
+    const op = randomUUID();
+    g.send('dev1', { type: 'session.broadcast', op, sessions: ['a', 'b', 'x', 'nope'], text: 'Pause café' });
+    await flush();
+    expect(g.dispatched[0]).toMatchObject({ type: 'session.broadcast', rid: op, to: { sessions: ['a', 'b', 'x', 'nope'] }, text: 'Pause café' });
+    await until(() => typed.length === 2);
+    expect(typed.map(([id]) => id)).toEqual(['a', 'b']);
+    const out = g.results('dev1').at(-1);
+    expect(out).toMatchObject({ type: 'operation.result', op, status: 'applied', sent: ['a', 'b'] });
+    expect(out).toMatchObject({ refused: [{ name: 'x' }, { name: 'nope' }] });
+  });
+
+  it('a retry of the same operation gets the same report and types nothing again', async () => {
+    const { g, typed } = make();
+    const m = { type: 'session.broadcast' as const, op: randomUUID(), sessions: ['a'], text: 'Salut' };
+    g.send('dev1', m); await until(() => typed.length === 1);
+    g.send('dev1', m); await flush(); await new Promise(r => setTimeout(r, 50));
+    expect(typed).toHaveLength(1);
+    expect(g.results('dev1').at(-1)).toMatchObject({ status: 'applied', sent: ['a'] });
+  });
+
+  it('nobody reached: the operation is failed with the refusals still reported', async () => {
+    const { g, put, store } = make();
+    put({ ...store.get('a')!, state: 'exited' });
+    const op = randomUUID();
+    g.send('dev1', { type: 'session.broadcast', op, sessions: ['a'], text: 'Salut' });
+    await flush();
+    expect(g.results('dev1').at(-1)).toMatchObject({ op, status: 'failed', sent: [], refused: [{ name: 'a' }] });
+  });
+
+  it('refuses a broadcast with an extra field, an empty list, an empty text or more than 32 sessions', async () => {
+    const { g } = make();
+    for (const bad of [{ extra: 1 }, { sessions: [] }, { text: '  ' }, { sessions: Array.from({ length: 33 }, (_, i) => `s${i}`) }]) {
+      g.send('dev1', { type: 'session.broadcast', op: randomUUID(), sessions: ['a'], text: 'x', ...bad } as never);
+    }
+    await flush();
+    expect(g.results('dev1').filter(r => r.status === 'rejected').map(r => r.reason)).toEqual(['invalid', 'invalid', 'invalid', 'invalid']);
+    expect(g.dispatched).toEqual([]);
   });
 });

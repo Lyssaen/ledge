@@ -7,13 +7,45 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'co
 
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
+  asks: {
+    sections: { decisions: 'Decisions', questions: 'Questions', updates: 'Updates' },
+    pill: { decision: 'decision', question: 'question', update: 'update', parked: 'waiting on you' },
+    priority: { urgent: 'urgent', critical: 'critical' },
+    recommended: (label) => `${label} · recommended`,
+    recommendedBy: (seat) => `Recommended by ${seat}`,
+    readAll: 'Show all', details: 'Details',
+    answerOther: 'Answer another way…', answerParked: 'Answer…', writeAnswer: 'Write an answer…',
+    placeholder: 'Your answer, in a few words…', placeholderParked: (seat) => `What ${seat} should do…`,
+    send: 'Send', cancel: 'Cancel', keys: 'Ctrl Enter · Esc', seen: 'Seen',
+    progress: (n, total) => `${n}/${total} answered · the answer goes with the last one`,
+    notSent: (why) => `Not sent: ${why}`, retry: 'Retry',
+    uncertain: 'Uncertain: the answer may have been sent. Retrying won’t send it twice.',
+    settlesAll: 'This answer settles the whole request, including unanswered questions.',
+    stopped: 'OpenRig is stopped',
+    sentTo: 'Sent to', already: 'Already settled elsewhere',
+    partial: 'List may be incomplete: OpenRig did not answer the last read.',
+    channel: {
+      no_person: { title: 'Ledge is not OpenRig’s human channel yet.', body: 'Rigs still go through Max, or the kernel’s TUI. Their requests don’t arrive here.' },
+      openrig_stopped: { title: 'OpenRig is stopped: rigs cannot write to you.', body: 'Your projects’ sessions still come here.' },
+      unreachable: { title: 'OpenRig is not responding.', body: '' },
+      no_default: { title: 'OpenRig has several people, and none is the default.', body: 'So its requests don’t arrive here. To set one:' },
+      not_installed: { title: (machine) => `OpenRig is not installed on ${machine}.`, body: 'Your projects’ sessions still come here.' }
+    }
+  },
   side: {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name) => `The rig ${name} on the OpenRig page`, rigAsks: (n) => `${n} ${pluralEn(n, 'request', 'requests')}`, 
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
     machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
     ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number) => `${yours} yours`,
-    ask: 'Ask Ledge', askPlaceholder: 'Ask Ledge…',
+    kernelTag: { ready: 'operational', starting: 'starting', stopped: 'stopped' },
+    empty: {
+      sessions: 'No session yet.', sessionsBody: 'A session runs an agent in a folder or a project.', newSession: 'Create a session',
+      stopped: 'OpenRig is stopped.', stoppedBody: 'Starting it also starts the kernel: the operator, the advisor and the queue.', start: 'Start OpenRig', starting: 'Starting OpenRig…',
+      retry: 'Retry', openPage: 'Open the OpenRig page',
+      installedOn: (machine: string) => `It’s installed on ${machine}: start it from its page.`, offlineOf: (n: number, m: number) => `offline · ${n}/${m}`,
+      noRig: 'No rig yet.', noRigBody: 'A rig is a team of agents.', noRigOperator: (name: string) => `${name}, the kernel’s operator, can help you put one together.`
+    },
     openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
     yours: 'Your turn', yoursMore: (n) => `See the other ${n}`, yoursLess: 'Show less',
@@ -504,6 +536,12 @@ export const en: Messages = {
   chunkFailed: 'This part of Ledge could not load. Restart the app.',
   close: 'Close',
   modalTitles: { launch: 'New session' },
+  broadcast: {
+    project: 'Write to the whole project…', selection: n => `Write to the ${n} sessions…`, title: label => `Write to ${label}`,
+    send: 'Send', cancel: 'Cancel', field: 'Message', picked: 'Selected sessions',
+    sent: (n, names) => `Delivered to ${n} ${n === 1 ? 'session' : 'sessions'}: ${names}`, refused: list => `Refused: ${list}`,
+    silent: 'No machine answered. Sending again will not write it twice.'
+  },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
     browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'

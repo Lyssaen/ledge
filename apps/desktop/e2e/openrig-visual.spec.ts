@@ -33,7 +33,7 @@ async function open(page: Page, theme: 'dark' | 'light') {
 for (const theme of ['dark', 'light'] as const) {
   test(`launch form, ${theme}`, async ({ page }, info) => {
     await open(page, theme);
-    await page.getByRole('button', { name: 'Lancer un rig…' }).click();
+    await page.locator('.or-head').getByRole('button', { name: 'Lancer un rig…' }).click();
     await page.getByRole('radio', { name: /^starter/ }).click();
     await page.getByLabel('Dossier de travail').fill('~/Workspace/ledge');
     await page.screenshot({ path: info.outputPath(`launch-empty-${theme}.png`) });

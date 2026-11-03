@@ -4,15 +4,15 @@ import { fakeDaemon, session } from './daemon';
 
 const ask = { kind: 'permission' as const, text: 'Run pnpm test', source: 'hook' as const };
 
-test('the handle shows one bot per session', async ({ page }) => {
+test('the handle shows Ledge alone, whatever the sessions', async ({ page }) => {
   const d = await fakeDaemon(page, [session('a'), session('b', { name: 'Pim', state: 'idle' }), session('c', { name: 'Ada' })]);
   await ready(page, 3);
   await expectMode(page, 'handle');
-  await expect(layer(page, 'handle').getByRole('button', { name: 'Pim available, open' })).toBeVisible();
+  await expect(layer(page, 'handle').locator('button')).toHaveCount(1);
   d.upsert(session('d', { name: 'Zed' }));
-  await expect(layer(page, 'handle').locator('button:not([data-resident]):not(:has([data-update-pip]))')).toHaveCount(4);
-  d.remove('a');
-  await expect(layer(page, 'handle').locator('button:not([data-resident]):not(:has([data-update-pip]))')).toHaveCount(3);
+  await ready(page, 4);
+  await expect(layer(page, 'handle').locator('button')).toHaveCount(1);
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth()}px`);
 });
 
 test('an ask unfolds the bubble after the unfold delay; Approve decides and the bubble folds once the daemon clears it', async ({ page }) => {
@@ -20,9 +20,9 @@ test('an ask unfolds the bubble after the unfold delay; Approve decides and the 
   await ready(page, 2);
   const t0 = Date.now();
   d.upsert(session('b', { name: 'Pim', state: 'waiting_permission', pending: ask }));
-  await expect(layer(page, 'handle').getByRole('button', { name: 'Pim needs your approval, open' })).toBeVisible();
+  await expect(layer(page, 'handle').locator('[data-line]')).toHaveAttribute('title', /Pim needs your approval/);
   await expectMode(page, 'bubble');
-  expect(Date.now() - t0).toBeGreaterThanOrEqual(500); // the bot grows first, the bubble follows ~540 ms later
+  expect(Date.now() - t0).toBeGreaterThanOrEqual(500); // the line wakes first, the bubble follows ~540 ms later
   const bubble = layer(page, 'bubble');
   await expect(bubble).toContainText('Run pnpm test');
   await bubble.getByRole('button', { name: 'Approve' }).click();
@@ -33,5 +33,6 @@ test('an ask unfolds the bubble after the unfold delay; Approve decides and the 
   await expectMode(page, 'bubble');
   d.upsert(session('b', { name: 'Pim', state: 'working' }));
   await expectMode(page, 'handle');
-  await expect(surface(page)).toHaveCSS('width', `${filetWidth([2])}px`);
+  // The request's 5 s on the line run out, then the filet rests again.
+  await expect(surface(page)).toHaveCSS('width', `${filetWidth()}px`, { timeout: 8000 });
 });

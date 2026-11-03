@@ -1,0 +1,73 @@
+/* The closed notch (mockup docs/mockups/ledge-notch-activity.html, notch-activity/notch.css): the filet and the awake row. */
+:root, :root[data-theme="light"] { --nt-ctl-hover: oklch(0.95 0 0); }
+:root[data-theme="dark"] { --nt-ctl-hover: #1d1e21; }
+
+/* Its own width (max-content, 640 px at most), never the surface's: the surface follows the row, not the reverse. */
+.nt-awake { display: flex; align-items: center; width: max-content; max-width: 640px; height: 38px; padding: 0 12px; box-sizing: border-box; white-space: nowrap; font-size: 13px; line-height: 18px; color: var(--foreground); }
+.nt-filet { display: flex; align-items: center; width: max-content; height: 10px; padding: 0 6px; gap: 4px; box-sizing: border-box; }
+.nt-mark { display: block; flex: none; width: 9px; height: 3px; border-radius: 1px; background: var(--sidebar-primary); }
+.nt-mark[data-dnd] { background: var(--muted-foreground); }
+.nt-mark[data-pending="permission"] { background: var(--danger-text); box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger-text) 25%, transparent); }
+.nt-mark[data-pending="question"] { background: var(--warning); box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 25%, transparent); }
+.nt-eq { display: flex; align-items: flex-end; flex: none; gap: 1px; height: 4px; }
+.nt-eq i { display: block; width: 1px; background: var(--muted-foreground); border-radius: 1px; }
+.nt-eq i:nth-child(1) { height: 2px; } .nt-eq i:nth-child(2) { height: 4px; } .nt-eq i:nth-child(3) { height: 3px; }
+
+.nt-moon { flex: none; margin-left: 6px; }
+/* The line gives way to the music controls at their pace (.18s): the cover then stays under a pointer that has not moved. */
+.nt-line-btn { min-width: 0; flex: 0 1 auto; max-width: 420px; transition: max-width .18s ease; margin-left: 10px; padding: 0 4px; height: 26px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.nt-line-btn[data-track] { cursor: default; }
+.nt-line-btn:not([data-track]):hover { background: var(--sidebar-accent); }
+.nt-line-btn:focus-visible, .nt-cover-btn:focus-visible, .nt-ctl:focus-visible, .nt-awake [data-resident]:focus-visible { outline: 2px solid var(--sidebar-primary); outline-offset: 1px; }
+.nt-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.nt-line[data-aged] { opacity: .62; }
+.nt-glyph { display: grid; place-items: center; flex: none; width: 14px; height: 14px; }
+.nt-words { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted-foreground); }
+.nt-words > * { margin-right: 5px; }
+.nt-words > *:last-child { margin-right: 0; }
+.nt-words b { color: var(--foreground); font-weight: 600; }
+.nt-words .nt-text { color: var(--foreground); }
+.nt-words code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: var(--foreground); }
+.nt-arrow { color: var(--task); }
+.nt-sub { font-size: 12px; }
+.nt-age { flex: none; font-size: 11.5px; color: var(--muted-foreground); }
+.nt-spin { font: 13px/14px 'Geist Mono', ui-monospace, monospace; }
+.nt-dots { display: flex; gap: 2px; }
+.nt-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--muted-foreground); animation: nt-dot 1.4s ease-in-out infinite; }
+.nt-dots i:nth-child(2) { animation-delay: .2s; } .nt-dots i:nth-child(3) { animation-delay: .4s; }
+.nt-dots[data-still] i { animation: none; opacity: .8; }
+@keyframes nt-dot { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+
+.nt-sep { display: block; flex: none; width: 1px; height: 16px; margin: 0 10px 0 12px; background: var(--sidebar-border); }
+.nt-music { display: flex; align-items: center; flex: none; }
+.nt-cover-btn { display: grid; place-items: center; flex: none; padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.nt-cover { position: relative; display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 5px; overflow: hidden; background: var(--sidebar-accent); color: var(--muted-foreground); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent); transition: filter .2s; }
+.nt-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: nt-fade .2s ease-out; }
+.nt-cover[data-paused] { filter: grayscale(.85) brightness(.75); }
+.nt-cover[data-pulse] { animation: nt-pop .5s cubic-bezier(.3,1.6,.5,1); }
+@keyframes nt-pop { 0% { transform: scale(.82); } 100% { transform: scale(1); } }
+@keyframes nt-fade { from { opacity: 0; } }
+.nt-pz { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 2.5px; }
+.nt-pz i { width: 2.5px; height: 9px; border-radius: 1px; background: #fff; }
+
+.nt-titles { display: grid; max-width: 0; overflow: hidden; opacity: 0; line-height: 15px; transition: max-width .18s ease, opacity .14s, margin .18s; }
+.nt-titles b { font-size: 12.5px; font-weight: 600; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; }
+.nt-titles span { font-size: 11.5px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; }
+.nt-titles em { font-style: normal; }
+.nt-ctls { display: flex; align-items: center; gap: 2px; }
+.nt-ctl { display: grid; place-items: center; flex: none; width: 0; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); cursor: pointer; opacity: 0; overflow: hidden; transition: width .18s ease, opacity .14s, background-color .12s; }
+.nt-ctl svg { width: 15px; height: 15px; }
+.nt-ctl:hover { background: var(--nt-ctl-hover); }
+.nt-ctl[aria-disabled] { cursor: default; color: var(--muted-foreground); }
+.nt-ctl[aria-disabled]:hover { background: transparent; }
+.nt-music[data-open] .nt-titles { max-width: 168px; opacity: 1; margin: 0 8px; }
+.nt-music[data-open] .nt-ctl { width: 28px; opacity: 1; }
+.nt-music[data-open] .nt-ctl[aria-disabled] { opacity: .35; }
+.nt-awake:has(.nt-music[data-open]) .nt-line-btn { max-width: 220px; }
+
+[data-still] .nt-cover[data-pulse], [data-still] .nt-cover img, [data-still] .nt-dots i { animation: none; }
+[data-still] .nt-titles, [data-still] .nt-ctl, [data-still] .nt-cover, [data-still] .nt-line-btn { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .nt-dots i, .nt-cover[data-pulse], .nt-cover img { animation: none; }
+  .nt-ctl, .nt-titles, .nt-line-btn { transition: none; }
+}

@@ -21,13 +21,47 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'co
 
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
 export const fr = {
+  /** « À toi »: what OpenRig's rigs ask the person (docs/mockups/ledge-human-operator-ab-lot1.html). */
+  asks: {
+    sections: { decisions: 'Décisions', questions: 'Questions', updates: 'Nouvelles' } as Record<'decisions' | 'questions' | 'updates', string>,
+    pill: { decision: 'décision', question: 'question', update: 'nouvelle', parked: 'en attente de toi' } as Record<'decision' | 'question' | 'update' | 'parked', string>,
+    priority: { urgent: 'urgent', critical: 'critique' } as Record<'urgent' | 'critical', string>,
+    recommended: (label: string) => `${label} · recommandé`,
+    recommendedBy: (seat: string) => `Recommandé par ${seat}`,
+    readAll: 'Tout lire', details: 'Détails',
+    answerOther: 'Répondre autrement…', answerParked: 'Répondre…', writeAnswer: 'Écrire la réponse…',
+    placeholder: 'Ta réponse, en quelques mots…', placeholderParked: (seat: string) => `Ce que ${seat} doit faire…`,
+    send: 'Envoyer', cancel: 'Annuler', keys: 'Ctrl Entrée · Échap', seen: 'Vu',
+    progress: (n: number, total: number) => `${n}/${total} répondues · la réponse part à la dernière`,
+    notSent: (why: string) => `Pas envoyée : ${why}`, retry: 'Réessayer',
+    // Validated by the user, 20:52Z.
+    uncertain: 'Envoi incertain : la réponse est peut-être partie. Réessayer ne l’enverra pas deux fois.',
+    settlesAll: 'Cette réponse règle toute la demande, y compris les questions sans réponse.',
+    stopped: 'OpenRig est arrêté',
+    sentTo: 'Envoyé à', already: 'Déjà réglée ailleurs',
+    partial: 'Liste peut-être incomplète : OpenRig n’a pas répondu à la dernière lecture.',
+    channel: {
+      no_person: { title: 'Ledge n’est pas encore le canal humain d’OpenRig.', body: 'Les rigs passent encore par Max, ou par le TUI du kernel. Leurs demandes n’arrivent pas ici.' },
+      openrig_stopped: { title: 'OpenRig est arrêté : les rigs ne peuvent pas t’écrire.', body: 'Les sessions de tes projets passent toujours par ici.' },
+      unreachable: { title: 'OpenRig ne répond pas.', body: '' },
+      no_default: { title: 'OpenRig a plusieurs personnes, et aucune n’est désignée par défaut.', body: 'Ses demandes n’arrivent donc pas ici. Pour en désigner une :' },
+      not_installed: { title: (machine: string) => `OpenRig n’est pas installé sur ${machine}.`, body: 'Les sessions de tes projets passent toujours par ici.' }
+    }
+  },
   side: {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name: string) => `Le rig ${name} sur la page OpenRig`, rigAsks: (n: number) => `${n} ${n > 1 ? 'demandes' : 'demande'}`, 
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
     machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
     ledgeHome: 'Accueil : Ledge, l’opérateur', ledgeLine: (yours: number) => `${yours} à toi`,
-    ask: 'Demander à Ledge', askPlaceholder: 'Demander à Ledge…',
+    kernelTag: { ready: 'opérationnel', starting: 'démarrage', stopped: 'arrêté' } as Record<'ready' | 'starting' | 'stopped', string>,
+    empty: {
+      sessions: 'Aucune session pour l’instant.', sessionsBody: 'Une session lance un agent dans un dossier ou un projet.', newSession: 'Créer une session',
+      stopped: 'OpenRig est arrêté.', stoppedBody: 'Le démarrer lance aussi le kernel : l’opérateur, l’advisor et la file.', start: 'Démarrer OpenRig', starting: 'Démarrage d’OpenRig…',
+      retry: 'Réessayer', openPage: 'Ouvrir la page OpenRig',
+      installedOn: (machine: string) => `Il est installé sur ${machine} : démarre-le depuis sa page.`, offlineOf: (n: number, m: number) => `hors ligne · ${n}/${m}`,
+      noRig: 'Aucun rig pour l’instant.', noRigBody: 'Un rig est une équipe d’agents.', noRigOperator: (name: string) => `${name}, l’opérateur du kernel, peut t’aider à en composer un.`
+    },
     openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
     yours: 'À toi', yoursMore: (n: number) => `Voir les ${n} autres`, yoursLess: 'Réduire',
@@ -530,6 +564,13 @@ export const fr = {
   chunkFailed: 'Cette partie de Ledge n’a pas pu se charger. Relancez l’application.',
   close: 'Fermer',
   modalTitles: { launch: 'Nouvelle session' },
+  /** Writing to a whole project, or to the sessions selected in the sidebar (broadcast spec): one message, each recipient gets it in its queue. */
+  broadcast: {
+    project: 'Écrire à tout le projet…', selection: (n: number) => `Écrire aux ${n} sessions…`, title: (label: string) => `Écrire à ${label}`,
+    send: 'Envoyer', cancel: 'Annuler', field: 'Message', picked: 'Sessions sélectionnées',
+    sent: (n: number, names: string) => `Remis à ${n} ${plural(n, 'session', 'sessions')} : ${names}`, refused: (list: string) => `Refusé : ${list}`,
+    silent: 'Aucune machine n’a répondu. Envoyer à nouveau ne l’écrira pas deux fois.'
+  },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
     browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap'

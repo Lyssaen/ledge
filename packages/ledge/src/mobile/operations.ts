@@ -5,10 +5,13 @@ import type { CloseHow, OperationReason, OperationStatus, PhoneClientMessage } f
 export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
 
 /** What an operation came to: the answer the phone gets. `how`: how a `session.close` ended the agent. */
-export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; how?: CloseHow;
+export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; how?: CloseHow; report?: Report;
   /** The operation's own detailed end, sent after its result and again on a replay (an OpenRig answer's `openrig.answered`). */ detail?: unknown };
 
-export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; how?: CloseHow; detail?: unknown; at: number }
+/** An applied `session.broadcast`: the names that got it, and those that did not, with why. */
+export interface Report { sent: string[]; refused: { name: string; reason: string }[] }
+
+export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; how?: CloseHow; report?: Report; detail?: unknown; at: number }
 
 export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } | { kind: 'conflict' };
 
@@ -21,6 +24,7 @@ export function fingerprint(m: PhoneOperation): string {
     ...(f.attachments?.length ? [f.attachments] : []),
     // A model change is its model and effort: the same id for another model is another operation (null, the agent's default, too).
     ...(m.type === 'session.model' ? [m.model, m.effort] : []),
+    ...(m.type === 'session.broadcast' ? [m.sessions] : []),
     // A hold is its terminal: the same id for another terminal is another operation.
     ...(m.type === 'term.hold' ? [m.tid] : []),
     // An OpenRig answer is its row and its answer (never its assertion, which changes): the same id for another is another operation.
@@ -54,9 +58,10 @@ export class OperationRegistry {
   }
 
   /** An operation already forgotten (expired) is left forgotten. */
-  finish(op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow, detail?: unknown): void {
+  finish(op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow, report?: Report, detail?: unknown): void {
     const r = this.records.get(op);
     if (!r) return;
+    if (report) r.report = report; else delete r.report;
     r.status = status;
     if (reason) r.reason = reason; else delete r.reason;
     if (how) r.how = how; else delete r.how;

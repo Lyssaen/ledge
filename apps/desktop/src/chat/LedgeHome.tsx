@@ -27,6 +27,9 @@ import { useChatCards } from './useChatCards';
 import { useTaskCards } from './useTaskCards';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
+import type { OpenRigAsksView } from '@ledge/fleet/openrigAsks';
+import { AsksColumn } from '../asks/AsksColumn';
+import { sessionOfAsk } from '../asks/model';
 
 export interface LedgeHomeProps {
   client: DaemonClient; view: FleetView; tasks: TasksApi; decisions: Decisions; waits: ReadonlyMap<string, Wait>;
@@ -36,6 +39,8 @@ export interface LedgeHomeProps {
   paused: boolean; focus: number;
   projects: Projects | null;
   onLaunched(id: string): void; onTerminal(id: string): void; notify(text: string): void; onProposal(pid: string): void;
+  /** « À toi »: what OpenRig's rigs ask the person, and the card the sidebar's « Voir » brings into view. */
+  asks?: OpenRigAsksView; askFocus?: { id: string; n: number } | null; machineLabel?: string;
 }
 
 const isToday = (iso: string) => iso.slice(0, 10) === new Date().toISOString().slice(0, 10);
@@ -47,9 +52,10 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-d
  * What waits for the user (answerable in place: the decisions sessions put to it too) and the closed tasks Ledge gave; the tasks
  * Ledge gave, open or closed today. « Résumer la journée » is an ordinary question.
  */
-export function LePoint({ view, api, decisions, waits, dispatch, onAsk, onShowTask, busy }: {
+export function LePoint({ view, api, decisions, waits, dispatch, onAsk, onShowTask, busy, asks, askFocus, machineLabel = 'local' }: {
   view: FleetView; api: TasksApi; decisions: Decisions; waits: ReadonlyMap<string, Wait>; dispatch: (a: NavAction) => void;
   onAsk(text: string): void; onShowTask(id: string): void; busy: boolean;
+  asks?: OpenRigAsksView | undefined; askFocus?: { id: string; n: number } | null | undefined; machineLabel?: string | undefined;
 }): JSX.Element {
   const { t } = useI18n();
   const p = t.home.point;
@@ -61,9 +67,24 @@ export function LePoint({ view, api, decisions, waits, dispatch, onAsk, onShowTa
   const near = useMemo(() => nearLimit(view.sessions, api.later, api.near), [view.sessions, api.later, api.near]);
   const given = api.tasks.filter(x => x.giver === LEDGE_GIVER && (!taskClosed(x) || isToday(x.updatedAt)));
   const state = (x: Task) => t.chat.task.state[x.state];
-  const count = attn.length + asked.length + closed.length + near.length;
+  const rigAsks = asks?.asks.length ?? 0;
+  const count = attn.length + asked.length + closed.length + near.length + rigAsks;
+  // The fade at the bottom while « Le point » has more below than it shows.
+  const pointRef = useRef<HTMLElement>(null);
+  const [more, setMore] = useState(false);
+  const measure = useCallback(() => { const el = pointRef.current; if (el) setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 1); }, []);
+  useEffect(() => {
+    measure();
+    const el = pointRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const cols = el.querySelector('.lp-cols');
+    if (cols) ro.observe(cols);
+    return () => ro.disconnect();
+  }, [measure]);
   return (
-    <section className="le-point" aria-label={p.title}>
+    <section ref={pointRef} className={cls('le-point', more && 'lp-more')} aria-label={p.title} onScroll={measure}>
       <div className="lp-head">
         <strong>{p.title}</strong>
         <span className="st-fill" />
@@ -72,7 +93,11 @@ export function LePoint({ view, api, decisions, waits, dispatch, onAsk, onShowTa
       <div className="lp-cols">
         <div className="lp-col" aria-label={p.yours}>
           <h3>{p.yours} {count > 0 && <b className="st-badge">{count}</b>}</h3>
-          {count === 0 && <p className="lp-none">{p.nothingYours}</p>}
+          {asks && <AsksColumn view={asks} sessions={view.sessions} machineLabel={machineLabel} focus={askFocus ?? null}
+            sourceOf={ask => { const s = sessionOfAsk(ask, view.sessions); return s ? (path: string) => dispatch({ type: 'open', id: s.id, doc: path }) : null; }}
+            onOpenSeat={id => dispatch({ type: 'open', id })} />}
+          {/* Never « Rien ne t'attend » when the list is not known whole (a banner, or a failed read: review). */}
+          {count === 0 && !(asks?.channel && asks.channel.state !== 'ready') && !asks?.partial && <p className="lp-none">{p.nothingYours}</p>}
           {attn.map(item => (
             <div key={item.session.id} className="lp-row">
               <SessionBot session={item.session} size={16} paused />
@@ -232,7 +257,12 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
   useEffect(() => { if (p.task) setShownTask(p.task); }, [p.task]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-  useEffect(() => { if (tab === 'conversation') inputRef.current?.focus({ preventScroll: true }); }, [p.focus, tab]);
+  // The composer takes the focus on the conversation tab, unless the sidebar's « Voir » just sent the focus to a card (review P1).
+  const seenAsk = useRef(p.askFocus?.n ?? 0);
+  useEffect(() => {
+    if (p.askFocus && p.askFocus.n !== seenAsk.current) { seenAsk.current = p.askFocus.n; return; }
+    if (tab === 'conversation') inputRef.current?.focus({ preventScroll: true });
+  }, [p.focus, tab, p.askFocus]);
   const busy = chat.some(x => x.answeredAt === undefined && x.error === undefined);
 
   // Images pasted or dropped on the field travel inline with the field's question only (not a suggestion's or « Résumer »).
@@ -303,7 +333,8 @@ export function LedgeHome(p: LedgeHomeProps): JSX.Element {
           {tab === 'conversation' && (
             <ChatCopyProvider value={copy}>
               <ChatView docked visible hideHeader multiline turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
-                pinned={<LePoint view={view} api={tasks} decisions={p.decisions} waits={p.waits} dispatch={dispatch} onAsk={ask} onShowTask={showTask} busy={busy || !!offline} />}
+                pinned={<LePoint view={view} api={tasks} decisions={p.decisions} waits={p.waits} dispatch={dispatch} onAsk={ask} onShowTask={showTask} busy={busy || !!offline}
+                  asks={p.asks} askFocus={p.askFocus} machineLabel={p.machineLabel} />}
                 above={above} footnote={<small className="home-readonly">{t.home.readOnly}</small>}
                 draft={draft} onDraft={setDraft} onFieldKey={onFieldKey}
                 attach={{ items: images.items, onFiles: images.add, onRemove: images.remove, ready: images.ready, error: images.error }}

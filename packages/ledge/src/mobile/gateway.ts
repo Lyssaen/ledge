@@ -9,6 +9,7 @@ import {
 } from '@ledge/protocol';
 import { ModelRefusalSchema, type HumanAnswer, type ModelRefusal, type OpenRigAnswered, type OpenRigAsksChanged, type Tool } from '@ledge/protocol';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -19,7 +20,7 @@ import { ActRefused } from '../chat/act.js';
 import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
 import { createTerminalHost, type SpawnControl, type TerminalHost } from './terminal.js';
-import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation } from './operations.js';
+import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation, type Report } from './operations.js';
 import { capabilities, clip, forPhone, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneThread } from './project.js';
 import { canSwitch, toPhoneCommands, toPhoneModels } from './project.js';
 import { checklistSummary, toPhoneChecklist } from './project.js';
@@ -223,7 +224,7 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
-      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}) },
+      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), broadcast: true as const },
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
@@ -282,14 +283,14 @@ export function createPhoneGateway(deps: {
     const s = live(m.id);
     if (reason.success && s) modelFailures.set(m.id, { reason: reason.data, model: s.model, effort: s.effort });
   };
-  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow) => {
+  const result = (deviceId: string, op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow, report?: Report) => {
     // A device revoked while its operation ran hears nothing more.
     if (stopped || !approved(deviceId)) return;
-    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(how ? { how } : {}) });
+    push(deviceId, { type: 'operation.result', op, status, ...(reason ? { reason } : {}), ...(how ? { how } : {}), ...(report ? { sent: report.sent, refused: report.refused } : {}) });
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'term.open' | 'term.hold' | 'openrig.answer' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -661,6 +662,22 @@ export function createPhoneGateway(deps: {
     return { status: 'applied' };
   };
 
+  /** One message to the sessions of a group: the daemon's broadcast by ids; applied when at least one got it, with who did and who did not. */
+  const broadcast = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'session.broadcast' }>): Promise<Outcome> => {
+    const rid = msg.op;
+    let answer: Extract<ServerMessage, { type: 'session.broadcast.result' }> | undefined;
+    const out = await ask({ type: 'session.broadcast', rid, to: { sessions: msg.sessions }, text: msg.text }, m => {
+      if (m.type !== 'session.broadcast.result' || m.rid !== rid) return undefined;
+      answer = m;
+      return true;
+    }, { silent: { status: 'failed' } });
+    if (!answer) return out;
+    // Clipped to the phone schema's bounds: one name too long would make the phone drop the whole answer.
+    const report: Report = { sent: answer.sent.slice(0, BROADCAST_SESSIONS_MAX).map(s => s.name.slice(0, 100)), refused: answer.refused.slice(0, BROADCAST_SESSIONS_MAX).map(r => ({ name: r.name.slice(0, 100), reason: r.reason.slice(0, 200) })) };
+    log(`phone: device ${deviceId} broadcast to ${report.sent.length} session(s), ${report.refused.length} refused`);
+    return { status: report.sent.length ? 'applied' : 'failed', report };
+  };
+
   /** Streams a session's pane: a session Ledge started, live, with a tmux pane of its own. */
   const termOpen = (deviceId: string, msg: Extract<PhoneOperation, { type: 'term.open' }>): Outcome => {
     if (!terminals) return { status: 'rejected', reason: 'unavailable' };
@@ -758,6 +775,7 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'chat.close') return chatClose(deviceId, msg);
     if (msg.type === 'chat.act') return chatAct(deviceId, msg);
     if (msg.type === 'session.close' || msg.type === 'session.resume') return sessionEnd(deviceId, msg);
+    if (msg.type === 'session.broadcast') return broadcast(deviceId, msg);
     if (msg.type === 'term.open') return termOpen(deviceId, msg);
     if (msg.type === 'term.hold') return termHold(deviceId, msg);
     if (msg.type === 'openrig.answer') return rigAnswer(deviceId, msg);
@@ -776,8 +794,9 @@ export function createPhoneGateway(deps: {
     const begun = registry.begin(deviceId, msg.op, fingerprint(msg));
     if (begun.kind === 'conflict') return result(deviceId, msg.op, 'rejected', 'conflict');
     if (begun.kind === 'replay') {
-      result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.how);
-      // A replay gets the operation's detailed end again (what an OpenRig answer came to), never a second run.
+      // A replay gets the operation's end again, never a second run: its result with a broadcast's report, then the detailed end an
+      // OpenRig answer keeps (`openrig.answered`).
+      result(deviceId, msg.op, begun.record.status, begun.record.reason, begun.record.how, begun.record.report);
       if (begun.record.detail !== undefined && approved(deviceId) && !stopped) push(deviceId, begun.record.detail as PhoneServerMessage);
       return;
     }
@@ -790,8 +809,8 @@ export function createPhoneGateway(deps: {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);
       outcome = { status: 'failed' };
     }
-    registry.finish(msg.op, outcome.status, outcome.reason, outcome.how, outcome.detail);
-    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how);
+    registry.finish(msg.op, outcome.status, outcome.reason, outcome.how, outcome.report, outcome.detail);
+    result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how, outcome.report);
     // The phone learns it can confirm from the snapshot that follows.
     if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {
@@ -1021,7 +1040,7 @@ export function createPhoneGateway(deps: {
       const op = OperationIdSchema.safeParse((raw as { op?: unknown } | null | undefined)?.op);
       // A model change the schema refuses (#58) is answered the same way.
       if (request === 'session.model' && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
-      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.task' || request === 'task.seen' || request === 'session.close' || request === 'session.resume' || request === 'term.open' || request === 'term.hold') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
+      if ((request === 'push.subscribe' || request === 'chat.launch' || request === 'chat.close' || request === 'chat.act' || request === 'chat.ignore' || request === 'chat.task' || request === 'task.seen' || request === 'session.close' || request === 'session.resume' || request === 'session.broadcast' || request === 'term.open' || request === 'term.hold') && op.success && approved(deviceId)) return push(deviceId, { type: 'operation.result', op: op.data, status: 'rejected', reason: 'invalid' });
       return push(deviceId, { type: 'error', code: 'invalid', ...(request !== undefined ? { request } : {}) });
     }
     const msg = parsed.data;

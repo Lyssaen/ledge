@@ -18,6 +18,10 @@ function sendUsage(args: string[]): { to: string; text: string; summary?: string
   return { to, text, ...(summary ? { summary } : {}) };
 }
 
+/** What a broadcast reached, and who it could not: `remis à 2 sessions (Nova, Pim) ; refusé : Zed (raison)`. */
+export const broadcastLine = (sent: string[], refused: { name: string; reason: string }[]) =>
+  `remis à ${sent.length} session${sent.length > 1 ? 's' : ''} (${sent.join(', ')})${refused.length ? ` ; refusé : ${refused.map(r => `${r.name} (${r.reason})`).join(', ')}` : ''}`;
+
 /** `ledge send` over an already-connected client: the hook sends on its own connection, where its `session.event` went,
  *  so the daemon knows the sender. `ms` is what is left of the shared deadline. */
 export async function sendOnClient(client: Client, args: string[], from: string, ms: number): Promise<{ line: string; code: number }> {
@@ -29,6 +33,11 @@ export async function sendOnClient(client: Client, args: string[], from: string,
     const pending = sendMessageAndAwaitAck(client, { type: 'session.message', rid: randomUUID(), from, to, text, ...(summary ? { summary } : {}) }, ms);
     sent = true;
     const ack = await pending;
+    if (ack.recipients) {
+      const { sent: reached, refused } = ack.recipients;
+      if (!reached.length) return { line: `refusé : ${ack.reason ?? refused[0]?.reason ?? 'raison inconnue'}`, code: 1 };
+      return { line: broadcastLine(reached, refused), code: 0 };
+    }
     if (ack.outcome === 'accepted') return { line: `remis à ${to}`, code: 0 };
     if (ack.outcome === 'queued') return { line: `${to} est occupé : il le recevra dès qu'il sera libre`, code: 0 };
     return { line: `refusé : ${ack.reason ?? 'raison inconnue'}`, code: 1 };

@@ -71,19 +71,14 @@ describe('prototype parity', () => {
   it('theme changes material without replacing SVG or resetting state', () => {
     snapshot([otto(), pim()]);
     const { rerender } = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /Otto working, open/ }));
-    const svg = layer('peek').querySelector('svg.bot') as SVGSVGElement;
-    const phase = svg.style.getPropertyValue('--bot-phase'); const state = svg.getAttribute('data-state');
-    expect(svg).toHaveAttribute('data-material', 'signal');
+    // Ledge is the notch's only mascot: awake under the pointer, the theme changes its material, not its node.
+    fireEvent.mouseEnter(surface());
+    const svg = layer('handle').querySelector('[data-sprite] svg') as SVGSVGElement;
+    expect(svg).toBeTruthy();
     rerender(<Surface screenH={1080} theme="light" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    const after = layer('peek').querySelector('svg.bot') as SVGSVGElement;
-    expect(after).toBe(svg);
-    expect(after).toHaveAttribute('data-material', 'pebble');
-    expect(after.style.getPropertyValue('--bot-phase')).toBe(phase);
-    expect(after.getAttribute('data-state')).toBe(state);
-    expect(layer('handle').querySelector('[data-ledge-mark]')).toBeInTheDocument();
-    expect(mode()).toBe('peek');
-    expect(within(layer('peek')).getByText('Otto')).toBeInTheDocument();
+    expect(layer('handle').querySelector('[data-sprite] svg')).toBe(svg);
+    expect(layer('handle').querySelectorAll('svg.bot')).toHaveLength(0);
+    expect(mode()).toBe('handle');
   });
 
   it('an ask has no clock; a notice keeps the time it had left while held', () => {
@@ -170,28 +165,23 @@ describe('prototype parity', () => {
     update(otto({ state: 'idle' }));
     tick(900);
     expect(mode()).toBe('handle');
-    fireEvent.click(screen.getByRole('button', { name: /Otto available, open/ }));
-    const view = layer('peek');
-    expect(within(view).getByText('Available')).toBeInTheDocument();
-    expect(within(view).queryByText(/passed|tests? ran|all green|✓/i)).toBeNull();
+    expect(within(layer('handle')).queryByText(/passed|tests? ran|all green|✓/i)).toBeNull();
   });
 
   it('large and empty fleets fit', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver); FakeResizeObserver.all = [];
     snapshot([]);
     const { unmount } = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    expect(surface()).toHaveStyle({ width: `${filetWidth([])}px`, height: '10px' });
+    expect(surface()).toHaveStyle({ width: `${filetWidth()}px`, height: '10px' });
     unmount();
 
     const bots = Array.from({ length: 12 }, (_, i) => fakeSession(`s${String(i).padStart(2, '0')}`, { name: `Bot${i}`, ...(i % 4 === 1 ? asks(`cmd ${i}`) : {}) }));
     snapshot(bots);
     const big = render(<Surface screenH={1080} theme="dark" client={rec.client} dnd onToggleDnd={() => {}} />);
-    // Every session is a dash, asks first; the filet stays inside the 1024 px viewport.
-    const buttons = within(layer('handle')).getAllByRole('button', { name: /open$/ }).filter(b => !b.hasAttribute('data-resident'));
-    expect(buttons).toHaveLength(12);
-    for (const b of buttons) expect(b).toHaveStyle({ width: '5px' });
-    expect(buttons.slice(0, 3).every(b => /needs your approval/.test(b.getAttribute('aria-label')!))).toBe(true);
-    expect(layer('handle').querySelector('[data-overflow]')).toBeNull();
+    // Ledge alone, whatever the fleet: no dash per session; its mark says a permission waits.
+    expect(within(layer('handle')).getAllByRole('button')).toHaveLength(1);
+    expect(surface()).toHaveStyle({ width: `${filetWidth()}px` });
+    expect(layer('handle').querySelector('[data-ledge-mark]')).toHaveAttribute('data-pending', 'permission');
     const left = parseFloat(surface().style.left), w = parseFloat(surface().style.width);
     expect(surface()).toHaveStyle({ top: '0px', height: '10px' });
     expect(left).toBeGreaterThanOrEqual(0); expect(left + w).toBeLessThanOrEqual(1024);
@@ -241,7 +231,8 @@ describe('prototype parity', () => {
   it('a chat draft survives a disconnect, and an offline ask cannot be decided', () => {
     snapshot([otto(), pim(asks('git push')), lu({ ...asks('rm -rf /tmp/x'), source: 'hook_only' })]);
     render(<Harness client={rec.client} dnd />);
-    fireEvent.click(screen.getByRole('button', { name: /Ledge, open/ }));
+    // Requests wait, so Ledge would reopen the oldest (choice A): the shortcut's second press opens the chat.
+    shortcut(); shortcut();
     tick(180);
     const field = screen.getByRole('textbox', { name: 'Ask Ledge' }) as HTMLInputElement;
     fireEvent.change(field, { target: { value: 'keep going, then rebase' } });
@@ -281,7 +272,8 @@ describe('prototype parity', () => {
     update(lu(question('Which strategy?', ['Backfill', 'Shadow'])));
     tick(540);
     expect(mode()).toBe('handle');
-    fireEvent.click(screen.getByRole('button', { name: /Lu has a question, open/ }));
+    // In Do not disturb the queued question waits for the shortcut (no robot to click any more).
+    shortcut();
     expect(mode()).toBe('bubble');
     tick(6000);
     expect(mode()).toBe('bubble');
@@ -387,16 +379,6 @@ describe('carried items', () => {
     for (const svg of bots) expect(svg).toHaveAttribute('data-frozen', 'true');
     act(() => daemonStore.setStatus('open'));
     for (const svg of document.querySelectorAll('svg.bot')) expect(svg).toHaveAttribute('data-frozen', 'false');
-  });
-
-  it('a mouse open of a bot shows the peek; Escape folds it and never leaves focus in an inert layer', () => {
-    snapshot([otto(), pim()]);
-    render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /Pim working, open/ }));
-    expect(mode()).toBe('peek');
-    press('Escape');
-    expect(mode()).toBe('handle');
-    expect(inInert()).toBe(false);
   });
 
   it('the chat menu sends settings to Ledge Desktop and toggles do not disturb here', () => {

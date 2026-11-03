@@ -167,6 +167,13 @@ export const copy = {
     state: { working: 'Au travail', idle: 'Disponible', exited: 'Terminée', error: 'Erreur' },
     empty: 'Aucune session sur ce PC', emptyHint: 'Les agents lancés depuis Ledge apparaissent ici.',
     open: (name: string, task: string) => `${name} · ${task}`,
+    /** « Écrire au groupe »: one message to every session of a group. */
+    writeGroup: 'Écrire au groupe', writeGroupLabel: (group: string) => `Message à tout le groupe ${group}`, writeGroupPlaceholder: 'Un message pour tout le groupe',
+    send: 'Envoyer', cancel: 'Annuler', sending: 'Envoi…',
+    sentTo: (names: string[]) => `Envoyé à ${names.join(', ')}`,
+    refusedLine: (name: string, reason: string) => `${name} : ${reason}`,
+    tooMany: (n: number, max: number) => `${n} sessions dans ce groupe, ${max} au plus : écrivez-leur depuis le PC`,
+    nobody: 'Personne à qui écrire', notSent: 'Message non envoyé', uncertain: 'Message envoyé ; vérifiez sur le PC',
     /** A session's context and relief (context handover spec §3.2): shown here, started from the PC. */
     context: (pct: number) => `contexte ${pct} %`,
     relief: { briefing: 'relève : bilan demandé', launching: 'relève : lancement…', done: 'relevée', failed: 'relève échouée' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,

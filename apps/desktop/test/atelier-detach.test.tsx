@@ -140,6 +140,8 @@ describe('the detached Atelier’s window (#21)', () => {
     d.upsert(fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' }));
     render(<AtelierApp client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
     await screen.findByRole('button', { name: /^Otto,/ });
+    // The projects arrive after the sessions: Otto sits at the Ledge table only once they are in (a race on main too).
+    await screen.findByRole('region', { name: 'Ledge table' });
     return { d, user: userEvent.setup(), close: () => d.close() };
   }
 
