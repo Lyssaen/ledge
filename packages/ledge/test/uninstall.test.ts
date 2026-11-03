@@ -145,3 +145,19 @@ describe('runUninstall', () => {
     expect(r.lines.join('\n')).toContain('"hooks" is not an object, not modified');
   });
 });
+
+describe('ledge uninstall: the Windows hook commands', () => {
+  it('removes Ledge\'s, and only them', async () => {
+    const { mergeClaudeHooks, mergeCodexHooks, windowsHookCommands } = await import('../src/cli/setup.js');
+    const cmds = windowsHookCommands('C:\\Program Files\\nodejs\\node.exe', 'C:\\Users\\a b\\AppData\\Roaming\\npm\\node_modules\\@paradow\\ledge\\dist\\cli\\index.js');
+    const foreign = { hooks: { Stop: [{ hooks: [{ type: 'command', command: '"C:/Program Files/nodejs/node.exe" "C:/tools/other/index.js" hook Stop' }] }] } };
+    const claude = mergeClaudeHooks(foreign, cmds.claude).settings;
+    const r = removeClaudeHooks(claude);
+    expect(r.removed).toBeGreaterThan(5);
+    expect(JSON.stringify(r.settings)).not.toContain('@paradow');
+    expect(JSON.stringify(r.settings)).toContain('C:/tools/other/index.js');
+    const codex = removeClaudeHooks(mergeCodexHooks({}, cmds.codex).settings, 'hooks.json');
+    expect(codex.removed).toBeGreaterThan(5);
+    expect(JSON.stringify(codex.settings)).not.toContain('@paradow');
+  });
+});

@@ -4,8 +4,16 @@ import { join } from 'node:path';
 import { paths } from '../paths.js';
 import { BIN_MARK, SERVICE, execRunner, stopDetachedDaemon, type Runner } from './setup.js';
 
-/** Every command `ledge setup` ever wired, whatever the event: `ledge hook <Event>`, `ledge hook codex|cursor <event>`. */
-const LEDGE_HOOK = /^ledge hook (?:(?:codex|cursor) )?[A-Za-z]+$/;
+/** Every command `ledge setup` ever wired, whatever the event: `ledge hook <Event>`, `ledge hook codex|cursor <event>`,
+ *  and on Windows the absolute forms, Claude's `"<node>" "<…/cli/index.js>" hook …` and Codex's
+ *  `& '<node>' '<…/cli/index.js>' hook codex …`. Only Ledge's CLI path (`…/cli/index.js`) counts: another tool's
+ *  node script is not taken for Ledge's. */
+const EVENT = String.raw`hook (?:(?:codex|cursor) )?[A-Za-z]+`;
+const LEDGE_HOOK = new RegExp([
+  String.raw`^ledge ${EVENT}$`,
+  String.raw`^"[^"]+" "[^"]*/cli/index\.js" ${EVENT}$`,
+  String.raw`^& '(?:[^']|'')+' '(?:[^']|'')*/cli/index\.js' ${EVENT}$`,
+].join('|'));
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
