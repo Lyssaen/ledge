@@ -53,35 +53,61 @@ export function parseRegQuery(out: string): RegValues {
 }
 
 const MACHINE_ENV = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment';
+/** What Windows sets at logon (USERNAME, USERPROFILE, APPDATA…), over the machine's: there USERNAME is SYSTEM. */
+const LOGON_ENV = 'HKCU\\Volatile Environment';
 const USER_ENV = 'HKCU\\Environment';
+
+/** `reg query <key>` under the UTF-8 code page: reg.exe writes in the console's code page, an OEM one on many PCs,
+ *  which would garble a non-ASCII value. */
+export function regCommand(key: string): { file: string; args: string[] } {
+  return { file: 'cmd', args: ['/d', '/s', '/c', `chcp 65001 >nul & reg query "${key}"`] };
+}
 const regQuery = (key: string) => new Promise<string>((resolve, reject) => {
-  execFile('reg', ['query', key], { windowsHide: true, timeout: 5000 }, (err, stdout) => (err ? reject(err) : resolve(String(stdout))));
+  const { file, args } = regCommand(key);
+  execFile(file, args, { windowsHide: true, timeout: 5000, windowsVerbatimArguments: true }, (err, stdout) => (err ? reject(err) : resolve(String(stdout))));
 });
 
 /**
- * Windows: the environment a new process of the user gets, read where Windows keeps it (machine, then user, which wins;
- * `Path` is both joined, then the folders only `base` has), `%NAME%` expanded against `base` then those values, an
- * unknown one kept as written. What a tool installed after the daemon started added to the PATH is there.
+ * Windows: the environment a new process of the user gets, read where Windows keeps it: the machine's, then the
+ * logon's, then the user's (each wins over the one before); `Path` is the machine's and the user's joined, then the
+ * folders only `base` has (Desktop's Git, the agents it installed). `%NAME%` is expanded against `base` then these
+ * values, as Windows does (`Path` last); an unknown one is kept as written. A source reg.exe cannot read is skipped,
+ * and said in the log.
  */
 export async function windowsRegistryEnv(run: (key: string) => Promise<string> = regQuery, base: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
-  const none = (): RegValues => ({});
-  const [machine, user] = await Promise.all([run(MACHINE_ENV).then(parseRegQuery, none), run(USER_ENV).then(parseRegQuery, none)]);
+  const read = (key: string) => run(key).then(parseRegQuery, (e: Error) => { log(`registry environment: ${key} not read (${e.message.split('\n')[0]})`); return {} as RegValues; });
+  const [machine, logon, user] = await Promise.all([read(MACHINE_ENV), read(LOGON_ENV), read(USER_ENV)]);
+  const sources = [machine, logon, user];
+  const isPath = (k: string) => k.toUpperCase() === 'PATH';
   const lookup = new Map<string, string>();
   for (const [k, v] of Object.entries(base)) if (v !== undefined) lookup.set(k.toUpperCase(), v);
-  for (const src of [machine, user]) for (const [k, v] of Object.entries(src)) if (v.type === 'REG_SZ') lookup.set(k.toUpperCase(), v.value);
   const expand = (s: string) => s.replace(/%([^%;]+)%/g, (all, name: string) => lookup.get(name.toUpperCase()) ?? all);
-  const value = (v: { type: string; value: string }) => (v.type === 'REG_EXPAND_SZ' ? expand(v.value) : v.value);
   const env: Record<string, string> = {};
-  for (const src of [machine, user]) for (const [k, v] of Object.entries(src)) if (k.toUpperCase() !== 'PATH') env[k] = value(v);
-  const path = (src: RegValues) => { const k = Object.keys(src).find(n => n.toUpperCase() === 'PATH'); return k ? value(src[k]!) : ''; };
+  // Plain strings first, then expandable ones in two passes, so one may name another (JAVA_HOME in Path's %JAVA_HOME%).
+  for (const src of sources) for (const [k, v] of Object.entries(src)) if (!isPath(k) && v.type === 'REG_SZ') { env[k] = v.value; lookup.set(k.toUpperCase(), v.value); }
+  for (let pass = 0; pass < 2; pass++) for (const src of sources) for (const [k, v] of Object.entries(src)) {
+    if (isPath(k) || v.type !== 'REG_EXPAND_SZ') continue;
+    env[k] = expand(v.value); lookup.set(k.toUpperCase(), env[k]!);
+  }
+  // A later source's plain value wins over an earlier expandable one of the same name.
+  for (const src of [logon, user]) for (const [k, v] of Object.entries(src)) if (!isPath(k)) env[k] = v.type === 'REG_SZ' ? v.value : expand(v.value);
+  const path = (src: RegValues) => { const k = Object.keys(src).find(isPath); return k ? (src[k]!.type === 'REG_EXPAND_SZ' ? expand(src[k]!.value) : src[k]!.value) : ''; };
   const joined = [path(machine), path(user)].filter(Boolean).join(';');
-  // The folders the daemon itself was given (Desktop's Git, the agents it installed) follow the registry's, once each.
-  const baseKey = Object.keys(base).find(k => k.toUpperCase() === 'PATH');
+  const baseKey = Object.keys(base).find(isPath);
   const seen = new Set(joined.split(';').map(d => d.toLowerCase()));
   const own = (baseKey ? base[baseKey] ?? '' : '').split(';').filter(d => d && !seen.has(d.toLowerCase()) && (seen.add(d.toLowerCase()), true));
   const full = [joined, ...own].filter(Boolean).join(';');
   if (full) env.Path = full;
   return env;
+}
+
+/** `over` on top of `base`. On Windows a variable's name has no case (PATH and Path are one): `base`'s spelling of a name
+ *  `over` sets is dropped, or a child would see both and take the stale one. */
+export function overlayEnv(base: NodeJS.ProcessEnv, over: Record<string, string>, platform: NodeJS.Platform = process.platform): Record<string, string> {
+  const out: Record<string, string> = {};
+  const overNames = new Set(Object.keys(over).map(k => (platform === 'win32' ? k.toUpperCase() : k)));
+  for (const [k, v] of Object.entries(base)) if (v !== undefined && !overNames.has(platform === 'win32' ? k.toUpperCase() : k)) out[k] = v;
+  return { ...out, ...over };
 }
 
 /** The environment a fresh terminal would give the user: the registry's on Windows, the login shell's elsewhere. */

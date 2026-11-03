@@ -19,7 +19,7 @@ import { createMobileService, type MobileService } from '../mobile/service.js';
 import { fileJournal } from './mailbox.js';
 import { tasksJournal } from './tasks.js';
 
-export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string; /** `daemon.stop` ends the process too (the CLI's daemon). */ exitOnStop?: boolean } = {}): Promise<{ stop(): Promise<void>; port: number }> {
+export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string; /** `daemon.stop` ends the process too (the CLI's daemon). */ exitOnStop?: boolean; /** Tests: the platform `daemon.stop` checks. */ platform?: NodeJS.Platform } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
   const store = new Store();
   const loaded = await store.load();
@@ -65,7 +65,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const mail = fileJournal(paths().mail);
   const taskJournal = tasksJournal(paths().tasks);
   let onStop = () => {};
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, attachments, onStop: () => onStop() });
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, attachments, onStop: () => onStop(), ...(opts.platform ? { platform: opts.platform } : {}) });
   ompLive = () => server.omp.liveCount();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));

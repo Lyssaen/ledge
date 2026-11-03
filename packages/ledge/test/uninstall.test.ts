@@ -173,3 +173,11 @@ describe('ledge uninstall on Windows', () => {
     expect(r.lines.join('\n')).not.toMatch(/WSL/);
   });
 });
+
+describe('ledge uninstall: another tool with the same shape of command', () => {
+  it('keeps a hook whose CLI is not Ledge\'s, even laid out as dist/cli/index.js', () => {
+    const settings = { hooks: { Stop: [{ hooks: [{ type: 'command', command: '"C:/n/node.exe" "C:/x/node_modules/claude-notifier/dist/cli/index.js" hook Stop' }] }] } };
+    expect(removeClaudeHooks(settings).removed).toBe(0);
+  });
+});
+

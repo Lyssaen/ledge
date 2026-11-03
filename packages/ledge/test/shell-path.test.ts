@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { envCommand, loginShellEnv, parseEnv } from '../src/shell-path.js';
-import { parseRegQuery, windowsRegistryEnv, userEnv } from '../src/shell-path.js';
+import { parseRegQuery, windowsRegistryEnv, userEnv, regCommand, overlayEnv } from '../src/shell-path.js';
 
 describe('envCommand', () => {
   it('asks any login shell for its environment, NUL-separated', () => {
@@ -74,6 +74,32 @@ describe('the user environment on Windows (registry)', () => {
   it('keeps the daemon\'s own Path folders after the registry\'s (what Desktop adds: its Git, the agents it installed)', async () => {
     const env = await windowsRegistryEnv(run, { USERPROFILE: 'C:\\Users\\u', SystemRoot: 'C:\\WINDOWS', Path: 'C:\\Ledge\\git\\cmd;C:\\WINDOWS\\system32;C:\\Ledge\\codex' });
     expect(env.Path).toBe('C:\\WINDOWS\\system32;C:\\Program Files\\Git\\cmd;C:\\Users\\u\\node;C:\\Users\\u\\bin;C:\\Ledge\\git\\cmd;C:\\Ledge\\codex');
+  });
+
+  it('takes the logon values (Volatile Environment) over the machine ones: USERNAME is the user, not SYSTEM', async () => {
+    const VOL = ['', 'HKEY_CURRENT_USER\\Volatile Environment', '    USERNAME    REG_SZ    u', '    USERPROFILE    REG_SZ    C:\\Users\\u', ''].join('\r\n');
+    const M = ['', 'HKEY_LOCAL_MACHINE\\...', '    USERNAME    REG_SZ    SYSTEM', '    HOMEDIR    REG_EXPAND_SZ    C:\\Users\\%USERNAME%', ''].join('\r\n');
+    const env = await windowsRegistryEnv(async k => (k.includes('Volatile') ? VOL : k.startsWith('HKLM') ? M : ''), {});
+    expect(env.USERNAME).toBe('u');
+    expect(env.HOMEDIR).toBe('C:\\Users\\u');
+  });
+
+  it('expands a REG_EXPAND_SZ that references another one', async () => {
+    const U = ['', 'HKEY_CURRENT_USER\\Environment', '    JAVA_HOME    REG_EXPAND_SZ    %USERPROFILE%\\jdk', '    Path    REG_EXPAND_SZ    %JAVA_HOME%\\bin', ''].join('\r\n');
+    const env = await windowsRegistryEnv(async k => (k === 'HKCU\\Environment' ? U : ''), { USERPROFILE: 'C:\\Users\\u' });
+    expect(env.JAVA_HOME).toBe('C:\\Users\\u\\jdk');
+    expect(env.Path).toBe('C:\\Users\\u\\jdk\\bin');
+  });
+
+  it('asks reg.exe under the UTF-8 code page, whatever the PC\'s OEM one', () => {
+    const { file, args } = regCommand('HKCU\\Environment');
+    expect(file).toBe('cmd');
+    expect(args.join(' ')).toMatch(/chcp 65001 >nul & reg query "HKCU\\Environment"/);
+  });
+
+  it('overlayEnv: on Windows a variable is replaced whatever its case (PATH and Path are one); elsewhere case counts', () => {
+    expect(overlayEnv({ PATH: 'old', A: '1' }, { Path: 'new' }, 'win32')).toEqual({ Path: 'new', A: '1' });
+    expect(overlayEnv({ PATH: 'old' }, { Path: 'new' }, 'linux')).toEqual({ PATH: 'old', Path: 'new' });
   });
 
   it('userEnv: the registry on Windows, the login shell elsewhere', async () => {

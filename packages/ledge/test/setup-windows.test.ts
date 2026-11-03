@@ -14,7 +14,7 @@ function fixture(codexToml?: string) {
   const settingsPath = join(root, '.claude', 'settings.json');
   const codexDir = join(root, '.codex'); mkdirSync(codexDir, { recursive: true });
   if (codexToml !== undefined) writeFileSync(join(codexDir, 'config.toml'), codexToml);
-  const cli = join(root, 'pkg', 'dist', 'cli', 'index.js'); mkdirSync(join(root, 'pkg', 'dist', 'cli'), { recursive: true }); writeFileSync(cli, '');
+  const cli = join(root, 'ledge', 'dist', 'cli', 'index.js'); mkdirSync(join(root, 'ledge', 'dist', 'cli'), { recursive: true }); writeFileSync(cli, '');
   const calls: string[] = [];
   const opts = { platform: 'win32' as const, settingsPath, codexDir, cursorDir: join(root, '.cursor'), cli, link: join(root, '.local', 'bin', 'ledge'), unitDir: join(root, 'systemd'), run: async (cmd: string, args: string[]) => { calls.push(`${cmd} ${args.join(' ')}`); return { code: 0, stdout: '', stderr: '' }; } };
   return { root, settingsPath, codexDir, cli, opts, calls };
@@ -47,6 +47,22 @@ describe('ensureCodexWindowsSandbox', () => {
   });
 });
 
+describe('ensureCodexWindowsSandbox, unusual TOML', () => {
+  it.each([
+    ['[windows] # set by IT\nsandbox = "elevated"\n'],
+    ['[ windows ]\nsandbox = "elevated"\n'],
+    ['windows.sandbox = "elevated"\n'],
+    ['windows = { sandbox = "elevated" }\n'],
+    ['[windows]\n"sandbox" = "elevated"\n'],
+  ])('keeps a sandbox chosen in any TOML form: %j', toml => {
+    expect(ensureCodexWindowsSandbox(toml)).toMatchObject({ toml, changed: false });
+  });
+  it('leaves a file it cannot parse, or a [windows] it cannot edit safely, untouched and says so', () => {
+    expect(ensureCodexWindowsSandbox('[tui\nbroken')).toMatchObject({ toml: '[tui\nbroken', changed: false, note: expect.stringMatching(/not valid TOML/) });
+    expect(ensureCodexWindowsSandbox('windows = { other = 1 }\n')).toMatchObject({ changed: false, note: expect.stringMatching(/set it by hand/) });
+  });
+});
+
 describe('ledge setup on Windows', () => {
   it('writes the Windows hook commands and the Codex sandbox, no script and no service', async () => {
     const f = fixture('[tui]\n');
@@ -70,4 +86,23 @@ describe('ledge setup on Windows', () => {
     await runSetup(f.opts);
     expect(files.map(p => readFileSync(p, 'utf8'))).toEqual(before);
   });
+
+  it('a moved CLI or node replaces Ledge\'s hooks instead of adding a second set; another tool\'s stay', async () => {
+    const f = fixture('');
+    mkdirSync(join(f.root, '.claude'), { recursive: true });
+    writeFileSync(f.settingsPath, JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: '"C:/n/node.exe" "C:/tools/notifier/dist/cli/index.js" hook Stop' }] }] } }));
+    await runSetup(f.opts);
+    const count = (p: string) => (readFileSync(p, 'utf8').match(/ hook /g) ?? []).length;
+    const first = count(f.settingsPath);
+    const moved = join(f.root, 'ledge-2', 'dist', 'cli', 'index.js'); mkdirSync(join(f.root, 'ledge-2', 'dist', 'cli'), { recursive: true }); writeFileSync(moved, '');
+    await runSetup({ ...f.opts, cli: moved });
+    expect(count(f.settingsPath)).toBe(first);
+    const text = readFileSync(f.settingsPath, 'utf8');
+    expect(text).toContain(fwd(moved));
+    expect(text).not.toContain(fwd(f.cli));
+    expect(text).toContain('C:/tools/notifier/dist/cli/index.js');
+    const codex = readFileSync(join(f.codexDir, 'hooks.json'), 'utf8');
+    expect(codex).toContain(fwd(moved)); expect(codex).not.toContain(fwd(f.cli));
+  });
 });
+

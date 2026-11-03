@@ -12,7 +12,7 @@ import { realTmux } from '../src/tmux.js';
 describe('daemon.stop', () => {
   it('stops the daemon a client with the token asks, through its whole stop; a client without the token cannot ask', async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-stop-'));
-    const d = await startDaemon({ port: 0, tmux: realTmux(`ledge-stop-${process.pid}`, { scope: async () => false }), exitOnStop: false });
+    const d = await startDaemon({ port: 0, tmux: realTmux(`ledge-stop-${process.pid}`, { scope: async () => false }), exitOnStop: false, platform: 'win32' });
     expect(existsSync(paths().pid)).toBe(true);
     const anon = await new Promise<number | string>(res => {
       const ws = new WebSocket(`ws://127.0.0.1:${d.port}`);
@@ -29,4 +29,20 @@ describe('daemon.stop', () => {
     await new Promise(r => setTimeout(r, 300));
     expect(existsSync(paths().pid)).toBe(false);
   });
+
+  it('off Windows it is refused and the daemon stays: a service there is stopped by systemd, not by a front', async () => {
+    const { startServer } = await import('../src/daemon/server.js');
+    const { Store } = await import('../src/daemon/store.js');
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-stop-l-'));
+    let stopped = 0;
+    const srv = await startServer({ store: new Store(), tmux: realTmux(`ledge-stop-l-${process.pid}`, { scope: async () => false }), port: 0, platform: 'linux', onStop: () => { stopped++; } });
+    try {
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'daemon.stop' });
+      expect(await c.next('error', 2000)).toMatchObject({ type: 'error', message: expect.stringMatching(/Windows/) });
+      expect(stopped).toBe(0);
+      await c.close();
+    } finally { await srv.close(); }
+  });
 });
+

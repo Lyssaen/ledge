@@ -29,7 +29,7 @@ import { createOmpSeats, isOmpSeat, type OmpSeats } from './omp/seats.js';
 import { inspectRepos } from './repos.js';
 import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
-import { userEnv } from '../shell-path.js';
+import { overlayEnv, userEnv } from '../shell-path.js';
 import { log } from '../log.js';
 import { tooWide, type Chat } from '../chat/service.js';
 import { createChatThreads } from '../chat/threads.js';
@@ -194,13 +194,13 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; /** What `daemon.stop` does (startDaemon: stop, then exit when run by the CLI). */ onStop?: () => void; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; /** What `daemon.stop` does (startDaemon: stop, then exit when run by the CLI). */ onStop?: () => void; /** The daemon's platform (tests): `daemon.stop` is for Windows only. */ platform?: NodeJS.Platform; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
-  const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await userEnv()) }));
+  const agentEnv = opts.agentEnv ?? (async () => overlayEnv(process.env, await userEnv()));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const reducer = new CaptureReducer();
   const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all() });
@@ -1465,8 +1465,11 @@ export async function startServer(opts: { store: Store; /** What `daemon.stop` d
       // Broadcast: every overlay shows the same progress, and the one that asked may be the one that reconnects.
       // A busy refusal goes to the asker only: it must not fail the flow the other overlays follow.
       case 'daemon.stop':
+        // Windows only: Desktop stops its daemon this way. Elsewhere the daemon is a service (systemd) a front must not
+        // end, and would not come back.
+        if ((opts.platform ?? process.platform) !== 'win32' || !opts.onStop) return reply({ type: 'error', message: 'daemon.stop is for Ledge Desktop on Windows' });
         log('daemon.stop asked by a client');
-        opts.onStop?.();
+        opts.onStop();
         return;
       case 'update.daemon':
         if (!opts.updater) return reply({ type: 'update.failed', version: msg.version, reason: 'no-systemd' });
