@@ -13,7 +13,7 @@ export function daemonOffer(local: MachineState | undefined, target: string | nu
   return d.install === 'npm' && d.systemd ? 'offer' : 'manual';
 }
 /** The daemon follows Desktop: the release on offer, else the running app (the same lockstep version, spec §11). */
-export const daemonTarget = (s: UpdateSnapshot): string | null => (s.phase.kind === 'available' ? s.phase.version : s.latest ?? s.app);
+export const daemonTarget = (s: Omit<UpdateSnapshot, 'channel'>): string | null => (s.phase.kind === 'available' ? s.phase.version : s.latest ?? s.app);
 
 export type DaemonStep =
   | { kind: 'sent'; version: string; auto?: true } | { kind: 'installing' } | { kind: 'restarting' } | { kind: 'done'; version: string }
