@@ -215,7 +215,7 @@ function ClosedView({ remoteUrl = false }: { remoteUrl?: boolean }): JSX.Element
       <div className="mk-url" title={`http://${URL_}`}><Icon d={SHELL_ICONS.browser} size={12} /><code>{remoteUrl ? 'file:///home/gch/…/ledge-openrig-omp.html' : URL_}</code><span className="muted">· dernière adresse</span></div>
       <div className="mk-screen closed">
         <Frame title="Dernière image du navigateur d'Otto" html={fake(2)} />
-        <span className="mk-stamp">Dernière image · 14:58</span>
+        <span className="mk-stamp">Dernière image · vue à 14:56</span>
       </div>
       <p className="mk-hint">Le bouton ouvre l'adresse dans votre navigateur ; il faut que le serveur de la maquette tourne encore. Si Otto rouvre son navigateur, le direct revient ici.</p>
     </>
@@ -291,7 +291,7 @@ function OmpClosed({ stopped = false }: { stopped?: boolean }): JSX.Element {
         <span className="mk-closed-badge"><span className="mk-off-dot" aria-hidden="true" />{stopped ? 'Siège arrêté à 15:20' : 'Onglets fermés à 15:06'}</span>
       </div>
       <div className="mk-url"><Icon d={SHELL_ICONS.browser} size={12} /><span>Navigateur de l’agent</span><span className="muted">· dernière page : Sièges OMP dans Ledge</span></div>
-      <div className="mk-screen closed"><Frame title="Dernière image du navigateur de Mia" html={fake(2)} /><span className="mk-stamp">Dernière image · {stopped ? '15:18' : '15:06'}</span></div>
+      <div className="mk-screen closed"><Frame title="Dernière image du navigateur de Mia" html={fake(2)} /><span className="mk-stamp">Dernière image · vue à {stopped ? '15:17' : '15:05'}</span></div>
       <p className="mk-hint">{stopped ? 'Le navigateur s’est arrêté avec le siège.' : 'Le navigateur de Mia reste prêt, sans onglet. Le direct revient dès qu’un onglet se rouvre.'} La maquette injectée n’a pas d’adresse : pas de « Ouvrir dans mon navigateur ».</p>
     </>
   );
@@ -445,6 +445,13 @@ function StatesView(): JSX.Element {
             {box(SHELL_ICONS.browser, 'Le direct n’est pas activé.', <>Le navigateur d'Otto ne laisse pas Ledge le regarder. Ledge peut ajouter une ligne à la config Playwright ; elle vaudra pour les prochains navigateurs.</>, 'Activer le direct…')}
           </div></aside>
         </Mini>
+        <Mini title="Fermé sans image (repli)" sub="Aucune image n'a pu être prise avant la fermeture (onglet trop bref, capture refusée) : le titre et l'adresse seuls.">
+          <aside className="side-pane mk-mini-pane"><SideHead on="closed" /><div className="side-body mk-page">
+            <div className="mk-live-head"><span className="mk-closed-badge"><span className="mk-off-dot" aria-hidden="true" />Navigateur fermé à 14:58</span><span className="mk-fill" /><Button variant="outline" size="sm"><Icon d={ICONS.external.d} size={13} />Ouvrir dans mon navigateur</Button></div>
+            <div className="mk-url"><Icon d={SHELL_ICONS.browser} size={12} /><code>{URL_}</code><span className="muted">· Sièges OMP dans Ledge</span></div>
+            <div className="mk-screen closed mk-wait"><span className="muted">Aucune image prise de cet onglet.</span></div>
+          </div></aside>
+        </Mini>
         <Mini title="En attente de la première image" sub="Le navigateur vient de démarrer, ou la page n'a encore rien dessiné.">
           <aside className="side-pane mk-mini-pane"><SideHead on="live" /><div className="side-body mk-page">
             <div className="mk-live-head"><span className="mk-live-badge"><i className="mk-live-dot" aria-hidden="true" />Direct</span><span className="mk-driver"><span className="mk-bot" />Otto conduit · lecture seule</span></div>
@@ -479,7 +486,7 @@ const LIMITS: [string, string][] = [
   ['Prérequis', 'Une ligne dans la config Playwright de Guillaume (--remote-debugging-port=0). Sans elle, pas de direct : seulement les captures, comme aujourd\'hui.'],
   ['Lecture seule', 'Garantie par Ledge, pas par Chrome : le daemon n\'envoie au navigateur que la liste fermée « lister, s\'attacher, filmer » ; jamais de clic, de frappe ni de script. Un test le vérifie.'],
   ['Coût', 'Ledge ne filme que quand l\'onglet Navigateur est visible ; une page immobile n\'envoie presque rien.'],
-  ['Après l\'agent', 'Plus rien à filmer : la dernière image et l\'adresse. « Ouvrir dans mon navigateur » ne marche que si le serveur de la maquette tourne encore.'],
+  ['Après l\'agent', 'La dernière image vient d\'une capture ponctuelle du daemon (Page.captureScreenshot), même sans spectateur : après chaque action navigateur de l\'agent (regroupées sur ≈ 1 s) et à chaque changement de page, au plus une toutes les 5 s. Elle date donc de la dernière action (« vue à 14:56 »), pas de la fermeture. Sans image prise : le titre seul. « Ouvrir dans mon navigateur » ne marche que si le serveur de la maquette tourne encore. À prouver : l\'onglet « hidden » d\'OMP.'],
   ['OMP (lot 1)', 'Navigateur déjà ouvert sur un port, trouvé sous le pane du siège ; le bouton suit les onglets (targetCreated / targetDestroyed). Pas d\'adresse (maquette injectée) ni d\'action nommée (eval). Prouvé sur une réplique ; à confirmer sur le siège réel (onglets « hidden »).'],
   ['Lot 2', 'Autre machine (relais par ledge bridge) ; la maquette vivante sans le navigateur de l\'agent, si Guillaume choisit (ii).'],
   ['Hors périmètre', 'Codex (pas de Playwright configuré aujourd\'hui) ; un agent qui tournerait sous Windows.']
@@ -493,7 +500,8 @@ const TEXTS: [string, string, string][] = [
   ['session.browser.readOnly(n)', 'Lecture seule : c’est Otto qui conduit.', 'Read-only: Otto is driving.'],
   ['session.browser.fps(k)', '11 im/s', '11 fps'],
   ['session.browser.closedAt(t)', 'Navigateur fermé à 14:58', 'Browser closed at 14:58'],
-  ['session.browser.lastImage(t) / lastUrl', 'Dernière image · 14:58 / dernière adresse', 'Last image · 14:58 / last address'],
+  ['session.browser.lastImage(t) / lastUrl', 'Dernière image · vue à 14:56 / dernière adresse', 'Last image · seen at 14:56 / last address'],
+  ['session.browser.noImage', 'Aucune image prise de cet onglet.', 'No image was taken of this tab.'],
   ['session.browser.openMine / openHint', 'Ouvrir dans mon navigateur / Le bouton ouvre l’adresse dans votre navigateur ; il faut que le serveur de la maquette tourne encore. Si Otto rouvre son navigateur, le direct revient ici.', 'Open in my browser / Opens the address in your browser; the mockup’s server must still be running. If Otto reopens the browser, the live view comes back here.'],
   ['session.browser.reopened(n)', 'Otto a rouvert son navigateur', 'Otto reopened the browser'],
   ['session.browser.waiting', 'En attente de la première image…', 'Waiting for the first image…'],
@@ -519,7 +527,7 @@ function ChoicesView(): JSX.Element {
         <ul>
           <li>Lot 1 : sessions Claude dans WSL <b>et sièges OMP locaux</b> (le maquettiste), même onglet, même direct.</li>
           <li>Claude : le direct s'active par « Activer le direct… », qui ajoute un port local à la config Playwright, sur confirmation. OMP : rien à activer, le port existe déjà.</li>
-          <li>Ledge garde une image de l'onglet même quand personne ne regarde (une image de temps en temps), pour avoir une dernière image à la fermeture. À confirmer par dev-back : sans cela, un navigateur jamais regardé se ferme sans image, avec seulement son titre.</li>
+          <li>Ledge garde une dernière image même quand personne ne regarde (capture ponctuelle après chaque action de l'agent, confirmé par dev-back) : la fermeture montre l'image « vue à » l'heure de la dernière action. Sans image prise, le titre seul (vue 5).</li>
         </ul>
       </div>
       <div className="mk-card">
