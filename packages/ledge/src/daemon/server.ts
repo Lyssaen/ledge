@@ -63,7 +63,7 @@ import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { createNotifier } from '../mobile/push/notifier.js';
 import { chatEndPayload, decisionPayload } from '../mobile/push/triggers.js';
-import { pushFor } from '../mobile/push/triggers.js';
+import { pushFor, resolvedFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
@@ -1609,10 +1609,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const badge = store.all().filter(s => s.pending).length + tasks.all().filter(openDecision).length;
       void notifier.notify(decisionPayload(task, badge), undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
     };
-    unsubscribePush = store.onApply((before, after) => {
+    /** Who answered each session's request, from its `Decided` (heard before the change it makes). */
+    const answeredBy = new Map<string, DecidedBy | null>();
+    const unsubscribeDecided = store.onEvent((id, ev) => { if (ev.name === 'Decided') answeredBy.set(id, ev.by ?? null); });
+    const unsubscribeApply = store.onApply((before, after) => {
+      const failed = (e: unknown) => log(`push failed (${e instanceof Error ? e.name : 'error'})`);
+      // A request answered anywhere: its notification is replaced on the devices that got it.
+      const r = resolvedFor(before, after, store.all(), answeredBy.get(after.id));
+      if (before?.pending && !after.pending) answeredBy.delete(after.id);
+      if (r) void notifier.notify(r, after.id).catch(failed);
       const p = pushFor(before, after, store.all());
-      if (p) void notifier.notify(p, after.id).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+      if (p) void notifier.notify(p, after.id).catch(failed);
     });
+    unsubscribePush = () => { unsubscribeDecided(); unsubscribeApply(); };
   }
 
   wss.on('connection', (ws, req) => {

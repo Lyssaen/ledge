@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createECDH, randomBytes } from 'node:crypto';
 import type { MobileState, PushPayload, PushSend, PushSendResult } from '@ledge/protocol';
 import { createNotifier } from '../src/mobile/push/notifier.js';
-import { chatEndPayload } from '../src/mobile/push/triggers.js';
+import { chatEndPayload, resolvedFor } from '../src/mobile/push/triggers.js';
 
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/SECRET-ENDPOINT-TOKEN';
 const TEXT = 'private-words-of-the-agent';
@@ -15,7 +15,7 @@ function setup(o: { enabled?: boolean; result?: PushSendResult | (() => Promise<
   const ecdh = createECDH('prime256v1');
   ecdh.generateKeys();
   const keys = { p256dh: ecdh.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') };
-  const pushes = new Map<string, { endpoint: string; p256dh: string; auth: string; key: string }>([['dev1', { endpoint: ENDPOINT, ...keys, key: 'K1' }]]);
+  const pushes = new Map<string, { endpoint: string; p256dh: string; auth: string; key: string; resolved?: true }>([['dev1', { endpoint: ENDPOINT, ...keys, key: 'K1' }]]);
   const online = new Set(['dev1']);
   const visible = new Set<string>();
   const sent: PushSend[] = [];
@@ -38,7 +38,7 @@ function setup(o: { enabled?: boolean; result?: PushSendResult | (() => Promise<
     now: () => clock.t,
     log: l => logs.push(l)
   });
-  return { n, sent, logs, pushes, visible, online, clock, setRelayKey: (k: string | null | undefined) => { relayKey = k; } };
+  return { n, sent, logs, pushes, keys, visible, online, clock, setRelayKey: (k: string | null | undefined) => { relayKey = k; } };
 }
 
 describe('push notifier', () => {
@@ -98,6 +98,36 @@ describe('push notifier', () => {
     await t.n.notify(payload('finished'), 'api');
     await t.n.notify(payload('request'), 'api');
     expect(t.sent).toHaveLength(2);
+  });
+
+  it('resolved: only to a device that got the request, knows the kind and is hidden; once', async () => {
+    const t = setup();
+    t.pushes.set('dev1', { ...t.pushes.get('dev1')!, resolved: true });
+    t.pushes.set('dev2', { endpoint: ENDPOINT + '2', ...t.keys, key: 'K1', resolved: true });
+    t.pushes.set('dev3', { endpoint: ENDPOINT + '3', ...t.keys, key: 'K1' });
+    t.visible.add('dev2');
+    await t.n.notify(payload(), 'api'); // dev1 and dev3 get the request; dev2 is in front
+    expect(t.sent.map(m => m.endpoint).sort()).toEqual([ENDPOINT, ENDPOINT + '3']);
+    t.visible.clear();
+    t.sent.length = 0;
+    const done = payload('resolved', { title: 'api · traitée', body: 'sur iPad' });
+    await t.n.notify(done, 'api');
+    // dev2 never got the request, dev3's service worker does not know `resolved`.
+    expect(t.sent.map(m => m.endpoint)).toEqual([ENDPOINT]);
+    expect(t.sent[0]).toMatchObject({ urgency: 'normal', topic: 'api' });
+    await t.n.notify(done, 'api');
+    expect(t.sent).toHaveLength(1);
+  });
+
+  it('resolvedFor: a request gone without another names who answered, nothing for a new one or none before', () => {
+    const s = (pending?: { kind: 'permission'; text: string; source: 'hook' }) => ({ id: 'api', name: 'Nova', pending } as never);
+    const P = { kind: 'permission' as const, text: 'ls', source: 'hook' as const };
+    expect(resolvedFor(s(P), s(), [], { kind: 'device', id: 'd', name: 'iPad' })).toMatchObject({ kind: 'resolved', title: 'Nova · traitée', body: 'sur iPad', tag: 'api', badge: 0 });
+    expect(resolvedFor(s(P), s(), [], { kind: 'pc' })).toMatchObject({ body: 'sur le PC' });
+    expect(resolvedFor(s(P), s(), [], null)).toMatchObject({ body: '' });
+    expect(resolvedFor(s(P), s({ ...P, text: 'pwd' }), [])).toBeNull();
+    expect(resolvedFor(s(), s(), [])).toBeNull();
+    expect(resolvedFor(undefined, s(), [])).toBeNull();
   });
 
   it('enabled false: nothing is sent', async () => {

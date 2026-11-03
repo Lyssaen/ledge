@@ -746,7 +746,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     },
 
     pushSubscribe(subscription, key) {
-      return write(op => ({ type: 'push.subscribe', op, subscription, key }));
+      // `resolved`: this app's service worker shows the push that replaces a request's notification once it is answered elsewhere.
+      return write(op => ({ type: 'push.subscribe', op, subscription, key, resolved: true }));
     },
 
     pushUnsubscribe() {

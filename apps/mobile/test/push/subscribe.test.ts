@@ -68,7 +68,7 @@ describe('enablePush', () => {
     expect(e.calls).toEqual(['permission', 'fetch', 'subscribe']);
     expect(e.fetchImpl).toHaveBeenCalledWith('/push/key', expect.anything());
     expect(e.subscribe).toHaveBeenCalledWith({ userVisibleOnly: true, applicationServerKey: expect.any(Uint8Array) });
-    expect(t.of('push.subscribe')[0]).toMatchObject({ subscription: toJSON(), key: KEY });
+    expect(t.of('push.subscribe')[0]).toMatchObject({ subscription: toJSON(), key: KEY, resolved: true });
     t.deliver({ type: 'operation.result', op: t.of('push.subscribe')[0]!.op, status: 'applied' });
     expect(await p).toBe('on');
   });
