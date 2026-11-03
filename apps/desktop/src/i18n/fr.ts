@@ -52,7 +52,7 @@ export const fr = {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name: string) => `Le rig ${name} sur la page OpenRig`, rigAsks: (n: number) => `${n} ${n > 1 ? 'demandes' : 'demande'}`, 
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
-    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
+    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', seatStopped: 'arrêté', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
     ledgeHome: 'Accueil : Ledge, l’opérateur', ledgeLine: (yours: number) => `${yours} à toi`,
     kernelTag: { ready: 'opérationnel', starting: 'démarrage', stopped: 'arrêté' } as Record<'ready' | 'starting' | 'stopped', string>,
     empty: {
@@ -293,7 +293,7 @@ export const fr = {
     grouping: 'Regrouper les sièges OpenRig', groupingBy: { projects: 'Projets', rigs: 'Rigs' }, groupingHint: { projects: 'Les sessions de tes projets, sans les sièges OpenRig', rigs: 'Les sièges OpenRig : chaque rig, le kernel à part' }, 
     viewTabs: 'Vue des agents', helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
     chat: 'Chat Ledge', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
-    panelShow: 'Afficher le panneau : shells et modifications', panelHide: 'Masquer le panneau', panelShowTitle: 'Afficher le panneau : shells et modifications (O)', panelHideTitle: 'Masquer le panneau (O)'
+    panelShow: 'Afficher le panneau : shells et modifications', panelHide: 'Masquer le panneau', panelShowTitle: 'Afficher le panneau : shells et modifications (O)', panelHideTitle: 'Masquer le panneau (O)', terminalGone: 'Siège arrêté : plus de terminal'
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
@@ -801,6 +801,9 @@ export const fr = {
   },
   session: {
     meta: 'Machine et dépôts',
+    /** An OMP seat of OpenRig: no thread, its Terminal view; stopped, its terminal gone (docs/mockups/ledge-openrig-omp.html). */
+    rigTerminalOnly: { title: 'Pas de fil pour ce siège.', body: 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Sa vue Terminal montre son écran : ce que tu y tapes lui est envoyé.' },
+    rigStopped: { title: 'Siège arrêté.', body: 'Son terminal n’existe plus : la page OpenRig montre son rig.' }, badgeStopped: 'Arrêté',
     subagent: 'Sous-agent',
     kidsPill: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`), kidsPillTitle: 'Voir les sous-agents dans la barre latérale',
     views: { label: 'Vue de la session', thread: 'Fil', terminal: 'Terminal', changes: 'Modifications' },

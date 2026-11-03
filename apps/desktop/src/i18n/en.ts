@@ -36,7 +36,7 @@ export const en: Messages = {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name) => `The rig ${name} on the OpenRig page`, rigAsks: (n) => `${n} ${pluralEn(n, 'request', 'requests')}`, 
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
-    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
+    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', seatStopped: 'stopped', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
     ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number) => `${yours} yours`,
     kernelTag: { ready: 'operational', starting: 'starting', stopped: 'stopped' },
     empty: {
@@ -267,7 +267,7 @@ export const en: Messages = {
     grouping: 'Group OpenRig’s seats', groupingBy: { projects: 'Projects', rigs: 'Rigs' }, groupingHint: { projects: 'Your projects’ sessions, without OpenRig’s seats', rigs: 'OpenRig’s seats: each rig, the kernel apart' }, 
     viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
     chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
-    panelShow: 'Show the panel: shells and changes', panelHide: 'Hide the panel', panelShowTitle: 'Show the panel: shells and changes (O)', panelHideTitle: 'Hide the panel (O)'
+    panelShow: 'Show the panel: shells and changes', panelHide: 'Hide the panel', panelShowTitle: 'Show the panel: shells and changes (O)', panelHideTitle: 'Hide the panel (O)', terminalGone: 'Seat stopped: no terminal'
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
@@ -763,6 +763,8 @@ export const en: Messages = {
   },
   session: {
     meta: 'Machine and repositories',
+    rigTerminalOnly: { title: 'No thread for this seat.', body: 'Ledge does not read the conversation of an OMP seat launched by OpenRig. Its Terminal view shows its screen: what you type there is sent to it.' },
+    rigStopped: { title: 'Seat stopped.', body: 'Its terminal is gone: the OpenRig page shows its rig.' }, badgeStopped: 'Stopped',
     subagent: 'Subagent',
     kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the sidebar',
     views: { label: 'Session view', thread: 'Thread', terminal: 'Terminal', changes: 'Changes' },

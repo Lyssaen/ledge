@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import { contextShare, isArchived, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
-import { Icon } from '@ledge/ui/ui/icons';
+import { contextShare, isArchived, isOmpSeat, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
+import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { Decisions } from '../fleet/decisions';
 import { whenOf, type Wait } from '../list/time';
@@ -18,7 +18,6 @@ import { AgentView, useAgent } from './AgentView';
 import { focusAgentView } from './agentFocus';
 import { openSessionTerminal } from './terminal';
 import { Button } from '@ledge/ui/ui/Button';
-import { ICONS } from '@ledge/ui/ui/icons';
 import { memoKey, type SessionMemory } from './memory';
 import { aboutLine } from './RigItems';
 import { clampSplit, type SessionView } from './prefs';
@@ -91,6 +90,10 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const th = t.session.thread;
   const offline = session.offline === true;
   const archived = isArchived(session);
+  // An OMP seat of OpenRig (docs/mockups/ledge-openrig-omp.html, mapped onto « Fil | Terminal » by design-ux on 2026-11-03):
+  // no thread nor reply, « Fil » says why and its Terminal view shows its screen; stopped, « Fil » says its terminal is gone and
+  // points at its rig, « Terminal » disabled.
+  const seat = isOmpSeat(session) ? (archived || session.state === 'exited' ? 'stopped' : 'live') : null;
   const key = memoKey(session.id, helper?.id);
   // What the last visit left, read once.
   const [memo] = useState(() => memory.get(key));
@@ -425,6 +428,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
     if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey) return;
     e.preventDefault();
     const next: SessionView = view === 'thread' ? 'terminal' : 'thread';
+    if (next === 'terminal' && seat === 'stopped') return;
     switchView(next, false);
     document.getElementById(`session-tab-${next}`)?.focus();
   };
@@ -442,15 +446,15 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
       <div className="pane-heading">
         <div className="view-switch" role="tablist" aria-label={t.session.views.label}>
-          {VIEWS.map(({ view: v, icon }) => (
+          {VIEWS.map(({ view: v, icon }) => { const gone = v === 'terminal' && seat === 'stopped'; return (
             <button key={v} type="button" role="tab" id={`session-tab-${v}`} aria-selected={view === v} tabIndex={view === v ? 0 : -1}
-              onClick={() => switchView(v, true)} onKeyDown={onTabKey}>
+              {...(gone ? { 'aria-disabled': true, title: t.top.terminalGone } : {})} onClick={() => { if (!gone) switchView(v, true); }} onKeyDown={onTabKey}>
               <Icon d={icon} size={13} />{t.session.views[v]}
               {/* The agent waits for an answer while its screen is shown: the thread, where it is answered, says so. */}
               {v === 'thread' && view === 'terminal' && waitKind && <span className="view-badge">1</span>}
               {v === 'terminal' && <span className={cls('view-dot', agent.dot)} aria-hidden="true" />}
             </button>
-          ))}
+          ); })}
         </div>
         <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(share !== undefined ? [t.handover.gauge(Math.round(share * 100))] : [])].filter(Boolean).join(' · ')}</span>
         {/* On Terminal, where the agent's screen runs, and « ouvrir dans un terminal externe ». */}
@@ -478,6 +482,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
           <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-terminal' })}>
             <div className="messages session-thread" ref={scroller} data-thread-focus tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
+              {seat !== null ? <SeatNote stopped={seat === 'stopped'} onOpenRig={() => p.dispatch({ type: 'openrig', section: 'rigs', machine: session.machineId ?? 'local' })} /> : <>
               {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
               {offline && (
                 <div className="frozen-banner" role="status">
@@ -490,12 +495,13 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
                 : <Thread client={p.client} session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
                     flash={flash?.id ?? null} onChange={openDiff} onCapture={onCapture} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
                     convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} onReplyTo={replyTo} />}
+              </>}
             </div>
             {view === 'terminal' && (
               <AgentView client={p.client} session={session} helper={helper ? { id: helper.id, name: helper.kind } : null} agent={agent} notify={p.notify}
                 onGoParent={() => p.dispatch({ type: 'open', id: session.id })} onOpenShell={p.onOpenShell} />
             )}
-            {view === 'thread' && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
+            {view === 'thread' && seat === null && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
           {/* On Terminal the agent's screen is alone: the pinned task and the reply come back with the thread (one types in the screen). */}
           {view === 'thread' && !archived && held && (
@@ -505,7 +511,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
               <button type="button" className="message-link" onClick={() => p.dispatch({ type: 'ledge', tab: 'tasks', task: held.id })}>{t.session.heldTask.seeTasks}</button>
             </div>
           )}
-          {view === 'thread' && !archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
+          {view === 'thread' && !archived && seat === null && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
             notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} />}
         </div>
         {paneShown && (
@@ -515,5 +521,21 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
         )}
       </div>
     </section>
+  );
+}
+
+/** In an OMP seat's thread place: why there is no thread (its Terminal view shows its screen), or, stopped, that its terminal is gone and
+ *  where its rig is (docs/mockups/ledge-openrig-omp.html, view 1). */
+function SeatNote({ stopped, onOpenRig }: { stopped: boolean; onOpenRig(): void }): JSX.Element {
+  const { t } = useI18n();
+  const x = stopped ? t.session.rigStopped : t.session.rigTerminalOnly;
+  return (
+    <div className="seat-note" role="status">
+      <Icon d={stopped ? ICONS.stop.d : ICONS.text.d} size={18} />
+      <div>
+        <p><strong>{x.title}</strong> {x.body}</p>
+        {stopped && <button type="button" className="message-link" onClick={onOpenRig}>{t.side.empty.openPage}</button>}
+      </div>
+    </div>
   );
 }

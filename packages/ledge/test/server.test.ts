@@ -2803,6 +2803,142 @@ describe('server: OpenRig seats found by Ledge itself', () => {
   });
 });
 
+describe('server: an OMP seat of OpenRig', () => {
+  it('is followed as an OMP session under its rig, for its state only: nothing typed into its pane, nothing of its screen sent', async () => {
+    const node = { logicalId: 'dev.agent', session: 'dev-agent@dev-omp', runtime: 'omp', model: 'anthropic/claude-sonnet-5-5', sessionStatus: 'running', lifecycleState: 'running', activity: 'unknown', stopped: false, work: 1 };
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-03T09:00:00.000Z', rigs: [
+      { id: 'D', name: 'dev-omp', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
+    const seatTmux = fakeTmux({ 'dev-agent@dev-omp': ['you ▸ go', '  ⚙ bash …', '  ⚙ bash done'] });
+    const ticks: string[] = [];
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, ompSeats: { tick: async () => {}, start: () => { ticks.push('start'); }, stop: () => { ticks.push('stop'); } }, openrig: { row: async () => ({ error: 'not_found' }),
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'openrig.status', requestId: 'r' });
+    await c.next('openrig.state');
+    await vi.waitFor(() => expect(store.get('rig-dev-agent-dev-omp')).toMatchObject({ tool: 'omp', source: 'rig', tmuxSession: 'dev-agent@dev-omp', state: 'idle', rig: { seat: 'dev-agent@dev-omp', name: 'dev-omp', role: 'dev.agent' } }));
+    expect(store.get('rig-dev-agent-dev-omp')?.backend).toBeUndefined();
+    c.send({ type: 'session.reply', id: 'rig-dev-agent-dev-omp', text: 'et les tests ?' });
+    expect(await c.next('error')).toMatchObject({ id: 'rig-dev-agent-dev-omp', code: 'read_only' });
+    c.send({ type: 'session.interrupt', id: 'rig-dev-agent-dev-omp' });
+    expect(await c.next('error')).toMatchObject({ id: 'rig-dev-agent-dev-omp', code: 'read_only' });
+    c.send({ type: 'session.kill', id: 'rig-dev-agent-dev-omp' });
+    expect(await c.next('error')).toMatchObject({ code: 'read_only' });
+    expect(seatTmux.sent.filter(x => x[1] === 'dev-agent@dev-omp')).toEqual([]);
+    c.close(); await srv2.close();
+    expect(ticks).toEqual(['start', 'stop']);
+  });
+});
+
+describe('server: a seat known from its hooks only that now runs OMP', () => {
+  it('waits for its pane, then becomes the OMP seat on it: followed, never typed into', async () => {
+    const SEAT = 'dev-agent@dev-omp';
+    store.upsert({ id: 'claude-conv', name: 'Bix', tool: 'claude', cwd: '/w', project: 'w', title: 'Bix', tmuxSession: null, state: 'idle', helpers: [],
+      startedAt: '2026-11-03T09:00:00.000Z', lastActivityAt: '2026-11-03T09:00:00.000Z', source: 'hook_only', rig: { seat: SEAT, name: 'dev-omp', role: 'dev.agent' } });
+    const node = { logicalId: 'dev.agent', session: SEAT, runtime: 'omp', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'unknown', stopped: false, work: 0 };
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-03T09:00:00.000Z', rigs: [
+      { id: 'D', name: 'dev-omp', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
+    const panes: Record<string, string[]> = {};
+    const seatTmux = fakeTmux(panes);
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, ompSeats: { tick: async () => {}, start: () => {}, stop: () => {} }, openrig: { row: async () => ({ error: 'not_found' }),
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    const discover = async () => { c.send({ type: 'openrig.status', requestId: 'r' }); await c.next('openrig.state'); await new Promise(r => setTimeout(r, 50)); };
+    await discover();
+    expect(store.get('claude-conv')).toMatchObject({ tool: 'claude', source: 'hook_only', tmuxSession: null });
+    panes[SEAT] = ['you ▸ go'];
+    await discover();
+    await vi.waitFor(() => expect(store.get('claude-conv')).toMatchObject({ tool: 'omp', source: 'rig', tmuxSession: SEAT, state: 'idle' }));
+    c.send({ type: 'session.reply', id: 'claude-conv', text: 'go' });
+    expect(await c.next('error')).toMatchObject({ id: 'claude-conv', code: 'read_only' });
+    expect(seatTmux.sent.filter(x => x[1] === SEAT)).toEqual([]);
+    c.close(); await srv2.close();
+  });
+});
+
+describe('server: a stopped OMP seat', () => {
+  it('stays under its rig while OpenRig lists it, its rig stopped too, and goes once the seat is gone from it; a failed reading removes nothing', async () => {
+    const seatNode = (session: string, logicalId: string, runtime = 'omp', sessionStatus = 'stopped') => ({ logicalId, session, runtime, model: null, sessionStatus, lifecycleState: 'stopped', activity: 'unknown', stopped: true, work: 0 });
+    const rigOf = (name: string, nodes: ReturnType<typeof seatNode>[], seats = nodes.length) => ({ id: name, name, status: 'stopped', lifecycleState: 'stopped', seats, running: 0, attention: 0, uptime: null, snapshot: null, nodes });
+    let rigs = [rigOf('split-omp', [seatNode('split-splitter@split-omp', 'split.splitter'), seatNode('review-reviewer@split-omp', 'review.reviewer')])];
+    const seat = (id: string, s: string, o: Partial<Session> = {}): Session => ({ id, name: id, tool: 'omp', cwd: '/w', project: 'w', title: id, tmuxSession: s, state: 'exited', exitedAt: '2026-11-03T09:00:00.000Z', helpers: [],
+      startedAt: '2026-11-03T08:00:00.000Z', lastActivityAt: '2026-11-03T09:00:00.000Z', source: 'rig', rig: { seat: s, name: s.split('@')[1]!, role: 'x.y' }, ...o });
+    store.upsert(seat('splitter', 'split-splitter@split-omp'));
+    store.upsert(seat('reviewer', 'review-reviewer@split-omp'));
+    store.upsert(seat('claude-gone', 'dev-build@old', { tool: 'claude' }));
+    const srv2 = await startServer({ store, tmux: fakeTmux({}), port: 0, ompSeats: { tick: async () => {}, start: () => {}, stop: () => {} }, openrig: { row: async () => ({ error: 'not_found' }),
+      async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-03T10:00:00.000Z', rigs }; },
+      async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    const discover = async () => { c.send({ type: 'openrig.status', requestId: 'r' }); await c.next('openrig.state'); await new Promise(r => setTimeout(r, 50)); };
+    await discover();
+    for (const id of ['splitter', 'reviewer']) expect(store.get(id)).toMatchObject({ state: 'exited' });
+    expect(store.get('splitter')?.archivedAt).toBeUndefined();
+    // A failed `rig ps` (no rig), or a failed `rig ps --nodes` (a rig counting seats but listing none): nothing goes.
+    rigs = []; await discover();
+    rigs = [rigOf('split-omp', [], 2)]; await discover();
+    expect(store.get('splitter')?.archivedAt).toBeUndefined();
+    expect(store.get('reviewer')?.archivedAt).toBeUndefined();
+    // The reviewer seat is removed from its rig: it goes; the other stays; a Claude seat is left to the retirement clock.
+    rigs = [rigOf('split-omp', [seatNode('split-splitter@split-omp', 'split.splitter')])]; await discover();
+    await vi.waitFor(() => expect(store.get('reviewer')?.archivedAt).toBeDefined());
+    expect(store.get('splitter')?.archivedAt).toBeUndefined();
+    expect(store.get('claude-gone')?.archivedAt).toBeUndefined();
+    c.close(); await srv2.close();
+  });
+});
+
+describe('server: a seat that changes harness under the same name', () => {
+  it('follows it: Claude → OMP (read-only, never typed into), OMP → Codex (typed into again), and back from the archive as OMP', async () => {
+    const SEAT = 'dev-agent@dev-omp';
+    const node = { logicalId: 'dev.agent', session: SEAT, runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 };
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-03T09:00:00.000Z', rigs: [
+      { id: 'D', name: 'dev-omp', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
+    const panes: Record<string, string[]> = { [SEAT]: ['❯ '] };
+    const seatTmux = fakeTmux(panes);
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, ompSeats: { tick: async () => {}, start: () => {}, stop: () => {} }, openrig: { row: async () => ({ error: 'not_found' }),
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    const discover = async () => { c.send({ type: 'openrig.status', requestId: 'r' }); await c.next('openrig.state'); };
+    const ID = 'rig-dev-agent-dev-omp';
+    await discover();
+    await vi.waitFor(() => expect(store.get(ID)).toMatchObject({ tool: 'claude', source: 'rig' }));
+    store.upsert({ ...store.get(ID)!, model: 'opus', lastReply: { text: 'fini', at: '2026-11-03T09:00:00.000Z' }, transcriptPath: '/t.jsonl' });
+    // Relaunched as an OMP seat under the same name.
+    node.runtime = 'omp';
+    await discover();
+    await vi.waitFor(() => expect(store.get(ID)).toMatchObject({ tool: 'omp', state: 'idle', source: 'rig' }));
+    for (const k of ['model', 'lastReply', 'transcriptPath']) expect(store.get(ID)).not.toHaveProperty(k);
+    c.send({ type: 'session.reply', id: ID, text: 'go' });
+    expect(await c.next('error')).toMatchObject({ id: ID, code: 'read_only' });
+    expect(seatTmux.sent.filter(x => x[1] === SEAT)).toEqual([]);
+    // And again as a Codex seat.
+    node.runtime = 'codex';
+    await discover();
+    await vi.waitFor(() => expect(store.get(ID)?.tool).toBe('codex'));
+    c.send({ type: 'session.reply', id: ID, text: 'go' });
+    await vi.waitFor(() => expect(seatTmux.sent).toContainEqual(['text', SEAT, 'go']));
+    // Its rig stops; it comes back from the archive running OMP.
+    store.apply(ID, { name: 'PaneGone', at: '2026-11-03T09:30:00.000Z', source: 'daemon' }); store.archive(ID, '2026-11-03T09:31:00.000Z');
+    node.runtime = 'omp';
+    await discover();
+    await vi.waitFor(() => expect(store.get(ID)).toMatchObject({ tool: 'omp', state: 'idle', source: 'rig' }));
+    expect(store.get(ID)?.archivedAt).toBeUndefined();
+    c.close(); await srv2.close();
+  });
+});
+
 describe('close a session', () => {
   const CLOSE = { freeMs: 200, exitMs: 200 };
   /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */

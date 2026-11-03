@@ -7,7 +7,7 @@ const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 /** `ledge tui`'s copy in French, the source of truth: `en.ts` is typed against it. */
 export const fr = {
   lang: { fr: 'Français', en: 'English' },
-  state: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule' } as Record<BotState, string>,
+  state: { approval: 'Votre accord', question: 'Une question', starting: 'Démarrage', idle: 'Disponible', working: 'Au travail', done: 'Terminée', error: 'Erreur', readonly: 'Lecture seule', stopped: 'Arrêté' } as Record<BotState | 'stopped', string>,
   time: {
     now: 'à l’instant', decimal: ',', s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j`
   },
@@ -22,7 +22,7 @@ export const fr = {
   },
   keys: {
     image: 'image', openImage: "ouvrir l'image",
-    navigate: 'naviguer', open: 'ouvrir', answer: 'répondre', attach: 'attacher (tmux)', ask: 'demander à Ledge', launch: 'nouvelle session',
+    navigate: 'naviguer', open: 'ouvrir', attachSeat: 'attacher son terminal', answer: 'répondre', attach: 'attacher (tmux)', ask: 'demander à Ledge', launch: 'nouvelle session',
     settings: 'réglages', help: 'aide', quit: 'quitter', back: 'retour', write: 'écrire', diffs: 'diffs', terminal: 'terminal', model: 'modèle',
     interrupt: 'interrompre', next: 'suivante en attente', unfold: 'déplier', send: 'envoyer / lancer', nextCard: 'carte suivante',
     newChat: 'nouvelle conversation', stopAnswer: 'arrêter la réponse', nextField: 'champ suivant', choose: 'choisir', tick: 'cocher',
@@ -40,7 +40,7 @@ export const fr = {
     rigSeat: (rig: string, role: string) => `rig ${rig} · ${role}`,
     yours: (n: number) => `À toi · ${n}`, projects: 'Projets', exchanges: 'Échanges', terminal: (name: string) => `Terminal · ${name}`,
     nobodyWaits: 'Personne ne t’attend.', noSession: 'Aucune session. + pour en lancer une.', noPreview: 'Pas d’aperçu.', noExchange: 'Aucun échange.',
-    sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`, outside: 'Hors projet', offline: 'hors ligne', readOnly: 'lecture seule',
+    sessions: (n: number) => `${n} ${plural(n, 'session', 'sessions')}`, sessionsOf: (live: number, all: number) => `${live} ${plural(live, 'session', 'sessions')} sur ${all}`, outside: 'Hors projet', offline: 'hors ligne', readOnly: 'lecture seule',
     wantsToRun: 'Veut exécuter :', asks: 'Demande :', plan: 'Propose un plan :', diff: 'Veut modifier :',
     allow: 'Autoriser', deny: 'Refuser', always: 'Toujours', denyWithNote: 'Refuser en expliquant',
     ledge: 'Ledge',
@@ -159,6 +159,7 @@ export const fr = {
     noteTooLong: (max: number) => `Note trop longue : ${max} caractères au plus. Elle reste dans le champ.`,
     noNote: (n: string) => `${n} ne prend pas de note ici.`,
     noTerminalOmp: (n: string) => `${n} est piloté par Ledge via le protocole d’OMP : pas de terminal à attacher.`,
+    seatStopped: (n: string) => `${n} est arrêté : son terminal n’existe plus. 6 ouvre OpenRig, où est son rig.`,
     noTerminal: (n: string) => `Pas de terminal pour ${n}.`, attachFailed: (code: number) => `tmux s’est arrêté avec le code ${code}.`,
     modelSwitch: 'Ce daemon ne change pas le modèle d’une session en cours.',
     draftKept: 'Brouillon gardé : r pour reprendre.', draftQuit: 'Brouillon en cours : ctrl+c encore pour quitter quand même (il sera perdu).',

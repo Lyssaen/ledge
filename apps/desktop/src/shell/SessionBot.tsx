@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { Helper, Session } from '@ledge/protocol';
+import { isStoppedOmpSeat, type Helper, type Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
 import { botState, poseFor, type BotState } from '@ledge/ui/bots/poseFor';
 import { Badge } from '@ledge/ui/ui/Badge';
@@ -10,11 +10,11 @@ import { useMotionPreferences } from '../motionPreferences';
 import { cls } from './cls';
 import { useTheme } from './theme';
 
-/** A session's bot: frozen offline (`frozen`), read-only for `hook_only`, seeded by its id. */
+/** A session's bot: frozen offline or as a stopped OMP seat (`frozen`), read-only for `hook_only`, seeded by its id. */
 export function SessionBot({ session, size, paused }: { session: Session; size: number; paused?: boolean }): JSX.Element {
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
-  return <Bot tool={session.tool} state={botState(session)} pose={poseFor(session.id, session.state)} size={size} theme={theme} seed={session.id} frozen={!!session.offline} paused={paused} reducedMotion={reduced} readOnly={session.source === 'hook_only'} />;
+  return <Bot tool={session.tool} state={botState(session)} pose={poseFor(session.id, session.state)} size={size} theme={theme} seed={session.id} frozen={!!session.offline || isStoppedOmpSeat(session)} paused={paused} reducedMotion={reduced} readOnly={session.source === 'hook_only'} />;
 }
 
 /** A sub-agent's bot: its parent's `tool`, seed `${parent.id}:${helper.id}`, state `helperState`, frozen when the parent is offline. */
@@ -26,10 +26,10 @@ export function HelperBot({ helper, parent, size, paused }: { helper: Helper; pa
   return <Bot tool={parent.tool} state={state} pose={poseFor(seed, state)} size={size} theme={theme} seed={seed} frozen={!!parent.offline} paused={paused} reducedMotion={reduced} readOnly={parent.source === 'hook_only'} />;
 }
 
-/** Offline reads « Offline » whatever the state; otherwise the state's badge. */
-export function StateBadge({ state, offline }: { state: BotState; offline?: boolean }): JSX.Element {
+/** Offline reads « Offline » whatever the state; a stopped OMP seat « Arrêté » (docs/mockups/ledge-openrig-omp.html); otherwise the state's badge. */
+export function StateBadge({ state, offline, stopped }: { state: BotState; offline?: boolean; stopped?: boolean }): JSX.Element {
   const { t } = useI18n();
-  return offline ? <Badge state="readonly" label={t.atelier.offline} /> : <Badge state={state} />;
+  return offline ? <Badge state="readonly" label={t.atelier.offline} /> : stopped ? <Badge state={state} label={t.session.badgeStopped} /> : <Badge state={state} />;
 }
 
 const ZAP = ['M13 2 3 14h9l-1 8 10-12h-9l1-8z'];

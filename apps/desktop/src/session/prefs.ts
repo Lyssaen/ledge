@@ -1,3 +1,4 @@
+import { isArchived, isOmpSeat, type Session } from '@ledge/protocol';
 import { isRecord, readJson, writeJson } from '../state/storage';
 
 /** The session place's preferences that survive a restart, for every session alike: the view on the left (Fil | Terminal v3:
@@ -34,3 +35,11 @@ export function loadSessionPrefs(): SessionPrefs {
   };
 }
 export function saveSessionPrefs(p: SessionPrefs): void { writeJson(SESSION_KEY, p); }
+
+/** The view `s`'s page shows: the preference, but for an OMP seat of OpenRig, which has no thread (design-ux, 2026-11-03 12:23Z):
+ *  running, its Terminal view, unless this visit chose « Fil » (`visit`); stopped, « Fil », where its page says its terminal is gone. */
+export function viewShown(s: Pick<Session, 'id' | 'source' | 'tool' | 'backend' | 'state' | 'archivedAt'> | null, pref: SessionView, visit: { id: string; view: SessionView } | null): SessionView {
+  if (!s || !isOmpSeat(s)) return pref;
+  if (isArchived(s) || s.state === 'exited') return 'thread';
+  return visit?.id === s.id ? visit.view : 'terminal';
+}

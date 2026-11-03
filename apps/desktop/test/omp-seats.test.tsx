@@ -1,0 +1,150 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import type { Session } from '@ledge/protocol';
+import { LangProvider } from '../src/i18n/lang';
+import { RigGroups } from '../src/shell/sidebar/RigGroups';
+import type { SidebarOpenRig } from '../src/openrig/sidebarState';
+import { SESSION_KEY, viewShown } from '../src/session/prefs';
+import { boot, closeDaemons } from './helpers';
+
+beforeEach(() => localStorage.clear());
+afterEach(async () => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); await closeDaemons(); });
+
+/** docs/mockups/ledge-openrig-omp.html: OMP seats of OpenRig under their rig, their page on their terminal, a stopped one greyed. */
+const omp = (id: string, name: string, rig: string, role: string, extra: Partial<Session> = {}): Session =>
+  fakeSession(id, { name, tool: 'omp', cwd: `/w/${rig}`, project: rig, title: `${name} · ${role}`, state: 'idle', source: 'rig', tmuxSession: `${role.replace('.', '-')}@${rig}`,
+    rig: { seat: `${role.replace('.', '-')}@${rig}`, name: rig, role }, ...extra });
+const IVO = omp('rig-ivo', 'Ivo', 'dev-omp', 'dev.agent', { state: 'working' });
+const PIA = omp('rig-pia', 'Pia', 'dev-omp', 'review.reviewer');
+const TOM = omp('rig-tom', 'Tom', 'split-omp', 'split.splitter', { state: 'exited', exitedAt: '2026-11-03T09:00:00.000Z' });
+const ANA = omp('rig-ana', 'Ana', 'split-omp', 'analysis.analyst');
+const LU = fakeSession('rig-lu', { name: 'Lu', cwd: '/w/ledge', state: 'exited', source: 'rig', rig: { seat: 'pilot-lead@ledge-dev', name: 'ledge-dev', role: 'pilot.lead' } });
+
+const openrig = (): SidebarOpenRig => ({ installed: true, daemonUp: true, kernelState: () => 'ready', labelOf: m => m, canStart: true, installedOn: null, starting: false, failed: null, start: vi.fn() });
+function mount(sessions: readonly Session[], lang: 'fr' | 'en' = 'fr') {
+  render(<LangProvider lang={lang}><aside className="st"><RigGroups sessions={sessions} current={null} paused dispatch={vi.fn()} openrig={openrig()} dense={false} onToggleDense={vi.fn()} /></aside></LangProvider>);
+}
+const rowOf = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) }).closest('[role="treeitem"]') as HTMLElement;
+
+describe('OMP seats in the sidebar', () => {
+  it('a running OMP seat is a seat row like the others: its mascot, its name, « rôle · omp », counted while it works', () => {
+    mount([IVO, PIA]);
+    expect(rowOf('Ivo')).toHaveTextContent('dev · omp');
+    expect(rowOf('Pia')).toHaveTextContent('review.reviewer · omp');
+    expect(rowOf('Ivo').querySelector('.bot')).toHaveAttribute('data-tool', 'omp');
+    expect(rowOf('Ivo')).not.toHaveClass('off');
+    const head = screen.getByRole('button', { name: /^dev-omp/ }).closest('[role="treeitem"]')!;
+    expect(head.querySelector('.t-work')).toHaveTextContent('1');
+  });
+
+  it('a stopped OMP seat stays under its rig, greyed « arrêté », its mascot frozen, out of the rig’s count', () => {
+    mount([ANA, TOM, { ...ANA, id: 'rig-sol', name: 'Sol', state: 'working', rig: { ...ANA.rig!, seat: 'review-reviewer@split-omp', role: 'review.reviewer' } }]);
+    const tom = rowOf('Tom');
+    expect(tom).toHaveClass('off');
+    expect(tom.querySelector('.st-time')).toHaveTextContent('arrêté');
+    expect(tom.querySelector('.bot')).toHaveAttribute('data-frozen', 'true');
+    expect(tom.querySelector('.bot')).toHaveAttribute('data-state', 'done');
+    const head = screen.getByRole('button', { name: /^split-omp/ }).closest('[role="treeitem"]')!;
+    expect(head.querySelector('.t-work')).toHaveTextContent('1');
+    cleanup();
+    mount([ANA, TOM], 'en');
+    expect(rowOf('Tom').querySelector('.st-time')).toHaveTextContent('stopped');
+  });
+
+  it('a stopped Claude seat still leaves the list, and so does an archived OMP seat', () => {
+    mount([ANA, LU, { ...TOM, archivedAt: '2026-11-03T09:30:00.000Z' }]);
+    expect(screen.queryByRole('button', { name: /^Lu/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Tom/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^ledge-dev/ })).toBeNull();
+  });
+});
+
+describe('the view an OMP seat’s page shows (Fil | Terminal, design-ux 2026-11-03 12:23Z)', () => {
+  it('the preference, for any session but an OMP seat of OpenRig', () => {
+    const claude = fakeSession('a');
+    expect(viewShown(claude, 'thread', null)).toBe('thread');
+    expect(viewShown(claude, 'terminal', { id: 'a', view: 'thread' })).toBe('terminal');
+    expect(viewShown(null, 'terminal', null)).toBe('terminal');
+    // An OMP session Ledge launched itself (omp-rpc) is not a seat.
+    expect(viewShown({ ...IVO, source: 'launcher', backend: 'omp-rpc' }, 'thread', null)).toBe('thread');
+  });
+
+  it('running: its Terminal view, unless this visit chose « Fil »; stopped: « Fil »', () => {
+    expect(viewShown(IVO, 'thread', null)).toBe('terminal');
+    expect(viewShown(IVO, 'thread', { id: 'rig-ivo', view: 'thread' })).toBe('thread');
+    expect(viewShown(IVO, 'thread', { id: 'rig-pia', view: 'thread' })).toBe('terminal');
+    expect(viewShown(TOM, 'terminal', null)).toBe('thread');
+    expect(viewShown({ ...PIA, archivedAt: '2026-11-03T09:30:00.000Z' }, 'terminal', null)).toBe('thread');
+  });
+});
+
+describe('an OMP seat’s page', () => {
+  const tab = (name: 'Thread' | 'Terminal') => screen.getByRole('tab', { name: new RegExp(`^${name}`) });
+
+  it('running: it opens on its Terminal view; « Fil » says why there is no thread, with no reply; the preference stays', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ view: 'thread', terminal: false, split: 0.5, termWidth: 0.46 }));
+    const { d, side, user } = await boot({ sessions: [IVO, PIA], projects: { projects: [] } as never });
+    d.preview('rig-ivo', ['you > Story ST7-412']);
+    await user.click(side.getByRole('button', { name: /^Ivo/ }));
+    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    expect(screen.getByRole('banner').querySelector('.crumb-task')).toHaveTextContent(/^dev\.agent$/);
+    expect(screen.getByRole('banner').querySelector('[data-badge]')).toHaveAttribute('data-badge', 'working');
+    await user.click(tab('Thread'));
+    expect(document.querySelector('.seat-note')).toHaveTextContent('No thread for this seat. Ledge does not read the conversation of an OMP seat launched by OpenRig. Its Terminal view shows its screen: what you type there is sent to it.');
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).view).toBe('thread');
+    // « Fil » held for this visit only: another seat opens on its Terminal, and Ivo again too.
+    await user.click(side.getByRole('button', { name: /^Pia/ }));
+    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
+    await user.click(side.getByRole('button', { name: /^Ivo/ }));
+    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).view).toBe('thread');
+  });
+
+  it('a seat’s view never writes the preference: a Claude session keeps its own', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ view: 'thread', terminal: false, split: 0.5, termWidth: 0.46 }));
+    const LUC = fakeSession('rig-lu', { name: 'Lu', cwd: '/w/ledge', state: 'idle', source: 'rig', tmuxSession: 'pilot-lead@ledge-dev', rig: { seat: 'pilot-lead@ledge-dev', name: 'ledge-dev', role: 'pilot.lead' } });
+    const { side, user } = await boot({ sessions: [IVO, LUC], projects: { projects: [] } as never });
+    await user.click(side.getByRole('button', { name: /^Ivo/ }));
+    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
+    await user.click(tab('Thread'));
+    await user.click(tab('Terminal'));
+    await user.click(side.getByRole('button', { name: /^Lu/ }));
+    await waitFor(() => expect(screen.getByRole('banner')).toHaveTextContent('Lu'));
+    expect(tab('Thread')).toHaveAttribute('aria-selected', 'true');
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).view).toBe('thread');
+  });
+
+  it('stopped: « Fil » says its terminal is gone, « Terminal » is disabled, the OpenRig page one click away; >_ is the panel as anywhere', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ view: 'terminal', terminal: false, split: 0.5, termWidth: 0.46 }));
+    const { side, user } = await boot({ sessions: [ANA, TOM], projects: { projects: [] } as never });
+    await user.click(side.getByRole('button', { name: /^Tom/ }));
+    await waitFor(() => expect(document.querySelector('.seat-note')).toHaveTextContent('Seat stopped. Its terminal is gone: the OpenRig page shows its rig.'));
+    expect(tab('Thread')).toHaveAttribute('aria-selected', 'true');
+    const terminal = tab('Terminal');
+    expect(terminal).toHaveAttribute('aria-disabled', 'true');
+    expect(terminal).toHaveAttribute('title', 'Seat stopped: no terminal');
+    await user.click(terminal);
+    expect(tab('Thread')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
+    expect(screen.getByRole('banner').querySelector('[data-badge]')).toHaveTextContent('Stopped');
+    expect(screen.getByRole('banner').querySelector('.crumb-task')).toHaveTextContent(/^split\.splitter$/);
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: /Show the panel/ })).not.toHaveAttribute('aria-disabled');
+    await user.click(screen.getByRole('button', { name: 'Open the OpenRig page' }));
+    await waitFor(() => expect(document.querySelector('.or-page')).not.toBeNull());
+  });
+
+  it('a session that turns OMP under the same id comes to its Terminal view, its « Fil » to the note (review)', async () => {
+    const seatOf = { seat: 'dev-agent@dev-omp', name: 'dev-omp', role: 'dev.agent' };
+    const CLAUDE = fakeSession('rig-dev', { name: 'Ivo', cwd: '/w/dev-omp', state: 'idle', source: 'rig', tmuxSession: 'dev-agent@dev-omp', rig: seatOf });
+    const { d, side, user } = await boot({ sessions: [CLAUDE], projects: { projects: [] } as never });
+    await user.click(side.getByRole('button', { name: /^Ivo/ }));
+    await waitFor(() => expect(tab('Thread')).toHaveAttribute('aria-selected', 'true'));
+    d.upsert({ ...CLAUDE, tool: 'omp' });
+    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
+    await user.click(tab('Thread'));
+    expect(document.querySelector('.seat-note')).toHaveTextContent('No thread for this seat.');
+  });
+});

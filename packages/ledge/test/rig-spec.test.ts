@@ -102,13 +102,15 @@ describe('launching a rig', () => {
     { kind: 'agent', name: 'qa', sourceType: 'builtin', sourcePath: '/a.yaml' },
     { kind: 'rig', name: 'starter', sourceType: 'builtin', resolvedSourcePath: `${DIR}/rig.yaml` },
     { kind: 'rig', name: 'kernel', sourceType: 'builtin', sourcePath: '/k.yaml' },
-    { kind: 'rig', name: 'mine', sourceType: 'user_file', sourcePath: '/u/mine/rig.yaml', summary: 'Mine' }
+    { kind: 'rig', name: 'mine', sourceType: 'user', sourcePath: '/u/mine/rig.yaml', summary: 'Mine' },
+    // OpenRig 0.7.7 names the person's own specs `user_file`.
+    { kind: 'rig', name: 'alpha', sourceType: 'user_file', sourcePath: '/u/alpha/rig.yaml' }
   ]);
   function setup(answers: Record<string, { code: number | null; stdout?: string; stderr?: string }> = {}) {
     const calls: string[][] = [], written = new Map<string, string>(), copied: string[] = [];
     const run: RigRun = async args => { calls.push(args); const key = args.slice(0, 2).join(' '); const a = answers[key] ?? (key === 'specs ls' ? { code: 0, stdout: LS } : { code: 0, stdout: '{}' }); return { code: a.code, stdout: a.stdout ?? '', stderr: a.stderr ?? '' }; };
     const fs = {
-      read: async (p: string) => { if (p === `${DIR}/rig.yaml`) return STARTER; if (p === '/u/mine/rig.yaml') return STARTER.replace('name: starter', 'name: mine'); throw new Error('ENOENT'); },
+      read: async (p: string) => { if (p === `${DIR}/rig.yaml`) return STARTER; if (p === '/u/mine/rig.yaml') return STARTER.replace('name: starter', 'name: mine'); if (p === '/u/alpha/rig.yaml') return STARTER.replace('name: starter', 'name: alpha'); throw new Error('ENOENT'); },
       exists: (p: string) => p === '/w/ledge' || p === '/home/me/w',
       copyDir: async (from: string, to: string) => { copied.push(`${from} -> ${to}`); },
       write: async (p: string, text: string) => { written.set(p, text); }
@@ -117,7 +119,7 @@ describe('launching a rig', () => {
   }
   it('lists the rig specs, the person\'s first, the kernel and agents left out', async () => {
     const { rig } = setup();
-    expect((await rig.specs()).specs.map(s => [s.name, s.source])).toEqual([['mine', 'user'], ['starter', 'builtin']]);
+    expect((await rig.specs()).specs.map(s => [s.name, s.source])).toEqual([['alpha', 'user'], ['mine', 'user'], ['starter', 'builtin']]);
   });
   it('a stopped daemon cannot list them', async () => {
     const { rig } = setup({ 'specs ls': { code: 1, stderr: 'Error: Daemon not running.\n' } });
@@ -286,5 +288,12 @@ describe('permissions at launch', () => {
     const fs = { read: async () => STARTER, exists: () => true, copyDir: async () => {}, write: async () => {} };
     const r = await createOpenRig({ run, fs, home: '/h', rigsDir: '/r' }).launch(launch({ name: 'starter', policy: 'yolo', nonInterruptive: true }));
     expect(r.commands[0]).toBe('rig up /r/starter/rig.yaml --cwd /w/ledge --non-interruptive --yes');
+  });
+});
+
+describe('where a spec comes from', () => {
+  it('builtin and builtin_* are OpenRig’s, every other kind (user, user_file, a new one) the person’s', async () => {
+    const { specSource } = await import('../src/daemon/openrig.js');
+    expect(['builtin', 'builtin_pack', 'user', 'user_file', 'shared_dir', undefined, 42].map(specSource)).toEqual(['builtin', 'builtin', 'user', 'user', 'user', 'user', 'user']);
   });
 });

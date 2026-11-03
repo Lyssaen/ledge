@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { canBroadcast, daemonStore, projectOf, useDaemon, type BroadcastTo, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
-import type { Project, Projects, Session } from '@ledge/protocol';
+import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
@@ -56,7 +56,7 @@ import { ConfirmDialog } from './manage/ConfirmDialog';
 import { BroadcastDialog } from './broadcast/BroadcastDialog';
 import { loadedWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
-import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
+import { loadSessionPrefs, saveSessionPrefs, viewShown, type SessionPrefs, type SessionView } from './session/prefs';
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { ptyBackend } from './term/backend';
@@ -153,10 +153,17 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }), []);
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
+  // The sessions as last rendered: whether a « Terminal » asked by id is an OMP seat's.
+  const knownNow = useRef<readonly Session[]>([]);
+  // The view an OMP seat's visit chose (viewShown): « Fil » holds while its page stays open, the preference left alone.
+  const [seatView, setSeatView] = useState<{ id: string; view: SessionView } | null>(null);
   // Every « Terminal » (the session menu, a chat card, the island) opens the session's page on its Terminal view, the agent's screen.
+  // An OMP seat opens on it anyway, the preference left alone.
   const showTerminal = useCallback((id: string) => {
     dispatch({ type: 'open', id });
-    setSessionPrefs(x => ({ ...x, view: 'terminal' }));
+    const s = knownNow.current.find(x => x.id === id);
+    if (s && isOmpSeat(s)) setSeatView(null);
+    else setSessionPrefs(x => ({ ...x, view: 'terminal' }));
   }, [setSessionPrefs]);
   // « Open in Ledge » from the island: the shell has already brought the window forward; this shows what was asked.
   useEffect(() => onOpenTarget(raw => {
@@ -186,6 +193,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // stale, hence the dependencies); reconcile returns the same state when nothing changes, and then nothing is dispatched.
   // An archived session keeps its page (it reads, read-only): only a session the daemon no longer lists at all takes the place away.
   const known = useMemo(() => [...sessions, ...fleetView.archived], [sessions, fleetView.archived]);
+  knownNow.current = known;
   useEffect(() => { if (reconcile(nav, known, projects) !== nav) dispatch({ type: 'reconcile', sessions: known, projects }); }, [known, projects]);
 
   const projectIdOf = useCallback((s: Session) => (projects ? projectOf(s, projects) : null), [projects]);
@@ -211,18 +219,35 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // Ledge shows the agent's screen (focused window, pane open, agent tab active): that is the terminal in front, no sound.
-  watching.current = () => (place.kind === 'session' && session ? watchedSession({ focused: document.hasFocus(), agentView: sessionPrefs.view === 'terminal', placeId: place.id, helper: place.helper }) : null);
+  watching.current = () => (place.kind === 'session' && session ? watchedSession({ focused: document.hasFocus(), agentView: sessionView === 'terminal', placeId: place.id, helper: place.helper }) : null);
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   useEffect(preloadPlaces, []);
+  // An OMP seat of OpenRig (design-ux, 2026-11-03 12:23Z): running, always on its Terminal view, « Fil » for the visit only;
+  // stopped, on « Fil ». Its view changes never touch the preference.
+  const ompSeat = session !== null && isOmpSeat(session);
+  const sessionView = viewShown(session, sessionPrefs.view, seatView);
+  const placeId = place.kind === 'session' ? place.id : null;
+  useEffect(() => { setSeatView(v => (v && v.id !== placeId ? null : v)); }, [placeId]);
+  // Any other session gets the preference itself, and both stay stable across renders: the page renders only for what it shows.
+  const shownPrefs = useMemo(() => (sessionView === sessionPrefs.view ? sessionPrefs : { ...sessionPrefs, view: sessionView }), [sessionPrefs, sessionView]);
+  const shown = useRef({ prefs: shownPrefs, seat: null as string | null });
+  shown.current = { prefs: shownPrefs, seat: ompSeat ? session.id : null };
+  const setShownPrefs = useCallback((fn: (p: SessionPrefs) => SessionPrefs) => {
+    const { prefs, seat } = shown.current;
+    if (seat === null) { setSessionPrefs(fn); return; }
+    const { view, ...rest } = fn(prefs);
+    if (view !== prefs.view) setSeatView({ id: seat, view });
+    if ((Object.keys(rest) as (keyof typeof rest)[]).some(k => rest[k] !== prefs[k])) setSessionPrefs(x => ({ ...x, ...rest }));
+  }, [setSessionPrefs]);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   // Ctrl + ² from outside a terminal (the thread, the reply, the panel's Modifications): the Terminal view, and the keyboard
   // into the agent's screen (or its banner's button when it cannot be typed into). A view just asked for draws its xterm in
   // the renders this key starts, so the focus waits for the next frame.
   const toTerminal = () => {
     if (place.kind !== 'session' || !session) return false;
-    if (sessionPrefs.view !== 'terminal') setSessionPrefs(p => ({ ...p, view: 'terminal' }));
+    if (sessionView !== 'terminal') setShownPrefs(p => ({ ...p, view: 'terminal' }));
     requestAnimationFrame(() => focusAgentView(termStore, session.id));
     return true;
   };
@@ -230,10 +255,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // panel: the keyboard goes back to the left view, which does not change.
   termThread.current = () => {
     const fromAgent = document.activeElement?.closest('.agent-view') !== null;
-    if (fromAgent && sessionPrefs.view === 'terminal') {
-      setSessionPrefs(p => ({ ...p, view: 'thread' }));
+    if (fromAgent && sessionView === 'terminal') {
+      setShownPrefs(p => ({ ...p, view: 'thread' }));
       requestAnimationFrame(focusThread);
-    } else if (sessionPrefs.view === 'terminal' && session) focusAgentView(termStore, session.id);
+    } else if (sessionView === 'terminal' && session) focusAgentView(termStore, session.id);
     else focusThread();
   };
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
@@ -334,7 +359,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
                 paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
             : place.kind === 'openrig' ? <OpenRigPage client={fleetClient} machines={machines} machine={place.machine} section={place.section ?? 'rigs'} role={place.role} seat={place.seat} open={place.open} projects={projects} sessions={sessions} dispatch={dispatch} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
-                prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
+                prefs={shownPrefs} setPrefs={setShownPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
                 tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />}

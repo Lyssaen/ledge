@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
-import { backendOf, type Session } from '@ledge/protocol';
+import { backendOf, isStoppedOmpSeat, type Session } from '@ledge/protocol';
 import type { Fleet } from '@ledge/fleet';
 import { attachEnv } from '../cli/launch.js';
 
 /** The command that puts this terminal on the session's pane (`ledge attach`, through ssh for a remote machine), or why there is none. */
-export function attachCommand(fleet: Pick<Fleet, 'terminal'>, s: Session): { argv: string[] } | { why: 'offline' | 'omp' | 'none' } {
+export function attachCommand(fleet: Pick<Fleet, 'terminal'>, s: Session): { argv: string[] } | { why: 'offline' | 'omp' | 'stopped' | 'none' } {
   if (s.offline) return { why: 'offline' };
+  // A stopped OMP seat of OpenRig, kept under its rig: its pane is gone.
+  if (isStoppedOmpSeat(s)) return { why: 'stopped' };
   if (backendOf(s) === 'omp-rpc') return { why: 'omp' };
   if (!s.tmuxSession) return { why: 'none' };
   const argv = fleet.terminal(s.id);

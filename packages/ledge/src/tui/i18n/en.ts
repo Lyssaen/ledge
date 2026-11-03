@@ -6,7 +6,7 @@ const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
 export const en: Messages = {
   lang: { fr: 'Français', en: 'English' },
-  state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only' },
+  state: { approval: 'Needs you', question: 'A question', starting: 'Starting', idle: 'Available', working: 'Working', done: 'Finished', error: 'Error', readonly: 'Read-only', stopped: 'Stopped' },
   time: { now: 'just now', decimal: '.', s: n => `${n}s`, min: n => `${n} min`, h: n => `${n} h`, d: n => `${n} d` },
   tabs: { overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig' },
   bar: {
@@ -19,7 +19,7 @@ export const en: Messages = {
   },
   keys: {
     image: 'image', openImage: 'open image',
-    navigate: 'move', open: 'open', answer: 'answer', attach: 'attach (tmux)', ask: 'ask Ledge', launch: 'new session',
+    navigate: 'move', open: 'open', attachSeat: 'attach its terminal', answer: 'answer', attach: 'attach (tmux)', ask: 'ask Ledge', launch: 'new session',
     settings: 'settings', help: 'help', quit: 'quit', back: 'back', write: 'write', diffs: 'diffs', terminal: 'terminal', model: 'model',
     interrupt: 'interrupt', next: 'next waiting', unfold: 'unfold', send: 'send / launch', nextCard: 'next card',
     newChat: 'new conversation', stopAnswer: 'stop the answer', nextField: 'next field', choose: 'choose', tick: 'tick',
@@ -36,7 +36,7 @@ export const en: Messages = {
     rigSeat: (rig, role) => `rig ${rig} · ${role}`,
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
     nobodyWaits: 'Nobody is waiting for you.', noSession: 'No session. Press + to start one.', noPreview: 'No preview.', noExchange: 'No message yet.',
-    sessions: n => `${n} ${plural(n, 'session', 'sessions')}`, outside: 'No project', offline: 'offline', readOnly: 'read-only',
+    sessions: n => `${n} ${plural(n, 'session', 'sessions')}`, sessionsOf: (live, all) => `${live} ${live === 1 ? 'session' : 'sessions'} of ${all}`, outside: 'No project', offline: 'offline', readOnly: 'read-only',
     wantsToRun: 'Wants to run:', asks: 'Asks:', plan: 'Proposes a plan:', diff: 'Wants to edit:',
     allow: 'Allow', deny: 'Deny', always: 'Always', denyWithNote: 'Deny with a note',
     ledge: 'Ledge',
@@ -148,6 +148,7 @@ export const en: Messages = {
     noteTooLong: max => `Note too long: ${max} characters at most. It stays in the field.`,
     noNote: n => `${n} takes no note here.`,
     noTerminalOmp: n => `${n} is driven by Ledge over OMP's protocol: there is no terminal to attach to.`,
+    seatStopped: n => `${n} is stopped: its terminal is gone. 6 opens OpenRig, where its rig is.`,
     noTerminal: n => `No terminal for ${n}.`, attachFailed: code => `tmux stopped with code ${code}.`,
     modelSwitch: 'This daemon cannot change a running session’s model.',
     draftKept: 'Draft kept: r to pick it up.', draftQuit: 'Draft in progress: ctrl+c again to quit anyway (it will be lost).',

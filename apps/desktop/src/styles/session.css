@@ -466,6 +466,17 @@ button.tg:disabled{cursor:default}
 
 /* Not in the mockup (its thread is always there): the loading and empty-thread notes sit in the reading column. */
 .session-thread>.thread-note{max-width:var(--col);margin-inline:auto}
+/* An OMP seat of OpenRig in its thread's place (docs/mockups/ledge-openrig-omp.html): why there is no thread, or that it stopped. */
+.seat-note{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px dashed var(--input);border-radius:var(--radius-lg);font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.session-thread>.seat-note{max-width:var(--col);margin-inline:auto}
+.seat-note p{margin:0}
+.seat-note strong{color:var(--foreground);font-weight:500}
+.seat-note svg{flex:none;margin-top:1px}
+.seat-note>div{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.seat-note .message-link{color:var(--info);font-size:12.5px}
+.seat-note .message-link:hover{text-decoration:underline}
+/* A stopped OMP seat's « Terminal »: in its place, disabled. */
+.view-switch [role=tab][aria-disabled=true]{opacity:.45;cursor:not-allowed}
 
 /* An archived session: the banner over the page, the pill in the header (the mockup's manage.css). */
 .archived-banner{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--secondary) 70%,transparent);font-size:12px}

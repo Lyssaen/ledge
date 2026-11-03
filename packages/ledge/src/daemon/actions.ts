@@ -1,6 +1,7 @@
 // The daemon's side of the action registry (spec 2026-10-26 action registry §2.1): whether an action is possible now, and
 // the message the daemon already handles that applies it. The chat's generic card and, in #93, the CLI share it.
 import { backendOf, isArchived, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type Session, type Task } from '@ledge/protocol';
+import { isOmpSeat } from './omp/seats.js';
 
 export interface ResolveCtx {
   sessions: readonly Session[]; tasks: readonly Task[];
@@ -35,7 +36,7 @@ function taskOf(ref: string, ctx: ResolveCtx): Task | Refusal {
 }
 /** A session Ledge can act on: tracked, writable, running. */
 function writable(s: Session): Refusal | null {
-  return s.source === 'hook_only' ? no('read_only', `${s.name} is read-only`) : s.state === 'exited' ? no('exited', `${s.name} has exited`) : null;
+  return s.source === 'hook_only' || isOmpSeat(s) ? no('read_only', `${s.name} is read-only`) : s.state === 'exited' ? no('exited', `${s.name} has exited`) : null;
 }
 const b = (name: string) => `**${name}**`;
 /** `ChatActionSchema` bounds a summary and each of its words to 300: a longer one would fail the whole chat.history. */
