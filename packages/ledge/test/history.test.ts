@@ -63,6 +63,16 @@ describe('History', () => {
     expect(h.items('s')[1]).not.toHaveProperty('byClose');
   });
 
+  it('a Decided keeps who decided on the permission, and none when it does not say', () => {
+    const h = new History();
+    h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }));
+    h.record('s', ev('Decided', { source: 'daemon', decision: 'accept', by: { kind: 'device', id: 'dev1', name: 'iPad' } }, 1));
+    expect(h.items('s')[0]).toMatchObject({ kind: 'permission', decision: 'accept', by: { kind: 'device', id: 'dev1', name: 'iPad' } });
+    h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'ls' }, 2));
+    h.record('s', ev('Decided', { source: 'daemon', decision: 'deny' }, 3));
+    expect(h.items('s')[1]).not.toHaveProperty('by');
+  });
+
   it('a Decided by a close, without decision, marks the open question row as dismissed by the close and settled', () => {
     const h = new History();
     h.record('s', ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }));

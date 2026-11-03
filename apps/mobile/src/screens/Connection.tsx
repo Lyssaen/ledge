@@ -13,6 +13,7 @@ import { setTheme, useThemeChoice, type ThemeChoice } from '../theme';
 import { ProtectRow } from './Enroll';
 import { NotificationsRow } from './Notifications';
 import { PcSection } from './PcSection';
+import { ThisDevice } from './ThisDevice';
 import { olderThan } from '../state/pc';
 
 const N = copy.connection;
@@ -47,6 +48,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
     <>
       <BackHeader title={N.title} fallback={{ name: 'inbox' }} label={N.back} link={linkView(state)} />
       <main className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pt-5 pb-[34px]">
+        <ThisDevice store={store} pinned={pinned} />
         <dl className="flex flex-col rounded-control border border-line bg-surface text-body">
           {rows.map(([label, value, mono, tone]) => (
             <div key={label} className="flex items-baseline justify-between gap-4 border-b border-line px-4 py-3 last:border-b-0">

@@ -85,7 +85,7 @@ test('notifications: turned on while pairing, a push shows a notification, an un
     signedIn = true;
     await page.getByRole('button', { name: copy.compare.same }).click();
     h.pc.ok();
-    await expect(page.getByRole('heading', { name: copy.compare.doneTitle(copy.yourPc) })).toBeVisible();
+    await expect(page.getByRole('heading', { name: new RegExp(` lié à ${copy.yourPc}$`) })).toBeVisible();
     // Nothing to protect here (the PC says the device is covered): the step after the pairing is the notifications.
     // The step is offered once the PC's snapshot has said so: wait for the phone to have asked, and for the answer.
     await expect.poll(() => sent().some((m) => m.type === 'snapshot.request')).toBe(true);
@@ -123,7 +123,7 @@ test('notifications: turned on while pairing, a push shows a notification, an un
     await deliver(JSON.stringify({
       v: 1, kind: 'request', title: 'Otto attend votre accord', body: 'pnpm test', url: '/#/request/s1/p1', badge: 1, tag: 'req-s1'
     }));
-    await expect.poll(shown).toEqual([{ title: 'Otto attend votre accord', body: 'pnpm test', tag: 'req-s1', data: { url: '/#/request/s1/p1' } }]);
+    await expect.poll(shown).toEqual([{ title: 'Otto attend votre accord', body: 'pnpm test', tag: 'req-s1', data: { url: '/#/request/s1/p1', kind: 'request' } }]);
   });
 
   await test.step('an unreadable push shows the fallback', async () => {

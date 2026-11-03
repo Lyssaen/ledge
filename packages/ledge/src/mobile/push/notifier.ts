@@ -39,6 +39,9 @@ export function createNotifier(deps: {
   const { mobile, log } = deps;
   const now = deps.now ?? Date.now;
   const lastFinished = new Map<string, number>();
+  /** The tags of the requests and questions each device was sent, until their `resolved` (memory only). */
+  const told = new Map<string, Set<string>>();
+  const tell = (id: string, tag: string) => { let s = told.get(id); if (!s) { s = new Set(); told.set(id, s); } s.add(tag); };
 
   return {
     async notify(payload, sessionId, only) {
@@ -58,6 +61,8 @@ export function createNotifier(deps: {
         if (only !== undefined && d.id !== only) return [];
         const sub = mobile.pushOf(d.id);
         if (!sub || (relayKey !== undefined && sub.key !== relayKey) || deps.presence(d.id)) return [];
+        // A `resolved` only replaces a notification the device got, and only on a service worker that shows it.
+        if (p.kind === 'resolved' && (!sub.resolved || !told.get(d.id)?.has(p.tag))) return [];
         return [{ id: d.id, online: d.online, sub }];
       });
       if (targets.length === 0) return;
@@ -69,10 +74,12 @@ export function createNotifier(deps: {
             endpoint: sub.endpoint,
             body: Buffer.from(encryptPush(plain, { p256dh: sub.p256dh, auth: sub.auth }, { padTo: PAD_TO })).toString('base64url'),
             ttl: TTL_S,
-            urgency: p.kind === 'finished' || p.kind === 'chat' ? 'normal' : 'high',
+            urgency: p.kind === 'finished' || p.kind === 'chat' || p.kind === 'resolved' ? 'normal' : 'high',
             topic: p.tag
           };
           const r = await mobile.sendPush(msg);
+          if (p.kind === 'resolved') told.get(id)?.delete(p.tag);
+          else if ((p.kind === 'request' || p.kind === 'question') && r.result === 'sent') tell(id, p.tag);
           if (r.result === 'gone') {
             log(`push: subscription of device ${id} is gone, removed`);
             mobile.setPush(id, null);

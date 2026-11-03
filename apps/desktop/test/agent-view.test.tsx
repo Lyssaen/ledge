@@ -250,7 +250,7 @@ it('says when a phone types into the agent\'s terminal, and takes the hand back'
   const release = vi.fn();
   render(<View session={nova} holders={new Map([[nova.id, 'iPhone · Safari']])} release={release} />);
   await tick();
-  expect(screen.getByText('Téléphone au clavier : iPhone · Safari tape dans le terminal de Nova.')).toBeInTheDocument();
+  expect(screen.getByText('iPhone · Safari au clavier : il tape dans le terminal de Nova.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Reprendre la main' }));
   expect(release).toHaveBeenCalledWith(nova.id);
 });

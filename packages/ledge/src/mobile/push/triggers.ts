@@ -1,4 +1,4 @@
-import { pendingKey, type ChatErrorCode, type PushPayload, type Session, type Task } from '@ledge/protocol';
+import { pendingKey, type ChatErrorCode, type DecidedBy, type PushPayload, type Session, type Task } from '@ledge/protocol';
 
 const TAG_MAX = 32;
 const TITLE_MAX = 80;
@@ -44,6 +44,17 @@ export function pushFor(before: Session | undefined, after: Session, all: readon
     return { v: 1, kind: 'finished', title: cut(`${after.name} a terminé`, TITLE_MAX), body: cut((after.lastReply?.text ?? '').trim(), BODY_MAX), url: `/#/thread/${encodeURIComponent(after.id)}`, badge, tag };
   }
   return null;
+}
+
+/**
+ * A request or question that left without another one in its place: the push that replaces its notification on the
+ * devices that got it. `by` names who answered, when the daemon knows (a decision it typed); else the body says nothing.
+ */
+export function resolvedFor(before: Session | undefined, after: Session, all: readonly Session[], by?: DecidedBy | null): PushPayload | null {
+  if (!before?.pending || after.pending) return null;
+  const badge = Math.min(999, all.filter(s => s.pending).length);
+  const body = !by ? '' : by.kind === 'pc' ? 'sur le PC' : cut(`sur ${by.name}`, BODY_MAX);
+  return { v: 1, kind: 'resolved', title: cut(`${after.name} · traitée`, TITLE_MAX), body, url: `/#/thread/${encodeURIComponent(after.id)}`, badge, tag: safeTag(after.id) };
 }
 
 /** The phone's own words for a question that ended without an answer (a copy of apps/mobile/src/copy.ts: the daemon never imports the phone). */

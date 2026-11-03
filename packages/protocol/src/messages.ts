@@ -18,8 +18,8 @@ import { MachinesSchema } from './machines.js';
 import { IslandPrefsSchema } from './island.js';
 import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
-import { DecisionSchema, NOTE_MAX } from './decisions.js';
-import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
+import { DecidedBySchema, DecisionSchema, NOTE_MAX } from './decisions.js';
+import { DeviceNameSchema, MobileStateSchema, RelayUrlSchema } from './mobile.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 
@@ -74,6 +74,8 @@ export const SessionEventSchema = z.object({
   decision: DecisionSchema.optional(),
   /** Decided: the request was refused by Ledge closing the session (its interrupt keys), not by the user's answer. */
   byClose: z.literal(true).optional(),
+  /** Decided: who answered, when the daemon typed it (absent: answered in the terminal, or an older daemon). */
+  by: DecidedBySchema.optional(),
   /** The agent's own session id when the hook names it, so the daemon can resume that conversation. */
   agentSessionId: z.string().optional()
 });
@@ -276,7 +278,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('session.decide'), id: z.string(), decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
     /** The request the user saw when deciding: refused (the request changed) unless it is still the pending one. Left out by older fronts and the island.
      *  `key` (pendingKey) covers its whole content; older fronts send kind and text only. */
-    expect: PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().max(64).optional() }).optional()
+    expect: PendingSchema.pick({ kind: true, text: true }).extend({ key: z.string().max(64).optional() }).optional(),
+    /** Who decides: set by the phone gateway for a device (over anything the device sent); left out by a local front, which means the PC. */
+    by: DecidedBySchema.optional()
   }),
   z.object({ type: z.literal('session.focus'), id: z.string() }),
   z.object({ type: z.literal('session.kill'), id: z.string() }),
@@ -323,10 +327,13 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('mobile.signout') }),
   /** While the link is offline: try again now. */
   z.object({ type: z.literal('mobile.retry') }),
-  z.object({ type: z.literal('mobile.pairing.approve'), id: z.string().min(1).max(100) }),
+  /** `replaces`: an approved device this one takes the place of (the same app reinstalled), revoked once this one is stored. */
+  z.object({ type: z.literal('mobile.pairing.approve'), id: z.string().min(1).max(100), replaces: z.string().min(1).max(100).optional() }),
   z.object({ type: z.literal('mobile.pairing.deny'), id: z.string().min(1).max(100) }),
   /** `id`: the device's fingerprint. */
   z.object({ type: z.literal('mobile.device.revoke'), id: z.string().min(1).max(100) }),
+  /** Names a device (`id`: its fingerprint); the device sees its new name in its next snapshot. */
+  z.object({ type: z.literal('mobile.device.rename'), id: z.string().min(1).max(100), name: DeviceNameSchema }),
   /** « Taper dans les terminaux depuis le téléphone »; turned off, every phone loses the hand. */
   z.object({ type: z.literal('mobile.terminal'), input: z.boolean() }),
   /** « Reprendre la main »: the phone typing into the session's terminal goes back to reading it. */

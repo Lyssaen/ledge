@@ -1,5 +1,5 @@
-// A phone turned on its side: the app fills the screen's width instead of keeping the 480 px column of a desktop window,
-// and its tabs leave the bottom for a rail on the left.
+// A phone turned on its side: the app fills the screen's width instead of keeping its 480 px column, and its tabs leave
+// the bottom for a rail on the left.
 // SHOTS=<dir> saves a capture of each screen there.
 import { devices, expect, test, type Page } from '@playwright/test';
 import { copy } from '../src/copy';
@@ -18,7 +18,7 @@ async function shot(page: Page, name: string, browser: string) {
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${browser}-${name}.png` });
 }
 
-test('in landscape the app spans the whole width with its tabs on the left, and a desktop window keeps its column', async ({ page, browserName }) => {
+test('in landscape the app spans the whole width with its tabs on the left', async ({ page, browserName }) => {
   await page.goto(h.url);
   await page.getByRole('link', { name: copy.login.github }).click();
   await h.pc.code();
@@ -45,10 +45,8 @@ test('in landscape the app spans the whole width with its tabs on the left, and 
   expect.soft(await width()).toBe(page.viewportSize()!.width);
 
   await page.goBack();
+  // A desktop window is a wide screen: the list keeps its rail and a pane beside it (tablet.spec.ts).
   await page.setViewportSize({ width: 1280, height: 800 });
-  expect.soft(await width()).toBe(480);
-  // Back under the list.
-  const bar = (await nav.boundingBox())!;
-  expect.soft(bar.y).toBeGreaterThan((await page.getByRole('main').boundingBox())!.y);
-  expect.soft(bar.width).toBe(480 - 36);
+  expect.soft(await width()).toBe(1280);
+  expect.soft((await nav.boundingBox())!.x).toBe(0);
 });

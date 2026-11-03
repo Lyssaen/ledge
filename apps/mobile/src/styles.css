@@ -39,6 +39,8 @@
 }
 /* A phone on its side (landscape, short), as the block at the end of this file: the screens that compact their header there. */
 @custom-variant phone-side (@media (orientation: landscape) and (max-height: 500px));
+/* A wide screen, an iPad either way up or a desktop window: two panes (ui/layout.tsx, WIDE_QUERY). */
+@custom-variant tablet (@media (min-width: 768px) and (min-height: 501px));
 @theme {
   --radius-card: 16px;
   --radius-control: 12px;
@@ -80,11 +82,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 }
 
-/* A phone on its side (landscape, short): the whole width; its notch is then on a side, cleared by the padding above. */
-@media (orientation: landscape) and (max-height: 500px) {
+/* A phone on its side (landscape, short), or a wide screen: the whole width; a notch is then on a side, cleared by the
+   padding above. */
+@media (orientation: landscape) and (max-height: 500px), (min-width: 768px) and (min-height: 501px) {
   .app { max-width: none; }
   /* The tabs become a rail on the left, so the short height goes to the thread and the composer. */
-  .app:has(> .tabbar) { padding-left: calc(env(safe-area-inset-left) + 92px); }
+  .app:has(.tabbar) { padding-left: calc(env(safe-area-inset-left) + 92px); }
   .tabbar {
     position: fixed; inset: 0 auto 0 0; z-index: 20; width: calc(env(safe-area-inset-left) + 76px);
     display: flex; flex-direction: column; justify-content: center; gap: 6px;
@@ -94,4 +97,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .tabbar > a { position: relative; flex-direction: column; gap: 2px; min-height: 56px; font-size: var(--text-meta); line-height: var(--text-meta--line-height); }
   /* The count, on the icon's corner instead of after the label. */
   .tabbar > a > span { position: absolute; top: 4px; right: 6px; }
+}
+
+/* A wide screen: the list (360 px at most) and, beside it, what it opened, its content 720 px at most. A screen with no
+   list (the chat, the connection) keeps one column of that width, centred. */
+@media (min-width: 768px) and (min-height: 501px) {
+  .split { display: grid; grid-template-columns: clamp(300px, 34vw, 360px) minmax(0, 1fr); flex: 1; min-height: 0; margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); }
+  .split-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding-right: 18px; border-right: 1px solid var(--color-line); }
+  .split-detail { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding: 0 max(28px, env(safe-area-inset-right)) 0 28px; }
+  .split-detail > * { width: 100%; max-width: 720px; margin-inline: auto; }
+  /* The rail starts at the top, as an iPad's sidebar; a phone on its side keeps it centred. */
+  .tabbar { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top) + 40px); }
+  /* « Retour » to the list beside it says nothing on a wide screen; back to the thread from its terminal stays. */
+  .split-detail [data-back="inbox"], .split-detail [data-back="agents"] { display: none; }
+  .app:not(:has(.split)) > :not(.tabbar) { width: 100%; max-width: 720px; margin-inline: auto; }
 }

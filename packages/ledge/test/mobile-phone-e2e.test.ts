@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { PhoneServerMessageSchema, pendingKey, type PhoneServerMessage, type Session } from '@ledge/protocol';
+import { PhoneServerMessageSchema, pendingKey, type PhoneServerMessage, type Session, type SessionEvent } from '@ledge/protocol';
+import { fingerprint } from '@ledge/seal';
 import { Store } from '../src/daemon/store.js';
 import { startServer } from '../src/daemon/server.js';
 import type { Tmux } from '../src/tmux.js';
@@ -100,12 +101,17 @@ describe('phone protocol end to end', () => {
     for (const s of first.sessions) expect(s).not.toHaveProperty('tmuxSession');
     expect(first.sessions[0]!.pending).toMatchObject({ risk: 'low', key: pendingKey(PENDING) });
 
+    const applied: SessionEvent[] = [];
+    const apply = store.apply.bind(store);
+    store.apply = (id, ev) => { applied.push(ev); return apply(id, ev); };
     const decide = JSON.stringify({ type: 'session.decide', op: randomUUID(), id: 'a', decision: 'accept', expect: { kind: 'permission', text: 'ls src', key: pendingKey(PENDING) } });
     await phone.send(decide);
     await until(() => results(phone).length >= 2, 'the decision applied');
     expect(results(phone).map(r => r.status)).toEqual(['received', 'applied']);
     expect(tmux.sent).toEqual([['text', 'ledge-a', '1']]);
     expect(store.get('a')?.pending).toBeUndefined();
+    // Named as the device that decided, with the label it paired under.
+    expect(applied.find(e => e.name === 'Decided')).toMatchObject({ decision: 'accept', by: { kind: 'device', id: await fingerprint(phone.publicKey) } });
 
     await phone.send(decide);
     await until(() => results(phone).length >= 3, 'the replay answered');

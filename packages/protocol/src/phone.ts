@@ -10,6 +10,7 @@ import type { TodoStatus } from './todos.js';
 import { MESSAGE_MAX, RefusalCodeSchema, SEMVER, UpdateFailureSchema } from './messages.js';
 import { BROADCAST_SESSIONS_MAX } from './broadcast.js';
 import { PushSubscriptionSchema } from './push.js';
+import { DeviceKindSchema, DeviceNameSchema } from './mobile.js';
 import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } from './models.js';
 import { SlashCommandSchema } from './commands.js';
 import { HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema } from './openrig.js';
@@ -324,8 +325,11 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('openrig.row'), qitem: QitemIdSchema }),
   /** The phone drops its passkey from the daemon. */
   z.object({ type: z.literal('device.forget'), op: OperationIdSchema }),
-  /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). */
-  z.object({ type: z.literal('push.subscribe'), op: OperationIdSchema, subscription: PushSubscriptionSchema, key: B64U.length(87) }),
+  /** The device names itself (on the PC and in its next snapshot); applied to the sender only. */
+  z.object({ type: z.literal('device.rename'), op: OperationIdSchema, name: DeviceNameSchema }),
+  /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). `resolved`: its service
+   *  worker shows a `resolved` push, which replaces a request's notification once it is answered elsewhere. */
+  z.object({ type: z.literal('push.subscribe'), op: OperationIdSchema, subscription: PushSubscriptionSchema, key: B64U.length(87), resolved: z.literal(true).optional() }),
   z.object({ type: z.literal('push.unsubscribe'), op: OperationIdSchema }),
   /** The phone's own chat with Ledge. */
   z.object({ type: z.literal('chat.ask'), qid: OperationIdSchema, text: z.string().trim().max(MESSAGE_MAX), attachments: z.array(AttachmentIdSchema).max(ATTACHMENTS_MAX).optional() }),
@@ -400,7 +404,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon answers `session.commands`. */ commands: z.literal(true).optional(),
     /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
     /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),
-    /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
+    /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
+    /** This device's id (its fingerprint, as decisions name it in `by`), its kind, and the name the user gave it (absent: none given). */
+    id: z.string().optional(), kind: DeviceKindSchema.optional(), name: z.string().optional() }).optional() }),
   /** « À toi » on this PC: the answer to `openrig.asks`, then each change, whole. */
   z.object({ type: z.literal('openrig.asks'), channel: HumanChannelSchema, asks: z.array(HumanAskSchema), partial: z.literal(true).optional(), truncated: z.literal(true).optional() }),
   /** An answer's end, as on the desktop (`openrig.answered`), under the phone's `op`. `rejected`: the device check refused it (`reason`). */

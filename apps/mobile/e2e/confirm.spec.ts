@@ -56,7 +56,7 @@ test('a passkey protects the high-impact accepts: enrolled at pairing, asked at 
     signedIn = true;
     await page.getByRole('button', { name: copy.compare.same }).click();
     h.pc.ok();
-    await expect(page.getByRole('heading', { name: copy.compare.doneTitle(copy.yourPc) })).toBeVisible();
+    await expect(page.getByRole('heading', { name: new RegExp(` lié à ${copy.yourPc}$`) })).toBeVisible();
     await page.getByRole('button', { name: copy.enroll.go }).click();
     await expect(page.getByText(copy.enroll.done)).toBeVisible();
     expect(h.daemon.device?.registered).toBe(true);

@@ -50,7 +50,7 @@ test('the phone chat: a question, its steps and answer, the instruction sent, th
     signedIn = true;
     await page.getByRole('button', { name: copy.compare.same }).click();
     h.pc.ok();
-    await expect(page.getByRole('heading', { name: copy.compare.doneTitle(copy.yourPc) })).toBeVisible();
+    await expect(page.getByRole('heading', { name: new RegExp(` lié à ${copy.yourPc}$`) })).toBeVisible();
     await page.getByRole('button', { name: copy.enroll.go }).click();
     await expect(page.getByText(copy.enroll.done)).toBeVisible();
     await page.getByRole('link', { name: copy.compare.seePending }).click();

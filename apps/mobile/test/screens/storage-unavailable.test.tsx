@@ -18,7 +18,7 @@ function unreadable() {
 describe('a key store that cannot be read', () => {
   it('says so, with « Réessayer » and « Recharger », and starts no pairing', () => {
     const t = unreadable();
-    expect(screen.getByRole('heading', { name: 'Stockage du téléphone illisible' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Stockage de l’appareil illisible' })).toBeInTheDocument();
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Réessayer', 'Recharger']);
     expect(t.calls).toEqual([]);
   });

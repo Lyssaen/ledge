@@ -228,6 +228,30 @@ describe('web sign-in', () => {
     expect((await fetch(`${m.base}/auth/me`, { headers: { cookie: `${RELAY_SESSION_COOKIE}=${pcToken}` } })).status).toBe(200);
   });
 
+  it('keeps two devices of one account connected together', async () => {
+    const m = await mount();
+    // Two browsers: the second signs in without the first's cookie.
+    const phone = setCookieOf(await signIn(m), RELAY_SESSION_COOKIE)!;
+    const a = new WebSocket(m.ws, { headers: { cookie: phone.pair, origin: m.base } });
+    a.once('error', () => {});
+    let closedA: number | null = null;
+    a.on('close', (code) => { closedA = code; });
+    const wA = await inbox(a).next(1) as { self: string };
+    const ipad = setCookieOf(await signIn(m), RELAY_SESSION_COOKIE)!;
+    const b = new WebSocket(m.ws, { headers: { cookie: ipad.pair, origin: m.base } });
+    b.once('error', () => {});
+    const wB = await inbox(b).next(1) as { self: string };
+    await new Promise((r) => setTimeout(r, 100));
+    expect(wA.self).toMatch(/^d_/);
+    expect(wB.self).toMatch(/^d_/);
+    expect(wB.self).not.toBe(wA.self);
+    expect(closedA).toBeNull();
+    expect(a.readyState).toBe(WebSocket.OPEN);
+    expect((await fetch(`${m.base}/auth/me`, { headers: { cookie: phone.pair } })).status).toBe(200);
+    a.close();
+    b.close();
+  });
+
   it('sets Secure exactly when publicUrl is https', async () => {
     const m = await mount({ publicUrl: 'https://relay.example' });
     const s = await manual(`${m.base}/auth/github/start`);

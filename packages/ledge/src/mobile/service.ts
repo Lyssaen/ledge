@@ -1,10 +1,10 @@
 // Mobile access: files, relay link, sign-in, pairing and channels put together, as one state and a set of commands
 // for the local fronts. Nothing secret (relay token, device code, keys, nonces, message texts) reaches the state or the log.
 import type WebSocket from 'ws';
-import { PushSendResultSchema, SealedFrameSchema, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
+import { DeviceNameSchema, PushSendResultSchema, SealedFrameSchema, deviceKindOfLabel, type DeviceKind, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
 import {
   clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations,
-  type ApprovedDevice, type RelaySession, type Revocation
+  MAX_DEVICE_PEERS, type ApprovedDevice, type RelaySession, type Revocation
 } from './files.js';
 import { rpOf, type DeviceCredential } from './webauthn.js';
 import { createRelayLink, type LinkState, type RelayLink, type Schedule } from './link.js';
@@ -13,7 +13,8 @@ import { createPairing } from './pairing.js';
 import { createChannels } from './channels.js';
 import { log } from '../log.js';
 
-export interface PushSetting { endpoint: string; p256dh: string; auth: string; key: string }
+/** `resolved`: the device's service worker shows a `resolved` push (it replaces a request's notification). */
+export interface PushSetting { endpoint: string; p256dh: string; auth: string; key: string; resolved?: true }
 
 export interface MobileService {
   state(): MobileState;
@@ -25,6 +26,10 @@ export interface MobileService {
   send(deviceId: string, text: string): Promise<boolean>;
   /** Removes the device from the PC (as the `mobile.device.revoke` command does); a device already gone is not an error. */
   revoke(deviceId: string): Promise<void>;
+  /** Renames an approved device (persisted); throws for an unknown device. */
+  rename(deviceId: string, name: string): void;
+  /** What a device is called and what it is, for its own snapshot and for the decisions it takes; null if unknown. */
+  deviceInfo(deviceId: string): { label: string; kind: DeviceKind; name?: string } | null;
   /** The device's passkey, unless it was registered for another relay host than the current one. */
   credential(deviceId: string): DeviceCredential | null;
   /** Stores the passkey of an approved device (persisted with it). */
@@ -40,6 +45,12 @@ export interface MobileService {
   /** Texts opened from approved devices' sealed messages; returns the unsubscribe. */
   onMessage(fn: (deviceId: string, text: string) => void): () => void;
   stop(): Promise<void>;
+}
+
+/** Every relay peer known for a device: its list, and `lastPeer` from a file written before the list was kept. */
+function peersOf(d: ApprovedDevice): string[] {
+  const list = d.peers ?? [];
+  return d.lastPeer && !list.includes(d.lastPeer) ? [...list, d.lastPeer] : list;
 }
 
 const REVOKE_TIMEOUT_MS = 15_000;
@@ -88,6 +99,18 @@ export async function createMobileService(opts: {
     link?.send({ type: 'send', to: peer, body: JSON.stringify(frame) });
   };
 
+  /** The device's peers with `peer` last, the oldest dropped past MAX_DEVICE_PEERS. */
+  const withPeer = (d: ApprovedDevice, peer: string): string[] =>
+    [...peersOf(d).filter((p) => p !== peer), peer].slice(-MAX_DEVICE_PEERS);
+
+  /** The device without `peer` in its list or as its last peer. */
+  const withoutPeer = (d: ApprovedDevice, peer: string): ApprovedDevice => {
+    if (d.lastPeer !== peer && !d.peers?.includes(peer)) return d;
+    const { lastPeer, peers, ...rest } = d;
+    const left = (peers ?? []).filter((p) => p !== peer);
+    return { ...rest, ...(lastPeer && lastPeer !== peer ? { lastPeer } : {}), ...(left.length > 0 ? { peers: left } : {}) };
+  };
+
   const saveDevices = (next: ApprovedDevice[]) => {
     writeDevices(next); // first: a failing write leaves memory unchanged
     devices = next;
@@ -98,7 +121,8 @@ export async function createMobileService(opts: {
     send: sendFrame,
     approve(d) {
       const old = devices.find((x) => x.id === d.id);
-      saveDevices(old ? devices.map((x) => (x.id === d.id ? { ...x, label: d.label } : x)) : [...devices, d]);
+      const kind = deviceKindOfLabel(d.label);
+      saveDevices(old ? devices.map((x) => (x.id === d.id ? { ...x, label: d.label, kind } : x)) : [...devices, { ...d, kind }]);
     },
     onChange: changed,
     now,
@@ -112,7 +136,9 @@ export async function createMobileService(opts: {
     onConfirmed(deviceId, peer) {
       if (devices.some((d) => d.id === deviceId)) {
         const at = new Date(now()).toISOString();
-        try { saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, lastPeer: peer, lastSeenAt: at } : d))); }
+        // A peer belongs to the device that confirmed on it last: a browser that lost its keys and paired again keeps its
+        // cookie, so the same peer; the old device no longer owns it, and revoking that one must not revoke this peer.
+        try { saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, lastPeer: peer, lastSeenAt: at, peers: withPeer(d, peer) } : withoutPeer(d, peer)))); }
         catch (e) { log(`mobile: devices.json not written (${(e as Error).message})`); }
       }
       pairing.linked(deviceId);
@@ -313,9 +339,20 @@ export async function createMobileService(opts: {
     log(`mobile: revoked device ${id}`);
     // Removed from the list first: dropDevice then answers the device's next msg with `denied`.
     channels.dropDevice(id);
-    if (d.lastPeer) sendFrame(d.lastPeer, { k: 'denied' });
+    // Every peer the device ever confirmed a channel on: an older relay session of it must not stay valid. A peer another
+    // approved device uses (the same browser paired again under a new key) is left alone: only this device's channel goes.
+    const others = new Set(devices.flatMap(peersOf));
+    const peers = peersOf(d).filter((p) => !others.has(p));
+    for (const p of peers) sendFrame(p, { k: 'denied' });
     changed();
-    if (d.lastPeer) await revokeOnRelay(d.lastPeer);
+    await Promise.all(peers.map((p) => revokeOnRelay(p)));
+  };
+
+  const rename = (id: string, raw: string) => {
+    const name = DeviceNameSchema.parse(raw);
+    if (!devices.some((d) => d.id === id)) throw new Error('no such device');
+    saveDevices(devices.map((d) => (d.id === id ? { ...d, name } : d)));
+    changed();
   };
 
   const pairingIn = (id: string, states: string[]) => {
@@ -336,7 +373,8 @@ export async function createMobileService(opts: {
         signinError,
         link: linkState,
         devices: devices.map((d) => ({
-          id: d.id, label: d.label, approvedAt: d.approvedAt, online: online.has(d.id), ...(d.lastSeenAt ? { lastSeenAt: d.lastSeenAt } : {})
+          id: d.id, label: d.label, approvedAt: d.approvedAt, online: online.has(d.id), ...(d.lastSeenAt ? { lastSeenAt: d.lastSeenAt } : {}),
+          kind: d.kind ?? deviceKindOfLabel(d.label), ...(d.name ? { name: d.name } : {})
         })),
         pairings: pairing.views(),
         terminalInput: config.terminalInput === true
@@ -344,6 +382,13 @@ export async function createMobileService(opts: {
     },
 
     revoke,
+
+    rename,
+
+    deviceInfo(deviceId) {
+      const d = devices.find((x) => x.id === deviceId);
+      return d ? { label: d.label, kind: d.kind ?? deviceKindOfLabel(d.label), ...(d.name ? { name: d.name } : {}) } : null;
+    },
 
     credential(deviceId) {
       const c = devices.find((d) => d.id === deviceId)?.credential;
@@ -448,18 +493,27 @@ export async function createMobileService(opts: {
         case 'mobile.retry':
           link?.retryNow();
           return;
-        case 'mobile.pairing.approve':
+        case 'mobile.pairing.approve': {
           pairingIn(msg.id, ['confirm']);
           // pair_ok would go nowhere while the device is stored: refuse, the pairing stays in confirm.
           if (linkState.state !== 'online') throw new Error('the relay is offline');
+          const before = new Set(devices.map((d) => d.id));
           pairing.approve(msg.id);
+          // The device it replaces goes once the new one is stored (so a relay peer they share stays the new one's), and only
+          // when a new key was approved: the same key approved again is that very device.
+          const added = devices.some((d) => !before.has(d.id));
+          if (msg.replaces !== undefined && added && before.has(msg.replaces)) await revoke(msg.replaces);
           return;
+        }
         case 'mobile.pairing.deny':
           pairingIn(msg.id, ['confirm', 'waiting']);
           pairing.deny(msg.id);
           return;
         case 'mobile.device.revoke':
           return revoke(msg.id);
+        case 'mobile.device.rename':
+          rename(msg.id, msg.name);
+          return;
       }
     },
 

@@ -80,7 +80,7 @@ test('a session closed from its page with the passkey, read as ended in the list
     expect(h.daemon.ended).toEqual(['s1']);
     expect(sent('session.close')).toMatchObject([{ id: 's1', assertion: { id: expect.any(String) } }]);
     await expect(page.getByRole('button', { name: S.close('Otto') })).toBeHidden();
-    await expect(page.getByText(/^Session fermée depuis le téléphone · \d\d:\d\d$/)).toBeVisible();
+    await expect(page.getByText(/^Session fermée depuis cet appareil · \d\d:\d\d$/)).toBeVisible();
   });
 
   await test.step('the list reads « Terminée » with the time it ended, and offers no resume of its own', async () => {

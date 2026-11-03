@@ -5,6 +5,14 @@ import type { Pending, Tool } from './session.js';
 export const DecisionSchema = z.enum(['accept', 'deny', 'always']);
 export type Decision = z.infer<typeof DecisionSchema>;
 
+/** Who took a decision: the PC (any local front: desktop, overlay, TUI, island) or a linked device, named as it was then.
+ *  Set by the daemon only (the phone gateway for a device); what a front sends for it is never trusted. */
+export const DecidedBySchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('pc') }),
+  z.object({ kind: z.literal('device'), id: z.string().min(1).max(100), name: z.string().min(1).max(60) })
+]);
+export type DecidedBy = z.infer<typeof DecidedBySchema>;
+
 /** The longest note a refusal carries to the agent. */
 export const NOTE_MAX = 4000;
 

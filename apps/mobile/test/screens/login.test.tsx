@@ -18,7 +18,7 @@ describe('signing in', () => {
     expect(screen.getByText('Connectez-vous avec le même compte GitHub que dans Ledge sur votre PC.')).toBeInTheDocument();
     expect(screen.getByText(globalThis.location.host)).toBeInTheDocument();
     expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Ce téléphone crée sa propre clé. Elle ne le quitte jamais.',
+      'Cet appareil crée sa propre clé. Elle ne le quitte jamais.',
       'Rien n’est accessible avant que vous ayez confirmé un code sur votre PC.',
       'Le serveur relaie des messages chiffrés : il ne peut ni les lire, ni répondre à votre place.'
     ]);

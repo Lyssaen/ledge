@@ -22,6 +22,8 @@ import { Thread } from './screens/Thread';
 import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
 import { copy } from './copy';
+import { Split, SplitEmpty, useWide } from './ui/layout';
+import { ownName } from './screens/ThisDevice';
 import { useMobile, type MobileStore } from './state/store';
 import type { UpdateWatch } from './sw/register';
 import type { BuildInfo } from './sw/types';
@@ -149,6 +151,15 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   const chatOff = route.name === 'chat' && mobile.fresh && !mobile.device?.chat;
   useEffect(() => { if (chatOff) replaceRoute({ name: 'inbox' }); }, [chatOff]);
 
+  const wide = useWide();
+  // A device the PC knows by id but that has no name yet names itself once, after its model and browser (docs/mockups/
+  // mobile-multi-device.html, part 3): the PC then shows « iPad · Safari », and so do the other devices' threads.
+  const named = useRef(false);
+  const unnamed = state === 'ready' && mobile.fresh && !!mobile.device?.id && !mobile.device.name;
+  useEffect(() => {
+    if (!unnamed || named.current) return;
+    if (store.renameDevice(ownName(undefined)) !== null) named.current = true;
+  }, [unnamed, store]);
   const pinned = link.pinned();
   // The pinned PC only while pairing: the name the old PC gave is not the one being paired.
   const pairingName = pinned?.name ?? null;
@@ -199,6 +210,21 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           />
         );
     }
+    const inbox = () => {
+      const notice = state === 'pc_offline' ? <Offline pcName={pcName} since={clock(mobile.syncedAt)} onRetry={retry} /> : undefined;
+      return <Inbox store={store} onReconnect={retry} notice={notice} />;
+    };
+    // A wide screen keeps the list on the left and opens what it lists on the right (docs/mockups/mobile-multi-device.html, part 5).
+    if (wide) {
+      switch (route.name) {
+        case 'inbox': return <Split list={inbox()} detail={<SplitEmpty {...copy.split.request} />} />;
+        case 'request': return <Split list={inbox()} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />} />;
+        case 'agents': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<SplitEmpty {...copy.split.agent} />} />;
+        case 'thread': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
+        case 'terminal': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
+        default: break;
+      }
+    }
     switch (route.name) {
       case 'agents': return <Agents store={store} onReconnect={retry} />;
       case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
@@ -207,10 +233,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
       case 'request': return <RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />;
       case 'connection': return <Connection store={store} fetchImpl={fetchImpl} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} />;
-      default: {
-        const notice = state === 'pc_offline' ? <Offline pcName={pcName} since={clock(mobile.syncedAt)} onRetry={retry} /> : undefined;
-        return <Inbox store={store} onReconnect={retry} notice={notice} />;
-      }
+      default: return inbox();
     }
   })();
 

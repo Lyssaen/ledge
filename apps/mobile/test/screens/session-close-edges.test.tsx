@@ -119,7 +119,7 @@ describe('what this phone’s close keeps saying after the session moved on', ()
     expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 
-  it('D3 — a later exit the agent made itself is not read as « fermée depuis le téléphone » (nor « de force »)', async () => {
+  it('D3 — a later exit the agent made itself is not read as « fermée depuis cet appareil » (nor « de force »)', async () => {
     const t = opened();
     await sendClose(t);
     result(t, 'session.close', 'applied', { how: 'killed' });
@@ -127,7 +127,7 @@ describe('what this phone’s close keeps saying after the session moved on', ()
     // Resumed on the PC, then the agent quit by itself two hours later.
     act(() => t.deliver({ type: 'session.updated', session: nova({ state: 'idle', startedAt: RESUMED }) }));
     act(() => t.deliver({ type: 'session.updated', session: nova({ state: 'exited', exitedAt: later(7_200_000), startedAt: RESUMED }) }));
-    expect(screen.queryByText(/Session fermée depuis le téléphone/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Session fermée depuis cet appareil/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Fermée de force/)).not.toBeInTheDocument();
   });
 

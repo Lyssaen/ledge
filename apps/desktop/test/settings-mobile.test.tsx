@@ -55,9 +55,9 @@ describe('Settings › Accès mobile', () => {
 
   it('« Taper dans les terminaux » shows only for a daemon that knows it, and sends mobile.terminal', async () => {
     const { sent, update, user } = show(ONLINE);
-    expect(screen.queryByRole('switch', { name: 'Taper dans les terminaux depuis le téléphone' })).toBeNull();
+    expect(screen.queryByRole('switch', { name: 'Taper dans les terminaux depuis un appareil lié' })).toBeNull();
     update({ ...ONLINE, terminalInput: false });
-    const sw = screen.getByRole('switch', { name: 'Taper dans les terminaux depuis le téléphone' });
+    const sw = screen.getByRole('switch', { name: 'Taper dans les terminaux depuis un appareil lié' });
     expect(sw).toHaveAttribute('aria-checked', 'false');
     await user.click(sw);
     expect(sent).toEqual([{ type: 'mobile.terminal', input: true }]);
@@ -159,6 +159,22 @@ describe('Settings › Accès mobile', () => {
     await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Révoquer' }));
     expect(sent).toEqual([{ type: 'mobile.device.revoke', id: 'fp-iphone' }]);
     expect(screen.getByText(/est révoqué/).closest('[role=status]')).toHaveTextContent('iPhone · Safari est révoqué.');
+  });
+
+  it('a device with a name: the name, then its model with the date; « Renommer » edits it inline, Enter sends, Escape cancels', async () => {
+    const ipad = { id: 'fp-ipad', label: 'iPad', kind: 'tablet' as const, name: 'iPad du salon', approvedAt: '2026-11-03T08:00:00.000Z', online: true };
+    const { sent, user } = show({ ...ONLINE, devices: [IPHONE, ipad] });
+    const row = within(screen.getByRole('article', { name: 'iPad du salon' }));
+    expect(row.getByText('iPad · lié le 3 nov. 2026')).toBeVisible();
+    await user.click(row.getByRole('button', { name: 'Renommer iPad du salon' }));
+    const field = row.getByRole('textbox', { name: 'Nom de l’appareil' });
+    expect(field).toHaveValue('iPad du salon');
+    await user.keyboard('{Escape}');
+    expect(row.queryByRole('textbox')).toBeNull();
+    await user.click(row.getByRole('button', { name: 'Renommer iPad du salon' }));
+    await user.clear(row.getByRole('textbox', { name: 'Nom de l’appareil' }));
+    await user.type(row.getByRole('textbox', { name: 'Nom de l’appareil' }), '  Tablette  {Enter}');
+    expect(sent).toEqual([{ type: 'mobile.device.rename', id: 'fp-ipad', name: 'Tablette' }]);
   });
 
   it('disabled with linked devices: they are said unable to connect, and none shows online', () => {

@@ -234,7 +234,7 @@ export class History {
           return q ? this.put(id, { ...q, status: 'unknown', byClose: true as const }) : undefined;
         }
         const perm = [...this.items(id)].reverse().find(i => i.kind === 'permission' && i.decision === undefined);
-        return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision, ...(ev.byClose ? { byClose: true as const } : {}) }) : undefined;
+        return perm && perm.kind === 'permission' ? this.put(id, { ...perm, decision: ev.decision, ...(ev.byClose ? { byClose: true as const } : {}), ...(ev.by ? { by: ev.by } : {}) }) : undefined;
       }
       case 'AgentMessage': {
         if (!ev.messageId || !ev.text) return undefined;

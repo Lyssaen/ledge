@@ -173,7 +173,7 @@ describe('a close from the phone, as the page follows it', () => {
     expect(screen.getByText('Fermée de force : l’agent ne répondait pas. Son dernier tour peut manquer.')).toBeInTheDocument();
     expect(screen.getByText('Sa conversation est gardée. Reprendre relance l’agent sur cette conversation, dans le même dossier.')).toBeInTheDocument();
     const time = new Date(EXITED).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    expect(screen.getByText(`Session fermée depuis le téléphone · ${time}`)).toBeInTheDocument();
+    expect(screen.getByText(`Session fermée depuis cet appareil · ${time}`)).toBeInTheDocument();
     // The primary button, with the resume icon before its words.
     expect(screen.getByRole('button', { name: 'Reprendre Nova' }).firstElementChild?.tagName).toBe('svg');
   });

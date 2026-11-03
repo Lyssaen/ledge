@@ -58,6 +58,26 @@ describe('« Lier un appareil »', () => {
     expect(screen.getByRole('button', { name: 'Refuser' })).toHaveFocus();
   });
 
+  it('an offline device of the same model: « Remplacer l’ancien … », checked, sends replaces; unchecked, it does not', async () => {
+    const old = { id: 'fp-old', label: 'Pixel · Chrome', approvedAt: '2026-10-02T08:00:00.000Z', online: false, lastSeenAt: new Date(Date.now() - 3 * 86_400_000).toISOString() };
+    const online = { id: 'fp-on', label: 'Pixel · Chrome', approvedAt: '2026-10-03T08:00:00.000Z', online: true };
+    const { sent, user } = show({ ...withPairings(pairing('p1')), devices: [old, online] });
+    const box = screen.getByRole('checkbox', { name: /Remplacer l’ancien « Pixel · Chrome »/ });
+    expect(box).toBeChecked();
+    expect(dialog()).toHaveTextContent('Vu il y a 3 j · lié le 2 oct. · il sera révoqué');
+    await user.click(box);
+    await user.click(screen.getByRole('button', { name: 'Approuver' }));
+    await user.click(box);
+    await user.click(screen.getByRole('button', { name: 'Approuver' }));
+    expect(sent).toEqual([{ type: 'mobile.pairing.approve', id: 'p1' }, { type: 'mobile.pairing.approve', id: 'p1', replaces: 'fp-old' }]);
+  });
+
+  it('no offline device of the same model: no « Remplacer »; an iPad is named in the instructions', () => {
+    show({ ...withPairings(pairing('p1', { label: 'iPad' })), devices: [{ id: 'fp-px', label: 'Pixel · Chrome', approvedAt: '2026-10-02T08:00:00.000Z', online: false }] });
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(dialog()).toHaveTextContent('Vérifiez que l’iPad affiche exactement ce code. Approuvez ici, puis confirmez sur l’iPad.');
+  });
+
   it('nothing to confirm (waiting, or mobile access off): no dialog', () => {
     const { update } = show(withPairings(pairing('p1', { state: 'waiting', code: null })));
     expect(dialog()).toBeNull();
@@ -70,8 +90,8 @@ describe('« Lier un appareil »', () => {
     await user.click(screen.getByRole('button', { name: 'Approuver' }));
     expect(sent).toEqual([{ type: 'mobile.pairing.approve', id: 'p1' }]);
     update(withPairings(pairing('p1', { state: 'approved' })));
-    const wait = screen.getByText(/Confirmez maintenant sur le téléphone\./);
-    expect(wait.closest('[aria-live]')).toHaveTextContent('Approuvé sur ce PC. Confirmez maintenant sur le téléphone.');
+    const wait = screen.getByText(/Confirmez maintenant sur l’appareil\./);
+    expect(wait.closest('[aria-live]')).toHaveTextContent('Approuvé sur ce PC. Confirmez maintenant sur l’appareil.');
     expect(screen.queryByRole('button', { name: 'Approuver' })).toBeNull();
     update(withPairings(pairing('p1', { state: 'linked' })));
     expect(dialog()).toHaveTextContent('Pixel · Chrome est lié.');
@@ -86,7 +106,7 @@ describe('« Lier un appareil »', () => {
   it('expired: « La demande a expiré » and « Fermer »', async () => {
     const { update, user } = show(withPairings(pairing('p1')));
     update(withPairings(pairing('p1', { state: 'expired' })));
-    expect(screen.getByRole('alert')).toHaveTextContent('La demande a expiré. Recommencez depuis le téléphone.');
+    expect(screen.getByRole('alert')).toHaveTextContent('La demande a expiré. Recommencez depuis l’appareil.');
     await user.click(screen.getAllByRole('button', { name: 'Fermer' }).at(-1)!);   // the result's « Fermer », not the title's
     expect(dialog()).toBeNull();
   });

@@ -33,7 +33,7 @@ export function useDialog(box: RefObject<HTMLElement | null>, onClose: () => voi
   }, [box]);
 }
 
-/** A sheet risen from the bottom over a dimmed screen, the phone's one form of modal; Escape and a tap on the dim close it. */
+/** A sheet risen from the bottom over a dimmed screen, the phone's one form of modal (centred on a wide screen); Escape and a tap on the dim close it. */
 export function Sheet({ labelledBy, onClose, children }: { labelledBy: string; onClose: () => void; children: ReactNode }) {
   const box = useRef<HTMLElement>(null);
   useDialog(box, onClose);
@@ -42,9 +42,9 @@ export function Sheet({ labelledBy, onClose, children }: { labelledBy: string; o
       <div className="absolute inset-0 bg-black/50" aria-hidden="true" onClick={onClose} />
       <section
         ref={box} role="dialog" aria-modal="true" aria-labelledby={labelledBy} tabIndex={-1}
-        className="absolute inset-x-0 bottom-0 mx-auto flex max-w-[480px] flex-col gap-4 rounded-t-[28px] border-t border-line bg-surface px-5 pt-3 pb-[calc(34px+env(safe-area-inset-bottom))] shadow-[var(--shadow-overlay)] outline-none"
+        className="absolute inset-x-0 bottom-0 mx-auto flex max-w-[480px] flex-col gap-4 rounded-t-[28px] border-t border-line bg-surface px-5 pt-3 pb-[calc(34px+env(safe-area-inset-bottom))] shadow-[var(--shadow-overlay)] outline-none tablet:inset-x-auto tablet:bottom-auto tablet:top-1/2 tablet:left-1/2 tablet:max-h-[calc(100dvh-48px)] tablet:w-[480px] tablet:-translate-x-1/2 tablet:-translate-y-1/2 tablet:overflow-y-auto tablet:rounded-[24px] tablet:border tablet:px-6 tablet:pt-6 tablet:pb-6"
       >
-        <span className="h-[5px] w-9 self-center rounded-full bg-muted/40" aria-hidden="true" />
+        <span className="h-[5px] w-9 self-center rounded-full bg-muted/40 tablet:hidden" aria-hidden="true" />
         {children}
       </section>
     </div>,

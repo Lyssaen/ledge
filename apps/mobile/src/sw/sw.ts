@@ -26,7 +26,7 @@ interface WorkerScope {
   location: { origin: string };
   registration: {
     active: object | null;
-    showNotification(title: string, o?: { body?: string; tag?: string; data?: { url: string }; icon?: string; renotify?: boolean }): Promise<void>;
+    showNotification(title: string, o?: { body?: string; tag?: string; data?: { url: string; kind?: string }; icon?: string; renotify?: boolean }): Promise<void>;
     setAppBadge?(n: number): Promise<void>;
   };
   skipWaiting(): Promise<void>;
@@ -189,7 +189,7 @@ function payloadOf(raw: unknown): PushPayload | null {
   const p = raw as Record<string, unknown>;
   const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
   const ok =
-    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decision') &&
+    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decision' || p.kind === 'resolved') &&
     str(p.title, 80) && str(p.body, 120) && str(p.url, 300) && PUSH_URL.test(p.url) &&
     typeof p.badge === 'number' && Number.isInteger(p.badge) && p.badge >= 0 && p.badge <= 999 &&
     typeof p.tag === 'string' && PUSH_TAG.test(p.tag);
@@ -202,7 +202,8 @@ sw.addEventListener('push', (e) => {
   try { payload = payloadOf(e.data?.json()); } catch { /* unreadable: the fallback below */ }
   e.waitUntil((async () => {
     if (!payload) return sw.registration.showNotification('Ledge', { body: 'Une demande attend', tag: 'ledge', renotify: true });
-    await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' });
+    // `resolved` replaces the request's notification under its tag, silently; `kind` lets the app close a stale one.
+    await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url, kind: payload.kind }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' && payload.kind !== 'resolved' });
     // The badge is a courtesy: neither a throw nor a rejection of it may fail the notification.
     try { await sw.registration.setAppBadge?.(payload.badge); } catch { /* ignored */ }
   })());

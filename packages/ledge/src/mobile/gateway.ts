@@ -9,7 +9,7 @@ import {
 } from '@ledge/protocol';
 import { ModelRefusalSchema, type HumanAnswer, type ModelRefusal, type OpenRigAnswered, type OpenRigAsksChanged, type Tool } from '@ledge/protocol';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
-import { BROADCAST_SESSIONS_MAX } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX, type DecidedBy, type DeviceKind } from '@ledge/protocol';
 import { PHONE_ROW_SUMMARY_MAX } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
@@ -85,7 +85,7 @@ const ROW_WAIT_MS = 15_000;
 const ROWS_IN_FLIGHT = 8;
 
 export function createPhoneGateway(deps: {
-  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'>;
+  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'> & Partial<Pick<MobileService, 'deviceInfo' | 'rename'>>;
   /** The relying party of the current relay; none when it is not served over https or from localhost. */
   rp: () => Rp | null;
   challenges: ChallengeStore;
@@ -223,6 +223,19 @@ export function createPhoneGateway(deps: {
     if (!p) return 'off';
     return key !== undefined && p.key !== key ? 'stale' : 'on';
   };
+  /** The device's kind and the name the user gave it, for its own snapshot. */
+  const ownInfo = (deviceId: string): { kind?: DeviceKind; name?: string } => {
+    const d = mobile.deviceInfo?.(deviceId);
+    return d ? { kind: d.kind, ...(d.name ? { name: d.name } : {}) } : {};
+  };
+
+  /** Who a device's decision is from: its id and its name now (the user's, else its label). */
+  const decidedBy = (deviceId: string): DecidedBy => {
+    const d = mobile.deviceInfo?.(deviceId);
+    const name = (d?.name ?? d?.label ?? '').trim();
+    return { kind: 'device', id: deviceId, name: name ? clip(name, 60).text : 'Appareil' };
+  };
+
   const snapshot = (deviceId: string): PhoneServerMessage => {
     const push = pushStatus(deviceId);
     const f = followers.get(deviceId);
@@ -230,7 +243,7 @@ export function createPhoneGateway(deps: {
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, rigRows: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
       ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), broadcast: true as const },
-    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}) }
+    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
     return deps.models ? { ...message, daemon: { ...message.daemon, models: true } } : message;
@@ -295,7 +308,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -377,10 +390,11 @@ export function createPhoneGateway(deps: {
   };
 
   /** The local message the operation stands for, built field by field. */
-  const local = (msg: SessionOperation): ClientMessage => {
+  const local = (deviceId: string, msg: SessionOperation): ClientMessage => {
     switch (msg.type) {
       case 'session.decide':
-        return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key } };
+        // `by` is the gateway's own: the device that sent it, as it is named now (nothing the device wrote is kept).
+        return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key }, by: decidedBy(deviceId) };
       case 'session.reply': return { type: 'session.reply', id: msg.id, text: msg.text, ...(msg.attachments?.length ? { attachments: msg.attachments } : {}) };
       case 'session.answer': return { type: 'session.answer', id: msg.id, requestId: msg.requestId, answers: msg.answers, ...(msg.cancel ? { cancel: true } : {}) };
       case 'session.interrupt': return { type: 'session.interrupt', id: msg.id };
@@ -790,10 +804,15 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'credential.register') return register(deviceId, msg);
     // Applied here; the device is revoked by `write`, once the answer has left.
     if (msg.type === 'device.forget') return { status: 'applied' };
+    if (msg.type === 'device.rename') {
+      if (!mobile.rename) return { status: 'rejected', reason: 'unavailable' };
+      mobile.rename(deviceId, msg.name);
+      return { status: 'applied' };
+    }
     if (msg.type === 'push.subscribe') {
       // Already refused by the schema; checked again here because the PC is the one that will send to it.
       if (!pushEndpointAllowed(msg.subscription.endpoint)) return { status: 'rejected', reason: 'invalid' };
-      mobile.setPush(deviceId, { endpoint: msg.subscription.endpoint, p256dh: msg.subscription.keys.p256dh, auth: msg.subscription.keys.auth, key: msg.key });
+      mobile.setPush(deviceId, { endpoint: msg.subscription.endpoint, p256dh: msg.subscription.keys.p256dh, auth: msg.subscription.keys.auth, key: msg.key, ...(msg.resolved ? { resolved: true as const } : {}) });
       return { status: 'applied' };
     }
     if (msg.type === 'push.unsubscribe') {
@@ -812,7 +831,7 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'openrig.answer') return rigAnswer(deviceId, msg);
     const refused = precheck(deviceId, msg);
     if (refused) return refused;
-    const out = local(msg);
+    const out = local(deviceId, msg);
     if (out.type === 'session.model') return modelChange(out);
     let error: { code?: string } | undefined;
     await deps.dispatch(out, m => {
@@ -843,7 +862,7 @@ export function createPhoneGateway(deps: {
     registry.finish(msg.op, outcome.status, outcome.reason, outcome.how, outcome.report, outcome.detail);
     result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how, outcome.report);
     // The phone learns it can confirm from the snapshot that follows.
-    if (msg.type === 'credential.register' && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
+    if ((msg.type === 'credential.register' || msg.type === 'device.rename') && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {
       // Revoking closes the channel and drops what is queued: the answer must be on its way first (bounded: a slow relay must not hold the revoke).
       let timer: ReturnType<typeof setTimeout> | undefined;

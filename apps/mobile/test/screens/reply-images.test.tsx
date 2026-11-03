@@ -136,7 +136,7 @@ describe('an image in the thread', () => {
 
   it('a ref without a preview says it is too heavy for the phone and fetches nothing', () => {
     const t = opened([prompt([{ ...REF, preview: false }])]);
-    expect(screen.getByText('Image trop lourde pour le téléphone · ouvrir sur le PC')).toBeInTheDocument();
+    expect(screen.getByText('Image trop lourde pour cet appareil · ouvrir sur le PC')).toBeInTheDocument();
     expect(t.of('attachment.get')).toEqual([]);
   });
 

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { copy } from '../copy';
+import { deviceLabel } from '../link/label';
 import type { Reach } from '../link/link';
 import type { PairingState } from '../link/pairing';
 import { href } from '../router';
@@ -70,7 +71,7 @@ export function Compare({ step, login, pcName, lost, stalled = false, reach = 'p
       <Board top="pt-40">
         <div className="flex flex-col items-center gap-3.5 text-center">
           <Mascot size={88} />
-          <h1 className={H1}>{C.doneTitle(step.pc.name ?? pcName ?? copy.yourPc)}</h1>
+          <h1 className={H1}>{C.doneTitle(step.pc.name ?? pcName ?? copy.yourPc, deviceLabel(globalThis.navigator?.userAgent ?? '', globalThis.navigator?.maxTouchPoints ?? 0).replace(/ tablette$/, ''))}</h1>
           <p className="max-w-[300px] text-muted">{C.doneBody}</p>
         </div>
         <Fill />

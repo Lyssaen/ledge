@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TRANSMISSION_OPS } from './tasks.js';
 import { ATTACHMENTS_MAX, AttachmentRefSchema } from './attachments.js';
 import { RigInfoSchema } from './rigMessages.js';
+import { DecidedBySchema } from './decisions.js';
 
 /** Native session tracking (spec 2026-10-13 §3): what a session's thread is made of. */
 export const ToolStatusSchema = z.enum(['running', 'success', 'failed', 'unknown']);
@@ -23,8 +24,8 @@ export const ThreadItemSchema = z.discriminatedUnion('kind', [
     /** Images the tool returned (a browser screenshot), in order; `imagesDropped`: some were not kept. */
     images: z.array(AttachmentRefSchema).max(ATTACHMENTS_MAX).optional(), imagesDropped: z.literal(true).optional() }),
   /** `unknown`: answered in the terminal, the daemon only saw the prompt go away; `always`: allowed and not asked again;
-   *  `byClose`: denied by Ledge closing the session. */
-  z.object({ kind: z.literal('permission'), ...base, tool: z.string(), text: z.string(), decision: z.enum(['accept', 'deny', 'always', 'unknown']).optional(), byClose: z.literal(true).optional() }),
+   *  `byClose`: denied by Ledge closing the session; `by`: who answered it from Ledge (the PC or a device, its name then). */
+  z.object({ kind: z.literal('permission'), ...base, tool: z.string(), text: z.string(), decision: z.enum(['accept', 'deny', 'always', 'unknown']).optional(), byClose: z.literal(true).optional(), by: DecidedBySchema.optional() }),
   z.object({ kind: z.literal('reply'), ...base, text: z.string() }),
   z.object({ kind: z.literal('helper'), ...base, task: z.string(), agentType: z.string().optional(), state: z.enum(['working', 'exited']) }),
   /** A message this session sent to another agent; `id` is the tool_use_id, `to` the address it used, `peer` the Ledge session id, `received` the paired item's id in the peer's thread, `via` set when Ledge's mailbox carries it. */

@@ -277,7 +277,7 @@ export function createPhoneLink(opts: {
     const id = identity;
     const p: Pairing = startPairing({
       identity: id,
-      label: deviceLabel(globalThis.navigator?.userAgent ?? ''),
+      label: deviceLabel(globalThis.navigator?.userAgent ?? '', globalThis.navigator?.maxTouchPoints ?? 0),
       send: (f: SealedFrame) => {
         // A frame the relay never got would leave both sides waiting until expiry: give up at once instead.
         if (!sock.send('pc', f)) {

@@ -301,7 +301,7 @@ describe('the pinned service worker', () => {
       const o = origin();
       const w = await firstVisit(o);
       await w.push(payload);
-      expect(w.self.registration.showNotification).toHaveBeenCalledWith('api attend votre accord', { body: 'rm -rf build', tag: 's1-k1', data: { url: '/#/request/s1/k1' }, icon: '/icon-192.png', renotify: true });
+      expect(w.self.registration.showNotification).toHaveBeenCalledWith('api attend votre accord', { body: 'rm -rf build', tag: 's1-k1', data: { url: '/#/request/s1/k1', kind: 'request' }, icon: '/icon-192.png', renotify: true });
       expect(w.self.registration.setAppBadge).toHaveBeenCalledWith(3);
     });
 
@@ -333,8 +333,14 @@ describe('the pinned service worker', () => {
       const o = origin();
       const w = await firstVisit(o);
       await w.push({ ...payload, kind: 'decision', title: 'Otto attend votre décision', body: 'Fusionner feat/roles ?', url: '/#/chat', tag: 't91b0d4', badge: 2 });
-      expect(w.self.registration.showNotification).toHaveBeenCalledWith('Otto attend votre décision', { body: 'Fusionner feat/roles ?', tag: 't91b0d4', data: { url: '/#/chat' }, icon: '/icon-192.png', renotify: true });
+      expect(w.self.registration.showNotification).toHaveBeenCalledWith('Otto attend votre décision', { body: 'Fusionner feat/roles ?', tag: 't91b0d4', data: { url: '/#/chat', kind: 'decision' }, icon: '/icon-192.png', renotify: true });
       expect(w.self.registration.setAppBadge).toHaveBeenCalledWith(2);
+    });
+
+    it('a resolved push replaces the request\'s notification under its tag, without ringing again', async () => {
+      const w = await firstVisit(origin());
+      await w.push({ ...payload, kind: 'resolved', title: 'api · traitée', body: 'sur iPad', url: '/#/thread/s1', badge: 0 });
+      expect(w.self.registration.showNotification).toHaveBeenCalledWith('api · traitée', { body: 'sur iPad', tag: 's1-k1', data: { url: '/#/thread/s1', kind: 'resolved' }, icon: '/icon-192.png', renotify: false });
     });
 
     it('a push still shows when the badge API is missing', async () => {

@@ -116,7 +116,7 @@ describe('the app', () => {
     expect(t.of('device.forget')).toEqual([]);
     expect(t.calls).toEqual(['signOut']);
     act(() => t.set('signed_out'));
-    expect(screen.getByText('Le PC n’a pas confirmé. Retirez ce téléphone dans Ledge sur le PC, section Accès mobile.')).toBeInTheDocument();
+    expect(screen.getByText('Le PC n’a pas confirmé. Retirez cet appareil dans Ledge sur le PC, section Accès mobile.')).toBeInTheDocument();
   });
 
   it('« Se déconnecter » without an answer from the PC: erased after 5 s, with the note', async () => {
@@ -213,7 +213,7 @@ describe('the app', () => {
     expect(storage.getItem('other.app')).toBe('kept');
 
     const t = app('unpaired', { lost: true });
-    expect(screen.getByText('Ce téléphone n’est plus lié')).toBeInTheDocument();
+    expect(screen.getByText('Cet appareil n’est plus lié')).toBeInTheDocument();
     expect(t.calls).toEqual(['startPairing']);
   });
 
@@ -277,7 +277,7 @@ describe('the app', () => {
       act(() => { t.setPairing({ step: 'linked', pc }); t.setPinned(pc); t.set('ready'); });
       act(() => t.deliver(withDevice(false)));
       expect(await screen.findByRole('heading', { name: 'Protéger les accords' })).toBeInTheDocument();
-      expect(screen.getByText('Face ID ou le code de ce téléphone sera demandé pour autoriser une commande à impact élevé.')).toBeInTheDocument();
+      expect(screen.getByText('Face ID ou le code de cet appareil sera demandé pour autoriser une commande à impact élevé.')).toBeInTheDocument();
       await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
       fireEvent.click(screen.getByRole('link', { name: 'Plus tard' }));
       expect(screen.getByRole('heading', { name: 'À traiter' })).toBeInTheDocument();

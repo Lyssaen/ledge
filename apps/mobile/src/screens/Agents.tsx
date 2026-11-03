@@ -5,7 +5,7 @@ import { agentsOf, type AgentRow } from '../model/agents';
 import { closingHere, endedAtLabel } from '../model/sessionEnd';
 import { useNow } from '../useNow';
 import { requestsOf } from '../model/requests';
-import { href } from '../router';
+import { href, useRoute } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
 import { Header, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
@@ -21,8 +21,11 @@ import { Icon } from '../ui/icons';
  * and resuming are done from the session's page, where what the agent was doing shows: a row is only a link.
  */
 function Row({ row, session, offline, threshold, plan, closing, now }: { row: AgentRow; session: PhoneSession | undefined; offline: boolean; threshold: number; plan?: boolean; closing: boolean; now: number }) {
+  const route = useRoute();
+  // The one opened beside the list, on a wide screen.
+  const open = (route.name === 'thread' || route.name === 'terminal') && route.sessionId === row.sessionId;
   return (
-    <a href={href({ name: 'thread', sessionId: row.sessionId })} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40 active:bg-raised/60">
+    <a href={href({ name: 'thread', sessionId: row.sessionId })} aria-current={open ? 'page' : undefined} className="flex gap-3 border-b border-line py-4 hover:bg-raised/40 active:bg-raised/60 aria-[current=page]:-mx-3 aria-[current=page]:rounded-card aria-[current=page]:border-transparent aria-[current=page]:bg-raised aria-[current=page]:px-3">
       <div className="mt-[3px]"><MobileBot tool={row.tool} seed={row.sessionId} state={session?.state ?? 'idle'} frozen={offline} /></div>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">

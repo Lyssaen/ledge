@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
-import type { MobileClientMessage, MobilePairing, MobileState } from '@ledge/protocol';
+import { deviceKindOfLabel, type DeviceKind, type MobileClientMessage, type MobilePairing, type MobileState } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
+import { spanOf } from '../list/time';
 import { Modal } from '../shell/Modal';
 import { clearPairingRequest, setPairingDialogOpen, usePairingRequest } from './pairingRequest';
 
 /** The mockup's phone (docs/mockups/mobile-access/main.tsx): the dialog's device, Settings › Mobile access's icon and devices.
  *  It lives here, in the first bundle with the dialog, so the dialog does not pull the settings chunk. */
 export const PHONE = ['M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z', 'M11 18h2'];
+/** A tablet, for a device whose kind says so (docs/mockups/mobile-multi-device.html, part 4). */
+export const TABLET = ['M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M11 18h2'];
+export const deviceGlyph = (kind: DeviceKind | undefined) => kind === 'tablet' ? TABLET : PHONE;
+
+/** The approved device a pairing most likely replaces: the same model (its label), offline, the one seen last. */
+export function replaceable(m: MobileState | undefined, label: string): MobileState['devices'][number] | null {
+  const same = (m?.devices ?? []).filter(d => !d.online && d.label === label);
+  return same.sort((a, b) => (b.lastSeenAt ?? b.approvedAt).localeCompare(a.lastSeenAt ?? a.approvedAt))[0] ?? null;
+}
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 /** The oldest request first: every pairing lives as long, so the one that expires first came first. */
@@ -87,13 +97,24 @@ export function usePairingDialogState(mobile: MobileState | undefined): PairingS
  * expired (« Fermer »), refused (closes). Escape, the backdrop and the title's close only close it.
  */
 export function PairingDialog({ shown, mobile, fleet, notify }: { shown: PairingShown | null; mobile: MobileState | undefined; fleet: { sendMobile(msg: MobileClientMessage): void }; notify(text: string): void }): JSX.Element | null {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const c = t.pairing;
   const body = useId();
   const current = shown?.pairing ?? null;
   const waiting = current !== null && (current.state === 'confirm' || current.state === 'approved');
   const left = useSecondsLeft(current?.expiresAt ?? null, waiting);
+  // « Remplacer l'ancien … », checked unless the user unchecks it, for this pairing.
+  const [keep, setKeep] = useState<string | null>(null);
   if (!shown || !current) return null;
+  const old = current.state === 'confirm' ? replaceable(mobile, current.label) : null;
+  const replacing = old !== null && keep !== current.id;
+  const date = new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short' });
+  const the = c.the(current.label);
+  const seenOf = (iso: string | undefined) => {
+    if (!iso) return t.settings.mobile.offline;
+    const span = spanOf(Date.now() - (Date.parse(iso) || 0));
+    return span === 'now' ? t.settings.mobile.seenNow : t.settings.mobile.seenAgo(`${span.n} ${t.list.when.units[span.unit]}`);
+  };
 
   const send = (msg: MobileClientMessage): boolean => {
     try { fleet.sendMobile(msg); return true; } catch (e) {
@@ -111,7 +132,7 @@ export function PairingDialog({ shown, mobile, fleet, notify }: { shown: Pairing
       <div className="pair-content">
         {waiting && <>
           <p id={body}>{login ? <>{c.intro.before}<strong>@{login}</strong>{c.intro.after}</> : c.introNoAccount}</p>
-          <div className="pair-device"><span className="machine-glyph" aria-hidden="true"><Icon d={PHONE} size={16} /></span><strong>{current.label}</strong></div>
+          <div className="pair-device"><span className="machine-glyph" aria-hidden="true"><Icon d={deviceGlyph(deviceKindOfLabel(current.label))} size={16} /></span><strong>{current.label}</strong></div>
           <div className={current.state === 'approved' ? 'pair-code dim' : 'pair-code'}>
             <span className="pair-code-label">{c.codeLabel}</span>
             <output className="mono" aria-label={c.codeSpelled(spelled)}>
@@ -120,19 +141,25 @@ export function PairingDialog({ shown, mobile, fleet, notify }: { shown: Pairing
           </div>
         </>}
         {current.state === 'confirm' && <>
-          <p>{c.check}</p>
+          <p>{c.check(the)}</p>
           <p className="pair-warn">{c.warn}</p>
+          {old && (
+            <label className="pair-replace">
+              <input type="checkbox" checked={replacing} onChange={e => setKeep(e.target.checked ? null : current.id)} />
+              <span><strong>{c.replace(old.name ?? old.label)}</strong><span className="set-hint">{c.replaceHint(seenOf(old.lastSeenAt), date.format(Date.parse(old.approvedAt)))}</span></span>
+            </label>
+          )}
           <div className="pair-actions">
             <span className="set-hint pair-expiry">{c.expiresIn(mmss(left))}</span>
             <span className="spacer" />
             <Button autoFocus onClick={() => { if (send({ type: 'mobile.pairing.deny', id: current.id })) dismiss(); }}>{c.deny}</Button>
-            <Button variant="primary" onClick={() => send({ type: 'mobile.pairing.approve', id: current.id })}>{c.approve}</Button>
+            <Button variant="primary" onClick={() => send({ type: 'mobile.pairing.approve', id: current.id, ...(replacing && old ? { replaces: old.id } : {}) })}>{c.approve}</Button>
           </div>
         </>}
         {current.state === 'approved' && (
           <div className="set-well pair-wait">
             <span className="ledge-spin" aria-hidden="true"><Icon d={ICONS.refresh.d} size={14} /></span>
-            <span role="status" aria-live="polite"><strong>{c.approved.strong}</strong>{c.approved.rest}</span>
+            <span role="status" aria-live="polite"><strong>{c.approved.strong}</strong>{c.approved.rest(the)}</span>
           </div>
         )}
         {current.state === 'linked' && <>
@@ -140,7 +167,7 @@ export function PairingDialog({ shown, mobile, fleet, notify }: { shown: Pairing
           <div className="pair-actions"><span className="spacer" /><Button variant="primary" autoFocus onClick={dismiss}>{c.close}</Button></div>
         </>}
         {current.state === 'expired' && <>
-          <div role="alert" className="set-well bad pair-result" id={body}><Icon d={ICONS.close.d} size={16} /><span>{c.expired}</span></div>
+          <div role="alert" className="set-well bad pair-result" id={body}><Icon d={ICONS.close.d} size={16} /><span>{c.expired(the)}</span></div>
           <div className="pair-actions"><span className="spacer" /><Button variant="primary" autoFocus onClick={dismiss}>{c.close}</Button></div>
         </>}
       </div>
