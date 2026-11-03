@@ -23,12 +23,12 @@ describe('comparing the code', () => {
     expect(screen.getByText(/Ledge vient d’afficher un code sur/)).toHaveTextContent('Ledge vient d’afficher un code sur votre PC. Il doit être identique à celui-ci.');
     expect(screen.getByLabelText('Code de liaison 123 456')).toHaveTextContent('123456');
     expect([...screen.getByLabelText('Code de liaison 123 456').children].map((c) => c.textContent)).toEqual(['123', '456']);
-    expect(screen.getByText('Calculé à partir des clés du PC et de ce téléphone')).toBeInTheDocument();
+    expect(screen.getByText('Calculé à partir des clés du PC et de cet appareil')).toBeInTheDocument();
     expect(await screen.findByText('@paradow')).toBeInTheDocument();
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Les codes sont identiques', 'Ils sont différents']);
   });
 
-  it('same → « Confirmez sur le PC » while pair_ok is missing, then « Téléphone lié à <nom> » until « Voir ce qui attend »', () => {
+  it('same → « Confirmez sur le PC » while pair_ok is missing, then « <appareil> lié à <nom> » until « Voir ce qui attend »', () => {
     const t = app('pairing');
     act(() => t.setPairing(compare()));
     fireEvent.click(screen.getByRole('button', { name: 'Les codes sont identiques' }));
@@ -45,8 +45,8 @@ describe('comparing the code', () => {
     });
     act(() => t.deliver(snapshot([], 'PC-Desan')));
     act(() => t.setPinned({ ...pc, name: 'PC-Desan' }));
-    expect(screen.getByRole('heading', { name: 'Téléphone lié à PC-Desan' })).toBeInTheDocument();
-    expect(screen.getByText('Vous pouvez lire, approuver et écrire. Retirez ce téléphone à tout moment depuis Ledge sur le PC.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Appareil lié à PC-Desan' })).toBeInTheDocument();
+    expect(screen.getByText('Vous pouvez lire, approuver et écrire. Retirez cet appareil à tout moment depuis Ledge sur le PC.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'Voir ce qui attend' }));
     expect(screen.getByRole('heading', { name: 'À traiter' })).toBeInTheDocument();
   });
@@ -75,7 +75,7 @@ describe('comparing the code', () => {
     const t = app('pairing');
     act(() => t.setReach('relay_unreachable'));
     expect(screen.getByRole('heading', { name: 'Relais injoignable' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Ce téléphone n’arrive pas à joindre le relais Ledge. Vérifiez sa connexion à internet, puis réessayez.');
+    expect(screen.getByRole('status')).toHaveTextContent('Cet appareil n’arrive pas à joindre le relais Ledge. Vérifiez sa connexion à internet, puis réessayez.');
     expect(screen.queryByText('En attente du code du PC…')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(t.calls).toEqual(['retry']);
@@ -104,7 +104,7 @@ describe('comparing the code', () => {
     expect(t.calls).toEqual(['cancel']);
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Liaison annulée');
-    expect(alert).toHaveTextContent('Des codes différents signifient que ce téléphone et le PC ne voient pas les mêmes clés.');
+    expect(alert).toHaveTextContent('Des codes différents signifient que cet appareil et le PC ne voient pas les mêmes clés.');
     fireEvent.click(screen.getByRole('button', { name: 'Recommencer' }));
     expect(t.calls).toEqual(['cancel', 'startPairing']);
   });
@@ -142,7 +142,7 @@ describe('comparing the code', () => {
     });
     expect(screen.getByText(/Ledge vient d’afficher un code sur/)).toHaveTextContent('Ledge vient d’afficher un code sur votre PC.');
     act(() => t.setPairing({ step: 'linked', pc }));
-    expect(screen.getByRole('heading', { name: 'Téléphone lié à votre PC' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Appareil lié à votre PC' })).toBeInTheDocument();
   });
 
   it('a pairing that could not start (no identity, keys not stored) → « Recommencer », not a spinner forever', () => {

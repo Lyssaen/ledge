@@ -170,7 +170,7 @@ describe('the thread of a session closed from the phone', () => {
     const ended = nova({ state: 'exited', exitedAt: AT });
     const items = threadItems([{ kind: 'reply', id: 'r1', at: '2026-10-29T18:30:00.000Z', turn: 1, text: 'Fait.' }], ended, op('applied', { how: 'exit' }));
     const time = new Date(AT).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    expect(items.at(-1)).toEqual({ key: `closed-${AT}`, kind: 'event', label: `Session fermée depuis le téléphone · ${time}`, at: AT });
+    expect(items.at(-1)).toEqual({ key: `closed-${AT}`, kind: 'event', label: `Session fermée depuis cet appareil · ${time}`, at: AT });
     // Ended without this phone: no such line.
     expect(threadItems([], ended, {}).some(i => i.kind === 'event')).toBe(false);
   });

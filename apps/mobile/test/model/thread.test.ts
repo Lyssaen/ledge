@@ -38,7 +38,18 @@ describe('threadItems', () => {
     const D = '22222222-2222-4222-8222-222222222222';
     const decided: Op = { op: D, message: { type: 'session.decide', op: D, id: 'a', decision: 'accept', expect: { key: 'k', kind: 'permission', text: 'pnpm build' } }, phase: 'applied', at: T(1) };
     const [item] = threadItems([permission('t2', 1, 'pnpm build', 'accept')], s(), ops(decided));
-    expect(item).toMatchObject({ kind: 'event', label: 'Accord pris en compte · depuis le téléphone' });
+    expect(item).toMatchObject({ kind: 'event', label: 'Accord pris en compte · depuis cet appareil' });
+  });
+
+  it('names who decided when the PC says it: this device, another one by its name then, or the PC; never guesses over it', () => {
+    const D = '22222222-2222-4222-8222-222222222222';
+    // An applied decision of this device on the same text: the PC's `by` wins over it.
+    const decided: Op = { op: D, message: { type: 'session.decide', op: D, id: 'a', decision: 'accept', expect: { key: 'k', kind: 'permission', text: 'pnpm build' } }, phase: 'applied', at: T(1) };
+    const by = (b: Extract<ThreadItem, { kind: 'permission' }>['by']): ThreadItem => ({ ...permission('t2', 1, 'pnpm build', 'accept'), by: b } as ThreadItem);
+    const label = (item: ThreadItem, self: string | null) => threadItems([item], s(), ops(decided), Date.now(), [], new Map(), self)[0];
+    expect(label(by({ kind: 'device', id: 'fp-ipad', name: 'iPad · Safari' }), 'fp-self')).toMatchObject({ label: 'Accord pris en compte · depuis iPad · Safari' });
+    expect(label(by({ kind: 'device', id: 'fp-self', name: 'Android · Chrome' }), 'fp-self')).toMatchObject({ label: 'Accord pris en compte · depuis cet appareil' });
+    expect(label(by({ kind: 'pc' }), 'fp-self')).toMatchObject({ label: 'Accord pris en compte · depuis le PC' });
   });
 
   it('marks the items the PC shortened', () => {

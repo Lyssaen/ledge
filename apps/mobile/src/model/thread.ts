@@ -35,17 +35,26 @@ export const messagesOf = (sessionId: string, ops: Record<string, Op>): Instruct
     .filter((o): o is Instruction => o.message.type === 'session.reply' && o.message.expect === null && o.message.id === sessionId)
     .sort((a, b) => a.at.localeCompare(b.at));
 
-/** Whether one of this phone's applied decisions answered that permission. */
+/** Whether one of this device's applied decisions answered that permission (a PC that does not say who decided). */
 function decidedHere(item: Extract<PcItem, { kind: 'permission' }>, sessionId: string, ops: Record<string, Op>): boolean {
   return Object.values(ops).some(o => o.phase === 'applied' && o.message.type === 'session.decide' && o.message.id === sessionId
     && o.message.expect.text === item.text && o.message.decision === item.decision);
 }
 
-function eventLabel(item: Extract<PcItem, { kind: 'permission' }>, sessionId: string, ops: Record<string, Op>): string | null {
+/** Who decided, as the thread says it: this device, another one by its name then, or the PC. `self`: this device's id. */
+export function decidedFrom(item: Extract<PcItem, { kind: 'permission' }>, sessionId: string, ops: Record<string, Op>, self: string | null): string {
+  const E = copy.thread.event;
+  if (item.by?.kind === 'device') return item.by.id === self ? E.fromHere : E.fromDevice(item.by.name);
+  if (item.by?.kind === 'pc') return E.fromPc;
+  // A PC that does not say who: this device's own decisions are known, anything else is said to be the PC's.
+  return decidedHere(item, sessionId, ops) ? E.fromHere : E.fromPc;
+}
+
+function eventLabel(item: Extract<PcItem, { kind: 'permission' }>, sessionId: string, ops: Record<string, Op>, self: string | null): string | null {
   const E = copy.thread.event;
   if (!item.decision) return null;
   if (item.decision === 'unknown') return E.resolved;
-  const from = decidedHere(item, sessionId, ops) ? E.fromPhone : E.fromPc;
+  const from = decidedFrom(item, sessionId, ops, self);
   return item.decision === 'deny' ? E.deny(from) : E.accept(from);
 }
 
@@ -65,9 +74,9 @@ const sameText = (prompt: string, sent: string, shortened: boolean) => {
  * window) goes once the PC lists something `TAKEN_WINDOW` past it: the PC moved on without it. Of the tools only those that returned images show, as a
  * capture; helpers and messages between agents are left to the terminal, but for OpenRig's (the items that carry `rig`:
  * a bubble, a task card, a notice line, each after its time); a permission shows once decided. `sessions`: the phone's,
- * to name the seat an OpenRig block is from.
+ * to name the seat an OpenRig block is from. `self`: this device's id, to tell its own decisions from another device's.
  */
-export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<string, Op>, now: number = Date.now(), cut: string[] = [], sessions: ReadonlyMap<string, PhoneSession> = new Map()): ThreadItem[] {
+export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<string, Op>, now: number = Date.now(), cut: string[] = [], sessions: ReadonlyMap<string, PhoneSession> = new Map(), self: string | null = null): ThreadItem[] {
   let out: ThreadItem[] = [];
   const shortened = new Set(cut);
   const mark = (id: string) => shortened.has(id) ? { cut: true as const } : {};
@@ -104,7 +113,7 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
     else if (i.kind === 'reply') out.push({ key: i.id, kind: 'agent', text: i.text, at: i.at, ...mark(i.id) });
     else if (i.kind === 'tool' && i.images?.length) out.push({ key: i.id, kind: 'capture', label: isBrowserCapture(i.tool) ? copy.thread.capture : toolShortName(i.tool), at: i.at, images: i.images });
     else if (i.kind === 'permission') {
-      const label = eventLabel(i, session.id, ops);
+      const label = eventLabel(i, session.id, ops, self);
       if (label) out.push({ key: i.id, kind: 'event', label, at: i.at });
     }
     if (out.length > before) { lastTime = null; lastPacket = null; }

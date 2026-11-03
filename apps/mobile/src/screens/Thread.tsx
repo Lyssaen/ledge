@@ -147,7 +147,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
 
   const scroller = useRef<HTMLElement>(null);
   const gone = thread?.status === 'gone';
-  const items = session && !gone ? threadItems(thread?.items ?? [], session, ops, now, thread?.cut ?? [], state.sessions) : [];
+  const items = session && !gone ? threadItems(thread?.items ?? [], session, ops, now, thread?.cut ?? [], state.sessions, state.device?.id ?? null) : [];
   const end = items.at(-1)?.key;
   useEffect(() => { const el = scroller.current; if (el) el.scrollTop = el.scrollHeight; }, [end, items.length]);
 

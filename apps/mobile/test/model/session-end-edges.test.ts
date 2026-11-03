@@ -81,7 +81,7 @@ describe('a clock skew between the PC and the phone', () => {
     expect(endingOf(young, book(c), T0 + 1_000).kind).toBe('closing');
   });
 
-  it('D8 — phone clock 10 s ahead: the exit this close caused is its own, and a later exit is not read as « fermée depuis le téléphone »', () => {
+  it('D8 — phone clock 10 s ahead: the exit this close caused is its own, and a later exit is not read as « fermée depuis cet appareil »', () => {
     const c = mk('session.close', 0, 'applied', { how: 'killed' });
     // The PC exits the agent 3 s after the close, on its own clock: that is 7 s before `at` on the phone's.
     const own = nova({ state: 'exited', exitedAt: iso(-7_000) });

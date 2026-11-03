@@ -64,7 +64,7 @@ test('a phone signs in, pairs, decides, survives a relay restart and a session r
     await page.getByRole('button', { name: copy.compare.same }).click();
     await expect(page.getByText(copy.compare.waitTitle)).toBeVisible();
     h.pc.ok();
-    await expect(page.getByRole('heading', { name: copy.compare.doneTitle(copy.yourPc) })).toBeVisible();
+    await expect(page.getByRole('heading', { name: new RegExp(` lié à ${copy.yourPc}$`) })).toBeVisible();
     await page.getByRole('link', { name: copy.compare.seePending }).click();
   });
 

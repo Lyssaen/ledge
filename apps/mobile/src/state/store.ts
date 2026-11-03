@@ -2,7 +2,7 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, type Assertion, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  PhoneClientMessageSchema, type Assertion, type DeviceKind, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
   type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
@@ -33,7 +33,8 @@ export interface MobileState {
   /** Null until the first snapshot of this run: they are not kept on the phone. */
   capabilities: CapabilitiesByTool | null;
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
-  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number } | null;
+  /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
+  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
   daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true } | null;
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
@@ -122,6 +123,8 @@ export interface MobileStore {
   answer(id: string, requestId: string, answers: Answer[], opts: { expect: PhoneExpect; cancel?: boolean }): string | null;
   /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
   registerCredential(c: Credential): string | null;
+  /** Names this device on the PC (`device.rename`); its next snapshot carries the name. The op's id, or null when nothing was sent. */
+  renameDevice(name: string): string | null;
   interrupt(id: string): string | null;
   /** Closes the session (`session.close`) with the device's assertion over it. The op's id, or null when nothing was sent (not ready, a close already on its way). */
   sessionClose(id: string, assertion: Assertion): string | null;
@@ -706,6 +709,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
     dismissPc() {
       if (state.pc && !pcRunning(state.pc)) set({ pc: null });
+    },
+
+    renameDevice(name) {
+      return write(op => ({ type: 'device.rename', op, name }));
     },
 
     registerCredential(c) {

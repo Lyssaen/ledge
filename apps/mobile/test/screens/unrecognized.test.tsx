@@ -22,13 +22,13 @@ function denied(opts: { hash?: string } = {}) {
 describe('the PC no longer knows this phone', () => {
   it('says so, whatever the route, with « Refaire la liaison » and « Se déconnecter »', () => {
     denied({ hash: '#/thread/a' });
-    expect(screen.getByRole('heading', { name: 'PC-Desan ne reconnaît plus ce téléphone' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'PC-Desan ne reconnaît plus cet appareil' })).toBeInTheDocument();
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Refaire la liaison', 'Se déconnecter']);
   });
 
   it('before the PC was named: « Votre PC »', () => {
     app('denied');
-    expect(screen.getByRole('heading', { name: 'Votre PC ne reconnaît plus ce téléphone' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Votre PC ne reconnaît plus cet appareil' })).toBeInTheDocument();
   });
 
   it('erases nothing and starts no pairing until the user chooses', () => {

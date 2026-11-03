@@ -77,8 +77,8 @@ describe('the chat screen', () => {
 
   it('the subtitle counts the sessions and their distinct repos', () => {
     chatSetup([session('a', { repo: 'x' }), session('b', { repo: 'x' }), session('c', { repo: 'y' })]);
-    expect(screen.getByText('Fil du téléphone · 3 agents, 2 repos')).toBeInTheDocument();
-    expect(copy.chat.subtitle(1, 1)).toBe('Fil du téléphone · 1 agent, 1 repo');
+    expect(screen.getByText('Fil de cet appareil · 3 agents, 2 repos')).toBeInTheDocument();
+    expect(copy.chat.subtitle(1, 1)).toBe('Fil de cet appareil · 1 agent, 1 repo');
   });
 
   it('asking sends chat.ask, shows the bubble, then the steps and « Arrêter », which sends chat.cancel', () => {

@@ -73,11 +73,11 @@ describe('the request detail', () => {
     expect(t.of('session.decide').at(-1)).toMatchObject({ decision: 'accept', expect: { key: 'p2', text: 'pnpm build' } });
   });
 
-  it('says a request resolved on the PC was handled there', () => {
+  it('says a request resolved elsewhere was handled, and where once the thread says it', () => {
     const t = opened(pending());
     const { pending: _, ...rest } = t.s;
     act(() => t.deliver({ type: 'session.updated', session: { ...rest, state: 'idle' } }));
-    expect(screen.getByRole('heading', { name: 'Déjà traitée sur le PC' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Déjà traitée ailleurs' })).toBeInTheDocument();
   });
 
   it('offline, keeps the last known request but sends nothing', () => {
@@ -152,7 +152,7 @@ describe('the decision footer', () => {
   it('a question it cannot answer from here sends to the PC, the thread link before the hint', () => {
     opened(question({ options: [] }), { tool: 'cursor' });
     expect(screen.queryByRole('button', { name: 'Envoyer ma réponse' })).not.toBeInTheDocument();
-    expect(footerOrder()).toEqual(['Voir le fil de Kai', 'Cet agent ne peut pas recevoir de réponse libre depuis le téléphone. Répondez sur le PC.']);
+    expect(footerOrder()).toEqual(['Voir le fil de Kai', 'Cet agent ne peut pas recevoir de réponse libre depuis un appareil lié. Répondez sur le PC.']);
   });
 
   it('a decision whose delivery is unknown is checked by reconnecting', () => {

@@ -195,7 +195,7 @@ describe('the live terminal screen', () => {
     expect(screen.getByText('En direct · lecture seule')).toBeInTheDocument();
     expect(screen.getByText('billing-api · 200 × 50, taille du PC')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Prendre la main/ })).toBeNull();
-    expect(screen.getByText(/activez « Taper dans les terminaux depuis le téléphone »/)).toBeInTheDocument();
+    expect(screen.getByText(/activez « Taper dans les terminaux depuis un appareil lié »/)).toBeInTheDocument();
     view.unmount();
     expect(t.of('term.close')).toEqual([{ type: 'term.close', tid: TID }]);
     expect(t.xt.calls).toContain('dispose');

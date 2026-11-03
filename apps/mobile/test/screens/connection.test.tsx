@@ -38,7 +38,7 @@ describe('Connection: notifications', () => {
   it('stale → the message, and « Activer les notifications »', () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(withPush('stale')));
-    expect(screen.getByText('Le PC a changé de clés : réactivez les notifications pour que ce téléphone les reçoive à nouveau.')).toBeInTheDocument();
+    expect(screen.getByText('Le PC a changé de clés : réactivez les notifications pour que cet appareil les reçoive à nouveau.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Activer les notifications' })).toBeInTheDocument();
   });
 
@@ -71,5 +71,38 @@ describe('Connection: notifications', () => {
     fireEvent.click(screen.getByRole('switch'));
     expect(await screen.findByText(/L’activation n’a pas abouti/)).toBeInTheDocument();
     expect(t.of('push.subscribe')).toEqual([]);
+  });
+});
+
+describe('Connection: this device', () => {
+  const known = (device: { id?: string; kind?: 'phone' | 'tablet'; name?: string }) => ({ ...snapshot([], 'PC-Desan'), device: { confirm: true, ...device } }) as never;
+
+  it('a PC that does not say which device this is: no « Cet appareil », and no name sent', () => {
+    const t = app('ready', { hash: '#/connection' });
+    act(() => t.deliver(known({})));
+    expect(screen.queryByRole('heading', { name: 'Cet appareil' })).not.toBeInTheDocument();
+    expect(t.of('device.rename')).toEqual([]);
+  });
+
+  it('a device without a name names itself once after its model and browser', () => {
+    const t = app('ready', { hash: '#/connection' });
+    act(() => t.deliver(known({ id: 'fp-self', kind: 'phone' })));
+    act(() => t.deliver(known({ id: 'fp-self', kind: 'phone' })));
+    expect(t.of('device.rename')).toHaveLength(1);
+    expect(t.of('device.rename')[0]!.name.length).toBeGreaterThan(0);
+  });
+
+  it('shows its name, and « Renommer » sends the new one, trimmed, after « Enregistrer »', async () => {
+    const t = app('ready', { hash: '#/connection' });
+    act(() => t.deliver(known({ id: 'fp-self', kind: 'tablet', name: 'iPad · Safari' })));
+    expect(screen.getByRole('heading', { name: 'Cet appareil' })).toBeInTheDocument();
+    expect(screen.getByText('iPad · Safari')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Renommer iPad · Safari' }));
+    const field = screen.getByRole('dialog', { name: 'Nom de cet appareil' }).querySelector('input')!;
+    expect(field).toHaveValue('iPad · Safari');
+    fireEvent.change(field, { target: { value: '  iPad du salon ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    await waitFor(() => expect(t.of('device.rename').map(m => m.name)).toEqual(['iPad du salon']));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

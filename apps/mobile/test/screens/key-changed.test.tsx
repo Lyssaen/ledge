@@ -18,7 +18,7 @@ describe('the PC’s key changed', () => {
   it('says so with the known and the received key, whatever the route', () => {
     changed({ hash: '#/thread/a' });
     expect(screen.getByRole('heading', { name: 'La clé de PC-Desan a changé' })).toBeInTheDocument();
-    expect(screen.getByText(/Ce téléphone a coupé la connexion/)).toBeInTheDocument();
+    expect(screen.getByText(/Cet appareil a coupé la connexion/)).toBeInTheDocument();
     const rows = [...document.querySelectorAll('dl dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]);
     expect(rows).toEqual([['Connue', '7c41 e09a · liée le 16 oct.'], ['Reçue', 'b2f8 113d · inconnue']]);
     expect(screen.getByText('Vous avez réinstallé Ledge ou changé de PC ?')).toBeInTheDocument();

@@ -23,6 +23,7 @@ import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
 import { copy } from './copy';
 import { Split, SplitEmpty, useWide } from './ui/layout';
+import { ownName } from './screens/ThisDevice';
 import { useMobile, type MobileStore } from './state/store';
 import type { UpdateWatch } from './sw/register';
 import type { BuildInfo } from './sw/types';
@@ -151,6 +152,14 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   useEffect(() => { if (chatOff) replaceRoute({ name: 'inbox' }); }, [chatOff]);
 
   const wide = useWide();
+  // A device the PC knows by id but that has no name yet names itself once, after its model and browser (docs/mockups/
+  // mobile-multi-device.html, part 3): the PC then shows « iPad · Safari », and so do the other devices' threads.
+  const named = useRef(false);
+  const unnamed = state === 'ready' && mobile.fresh && !!mobile.device?.id && !mobile.device.name;
+  useEffect(() => {
+    if (!unnamed || named.current) return;
+    if (store.renameDevice(ownName(undefined)) !== null) named.current = true;
+  }, [unnamed, store]);
   const pinned = link.pinned();
   // The pinned PC only while pairing: the name the old PC gave is not the one being paired.
   const pairingName = pinned?.name ?? null;

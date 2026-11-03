@@ -38,12 +38,12 @@ export const copy = {
   images: {
     attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',
     dialog: 'Répondez d\'abord à la question, l\'image partira après', failed: 'Image non envoyée',
-    noPreview: 'Image trop lourde pour le téléphone · ouvrir sur le PC', unavailable: 'Image indisponible',
+    noPreview: 'Image trop lourde pour cet appareil · ouvrir sur le PC', unavailable: 'Image indisponible',
     view: 'Image', share: 'Partager', save: 'Enregistrer', close: 'Fermer', prev: 'Image précédente', next: 'Image suivante'
   },
   chat: {
     title: 'Ledge',
-    subtitle: (agents: number, repos: number) => `Fil du téléphone · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${repos} ${repos > 1 ? 'repos' : 'repo'}`,
+    subtitle: (agents: number, repos: number) => `Fil de cet appareil · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${repos} ${repos > 1 ? 'repos' : 'repo'}`,
     point: {
       title: 'Le point', label: 'Le point', ago: (s: string) => `il y a ${s}`,
       yours: 'À TOI', yoursLabel: 'À toi', given: 'CONFIÉES PAR LEDGE', givenLabel: 'Confiées par Ledge',
@@ -126,7 +126,7 @@ export const copy = {
       stale: 'La demande a changé depuis : rien n’a été envoyé.',
       deniedNote: (name: string) => `${name} a reçu votre refus : la commande n’a pas été lancée.`,
       cutMark: 'Demande coupée : la suite est sur le PC.',
-      cutNote: 'Demande trop longue pour le téléphone : elle s’accepte sur le PC. Vous pouvez la refuser d’ici.',
+      cutNote: 'Demande trop longue pour cet appareil : elle s’accepte sur le PC. Vous pouvez la refuser d’ici.',
       all: (n: number) => `Tout appliquer (${n})`, resume: (k: number, n: number) => `Reprendre à l’étape ${k} (${n})`, skip: (k: number, n: number) => `Continuer sans l’étape ${k} (${n})`,
       inOrder: 'Dans l’ordre ; s’arrête au premier échec.', notReplayed: 'Les étapes faites ne sont pas rejouées.',
       progress: (k: number, n: number) => `Étape ${k} sur ${n}…`, planDone: (at: string) => `Plan appliqué${at ? ` à ${at}` : ''}`,
@@ -182,7 +182,7 @@ export const copy = {
   link: {
     online: 'connecté', offline: 'déconnecté',
     /** The header's way to the connection screen, for screen readers. */
-    openConnection: 'Connexion du téléphone',
+    openConnection: 'Connexion de cet appareil',
     lostTitle: 'Connexion au PC perdue',
     lostBody: 'Le PC, le réseau ou Tailscale est indisponible. Les demandes ci-dessous peuvent avoir changé.',
     lostDetail: 'Dernier état connu. Reconnectez-vous pour vérifier si cette demande attend toujours une décision.',
@@ -240,11 +240,11 @@ export const copy = {
     hint: 'La décision sera transmise immédiatement au PC.',
     offlineHint: 'Aucune décision ne sera envoyée hors connexion.',
     readOnly: 'Session démarrée hors de Ledge : répondez dans le terminal.',
-    answerOnPc: 'Cet agent ne peut pas recevoir de réponse libre depuis le téléphone. Répondez sur le PC.',
+    answerOnPc: 'Cet agent ne peut pas recevoir de réponse libre depuis un appareil lié. Répondez sur le PC.',
     answerHint: 'La réponse sera transmise immédiatement au PC.',
     send: 'Envoyer ma réponse',
     otherInvalid: `Le PC n’a pas accepté cette réponse. Corrigez-la, elle tient sur une ligne de ${MESSAGE_MAX} caractères au plus.`,
-    otherUnsupported: 'Cet agent ne peut pas recevoir de réponse libre depuis le téléphone. Choisissez une option ou répondez sur le PC.',
+    otherUnsupported: 'Cet agent ne peut pas recevoir de réponse libre depuis un appareil lié. Choisissez une option ou répondez sur le PC.',
     sending: 'Transmission au PC…', sendingBody: 'En attente de confirmation du terminal.',
     uncertain: 'Réception non confirmée',
     uncertainBody: 'La connexion a été perdue pendant l’envoi. La décision a peut-être été reçue. Vérifiez son état avant de recommencer.',
@@ -297,7 +297,7 @@ export const copy = {
     killed: 'Fermée de force : l’agent ne répondait pas. Son dernier tour peut manquer.',
     resume: (bot: string) => `Reprendre ${bot}`,
     resuming: (bot: string) => `Reprise de ${bot}…`,
-    closedHere: (time: string) => `Session fermée depuis le téléphone · ${time}`,
+    closedHere: (time: string) => `Session fermée depuis cet appareil · ${time}`,
     notClosed: (bot: string) => `${bot} n’a pas été fermée`,
     closeFailed: 'Le PC n’a pas pu arrêter l’agent. Vérifiez sur le PC, ou réessayez.',
     readOnly: 'Elle a été démarrée hors de Ledge : fermez-la dans son terminal sur le PC.',
@@ -328,7 +328,9 @@ export const copy = {
       deny: (from: string) => `Refus pris en compte · depuis ${from}`,
       answer: (option: string) => `Réponse prise en compte · ${option}`,
       resolved: 'Traitée dans le terminal', interrupt: 'Interruption transmise',
-      fromPc: 'le PC', fromPhone: 'le téléphone'
+      fromPc: 'le PC', fromHere: 'cet appareil',
+      /** Another linked device, by the name it had when it decided. */
+      fromDevice: (name: string) => name
     },
     delivery: { sending: 'Envoi au PC…', taken: 'Pris par le terminal', takenNow: 'Pris par le terminal · à l’instant', uncertain: 'Réception non confirmée' },
     /** OpenRig's messages in a seat's thread (docs/mockups/openrig-messages, section « Téléphone » and its copy table). */
@@ -374,7 +376,7 @@ export const copy = {
       busy: 'L’agent n’est plus disponible pour une consigne. Votre brouillon est conservé.',
       invalid: (max: number) => `Le message n’a pas été accepté par le PC (${max} caractères au plus). Votre brouillon est conservé.`,
       readOnly: 'Cette session a été démarrée hors de Ledge : écrivez dans le terminal.',
-      forbidden: 'Ce téléphone n’est plus autorisé. Votre brouillon est conservé.',
+      forbidden: 'Cet appareil n’est plus autorisé. Votre brouillon est conservé.',
       uncertain: 'La connexion a été perdue ou le terminal n’a pas confirmé. Le message a peut-être été reçu : vérifiez le terminal avant de le renvoyer. Votre brouillon est conservé.'
     }
   },
@@ -399,19 +401,19 @@ export const copy = {
       screen: (bot: string) => `Terminal de ${bot}`,
       position: 'Partie visible des colonnes',
       hold: 'Prendre la main', holdAgain: 'Reprendre la main', release: 'Rendre la main',
-      inputOff: 'Pour taper ici, activez « Taper dans les terminaux depuis le téléphone » sur le PC, dans Accès mobile.',
+      inputOff: 'Pour taper ici, activez « Taper dans les terminaux depuis un appareil lié » sur le PC, dans Accès mobile.',
       offlineHint: 'L’écran reprend dès que le PC répond.',
       back: 'Retour au fil',
       heldTitle: (bot: string) => `Vous tapez dans ${bot}`,
       heldLeft: (left: string) => `Main rendue dans ${left} sans frappe`,
       heldTag: 'Au clavier',
       released: { idle: 'Main rendue : 5 minutes sans frappe.', expired: 'Main rendue : 30 minutes écoulées.', background: 'Main rendue : l’appli est passée en arrière-plan.', pc: 'Le PC a repris la main.', link: 'Main rendue : connexion perdue.' },
-      exit: { ended: null, gone: (bot: string) => `Le terminal de ${bot} n’existe plus sur le PC.`, closed: null, superseded: 'Le terminal a été ouvert ailleurs sur ce téléphone.', failed: 'Le PC n’a pas pu suivre ce terminal.' },
+      exit: { ended: null, gone: (bot: string) => `Le terminal de ${bot} n’existe plus sur le PC.`, closed: null, superseded: 'Le terminal a été ouvert ailleurs sur cet appareil.', failed: 'Le PC n’a pas pu suivre ce terminal.' },
       refused: { read_only: 'Session démarrée hors de Ledge : ouvrez son terminal sur le PC.', unknown_session: 'Cette session n’existe plus sur le PC.', unavailable: 'Le PC ne peut pas montrer ce terminal.' } as Partial<Record<string, string>>,
-      holdRefused: { conflict: 'Un autre appareil tape déjà dans ce terminal.', read_only: 'Session démarrée hors de Ledge : tapez dans son terminal sur le PC.', unavailable: 'Le PC ne permet plus de taper depuis le téléphone.' } as Partial<Record<string, string>>,
+      holdRefused: { conflict: 'Un autre appareil tape déjà dans ce terminal.', read_only: 'Session démarrée hors de Ledge : tapez dans son terminal sur le PC.', unavailable: 'Le PC ne permet plus de taper depuis un appareil lié.' } as Partial<Record<string, string>>,
       sheetTitle: (bot: string) => `Taper dans le terminal de ${bot} ?`,
-      sheetBody: 'Ce que vous tapez part tel quel dans son terminal sur le PC, comme au clavier du PC. Cela vaut aussi pour une demande d’autorisation : elle ne passe alors pas par la vérification du téléphone.',
-      sheetNote: 'La main vous est retirée après 5 minutes sans frappe, au bout de 30 minutes, ou dès que l’appli passe en arrière-plan. Le PC affiche « Téléphone au clavier » et peut la reprendre.',
+      sheetBody: 'Ce que vous tapez part tel quel dans son terminal sur le PC, comme au clavier du PC. Cela vaut aussi pour une demande d’autorisation : elle ne passe alors pas par la vérification de l’appareil.',
+      sheetNote: 'La main vous est retirée après 5 minutes sans frappe, au bout de 30 minutes, ou dès que l’appli passe en arrière-plan. Le PC affiche le nom de cet appareil « au clavier » et peut la reprendre.',
       go: 'Vérifier et prendre la main', cancel: 'Annuler',
       unprotectedTitle: 'Protégez d’abord vos accords depuis Connexion.', unprotectedBody: 'Prendre la main demande la passkey de cet appareil, comme fermer une session.', openConnection: 'Ouvrir Connexion',
       keys: 'Touches spéciales',
@@ -419,7 +421,7 @@ export const copy = {
       keyLabel: { esc: 'Échap', tab: 'Tabulation', ctrl: 'Contrôle', alt: 'Alt', left: 'Flèche gauche', up: 'Flèche haut', down: 'Flèche bas', right: 'Flèche droite', enter: 'Entrée', interrupt: 'Contrôle C', paste: 'Coller', line: 'Mode ligne' },
       armed: 'armé', locked: 'verrouillé',
       lineField: 'Ligne à taper dans le terminal', lineSend: 'Taper la ligne', withEnter: 'Avec ↵',
-      pasteFailed: 'Rien à coller, ou le téléphone a refusé l’accès au presse-papiers.'
+      pasteFailed: 'Rien à coller, ou l’appareil a refusé l’accès au presse-papiers.'
     }
   },
   question: {
@@ -466,10 +468,20 @@ export const copy = {
   },
   gone: {
     header: 'Demande', title: 'Déjà traitée sur le PC', body: 'Cette demande a été résolue ailleurs. Aucune nouvelle décision n’a été envoyée.', back: 'Retour aux demandes',
+    /** Who answered, when the thread says it (docs/mockups/mobile-multi-device.html, part 1). */
+    titleOn: (where: string) => `Déjà traitée sur ${where}`, titleElsewhere: 'Déjà traitée ailleurs',
+    decided: (what: 'accept' | 'deny' | 'always', time: string) => `${what === 'deny' ? 'Refusée' : 'Acceptée'} à ${time}. Aucune nouvelle décision n’a été envoyée.`,
     staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.'
   },
   loading: 'Chargement de la demande…',
   connection: {
+    /** « Cet appareil » (docs/mockups/mobile-multi-device.html, part 3). */
+    device: {
+      title: 'Cet appareil', linkedOn: (date: string) => `Lié le ${date}`, rename: 'Renommer', renameLabel: (name: string) => `Renommer ${name}`,
+      sheetTitle: 'Nom de cet appareil', sheetBody: 'Il s’affiche sur le PC et dans les fils de vos autres appareils.', field: 'Nom',
+      save: 'Enregistrer', cancel: 'Annuler', failed: 'Le PC n’a pas pris le nom. Réessayez.',
+      others: 'Les autres appareils liés se gèrent sur le PC, dans Ledge › Réglages › Accès mobile.'
+    },
     title: 'Connexion', back: 'Retour aux demandes', pc: 'PC', status: 'État', unknown: 'Inconnu',
     states: { online: 'Connecté', offline: 'Déconnecté', connecting: 'Connexion en cours…' },
     account: 'Compte', relay: 'Serveur', pcFingerprint: 'Empreinte du PC', version: 'Version de l’app', appFingerprint: 'Empreinte de l’app',
@@ -510,14 +522,14 @@ export const copy = {
       confirmUpdateBody: (pc: string, from: string, to: string) => `${pc} passe de ${from} à ${to}. npm installe la version, puis le daemon redémarre. Vos sessions continuent.`,
       confirmRestart: 'Redémarrer le daemon ?',
       confirmRestartBody: (pc: string) => `Le daemon de ${pc} redémarre sans rien installer. Vos sessions continuent, et le lien revient en quelques secondes.`,
-      passkey: 'La passkey de ce téléphone confirme l’action. Sans elle, le PC refuse.',
+      passkey: 'La passkey de cet appareil confirme l’action. Sans elle, le PC refuse.',
       noPasskey: 'Protégez d’abord les accords avec l’appareil, plus haut.',
       confirm: 'Confirmer', cancel: 'Annuler', notDone: 'Pas fait.'
     }
   },
   /** The user left while the PC could not confirm that it removed this phone: shown on the screen they land on. */
   forget: {
-    pending: 'Le PC n’a pas confirmé. Retirez ce téléphone dans Ledge sur le PC, section Accès mobile.'
+    pending: 'Le PC n’a pas confirmé. Retirez cet appareil dans Ledge sur le PC, section Accès mobile.'
   },
   /** The GitHub login, as the boards write it. */
   account: (login: string) => `@${login}`,
@@ -525,24 +537,24 @@ export const copy = {
   yourPc: 'votre PC',
   replaced: {
     title: 'Ledge est ouvert ailleurs',
-    body: 'Un autre onglet de ce téléphone a pris la connexion. Fermez-le, ou reprenez la connexion ici.',
+    body: 'Un autre onglet de cet appareil a pris la connexion. Fermez-le, ou reprenez la connexion ici.',
     here: 'Utiliser ici'
   },
   insecure: {
     title: 'Connexion non sécurisée',
-    body: 'Ledge sur téléphone ne s’ouvre que sur une adresse HTTPS. Ouvrez l’adresse https:// du serveur.'
+    body: 'Ledge sur mobile ne s’ouvre que sur une adresse HTTPS. Ouvrez l’adresse https:// du serveur.'
   },
   /** The app or its start failed to load (a lost connection mid-update, a blocked storage): no board shows it. */
   bootFailed: {
     title: 'Ledge n’a pas pu démarrer',
-    body: 'Le chargement de l’app a échoué. Vérifiez la connexion du téléphone, puis rechargez la page.',
+    body: 'Le chargement de l’app a échoué. Vérifiez la connexion de l’appareil, puis rechargez la page.',
     reload: 'Recharger'
   },
   login: {
     title: 'Vos agents, dans la poche',
     subtitle: 'Connectez-vous avec le même compte GitHub que dans Ledge sur votre PC.',
     notes: [
-      'Ce téléphone crée sa propre clé. Elle ne le quitte jamais.',
+      'Cet appareil crée sa propre clé. Elle ne le quitte jamais.',
       'Rien n’est accessible avant que vous ayez confirmé un code sur votre PC.',
       'Le serveur relaie des messages chiffrés : il ne peut ni les lire, ni répondre à votre place.'
     ],
@@ -572,7 +584,7 @@ export const copy = {
   /** Protecting the high-impact accepts with this device, at pairing and in Connection. */
   enroll: {
     title: 'Protéger les accords',
-    body: 'Face ID ou le code de ce téléphone sera demandé pour autoriser une commande à impact élevé.',
+    body: 'Face ID ou le code de cet appareil sera demandé pour autoriser une commande à impact élevé.',
     go: 'Protéger les accords', later: 'Plus tard',
     done: 'Protégés par cet appareil', row: 'Accords à impact élevé',
     unsupported: 'Cet appareil ne peut pas protéger les accords.'
@@ -581,45 +593,46 @@ export const copy = {
     title: 'Être prévenu quand un agent attend', body: 'Activez les notifications pour ouvrir une demande directement depuis votre écran verrouillé.',
     enable: 'Activer les notifications', later: 'Plus tard', working: 'Activation…', waiting: 'Connexion au PC…',
     row: 'Notifications', on: 'Activées', off: 'Désactivées',
-    denied: 'Notifications refusées. Vous pourrez les autoriser dans les réglages du téléphone.',
+    denied: 'Notifications refusées. Vous pourrez les autoriser dans les réglages de l’appareil.',
     unsupported: 'Ce navigateur ne propose pas les notifications. Sur iPhone, ouvrez Ledge depuis son icône de l’écran d’accueil.',
     failed: 'L’activation n’a pas abouti : le PC n’a pas reçu l’abonnement. Vérifiez la connexion, puis réessayez.',
     noPush: 'Les notifications ne sont pas disponibles sur ce PC.',
-    stale: 'Le PC a changé de clés : réactivez les notifications pour que ce téléphone les reçoive à nouveau.'
+    stale: 'Le PC a changé de clés : réactivez les notifications pour que cet appareil les reçoive à nouveau.'
   },
   compare: {
     /** The name this phone gives itself in its `pair_commit`, when its user agent names no known device. */
-    deviceLabel: 'Téléphone',
+    deviceLabel: 'Appareil',
     title: 'Comparez ce code',
     waitCode: 'En attente du code du PC…',
     codeLabel: (code: string) => `Code de liaison ${code}`,
     intro: (pc: string) => `Ledge vient d’afficher un code sur ${pc}. Il doit être identique à celui-ci.`,
-    basis: 'Calculé à partir des clés du PC et de ce téléphone',
+    basis: 'Calculé à partir des clés du PC et de cet appareil',
     same: 'Les codes sont identiques',
     different: 'Ils sont différents',
     waitTitle: 'Confirmez sur le PC',
     waitBody: (pc: string, code: string) => `Dans Ledge sur ${pc}, cliquez sur Approuver sous le même code ${code}.`,
     cancel: 'Annuler',
-    doneTitle: (pc: string) => `Téléphone lié à ${pc}`,
-    doneBody: 'Vous pouvez lire, approuver et écrire. Retirez ce téléphone à tout moment depuis Ledge sur le PC.',
+    /** `model`: the device's kind as the pairing label names it (iPad, iPhone, Android); else « Appareil ». */
+    doneTitle: (pc: string, model: string) => `${model} lié à ${pc}`,
+    doneBody: 'Vous pouvez lire, approuver et écrire. Retirez cet appareil à tout moment depuis Ledge sur le PC.',
     seePending: 'Voir ce qui attend',
     cancelledTitle: 'Liaison annulée',
-    cancelledBody: 'Des codes différents signifient que ce téléphone et le PC ne voient pas les mêmes clés. Quelqu’un tente peut-être de s’interposer. Refusez aussi sur le PC.',
+    cancelledBody: 'Des codes différents signifient que cet appareil et le PC ne voient pas les mêmes clés. Quelqu’un tente peut-être de s’interposer. Refusez aussi sur le PC.',
     expiredTitle: 'Code expiré',
     expiredBody: 'Le code n’a pas été confirmé à temps sur les deux appareils.',
     refusedTitle: 'Liaison refusée sur le PC',
-    refusedBody: 'Ledge sur le PC a refusé ce téléphone.',
-    lostTitle: 'Ce téléphone n’est plus lié',
+    refusedBody: 'Ledge sur le PC a refusé cet appareil.',
+    lostTitle: 'Cet appareil n’est plus lié',
     lostBody: 'Ses clés ont disparu (données du site effacées ou navigation privée) et le dernier état connu a été effacé avec. Comparez un nouveau code pour le lier.',
     /** A pairing was asked and none could start (no key could be made, the link closed): no board shows it. */
     stalledTitle: 'La liaison n’a pas pu démarrer',
-    stalledBody: 'Ce téléphone n’a pas pu préparer sa clé. Recommencez ; si cela persiste, rechargez la page.',
+    stalledBody: 'Cet appareil n’a pas pu préparer sa clé. Recommencez ; si cela persiste, rechargez la page.',
     retry: 'Recommencer',
     /** Waiting for the PC's code while it is not on the relay: the pairing starts by itself once it is. */
     offlineTitle: 'PC hors ligne',
     offlineBody: (pc: string) => `Activez l’accès mobile dans Ledge sur ${pc} : la liaison démarre dès qu’il est en ligne.`,
     relayTitle: 'Relais injoignable',
-    relayBody: 'Ce téléphone n’arrive pas à joindre le relais Ledge. Vérifiez sa connexion à internet, puis réessayez.',
+    relayBody: 'Cet appareil n’arrive pas à joindre le relais Ledge. Vérifiez sa connexion à internet, puis réessayez.',
     retryNow: 'Réessayer'
   },
   denied: {
@@ -630,7 +643,7 @@ export const copy = {
   },
   keyChanged: {
     title: (pc: string) => `La clé de ${pc} a changé`,
-    body: 'Ce téléphone a coupé la connexion. Il n’envoie plus rien et n’affiche plus rien de ce PC tant que vous n’avez pas refait la liaison.',
+    body: 'Cet appareil a coupé la connexion. Il n’envoie plus rien et n’affiche plus rien de ce PC tant que vous n’avez pas refait la liaison.',
     known: 'Connue', received: 'Reçue',
     knownDetail: (fp: string, date: string) => `${fp} · liée le ${date}`,
     receivedDetail: (fp: string) => `${fp} · inconnue`,
@@ -643,16 +656,16 @@ export const copy = {
   },
   /** The PC answered a hello with `denied` (this phone was removed in Ledge on the PC): no board shows it, KeyChanged is the model. */
   unrecognized: {
-    title: (pc: string | null) => `${pc ?? 'Votre PC'} ne reconnaît plus ce téléphone`,
-    body: 'Ce téléphone a sans doute été retiré dans Ledge sur le PC. Il n’envoie plus rien à ce PC.',
-    kept: 'Le dernier état connu et vos brouillons restent sur ce téléphone. Refaire la liaison les efface et fait comparer un nouveau code.',
+    title: (pc: string | null) => `${pc ?? 'Votre PC'} ne reconnaît plus cet appareil`,
+    body: 'Cet appareil a sans doute été retiré dans Ledge sur le PC. Il n’envoie plus rien à ce PC.',
+    kept: 'Le dernier état connu et vos brouillons restent sur cet appareil. Refaire la liaison les efface et fait comparer un nouveau code.',
     relink: 'Refaire la liaison',
     signOut: 'Se déconnecter'
   },
   /** The key store could not be read (a lost IndexedDB connection): no board shows it. Nothing was erased. */
   storage: {
-    title: 'Stockage du téléphone illisible',
-    body: 'Le navigateur n’a pas pu lire les clés de ce téléphone. Rien n’a été effacé : réessayez, ou rechargez la page.',
+    title: 'Stockage de l’appareil illisible',
+    body: 'Le navigateur n’a pas pu lire les clés de cet appareil. Rien n’a été effacé : réessayez, ou rechargez la page.',
     retry: 'Réessayer',
     reload: 'Recharger'
   },
