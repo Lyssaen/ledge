@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useState } from 'react';
 import { BROADCAST_SILENT, canBroadcast, isPending, useContextNear, useTasks } from '@ledge/fleet';
-import { LEDGE_GIVER, projectOf, type Session, type Task } from '@ledge/protocol';
+import { isOmpSeat, isStoppedOmpSeat, LEDGE_GIVER, projectOf, type Session, type Task } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { closedLedgeTasks, exchanges, helperCount, machineOf, nearContext, nextWaiting, openDecisions, overview, step } from '../model/overview.js';
@@ -22,7 +22,7 @@ import { TitledBox } from '../ui/TitledBox.js';
 /** Under this many columns the overview is one column: the session card opens with ↵. */
 export const WIDE = 100;
 
-type Row = { kind: 'project'; key: string; label: string; color: string; count: number; rig?: boolean; folder?: string }
+type Row = { kind: 'project'; key: string; label: string; color: string; count: number; shown?: number; rig?: boolean; folder?: string }
   | { kind: 'branch'; key: string; branch: string; indent: number } | { kind: 'session'; key: string; s: Session; indent: number; group?: 'rig' | 'kernel' };
 /** A rig's folder by its last name (`/w/ledge` -> `ledge`). */
 const folderOf = (cwd: string | undefined): string => (cwd ?? '').split('/').filter(Boolean).at(-1) ?? '';
@@ -108,7 +108,8 @@ export function Overview() {
     if (input === 'j' || key.downArrow) { select(step(view.order, sel, 1)); return true; }
     if (input === 'k' || key.upArrow) { select(step(view.order, sel, -1)); return true; }
     if (key.tab) { const next = nextWaiting(view.yours, sel); if (next) select(next); return true; }
-    if (key.return) { if (selected) go('session'); return true; }
+    // An OMP seat of OpenRig has no thread: ↵ attaches its terminal, as a does (docs/mockups/ledge-openrig-omp.html, view 2).
+    if (key.return) { if (selected && isOmpSeat(selected)) attach(selected); else if (selected) go('session'); return true; }
     if (!selected) return false;
     if (input === 'a') { attach(selected); return true; }
     if (input === 'r' && selected.pending) { go('session'); return true; }
@@ -121,7 +122,7 @@ export function Overview() {
 
   // PROJETS, RIGS and KERNEL, each in its own box (docs/mockups/ledge-openrig-groups.html, view 3).
   const groupRows = (kind: 'rig' | 'kernel'): Row[] => view.tree.filter(n => n.kind === kind).flatMap(n => [
-    ...(kind === 'rig' ? [{ kind: 'project' as const, key: n.key, label: n.label, color: C.blue, count: n.count, rig: true, folder: folderOf(n.branches[0]?.sessions[0]?.cwd) }] : []),
+    ...(kind === 'rig' ? [{ kind: 'project' as const, key: n.key, label: n.label, color: C.blue, count: n.count, ...(n.shown !== undefined && { shown: n.shown }), rig: true, folder: folderOf(n.branches[0]?.sessions[0]?.cwd) }] : []),
     ...n.branches.flatMap(b => b.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: kind === 'rig' ? 2 : 0, group: kind })))
   ]);
   const rigRows = groupRows('rig'), kernelRows = groupRows('kernel');
@@ -147,6 +148,8 @@ export function Overview() {
   const stateW = Math.max(...Object.values(t.state).map(x => x.length)) + 1;
   const topicW = Math.max(6, inner - 6 - nameW - stateW - 3);
   const askW = Math.max(6, inner - 2 - nameW - 9 - 7);
+  // The rigs' box: each seat's role, then its harness at the same column (the longest role and two spaces).
+  const roleW = Math.max(11, ...rigRows.map(r => (r.kind === 'session' ? [...(r.s.rig?.role ?? '')].length + 2 : 0)));
 
   const yoursBox = (
     <TitledBox title={t.overview.yours(yoursCount)} color={yoursCount ? C.red : C.line} titleColor={yoursCount ? C.red : C.dim} height={yoursHeight + 2}>
@@ -181,19 +184,21 @@ export function Overview() {
   const groupBox = (title: string, rows: Row[], rowsHeight: number) => rows.length === 0 ? null : (
     <TitledBox title={title} height={rowsHeight + 2}>
       {windowed(rows, sel, rowsHeight).map(r => r.kind === 'project'
-        ? <Text key={r.key} wrap="truncate"><Text color={r.color}>⬡</Text> <Text color={C.fg} bold>{r.label}</Text>{r.folder ? <Text color={C.faint}>  {r.folder}</Text> : null}<Text color={C.faint}>  {t.overview.sessions(r.count)}</Text></Text>
+        ? <Text key={r.key} wrap="truncate"><Text color={r.color}>⬡</Text> <Text color={C.fg} bold>{r.label}</Text>{r.folder ? <Text color={C.faint}>  {r.folder}</Text> : null}<Text color={C.faint}>  {r.shown !== undefined ? t.overview.sessionsOf(r.count, r.shown) : t.overview.sessions(r.count)}</Text></Text>
         : r.kind === 'session'
-          ? <SessionRow key={r.key} s={r.s} on={r.s.id === sel} nameW={nameW} topicW={Math.max(6, topicW - r.indent)} stateW={stateW} indent={r.indent} group={r.group} />
+          ? <SessionRow key={r.key} s={r.s} on={r.s.id === sel} nameW={nameW} topicW={Math.max(6, topicW - r.indent)} stateW={stateW} indent={r.indent} group={r.group} roleW={roleW} />
           : null)}
     </TitledBox>
   );
   const rigsBox = groupBox(t.overview.rigsGroup, rigRows, rigsHeight);
   const kernelBox = groupBox(t.overview.kernelGroup, kernelRows, kernelHeight);
 
+  const stopped = !!selected && isStoppedOmpSeat(selected);
   const keys: Array<readonly [string, string]> = writing ? [['↵', t.keys.sendOnly], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]] : deciding?.confirm ? [['y', t.keys.sendAnswer], ['n esc', t.keys.edit]]
     : deciding ? [['↵', t.keys.review], ['alt+↵', t.keys.newLine], ['esc', t.keys.cancel]] : [
-    ['j k', t.keys.navigate], ['↵', t.keys.open], ...(view.yours.length ? [['tab', t.keys.next] as const, ['y n', t.keys.answer] as const] : []),
-    ['a', t.keys.attach], ...(writable ? [['m', t.keys.writeProject] as const] : []),
+    // On an OMP seat ↵ attaches its terminal; on a stopped one, neither ↵ nor a has anything to attach.
+    ['j k', t.keys.navigate], ...(stopped ? [] : [['↵', selected && isOmpSeat(selected) ? t.keys.attachSeat : t.keys.open] as const]), ...(view.yours.length ? [['tab', t.keys.next] as const, ['y n', t.keys.answer] as const] : []),
+    ...(stopped ? [] : [['a', t.keys.attach] as const]), ...(writable ? [['m', t.keys.writeProject] as const] : []),
     ...(decisions.length ? [['D', t.keys.decide] as const] : []), ...(near.length ? [['H', t.keys.handover] as const] : []),
     ['/', t.keys.ask], ['+', t.keys.launch], [',', t.keys.settings], ['?', t.keys.help], ['q', t.keys.quit]
   ];
@@ -237,23 +242,28 @@ export function Overview() {
   );
 }
 
-function SessionRow({ s, on, nameW, topicW, stateW, indent = 0, group }: { s: Session; on: boolean; nameW: number; topicW: number; stateW: number; indent?: number; group?: 'rig' | 'kernel' }) {
+function SessionRow({ s, on, nameW, topicW, stateW, indent = 0, group, roleW = 11 }: { s: Session; on: boolean; nameW: number; topicW: number; stateW: number; indent?: number; group?: 'rig' | 'kernel'; roleW?: number }) {
   const { t, g } = useTui();
   const st = botState(s);
   const n = helperCount(s);
+  // A stopped OMP seat: all grey, « Arrêté » (docs/mockups/ledge-openrig-omp.html, view 2).
+  const stopped = isStoppedOmpSeat(s);
+  // In a group's box: the kernel's role (short) then its harness, as before; a rig's whole role, then its harness at one column.
+  const roleTool = group === 'kernel' ? `${(s.rig?.role ?? '').replace(/\.(agent|lead|worker)$/, '').padEnd(11)}${s.tool}`
+    : (w => `${w > 0 ? fit(s.rig?.role ?? '', w) : ''}${s.tool}`)(Math.min(roleW, Math.max(0, topicW - 1 - s.tool.length)));
   return (
     <Text wrap="truncate" backgroundColor={on ? C.sel : undefined}>
       <Text color={on ? C.coral : C.faint}>{on ? '▌' : ' '}</Text>
       <Text>{' '.repeat(2 + indent)}</Text>
-      <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{g[st]} </Text>
-      <Text color={s.offline ? C.dim : C.fg} bold>{fit(s.name, nameW)}</Text>
+      <Text color={s.offline || stopped ? C.faint : STATE_COLOR[st]}>{g[st]} </Text>
+      <Text color={stopped ? C.faint : s.offline ? C.dim : C.fg} bold={!stopped}>{fit(s.name, nameW)}</Text>
       {/* A seat: its tag whole, then its role and the topic in what is left (the topic goes first). */}
       {/* In the rigs' and the kernel's boxes the box says the rig: the role (and, for the kernel, the harness) instead. */}
-      {group ? <Text color={C.dim}> {fit(group === 'kernel' ? `${(s.rig?.role ?? '').replace(/\.(agent|lead|worker)$/, '').padEnd(11)}${s.tool}` : s.rig?.role ?? '', topicW - 1)} </Text> : <>
+      {group ? <Text color={stopped ? C.faint : C.dim}> {fit(roleTool, topicW - 1)} </Text> : <>
         {s.rig ? <Text color={C.blue}> {rigTag(s)}</Text> : null}
         <Text color={C.dim}>{fit(seatSecond(s, oneLine(s.topic ?? s.title)), s.rig ? Math.max(0, topicW - rigTag(s).length - 1) : topicW)} </Text>
       </>}
-      <Text color={s.offline ? C.faint : STATE_COLOR[st]}>{fit(s.offline ? t.overview.offline : t.state[st], stateW).trimEnd()}</Text>
+      <Text color={s.offline || stopped ? C.faint : STATE_COLOR[st]}>{fit(s.offline ? t.overview.offline : stopped ? t.state.stopped : t.state[st], stateW).trimEnd()}</Text>
       {n > 0 ? <Text color={C.violet}> +{n}</Text> : null}
       {s.machineName && s.machineId !== 'local' ? <Text color={C.faint}> · {machineLabel(s)}</Text> : null}
     </Text>

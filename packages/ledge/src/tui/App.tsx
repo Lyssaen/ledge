@@ -122,7 +122,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
 
   const attach = useCallback((s: Session) => {
     const cmd = attachCommand(fleet, s);
-    if ('why' in cmd) { toast({ text: cmd.why === 'offline' ? t.toast.offline(s.name) : cmd.why === 'omp' ? t.toast.noTerminalOmp(s.name) : t.toast.noTerminal(s.name), tone: 'info' }); return; }
+    if ('why' in cmd) { toast({ text: cmd.why === 'offline' ? t.toast.offline(s.name) : cmd.why === 'omp' ? t.toast.noTerminalOmp(s.name) : cmd.why === 'stopped' ? t.toast.seatStopped(s.name) : t.toast.noTerminal(s.name), tone: 'info' }); return; }
     void suspendTerminal(async () => {
       const code = await (run ?? runAttached)(cmd.argv);
       // The attached program (tmux, a shell) may have set its own title: ours is written again.

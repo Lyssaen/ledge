@@ -1,13 +1,13 @@
 import type { Projects, Session } from '@ledge/protocol';
-import { isArchived, projectOf } from '@ledge/protocol';
+import { isArchived, isStoppedOmpSeat, projectOf } from '@ledge/protocol';
 import { basename } from 'node:path';
 import { connect, type Client } from '../client.js';
 
-/** The directory of the sessions an agent can reach (#20): the live ones, not archived; `self` (LEDGE_SESSION) marked
- *  `*`. Its project is the daemon's project (`projects`, the name `@projet:` takes) when the session is in one, else the
+/** The directory of the sessions an agent can reach (#20): the live ones, not archived, and the stopped OMP seats of OpenRig
+ *  (`exited`), so an agent sees that one will not answer; `self` (LEDGE_SESSION) marked `*`. Its project is the daemon's project (`projects`, the name `@projet:` takes) when the session is in one, else the
  *  repository, with the worktree folder when it is one. */
 export function formatWho(sessions: readonly Session[], self?: string, projects?: Projects): string {
-  const live = sessions.filter(s => s.state !== 'exited' && !isArchived(s));
+  const live = sessions.filter(s => (s.state !== 'exited' && !isArchived(s)) || isStoppedOmpSeat(s));
   if (live.length === 0) return 'aucune autre session';
   const rows = live.map(s => [
     s.id === self ? '*' : ' ', s.name, s.tool, s.state,

@@ -1,11 +1,12 @@
 import { isPending, liveHelpers, splitId } from '@ledge/fleet';
-import { contextNear, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmissions, type Project, type ProjectColor, type Projects, type Session, type Task } from '@ledge/protocol';
+import { contextNear, isStoppedOmpSeat, LEDGE_GIVER, openDecision, projectOf, taskClosed, transmissions, type Project, type ProjectColor, type Projects, type Session, type Task } from '@ledge/protocol';
 
 /** A session row of the tree under its branch. */
 export interface BranchRow { branch: string; sessions: Session[] }
 /** A project of the tree: a project of the daemon's list, or a repository outside any (`color` absent). */
-/** `kind`: an OpenRig rig's group or the kernel's (docs/mockups/ledge-openrig-groups.html, view 3), after the projects. */
-export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number; kind?: 'rig' | 'kernel' }
+/** `kind`: an OpenRig rig's group or the kernel's (docs/mockups/ledge-openrig-groups.html, view 3), after the projects. `count`: its
+ *  live sessions; `shown`: with its stopped OMP seats, listed greyed after them (docs/mockups/ledge-openrig-omp.html). */
+export interface ProjectNode { key: string; label: string; color?: ProjectColor; branches: BranchRow[]; count: number; shown?: number; kind?: 'rig' | 'kernel' }
 export interface Overview {
   /** The sessions waiting for the user, the oldest request first. */
   yours: Session[];
@@ -15,7 +16,7 @@ export interface Overview {
   machines: number;
 }
 
-/** The sessions the overview lists: live ones (an exited session leaves the list; archived ones are not in `sessions`). */
+/** The live sessions (an exited session leaves the list, but for a stopped OMP seat under its rig; archived ones are not in `sessions`). */
 export const listed = (sessions: readonly Session[]): Session[] => sessions.filter(s => s.state !== 'exited');
 
 export const machineOf = (s: Session): string => s.machineId ?? splitId(s.id)?.machine ?? 'local';
@@ -29,16 +30,16 @@ export function overview(sessions: readonly Session[], projects: Projects | null
   const known = new Map<string, Project>((projects?.projects ?? []).map(p => [p.id, p]));
   for (const p of projects?.projects ?? []) nodes.set(`p:${p.id}`, { key: `p:${p.id}`, label: p.name, color: p.color, branches: [], count: 0 });
   const rigNodes = new Map<string, ProjectNode>();
+  // An OpenRig seat goes to its rig's group, the kernel's to the kernel's, never to a project.
+  const rigNodeOf = (rig: string): ProjectNode => {
+    const kind = rig === 'kernel' ? 'kernel' as const : 'rig' as const;
+    const key = kind === 'kernel' ? 'g:kernel' : `g:rig:${rig}`;
+    let node = rigNodes.get(key);
+    if (!node) { node = { key, label: kind === 'kernel' ? 'Kernel' : rig, kind, branches: [{ branch: '', sessions: [] }], count: 0 }; rigNodes.set(key, node); }
+    return node;
+  };
   for (const s of live) {
-    // An OpenRig seat goes to its rig's group, the kernel's to the kernel's, never to a project.
-    if (s.rig) {
-      const kind = s.rig.name === 'kernel' ? 'kernel' as const : 'rig' as const;
-      const key = kind === 'kernel' ? 'g:kernel' : `g:rig:${s.rig.name}`;
-      let node = rigNodes.get(key);
-      if (!node) { node = { key, label: kind === 'kernel' ? 'Kernel' : s.rig.name, kind, branches: [{ branch: '', sessions: [] }], count: 0 }; rigNodes.set(key, node); }
-      node.branches[0]!.sessions.push(s); node.count += 1;
-      continue;
-    }
+    if (s.rig) { const node = rigNodeOf(s.rig.name); node.branches[0]!.sessions.push(s); node.count += 1; continue; }
     const pid = projects ? projectOf({ machineId: machineOf(s), cwd: s.cwd }, projects) : null;
     const key = pid && known.has(pid) ? `p:${pid}` : `r:${machineOf(s)}:${s.repoPath ?? s.cwd}`;
     let node = nodes.get(key);
@@ -47,6 +48,12 @@ export function overview(sessions: readonly Session[], projects: Projects | null
     let row = node.branches.find(b => b.branch === branch);
     if (!row) { row = { branch, sessions: [] }; node.branches.push(row); }
     row.sessions.push(s); node.count += 1;
+  }
+  // A stopped OMP seat stays under its rig, after its live seats, out of its count.
+  for (const s of sessions) {
+    if (!isStoppedOmpSeat(s) || !s.rig) continue;
+    const node = rigNodeOf(s.rig.name);
+    node.branches[0]!.sessions.push(s); node.shown = (node.shown ?? node.count) + 1;
   }
   const groups = [...rigNodes.values()].sort((a, b) => (a.kind === b.kind ? a.label.localeCompare(b.label) : a.kind === 'kernel' ? 1 : -1));
   const tree = [...[...nodes.values()].filter(n => n.count > 0), ...groups];
