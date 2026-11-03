@@ -56,7 +56,7 @@ import { ConfirmDialog } from './manage/ConfirmDialog';
 import { BroadcastDialog } from './broadcast/BroadcastDialog';
 import { loadedWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
-import { loadSessionPrefs, saveSessionPrefs } from './session/prefs';
+import { loadSessionPrefs, saveSessionPrefs, terminalShown, type SessionPrefs } from './session/prefs';
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { ptyBackend } from './term/backend';
@@ -210,18 +210,28 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // Ledge shows the agent's screen (focused window, pane open, agent tab active): that is the terminal in front, no sound.
-  watching.current = () => (place.kind === 'session' && session ? watchedSession({ focused: document.hasFocus(), terminal: sessionPrefs.terminal, placeId: place.id, helper: place.helper, active: termStore.active(place.id), agentTab: agentTabId(place.id) }) : null);
+  watching.current = () => (place.kind === 'session' && session ? watchedSession({ focused: document.hasFocus(), terminal: terminalOn, placeId: place.id, helper: place.helper, active: termStore.active(place.id), agentTab: agentTabId(place.id) }) : null);
   // The subagent whose page is open, found as the Workspace finds it (live, else its thread row), for the top bar.
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   useEffect(preloadPlaces, []);
-  const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
+  // The OMP seat whose terminal was closed on its page: it opens on it otherwise (terminalShown).
+  const [seatClosed, setSeatClosed] = useState<string | null>(null);
+  const terminalOn = terminalShown(session, sessionPrefs.terminal, seatClosed);
+  const shownPrefs = useMemo(() => ({ ...sessionPrefs, terminal: terminalOn }), [sessionPrefs, terminalOn]);
+  // A change from the page: a terminal it hides on an OMP seat is that seat's closing; one it leaves as shown keeps the preference.
+  const setShownPrefs = (fn: (p: SessionPrefs) => SessionPrefs) => {
+    const next = fn(shownPrefs);
+    if (!next.terminal && terminalOn && session) setSeatClosed(session.id);
+    setSessionPrefs(x => ({ ...x, ...next, terminal: next.terminal === terminalOn ? x.terminal : next.terminal }));
+  };
+  const toggleTerminal = () => setShownPrefs(p => ({ ...p, terminal: !p.terminal }));
   // Ctrl + ² from outside the terminal: it shows if hidden, then its open tab takes the keyboard. A pane just asked for draws
   // its xterm in the renders this key starts, so the focus waits for the next frame.
   const toTerminal = () => {
     if (place.kind !== 'session' || !session) return false;
     const id = place.id;
-    if (!sessionPrefs.terminal) setSessionPrefs(p => ({ ...p, terminal: true }));
+    if (!terminalOn) setSessionPrefs(p => ({ ...p, terminal: true }));
     requestAnimationFrame(() => termStore.surface(termStore.active(id))?.focus());
     return true;
   };
@@ -314,7 +324,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
-          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
+          <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={terminalOn} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.target.kind === 'session' && sessionMenu.menu.target.id === session?.id, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
@@ -323,7 +333,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
                 paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
             : place.kind === 'openrig' ? <OpenRigPage client={fleetClient} machines={machines} machine={place.machine} section={place.section ?? 'rigs'} role={place.role} seat={place.seat} open={place.open} projects={projects} sessions={sessions} dispatch={dispatch} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
-                prefs={sessionPrefs} setPrefs={setSessionPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
+                prefs={shownPrefs} setPrefs={setShownPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
                 tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />}

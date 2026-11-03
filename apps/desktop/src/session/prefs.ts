@@ -1,3 +1,4 @@
+import { isArchived, isOmpSeat, type Session } from '@ledge/protocol';
 import { isRecord, readJson, writeJson } from '../state/storage';
 
 /** The session place's preferences that survive a restart: whether the terminal shows beside the conversation and how wide its
@@ -31,3 +32,11 @@ export function loadSessionPrefs(): SessionPrefs {
   };
 }
 export function saveSessionPrefs(p: SessionPrefs): void { writeJson(SESSION_KEY, p); }
+
+/** Whether the terminal shows beside `s`: the preference, but for an OMP seat of OpenRig (docs/mockups/ledge-openrig-omp.html),
+ *  which has no thread: running, it opens on its terminal until the terminal is closed on it (`closedOn`); stopped, it has none. */
+export function terminalShown(s: Pick<Session, 'id' | 'source' | 'tool' | 'backend' | 'state' | 'archivedAt'> | null, pref: boolean, closedOn: string | null): boolean {
+  if (!s || !isOmpSeat(s)) return pref;
+  if (isArchived(s) || s.state === 'exited') return false;
+  return pref || closedOn !== s.id;
+}

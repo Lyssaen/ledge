@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type JSX } from 'react';
-import type { HumanAsk, Session } from '@ledge/protocol';
+import { isStoppedOmpSeat, type HumanAsk, type Session } from '@ledge/protocol';
 import { isAskSeat, markOf } from '../../asks/model';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
@@ -30,7 +30,7 @@ const tagWord = (t: { side: { kernelTag: Record<'ready' | 'starting' | 'stopped'
 /**
  * The OpenRig seats Ledge follows, away from the projects (docs/mockups/ledge-sidebar-tidy.html): « Kernel » first, in its box,
  * with the kernel's real state; then « Rigs », one row per rig with its seats under it, and the header's options. A seat that ended
- * is left out. Without a seat, the box OpenRig's state calls for: stopped, starting, failed, or no rig yet.
+ * is left out, but for an OMP seat: greyed « arrêté » under its rig, out of its counts (docs/mockups/ledge-openrig-omp.html). Without a seat, the box OpenRig's state calls for: stopped, starting, failed, or no rig yet.
  */
 export function RigGroups({ sessions, current, paused, dispatch, openrig, dense, onToggleDense, asks = [], onMenu }: {
   sessions: readonly Session[]; current: string | null; paused: boolean; dispatch: (a: NavAction) => void;
@@ -47,12 +47,12 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
   const live = sessions.filter(s => s.rig && s.state !== 'exited');
   const kernel = live.filter(s => s.rig!.name === KERNEL);
   const rigs = new Map<string, Session[]>();
-  for (const s of live) if (s.rig!.name !== KERNEL) rigs.set(s.rig!.name, [...(rigs.get(s.rig!.name) ?? []), s]);
+  for (const s of sessions.filter(x => x.rig && (x.state !== 'exited' || isStoppedOmpSeat(x)))) if (s.rig!.name !== KERNEL) rigs.set(s.rig!.name, [...(rigs.get(s.rig!.name) ?? []), s]);
   // Only the asking seat on the asks' machine is marked: a namesake seat elsewhere is not (review).
   const askOf = (s: Session) => markOf(asks.filter(a => s.rig !== undefined && isAskSeat(s, a.from.seat)));
   const launch = () => dispatch({ type: 'openrig', section: 'rigs', open: { launch: true } });
-  const row = (s: Session, depth: number) => (
-    <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel', s.offline && 'off')} style={{ '--d': depth } as CSSProperties}
+  const row = (s: Session, depth: number) => { const stopped = isStoppedOmpSeat(s); return (
+    <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel', (s.offline || stopped) && 'off')} style={{ '--d': depth } as CSSProperties}
       onContextMenu={onMenu ? e => { e.preventDefault(); onMenu(s.id, menuPoint(e, e.currentTarget), e.currentTarget.querySelector<HTMLElement>('.st-main')); } : undefined}>
       <span className="st-gap" />
       <span className="st-bot"><SessionBot session={s} size={18} paused={paused} /></span>
@@ -61,9 +61,9 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
       </button>
       {(() => { const a = askOf(s); return a && !s.offline
         ? <span className="st-time t-approval st-ask-mark">{t.asks.pill[a]}</span>
-        : <span className={cls('st-time', waiting(s) && (s.state === 'waiting_permission' ? 't-approval' : s.state === 'waiting_input' ? 't-question' : 't-error'))}>{s.offline ? t.side.offline : ''}</span>; })()}
+        : <span className={cls('st-time', waiting(s) && (s.state === 'waiting_permission' ? 't-approval' : s.state === 'waiting_input' ? 't-question' : 't-error'))}>{s.offline ? t.side.offline : stopped ? t.side.seatStopped : ''}</span>; })()}
     </div>
-  );
+  ); };
 
   if (live.length === 0) {
     if (!openrig) return null;

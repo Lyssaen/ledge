@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import { contextShare, isArchived, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
-import { Icon } from '@ledge/ui/ui/icons';
+import { contextShare, isArchived, isOmpSeat, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
+import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { Decisions } from '../fleet/decisions';
 import { whenOf, type Wait } from '../list/time';
@@ -72,6 +72,9 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const th = t.session.thread;
   const offline = session.offline === true;
   const archived = isArchived(session);
+  // An OMP seat of OpenRig (docs/mockups/ledge-openrig-omp.html): no thread nor reply, its terminal alongside; stopped, a line
+  // that says its terminal is gone and points at its rig.
+  const seat = isOmpSeat(session) ? (archived || session.state === 'exited' ? 'stopped' : 'live') : null;
   const key = memoKey(session.id, helper?.id);
   // What the last visit left, read once.
   const [memo] = useState(() => memory.get(key));
@@ -397,7 +400,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
     if (e.key === 'Escape' && todoShown) { setTodoOpen(false); return true; }
     if (e.key === 'Escape' && paneShown) { closeTab(activeTab!); return true; }
     if (replyKeys.current?.(e)) return true;
-    if (e.key === 'o' || e.key === 'O') { p.onTerminal(); return true; }
+    if (e.key === 'o' || e.key === 'O') { if (seat !== 'stopped') p.onTerminal(); return true; }
     const k = e.key.toLowerCase();
     if (k !== 'j' && k !== 'k') return false;
     const walk = view === 'changes' ? files.length > 0 : paneShown && active.kind === 'diff' && files.length > 0;
@@ -426,14 +429,14 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   return (
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
       <div className="pane-heading">
-        <div className="view-switch" role="tablist" aria-label={t.session.views.label}>
+        {seat === null && <div className="view-switch" role="tablist" aria-label={t.session.views.label}>
           {VIEWS.map(({ view: v, icon }) => (
             <button key={v} type="button" role="tab" id={`session-tab-${v}`} aria-selected={view === v} tabIndex={view === v ? 0 : -1}
               onClick={() => switchView(v)} onKeyDown={onTabKey}>
               <Icon d={icon} size={13} />{t.session.views[v]}{v === 'changes' && loaded && <span className="tab-count mono">{files.length}</span>}
             </button>
           ))}
-        </div>
+        </div>}
         <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(share !== undefined ? [t.handover.gauge(Math.round(share * 100))] : [])].filter(Boolean).join(' · ')}</span>
         {/* Its relief (context handover spec §3.3): under way, done (the relief opens), or the one it relieves. */}
         {session.handover && (session.handover.state === 'done' && session.handover.to
@@ -455,6 +458,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
           <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-changes' })}>
             <div className="messages session-thread" ref={scroller} data-thread-focus tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
+              {seat !== null ? <SeatNote stopped={seat === 'stopped'} onOpenRig={() => p.dispatch({ type: 'openrig', section: 'rigs', machine: session.machineId ?? 'local' })} /> : <>
               {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
               {offline && (
                 <div className="frozen-banner" role="status">
@@ -467,6 +471,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
                 : <Thread client={p.client} session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
                     flash={flash?.id ?? null} onChange={openDiff} onCapture={onCapture} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
                     convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} onReplyTo={replyTo} />}
+              </>}
             </div>
             {/* Before the thread is there, the files are not known: the thread's own note, never « Aucun fichier modifié ». */}
             {view === 'changes' && !loaded && <div className="changes-empty"><p className="muted">{offline ? th.notLoaded : th.loading}</p></div>}
@@ -474,7 +479,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
               <Changes files={files} current={current?.path ?? null} onFile={setFile} onTouch={showInThread} listOpen={listOpen} onListOpen={setListOpen}
                 session={session} name={helper?.kind ?? session.name} notify={p.notify} />
             )}
-            {view === 'thread' && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
+            {view === 'thread' && seat === null && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
           {!archived && held && (
             <div className="pinned-task" role="note" aria-label={t.session.heldTask.pinned} data-task={held.id}>
@@ -483,7 +488,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
               <button type="button" className="message-link" onClick={() => p.dispatch({ type: 'ledge', tab: 'tasks', task: held.id })}>{t.session.heldTask.seeTasks}</button>
             </div>
           )}
-          {!archived && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
+          {!archived && seat === null && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
             notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} />}
         </div>
         {paneShown && (
@@ -493,5 +498,21 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
         )}
       </div>
     </section>
+  );
+}
+
+/** In an OMP seat's thread place: why there is no thread (its terminal is alongside), or, stopped, that its terminal is gone and
+ *  where its rig is (docs/mockups/ledge-openrig-omp.html, view 1). */
+function SeatNote({ stopped, onOpenRig }: { stopped: boolean; onOpenRig(): void }): JSX.Element {
+  const { t } = useI18n();
+  const x = stopped ? t.session.rigStopped : t.session.rigTerminalOnly;
+  return (
+    <div className="seat-note" role="status">
+      <Icon d={stopped ? ICONS.stop.d : ICONS.text.d} size={18} />
+      <div>
+        <p><strong>{x.title}</strong> {x.body}</p>
+        {stopped && <button type="button" className="message-link" onClick={onOpenRig}>{t.side.empty.openPage}</button>}
+      </div>
+    </div>
   );
 }

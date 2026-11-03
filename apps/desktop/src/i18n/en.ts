@@ -36,7 +36,7 @@ export const en: Messages = {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name) => `The rig ${name} on the OpenRig page`, rigAsks: (n) => `${n} ${pluralEn(n, 'request', 'requests')}`, 
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
-    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
+    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', seatStopped: 'stopped', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
     ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number) => `${yours} yours`,
     kernelTag: { ready: 'operational', starting: 'starting', stopped: 'stopped' },
     empty: {
@@ -762,6 +762,8 @@ export const en: Messages = {
   },
   session: {
     meta: 'Machine and repositories',
+    rigTerminalOnly: { title: 'No thread for this seat.', body: 'Ledge does not read the conversation of an OMP seat launched by OpenRig. Its terminal is open alongside: what you type there is sent to it.' },
+    rigStopped: { title: 'Seat stopped.', body: 'Its terminal is gone: the OpenRig page shows its rig.' },
     subagent: 'Subagent',
     kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the sidebar',
     views: { label: 'Session view', thread: 'Thread', changes: 'Changes' },

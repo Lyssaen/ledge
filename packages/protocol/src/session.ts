@@ -143,3 +143,15 @@ export function backendOf(s: Pick<Session, 'backend'>): Backend {
 export function isArchived(s: Pick<Session, 'archivedAt'>): boolean {
   return s.archivedAt !== undefined;
 }
+
+/** An OMP seat of OpenRig that Ledge follows for its state only (one Ledge launches itself is `omp-rpc`): no thread, its pane is
+ *  the seat's runner, its life OpenRig's. */
+export function isOmpSeat(s: Pick<Session, 'source' | 'tool' | 'backend'>): boolean {
+  return s.source === 'rig' && s.tool === 'omp' && s.backend === undefined;
+}
+
+/** A stopped OMP seat, which the fronts keep under its rig, greyed « arrêté » (docs/mockups/ledge-openrig-omp.html), as long as the
+ *  daemon keeps it out of the archive. Claude and Codex seats that end leave the lists, as before. */
+export function isStoppedOmpSeat(s: Pick<Session, 'source' | 'tool' | 'backend' | 'state' | 'archivedAt'>): boolean {
+  return isOmpSeat(s) && s.state === 'exited' && !isArchived(s);
+}
