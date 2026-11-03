@@ -21,6 +21,12 @@ describe('browser: the agent\'s browser, live', () => {
     expect(() => parseServerMessage({ type: 'browser.frame', id: 's1', data: '', at, live: true })).toThrow();
   });
 
+  it('each image says which page it is of, as the state says which page is shown', () => {
+    expect(parseServerMessage({ type: 'browser.live', id: 's1', state: 'live', tabs: 2, page: '2.1', image: { at, page: '1.0' } })).toMatchObject({ page: '2.1', image: { page: '1.0' } });
+    expect(parseServerMessage({ type: 'browser.frame', id: 's1', data: '/9j/4AAQ', at, page: '2.1', live: true })).toMatchObject({ page: '2.1' });
+    expect(() => parseServerMessage({ type: 'browser.frame', id: 's1', data: '/9j/4AAQ', at, page: '', live: true })).toThrow();
+  });
+
   it('watch, unwatch; enabling needs the person\'s confirmation', () => {
     expect(parseClientMessage({ type: 'browser.watch', id: 's1' })).toEqual({ type: 'browser.watch', id: 's1' });
     expect(parseClientMessage({ type: 'browser.unwatch', id: 's1' })).toEqual({ type: 'browser.unwatch', id: 's1' });

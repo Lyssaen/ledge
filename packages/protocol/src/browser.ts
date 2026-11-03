@@ -36,6 +36,11 @@ export const BROWSER_TITLE_MAX = 300;
 export const BROWSER_FRAME_MAX = 2_000_000;
 
 const url = z.string().max(BROWSER_URL_MAX);
+/**
+ * Which page an image is of: the agent's tab and its navigation, opaque (`<tab>.<navigation>`), only ever compared. It
+ * changes when the agent goes to another tab or the tab to another address; two tabs on the same address differ.
+ */
+const page = z.string().min(1).max(64);
 const title = z.string().max(BROWSER_TITLE_MAX);
 
 /**
@@ -48,10 +53,12 @@ export const BrowserLiveSchema = z.object({
   type: z.literal('browser.live'), id: z.string(),
   state: BrowserStateSchema,
   url: url.optional(), title: title.optional(),
+  /** The page the film shows now (live), or showed last (closed). A front shows a frame only when its `page` is this one. */
+  page: page.optional(),
   tabs: z.number().int().nonnegative(),
   since: z.string().datetime().optional(),
   closedAt: z.string().datetime().optional(), closed: BrowserClosedHowSchema.optional(),
-  image: z.object({ at: z.string().datetime(), url: url.optional(), title: title.optional() }).optional()
+  image: z.object({ at: z.string().datetime(), url: url.optional(), title: title.optional(), page: page.optional() }).optional()
 });
 export type BrowserLive = z.infer<typeof BrowserLiveSchema>;
 
@@ -65,6 +72,8 @@ export const BrowserFrameSchema = z.object({
   data: z.string().min(1).max(BROWSER_FRAME_MAX),
   at: z.string().datetime(),
   width: z.number().int().positive().optional(), height: z.number().int().positive().optional(),
+  /** The page this image is of (film or kept image): a late frame of another page is told apart by it. */
+  page: page.optional(),
   live: z.boolean()
 });
 export type BrowserFrame = z.infer<typeof BrowserFrameSchema>;
