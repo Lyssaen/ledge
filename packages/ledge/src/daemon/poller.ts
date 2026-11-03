@@ -78,8 +78,9 @@ export function startPoller(opts: {
     }
     if (s.state === 'exited') {
       forget(s.id);
-      // A restore restarts the clock: the later of the exit and the restore counts.
-      if (!s.archivedAt && s.exitedAt) {
+      // A restore restarts the clock: the later of the exit and the restore counts. An OMP seat of OpenRig stays, stopped under
+      // its rig, as long as OpenRig lists it: the seat discovery archives it once it is gone (server.ts).
+      if (!s.archivedAt && s.exitedAt && !isOmpSeat(s)) {
         const since = Math.max(Date.parse(s.exitedAt), s.restoredAt ? Date.parse(s.restoredAt) : -Infinity);
         if (t - since > retireMs) store.archive(s.id, now());
       }

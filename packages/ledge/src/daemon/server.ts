@@ -68,6 +68,12 @@ import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
 
+/** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
+function withoutHarness(s: Session): Session {
+  const { pending: _p, lastReply: _r, transcriptPath: _t, agentSessionId: _a, agentSessionFile: _f, model: _m, effort: _e, modelNext: _n, queue: _q, backend: _b, ...rest } = s;
+  return { ...rest, helpers: [] };
+}
+
 /** The OpenRig runtimes Ledge follows as a session, and the harness each one is. */
 const SEAT_TOOLS: Readonly<Record<string, Tool>> = { 'claude-code': 'claude', codex: 'codex', omp: 'omp' };
 
@@ -229,10 +235,21 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    */
   async function discoverSeats(st: OpenRigState): Promise<void> {
     if (st.daemon.state !== 'running') return;
-    const followed = new Set(store.all().filter(x => x.rig && x.state !== 'exited').map(x => x.rig!.seat));
+    const followed = new Map(store.all().filter(x => x.rig && x.state !== 'exited').map(x => [x.rig!.seat, x.id] as const));
     for (const r of st.rigs) for (const n of r.nodes) {
       const tool = SEAT_TOOLS[n.runtime];
-      if (!tool || n.sessionStatus !== 'running' || followed.has(n.session)) continue;
+      if (!tool || n.sessionStatus !== 'running') continue;
+      const live = followed.get(n.session);
+      if (live !== undefined) {
+        // The seat now runs another harness under the same name (its rig relaunched from another spec): the session follows it,
+        // so an OMP seat is never typed into as a Claude or Codex one, nor a Claude or Codex seat left unfollowed as an OMP one.
+        const s = store.get(live);
+        if (s && s.tool !== tool && (s.source === 'rig' || s.source === 'hook_only')) {
+          store.upsert({ ...withoutHarness(s), tool, state: 'idle', lastActivityAt: now() });
+          log(`openrig: seat ${n.session} now runs ${n.runtime}`);
+        }
+        continue;
+      }
       if (!(await tmux.hasSession(n.session).catch(() => false))) continue;
       // The session this seat had before (ended with its rig, archived since), else the one its id names: the same seat comes back as itself.
       const before = store.all().filter(x => x.rig?.seat === n.session).sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))[0];
@@ -242,14 +259,28 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (old) {
         if (old.archivedAt) store.unarchive(id, at);
         const { exitedAt: _e, exitCode: _c, pending: _p, ...rest } = store.get(id)!;
-        store.upsert({ ...rest, state: 'idle', tmuxSession: n.session, source: 'rig', rig, lastActivityAt: at });
+        // Back under the harness it runs now: the one it had before may not be it any more.
+        const same = rest.tool === tool ? rest : { ...withoutHarness(rest as Session), tool };
+        store.upsert({ ...same, state: 'idle', tmuxSession: n.session, source: 'rig', rig, lastActivityAt: at });
       } else {
         const name = pickName([...namesInUse(store.all()), ...heldNames(store.all())]);
         store.upsert({ id, name, tool, cwd, project: basename(cwd) || r.name, title: `${name} · ${n.logicalId}`,
           tmuxSession: n.session, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'rig', rig });
         log(`openrig: seat ${n.session} followed as ${name}`);
       }
-      followed.add(n.session);
+      followed.set(n.session, id);
+    }
+    // A stopped OMP seat stays under its rig while OpenRig lists it (its rig stopped too), and leaves once the seat is gone from it.
+    // Only a reading that lists seats says one is gone: a failed `rig ps` reads as no rig, a failed `rig ps --nodes` as rigs
+    // without seats; a rig that counts seats but lists none was not read whole, its seats are kept.
+    if (!st.rigs.some(r => r.nodes.length > 0)) return;
+    const listed = new Set(st.rigs.flatMap(r => r.nodes.map(n => n.session)));
+    const unsure = new Set(st.rigs.filter(r => r.seats > 0 && r.nodes.length === 0).map(r => r.name));
+    for (const s of store.all()) {
+      if (isOmpSeat(s) && s.rig && s.state === 'exited' && !isArchived(s) && !listed.has(s.rig.seat) && !unsure.has(s.rig.name)) {
+        store.archive(s.id, now());
+        log(`openrig: seat ${s.rig.seat} is gone from OpenRig`);
+      }
     }
   }
   const SEATS_EVERY_MS = 30_000;

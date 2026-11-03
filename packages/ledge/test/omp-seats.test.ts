@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { createOmpSeats, entryState, isOmpSeat, TAIL_BYTES } from '../src/daemon/omp/seats.js';
+import { createOmpSeats, entryState, isOmpSeat } from '../src/daemon/omp/seats.js';
 
 // Entries as OMP 18.13.1 writes them under OpenRig 0.7.7 (~/.openrig/state/omp/<seat>/sessions/*.jsonl), trimmed.
 const at = (s: number) => `2026-11-03T09:00:${String(s).padStart(2, '0')}.000Z`;
@@ -17,7 +17,7 @@ const HEAD = [
 const prompt = (id: string, s: number, text: string) => ({ type: 'message', id, timestamp: at(s), message: { role: 'user', attribution: 'user', content: [{ type: 'text', text }] } });
 const said = (id: string, s: number, stopReason: string) => ({ type: 'message', id, timestamp: at(s), message: { role: 'assistant', content: [{ type: 'text', text: 'x' }], stopReason } });
 const toolStart = (id: string, s: number) => ({ type: 'custom', customType: 'tool_execution_start', id, timestamp: at(s), data: { toolCallId: `t-${id}`, toolName: 'bash', args: {} } });
-const toolResult = (id: string, s: number) => ({ type: 'message', id, timestamp: at(s), message: { role: 'toolResult', toolCallId: 't', toolName: 'bash', content: [], isError: false } });
+const toolResult = (id: string, s: number, text = '') => ({ type: 'message', id, timestamp: at(s), message: { role: 'toolResult', toolCallId: 't', toolName: 'bash', content: text ? [{ type: 'text', text }] : [], isError: false } });
 const lines = (entries: unknown[]) => entries.map(e => `${JSON.stringify(e)}\n`).join('');
 
 describe('entryState: what an OMP journal entry says of the seat', () => {
@@ -66,11 +66,33 @@ describe('createOmpSeats: the state of an OpenRig OMP seat, from its journal', (
     expect(store.get(ID)?.state).toBe('working');
   });
 
-  it('a seat new to Ledge reads only the end of a long journal, which holds its state', async () => {
+  it('a seat new to Ledge takes its state from the last entry that tells one, however long that line, and again after a restart', async () => {
     store.upsert(session());
-    writeFileSync(journal, lines([...HEAD, prompt('u0', 1, 'x'.repeat(TAIL_BYTES)), said('a0', 2, 'toolUse'), said('a1', 9, 'stop')]));
+    // A tool result of 600 KB is the last whole entry while OMP works on the next call; OMP's bookkeeping after it tells nothing.
+    writeFileSync(journal, lines([...HEAD, prompt('u0', 1, 'go'), said('a0', 2, 'toolUse'), toolResult('r0', 9, 'x'.repeat(600 * 1024)), { type: 'ttsr_injection', timestamp: at(10) }]));
     await createOmpSeats({ store, root }).tick();
-    expect(store.get(ID)).toMatchObject({ state: 'idle', lastActivityAt: at(9) });
+    expect(store.get(ID)).toMatchObject({ state: 'working', lastActivityAt: at(9) });
+    // The daemon restarts: the seat is idle as discovery recorded it, until its journal says otherwise.
+    store.upsert({ ...store.get(ID)!, state: 'idle' });
+    const s = createOmpSeats({ store, root }); await s.tick();
+    expect(store.get(ID)?.state).toBe('working');
+    // Read on from there: the turn's end.
+    appendFileSync(journal, lines([said('a1', 20, 'stop')]));
+    await s.tick();
+    expect(store.get(ID)).toMatchObject({ state: 'idle', lastActivityAt: at(20) });
+  });
+
+  it('a journal with no entry that tells a state, or only a line still being written, leaves the state as it is', async () => {
+    store.upsert(session({ state: 'idle' }));
+    writeFileSync(journal, lines(HEAD));
+    const s = createOmpSeats({ store, root }); await s.tick();
+    expect(store.get(ID)?.state).toBe('idle');
+    appendFileSync(journal, '{"type":"message","message":{"role":"user"');
+    await s.tick();
+    expect(store.get(ID)?.state).toBe('idle');
+    appendFileSync(journal, ',"content":[]},"timestamp":"2026-11-03T09:00:30.000Z"}\n');
+    await s.tick();
+    expect(store.get(ID)?.state).toBe('working');
   });
 
   it('a new conversation of the seat (another journal) is followed from then on', async () => {

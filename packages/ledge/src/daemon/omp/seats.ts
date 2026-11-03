@@ -18,8 +18,10 @@ import type { Store } from '../store.js';
 /** Where OpenRig keeps its OMP seats: `<OPENRIG_HOME>/state/omp`. */
 export const ompSeatsRoot = (env: NodeJS.ProcessEnv = process.env): string => join(env.OPENRIG_HOME?.trim() || join(homedir(), '.openrig'), 'state', 'omp');
 
-/** A seat seen for the first time is read from this far back: enough to hold the entry that tells its state. */
-export const TAIL_BYTES = 256 * 1024;
+/** A seat seen for the first time: its journal is searched backwards, at most this far, for the last entry that tells its state
+ *  (a tool result can be a line of several megabytes). */
+export const BACK_BYTES = 16 * 1024 * 1024;
+const BLOCK = 64 * 1024;
 /** At most this much journal per seat and tick: a burst is read over the next ticks. */
 export const READ_BYTES = 4 * 1024 * 1024;
 
@@ -72,8 +74,14 @@ export function createOmpSeats(deps: OmpSeatsDeps) {
     let size: number;
     try { size = (await stat(file)).size; } catch { return; }
     let f = follows.get(s.id);
-    // A seat new to this daemon, or a new conversation of the seat: its recent part holds its state.
-    if (!f || f.file !== file) { f = { file, offset: Math.max(0, size - TAIL_BYTES) }; follows.set(s.id, f); }
+    // A seat new to this daemon, or a new conversation of the seat: its state is its last entry that tells one, then the
+    // journal is read on from the end of its last whole line.
+    if (!f || f.file !== file) {
+      const known = await lastState(file, size);
+      f = { file, offset: known.end }; follows.set(s.id, f);
+      if (known.state) apply(s.id, known.state);
+      return;
+    }
     // A journal shorter than what was read was rewritten: what follows is new.
     if (size < f.offset) { f.offset = size; return; }
     if (size === f.offset) return;
@@ -96,11 +104,54 @@ export function createOmpSeats(deps: OmpSeatsDeps) {
       try { entry = JSON.parse(line); } catch { continue; }
       last = entryState(entry) ?? last;
     }
-    if (!last) return;
-    const cur = store.get(s.id);
+    if (last) apply(s.id, last);
+  }
+
+  function apply(id: string, last: NonNullable<ReturnType<typeof entryState>>): void {
+    const cur = store.get(id);
     if (!cur || cur.state === 'exited') return;
     const at = last.at ?? new Date().toISOString();
     if (cur.state !== last.state || at > cur.lastActivityAt) store.upsert({ ...cur, state: last.state, lastActivityAt: at > cur.lastActivityAt ? at : cur.lastActivityAt });
+  }
+
+  /**
+   * The state the journal's last telling entry gives, read backwards line by line from its last whole line (`end`: the byte after
+   * it, where reading goes on). Null when no entry within BACK_BYTES tells one: the state is left as it is.
+   */
+  async function lastState(file: string, size: number): Promise<{ state: ReturnType<typeof entryState>; end: number }> {
+    const fh = await open(file, 'r');
+    try {
+      /** The position of the last newline before `before`, or -1; null once the search goes past BACK_BYTES. */
+      const newlineBefore = async (before: number): Promise<number | null> => {
+        const buf = Buffer.alloc(BLOCK);
+        for (let to = before; to > 0;) {
+          if (size - to > BACK_BYTES) return null;
+          const from = Math.max(0, to - BLOCK);
+          const { bytesRead } = await fh.read(buf, 0, to - from, from);
+          const at = buf.subarray(0, bytesRead).lastIndexOf(0x0a);
+          if (at !== -1) return from + at;
+          to = from;
+        }
+        return -1;
+      };
+      const last = await newlineBefore(size);
+      if (last === null || last === -1) return { state: null, end: last === -1 ? 0 : size };
+      const end = last + 1;
+      for (let lineEnd = last; lineEnd > 0;) {
+        const start = await newlineBefore(lineEnd);
+        if (start === null) break;
+        const from = start + 1;
+        const line = Buffer.alloc(lineEnd - from);
+        await fh.read(line, 0, line.length, from);
+        let entry: unknown = null;
+        try { entry = JSON.parse(line.toString('utf8')); } catch { /* a broken line tells nothing */ }
+        const state = entryState(entry);
+        if (state) return { state, end };
+        if (start === -1) break;
+        lineEnd = start;
+      }
+      return { state: null, end };
+    } finally { await fh.close(); }
   }
 
   async function tick(): Promise<void> {

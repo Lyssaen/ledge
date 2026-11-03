@@ -179,6 +179,9 @@ describe('poller', () => {
     expect(store.get('s')!.state).toBe('working');
     delete panes[seat]; clock += 1000; await p.tick();
     expect(store.get('s')!.state).toBe('exited');
+    // Stopped, it stays under its rig: OpenRig's listing decides when it goes, not the retirement clock.
+    clock += 24 * 3600_000; await p.tick();
+    expect(store.get('s')!.archivedAt).toBeUndefined();
     p.stop();
   });
   it('archives an exited session after retireMs instead of removing it', async () => {
