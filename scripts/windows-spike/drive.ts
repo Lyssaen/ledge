@@ -130,10 +130,11 @@ const checks: Check[] = [
     }
     await until(id, idle, 120_000, 'question-answered');
     save(id, 'question-after');
-    // The thread gets the answer once the Stop hook ran, which can come seconds after the pane is at rest.
-    let said = '';
-    for (let n = 0; n < 20 && !/bleu/i.test(said); n++) { said = (await thread(id)).filter(x => x.kind === 'message').map(x => (x as { text: string }).text).at(-1) ?? ''; if (!/bleu/i.test(said)) await sleep(500); }
-    if (!/bleu/i.test(said)) throw new Error(`answered option ${i + 1}, the agent said ${JSON.stringify(said.slice(0, 80))}`);
+    // Claude prints the answer it got (« · Quelle couleur … → Bleu »): the option the digit picked, on screen.
+    const lines = previews.get(id) ?? [];
+    const answered = lines.find(l => /→\s*Bleu\b/i.test(l));
+    if (!answered) throw new Error(`answered option ${i + 1}, but the pane shows no « → Bleu » (${save(id, 'question-no-answer')})`);
+    const said = lines.filter(l => /^●\s/.test(l)).at(-1)?.replace(/^●\s*/, '') ?? '';
     return `option ${i + 1} (Bleu) chosen, the agent said ${JSON.stringify(said.slice(0, 40))}`;
   } },
   { n: 7, name: 'interrupt', run: async id => {
