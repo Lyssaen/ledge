@@ -47,6 +47,19 @@ export function entryState(raw: unknown): { state: 'working' | 'idle'; at?: stri
 
 interface Follow { file: string; offset: number }
 
+/** The position of the first newline at or after `from`, or -1 before `size`. */
+async function nextNewline(fh: import('node:fs/promises').FileHandle, from: number, size: number): Promise<number> {
+  const buf = Buffer.alloc(BLOCK);
+  for (let at = from; at < size;) {
+    const { bytesRead } = await fh.read(buf, 0, Math.min(BLOCK, size - at), at);
+    if (bytesRead === 0) return -1;
+    const nl = buf.subarray(0, bytesRead).indexOf(0x0a);
+    if (nl !== -1) return at + nl;
+    at += bytesRead;
+  }
+  return -1;
+}
+
 export interface OmpSeatsDeps {
   store: Store;
   /** `<OPENRIG_HOME>/state/omp`. */
@@ -86,15 +99,22 @@ export function createOmpSeats(deps: OmpSeatsDeps) {
     if (size < f.offset) { f.offset = size; return; }
     if (size === f.offset) return;
     const fh = await open(file, 'r');
-    let chunk: Buffer;
+    let chunk: Buffer, end: number;
     try {
-      const want = Math.min(size - f.offset, READ_BYTES);
-      chunk = Buffer.alloc(want);
-      chunk = chunk.subarray(0, (await fh.read(chunk, 0, want, f.offset)).bytesRead);
+      const readAt = async (want: number): Promise<Buffer> => { const b = Buffer.alloc(want); return b.subarray(0, (await fh.read(b, 0, want, f!.offset)).bytesRead); };
+      chunk = await readAt(Math.min(size - f.offset, READ_BYTES));
+      end = chunk.lastIndexOf(0x0a);
+      // A single new line longer than one read (a large prompt or result): read whole, up to BACK_BYTES.
+      if (end === -1 && chunk.length < size - f.offset) { chunk = await readAt(Math.min(size - f.offset, BACK_BYTES)); end = chunk.lastIndexOf(0x0a); }
+      if (end === -1 && chunk.length === BACK_BYTES) {
+        // Longer still: skipped up to its end, the next entries tell the state.
+        const next = await nextNewline(fh, f.offset + chunk.length, size);
+        if (next !== -1) { log(`omp seats: an entry of ${s.rig!.seat} over ${BACK_BYTES} bytes was skipped`); f.offset = next + 1; }
+        return;
+      }
     } finally { await fh.close(); }
-    // Only whole lines: the one OMP is still writing is read on a next tick. A read that starts mid-journal drops its cut first line.
-    const end = chunk.lastIndexOf(0x0a);
-    if (end === -1) { if (chunk.length === READ_BYTES) f.offset += chunk.length; return; }
+    // Only whole lines: the one OMP is still writing is read on a next tick, from its start.
+    if (end === -1) return;
     const lines = chunk.subarray(0, end).toString('utf8').split('\n');
     f.offset += end + 1;
     let last: ReturnType<typeof entryState> = null;

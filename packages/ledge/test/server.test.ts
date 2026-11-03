@@ -2832,6 +2832,35 @@ describe('server: an OMP seat of OpenRig', () => {
   });
 });
 
+describe('server: a seat known from its hooks only that now runs OMP', () => {
+  it('waits for its pane, then becomes the OMP seat on it: followed, never typed into', async () => {
+    const SEAT = 'dev-agent@dev-omp';
+    store.upsert({ id: 'claude-conv', name: 'Bix', tool: 'claude', cwd: '/w', project: 'w', title: 'Bix', tmuxSession: null, state: 'idle', helpers: [],
+      startedAt: '2026-11-03T09:00:00.000Z', lastActivityAt: '2026-11-03T09:00:00.000Z', source: 'hook_only', rig: { seat: SEAT, name: 'dev-omp', role: 'dev.agent' } });
+    const node = { logicalId: 'dev.agent', session: SEAT, runtime: 'omp', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'unknown', stopped: false, work: 0 };
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-03T09:00:00.000Z', rigs: [
+      { id: 'D', name: 'dev-omp', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
+    const panes: Record<string, string[]> = {};
+    const seatTmux = fakeTmux(panes);
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, ompSeats: { tick: async () => {}, start: () => {}, stop: () => {} }, openrig: { row: async () => ({ error: 'not_found' }),
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    const discover = async () => { c.send({ type: 'openrig.status', requestId: 'r' }); await c.next('openrig.state'); await new Promise(r => setTimeout(r, 50)); };
+    await discover();
+    expect(store.get('claude-conv')).toMatchObject({ tool: 'claude', source: 'hook_only', tmuxSession: null });
+    panes[SEAT] = ['you ▸ go'];
+    await discover();
+    await vi.waitFor(() => expect(store.get('claude-conv')).toMatchObject({ tool: 'omp', source: 'rig', tmuxSession: SEAT, state: 'idle' }));
+    c.send({ type: 'session.reply', id: 'claude-conv', text: 'go' });
+    expect(await c.next('error')).toMatchObject({ id: 'claude-conv', code: 'read_only' });
+    expect(seatTmux.sent.filter(x => x[1] === SEAT)).toEqual([]);
+    c.close(); await srv2.close();
+  });
+});
+
 describe('server: a stopped OMP seat', () => {
   it('stays under its rig while OpenRig lists it, its rig stopped too, and goes once the seat is gone from it; a failed reading removes nothing', async () => {
     const seatNode = (session: string, logicalId: string, runtime = 'omp', sessionStatus = 'stopped') => ({ logicalId, session, runtime, model: null, sessionStatus, lifecycleState: 'stopped', activity: 'unknown', stopped: true, work: 0 });
