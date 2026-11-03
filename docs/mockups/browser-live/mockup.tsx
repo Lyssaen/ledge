@@ -469,9 +469,9 @@ function StatesView(): JSX.Element {
             <div className="changes-empty mk-problem"><span className="mk-ok"><Icon d={ICONS.check.d} size={22} /></span><strong>Direct activé pour les prochaines sessions.</strong><p>Les sessions démarrées ensuite montreront leur navigateur en direct. Celle-ci garde ses captures.</p></div>
           </div></aside>
         </Mini>
-        <Mini title="Après « Activer » : refusé (refused)" sub="Trois raisons, un texte chacune ; le chemin en code quand il y en a un. Pas de bouton : rien n'a été modifié.">
+        <Mini title="Après « Activer » : refusé (refused)" sub="Trois raisons, un texte chacune ; le chemin en code quand il y en a un. Rien n'a été modifié. « Réessayer » renvoie la demande (l'accord est déjà donné) ; le refus n'est pas retenu : rouvrir l'onglet remontre « Le direct n'est pas activé ».">
           <aside className="side-pane mk-mini-pane"><SideHead on="live" live={false} /><div className="side-body mk-page">
-            <div className="changes-empty mk-problem"><Icon d={ICONS.warning.d} size={22} /><strong>Ledge n’a pas pu écrire la config.</strong><p><code>~/.config/playwright-mcp/config.json</code></p><p className="muted">Autres raisons : « Claude Code ne charge aucune config Playwright : rien à modifier. » · « La config Playwright n’est pas lisible : Ledge n’y touche pas. » + chemin.</p></div>
+            <div className="changes-empty mk-problem"><Icon d={ICONS.warning.d} size={22} /><strong>Ledge n’a pas pu écrire la config.</strong><p><code>~/.config/playwright-mcp/config.json</code></p><p className="muted">Autres raisons : « Claude Code ne charge aucune config Playwright : rien à modifier. » · « La config Playwright n’est pas lisible : Ledge n’y touche pas. » + chemin.</p><Button variant="outline" size="sm">Réessayer</Button></div>
           </div></aside>
         </Mini>
         <Mini title="Activer le direct (confirmation)" sub="Le seul geste qui modifie la machine : une ligne dans la config Playwright, sur accord explicite.">
@@ -524,6 +524,7 @@ const TEXTS: [string, string, string][] = [
   ['session.browser.refused.not_configured', 'Claude Code ne charge aucune config Playwright : rien à modifier.', 'Claude Code loads no Playwright config: nothing to change.'],
   ['session.browser.refused.invalid_config(path)', 'La config Playwright n’est pas lisible : Ledge n’y touche pas. + chemin', 'The Playwright config cannot be read: Ledge leaves it alone. + path'],
   ['session.browser.refused.write_failed(path)', 'Ledge n’a pas pu écrire la config. + chemin', 'Ledge could not write the config. + path'],
+  ['session.browser.retry / applying', 'Réessayer / En cours…', 'Try again / Working…'],
   ['session.browser.enableRisk (corrigé)', '… comme pour les sièges OMP aujourd’hui. Vaut pour les sessions démarrées ensuite ; celles en cours gardent leurs captures.', '… as OMP seats already do. Applies to sessions started afterwards; running ones keep their captures.'],
   ['session.browser.agentBrowser / lastPage(t)', 'Navigateur de l’agent / dernière page : Sièges OMP dans Ledge', 'The agent’s browser / last page: Sièges OMP dans Ledge'],
   ['session.browser.using(n, t) (OMP)', 'Mia utilise le navigateur · depuis 15:01', 'Mia is using the browser · since 15:01'],
