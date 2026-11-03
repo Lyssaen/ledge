@@ -102,7 +102,7 @@ describe('launching a rig', () => {
     { kind: 'agent', name: 'qa', sourceType: 'builtin', sourcePath: '/a.yaml' },
     { kind: 'rig', name: 'starter', sourceType: 'builtin', resolvedSourcePath: `${DIR}/rig.yaml` },
     { kind: 'rig', name: 'kernel', sourceType: 'builtin', sourcePath: '/k.yaml' },
-    { kind: 'rig', name: 'mine', sourceType: 'user', sourcePath: '/u/mine/rig.yaml', summary: 'Mine' }
+    { kind: 'rig', name: 'mine', sourceType: 'user_file', sourcePath: '/u/mine/rig.yaml', summary: 'Mine' }
   ]);
   function setup(answers: Record<string, { code: number | null; stdout?: string; stderr?: string }> = {}) {
     const calls: string[][] = [], written = new Map<string, string>(), copied: string[] = [];
