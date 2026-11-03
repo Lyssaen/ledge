@@ -49,27 +49,30 @@ export function TuiAttached() {
 
 /* ── Vue d'ensemble (1) ── */
 
-export function TuiOverview() {
-  const st: Record<string, [string, Col, string]> = { working: ['●', 'blue', 'Au travail'], idle: ['○', 'green', 'Disponible'], error: ['✗', 'red', 'Erreur'] };
+export function TuiOverview({ stoppedOn = false }: { stoppedOn?: boolean }) {
+  const st: Record<string, [string, Col, string]> = { working: ['●', 'blue', 'Au travail'], idle: ['○', 'green', 'Disponible'], stopped: ['·', 'faint', 'Arrêté'] };
   const seat = (on: boolean, name: string, role: string, tool: string, s: string, isNew = false): { l: Line; bg: Col } | Line => {
     const [g, c, word] = st[s]!;
-    const l: Line = [[on ? '▌' : ' ', on ? 'coral' : 'faint'], ['  '], [g + ' ', c], [pad(name, 6), 'fg', true], [' ' + pad(role, 20), 'dim'], [pad(tool, 9), 'dim'], [word, c]];
+    const off = s === 'stopped';
+    const l: Line = [[on ? '▌' : ' ', on ? 'coral' : 'faint'], ['  '], [g + ' ', c], [pad(name, 6), off ? 'faint' : 'fg', !off], [' ' + pad(role, 20), off ? 'faint' : 'dim'], [pad(tool, 9), off ? 'faint' : 'dim'], [word, c]];
     return on ? { l, bg: 'sel' } : l;
   };
   const rig = (name: string, n: string): Line => [[' '], [pad(name, 14), 'fg', true], [n, 'faint']];
   const rigs = box('RIGS', W, [
     rig('dev-omp', '2 sièges'),
-    seat(true, 'Ivo', 'dev.agent', 'omp', 'working', true),
+    seat(!stoppedOn, 'Ivo', 'dev.agent', 'omp', 'working', true),
     seat(false, 'Pia', 'review.reviewer', 'omp', 'idle', true),
     rig('ledge-dev', '4 sièges'),
     seat(false, 'Lu', 'pilot.lead', 'claude', 'idle', true),
     seat(false, 'Ida', 'dev.back', 'claude', 'working', true),
-    rig('split-omp', '2 sièges'),
+    rig('split-omp', '2 sièges sur 3'),
     seat(false, 'Ana', 'analysis.analyst', 'omp', 'idle', true),
-    seat(false, 'Sol', 'review.reviewer', 'omp', 'idle', true)
+    seat(false, 'Sol', 'review.reviewer', 'omp', 'idle', true),
+    seat(stoppedOn, 'Tom', 'split.splitter', 'omp', 'stopped', true)
   ], 'line', 'dim', 14);
   const kernel = box('KERNEL', W, [seat(false, 'Kit', 'operator', 'claude', 'idle')]);
-  return <Frame label="ledge tui · vue d'ensemble avec des sièges OMP" lines={[header('9 sessions · 1 machine'), ...kernel, ...rigs, keys([['↑↓', 'choisir'], ['↵', 'attacher son terminal'], ['a', 'attacher (tmux)'], ['6', 'OpenRig'], ['?', 'aide']])]} />;
+  const toast: Line[] = stoppedOn ? [fit([[' ℹ Tom est arrêté : son terminal n’existe plus. 6 ouvre OpenRig, où est son rig.', 'blue']], W)] : [];
+  return <Frame label="ledge tui · vue d'ensemble avec des sièges OMP" lines={[header('9 sessions · 1 machine'), ...kernel, ...rigs, ...toast, keys(stoppedOn ? [['↑↓', 'choisir'], ['6', 'OpenRig'], ['?', 'aide']] : [['↑↓', 'choisir'], ['↵', 'attacher son terminal'], ['a', 'attacher (tmux)'], ['6', 'OpenRig'], ['?', 'aide']])]} />;
 }
 
 /* ── ledge who ── */
@@ -82,12 +85,13 @@ export function Who() {
     ['Ivo', 'omp', 'working', 'workspace', '-', '-', true],
     ['Pia', 'omp', 'idle', 'workspace', '-', '-', true],
     ['Ana', 'omp', 'idle', 'workspace', '-', '-', true],
-    ['Sol', 'omp', 'idle', 'workspace', '-', '-', true]
+    ['Sol', 'omp', 'idle', 'workspace', '-', '-', true],
+    ['Tom', 'omp', 'exited', 'workspace', '-', '-', true]
   ];
   const lines: Line[] = [
     [['$ ', 'faint'], ['ledge who', 'fg']],
     [['  ' + pad('NOM', 4) + pad('OUTIL', 7) + pad('ÉTAT', 8) + pad('PROJET', 10) + pad('BRANCHE', 8) + 'SUJET', 'dim', true]],
-    ...rows.map(([n, t, s, p, b, sub, isNew]) => [['  ' + pad(n, 4), 'fg'], [pad(t, 7), 'fg'], [pad(s, 8), s === 'error' ? 'red' : 'fg'], [pad(p, 10) + pad(b, 8) + sub, 'fg']] as Line)
+    ...rows.map(([n, t, s, p, b, sub, isNew]) => [['  ' + pad(n, 4), s === 'exited' ? 'faint' : 'fg'], [pad(t, 7), s === 'exited' ? 'faint' : 'fg'], [pad(s, 8), s === 'exited' ? 'faint' : 'fg'], [pad(p, 10) + pad(b, 8) + sub, s === 'exited' ? 'faint' : 'fg']] as Line)
   ];
   return <Frame label="ledge who avec des sièges OMP" lines={lines} />;
 }

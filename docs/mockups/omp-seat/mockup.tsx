@@ -5,9 +5,9 @@ import { TuiAttached, TuiOverview, Who } from './tui';
 
 type View = 'desktop' | 'tui' | 'who' | 'texts';
 const VIEWS: Array<[View, string]> = [['desktop', '1 · Desktop'], ['tui', '2 · ledge tui'], ['who', '3 · ledge who'], ['texts', '4 · Textes FR / EN']];
-const DESK: Array<[DesktopState, string]> = [['live', 'Au travail · inactif'], ['stopped', 'Variante : siège arrêté gardé']];
-type Tui = 'overview' | 'attached';
-const TUI: Array<[Tui, string]> = [['overview', 'Vue d’ensemble (1)'], ['attached', '↵ sur Ivo']];
+const DESK: Array<[DesktopState, string]> = [['live', 'Au travail · inactif'], ['stopped', 'Siège arrêté'], ['stoppedOpen', 'Clic sur un siège arrêté']];
+type Tui = 'overview' | 'attached' | 'stopped';
+const TUI: Array<[Tui, string]> = [['overview', 'Vue d’ensemble (1)'], ['attached', '↵ sur Ivo'], ['stopped', '↵ sur Tom (arrêté)']];
 
 const read = (k: string) => new URLSearchParams(location.hash.slice(1)).get(k);
 
@@ -24,9 +24,6 @@ function Notes({ title, children, open }: { title: string; children: ReactNode; 
   );
 }
 
-const STOPPED = <ul>
-  <li><b>Un siège arrêté</b> : je recommande qu’il quitte la sidebar, la liste TUI et <code>ledge who</code>, comme un siège Claude ou Codex arrêté aujourd’hui. La page OpenRig continue de le montrer « arrêté ». La variante « Siège arrêté gardé » (vue 1) le laisse grisé sous son rig avec le mot « arrêté », mais elle ne vaudrait que pour OMP, sauf à l’étendre à tous les sièges.</li>
-</ul>;
 
 function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>((read('theme') as 'dark' | 'light') ?? 'dark');
@@ -50,7 +47,10 @@ function App() {
           <Seg label="État" items={DESK} value={desk} onChange={setDesk} />
           <div className="mk-app"><DesktopView state={desk} /></div>
         </div>
-        <Notes title="Un siège OMP sous son rig, comme les autres" open={STOPPED}>
+        <Notes title="Un siège OMP sous son rig, comme les autres" open={<ul>
+          <li><b>Siège arrêté</b> (complément) : gardé sous son rig, mascotte figée, nom en gris, « arrêté » à droite. Il ne compte dans aucun chiffre du rig. Seuls les sièges OMP sont concernés.</li>
+          <li><b>Clic sur un siège arrêté</b> : sa page s’ouvre, mais son terminal n’existe plus. À la place, « Siège arrêté. Son terminal n’existe plus : la page OpenRig montre son rig. » et un lien « Ouvrir la page OpenRig » qui ouvre la section Rigs sur sa machine, comme le lien vide de la sidebar. Pas de panneau terminal et pas de relance depuis cette page.</li>
+        </ul>}>
           <ul>
             <li><b>Sidebar</b> : sous son rig, la mascotte OMP, le nom donné par Ledge, puis <code>rôle · omp</code>. C’est le format actuel des sièges Claude et Codex : aucun changement d’écran, seulement les données.</li>
             <li><b>États</b> : au travail (pose « travail », compté dans le chiffre bleu du rig) et inactif (pose « disponible »). Une fin de tour en erreur compte comme inactive. Pas d’attente d’accord ni de question : un siège OMP n’en pose jamais sous OpenRig.</li>
@@ -63,9 +63,12 @@ function App() {
       {view === 'tui' && <main className="mk-main">
         <div className="mk-col">
           <Seg label="Écran" items={TUI} value={tui} onChange={setTui} />
-          <div className={'mk-tui tui-' + theme}>{tui === 'overview' ? <TuiOverview /> : <TuiAttached />}</div>
+          <div className={'mk-tui tui-' + theme}>{tui === 'overview' ? <TuiOverview /> : tui === 'stopped' ? <TuiOverview stoppedOn /> : <TuiAttached />}</div>
         </div>
-        <Notes title="Dans la liste de ledge tui" open={STOPPED}>
+        <Notes title="Dans la liste de ledge tui" open={<ul>
+          <li><b>Siège arrêté</b> (complément) : gardé dans la boîte RIGS, tout en gris (glyphe <code>·</code>, nom, rôle, harnais, « Arrêté »). Le compte du rig dit « 2 sièges sur 3 ».</li>
+          <li><b>↵ ou a sur un siège arrêté</b> : rien ne s’attache. Un toast d’information, celui que Ledge montre déjà quand un terminal manque, dit « Tom est arrêté : son terminal n’existe plus. 6 ouvre OpenRig, où est son rig. » Quand un siège arrêté est choisi, la barre de touches ne montre ni ↵ ni a.</li>
+        </ul>}>
           <ul>
             <li><b>Boîte RIGS</b> : un siège OMP est une ligne comme les autres, avec le glyphe et le mot de son état (● Au travail, ○ Disponible).</li>
             <li>Changement proposé, pour tous les sièges de rig : la ligne montre son rôle <b>puis son harnais</b>, comme la boîte KERNEL le fait déjà. Sans lui, rien ne distingue un siège OMP d’un siège Claude dans la liste. Si c’est de trop, on garde la ligne actuelle : seule la mascotte de Desktop dit alors le harnais.</li>
@@ -76,7 +79,9 @@ function App() {
 
       {view === 'who' && <main className="mk-main">
         <div className="mk-col"><div className={'mk-tui tui-' + theme}><Who /></div></div>
-        <Notes title="ledge who : rien de neuf à part les lignes" open={STOPPED}>
+        <Notes title="ledge who : rien de neuf à part les lignes" open={<ul>
+          <li><b>Siège arrêté</b> (complément) : <code>ledge who</code> le liste aussi, <code>ÉTAT exited</code>, pour qu’un agent voie que ce siège ne répondra pas. Seuls les sièges OMP arrêtés y figurent ; les autres sessions terminées restent hors de la liste.</li>
+        </ul>}>
           <ul>
             <li>Un siège OMP est une ligne ordinaire : <code>OUTIL omp</code>, <code>ÉTAT working</code> ou <code>idle</code>. Son sujet est vide (<code>-</code>) : OpenRig ne lui fait pas passer de première consigne par les hooks, contrairement aux sièges Claude et Codex.</li>
             <li>Aucune colonne nouvelle.</li>
@@ -98,7 +103,12 @@ const TEXTS: Array<[string, string, string]> = [
   ['desktop session.rigTerminalOnly.title', 'Pas de fil pour ce siège.', 'No thread for this seat.'],
   ['desktop session.rigTerminalOnly.body', 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Son terminal est ouvert à côté : ce que tu y tapes lui est envoyé.', 'Ledge does not read the conversation of an OMP seat launched by OpenRig. Its terminal is open alongside: what you type there is sent to it.'],
   ['tui keys.attachSeat', 'attacher son terminal', 'attach its terminal'],
-  ['desktop side.seatStopped (variante seulement)', 'arrêté', 'stopped']
+  ['desktop side.seatStopped', 'arrêté', 'stopped'],
+  ['desktop session.rigStopped.title', 'Siège arrêté.', 'Seat stopped.'],
+  ['desktop session.rigStopped.body', 'Son terminal n’existe plus : la page OpenRig montre son rig.', 'Its terminal is gone: the OpenRig page shows its rig.'],
+  ['desktop session.rigStopped.open (= side.empty.openPage)', 'Ouvrir la page OpenRig', 'Open the OpenRig page'],
+  ['tui state.stopped', 'Arrêté', 'Stopped'],
+  ['tui toast.seatStopped(n)', '${n} est arrêté : son terminal n’existe plus. 6 ouvre OpenRig, où est son rig.', '${n} is stopped: its terminal is gone. 6 opens OpenRig, where its rig is.']
 ];
 
 createRoot(document.getElementById('root')!).render(<App />);

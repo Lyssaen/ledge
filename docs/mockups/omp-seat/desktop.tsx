@@ -9,7 +9,7 @@ const RIG = ['M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5z', 'M12 8.5a3.5 3.5 0
 const DENSE = ['M4 4h16', 'M4 8h16', 'M4 12h16', 'M4 16h16', 'M4 20h16'];
 const FOLD = ['m7 20 5-5 5 5', 'm7 4 5 5 5-5'];
 
-export type DesktopState = 'live' | 'stopped';
+export type DesktopState = 'live' | 'stopped' | 'stoppedOpen';
 interface Seat { id: string; name: string; tool: 'claude' | 'codex' | 'omp'; role: string; state: BotState | 'stopped'; sel?: boolean }
 /** The mascots follow the page's theme, as SessionBot passes it in the app. */
 const theme = (): 'light' | 'dark' => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
@@ -39,10 +39,10 @@ function RigHead({ name, where, work }: { name: string; where: string; work?: nu
 }
 
 function Sidebar({ state }: { state: DesktopState }) {
-  const devOmp: Seat[] = [{ id: 'a', name: 'Ivo', tool: 'omp', role: 'dev.agent', state: 'working', sel: true }, { id: 'b', name: 'Pia', tool: 'omp', role: 'review.reviewer', state: 'idle' }];
+  const devOmp: Seat[] = [{ id: 'a', name: 'Ivo', tool: 'omp', role: 'dev.agent', state: 'working', sel: state !== 'stoppedOpen' }, { id: 'b', name: 'Pia', tool: 'omp', role: 'review.reviewer', state: 'idle' }];
   const ledgeDev: Seat[] = [{ id: 'c', name: 'Lu', tool: 'claude', role: 'pilot.lead', state: 'idle' }, { id: 'd', name: 'Ida', tool: 'claude', role: 'dev.back', state: 'working' }];
   const split: Seat[] = [{ id: 'e', name: 'Ana', tool: 'omp', role: 'analysis.analyst', state: 'idle' }, { id: 'f', name: 'Sol', tool: 'omp', role: 'review.reviewer', state: 'idle' },
-    ...(state === 'stopped' ? [{ id: 'g', name: 'Tom', tool: 'omp', role: 'split.splitter', state: 'stopped' } as Seat] : [])];
+    { id: 'g', name: 'Tom', tool: 'omp', role: 'split.splitter', state: 'stopped', sel: state === 'stoppedOpen' }];
   return (
     <aside className="sidebar st mk-sidebar">
       <div className="st-scroll">
@@ -111,6 +111,30 @@ function SeatPage() {
   );
 }
 
+/** A stopped OMP seat, opened: its terminal is gone, the page says so and points at its rig. */
+function StoppedPage() {
+  return (
+    <div className="mk-page">
+      <header className="mk-page-head">
+        <Bot theme={theme()} tool="omp" state="done" size={30} seed="Tom" frozen />
+        <div className="mk-page-id">
+          <div><strong>Tom</strong><span className="rig-tag">split-omp</span></div>
+          <span className="mono">split.splitter · OMP · arrêté</span>
+        </div>
+      </header>
+      <div className="mk-page-body mk-page-stopped">
+        <div className="mk-nothread" role="status">
+          <Icon d={ICONS.stop.d} size={18} />
+          <div>
+            <p><strong>Siège arrêté.</strong> Son terminal n’existe plus : la page OpenRig montre son rig.</p>
+            <button type="button" className="mk-link">Ouvrir la page OpenRig</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DesktopView({ state }: { state: DesktopState }) {
-  return <div className="mk-desk"><Sidebar state={state} /><SeatPage /></div>;
+  return <div className="mk-desk"><Sidebar state={state} />{state === 'stoppedOpen' ? <StoppedPage /> : <SeatPage />}</div>;
 }

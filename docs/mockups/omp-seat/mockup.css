@@ -63,3 +63,9 @@ code { font-family: 'Geist Mono', monospace; font-size: .92em; }
 .mk-texts td code { font-size: 11px; color: var(--muted-foreground); }
 
 @media (max-width: 1200px) { .mk-main { grid-template-columns: 1fr; } .mk-notes { position: static; } }
+
+/* A stopped OMP seat's page: no terminal, the line and the link. */
+.mk-page-stopped { grid-template-columns: minmax(0, 520px); }
+.mk-nothread > div { display: flex; flex-direction: column; gap: 8px; }
+.mk-link { align-self: flex-start; color: var(--info) !important; font-size: 12.5px; }
+.mk-link:hover { text-decoration: underline; }
