@@ -249,8 +249,8 @@ function SessionRow({ s, on, nameW, topicW, stateW, indent = 0, group, roleW = 1
   // A stopped OMP seat: all grey, « Arrêté » (docs/mockups/ledge-openrig-omp.html, view 2).
   const stopped = isStoppedOmpSeat(s);
   // In a group's box: the kernel's role (short) then its harness, as before; a rig's whole role, then its harness at one column.
-  const roleTool = group === 'kernel' ? `${(s.rig?.role ?? '').replace(/\.(agent|lead|worker)$/, '').padEnd(11)}${s.tool}`
-    : (w => `${w > 0 ? fit(s.rig?.role ?? '', w) : ''}${s.tool}`)(Math.min(roleW, Math.max(0, topicW - 1 - s.tool.length)));
+  // Short of room, the harness gives way first: the role stays whole.
+  const roleTool = group === 'kernel' ? `${(s.rig?.role ?? '').replace(/\.(agent|lead|worker)$/, '').padEnd(11)}${s.tool}` : `${(s.rig?.role ?? '').padEnd(roleW)}${s.tool}`;
   return (
     <Text wrap="truncate" backgroundColor={on ? C.sel : undefined}>
       <Text color={on ? C.coral : C.faint}>{on ? '▌' : ' '}</Text>

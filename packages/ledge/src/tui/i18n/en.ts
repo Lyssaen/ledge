@@ -36,7 +36,7 @@ export const en: Messages = {
     rigSeat: (rig, role) => `rig ${rig} · ${role}`,
     yours: n => `Yours · ${n}`, projects: 'Projects', exchanges: 'Messages', terminal: name => `Terminal · ${name}`,
     nobodyWaits: 'Nobody is waiting for you.', noSession: 'No session. Press + to start one.', noPreview: 'No preview.', noExchange: 'No message yet.',
-    sessions: n => `${n} ${plural(n, 'session', 'sessions')}`, sessionsOf: (live, all) => `${live} ${plural(live, 'session', 'sessions')} of ${all}`, outside: 'No project', offline: 'offline', readOnly: 'read-only',
+    sessions: n => `${n} ${plural(n, 'session', 'sessions')}`, sessionsOf: (live, all) => `${live} ${live === 1 ? 'session' : 'sessions'} of ${all}`, outside: 'No project', offline: 'offline', readOnly: 'read-only',
     wantsToRun: 'Wants to run:', asks: 'Asks:', plan: 'Proposes a plan:', diff: 'Wants to edit:',
     allow: 'Allow', deny: 'Deny', always: 'Always', denyWithNote: 'Deny with a note',
     ledge: 'Ledge',

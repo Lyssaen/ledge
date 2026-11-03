@@ -21,6 +21,13 @@ const TOM = omp('rig-tom', 'Tom', 'split-omp', 'split.splitter', { state: 'exite
 const GONE = fakeSession('rig-max', { name: 'Max', cwd: '/w/ledge', state: 'exited', source: 'rig', rig: { seat: 'dev-back@ledge-dev', name: 'ledge-dev', role: 'dev.back' } });
 
 describe('OMP seats in the overview model', () => {
+  it('the rig line counts its live sessions of all it shows; in English, 0 is plural', async () => {
+    const { fr } = await import('../src/tui/i18n/fr.js');
+    const { en } = await import('../src/tui/i18n/en.js');
+    expect([0, 1, 2].map(n => fr.overview.sessionsOf(n, 3))).toEqual(['0 session sur 3', '1 session sur 3', '2 sessions sur 3']);
+    expect([0, 1, 2].map(n => en.overview.sessionsOf(n, 3))).toEqual(['0 sessions of 3', '1 session of 3', '2 sessions of 3']);
+  });
+
   it('a stopped OMP seat stays under its rig, after its live seats, out of its count; a stopped Claude seat leaves', () => {
     const v = overview([OTTO, ANA, TOM, LU, GONE, { ...PIA, id: 'rig-old', name: 'Old', state: 'exited', archivedAt: '2026-11-03T09:30:00.000Z' }], null);
     const split = v.tree.find(n => n.label === 'split-omp')!;
