@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>À toi, lot 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/*BASE*/
+/* ===== Lot 1 cards ===== */
+.pane{padding:18px;border-radius:12px;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;display:flex;flex-direction:column;gap:10px;width:560px}
+.pane button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.pane .btn{padding:0 11px}.pane .btn.sm{padding:0 8px}.pane .btn.pri{color:var(--primary-foreground)}
+.lbl{font:600 11px 'Geist Mono',monospace;color:var(--muted-foreground);margin-top:6px}
+.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.clamp2{-webkit-line-clamp:2}
+.more{font-size:12px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:2px;align-self:flex-start}
+.q-block{display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid var(--border)}
+.q-block .qt{font-size:13px;font-weight:500}
+.chosen{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted-foreground)}
+.ta{min-height:72px;border:1px solid var(--ring);border-radius:var(--radius-md);background:var(--well);padding:9px 11px;font-size:13px;color:var(--muted-foreground)}
+.err-line{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--danger-text);padding-top:6px;border-top:1px solid var(--border)}
+.spin{width:12px;height:12px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;display:inline-block;animation:sp .9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.done-line{display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);font-size:12.5px;color:var(--muted-foreground)}
+.done-line b{color:var(--foreground);font-weight:500}
+.pill.urg{border-color:var(--sidebar-primary);background:var(--sidebar-primary);color:#fff}
+.btn[disabled]{opacity:.5}
+.twocol{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.spec{max-width:560px;font-size:12.5px;line-height:18px;opacity:.8}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>À toi, lot 1 : les cartes</h1>
+      <p class="lead">Complément à <code>ledge-human-operator-ab.html</code>, validée le 2 novembre à 19:36, pour les questions de dev-front. Les cartes suivent le contrat back
+        <code>docs/vision/ledge-human-channel-contract.md</code> (branche <code>feat/human-channel</code>). Au lot 1, tout est sur « Toujours moi » : pas de recommandation de Ledge, pas de « Réglé par Ledge »,
+        pas de « Pourquoi c'est à toi », pas de délai « Annuler ». Une réponse part tout de suite. À gauche en sombre, à droite en clair.</p>
+    </div>
+  </header>
+  <div class="twocol" style="margin-top:22px">
+    <div class="th-dark" id="col-dark"></div>
+    <div class="th-light" id="col-light"></div>
+  </div>
+</div>
+<script>
+const P = {
+  rig: ['M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5z','M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7'],
+  file: ['M6 3h8l4 4v14H6z','M14 3v4h4'],
+  check: ['m5 12 5 5 9-10'],
+  chev: ['m9 18 6-6-6-6'],
+  alert: ['M12 3 2 20h20z','M12 10v4','M12 17h.01'],
+  send: ['M5 12h14','m13 6 6 6-6 6']
+};
+const ic = (d, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d.map(x => `<path d="${x}"/>`).join('')}</svg>`;
+const hx = () => `<span class="hex">${ic(P.rig, 13)}</span>`;
+const src = t => `<span class="src">${ic(P.file, 11)}${t}</span>`;
+const who = (seat, role, pill, t = '4 min', extra = '') => `<div class="who">${hx()}<strong>ledge-dev</strong> · ${seat} <span class="mono">${role}</span>${pill}${extra}<span class="sp"></span><time>${t}</time></div>`;
+const BODY = 'Lu prépare Réglages › Ledge pour le lot 4. Le choix change ce que l’écran propose et le coût de Ledge : un seul modèle est plus simple à régler, deux modèles permettent un modèle plus fort, et plus lent, seulement quand Ledge décide seul. La note de vision n’en prévoit qu’un.';
+
+const CARDS = [
+  ['Décision · une question · option recommandée par le siège', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <p class="clamp">${BODY}</p><button class="more">Tout lire</button>
+    <button class="fold-btn">${ic(P.chev, 11)} Détails</button>
+    <div class="acts">${src('docs/mockups/ledge-human-operator-ab.html')}</div>
+    <div class="acts"><button class="btn pri" title="Recommandé par Bix">Un seul modèle · recommandé</button><button class="btn">Un plus fort pour décider seul</button><button class="btn ghost">Répondre autrement…</button></div></div>`,
+    'Plus de ligne « Ledge recommande ». Si <code>body</code> = <code>summary</code> et <code>bodyTruncated</code>, pas de corps ni de « Tout lire ». « · recommandé » vient de <code>options[].recommended</code> ; l’infobulle dit qui recommande. <code>evidenceRef</code> donne une pastille. Le corps fait 3 lignes au plus, puis « Tout lire » le déplie dans la carte. « Détails » (si <code>detail</code>) se déplie sous le corps.'],
+  ['« Répondre autrement… » ouvert', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <div class="ta">Ta réponse, en quelques mots…</div>
+    <div class="acts"><button class="btn pri">${ic(P.send, 12)}Envoyer</button><button class="btn ghost">Annuler</button><span class="fine" style="margin-left:auto">Ctrl Entrée · Échap</span></div></div>`,
+    'La zone remplace les boutons et répond à toute la demande (<code>words</code>). EN : « Your answer, in a few words… », Send, Cancel. Annuler rend les boutons.'],
+  ['Plusieurs questions · une déjà répondue', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Deux choix pour l’écran de réglage</h4>
+    <div class="q-block"><span class="qt">1. Un modèle pour tout, ou un plus fort pour décider seul ?</span><span class="chosen">${ic(P.check, 13)}Un seul modèle</span></div>
+    <div class="q-block"><span class="qt">2. Délai avant envoi par défaut ?</span><div class="acts"><button class="btn sm">3 s</button><button class="btn sm pri">5 s · recommandé</button><button class="btn sm">10 s</button></div></div>
+    <div class="acts" style="border-top:1px solid var(--border);padding-top:8px"><span class="fine">1/2 répondues · la réponse part à la dernière</span><span style="flex:1"></span><button class="btn ghost sm">Répondre autrement…</button></div></div>`,
+    'Questions l’une sous l’autre, séparées d’un filet. Une question répondue (<code>outcome: recorded</code>) montre « ✓ {label} » en gris et ne se modifie plus. EN : « {n}/{total} answered · the answer goes with the last one ».'],
+  ['Plusieurs questions · « Répondre autrement… » ouvert · validé 20:52', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Deux choix pour l’écran de réglage</h4>
+    <div class="q-block"><span class="qt">1. Un modèle pour tout, ou un plus fort pour décider seul ?</span><span class="chosen">${ic(P.check, 13)}Un seul modèle</span></div>
+    <div class="q-block"><span class="qt">2. Délai avant envoi par défaut ?</span><div class="acts" style="opacity:.45"><button class="btn sm" disabled>3 s</button><button class="btn sm" disabled>5 s · recommandé</button><button class="btn sm" disabled>10 s</button></div></div>
+    <div class="q-block"><div class="ta">Ta réponse, en quelques mots…</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--warning)">${ic(P.alert, 12)}Cette réponse règle toute la demande, y compris les questions sans réponse.</div>
+    <div class="acts"><button class="btn pri">${ic(P.send, 12)}Envoyer</button><button class="btn ghost">Annuler</button></div></div></div>`,
+    'La zone remplace le pied de carte, sous toutes les questions ; les boutons des questions en attente sont désactivés tant qu’elle est ouverte. Nouveau texte, validé à 20:52 : une ligne d’avertissement (couleur <code>--warning</code>, icône 12 px) entre la zone et les boutons. Elle n’apparaît que si la demande a plusieurs questions et qu’au moins une n’a pas de réponse. EN « This answer settles the whole request, including unanswered questions. » Rien ne change pour une demande à une seule question.'],
+  ['Demande sans boutons · ligne bloquée (parked)', `<div class="card">${who('Ida', 'dev.front', '<span class="pill q">en attente de toi</span>', '12 min')}
+    <h4>Je reste bloquée sur la carte « Pas envoyée » : je garde la carte ou je la remplace ?</h4>
+    <p class="clamp clamp2">La ligne qitem-…195555 attend une décision de toi depuis 12 minutes. Ida ne peut pas continuer le lot 1 sans elle.</p>
+    <div class="acts"><button class="btn">Répondre…</button></div></div>`,
+    'Section « Questions ». <code>parked</code> : pastille jaune « en attente de toi » (EN « waiting on you »), « Répondre… » ouvre la zone de texte, placeholder « Ce que {siège} doit faire… » (EN « What {seat} should do… ») ; envoi = <code>resolve</code>. Une <code>decision</code> sans questions est rendue pareil, avec « Écrire la réponse… » et la pastille « question ».'],
+  ['Nouvelle (update)', `<div class="card" style="gap:6px">${who('Lu', 'design.ux', '<span class="pill">nouvelle</span>', '19:40')}
+    <div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1;display:flex;flex-direction:column;gap:4px"><b style="font-size:13px;font-weight:500">Maquette A+B : complément harnais et modèle rendu</b><p class="clamp clamp2">Slack retiré, Réglages › Ledge avec harnais et modèle, écran « harnais pas installé ».</p></div><button class="btn sm ghost">Vu</button></div>
+    <div class="acts">${src('docs/mockups/ledge-human-operator-ab.html')}</div></div>`,
+    'Section « Nouvelles ». Carte compacte, corps sur 2 lignes, « Vu » (EN « Seen ») envoie <code>seen</code> et retire la carte (avec la ligne de confirmation du dernier exemple).'],
+  ['Urgente (priority urgent ou critical)', `<div class="card hot">${who('Pim', 'review.qa', '<span class="pill dec">décision</span>', '1 min', '<span class="pill urg" style="margin-left:4px">urgent</span>')}
+    <h4>La revue bloque la fusion : on corrige avant ou après la démo ?</h4>
+    <div class="acts"><button class="btn pri">Avant · recommandé</button><button class="btn">Après</button><button class="btn ghost">Répondre autrement…</button></div></div>`,
+    '<code>priority</code> vaut <code>urgent</code> ou <code>critical</code> : la carte passe en tête de sa section, avec une pastille rouge pleine : « urgent » pour <code>urgent</code>, « critique » pour <code>critical</code> (EN « urgent », « critical ») ; rien pour <code>routine</code>. Tri : critique, puis urgent, puis le reste. Consigne d’équipe : une demande à <code>ledge@external</code> n’utilise jamais <code>--alert</code>, donc la pastille ne lit pas <code>alert</code>. Elle va aussi à l’île et au téléphone (lot 3 pour le téléphone).'],
+  ['Envoi en cours', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <div class="acts"><button class="btn pri" disabled style="opacity:.8"><span class="spin"></span>Un seul modèle · recommandé</button><button class="btn" disabled>Un plus fort pour décider seul</button><button class="btn ghost" disabled>Répondre autrement…</button></div></div>`,
+    'Tous les boutons sont désactivés ; une roue apparaît dans le bouton cliqué jusqu’à <code>openrig.answered</code>.'],
+  ['Pas envoyée', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <div class="acts"><button class="btn pri">Un seul modèle · recommandé</button><button class="btn">Un plus fort pour décider seul</button><button class="btn ghost">Répondre autrement…</button></div>
+    <div class="err-line">${ic(P.alert, 13)}<span>Pas envoyée : OpenRig est arrêté</span><span style="flex:1"></span><button class="btn sm" style="color:var(--foreground)">Réessayer</button></div></div>`,
+    'En bas de la carte. « Pas envoyée : {raison} » (EN « Not sent: {reason} »), avec <code>message</code> ou un texte par code (<code>openrig_stopped</code> → « OpenRig est arrêté », <code>unreachable</code> → message). Réessayer renvoie le même <code>openrig.answer</code>. Pour <code>closed</code> et <code>already</code>, pas d’erreur : voir l’exemple suivant.'],
+  ['Envoi incertain (uncertain) · validé 20:52', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <div class="acts"><button class="btn pri">Un seul modèle · recommandé</button><button class="btn">Un plus fort pour décider seul</button><button class="btn ghost">Répondre autrement…</button></div>
+    <div class="err-line" style="color:var(--warning)">${ic(P.alert, 13)}<span>Envoi incertain : la réponse est peut-être partie. Réessayer ne l’enverra pas deux fois.</span><span style="flex:1"></span><button class="btn sm" style="color:var(--foreground)">Réessayer</button></div></div>`,
+    'Ton jaune (<code>--warning</code>), même place que « Pas envoyée ». EN « Uncertain: the answer may have been sent. Retrying won’t send it twice. », « Retry ». Si Réessayer revient avec <code>already</code> après un envoi incertain, la carte affiche « Envoyé à {siège} » (c’est notre propre envoi), pas « Déjà réglée ailleurs ».'],
+  ['Après la réponse (1,5 s)', `<div class="done-line">${ic(P.check, 14)}<span><b>Envoyé à Bix</b> · pilot</span></div><div class="done-line">${ic(P.check, 14)}<span><b>Déjà réglée ailleurs</b></span></div>`,
+    'La carte se réduit à cette ligne, puis se retire. EN « Sent to {seat} », « Already settled elsewhere ». En mouvement réduit : pas d’animation, même ligne, même durée.'],
+  ['Liste partielle (partial)', `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-foreground)">${ic(P.alert, 12)}Liste peut-être incomplète : OpenRig n’a pas répondu à la dernière lecture.</div><div class="sec">Décisions <span class="n">1</span></div>`,
+    'Une seule ligne, en tête de la colonne À toi, au-dessus de la première section. Grise, sans cadre ni bouton, elle disparaît à la prochaine lecture réussie. Pas de ligne si une bannière de canal est déjà affichée. EN « List may be incomplete: OpenRig did not answer the last read. »'],
+  ['Bannières du canal (sans bouton au lot 1)', `<div class="banner err">${ic(P.alert, 16)}<div class="bt"><b>Ledge n’est pas encore le canal humain d’OpenRig.</b><p>Les rigs passent encore par Max, ou par le TUI du kernel. Leurs demandes n’arrivent pas ici.</p></div></div>
+    <div class="banner err">${ic(P.alert, 16)}<div class="bt"><b>OpenRig a plusieurs personnes, et aucune n’est désignée par défaut.</b><p>Ses demandes n’arrivent donc pas ici. Pour en désigner une :</p><p class="mono" style="font-size:11.5px">{channel.message} : la commande donnée par OpenRig</p></div></div>
+    <div class="banner warn">${ic(P.alert, 16)}<div class="bt"><b>OpenRig est arrêté : les rigs ne peuvent pas t’écrire.</b><p>Les sessions de tes projets passent toujours par ici.</p></div></div>
+    <div class="banner warn">${ic(P.alert, 16)}<div class="bt"><b>OpenRig ne répond pas.</b><p>connection refused on 127.0.0.1:7433</p></div></div>
+    <div class="banner">${ic(P.alert, 16)}<div class="bt"><b>OpenRig n’est pas installé sur WSL.</b><p>Les sessions de tes projets passent toujours par ici.</p></div></div>`,
+    '<code>no_person</code>, <code>no_default</code> (rouge aussi, <code>message</code> en mono ; EN « OpenRig has several people, and none is the default. » / « So its requests don’t arrive here. To set one: »), <code>openrig_stopped</code>, <code>unreachable</code> (le <code>message</code> tel quel, en mono-ligne), <code>not_installed</code>. Pas de bouton « Brancher Ledge » ni « Démarrer OpenRig » ici au lot 1 : la sidebar a déjà « Démarrer OpenRig ». « Ce que Max t’a relayé » est retiré.']
+];
+for (const id of ['col-dark', 'col-light']) {
+  document.getElementById(id).innerHTML = `<div class="pane">${CARDS.map(([l, h, spec]) => `<span class="lbl">${l}</span>${h}${id === 'col-dark' ? `<div class="spec">${spec}</div>` : ''}`).join('')}</div>`;
+}
+</script>
+</body>
+</html>

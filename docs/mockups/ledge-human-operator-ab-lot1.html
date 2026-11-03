@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>À toi, lot 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+
+/* ===== Real Lyssaën tokens (packages/ui/src/styles/tokens.css), scoped per theme by build.mjs ===== */
+.th-light {
+  --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0); --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0); --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.505 0.213 27.518); --primary-foreground: oklch(0.971 0.013 17.38); --primary-hover: oklch(0.444 0.177 26.899);
+  --secondary: oklch(0.967 0.001 286.375); --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0); --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325); --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0); --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0);
+  --radius: 0.625rem; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px;
+  --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0); --sidebar-primary: oklch(0.577 0.245 27.325);
+  --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0);
+  /* The notch itself: pure white (light) or pure black (dark), borderless, so it merges with the screen edge. */
+  --notch: #fff;
+  --task: #7c3aed; /* a task handed between seats (issue #92): no seat state wears violet */
+  --success: #059669; --warning: #b45309; --info: #2563eb; --danger-text: oklch(0.505 0.213 27.518);
+  --status-success-soft: #ecfdf5; --status-warning-soft: #fffbeb; --status-info-soft: #eff6ff; --status-danger-soft: #fef2f2;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25);
+  --well: oklch(0.97 0 0);
+  /* The embedded terminal (apps/desktop term/theme.ts): its background, text, sixteen ANSI colours, cursor and selection. */
+  --term-bg: oklch(0.99 0 0); --term-fg: oklch(0.22 0 0);
+  --term-ansi-0: #24292f; --term-ansi-1: #b91c1c; --term-ansi-2: #047857; --term-ansi-3: #a16207;
+  --term-ansi-4: #1d4ed8; --term-ansi-5: #8250df; --term-ansi-6: #1b7c83; --term-ansi-7: #6e7781;
+  --term-ansi-8: oklch(0.52 0 0); --term-ansi-9: #a40e26; --term-ansi-10: #1a7f37; --term-ansi-11: #9a6700;
+  --term-ansi-12: #0550ae; --term-ansi-13: #6639ba; --term-ansi-14: #136061; --term-ansi-15: #424a53;
+  --term-cursor: oklch(0.145 0 0); --term-selection: #0969da33;
+  --edge-hot: rgba(0,0,0,.06);
+}
+.th-dark {
+  --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0); --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0); --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.444 0.177 26.899); --primary-foreground: oklch(0.971 0.013 17.38); --primary-hover: oklch(0.396 0.141 25.723);
+  --secondary: oklch(0.274 0.006 286.033); --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0); --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216); --destructive-foreground: oklch(0.985 0 0);
+  --border: #ffffff1a; --input: #ffffff26; --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0); --sidebar-primary: oklch(0.637 0.237 25.331);
+  --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.269 0 0); --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: #ffffff1a; --sidebar-ring: oklch(0.556 0 0);
+  --notch: #000;
+  --task: #a78bfa;
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa; --danger-text: oklch(0.704 0.191 22.216);
+  --status-success-soft: #052e16; --status-warning-soft: #422006; --status-info-soft: #172554; --status-danger-soft: #450a0a;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7);
+  --well: oklch(0.145 0 0);
+  --term-bg: #0c0c0d; --term-fg: #e5e5e5;
+  --term-ansi-0: #484f58; --term-ansi-1: #f87171; --term-ansi-2: #4ade80; --term-ansi-3: #facc15;
+  --term-ansi-4: #7cb3fb; --term-ansi-5: #bc8cff; --term-ansi-6: #39c5cf; --term-ansi-7: #b1bac4;
+  --term-ansi-8: #8f8f8f; --term-ansi-9: #ffa198; --term-ansi-10: #56d364; --term-ansi-11: #e3b341;
+  --term-ansi-12: #79c0ff; --term-ansi-13: #d2a8ff; --term-ansi-14: #56d4dd; --term-ansi-15: #ffffff;
+  --term-cursor: oklch(0.985 0 0); --term-selection: #58a6ff40;
+  --edge-hot: rgba(255,255,255,.08);
+}
+
+/* Mascots (spec section 6). Material follows the theme: Galet (light) / Signal (dark).
+   A bot's own data-material wins over the root theme so its theme prop is authoritative. */
+@property --bot-shell-top { syntax: '<color>'; inherits: true; initial-value: #f0eee6; }
+@property --bot-shell-bottom { syntax: '<color>'; inherits: true; initial-value: #b7b7b0; }
+@property --bot-shell-line { syntax: '<color>'; inherits: true; initial-value: #ffffff99; }
+@property --bot-visor { syntax: '<color>'; inherits: true; initial-value: #22292b; }
+@property --bot-shine { syntax: '<color>'; inherits: true; initial-value: #ffffff77; }
+.th-light, [data-material="pebble"] {
+  --bot-shell-top: #f0eee6; --bot-shell-bottom: #b7b7b0; --bot-shell-line: #ffffff99; --bot-visor: #22292b;
+  --bot-shine: #ffffff77;
+}
+.th-dark, [data-material="signal"] {
+  --bot-shell-top: #34434b; --bot-shell-bottom: #273238; --bot-shell-line: #859397; --bot-visor: #172124;
+  --bot-shine: #ffffff00;
+}
+/* Halo (docs/mockups/mascots-halo.html, "Contour" rendering): a glow in the state's badge colour hugging the
+   silhouette. Full strength for a bot that waits or errs, softer for a live bot, none for done or read-only. */
+@property --bot-halo-a { syntax: '<number>'; inherits: false; initial-value: 0; }
+:root { --bot-halo-alpha: .55; --bot-halo-alpha-soft: .3; --bot-halo-spread: .32; }
+:root {
+  --bot-visor-line: #00000055; --bot-reflection: #ffffff; --bot-ground: #000000; --bot-readonly-line: #adb3b2;
+  --bot-eye-starting: #90c7f2; --bot-eye-working: #90c7f2; --bot-eye-approval: #f2b09c; --bot-eye-question: #f6d487;
+  --bot-eye-idle: #a9dfc7; --bot-eye-error: #ffab9f; --bot-eye-done: #a3aaa9;
+}
+
+/* ===== Real sidebar stylesheet (apps/desktop/src/styles/sidebar.css, main 0c47f61b) ===== */
+/* The sidebar as an IDE explorer, from docs/mockups/session-management/sidebar-tree.css: ask field, views,
+   « À toi », the project › branch › session tree. No search row, no auto-hide, no word mark (the titlebar owns the brand).
+   `.side-swatch` and `.machine-dot` stay: they are used across the app; `.side-footer` is an alias of `.st-foot`. */
+.sidebar.st{position:relative;width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
+.st button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+.st button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:var(--radius-sm)}
+.st .mono{font-family:'Geist Mono',monospace}
+.st-fill{flex:1}
+.st-ask{margin:10px 10px 0;height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);cursor:text}
+.st-ask:focus-within,.st-ask.on{border-color:var(--ring)}
+.st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
+.st-ask input::placeholder{color:var(--muted-foreground)}
+.st .st-mascot{display:inline-flex;flex:none}
+.st-views{display:flex;flex-direction:column;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-views button:hover{color:var(--sidebar-foreground)}
+.st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st .st-views button.on svg{color:var(--sidebar-primary)}
+.st-views small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-scroll{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:10px}
+.st-label{display:flex;align-items:center;gap:4px;height:26px;padding:0 2px 0 8px;font-size:11px;color:var(--muted-foreground)}
+.st-badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:grid;place-items:center;font:600 10px 'Geist Mono',monospace;background:var(--sidebar-primary);color:var(--sidebar-primary-foreground,var(--primary-foreground))}
+.st .st-icon{width:24px;height:24px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st .st-icon:hover,.st .st-icon.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+/* « À toi » */
+.st-card{display:flex;gap:8px;padding:6px 6px 6px 8px;border-radius:var(--radius-md)}
+.st-card:hover,.st-card.sel{background:var(--sidebar-accent)}
+.st-card-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.st-l1{display:flex;align-items:center;gap:6px;font-size:13px}
+.st .st-name{font-weight:500;color:var(--sidebar-foreground)}
+.st .st-name:hover{text-decoration:underline}
+.st-where{flex:1;min-width:0;display:flex;align-items:center;gap:2px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-task .st-where{display:block}
+.st-where .side-swatch{width:7px;height:7px;margin:0 3px 0 0}
+.st-l2{display:flex;align-items:center;gap:5px}
+.st-req{flex:1;min-width:0;font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .st-qa{height:22px;padding:0 8px;border-radius:var(--radius-sm);font-size:11px;font-weight:500;border:1px solid var(--input);color:var(--sidebar-foreground)}
+.st .st-qa:hover{background:var(--sidebar-accent)}
+.st .st-qa.pri{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.st .st-qa.pri:hover{background:var(--primary-hover)}
+.st .st-showall{margin:2px 0 0 34px;font-size:12px;color:var(--muted-foreground)}
+.st .st-showall:hover{color:var(--sidebar-foreground)}
+/* The tree */
+.st-tree{display:flex;flex-direction:column;gap:1px}
+.st-row{--d:0;position:relative;display:flex;align-items:center;gap:6px;min-height:28px;padding:0 6px 0 calc(4px + var(--d) * 14px);border-radius:var(--radius-sm);font-size:13px;color:var(--muted-foreground)}
+.st-row:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.sel{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));outline:1.5px solid var(--sidebar-primary)}
+.st-project.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));color:var(--foreground);outline:1.5px solid var(--sidebar-primary)}
+.is-dragging .st-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
+.st .st-chev{width:16px;height:16px;flex:none;display:grid;place-items:center;color:var(--muted-foreground);border-radius:4px}
+.st .st-chev:hover{color:var(--sidebar-foreground)}
+.st-chev span{display:grid;transition:transform .15s}
+.st-chev span.open{transform:rotate(90deg)}
+.st-gap{width:16px;flex:none}
+.st-none{background:none!important;border:1px dashed var(--muted-foreground)}
+.st .st-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;padding:4px 0}
+.st-main strong{font-weight:500;color:var(--sidebar-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-main span{font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-project .st-main{flex-direction:row;align-items:baseline;gap:6px}
+.st-project .st-main strong{font-weight:600;flex:none;max-width:60%}
+.st-project .st-main span{font-size:11px}
+.st-branch{color:var(--muted-foreground)}
+.st-branch .st-main span{font:12px 'Geist Mono',monospace;color:var(--sidebar-foreground)}
+.st-wt{font:500 9px 'Geist Mono',monospace;padding:1px 4px;border-radius:4px;border:1px solid var(--input);color:var(--muted-foreground);flex:none}
+.st-count{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-tally{display:flex;gap:7px;flex:none;font:500 10px 'Geist Mono',monospace}
+.st-tally span{display:flex;align-items:center;gap:3px}
+.st-tally i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-need{color:var(--sidebar-primary)}.t-work{color:var(--info)}.t-done{color:var(--muted-foreground)}
+.t-off{color:var(--muted-foreground)}.t-off i{background:none;border:1px solid currentColor}
+.st-agent{align-items:flex-start;min-height:40px}
+.st-agent>.st-chev,.st-agent>.st-gap{margin-top:7px}
+.st-bot{width:18px;height:18px;flex:none;display:grid;place-items:center;margin-top:5px}
+.st-card .st-bot{margin-top:1px}
+.st-agent.helper{min-height:28px;align-items:center}
+.st-agent.helper .st-main{flex-direction:row;gap:6px;align-items:baseline}
+.st-agent.helper .st-main strong,.st-dense .st-agent .st-main strong{flex:none}
+.st-agent.helper>.st-chev,.st-agent.helper>.st-gap,.st-agent.helper .st-bot,.st-agent.helper .st-time,.st-agent.helper .st-kids{margin-top:0}
+.st-agent.done{opacity:.6}
+.st-agent.off .st-main strong{color:var(--muted-foreground)}
+.st-time{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);flex:none;margin-top:6px}
+.st-time.t-approval{color:var(--sidebar-primary)}.st-time.t-question{color:var(--warning)}.st-time.t-error{color:var(--danger-text)}
+.st-kids{flex:none;margin-top:5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;border:1px solid var(--input);display:grid;place-items:center;font:500 10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-acts{position:absolute;right:4px;top:4px;display:none;gap:1px;padding:1px;border-radius:var(--radius-sm);background:var(--sidebar-accent)}
+.st-project .st-acts,.st-branch .st-acts,.st-agent.helper .st-acts{top:2px}
+.st-row:hover .st-acts,.st-row:focus-within .st-acts{display:flex}
+.st .st-acts button{width:22px;height:22px;display:grid;place-items:center;border-radius:5px;color:var(--muted-foreground)}
+.st .st-acts button:hover{background:color-mix(in srgb,var(--foreground) 8%,transparent);color:var(--sidebar-foreground)}
+.st-more{min-height:26px;font-size:12px}
+.st .st-more button{color:var(--muted-foreground)}
+.st .st-more button:hover{color:var(--sidebar-foreground)}
+/* Archives, at the foot of the tree: folded, filterable, each session read, put back, resumed or deleted from its row. */
+.st-archives{border-top:1px solid var(--sidebar-border);padding-top:6px}
+.st .st-arch-toggle{display:flex;align-items:center;gap:6px;height:24px;font-size:11px;color:var(--muted-foreground)}
+.st .st-arch-toggle:hover{color:var(--sidebar-foreground)}
+.st-arch-toggle>span{display:grid;transition:transform .15s}
+.st-arch-toggle>span.open{transform:rotate(90deg)}
+.st-arch-toggle small{font:10px 'Geist Mono',monospace}
+.st-arch-q{display:flex;align-items:center;gap:6px;height:28px;margin:2px 4px 4px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st-arch-q input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:12px 'Geist',system-ui,sans-serif;outline:none}
+.st-arch{padding-left:8px}
+.st-arch .st-main strong{display:flex;align-items:center;gap:0;color:var(--muted-foreground)}
+.st-arch .st-main strong .side-swatch{width:7px;height:7px;margin:0 6px 0 0}
+.st-arch.sel .st-main strong{color:var(--sidebar-foreground)}
+.st-arch .st-bot{opacity:.7}
+.st .st-acts button.danger:hover{color:var(--danger-text)}
+.st-help{margin:6px 8px 0;font-size:11px;line-height:15px;color:var(--muted-foreground)}
+/* Compact: one line per session. */
+.st-dense .st-agent{min-height:26px;align-items:center}
+.st-dense .st-agent .st-main{flex-direction:row;gap:6px;align-items:baseline;padding:2px 0}
+.st-dense .st-agent>.st-chev,.st-dense .st-agent>.st-gap,.st-dense .st-bot,.st-dense .st-time,.st-dense .st-kids{margin-top:0}
+.st-dense .st-acts{top:1px}
+/* Machines and Settings at the foot. */
+.st-foot{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground);overflow:hidden}
+.st .st-mach{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.st .st-mach:hover{color:var(--sidebar-foreground)}
+.st-mach small{font:10px 'Geist Mono',monospace}
+.st-mach .machine-dot{margin:0}
+/* The ? beside Settings: its tooltip lists the shortcuts (t.shortcuts.rows), on hover and on keyboard focus. It hangs from the
+   aside (position:relative), above the foot, so the foot's overflow:hidden does not clip it. */
+.st-keys-tip{position:absolute;left:8px;bottom:48px;z-index:30;width:max-content;max-width:320px;display:none;flex-direction:column;gap:5px;padding:10px 12px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);font-size:11px;line-height:15px;pointer-events:none}
+.st-keys:hover .st-keys-tip,.st-keys:focus-within .st-keys-tip{display:flex}
+.st-keys-tip>span{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.st-keys-tip kbd{flex:none;font-size:10px!important}
+.side-footer{padding:0;border:0} /* alias: Settings' test reads this selector; the foot is .st-foot */
+.side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
+.machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
+.machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
+/* A daemon restarting for its update (#48): neither online nor offline. */
+.machine-dot.updating{background:var(--warning);box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 18%,transparent)}
+@media(max-width:1250px){.sidebar.st{width:256px}}
+/* A narrow window: a 64 px rail, the projects as swatches with their tally, the rest behind icons. */
+@media(max-width:850px){
+ .sidebar.st{width:64px}
+ .st kbd{display:none!important}
+ .st .st-keys-tip kbd{display:inline-flex!important}
+ .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
+ .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
+ .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
+ .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
+ .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
+ .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
+ .st-project .side-swatch{width:16px;height:16px;border-radius:5px}
+ .st-tally{position:absolute;top:2px;right:6px}.st-tally span:not(.t-need){display:none}
+ .st-foot{flex-direction:column;height:auto;padding:8px 0;gap:8px}.st .st-mach{font-size:0}.st-mach small{display:none}.st-foot .st-fill{display:none}
+}
+
+/* Ledge's entry (ledge home spec §2.1): the resident, « Ledge. », the live line and /, the question field under it; lit while the home view shows. */
+.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:4px;padding:6px 8px 6px;cursor:default}
+.st-ledge .st-ledge-entry{display:flex;align-items:center;gap:8px;width:100%;padding:2px 0;border:0;background:none;color:var(--sidebar-foreground);text-align:left;cursor:pointer}
+.st-ledge .st-ledge-names{display:flex;flex-direction:column;flex:1;min-width:0;line-height:14px}
+.st-ledge .st-ledge-brand{font-size:13px;font-weight:650}
+.st-ledge .st-ledge-line{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
+.st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
+@media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
+.st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}
+.st-card.st-near .st-task-mark{color:var(--warning,#e5b85c)}
+.st-card.st-decision .st-task-mark{color:var(--sidebar-primary);font-weight:700}
+
+/* OpenRig's groups (docs/mockups/ledge-openrig-groups.html): a rig's hexagon, the kernel's. */
+.st-rig-hex{display:inline-grid;place-items:center;color:var(--info);flex:none}
+.st-kernel-hex{display:inline-grid;place-items:center;color:#8b5cf6;margin-right:4px}
+.st-grouping{display:flex;gap:2px;margin:6px 10px 2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-grouping button{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 8px;height:24px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-grouping button[aria-checked=true]{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+
+/* ===== Sidebar as proposed in ledge-sidebar-tidy.html (pending validation): kept as is in every direction ===== */
+.v2 .st-ask.st-ledge{padding:8px 14px;gap:0}
+.v2 .st-views{padding:4px;gap:2px;margin:10px 10px 8px}
+.v2.st .st-views button{height:30px;padding:0 10px;gap:9px}
+.v2 .st-grouping{margin:0 10px 8px;padding:4px;flex:none}
+.v2.st .st-grouping button{height:26px}
+.st-kernel-box{--kv:#8b5cf6;margin:0 2px;padding:2px 4px 4px;border:1px solid color-mix(in srgb,var(--kv) 34%,var(--border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--kv) 7%,var(--sidebar))}
+.th-dark .st-kernel-box{--kv:#a78bfa;background:color-mix(in srgb,var(--kv) 9%,var(--sidebar))}
+.st-kernel-box .st-label{padding:0 6px}
+.st-kernel-box .st-kernel-name{color:var(--sidebar-foreground);font-weight:600}
+.st-kernel-tag{display:flex;align-items:center;gap:5px;font:500 10px 'Geist Mono',monospace;color:color-mix(in srgb,var(--kv) 75%,var(--muted-foreground))}
+.st-kernel-tag i{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.st-kernel-box .st-row{padding-left:6px}
+.sidebar.st{width:264px;flex:none}
+
+/* ===== The app frame and its parts (mockup of the proposals, built on the tokens) ===== */
+*{box-sizing:border-box}
+.app{--task:#6d4fc4;width:1200px;height:740px;display:flex;flex-direction:column;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',system-ui,sans-serif;overflow:hidden;position:relative}
+.th-dark .app,.th-dark.app{--task:#b9a2f0}
+.app button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.tb{height:32px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--sidebar-border);background:var(--sidebar)}
+.tb b{font-weight:650;font-size:13px}.tb b i{font-style:normal;color:var(--sidebar-primary)}
+.tb .sp{flex:1}.tb .wc{display:flex;gap:18px;color:var(--muted-foreground);font-size:12px}
+.tb .badge{font:600 10px 'Geist Mono',monospace;color:var(--sidebar-primary)}
+.body{flex:1;min-height:0;display:flex}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--background)}
+.mh{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border)}
+.mh h3{margin:0;font-size:14px;font-weight:600}
+.mh .sub{font-size:12px;color:var(--muted-foreground)}
+.mh .sp{flex:1}
+.mc{flex:1;min-height:0;overflow:hidden;display:flex}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;padding:18px 20px;overflow:hidden}
+.col.side{flex:none;width:300px;border-left:1px solid var(--border);background:color-mix(in srgb,var(--sidebar) 60%,var(--background))}
+.sec{font:500 11px 'Geist',sans-serif;color:var(--muted-foreground);display:flex;align-items:center;gap:6px;margin-top:2px}
+.sec .n{font:600 10px 'Geist Mono',monospace;min-width:16px;height:16px;padding:0 4px;border-radius:999px;display:inline-grid;place-items:center;background:var(--sidebar-primary);color:var(--primary-foreground)}
+.sec .sp{flex:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.card.hot{border-color:color-mix(in srgb,var(--sidebar-primary) 45%,var(--border))}
+.card .who{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-foreground)}
+.card .who strong{color:var(--foreground);font-weight:600}
+.card .who .sp{flex:1}
+.card .who time{font:11px 'Geist Mono',monospace}
+.card h4{margin:0;font-size:14px;line-height:20px;font-weight:600}
+.card p{margin:0;font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.card p b{color:var(--foreground);font-weight:500}
+.acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{height:28px;padding:0 11px;border-radius:var(--radius-sm);border:1px solid var(--input)!important;font-size:12px!important;font-weight:500;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.pri{background:var(--primary)!important;border-color:var(--primary)!important;color:var(--primary-foreground)!important}
+.btn.ghost{border-color:transparent!important;color:var(--muted-foreground)!important}
+.btn.sm{height:24px;padding:0 8px;font-size:11px!important}
+.app .btn{padding:0 11px}.app .btn.sm{padding:0 8px}.app .chip{padding:0 8px}.app .btn.pri{color:var(--primary-foreground)}
+.fine{font-size:11px;color:var(--muted-foreground)}
+.pill{font:500 10px 'Geist Mono',monospace;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:var(--muted-foreground);white-space:nowrap}
+.pill.dec{border-color:color-mix(in srgb,var(--sidebar-primary) 50%,var(--border));color:var(--sidebar-primary)}
+.pill.q{border-color:color-mix(in srgb,var(--warning) 50%,var(--border));color:var(--warning)}
+.pill.ok{border-color:color-mix(in srgb,var(--success) 50%,var(--border));color:var(--success)}
+.pill.auto{border-color:color-mix(in srgb,var(--info) 50%,var(--border));color:var(--info)}
+.pill.task{border-color:color-mix(in srgb,var(--task) 50%,var(--border));color:var(--task)}
+.hex{display:inline-grid;place-items:center;color:var(--info)}
+.hex.k{color:#8b5cf6}
+.mono{font-family:'Geist Mono',monospace}
+.field{border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);padding:9px 12px;font-size:13px;color:var(--muted-foreground);display:flex;align-items:center;gap:8px}
+.field.tall{align-items:flex-start;min-height:64px;color:var(--foreground);line-height:19px}
+.composer{margin-top:auto;border:1px solid var(--input);border-radius:var(--radius-lg);background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.composer .ph{color:var(--muted-foreground);font-size:13px}
+.composer .row{display:flex;align-items:center;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground);background:var(--well)}
+.chip b{color:var(--foreground);font-weight:500}
+.mini-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)}
+.mini-row:last-child{border-bottom:0}
+.mini-row .sp{flex:1}
+.mini-row .t{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.bar{height:4px;border-radius:2px;background:var(--muted);overflow:hidden}.bar i{display:block;height:100%;background:var(--info)}
+/* Chat */
+.msg{display:flex;gap:10px;align-items:flex-start}
+.msg .body2{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.msg .name{font-size:12px;font-weight:600}.msg .name small{font-weight:400;color:var(--muted-foreground);margin-left:6px;font-family:'Geist Mono',monospace;font-size:10.5px}
+.msg .txt{font-size:13px;line-height:19px}
+.msg.me{justify-content:flex-end}
+.msg.me .txt{background:var(--muted);border-radius:12px 12px 4px 12px;padding:8px 12px;max-width:70%}
+.folded{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
+.folded b{color:var(--foreground);font-weight:500}
+/* OpenRig traffic as interpreted cards (place reserved for ledge-dev-2) */
+.orm{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--muted-foreground);padding:6px 10px;border-left:2px solid color-mix(in srgb,var(--task) 60%,transparent);background:color-mix(in srgb,var(--task) 5%,transparent);border-radius:0 6px 6px 0}
+.orm b{color:var(--foreground);font-weight:500}
+.orm .t{margin-left:auto;font:10.5px 'Geist Mono',monospace;flex:none}
+.reserve{position:relative;outline:1.5px dashed #d99a00;outline-offset:4px;border-radius:6px}
+.reserve::after{content:attr(data-r);position:absolute;right:-4px;top:-14px;font:600 9.5px 'Geist Mono',monospace;color:#1b1b1b;background:#ffc94d;padding:1px 6px;border-radius:4px;white-space:nowrap}
+/* Mascots and bots (simplified) */
+.mascot{width:26px;height:26px;flex:none;border-radius:8px 8px 6px 6px;background:linear-gradient(#c43a32,#8e1f1a);position:relative;display:inline-block}
+.mascot::after{content:"";position:absolute;left:6px;right:6px;top:9px;height:6px;border-radius:3px;background:#1b1414;box-shadow:inset 3px 0 0 -1px #ffb0a6,inset -3px 0 0 -1px #ffb0a6}
+.mascot.s{width:20px;height:20px}.mascot.s::after{left:4px;right:4px;top:7px;height:5px}
+.bot{width:18px;height:18px;flex:none;position:relative;display:inline-block}
+.bot::before{content:"";position:absolute;inset:1px 1px 3px;border-radius:5px 5px 4px 4px;background:linear-gradient(var(--bt,#d58a62),var(--bb,#a65a3a))}
+.bot::after{content:"";position:absolute;left:4px;right:4px;top:5px;height:4px;border-radius:2px;background:#1b2224;box-shadow:inset 2px 0 0 -.5px var(--e,#a9dfc7),inset -2px 0 0 -.5px var(--e,#a9dfc7)}
+.bot.codex{--bt:#8189ea;--bb:#5359c4}.bot.work{--e:#90c7f2}.bot.ap{--e:#f2b09c}.bot.q{--e:#f6d487}
+.bot.big{transform:scale(1.4);margin:3px}
+.max{--bt:#9b82e8;--bb:#6a4fc8}
+kbd.k{display:inline-flex;align-items:center;min-width:16px;height:16px;padding:0 4px;border-radius:4px;border:1px solid var(--border);color:var(--muted-foreground);font:10px 'Geist Mono',monospace}
+/* Dialog */
+.scrim{position:absolute;inset:0;background:color-mix(in srgb,#000 40%,transparent);display:grid;place-items:center;z-index:10}
+.dlg{width:560px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:0 20px 60px rgba(0,0,0,.35);display:flex;flex-direction:column}
+.dlg .dh{padding:16px 20px 4px;display:flex;align-items:center;gap:8px}.dlg .dh h3{margin:0;font-size:15px}
+.dlg .db{padding:10px 20px 14px;display:flex;flex-direction:column;gap:10px}
+.dlg .df{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.dlg label{font-size:11.5px;font-weight:500;color:var(--muted-foreground);display:flex;flex-direction:column;gap:5px}
+.cmd{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);background:var(--well);border:1px solid var(--border);border-radius:6px;padding:6px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Delegation settings */
+.lvl{display:grid;grid-template-columns:1fr 92px 92px 92px;align-items:center;border-bottom:1px solid var(--border);font-size:12.5px;min-height:44px}
+.lvl.head{min-height:30px;font-size:11px;color:var(--muted-foreground);font-weight:500}
+.lvl>div:not(:first-child){text-align:center}
+.lvl .what b{display:block;font-weight:500}
+.lvl .what small{color:var(--muted-foreground);font-size:11.5px}
+.radio{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--input);display:inline-block;vertical-align:middle}
+.radio.on{border:4.5px solid var(--primary)}
+.lock{font-size:11px;color:var(--muted-foreground)}
+/* Island / atelier vignettes */
+.vigs{display:flex;flex-direction:column;gap:14px}
+.vig{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.vig h5{margin:0;font-size:12px;font-weight:600;display:flex;gap:6px;align-items:center}
+.vig p{margin:0;font-size:12px;color:var(--muted-foreground);line-height:17px}
+.island{align-self:center;display:flex;align-items:center;gap:10px;background:#0b0b0c;color:#f2f2f2;border-radius:0 0 18px 18px;padding:8px 16px 10px;font-size:12px;min-width:360px;max-width:520px}
+.island .sp{flex:1}
+.island .ib{height:22px;padding:0 9px;border-radius:999px;background:#2a2a2d;color:#f2f2f2;font-size:11px;display:inline-flex;align-items:center}
+.island .ib.pri{background:#c4342c}
+.island small{color:#a3a3a3}
+.floor{height:120px;border-radius:10px;background:linear-gradient(160deg,color-mix(in srgb,var(--info) 10%,var(--well)),var(--well));border:1px solid var(--border);position:relative;overflow:hidden}
+.floor .tbl{position:absolute;left:36%;top:44%;width:30%;height:26%;border-radius:8px;background:color-mix(in srgb,#b88a4a 45%,var(--card));border:1px solid var(--border)}
+.floor .s{position:absolute;display:flex;flex-direction:column;align-items:center;font-size:9.5px;gap:1px}
+.floor .flag{position:absolute;font:600 9.5px 'Geist',sans-serif;padding:2px 6px;border-radius:5px;background:var(--sidebar-primary);color:#fff}
+.floor .bubble{position:absolute;font-size:10px;line-height:13px;padding:5px 8px;border-radius:8px;background:var(--card);border:1px solid var(--border);max-width:190px;color:var(--foreground)}
+
+/* ===== Page furniture ===== */
+html,body{margin:0}
+body{font-family:'Geist',system-ui,sans-serif;font-size:14px;line-height:21px;background:#e9e7e2;color:#1b1b1b}
+body.dark-page{background:#141414;color:#e8e8e8}
+.page{max-width:1880px;margin:0 auto;padding:30px 28px 90px}
+header.top{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap}
+h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing:-.01em}
+.lead{max-width:980px;margin:0;color:inherit;opacity:.8}
+.switch{margin-left:auto;display:flex;gap:4px;padding:3px;border-radius:9px;background:rgba(0,0,0,.08)}
+.switch button{border:0;background:none;padding:5px 12px;border-radius:7px;font:500 12px 'Geist',sans-serif;color:inherit;cursor:pointer}
+.switch button.on{background:#fff;color:#1b1b1b;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.grid{display:grid;grid-template-columns:repeat(3,600px);gap:24px;margin-top:22px}
+.colhead{border-radius:12px;padding:16px 18px;background:#fff;color:#1b1b1b;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:19px}
+.dark-page .colhead{background:#1f1f1f;color:#e8e8e8}
+.colhead h2{margin:0;font-size:17px;display:flex;gap:8px;align-items:baseline}
+.colhead h2 .tag{font:600 11px 'Geist Mono',monospace;padding:1px 7px;border-radius:999px;background:#e0322a;color:#fff}
+.colhead .tagline{font-size:13.5px;font-weight:500}
+.colhead dl{margin:4px 0 0;display:grid;grid-template-columns:118px 1fr;gap:4px 10px}
+.colhead dt{font-weight:600;font-size:12px;opacity:.65}
+.colhead dd{margin:0}
+.rowtitle{grid-column:1/-1;margin:26px 0 -8px;font-size:16px;font-weight:600;display:flex;gap:10px;align-items:baseline}
+.rowtitle small{font-weight:400;font-size:13px;opacity:.7}
+.shot{width:600px;height:370px;overflow:hidden;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(0,0,0,.14);cursor:zoom-in;position:relative}
+.shot>.app{transform:scale(.5);transform-origin:0 0}
+.shot-cap{font-size:12.5px;line-height:18px;opacity:.8;margin-top:8px}
+.cell{display:flex;flex-direction:column}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:100;cursor:zoom-out}
+.lightbox.on{display:grid}
+.lightbox .app{box-shadow:0 20px 80px rgba(0,0,0,.5);border-radius:10px}
+.notes{max-width:1240px;margin-top:40px;background:#fff;color:#1b1b1b;border-radius:12px;padding:24px 28px}
+.dark-page .notes{background:#1f1f1f;color:#e8e8e8}
+.notes h2{font-size:18px;margin:0 0 10px}
+.notes h3{font-size:15px;margin:22px 0 8px}
+.notes ol,.notes ul{margin:0;padding-left:22px;font-size:13.5px;line-height:21px}
+.notes li{margin:4px 0}
+.notes code{font:12px 'Geist Mono',monospace;background:rgba(127,127,127,.15);padding:1px 4px;border-radius:4px}
+.fact{border-left:3px solid #e0322a;padding:6px 12px;margin:10px 0;font-size:13.5px}
+
+
+/* ===== A+B additions ===== */
+.app .chip{padding:0 8px}
+.app .btn{padding:0 11px}.app .btn.sm{padding:0 8px}.app .btn.pri{color:var(--primary-foreground)}
+.max-card{border-color:color-mix(in srgb,#8b5cf6 40%,var(--border));background:color-mix(in srgb,#8b5cf6 5%,var(--card))}
+.th-dark .max-card{border-color:color-mix(in srgb,#a78bfa 40%,var(--border));background:color-mix(in srgb,#a78bfa 7%,var(--card))}
+.max-card .who strong{color:#7c4ddb}.th-dark .max-card .who strong{color:#c4b0fb}
+.seatline{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 0}
+.seatline .mono{color:var(--muted-foreground);font-size:11.5px}
+.countdown{border-color:color-mix(in srgb,var(--info) 45%,var(--border))}
+.cd-bar{height:3px;border-radius:2px;background:var(--muted);overflow:hidden}.cd-bar i{display:block;height:100%;background:var(--info)}
+.src{display:inline-flex;align-items:center;gap:4px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);border:1px solid var(--border);border-radius:5px;padding:0 6px;height:20px;background:var(--well)}
+.banner{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--well)}
+.banner.warn{border-color:color-mix(in srgb,var(--warning) 45%,var(--border));background:color-mix(in srgb,var(--warning) 7%,var(--card))}
+.banner.err{border-color:color-mix(in srgb,var(--danger-text) 45%,var(--border));background:color-mix(in srgb,var(--danger-text) 6%,var(--card))}
+.banner .bt{flex:1;display:flex;flex-direction:column;gap:3px}
+.banner b{font-size:13px;font-weight:600}
+.banner p{margin:0;font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.empty-box{border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.empty-box b{font-size:13px;font-weight:500}
+.empty-box p{margin:0;font-size:12.5px;color:var(--muted-foreground);line-height:18px}
+.raw{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--well);font:11px/16px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.fold-btn{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted-foreground)}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.seg span{height:24px;display:inline-flex;align-items:center;padding:0 10px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.seg span.on{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+.combo{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);font-size:12.5px;min-width:280px}
+.combo .sp{flex:1}.combo small{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.check{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--input);display:inline-grid;place-items:center;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.set-sec{display:flex;flex-direction:column;gap:8px;padding:14px 0;border-bottom:1px solid var(--border)}
+.set-sec h4{margin:0;font-size:13px;font-weight:600}
+.set-sec .hint{font-size:12px;color:var(--muted-foreground);line-height:17px}
+.set-row{display:flex;align-items:center;gap:10px;font-size:12.5px}
+.hns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:1}
+.hn{border:1px solid var(--border);border-radius:var(--radius-md);padding:7px 10px;display:flex;flex-direction:column;gap:1px;background:var(--card)}
+.hn b{font-size:12.5px;font-weight:600;display:flex;align-items:center}
+.hn small{font-size:11px;color:var(--muted-foreground)}
+.hn.on{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.hn.absent{opacity:.55}.hn.absent small{color:var(--danger-text)}
+.hn.bad{opacity:1;border-color:var(--danger-text);box-shadow:0 0 0 1px var(--danger-text)}
+/* Strip of card states at real size */
+.strip{display:grid;grid-template-columns:repeat(4,380px);gap:16px;margin-top:6px}
+.strip .app-bg{padding:14px;border-radius:12px;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;display:flex;flex-direction:column;gap:8px}
+.strip .lbl{font:600 11px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.strip .app-bg .btn{padding:0 11px}.strip .app-bg .btn.sm{padding:0 8px}
+.strip .app-bg button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+/* Phone */
+.phone{width:360px;height:740px;border-radius:40px;border:10px solid #0d0d0e;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;overflow:hidden;display:flex;flex-direction:column;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.phone button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.phone .btn{padding:0 11px}.phone .btn.sm{padding:0 8px}.phone .btn.pri{color:var(--primary-foreground)}
+.phone .sb{height:30px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font:600 12px 'Geist',sans-serif}
+.phone .ph-h{display:flex;align-items:center;gap:8px;padding:6px 16px 10px}
+.phone .ph-h h3{margin:0;font-size:20px;font-weight:650}
+.phone .ph-c{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:10px;padding:0 12px}
+.phone .card{padding:11px 12px}
+.phone .card h4{font-size:13.5px;line-height:19px}
+.phone .tabs{height:62px;flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border);background:var(--sidebar);padding-bottom:8px}
+.phone .tabs span{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10.5px;color:var(--muted-foreground);position:relative}
+.phone .tabs span.on{color:var(--sidebar-primary);font-weight:600}
+.phone .tabs .dot{position:absolute;top:8px;right:28%;min-width:15px;height:15px;border-radius:999px;background:var(--sidebar-primary);color:#fff;font:600 9px/15px 'Geist Mono',monospace;text-align:center;padding:0 3px}
+.phone .composer{margin:8px 12px 10px}
+/* TUI */
+.term{width:760px;border-radius:10px;overflow:hidden;font:12.5px/18px 'Geist Mono',monospace;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.term .tt{height:28px;display:flex;align-items:center;gap:6px;padding:0 12px;font:11px 'Geist',sans-serif}
+.term .tt i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.term pre{margin:0;padding:12px 16px 16px;white-space:pre}
+.th-dark .term,.term.dark{background:#0c0c0d;color:#e5e5e5}.th-dark .term .tt{background:#1b1b1d;color:#9b9b9b}
+.th-light .term{background:#fbfbfa;color:#1d1d1f}.th-light .term .tt{background:#ececea;color:#666}
+.term .r{color:#f87171}.term .y{color:#e3b341}.term .b{color:#79c0ff}.term .g{color:#56d364}.term .m{color:#bc8cff}.term .d{opacity:.55}.term .inv{background:#f87171;color:#0c0c0d}
+.th-light .term .r{color:#c4342c}.th-light .term .y{color:#9a6700}.th-light .term .b{color:#0969da}.th-light .term .g{color:#1a7f37}.th-light .term .m{color:#8250df}.th-light .term .inv{background:#c4342c;color:#fff}
+.app .chip,.phone .chip{white-space:nowrap}
+.col.side .composer .chip:nth-of-type(2){display:none}
+.phone .card .who .mono,.phone .card .who time{display:none}
+.phone .card .who{flex-wrap:wrap}
+/* Page */
+.sec-title{margin:40px 0 4px;font-size:19px;font-weight:650;display:flex;gap:10px;align-items:baseline}
+.sec-title .num{font:600 12px 'Geist Mono',monospace;opacity:.6}
+.sec-note{max-width:1100px;margin:0 0 14px;font-size:13.5px;opacity:.8}
+.rowx{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.cell{width:600px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.toc a{font-size:12.5px;color:inherit;text-decoration:none;padding:4px 10px;border-radius:999px;background:rgba(127,127,127,.14)}
+
+/* ===== Lot 1 cards ===== */
+.pane{padding:18px;border-radius:12px;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;display:flex;flex-direction:column;gap:10px;width:560px}
+.pane button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.pane .btn{padding:0 11px}.pane .btn.sm{padding:0 8px}.pane .btn.pri{color:var(--primary-foreground)}
+.lbl{font:600 11px 'Geist Mono',monospace;color:var(--muted-foreground);margin-top:6px}
+.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.clamp2{-webkit-line-clamp:2}
+.more{font-size:12px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:2px;align-self:flex-start}
+.q-block{display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid var(--border)}
+.q-block .qt{font-size:13px;font-weight:500}
+.chosen{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted-foreground)}
+.ta{min-height:72px;border:1px solid var(--ring);border-radius:var(--radius-md);background:var(--well);padding:9px 11px;font-size:13px;color:var(--muted-foreground)}
+.err-line{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--danger-text);padding-top:6px;border-top:1px solid var(--border)}
+.spin{width:12px;height:12px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;display:inline-block;animation:sp .9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.done-line{display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);font-size:12.5px;color:var(--muted-foreground)}
+.done-line b{color:var(--foreground);font-weight:500}
+.pill.urg{border-color:var(--sidebar-primary);background:var(--sidebar-primary);color:#fff}
+.btn[disabled]{opacity:.5}
+.twocol{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.spec{max-width:560px;font-size:12.5px;line-height:18px;opacity:.8}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>À toi, lot 1 : les cartes</h1>
+      <p class="lead">Complément à <code>ledge-human-operator-ab.html</code>, validée le 2 novembre à 19:36, pour les questions de dev-front. Les cartes suivent le contrat back
+        <code>docs/vision/ledge-human-channel-contract.md</code> (branche <code>feat/human-channel</code>). Au lot 1, tout est sur « Toujours moi » : pas de recommandation de Ledge, pas de « Réglé par Ledge »,
+        pas de « Pourquoi c'est à toi », pas de délai « Annuler ». Une réponse part tout de suite. À gauche en sombre, à droite en clair.</p>
+    </div>
+  </header>
+  <div class="twocol" style="margin-top:22px">
+    <div class="th-dark" id="col-dark"></div>
+    <div class="th-light" id="col-light"></div>
+  </div>
+</div>
+<script>
+const P = {
+  rig: ['M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5z','M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7'],
+  file: ['M6 3h8l4 4v14H6z','M14 3v4h4'],
+  check: ['m5 12 5 5 9-10'],
+  chev: ['m9 18 6-6-6-6'],
+  alert: ['M12 3 2 20h20z','M12 10v4','M12 17h.01'],
+  send: ['M5 12h14','m13 6 6 6-6 6']
+};
+const ic = (d, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d.map(x => `<path d="${x}"/>`).join('')}</svg>`;
+const hx = () => `<span class="hex">${ic(P.rig, 13)}</span>`;
+const src = t => `<span class="src">${ic(P.file, 11)}${t}</span>`;
+const who = (seat, role, pill, t = '4 min', extra = '') => `<div class="who">${hx()}<strong>ledge-dev</strong> · ${seat} <span class="mono">${role}</span>${pill}${extra}<span class="sp"></span><time>${t}</time></div>`;
+const BODY = 'Lu prépare Réglages › Ledge pour le lot 4. Le choix change ce que l’écran propose et le coût de Ledge : un seul modèle est plus simple à régler, deux modèles permettent un modèle plus fort, et plus lent, seulement quand Ledge décide seul. La note de vision n’en prévoit qu’un.';
+
+const CARDS = [
+  ['Décision · une question · option recommandée par le siège', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <p class="clamp">${BODY}</p><button class="more">Tout lire</button>
+    <button class="fold-btn">${ic(P.chev, 11)} Détails</button>
+    <div class="acts">${src('docs/mockups/ledge-human-operator-ab.html')}</div>
+    <div class="acts"><button class="btn pri" title="Recommandé par Bix">Un seul modèle · recommandé</button><button class="btn">Un plus fort pour décider seul</button><button class="btn ghost">Répondre autrement…</button></div></div>`,
+    'Plus de ligne « Ledge recommande ». Si <code>body</code> = <code>summary</code> et <code>bodyTruncated</code>, pas de corps ni de « Tout lire ». « · recommandé » vient de <code>options[].recommended</code> ; l’infobulle dit qui recommande. <code>evidenceRef</code> donne une pastille. Le corps fait 3 lignes au plus, puis « Tout lire » le déplie dans la carte. « Détails » (si <code>detail</code>) se déplie sous le corps.'],
+  ['« Répondre autrement… » ouvert', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <div class="ta">Ta réponse, en quelques mots…</div>
+    <div class="acts"><button class="btn pri">${ic(P.send, 12)}Envoyer</button><button class="btn ghost">Annuler</button><span class="fine" style="margin-left:auto">Ctrl Entrée · Échap</span></div></div>`,
+    'La zone remplace les boutons et répond à toute la demande (<code>words</code>). EN : « Your answer, in a few words… », Send, Cancel. Annuler rend les boutons.'],
+  ['Plusieurs questions · une déjà répondue', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Deux choix pour l’écran de réglage</h4>
+    <div class="q-block"><span class="qt">1. Un modèle pour tout, ou un plus fort pour décider seul ?</span><span class="chosen">${ic(P.check, 13)}Un seul modèle</span></div>
+    <div class="q-block"><span class="qt">2. Délai avant envoi par défaut ?</span><div class="acts"><button class="btn sm">3 s</button><button class="btn sm pri">5 s · recommandé</button><button class="btn sm">10 s</button></div></div>
+    <div class="acts" style="border-top:1px solid var(--border);padding-top:8px"><span class="fine">1/2 répondues · la réponse part à la dernière</span><span style="flex:1"></span><button class="btn ghost sm">Répondre autrement…</button></div></div>`,
+    'Questions l’une sous l’autre, séparées d’un filet. Une question répondue (<code>outcome: recorded</code>) montre « ✓ {label} » en gris et ne se modifie plus. EN : « {n}/{total} answered · the answer goes with the last one ».'],
+  ['Plusieurs questions · « Répondre autrement… » ouvert · validé 20:52', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Deux choix pour l’écran de réglage</h4>
+    <div class="q-block"><span class="qt">1. Un modèle pour tout, ou un plus fort pour décider seul ?</span><span class="chosen">${ic(P.check, 13)}Un seul modèle</span></div>
+    <div class="q-block"><span class="qt">2. Délai avant envoi par défaut ?</span><div class="acts" style="opacity:.45"><button class="btn sm" disabled>3 s</button><button class="btn sm" disabled>5 s · recommandé</button><button class="btn sm" disabled>10 s</button></div></div>
+    <div class="q-block"><div class="ta">Ta réponse, en quelques mots…</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--warning)">${ic(P.alert, 12)}Cette réponse règle toute la demande, y compris les questions sans réponse.</div>
+    <div class="acts"><button class="btn pri">${ic(P.send, 12)}Envoyer</button><button class="btn ghost">Annuler</button></div></div></div>`,
+    'La zone remplace le pied de carte, sous toutes les questions ; les boutons des questions en attente sont désactivés tant qu’elle est ouverte. Nouveau texte, validé à 20:52 : une ligne d’avertissement (couleur <code>--warning</code>, icône 12 px) entre la zone et les boutons. Elle n’apparaît que si la demande a plusieurs questions et qu’au moins une n’a pas de réponse. EN « This answer settles the whole request, including unanswered questions. » Rien ne change pour une demande à une seule question.'],
+  ['Demande sans boutons · ligne bloquée (parked)', `<div class="card">${who('Ida', 'dev.front', '<span class="pill q">en attente de toi</span>', '12 min')}
+    <h4>Je reste bloquée sur la carte « Pas envoyée » : je garde la carte ou je la remplace ?</h4>
+    <p class="clamp clamp2">La ligne qitem-…195555 attend une décision de toi depuis 12 minutes. Ida ne peut pas continuer le lot 1 sans elle.</p>
+    <div class="acts"><button class="btn">Répondre…</button></div></div>`,
+    'Section « Questions ». <code>parked</code> : pastille jaune « en attente de toi » (EN « waiting on you »), « Répondre… » ouvre la zone de texte, placeholder « Ce que {siège} doit faire… » (EN « What {seat} should do… ») ; envoi = <code>resolve</code>. Une <code>decision</code> sans questions est rendue pareil, avec « Écrire la réponse… » et la pastille « question ».'],
+  ['Nouvelle (update)', `<div class="card" style="gap:6px">${who('Lu', 'design.ux', '<span class="pill">nouvelle</span>', '19:40')}
+    <div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1;display:flex;flex-direction:column;gap:4px"><b style="font-size:13px;font-weight:500">Maquette A+B : complément harnais et modèle rendu</b><p class="clamp clamp2">Slack retiré, Réglages › Ledge avec harnais et modèle, écran « harnais pas installé ».</p></div><button class="btn sm ghost">Vu</button></div>
+    <div class="acts">${src('docs/mockups/ledge-human-operator-ab.html')}</div></div>`,
+    'Section « Nouvelles ». Carte compacte, corps sur 2 lignes, « Vu » (EN « Seen ») envoie <code>seen</code> et retire la carte (avec la ligne de confirmation du dernier exemple).'],
+  ['Urgente (priority urgent ou critical)', `<div class="card hot">${who('Pim', 'review.qa', '<span class="pill dec">décision</span>', '1 min', '<span class="pill urg" style="margin-left:4px">urgent</span>')}
+    <h4>La revue bloque la fusion : on corrige avant ou après la démo ?</h4>
+    <div class="acts"><button class="btn pri">Avant · recommandé</button><button class="btn">Après</button><button class="btn ghost">Répondre autrement…</button></div></div>`,
+    '<code>priority</code> vaut <code>urgent</code> ou <code>critical</code> : la carte passe en tête de sa section, avec une pastille rouge pleine : « urgent » pour <code>urgent</code>, « critique » pour <code>critical</code> (EN « urgent », « critical ») ; rien pour <code>routine</code>. Tri : critique, puis urgent, puis le reste. Consigne d’équipe : une demande à <code>ledge@external</code> n’utilise jamais <code>--alert</code>, donc la pastille ne lit pas <code>alert</code>. Elle va aussi à l’île et au téléphone (lot 3 pour le téléphone).'],
+  ['Envoi en cours', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <div class="acts"><button class="btn pri" disabled style="opacity:.8"><span class="spin"></span>Un seul modèle · recommandé</button><button class="btn" disabled>Un plus fort pour décider seul</button><button class="btn ghost" disabled>Répondre autrement…</button></div></div>`,
+    'Tous les boutons sont désactivés ; une roue apparaît dans le bouton cliqué jusqu’à <code>openrig.answered</code>.'],
+  ['Pas envoyée', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <div class="acts"><button class="btn pri">Un seul modèle · recommandé</button><button class="btn">Un plus fort pour décider seul</button><button class="btn ghost">Répondre autrement…</button></div>
+    <div class="err-line">${ic(P.alert, 13)}<span>Pas envoyée : OpenRig est arrêté</span><span style="flex:1"></span><button class="btn sm" style="color:var(--foreground)">Réessayer</button></div></div>`,
+    'En bas de la carte. « Pas envoyée : {raison} » (EN « Not sent: {reason} »), avec <code>message</code> ou un texte par code (<code>openrig_stopped</code> → « OpenRig est arrêté », <code>unreachable</code> → message). Réessayer renvoie le même <code>openrig.answer</code>. Pour <code>closed</code> et <code>already</code>, pas d’erreur : voir l’exemple suivant.'],
+  ['Envoi incertain (uncertain) · validé 20:52', `<div class="card hot">${who('Bix', 'pilot', '<span class="pill dec">décision</span>')}
+    <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+    <div class="acts"><button class="btn pri">Un seul modèle · recommandé</button><button class="btn">Un plus fort pour décider seul</button><button class="btn ghost">Répondre autrement…</button></div>
+    <div class="err-line" style="color:var(--warning)">${ic(P.alert, 13)}<span>Envoi incertain : la réponse est peut-être partie. Réessayer ne l’enverra pas deux fois.</span><span style="flex:1"></span><button class="btn sm" style="color:var(--foreground)">Réessayer</button></div></div>`,
+    'Ton jaune (<code>--warning</code>), même place que « Pas envoyée ». EN « Uncertain: the answer may have been sent. Retrying won’t send it twice. », « Retry ». Si Réessayer revient avec <code>already</code> après un envoi incertain, la carte affiche « Envoyé à {siège} » (c’est notre propre envoi), pas « Déjà réglée ailleurs ».'],
+  ['Après la réponse (1,5 s)', `<div class="done-line">${ic(P.check, 14)}<span><b>Envoyé à Bix</b> · pilot</span></div><div class="done-line">${ic(P.check, 14)}<span><b>Déjà réglée ailleurs</b></span></div>`,
+    'La carte se réduit à cette ligne, puis se retire. EN « Sent to {seat} », « Already settled elsewhere ». En mouvement réduit : pas d’animation, même ligne, même durée.'],
+  ['Liste partielle (partial)', `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-foreground)">${ic(P.alert, 12)}Liste peut-être incomplète : OpenRig n’a pas répondu à la dernière lecture.</div><div class="sec">Décisions <span class="n">1</span></div>`,
+    'Une seule ligne, en tête de la colonne À toi, au-dessus de la première section. Grise, sans cadre ni bouton, elle disparaît à la prochaine lecture réussie. Pas de ligne si une bannière de canal est déjà affichée. EN « List may be incomplete: OpenRig did not answer the last read. »'],
+  ['Bannières du canal (sans bouton au lot 1)', `<div class="banner err">${ic(P.alert, 16)}<div class="bt"><b>Ledge n’est pas encore le canal humain d’OpenRig.</b><p>Les rigs passent encore par Max, ou par le TUI du kernel. Leurs demandes n’arrivent pas ici.</p></div></div>
+    <div class="banner err">${ic(P.alert, 16)}<div class="bt"><b>OpenRig a plusieurs personnes, et aucune n’est désignée par défaut.</b><p>Ses demandes n’arrivent donc pas ici. Pour en désigner une :</p><p class="mono" style="font-size:11.5px">{channel.message} : la commande donnée par OpenRig</p></div></div>
+    <div class="banner warn">${ic(P.alert, 16)}<div class="bt"><b>OpenRig est arrêté : les rigs ne peuvent pas t’écrire.</b><p>Les sessions de tes projets passent toujours par ici.</p></div></div>
+    <div class="banner warn">${ic(P.alert, 16)}<div class="bt"><b>OpenRig ne répond pas.</b><p>connection refused on 127.0.0.1:7433</p></div></div>
+    <div class="banner">${ic(P.alert, 16)}<div class="bt"><b>OpenRig n’est pas installé sur WSL.</b><p>Les sessions de tes projets passent toujours par ici.</p></div></div>`,
+    '<code>no_person</code>, <code>no_default</code> (rouge aussi, <code>message</code> en mono ; EN « OpenRig has several people, and none is the default. » / « So its requests don’t arrive here. To set one: »), <code>openrig_stopped</code>, <code>unreachable</code> (le <code>message</code> tel quel, en mono-ligne), <code>not_installed</code>. Pas de bouton « Brancher Ledge » ni « Démarrer OpenRig » ici au lot 1 : la sidebar a déjà « Démarrer OpenRig ». « Ce que Max t’a relayé » est retiré.']
+];
+for (const id of ['col-dark', 'col-light']) {
+  document.getElementById(id).innerHTML = `<div class="pane">${CARDS.map(([l, h, spec]) => `<span class="lbl">${l}</span>${h}${id === 'col-dark' ? `<div class="spec">${spec}</div>` : ''}`).join('')}</div>`;
+}
+</script>
+</body>
+</html>

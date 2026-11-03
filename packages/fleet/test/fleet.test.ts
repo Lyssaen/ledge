@@ -1,3 +1,5 @@
+import { act, renderHook } from '@testing-library/react';
+import { useOpenRigAsksAll } from '../src/openrigAsks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
@@ -441,6 +443,87 @@ describe('multi-machine connections', () => {
     server.set('unreachable');
     client.send({ type: 'openrig.row', requestId: 'w3', machineId: 'server', qitem: 'qitem-3-c' });
     expect(rows().at(-1)).toEqual({ type: 'openrig.rowState', requestId: 'w3', machineId: 'server', qitem: 'qitem-3-c', error: 'offline' });
+  });
+  it('routes « À toi » asks and answers to their machine; a push carries its machine; an older daemon refuses only those', () => {
+    const { client, server, got } = setup();
+    const human = () => got.filter(m => m.type === 'openrig.asksChanged' || m.type === 'openrig.answered' || m.type === 'openrig.state');
+    client.send({ type: 'openrig.asks', requestId: 'h1', machineId: 'server' });
+    client.send({ type: 'openrig.answer', requestId: 'h2', machineId: 'server', qitemId: 'q1', answer: { kind: 'seen' } });
+    expect(server.sent).toEqual([{ type: 'openrig.asks', requestId: 'h1' }, { type: 'openrig.answer', requestId: 'h2', qitemId: 'q1', answer: { kind: 'seen' } }]);
+    const channel = { state: 'ready' as const, person: null, slack: false };
+    server.emit({ type: 'openrig.asksChanged', requestId: 'h1', channel, asks: [] });
+    server.emit({ type: 'openrig.asksChanged', channel, asks: [] }); // a push
+    server.emit({ type: 'openrig.answered', requestId: 'h2', qitemId: 'q1', ok: true, outcome: 'answered' });
+    expect(human()).toEqual([
+      { type: 'openrig.asksChanged', requestId: 'h1', machineId: 'server', channel, asks: [] },
+      { type: 'openrig.asksChanged', machineId: 'server', channel, asks: [] },
+      { type: 'openrig.answered', requestId: 'h2', machineId: 'server', qitemId: 'q1', ok: true, outcome: 'answered' }
+    ]);
+    client.send({ type: 'openrig.status', requestId: 'h3', machineId: 'server' });
+    client.send({ type: 'openrig.answer', requestId: 'h4', machineId: 'server', qitemId: 'q2', answer: { kind: 'words', text: 'Oui' } });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.answer' });
+    expect(human().at(-1)).toEqual({ type: 'openrig.answered', requestId: 'h4', machineId: 'server', qitemId: 'q2', ok: false, error: 'outdated' });
+    server.set('unreachable');
+    client.send({ type: 'openrig.asks', requestId: 'h5', machineId: 'server' });
+    expect(human().at(-1)).toEqual({ type: 'openrig.asksChanged', requestId: 'h5', machineId: 'server', asks: [], error: 'offline' });
+  });
+  it('an answer already sent whose machine drops is uncertain, never offline; a read stays offline; an answer refused before sending is offline', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'openrig.answer', requestId: 'w1', machineId: 'server', qitemId: 'q1', answer: { kind: 'seen' } });
+    client.send({ type: 'openrig.asks', requestId: 'w2', machineId: 'server' });
+    server.set('unreachable');
+    const end = (id: string) => got.find(m => 'requestId' in m && m.requestId === id);
+    expect(end('w1')).toMatchObject({ type: 'openrig.answered', qitemId: 'q1', ok: false, error: 'uncertain' });
+    expect(end('w2')).toMatchObject({ type: 'openrig.asksChanged', error: 'offline' });
+    client.send({ type: 'openrig.answer', requestId: 'w3', machineId: 'server', qitemId: 'q2', answer: { kind: 'seen' } });
+    expect(end('w3')).toMatchObject({ type: 'openrig.answered', ok: false, error: 'offline' });
+  });
+  it('through the real fleet, useOpenRigAsksAll gets uncertain for an answer whose machine drops in flight, offline for one refused before', async () => {
+    const { client, server } = setup();
+    const { result } = renderHook(() => useOpenRigAsksAll(client, ['local', 'server']));
+    const inFlight = result.current.answer('server', 'q-flight', { kind: 'words', text: 'Oui' });
+    expect(server.sent.some(m => m.type === 'openrig.answer')).toBe(true);
+    act(() => { server.set('unreachable'); });
+    expect(await inFlight).toMatchObject({ type: 'openrig.answered', machineId: 'server', qitemId: 'q-flight', ok: false, error: 'uncertain' });
+    expect(await result.current.answer('server', 'q-after', { kind: 'seen' })).toMatchObject({ machineId: 'server', qitemId: 'q-after', ok: false, error: 'offline' });
+  });
+  it('routes goals, a goal sent and a reply to Max to their machine; an older daemon refuses only those', () => {
+    const { client, server, got } = setup();
+    const goals = () => got.filter(m => m.type === 'openrig.goalsChanged' || m.type === 'openrig.goal.sent' || m.type === 'openrig.goal.replied');
+    client.send({ type: 'openrig.goals', requestId: 'g1', machineId: 'server' });
+    client.send({ type: 'openrig.goal.send', requestId: 'g2', machineId: 'server', goalId: 'abcdef12-0000', text: 'x' });
+    expect(server.sent).toEqual([{ type: 'openrig.goals', requestId: 'g1' }, { type: 'openrig.goal.send', requestId: 'g2', goalId: 'abcdef12-0000', text: 'x' }]);
+    server.emit({ type: 'openrig.goalsChanged', requestId: 'g1', goals: [] });
+    server.emit({ type: 'openrig.goalsChanged', goals: [] }); // a push
+    server.emit({ type: 'openrig.goal.sent', requestId: 'g2', goalId: 'abcdef12-0000', ok: true, qitemId: 'q' });
+    expect(goals()).toEqual([
+      { type: 'openrig.goalsChanged', requestId: 'g1', machineId: 'server', goals: [] },
+      { type: 'openrig.goalsChanged', machineId: 'server', goals: [] },
+      { type: 'openrig.goal.sent', requestId: 'g2', machineId: 'server', goalId: 'abcdef12-0000', ok: true, qitemId: 'q' }
+    ]);
+    client.send({ type: 'openrig.asks', requestId: 'g3', machineId: 'server' });
+    client.send({ type: 'openrig.goal.reply', requestId: 'g4', machineId: 'server', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', text: 'y' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.goal.reply' });
+    expect(goals().at(-1)).toEqual({ type: 'openrig.goal.replied', requestId: 'g4', machineId: 'server', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', ok: false, error: 'outdated' });
+    expect(got.some(m => m.type === 'openrig.asksChanged' && m.requestId === 'g3')).toBe(false); // still pending
+    server.set('unreachable');
+    client.send({ type: 'openrig.goal.send', requestId: 'g5', machineId: 'server', goalId: 'abcdef12-0001', text: 'z' });
+    expect(goals().at(-1)).toEqual({ type: 'openrig.goal.sent', requestId: 'g5', machineId: 'server', goalId: 'abcdef12-0001', ok: false, error: 'offline' });
+  });
+  it('a write already sent whose machine drops is uncertain, never offline; a read stays offline; a write refused before sending is offline', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'openrig.goal.send', requestId: 'w1', machineId: 'server', goalId: 'abcdef12-0000', text: 'x' });
+    client.send({ type: 'openrig.goal.reply', requestId: 'w2', machineId: 'server', goalId: 'abcdef12-0000', replyId: 'fedcba98-0000', text: 'y' });
+    client.send({ type: 'openrig.answer', requestId: 'w3', machineId: 'server', qitemId: 'q1', answer: { kind: 'seen' } });
+    client.send({ type: 'openrig.goals', requestId: 'w4', machineId: 'server' });
+    server.set('unreachable');
+    const end = (id: string) => got.find(m => 'requestId' in m && m.requestId === id);
+    expect(end('w1')).toMatchObject({ type: 'openrig.goal.sent', goalId: 'abcdef12-0000', ok: false, error: 'uncertain' });
+    expect(end('w2')).toMatchObject({ type: 'openrig.goal.replied', replyId: 'fedcba98-0000', ok: false, error: 'uncertain' });
+    expect(end('w3')).toMatchObject({ type: 'openrig.answered', qitemId: 'q1', ok: false, error: 'uncertain' });
+    expect(end('w4')).toMatchObject({ type: 'openrig.goalsChanged', error: 'offline' });
+    client.send({ type: 'openrig.goal.send', requestId: 'w5', machineId: 'server', goalId: 'abcdef12-0001', text: 'z' });
+    expect(end('w5')).toMatchObject({ ok: false, error: 'offline' });
   });
   it('routes roles, a role and a role file to their machine; an older daemon refuses only those, the others stay pending', () => {
     const { client, server, got } = setup();

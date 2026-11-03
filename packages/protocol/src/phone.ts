@@ -12,6 +12,7 @@ import { BROADCAST_SESSIONS_MAX } from './broadcast.js';
 import { PushSubscriptionSchema } from './push.js';
 import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } from './models.js';
 import { SlashCommandSchema } from './commands.js';
+import { HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema } from './openrig.js';
 import { QitemIdSchema, RigRowSchema } from './rigMessages.js';
 
 /** A queue row's state on the phone (docs/mockups/ledge-openrig-messages.html, decision 2): the PC's own, its summary shortened. */
@@ -160,7 +161,8 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 /** What a challenge is for. */
 /** `pc`: updating or restarting the PC's daemon (spec 2026-10-28 mobile daemon update). */
 /** `terminal`: taking the hand on a session's terminal (spec 2026-11-02 mobile terminal), bound to the session. */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal']);
+/** `rig`: an answer to what OpenRig asks the person (« À toi », lot 3), bound to the row and to that very answer. */
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -283,7 +285,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
    * or `act` names a turn of the chat (`qid`) or a session (`id`, for `session.close` and `session.resume`).
    */
   z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional(),
-    /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional() }),
+    /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional(),
+    /** A `rig` challenge: the OpenRig row and the exact answer it covers. */ qitem: z.string().min(1).max(200).optional(), answer: HumanAnswerSchema.optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -361,6 +364,11 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('term.close'), tid: TerminalIdSchema }),
   /** Whether the phone's app is in front: a device that is visible gets no push. */
   z.object({ type: z.literal('presence'), visible: z.boolean() }),
+  /** « À toi » (lot 3): what OpenRig on this PC asks the person, then pushed whole when it changes (`openrig.asks`). */
+  z.object({ type: z.literal('openrig.asks') }),
+  /** The person's answer to an OpenRig row. A choice, words or a resolve carries an assertion of purpose `rig` bound to that row and that
+   *  answer; « Vu » (`seen`) needs none. */
+  z.object({ type: z.literal('openrig.answer'), op: OperationIdSchema, qitemId: z.string().min(1).max(200), answer: HumanAnswerSchema, assertion: AssertionSchema.optional() }),
   /** Installs `version` on the PC, then restarts its daemon; the phone asks for its own build's version. Passkey, purpose `pc`. */
   z.object({ type: z.literal('daemon.update'), ...pcOp, version: z.string().regex(SEMVER) }).strict(),
   /** Restarts the PC's daemon without installing anything. Passkey, purpose `pc`. */
@@ -391,7 +399,15 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The PC lets a phone type into a terminal (`term.hold`): its setting is on. */ terminalInput: z.literal(true).optional(),
     /** The daemon answers `session.commands`. */ commands: z.literal(true).optional(),
     /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
+    /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),
     /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional() }).optional() }),
+  /** « À toi » on this PC: the answer to `openrig.asks`, then each change, whole. */
+  z.object({ type: z.literal('openrig.asks'), channel: HumanChannelSchema, asks: z.array(HumanAskSchema), partial: z.literal(true).optional(), truncated: z.literal(true).optional() }),
+  /** An answer's end, as on the desktop (`openrig.answered`), under the phone's `op`. `rejected`: the device check refused it (`reason`). */
+  z.object({ type: z.literal('openrig.answered'), op: OperationIdSchema, qitemId: z.string(), ok: z.boolean(),
+    outcome: z.enum(['recorded', 'answered', 'already']).optional(), remaining: z.array(z.string()).optional(), replyId: z.string().optional(),
+    error: HumanAnswerErrorSchema.optional(), message: z.string().max(500).optional(),
+    rejected: z.enum(['confirm_required', 'assertion_invalid', 'assertion_expired', 'unavailable']).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),

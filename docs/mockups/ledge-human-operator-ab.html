@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge, contact humain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+
+/* ===== Real Lyssaën tokens (packages/ui/src/styles/tokens.css), scoped per theme by build.mjs ===== */
+.th-light {
+  --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0); --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0); --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.505 0.213 27.518); --primary-foreground: oklch(0.971 0.013 17.38); --primary-hover: oklch(0.444 0.177 26.899);
+  --secondary: oklch(0.967 0.001 286.375); --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0); --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325); --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0); --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0);
+  --radius: 0.625rem; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px;
+  --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0); --sidebar-primary: oklch(0.577 0.245 27.325);
+  --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0);
+  /* The notch itself: pure white (light) or pure black (dark), borderless, so it merges with the screen edge. */
+  --notch: #fff;
+  --task: #7c3aed; /* a task handed between seats (issue #92): no seat state wears violet */
+  --success: #059669; --warning: #b45309; --info: #2563eb; --danger-text: oklch(0.505 0.213 27.518);
+  --status-success-soft: #ecfdf5; --status-warning-soft: #fffbeb; --status-info-soft: #eff6ff; --status-danger-soft: #fef2f2;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25);
+  --well: oklch(0.97 0 0);
+  /* The embedded terminal (apps/desktop term/theme.ts): its background, text, sixteen ANSI colours, cursor and selection. */
+  --term-bg: oklch(0.99 0 0); --term-fg: oklch(0.22 0 0);
+  --term-ansi-0: #24292f; --term-ansi-1: #b91c1c; --term-ansi-2: #047857; --term-ansi-3: #a16207;
+  --term-ansi-4: #1d4ed8; --term-ansi-5: #8250df; --term-ansi-6: #1b7c83; --term-ansi-7: #6e7781;
+  --term-ansi-8: oklch(0.52 0 0); --term-ansi-9: #a40e26; --term-ansi-10: #1a7f37; --term-ansi-11: #9a6700;
+  --term-ansi-12: #0550ae; --term-ansi-13: #6639ba; --term-ansi-14: #136061; --term-ansi-15: #424a53;
+  --term-cursor: oklch(0.145 0 0); --term-selection: #0969da33;
+  --edge-hot: rgba(0,0,0,.06);
+}
+.th-dark {
+  --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0); --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0); --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.444 0.177 26.899); --primary-foreground: oklch(0.971 0.013 17.38); --primary-hover: oklch(0.396 0.141 25.723);
+  --secondary: oklch(0.274 0.006 286.033); --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0); --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216); --destructive-foreground: oklch(0.985 0 0);
+  --border: #ffffff1a; --input: #ffffff26; --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0); --sidebar-primary: oklch(0.637 0.237 25.331);
+  --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.269 0 0); --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: #ffffff1a; --sidebar-ring: oklch(0.556 0 0);
+  --notch: #000;
+  --task: #a78bfa;
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa; --danger-text: oklch(0.704 0.191 22.216);
+  --status-success-soft: #052e16; --status-warning-soft: #422006; --status-info-soft: #172554; --status-danger-soft: #450a0a;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7);
+  --well: oklch(0.145 0 0);
+  --term-bg: #0c0c0d; --term-fg: #e5e5e5;
+  --term-ansi-0: #484f58; --term-ansi-1: #f87171; --term-ansi-2: #4ade80; --term-ansi-3: #facc15;
+  --term-ansi-4: #7cb3fb; --term-ansi-5: #bc8cff; --term-ansi-6: #39c5cf; --term-ansi-7: #b1bac4;
+  --term-ansi-8: #8f8f8f; --term-ansi-9: #ffa198; --term-ansi-10: #56d364; --term-ansi-11: #e3b341;
+  --term-ansi-12: #79c0ff; --term-ansi-13: #d2a8ff; --term-ansi-14: #56d4dd; --term-ansi-15: #ffffff;
+  --term-cursor: oklch(0.985 0 0); --term-selection: #58a6ff40;
+  --edge-hot: rgba(255,255,255,.08);
+}
+
+/* Mascots (spec section 6). Material follows the theme: Galet (light) / Signal (dark).
+   A bot's own data-material wins over the root theme so its theme prop is authoritative. */
+@property --bot-shell-top { syntax: '<color>'; inherits: true; initial-value: #f0eee6; }
+@property --bot-shell-bottom { syntax: '<color>'; inherits: true; initial-value: #b7b7b0; }
+@property --bot-shell-line { syntax: '<color>'; inherits: true; initial-value: #ffffff99; }
+@property --bot-visor { syntax: '<color>'; inherits: true; initial-value: #22292b; }
+@property --bot-shine { syntax: '<color>'; inherits: true; initial-value: #ffffff77; }
+.th-light, [data-material="pebble"] {
+  --bot-shell-top: #f0eee6; --bot-shell-bottom: #b7b7b0; --bot-shell-line: #ffffff99; --bot-visor: #22292b;
+  --bot-shine: #ffffff77;
+}
+.th-dark, [data-material="signal"] {
+  --bot-shell-top: #34434b; --bot-shell-bottom: #273238; --bot-shell-line: #859397; --bot-visor: #172124;
+  --bot-shine: #ffffff00;
+}
+/* Halo (docs/mockups/mascots-halo.html, "Contour" rendering): a glow in the state's badge colour hugging the
+   silhouette. Full strength for a bot that waits or errs, softer for a live bot, none for done or read-only. */
+@property --bot-halo-a { syntax: '<number>'; inherits: false; initial-value: 0; }
+:root { --bot-halo-alpha: .55; --bot-halo-alpha-soft: .3; --bot-halo-spread: .32; }
+:root {
+  --bot-visor-line: #00000055; --bot-reflection: #ffffff; --bot-ground: #000000; --bot-readonly-line: #adb3b2;
+  --bot-eye-starting: #90c7f2; --bot-eye-working: #90c7f2; --bot-eye-approval: #f2b09c; --bot-eye-question: #f6d487;
+  --bot-eye-idle: #a9dfc7; --bot-eye-error: #ffab9f; --bot-eye-done: #a3aaa9;
+}
+
+/* ===== Real sidebar stylesheet (apps/desktop/src/styles/sidebar.css, main 0c47f61b) ===== */
+/* The sidebar as an IDE explorer, from docs/mockups/session-management/sidebar-tree.css: ask field, views,
+   « À toi », the project › branch › session tree. No search row, no auto-hide, no word mark (the titlebar owns the brand).
+   `.side-swatch` and `.machine-dot` stay: they are used across the app; `.side-footer` is an alias of `.st-foot`. */
+.sidebar.st{position:relative;width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
+.st button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+.st button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:var(--radius-sm)}
+.st .mono{font-family:'Geist Mono',monospace}
+.st-fill{flex:1}
+.st-ask{margin:10px 10px 0;height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);cursor:text}
+.st-ask:focus-within,.st-ask.on{border-color:var(--ring)}
+.st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
+.st-ask input::placeholder{color:var(--muted-foreground)}
+.st .st-mascot{display:inline-flex;flex:none}
+.st-views{display:flex;flex-direction:column;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-views button:hover{color:var(--sidebar-foreground)}
+.st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st .st-views button.on svg{color:var(--sidebar-primary)}
+.st-views small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-scroll{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:10px}
+.st-label{display:flex;align-items:center;gap:4px;height:26px;padding:0 2px 0 8px;font-size:11px;color:var(--muted-foreground)}
+.st-badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:grid;place-items:center;font:600 10px 'Geist Mono',monospace;background:var(--sidebar-primary);color:var(--sidebar-primary-foreground,var(--primary-foreground))}
+.st .st-icon{width:24px;height:24px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st .st-icon:hover,.st .st-icon.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+/* « À toi » */
+.st-card{display:flex;gap:8px;padding:6px 6px 6px 8px;border-radius:var(--radius-md)}
+.st-card:hover,.st-card.sel{background:var(--sidebar-accent)}
+.st-card-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.st-l1{display:flex;align-items:center;gap:6px;font-size:13px}
+.st .st-name{font-weight:500;color:var(--sidebar-foreground)}
+.st .st-name:hover{text-decoration:underline}
+.st-where{flex:1;min-width:0;display:flex;align-items:center;gap:2px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-task .st-where{display:block}
+.st-where .side-swatch{width:7px;height:7px;margin:0 3px 0 0}
+.st-l2{display:flex;align-items:center;gap:5px}
+.st-req{flex:1;min-width:0;font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .st-qa{height:22px;padding:0 8px;border-radius:var(--radius-sm);font-size:11px;font-weight:500;border:1px solid var(--input);color:var(--sidebar-foreground)}
+.st .st-qa:hover{background:var(--sidebar-accent)}
+.st .st-qa.pri{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.st .st-qa.pri:hover{background:var(--primary-hover)}
+.st .st-showall{margin:2px 0 0 34px;font-size:12px;color:var(--muted-foreground)}
+.st .st-showall:hover{color:var(--sidebar-foreground)}
+/* The tree */
+.st-tree{display:flex;flex-direction:column;gap:1px}
+.st-row{--d:0;position:relative;display:flex;align-items:center;gap:6px;min-height:28px;padding:0 6px 0 calc(4px + var(--d) * 14px);border-radius:var(--radius-sm);font-size:13px;color:var(--muted-foreground)}
+.st-row:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.sel{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));outline:1.5px solid var(--sidebar-primary)}
+.st-project.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));color:var(--foreground);outline:1.5px solid var(--sidebar-primary)}
+.is-dragging .st-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
+.st .st-chev{width:16px;height:16px;flex:none;display:grid;place-items:center;color:var(--muted-foreground);border-radius:4px}
+.st .st-chev:hover{color:var(--sidebar-foreground)}
+.st-chev span{display:grid;transition:transform .15s}
+.st-chev span.open{transform:rotate(90deg)}
+.st-gap{width:16px;flex:none}
+.st-none{background:none!important;border:1px dashed var(--muted-foreground)}
+.st .st-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;padding:4px 0}
+.st-main strong{font-weight:500;color:var(--sidebar-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-main span{font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-project .st-main{flex-direction:row;align-items:baseline;gap:6px}
+.st-project .st-main strong{font-weight:600;flex:none;max-width:60%}
+.st-project .st-main span{font-size:11px}
+.st-branch{color:var(--muted-foreground)}
+.st-branch .st-main span{font:12px 'Geist Mono',monospace;color:var(--sidebar-foreground)}
+.st-wt{font:500 9px 'Geist Mono',monospace;padding:1px 4px;border-radius:4px;border:1px solid var(--input);color:var(--muted-foreground);flex:none}
+.st-count{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-tally{display:flex;gap:7px;flex:none;font:500 10px 'Geist Mono',monospace}
+.st-tally span{display:flex;align-items:center;gap:3px}
+.st-tally i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-need{color:var(--sidebar-primary)}.t-work{color:var(--info)}.t-done{color:var(--muted-foreground)}
+.t-off{color:var(--muted-foreground)}.t-off i{background:none;border:1px solid currentColor}
+.st-agent{align-items:flex-start;min-height:40px}
+.st-agent>.st-chev,.st-agent>.st-gap{margin-top:7px}
+.st-bot{width:18px;height:18px;flex:none;display:grid;place-items:center;margin-top:5px}
+.st-card .st-bot{margin-top:1px}
+.st-agent.helper{min-height:28px;align-items:center}
+.st-agent.helper .st-main{flex-direction:row;gap:6px;align-items:baseline}
+.st-agent.helper .st-main strong,.st-dense .st-agent .st-main strong{flex:none}
+.st-agent.helper>.st-chev,.st-agent.helper>.st-gap,.st-agent.helper .st-bot,.st-agent.helper .st-time,.st-agent.helper .st-kids{margin-top:0}
+.st-agent.done{opacity:.6}
+.st-agent.off .st-main strong{color:var(--muted-foreground)}
+.st-time{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);flex:none;margin-top:6px}
+.st-time.t-approval{color:var(--sidebar-primary)}.st-time.t-question{color:var(--warning)}.st-time.t-error{color:var(--danger-text)}
+.st-kids{flex:none;margin-top:5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;border:1px solid var(--input);display:grid;place-items:center;font:500 10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-acts{position:absolute;right:4px;top:4px;display:none;gap:1px;padding:1px;border-radius:var(--radius-sm);background:var(--sidebar-accent)}
+.st-project .st-acts,.st-branch .st-acts,.st-agent.helper .st-acts{top:2px}
+.st-row:hover .st-acts,.st-row:focus-within .st-acts{display:flex}
+.st .st-acts button{width:22px;height:22px;display:grid;place-items:center;border-radius:5px;color:var(--muted-foreground)}
+.st .st-acts button:hover{background:color-mix(in srgb,var(--foreground) 8%,transparent);color:var(--sidebar-foreground)}
+.st-more{min-height:26px;font-size:12px}
+.st .st-more button{color:var(--muted-foreground)}
+.st .st-more button:hover{color:var(--sidebar-foreground)}
+/* Archives, at the foot of the tree: folded, filterable, each session read, put back, resumed or deleted from its row. */
+.st-archives{border-top:1px solid var(--sidebar-border);padding-top:6px}
+.st .st-arch-toggle{display:flex;align-items:center;gap:6px;height:24px;font-size:11px;color:var(--muted-foreground)}
+.st .st-arch-toggle:hover{color:var(--sidebar-foreground)}
+.st-arch-toggle>span{display:grid;transition:transform .15s}
+.st-arch-toggle>span.open{transform:rotate(90deg)}
+.st-arch-toggle small{font:10px 'Geist Mono',monospace}
+.st-arch-q{display:flex;align-items:center;gap:6px;height:28px;margin:2px 4px 4px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st-arch-q input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:12px 'Geist',system-ui,sans-serif;outline:none}
+.st-arch{padding-left:8px}
+.st-arch .st-main strong{display:flex;align-items:center;gap:0;color:var(--muted-foreground)}
+.st-arch .st-main strong .side-swatch{width:7px;height:7px;margin:0 6px 0 0}
+.st-arch.sel .st-main strong{color:var(--sidebar-foreground)}
+.st-arch .st-bot{opacity:.7}
+.st .st-acts button.danger:hover{color:var(--danger-text)}
+.st-help{margin:6px 8px 0;font-size:11px;line-height:15px;color:var(--muted-foreground)}
+/* Compact: one line per session. */
+.st-dense .st-agent{min-height:26px;align-items:center}
+.st-dense .st-agent .st-main{flex-direction:row;gap:6px;align-items:baseline;padding:2px 0}
+.st-dense .st-agent>.st-chev,.st-dense .st-agent>.st-gap,.st-dense .st-bot,.st-dense .st-time,.st-dense .st-kids{margin-top:0}
+.st-dense .st-acts{top:1px}
+/* Machines and Settings at the foot. */
+.st-foot{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground);overflow:hidden}
+.st .st-mach{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.st .st-mach:hover{color:var(--sidebar-foreground)}
+.st-mach small{font:10px 'Geist Mono',monospace}
+.st-mach .machine-dot{margin:0}
+/* The ? beside Settings: its tooltip lists the shortcuts (t.shortcuts.rows), on hover and on keyboard focus. It hangs from the
+   aside (position:relative), above the foot, so the foot's overflow:hidden does not clip it. */
+.st-keys-tip{position:absolute;left:8px;bottom:48px;z-index:30;width:max-content;max-width:320px;display:none;flex-direction:column;gap:5px;padding:10px 12px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);font-size:11px;line-height:15px;pointer-events:none}
+.st-keys:hover .st-keys-tip,.st-keys:focus-within .st-keys-tip{display:flex}
+.st-keys-tip>span{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.st-keys-tip kbd{flex:none;font-size:10px!important}
+.side-footer{padding:0;border:0} /* alias: Settings' test reads this selector; the foot is .st-foot */
+.side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
+.machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
+.machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
+/* A daemon restarting for its update (#48): neither online nor offline. */
+.machine-dot.updating{background:var(--warning);box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 18%,transparent)}
+@media(max-width:1250px){.sidebar.st{width:256px}}
+/* A narrow window: a 64 px rail, the projects as swatches with their tally, the rest behind icons. */
+@media(max-width:850px){
+ .sidebar.st{width:64px}
+ .st kbd{display:none!important}
+ .st .st-keys-tip kbd{display:inline-flex!important}
+ .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
+ .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
+ .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
+ .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
+ .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
+ .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
+ .st-project .side-swatch{width:16px;height:16px;border-radius:5px}
+ .st-tally{position:absolute;top:2px;right:6px}.st-tally span:not(.t-need){display:none}
+ .st-foot{flex-direction:column;height:auto;padding:8px 0;gap:8px}.st .st-mach{font-size:0}.st-mach small{display:none}.st-foot .st-fill{display:none}
+}
+
+/* Ledge's entry (ledge home spec §2.1): the resident, « Ledge. », the live line and /, the question field under it; lit while the home view shows. */
+.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:4px;padding:6px 8px 6px;cursor:default}
+.st-ledge .st-ledge-entry{display:flex;align-items:center;gap:8px;width:100%;padding:2px 0;border:0;background:none;color:var(--sidebar-foreground);text-align:left;cursor:pointer}
+.st-ledge .st-ledge-names{display:flex;flex-direction:column;flex:1;min-width:0;line-height:14px}
+.st-ledge .st-ledge-brand{font-size:13px;font-weight:650}
+.st-ledge .st-ledge-line{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
+.st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
+@media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
+.st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}
+.st-card.st-near .st-task-mark{color:var(--warning,#e5b85c)}
+.st-card.st-decision .st-task-mark{color:var(--sidebar-primary);font-weight:700}
+
+/* OpenRig's groups (docs/mockups/ledge-openrig-groups.html): a rig's hexagon, the kernel's. */
+.st-rig-hex{display:inline-grid;place-items:center;color:var(--info);flex:none}
+.st-kernel-hex{display:inline-grid;place-items:center;color:#8b5cf6;margin-right:4px}
+.st-grouping{display:flex;gap:2px;margin:6px 10px 2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-grouping button{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 8px;height:24px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-grouping button[aria-checked=true]{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+
+/* ===== Sidebar as proposed in ledge-sidebar-tidy.html (pending validation): kept as is in every direction ===== */
+.v2 .st-ask.st-ledge{padding:8px 14px;gap:0}
+.v2 .st-views{padding:4px;gap:2px;margin:10px 10px 8px}
+.v2.st .st-views button{height:30px;padding:0 10px;gap:9px}
+.v2 .st-grouping{margin:0 10px 8px;padding:4px;flex:none}
+.v2.st .st-grouping button{height:26px}
+.st-kernel-box{--kv:#8b5cf6;margin:0 2px;padding:2px 4px 4px;border:1px solid color-mix(in srgb,var(--kv) 34%,var(--border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--kv) 7%,var(--sidebar))}
+.th-dark .st-kernel-box{--kv:#a78bfa;background:color-mix(in srgb,var(--kv) 9%,var(--sidebar))}
+.st-kernel-box .st-label{padding:0 6px}
+.st-kernel-box .st-kernel-name{color:var(--sidebar-foreground);font-weight:600}
+.st-kernel-tag{display:flex;align-items:center;gap:5px;font:500 10px 'Geist Mono',monospace;color:color-mix(in srgb,var(--kv) 75%,var(--muted-foreground))}
+.st-kernel-tag i{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.st-kernel-box .st-row{padding-left:6px}
+.sidebar.st{width:264px;flex:none}
+
+/* ===== The app frame and its parts (mockup of the proposals, built on the tokens) ===== */
+*{box-sizing:border-box}
+.app{--task:#6d4fc4;width:1200px;height:740px;display:flex;flex-direction:column;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',system-ui,sans-serif;overflow:hidden;position:relative}
+.th-dark .app,.th-dark.app{--task:#b9a2f0}
+.app button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.tb{height:32px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--sidebar-border);background:var(--sidebar)}
+.tb b{font-weight:650;font-size:13px}.tb b i{font-style:normal;color:var(--sidebar-primary)}
+.tb .sp{flex:1}.tb .wc{display:flex;gap:18px;color:var(--muted-foreground);font-size:12px}
+.tb .badge{font:600 10px 'Geist Mono',monospace;color:var(--sidebar-primary)}
+.body{flex:1;min-height:0;display:flex}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--background)}
+.mh{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border)}
+.mh h3{margin:0;font-size:14px;font-weight:600}
+.mh .sub{font-size:12px;color:var(--muted-foreground)}
+.mh .sp{flex:1}
+.mc{flex:1;min-height:0;overflow:hidden;display:flex}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;padding:18px 20px;overflow:hidden}
+.col.side{flex:none;width:300px;border-left:1px solid var(--border);background:color-mix(in srgb,var(--sidebar) 60%,var(--background))}
+.sec{font:500 11px 'Geist',sans-serif;color:var(--muted-foreground);display:flex;align-items:center;gap:6px;margin-top:2px}
+.sec .n{font:600 10px 'Geist Mono',monospace;min-width:16px;height:16px;padding:0 4px;border-radius:999px;display:inline-grid;place-items:center;background:var(--sidebar-primary);color:var(--primary-foreground)}
+.sec .sp{flex:1}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.card.hot{border-color:color-mix(in srgb,var(--sidebar-primary) 45%,var(--border))}
+.card .who{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-foreground)}
+.card .who strong{color:var(--foreground);font-weight:600}
+.card .who .sp{flex:1}
+.card .who time{font:11px 'Geist Mono',monospace}
+.card h4{margin:0;font-size:14px;line-height:20px;font-weight:600}
+.card p{margin:0;font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.card p b{color:var(--foreground);font-weight:500}
+.acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{height:28px;padding:0 11px;border-radius:var(--radius-sm);border:1px solid var(--input)!important;font-size:12px!important;font-weight:500;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.pri{background:var(--primary)!important;border-color:var(--primary)!important;color:var(--primary-foreground)!important}
+.btn.ghost{border-color:transparent!important;color:var(--muted-foreground)!important}
+.btn.sm{height:24px;padding:0 8px;font-size:11px!important}
+.app .btn{padding:0 11px}.app .btn.sm{padding:0 8px}.app .chip{padding:0 8px}.app .btn.pri{color:var(--primary-foreground)}
+.fine{font-size:11px;color:var(--muted-foreground)}
+.pill{font:500 10px 'Geist Mono',monospace;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:var(--muted-foreground);white-space:nowrap}
+.pill.dec{border-color:color-mix(in srgb,var(--sidebar-primary) 50%,var(--border));color:var(--sidebar-primary)}
+.pill.q{border-color:color-mix(in srgb,var(--warning) 50%,var(--border));color:var(--warning)}
+.pill.ok{border-color:color-mix(in srgb,var(--success) 50%,var(--border));color:var(--success)}
+.pill.auto{border-color:color-mix(in srgb,var(--info) 50%,var(--border));color:var(--info)}
+.pill.task{border-color:color-mix(in srgb,var(--task) 50%,var(--border));color:var(--task)}
+.hex{display:inline-grid;place-items:center;color:var(--info)}
+.hex.k{color:#8b5cf6}
+.mono{font-family:'Geist Mono',monospace}
+.field{border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);padding:9px 12px;font-size:13px;color:var(--muted-foreground);display:flex;align-items:center;gap:8px}
+.field.tall{align-items:flex-start;min-height:64px;color:var(--foreground);line-height:19px}
+.composer{margin-top:auto;border:1px solid var(--input);border-radius:var(--radius-lg);background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.composer .ph{color:var(--muted-foreground);font-size:13px}
+.composer .row{display:flex;align-items:center;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground);background:var(--well)}
+.chip b{color:var(--foreground);font-weight:500}
+.mini-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)}
+.mini-row:last-child{border-bottom:0}
+.mini-row .sp{flex:1}
+.mini-row .t{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.bar{height:4px;border-radius:2px;background:var(--muted);overflow:hidden}.bar i{display:block;height:100%;background:var(--info)}
+/* Chat */
+.msg{display:flex;gap:10px;align-items:flex-start}
+.msg .body2{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.msg .name{font-size:12px;font-weight:600}.msg .name small{font-weight:400;color:var(--muted-foreground);margin-left:6px;font-family:'Geist Mono',monospace;font-size:10.5px}
+.msg .txt{font-size:13px;line-height:19px}
+.msg.me{justify-content:flex-end}
+.msg.me .txt{background:var(--muted);border-radius:12px 12px 4px 12px;padding:8px 12px;max-width:70%}
+.folded{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted-foreground)}
+.folded b{color:var(--foreground);font-weight:500}
+/* OpenRig traffic as interpreted cards (place reserved for ledge-dev-2) */
+.orm{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--muted-foreground);padding:6px 10px;border-left:2px solid color-mix(in srgb,var(--task) 60%,transparent);background:color-mix(in srgb,var(--task) 5%,transparent);border-radius:0 6px 6px 0}
+.orm b{color:var(--foreground);font-weight:500}
+.orm .t{margin-left:auto;font:10.5px 'Geist Mono',monospace;flex:none}
+.reserve{position:relative;outline:1.5px dashed #d99a00;outline-offset:4px;border-radius:6px}
+.reserve::after{content:attr(data-r);position:absolute;right:-4px;top:-14px;font:600 9.5px 'Geist Mono',monospace;color:#1b1b1b;background:#ffc94d;padding:1px 6px;border-radius:4px;white-space:nowrap}
+/* Mascots and bots (simplified) */
+.mascot{width:26px;height:26px;flex:none;border-radius:8px 8px 6px 6px;background:linear-gradient(#c43a32,#8e1f1a);position:relative;display:inline-block}
+.mascot::after{content:"";position:absolute;left:6px;right:6px;top:9px;height:6px;border-radius:3px;background:#1b1414;box-shadow:inset 3px 0 0 -1px #ffb0a6,inset -3px 0 0 -1px #ffb0a6}
+.mascot.s{width:20px;height:20px}.mascot.s::after{left:4px;right:4px;top:7px;height:5px}
+.bot{width:18px;height:18px;flex:none;position:relative;display:inline-block}
+.bot::before{content:"";position:absolute;inset:1px 1px 3px;border-radius:5px 5px 4px 4px;background:linear-gradient(var(--bt,#d58a62),var(--bb,#a65a3a))}
+.bot::after{content:"";position:absolute;left:4px;right:4px;top:5px;height:4px;border-radius:2px;background:#1b2224;box-shadow:inset 2px 0 0 -.5px var(--e,#a9dfc7),inset -2px 0 0 -.5px var(--e,#a9dfc7)}
+.bot.codex{--bt:#8189ea;--bb:#5359c4}.bot.work{--e:#90c7f2}.bot.ap{--e:#f2b09c}.bot.q{--e:#f6d487}
+.bot.big{transform:scale(1.4);margin:3px}
+.max{--bt:#9b82e8;--bb:#6a4fc8}
+kbd.k{display:inline-flex;align-items:center;min-width:16px;height:16px;padding:0 4px;border-radius:4px;border:1px solid var(--border);color:var(--muted-foreground);font:10px 'Geist Mono',monospace}
+/* Dialog */
+.scrim{position:absolute;inset:0;background:color-mix(in srgb,#000 40%,transparent);display:grid;place-items:center;z-index:10}
+.dlg{width:560px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:0 20px 60px rgba(0,0,0,.35);display:flex;flex-direction:column}
+.dlg .dh{padding:16px 20px 4px;display:flex;align-items:center;gap:8px}.dlg .dh h3{margin:0;font-size:15px}
+.dlg .db{padding:10px 20px 14px;display:flex;flex-direction:column;gap:10px}
+.dlg .df{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.dlg label{font-size:11.5px;font-weight:500;color:var(--muted-foreground);display:flex;flex-direction:column;gap:5px}
+.cmd{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);background:var(--well);border:1px solid var(--border);border-radius:6px;padding:6px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Delegation settings */
+.lvl{display:grid;grid-template-columns:1fr 92px 92px 92px;align-items:center;border-bottom:1px solid var(--border);font-size:12.5px;min-height:44px}
+.lvl.head{min-height:30px;font-size:11px;color:var(--muted-foreground);font-weight:500}
+.lvl>div:not(:first-child){text-align:center}
+.lvl .what b{display:block;font-weight:500}
+.lvl .what small{color:var(--muted-foreground);font-size:11.5px}
+.radio{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--input);display:inline-block;vertical-align:middle}
+.radio.on{border:4.5px solid var(--primary)}
+.lock{font-size:11px;color:var(--muted-foreground)}
+/* Island / atelier vignettes */
+.vigs{display:flex;flex-direction:column;gap:14px}
+.vig{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.vig h5{margin:0;font-size:12px;font-weight:600;display:flex;gap:6px;align-items:center}
+.vig p{margin:0;font-size:12px;color:var(--muted-foreground);line-height:17px}
+.island{align-self:center;display:flex;align-items:center;gap:10px;background:#0b0b0c;color:#f2f2f2;border-radius:0 0 18px 18px;padding:8px 16px 10px;font-size:12px;min-width:360px;max-width:520px}
+.island .sp{flex:1}
+.island .ib{height:22px;padding:0 9px;border-radius:999px;background:#2a2a2d;color:#f2f2f2;font-size:11px;display:inline-flex;align-items:center}
+.island .ib.pri{background:#c4342c}
+.island small{color:#a3a3a3}
+.floor{height:120px;border-radius:10px;background:linear-gradient(160deg,color-mix(in srgb,var(--info) 10%,var(--well)),var(--well));border:1px solid var(--border);position:relative;overflow:hidden}
+.floor .tbl{position:absolute;left:36%;top:44%;width:30%;height:26%;border-radius:8px;background:color-mix(in srgb,#b88a4a 45%,var(--card));border:1px solid var(--border)}
+.floor .s{position:absolute;display:flex;flex-direction:column;align-items:center;font-size:9.5px;gap:1px}
+.floor .flag{position:absolute;font:600 9.5px 'Geist',sans-serif;padding:2px 6px;border-radius:5px;background:var(--sidebar-primary);color:#fff}
+.floor .bubble{position:absolute;font-size:10px;line-height:13px;padding:5px 8px;border-radius:8px;background:var(--card);border:1px solid var(--border);max-width:190px;color:var(--foreground)}
+
+/* ===== Page furniture ===== */
+html,body{margin:0}
+body{font-family:'Geist',system-ui,sans-serif;font-size:14px;line-height:21px;background:#e9e7e2;color:#1b1b1b}
+body.dark-page{background:#141414;color:#e8e8e8}
+.page{max-width:1880px;margin:0 auto;padding:30px 28px 90px}
+header.top{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap}
+h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing:-.01em}
+.lead{max-width:980px;margin:0;color:inherit;opacity:.8}
+.switch{margin-left:auto;display:flex;gap:4px;padding:3px;border-radius:9px;background:rgba(0,0,0,.08)}
+.switch button{border:0;background:none;padding:5px 12px;border-radius:7px;font:500 12px 'Geist',sans-serif;color:inherit;cursor:pointer}
+.switch button.on{background:#fff;color:#1b1b1b;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.grid{display:grid;grid-template-columns:repeat(3,600px);gap:24px;margin-top:22px}
+.colhead{border-radius:12px;padding:16px 18px;background:#fff;color:#1b1b1b;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:19px}
+.dark-page .colhead{background:#1f1f1f;color:#e8e8e8}
+.colhead h2{margin:0;font-size:17px;display:flex;gap:8px;align-items:baseline}
+.colhead h2 .tag{font:600 11px 'Geist Mono',monospace;padding:1px 7px;border-radius:999px;background:#e0322a;color:#fff}
+.colhead .tagline{font-size:13.5px;font-weight:500}
+.colhead dl{margin:4px 0 0;display:grid;grid-template-columns:118px 1fr;gap:4px 10px}
+.colhead dt{font-weight:600;font-size:12px;opacity:.65}
+.colhead dd{margin:0}
+.rowtitle{grid-column:1/-1;margin:26px 0 -8px;font-size:16px;font-weight:600;display:flex;gap:10px;align-items:baseline}
+.rowtitle small{font-weight:400;font-size:13px;opacity:.7}
+.shot{width:600px;height:370px;overflow:hidden;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(0,0,0,.14);cursor:zoom-in;position:relative}
+.shot>.app{transform:scale(.5);transform-origin:0 0}
+.shot-cap{font-size:12.5px;line-height:18px;opacity:.8;margin-top:8px}
+.cell{display:flex;flex-direction:column}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:100;cursor:zoom-out}
+.lightbox.on{display:grid}
+.lightbox .app{box-shadow:0 20px 80px rgba(0,0,0,.5);border-radius:10px}
+.notes{max-width:1240px;margin-top:40px;background:#fff;color:#1b1b1b;border-radius:12px;padding:24px 28px}
+.dark-page .notes{background:#1f1f1f;color:#e8e8e8}
+.notes h2{font-size:18px;margin:0 0 10px}
+.notes h3{font-size:15px;margin:22px 0 8px}
+.notes ol,.notes ul{margin:0;padding-left:22px;font-size:13.5px;line-height:21px}
+.notes li{margin:4px 0}
+.notes code{font:12px 'Geist Mono',monospace;background:rgba(127,127,127,.15);padding:1px 4px;border-radius:4px}
+.fact{border-left:3px solid #e0322a;padding:6px 12px;margin:10px 0;font-size:13.5px}
+
+/* ===== A+B additions ===== */
+.app .chip{padding:0 8px}
+.app .btn{padding:0 11px}.app .btn.sm{padding:0 8px}.app .btn.pri{color:var(--primary-foreground)}
+.max-card{border-color:color-mix(in srgb,#8b5cf6 40%,var(--border));background:color-mix(in srgb,#8b5cf6 5%,var(--card))}
+.th-dark .max-card{border-color:color-mix(in srgb,#a78bfa 40%,var(--border));background:color-mix(in srgb,#a78bfa 7%,var(--card))}
+.max-card .who strong{color:#7c4ddb}.th-dark .max-card .who strong{color:#c4b0fb}
+.seatline{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 0}
+.seatline .mono{color:var(--muted-foreground);font-size:11.5px}
+.countdown{border-color:color-mix(in srgb,var(--info) 45%,var(--border))}
+.cd-bar{height:3px;border-radius:2px;background:var(--muted);overflow:hidden}.cd-bar i{display:block;height:100%;background:var(--info)}
+.src{display:inline-flex;align-items:center;gap:4px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);border:1px solid var(--border);border-radius:5px;padding:0 6px;height:20px;background:var(--well)}
+.banner{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--well)}
+.banner.warn{border-color:color-mix(in srgb,var(--warning) 45%,var(--border));background:color-mix(in srgb,var(--warning) 7%,var(--card))}
+.banner.err{border-color:color-mix(in srgb,var(--danger-text) 45%,var(--border));background:color-mix(in srgb,var(--danger-text) 6%,var(--card))}
+.banner .bt{flex:1;display:flex;flex-direction:column;gap:3px}
+.banner b{font-size:13px;font-weight:600}
+.banner p{margin:0;font-size:12.5px;line-height:18px;color:var(--muted-foreground)}
+.empty-box{border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.empty-box b{font-size:13px;font-weight:500}
+.empty-box p{margin:0;font-size:12.5px;color:var(--muted-foreground);line-height:18px}
+.raw{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--well);font:11px/16px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.fold-btn{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted-foreground)}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.seg span{height:24px;display:inline-flex;align-items:center;padding:0 10px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.seg span.on{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+.combo{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);font-size:12.5px;min-width:280px}
+.combo .sp{flex:1}.combo small{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.check{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--input);display:inline-grid;place-items:center;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.set-sec{display:flex;flex-direction:column;gap:8px;padding:14px 0;border-bottom:1px solid var(--border)}
+.set-sec h4{margin:0;font-size:13px;font-weight:600}
+.set-sec .hint{font-size:12px;color:var(--muted-foreground);line-height:17px}
+.set-row{display:flex;align-items:center;gap:10px;font-size:12.5px}
+.hns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:1}
+.hn{border:1px solid var(--border);border-radius:var(--radius-md);padding:7px 10px;display:flex;flex-direction:column;gap:1px;background:var(--card)}
+.hn b{font-size:12.5px;font-weight:600;display:flex;align-items:center}
+.hn small{font-size:11px;color:var(--muted-foreground)}
+.hn.on{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.hn.absent{opacity:.55}.hn.absent small{color:var(--danger-text)}
+.hn.bad{opacity:1;border-color:var(--danger-text);box-shadow:0 0 0 1px var(--danger-text)}
+/* Strip of card states at real size */
+.strip{display:grid;grid-template-columns:repeat(4,380px);gap:16px;margin-top:6px}
+.strip .app-bg{padding:14px;border-radius:12px;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;display:flex;flex-direction:column;gap:8px}
+.strip .lbl{font:600 11px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.strip .app-bg .btn{padding:0 11px}.strip .app-bg .btn.sm{padding:0 8px}
+.strip .app-bg button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+/* Phone */
+.phone{width:360px;height:740px;border-radius:40px;border:10px solid #0d0d0e;background:var(--background);color:var(--foreground);font:13px/19px 'Geist',sans-serif;overflow:hidden;display:flex;flex-direction:column;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.phone button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.phone .btn{padding:0 11px}.phone .btn.sm{padding:0 8px}.phone .btn.pri{color:var(--primary-foreground)}
+.phone .sb{height:30px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font:600 12px 'Geist',sans-serif}
+.phone .ph-h{display:flex;align-items:center;gap:8px;padding:6px 16px 10px}
+.phone .ph-h h3{margin:0;font-size:20px;font-weight:650}
+.phone .ph-c{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:10px;padding:0 12px}
+.phone .card{padding:11px 12px}
+.phone .card h4{font-size:13.5px;line-height:19px}
+.phone .tabs{height:62px;flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border);background:var(--sidebar);padding-bottom:8px}
+.phone .tabs span{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10.5px;color:var(--muted-foreground);position:relative}
+.phone .tabs span.on{color:var(--sidebar-primary);font-weight:600}
+.phone .tabs .dot{position:absolute;top:8px;right:28%;min-width:15px;height:15px;border-radius:999px;background:var(--sidebar-primary);color:#fff;font:600 9px/15px 'Geist Mono',monospace;text-align:center;padding:0 3px}
+.phone .composer{margin:8px 12px 10px}
+/* TUI */
+.term{width:760px;border-radius:10px;overflow:hidden;font:12.5px/18px 'Geist Mono',monospace;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.term .tt{height:28px;display:flex;align-items:center;gap:6px;padding:0 12px;font:11px 'Geist',sans-serif}
+.term .tt i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.term pre{margin:0;padding:12px 16px 16px;white-space:pre}
+.th-dark .term,.term.dark{background:#0c0c0d;color:#e5e5e5}.th-dark .term .tt{background:#1b1b1d;color:#9b9b9b}
+.th-light .term{background:#fbfbfa;color:#1d1d1f}.th-light .term .tt{background:#ececea;color:#666}
+.term .r{color:#f87171}.term .y{color:#e3b341}.term .b{color:#79c0ff}.term .g{color:#56d364}.term .m{color:#bc8cff}.term .d{opacity:.55}.term .inv{background:#f87171;color:#0c0c0d}
+.th-light .term .r{color:#c4342c}.th-light .term .y{color:#9a6700}.th-light .term .b{color:#0969da}.th-light .term .g{color:#1a7f37}.th-light .term .m{color:#8250df}.th-light .term .inv{background:#c4342c;color:#fff}
+.app .chip,.phone .chip{white-space:nowrap}
+.col.side .composer .chip:nth-of-type(2){display:none}
+.phone .card .who .mono,.phone .card .who time{display:none}
+.phone .card .who{flex-wrap:wrap}
+/* Page */
+.sec-title{margin:40px 0 4px;font-size:19px;font-weight:650;display:flex;gap:10px;align-items:baseline}
+.sec-title .num{font:600 12px 'Geist Mono',monospace;opacity:.6}
+.sec-note{max-width:1100px;margin:0 0 14px;font-size:13.5px;opacity:.8}
+.rowx{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.cell{width:600px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.toc a{font-size:12.5px;color:inherit;text-decoration:none;padding:4px 10px;border-radius:999px;background:rgba(127,127,127,.14)}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Ledge, contact humain d'OpenRig</h1>
+      <p class="lead">Direction A+B, retenue le 2 novembre 2026 : Ledge est le contact humain des rigs, et Max reste chargé de choisir les équipes. Au départ, presque tout est réglé sur
+        « Toujours moi ». La sidebar est celle de <code>ledge-sidebar-tidy</code>, Kernel encadré compris. Les bandes jaunes marquent la place des messages OpenRig interprétés
+        (ledge-dev-2). Clique sur un écran pour le voir en taille réelle.</p>
+      <nav class="toc"><a href="#s1">1 · Accueil</a><a href="#s2">2 · Décision</a><a href="#s3">3 · Ledge décide seul</a><a href="#s4">4 · Objectif</a><a href="#s5">5 · Réglage</a><a href="#s6">6 · États</a><a href="#s7">7 · Mobile</a><a href="#s8">8 · TUI</a><a href="#s9">9 · Fiche</a></nav>
+    </div>
+    <div class="switch" role="radiogroup" aria-label="Thème"><button data-th="dark" class="on">Sombre</button><button data-th="light">Clair</button></div>
+  </header>
+
+  <h2 class="sec-title" id="s1"><span class="num">1</span>Accueil « À toi »</h2>
+  <p class="sec-note">Ledge s'ouvre sur « À toi » : ce que les rigs et les sessions attendent de toi, ce que Ledge a réglé à ta place, et les nouvelles. À droite, la conversation avec Ledge,
+    par laquelle passent aussi les objectifs. Les sessions hors rig (projets) arrivent au même endroit qu'aujourd'hui.</p>
+  <div class="rowx" id="r1"></div>
+
+  <h2 class="sec-title" id="s2"><span class="num">2</span>Un rig me demande une décision</h2>
+  <p class="sec-note">Le fil du rig, avec au centre les échanges OpenRig rendus en cartes. Les messages bruts se replient (choix validé).
+    La décision porte la recommandation de Ledge, ses sources, et la raison pour laquelle elle t'est posée.</p>
+  <div class="rowx" id="r2"></div>
+
+  <h2 class="sec-title" id="s3"><span class="num">3</span>Ledge décide seul, avec un délai « Annuler »</h2>
+  <p class="sec-note">Seulement pour un sujet réglé sur « Ledge décide ». La réponse attend quelques secondes (5 s par défaut, réglable) avant de partir, avec « Annuler ».
+    Une fois envoyée, elle ne se reprend plus. Les quatre états de la carte sont montrés en taille réelle sous l'écran.</p>
+  <div class="rowx" id="r3"></div>
+  <div class="strip" id="strip"></div>
+
+  <h2 class="sec-title" id="s4"><span class="num">4</span>Je donne un objectif : Ledge transmet, Max propose l'équipe</h2>
+  <p class="sec-note">Tu écris l'objectif à Ledge, qui le met en forme et le transmet à Max. Max répond avec une équipe (un rig existant, des sièges, ou un rig à lancer).
+    Tu confirmes : le réglage « Confirmer l'équipe de Max » est sur « Toujours moi » au départ.</p>
+  <div class="rowx" id="r4"></div>
+
+  <h2 class="sec-title" id="s5"><span class="num">5</span>Réglages › Ledge</h2>
+  <p class="sec-note">Sujet par sujet : Toujours moi / Ledge propose / Ledge décide. Deux sujets sont verrouillés. Au même endroit : le modèle de Ledge, le délai avant envoi, les sources que Ledge peut citer, et l'état du canal humain.</p>
+  <div class="rowx" id="r5"></div>
+
+  <h2 class="sec-title" id="s6"><span class="num">6</span>États vides et erreurs</h2>
+  <p class="sec-note">Rien ne t'attend · OpenRig arrêté · Ledge pas encore canal humain d'OpenRig. L'erreur d'envoi d'une réponse est dans la bande de la section 3.</p>
+  <div class="rowx" id="r6"></div>
+
+  <h2 class="sec-title" id="s7"><span class="num">7</span>Mobile</h2>
+  <p class="sec-note">Même direction : l'onglet « À toi » de l'app mobile (onglets Ledge · À toi · Rigs · Projets, déjà retenus) reçoit les mêmes cartes, y compris le délai « Annuler ». L'objectif se donne dans l'onglet Ledge.</p>
+  <div class="rowx" id="r7"></div>
+
+  <h2 class="sec-title" id="s8"><span class="num">8</span><code>ledge tui</code></h2>
+  <p class="sec-note">Même direction au clavier : chiffres pour répondre, <code>a</code> pour annuler pendant le délai, <code>o</code> pour donner un objectif.</p>
+  <div class="rowx" id="r8"></div>
+
+  <section class="notes" id="s9">
+    <h2>Fiche de passation</h2>
+    <h3>Ce qui change par rapport à aujourd'hui</h3>
+    <ul>
+      <li><b>À toi</b> devient l'accueil de Ledge. Il reçoit aussi les lignes OpenRig adressées à l'humain (<code>--human-intent decision|update</code>, questions à boutons), en plus des demandes des sessions. La réponse repart dans la ligne.</li>
+      <li><b>Nouvelle section « Réglé par Ledge »</b> : chaque réglage avec sa source (fichier ou maquette) et son heure. Vide au départ, tant que tout est sur « Toujours moi ».</li>
+      <li><b>Carte de décision</b> : recommandation de Ledge, sources en pastilles, « Pourquoi c'est à toi » (le réglage qui s'applique, avec un lien pour le changer).</li>
+      <li><b>Carte « Ledge répond… »</b> pendant le délai : barre qui se vide, « Annuler ». Puis « Envoyé » (pastille <i>auto</i>), « Annulé » (la question revient dans À toi), ou « Pas envoyée » (avec Réessayer).</li>
+      <li><b>Objectif</b> : écrit à Ledge, qui le transmet à Max. La proposition d'équipe arrive comme une carte de Max (violet du kernel) : Confirmer / Changer d'équipe / Lancer un rig plutôt.</li>
+      <li><b>Réglages › Ledge</b> : sujets ; harnais (mêmes tuiles que le lancement : Claude Code, Codex, Cursor Agent, OMP) et modèle (liste qui suit le harnais), par défaut Claude Code et Sonnet 5.5 ; délai ; sources ; état du canal humain (Ledge actif · TUI du kernel disponible).</li>
+      <li><b>Harnais absent</b> : tuile grisée « pas installé sur {machine} ». Si c'est celui choisi, un bandeau dans Réglages, et Ledge ne résume, ne recommande et ne décide plus rien ; les demandes arrivent quand même dans À toi, sans recommandation.</li>
+      <li><b>Fil du rig</b> : les cartes OpenRig (ledge-dev-2) au centre ; « n messages bruts » se déplie en texte mono.</li>
+    </ul>
+    <h3>Textes nouveaux (FR · EN)</h3>
+    <ul>
+      <li>Réglé par Ledge · Settled by Ledge — Ledge décide seul : n sujets · Ledge decides alone: n topics — Régler · Adjust</li>
+      <li>Rien n'est réglé par Ledge pour l'instant : tout est sur « Toujours moi ». · Nothing settled by Ledge yet: everything is on “Always me”.</li>
+      <li>Pourquoi c'est à toi · Why it's yours — Ledge recommande · Ledge recommends — Sources · Sources</li>
+      <li>Ledge répond à {siège} · envoi dans {n} s · Ledge answers {seat} · sending in {n} s — Annuler · Cancel — Envoyé · Sent — Annulé : la question revient dans À toi · Cancelled: the question is back in Yours — Pas envoyée : {raison} · Not sent: {reason} — Réessayer · Retry</li>
+      <li>Max propose · Max suggests — Confirmer l'équipe · Confirm the team — Changer d'équipe · Change team — Lancer un rig plutôt · Launch a rig instead</li>
+      <li>Toujours moi · Always me — Ledge propose · Ledge suggests — Ledge décide · Ledge decides — Verrouillé · Locked</li>
+      <li>Harnais et modèle de Ledge · Ledge's harness and model — pas installé sur {machine} · not installed on {machine} — Revenir à Claude Code · Back to Claude Code — Délai avant envoi · Delay before sending — Sources que Ledge peut citer · Sources Ledge may cite — Canal humain d'OpenRig · OpenRig's human channel</li>
+      <li>Rien ne t'attend. · Nothing is waiting for you. — OpenRig est arrêté : les rigs ne peuvent pas t'écrire. · OpenRig is stopped: rigs cannot write to you. — Ledge n'est pas encore le canal humain d'OpenRig. · Ledge is not OpenRig's human channel yet.</li>
+    </ul>
+    <h3>Comportements</h3>
+    <ul>
+      <li><b>Délai</b> : il court même si la fenêtre est fermée. L'île montre la ligne « Ledge répond… » avec « Annuler » ; le téléphone reçoit une notification silencieuse. Après le délai, l'envoi est définitif.</li>
+      <li><b>Annuler</b> : la question passe dans « Questions » d'À toi, avec la réponse que Ledge proposait pré-remplie.</li>
+      <li><b>Ne plus décider ça seul</b> (sur une ligne réglée) : remet ce sujet sur « Ledge propose ».</li>
+      <li><b>Sources</b> : chaque pastille ouvre le fichier ou la maquette à l'endroit cité.</li>
+      <li><b>Clavier</b> : <kbd>1</kbd>…<kbd>9</kbd> choisissent une option de la carte qui a le focus ; <kbd>Échap</kbd> pendant le délai = Annuler. (À confirmer avec les raccourcis existants.)</li>
+    </ul>
+    <h3>Remarques sur la note de vision (<code>docs/vision/ledge-human-operator.md</code>)</h3>
+    <ul>
+      <li><b>« Choix de l'équipe » chevauche Max.</b> La note met Max sur le dispatch, mais le réglage « Choix de l'équipe pour un objectif » de la maquette précédente laissait Ledge choisir. Dans celle-ci, le sujet devient « <b>Confirmer l'équipe proposée par Max</b> » (Toujours moi / Ledge confirme). Max propose toujours ; Ledge ne fait que confirmer à ta place, si tu le règles ainsi.</li>
+      <li><b>« À toi » contient aussi les sessions hors rig</b> (permissions, questions des sessions de projets). La note ne parle que des lignes OpenRig. Les deux arrivent au même endroit ; le réglage « Permissions des sièges » vaut-il aussi pour les sessions hors rig ?</li>
+      <li><b>Le délai « Annuler » ne protège que si tu regardes.</b> Absent, tu ne verras pas les 5 s passer. La maquette le relaie à l'île et au téléphone, mais le vrai garde-fou reste le réglage par sujet. À dire dans la note.</li>
+      <li><b>Slack</b> : tranché, Slack disparaît. Ledge est le seul point de contact ; le TUI du kernel reste disponible.</li>
+      <li><b>« Le modèle est au choix de l'utilisateur »</b> : la note ne dit pas lequel par défaut, ni s'il se règle par sujet. La maquette propose un seul modèle pour Ledge, dans Réglages › Ledge.</li>
+    </ul>
+    <h3>Questions ouvertes pour l'utilisateur</h3>
+    <ol>
+      <li>Réglage de départ : je mets tout sur « Toujours moi », sauf « Questions techniques avec réponse dans le dépôt » sur « Ledge propose ». D'accord, ou vraiment tout sur « Toujours moi » ?</li>
+      <li>Délai avant envoi : 5 s par défaut, réglable 3 / 5 / 10 / 30 s. Ça te va ?</li>
+      <li><i>Tranché :</i> harnais et modèle au choix, par défaut Claude Code et Sonnet 5.5 (section 5).</li>
+      <li>« Permissions des sièges » s'applique-t-il aussi aux sessions hors rig (Claude Code lancé à la main) ?</li>
+      <li><i>Tranché :</i> plus de Slack, Ledge le remplace.</li>
+      <li>Quand Max propose une équipe et que tu as réglé « Ledge confirme », la confirmation passe-t-elle aussi par le délai « Annuler » ? (Je propose oui.)</li>
+    </ol>
+    <h3>Non montré ici</h3>
+    <ul>
+      <li>Le mécanisme technique du canal humain (étude dev-back). L'écran « pas encore canal humain » suppose un bouton qui le branche ; son libellé dépendra de l'étude.</li>
+      <li>La forme exacte des cartes OpenRig (ledge-dev-2).</li>
+      <li>Le Journal complet de ce que Ledge a réglé : seule son entrée est montrée.</li>
+    </ul>
+  </section>
+</div>
+<div class="lightbox" id="lb"></div>
+
+<script>
+const P = {
+  grid: ['M3 3h7v7H3z','M14 3h7v7h-7z','M3 14h7v7H3z','M14 14h7v7h-7z'],
+  rig: ['M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5z','M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7'],
+  dense: ['M4 4h16','M4 8h16','M4 12h16','M4 16h16','M4 20h16'],
+  fold: ['m7 20 5-5 5 5','m7 4 5 5 5-5'],
+  plus: ['M12 5v14','M5 12h14'],
+  chev: ['m9 18 6-6-6-6'],
+  chevDown: ['m6 9 6 6 6-6'],
+  help: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6','M12 17h.01'],
+  gear: ['M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6','M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z'],
+  send: ['M5 12h14','m13 6 6 6-6 6'],
+  target: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8','M12 12h.01'],
+  shield: ['M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z'],
+  mail: ['M3 6h18v12H3z','m3 7 9 6 9-6'],
+  check: ['m5 12 5 5 9-10'],
+  file: ['M6 3h8l4 4v14H6z','M14 3v4h4'],
+  alert: ['M12 3 2 20h20z','M12 10v4','M12 17h.01'],
+  play: ['M7 4.5v15l12-7.5z'],
+  lock: ['M6 11h12v9H6z','M8 11V8a4 4 0 0 1 8 0v3'],
+  x: ['M6 6l12 12','M18 6 6 18'],
+  undo: ['M9 14 4 9l5-5','M4 9h10a6 6 0 0 1 0 12h-3']
+};
+const ic = (d, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d.map(x => `<path d="${x}"/>`).join('')}</svg>`;
+const hx = (k = false, s = 13) => `<span class="hex${k ? ' k' : ''}">${ic(P.rig, s)}</span>`;
+const src = t => `<span class="src">${ic(P.file, 11)}${t}</span>`;
+
+/* ---------- Sidebar: ledge-sidebar-tidy, Kernel boxed ---------- */
+const RIG = [['Bix','pilot','claude','work'],['Lu','design.ux','claude'],['Ida','dev.front','claude','work'],['Pim','review.qa','codex'],['Pim','dev.back','claude']];
+const KERNEL = [['Nova','advisor','claude'],['Max','operator','claude'],['Rex','queue','claude']];
+function seat(s, d, o = {}) {
+  const ask = o.ask && o.ask[s[0] + s[1]];
+  return `<div class="st-row st-agent${o.sel === s[0] + s[1] ? ' sel' : ''}" style="--d:${d}"><span class="st-gap"></span><span class="st-bot"><i class="bot ${s[2] === 'codex' ? 'codex' : ''} ${ask ? 'ap' : s[3] || ''}"></i></span><button class="st-main"><strong>${s[0]}</strong><span class="mono">${s[1]} · ${s[2]}</span></button><span class="st-time${ask ? ' t-approval' : ''}">${ask || ''}</span></div>`;
+}
+function sidebar(o = {}) {
+  const stopped = o.stopped;
+  const kernel = stopped ? '' : `<section class="st-kernel-box"><div class="st-label">${hx(true, 12)}<span class="st-kernel-name" style="margin-left:4px">Kernel</span><span class="st-fill"></span><span class="st-kernel-tag"><i></i>opérationnel</span></div><div>${KERNEL.map(s => seat(s, 0, o)).join('')}</div></section>`;
+  const rigs = stopped
+    ? `<div class="st-empty" style="margin:2px 2px 0;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:3px"><strong style="font-size:13px;font-weight:500">OpenRig est arrêté.</strong><p style="margin:0;font-size:12px;line-height:17px;color:var(--muted-foreground)">Le démarrer lance aussi le kernel : l’opérateur, l’advisor et la file.</p><button style="margin-top:8px;height:30px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--input);border-radius:var(--radius-sm);font-size:12px;font-weight:500">${ic(P.play, 12)}Démarrer OpenRig</button></div>`
+    : `<section><div class="st-label"><span>Rigs</span><span class="st-fill"></span><button class="st-icon on">${ic(P.dense)}</button><button class="st-icon">${ic(P.fold)}</button><button class="st-icon">${ic(P.plus)}</button></div>
+    <div><div class="st-row st-project st-rig" style="--d:0"><button class="st-chev"><span class="open">${ic(P.chev, 12)}</span></button><span class="st-rig-hex">${ic(P.rig, 13)}</span><button class="st-main"><strong>ledge-dev</strong><span class="mono">ledge</span></button><span class="st-tally">${o.rigAsk ? `<span class="t-need"><i></i>${o.rigAsk}</span>` : ''}<span class="t-work"><i></i>2</span></span></div>${RIG.map(s => seat(s, 1, o)).join('')}</div></section>`;
+  return `<aside class="sidebar st v2 st-dense">
+    <div class="st-ask st-ledge${o.ledgeOn ? ' on' : ''}"><button class="st-ledge-entry"><span class="st-mascot"><i class="mascot s"></i></span><span class="st-ledge-names"><span class="st-ledge-brand">Ledge<span style="color:var(--sidebar-primary)">.</span></span><small class="st-ledge-line">${o.ledgeLine ?? '2 à toi · 2 réglées'}</small></span><kbd class="k">/</kbd></button></div>
+    <nav class="st-views"><button>${ic(P.grid, 13)}<span>Atelier</span><span class="st-fill"></span><small>${o.active ?? 9} actifs</small></button><button>${ic(P.rig, 13)}<span>OpenRig</span></button></nav>
+    <div class="st-grouping"><button aria-checked="false">Projets</button><button aria-checked="true">Rigs</button></div>
+    <div class="st-scroll">${kernel}${rigs}</div>
+    <div class="st-foot"><button class="st-mach"><i class="machine-dot"></i>WSL<small>${o.active ?? 9}</small></button><span class="st-fill"></span><button class="st-icon">${ic(P.help, 15)}</button><button class="st-icon${o.settingsOn ? ' on' : ''}">${ic(P.gear, 15)}</button></div>
+  </aside>`;
+}
+const app = (sb, main, extra = '') => `<div class="app"><div class="tb"><b>Ledge<i>.</i></b><span class="sp"></span><span class="badge">● 2</span><span class="wc">— ▢ ✕</span></div><div class="body">${sb}<div class="main">${main}</div></div>${extra}</div>`;
+
+/* ---------- Cards ---------- */
+const decisionCard = (o = {}) => `<div class="card hot">
+  <div class="who">${hx()}<strong>ledge-dev</strong> · Bix <span class="mono">pilot</span><span class="pill dec">décision</span><span class="sp"></span><time>il y a 4 min</time></div>
+  <h4>Écran de réglage : un modèle pour tout, ou un plus fort pour « décider seul » ?</h4>
+  <p>Lu prépare Réglages › Ledge. Le choix change ce que l'écran propose et le coût de Ledge.</p>
+  <div class="msg" style="gap:8px"><i class="mascot s"></i><div class="body2" style="gap:5px"><div class="txt" style="font-size:12.5px"><b>Ledge recommande « Un seul modèle »</b> : plus simple à régler, et la note de vision n'en prévoit qu'un.</div><div class="acts">${src('docs/vision/ledge-human-operator.md §Règles')}${src('ledge-human-operator.html')}</div></div></div>
+  <div class="acts"><button class="btn pri">Un seul modèle · recommandé</button><button class="btn">Un plus fort pour décider seul</button><button class="btn ghost">Répondre autrement…</button></div>
+  ${o.why ? `<div class="acts" style="border-top:1px solid var(--border);padding-top:8px">${ic(P.shield, 13)}<span class="fine"><b style="color:var(--foreground);font-weight:500">Pourquoi c'est à toi</b> · « Choix de produit » est sur Toujours moi.</span><span style="flex:1"></span><button class="btn sm ghost">Changer ce réglage</button></div>` : `<div class="fine">Une réponse ne se reprend pas · ligne <span class="mono">qitem-…192556</span></div>`}
+</div>`;
+const sessionAsk = () => `<div class="card">
+  <div class="who"><i class="bot ap"></i><strong>Otto</strong> · Ledge <span class="mono">main</span><span class="pill dec">accord</span><span class="sp"></span><time>2 min</time></div>
+  <h4 style="font-size:13px">Lancer <span class="mono">pnpm test</span> ?</h4>
+  <div class="acts"><button class="btn pri sm">Oui</button><button class="btn sm">Non</button><span class="fine">session hors rig · projet Ledge</span></div>
+</div>`;
+const questionCard = () => `<div class="card">
+  <div class="who">${hx()}<strong>ledge-dev</strong> · Ida <span class="mono">dev.front</span><span class="pill q">question</span><span class="sp"></span><time>12 min</time></div>
+  <h4 style="font-size:13px">Le délai « Annuler » se règle par sujet ou une fois pour tout ?</h4>
+  <div class="msg" style="gap:8px"><i class="mascot s"></i><div class="txt" style="font-size:12px;color:var(--muted-foreground)">Ledge propose : « une fois pour tout » ${src('ledge-human-operator-ab.html §5')}</div></div>
+  <div class="acts"><button class="btn sm pri">Envoyer la proposition</button><button class="btn sm">Écrire la réponse…</button></div>
+</div>`;
+const settled = (rows) => `<div class="card" style="gap:0;padding:4px 14px">${rows.map(u => `<div class="mini-row"><span class="pill auto">auto</span><span>${u[0]}</span><span class="sp"></span>${src(u[1])}<span class="t">${u[2]}</span></div>`).join('')}</div>`;
+const SETTLED = [['Ida : Node 22 pour les tests', 'CLAUDE.md', '18:52'], ['Rex : branche feat/sidebar-tidy', 'convention du dépôt', '18:38']];
+const updates = () => `<div class="card" style="gap:0;padding:4px 14px">${[['Lu a rendu la maquette A+B','design.ux · 19:40'],['Ida a fini le lot 2 (slash commands)','dev.front · 18:31']].map(u => `<div class="mini-row">${ic(P.check, 13)}<span>${u[0]}</span><span class="sp"></span><span class="t">${u[1]}</span></div>`).join('')}</div>`;
+const ledgeSays = (html) => `<div class="msg"><i class="mascot s"></i><div class="body2"><div class="name">Ledge</div>${html}</div></div>`;
+const maxSays = (html) => `<div class="msg"><i class="bot max big"></i><div class="body2"><div class="name" style="color:#8b5cf6">Max <small>operator · kernel</small></div>${html}</div></div>`;
+const meSays = t => `<div class="msg me"><div class="txt">${t}</div></div>`;
+const composer = (ph = 'Écrire à Ledge : une question, un objectif, « dis à Ida que… »', chips = true) => `<div class="composer"><span class="ph">${ph}</span>${chips ? `<div class="row"><span class="chip">${ic(P.target, 11)} Nouvel objectif</span><span class="chip">Qu'est-ce qui bloque ?</span><span style="flex:1"></span><button class="btn sm pri">${ic(P.send, 12)}</button></div>` : ''}</div>`;
+const homeHead = (n = 1) => `<div class="mh"><i class="mascot s"></i><h3>À toi</h3><span class="sub">ce que les rigs et les sessions attendent de toi</span><span class="sp"></span><button class="chip" style="height:26px">${ic(P.shield, 12)} Ledge décide seul : <b>${n} sujet${n > 1 ? 's' : ''}</b> · Régler</button></div>`;
+const countdownCard = (s = 3) => `<div class="card countdown">
+  <div class="who"><i class="mascot s"></i><strong>Ledge répond à Ida</strong><span class="mono">dev.front</span><span class="sp"></span><span class="pill auto">envoi dans ${s} s</span></div>
+  <p>« Node 22 » à « Je lance les tests sous Node 18 ou 22 ? »</p>
+  <div class="acts">${src('CLAUDE.md § Le dépôt')}<span style="flex:1"></span><button class="btn sm">${ic(P.undo, 12)}Annuler</button></div>
+  <div class="cd-bar"><i style="width:${s * 20}%"></i></div>
+</div>`;
+
+/* ---------- Screens ---------- */
+const S = {
+  homeDay1: () => app(sidebar({ ledgeOn: true, ledgeLine: '3 à toi', rigAsk: 2, ask: { Bixpilot: 'décision', Idadev: '' } }), `${homeHead(0).replace('<b>0 sujet</b>', '<b>aucun sujet</b>')}
+    <div class="mc"><div class="col">
+      <div class="sec">Décisions <span class="n">1</span></div>${decisionCard()}
+      <div class="sec">Accords <span class="n">1</span></div>${sessionAsk()}
+      <div class="sec">Réglé par Ledge</div>
+      <div class="empty-box"><b>Rien n'est réglé par Ledge pour l'instant.</b><p>Tout est sur « Toujours moi ». Ledge recommande, tu réponds. Tu pourras lui confier un sujet dans Réglages › Ledge.</p></div>
+    </div><div class="col side">
+      ${ledgeSays(`<div class="txt" style="font-size:12.5px">Bonjour. ledge-dev attend une décision de toi, et Otto ton accord pour lancer les tests.</div>`)}
+      ${composer()}
+    </div></div>`),
+  homeLater: () => app(sidebar({ ledgeOn: true, rigAsk: 1, ask: { Bixpilot: 'décision' } }), `${homeHead(1)}
+    <div class="mc"><div class="col">
+      <div class="sec">Décisions <span class="n">1</span></div>${decisionCard()}
+      <div class="sec">Questions <span class="n">1</span></div>${questionCard()}
+      <div class="sec">Réglé par Ledge <span class="sp"></span><span class="fine">aujourd'hui · Journal</span></div>${settled(SETTLED)}
+      <div class="sec">Nouvelles</div>${updates()}
+    </div><div class="col side">
+      ${ledgeSays(`<div class="txt" style="font-size:12.5px">ledge-dev attend ta décision sur le modèle. J'ai réglé 2 questions techniques, sources à gauche.</div>`)}
+      ${composer()}
+    </div></div>`),
+  decision: () => app(sidebar({ rigAsk: 1, sel: 'Bixpilot', ask: { Bixpilot: 'décision' } }), `
+    <div class="mh">${hx()}<h3>ledge-dev</h3><span class="sub">fil du rig · 5 sièges · ~/Workspace/ledge</span><span class="sp"></span><button class="btn sm">Écrire au rig</button><button class="btn sm ghost">Table</button></div>
+    <div class="mc"><div class="col">
+      <div class="reserve" data-r="messages OpenRig interprétés · ledge-dev-2" style="display:flex;flex-direction:column;gap:6px">
+        <div class="orm">${ic(P.mail, 13)}<span><b>Bix → Lu</b> · maquette A+B : Réglages › Ledge avec choix du modèle</span><span class="t">19:26</span></div>
+        <div class="orm">${ic(P.mail, 13)}<span><b>Lu → Bix</b> · un ou deux modèles ? à faire trancher</span><span class="t">19:31</span></div>
+        <div class="orm">${ic(P.mail, 13)}<span><b>Bix → toi</b> · décision demandée (ci-dessous)</span><span class="t">19:32</span></div>
+        <button class="fold-btn">${ic(P.chev, 11)} 3 messages bruts</button>
+      </div>
+      ${decisionCard({ why: true })}
+      ${composer('Écrire à ledge-dev (arrive chez Bix, le pilote)…', false)}
+    </div><div class="col side">
+      <div class="sec">La demande</div>
+      <div class="card" style="gap:5px"><p><b>De</b> Bix · pilot</p><p><b>Ligne</b> <span class="mono">qitem-…192556</span></p><p><b>Attend depuis</b> 4 min</p><p><b>Bloque</b> l'écran Réglages › Ledge</p></div>
+      <div class="sec">Sources de Ledge</div>
+      <div class="card" style="gap:6px">${src('docs/vision/ledge-human-operator.md')}${src('ledge-human-operator.html')}<p class="fine">Chaque source s'ouvre à l'endroit cité.</p></div>
+    </div></div>`),
+  decisionRaw: () => app(sidebar({ rigAsk: 1, sel: 'Bixpilot', ask: { Bixpilot: 'décision' } }), `
+    <div class="mh">${hx()}<h3>ledge-dev</h3><span class="sub">fil du rig</span><span class="sp"></span><button class="btn sm">Écrire au rig</button></div>
+    <div class="mc"><div class="col">
+      <div class="reserve" data-r="messages OpenRig interprétés · ledge-dev-2" style="display:flex;flex-direction:column;gap:6px">
+        <div class="orm">${ic(P.mail, 13)}<span><b>Bix → Lu</b> · maquette A+B : Réglages › Ledge avec choix du modèle</span><span class="t">19:26</span></div>
+        <div class="orm">${ic(P.mail, 13)}<span><b>Lu → Bix</b> · un ou deux modèles ? à faire trancher</span><span class="t">19:31</span></div>
+        <button class="fold-btn">${ic(P.chevDown, 11)} 3 messages bruts</button>
+        <div class="raw"><span>19:26 pilot-lead@ledge-dev → design-ux@ledge-dev  rig queue handoff qitem-20261102192556-52fef6aa</span><span>      « Affiner la direction A+B retenue (Ledge contact humain, Max reste pour le dispatch)… »</span><span>19:31 design-ux@ledge-dev → pilot-lead@ledge-dev  rig send « un ou deux modèles ? »</span><span>19:32 pilot-lead@ledge-dev → human  rig queue create --human-intent decision « Écran de réglage… »</span></div>
+      </div>
+      ${decisionCard({ why: true })}
+    </div></div>`),
+  countdown: () => app(sidebar({ ledgeOn: true, rigAsk: 1, ask: { Bixpilot: 'décision' } }), `${homeHead(1)}
+    <div class="mc"><div class="col">
+      ${countdownCard(3)}
+      <div class="sec">Décisions <span class="n">1</span></div>${decisionCard()}
+      <div class="sec">Réglé par Ledge <span class="sp"></span><span class="fine">aujourd'hui · Journal</span></div>${settled(SETTLED.slice(1))}
+    </div><div class="col side">
+      ${ledgeSays(`<div class="txt" style="font-size:12.5px">Ida demande Node 18 ou 22. CLAUDE.md dit Node 22 : je réponds dans 3 s, sauf si tu annules.</div>`)}
+      ${composer()}
+    </div></div>`),
+  goalAsk: () => app(sidebar({ ledgeOn: true }), `
+    <div class="mh"><i class="mascot s"></i><h3>Ledge</h3><span class="sub">conversation</span><span class="sp"></span><button class="btn sm ghost">À toi · 2</button></div>
+    <div class="mc"><div class="col">
+      ${meSays('Je veux la pochette de la musique en cours dans l’encoche fermée.')}
+      ${ledgeSays(`<div class="txt">Je le mets en forme et je le transmets à Max, qui choisit l'équipe.</div>
+        <div class="card" style="gap:5px"><div class="who">${ic(P.target, 13)}<strong>Objectif</strong><span class="sp"></span><span class="pill">envoyé à Max · 19:41</span></div>
+        <p><b>Objectif</b> · pochette de la musique en cours dans l'encoche fermée</p><p><b>Fini quand</b> · s'affiche pour tous les lecteurs Windows (SMTC), testé sur la vraie encoche</p><p><b>Reste à toi</b> · maquette, merge et release (verrouillés)</p></div>`)}
+      ${maxSays(`<div class="card max-card" style="gap:6px"><div class="who">${hx(true)}<strong>Max propose</strong><span class="sp"></span><span class="pill task">à confirmer</span></div>
+        <div class="seatline">${hx()}<b>ledge-dev</b><span class="mono">déjà en marche · même dépôt</span></div>
+        <div class="seatline"><i class="bot"></i>Lu <span class="mono">design.ux</span> · maquette d'abord</div>
+        <div class="seatline"><i class="bot work"></i>Ida <span class="mono">dev.front</span> · après validation</div>
+        <p>Pas de nouveau rig : ledge-dev a un siège design et connaît l'encoche.</p>
+        <div class="acts"><button class="btn pri">Confirmer l'équipe</button><button class="btn">Changer d'équipe</button><button class="btn ghost sm">Lancer un rig plutôt</button></div>
+        <div class="acts"><span class="fine">${ic(P.shield, 11)} « Confirmer l'équipe de Max » est sur Toujours moi.</span></div></div>`)}
+      ${composer('Réponds à Ledge…', false)}
+    </div></div>`),
+  goalDone: () => app(sidebar({ ledgeOn: true }), `
+    <div class="mh"><i class="mascot s"></i><h3>Ledge</h3><span class="sub">conversation</span></div>
+    <div class="mc"><div class="col">
+      ${maxSays(`<div class="card max-card" style="gap:6px;opacity:.85"><div class="who">${hx(true)}<strong>Max propose</strong><span class="sp"></span><span class="pill ok">confirmée · 19:43</span></div><div class="seatline">${hx()}<b>ledge-dev</b> · Lu, puis Ida</div></div>`)}
+      ${ledgeSays(`<div class="txt">C'est parti. Bix a pris l'objectif ; Lu commence par la maquette, que tu valideras.</div>
+        <div class="card" style="gap:6px"><div class="who">${ic(P.target, 13)}<strong>Pochette dans l'encoche</strong><span class="sp"></span><span class="pill task">prise</span></div>
+        <p>confiée › prise par Bix › passée à Lu</p><div class="bar"><i style="width:12%"></i></div>
+        <div class="acts"><span class="fine mono">qitem-…194312</span><span style="flex:1"></span><button class="btn sm">Ouvrir le fil du rig</button></div></div>
+        <div class="txt" style="font-size:12.5px;color:var(--muted-foreground)">Je te remonterai la maquette dans À toi dès qu'elle sera prête.</div>`)}
+      ${composer('Réponds à Ledge…', false)}
+    </div></div>`),
+  settings: () => settingsScreen(false),
+  settingsMissing: () => settingsScreen(true),
+  empty: () => app(sidebar({ ledgeOn: true, ledgeLine: 'rien pour toi' }), `${homeHead(1)}
+    <div class="mc"><div class="col">
+      <div class="empty-box" style="padding:22px 20px;align-items:flex-start"><b style="font-size:14px">Rien ne t'attend.</b><p>Les rigs avancent. Ce qu'ils te demanderont arrivera ici, et sur l'île.</p></div>
+      <div class="sec">Réglé par Ledge <span class="sp"></span><span class="fine">aujourd'hui · Journal</span></div>${settled(SETTLED)}
+      <div class="sec">Nouvelles</div>${updates()}
+    </div><div class="col side">${ledgeSays(`<div class="txt" style="font-size:12.5px">Tout est calme. Tu veux donner un objectif ?</div>`)}${composer()}</div></div>`),
+  stopped: () => app(sidebar({ ledgeOn: true, stopped: true, active: 2, ledgeLine: '1 à toi' }), `${homeHead(1)}
+    <div class="mc"><div class="col">
+      <div class="banner warn">${ic(P.alert, 16)}<div class="bt"><b>OpenRig est arrêté : les rigs ne peuvent pas t'écrire.</b><p>Les sessions de tes projets passent toujours par ici. Les lignes OpenRig en attente arriveront au redémarrage.</p></div><button class="btn sm">${ic(P.play, 11)}Démarrer OpenRig</button></div>
+      <div class="sec">Accords <span class="n">1</span></div>${sessionAsk()}
+      <div class="sec">Réglé par Ledge</div>
+      <div class="empty-box"><b>Rien aujourd'hui.</b><p>Ledge ne règle que les demandes des rigs ; elles reprendront avec OpenRig.</p></div>
+    </div><div class="col side">${ledgeSays(`<div class="txt" style="font-size:12.5px">OpenRig est arrêté depuis 18:12. Je peux le démarrer si tu veux.</div>`)}${composer('Écrire à Ledge…', false)}</div></div>`),
+  notChannel: () => app(sidebar({ ledgeOn: true, ledgeLine: '1 à toi' }), `${homeHead(0).replace('<b>0 sujet</b>', '<b>aucun sujet</b>')}
+    <div class="mc"><div class="col">
+      <div class="banner err">${ic(P.alert, 16)}<div class="bt"><b>Ledge n'est pas encore le canal humain d'OpenRig.</b><p>Les rigs passent encore par Max, ou par le TUI du kernel. Leurs décisions n'arrivent pas ici, et Ledge ne peut ni les recommander ni les régler.</p></div><button class="btn sm pri">Brancher Ledge</button></div>
+      <div class="sec">Accords <span class="n">1</span></div>${sessionAsk()}
+      <div class="sec">Ce que Max t'a relayé</div>
+      <div class="card" style="gap:4px"><div class="who">${hx(true)}<strong>Max</strong> · relais<span class="sp"></span><time>19:32</time></div><p>« Bix demande : un modèle pour tout, ou un plus fort pour décider seul ? »</p><p class="fine">Lecture seule : réponds à Max dans le TUI du kernel.</p></div>
+    </div><div class="col side">${ledgeSays(`<div class="txt" style="font-size:12.5px">Une fois branché, je recevrai directement les lignes adressées à l'humain, et Max n'aura plus à te les relayer.</div>`)}${composer('Écrire à Ledge…', false)}</div></div>`)
+};
+
+/* Réglages › Ledge: harness and model (default Claude Code + Sonnet 5.5); `missing` = the chosen harness is not installed. */
+const HARNESS = [['claude','Claude Code','Conception, revue'],['codex','Codex','Code et tests'],['cursor','Cursor Agent','Dans l’éditeur'],['omp','OMP','Piloté en natif']];
+function settingsScreen(missing) {
+  const chosen = missing ? 'codex' : 'claude';
+  const tiles = HARNESS.map(([id, name, sub]) => {
+    const absent = id === 'omp' || (missing && id === 'codex');
+    const on = id === chosen;
+    return `<div class="hn${on ? ' on' : ''}${absent ? ' absent' : ''}${on && absent ? ' bad' : ''}"><b>${name}${id === 'claude' ? ' <span class="pill" style="margin-left:4px">défaut</span>' : ''}</b><small>${absent ? 'pas installé sur WSL' : sub}</small></div>`;
+  }).join('');
+  const model = missing
+    ? `<div class="combo" style="opacity:.5"><span>—</span><span class="sp"></span><small>aucun modèle tant que Codex manque</small>${ic(P.chevDown, 12)}</div>`
+    : `<div class="combo"><span class="hex" style="color:#d97757">●</span>Sonnet 5.5<span class="sp"></span><small>claude-sonnet-5-5 · défaut</small>${ic(P.chevDown, 12)}</div>`;
+  const warn = missing ? `<div class="banner err" style="padding:9px 12px">${ic(P.alert, 15)}<div class="bt"><b style="font-size:12.5px">Codex n'est pas installé sur WSL.</b><p>Tant qu'il manque, Ledge ne résume, ne recommande et ne décide rien. Les demandes arrivent quand même dans À toi, sans recommandation.</p></div><div class="acts" style="flex-direction:column;align-items:stretch"><button class="btn sm pri">Revenir à Claude Code</button><button class="btn sm ghost">Comment l'installer</button></div></div>` : '';
+  return app(sidebar({ settingsOn: true }), `
+    <div class="mh">${ic(P.gear, 15)}<h3>Réglages</h3><span class="sub">› Ledge</span></div>
+    <div class="mc"><div class="col" style="gap:0;padding-top:4px">
+      <div class="set-sec" style="padding-top:4px;gap:4px"><h4>Ce que Ledge décide seul</h4>
+        <div>
+        <div class="lvl head"><div>Sujet</div><div>Toujours moi</div><div>Ledge propose</div><div>Ledge décide</div></div>
+        ${[['Questions techniques','réponse dans le dépôt : CLAUDE.md, config, conventions',1],['Permissions des sièges','lecture, tests, commandes du projet',0],['Confirmer l\'équipe proposée par Max','Max propose toujours l\'équipe',0],['Choix de produit et textes de l\'app','mots, écrans, priorités',0],['Valider une maquette','toujours la tienne',0,1],['Push, PR, merge, release','jamais délégable',0,1]].map(r => `<div class="lvl" style="min-height:35px"><div class="what"><b>${r[0]}${r[3] ? ` <span class="lock" style="display:inline-flex;vertical-align:-2px">${ic(P.lock, 12)}</span>` : ''}</b><small>${r[1]}</small></div>${[0,1,2].map(i => `<div>${r[3] && i > 0 ? '<span class="lock">—</span>' : `<span class="radio${r[2] === i ? ' on' : ''}"></span>`}</div>`).join('')}</div>`).join('')}
+        </div>
+      </div>
+      <div class="set-sec" style="gap:7px"><h4>Harnais et modèle de Ledge</h4>
+        <div style="display:flex;gap:16px;align-items:flex-start"><div class="hns">${tiles}</div><div style="display:flex;flex-direction:column;gap:5px"><span class="fine">Modèle</span>${model}</div></div>
+        ${warn || `<div class="hint">Pour résumer, recommander et décider seul. Mêmes harnais que le lancement d'une session ; la liste des modèles suit le harnais.</div>`}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 24px">
+        <div class="set-sec"><h4>Délai avant envoi</h4><div class="seg"><span>3 s</span><span class="on">5 s</span><span>10 s</span><span>30 s</span></div><div class="hint">« Annuler » reste possible pendant ce délai.</div></div>
+        <div class="set-sec"><h4>Sources citables</h4><div class="set-row"><span class="check on">${ic(P.check, 10)}</span>Le dépôt</div><div class="set-row"><span class="check on">${ic(P.check, 10)}</span>Les maquettes validées</div><div class="set-row"><span class="check"></span>Ses réponses passées</div></div>
+        <div class="set-sec"><h4>Canal humain d'OpenRig</h4><div class="set-row"><span class="pill ok">Ledge · actif</span></div><div class="set-row"><span class="pill">TUI du kernel · disponible</span></div><div class="hint">Ledge est ton seul point de contact.</div></div>
+      </div>
+    </div></div>`);
+}
+const CAP = {
+  homeDay1: '<b>Premier jour.</b> Tout est sur « Toujours moi » : « Réglé par Ledge » est vide et le dit. Un accord d’une session hors rig (Otto) arrive au même endroit.',
+  homeLater: '<b>Plus tard</b>, un sujet confié à Ledge. Les réglages du jour, chacun avec sa source. La question d’Ida porte la proposition de Ledge, à envoyer d’un clic.',
+  decision: 'Fil du rig : cartes OpenRig au centre, bruts repliés. La décision avec la recommandation, les sources et « Pourquoi c’est à toi ». À droite, la ligne et les sources.',
+  decisionRaw: 'Les 3 messages bruts dépliés : le texte des lignes et des envois, en mono.',
+  countdown: 'Ledge répond seul à Ida (sujet « Questions techniques » sur « Ledge décide ») : la carte reste en tête d’À toi pendant le délai, avec « Annuler ».',
+  goalAsk: 'Tu écris l’objectif à Ledge. Ledge le met en forme et le passe à Max. Max répond avec l’équipe : tu confirmes, tu changes, ou tu lances un rig.',
+  goalDone: 'Après confirmation : l’objectif suit son trajet (confiée › prise › passée à Lu), avec un lien vers le fil du rig.',
+  settingsMissing: '<b>Harnais pas installé.</b> Codex est choisi mais absent de la machine : Ledge se tait (ni résumé, ni recommandation, ni décision seul) ; les demandes arrivent quand même dans À toi. Un clic pour revenir à Claude Code. Les harnais absents sont grisés dans la liste.',
+  settings: 'Réglages › Ledge. Au départ, tout est sur « Toujours moi », sauf les questions techniques sur « Ledge propose » (question 1). Harnais et modèle (par défaut Claude Code et Sonnet 5.5), délai, sources et canal humain sont au même endroit.',
+  empty: '<b>Rien ne t’attend.</b> « Réglé par Ledge » et les nouvelles restent visibles.',
+  stopped: '<b>OpenRig arrêté.</b> Les sessions de projets continuent ; la sidebar montre l’état vide de <code>sidebar-tidy</code>.',
+  notChannel: '<b>Ledge pas encore canal humain.</b> Les décisions passent encore par Max (ou le TUI du kernel) : Ledge montre en lecture seule ce que Max relaie, et propose de se brancher.'
+};
+const shot = (k) => `<div class="cell"><div class="shot" id="s-${k}">${S[k]()}</div><div class="shot-cap">${CAP[k]}</div></div>`;
+document.getElementById('r1').innerHTML = shot('homeDay1') + shot('homeLater');
+document.getElementById('r2').innerHTML = shot('decision') + shot('decisionRaw');
+document.getElementById('r3').innerHTML = shot('countdown');
+document.getElementById('r4').innerHTML = shot('goalAsk') + shot('goalDone');
+document.getElementById('r5').innerHTML = shot('settings') + shot('settingsMissing');
+document.getElementById('r6').innerHTML = shot('empty') + shot('stopped') + shot('notChannel');
+
+/* Strip: the auto-answer card's four states, real size */
+document.getElementById('strip').innerHTML = [
+  ['pendant le délai', countdownCard(3)],
+  ['envoyé', `<div class="card"><div class="who"><span class="pill auto">auto</span><strong>Ida : Node 22 pour les tests</strong><span class="sp"></span><span class="t" style="font:11px 'Geist Mono',monospace;color:var(--muted-foreground)">18:52</span></div><div class="acts">${src('CLAUDE.md § Le dépôt')}<span style="flex:1"></span><button class="btn sm ghost">Ne plus décider ça seul</button></div></div>`],
+  ['annulé', `<div class="card"><div class="who">${ic(P.undo, 13)}<strong>Annulé</strong><span class="sp"></span><span class="fine">la question revient dans À toi</span></div><p>Ida : « Node 18 ou 22 ? » · réponse proposée gardée : « Node 22 »</p><div class="acts"><button class="btn sm pri">Envoyer quand même</button><button class="btn sm">Écrire la réponse…</button></div></div>`],
+  ['pas envoyée', `<div class="card" style="border-color:color-mix(in srgb,var(--danger-text) 45%,var(--border))"><div class="who" style="color:var(--danger-text)">${ic(P.alert, 13)}<strong style="color:var(--danger-text)">Pas envoyée</strong><span class="sp"></span><span class="fine">19:03</span></div><p>Le daemon OpenRig ne répond pas. La réponse « Node 22 » à Ida attend.</p><div class="acts"><button class="btn sm">Réessayer</button><button class="btn sm ghost">Annuler</button></div></div>`]
+].map(([l, h]) => `<div class="app-bg"><span class="lbl">${l}</span>${h}</div>`).join('');
+
+/* Mobile */
+const phone = (title, content, tab, comp = '') => `<div class="phone"><div class="sb"><span>19:42</span><span>●●● ▮</span></div><div class="ph-h">${title}</div><div class="ph-c">${content}</div>${comp}<div class="tabs">${['Ledge','À toi','Rigs','Projets'].map(t => `<span class="${t === tab ? 'on' : ''}">${t === 'Ledge' ? '<i class="mascot s" style="width:18px;height:18px"></i>' : t === 'À toi' ? ic(P.check, 18) : t === 'Rigs' ? ic(P.rig, 18) : ic(P.grid, 18)}${t}${t === 'À toi' ? '<b class="dot">2</b>' : ''}</span>`).join('')}</div></div>`;
+document.getElementById('r7').innerHTML =
+  `<div class="cell" style="width:auto"><div class="shot-like" id="m1">${phone('<h3>À toi</h3><span style="flex:1"></span><span class="chip">' + ic(P.shield, 11) + ' 1 sujet</span>', countdownCard(3) + '<div class="sec">Décisions <span class="n">1</span></div>' + decisionCard().replace('<div class="acts"><button class="btn pri">Un seul modèle · recommandé</button><button class="btn">Un plus fort pour décider seul</button><button class="btn ghost">Répondre autrement…</button></div>', '<div class="acts"><button class="btn pri sm">Un seul modèle</button><button class="btn sm">Un plus fort</button></div>'), 'À toi')}</div><div class="shot-cap">À toi sur le téléphone : la même carte « Ledge répond… » avec Annuler, puis la décision.</div></div>` +
+  `<div class="cell" style="width:auto"><div class="shot-like" id="m2">${phone('<i class="mascot s"></i><h3>Ledge</h3>', meSays('La pochette de la musique dans l’encoche fermée.') + maxSays(`<div class="card max-card" style="gap:6px"><div class="who">${hx(true)}<strong>Max propose</strong></div><div class="seatline">${hx()}<b>ledge-dev</b> · Lu puis Ida</div><div class="acts"><button class="btn pri sm">Confirmer</button><button class="btn sm">Changer</button></div></div>`), 'Ledge', composer('Écrire à Ledge…', false))}</div><div class="shot-cap">Onglet Ledge : l’objectif écrit à Ledge, la proposition de Max à confirmer.</div></div>`;
+
+/* TUI */
+const tui1 = `<span class="d">ledge tui ─ À toi</span>                                            <span class="d">WSL · 9 sessions</span>
+┌─ <span class="b">Ledge répond à Ida</span> ───────────────────────────────────── <span class="b">envoi dans 3 s</span> ──
+│ « Node 22 »  ← CLAUDE.md § Le dépôt
+│ <span class="b">███████████░░░░░░░</span>                                     <span class="inv"> a </span> annuler
+└───────────────────────────────────────────────────────────────────────────
+┌─ <span class="r">DÉCISION</span> · ⬡ ledge-dev · Bix pilot ────────────────────────── 4 min ──
+│ Écran de réglage : un modèle pour tout, ou un plus fort pour décider seul ?
+│ <span class="m">Ledge recommande</span> « Un seul modèle » ← docs/vision/…md §Règles
+│  <span class="inv"> 1 </span> Un seul modèle · recommandé   <span class="inv"> 2 </span> Un plus fort   <span class="d"> r </span> répondre…
+└───────────────────────────────────────────────────────────────────────────
+ <span class="d">Réglé par Ledge</span>
+  <span class="b">auto</span>  Rex : branche feat/sidebar-tidy   ← convention du dépôt      18:38
+ <span class="d">o objectif · / Ledge · ↑↓ naviguer · ? aide</span>`;
+const tui2 = `<span class="d">ledge tui ─ Ledge</span>
+ <span class="d">toi</span>   La pochette de la musique dans l’encoche fermée.
+ <span class="r">Ledge</span> Je le transmets à Max, qui choisit l’équipe.
+ <span class="m">Max</span>   ┌─ <span class="m">Max propose</span> ──────────────────────────────── à confirmer ──
+       │ ⬡ ledge-dev  · Lu (design.ux) maquette, puis Ida (dev.front)
+       │ <span class="inv"> c </span> confirmer   <span class="d"> e </span> changer d’équipe   <span class="d"> l </span> lancer un rig
+       └──────────────────────────────────────────────────────────────
+ <span class="d">Confirmer l’équipe de Max : Toujours moi</span>
+ <span class="g">›</span> <span class="d">Écrire à Ledge…</span>`;
+document.getElementById('r8').innerHTML =
+  `<div class="cell" style="width:auto"><div class="term"><div class="tt"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>&nbsp; ledge tui</div><pre>${tui1}</pre></div><div class="shot-cap">À toi au clavier : <kbd class="k">a</kbd> annule pendant le délai, <kbd class="k">1</kbd>/<kbd class="k">2</kbd> répondent.</div></div>` +
+  `<div class="cell" style="width:auto"><div class="term"><div class="tt"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>&nbsp; ledge tui</div><pre>${tui2}</pre></div><div class="shot-cap">Objectif dans la conversation, proposition de Max à confirmer avec <kbd class="k">c</kbd>.</div></div>`;
+
+/* Theme + lightbox */
+const setTheme = th => {
+  document.body.classList.toggle('dark-page', th === 'dark');
+  document.querySelectorAll('.shot, #lb, .strip .app-bg, .shot-like, .term').forEach(s => { s.classList.remove('th-dark', 'th-light'); s.classList.add('th-' + th); });
+  document.querySelectorAll('.term').forEach(t => t.parentElement.classList.remove('th-dark', 'th-light'));
+  document.querySelectorAll('#r8 .cell').forEach(c => { c.classList.remove('th-dark', 'th-light'); c.classList.add('th-' + th); });
+  document.querySelectorAll('.switch button').forEach(b => b.classList.toggle('on', b.dataset.th === th));
+};
+document.querySelectorAll('.switch button').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.th)));
+setTheme(new URLSearchParams(location.search).get('theme') || 'dark');
+const lb = document.getElementById('lb');
+document.addEventListener('click', e => {
+  const s = e.target.closest('.shot');
+  if (s) { lb.innerHTML = s.innerHTML; lb.classList.add('on'); return; }
+  if (e.target.closest('#lb')) lb.classList.remove('on');
+});
+window.openShot = id => { const s = document.getElementById(id); lb.innerHTML = s.innerHTML; lb.classList.add('on'); };
+</script>
+</body>
+</html>

@@ -113,6 +113,35 @@ describe('phone protocol end to end', () => {
     expect(tmux.sent).toHaveLength(1);
   }, 20_000);
 
+  it('« À toi » over the relay: the phone reads this PC\'s OpenRig asks, gets a change pushed, and a « Vu » goes and comes back once', async () => {
+    const channel = { state: 'ready' as const, person: { address: 'ledge@external', name: 'Ledge' }, slack: false };
+    const ask = { id: 'qitem-n', kind: 'update' as const, alert: false, priority: 'routine' as const, from: { seat: 'design-ux@ledge-dev', rig: 'ledge-dev', role: 'design.ux' },
+      summary: 'La maquette est prête', body: 'Texte', bodyTruncated: false, detail: null, evidenceRef: null, questions: [], createdAt: T0, updatedAt: T0 };
+    let push: ((l: { channel: typeof channel; asks: typeof ask[] }) => void) | null = null;
+    const answered: string[] = [];
+    const { phone } = await linked({ server: { human: {
+      async list() { return { channel, asks: [ask] }; },
+      async answer(qitemId, a) { answered.push(`${qitemId} ${a.kind}`); return { qitemId, ok: true, outcome: 'answered' as const }; },
+      start(fn) { push = fn; }, stop() {}
+    } } });
+    const asks = () => parsed(phone).filter(m => m.type === 'openrig.asks');
+    await phone.send(JSON.stringify({ type: 'openrig.asks' }));
+    await until(() => asks().length >= 1, 'the list');
+    expect(asks()[0]).toEqual({ type: 'openrig.asks', channel, asks: [ask] });
+    expect(push).not.toBeNull();
+    push!({ channel, asks: [] });
+    await until(() => asks().length >= 2, 'the change');
+    expect(asks()[1]).toEqual({ type: 'openrig.asks', channel, asks: [] });
+    const op = randomUUID();
+    const seen = JSON.stringify({ type: 'openrig.answer', op, qitemId: 'qitem-n', answer: { kind: 'seen' } });
+    await phone.send(seen);
+    await until(() => results(phone).some(r => r.op === op && r.status === 'applied'), 'the answer applied');
+    expect(parsed(phone).find(m => m.type === 'openrig.answered')).toMatchObject({ op, qitemId: 'qitem-n', ok: true, outcome: 'answered' });
+    await phone.send(seen); // a replay of the same op: answered from the registry, not sent to OpenRig again
+    await until(() => results(phone).filter(r => r.op === op).length >= 3, 'the replay answered');
+    expect(answered).toEqual(['qitem-n seen']);
+  }, 20_000);
+
   it('a signed chat.close closes the sessions of the phone\'s close card, and the phone reads it in chat.history', async () => {
     const panes: Record<string, string[]> = { 'ledge-a': ['> '] };
     const { store, tmux, phone, relayUrl } = await linked({

@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type JSX } from 'react';
-import type { Session } from '@ledge/protocol';
+import type { HumanAsk, Session } from '@ledge/protocol';
+import { isAskSeat, markOf } from '../../asks/model';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
 import type { NavAction } from '../../nav/state';
@@ -30,9 +31,11 @@ const tagWord = (t: { side: { kernelTag: Record<'ready' | 'starting' | 'stopped'
  * with the kernel's real state; then « Rigs », one row per rig with its seats under it, and the header's options. A seat that ended
  * is left out. Without a seat, the box OpenRig's state calls for: stopped, starting, failed, or no rig yet.
  */
-export function RigGroups({ sessions, current, paused, dispatch, openrig, dense, onToggleDense }: {
+export function RigGroups({ sessions, current, paused, dispatch, openrig, dense, onToggleDense, asks = [] }: {
   sessions: readonly Session[]; current: string | null; paused: boolean; dispatch: (a: NavAction) => void;
   openrig?: SidebarOpenRig | undefined; dense: boolean; onToggleDense(): void;
+  /** What OpenRig's rigs ask the person: the asking seat's row says so in red, and its rig counts it (docs/mockups/ledge-human-operator-ab.html). */
+  asks?: readonly HumanAsk[];
 }): JSX.Element | null {
   const { t } = useI18n();
   const o = t.openrig;
@@ -42,6 +45,8 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
   const kernel = live.filter(s => s.rig!.name === KERNEL);
   const rigs = new Map<string, Session[]>();
   for (const s of live) if (s.rig!.name !== KERNEL) rigs.set(s.rig!.name, [...(rigs.get(s.rig!.name) ?? []), s]);
+  // Only the asking seat on the asks' machine is marked: a namesake seat elsewhere is not (review).
+  const askOf = (s: Session) => markOf(asks.filter(a => s.rig !== undefined && isAskSeat(s, a.from.seat)));
   const launch = () => dispatch({ type: 'openrig', section: 'rigs', open: { launch: true } });
   const row = (s: Session, depth: number) => (
     <div key={s.id} role="treeitem" aria-level={depth + 1} aria-selected={current === s.id} className={cls('st-row st-agent', current === s.id && 'sel', s.offline && 'off')} style={{ '--d': depth } as CSSProperties}>
@@ -50,7 +55,9 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
       <button type="button" className="st-main" onClick={() => dispatch({ type: 'open', id: s.id })}>
         <strong>{s.name}</strong><span className="mono">{[s.rig!.role?.replace(/\.agent$|\.lead$|\.worker$/, '') ?? s.rig!.seat, s.tool].join(' · ')}</span>
       </button>
-      <span className={cls('st-time', waiting(s) && (s.state === 'waiting_permission' ? 't-approval' : s.state === 'waiting_input' ? 't-question' : 't-error'))}>{s.offline ? t.side.offline : ''}</span>
+      {(() => { const a = askOf(s); return a && !s.offline
+        ? <span className="st-time t-approval st-ask-mark">{t.asks.pill[a]}</span>
+        : <span className={cls('st-time', waiting(s) && (s.state === 'waiting_permission' ? 't-approval' : s.state === 'waiting_input' ? 't-question' : 't-error'))}>{s.offline ? t.side.offline : ''}</span>; })()}
     </div>
   );
 
@@ -116,7 +123,7 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
               {[...rigs].sort(([a], [b]) => a.localeCompare(b)).map(([name, seats]) => {
                 const open = !closed.has(name);
                 const flip = () => setClosed(c => { const n = new Set(c); if (n.has(name)) n.delete(name); else n.add(name); return n; });
-                const ask = seats.filter(waiting).length, working = seats.filter(x => x.state === 'working').length;
+                const ask = seats.filter(x => waiting(x) || askOf(x) !== null).length, working = seats.filter(x => x.state === 'working').length;
                 const machine = seats[0]!.machineId ?? 'local';
                 return [
                   <div key={`rig:${name}`} role="treeitem" aria-level={1} aria-expanded={open} className="st-row st-project st-rig" style={{ '--d': 0 } as CSSProperties}>

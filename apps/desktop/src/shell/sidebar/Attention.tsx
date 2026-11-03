@@ -1,5 +1,8 @@
 import { useState, type JSX, type MouseEvent } from 'react';
-import type { Project, Session, Task } from '@ledge/protocol';
+import type { HumanAsk, Project, Session, Task } from '@ledge/protocol';
+import { Icon } from '@ledge/ui/ui/icons';
+import { sessionOfAsk, whoOf } from '../../asks/model';
+import { SHELL_ICONS } from '../icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../../i18n/lang';
 import { spanOf } from '../../list/time';
@@ -42,6 +45,11 @@ export function Attention(p: {
   near?: readonly Session[];
   onHandover?(id: string): void;
   onLater?(id: string): void;
+  /** What OpenRig's rigs ask the person (docs/mockups/ledge-human-operator-ab-lot1.html): one compact line each, « Voir » opens
+   *  the home on its card. No answer from here: an answer is final and needs the card's context. */
+  rigAsks?: readonly HumanAsk[];
+  sessions?: readonly Session[];
+  onSeeAsk?(id: string): void;
 }): JSX.Element | null {
   const { t } = useI18n();
   const [all, setAll] = useState(false);
@@ -49,7 +57,8 @@ export function Attention(p: {
   const tasks = p.ledgeTasks ?? [];
   const near = p.near ?? [];
   const asked = p.decisions ?? [];
-  const count = p.items.length + asked.length + tasks.length + near.length;
+  const rigAsks = p.rigAsks ?? [];
+  const count = p.items.length + asked.length + tasks.length + near.length + rigAsks.length;
   if (count === 0) return null;
   const shown = all ? p.items : p.items.slice(0, CAP);
   const units = t.list.when.units;
@@ -61,6 +70,26 @@ export function Attention(p: {
         <span className="st-fill" />
         <Kbd>Alt ↓</Kbd>
       </div>
+      {rigAsks.map(x => {
+        const session = sessionOfAsk(x, p.sessions ?? []);
+        const who = whoOf(x, session);
+        return (
+          <div key={x.id} className="st-card st-task st-decision st-rig-ask" data-ask={x.id}>
+            <span className="st-bot">{session ? <SessionBot session={session} size={18} paused={p.paused} /> : <span className="st-rig-hex" aria-hidden="true"><Icon d={SHELL_ICONS.rig} size={13} /></span>}</span>
+            <div className="st-card-body">
+              <div className="st-l1">
+                <span className="st-req"><strong>{who.name}</strong>{x.from.rig ? ` · ${x.from.rig}` : ''}</span>
+                {x.priority !== 'routine' && <span className="st-ask-urgent">{t.asks.priority[x.priority]}</span>}
+                <span className="st-time">{shortWhen(x.updatedAt, units, t.list.when.now)}</span>
+              </div>
+              <div className="st-l2">
+                <span className="st-req" title={x.summary}>{x.summary}</span>
+                <button type="button" className="st-qa" onClick={() => p.onSeeAsk?.(x.id)}>{t.side.see}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
       {shown.map(item => {
         const who = item.helper?.kind ?? item.session.name;
         const project = p.projectOf(item.session);

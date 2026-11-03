@@ -122,7 +122,7 @@ export function findRig(env: NodeJS.ProcessEnv, exists: (p: string) => boolean =
   return candidates.find(dir => exists(join(dir, 'rig'))) ?? null;
 }
 
-const execRun = (env: () => Promise<NodeJS.ProcessEnv>): RigRun => async (args, timeoutMs) => {
+export const execRun = (env: () => Promise<NodeJS.ProcessEnv>): RigRun => async (args, timeoutMs) => {
   const base = await env(), dir = findRig(base);
   if (!dir) return { code: null, stdout: '', stderr: 'rig: command not found' };
   const e = { ...base, PATH: [dir, base.PATH].filter(Boolean).join(delimiter), NO_COLOR: '1', CLICOLOR: '0', FORCE_COLOR: '0' };

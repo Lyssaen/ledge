@@ -21,6 +21,33 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'co
 
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
 export const fr = {
+  /** « À toi »: what OpenRig's rigs ask the person (docs/mockups/ledge-human-operator-ab-lot1.html). */
+  asks: {
+    sections: { decisions: 'Décisions', questions: 'Questions', updates: 'Nouvelles' } as Record<'decisions' | 'questions' | 'updates', string>,
+    pill: { decision: 'décision', question: 'question', update: 'nouvelle', parked: 'en attente de toi' } as Record<'decision' | 'question' | 'update' | 'parked', string>,
+    priority: { urgent: 'urgent', critical: 'critique' } as Record<'urgent' | 'critical', string>,
+    recommended: (label: string) => `${label} · recommandé`,
+    recommendedBy: (seat: string) => `Recommandé par ${seat}`,
+    readAll: 'Tout lire', details: 'Détails',
+    answerOther: 'Répondre autrement…', answerParked: 'Répondre…', writeAnswer: 'Écrire la réponse…',
+    placeholder: 'Ta réponse, en quelques mots…', placeholderParked: (seat: string) => `Ce que ${seat} doit faire…`,
+    send: 'Envoyer', cancel: 'Annuler', keys: 'Ctrl Entrée · Échap', seen: 'Vu',
+    progress: (n: number, total: number) => `${n}/${total} répondues · la réponse part à la dernière`,
+    notSent: (why: string) => `Pas envoyée : ${why}`, retry: 'Réessayer',
+    // Validated by the user, 20:52Z.
+    uncertain: 'Envoi incertain : la réponse est peut-être partie. Réessayer ne l’enverra pas deux fois.',
+    settlesAll: 'Cette réponse règle toute la demande, y compris les questions sans réponse.',
+    stopped: 'OpenRig est arrêté',
+    sentTo: 'Envoyé à', already: 'Déjà réglée ailleurs',
+    partial: 'Liste peut-être incomplète : OpenRig n’a pas répondu à la dernière lecture.',
+    channel: {
+      no_person: { title: 'Ledge n’est pas encore le canal humain d’OpenRig.', body: 'Les rigs passent encore par Max, ou par le TUI du kernel. Leurs demandes n’arrivent pas ici.' },
+      openrig_stopped: { title: 'OpenRig est arrêté : les rigs ne peuvent pas t’écrire.', body: 'Les sessions de tes projets passent toujours par ici.' },
+      unreachable: { title: 'OpenRig ne répond pas.', body: '' },
+      no_default: { title: 'OpenRig a plusieurs personnes, et aucune n’est désignée par défaut.', body: 'Ses demandes n’arrivent donc pas ici. Pour en désigner une :' },
+      not_installed: { title: (machine: string) => `OpenRig n’est pas installé sur ${machine}.`, body: 'Les sessions de tes projets passent toujours par ici.' }
+    }
+  },
   side: {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name: string) => `Le rig ${name} sur la page OpenRig`, rigAsks: (n: number) => `${n} ${n > 1 ? 'demandes' : 'demande'}`, 
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
