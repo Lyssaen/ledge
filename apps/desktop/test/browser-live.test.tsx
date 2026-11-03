@@ -146,6 +146,42 @@ describe('a Claude session’s browser', () => {
     await waitFor(() => expect(screen.getByTestId('browser-screen')).toHaveTextContent('Waiting for the first image…'));
   });
 
+  it('with `page`: only an image of the tab followed shows — another tab on the same address, a late frame of the page before (review, pilot-lead)', async () => {
+    const { d, user } = await openOtto(live('otto', { page: '1.1', image: { at: SHOT, url: URL, page: '1.1' } }));
+    d.lastImage({ id: 'otto', data: 'QUFB', at: SHOT, page: '1.1' });
+    await waitFor(() => expect(pill()).toHaveClass('browser-pill-live'));
+    await user.click(pill()!);
+    const img = () => screen.getByTestId('browser-screen').querySelector('img');
+    await waitFor(() => expect(img()).toHaveAttribute('src', 'data:image/jpeg;base64,QUFB'));
+    // Another tab, already open on the same address: its page differs, the frame empties.
+    act(() => d.browser(live('otto', { page: '2.1', tabs: 2, image: { at: SHOT, url: URL, page: '1.1' } })));
+    await waitFor(() => expect(img()).toBeNull());
+    // A late frame of the tab before is set aside; the followed tab's shows.
+    act(() => d.frame({ id: 'otto', data: 'TEFURQ==', at: new Date().toISOString(), page: '1.1' }));
+    await new Promise(r => setTimeout(r, 50));
+    expect(img()).toBeNull();
+    act(() => d.frame({ id: 'otto', data: 'QkJC', at: new Date().toISOString(), page: '2.1' }));
+    await waitFor(() => expect(img()).toHaveAttribute('src', 'data:image/jpeg;base64,QkJC'));
+    // A frame of A after B's announcement on the same tab (2.2): set aside, never under B's address; the one shown before stays out too.
+    act(() => d.browser(live('otto', { page: '2.2', tabs: 2, url: 'https://example.com/b', image: { at: SHOT, url: URL, page: '1.1' } })));
+    await waitFor(() => expect(img()).toBeNull());
+    act(() => d.frame({ id: 'otto', data: 'TEFURQ==', at: new Date().toISOString(), page: '2.1' }));
+    await new Promise(r => setTimeout(r, 50));
+    expect(img()).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('browser-screen')).toHaveTextContent('Waiting for the first image…'));
+  });
+
+  it('closed with `page`: the kept image of its page only', async () => {
+    const { d, user } = await openOtto(closed('otto', { page: '1.3', image: { at: SHOT, url: URL, page: '1.3' } }));
+    d.lastImage({ id: 'otto', data: 'S0VQVA==', at: SHOT, page: '1.2' });
+    await waitFor(() => expect(pill()).toHaveClass('browser-pill-closed'));
+    await user.click(pill()!);
+    await waitFor(() => expect(watches(d)).toContain('browser.watch:otto'));
+    await new Promise(r => setTimeout(r, 100));
+    expect(screen.getByTestId('browser-screen').querySelector('img')).toBeNull();
+    expect(pane().getByText('No image was taken of this tab.')).toBeVisible();
+  });
+
   it('closed without an image: its title and address only; an address that is not http has no « Open in my browser »', async () => {
     const { user } = await openOtto(closed('otto', { image: undefined, url: 'file:///home/gch/m.html' }), []);
     await waitFor(() => expect(pill()).toHaveClass('browser-pill-closed'));

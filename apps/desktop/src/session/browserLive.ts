@@ -110,21 +110,28 @@ export function useBrowser(session: Session): BrowserLive | undefined {
   return useDaemon().browsers.get(session.id);
 }
 
-export interface Frame { src: string; at: string; live: boolean; width?: number; height?: number }
+export interface Frame { src: string; at: string; live: boolean; width?: number; height?: number; /** The page it is of (protocol `page`). */ page?: string }
 /** How long without a frame before the frame rate hides (design-ux 5: never « 0 im/s »). */
 export const FPS_WINDOW_MS = 2000;
 
 /** What the film shows, for useBrowserFrames: a frame stays only on the page it was taken of. */
-export const pageOf = (b: BrowserLive | undefined): string => (b ? `${b.url ?? ''}\n${b.tabs}` : '');
+export const pageOf = (b: BrowserLive | undefined): string => (!b ? '' : b.page ?? `${b.url ?? ''}\n${b.tabs}`);
+/** The page whose images may show: the tab the film follows (live), the kept image's (closed). Undefined: a daemon without `page`. */
+export const wantedPage = (b: BrowserLive | undefined): string | undefined => (b?.state === 'closed' ? b.image?.page : b?.page);
+/** An image may show for this page: the same `page` when both say one (a late frame of A, another tab on the same address: never). */
+export const ofPage = (frame: Frame, want: string | undefined): boolean => want === undefined || frame.page === undefined || frame.page === want;
 
 /**
  * Watches the session's browser while `on` (the Navigateur tab shown on its Direct side): `browser.watch`, the frames as they
  * come, `browser.unwatch` when it stops. Watched again when the browser changes state (the daemon then sends the image it
  * kept) and after each reconnection. `fps`: frames of the film in the last two seconds, per second; null without any.
  */
-export function useBrowserFrames(client: DaemonClient, id: string, on: boolean, state: BrowserLive['state'] | undefined, page = ''): { frame: Frame | null; fps: number | null } {
+export function useBrowserFrames(client: DaemonClient, id: string, on: boolean, state: BrowserLive['state'] | undefined, page = '', want?: string): { frame: Frame | null; fps: number | null } {
   const { snapshotSeq } = useDaemon();
   const [frame, setFrame] = useState<Frame | null>(null);
+  // Another page's image never takes the place of this page's (pilot-lead 17:38Z: shown only when its page is the tab followed).
+  const wanted = useRef(want);
+  wanted.current = want;
   const [fps, setFps] = useState<number | null>(null);
   const times = useRef<number[]>([]);
   // Another state (closed, live again), another page (an address, a tab opened or closed) or another session: what showed
@@ -141,7 +148,9 @@ export function useBrowserFrames(client: DaemonClient, id: string, on: boolean, 
     };
     const off = client.onMessage(m => {
       if (m.type !== 'browser.frame' || m.id !== id) return;
-      setFrame({ src: `data:image/jpeg;base64,${m.data}`, at: m.at, live: m.live, width: m.width, height: m.height });
+      const next: Frame = { src: `data:image/jpeg;base64,${m.data}`, at: m.at, live: m.live, width: m.width, height: m.height, ...(m.page !== undefined ? { page: m.page } : {}) };
+      if (!ofPage(next, wanted.current)) return;
+      setFrame(next);
       if (m.live) {
         times.current.push(Date.now()); count();
         clearTimeout(timer); timer = setTimeout(count, FPS_WINDOW_MS);

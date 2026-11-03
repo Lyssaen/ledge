@@ -12,7 +12,7 @@ import { BrowserTab, type CaptureFocus } from './BrowserTab';
 import type { Capture } from './captures';
 import { clock } from './exchanges';
 import {
-  bare, enabledAnswer, hasDirect, isLocal, keepEnabledAnswer, kindOf, lastActionOf, markOffSeen, noAddress, openable, pageOf, sideOnOpen,
+  bare, enabledAnswer, hasDirect, isLocal, keepEnabledAnswer, kindOf, lastActionOf, markOffSeen, noAddress, openable, pageOf, sideOnOpen, wantedPage,
   useBrowser, useBrowserFrames, type BrowserAction, type BrowserKind, type BrowserSide, type Frame
 } from './browserLive';
 
@@ -65,7 +65,7 @@ export function BrowserPane(p: BrowserPaneProps): JSX.Element {
   }, [kind]);
 
   const watching = shown === 'direct' && (kind === 'live' || kind === 'closed');
-  const { frame, fps } = useBrowserFrames(p.client, session.id, watching, browser?.state, pageOf(browser));
+  const { frame, fps } = useBrowserFrames(p.client, session.id, watching, browser?.state, pageOf(browser), wantedPage(browser));
 
   if (!hasDirect(kind)) return <BrowserTab captures={captures} focus={p.focus} client={p.client} session={session} helperName={p.helperName} head={p.head} onShowInThread={p.onShowInThread} onClose={p.onClose} />;
 
@@ -125,7 +125,8 @@ function LiveSide({ session, browser, frame, fps, seat, reopened, action, onShow
   // Live, a frame of the film (since the page last changed, useBrowserFrames); the image the daemon kept only when it is of
   // this page (its address) and of this live period, never an older page's (review qitem-20261103173211).
   const keptHere = browser.image !== undefined && browser.image.url === browser.url && (!browser.since || Date.parse(browser.image.at) >= Date.parse(browser.since));
-  const shown = frame && (frame.live || keptHere) ? frame : null;
+  // With `page` (protocol 357495fd), the page decides; without (an older daemon), the address and the live period do.
+  const shown = !frame ? null : browser.page !== undefined ? (frame.page !== undefined && frame.page === browser.page ? frame : null) : frame.live || keptHere ? frame : null;
   // No image of this page yet: the frame empty at once, « En attente… » only past half a second, so a quick navigation does not
   // flash a text (design-ux 17:39Z). Keyed by the page, a new page starts over.
   const [late, setLate] = useState(false);
@@ -183,7 +184,7 @@ function ClosedSide({ session, browser, frame, seat }: { session: Session; brows
   const badge = seat ? (browser.closed === 'stopped' ? tb.seatStopped(at) : tb.tabsClosed(at)) : tb.closedAt(at);
   const open = !seat && openable(url);
   // Closed, only the image the daemon kept (sent on the watch), dated by it.
-  const image = browser.image !== undefined && frame !== null && !frame.live;
+  const image = browser.image !== undefined && frame !== null && (browser.image.page !== undefined ? frame.page === browser.image.page : !frame.live);
   return (
     <>
       <div className="browser-live-head">
