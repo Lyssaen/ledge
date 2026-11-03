@@ -86,6 +86,8 @@ Production runbook: one Docker image (`apps/relay/Dockerfile`, build context = t
    ```sh
    git push origin vX.Y.Z^{commit}:refs/heads/production
    ```
+
+   The Release workflow does this itself (job `production`) once the daemon is on npm and the installer and `ledge-mobile-build.json` are on the release: fast-forward only, and only when the tagged commit carries the tag's version. By hand only for the first deploy or after that job failed.
 7. **After a deploy, check.**
    - `https://app.kl-ledge.dev/healthz` answers `ok`.
    - The logs show `{"ev":"listening",…,"mode":"accounts"}`.
