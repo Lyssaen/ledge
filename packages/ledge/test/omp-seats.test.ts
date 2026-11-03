@@ -82,6 +82,28 @@ describe('createOmpSeats: the state of an OpenRig OMP seat, from its journal', (
     expect(store.get(ID)).toMatchObject({ state: 'idle', lastActivityAt: at(20) });
   });
 
+  it('follows a new entry larger than one read, whole or written in several goes', async () => {
+    store.upsert(session());
+    writeFileSync(journal, lines([...HEAD, prompt('u0', 1, 'go'), said('a0', 2, 'stop')]));
+    const s = createOmpSeats({ store, root }); await s.tick();
+    expect(store.get(ID)?.state).toBe('idle');
+    // A 5 MB prompt, over the 4 MB of one read.
+    appendFileSync(journal, lines([prompt('u1', 10, 'y'.repeat(5 * 1024 * 1024))]));
+    await s.tick(); await s.tick();
+    expect(store.get(ID)).toMatchObject({ state: 'working', lastActivityAt: at(10) });
+    appendFileSync(journal, lines([said('a1', 11, 'stop')]));
+    await s.tick();
+    expect(store.get(ID)?.state).toBe('idle');
+    // A 5 MB tool result written in two goes: nothing until it is whole, then read whole.
+    const big = JSON.stringify(toolResult('r2', 12, 'z'.repeat(5 * 1024 * 1024)));
+    appendFileSync(journal, big.slice(0, 3 * 1024 * 1024));
+    await s.tick();
+    expect(store.get(ID)?.state).toBe('idle');
+    appendFileSync(journal, `${big.slice(3 * 1024 * 1024)}\n`);
+    await s.tick();
+    expect(store.get(ID)).toMatchObject({ state: 'working', lastActivityAt: at(12) });
+  });
+
   it('a journal with no entry that tells a state, or only a line still being written, leaves the state as it is', async () => {
     store.upsert(session({ state: 'idle' }));
     writeFileSync(journal, lines(HEAD));

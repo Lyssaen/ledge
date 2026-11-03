@@ -245,7 +245,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // so an OMP seat is never typed into as a Claude or Codex one, nor a Claude or Codex seat left unfollowed as an OMP one.
         const s = store.get(live);
         if (s && s.tool !== tool && (s.source === 'rig' || s.source === 'hook_only')) {
-          store.upsert({ ...withoutHarness(s), tool, state: 'idle', lastActivityAt: now() });
+          // A seat known from its hooks only is put on its pane at the same time; without a pane yet, it waits for a next pass.
+          if (s.source === 'hook_only' && !(await tmux.hasSession(n.session).catch(() => false))) continue;
+          const cur = store.get(live);
+          if (!cur || cur.state === 'exited' || cur.tool === tool) continue;
+          store.upsert({ ...withoutHarness(cur), tool, state: 'idle', source: 'rig', tmuxSession: n.session, lastActivityAt: now() });
           log(`openrig: seat ${n.session} now runs ${n.runtime}`);
         }
         continue;
