@@ -155,16 +155,20 @@ async function main() {
   try {
     // First run in the work folder: the agent asks to trust it. Ledge parses it as a permission; the driver accepts that.
     let s = await until(id, x => idle(x) || x.pending?.kind === 'permission', 90_000, 'launch');
+    let trusted: boolean | null = null;
     if (s.pending?.kind === 'permission') {
       if (!/trust/i.test(s.pending.text + (s.pending.options ?? []).join(' '))) throw new Error(`launch: an unexpected permission ${JSON.stringify(s.pending.text)}`);
-      save(id, 'launch-trust'); emit({ ev: 'accept-trust', text: s.pending.text });
+      save(id, 'launch-trust'); emit({ ev: 'accept-trust', text: s.pending.text }); trusted = true;
       send({ type: 'session.decide', id, decision: 'accept' });
       s = await until(id, idle, 90_000, 'launch-trusted');
     }
     const f = save(id, 'launch-idle');
     result(1, 'launch', true, `idle after ${Date.now() - t} ms, preview ${f}`);
+    // Check 8: Windows draws the cursor as '>'. The adapter read it if the trust dialog was parsed, and the input box is
+    // recognized at rest when the preview (which leaves the box out) holds no '>' prompt line.
     const lines = previews.get(id) ?? [];
-    result(8, 'glyphs', lines.some(l => /^[>❯›]\s/.test(l.trimStart())), `prompt line: ${JSON.stringify(lines.find(l => /^[>❯›]\s/.test(l.trimStart())) ?? null)}`);
+    const boxLeft = lines.some(l => /^[>❯]\s/.test(l));
+    result(8, 'glyphs', trusted !== false && !boxLeft, `trust dialog ${trusted === null ? 'not shown' : 'parsed with > cursor'}; input box ${boxLeft ? 'left in the preview' : 'recognized'}`);
   } catch (e) { result(1, 'launch', false, (e as Error).message); process.exit(1); }
   for (const c of checks) {
     if (which !== 'all' && which !== c.name) continue;
