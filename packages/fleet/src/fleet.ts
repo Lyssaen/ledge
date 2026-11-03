@@ -84,8 +84,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
   /** `session.commands` requestId -> the machine asked and the session's qualified id, so only its listing answers it (a drop or a refusal answers « offline » or « outdated »). */
   const commandLists = new Map<string, { machine: string; id: string }>();
-  type RigKind = 'status' | 'act' | 'specs' | 'launch' | 'seats' | 'roles' | 'role' | 'roleFile' | 'asks' | 'answer';
-  type RigAsk = { machine: string; kind: RigKind; roleId?: string; path?: string; qitemId?: string };
+  type RigKind = 'status' | 'act' | 'specs' | 'launch' | 'seats' | 'roles' | 'role' | 'roleFile' | 'asks' | 'answer' | 'goals' | 'goalSend' | 'goalReply';
+  type RigAsk = { machine: string; kind: RigKind; roleId?: string; path?: string; qitemId?: string; goalId?: string; replyId?: string };
   const rigFailure = (a: RigAsk, requestId: string, machineId: string, error: 'offline' | 'outdated'): ServerMessage =>
     a.kind === 'act' ? { type: 'openrig.done', requestId, machineId, ok: false, commands: [], error }
     : a.kind === 'specs' ? { type: 'openrig.specList', requestId, machineId, specs: [], error }
@@ -96,11 +96,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     : a.kind === 'roleFile' ? { type: 'openrig.roleFileContent', requestId, machineId, roleId: a.roleId ?? '', path: a.path ?? '', error }
     : a.kind === 'asks' ? { type: 'openrig.asksChanged', requestId, machineId, asks: [], error }
     : a.kind === 'answer' ? { type: 'openrig.answered', requestId, machineId, qitemId: a.qitemId ?? '', ok: false, error }
+    : a.kind === 'goals' ? { type: 'openrig.goalsChanged', requestId, machineId, goals: [], error }
+    : a.kind === 'goalSend' ? { type: 'openrig.goal.sent', requestId, machineId, goalId: a.goalId ?? '', ok: false, error }
+    : a.kind === 'goalReply' ? { type: 'openrig.goal.replied', requestId, machineId, goalId: a.goalId ?? '', replyId: a.replyId ?? '', ok: false, error }
     : { type: 'openrig.state', requestId, machineId, error };
   /** The OpenRig writes whose end is told `uncertain` when their machine drops after they were sent (a refusal before sending stays `offline`). */
-  const SENT_WRITES: ReadonlySet<RigKind> = new Set(['answer']);
+  const SENT_WRITES: ReadonlySet<RigKind> = new Set(['answer', 'goalSend', 'goalReply']);
   const rigUncertain = (a: RigAsk, requestId: string, machineId: string): ServerMessage =>
-    ({ type: 'openrig.answered', requestId, machineId, qitemId: a.qitemId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' });
+    a.kind === 'answer' ? { type: 'openrig.answered', requestId, machineId, qitemId: a.qitemId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' }
+    : a.kind === 'goalSend' ? { type: 'openrig.goal.sent', requestId, machineId, goalId: a.goalId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' }
+    : { type: 'openrig.goal.replied', requestId, machineId, goalId: a.goalId ?? '', replyId: a.replyId ?? '', ok: false, error: 'uncertain', message: 'the machine dropped before the answer came back' };
   /** `openrig.status` / `openrig.act` requestId -> the machine asked, so only its answer is emitted (a drop or a refusal answers « offline » or « outdated »). */
   const rigAsks = new Map<string, RigAsk>();
   /** Each pending OpenRig ask of `machine` (of `kinds` only, when given) is answered with `error`: 'offline' when it dropped,
@@ -108,8 +113,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const answerFailedRigs = (machine: string, error: 'offline' | 'outdated', kinds?: readonly RigKind[]) => {
     for (const [requestId, a] of rigAsks) if (a.machine === machine && (!kinds || kinds.includes(a.kind))) {
       rigAsks.delete(requestId);
-      // A write already handed to the machine (an answer to OpenRig) that drops before its end may have been done there: `uncertain`,
-      // never `offline`, which says nothing left (sending it again is safe: OpenRig records an answer once).
+      // A write already handed to the machine (a goal, a word to Max, an answer) that drops before its end may have been done there:
+      // `uncertain`, never `offline`, which says nothing left (sending it again with the same id is safe).
       emit(error === 'offline' && SENT_WRITES.has(a.kind) ? rigUncertain(a, requestId, machine) : rigFailure(a, requestId, machine, error));
     }
   };
@@ -329,7 +334,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'attachment.stored' || m.type === 'attachment.data' || m.type === 'attachment.error') { if (attachmentAsks.get(m.requestId) === machine) { attachmentAsks.delete(m.requestId); emit(m); } return; }
     if (m.type === 'repos.found') { if (scans.get(m.requestId) === machine) { scans.delete(m.requestId); emit(m); } return; }
     if (m.type === 'openrig.state' || m.type === 'openrig.done' || m.type === 'openrig.specList' || m.type === 'openrig.launched' || m.type === 'openrig.reseated'
-      || m.type === 'openrig.roleList' || m.type === 'openrig.roleDetail' || m.type === 'openrig.roleFileContent' || m.type === 'openrig.asksChanged' || m.type === 'openrig.answered') {
+      || m.type === 'openrig.roleList' || m.type === 'openrig.roleDetail' || m.type === 'openrig.roleFileContent' || m.type === 'openrig.asksChanged' || m.type === 'openrig.answered'
+      || m.type === 'openrig.goalsChanged' || m.type === 'openrig.goal.sent' || m.type === 'openrig.goal.replied') {
       // An answer goes out once, from the machine asked; a state that follows an action goes out from any machine.
       if (m.requestId !== undefined) { if (rigAsks.get(m.requestId)?.machine !== machine) return; rigAsks.delete(m.requestId); }
       emit({ ...m, machineId: machine }); return;
@@ -393,6 +399,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.request === 'openrig.roles' || m.request === 'openrig.role' || m.request === 'openrig.roleFile') { answerFailedRigs(machine, 'outdated', ['roles', 'role', 'roleFile']); return; }
       // Likewise a daemon that predates « À toi » refuses only its asks and answers.
       if (m.request === 'openrig.asks' || m.request === 'openrig.answer') { answerFailedRigs(machine, 'outdated', ['asks', 'answer']); return; }
+      if (m.request === 'openrig.goals' || m.request === 'openrig.goal.send' || m.request === 'openrig.goal.reply') { answerFailedRigs(machine, 'outdated', ['goals', 'goalSend', 'goalReply']); return; }
       if (m.request?.startsWith('openrig.')) { answerFailedRigs(machine, 'outdated'); return; }
       if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
@@ -587,13 +594,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         modelLists.set(msg.requestId, { machine, tool: msg.tool });
       }
       if (msg.type === 'openrig.status' || msg.type === 'openrig.act' || msg.type === 'openrig.specs' || msg.type === 'openrig.launch' || msg.type === 'openrig.seats'
-        || msg.type === 'openrig.roles' || msg.type === 'openrig.role' || msg.type === 'openrig.roleFile' || msg.type === 'openrig.asks' || msg.type === 'openrig.answer') {
+        || msg.type === 'openrig.roles' || msg.type === 'openrig.role' || msg.type === 'openrig.roleFile' || msg.type === 'openrig.asks' || msg.type === 'openrig.answer'
+        || msg.type === 'openrig.goals' || msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply') {
         machine = msg.machineId ?? 'local';
         const { machineId: _m, ...rest } = msg; outgoing = rest;
         const kind: RigKind = msg.type === 'openrig.status' ? 'status' : msg.type === 'openrig.act' ? 'act' : msg.type === 'openrig.specs' ? 'specs' : msg.type === 'openrig.seats' ? 'seats'
           : msg.type === 'openrig.roles' ? 'roles' : msg.type === 'openrig.role' ? 'role' : msg.type === 'openrig.roleFile' ? 'roleFile'
-          : msg.type === 'openrig.asks' ? 'asks' : msg.type === 'openrig.answer' ? 'answer' : 'launch';
-        const ask: RigAsk = { machine, kind, ...(msg.type === 'openrig.role' || msg.type === 'openrig.roleFile' ? { roleId: msg.roleId } : {}), ...(msg.type === 'openrig.roleFile' ? { path: msg.path } : {}), ...(msg.type === 'openrig.answer' ? { qitemId: msg.qitemId } : {}) };
+          : msg.type === 'openrig.asks' ? 'asks' : msg.type === 'openrig.answer' ? 'answer'
+          : msg.type === 'openrig.goals' ? 'goals' : msg.type === 'openrig.goal.send' ? 'goalSend' : msg.type === 'openrig.goal.reply' ? 'goalReply' : 'launch';
+        const ask: RigAsk = { machine, kind, ...(msg.type === 'openrig.role' || msg.type === 'openrig.roleFile' ? { roleId: msg.roleId } : {}), ...(msg.type === 'openrig.roleFile' ? { path: msg.path } : {}), ...(msg.type === 'openrig.answer' ? { qitemId: msg.qitemId } : {}),
+          ...(msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply' ? { goalId: msg.goalId } : {}), ...(msg.type === 'openrig.goal.reply' ? { replyId: msg.replyId } : {}) };
         if (!available(peers.get(machine))) { emit(rigFailure(ask, msg.requestId, machine, 'offline')); return; }
         rigAsks.set(msg.requestId, ask);
       }

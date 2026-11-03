@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { HUMAN_ASK_BODY_MAX, HUMAN_ASKS_MAX, type HumanAnswer, type HumanAnswerError, type HumanAsk, type HumanChannel, type HumanQuestionAnswer, type OpenRigAnswered, type OpenRigState } from '@ledge/protocol';
 import { log } from '../log.js';
+import { goalOf, parseTeam } from './goalTeam.js';
 import type { RigRun } from './openrig.js';
 
 /**
@@ -23,6 +24,7 @@ export interface HumanChannelDeps {
   /** Delay between an OpenRig event and the read it triggers (several events, one read). */ debounceMs?: number;
   /** The safety poll. */ pollMs?: number;
   /** How long the person's name and Slack readiness stand. */ personTtlMs?: number;
+  /** Called on each OpenRig event that may change the queue (the goals follow the same stream). */ onEvent?: () => void;
   now?: () => number;
 }
 
@@ -135,7 +137,11 @@ export function toAsk(raw: unknown, kind: HumanAsk['kind']): HumanAsk | null {
     return [{ id: qid, question, options, answer: answerOf(answers, qid) }];
   });
   const priority = str(q.priority);
+  // Max's ask about a goal (lot 2): which goal, and the team its ```ledge-team``` block names.
+  // The tag names the goal row (`qitem-ledge-goal-<goalId>`); the front knows the goal by its goalId.
+  const tagged = goalOf(q.tags), goalId = tagged?.replace(/^qitem-ledge-goal-/, '') ?? null, team = tagged ? parseTeam(body) : null;
   return {
+    ...(goalId ? { goalId } : {}), ...(team ? { team } : {}),
     id, kind, alert: Array.isArray(q.tags) && q.tags.includes('human-alert'),
     priority: priority && PRIORITIES.has(priority) ? priority as HumanAsk['priority'] : 'routine',
     from: { seat, ...seatParts(seat) },
@@ -330,7 +336,7 @@ export function createHumanChannel(deps: HumanChannelDeps): HumanChannelService 
         try {
           await sse(`${b.url}/api/events${lastEventId ? '' : '?replay=0'}`, lastEventId, (id, data) => {
             if (id) lastEventId = id;
-            if (WAKING.test(str(obj(data).type) ?? '')) soon();
+            if (WAKING.test(str(obj(data).type) ?? '')) { soon(); deps.onEvent?.(); }
           }, abort.signal);
         } catch (e) { if (running && !abort.signal.aborted) log(`openrig human: events dropped: ${(e as Error).message}`); }
         if (now() - started > 30_000) wait = 2_000;
