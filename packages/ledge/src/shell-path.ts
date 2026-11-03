@@ -60,8 +60,8 @@ const regQuery = (key: string) => new Promise<string>((resolve, reject) => {
 
 /**
  * Windows: the environment a new process of the user gets, read where Windows keeps it (machine, then user, which wins;
- * `Path` is both joined), `%NAME%` expanded against `base` then those values, an unknown one kept as written. What a
- * tool installed after the daemon started added to the PATH is there.
+ * `Path` is both joined, then the folders only `base` has), `%NAME%` expanded against `base` then those values, an
+ * unknown one kept as written. What a tool installed after the daemon started added to the PATH is there.
  */
 export async function windowsRegistryEnv(run: (key: string) => Promise<string> = regQuery, base: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
   const none = (): RegValues => ({});
@@ -75,7 +75,12 @@ export async function windowsRegistryEnv(run: (key: string) => Promise<string> =
   for (const src of [machine, user]) for (const [k, v] of Object.entries(src)) if (k.toUpperCase() !== 'PATH') env[k] = value(v);
   const path = (src: RegValues) => { const k = Object.keys(src).find(n => n.toUpperCase() === 'PATH'); return k ? value(src[k]!) : ''; };
   const joined = [path(machine), path(user)].filter(Boolean).join(';');
-  if (joined) env.Path = joined;
+  // The folders the daemon itself was given (Desktop's Git, the agents it installed) follow the registry's, once each.
+  const baseKey = Object.keys(base).find(k => k.toUpperCase() === 'PATH');
+  const seen = new Set(joined.split(';').map(d => d.toLowerCase()));
+  const own = (baseKey ? base[baseKey] ?? '' : '').split(';').filter(d => d && !seen.has(d.toLowerCase()) && (seen.add(d.toLowerCase()), true));
+  const full = [joined, ...own].filter(Boolean).join(';');
+  if (full) env.Path = full;
   return env;
 }
 

@@ -71,6 +71,11 @@ describe('the user environment on Windows (registry)', () => {
     expect(env.Weird).toBe('%NOPE%\\x');
   });
 
+  it('keeps the daemon\'s own Path folders after the registry\'s (what Desktop adds: its Git, the agents it installed)', async () => {
+    const env = await windowsRegistryEnv(run, { USERPROFILE: 'C:\\Users\\u', SystemRoot: 'C:\\WINDOWS', Path: 'C:\\Ledge\\git\\cmd;C:\\WINDOWS\\system32;C:\\Ledge\\codex' });
+    expect(env.Path).toBe('C:\\WINDOWS\\system32;C:\\Program Files\\Git\\cmd;C:\\Users\\u\\node;C:\\Users\\u\\bin;C:\\Ledge\\git\\cmd;C:\\Ledge\\codex');
+  });
+
   it('userEnv: the registry on Windows, the login shell elsewhere', async () => {
     const calls: string[] = [];
     expect((await userEnv('win32', { registry: async () => { calls.push('reg'); return { A: '1' }; }, shell: async () => { calls.push('sh'); return {}; } })).A).toBe('1');
