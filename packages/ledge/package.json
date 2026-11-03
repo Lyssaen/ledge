@@ -3,13 +3,27 @@
   "version": "0.41.0",
   "description": "Follow and answer your WSL agent sessions (Claude Code, Codex, Cursor Agent) from the Ledge island on Windows.",
   "type": "module",
-  "bin": { "ledge": "dist/cli/index.js" },
-  "files": ["dist", "assets/ledge.ico"],
-  "engines": { "node": ">=22" },
-  "repository": { "type": "git", "url": "git+https://github.com/Lyssaen/ledge.git", "directory": "packages/ledge" },
+  "bin": {
+    "ledge": "dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "assets/ledge.ico"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lyssaen/ledge.git",
+    "directory": "packages/ledge"
+  },
   "homepage": "https://github.com/Lyssaen/ledge#readme",
   "license": "UNLICENSED",
-  "publishConfig": { "access": "public", "provenance": true },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",
@@ -18,8 +32,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@xterm/headless": "6.0.0",
     "ink": "7.1.1",
     "jpeg-js": "^0.4.4",
+    "node-pty": "1.1.0",
     "pngjs": "^7.0.0",
     "react": "^19.3.0",
     "string-width": "^8.3.0",
