@@ -154,3 +154,13 @@ describe('realUpdaterDeps: OMP processes the daemon owns', () => {
     expect(await live.atRisk()).toBe(true);
   });
 });
+
+describe('the updater on Windows', () => {
+  it('runs nothing and says Ledge Desktop updates Ledge', async () => {
+    const d = deps({ platform: 'win32' });
+    const sent: ServerMessage[] = [];
+    await createDaemonUpdater(d).update('0.3.0', m => sent.push(m));
+    expect(sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'no-systemd', detail: 'On Windows, Ledge Desktop updates Ledge' }]);
+    expect(d.calls).toEqual([]);
+  });
+});
