@@ -442,7 +442,7 @@ function StatesView(): JSX.Element {
       <div className="mk-grid">
         <Mini title="Direct pas encore activé" sub={<>Otto se sert de Playwright, mais son Chrome n'ouvre pas de port à Ledge (config sans <code>--remote-debugging-port=0</code>). Le bouton reste celui des captures ; le volet le dit une fois.</>}>
           <aside className="side-pane mk-mini-pane"><SideHead on="live" live={false} /><div className="side-body mk-page">
-            {box(SHELL_ICONS.browser, 'Le direct n’est pas activé.', <>Le navigateur d'Otto ne laisse pas Ledge le regarder. Ledge peut ajouter une ligne à la config Playwright ; elle vaudra pour les prochains navigateurs.</>, 'Activer le direct…')}
+            {box(SHELL_ICONS.browser, 'Le direct n’est pas activé.', <>Le navigateur d'Otto ne laisse pas Ledge le regarder. Ledge peut ajouter une ligne à la config Playwright ; elle vaudra pour les sessions démarrées ensuite.</>, 'Activer le direct…')}
           </div></aside>
         </Mini>
         <Mini title="Fermé sans image (repli)" sub="Aucune image n'a pu être prise avant la fermeture (onglet trop bref, capture refusée) : le titre et l'adresse seuls.">
@@ -464,12 +464,22 @@ function StatesView(): JSX.Element {
             {box(SHELL_ICONS.machine, 'Direct pas encore disponible pour une machine distante.', 'Otto travaille sur desktop-02. Ses captures restent visibles dans Captures.', 'Voir les captures')}
           </div></aside>
         </Mini>
+        <Mini title="Après « Activer » : activé (enabled / already)" sub="La ligne est dans la config. La session en cours reste sans direct : Playwright lit sa config au lancement de la session.">
+          <aside className="side-pane mk-mini-pane"><SideHead on="live" live={false} /><div className="side-body mk-page">
+            <div className="changes-empty mk-problem"><span className="mk-ok"><Icon d={ICONS.check.d} size={22} /></span><strong>Direct activé pour les prochaines sessions.</strong><p>Les sessions démarrées ensuite montreront leur navigateur en direct. Celle-ci garde ses captures.</p></div>
+          </div></aside>
+        </Mini>
+        <Mini title="Après « Activer » : refusé (refused)" sub="Trois raisons, un texte chacune ; le chemin en code quand il y en a un. Pas de bouton : rien n'a été modifié.">
+          <aside className="side-pane mk-mini-pane"><SideHead on="live" live={false} /><div className="side-body mk-page">
+            <div className="changes-empty mk-problem"><Icon d={ICONS.warning.d} size={22} /><strong>Ledge n’a pas pu écrire la config.</strong><p><code>~/.config/playwright-mcp/config.json</code></p><p className="muted">Autres raisons : « Claude Code ne charge aucune config Playwright : rien à modifier. » · « La config Playwright n’est pas lisible : Ledge n’y touche pas. » + chemin.</p></div>
+          </div></aside>
+        </Mini>
         <Mini title="Activer le direct (confirmation)" sub="Le seul geste qui modifie la machine : une ligne dans la config Playwright, sur accord explicite.">
           <aside className="side-pane mk-mini-pane"><SideHead on="live" live={false} /><div className="side-body mk-page">
             <div className="mk-confirm">
               <strong>Activer le direct du navigateur des agents ?</strong>
               <p>Ledge ajoute <code>--remote-debugging-port=0</code> à <code>~/.config/playwright-mcp/config.json</code>. Chaque navigateur d'agent ouvrira alors un port local (127.0.0.1) que Ledge regarde, sans jamais cliquer ni taper.</p>
-              <p className="muted">Un programme de cette machine qui trouve ce port pourrait aussi piloter ce navigateur, comme pour les sièges OMP aujourd'hui. Vaut pour les prochains navigateurs.</p>
+              <p className="muted">Un programme de cette machine qui trouve ce port pourrait aussi piloter ce navigateur, comme pour les sièges OMP aujourd'hui. Vaut pour les sessions démarrées ensuite ; celles en cours gardent leurs captures.</p>
               <div className="mk-confirm-btns"><Button variant="outline" size="sm">Annuler</Button><Button variant="primary" size="sm">Activer</Button></div>
             </div>
           </div></aside>
@@ -505,10 +515,15 @@ const TEXTS: [string, string, string][] = [
   ['session.browser.openMine / openHint', 'Ouvrir dans mon navigateur / Le bouton ouvre l’adresse dans votre navigateur ; il faut que le serveur de la maquette tourne encore. Si Otto rouvre son navigateur, le direct revient ici.', 'Open in my browser / Opens the address in your browser; the mockup’s server must still be running. If Otto reopens the browser, the live view comes back here.'],
   ['session.browser.reopened(n)', 'Otto a rouvert son navigateur', 'Otto reopened the browser'],
   ['session.browser.waiting', 'En attente de la première image…', 'Waiting for the first image…'],
-  ['session.browser.off / offBody(n) / enable', 'Le direct n’est pas activé. / Le navigateur d’Otto ne laisse pas Ledge le regarder. Ledge peut ajouter une ligne à la config Playwright ; elle vaudra pour les prochains navigateurs. / Activer le direct…', 'Live view is off. / Otto’s browser does not let Ledge watch it. Ledge can add one line to the Playwright config; it applies to the next browsers. / Turn on live view…'],
+  ['session.browser.off / offBody(n) / enable', 'Le direct n’est pas activé. / Le navigateur d’Otto ne laisse pas Ledge le regarder. Ledge peut ajouter une ligne à la config Playwright ; elle vaudra pour les sessions démarrées ensuite. / Activer le direct…', 'Live view is off. / Otto’s browser does not let Ledge watch it. Ledge can add one line to the Playwright config; it applies to sessions started afterwards. / Turn on live view…'],
   ['session.browser.enableTitle / enableBody / enableRisk', 'Activer le direct du navigateur des agents ? / Ledge ajoute … : chaque navigateur d’agent ouvrira un port local que Ledge regarde, sans jamais cliquer ni taper. / Un programme de cette machine qui trouve ce port pourrait aussi piloter ce navigateur…', 'Turn on live view of the agents’ browser? / Ledge adds …: each agent browser opens a local port Ledge watches, never clicking or typing. / A program on this machine that finds this port could also drive that browser…'],
   ['session.browser.remote / remoteBody(n, m)', 'Direct pas encore disponible pour une machine distante. / Otto travaille sur desktop-02. Ses captures restent visibles dans Captures.', 'Live view not available for a remote machine yet. / Otto works on desktop-02. Otto’s captures stay in Captures.'],
   ['session.browser.seeCaptures', 'Voir les captures', 'See the captures'],
+  ['session.browser.enabled / enabledBody', 'Direct activé pour les prochaines sessions. / Les sessions démarrées ensuite montreront leur navigateur en direct. Celle-ci garde ses captures.', 'Live view on for the next sessions. / Sessions started from now on will show their browser live. This one keeps its captures.'],
+  ['session.browser.refused.not_configured', 'Claude Code ne charge aucune config Playwright : rien à modifier.', 'Claude Code loads no Playwright config: nothing to change.'],
+  ['session.browser.refused.invalid_config(path)', 'La config Playwright n’est pas lisible : Ledge n’y touche pas. + chemin', 'The Playwright config cannot be read: Ledge leaves it alone. + path'],
+  ['session.browser.refused.write_failed(path)', 'Ledge n’a pas pu écrire la config. + chemin', 'Ledge could not write the config. + path'],
+  ['session.browser.enableRisk (corrigé)', '… comme pour les sièges OMP aujourd’hui. Vaut pour les sessions démarrées ensuite ; celles en cours gardent leurs captures.', '… as OMP seats already do. Applies to sessions started afterwards; running ones keep their captures.'],
   ['session.browser.agentBrowser / lastPage(t)', 'Navigateur de l’agent / dernière page : Sièges OMP dans Ledge', 'The agent’s browser / last page: Sièges OMP dans Ledge'],
   ['session.browser.using(n, t) (OMP)', 'Mia utilise le navigateur · depuis 15:01', 'Mia is using the browser · since 15:01'],
   ['session.browser.tabsClosed(t) / seatStopped(t) (OMP)', 'Onglets fermés à 15:06 / Siège arrêté à 15:20', 'Tabs closed at 15:06 / Seat stopped at 15:20'],
