@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sidebar Desktop — ajustements</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* ===== Real Lyssaën tokens (packages/ui/src/styles/tokens.css), scoped per theme by build.mjs ===== */
+.th-light {
+  --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0); --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0); --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.505 0.213 27.518); --primary-foreground: oklch(0.971 0.013 17.38); --primary-hover: oklch(0.444 0.177 26.899);
+  --secondary: oklch(0.967 0.001 286.375); --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0); --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325); --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0); --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0);
+  --radius: 0.625rem; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px;
+  --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0); --sidebar-primary: oklch(0.577 0.245 27.325);
+  --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0);
+  /* The notch itself: pure white (light) or pure black (dark), borderless, so it merges with the screen edge. */
+  --notch: #fff;
+  --task: #7c3aed; /* a task handed between seats (issue #92): no seat state wears violet */
+  --success: #059669; --warning: #b45309; --info: #2563eb; --danger-text: oklch(0.505 0.213 27.518);
+  --status-success-soft: #ecfdf5; --status-warning-soft: #fffbeb; --status-info-soft: #eff6ff; --status-danger-soft: #fef2f2;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25);
+  --well: oklch(0.97 0 0);
+  /* The embedded terminal (apps/desktop term/theme.ts): its background, text, sixteen ANSI colours, cursor and selection. */
+  --term-bg: oklch(0.99 0 0); --term-fg: oklch(0.22 0 0);
+  --term-ansi-0: #24292f; --term-ansi-1: #b91c1c; --term-ansi-2: #047857; --term-ansi-3: #a16207;
+  --term-ansi-4: #1d4ed8; --term-ansi-5: #8250df; --term-ansi-6: #1b7c83; --term-ansi-7: #6e7781;
+  --term-ansi-8: oklch(0.52 0 0); --term-ansi-9: #a40e26; --term-ansi-10: #1a7f37; --term-ansi-11: #9a6700;
+  --term-ansi-12: #0550ae; --term-ansi-13: #6639ba; --term-ansi-14: #136061; --term-ansi-15: #424a53;
+  --term-cursor: oklch(0.145 0 0); --term-selection: #0969da33;
+  --edge-hot: rgba(0,0,0,.06);
+}
+.th-dark {
+  --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0); --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0); --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.444 0.177 26.899); --primary-foreground: oklch(0.971 0.013 17.38); --primary-hover: oklch(0.396 0.141 25.723);
+  --secondary: oklch(0.274 0.006 286.033); --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0); --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216); --destructive-foreground: oklch(0.985 0 0);
+  --border: #ffffff1a; --input: #ffffff26; --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0); --sidebar-primary: oklch(0.637 0.237 25.331);
+  --sidebar-primary-foreground: oklch(0.971 0.013 17.38); --sidebar-accent: oklch(0.269 0 0); --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: #ffffff1a; --sidebar-ring: oklch(0.556 0 0);
+  --notch: #000;
+  --task: #a78bfa;
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa; --danger-text: oklch(0.704 0.191 22.216);
+  --status-success-soft: #052e16; --status-warning-soft: #422006; --status-info-soft: #172554; --status-danger-soft: #450a0a;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7);
+  --well: oklch(0.145 0 0);
+  --term-bg: #0c0c0d; --term-fg: #e5e5e5;
+  --term-ansi-0: #484f58; --term-ansi-1: #f87171; --term-ansi-2: #4ade80; --term-ansi-3: #facc15;
+  --term-ansi-4: #7cb3fb; --term-ansi-5: #bc8cff; --term-ansi-6: #39c5cf; --term-ansi-7: #b1bac4;
+  --term-ansi-8: #8f8f8f; --term-ansi-9: #ffa198; --term-ansi-10: #56d364; --term-ansi-11: #e3b341;
+  --term-ansi-12: #79c0ff; --term-ansi-13: #d2a8ff; --term-ansi-14: #56d4dd; --term-ansi-15: #ffffff;
+  --term-cursor: oklch(0.985 0 0); --term-selection: #58a6ff40;
+  --edge-hot: rgba(255,255,255,.08);
+}
+
+/* Mascots (spec section 6). Material follows the theme: Galet (light) / Signal (dark).
+   A bot's own data-material wins over the root theme so its theme prop is authoritative. */
+@property --bot-shell-top { syntax: '<color>'; inherits: true; initial-value: #f0eee6; }
+@property --bot-shell-bottom { syntax: '<color>'; inherits: true; initial-value: #b7b7b0; }
+@property --bot-shell-line { syntax: '<color>'; inherits: true; initial-value: #ffffff99; }
+@property --bot-visor { syntax: '<color>'; inherits: true; initial-value: #22292b; }
+@property --bot-shine { syntax: '<color>'; inherits: true; initial-value: #ffffff77; }
+.th-light, [data-material="pebble"] {
+  --bot-shell-top: #f0eee6; --bot-shell-bottom: #b7b7b0; --bot-shell-line: #ffffff99; --bot-visor: #22292b;
+  --bot-shine: #ffffff77;
+}
+.th-dark, [data-material="signal"] {
+  --bot-shell-top: #34434b; --bot-shell-bottom: #273238; --bot-shell-line: #859397; --bot-visor: #172124;
+  --bot-shine: #ffffff00;
+}
+/* Halo (docs/mockups/mascots-halo.html, "Contour" rendering): a glow in the state's badge colour hugging the
+   silhouette. Full strength for a bot that waits or errs, softer for a live bot, none for done or read-only. */
+@property --bot-halo-a { syntax: '<number>'; inherits: false; initial-value: 0; }
+:root { --bot-halo-alpha: .55; --bot-halo-alpha-soft: .3; --bot-halo-spread: .32; }
+:root {
+  --bot-visor-line: #00000055; --bot-reflection: #ffffff; --bot-ground: #000000; --bot-readonly-line: #adb3b2;
+  --bot-eye-starting: #90c7f2; --bot-eye-working: #90c7f2; --bot-eye-approval: #f2b09c; --bot-eye-question: #f6d487;
+  --bot-eye-idle: #a9dfc7; --bot-eye-error: #ffab9f; --bot-eye-done: #a3aaa9;
+}
+
+/* ===== Real sidebar stylesheet (apps/desktop/src/styles/sidebar.css, main 0c47f61b) = « Avant » ===== */
+/* The sidebar as an IDE explorer, from docs/mockups/session-management/sidebar-tree.css: ask field, views,
+   « À toi », the project › branch › session tree. No search row, no auto-hide, no word mark (the titlebar owns the brand).
+   `.side-swatch` and `.machine-dot` stay: they are used across the app; `.side-footer` is an alias of `.st-foot`. */
+.sidebar.st{position:relative;width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
+.st button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
+.st button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:var(--radius-sm)}
+.st .mono{font-family:'Geist Mono',monospace}
+.st-fill{flex:1}
+.st-ask{margin:10px 10px 0;height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);cursor:text}
+.st-ask:focus-within,.st-ask.on{border-color:var(--ring)}
+.st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
+.st-ask input::placeholder{color:var(--muted-foreground)}
+.st .st-mascot{display:inline-flex;flex:none}
+.st-views{display:flex;flex-direction:column;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-views button:hover{color:var(--sidebar-foreground)}
+.st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st .st-views button.on svg{color:var(--sidebar-primary)}
+.st-views small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-scroll{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:10px}
+.st-label{display:flex;align-items:center;gap:4px;height:26px;padding:0 2px 0 8px;font-size:11px;color:var(--muted-foreground)}
+.st-badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:grid;place-items:center;font:600 10px 'Geist Mono',monospace;background:var(--sidebar-primary);color:var(--sidebar-primary-foreground,var(--primary-foreground))}
+.st .st-icon{width:24px;height:24px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st .st-icon:hover,.st .st-icon.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+/* « À toi » */
+.st-card{display:flex;gap:8px;padding:6px 6px 6px 8px;border-radius:var(--radius-md)}
+.st-card:hover,.st-card.sel{background:var(--sidebar-accent)}
+.st-card-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.st-l1{display:flex;align-items:center;gap:6px;font-size:13px}
+.st .st-name{font-weight:500;color:var(--sidebar-foreground)}
+.st .st-name:hover{text-decoration:underline}
+.st-where{flex:1;min-width:0;display:flex;align-items:center;gap:2px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-task .st-where{display:block}
+.st-where .side-swatch{width:7px;height:7px;margin:0 3px 0 0}
+.st-l2{display:flex;align-items:center;gap:5px}
+.st-req{flex:1;min-width:0;font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .st-qa{height:22px;padding:0 8px;border-radius:var(--radius-sm);font-size:11px;font-weight:500;border:1px solid var(--input);color:var(--sidebar-foreground)}
+.st .st-qa:hover{background:var(--sidebar-accent)}
+.st .st-qa.pri{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.st .st-qa.pri:hover{background:var(--primary-hover)}
+.st .st-showall{margin:2px 0 0 34px;font-size:12px;color:var(--muted-foreground)}
+.st .st-showall:hover{color:var(--sidebar-foreground)}
+/* The tree */
+.st-tree{display:flex;flex-direction:column;gap:1px}
+.st-row{--d:0;position:relative;display:flex;align-items:center;gap:6px;min-height:28px;padding:0 6px 0 calc(4px + var(--d) * 14px);border-radius:var(--radius-sm);font-size:13px;color:var(--muted-foreground)}
+.st-row:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.sel{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));outline:1.5px solid var(--sidebar-primary)}
+.st-project.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));color:var(--foreground);outline:1.5px solid var(--sidebar-primary)}
+.is-dragging .st-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
+.st .st-chev{width:16px;height:16px;flex:none;display:grid;place-items:center;color:var(--muted-foreground);border-radius:4px}
+.st .st-chev:hover{color:var(--sidebar-foreground)}
+.st-chev span{display:grid;transition:transform .15s}
+.st-chev span.open{transform:rotate(90deg)}
+.st-gap{width:16px;flex:none}
+.st-none{background:none!important;border:1px dashed var(--muted-foreground)}
+.st .st-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;padding:4px 0}
+.st-main strong{font-weight:500;color:var(--sidebar-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-main span{font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-project .st-main{flex-direction:row;align-items:baseline;gap:6px}
+.st-project .st-main strong{font-weight:600;flex:none;max-width:60%}
+.st-project .st-main span{font-size:11px}
+.st-branch{color:var(--muted-foreground)}
+.st-branch .st-main span{font:12px 'Geist Mono',monospace;color:var(--sidebar-foreground)}
+.st-wt{font:500 9px 'Geist Mono',monospace;padding:1px 4px;border-radius:4px;border:1px solid var(--input);color:var(--muted-foreground);flex:none}
+.st-count{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-tally{display:flex;gap:7px;flex:none;font:500 10px 'Geist Mono',monospace}
+.st-tally span{display:flex;align-items:center;gap:3px}
+.st-tally i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-need{color:var(--sidebar-primary)}.t-work{color:var(--info)}.t-done{color:var(--muted-foreground)}
+.t-off{color:var(--muted-foreground)}.t-off i{background:none;border:1px solid currentColor}
+.st-agent{align-items:flex-start;min-height:40px}
+.st-agent>.st-chev,.st-agent>.st-gap{margin-top:7px}
+.st-bot{width:18px;height:18px;flex:none;display:grid;place-items:center;margin-top:5px}
+.st-card .st-bot{margin-top:1px}
+.st-agent.helper{min-height:28px;align-items:center}
+.st-agent.helper .st-main{flex-direction:row;gap:6px;align-items:baseline}
+.st-agent.helper .st-main strong,.st-dense .st-agent .st-main strong{flex:none}
+.st-agent.helper>.st-chev,.st-agent.helper>.st-gap,.st-agent.helper .st-bot,.st-agent.helper .st-time,.st-agent.helper .st-kids{margin-top:0}
+.st-agent.done{opacity:.6}
+.st-agent.off .st-main strong{color:var(--muted-foreground)}
+.st-time{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);flex:none;margin-top:6px}
+.st-time.t-approval{color:var(--sidebar-primary)}.st-time.t-question{color:var(--warning)}.st-time.t-error{color:var(--danger-text)}
+.st-kids{flex:none;margin-top:5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;border:1px solid var(--input);display:grid;place-items:center;font:500 10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.st-acts{position:absolute;right:4px;top:4px;display:none;gap:1px;padding:1px;border-radius:var(--radius-sm);background:var(--sidebar-accent)}
+.st-project .st-acts,.st-branch .st-acts,.st-agent.helper .st-acts{top:2px}
+.st-row:hover .st-acts,.st-row:focus-within .st-acts{display:flex}
+.st .st-acts button{width:22px;height:22px;display:grid;place-items:center;border-radius:5px;color:var(--muted-foreground)}
+.st .st-acts button:hover{background:color-mix(in srgb,var(--foreground) 8%,transparent);color:var(--sidebar-foreground)}
+.st-more{min-height:26px;font-size:12px}
+.st .st-more button{color:var(--muted-foreground)}
+.st .st-more button:hover{color:var(--sidebar-foreground)}
+/* Archives, at the foot of the tree: folded, filterable, each session read, put back, resumed or deleted from its row. */
+.st-archives{border-top:1px solid var(--sidebar-border);padding-top:6px}
+.st .st-arch-toggle{display:flex;align-items:center;gap:6px;height:24px;font-size:11px;color:var(--muted-foreground)}
+.st .st-arch-toggle:hover{color:var(--sidebar-foreground)}
+.st-arch-toggle>span{display:grid;transition:transform .15s}
+.st-arch-toggle>span.open{transform:rotate(90deg)}
+.st-arch-toggle small{font:10px 'Geist Mono',monospace}
+.st-arch-q{display:flex;align-items:center;gap:6px;height:28px;margin:2px 4px 4px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st-arch-q input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:12px 'Geist',system-ui,sans-serif;outline:none}
+.st-arch{padding-left:8px}
+.st-arch .st-main strong{display:flex;align-items:center;gap:0;color:var(--muted-foreground)}
+.st-arch .st-main strong .side-swatch{width:7px;height:7px;margin:0 6px 0 0}
+.st-arch.sel .st-main strong{color:var(--sidebar-foreground)}
+.st-arch .st-bot{opacity:.7}
+.st .st-acts button.danger:hover{color:var(--danger-text)}
+.st-help{margin:6px 8px 0;font-size:11px;line-height:15px;color:var(--muted-foreground)}
+/* Compact: one line per session. */
+.st-dense .st-agent{min-height:26px;align-items:center}
+.st-dense .st-agent .st-main{flex-direction:row;gap:6px;align-items:baseline;padding:2px 0}
+.st-dense .st-agent>.st-chev,.st-dense .st-agent>.st-gap,.st-dense .st-bot,.st-dense .st-time,.st-dense .st-kids{margin-top:0}
+.st-dense .st-acts{top:1px}
+/* Machines and Settings at the foot. */
+.st-foot{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground);overflow:hidden}
+.st .st-mach{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.st .st-mach:hover{color:var(--sidebar-foreground)}
+.st-mach small{font:10px 'Geist Mono',monospace}
+.st-mach .machine-dot{margin:0}
+/* The ? beside Settings: its tooltip lists the shortcuts (t.shortcuts.rows), on hover and on keyboard focus. It hangs from the
+   aside (position:relative), above the foot, so the foot's overflow:hidden does not clip it. */
+.st-keys-tip{position:absolute;left:8px;bottom:48px;z-index:30;width:max-content;max-width:320px;display:none;flex-direction:column;gap:5px;padding:10px 12px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);font-size:11px;line-height:15px;pointer-events:none}
+.st-keys:hover .st-keys-tip,.st-keys:focus-within .st-keys-tip{display:flex}
+.st-keys-tip>span{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.st-keys-tip kbd{flex:none;font-size:10px!important}
+.side-footer{padding:0;border:0} /* alias: Settings' test reads this selector; the foot is .st-foot */
+.side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
+.machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
+.machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
+/* A daemon restarting for its update (#48): neither online nor offline. */
+.machine-dot.updating{background:var(--warning);box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 18%,transparent)}
+@media(max-width:1250px){.sidebar.st{width:256px}}
+/* A narrow window: a 64 px rail, the projects as swatches with their tally, the rest behind icons. */
+@media(max-width:850px){
+ .sidebar.st{width:64px}
+ .st kbd{display:none!important}
+ .st .st-keys-tip kbd{display:inline-flex!important}
+ .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
+ .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
+ .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
+ .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
+ .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
+ .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
+ .st-project .side-swatch{width:16px;height:16px;border-radius:5px}
+ .st-tally{position:absolute;top:2px;right:6px}.st-tally span:not(.t-need){display:none}
+ .st-foot{flex-direction:column;height:auto;padding:8px 0;gap:8px}.st .st-mach{font-size:0}.st-mach small{display:none}.st-foot .st-fill{display:none}
+}
+
+/* Ledge's entry (ledge home spec §2.1): the resident, « Ledge. », the live line and /, the question field under it; lit while the home view shows. */
+.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:4px;padding:6px 8px 6px;cursor:default}
+.st-ledge .st-ledge-entry{display:flex;align-items:center;gap:8px;width:100%;padding:2px 0;border:0;background:none;color:var(--sidebar-foreground);text-align:left;cursor:pointer}
+.st-ledge .st-ledge-names{display:flex;flex-direction:column;flex:1;min-width:0;line-height:14px}
+.st-ledge .st-ledge-brand{font-size:13px;font-weight:650}
+.st-ledge .st-ledge-line{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
+.st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
+@media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
+.st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}
+.st-card.st-near .st-task-mark{color:var(--warning,#e5b85c)}
+.st-card.st-decision .st-task-mark{color:var(--sidebar-primary);font-weight:700}
+
+/* OpenRig's groups (docs/mockups/ledge-openrig-groups.html): a rig's hexagon, the kernel's. */
+.st-rig-hex{display:inline-grid;place-items:center;color:var(--info);flex:none}
+.st-kernel-hex{display:inline-grid;place-items:center;color:#8b5cf6;margin-right:4px}
+.st-grouping{display:flex;gap:2px;margin:6px 10px 2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-grouping button{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 8px;height:24px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st .st-grouping button[aria-checked=true]{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+
+
+/* ===== « Après » : the proposed changes, scoped to .v2. This block is the spec for dev-front. ===== */
+/* 5 · Ledge's entry without its field: one row; its left edge lines up with the views' icons (1 + 14 = 15 px). */
+.v2 .st-ask.st-ledge{padding:8px 14px 8px 14px;gap:0}
+/* 1 · Atelier / OpenRig breathe: 4 px inside the box (was 2), rows 30 px (was 28), 10 px sides (was 8). */
+.v2 .st-views{padding:4px;gap:2px;margin:10px 10px 8px}
+.v2.st .st-views button{height:30px;padding:0 10px;gap:9px}
+/* 4 · Projets / Rigs: out of the scrolling list, right under the views, same margins, same 4 px inside → same width. */
+.v2 .st-grouping{margin:0 10px 8px;padding:4px;flex:none}
+.v2.st .st-grouping button{height:26px}
+/* 2 · Rigs' header carries icons like Projets' (.st-label .st-icon, unchanged). Rig row « + » appears on hover (.st-acts, unchanged). */
+/* 7 · Kernel, the operational layer: a tinted box (kernel violet), same outer edges as the views and the toggle
+   (the list's 8 px + 2 px = 10 px), 4 px inside like them. Its header gains « opérationnel » on the right. */
+.st-kernel-box{--kv:#8b5cf6;margin:0 2px;padding:2px 4px 4px;border:1px solid color-mix(in srgb,var(--kv) 34%,var(--border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--kv) 7%,var(--sidebar))}
+.th-dark .st-kernel-box{--kv:#a78bfa;background:color-mix(in srgb,var(--kv) 9%,var(--sidebar))}
+.st-kernel-box .st-label{padding:0 6px 0 6px}
+.st-kernel-box .st-kernel-name{color:var(--sidebar-foreground);font-weight:600}
+.st-kernel-tag{display:flex;align-items:center;gap:5px;font:500 10px 'Geist Mono',monospace;color:color-mix(in srgb,var(--kv) 75%,var(--muted-foreground))}
+.st-kernel-tag i{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.st-kernel-tag[data-state="offline"] i{background:var(--muted-foreground)}
+.ktip{top:28px;right:6px;white-space:pre-line;line-height:16px}
+.st-kernel-box .st-row{padding-left:6px}
+.st-kernel-box .st-row:hover,.st-kernel-box .st-row.sel{background:color-mix(in srgb,var(--kv) 14%,var(--sidebar))}
+/* 3 · Empty states: a quiet box in the list, its one action as an outline button. */
+.st-empty{margin:2px 2px 0;padding:12px 12px 12px;border:1px solid var(--border);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:3px}
+.st-empty strong{font-size:13px;font-weight:500;color:var(--sidebar-foreground);line-height:18px}
+.st-empty p{margin:0;font-size:12px;line-height:17px;color:var(--muted-foreground)}
+.st-empty p.err{color:var(--danger-text)}
+.st .st-empty-btn{margin-top:8px;height:30px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--input);border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--sidebar-foreground);text-align:center}
+.st .st-empty-btn:hover,.st .st-empty-btn.hover{background:var(--sidebar-accent)}
+.st .st-empty-btn[disabled]{opacity:1;color:var(--muted-foreground);cursor:default}
+.st .st-empty-link{margin-top:4px;align-self:center;font-size:11px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:2px}
+.st-spin{width:12px;height:12px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:ledge-spin .9s linear infinite}
+@keyframes ledge-spin{to{transform:rotate(360deg)}}
+
+/* ===== Mockup furniture (not part of the spec) ===== */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:'Geist',system-ui,sans-serif;font-size:14px;line-height:20px;background:#e9e7e2;color:#1b1b1b}
+.page{max-width:1500px;margin:0 auto;padding:36px 32px 80px}
+h1{font-size:26px;line-height:32px;margin:0 0 6px;font-weight:650;letter-spacing:-.01em}
+h2{font-size:18px;margin:44px 0 4px;font-weight:600}
+.lead{max-width:860px;color:#4b4b4b;margin:0}
+.sec-note{max-width:900px;color:#555;margin:0 0 16px;font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.frame{display:flex;flex-direction:column;gap:8px}
+.cap{font:500 12px 'Geist Mono',monospace;color:#555;display:flex;gap:8px;align-items:center}
+.cap b{font-family:'Geist',sans-serif;font-weight:600;color:#1b1b1b;font-size:13px}
+.tag{font:500 10px 'Geist Mono',monospace;padding:1px 6px;border-radius:999px;border:1px solid #bbb;color:#555}
+.tag.after{border-color:#b4312a;color:#b4312a}
+.win{position:relative;height:660px;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(0,0,0,.12);display:flex}
+.win.short{height:600px}
+.win .sidebar.st{height:100%;font-family:'Geist',system-ui,sans-serif;font-size:14px;line-height:20px;color:var(--sidebar-foreground)}
+.win .canvas{width:56px;background:var(--background)}
+.pin{position:absolute;z-index:5;width:18px;height:18px;border-radius:50%;background:#e0322a;color:#fff;font:700 10px/18px 'Geist',sans-serif;text-align:center;box-shadow:0 0 0 2px #fff}
+.legend{max-width:360px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:19px;padding-top:28px}
+.legend div{display:flex;gap:10px}
+.legend kbd.k,.sheet kbd{border:1px solid #ccc;background:#fff;color:#555;border-radius:4px;padding:0 4px;font:10px 'Geist Mono',monospace}
+.legend .n{flex:none;width:18px;height:18px;border-radius:50%;background:#e0322a;color:#fff;font:700 10px/18px 'Geist',sans-serif;text-align:center;margin-top:1px}
+.zoom{overflow:hidden;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(0,0,0,.12)}
+.zoom .inner{transform:scale(2);transform-origin:0 0}
+.tip{position:absolute;z-index:6;padding:5px 8px;border-radius:6px;background:var(--popover,#222);color:var(--popover-foreground,#eee);border:1px solid var(--border);font-size:11px;line-height:14px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.force-hover{background:var(--sidebar-accent)!important;color:var(--sidebar-foreground)!important}
+.force-hover .st-acts{display:flex!important}
+.st-icon.force-hover{background:var(--sidebar-accent)}
+/* Simplified session bots (the app draws them with SessionBot; only their place matters here). */
+.bot{width:18px;height:18px;position:relative;display:inline-block}
+.bot::before{content:"";position:absolute;inset:1px 1px 3px;border-radius:5px 5px 4px 4px;background:linear-gradient(var(--bt,#d58a62),var(--bb,#a65a3a))}
+.bot::after{content:"";position:absolute;left:4px;right:4px;top:5px;height:4px;border-radius:2px;background:#1b2224;box-shadow:inset 2px 0 0 -.5px var(--e,#a9dfc7),inset -2px 0 0 -.5px var(--e,#a9dfc7)}
+.bot.codex{--bt:#8189ea;--bb:#5359c4}
+.bot.work{--e:#90c7f2}.bot.ap{--e:#f2b09c}.bot.q{--e:#f6d487}
+.mascot{width:22px;height:22px;border-radius:7px 7px 5px 5px;background:linear-gradient(#c43a32,#8e1f1a);position:relative;display:inline-block}
+.mascot::after{content:"";position:absolute;left:5px;right:5px;top:8px;height:5px;border-radius:3px;background:#1b1414;box-shadow:inset 3px 0 0 -1px #ffb0a6,inset -3px 0 0 -1px #ffb0a6}
+kbd.k{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:4px;border:1px solid var(--border);background:var(--background);color:var(--muted-foreground);font:10px 'Geist Mono',monospace}
+/* Fiche */
+.sheet{max-width:1100px;background:#fff;border-radius:10px;padding:24px 28px;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.sheet h3{font-size:15px;margin:22px 0 8px}
+.sheet h3:first-child{margin-top:0}
+.sheet table{border-collapse:collapse;width:100%;font-size:12.5px;line-height:17px}
+.sheet th,.sheet td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left;vertical-align:top}
+.sheet th{font-weight:600;color:#555;background:#faf9f7}
+.sheet code{font:11.5px 'Geist Mono',monospace;background:#f4f2ee;padding:1px 4px;border-radius:4px}
+.sheet ul,.sheet ol{margin:0;padding-left:20px;font-size:13px;line-height:20px}
+.sheet li{margin:3px 0}
+.q{background:#fff5f4;border:1px solid #f3c9c5;border-radius:8px;padding:12px 16px}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Sidebar Desktop : sept ajustements</h1>
+  <p class="lead">Demande de l'utilisateur du 2 novembre 2026, traitée sur la ligne <code>qitem-20261102183714</code>. La maquette reprend
+    les vrais tokens Lyssaën et la vraie <code>sidebar.css</code> (main 0c47f61b). « Avant » est le rendu actuel, « Après » ajoute
+    seulement le bloc CSS <code>.v2</code> en tête du fichier. Les mascottes sont simplifiées : seule leur place compte ici.</p>
+
+  <h2>1. Avant / après, onglet Rigs (l'état de la capture)</h2>
+  <p class="sec-note">Thème sombre, 288 px de large (fenêtre de plus de 1250 px de large).</p>
+  <div class="row" id="s-compare"></div>
+
+  <h2>2. Après, thème clair, et l'onglet Projets</h2>
+  <p class="sec-note">L'onglet Projets ne change pas, sauf ce qui l'entoure : l'entrée Ledge, le bloc Atelier/OpenRig et le sélecteur.</p>
+  <div class="row" id="s-light"></div>
+
+  <h2>3. Les options de l'en-tête « Rigs » (zoom ×2)</h2>
+  <p class="sec-note">Les mêmes boutons que pour « Projets », sauf « masquer les terminées » : un siège terminé n'est déjà pas affiché.
+    Le « + » d'un projet ouvre une nouvelle session. Pour un rig, le même « + » ouvre la fenêtre « Changer les sièges »
+    (<code>openrig.reseat</code>, qui existe déjà).</p>
+  <div class="row" id="s-zoom"></div>
+
+  <h2>4. États vides</h2>
+  <p class="sec-note">« Créer une session » ne concerne que l'onglet Projets. L'onglet Rigs a ses propres états, qui suivent OpenRig.
+    Le sélecteur Projets/Rigs reste visible même sans rig : sinon ces états n'auraient pas d'endroit où s'afficher.</p>
+  <div class="row" id="s-empty"></div>
+
+  <h2>4 bis. États multi-machines (nés des revues)</h2>
+  <p class="sec-note">Complément du 2 novembre, validé à 20 h 11 avec deux ajustements (« hors ligne · n/m », phrase de l'état 3). Ces trois états existent déjà dans l'implémentation (<code>feat/sidebar-tidy</code> f2a01506) ; ils sont dessinés tels quels. Les écrans au-dessus ne changent pas.
+    (1) Kernel sur deux machines, EC2 injoignable : le pire état gagne (arrêté &gt; hors ligne &gt; démarrage &gt; opérationnel), donc « hors ligne · n/m » (n machines du Kernel hors ligne sur m) avec un point gris. L'infobulle donne une ligne par machine ; les sièges d'EC2 sont grisés, avec « hors ligne ».
+    (2) Au chargement, tant que toutes les machines du Kernel n'ont pas répondu : « Kernel » seul, sans point ni mot.
+    (3) Aucun daemon actif, OpenRig installé seulement sur une machine distante : « OpenRig est arrêté. », « Il est installé sur {machine} : démarre-le depuis sa page. », puis le lien « Ouvrir la page OpenRig ». Pas de bouton Démarrer : la sidebar ne démarre que la machine locale.</p>
+  <div class="row" id="s-multi"></div>
+
+  <h2>5. Anglais</h2>
+  <div class="row" id="s-en"></div>
+
+  <h2>6. Fiche de passation</h2>
+  <div class="sheet">
+    <h3>Ce qui change (dans l'ordre de la demande)</h3>
+    <table>
+      <tr><th>#</th><th>Point</th><th>Avant</th><th>Après</th></tr>
+      <tr><td>1</td><td>Bloc Atelier / OpenRig</td><td><code>.st-views</code> padding 2 px ; boutons 28 px de haut, 8 px sur les côtés, 7 px entre icône et texte ; marge 10/10/6</td><td>padding 4 px ; boutons 30 px de haut, 10 px sur les côtés, 9 px entre icône et texte ; marge 10/10/8</td></tr>
+      <tr><td>2</td><td>En-tête « Rigs »</td><td>Libellé seul</td><td>Mêmes <code>.st-icon</code> que Projets : <b>Mode compact (D)</b>, <b>Tout replier</b>, <b>+ Lancer un rig…</b>. Au survol d'une ligne de rig : <b>+</b> = « Changer les sièges de &lt;rig&gt; »</td></tr>
+      <tr><td>3</td><td>États vides</td><td>Projets : liste vide, sans rien. Rigs : l'onglet n'existe pas tant qu'aucun siège ne tourne.</td><td>Un encadré avec une phrase et un bouton : Créer une session · Démarrer OpenRig · Lancer un rig… (et : démarrage en cours, échec, OpenRig absent)</td></tr>
+      <tr><td>4</td><td>Sélecteur Projets/Rigs</td><td>Dans la liste qui défile, sous « À toi » ; marges 6/10 en plus des 8 px de la liste, donc 16 px plus étroit que le bloc Atelier</td><td>Hors de la liste, juste sous le bloc Atelier/OpenRig, mêmes marges latérales (10 px) et même padding (4 px) : <b>exactement la même largeur</b>, et il ne défile plus</td></tr>
+      <tr><td>5</td><td>Entrée Ledge</td><td>Mascotte, « Ledge. », « N à toi », <kbd>/</kbd>, et le champ « Demander à Ledge… » en dessous</td><td>Le champ disparaît, l'entrée reste (clic ou <kbd>/</kbd> ouvre l'accueil Ledge). Le bloc fait une seule ligne ; son bord gauche est aligné sur les icônes Atelier/OpenRig (15 px)</td></tr>
+      <tr><td>6</td><td>Ordre de l'onglet Rigs</td><td>Rigs, puis Kernel</td><td><b>Kernel en premier</b> (Nova, Max, Rex), puis Rigs avec ses options</td></tr>
+      <tr><td>7</td><td>Encadré du Kernel</td><td>Libellé gris « Kernel » et ses lignes, sans fond</td><td><code>.st-kernel-box</code> : marges 0 2 px dans la liste (bord à 10 px, comme le bloc Atelier et le sélecteur), padding 2/4/4 px, rayon <code>--radius-md</code>, bordure violet 34 % mêlé à <code>--border</code>, fond violet 7 % (9 % en sombre) sur <code>--sidebar</code> ; violet = <code>#8b5cf6</code> (clair) / <code>#a78bfa</code> (sombre), celui de <code>.st-kernel-hex</code>. En-tête : « Kernel » en gras, à droite <code>● opérationnel</code> (point <code>--success</code>, mono 10 px). Survol / sélection d'un siège : violet 14 %. Pas de « + » ni d'icônes dans cet en-tête.</td></tr>
+    </table>
+
+    <h3>Textes FR / EN</h3>
+    <table>
+      <tr><th>Clé proposée</th><th>FR</th><th>EN</th></tr>
+      <tr><td><code>side.kernelTag</code></td><td>opérationnel</td><td>operational</td></tr>
+      <tr><td><code>side.kernelOffline(n, m)</code></td><td>hors ligne · {n}/{m}</td><td>offline · {n}/{m}</td></tr>
+      <tr><td><code>side.empty.stoppedElsewhere(machine)</code></td><td>Il est installé sur {machine} : démarre-le depuis sa page.</td><td>It’s installed on {machine}: start it from its page.</td></tr>
+      <tr><td><code>side.empty.sessions</code></td><td>Aucune session pour l'instant.</td><td>No session yet.</td></tr>
+      <tr><td><code>side.empty.sessionsBody</code></td><td>Une session lance un agent dans un dossier ou un projet.</td><td>A session runs an agent in a folder or a project.</td></tr>
+      <tr><td><code>side.empty.newSession</code></td><td>Créer une session</td><td>Create a session</td></tr>
+      <tr><td><code>side.empty.stopped</code></td><td>OpenRig est arrêté.</td><td>OpenRig is stopped.</td></tr>
+      <tr><td><code>side.empty.stoppedBody</code></td><td>Le démarrer lance aussi le kernel : l'opérateur, l'advisor et la file.</td><td>Starting it also starts the kernel: the operator, the advisor and the queue.</td></tr>
+      <tr><td><code>side.empty.start</code></td><td>Démarrer OpenRig</td><td>Start OpenRig</td></tr>
+      <tr><td><code>side.empty.starting</code></td><td>Démarrage d'OpenRig…</td><td>Starting OpenRig…</td></tr>
+      <tr><td><code>side.empty.retry</code></td><td>Réessayer</td><td>Retry</td></tr>
+      <tr><td><code>side.empty.openPage</code></td><td>Ouvrir la page OpenRig</td><td>Open the OpenRig page</td></tr>
+      <tr><td><code>side.empty.noRig</code></td><td>Aucun rig pour l'instant.</td><td>No rig yet.</td></tr>
+      <tr><td><code>side.empty.noRigBody</code></td><td>Un rig est une équipe d'agents. Max, l'opérateur du kernel, peut t'aider à en composer un.<br><small>(nom = siège opérateur du kernel ; sans opérateur, deuxième phrase omise)</small></td><td>A rig is a team of agents. Max, the kernel's operator, can help you put one together.</td></tr>
+      <tr><td>existantes</td><td colspan="2"><code>openrig.launch.open</code> (Lancer un rig… / Launch a rig…) · <code>openrig.failed(why)</code> (Échec : … / Failed: …) ·
+        <code>openrig.notInstalledTitle</code>, <code>openrig.notInstalled</code>, <code>openrig.howToInstall</code> · <code>side.dense</code>, <code>side.foldAll</code> ·
+        <code>openrig.reseat.openLabel(rig)</code> (Changer les sièges de … / Change …'s seats)</td></tr>
+    </table>
+
+    <h3>Comportements</h3>
+    <ul>
+      <li><b>Créer une session</b> : ouvre la fenêtre « Lancer » sans projet présélectionné (comme <code>onLaunch()</code> sans argument).</li>
+      <li><b>Démarrer OpenRig</b> : la même action que « Démarrer » du daemon sur la page OpenRig (daemon et kernel), sur la machine locale. Pendant
+        le démarrage, le bouton est désactivé, avec une roue et « Démarrage d'OpenRig… ». En cas d'échec : la raison en rouge, « Réessayer », et un lien
+        « Ouvrir la page OpenRig » (journal). Quand le kernel arrive, ses sièges apparaissent et l'encadré passe à « Aucun rig ».</li>
+      <li><b>Lancer un rig…</b> (bouton de l'encadré et « + » de l'en-tête Rigs) : ouvre la fenêtre de lancement de rig qui existe déjà (<code>openrig.launch</code>).</li>
+      <li><b>« + » au survol d'une ligne de rig</b> : ouvre « Changer les sièges » de ce rig. Il se place comme le « + » d'un projet (<code>.st-acts</code>, visible au survol et au focus).</li>
+      <li><b>Mode compact (D)</b> : la même préférence que pour Projets (<code>prefs.dense</code>), qui s'applique déjà aux lignes de sièges. Il s'allume à l'identique dans les deux en-têtes.</li>
+      <li><b>Tout replier</b> : replie tous les rigs (le Kernel ne se replie pas aujourd'hui, et ça ne change pas).</li>
+      <li><b>Sélecteur</b> : visible dès qu'OpenRig est installé sur une machine suivie, même sans siège (aujourd'hui, il faut au moins un siège vivant). Clavier inchangé.</li>
+      <li><b>Raccourci <kbd>/</kbd></b> : ouvre déjà l'accueil Ledge (<code>nav/useKeys.ts</code>) et ne dépend pas du champ ; <kbd>Ctrl</kbd>+<kbd>/</kbd> ouvre toujours le chat.
+        Le champ retiré emporte <code>data-ask-input</code>, que rien d'autre n'utilise, et l'état <code>ask</code> de Sidebar.tsx.</li>
+      <li><b>Fenêtre étroite (rail de 64 px, moins de 850 px)</b> : les encadrés vides sont masqués, comme <code>.st-help</code>. Le sélecteur garde le comportement d'aujourd'hui.</li>
+    </ul>
+
+    <h3>Questions ouvertes pour l'utilisateur</h3>
+    <div class="q"><ol>
+      <li><b>Options de Rigs</b> : en-tête = compact, tout replier, « + Lancer un rig… » ; « + » sur la ligne d'un rig = changer ses sièges ; pas de « masquer les terminées ». Ça te va ?</li>
+      <li><b>« Lever » ou « Lancer » un rig ?</b> L'app dit déjà « Lancer un rig… » partout ; je recommande de garder ce mot.</li>
+      <li><b>Sélecteur hors de la liste</b> : pour avoir vraiment la même largeur que le bloc Atelier, je le sors de la liste qui défile (sinon la barre
+        de défilement le rétrécit dès que la liste est longue). Il passe donc au-dessus de « À toi » au lieu d'en dessous. OK ?</li>
+      <li><b>OpenRig absent de la machine</b> : je recommande de cacher l'onglet Rigs (comme aujourd'hui). La variante « OpenRig n'est pas installé + Comment l'installer »
+        est dessinée (section 4) si tu préfères le montrer.</li>
+      <li><b>« opérationnel »</b> dans l'en-tête du Kernel : il dit que c'est la couche qui fait tourner les rigs. Le point vert disparaît (et le mot passe à « arrêté ») si un siège du kernel tombe ? Je propose de garder seulement le mot, sans état, si tu préfères qu'il reste une étiquette.</li>
+      <li><b>Plusieurs machines</b> : « Démarrer OpenRig » démarre la machine locale ; l'encadré n'apparaît que si aucune machine suivie n'a de daemon actif. D'accord ?</li>
+    </ol></div>
+  </div>
+</div>
+
+<script>
+const P = {
+  grid: ['M3 3h7v7H3z','M14 3h7v7h-7z','M3 14h7v7H3z','M14 14h7v7h-7z'],
+  rig: ['M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5z','M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7'],
+  dense: ['M4 4h16','M4 8h16','M4 12h16','M4 16h16','M4 20h16'],
+  eyeOff: ['M9.9 9.9a3 3 0 1 0 4.2 4.2','M10.7 5.1A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13 13 0 0 1-1.7 2.7','M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6','M2 2l20 20'],
+  fold: ['m7 20 5-5 5 5','m7 4 5 5 5-5'],
+  plus: ['M12 5v14','M5 12h14'],
+  chev: ['m9 18 6-6-6-6'],
+  help: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6','M12 17h.01'],
+  gear: ['M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z','M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6'],
+  archive: ['M3 4h18v4H3z','M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8','M10 12h4'],
+  play: ['M7 4.5v15l12-7.5z'],
+  branch: ['M6 3v12','M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6','M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6','M18 9a9 9 0 0 1-9 9']
+};
+const ic = (d, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d.map(x => `<path d="${x}"/>`).join('')}</svg>`;
+
+const T = {
+  fr: { ledgeLine: n => `${n} à toi`, ask: 'Demander à Ledge…', atelier: 'Atelier', active: n => `${n} actifs`, openrig: 'OpenRig', projects: 'Projets', rigs: 'Rigs', kernel: 'Kernel', kernelTag: 'opérationnel', offline: 'hors ligne', kernelOffline: (n, m) => `hors ligne · ${n}/${m}`, stoppedElsewhere: mc => `Il est installé sur ${mc} : démarre-le depuis sa page.`, archives: 'Archives',
+    dense: 'Mode compact (D)', foldAll: 'Tout replier', hideDone: 'Masquer les sessions terminées (H)', newProject: 'Nouveau projet', launchRig: 'Lancer un rig…', reseat: r => `Changer les sièges de ${r}`,
+    emptySessions: 'Aucune session pour l’instant.', emptySessionsBody: 'Une session lance un agent dans un dossier ou un projet.', newSession: 'Créer une session',
+    stopped: 'OpenRig est arrêté.', stoppedBody: 'Le démarrer lance aussi le kernel : l’opérateur, l’advisor et la file.', start: 'Démarrer OpenRig', starting: 'Démarrage d’OpenRig…',
+    failed: w => `Échec : ${w}`, retry: 'Réessayer', openPage: 'Ouvrir la page OpenRig',
+    noRig: 'Aucun rig pour l’instant.', noRigBody: 'Un rig est une équipe d’agents. Max, l’opérateur du kernel, peut t’aider à en composer un.',
+    notInstalledTitle: 'OpenRig n’est pas installé', notInstalled: 'La commande rig est introuvable sur cette machine. Ledge n’installe rien lui-même.', howToInstall: 'Comment l’installer',
+    why: 'le port 7433 est déjà utilisé' },
+  en: { ledgeLine: n => `${n} yours`, ask: 'Ask Ledge…', atelier: 'Atelier', active: n => `${n} active`, openrig: 'OpenRig', projects: 'Projects', rigs: 'Rigs', kernel: 'Kernel', kernelTag: 'operational', offline: 'offline', kernelOffline: (n, m) => `offline · ${n}/${m}`, stoppedElsewhere: mc => `It’s installed on ${mc}: start it from its page.`, archives: 'Archives',
+    dense: 'Compact mode (D)', foldAll: 'Fold all', hideDone: 'Hide finished sessions (H)', newProject: 'New project', launchRig: 'Launch a rig…', reseat: r => `Change ${r}’s seats`,
+    emptySessions: 'No session yet.', emptySessionsBody: 'A session runs an agent in a folder or a project.', newSession: 'Create a session',
+    stopped: 'OpenRig is stopped.', stoppedBody: 'Starting it also starts the kernel: the operator, the advisor and the queue.', start: 'Start OpenRig', starting: 'Starting OpenRig…',
+    failed: w => `Failed: ${w}`, retry: 'Retry', openPage: 'Open the OpenRig page',
+    noRig: 'No rig yet.', noRigBody: 'A rig is a team of agents. Max, the kernel’s operator, can help you put one together.',
+    notInstalledTitle: 'OpenRig is not installed', notInstalled: 'The rig command is not found on this machine. Ledge installs nothing itself.', howToInstall: 'How to install it',
+    why: 'port 7433 is already in use' }
+};
+
+const RIG = [['Bix','pilot','claude','work',true],['Lu','design.ux','claude'],['Ida','dev.front','claude','work'],['Pim','review.qa','codex'],['Pim','dev.back','claude']];
+const KERNEL = [['Nova','advisor','claude'],['Max','operator','claude',null,true],['Rex','queue','claude']];
+
+const seat = (s, depth) => `<div class="st-row st-agent${s[4] ? ' sel' : ''}" style="--d:${depth}"><span class="st-gap"></span><span class="st-bot"><i class="bot ${s[2] === 'codex' ? 'codex' : ''} ${s[3] || ''}"></i></span><button class="st-main"><strong>${s[0]}</strong><span class="mono">${s[1]} · ${s[2]}</span></button><span class="st-time"></span></div>`;
+const label = (t, icons = '') => `<div class="st-label">${t}<span class="st-fill"></span>${icons}</div>`;
+const kernelLabel = t => `<div class="st-label"><span class="st-kernel-hex">${ic(P.rig, 12)}</span><span>${t.kernel}</span><span class="st-fill"></span></div>`;
+const rigIcons = (t, o = {}) => `<button class="st-icon${o.dense ? ' on' : ''}${o.hover === 'dense' ? ' force-hover' : ''}" data-k="dense" title="${t.dense}">${ic(P.dense)}</button><button class="st-icon" data-k="fold" title="${t.foldAll}">${ic(P.fold)}</button><button class="st-icon${o.hover === 'launch' ? ' force-hover' : ''}" data-k="launch" title="${t.launchRig}">${ic(P.plus)}</button>`;
+const rigRow = (t, o = {}) => `<div class="st-row st-project st-rig${o.hoverRig ? ' force-hover' : ''}" style="--d:0" data-k="rigrow"><button class="st-chev"><span class="open">${ic(P.chev, 12)}</span></button><span class="st-rig-hex">${ic(P.rig, 13)}</span><button class="st-main"><strong>ledge-dev</strong><span class="mono">ledge</span></button><span class="st-tally"><span class="t-work"><i></i>2</span></span>${o.after ? `<span class="st-acts"><button data-k="reseat" title="${t.reseat('ledge-dev')}">${ic(P.plus, 13)}</button></span>` : ''}</div>`;
+const kernelSec = (t, boxed) => boxed
+  ? `<section class="st-kernel-box" data-k="kernelbox"><div class="st-label"><span class="st-kernel-hex">${ic(P.rig, 12)}</span><span class="st-kernel-name">${t.kernel}</span><span class="st-fill"></span><span class="st-kernel-tag"><i></i>${t.kernelTag}</span></div><div>${KERNEL.map(s => seat(s, 0)).join('')}</div></section>`
+  : `<section>${kernelLabel(t)}<div>${KERNEL.map(s => seat(s, 0)).join('')}</div></section>`;
+/* 8 · Multi-machine states (reference: feat/sidebar-tidy f2a01506). The kernel's seats on two machines: WSL (read) and EC2. */
+const KERNEL_EC2 = [['Ada','advisor','claude'],['Sol','operator','claude']];
+const offSeat = s => `<div class="st-row st-agent off" style="--d:0"><span class="st-gap"></span><span class="st-bot"><i class="bot" style="opacity:.5"></i></span><button class="st-main"><strong>${s[0]}</strong><span class="mono">${s[1]} · ${s[2]}</span></button><span class="st-time">${'{off}'}</span></div>`;
+const kernelMulti = (t, mode, tip) => {
+  const tag = mode === 'offline' ? `<span class="st-kernel-tag" data-state="offline" data-k="ktag"><i></i>${t.kernelOffline(1, 2)}</span>` : '';
+  const ec2 = mode === 'offline' ? KERNEL_EC2.map(s => offSeat(s).replace('{off}', t.offline)).join('') : '';
+  const tipHtml = tip && mode === 'offline' ? `<div class="tip ktip">WSL · ${t.kernelTag}<br>EC2 · ${t.offline}</div>` : '';
+  return `<section class="st-kernel-box" data-k="kernelbox" style="position:relative"><div class="st-label"><span class="st-kernel-hex">${ic(P.rig, 12)}</span><span class="st-kernel-name">${t.kernel}</span><span class="st-fill"></span>${tag}</div>${tipHtml}<div>${KERNEL.map(s => seat(s, 0)).join('')}${ec2}</div></section>`;
+};
+const rigsSec = (t, o) => `<section>${label(`<span>${t.rigs}</span>`, o.after ? rigIcons(t, o) : '')}<div>${rigRow(t, o)}${RIG.map(s => seat(s, 1)).join('')}</div></section>`;
+
+const projectsTree = t => `<section>${label(`<span>${t.projects}</span>`, `<button class="st-icon" title="${t.hideDone}">${ic(P.eyeOff)}</button><button class="st-icon" title="${t.dense}">${ic(P.dense)}</button><button class="st-icon" title="${t.foldAll}">${ic(P.fold)}</button><button class="st-icon" title="${t.newProject}">${ic(P.plus)}</button>`)}
+<div class="st-tree">
+<div class="st-row st-project" style="--d:0"><button class="st-chev"><span class="open">${ic(P.chev, 12)}</span></button><span class="side-swatch" style="background:#e0322a"></span><button class="st-main"><strong>Ledge</strong><span class="mono">ledge</span></button><span class="st-tally"><span class="t-need"><i></i>1</span><span class="t-work"><i></i>2</span></span></div>
+<div class="st-row st-branch" style="--d:1"><button class="st-chev"><span class="open">${ic(P.chev, 12)}</span></button>${ic(P.branch, 13)}<button class="st-main mono"><span>main</span></button><span class="st-fill"></span><span class="st-count">2</span></div>
+<div class="st-row st-agent" style="--d:2"><span class="st-gap"></span><span class="st-bot"><i class="bot ap"></i></span><button class="st-main"><strong>Otto</strong><span>Slash commands sur mobile</span></button><span class="st-time t-approval">2 min</span></div>
+<div class="st-row st-agent sel" style="--d:2"><span class="st-gap"></span><span class="st-bot"><i class="bot work"></i></span><button class="st-main"><strong>Plume</strong><span>Musique dans l’encoche</span></button><span class="st-time">1 h</span></div>
+<div class="st-row st-branch" style="--d:1"><button class="st-chev"><span class="open">${ic(P.chev, 12)}</span></button>${ic(P.branch, 13)}<button class="st-main mono"><span>feat/mobile-terminal</span></button><span class="st-wt">wt</span><span class="st-fill"></span><span class="st-count">1</span></div>
+<div class="st-row st-agent" style="--d:2"><span class="st-gap"></span><span class="st-bot"><i class="bot codex work"></i></span><button class="st-main"><strong>Vega</strong><span>Terminal dans l’app mobile</span></button><span class="st-time">4 min</span></div>
+<div class="st-row st-project" style="--d:0"><button class="st-chev"><span>${ic(P.chev, 12)}</span></button><span class="side-swatch" style="background:#2563eb"></span><button class="st-main"><strong>Synapse</strong><span class="mono">enterprise-solution-front</span></button><span class="st-tally"><span class="t-done"><i></i>3</span></span></div>
+</div></section>`;
+
+const empty = (t, kind) => {
+  const btn = (txt, icon, extra = '') => `<button class="st-empty-btn" ${extra}>${icon}${txt}</button>`;
+  switch (kind) {
+    case 'sessions': return `<div class="st-empty" data-k="empty"><strong>${t.emptySessions}</strong><p>${t.emptySessionsBody}</p>${btn(t.newSession, ic(P.plus, 13))}</div>`;
+    case 'stopped': return `<div class="st-empty" data-k="empty"><strong>${t.stopped}</strong><p>${t.stoppedBody}</p>${btn(t.start, ic(P.play, 12))}</div>`;
+    case 'starting': return `<div class="st-empty" data-k="empty"><strong>${t.stopped}</strong><p>${t.stoppedBody}</p>${btn(t.starting, '<i class="st-spin"></i>', 'disabled')}</div>`;
+    case 'failed': return `<div class="st-empty" data-k="empty"><strong>${t.stopped}</strong><p class="err">${t.failed(t.why)}</p>${btn(t.retry, ic(P.play, 12))}<button class="st-empty-link">${t.openPage}</button></div>`;
+    case 'norig': return `<div class="st-empty" data-k="empty"><strong>${t.noRig}</strong><p>${t.noRigBody}</p>${btn(t.launchRig, ic(P.plus, 13))}</div>`;
+    case 'remote': return `<div class="st-empty" data-k="empty" role="status"><strong>${t.stopped}</strong><p>${t.stoppedElsewhere('EC2')}</p><button class="st-empty-link">${t.openPage}</button></div>`;
+    case 'absent': return `<div class="st-empty" data-k="empty"><strong>${t.notInstalledTitle}</strong><p>${t.notInstalled}</p>${btn(t.howToInstall, '')}</div>`;
+  }
+};
+
+function sidebar(o) {
+  const t = T[o.lang || 'fr'];
+  const after = o.v === 'after';
+  if (o.dense === undefined) o.dense = true;
+  const tab = o.tab || 'rigs';
+  const toggle = o.noToggle ? '' : `<div class="st-grouping" data-k="toggle">${['projects', 'rigs'].map(g => `<button aria-checked="${g === tab}">${t[g]}</button>`).join('')}</div>`;
+  const ledge = `<div class="st-ask st-ledge" data-k="ledge"><button class="st-ledge-entry"><span class="st-mascot"><i class="mascot"></i></span><span class="st-ledge-names"><span class="st-ledge-brand">Ledge<span style="color:var(--sidebar-primary)">.</span></span><small class="st-ledge-line">${t.ledgeLine(o.yours ?? 0)}</small></span><kbd class="k">/</kbd></button>${after ? '' : `<input type="text" placeholder="${t.ask}">`}</div>`;
+  const views = `<nav class="st-views" data-k="views"><button class="${o.atelier ? 'on' : ''}">${ic(P.grid, 13)}<span>${t.atelier}</span><span class="st-fill"></span><small>${t.active(o.active ?? 9)}</small></button><button class="${o.openrigOn ? 'on' : ''}">${ic(P.rig, 13)}<span>${t.openrig}</span></button></nav>`;
+  let body = '';
+  if (tab === 'projects') body = o.state === 'empty' ? `<section>${label(`<span>${t.projects}</span>`, `<button class="st-icon" title="${t.newProject}">${ic(P.plus)}</button>`)}${empty(t, 'sessions')}</section>` : projectsTree(t);
+  else if (!after) body = rigsSec(t, Object.assign({}, o, { after: false })) + kernelSec(t);
+  else if (o.state === 'stopped' || o.state === 'starting' || o.state === 'failed' || o.state === 'absent' || o.state === 'remote') body = empty(t, o.state);
+  else if (o.state === 'kOffline' || o.state === 'kLoading') body = kernelMulti(t, o.state === 'kOffline' ? 'offline' : 'loading', o.tip) + rigsSec(t, Object.assign({}, o, { after: true }));
+  else if (o.state === 'norig') body = kernelSec(t, true) + `<section>${label(`<span>${t.rigs}</span>`, rigIcons(t, Object.assign({}, o, { dense: o.dense })))}${empty(t, 'norig')}</section>`;
+  else body = kernelSec(t, true) + rigsSec(t, Object.assign({}, o, { after: true }));
+  const archives = `<div class="st-archives"><button class="st-arch-toggle"><span>${ic(P.chev, 12)}</span>${ic(P.archive, 13)} ${t.archives} <small>${o.archived ?? 149}</small></button></div>`;
+  const foot = `<div class="st-foot"><button class="st-mach"><i class="machine-dot"></i>WSL<small>${o.machineCount ?? 9}</small></button>${o.ec2 ? `<button class="st-mach"><i class="machine-dot${o.ec2 === 'off' ? ' off' : ''}"></i>EC2${o.ec2 === 'off' ? '' : `<small>${o.ec2}</small>`}</button>` : ''}<span class="st-fill"></span><button class="st-icon">${ic(P.help, 15)}</button><button class="st-icon">${ic(P.gear, 15)}</button></div>`;
+  const scroll = `<div class="st-scroll">${after ? '' : toggle}${body}${archives}</div>`;
+  return `<aside class="sidebar st${after ? ' v2' : ''}${o.dense ? ' st-dense' : ''}">${ledge}${views}${after ? toggle : ''}${scroll}${foot}</aside>`;
+}
+
+function frame(o) {
+  const cap = `<div class="cap"><b>${o.title}</b>${o.v === 'after' ? '<span class="tag after">après</span>' : o.v === 'before' ? '<span class="tag">avant</span>' : ''}<span>${o.theme === 'dark' ? 'sombre' : 'clair'}${o.lang === 'en' ? ' · EN' : ''}</span></div>`;
+  return `<div class="frame" id="${o.id || ''}">${cap}<div class="win th-${o.theme}${o.short ? ' short' : ''}">${sidebar(o)}<div class="canvas"></div></div></div>`;
+}
+
+document.getElementById('s-compare').innerHTML =
+  frame({ id: 'f-before', title: 'Aujourd’hui', v: 'before', theme: 'dark', yours: 2 }) +
+  frame({ id: 'f-after', title: 'Proposé', v: 'after', theme: 'dark', yours: 2 }) +
+  `<div class="legend">
+    <div><span class="n">1</span><span><b>Atelier / OpenRig</b> respire : 4 px à l’intérieur du bloc, lignes de 30 px, 10 px sur les côtés.</span></div>
+    <div><span class="n">2</span><span><b>« Rigs »</b> reçoit les options de « Projets » : compact, tout replier, <b>+ Lancer un rig…</b>. Au survol d’un rig : <b>+</b> pour changer ses sièges.</span></div>
+    <div><span class="n">4</span><span><b>Projets / Rigs</b> : même largeur et même padding que le bloc du dessus. Il sort de la liste qui défile pour garder cette largeur quand la barre de défilement apparaît.</span></div>
+    <div><span class="n">5</span><span><b>Plus de champ</b> « Demander à Ledge… » : l’entrée Ledge tient sur une ligne. <kbd class="k">/</kbd> ouvre toujours l’accueil Ledge.</span></div>
+    <div><span class="n">6</span><span><b>Kernel en premier</b>, dans un encadré teinté (bordure et fond violets, ceux de son hexagone) : la couche opérationnelle, pas une équipe de travail. Son en-tête gagne « ● opérationnel ». Mêmes bords que le bloc Atelier et le sélecteur.</span></div>
+    <div><span class="n">3</span><span>Les <b>états vides</b> sont en section 4.</span></div>
+  </div>`;
+
+document.getElementById('s-light').innerHTML =
+  frame({ id: 'f-light-rigs', title: 'Rigs', v: 'after', theme: 'light', yours: 2 }) +
+  frame({ id: 'f-light-proj', title: 'Projets', v: 'after', theme: 'light', tab: 'projects', yours: 2, atelier: true }) +
+  frame({ id: 'f-dark-proj', title: 'Projets', v: 'after', theme: 'dark', tab: 'projects', yours: 2 });
+
+document.getElementById('s-zoom').innerHTML =
+  `<div class="frame"><div class="cap"><b>En-tête Rigs, survol de « + »</b><span>sombre</span></div><div class="zoom" style="width:576px;height:260px"><div class="inner" id="z1"></div></div></div>` +
+  `<div class="frame"><div class="cap"><b>Survol d’une ligne de rig</b><span>clair</span></div><div class="zoom" style="width:576px;height:260px"><div class="inner" id="z2"></div></div></div>` +
+  `<div class="frame"><div class="cap"><b>Mode compact éteint</b><span>sombre</span></div><div class="win th-dark short">${sidebar({ v: 'after', theme: 'dark', dense: false, yours: 2 })}<div class="canvas"></div></div></div>`;
+
+document.getElementById('s-empty').innerHTML =
+  frame({ title: 'Projets · aucune session', v: 'after', theme: 'light', tab: 'projects', state: 'empty', active: 0, archived: 12, machineCount: 0, short: true }) +
+  frame({ title: 'Projets · aucune session', v: 'after', theme: 'dark', tab: 'projects', state: 'empty', active: 0, archived: 12, machineCount: 0, short: true }) +
+  frame({ id: 'f-stopped', title: 'Rigs · OpenRig arrêté', v: 'after', theme: 'dark', state: 'stopped', active: 2, machineCount: 2, short: true }) +
+  frame({ title: 'Rigs · démarrage en cours', v: 'after', theme: 'light', state: 'starting', active: 2, machineCount: 2, short: true }) +
+  frame({ title: 'Rigs · échec du démarrage', v: 'after', theme: 'dark', state: 'failed', active: 2, machineCount: 2, short: true }) +
+  frame({ id: 'f-norig', title: 'Rigs · daemon actif, aucun rig', v: 'after', theme: 'dark', state: 'norig', active: 5, machineCount: 5, short: true }) +
+  frame({ title: 'Rigs · daemon actif, aucun rig', v: 'after', theme: 'light', state: 'norig', active: 5, machineCount: 5, short: true }) +
+  frame({ title: 'Rigs · OpenRig absent (variante, Q4)', v: 'after', theme: 'light', state: 'absent', active: 2, machineCount: 2, short: true });
+
+document.getElementById('s-multi').innerHTML =
+  frame({ id: 'f-koff', title: '(1) Kernel · EC2 injoignable, infobulle', v: 'after', theme: 'dark', state: 'kOffline', tip: true, ec2: 'off', machineCount: 8, short: true }) +
+  frame({ title: '(1) Kernel · EC2 injoignable', v: 'after', theme: 'light', state: 'kOffline', ec2: 'off', machineCount: 8, short: true }) +
+  frame({ title: '(2) Kernel · au chargement', v: 'after', theme: 'dark', state: 'kLoading', ec2: '…', machineCount: 8, short: true }) +
+  frame({ title: '(2) Kernel · au chargement', v: 'after', theme: 'light', state: 'kLoading', ec2: '…', machineCount: 8, short: true }) +
+  frame({ title: '(3) OpenRig seulement sur EC2, arrêté', v: 'after', theme: 'dark', state: 'remote', ec2: 2, active: 2, machineCount: 2, short: true }) +
+  frame({ title: '(3) OpenRig seulement sur EC2, arrêté', v: 'after', theme: 'light', state: 'remote', ec2: 2, active: 2, machineCount: 2, short: true }) +
+  frame({ title: '(1) EN', v: 'after', theme: 'dark', lang: 'en', state: 'kOffline', tip: true, ec2: 'off', machineCount: 8, short: true }) +
+  frame({ title: '(3) EN', v: 'after', theme: 'light', lang: 'en', state: 'remote', ec2: 2, active: 2, machineCount: 2, short: true });
+
+document.getElementById('s-en').innerHTML =
+  frame({ title: 'Rigs', v: 'after', theme: 'dark', lang: 'en', yours: 2 }) +
+  frame({ title: 'Rigs · stopped', v: 'after', theme: 'light', lang: 'en', state: 'stopped', active: 2, machineCount: 2, short: true }) +
+  frame({ title: 'Rigs · no rig', v: 'after', theme: 'dark', lang: 'en', state: 'norig', active: 5, machineCount: 5, short: true }) +
+  frame({ title: 'Projects · empty', v: 'after', theme: 'light', lang: 'en', tab: 'projects', state: 'empty', active: 0, archived: 12, machineCount: 0, short: true });
+
+// Zooms: a sidebar cropped around the Rigs header / rig row, with a forced hover and its tooltip.
+function zoom(id, theme, o, anchorSel, tipText, offsetY) {
+  const host = document.getElementById(id);
+  host.innerHTML = `<div class="win th-${theme}" style="height:900px;box-shadow:none;border-radius:0">${sidebar(Object.assign({ v: 'after', theme, yours: 2 }, o))}</div>`;
+  const win = host.firstElementChild;
+  const a = win.querySelector(anchorSel);
+  const r = a.getBoundingClientRect(), w = win.getBoundingClientRect();
+  const s = 2; // the .inner scale
+  const top = (r.top - w.top) / s, left = (r.left - w.left) / s;
+  win.style.transform = `translateY(${-(top - offsetY)}px)`;
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  tip.textContent = tipText;
+  tip.style.top = `${top + 28}px`;
+  win.appendChild(tip);
+  tip.style.left = `${Math.max(4, Math.min(left - 40, 288 - tip.offsetWidth - 4))}px`;
+}
+zoom('z1', 'dark', { hover: 'launch' }, '[data-k="launch"]', T.fr.launchRig, 40);
+zoom('z2', 'light', { hoverRig: true }, '[data-k="reseat"]', T.fr.reseat('ledge-dev'), 40);
+
+// Numbered pins on the « Proposé » frame.
+function pin(frameId, sel, n, dx = 0, dy = 0) {
+  const f = document.getElementById(frameId); if (!f) return;
+  const win = f.querySelector('.win'), el = win.querySelector(sel); if (!el) return;
+  const r = el.getBoundingClientRect(), w = win.getBoundingClientRect();
+  const p = document.createElement('span');
+  p.className = 'pin'; p.textContent = n;
+  p.style.top = `${r.top - w.top + r.height / 2 - 9 + dy}px`;
+  p.style.left = `${Math.min(r.right - w.left + 4 + dx, w.width - 20)}px`;
+  win.appendChild(p);
+}
+const pins = () => {
+  pin('f-after', '[data-k="views"]', 1, 4);
+  pin('f-after', '[data-k="launch"]', 2, 2);
+  pin('f-after', '[data-k="toggle"]', 4, 4);
+  pin('f-after', '[data-k="ledge"]', 5, 4);
+  pin('f-after', '[data-k="kernelbox"]', 6, 4);
+};
+document.fonts.ready.then(pins);
+</script>
+</body>
+</html>
