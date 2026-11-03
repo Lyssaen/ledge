@@ -61,6 +61,9 @@ export function Sidebar(p: {
   const [prefs, setPrefs] = useStored(loadSidebarPrefs, saveSidebarPrefs);
   // The sessions picked with Ctrl/⌘ + click, in the order picked: from two, the bar below writes to them (broadcast spec).
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  // What is folded in the tree and whether the Archives are open: here, so the context menus fold too.
+  const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const [archivesOpen, setArchivesOpen] = useState(false);
   const pick = (id: string) => setPicked(was => {
     const next = new Set(was);
     if (next.has(id)) next.delete(id); else if (next.size < BROADCAST_SESSIONS_MAX) next.add(id);
@@ -181,7 +184,7 @@ export function Sidebar(p: {
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
           }} />
         {!byRig && <section aria-label={t.side.projects}>
-          <Tree groups={shownGroups} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
+          <Tree groups={shownGroups} closed={closed} onClosed={setClosed} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
             hideDone={prefs.hideDone} dense={prefs.dense} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
@@ -199,7 +202,7 @@ export function Sidebar(p: {
         </section>}
         {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
           dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []} />}
-        <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
+        <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
           onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />

@@ -31,6 +31,9 @@ export function Archives(p: {
   projectName: (s: Session) => string;
   project: (s: Session) => Pick<Project, 'color'> | null;
   reveal: number;
+  /** Unfolded: held by the sidebar, so its menu folds too. */
+  open: boolean;
+  onOpenChange(open: boolean): void;
   onRead(id: string): void;
   onRestore(id: string): void;
   onResume(id: string): void;
@@ -39,7 +42,7 @@ export function Archives(p: {
   paused: boolean;
 }): JSX.Element {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const { open, onOpenChange: setOpen } = p;
   const [q, setQ] = useState('');
   const sectionRef = useRef<HTMLElement>(null);
   const reading = p.archived.some(s => s.id === p.current && isArchived(s));
@@ -67,7 +70,7 @@ export function Archives(p: {
   return (
     <section ref={sectionRef} className="st-archives" aria-label={t.side.archives}>
       <div className="st-label">
-        <button type="button" className="st-arch-toggle" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        <button type="button" className="st-arch-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
           <span className={open ? 'open' : undefined}><Icon d={ICONS.chevronRight.d} size={12} /></span>
           <Icon d={SHELL_ICONS.archive} size={13} />{t.side.archives}{p.archived.length > 0 && <small>{p.archived.length}</small>}
         </button>

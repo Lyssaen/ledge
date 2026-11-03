@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import type { Helper, Projects, Session } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { Filing } from '../../atelier/filing';
@@ -17,7 +17,8 @@ const branchIcon = ['M6 3v12', 'M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M6 21a3 3 0
 /** A row the keyboard walks: Left folds it (or goes to its parent), Right unfolds it. `session` is set only for a principal. */
 interface Nav { toggle?: () => void; open?: boolean; parent?: string; session?: Session }
 
-const projectKey = (id: string | null): string => `p:${id ?? 'none'}`;
+/** A project's fold key (« Sans projet »: `p:none`); a branch's is `p:<id>:<branch>`. */
+export const projectKey = (id: string | null): string => `p:${id ?? 'none'}`;
 
 function helperNeeds(s: Session, h: Helper): boolean {
   if (s.offline) return false;
@@ -36,7 +37,7 @@ function placeOf(groups: readonly ProjectGroup[], id: string): { session: Sessio
   return null;
 }
 
-const flip = (set: Set<string>, put: (n: Set<string>) => void, k: string) => {
+const flip = (set: ReadonlySet<string>, put: (n: Set<string>) => void, k: string) => {
   const n = new Set(set);
   if (n.has(k)) n.delete(k); else n.add(k);
   put(n);
@@ -52,6 +53,9 @@ function shortWhen(iso: string, units: { min: string; h: string; d: string }, no
  *  One branch folds into the project. Finished sessions (`isFinished`) hide behind « +N finished » until that row is opened. */
 export function Tree(p: {
   groups: ProjectGroup[];
+  /** What is folded (projects and branches, by `projectKey`): held by the sidebar, so its menus fold too. */
+  closed: ReadonlySet<string>;
+  onClosed: Dispatch<SetStateAction<Set<string>>>;
   sessions: readonly Session[];
   projects: Projects | null;
   current: string | null;
@@ -78,7 +82,7 @@ export function Tree(p: {
   paused: boolean;
 }): JSX.Element {
   const { t } = useI18n();
-  const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const { closed, onClosed: setClosed } = p;
   const [shown, setShown] = useState<Set<string>>(() => new Set());
   const [kids, setKids] = useState<Set<string>>(() => new Set());
   const treeRef = useRef<HTMLDivElement>(null);
