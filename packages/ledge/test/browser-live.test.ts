@@ -130,14 +130,19 @@ function fakeBrowser(pages: { id: string; url: string; title: string }[] = []) {
   const closes: (() => void)[] = [];
   let closed = false, next = 0, shot = 0;
   /** What the next screenshots show: a new image each time unless the page is set to stand still. */
-  const view = { still: null as string | null, hold: false, release: undefined as (() => void) | undefined };
+  const view = { still: null as string | null, hold: false, release: undefined as (() => void) | undefined,
+    /** The next attachToTarget waits for `attached()`. */ holdAttach: false, attached: undefined as (() => void) | undefined };
   const cdp: Cdp = {
     async call(method, params = {}, sessionId) {
       if (!CDP_ALLOWED.has(method)) throw new CdpRefused(method);
       if (closed) throw new Error('CDP connection closed');
       calls.push({ method, params, ...(sessionId ? { sessionId } : {}) });
       if (method === 'Target.getTargets') return { targetInfos: pages.map(p => ({ targetId: p.id, type: 'page', url: p.url, title: p.title })) };
-      if (method === 'Target.attachToTarget') return { sessionId: `S${++next}` };
+      if (method === 'Target.attachToTarget') {
+        const sessionId = `S${++next}`;
+        if (view.holdAttach) { view.holdAttach = false; await new Promise<void>(r => { view.attached = r; }); }
+        return { sessionId };
+      }
       if (method === 'Page.captureScreenshot') {
         const data = view.still ?? `/9j/shot${++shot}`;
         if (view.hold) { const release = new Promise<void>(r => { view.release = r; }); view.hold = false; await release; }
@@ -492,6 +497,33 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
       expect(sent().filter(([d]) => d === '/9j/undated' || d === '/9j/old-late')).toEqual([]);
       b.emit({ method: 'Page.screencastFrame', sessionId: film2, params: { data: '/9j/new', sessionId: 3 } });
       expect(sent().at(-1)).toEqual(['/9j/new', '1.2']);
+      svc.stop();
+    });
+
+    it('a film started anew after a navigation is of the new page, even in the same millisecond; a navigation during its start starts it again', async () => {
+      const { svc, b } = await liveOtto();
+      const { got, sink } = sinkOf();
+      const starts = () => b.calls.filter(c => c.method === 'Page.startScreencast').map(c => c.sessionId!);
+      const sent = () => got.filter(m => m.type === 'browser.frame' && m.live).map(m => m.type === 'browser.frame' ? [m.data, m.page] : []);
+      svc.watch('otto', sink);
+      await vi.waitFor(() => expect(starts()).toHaveLength(1));
+      // The clock does not move: the navigation and the new film share their millisecond.
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/b', 'B');
+      await vi.waitFor(() => expect(starts()).toHaveLength(2));
+      b.emit({ method: 'Page.screencastFrame', sessionId: starts()[1], params: { data: '/9j/b', sessionId: 1 } });
+      expect(sent().at(-1)).toEqual(['/9j/b', '1.1']);
+      // A navigation while the next film is being attached: that film, started on 1.1, is replaced by one on 1.2.
+      b.view.holdAttach = true;
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/c', 'C');
+      await vi.waitFor(() => expect(b.view.attached).toBeTypeOf('function'));
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/d', 'D');
+      b.view.attached!();
+      await vi.waitFor(() => expect(starts().length).toBeGreaterThanOrEqual(4));
+      const stale = starts()[2]!, fresh = starts().at(-1)!;
+      b.emit({ method: 'Page.screencastFrame', sessionId: stale, params: { data: '/9j/stale', sessionId: 2 } });
+      b.emit({ method: 'Page.screencastFrame', sessionId: fresh, params: { data: '/9j/d', sessionId: 3 } });
+      expect(sent().some(([d]) => d === '/9j/stale')).toBe(false);
+      expect(sent().at(-1)).toEqual(['/9j/d', '1.3']);
       svc.stop();
     });
 
