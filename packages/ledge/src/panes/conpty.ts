@@ -6,6 +6,9 @@ import { keyBytes } from './keys.js';
 import { captureLines } from './capture.js';
 import { resolveCommand } from './resolve.js';
 
+/** A text is typed this many characters at a time, SLICE_GAP_MS apart (see `sendText`). */
+const SLICE = 256, SLICE_GAP_MS = 20;
+
 /** One agent: its pseudo-terminal (ConPTY on Windows) and the headless terminal its output is rendered in. */
 interface Pane { pty: IPty; term: xterm.Terminal; exited: Promise<void> }
 
@@ -50,7 +53,13 @@ export function conptyPanes(opts: { cols?: number; rows?: number; spawn?: typeof
     async sendText(name, text) {
       if (/[\r\n]/.test(text)) throw new Error('sendText: text must not contain newlines; flatten it first');
       const p = get(name); if (!p) throw new Error(`no pane ${name}`);
-      p.pty.write(text);
+      // claude.exe on ConPTY keeps only the end of one big write (spike: 267 of 2316 characters left); 256 characters
+      // every 20 ms arrive whole. Sliced by code point, so no surrogate pair is cut.
+      const chars = [...text];
+      for (let i = 0; i < chars.length; i += SLICE) {
+        if (i) await new Promise(r => setTimeout(r, SLICE_GAP_MS));
+        p.pty.write(chars.slice(i, i + SLICE).join(''));
+      }
     },
     async sendKeys(name, keys) {
       const p = get(name); if (!p) throw new Error(`no pane ${name}`);

@@ -100,13 +100,13 @@ const checks: Check[] = [
   { n: 4, name: 'permission', run: async id => {
     const file = join(WORK, 'probe.txt'); if (existsSync(file)) execFileSync('cmd', ['/c', 'del', file]);
     await turn(id, 'Crée le fichier probe.txt contenant le mot ok, dans le dossier courant, avec ton outil d\'écriture de fichier.', 'perm-ask');
-    let s = await until(id, x => x.state === 'waiting_permission' && x.pending?.kind === 'permission', 30_000, 'perm-pending');
+    let s = await until(id, x => x.state === 'waiting_permission' && (x.pending?.kind === 'permission' || x.pending?.kind === 'diff'), 30_000, 'perm-pending');
     save(id, 'perm-dialog');
     send({ type: 'session.decide', id, decision: 'accept' });
     await until(id, idle, 120_000, 'perm-accepted');
     if (!existsSync(file)) throw new Error('approved, but probe.txt is not there');
     await turn(id, 'Supprime le fichier probe.txt avec une commande shell.', 'perm-ask-2');
-    s = await until(id, x => x.state === 'waiting_permission' && x.pending?.kind === 'permission', 30_000, 'perm-pending-2');
+    s = await until(id, x => x.state === 'waiting_permission' && (x.pending?.kind === 'permission' || x.pending?.kind === 'diff'), 30_000, 'perm-pending-2');
     save(id, 'perm-dialog-2');
     send({ type: 'session.decide', id, decision: 'deny' });
     await until(id, x => idle(x) || x.state === 'waiting_input', 120_000, 'perm-denied');
