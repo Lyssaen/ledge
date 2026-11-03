@@ -12,7 +12,7 @@ import { BrowserTab, type CaptureFocus } from './BrowserTab';
 import type { Capture } from './captures';
 import { clock } from './exchanges';
 import {
-  bare, enabledAnswer, hasDirect, isLocal, keepEnabledAnswer, kindOf, lastActionOf, markOffSeen, noAddress, openable, sideOnOpen,
+  bare, enabledAnswer, hasDirect, isLocal, keepEnabledAnswer, kindOf, lastActionOf, markOffSeen, noAddress, openable, pageOf, sideOnOpen,
   useBrowser, useBrowserFrames, type BrowserAction, type BrowserKind, type BrowserSide, type Frame
 } from './browserLive';
 
@@ -63,7 +63,7 @@ export function BrowserPane(p: BrowserPaneProps): JSX.Element {
   }, [kind]);
 
   const watching = shown === 'direct' && (kind === 'live' || kind === 'closed');
-  const { frame, fps } = useBrowserFrames(p.client, session.id, watching, browser?.state);
+  const { frame, fps } = useBrowserFrames(p.client, session.id, watching, browser?.state, pageOf(browser));
 
   if (!hasDirect(kind)) return <BrowserTab captures={captures} focus={p.focus} client={p.client} session={session} helperName={p.helperName} head={p.head} onShowInThread={p.onShowInThread} onClose={p.onClose} />;
 
@@ -120,8 +120,10 @@ function UrlLine({ url, title, seat, closed, image }: { url?: string; title?: st
 function LiveSide({ session, browser, frame, fps, seat, reopened, action, onShowInThread }: { session: Session; browser: BrowserLive; frame: Frame | null; fps: number | null; seat: boolean; reopened: boolean; action: BrowserAction | null; onShowInThread(toolId: string): void }): JSX.Element {
   const { t } = useI18n();
   const tb = t.session.browser;
-  // Live, a frame of the film; the image the daemon kept only when taken since the browser went live, never an older page's.
-  const shown = frame && (frame.live || !browser.since || Date.parse(frame.at) >= Date.parse(browser.since)) ? frame : null;
+  // Live, a frame of the film (since the page last changed, useBrowserFrames); the image the daemon kept only when it is of
+  // this page (its address) and of this live period, never an older page's (review qitem-20261103173211).
+  const keptHere = browser.image !== undefined && browser.image.url === browser.url && (!browser.since || Date.parse(browser.image.at) >= Date.parse(browser.since));
+  const shown = frame && (frame.live || keptHere) ? frame : null;
   return (
     <>
       <div className="browser-live-head">

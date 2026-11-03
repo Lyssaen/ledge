@@ -114,19 +114,22 @@ export interface Frame { src: string; at: string; live: boolean; width?: number;
 /** How long without a frame before the frame rate hides (design-ux 5: never « 0 im/s »). */
 export const FPS_WINDOW_MS = 2000;
 
+/** What the film shows, for useBrowserFrames: a frame stays only on the page it was taken of. */
+export const pageOf = (b: BrowserLive | undefined): string => (b ? `${b.url ?? ''}\n${b.tabs}` : '');
+
 /**
  * Watches the session's browser while `on` (the Navigateur tab shown on its Direct side): `browser.watch`, the frames as they
  * come, `browser.unwatch` when it stops. Watched again when the browser changes state (the daemon then sends the image it
  * kept) and after each reconnection. `fps`: frames of the film in the last two seconds, per second; null without any.
  */
-export function useBrowserFrames(client: DaemonClient, id: string, on: boolean, state: BrowserLive['state'] | undefined): { frame: Frame | null; fps: number | null } {
+export function useBrowserFrames(client: DaemonClient, id: string, on: boolean, state: BrowserLive['state'] | undefined, page = ''): { frame: Frame | null; fps: number | null } {
   const { snapshotSeq } = useDaemon();
   const [frame, setFrame] = useState<Frame | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const times = useRef<number[]>([]);
-  // Another state (closed, live again) or another session: what showed belongs to the browser as it was (review: a closed
-  // page's image under a new one's address); the watch below brings what the daemon has now.
-  useEffect(() => { setFrame(null); }, [id, state]);
+  // Another state (closed, live again), another page (an address, a tab opened or closed) or another session: what showed
+  // belongs to the browser as it was (review: an image of page A under B's address); the film, or the watch, brings the next.
+  useEffect(() => { setFrame(null); }, [id, state, page]);
   useEffect(() => {
     if (!on) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
