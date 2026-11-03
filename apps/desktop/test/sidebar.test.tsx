@@ -37,8 +37,8 @@ describe('the sidebar shell', () => {
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
   });
 
-  it('no session: the Projects header keeps only + and the box offers « Create a session » (sidebar tidy, point 3)', async () => {
-    const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: [] });
+  it('no project and no session: the Projects header keeps only + and the box offers « Create a session » (sidebar tidy, point 3)', async () => {
+    const { side, user } = await boot({ projects: { projects: [], rules: [] }, sessions: [] });
     const box = side.getByRole('status');
     expect(box).toHaveTextContent('No session yet.A session runs an agent in a folder or a project.Create a session');
     expect(box).toHaveClass('st-empty');

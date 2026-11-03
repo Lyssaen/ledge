@@ -12,7 +12,7 @@ import { SHELL_ICONS } from '../icons';
 import { AutoMark, HelperBot, SessionBot } from '../SessionBot';
 import type { MenuTarget } from '../../manage/useContextMenu';
 import { isMenuKey, menuPoint } from './menuPoint';
-import { isFinished, type ProjectGroup } from './model';
+import type { ProjectGroup } from './model';
 
 const branchIcon = ['M6 3v12', 'M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M18 9a9 9 0 0 1-9 9'];
 
@@ -51,8 +51,12 @@ function shortWhen(iso: string, units: { min: string; h: string; d: string }, no
   return span === 'now' ? nowLabel : `${span.n} ${units[span.unit]}`;
 }
 
+/** A session that ended: with the eye pressed, it hides behind « +N terminées » until that row is opened. */
+const isEnded = (s: Session): boolean => s.state === 'exited';
+
 /** Project, then branch when the project has several, then session, then subagents.
- *  One branch folds into the project. Finished sessions (`isFinished`) hide behind « +N finished » until that row is opened. */
+ *  One branch folds into the project. The eye (docs/mockups/ledge-projects-eye.html): pressed, the projects with a live agent
+ *  (`groups`, the others counted in `hiddenProjects`), their ended sessions behind « +N terminées »; released, every project, all open. */
 export function Tree(p: {
   groups: ProjectGroup[];
   /** What is folded (projects and branches, by `projectKey`): held by the sidebar, so its menus fold too. */
@@ -63,6 +67,10 @@ export function Tree(p: {
   current: string | null;
   filter: string;
   hideDone: boolean;
+  /** The projects the pressed eye hides: « +N projets sans agent actif » under the tree, or « Aucun agent actif. » alone. */
+  hiddenProjects: number;
+  /** Some session is in the projects' tree, shown or not: without any, its box offers one (sidebar tidy, point 3). */
+  anySession: boolean;
   dense: boolean;
   filing: Filing;
   revealCurrent: number;
@@ -105,7 +113,7 @@ export function Tree(p: {
     const found = placeOf(latest.current.groups, id);
     if (!found) return;
     setClosed(c => { const n = new Set(c); n.delete(found.pkey); n.delete(found.bkey); return n; });
-    if (isFinished(found.session)) setShown(s => { const n = new Set(s); n.add(found.pkey); n.add(found.bkey); return n; });
+    if (isEnded(found.session)) setShown(s => { const n = new Set(s); n.add(found.pkey); n.add(found.bkey); return n; });
     if (kidsToo && found.session.helpers.length > 0) {
       const s = found.session;
       setKids(k => {
@@ -118,7 +126,7 @@ export function Tree(p: {
   };
   useEffect(() => { if (p.current) openTo(p.current, false); }, [p.current]);
   useEffect(() => { if (p.revealCurrent && p.current) openTo(p.current, true); }, [p.revealCurrent]);
-  // H hides every finished session again, the ones a « +N finished » showed included, but not the open one.
+  // H hides every ended session again, the ones a « +N finished » showed included, but not the open one.
   useEffect(() => {
     if (!p.hideDone) return;
     setShown(new Set());
@@ -182,7 +190,7 @@ export function Tree(p: {
     const row = (
       <div key={treeKey} role="treeitem" aria-level={depth + 1} aria-expanded={subs.length > 0 ? open : undefined}
         aria-selected={selected} aria-current={selected ? 'true' : undefined}
-        className={cls('st-row st-agent', selected && 'sel', !helper && p.picked.has(s.id) && 'picked', !helper && isFinished(s) && 'done', s.offline && 'off', !!helper && 'helper')}
+        className={cls('st-row st-agent', selected && 'sel', !helper && p.picked.has(s.id) && 'picked', !helper && isEnded(s) && 'done', s.offline && 'off', !!helper && 'helper')}
         style={{ '--d': depth } as CSSProperties}
         onContextMenu={helper ? undefined : e => menuOn({ kind: 'session', id: s.id }, e)}>
         {toggle ? <Chevron open={open} label={open ? t.side.foldKids(name) : t.side.unfoldKids(name)} onClick={toggle} /> : <span className="st-gap" />}
@@ -207,9 +215,9 @@ export function Tree(p: {
   };
 
   const sessionRows = (list: readonly Session[], depth: number, key: string, parentKey: string): ReactNode[] => {
-    const done = list.filter(isFinished);
+    const done = list.filter(isEnded);
     const all = !p.hideDone || shown.has(key);
-    const rows = list.filter(s => all || !isFinished(s)).flatMap(s => agentRows(s, depth, parentKey));
+    const rows = list.filter(s => all || !isEnded(s)).flatMap(s => agentRows(s, depth, parentKey));
     // Once shown, the finished ones stay until H hides them all again: no « Hide finished » link. Archiving stays per session.
     if (!all && done.length > 0) {
       const moreKey = `${key}:more`;
@@ -231,7 +239,7 @@ export function Tree(p: {
     let need = 0, work = 0, off = 0, done = 0;
     for (const s of sessions) {
       if (s.offline) off++;
-      else if (isFinished(s)) done++;
+      else if (isEnded(s)) done++;
       else if (s.state === 'waiting_permission' || s.state === 'waiting_input' || s.state === 'error') need++;
       else if (s.state === 'working') work++;
       if (s.offline) continue;
@@ -283,7 +291,7 @@ export function Tree(p: {
       const bkey = `${pkey}:${b.branch}`;
       const bopen = !closed.has(bkey);
       const btoggle = () => flip(closed, setClosed, bkey);
-      const visible = b.sessions.filter(s => !p.hideDone || shown.has(bkey) || !isFinished(s)).length;
+      const visible = b.sessions.filter(s => !p.hideDone || shown.has(bkey) || !isEnded(s)).length;
       nav.current.set(bkey, { toggle: btoggle, open: bopen, parent: pkey });
       rows.push(
         <div key={bkey} role="treeitem" aria-level={2} aria-expanded={bopen} className="st-row st-branch" style={{ '--d': 1 } as CSSProperties}>
@@ -303,7 +311,65 @@ export function Tree(p: {
     }
   }
 
-  // No session at all (docs/mockups/ledge-sidebar-tidy.html, point 3): the header keeps only « + », and the box offers a session.
+  // The pressed eye hides projects: a last row says how many, and opens them all (the eye released). Alone under the
+  // « Aucune session » box, it is the tree's only tab stop.
+  const moreKey = 'more-projects';
+  const moreRow = p.hideDone && p.hiddenProjects > 0 ? (
+    <div key={moreKey} className="st-row st-more st-more-projects" style={{ '--d': 0 } as CSSProperties}>
+      <span className="st-gap" />
+      <button type="button" data-tree-key={moreKey} tabIndex={p.groups.length === 0 ? 0 : tabOf(moreKey)} aria-expanded={false} onClick={p.onToggleHide}>{t.side.moreProjects(p.hiddenProjects)}</button>
+    </div>
+  ) : null;
+  if (moreRow) { nav.current.set(moreKey, {}); if (p.groups.length > 0) rows.push(moreRow); }
+  // H and D from the header's buttons and the « Aucun agent actif. » box too, as in the tree: that box has no tree to take them.
+  const headKeys = (e: ReactKeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'h') p.onToggleHide(); else if (k === 'd') p.onToggleDense(); else return;
+    e.preventDefault(); e.stopPropagation();
+  };
+  const header = (
+    <div className="st-label" onKeyDown={headKeys}>
+      <span>{t.side.projects}</span><span className="st-fill" />
+      <button type="button" className={cls('st-icon', p.hideDone && 'on')} aria-pressed={p.hideDone} aria-label={t.side.hideDone} title={t.side.hideDone} onClick={p.onToggleHide}>
+        <Icon d={SHELL_ICONS.eyeOff} size={14} />
+      </button>
+      <button type="button" className={cls('st-icon', p.dense && 'on')} aria-pressed={p.dense} aria-label={t.side.dense} title={t.side.dense} onClick={p.onToggleDense}>
+        <Icon d={SHELL_ICONS.densityTight} size={14} />
+      </button>
+      <button type="button" className="st-icon" aria-label={t.side.foldAll} title={t.side.foldAll} onClick={() => setClosed(new Set(p.groups.map(g => projectKey(g.id))))}>
+        <Icon d={SHELL_ICONS.foldAll} size={14} />
+      </button>
+      <button type="button" className="st-icon" aria-label={t.side.newProject} title={t.side.newProject} onClick={p.onNewProject}>
+        <Icon d={ICONS.plus.d} size={14} />
+      </button>
+    </div>
+  );
+  // Projects, no session at all, the eye pressed: the header whole, the box that offers a session, and what the eye hides.
+  if (p.groups.length === 0 && moreRow && !p.anySession) return (
+    <>
+      {header}
+      <div className="st-empty" role="status" onKeyDown={headKeys}>
+        <strong>{t.side.empty.sessions}</strong>
+        <p>{t.side.empty.sessionsBody}</p>
+        <button type="button" className="st-empty-btn" onClick={() => p.onLaunch()}><Icon d={ICONS.plus.d} size={13} />{t.side.empty.newSession}</button>
+      </div>
+      <div ref={treeRef} role="tree" aria-label={t.side.tree} className={cls('st-tree', p.dense && 'st-dense')} onKeyDown={onTreeKey}>{moreRow}</div>
+    </>
+  );
+  // Sessions, but none live and the eye pressed: the header, and a box that releases the eye.
+  if (p.groups.length === 0 && moreRow) return (
+    <>
+      {header}
+      <div className="st-empty" role="status" onKeyDown={headKeys}>
+        <strong>{t.side.empty.noActive}</strong>
+        <p>{t.side.empty.noActiveBody}</p>
+        <button type="button" className="st-empty-btn" onClick={p.onToggleHide}>{t.side.empty.showAll}</button>
+      </div>
+    </>
+  );
+
+  // No project and no session (docs/mockups/ledge-sidebar-tidy.html, point 3): the header keeps only « + », the box offers a session.
   if (p.groups.length === 0) return (
     <>
       <div className="st-label">
@@ -322,21 +388,7 @@ export function Tree(p: {
 
   return (
     <>
-      <div className="st-label">
-        <span>{t.side.projects}</span><span className="st-fill" />
-        <button type="button" className={cls('st-icon', p.hideDone && 'on')} aria-pressed={p.hideDone} aria-label={t.side.hideDone} title={t.side.hideDone} onClick={p.onToggleHide}>
-          <Icon d={SHELL_ICONS.eyeOff} size={14} />
-        </button>
-        <button type="button" className={cls('st-icon', p.dense && 'on')} aria-pressed={p.dense} aria-label={t.side.dense} title={t.side.dense} onClick={p.onToggleDense}>
-          <Icon d={SHELL_ICONS.densityTight} size={14} />
-        </button>
-        <button type="button" className="st-icon" aria-label={t.side.foldAll} title={t.side.foldAll} onClick={() => setClosed(new Set(p.groups.map(g => projectKey(g.id))))}>
-          <Icon d={SHELL_ICONS.foldAll} size={14} />
-        </button>
-        <button type="button" className="st-icon" aria-label={t.side.newProject} title={t.side.newProject} onClick={p.onNewProject}>
-          <Icon d={ICONS.plus.d} size={14} />
-        </button>
-      </div>
+      {header}
       <div ref={treeRef} role="tree" aria-label={t.side.tree} className={cls('st-tree', p.dense && 'st-dense')} onKeyDown={onTreeKey}>{rows}</div>
     </>
   );

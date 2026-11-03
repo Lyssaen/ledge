@@ -82,7 +82,7 @@ describe('the sidebar tree', () => {
   it('the Projects heading has hide, compact, fold-all and new-project', async () => {
     const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
     const projects = within(side.getByRole('region', { name: 'Projects' }));
-    const hide = projects.getByRole('button', { name: 'Hide finished sessions (H)' });
+    const hide = projects.getByRole('button', { name: 'Only projects with a live agent (H)' });
     const compact = projects.getByRole('button', { name: 'Compact mode (D)' });
     expect(hide).toHaveAttribute('aria-pressed', 'true');
     expect(compact).toHaveAttribute('aria-pressed', 'false');
