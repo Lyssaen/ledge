@@ -22,6 +22,7 @@ for (const d of delays.map(Number)) {
   const submitted = /esc to interrupt|Working|Worked for/.test(pane);
   const draftHasText = pane.split('\n').some(l => /^›\s+\S/.test(l) && /Ligne/.test(l));
   console.log(JSON.stringify({ delayMs: d, typedMs, submitted, draftStillHolds: draftHasText && !submitted }));
+  if (process.env.SHOW) console.log(pane.split('\n').filter(l => l.trim() && !/[⣿⠿⢸]/.test(l)).slice(-14).map(l => '|' + l.slice(0, 160)).join('\n'));
   await panes.killSession('c');
 }
 process.exit(0);
