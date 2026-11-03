@@ -28,8 +28,9 @@ export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
   | { kind: 'launch'; project?: string }   // project : la table ou le projet d'où on l'a demandée (lot 7)
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
+  // addFolder : ouvert sur le navigateur de dossiers (« Ajouter un dossier… » du menu d'un projet) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
-  | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }
+  | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string; addFolder?: true }
   // to : un projet (son id) ou les sessions choisies dans la barre latérale (ids qualifiés) ; la flotte envoie à chaque machine qui en a sa part (broadcast)
   | { kind: 'broadcast'; to: { project: string } | { sessions: string[] } }
   | null;

@@ -8,6 +8,7 @@ import type { Filing } from '../../atelier/filing';
 import type { Decisions } from '../../fleet/decisions';
 import { useI18n } from '../../i18n/lang';
 import type { Wait } from '../../list/time';
+import type { ContextMenuState } from '../../manage/useContextMenu';
 import type { SessionActions } from '../../manage/useSessionActions';
 import { useMotionPreferences } from '../../motionPreferences';
 import { activeCount } from '../../nav/agents';
@@ -22,6 +23,7 @@ import { attentionOf, treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
 import { RigGroups } from './RigGroups';
+import { SidebarMenuHost } from './SidebarMenus';
 import { setGrouping, useGrouping } from '../../openrig/grouping';
 import type { SidebarOpenRig } from '../../openrig/sidebarState';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
@@ -36,8 +38,10 @@ export function Sidebar(p: {
   order: readonly Session[]; projectIdOf: (s: Session) => string | null;
   filing: Filing; actions: SessionActions; decisions: Decisions;
   waits: ReadonlyMap<string, Wait>;
-  /** `opened`: a session's menu shows; Échap is its own then, the selection stays. */
-  menu: { open(id: string, at: { x: number; y: number }, opener?: HTMLElement): void; opened?: boolean };
+  /** The window's one context menu: a session's (rendered by the app) or one of the sidebar's own (rendered here). While one shows, Échap is its own. */
+  menu: ContextMenuState;
+  /** A short notice (the toast): « Tout restaurer » says what it did once. */
+  notify(text: string): void;
   /** The local daemon takes a broadcast: the ✉ of a project row and the Ctrl/⌘ + click selection are offered. */
   broadcast?: boolean;
   /** Bumped by each broadcast that reached someone: the selection is kept until then, emptied then. */
@@ -61,6 +65,9 @@ export function Sidebar(p: {
   const [prefs, setPrefs] = useStored(loadSidebarPrefs, saveSidebarPrefs);
   // The sessions picked with Ctrl/⌘ + click, in the order picked: from two, the bar below writes to them (broadcast spec).
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  // What is folded in the tree and whether the Archives are open: here, so the context menus fold too.
+  const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const [archivesOpen, setArchivesOpen] = useState(false);
   const pick = (id: string) => setPicked(was => {
     const next = new Set(was);
     if (next.has(id)) next.delete(id); else if (next.size < BROADCAST_SESSIONS_MAX) next.add(id);
@@ -92,7 +99,7 @@ export function Sidebar(p: {
   const decisions = useMemo(() => (p.tasksApi ? openDecisions(p.tasksApi.tasks) : []), [p.tasksApi]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
-  keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null || !!p.menu.opened };
+  keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null || p.menu.menu !== null };
   // Alt ↓ opens the next waiting session. Ctrl ⇧ E focuses its tree row, or the first row when none is open.
   // A dialog, a confirmation, the chat, or a text field already owns the key (same rule as the window shortcuts).
   useEffect(() => {
@@ -142,7 +149,9 @@ export function Sidebar(p: {
   const active = activeCount(p.sessions);
   const homeOn = place.kind === 'home';
   return (
-    <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}>
+    // No webview menu anywhere in the sidebar: a row with a menu opens it, elsewhere a right click does nothing; a text field keeps its own (copy, paste).
+    <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}
+      onContextMenu={e => { if (!(e.target instanceof Element && e.target.closest('input, textarea, [contenteditable="true"]'))) e.preventDefault(); }}>
       <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
         <button type="button" className="st-ledge-entry" aria-current={homeOn ? 'page' : undefined} aria-label={t.side.ledgeHome} title={t.side.ledgeHome} onClick={() => p.dispatch({ type: 'ledge' })}>
           <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
@@ -178,32 +187,33 @@ export function Sidebar(p: {
           onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.tasksApi?.putLater(s); }}
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
-            p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
+            p.menu.open(id, { x: e.clientX, y: e.clientY }, host ?? null);
           }} />
         {!byRig && <section aria-label={t.side.projects}>
-          <Tree groups={shownGroups} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
+          <Tree groups={shownGroups} closed={closed} onClosed={setClosed} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
             hideDone={prefs.hideDone} dense={prefs.dense} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
             onLaunch={project => p.dispatch({ type: 'modal', modal: { kind: 'launch', ...(project !== undefined ? { project } : {}) } })}
             onBroadcast={p.broadcast ? project => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project } } }) : undefined}
             picked={picked} onPick={p.broadcast ? pick : undefined}
-            onMenu={(id, e) => {
-              const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
-              p.menu.open(id, { x: e.clientX, y: e.clientY }, host?.querySelector<HTMLElement>('[data-tree-key]') ?? host);
-            }}
+            onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
             onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>}
         {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
-          dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []} />}
-        <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
+          dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []}
+          onMenu={(id, at, opener) => p.menu.open(id, at, opener)} />}
+        <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
-          onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />
+          onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused}
+          onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)} />
       </div>
+      <SidebarMenuHost state={p.menu} projects={p.projects} groups={groups} archived={p.archived} actions={p.actions} dispatch={p.dispatch}
+        broadcast={!!p.broadcast} closed={closed} onClosed={setClosed} archivesOpen={archivesOpen} onArchivesOpen={setArchivesOpen} notify={p.notify} />
       {p.broadcast && pickedIds.length >= 2 && (
         <div className="st-picked" role="region" aria-label={t.broadcast.picked}>
           <button type="button" className="st-picked-write" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { sessions: pickedIds } } })}>

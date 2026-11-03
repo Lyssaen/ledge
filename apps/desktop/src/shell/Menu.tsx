@@ -85,7 +85,8 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   const place = at ? { position: 'fixed' as const, left: placed?.left ?? at.x, top: placed?.top ?? at.y, right: 'auto', bottom: 'auto', margin: 0 } : undefined;
   return (
     // The focus leaving for a control outside (Tab, or a key like F that moves it) closes the menu, and stays where it went.
-    <span className={className} ref={wrap} onBlur={e => { if (open && e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) changeRef.current(false); }}>
+    // A contextmenu inside the menu (the menu key sends it after the menu took the focus, on Windows) never shows the webview's own.
+    <span className={className} ref={wrap} onContextMenu={e => { if (open) e.preventDefault(); }} onBlur={e => { if (open && e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) changeRef.current(false); }}>
       {trigger({ ref: button, 'aria-haspopup': 'menu', 'aria-expanded': open, onClick: () => onOpenChange(!open) })}
       {open && (
         <CloseMenu.Provider value={() => closeRef.current()}>

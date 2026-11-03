@@ -51,6 +51,8 @@ export function ProjectEditor(p: {
   mode: 'new' | 'edit'; initial: ProjectDraft; projects: Projects; sessions: readonly Session[]; machines: readonly MachineState[];
   /** A proposal opened by the navigation (its draft is `initial`). */
   proposal?: Proposal | undefined; paused?: boolean; onPhase?(phase: EditorPhase): void;
+  /** Opened on the folder browser (« Ajouter un dossier… » of a project's menu). */
+  addFolder?: boolean;
   client: DaemonClient; fleet: Pick<Fleet, 'setProjects'>; projectIdOf(s: Session): string | null; onClose(): void;
   onSaved(id: string, created: boolean, filed: Session[]): void;
   /** The deletion view (« Supprimer le projet », edit mode only): the dialog titles it, hence held there. */
@@ -80,8 +82,8 @@ export function ProjectEditor(p: {
   // « new » until the daemon has confirmed the project: a confirmation the editor stays open after (edited since) makes it an edit.
   const [mode, setMode] = useState(p.mode);
   const [tried, setTried] = useState(false);
-  // A new project without repository opens on the folder browser.
-  const [adding, setAdding] = useState(p.mode === 'new' && p.initial.repos.length === 0);
+  // A new project without repository, or « Ajouter un dossier… », opens on the folder browser.
+  const [adding, setAdding] = useState(p.addFolder === true || (p.mode === 'new' && p.initial.repos.length === 0));
   // What is known of each repository (by machine and path): from the browser when added, from repos.inspect for the saved ones.
   const [known, setKnown] = useState<ReadonlyMap<string, Known>>(() => new Map());
   const { state, confirming, send, reset } = useProjectSave(p.fleet, projects);

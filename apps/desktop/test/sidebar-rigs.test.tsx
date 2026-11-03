@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, renderHook, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -26,6 +26,14 @@ function mount(sessions: readonly Session[], openrig: SidebarOpenRig | undefined
 }
 
 describe('the Rigs view of the sidebar', () => {
+  it('a right click on a rig seat opens its session menu', () => {
+    const onMenu = vi.fn();
+    render(<LangProvider lang="en"><aside className="st"><RigGroups sessions={[...RIG, ...KERNEL]} current={null} paused dispatch={vi.fn()} openrig={rig()} dense={false} onToggleDense={vi.fn()} onMenu={onMenu} /></aside></LangProvider>);
+    const bix = screen.getByRole('button', { name: /^Bix/ });
+    expect(fireEvent.contextMenu(bix.closest('[role="treeitem"]')!, { clientX: 30, clientY: 40 })).toBe(false);
+    expect(onMenu).toHaveBeenCalledWith('r1', { x: 30, y: 40 }, bix);
+  });
+
   it('shows the Kernel first, in its box, then the Rigs', () => {
     mount([...RIG, ...KERNEL], rig());
     const sections = [...document.querySelectorAll('section')];

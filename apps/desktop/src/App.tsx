@@ -50,7 +50,7 @@ import { Toast, useToast } from './shell/Toast';
 import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
 import { useSessionActions } from './manage/useSessionActions';
-import { useSessionMenu } from './manage/useSessionMenu';
+import { useContextMenu } from './manage/useContextMenu';
 import { SessionMenuHost } from './manage/SessionMenu';
 import { ConfirmDialog } from './manage/ConfirmDialog';
 import { BroadcastDialog } from './broadcast/BroadcastDialog';
@@ -201,7 +201,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier and the session page hand it their menus.
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
-  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: showTerminal });
+  const sessionMenu = useContextMenu({ client: fleetClient, sessions, archived: fleetView.archived, projects: projects?.projects ?? NO_PROJECTS, onShowTerminal: showTerminal });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
   // The sidebar's Ask Ledge, the same send as the chat panel: nothing goes out while the local daemon is offline (the chat still opens).
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
@@ -307,7 +307,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
-          actions={actions} decisions={decisions} waits={waits} menu={{ open: (id, at, opener) => sessionMenu.open(id, at, opener ?? null), opened: sessionMenu.menu !== null }}
+          actions={actions} decisions={decisions} waits={waits} menu={sessionMenu} notify={notify}
           broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
           openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
@@ -316,7 +316,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
-            manage={{ open: sessionMenu.menu?.id === session?.id && sessionMenu.menu !== null, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
+            manage={{ open: sessionMenu.menu?.target.kind === 'session' && sessionMenu.menu.target.id === session?.id, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} tasks={tasksApi} decisions={decisions} waits={waits} tab={place.tab} task={place.task} dispatch={dispatch}
                 asks={asks} askFocus={askFocus} machineLabel={localMachine?.label ?? 'local'}
@@ -346,7 +346,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         </Modal>
       )}
       {nav.modal?.kind === 'project' && (
-        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}|${nav.modal.proposal ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete}
+        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}|${nav.modal.proposal ?? ''}|${nav.modal.addFolder ? 'add' : ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete} addFolder={nav.modal.addFolder}
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}

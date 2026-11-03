@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { DaemonClient } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { Menu, MenuItem } from '../src/shell/Menu';
-import { useSessionMenu } from '../src/manage/useSessionMenu';
+import { useContextMenu, type ContextMenuState } from '../src/manage/useContextMenu';
 
 // The external terminal's commands, watched: the session menu must never reach them.
 const bridge = vi.hoisted(() => ({ openTerminal: vi.fn(async () => true), focusTerminal: vi.fn(async () => true) }));
@@ -84,6 +84,13 @@ describe('Menu', () => {
       expect(screen.getByRole('menuitem', { name: 'Archive' })).toHaveFocus();
     } finally { rect.mockRestore(); }
   });
+
+  it('a contextmenu inside an open menu never shows the webview menu (the menu key sends it after the menu took the focus)', () => {
+    render(<Menu open onOpenChange={() => {}} label="Session" className="ctx" menuClassName="ctx-menu" at={{ x: 10, y: 10 }} trigger={() => null}>
+      <MenuItem onSelect={() => {}}>Archive</MenuItem>
+    </Menu>);
+    expect(fireEvent.contextMenu(screen.getByRole('menuitem', { name: 'Archive' }))).toBe(false);
+  });
 });
 
 describe('the session menu', () => {
@@ -92,12 +99,49 @@ describe('the session menu', () => {
     const onShowTerminal = vi.fn();
     const live = fakeSession('local:otto', { name: 'Otto', state: 'working' });
     const lost = fakeSession('local:lost', { name: 'Lost', state: 'working', offline: true });
-    const { result } = renderHook(() => useSessionMenu({ client, sessions: [live, lost], onShowTerminal }));
+    const { result } = renderHook(() => useContextMenu({ client, sessions: [live, lost], archived: [], projects: [], onShowTerminal }));
     act(() => result.current.terminal(live));
     act(() => result.current.terminal(lost));
     expect(onShowTerminal.mock.calls).toEqual([['local:otto'], ['local:lost']]);
     expect(bridge.openTerminal).not.toHaveBeenCalled();
     expect(bridge.focusTerminal).not.toHaveBeenCalled();
     expect(client.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('useContextMenu', () => {
+  const client = { send: vi.fn(), fleet: null } as unknown as DaemonClient;
+  const otto = fakeSession('local:otto', { name: 'Otto', state: 'working' });
+  const nova = fakeSession('local:nova', { name: 'Nova', state: 'exited', archivedAt: '2026-10-18T10:00:00.000Z' });
+  const ledge = { id: 'ledge', name: 'Ledge', color: 'green', repos: [] } as unknown as Parameters<typeof useContextMenu>[0]['projects'][number];
+  const at = { x: 10, y: 20 };
+  type Props = Parameters<typeof useContextMenu>[0];
+  const hook = (props: Partial<Props> = {}) => renderHook((p: Props) => useContextMenu(p), {
+    initialProps: { client, sessions: [otto], archived: [nova], projects: [ledge], onShowTerminal: vi.fn(), ...props }
+  });
+
+  it('open(id) is a session target; openOn holds any target; one at a time', () => {
+    const { result } = hook();
+    act(() => result.current.open('local:otto', at, null));
+    expect(result.current.menu?.target).toEqual({ kind: 'session', id: 'local:otto' });
+    expect(result.current.session?.id).toBe('local:otto');
+    act(() => result.current.openOn({ kind: 'archives' }, at, null));
+    expect(result.current.menu?.target).toEqual({ kind: 'archives' });
+    expect(result.current.session).toBeNull();
+  });
+
+  it('closes when its target goes away', () => {
+    const cases: Array<[Parameters<ContextMenuState['openOn']>[0], Partial<Props>]> = [
+      [{ kind: 'project', id: 'ledge' }, { projects: [] }],
+      [{ kind: 'archive', id: 'local:nova' }, { archived: [] }],
+      [{ kind: 'session', id: 'local:otto' }, { sessions: [] }]
+    ];
+    for (const [target, gone] of cases) {
+      const { result, rerender } = hook();
+      act(() => result.current.openOn(target, at, null));
+      expect(result.current.menu?.target).toEqual(target);
+      rerender({ client, sessions: [otto], archived: [nova], projects: [ledge], onShowTerminal: vi.fn(), ...gone });
+      expect(result.current.menu).toBeNull();
+    }
   });
 });

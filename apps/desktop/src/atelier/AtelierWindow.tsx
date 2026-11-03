@@ -19,7 +19,7 @@ import { WindowCaps } from '../shell/WindowCaps';
 import { useWindowFullscreen } from '../shell/useWindowFullscreen';
 import { SHELL_ICONS } from '../shell/icons';
 import { useSessionActions } from '../manage/useSessionActions';
-import { useSessionMenu } from '../manage/useSessionMenu';
+import { useContextMenu } from '../manage/useContextMenu';
 import { SessionMenuHost } from '../manage/SessionMenu';
 import { ConfirmDialog } from '../manage/ConfirmDialog';
 import { Atelier } from './Atelier';
@@ -75,7 +75,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
   const { notice, action: noticeAction, notify, undo } = useToast();
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
-  const sessionMenu = useSessionMenu({ client: fleetClient, sessions, onShowTerminal: terminalToMain });
+  const sessionMenu = useContextMenu({ client: fleetClient, sessions, archived: [], projects: projects?.projects ?? [], onShowTerminal: terminalToMain });
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : null });
   const blocked = actions.pending !== null || sessionMenu.renaming !== null;

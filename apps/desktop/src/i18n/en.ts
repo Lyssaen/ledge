@@ -67,6 +67,15 @@ export const en: Messages = {
     kids: (n) => `${n} ${pluralEn(n, 'subagent', 'subagents')}`,
     wt: 'Linked worktree',
     tallyNeed: 'to decide', tallyWork: 'working', tallyOff: 'offline', tallyDone: 'finished',
+    ctx: {
+      label: (name) => `Actions for ${name}`,
+      newHere: 'New session here', broadcast: 'Write to the whole project…', addFolder: 'Add a folder…', edit: 'Edit project…',
+      fold: 'Fold', unfold: 'Unfold', deleteProject: 'Delete project…', newSession: 'New session…', newProject: 'New project…',
+      deleteAll: (n) => `Delete all (${n})…`,
+      skipped: (k) => `${k} kept: their machine must update Ledge`,
+      restoreAll: 'Restore all', restoredAll: (n) => `${n} ${pluralEn(n, 'session', 'sessions')} put back at ${pluralEn(n, 'its', 'their')} table.`,
+      read: 'Read'
+    },
     archives: 'Archives', archiveFilter: 'Filter the archives', archiveFilterPh: 'Filter the archives…',
     archiveEmpty: 'Nothing archived yet.', archiveNone: 'No archive matches.',
     read: (name, project, task, when) => `Reread ${name}, ${project}, ${task}, archived ${when}`,

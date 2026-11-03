@@ -8,6 +8,8 @@ import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
 import { SessionBot } from '../SessionBot';
+import type { MenuTarget } from '../../manage/useContextMenu';
+import { isMenuKey, menuPoint } from './menuPoint';
 import { filterArchived } from './model';
 
 /** « 12 min » / « 1 h » / « 3 d », or the list's « just now ». Same units as the tree. */
@@ -31,15 +33,20 @@ export function Archives(p: {
   projectName: (s: Session) => string;
   project: (s: Session) => Pick<Project, 'color'> | null;
   reveal: number;
+  /** Unfolded: held by the sidebar, so its menu folds too. */
+  open: boolean;
+  onOpenChange(open: boolean): void;
   onRead(id: string): void;
   onRestore(id: string): void;
   onResume(id: string): void;
   onDelete(ids: string[]): void;
   allowed(id: string): boolean;
+  /** The header's and a row's menu (right click, the menu key): what it is on, where, and the control the focus goes back to. */
+  onMenu(target: MenuTarget, at: { x: number; y: number }, opener: HTMLElement | null): void;
   paused: boolean;
 }): JSX.Element {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const { open, onOpenChange: setOpen } = p;
   const [q, setQ] = useState('');
   const sectionRef = useRef<HTMLElement>(null);
   const reading = p.archived.some(s => s.id === p.current && isArchived(s));
@@ -67,7 +74,9 @@ export function Archives(p: {
   return (
     <section ref={sectionRef} className="st-archives" aria-label={t.side.archives}>
       <div className="st-label">
-        <button type="button" className="st-arch-toggle" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        <button type="button" className="st-arch-toggle" aria-expanded={open} onClick={() => setOpen(!open)}
+          onContextMenu={e => { e.preventDefault(); p.onMenu({ kind: 'archives' }, menuPoint(e, e.currentTarget), e.currentTarget); }}
+          onKeyDown={e => { if (isMenuKey(e)) { e.preventDefault(); p.onMenu({ kind: 'archives' }, menuPoint(e, e.currentTarget), e.currentTarget); } }}>
           <span className={open ? 'open' : undefined}><Icon d={ICONS.chevronRight.d} size={12} /></span>
           <Icon d={SHELL_ICONS.archive} size={13} />{t.side.archives}{p.archived.length > 0 && <small>{p.archived.length}</small>}
         </button>
@@ -90,10 +99,12 @@ export function Archives(p: {
             const ok = p.allowed(s.id);
             const selected = p.current === s.id;
             return (
-              <div key={s.id} role="listitem" className={cls('st-row st-agent st-arch', selected && 'sel')} style={{ '--d': 0 } as CSSProperties}>
+              <div key={s.id} role="listitem" className={cls('st-row st-agent st-arch', selected && 'sel')} style={{ '--d': 0 } as CSSProperties}
+                onContextMenu={e => { e.preventDefault(); const main = e.currentTarget.querySelector<HTMLElement>('.st-main'); p.onMenu({ kind: 'archive', id: s.id }, menuPoint(e, e.currentTarget), main); }}>
                 <span className="st-bot"><SessionBot session={{ ...s, state: 'exited' }} size={16} paused={p.paused} /></span>
                 <button type="button" className="st-main" data-arch-key={s.id} aria-current={selected ? 'page' : undefined}
-                  aria-label={t.side.read(s.name, name, task, when)} onClick={() => p.onRead(s.id)}>
+                  aria-label={t.side.read(s.name, name, task, when)} onClick={() => p.onRead(s.id)}
+                  onKeyDown={e => { if (isMenuKey(e)) { e.preventDefault(); p.onMenu({ kind: 'archive', id: s.id }, menuPoint(e, e.currentTarget), e.currentTarget); } }}>
                   <strong><ProjectSwatch project={p.project(s)} />{s.name}</strong>{task && <span>{task}</span>}
                 </button>
                 {kids > 0 && <span className="st-kids" title={t.side.kids(kids)}>{kids}</span>}
