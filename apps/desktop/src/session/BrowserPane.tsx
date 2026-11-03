@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
-import type { DaemonClient } from '@ledge/fleet';
+import { useDaemon, type DaemonClient } from '@ledge/fleet';
 import type { BrowserLive, Session, ThreadItem } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -120,6 +120,8 @@ function UrlLine({ url, title, seat, closed, image }: { url?: string; title?: st
 function LiveSide({ session, browser, frame, fps, seat, reopened, action, onShowInThread }: { session: Session; browser: BrowserLive; frame: Frame | null; fps: number | null; seat: boolean; reopened: boolean; action: BrowserAction | null; onShowInThread(toolId: string): void }): JSX.Element {
   const { t } = useI18n();
   const tb = t.session.browser;
+  // Live, a frame of the film; the image the daemon kept only when taken since the browser went live, never an older page's.
+  const shown = frame && (frame.live || !browser.since || Date.parse(frame.at) >= Date.parse(browser.since)) ? frame : null;
   return (
     <>
       <div className="browser-live-head">
@@ -129,8 +131,8 @@ function LiveSide({ session, browser, frame, fps, seat, reopened, action, onShow
         {fps !== null && <span className="browser-fps mono">{tb.fps(fps)}</span>}
       </div>
       <UrlLine url={browser.url} title={browser.title} seat={seat} closed={false} image />
-      <div className={cls('browser-screen live', !frame && 'wait')} title={tb.readOnly(session.name)} data-testid="browser-screen">
-        {frame ? <img src={frame.src} alt={tb.live} draggable={false} /> : <span className="muted">{tb.waiting}</span>}
+      <div className={cls('browser-screen live', !shown && 'wait')} title={tb.readOnly(session.name)} data-testid="browser-screen">
+        {shown ? <img src={shown.src} alt={tb.live} draggable={false} /> : <span className="muted">{tb.waiting}</span>}
         {reopened && <div className="browser-toast" role="status"><i className="live-dot" aria-hidden="true" />{tb.reopened(session.name)}</div>}
       </div>
       {seat
@@ -168,7 +170,8 @@ function ClosedSide({ session, browser, frame, seat }: { session: Session; brows
   const at = clock(browser.closedAt ?? browser.since ?? new Date().toISOString());
   const badge = seat ? (browser.closed === 'stopped' ? tb.seatStopped(at) : tb.tabsClosed(at)) : tb.closedAt(at);
   const open = !seat && openable(url);
-  const image = browser.image !== undefined && frame !== null;
+  // Closed, only the image the daemon kept (sent on the watch), dated by it.
+  const image = browser.image !== undefined && frame !== null && !frame.live;
   return (
     <>
       <div className="browser-live-head">
@@ -193,6 +196,9 @@ function OffSide({ session, client }: { session: Session; client: DaemonClient }
   const [step, setStep] = useState<'box' | 'confirm' | 'asking'>('box');
   const [answer, setAnswer] = useState(enabledAnswer);
   const rid = useRef<string | null>(null);
+  // The connection lost before the answer: nothing to wait for any more, the box again.
+  const { status } = useDaemon();
+  useEffect(() => { if (status !== 'open' && rid.current !== null) { rid.current = null; setAnswer(null); setStep('box'); } }, [status]);
   useEffect(() => client.onMessage(m => {
     if (m.type !== 'browser.enabled' || m.rid !== rid.current) return;
     rid.current = null; keepEnabledAnswer(m); setAnswer(m); setStep('box');
@@ -210,12 +216,14 @@ function OffSide({ session, client }: { session: Session; client: DaemonClient }
       </div>
     );
   }
-  if (answer) {
+  // Refused: « Réessayer » asks again at once, the person having agreed already (design-ux 17:23Z); the answer replaces the box.
+  if (answer && step !== 'confirm') {
     return (
       <div className="changes-empty browser-problem" role="status">
         <Icon d={ICONS.warning.d} size={22} />
         <strong>{tb.refused[answer.reason ?? 'write_failed']}</strong>
         {answer.path && answer.reason !== 'not_configured' && <p><code>{answer.path}</code></p>}
+        <Button variant="outline" size="sm" onClick={enable} disabled={step === 'asking'}>{step === 'asking' ? tb.working : tb.retry}</Button>
       </div>
     );
   }

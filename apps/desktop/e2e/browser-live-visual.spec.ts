@@ -152,7 +152,15 @@ for (const theme of ['dark', 'light'] as const) test(`no film: off, its confirma
   await page.getByRole('dialog').getByRole('button', { name: 'Activer' }).click();
   await expect.poll(() => d.received.some(m => m.type === 'browser.enable')).toBe(true);
   const rid = (d.received.find(m => m.type === 'browser.enable') as { rid: string }).rid;
-  d.push({ type: 'browser.enabled', rid, outcome: 'enabled', path: '/home/gch/.config/playwright-mcp/config.json' });
+  // Refused first, then « Réessayer » asks again at once (design-ux 17:23Z).
+  d.push({ type: 'browser.enabled', rid, outcome: 'refused', reason: 'write_failed', path: '/home/gch/.config/playwright-mcp/config.json' });
+  await expect(page.getByText('Ledge n’a pas pu écrire la config.')).toBeVisible();
+  await zoom('refused');
+  await page.getByRole('button', { name: 'Réessayer' }).click();
+  await expect.poll(() => d.received.filter(m => m.type === 'browser.enable').length).toBe(2);
+  await zoom('retrying');
+  const again = (d.received.filter(m => m.type === 'browser.enable').at(-1) as { rid: string }).rid;
+  d.push({ type: 'browser.enabled', rid: again, outcome: 'enabled', path: '/home/gch/.config/playwright-mcp/config.json' });
   await expect(page.getByText('Direct activé pour les prochaines sessions.')).toBeVisible();
   await zoom('enabled');
   d.browser(closed('otto', { image: undefined }));

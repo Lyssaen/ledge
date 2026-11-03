@@ -1043,7 +1043,7 @@ export const fr = {
       enableTitle: 'Activer le direct du navigateur des agents ?',
       enableBody: { lead: 'Ledge ajoute ', flag: '--remote-debugging-port=0', rest: ' à la config Playwright que charge Claude Code. Chaque navigateur d’agent ouvrira alors un port local (127.0.0.1) que Ledge regarde, sans jamais cliquer ni taper.' },
       enableRisk: 'Un programme de cette machine qui trouve ce port pourrait aussi piloter ce navigateur, comme pour les sièges OMP aujourd’hui. Vaut pour les sessions démarrées ensuite ; celles en cours gardent leurs captures.',
-      cancel: 'Annuler', confirm: 'Activer',
+      cancel: 'Annuler', confirm: 'Activer', retry: 'Réessayer', working: 'En cours…',
       enabled: 'Direct activé pour les prochaines sessions.', enabledBody: 'Les sessions démarrées ensuite montreront leur navigateur en direct. Celle-ci garde ses captures.',
       refused: { not_configured: 'Claude Code ne charge aucune config Playwright : rien à modifier.', invalid_config: 'La config Playwright n’est pas lisible : Ledge n’y touche pas.', write_failed: 'Ledge n’a pas pu écrire la config.' },
       remote: 'Direct pas encore disponible pour une machine distante.',

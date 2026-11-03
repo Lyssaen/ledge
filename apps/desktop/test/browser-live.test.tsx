@@ -99,6 +99,28 @@ describe('a Claude session’s browser', () => {
     await waitFor(() => expect(watches(d).filter(w => w === 'browser.watch:otto')).toHaveLength(2));
   });
 
+  it('reopened on another page with no image yet: « Waiting for the first image… », never the closed page’s image under its address (review)', async () => {
+    const { d, user } = await openOtto(live('otto'));
+    act(() => d.frame({ id: 'otto', data: 'T0xE', at: new Date().toISOString() }));
+    await waitFor(() => expect(pill()).toHaveClass('browser-pill-live'));
+    await user.click(pill()!);
+    act(() => d.frame({ id: 'otto', data: 'T0xE', at: new Date().toISOString() }));
+    await waitFor(() => expect(screen.getByTestId('browser-screen').querySelector('img')).toHaveAttribute('src', 'data:image/jpeg;base64,T0xE'));
+    // Closed: the daemon keeps that image; then the browser opens again on another page, the kept image older than it.
+    const kept = new Date(Date.now() - 60_000).toISOString();
+    d.lastImage({ id: 'otto', data: 'T0xE', at: kept });
+    act(() => d.browser(closed('otto', { image: { at: kept, url: URL } })));
+    await waitFor(() => expect(screen.getByTestId('browser-screen')).toHaveClass('closed'));
+    act(() => d.browser(live('otto', { url: 'https://example.com/new', title: 'New', since: new Date().toISOString() })));
+    await waitFor(() => expect(document.querySelector('.browser-address')).toHaveTextContent('example.com/new'));
+    await waitFor(() => expect(watches(d).filter(w => w === 'browser.watch:otto').length).toBeGreaterThanOrEqual(3));
+    expect(screen.getByTestId('browser-screen')).toHaveTextContent('Waiting for the first image…');
+    expect(screen.getByTestId('browser-screen').querySelector('img')).toBeNull();
+    // Its first frame of the film shows.
+    act(() => d.frame({ id: 'otto', data: 'TkVX', at: new Date().toISOString() }));
+    await waitFor(() => expect(screen.getByTestId('browser-screen').querySelector('img')).toHaveAttribute('src', 'data:image/jpeg;base64,TkVX'));
+  });
+
   it('closed without an image: its title and address only; an address that is not http has no « Open in my browser »', async () => {
     const { user } = await openOtto(closed('otto', { image: undefined, url: 'file:///home/gch/m.html' }), []);
     await waitFor(() => expect(pill()).toHaveClass('browser-pill-closed'));
@@ -153,6 +175,30 @@ describe('a Claude session’s browser', () => {
     await waitFor(() => expect(pane().getByText('The Playwright config cannot be read: Ledge leaves it alone.')).toBeVisible());
     expect(pane().getByText('/home/gch/pw.json')).toBeVisible();
     expect(pane().queryByRole('button', { name: /Turn on/ })).toBeNull();
+    // The config mended: « Try again » asks once more at once, « Working… » meanwhile (review qitem-20261103172151, design-ux 17:23Z).
+    await user.click(pane().getByRole('button', { name: 'Try again' }));
+    expect(pane().queryByRole('dialog')).toBeNull();
+    expect(pane().getByRole('button', { name: 'Working…' })).toBeDisabled();
+    await waitFor(() => expect(d.received.filter(m => m.type === 'browser.enable')).toHaveLength(2));
+    const again = (d.received.filter(m => m.type === 'browser.enable').at(-1) as { rid: string }).rid;
+    expect(again).not.toBe(rid);
+    act(() => d.reply({ type: 'browser.enabled', rid: again, outcome: 'already', path: '/home/gch/pw.json' }));
+    await waitFor(() => expect(pane().getByText('Live view on for the next sessions.')).toBeVisible());
+  });
+
+  it('a refusal is not kept for the app: the pane opened again offers « Turn on live view… » again', async () => {
+    const { d, user } = await openOtto({ id: 'otto', state: 'off', tabs: 1 }, []);
+    await waitFor(() => expect(pill()).not.toBeNull());
+    await user.click(pill()!);
+    await user.click(pane().getByRole('button', { name: 'Turn on live view…' }));
+    await user.click(within(pane().getByRole('dialog')).getByRole('button', { name: 'Turn on' }));
+    await waitFor(() => expect(d.received.some(m => m.type === 'browser.enable')).toBe(true));
+    const rid = (d.received.find(m => m.type === 'browser.enable') as { rid: string }).rid;
+    act(() => d.reply({ type: 'browser.enabled', rid, outcome: 'refused', reason: 'not_configured' }));
+    await waitFor(() => expect(pane().getByText('Claude Code loads no Playwright config: nothing to change.')).toBeVisible());
+    await user.click(pane().getByRole('button', { name: /Close the pane/ }));
+    await user.click(pill()!);
+    expect(pane().getByRole('button', { name: 'Turn on live view…' })).toBeVisible();
   });
 });
 

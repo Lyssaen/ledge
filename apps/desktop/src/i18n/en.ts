@@ -989,7 +989,7 @@ export const en: Messages = {
       enableTitle: 'Turn on live view of the agents’ browser?',
       enableBody: { lead: 'Ledge adds ', flag: '--remote-debugging-port=0', rest: ' to the Playwright config Claude Code loads. Each agent browser then opens a local port (127.0.0.1) that Ledge watches, never clicking or typing.' },
       enableRisk: 'A program on this machine that finds this port could also drive that browser, as OMP seats already do. Applies to sessions started afterwards; running ones keep their captures.',
-      cancel: 'Cancel', confirm: 'Turn on',
+      cancel: 'Cancel', confirm: 'Turn on', retry: 'Try again', working: 'Working…',
       enabled: 'Live view on for the next sessions.', enabledBody: 'Sessions started from now on will show their browser live. This one keeps its captures.',
       refused: { not_configured: 'Claude Code loads no Playwright config: nothing to change.', invalid_config: 'The Playwright config cannot be read: Ledge leaves it alone.', write_failed: 'Ledge could not write the config.' },
       remote: 'Live view not available for a remote machine yet.',

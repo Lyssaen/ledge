@@ -34,10 +34,11 @@ export const hasDirect = (kind: BrowserKind): boolean => kind !== 'none';
 let offShown = false;
 export const offSeen = (): boolean => offShown;
 export const markOffSeen = (): void => { offShown = true; };
-/** The answer to « Activer », for the whole app too: the config is one file. */
+/** « Activer » done, for the whole app too: the config is one file. A refusal is not kept: once the config is mended, the
+ *  box offers « Activer » again (review qitem-20261103172151). */
 let enableResult: BrowserEnabled | null = null;
 export const enabledAnswer = (): BrowserEnabled | null => enableResult;
-export const keepEnabledAnswer = (a: BrowserEnabled): void => { enableResult = a; };
+export const keepEnabledAnswer = (a: BrowserEnabled): void => { if (a.outcome !== 'refused') enableResult = a; };
 /** Tests only: a fresh app. */
 export function resetBrowserLive(): void { offShown = false; enableResult = null; }
 
@@ -123,6 +124,9 @@ export function useBrowserFrames(client: DaemonClient, id: string, on: boolean, 
   const [frame, setFrame] = useState<Frame | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const times = useRef<number[]>([]);
+  // Another state (closed, live again) or another session: what showed belongs to the browser as it was (review: a closed
+  // page's image under a new one's address); the watch below brings what the daemon has now.
+  useEffect(() => { setFrame(null); }, [id, state]);
   useEffect(() => {
     if (!on) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
