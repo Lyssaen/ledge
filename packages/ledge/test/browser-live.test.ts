@@ -209,7 +209,7 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
     const shots = () => b.methods().filter(m => m === 'Page.captureScreenshot').length;
     expect(shots()).toBe(1);
     // The poke's search (0.2 s), then the agent's actions grouped over 1 s.
-    expect(last()?.image).toEqual({ at: '2026-11-03T15:00:01.200Z', url: 'http://localhost:8733/ledge-openrig-omp.html', title: 'Ledge · OpenRig' });
+    expect(last()?.image).toEqual({ at: '2026-11-03T15:00:01.200Z', url: 'http://localhost:8733/ledge-openrig-omp.html', title: 'Ledge · OpenRig', page: '1.1' });
     // The capture attaches to the tab and leaves it at once.
     expect(b.methods().slice(-3)).toEqual(['Target.attachToTarget', 'Page.captureScreenshot', 'Target.detachFromTarget']);
     // Three more actions within a second: one image, not before 5 s after the first.
@@ -405,6 +405,53 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
       for (let i = 0; i < 6; i++) { b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: `/9j/more${i}`, sessionId: 20 + i } }); await advance(250); }
       expect(shots()).toBe(s1);
       for (const m of b.methods()) expect(CDP_ALLOWED.has(m)).toBe(true);
+      svc.stop();
+    });
+
+    it('each image says its page: two tabs on one address differ, a late frame of the tab left keeps its own page', async () => {
+      store.upsert(session());
+      const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b\n' });
+      const b = fakeBrowser([{ id: 'T1', url: 'http://localhost/a', title: 'A' }]);
+      const { svc } = service(fs, b);
+      await svc.tick();
+      expect(last()).toMatchObject({ state: 'live', page: '1.0' });
+      // A second tab on the same address: another page.
+      await advance(10);
+      b.tab('Target.targetCreated', 'T2', 'http://localhost/a', 'A');
+      expect(last()).toMatchObject({ url: 'http://localhost/a', tabs: 2, page: '2.0' });
+      const { got, sink } = sinkOf();
+      svc.watch('otto', sink);
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(1));
+      const film2 = b.calls.filter(c => c.method === 'Page.startScreencast')[0]!.sessionId;
+      b.emit({ method: 'Page.screencastFrame', sessionId: film2, params: { data: '/9j/t2', sessionId: 1 } });
+      expect(got.at(-1)).toMatchObject({ type: 'browser.frame', data: '/9j/t2', page: '2.0' });
+      // The agent goes back to the first tab: the state says page 1.0 at once; a frame of the second tab arriving late says 2.0.
+      await advance(10);
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/a', 'A again');
+      expect(last()).toMatchObject({ url: 'http://localhost/a', page: '1.0' });
+      b.emit({ method: 'Page.screencastFrame', sessionId: film2, params: { data: '/9j/t2-late', sessionId: 2 } });
+      const late = got.filter(m => m.type === 'browser.frame' && m.data === '/9j/t2-late');
+      expect(late.every(m => m.type === 'browser.frame' && m.page === '2.0')).toBe(true);
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(2));
+      const film1 = b.calls.filter(c => c.method === 'Page.startScreencast')[1]!.sessionId;
+      // The first tab navigates: page 1.1. A frame Chrome drew before the navigation, arriving after it, is still 1.0.
+      await advance(10);
+      const before = clock / 1000 - 0.005;
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/b', 'B');
+      expect(last()).toMatchObject({ url: 'http://localhost/b', page: '1.1' });
+      b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/old', sessionId: 3, metadata: { timestamp: before } } });
+      b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/new', sessionId: 4, metadata: { timestamp: clock / 1000 + 0.005 } } });
+      expect(got.filter(m => m.type === 'browser.frame' && m.live).slice(-2).map(m => m.type === 'browser.frame' ? [m.data, m.page] : [])).toEqual([['/9j/old', '1.0'], ['/9j/new', '1.1']]);
+      svc.stop();
+    });
+
+    it('the kept image says its page, in the state and in the frame sent on watch', async () => {
+      const { svc } = await liveOtto();
+      await advance(1100);
+      expect(last()).toMatchObject({ page: '1.0', image: { page: '1.0' } });
+      const { got, sink } = sinkOf();
+      svc.watch('otto', sink);
+      expect(got[1]).toMatchObject({ type: 'browser.frame', live: false, page: '1.0' });
       svc.stop();
     });
 

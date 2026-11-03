@@ -29,14 +29,16 @@ export interface BrowserLiveDeps {
   stillMs?: number;
 }
 
-interface Page { url: string; title: string; at: number }
-interface Image { data: string; at: string; url?: string; title?: string; width?: number; height?: number }
+/** An agent's tab: `seq` numbers it in its session, `nav` counts its changes of address, `navAt` when the last one was seen. */
+interface Page { url: string; title: string; at: number; seq: number; nav: number; navAt: number }
+interface Image { data: string; at: string; url?: string; title?: string; page?: string; width?: number; height?: number }
 interface Track {
   id: string;
   cdp?: Cdp; browserPid?: number; connecting?: boolean;
   pages: Map<string, Page>;
   state: BrowserState; since?: string; closedAt?: string; closed?: BrowserClosedHow;
-  url?: string; title?: string;
+  url?: string; title?: string; page?: string;
+  pageSeq: number;
   image?: Image;
   watchers: Set<BrowserSink>;
   film?: { targetId: string; sessionId: string; lastCastAt: number; lastData?: string; delay: number };
@@ -79,7 +81,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
 
   const track = (id: string): Track => {
     let t = tracks.get(id);
-    if (!t) { t = { id, pages: new Map(), state: 'none', watchers: new Set(), lastCaptureAt: -Infinity, capturing: false }; tracks.set(id, t); }
+    if (!t) { t = { id, pages: new Map(), pageSeq: 0, state: 'none', watchers: new Set(), lastCaptureAt: -Infinity, capturing: false }; tracks.set(id, t); }
     return t;
   };
   const active = (t: Track): [string, Page] | undefined => {
@@ -88,12 +90,23 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     return best;
   };
 
+  /** What a front compares: the tab and its navigation, never shown. */
+  const pageId = (p: Page, nav = p.nav): string => `${p.seq}.${nav}`;
+  /** A tab seen for the first time, or seen again: a new address is a new navigation. */
+  function see(t: Track, targetId: string, url: string, title: string): void {
+    const was = t.pages.get(targetId);
+    if (!was) { t.pages.set(targetId, { url, title, at: now(), seq: ++t.pageSeq, nav: 0, navAt: now() }); return; }
+    if (was.url !== url) { was.nav++; was.navAt = now(); }
+    was.url = url; was.title = title; was.at = now();
+  }
+
   function message(t: Track): BrowserLive {
     return {
       type: 'browser.live', id: t.id, state: t.state, tabs: t.pages.size,
       ...(t.url !== undefined ? { url: cut(t.url, BROWSER_URL_MAX) } : {}), ...(t.title !== undefined ? { title: cut(t.title, BROWSER_TITLE_MAX) } : {}),
+      ...(t.page ? { page: t.page } : {}),
       ...(t.since ? { since: t.since } : {}), ...(t.closedAt ? { closedAt: t.closedAt } : {}), ...(t.closed ? { closed: t.closed } : {}),
-      ...(t.image ? { image: { at: t.image.at, ...(t.image.url !== undefined ? { url: cut(t.image.url, BROWSER_URL_MAX) } : {}), ...(t.image.title !== undefined ? { title: cut(t.image.title, BROWSER_TITLE_MAX) } : {}) } } : {})
+      ...(t.image ? { image: { at: t.image.at, ...(t.image.url !== undefined ? { url: cut(t.image.url, BROWSER_URL_MAX) } : {}), ...(t.image.title !== undefined ? { title: cut(t.image.title, BROWSER_TITLE_MAX) } : {}), ...(t.image.page ? { page: t.image.page } : {}) } } : {})
     };
   }
   function publish(t: Track): void {
@@ -106,7 +119,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     deps.emit(m);
   }
   const lastImage = (t: Track): BrowserFrame | null => t.image
-    ? { type: 'browser.frame', id: t.id, data: t.image.data, at: t.image.at, ...(t.image.width ? { width: t.image.width } : {}), ...(t.image.height ? { height: t.image.height } : {}), live: false }
+    ? { type: 'browser.frame', id: t.id, data: t.image.data, at: t.image.at, ...(t.image.width ? { width: t.image.width } : {}), ...(t.image.height ? { height: t.image.height } : {}), ...(t.image.page ? { page: t.image.page } : {}), live: false }
     : null;
 
   /** The state the tabs make: live while one is open; closed when the last one went (or the browser), with how. */
@@ -114,7 +127,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     const top = active(t);
     if (top) {
       if (t.state !== 'live') { t.state = 'live'; t.since = iso(); delete t.closedAt; delete t.closed; }
-      t.url = top[1].url; t.title = top[1].title;
+      t.url = top[1].url; t.title = top[1].title; t.page = pageId(top[1]);
     } else if (t.state === 'live') {
       t.state = 'closed'; t.closedAt = iso(); t.closed = gone ?? (t.cdp ? 'tabs' : 'browser');
     }
@@ -132,7 +145,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       if (!agentPage(info)) { if (was) { t.pages.delete(info.targetId); settle(t); } return; }
       const url = info.url ?? '', title = info.title ?? '';
       if (was && was.url === url && was.title === title) return;
-      t.pages.set(info.targetId, { url, title, at: now() });
+      see(t, info.targetId, url, title);
       settle(t);
       scheduleCapture(t);
     } else if (e.method === 'Target.targetDestroyed') {
@@ -167,7 +180,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       await c.call('Target.setDiscoverTargets', { discover: true });
       const list = await c.call('Target.getTargets');
       for (const info of (list.targetInfos as { targetId: string; type: string; url: string; title: string }[] | undefined) ?? []) {
-        if (agentPage(info) && !t.pages.has(info.targetId)) t.pages.set(info.targetId, { url: info.url, title: info.title, at: now() });
+        if (agentPage(info) && !t.pages.has(info.targetId)) see(t, info.targetId, info.url, info.title);
       }
       settle(t);
       scheduleCapture(t);
@@ -246,7 +259,10 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     let changed = false;
     for (const info of (list?.targetInfos as { targetId: string; type: string; url: string; title: string }[] | undefined) ?? []) {
       const page = t.pages.get(info.targetId);
-      if (page && agentPage(info) && (page.url !== info.url || page.title !== info.title)) { page.url = info.url; page.title = info.title; changed = true; }
+      if (page && agentPage(info) && (page.url !== info.url || page.title !== info.title)) {
+        if (page.url !== info.url) { page.nav++; page.navAt = now(); }
+        page.url = info.url; page.title = info.title; changed = true;
+      }
     }
     if (changed) settle(t);
   }
@@ -261,7 +277,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
       const r = await cdp.call('Page.captureScreenshot', { format: 'jpeg', quality: 60 }, sessionId);
       const data = typeof r.data === 'string' ? r.data : '';
       if (!data || data.length > BROWSER_FRAME_MAX) return null;
-      return { data, at: iso(), url: top[1].url, title: top[1].title };
+      return { data, at: iso(), url: top[1].url, title: top[1].title, page: pageId(top[1]) };
     } finally { await cdp.call('Target.detachFromTarget', { sessionId }).catch(() => {}); }
   }
 
@@ -285,17 +301,22 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     const f = t.film, cdp = t.cdp;
     if (!f || !cdp || e.sessionId !== f.sessionId) return;
     void cdp.call('Page.screencastFrameAck', { sessionId: e.params.sessionId }, f.sessionId).catch(() => {});
-    const data = e.params.data, meta = e.params.metadata as { deviceWidth?: number; deviceHeight?: number } | undefined;
+    const data = e.params.data, meta = e.params.metadata as { deviceWidth?: number; deviceHeight?: number; timestamp?: number } | undefined;
     if (typeof data !== 'string' || !data || data.length > BROWSER_FRAME_MAX) return;
     f.lastCastAt = now(); f.lastData = data;
-    frame(t, data, meta?.deviceWidth, meta?.deviceHeight);
+    // The film's own tab, not the one in front now; a frame Chrome drew before the tab's last navigation is of the one before.
+    const p = t.pages.get(f.targetId);
+    if (!p) return;
+    const drawn = typeof meta?.timestamp === 'number' ? meta.timestamp * 1000 : undefined;
+    const nav = drawn !== undefined && drawn < p.navAt && p.nav > 0 ? p.nav - 1 : p.nav;
+    frame(t, data, { url: p.url, title: p.title, page: pageId(p, nav) }, meta?.deviceWidth, meta?.deviceHeight);
   }
 
-  function frame(t: Track, data: string, width?: number, height?: number): void {
-    const at = iso(), page = active(t)?.[1];
+  function frame(t: Track, data: string, of: { url?: string; title?: string; page?: string }, width?: number, height?: number): void {
+    const at = iso();
     const w = width && width > 0 ? Math.round(width) : undefined, h = height && height > 0 ? Math.round(height) : undefined;
-    send(t, { type: 'browser.frame', id: t.id, data, at, ...(w ? { width: w } : {}), ...(h ? { height: h } : {}), live: true });
-    t.image = { data, at, url: page?.url, title: page?.title, ...(w ? { width: w } : {}), ...(h ? { height: h } : {}) };
+    send(t, { type: 'browser.frame', id: t.id, data, at, ...(w ? { width: w } : {}), ...(h ? { height: h } : {}), ...(of.page ? { page: of.page } : {}), live: true });
+    t.image = { data, at, url: of.url, title: of.title, ...(of.page ? { page: of.page } : {}), ...(w ? { width: w } : {}), ...(h ? { height: h } : {}) };
     // The image's date reaches the other fronts at the pace of the images kept without a viewer.
     if (now() - t.lastCaptureAt >= captureMinMs) { t.lastCaptureAt = now(); publish(t); }
   }
@@ -346,7 +367,7 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     let changed = false;
     try {
       const img = await shoot(t);
-      if (img && t.film === f && img.data !== f.lastData) { f.lastData = img.data; frame(t, img.data); changed = true; }
+      if (img && t.film === f && img.data !== f.lastData) { f.lastData = img.data; frame(t, img.data, img); changed = true; }
     } catch (e) { log(`browser of ${t.id}: no still image (${(e as Error).message})`); }
     finally { t.capturing = false; }
     if (t.film !== f) return;
