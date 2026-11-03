@@ -79,10 +79,10 @@ export function Who() {
     ['Kit', 'claude', 'idle', 'workspace', '-', 'advisor-lead@kernel'],
     ['Lu', 'claude', 'idle', 'Ledge', 'main', 'pilot-lead@ledge-dev'],
     ['Ida', 'claude', 'working', 'Ledge', 'main', 'dev-back@ledge-dev'],
-    ['Ivo', 'omp', 'working', 'workspace', '-', 'dev-agent@dev-omp', true],
-    ['Pia', 'omp', 'idle', 'workspace', '-', 'review-reviewer@dev-omp', true],
-    ['Ana', 'omp', 'idle', 'workspace', '-', 'analysis-analyst@split-omp', true],
-    ['Sol', 'omp', 'idle', 'workspace', '-', 'review-reviewer@split-omp', true]
+    ['Ivo', 'omp', 'working', 'workspace', '-', '-', true],
+    ['Pia', 'omp', 'idle', 'workspace', '-', '-', true],
+    ['Ana', 'omp', 'idle', 'workspace', '-', '-', true],
+    ['Sol', 'omp', 'idle', 'workspace', '-', '-', true]
   ];
   const lines: Line[] = [
     [['$ ', 'faint'], ['ledge who', 'fg']],

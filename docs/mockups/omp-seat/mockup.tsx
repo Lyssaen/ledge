@@ -78,7 +78,7 @@ function App() {
         <div className="mk-col"><div className={'mk-tui tui-' + theme}><Who /></div></div>
         <Notes title="ledge who : rien de neuf à part les lignes" open={STOPPED}>
           <ul>
-            <li>Un siège OMP est une ligne ordinaire : <code>OUTIL omp</code>, <code>ÉTAT working</code> ou <code>idle</code>. Le sujet est l’adresse du siège, comme pour les sièges Claude et Codex.</li>
+            <li>Un siège OMP est une ligne ordinaire : <code>OUTIL omp</code>, <code>ÉTAT working</code> ou <code>idle</code>. Son sujet est vide (<code>-</code>) : OpenRig ne lui fait pas passer de première consigne par les hooks, contrairement aux sièges Claude et Codex.</li>
             <li>Aucune colonne nouvelle.</li>
           </ul>
         </Notes>
