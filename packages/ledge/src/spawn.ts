@@ -95,7 +95,8 @@ export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   const transcriptPath = agentSessionId ? claudeTranscriptPath(opts.cwd, agentSessionId, env) : undefined;
   // With recordExit, sh runs the agent with its argv untouched ("$@") and writes its exit code to
   // the file passed as $0, so the session can die naturally and the code is still readable.
-  const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
+  // ConPTY panes report the exit code themselves, and Windows has no sh: the wrapper is for tmux only.
+  const command = opts.recordExit && process.platform !== 'win32' ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
   const key = sessionKey(id);
   await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, ...(key ? { [SESSION_KEY_VAR]: key } : {}), LEDGE_NAME: name, ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), unset: PARENT_AGENT_VARS, command });
   const at = now();

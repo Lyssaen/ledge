@@ -25,6 +25,8 @@ export interface Tmux {
   attachArgs(name: string, opts?: { readOnly?: boolean }): string[];
   /** A control client on the session (`-C`) that only reads and never counts for the window's size: the phone's terminal. */
   controlArgs?(name: string): string[] | null;
+  /** The code the pane's program exited with, when the panes know it (ConPTY); `undefined` while it runs or with tmux. */
+  exitCode?(name: string): number | null | undefined;
 }
 
 export function runFile(file: string, args: string[], env?: NodeJS.ProcessEnv, opts?: { timeoutMs?: number }): Promise<{ code: number; stdout: string; stderr: string }> {

@@ -7,7 +7,8 @@ import { History } from './history.js';
 import { AttachmentStore } from './attachments.js';
 import { startServer } from './server.js';
 import { startPoller } from './poller.js';
-import { realTmux, routedTmux, type Tmux } from '../tmux.js';
+import type { Tmux } from '../tmux.js';
+import { pickTmux } from '../panes/pick.js';
 import { ensureLedgeDir, paths } from '../paths.js';
 import { log } from '../log.js';
 import { daemonInfo } from '../update/self.js';
@@ -21,7 +22,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   await ensureLedgeDir();
   const store = new Store();
   const loaded = await store.load();
-  const tmux = opts.tmux ?? routedTmux(realTmux(opts.tmuxSocket ?? 'ledge'), realTmux(null));
+  const tmux = opts.tmux ?? pickTmux(process.platform, process.env, opts.tmuxSocket ?? 'ledge');
   let live: Set<string> | null = null;
   try { live = new Set(await tmux.listSessions()); }
   catch (e) { log(`startup prune skipped, tmux unavailable: ${(e as Error).message}`); }
