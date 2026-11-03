@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import type { Tmux } from '../tmux.js';
 import { keyBytes } from './keys.js';
 import { captureLines } from './capture.js';
+import { resolveCommand } from './resolve.js';
 
 /** One agent: its pseudo-terminal (ConPTY on Windows) and the headless terminal its output is rendered in. */
 interface Pane { pty: IPty; term: xterm.Terminal; exited: Promise<void> }
@@ -38,7 +39,7 @@ export function conptyPanes(opts: { cols?: number; rows?: number; spawn?: typeof
       const childEnv: Record<string, string> = {};
       for (const [k, v] of Object.entries(env)) if (!unset.includes(k)) childEnv[k] = v;
       const term = new xterm.Terminal({ cols, rows, scrollback: 5000, allowProposedApi: true });
-      const pty = spawn(command[0]!, command.slice(1), { name: 'xterm-256color', cols, rows, cwd, env: childEnv });
+      const pty = spawn(resolveCommand(command[0]!, childEnv), command.slice(1), { name: 'xterm-256color', cols, rows, cwd, env: childEnv });
       codes.delete(name);
       let done!: () => void;
       const exited = new Promise<void>(r => { done = r; });
