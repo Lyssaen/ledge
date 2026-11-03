@@ -4,6 +4,7 @@ import { homedir, userInfo } from 'node:os';
 import { join, dirname } from 'node:path';
 import { ensureLedgeDir, paths } from '../paths.js';
 import { tmuxServerAtRisk } from '../update/guard.js';
+import { renameRetry } from '../fs-retry.js';
 
 export const CLAUDE_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd',
   'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop'] as const;
@@ -216,7 +217,72 @@ export async function writeBin(opts: { link: string; node: string; target: strin
  * `codexDir` and `cursorDir` are the agents' config folders: their hooks are wired only where the folder exists. For
  * tests: `cli` is the CLI as it was run (argv[1]), `link` the `ledge` script's place, `unitDir` and `run` the service's.
  */
-export async function runSetup(opts: { settingsPath?: string; codexDir?: string; cursorDir?: string; service?: boolean; cli?: string; link?: string; unitDir?: string; run?: Runner } = {}): Promise<string[]> {
+/**
+ * The hook commands on Windows, by absolute paths (no `ledge` on the PATH there). Claude Code runs a hook as written;
+ * Codex runs it through `powershell.exe -NoProfile -Command`, where a quoted path alone is a string: the call operator
+ * runs it (spike, measured). Forward slashes work in both.
+ */
+export function windowsHookCommands(node: string, cli: string): { claude: string; codex: string } {
+  const [n, c] = [node, cli].map(p => p.replace(/\\/g, '/'));
+  if (n!.includes('"') || c!.includes('"')) throw new Error('a path with a double quote cannot be quoted in a hook command');
+  const ps = (p: string) => `'${p.replace(/'/g, "''")}'`;
+  return { claude: `"${n}" "${c}" hook`, codex: `& ${ps(n!)} ${ps(c!)} hook codex` };
+}
+
+/** Codex on Windows asks how to sandbox itself at its first start; its default sandbox needs admin rights the PC may
+ *  not give. Ledge sets the non-admin one (`[windows] sandbox = "unelevated"`, as Codex 0.166 writes it), unless a
+ *  sandbox was already chosen. */
+export function ensureCodexWindowsSandbox(toml: string): { toml: string; changed: boolean } {
+  const lines = toml.split('\n');
+  const at = lines.findIndex(l => /^\s*\[windows\]\s*$/.test(l));
+  if (at < 0) {
+    const base = toml && !toml.endsWith('\n') ? `${toml}\n` : toml;
+    return { toml: `${base}${base.trim() ? '\n' : ''}[windows]\nsandbox = "unelevated"\n`, changed: true };
+  }
+  for (let i = at + 1; i < lines.length && !/^\s*\[/.test(lines[i]!); i++) if (/^\s*sandbox\s*=/.test(lines[i]!)) return { toml, changed: false };
+  lines.splice(at + 1, 0, 'sandbox = "unelevated"');
+  return { toml: lines.join('\n'), changed: true };
+}
+
+/** Sets Codex's Windows sandbox in `<codexDir>/config.toml`; true when the file changed. */
+async function setCodexSandbox(codexDir: string): Promise<boolean> {
+  const path = join(codexDir, 'config.toml');
+  let current = '';
+  try { current = await readFile(path, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+  const { toml, changed } = ensureCodexWindowsSandbox(current);
+  if (!changed) return false;
+  const tmp = `${path}.ledge-${process.pid}.tmp`;
+  await writeFile(tmp, toml);
+  await renameRetry(tmp, path);
+  return true;
+}
+
+/** `ledge setup` on Windows: the agents' hooks by absolute commands and Codex's sandbox. No script, no service: Ledge
+ *  Desktop starts the daemon there. */
+async function runSetupWindows(opts: { settingsPath?: string; codexDir?: string; cli?: string }): Promise<string[]> {
+  const out: string[] = [];
+  await ensureLedgeDir();
+  out.push('~/.ledge ready');
+  const cliPath = opts.cli ?? process.argv[1] ?? '';
+  if (cliPath.endsWith('.ts')) return [...out, 'hooks skipped: run setup from the built CLI (pnpm --filter @paradow/ledge build, then node dist/cli/index.js setup)'];
+  const cmds = windowsHookCommands(process.execPath, await realpath(cliPath));
+  const settingsPath = opts.settingsPath ?? join(homedir(), '.claude', 'settings.json');
+  out.push(await mergeJsonFile(settingsPath, s => mergeClaudeHooks(s, cmds.claude), 'settings.json') ? `Claude Code hooks added in ${settingsPath}` : 'Claude Code hooks already present');
+  const codexDir = opts.codexDir ?? process.env.CODEX_HOME ?? join(homedir(), '.codex');
+  if (!(await isDir(codexDir))) out.push(`Codex not found (${codexDir} missing), Codex hooks skipped`);
+  else {
+    out.push(await mergeJsonFile(join(codexDir, 'hooks.json'), h => mergeCodexHooks(h, cmds.codex), 'hooks.json')
+      ? `Codex hooks added in ${join(codexDir, 'hooks.json')}; Codex asks to review them on its next start: trust them there or from Ledge`
+      : 'Codex hooks already present');
+    out.push(await setCodexSandbox(codexDir) ? 'Codex set to its non-admin Windows sandbox' : 'Codex sandbox already chosen, kept');
+  }
+  out.push('Cursor Agent hooks skipped: Cursor Agent is not on Windows in Ledge');
+  out.push('On Windows, Ledge Desktop starts the daemon: no script, no service');
+  return out;
+}
+
+export async function runSetup(opts: { settingsPath?: string; codexDir?: string; cursorDir?: string; service?: boolean; cli?: string; link?: string; unitDir?: string; run?: Runner; platform?: NodeJS.Platform } = {}): Promise<string[]> {
+  if ((opts.platform ?? process.platform) === 'win32') return runSetupWindows(opts);
   const out: string[] = [];
   await ensureLedgeDir();
   out.push('~/.ledge ready (tmux.conf written if missing)');
