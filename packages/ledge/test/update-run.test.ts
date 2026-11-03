@@ -6,7 +6,8 @@ const NPM_INFO: DaemonInfo = { version: '0.2.2', install: 'npm', systemd: true }
 function deps(over: Partial<UpdaterDeps> = {}): UpdaterDeps & { calls: string[] } {
   const calls: string[] = [];
   return {
-    calls, execPath: '/home/u/.local/share/nvm/v26.7.0/bin/node',
+    // The npm and systemd flows these tests describe are Linux's: on Windows Desktop updates (its own test below).
+    calls, execPath: '/home/u/.local/share/nvm/v26.7.0/bin/node', platform: 'linux',
     info: () => NPM_INFO, atRisk: async () => false,
     npm: async cmd => { calls.push(`npm ${cmd.file} ${cmd.args.join(' ')}`); return { code: 0, output: 'added 1 package' }; },
     restart: async () => { calls.push('restart'); return 0; }, save: async () => { calls.push('save'); },
