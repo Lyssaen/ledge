@@ -11,9 +11,12 @@ import { mergeClaudeHooks, mergeCodexHooks } from '../../packages/ledge/src/cli/
 const fwd = (p: string) => p.replace(/\\/g, '/');
 const cli = fwd(resolve(dirname(fileURLToPath(import.meta.url)), '../../packages/ledge/dist/cli/index.js'));
 const base = `"${fwd(process.execPath)}" "${cli}" hook`;
+// Codex on Windows runs a hook as `powershell.exe -NoProfile -Command "<command>"` (spike): a command starting with a
+// quoted path is a mere string there and fails with code 1; the call operator runs it, spaces in the paths included.
+const codexBase = `& '${fwd(process.execPath)}' '${cli}' hook`;
 const files = [
   { path: join(homedir(), '.claude', 'settings.json'), command: base, merge: mergeClaudeHooks },
-  { path: join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'hooks.json'), command: `${base} codex`, merge: mergeCodexHooks },
+  { path: join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'hooks.json'), command: `${codexBase} codex`, merge: mergeCodexHooks },
 ];
 type Entry = { hooks?: Array<{ command?: string }> };
 
