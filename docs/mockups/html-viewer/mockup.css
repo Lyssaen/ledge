@@ -127,3 +127,5 @@ code { font-family: 'Geist Mono', monospace; font-size: .92em; }
 .mk-texts td:first-child { width: 24%; }
 @media (max-width: 1300px) { .mk-iso-grid, .mk-entries { grid-template-columns: 1fr; } .mk-entry:first-child { grid-row: auto; } }
 .mk-app .pane-tabs, .mk-mini .pane-tabs { scrollbar-width: none; }
+html, body, #root { height: auto !important; min-height: 100%; overflow: visible !important; }
+#root { position: static !important; }

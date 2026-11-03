@@ -200,3 +200,6 @@ code { font-family: 'Geist Mono', monospace; font-size: .92em; }
 .mk-seatnote { margin: 24px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); font-size: 12.5px; line-height: 19px; color: var(--muted-foreground); }
 .mk-seatnote strong { color: var(--foreground); font-weight: 500; }
 .mk-small-card ul { font-size: 12px; }
+.mk-ok { color: var(--success); display: inline-flex; }
+html, body, #root { height: auto !important; min-height: 100%; overflow: visible !important; }
+#root { position: static !important; }
