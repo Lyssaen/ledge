@@ -31,6 +31,19 @@ export const MobileLinkStateSchema = z.discriminatedUnion('state', [
 ]);
 export type MobileLinkState = z.infer<typeof MobileLinkStateSchema>;
 
+/** A linked device's form: a tablet gets the wide layout's glyph on the PC. */
+export const DeviceKindSchema = z.enum(['phone', 'tablet']);
+export type DeviceKind = z.infer<typeof DeviceKindSchema>;
+
+/** A device's name as the user gives it: trimmed, 1 to 40 characters, no control character. */
+export const DEVICE_NAME_MAX = 40;
+export const DeviceNameSchema = z.string().trim().min(1).max(DEVICE_NAME_MAX).regex(/^[^\u0000-\u001f\u007f]+$/);
+
+/** The kind a pairing label names: `iPad`, or a label with « tablet »/« tablette », is a tablet; any other a phone. */
+export function deviceKindOfLabel(label: string): DeviceKind {
+  return /\b(iPad|tablet|tablette)\b/i.test(label) ? 'tablet' : 'phone';
+}
+
 /** A device pairing waiting for, or just past, the user's decision on the PC. */
 export const MobilePairingSchema = z.object({
   id: z.string(),
@@ -50,7 +63,11 @@ export const MobileStateSchema = z.object({
   /** The last sign-in that did not end with a session; cleared by the next one. */
   signinError: z.enum(['expired', 'denied', 'not_allowed', 'failed']).nullable(),
   link: MobileLinkStateSchema,
-  devices: z.array(z.object({ id: z.string(), label: z.string(), approvedAt: z.string(), online: z.boolean(), lastSeenAt: z.string().optional() })),
+  devices: z.array(z.object({
+    id: z.string(), label: z.string(), approvedAt: z.string(), online: z.boolean(), lastSeenAt: z.string().optional(),
+    /** Absent from an older daemon; `name` absent: the user gave none, the front derives one from the label. */
+    kind: DeviceKindSchema.optional(), name: z.string().optional()
+  })),
   pairings: z.array(MobilePairingSchema),
   /** « Taper dans les terminaux depuis le téléphone »: absent from an older daemon, which has no phone terminal. */
   terminalInput: z.boolean().optional()

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, renameSync, chmodSync, unlinkSync } from 'node:fs';
 import { z } from 'zod';
-import { DEFAULT_RELAY_URL, MobileConfigSchema, type MobileConfig } from '@ledge/protocol';
+import { DEFAULT_RELAY_URL, DeviceKindSchema, DeviceNameSchema, MobileConfigSchema, type MobileConfig } from '@ledge/protocol';
 import { exportIdentity, generateIdentity, importIdentity, type Identity } from '@ledge/seal';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
@@ -14,11 +14,20 @@ const DeviceCredentialSchema = z.object({
   rpId: z.string().min(1), transports: z.array(z.string()).optional()
 });
 
+/** How many relay peers are kept per device: enough for a few sign-ins again, never a growing list. */
+export const MAX_DEVICE_PEERS = 8;
+
 const ApprovedDeviceSchema = z.object({
   id: z.string().min(1), publicKey: z.string().min(1), label: z.string(), approvedAt: z.string(),
   lastPeer: z.string().optional(), lastSeenAt: z.string().optional(), credential: DeviceCredentialSchema.optional(),
-  /** The phone's push subscription and the relay's VAPID key it was made with. */
-  push: z.object({ endpoint: z.string().min(1), p256dh: z.string().min(1), auth: z.string().min(1), key: z.string().min(1) }).optional()
+  /** The phone's push subscription and the relay's VAPID key it was made with; `resolved`: its service worker shows a `resolved` push. */
+  push: z.object({ endpoint: z.string().min(1), p256dh: z.string().min(1), auth: z.string().min(1), key: z.string().min(1), resolved: z.literal(true).optional() }).optional(),
+  /** Phone or tablet, from the pairing label; absent on a device approved before it was kept. */
+  kind: DeviceKindSchema.optional(),
+  /** The name the user gave it; absent means the default name the fronts derive. */
+  name: DeviceNameSchema.optional(),
+  /** Every relay peer that confirmed a channel for it, newest last (at most MAX_DEVICE_PEERS): all are revoked with it. */
+  peers: z.array(z.string().min(1)).max(MAX_DEVICE_PEERS).optional()
 });
 export type ApprovedDevice = z.infer<typeof ApprovedDeviceSchema>;
 

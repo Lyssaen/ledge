@@ -7,7 +7,7 @@ import WebSocket from 'ws';
 import { fingerprint } from '@ledge/seal';
 import type { MobileState } from '@ledge/protocol';
 import { createMobileService, type MobileService } from '../src/mobile/service.js';
-import { readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations } from '../src/mobile/files.js';
+import { readDevices, readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations } from '../src/mobile/files.js';
 import { paths } from '../src/paths.js';
 import { startTestRelay, TEST_ACCOUNT, type TestRelay } from './mobile-relay-harness.js';
 import { fakeDevice, type FakeDevice } from './mobile-fake-device.js';
@@ -187,6 +187,46 @@ describe('mobile access service', () => {
     // A second revoke does nothing.
     await ctx.s.handle({ type: 'mobile.device.revoke', id });
     expect(ctx.calls.revoked).toHaveLength(1);
+  });
+
+  it('revoke: every peer the device ever confirmed on is revoked, an older one included', async () => {
+    const OLD = 'd_oldoldoldoldoldo';
+    // A device that signed in again under PEER: OLD is still in its list, lastPeer names PEER only.
+    writeDevices([{ id: 'x', publicKey: 'k', label: 'iPad', approvedAt: '2026-10-19T00:00:00Z', peers: [OLD], lastPeer: PEER }]);
+    const ctx = await signedIn();
+    await ctx.s.handle({ type: 'mobile.device.revoke', id: 'x' });
+    expect(ctx.calls.revoked.map((c) => c.peer).sort()).toEqual([OLD, PEER].sort());
+  });
+
+  it('a confirmed channel adds its peer to the device, once', async () => {
+    const ctx = await signedIn();
+    const phone = await linkedPhone(ctx);
+    await phone.hello();
+    await until(() => ctx.s.state().devices[0]?.online === true, 'online again');
+    expect(JSON.parse(readFileSync(paths().devices, 'utf8'))[0].peers).toEqual([PEER]);
+  });
+
+  it('kind from the label, and a rename persisted and shown in the state', async () => {
+    const ctx = await signedIn();
+    const phone = await linkedPhone(ctx);
+    const id = await fingerprint(phone.publicKey);
+    expect(ctx.s.state().devices[0]).toMatchObject({ id, kind: 'phone' });
+    expect(ctx.s.state().devices[0]!.name).toBeUndefined();
+    await ctx.s.handle({ type: 'mobile.device.rename', id, name: '  Pixel de Guillaume ' });
+    expect(ctx.s.state().devices[0]!.name).toBe('Pixel de Guillaume');
+    expect(ctx.s.deviceInfo(id)).toEqual({ label: 'Pixel 8', kind: 'phone', name: 'Pixel de Guillaume' });
+    expect(readDevices()[0]!.name).toBe('Pixel de Guillaume');
+    await expect(ctx.s.handle({ type: 'mobile.device.rename', id: 'nobody', name: 'x' })).rejects.toThrow(/device/);
+    expect(() => ctx.s.rename(id, '   ')).toThrow();
+  });
+
+  it('a device file without kind reads its kind from its label', async () => {
+    writeMobileConfig({ enabled: false, relayUrl: 'http://localhost:5173' });
+    writeDevices([{ id: 'x', publicKey: 'k', label: 'iPad', approvedAt: '2026-10-19T00:00:00Z' }]);
+    const s = await service();
+    expect(s.state().devices[0]).toMatchObject({ kind: 'tablet' });
+    expect(s.deviceInfo('x')).toEqual({ label: 'iPad', kind: 'tablet' });
+    expect(s.deviceInfo('nobody')).toBeNull();
   });
 
   it('revoke: a msg sent by the device afterwards is answered denied', async () => {

@@ -19,7 +19,7 @@ import { IslandPrefsSchema } from './island.js';
 import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
-import { MobileStateSchema, RelayUrlSchema } from './mobile.js';
+import { DeviceNameSchema, MobileStateSchema, RelayUrlSchema } from './mobile.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 
@@ -327,6 +327,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('mobile.pairing.deny'), id: z.string().min(1).max(100) }),
   /** `id`: the device's fingerprint. */
   z.object({ type: z.literal('mobile.device.revoke'), id: z.string().min(1).max(100) }),
+  /** Names a device (`id`: its fingerprint); the device sees its new name in its next snapshot. */
+  z.object({ type: z.literal('mobile.device.rename'), id: z.string().min(1).max(100), name: DeviceNameSchema }),
   /** « Taper dans les terminaux depuis le téléphone »; turned off, every phone loses the hand. */
   z.object({ type: z.literal('mobile.terminal'), input: z.boolean() }),
   /** « Reprendre la main »: the phone typing into the session's terminal goes back to reading it. */
