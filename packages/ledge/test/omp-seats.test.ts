@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { createOmpSeats, entryState, isOmpSeat } from '../src/daemon/omp/seats.js';
+import { createOmpSeats, entryState, isOmpSeat, toolOf } from '../src/daemon/omp/seats.js';
 
 // Entries as OMP 18.13.1 writes them under OpenRig 0.7.7 (~/.openrig/state/omp/<seat>/sessions/*.jsonl), trimmed.
 const at = (s: number) => `2026-11-03T09:00:${String(s).padStart(2, '0')}.000Z`;
@@ -138,5 +138,28 @@ describe('createOmpSeats: the state of an OpenRig OMP seat, from its journal', (
     expect(store.get('gone')?.state).toBe('exited');
     expect(store.get('fresh')?.state).toBe('idle');
     expect(isOmpSeat(store.get('own')!)).toBe(false);
+  });
+});
+
+describe('createOmpSeats: the tools a seat uses, read on in its journal', () => {
+  it('tells each tool started or answered after the first reading, never the ones already there', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-omp-tools-')), root = join(dir, 'state', 'omp'), SEAT = 'design-maquettiste@dev-omp';
+    mkdirSync(join(root, SEAT, 'sessions'), { recursive: true });
+    const journal = join(root, SEAT, 'sessions', 'j.jsonl');
+    writeFileSync(join(root, SEAT, 'runner-state.json'), JSON.stringify({ sessionFile: journal }));
+    const evalStart = (id: string, s: number) => ({ type: 'custom', customType: 'tool_execution_start', id, timestamp: at(s), data: { toolCallId: `t-${id}`, toolName: 'eval', args: {} } });
+    const evalResult = (id: string, s: number) => ({ type: 'message', id, timestamp: at(s), message: { role: 'toolResult', toolCallId: `t-${id}`, toolName: 'eval', content: [{ type: 'text', text: 'Opened tab "maq"' }] } });
+    writeFileSync(journal, lines([...HEAD, prompt('u1', 2, 'go'), evalStart('e0', 3), evalResult('e0', 4)]));
+    const store = new Store();
+    store.upsert({ id: 'mia', name: 'Mia', tool: 'omp', cwd: '/w', project: 'w', title: 'Mia', tmuxSession: SEAT, state: 'idle', helpers: [], startedAt: at(0), lastActivityAt: at(0), source: 'rig', rig: { seat: SEAT, name: 'dev-omp' } });
+    const tools: [string, string][] = [];
+    const s = createOmpSeats({ store, root, onTool: (id, tool) => tools.push([id, tool]) });
+    await s.tick();
+    expect(tools).toEqual([]);
+    appendFileSync(journal, lines([said('a1', 5, 'toolUse'), evalStart('e1', 6), toolStart('b1', 7), evalResult('e1', 8)]));
+    await s.tick();
+    expect(tools).toEqual([['mia', 'eval'], ['mia', 'bash'], ['mia', 'eval']]);
+    expect(toolOf({ type: 'custom', customType: 'session_exit', data: { toolName: 'x' } })).toBeNull();
+    expect(toolOf(prompt('u', 1, 'x'))).toBeNull();
   });
 });
