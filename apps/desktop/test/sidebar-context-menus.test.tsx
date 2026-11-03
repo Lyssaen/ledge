@@ -201,6 +201,8 @@ describe('SidebarMenuHost on the Archives, some on a machine that cannot archive
       closed={new Set()} onClosed={vi.fn()} archivesOpen={false} onArchivesOpen={vi.fn()} notify={vi.fn()} /></LangProvider>);
     const item = screen.getByRole('menuitem', { name: 'Delete all (1)…' });
     expect(item).toHaveTextContent('1 kept: their machine must update Ledge');
+    expect(item).toHaveAccessibleDescription('1 kept: their machine must update Ledge');
+    expect(item).toHaveClass('with-note');
     await user.click(item);
     expect(request).toHaveBeenCalledWith('delete', ['a1']);
   });

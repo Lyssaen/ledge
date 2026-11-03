@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from 'react';
+import { useId, type JSX, type ReactNode } from 'react';
 import type { Projects, Session } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
@@ -28,14 +28,18 @@ export interface SidebarMenuHostProps {
 
 interface ItemOptions { danger?: boolean; disabled?: boolean; note?: string }
 
-/** One choice: its label is its accessible name (the tests and the screen readers read it), an icon before it. */
-function item(label: string, icon: readonly string[], onSelect: () => void, o: ItemOptions = {}): JSX.Element {
+/** One choice: its label is its accessible name, an icon before it; a note goes on its own line under it and is its description. */
+function Item({ label, icon, onSelect, o = {} }: { label: string; icon: readonly string[]; onSelect(): void; o?: ItemOptions }): JSX.Element {
+  const noteId = useId();
+  const cls = [o.danger && 'danger', o.note && 'with-note'].filter(Boolean).join(' ') || undefined;
   return (
-    <MenuItem key={label} aria-label={label} className={o.danger ? 'danger' : undefined} disabled={o.disabled} onSelect={onSelect}>
-      <span><Icon d={icon} size={14} />{label}</span>{o.note && <small>{o.note}</small>}
+    <MenuItem aria-label={label} aria-describedby={o.note ? noteId : undefined} className={cls} disabled={o.disabled} onSelect={onSelect}>
+      <span><Icon d={icon} size={14} />{label}</span>{o.note && <small id={noteId} className="menu-note">{o.note}</small>}
     </MenuItem>
   );
 }
+const item = (label: string, icon: readonly string[], onSelect: () => void, o: ItemOptions = {}): JSX.Element =>
+  <Item key={label} label={label} icon={icon} onSelect={onSelect} o={o} />;
 
 /** The sidebar's own menus (every target but a session, which `SessionMenuHost` renders): a project, « No project », the Archives, one archive. */
 export function SidebarMenuHost(p: SidebarMenuHostProps): JSX.Element | null {

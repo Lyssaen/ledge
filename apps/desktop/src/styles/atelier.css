@@ -357,6 +357,8 @@
 .session-menu [role=menuitem] svg{color:var(--muted-foreground)}
 .session-menu [role=menuitem]:hover:not(:disabled),.session-menu [role=menuitem]:focus-visible{background:var(--accent);outline:none}
 .session-menu [role=menuitem]:disabled{opacity:.45}
+.session-menu [role=menuitem].with-note{height:auto;min-height:32px;padding:6px 8px;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px}
+.session-menu .menu-note{font-size:11px;line-height:1.3;color:var(--muted-foreground);white-space:normal;padding-left:23px}
 .session-menu [role=menuitem].danger,.session-menu [role=menuitem].danger svg{color:var(--danger-text)}
 .session-menu [role=menuitem].danger:hover:not(:disabled),.session-menu [role=menuitem].danger:focus-visible{background:color-mix(in srgb,var(--danger-text) 12%,transparent)}
 .session-menu-note{margin:0;padding:2px 8px 6px 31px;font-size:11px;line-height:15px;color:var(--muted-foreground)}

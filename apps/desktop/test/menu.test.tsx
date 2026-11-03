@@ -84,6 +84,13 @@ describe('Menu', () => {
       expect(screen.getByRole('menuitem', { name: 'Archive' })).toHaveFocus();
     } finally { rect.mockRestore(); }
   });
+
+  it('a contextmenu inside an open menu never shows the webview menu (the menu key sends it after the menu took the focus)', () => {
+    render(<Menu open onOpenChange={() => {}} label="Session" className="ctx" menuClassName="ctx-menu" at={{ x: 10, y: 10 }} trigger={() => null}>
+      <MenuItem onSelect={() => {}}>Archive</MenuItem>
+    </Menu>);
+    expect(fireEvent.contextMenu(screen.getByRole('menuitem', { name: 'Archive' }))).toBe(false);
+  });
 });
 
 describe('the session menu', () => {
