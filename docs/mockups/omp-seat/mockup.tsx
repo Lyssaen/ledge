@@ -66,7 +66,7 @@ function App() {
           <div className={'mk-tui tui-' + theme}>{tui === 'overview' ? <TuiOverview /> : tui === 'stopped' ? <TuiOverview stoppedOn /> : <TuiAttached />}</div>
         </div>
         <Notes title="Dans la liste de ledge tui" open={<ul>
-          <li><b>Siège arrêté</b> (complément) : gardé dans la boîte RIGS, tout en gris (glyphe <code>·</code>, nom, rôle, harnais, « Arrêté »). Le compte du rig dit « 2 sièges sur 3 ».</li>
+          <li><b>Siège arrêté</b> (complément) : gardé dans la boîte RIGS, tout en gris (glyphe <code>·</code>, nom, rôle, harnais, « Arrêté »). Le compte du rig garde « N sessions » et devient « 2 sessions sur 3 » quand un siège OMP y est arrêté.</li>
           <li><b>↵ ou a sur un siège arrêté</b> : rien ne s’attache. Un toast d’information, celui que Ledge montre déjà quand un terminal manque, dit « Tom est arrêté : son terminal n’existe plus. 6 ouvre OpenRig, où est son rig. » Quand un siège arrêté est choisi, la barre de touches ne montre ni ↵ ni a.</li>
         </ul>}>
           <ul>
@@ -108,6 +108,7 @@ const TEXTS: Array<[string, string, string]> = [
   ['desktop session.rigStopped.body', 'Son terminal n’existe plus : la page OpenRig montre son rig.', 'Its terminal is gone: the OpenRig page shows its rig.'],
   ['desktop session.rigStopped.open (= side.empty.openPage)', 'Ouvrir la page OpenRig', 'Open the OpenRig page'],
   ['tui state.stopped', 'Arrêté', 'Stopped'],
+  ['tui overview.sessionsOf(live, all)', '${live} session(s) sur ${all} (pluriel sur le premier nombre)', '${live} session(s) of ${all}'],
   ['tui toast.seatStopped(n)', '${n} est arrêté : son terminal n’existe plus. 6 ouvre OpenRig, où est son rig.', '${n} is stopped: its terminal is gone. 6 opens OpenRig, where its rig is.']
 ];
 

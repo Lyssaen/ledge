@@ -59,13 +59,13 @@ export function TuiOverview({ stoppedOn = false }: { stoppedOn?: boolean }) {
   };
   const rig = (name: string, n: string): Line => [[' '], [pad(name, 14), 'fg', true], [n, 'faint']];
   const rigs = box('RIGS', W, [
-    rig('dev-omp', '2 sièges'),
+    rig('dev-omp', '2 sessions'),
     seat(!stoppedOn, 'Ivo', 'dev.agent', 'omp', 'working', true),
     seat(false, 'Pia', 'review.reviewer', 'omp', 'idle', true),
-    rig('ledge-dev', '4 sièges'),
+    rig('ledge-dev', '4 sessions'),
     seat(false, 'Lu', 'pilot.lead', 'claude', 'idle', true),
     seat(false, 'Ida', 'dev.back', 'claude', 'working', true),
-    rig('split-omp', '2 sièges sur 3'),
+    rig('split-omp', '2 sessions sur 3'),
     seat(false, 'Ana', 'analysis.analyst', 'omp', 'idle', true),
     seat(false, 'Sol', 'review.reviewer', 'omp', 'idle', true),
     seat(stoppedOn, 'Tom', 'split.splitter', 'omp', 'stopped', true)
