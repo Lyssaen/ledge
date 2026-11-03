@@ -180,7 +180,8 @@ async function main() {
   } catch (e) { result(1, 'launch', false, (e as Error).message); process.exit(1); }
   for (const c of checks) {
     if (which !== 'all' && which !== c.name) continue;
-    if (c.name === 'question' && tool !== 'claude') continue;
+    // Codex: the design asks 1-3, 6, 7; in its non-admin sandbox it writes in the work folder without asking.
+    if ((c.name === 'question' || c.name === 'permission') && tool !== 'claude') continue;
     try { result(c.n, c.name, true, await c.run(id)); }
     catch (e) { result(c.n, c.name, false, (e as Error).message); }
   }

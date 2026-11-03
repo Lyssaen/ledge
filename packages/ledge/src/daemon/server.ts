@@ -538,7 +538,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       else if ('waitMs' in step) await new Promise(r => setTimeout(r, step.waitMs));
       else if ('keys' in step) await tmux.sendKeys(s.tmuxSession, step.keys);
       else {
-        const end = Date.now() + UNTIL_MS;
+        const end = Date.now() + (step.ms ?? UNTIL_MS);
         for (;;) {
           const pane = await tmux.capture(s.tmuxSession, UNTIL_LINES);
           if (pane !== null && step.until(pane)) break;

@@ -1,3 +1,4 @@
+import type { Pending } from '@ledge/protocol';
 import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 // Codex CLI 0.162 draws its dialogs at the bottom of the pane, without a box, the footer on the last line:
@@ -218,6 +219,31 @@ function noteKeys(d: Dialog | null, note: string): KeyPlan {
   return [...(no ? digit(no) : [{ keys: ['Escape'] }]), { until: atRest, denied: true }, { text: flatten(note) }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
 }
 
+/** How long Codex may take to show a typed draft behind ConPTY: ~2 s for 2.3 KB (spike), more for longer. */
+const DRAFT_SHOWN_MS = 10_000;
+/** The input line holds the start of `text`, or Codex folded it into a paste. */
+function draftShown(text: string): (pane: string) => boolean {
+  const head = text.replace(/\s+/g, '').slice(0, 20);
+  return pane => {
+    const lines = split(pane);
+    const i = inputLine(lines);
+    if (i < 0) return false;
+    const draft = lines.slice(i).join('').replace(/\s+/g, '').replace(/^›/, '');
+    return /\[PastedContent\d+chars\]/.test(draft) || (head.length > 0 && draft.startsWith(head));
+  };
+}
+
+/** The keys that send a reply. Behind ConPTY (Windows) Codex takes a long text in for seconds, and an Enter that comes
+ *  before it has is a newline in the paste: Enter waits for the draft on screen. */
+export function codexReplyPlan(text: string, pending: Pending | undefined, platform: NodeJS.Platform, pane?: string): KeyPlan {
+  const flat = flatten(text);
+  // The sandbox picker: a digit only moves the cursor to that row, Enter takes it.
+  if (pending?.kind === 'question' && /^[1-9]$/.test(flat) && pane && parseDialog(pane)?.kind === 'sandbox') return [...digit(Number(flat)), { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+  if (pending?.kind === 'question' && /^[1-9]$/.test(flat)) return digit(Number(flat));
+  if (platform === 'win32') return [{ text: flat }, { until: draftShown(flat), ms: DRAFT_SHOWN_MS }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+  return [{ text: flat }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+}
+
 export const codexAdapter: Adapter = {
   tool: 'codex',
   detectPrompt,
@@ -249,13 +275,7 @@ export const codexAdapter: Adapter = {
     // "Yes, proceed" runs this one command (or applies this one edit); `p` / `a` would stop asking.
     return [{ text: 'y' }];
   },
-  replyPlan(text, pending, pane) {
-    const flat = flatten(text);
-    // The sandbox picker: a digit only moves the cursor to that row, Enter takes it.
-    if (pending?.kind === 'question' && /^[1-9]$/.test(flat) && pane && parseDialog(pane)?.kind === 'sandbox') return [...digit(Number(flat)), { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
-    if (pending?.kind === 'question' && /^[1-9]$/.test(flat)) return digit(Number(flat));
-    return [{ text: flat }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
-  },
+  replyPlan: (text, pending, pane) => codexReplyPlan(text, pending, process.platform, pane),
   // Esc interrupts the turn; Ctrl+C clears the draft and a second one quits Codex.
   interruptKeys: () => ['Escape'],
   // Codex 0.162, seen in tmux: Ctrl+U clears a typed draft, then `/exit` and `/quit` both quit it (a draft cleared that

@@ -6,7 +6,7 @@ import type { Decision, Pending, RefusalCode, Tool } from '@ledge/protocol';
  * one read can apply them all to the screen it had): if it never does, the rest is not sent. `denied`: the keys before
  * it already refused (a deny with a note waiting for the input box), so a wait that fails leaves a refusal without its note.
  */
-export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: number } | { until: (lastLines: string) => boolean; denied?: true }>;
+export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: number } | { until: (lastLines: string) => boolean; denied?: true; /** How long to wait for it, when not the server's default. */ ms?: number }>;
 /**
  * A shell command an approval dialog shows as such: its lines on screen (trimmed, without the dialog's own `$` or the
  * folder it runs in) and the pane column each one ends at, which tells a line the TUI wrapped from one the command ends.
