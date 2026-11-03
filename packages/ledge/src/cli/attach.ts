@@ -1,5 +1,6 @@
+import { ledgePort } from '../port.js';
 import { spawn } from 'node:child_process';
-import { PROTOCOL_PORT, backendOf } from '@ledge/protocol';
+import { backendOf } from '@ledge/protocol';
 import { connect } from '../client.js';
 import { isSeatSession, realTmux } from '../tmux.js';
 import { attachEnv } from './launch.js';
@@ -59,18 +60,18 @@ export async function attach(id: string, opts: AttachOptions = {}): Promise<numb
   let tmuxName = `ledge-${id}`;
   // An OpenRig seat runs on the user's default tmux server, under its seat's name (`dev-build@starter`).
   if (!(await tmux.hasSession(tmuxName))) {
-    const seat = await seatSession(id, opts.port ?? PROTOCOL_PORT);
+    const seat = await seatSession(id, opts.port ?? ledgePort());
     if (seat) { tmux = realTmux(opts.seatSocket === undefined ? null : opts.seatSocket); tmuxName = seat; }
   }
   if (!(await tmux.hasSession(tmuxName))) {
     // An OMP session has no pane: the daemon drives it over its protocol, and nothing a terminal shows is its state (spec 2026-10-20 §3.5).
-    const native = await nativeSession(id, opts.port ?? PROTOCOL_PORT);
+    const native = await nativeSession(id, opts.port ?? ledgePort());
     console.error(native ? `ledge attach: ${native} is driven by Ledge over OMP's own protocol: there is no terminal to attach to (open a shell from the app)` : `ledge attach: no session ${id}`);
     return 1;
   }
   let title = tmuxName;
   try {
-    const c = await connect({ port: opts.port ?? PROTOCOL_PORT, timeoutMs: 800 });
+    const c = await connect({ port: opts.port ?? ledgePort(), timeoutMs: 800 });
     const snap = await c.next('snapshot');
     title = snap.sessions.find(s => s.id === id)?.title ?? title;
     await Promise.race([c.close(), new Promise(r => setTimeout(r, 500))]);

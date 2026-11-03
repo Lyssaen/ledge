@@ -15,6 +15,9 @@ export default defineConfig({
   // @ledge/protocol is a workspace package that ships TypeScript sources: bundle it into the CLI,
   // otherwise dist/cli/index.js imports src/index.ts at runtime and fails with ERR_MODULE_NOT_FOUND.
   noExternal: ['@ledge/protocol', '@ledge/seal'],
+  // The ConPTY panes' packages (optional dependencies, which tsup would bundle): node-pty loads its own .node file, and
+  // both are imported only when a pane starts (panes/conpty.ts), so a hook never loads them.
+  external: ['node-pty', '@xterm/headless'],
   define: { __LEDGE_VERSION__: JSON.stringify(version) },
   // The Ledge guide the chat writes into ledge.md (chat/guide.ts reads it beside dist/cli).
   onSuccess: async () => { copyFileSync(new URL('../../docs/ledge-guide.md', import.meta.url), new URL('./dist/ledge-guide.md', import.meta.url)); }

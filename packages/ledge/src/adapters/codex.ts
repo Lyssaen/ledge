@@ -1,3 +1,4 @@
+import type { Pending } from '@ledge/protocol';
 import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, flatten, shownCommand, type Adapter, type KeyPlan, type PanePromptMatch } from './types.js';
 
 // Codex CLI 0.162 draws its dialogs at the bottom of the pane, without a box, the footer on the last line:
@@ -24,6 +25,8 @@ import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, flatten, shownCommand, typ
 const APPROVAL_FOOTER = /^\s*Press enter to confirm or esc to cancel\s*$/;
 const QUESTION_FOOTER = /\benter to submit\b/;
 const SELECT_FOOTER = /^\s*enter select · esc back\s*$/;
+/** The header of the sandbox setup Codex shows on Windows at its first start. */
+const SANDBOX_SETUP = /^\s*Set up the Codex agent sandbox\b/;
 const CONFIRM_FOOTER = /^\s*enter confirm · esc skip\s*$/;
 const FOOTERS = [APPROVAL_FOOTER, QUESTION_FOOTER, SELECT_FOOTER, CONFIRM_FOOTER];
 const OPTION = /^\s*(?:›\s*)?(\d+)\.\s+(\S.*)$/;
@@ -42,7 +45,7 @@ function lastLine(lines: string[]): number {
 }
 
 /** `raw`: each option as drawn, its key hint (`(p)`) still at the end. */
-type Dialog = { kind: 'approval' | 'question' | 'plan' | 'confirm'; header: string[]; options: string[]; details: string[]; raw: string[] };
+type Dialog = { kind: 'approval' | 'question' | 'plan' | 'confirm' | 'sandbox'; header: string[]; options: string[]; details: string[]; raw: string[] };
 
 /** Option label: the description after two spaces and the key hint (`(y)`, `(esc)`) left out. */
 const label = (text: string) => text.split(/\s{2,}/)[0]!.replace(/\s+\([a-z]+\)$/, '').trim();
@@ -75,7 +78,9 @@ function parseDialog(pane: string): Dialog | null {
   }
   const f = lines[footer]!;
   const kind = APPROVAL_FOOTER.test(f) ? 'approval' : QUESTION_FOOTER.test(f) ? 'question' : SELECT_FOOTER.test(f) ? 'plan' : 'confirm';
-  // A select footer is also any picker the user opens (/model, /permissions): only the plan question is the agent's.
+  // A select footer is also any picker the user opens (/model, /permissions): only the plan question is the agent's,
+  // and, on Windows, the sandbox setup Codex asks before anything else (spike, 0.166).
+  if (kind === 'plan' && header.some(l => SANDBOX_SETUP.test(l))) return { kind: 'sandbox', header, options: raw.map(label), details: raw.map(detail), raw };
   if (kind === 'plan' && !header.some(l => /^\s*Implement this plan\?\s*$/.test(l))) return null;
   return { kind, header, options: raw.map(label), details: raw.map(detail), raw };
 }
@@ -122,6 +127,7 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   if (!d) return null;
   if (d.kind === 'question') return { kind: 'question', text: questionText(d.header), options: d.options, ...(d.details.some(Boolean) ? { optionDetails: d.details } : {}) };
   if (d.kind === 'plan') return { kind: 'plan', text: 'Implement this plan?', options: d.options };
+  if (d.kind === 'sandbox') return { kind: 'question', text: 'Set up the Codex agent sandbox (Windows)', options: d.options };
   if (d.kind === 'confirm') return { kind: 'permission', text: confirmText(d.header), options: d.options };
   const cmd = d.header.findIndex(l => /^\s*\$\s/.test(l));
   const command = cmd >= 0 ? shownCommand(rawRun(d.header, cmd)) : undefined;
@@ -213,6 +219,35 @@ function noteKeys(d: Dialog | null, note: string): KeyPlan {
   return [...(no ? digit(no) : [{ keys: ['Escape'] }]), { until: atRest, denied: true }, { text: flatten(note) }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
 }
 
+/** How long Codex may take to show a typed draft behind ConPTY: ~2 s for 2.3 KB (spike), more for longer. */
+const DRAFT_SHOWN_MS = 10_000;
+/** Letters and digits only: Codex on Windows drops some other characters it is typed (·, →, ✓: spike). */
+const kept = (s: string) => s.replace(/[^\p{L}\p{N}]/gu, '');
+/** The input line holds the start of `text`, or Codex folded it into a paste. A text with no letter or digit gives
+ *  nothing to look for: the step passes and the pause before Enter is all that is left. */
+function draftShown(text: string): (pane: string) => boolean {
+  const head = kept(text).slice(0, 20);
+  return pane => {
+    if (!head) return true;
+    const lines = split(pane);
+    const i = inputLine(lines);
+    if (i < 0) return false;
+    const draft = lines.slice(i).join('').replace(/\s+/g, '').replace(/^›/, '');
+    return /\[PastedContent\d+chars\]/.test(draft) || kept(draft).startsWith(head);
+  };
+}
+
+/** The keys that send a reply. Behind ConPTY (Windows) Codex takes a long text in for seconds, and an Enter that comes
+ *  before it has is a newline in the paste: Enter waits for the draft on screen. */
+export function codexReplyPlan(text: string, pending: Pending | undefined, platform: NodeJS.Platform, pane?: string): KeyPlan {
+  const flat = flatten(text);
+  // The sandbox picker: a digit only moves the cursor to that row, Enter takes it.
+  if (pending?.kind === 'question' && /^[1-9]$/.test(flat) && pane && parseDialog(pane)?.kind === 'sandbox') return [...digit(Number(flat)), { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+  if (pending?.kind === 'question' && /^[1-9]$/.test(flat)) return digit(Number(flat));
+  if (platform === 'win32') return [{ text: flat }, { until: draftShown(flat), ms: DRAFT_SHOWN_MS }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+  return [{ text: flat }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
+}
+
 export const codexAdapter: Adapter = {
   tool: 'codex',
   detectPrompt,
@@ -222,7 +257,7 @@ export const codexAdapter: Adapter = {
   keysFor(decision, pending, pane, note) {
     const d = pane ? parseDialog(pane) : null;
     // An approval or the hooks review answers a permission (or a diff).
-    if (d) assertDialogIs(pending, d.kind === 'approval' || d.kind === 'confirm' ? 'permission' : d.kind);
+    if (d) assertDialogIs(pending, d.kind === 'approval' || d.kind === 'confirm' ? 'permission' : d.kind === 'sandbox' ? 'question' : d.kind);
     if (decision === 'always') return alwaysKeys(d);
     if (decision === 'deny' && note) return noteKeys(d, note);
     if (decision === 'deny') {
@@ -244,11 +279,7 @@ export const codexAdapter: Adapter = {
     // "Yes, proceed" runs this one command (or applies this one edit); `p` / `a` would stop asking.
     return [{ text: 'y' }];
   },
-  replyPlan(text, pending) {
-    const flat = flatten(text);
-    if (pending?.kind === 'question' && /^[1-9]$/.test(flat)) return digit(Number(flat));
-    return [{ text: flat }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
-  },
+  replyPlan: (text, pending, pane) => codexReplyPlan(text, pending, process.platform, pane),
   // Esc interrupts the turn; Ctrl+C clears the draft and a second one quits Codex.
   interruptKeys: () => ['Escape'],
   // Codex 0.162, seen in tmux: Ctrl+U clears a typed draft, then `/exit` and `/quit` both quit it (a draft cleared that

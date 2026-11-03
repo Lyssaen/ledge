@@ -396,6 +396,12 @@ describe('claude adapter: a question with a preview (Claude Code 2.1.310 capture
     expect(claudeAdapter.promptGone!(preview, verrou)).toBe(false);
     expect(claudeAdapter.promptGone!(fx('claude2-question-preview-chat-left'), verrou)).toBe(true);
   });
+  it('on Linux a > in the output above the dialog is not the cursor (diff prints `> 2. RWLock`)', () => {
+    const rule = preview.indexOf('\n───');
+    const pane = preview.slice(0, rule) + '\n● Bash(diff a.md b.md)\n  ⎿  3c3\n     > 2. RWLock\n' + preview.slice(rule);
+    expect((claudeAdapter.replyPlan('2', verrou, pane)[1] as Until).until(tail(pane, 30))).toBe(false);
+    expect(claudeAdapter.detectPrompt(pane)).toEqual({ kind: 'question', text: 'Quel verrou utiliser ?', options: ['Mutex', 'RWLock', 'Aucun'] });
+  });
   it('a digit only moves the cursor: Enter once the cursor is on that option', () => {
     const plan = claudeAdapter.replyPlan('2', verrou, preview);
     expect(plan).toEqual([{ text: '2' }, { until: expect.any(Function) }, { keys: ['Enter'] }]);

@@ -1,6 +1,7 @@
+import { ledgePort } from '../port.js';
 import type { Readable, Writable } from 'node:stream';
 import WebSocket from 'ws';
-import { PROTOCOL_PORT, parseClientMessage, parseServerMessage, type ClientMessage, type ServerMessage } from '@ledge/protocol';
+import { parseClientMessage, parseServerMessage, type ClientMessage, type ServerMessage } from '@ledge/protocol';
 import { readDaemonToken } from '../auth.js';
 import { MAX_FRAME, readFrames } from '../transport/frames.js';
 import { dropLogger, frameType, unknownRequest } from '../transport/unparsed.js';
@@ -16,7 +17,7 @@ function bearerHeaders(): Record<string, string> {
 export function bridge(opts: { input?: Readable; output?: Writable; port?: number; log?: (line: string) => void } = {}): Promise<void> {
   const input = opts.input ?? process.stdin, output = opts.output ?? process.stdout;
   const dropped = dropLogger(opts.log ?? (line => { process.stderr.write(`${line}\n`); }), 'ledge bridge');
-  const ws = new WebSocket(`ws://127.0.0.1:${opts.port ?? PROTOCOL_PORT}`, { maxPayload: MAX_FRAME, handshakeTimeout: 10_000, headers: bearerHeaders() });
+  const ws = new WebSocket(`ws://127.0.0.1:${opts.port ?? ledgePort()}`, { maxPayload: MAX_FRAME, handshakeTimeout: 10_000, headers: bearerHeaders() });
   return new Promise((resolve, reject) => {
     let settled = false, off = () => {};
     const finish = (error?: Error) => {

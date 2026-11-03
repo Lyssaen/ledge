@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { Pending } from '@ledge/protocol';
-import { codexAdapter, REPLY_ENTER_DELAY_MS } from '../src/adapters/codex.js';
+import { codexAdapter, codexReplyPlan, REPLY_ENTER_DELAY_MS } from '../src/adapters/codex.js';
 import { adapterFor } from '../src/adapters/index.js';
 import { buildPreview } from '../src/adapters/preview.js';
 
@@ -118,7 +118,8 @@ describe('codex adapter: keys', () => {
     expect(codexAdapter.keysFor('accept', pending('permission', { source: 'pane' }), p)).toEqual([{ text: '2' }, { keys: ['Enter'] }]);
     expect(codexAdapter.keysFor('deny', pending('permission', { source: 'pane' }), p)).toEqual([{ keys: ['Escape'] }]);
   });
-  it('a reply is typed, then Enter after a pause (Enter inside a paste burst is a newline)', () => {
+  // The tmux plan; on Windows the reply waits for its draft first (see 'a reply on Windows (ConPTY)').
+  it.skipIf(process.platform === 'win32')('a reply is typed, then Enter after a pause (Enter inside a paste burst is a newline)', () => {
     expect(codexAdapter.replyPlan('run the\ntests')).toEqual([{ text: 'run the tests' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
   });
   it('a digit answers a question at once', () => {
@@ -167,5 +168,48 @@ describe('codex adapter: the dialog on screen must be the request (lot 6a review
   it('the matching dialog still takes its keys; no readable dialog keeps the fallbacks', () => {
     expect(codexAdapter.keysFor('accept', pending('diff'), fx('codex-permission-patch'))).toEqual([{ text: 'y' }]);
     expect(codexAdapter.keysFor('accept', pending('permission'))).toEqual([{ text: 'y' }]);
+  });
+});
+
+// Captured on Windows through ConPTY (spike): Codex asks once how to sandbox itself, over the picker footer.
+describe('codex adapter: the Windows sandbox setup', () => {
+  const pane = readFileSync(new URL('./fixtures/panes/win-codex-sandbox.txt', import.meta.url), 'utf8');
+  it('is a question for the user, with its three choices', () => {
+    expect(codexAdapter.detectPrompt(pane)).toEqual({
+      kind: 'question', text: 'Set up the Codex agent sandbox (Windows)',
+      options: ['Set up default sandbox (requires Administrator permissions)', 'Use non-admin sandbox (higher risk if prompt injected)', 'Quit'],
+    });
+    expect(codexAdapter.promptStillVisible(pane)).toBe(true);
+  });
+  it('is answered by its number then Enter (a digit only moves the cursor there)', () => {
+    const p: Pending = { kind: 'question', text: 'Set up the Codex agent sandbox (Windows)', source: 'pane' };
+    expect(codexAdapter.replyPlan('2', p, pane)).toEqual([{ text: '2' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
+  });
+});
+
+describe('codex adapter: a reply on Windows (ConPTY)', () => {
+  const rest = '› Ask Codex to do anything\n\n  GPT-6.1 Terra low · ~\\work';
+  it('waits for Codex to show the whole draft before Enter: it takes a long text in for ~2 s, and an Enter before is a newline', () => {
+    const plan = codexReplyPlan('Réponds seulement OK.', undefined, 'win32');
+    expect(plan.map(s => Object.keys(s).sort().join(','))).toEqual(['text', 'ms,until', 'waitMs', 'keys']);
+    expect(plan[0]).toEqual({ text: 'Réponds seulement OK.' });
+    expect(plan[1]).toMatchObject({ ms: 10_000 });
+    expect(plan[2]).toEqual({ waitMs: REPLY_ENTER_DELAY_MS });
+    expect(plan[3]).toEqual({ keys: ['Enter'] });
+    const shown = (plan[1] as { until: (p: string) => boolean }).until;
+    expect(shown(rest)).toBe(false);
+    expect(shown('› Réponds seulement OK.\n\n  GPT-6.1 Terra low')).toBe(true);
+    expect(codexReplyPlan('x'.repeat(2000), undefined, 'win32')[1]).toMatchObject({ ms: 10_000 });
+    expect((codexReplyPlan('x'.repeat(2000), undefined, 'win32')[1] as { until: (p: string) => boolean }).until('› [Pasted Content 2000 chars]')).toBe(true);
+  });
+  it('knows the draft even when Codex dropped characters of it (· → ✓ vanish from its input on Windows)', () => {
+    const shown = (codexReplyPlan('→ Réponds · OK ✓ vite', undefined, 'win32')[1] as { until: (p: string) => boolean }).until;
+    expect(shown('›  Réponds  OK  vite')).toBe(true);
+    expect(shown('› Ask Codex to do anything')).toBe(false);
+    // Nothing Codex surely keeps to look for: wait for no draft, Enter after the pause.
+    expect((codexReplyPlan('→ ✓', undefined, 'win32')[1] as { until: (p: string) => boolean }).until('› Ask Codex to do anything')).toBe(true);
+  });
+  it('elsewhere keeps the tmux plan', () => {
+    expect(codexReplyPlan('hello', undefined, 'linux')).toEqual([{ text: 'hello' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
   });
 });
