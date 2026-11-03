@@ -10,7 +10,7 @@ import { Menu, MenuItem } from '../shell/Menu';
 import { Modal } from '../shell/Modal';
 import { SHELL_ICONS } from '../shell/icons';
 import type { SessionActions } from './useSessionActions';
-import type { SessionMenuState } from './useSessionMenu';
+import type { ContextMenuState } from './useContextMenu';
 
 /** A session still runs when its machine answers and it has not exited. */
 export const isLiveSession = (s: Session): boolean => !s.offline && s.state !== 'exited';
@@ -103,9 +103,9 @@ export function RenameDialog({ session: s, onRename, onClose }: { session: Sessi
   );
 }
 
-/** The menu and the rename dialog of a `useSessionMenu`, once for the page that owns it. */
+/** The session menu and the rename dialog of a `useContextMenu`, once for the page that owns it: only for a session target. */
 export function SessionMenuHost({ state, actions, filing, projects, currentOf, onOpen, onHandover }: {
-  state: SessionMenuState; actions: SessionActions; filing: Filing; projects: readonly Project[]; currentOf(s: Session): string | null; onOpen(s: Session): void; onHandover?(s: Session): void;
+  state: ContextMenuState; actions: SessionActions; filing: Filing; projects: readonly Project[]; currentOf(s: Session): string | null; onOpen(s: Session): void; onHandover?(s: Session): void;
 }): JSX.Element {
   const { menu, session, renaming } = state;
   return (<>

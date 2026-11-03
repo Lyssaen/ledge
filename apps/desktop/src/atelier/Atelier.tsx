@@ -5,7 +5,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { activeCount } from '../nav/agents';
-import type { SessionMenuState } from '../manage/useSessionMenu';
+import type { ContextMenuState } from '../manage/useContextMenu';
 import type { SessionActions } from '../manage/useSessionActions';
 import { useScreenKeys } from '../nav/screenKeys';
 import type { NavAction, NavState } from '../nav/state';
@@ -31,7 +31,7 @@ export interface AtelierProps {
   /** The session menu and its keys (E, Suppr, F2, T): end, archive, resume and delete with their confirmation. */
   actions: SessionActions;
   /** The session menu's state, shared with the session page's header (the shell renders the menu): the seats open it, the keys use its terminal and rename. */
-  menu: SessionMenuState;
+  menu: ContextMenuState;
   /** More buttons at the end of the zoom bar (the detached Atelier's way out of full screen). */
   tools?: ReactNode;
   /** The tasks the daemon knows: the messages layer draws each recent hand-over. */
@@ -164,7 +164,7 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
                 {tables.map(table => (
                   <ProjectTable key={table.key} table={table} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
                     isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
-                    actions={actions} menuId={menu.menu?.id ?? null} onMenu={menuAt}
+                    actions={actions} menuId={menu.menu?.target.kind === 'session' ? menu.menu.target.id : null} onMenu={menuAt}
                     seatDrag={seatDrag} tableDrop={rig ? undefined : tableDrop(table, project.id)} />
                 ))}
               </ProjectRoom>
