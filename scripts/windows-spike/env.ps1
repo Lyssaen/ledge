@@ -3,6 +3,8 @@
 $S = Join-Path $env:TEMP 'ledge-spike'
 $env:LEDGE_HOME = Join-Path $S 'home'
 $env:LEDGE_PORT = '47832'
+# Codex keeps its login, config and hooks here: the user's own ~/.codex is never touched.
+$env:CODEX_HOME = Join-Path $S 'codex-home'
 $env:CLAUDE_CODE_GIT_BASH_PATH = Join-Path $S 'git\bin\bash.exe'
 $sys = ([Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')) -split ';' |
   Where-Object { $_ -and $_ -notmatch '\\Program Files\\Git\\' }

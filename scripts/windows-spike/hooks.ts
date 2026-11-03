@@ -1,4 +1,5 @@
-// Adds or removes the spike's Ledge hooks in the Windows user's Claude Code and Codex configs. The command runs the built
+// Adds or removes the spike's Ledge hooks in the Windows user's Claude Code config and in the spike's Codex home
+// (CODEX_HOME, set by env.ps1). The command runs the built
 // CLI with the system Node, by absolute, quoted, forward-slash paths (works from cmd and from Git Bash).
 //   tsx hooks.ts install|remove
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -12,7 +13,7 @@ const cli = fwd(resolve(dirname(fileURLToPath(import.meta.url)), '../../packages
 const base = `"${fwd(process.execPath)}" "${cli}" hook`;
 const files = [
   { path: join(homedir(), '.claude', 'settings.json'), command: base, merge: mergeClaudeHooks },
-  { path: join(homedir(), '.codex', 'hooks.json'), command: `${base} codex`, merge: mergeCodexHooks },
+  { path: join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'hooks.json'), command: `${base} codex`, merge: mergeCodexHooks },
 ];
 type Entry = { hooks?: Array<{ command?: string }> };
 
