@@ -166,6 +166,9 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<{ lines
   const link = opts.link ?? join(homedir(), '.local', 'bin', 'ledge');
   if (script) await step(async () => { if (await removeLink(link, script)) lines.push(`${link} removed`); });
 
-  lines.push(ok ? 'Ledge is uninstalled from WSL. On Windows: Settings > Apps > Installed apps > Ledge > Uninstall.' : 'Uninstall finished with errors, see above.');
+  const done = (opts.platform ?? process.platform) === 'win32'
+    ? "Ledge's hooks are removed. To remove Ledge Desktop: Settings > Apps > Installed apps > Ledge Desktop > Uninstall."
+    : 'Ledge is uninstalled from WSL. On Windows: Settings > Apps > Installed apps > Ledge > Uninstall.';
+  lines.push(ok ? done : 'Uninstall finished with errors, see above.');
   return { lines, ok };
 }

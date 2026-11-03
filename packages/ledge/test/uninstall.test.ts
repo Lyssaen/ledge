@@ -170,5 +170,6 @@ describe('ledge uninstall on Windows', () => {
     const r = await runUninstall({ platform: 'win32', settingsPath: join(root, 'settings.json'), codexDir: join(root, '.codex'), cursorDir: join(root, '.cursor'), link: join(root, 'bin', 'ledge'), unitDir: join(root, 'systemd'), run: async (cmd: string, args: string[]) => { calls.push(`${cmd} ${args.join(' ')}`); return { code: 0, stdout: '', stderr: '' }; } });
     expect(calls.filter(c => c.startsWith('systemctl'))).toEqual([]);
     expect(r.lines.join('\n')).toMatch(/no service on Windows/);
+    expect(r.lines.join('\n')).not.toMatch(/WSL/);
   });
 });
