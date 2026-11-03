@@ -24,6 +24,8 @@ function client(path: string) {
   const sock: Socket = connect(path);
   const frames: Array<Record<string, unknown>> = [];
   let closed = false; sock.on('close', () => { closed = true; });
+  // The host ends connections it refuses: a write after that is EPIPE, expected here.
+  sock.on('error', () => {});
   sock.on('data', frameLines(l => frames.push(JSON.parse(l))));
   let id = 0;
   const req = async (body: Record<string, unknown>) => {
