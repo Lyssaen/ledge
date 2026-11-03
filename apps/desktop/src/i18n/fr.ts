@@ -59,6 +59,7 @@ export const fr = {
       sessions: 'Aucune session pour l’instant.', sessionsBody: 'Une session lance un agent dans un dossier ou un projet.', newSession: 'Créer une session',
       stopped: 'OpenRig est arrêté.', stoppedBody: 'Le démarrer lance aussi le kernel : l’opérateur, l’advisor et la file.', start: 'Démarrer OpenRig', starting: 'Démarrage d’OpenRig…',
       retry: 'Réessayer', openPage: 'Ouvrir la page OpenRig',
+      noActive: 'Aucun agent actif.', noActiveBody: 'Aucun projet n’a d’agent en marche. H affiche tous les projets.', showAll: 'Afficher tous les projets',
       installedOn: (machine: string) => `Il est installé sur ${machine} : démarre-le depuis sa page.`, offlineOf: (n: number, m: number) => `hors ligne · ${n}/${m}`,
       noRig: 'Aucun rig pour l’instant.', noRigBody: 'Un rig est une équipe d’agents.', noRigOperator: (name: string) => `${name}, l’opérateur du kernel, peut t’aider à en composer un.`
     },
@@ -67,7 +68,7 @@ export const fr = {
     yours: 'À toi', yoursMore: (n: number) => `Voir les ${n} autres`, yoursLess: 'Réduire',
     allow: 'Oui', deny: 'Non', reply: 'Répondre', see: 'Voir',
     ofHelper: (parent: string) => `↳ ${parent}`,
-    hideDone: 'Masquer les sessions terminées (H)', showDone: 'Afficher les sessions terminées (H)',
+    hideDone: 'Seulement les projets avec un agent actif (H)', moreProjects: (n: number) => `+${n} ${plural(n, 'projet', 'projets')} sans agent actif`,
     dense: 'Mode compact (D)', foldAll: 'Tout replier',
     tree: 'Projets, branches et sessions',
     fold: (name: string) => `Replier ${name}`, unfold: (name: string) => `Déplier ${name}`,
@@ -292,7 +293,7 @@ export const fr = {
     grouping: 'Regrouper les sièges OpenRig', groupingBy: { projects: 'Projets', rigs: 'Rigs' }, groupingHint: { projects: 'Les sessions de tes projets, sans les sièges OpenRig', rigs: 'Les sièges OpenRig : chaque rig, le kernel à part' }, 
     viewTabs: 'Vue des agents', helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
     chat: 'Chat Ledge', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
-    terminalShow: 'Afficher le terminal', terminalHide: 'Masquer le terminal', terminalShowTitle: 'Afficher le terminal (O)', terminalHideTitle: 'Masquer le terminal (O)', terminalGone: 'Siège arrêté : plus de terminal'
+    panelShow: 'Afficher le panneau : shells et modifications', panelHide: 'Masquer le panneau', panelShowTitle: 'Afficher le panneau : shells et modifications (O)', panelHideTitle: 'Masquer le panneau (O)', terminalGone: 'Siège arrêté : plus de terminal'
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
@@ -589,7 +590,7 @@ export const fr = {
     title: 'Raccourcis clavier',
     intro: 'Actifs lorsque la fenêtre a le focus. Les touches de navigation restent disponibles pour la saisie et le terminal lorsqu’ils ont le focus.',
     outro: 'Ctrl / ⌘ K ouvre la recherche depuis n’importe quelle vue. Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.',
-    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (Modifications)'],['O','Afficher ou masquer le terminal'],['Ctrl `','Passer du fil au terminal et retour'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
+    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (onglet Modifications)'],['O','Afficher ou masquer le panneau : shells et modifications'],['Ctrl `','Basculer entre le fil et l’écran de l’agent, le clavier suit'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>
   },
   tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
   notify: {
@@ -800,12 +801,14 @@ export const fr = {
   },
   session: {
     meta: 'Machine et dépôts',
-    /** An OMP seat of OpenRig: no thread, its terminal alongside; stopped, its terminal gone (docs/mockups/ledge-openrig-omp.html). */
-    rigTerminalOnly: { title: 'Pas de fil pour ce siège.', body: 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Son terminal est ouvert à côté : ce que tu y tapes lui est envoyé.' },
+    /** An OMP seat of OpenRig: no thread, its Terminal view; stopped, its terminal gone (docs/mockups/ledge-openrig-omp.html). */
+    rigTerminalOnly: { title: 'Pas de fil pour ce siège.', body: 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Sa vue Terminal montre son écran : ce que tu y tapes lui est envoyé.' },
     rigStopped: { title: 'Siège arrêté.', body: 'Son terminal n’existe plus : la page OpenRig montre son rig.' }, badgeStopped: 'Arrêté',
     subagent: 'Sous-agent',
     kidsPill: (n: number) => plural(n, `${n} sous-agent`, `${n} sous-agents`), kidsPillTitle: 'Voir les sous-agents dans la barre latérale',
-    views: { label: 'Vue de la session', thread: 'Fil', changes: 'Modifications' },
+    views: { label: 'Vue de la session', thread: 'Fil', terminal: 'Terminal', changes: 'Modifications' },
+    /** The right panel (Fil | Terminal v3): « ± Modifications », then the shells. */
+    panel: { label: 'Panneau : shells et modifications', resize: 'Largeur du panneau', max: 'Agrandir le panneau', unmax: 'Réduire le panneau' },
     changes: {
       files: 'Fichiers modifiés', count: (n: number) => plural(n, `${n} fichier`, `${n} fichiers`), toggle: (n: number) => `Fichiers · ${n}`,
       labels: { add: 'Ajouté', edit: 'Modifié', write: 'Réécrit', delete: 'Supprimé', rename: 'Renommé' } as Record<Change, string>,
@@ -839,11 +842,11 @@ export const fr = {
     terminal: {
       title: 'Terminal', empty: 'Aucune sortie reçue pour l’instant.',
       phoneHolds: (device: string, n: string) => `Téléphone au clavier : ${device} tape dans le terminal de ${n}.`, takeBack: 'Reprendre la main',
-      resize: 'Largeur du terminal', openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`,
+      openFailed: (n: string) => `Le terminal de ${n} n’a pas pu s’ouvrir.`,
       agentTab: (n: string) => `${n} · agent`, shellTab: (n: number, dir: string) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
       addShell: 'Nouveau shell', closeTab: (label: string) => `Fermer ${label}`,
       local: 'wsl', remote: (host: string) => `ssh · ${host}`,
-      external: 'Ouvrir dans un terminal externe', max: 'Agrandir le terminal', unmax: 'Réduire le terminal',
+      external: 'Ouvrir dans un terminal externe',
       attached: 'Attaché', attachedSsh: 'Attaché par SSH', reconnecting: 'Reconnexion…', readOnly: 'Lecture seule', offline: 'Hors ligne', preview: 'Aperçu · lecture seule',
       connecting: 'Connexion…', shell: 'Shell',
       tmuxTarget: (session: string, host?: string) => (host ? `ssh ${host} · tmux · ${session}` : `tmux · ${session}`),
@@ -857,12 +860,15 @@ export const fr = {
       retry: 'Réessayer',
       subagent: (h: string, p: string) => `${h} est un sous-agent de ${p} et n’a pas de terminal à lui : voici l’écran de ${p}, en lecture seule.`,
       goParent: (p: string) => `Aller à ${p}`,
-      outside: (n: string) => `${n} a été lancée hors de Ledge : pas d’écran à rattacher. Voici ses dernières lignes, en lecture seule. Votre shell reste disponible.`,
-      ended: (n: string) => `${n} est terminée : voici ses dernières lignes, en lecture seule. Votre shell reste disponible.`,
+      outside: (n: string) => `${n} a été lancée hors de Ledge : pas d’écran à rattacher. Voici ses dernières lignes, en lecture seule.`,
+      ended: (n: string) => `${n} est terminée : voici ses dernières lignes, en lecture seule.`,
       shellIntro: (n: string, dir: string) => `Shell ouvert dans le dossier de ${n} : ${dir}`,
       shellIntroSsh: (host: string, n: string, dir: string) => `Shell sur ${host}, dans le dossier de ${n} : ${dir}`,
       shellEnded: (code: number | null) => `Shell terminé (code ${code})`, shellLost: 'Shell terminé : connexion perdue',
       reopen: 'Rouvrir', shellUnavailable: 'Ce dossier ne peut pas être ouvert dans un shell.',
+      noAgentScreen: 'Pas d’écran d’agent', openShell: 'Ouvrir un shell',
+      nativeTitle: (n: string) => `Ledge pilote ${n} directement : il n’a pas d’écran d’agent.`,
+      nativeBody: 'Son travail se lit dans le fil. Vous pouvez ouvrir un shell dans son dossier, dans le panneau de droite.',
       toTerminal: (k: string) => `Donner le clavier au terminal · Ctrl ${k}`, toThread: (k: string) => `Le clavier va au terminal · revenir au fil : Ctrl ${k}`
     },
     pending: {

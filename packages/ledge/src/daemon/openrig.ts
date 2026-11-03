@@ -33,12 +33,12 @@ const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const int = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
 const parse = (text: string): unknown => { try { return JSON.parse(text); } catch { return undefined; } };
 
-/** Where a spec of `rig specs ls` comes from, as the fronts read it: `user` the person's own (OpenRig 0.7.7 says `user_file`),
- *  `builtin` shipped with OpenRig, any other kind as OpenRig names it. */
-export function specSource(raw: unknown): string {
+/** Where a spec of `rig specs ls` comes from, as the fronts read it: `builtin` shipped with OpenRig (`builtin`, `builtin_*`), every
+ *  other kind the person's own (`user`; OpenRig 0.7.7 says `user_file`). The fronts know these two only, and a new kind is more
+ *  likely the person's file than a shipped spec. */
+export function specSource(raw: unknown): 'user' | 'builtin' {
   const s = str(raw);
-  if (!s) return 'unknown';
-  return s === 'user' || s.startsWith('user_') ? 'user' : s === 'builtin' || s.startsWith('builtin_') ? 'builtin' : s;
+  return s === 'builtin' || s?.startsWith('builtin_') ? 'builtin' : 'user';
 }
 
 /** One seat of `rig ps --nodes --json`. */

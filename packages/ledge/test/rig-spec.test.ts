@@ -290,3 +290,10 @@ describe('permissions at launch', () => {
     expect(r.commands[0]).toBe('rig up /r/starter/rig.yaml --cwd /w/ledge --non-interruptive --yes');
   });
 });
+
+describe('where a spec comes from', () => {
+  it('builtin and builtin_* are OpenRig’s, every other kind (user, user_file, a new one) the person’s', async () => {
+    const { specSource } = await import('../src/daemon/openrig.js');
+    expect(['builtin', 'builtin_pack', 'user', 'user_file', 'shared_dir', undefined, 42].map(specSource)).toEqual(['builtin', 'builtin', 'user', 'user', 'user', 'user', 'user']);
+  });
+});

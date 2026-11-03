@@ -5,7 +5,7 @@ import type { OpenRigState, Session } from '@ledge/protocol';
 import { fakeDaemon, session } from './daemon';
 
 // Visual review of docs/mockups/ledge-openrig-omp.html, view 1 (not an assertion suite): OMP seats under their rig, a running seat's
-// page on its terminal, a stopped one greyed and its page. The browser build has no PTY: the terminal pane shows the seat's preview.
+// page on its Terminal view and on « Fil », a stopped one greyed and its page. The browser build has no PTY: the terminal pane shows the seat's preview.
 // LEDGE_VISUAL=1 pnpm exec playwright test e2e/omp-seats-visual.spec.ts   (from apps/desktop)
 test.skip(!process.env.LEDGE_VISUAL, 'set LEDGE_VISUAL=1 to capture the OMP seats');
 test.use({ viewport: { width: 1440, height: 860 }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
@@ -24,8 +24,11 @@ const MIRROR = ["you > Story ST7-412 : implémente le refus d'un IBAN vide, en T
   '  ⚙ read …', '  ⚙ read done', '  ⚙ edit done', '  ⚙ bash …', '  ⚙ bash FAILED', '', 'Le test échoue comme attendu (rouge). Je commite cette étape.'];
 const state: OpenRigState = { installed: true, version: '0.7.7', daemon: { state: 'running', pid: 1, port: 7433 }, kernel: { state: 'ready' }, rigs: [], at: new Date().toISOString() };
 
-async function open(page: Page, theme: 'dark' | 'light', lang: 'fr' | 'en' = 'fr', sessions: Session[] = SEATS) {
-  await page.addInitScript(([t, l]) => { try { localStorage.setItem('desktop.lang', l!); localStorage.setItem('desktop.theme', t!); localStorage.setItem('desktop.grouping', 'rigs'); } catch { /* ignore */ } }, [theme, lang]);
+async function open(page: Page, theme: 'dark' | 'light', lang: 'fr' | 'en' = 'fr', sessions: Session[] = SEATS, dense = false) {
+  await page.addInitScript(([t, l, c]) => { try {
+    localStorage.setItem('desktop.lang', l!); localStorage.setItem('desktop.theme', t!); localStorage.setItem('desktop.grouping', 'rigs');
+    if (c === '1') localStorage.setItem('desktop.sidebar', JSON.stringify({ hideDone: true, dense: true }));
+  } catch { /* ignore */ } }, [theme, lang, dense ? '1' : '0']);
   const d = await fakeDaemon(page, sessions, { projects: { projects: [], rules: [] }, openrig: state });
   await page.goto('/');
   await page.evaluate(() => document.fonts.ready);
@@ -38,10 +41,13 @@ for (const theme of ['dark', 'light'] as const) {
     const d = await open(page, theme);
     await side(page).getByRole('button', { name: /^Ivo/ }).click();
     d.preview('rig-ivo', MIRROR);
-    await expect(page.locator('.seat-note')).toContainText('Pas de fil pour ce siège.', { timeout: 30_000 });
-    await expect(page.getByRole('region', { name: 'Terminal' })).toContainText('INVALID_IBAN');
+    // A running seat opens on its Terminal view; « Fil » says why there is no thread (design-ux, Fil | Terminal, 12:23Z).
+    await expect(page.getByRole('region', { name: 'Terminal' })).toContainText('INVALID_IBAN', { timeout: 30_000 });
     await page.screenshot({ path: info.outputPath(`omp-live-${theme}.png`) });
     await side(page).screenshot({ path: info.outputPath(`omp-sidebar-${theme}.png`) });
+    await page.getByRole('tab', { name: /^Fil/ }).click();
+    await expect(page.locator('.seat-note')).toContainText('Pas de fil pour ce siège.');
+    await page.screenshot({ path: info.outputPath(`omp-live-thread-${theme}.png`) });
     await page.locator('.seat-note').screenshot({ path: info.outputPath(`omp-nothread-${theme}.png`) });
     await side(page).locator('[role="treeitem"]').filter({ hasText: 'Tom' }).screenshot({ path: info.outputPath(`omp-stopped-row-${theme}.png`) });
   });
@@ -51,16 +57,26 @@ for (const theme of ['dark', 'light'] as const) {
     await side(page).getByRole('button', { name: /^Tom/ }).click();
     await expect(page.locator('.seat-note')).toContainText('Siège arrêté.', { timeout: 30_000 });
     await expect(page.getByRole('region', { name: 'Terminal' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: /^Terminal/ })).toHaveAttribute('aria-disabled', 'true');
     await page.screenshot({ path: info.outputPath(`omp-stopped-open-${theme}.png`) });
     await page.locator('.seat-note').screenshot({ path: info.outputPath(`omp-stopped-note-${theme}.png`) });
   });
 }
 
+// The seats in the compact sidebar (#185's alignment): the stopped one greyed on the same grid.
+for (const theme of ['dark', 'light'] as const) test(`OMP seats, compact sidebar, ${theme}`, async ({ page }, info) => {
+  await open(page, theme, 'fr', SEATS, true);
+  await expect(side(page).locator('[role="treeitem"]').filter({ hasText: 'Tom' })).toBeVisible({ timeout: 30_000 });
+  await side(page).screenshot({ path: info.outputPath(`omp-sidebar-compact-${theme}.png`) });
+});
+
 test('english', async ({ page }, info) => {
   const d = await open(page, 'dark', 'en');
   await side(page).getByRole('button', { name: /^Ivo/ }).click();
   d.preview('rig-ivo', MIRROR);
-  await expect(page.locator('.seat-note')).toContainText('No thread for this seat.', { timeout: 30_000 });
+  await expect(page.getByRole('region', { name: 'Terminal' })).toContainText('INVALID_IBAN', { timeout: 30_000 });
+  await page.getByRole('tab', { name: /^Thread/ }).click();
+  await expect(page.locator('.seat-note')).toContainText('No thread for this seat.');
   await page.screenshot({ path: info.outputPath('omp-live-en-dark.png') });
   await side(page).getByRole('button', { name: /^Tom/ }).click();
   await expect(page.locator('.seat-note')).toContainText('Seat stopped.');

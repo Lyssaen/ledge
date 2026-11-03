@@ -90,6 +90,8 @@
 .st-more{min-height:26px;font-size:12px}
 .st .st-more button{color:var(--muted-foreground)}
 .st .st-more button:hover{color:var(--sidebar-foreground)}
+/* « +N projets sans agent actif »: the tree's last row, apart from the last project (docs/mockups/ledge-projects-eye.html). */
+.st .st-more-projects{margin-top:4px;border-top:1px dashed var(--sidebar-border);border-radius:0;padding-top:2px}
 /* Archives, at the foot of the tree: folded, filterable, each session read, put back, resumed or deleted from its row. */
 .st-archives{border-top:1px solid var(--sidebar-border);padding-top:6px}
 .st .st-arch-toggle{display:flex;align-items:center;gap:6px;height:24px;font-size:11px;color:var(--muted-foreground)}
@@ -102,6 +104,8 @@
 .st-arch{padding-left:8px}
 .st-arch .st-main strong{display:flex;align-items:center;gap:0;color:var(--muted-foreground)}
 .st-arch .st-main strong .side-swatch{width:7px;height:7px;margin:0 6px 0 0}
+/* An archive outside any project keeps the colour's place, empty: every name starts at one column. */
+.st-arch .st-main strong .filter-none{width:7px;height:7px;margin:0 6px 0 0;flex-shrink:0}
 .st-arch.sel .st-main strong{color:var(--sidebar-foreground)}
 .st-arch .st-bot{opacity:.7}
 .st .st-acts button.danger:hover{color:var(--danger-text)}
@@ -131,6 +135,8 @@
 .st-keys-tip kbd{flex:none;font-size:10px!important}
 .side-footer{padding:0;border:0} /* alias: Settings' test reads this selector; the foot is .st-foot */
 .side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
+/* « Sans projet » has no colour: its place stays, empty, so its name lines up with the projects' names. */
+.st-project>.filter-none{width:9px;height:9px;margin:0 3px;flex-shrink:0}
 .machine-dot{width:7px;height:7px;border-radius:50%;margin:0 4px 0 2px;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 18%,transparent);flex-shrink:0}
 .machine-dot.off{background:none;border:1.5px solid var(--muted-foreground);box-shadow:none}
 /* A daemon restarting for its update (#48): neither online nor offline. */

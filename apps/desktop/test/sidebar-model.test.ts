@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { projectOf } from '@ledge/fleet';
 import { TWO_PROJECTS } from './helpers';
-import { attentionOf, branchOf, filterArchived, isFinished, quickDecide, treeModel } from '../src/shell/sidebar/model';
+import { attentionOf, branchOf, eyeGroups, filterArchived, isLive, quickDecide, treeModel } from '../src/shell/sidebar/model';
 
 const idOf = (s: ReturnType<typeof fakeSession>) => projectOf(s, TWO_PROJECTS);
 
@@ -72,17 +72,38 @@ describe('quickDecide', () => {
 });
 
 describe('filterArchived / helpers', () => {
-  it('branchOf and isFinished', () => {
+  it('branchOf, and a live agent: neither ended nor archived (docs/mockups/ledge-projects-eye.html)', () => {
     expect(branchOf({})).toBe('main');
     expect(branchOf({ branch: '  desktop ' })).toBe('desktop');
-    expect(isFinished(fakeSession('a', { state: 'exited' }))).toBe(true);
-    expect(isFinished(fakeSession('a', { state: 'idle' }))).toBe(true);
-    expect(isFinished(fakeSession('a', { state: 'exited', offline: true }))).toBe(false);
-    expect(isFinished(fakeSession('a', { state: 'working' }))).toBe(false);
-    // A turn ended while a background subagent still works: the agent is not done until the subagent stops.
-    const helper = { id: 'h1', kind: 'general-purpose', task: 'search', state: 'working' as const };
-    expect(isFinished(fakeSession('a', { state: 'idle', helpers: [helper] }))).toBe(false);
-    expect(isFinished(fakeSession('a', { state: 'idle', helpers: [{ ...helper, state: 'exited' }] }))).toBe(true);
+    for (const state of ['working', 'idle', 'waiting_input', 'waiting_permission', 'error', 'starting'] as const) expect(isLive(fakeSession('a', { state }))).toBe(true);
+    expect(isLive(fakeSession('a', { state: 'idle', offline: true }))).toBe(true);
+    expect(isLive(fakeSession('a', { state: 'exited' }))).toBe(false);
+    expect(isLive(fakeSession('a', { state: 'idle', archivedAt: '2026-10-18T10:00:00.000Z' }))).toBe(false);
+  });
+  it('the eye: pressed, the projects with a live agent and how many it hides; released, every project, « Sans projet » with sessions', () => {
+    const projects = { projects: [
+      { id: 'ledge', name: 'Ledge', color: 'green' as const, description: '', repos: [{ machine: 'local', path: '/w/ledge' }] },
+      { id: 'paper', name: 'Paper', color: 'amber' as const, description: '', repos: [{ machine: 'local', path: '/w/paper' }] },
+      { id: 'empty', name: 'Empty', color: 'pink' as const, description: '', repos: [{ machine: 'local', path: '/w/empty' }] }
+    ], rules: [] };
+    const idOf = (s: { cwd: string }) => (s.cwd === '/w/ledge' ? 'ledge' : s.cwd === '/w/paper' ? 'paper' : s.cwd === '/w/empty' ? 'empty' : null);
+    const sessions = [fakeSession('a', { cwd: '/w/ledge', state: 'idle' }), fakeSession('b', { cwd: '/w/paper', state: 'exited' }), fakeSession('c', { cwd: '/tmp', state: 'exited' })];
+    const groups = treeModel(sessions, projects, idOf);
+    const names = (r: { shown: { name: string }[] }) => r.shown.map(g => g.name);
+    const pressed = eyeGroups(groups, true, { dragging: false });
+    expect([names(pressed), pressed.hidden]).toEqual([['Ledge'], 3]);
+    const released = eyeGroups(groups, false, { dragging: false });
+    expect([names(released), released.hidden]).toEqual([['Ledge', 'Paper', 'Empty', 'Sans projet'], 0]);
+    // Released, « Sans projet » shows only with sessions.
+    expect(names(eyeGroups(treeModel(sessions.slice(0, 2), projects, idOf), false, { dragging: false }))).toEqual(['Ledge', 'Paper', 'Empty']);
+    // A project dragged onto, or the filter, still shows.
+    expect(names(eyeGroups(groups, true, { dragging: true }))).toEqual(['Ledge', 'Paper', 'Empty']);
+    expect(names(eyeGroups(groups, true, { dragging: false, filter: 'paper' }))).toEqual(['Ledge', 'Paper']);
+    // Nobody live, or no session at all: nothing shows, every project counted (the tree picks its box).
+    const quiet = treeModel(sessions.slice(1), projects, idOf);
+    expect([names(eyeGroups(quiet, true, { dragging: false })), eyeGroups(quiet, true, { dragging: false }).hidden]).toEqual([[], 4]);
+    expect(eyeGroups(treeModel([], projects, idOf), true, { dragging: false })).toEqual({ shown: [], hidden: 3 });
+    expect(names(eyeGroups(treeModel([], projects, idOf), false, { dragging: false }))).toEqual(['Ledge', 'Paper', 'Empty']);
   });
   it('filterArchived matches name, task and project', () => {
     const old = fakeSession('old', { name: 'Nova', topic: 'Migration', archivedAt: '2026-10-18T10:00:00.000Z' });

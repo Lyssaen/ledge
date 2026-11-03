@@ -99,14 +99,9 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
             ? <button type="button" className="archived-pill" onClick={() => onRevealArchives?.()}><Icon d={SHELL_ICONS.archive} size={12} />{t.manage.archivedBanner.pill}</button>
             : <>{!helper && <ApprovalBadge session={session} />}<StateBadge state={helper ? helperState(helper) : botState(session)} offline={!!session.offline} stopped={!helper && isStoppedOmpSeat(session)} /></>}
           <span className="view-actions-sep" />
-          {/* A stopped OMP seat has no terminal any more: the toggle stays in its place, disabled. */}
-          {isOmpSeat(session) && (isArchived(session) || session.state === 'exited')
-            ? <Button variant="ghost" size="icon" className="top-terminal-gone" aria-disabled="true" aria-label={t.top.terminalGone} title={t.top.terminalGone}>
-                <Icon d={SHELL_ICONS.terminal} size={16} />
-              </Button>
-            : <Button variant="ghost" size="icon" aria-pressed={terminal} aria-label={terminal ? t.top.terminalHide : t.top.terminalShow} title={terminal ? t.top.terminalHideTitle : t.top.terminalShowTitle} onClick={onTerminal}>
-                <Icon d={SHELL_ICONS.terminal} size={16} />
-              </Button>}
+          <Button variant="ghost" size="icon" aria-pressed={terminal} aria-label={terminal ? t.top.panelHide : t.top.panelShow} title={terminal ? t.top.panelHideTitle : t.top.panelShowTitle} onClick={onTerminal}>
+            <Icon d={SHELL_ICONS.terminal} size={16} />
+          </Button>
           {manage && !helper && !isArchived(session) && (
             <Button variant="ghost" size="icon" aria-label={t.manage.menu.label(session.name)} title={t.manage.menu.more} aria-haspopup="menu" aria-expanded={manage.open}
               onClick={e => { const r = e.currentTarget.getBoundingClientRect(); manage.onOpen({ x: r.right - MENU_WIDTH, y: r.bottom + 6 }, e.currentTarget); }}>

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PtyBackend, PtyEvents } from '../src/term/backend';
 import type { TermSurface } from '../src/term/surface';
-import { TermStore, agentTabId, type Tab, type TermDeps } from '../src/term/store';
+import { TermStore, agentTabId, changesTabId, type Tab, type TermDeps } from '../src/term/store';
 
 type Open = { argv: string[]; on: PtyEvents; closed: boolean; writes: string[]; sizes: [number, number][]; resolve(ok: boolean): void };
 type FakeSurface = TermSurface & { written: (Uint8Array | string)[]; readOnly: boolean; disposed: boolean; type(d: string): void; resized(c: number, r: number): void };
@@ -53,37 +53,40 @@ function store(over: Partial<TermDeps> = {}) {
     now: () => Date.now(), ...over
   });
 }
+/** « + » in the panel: a new shell tab, not started yet. */
+const plus = (st: TermStore, sid: string) => shellOf(st, sid, st.newShell(sid));
 const shellOf = (st: TermStore, sid: string, id: string) => st.tabs(sid).find(t => t.id === id) as Extract<Tab, { kind: 'shell' }>;
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-19T10:00:00Z')); backend = fakeBackend(); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe('TermStore tabs and shells', () => {
-  it('the first view is the agent tab and one idle shell, the agent tab selected', () => {
+  it('no shell until « + »: the panel opens on Modifications', () => {
     const st = store();
     const tabs = st.tabs('local:a');
-    expect(tabs).toEqual([{ kind: 'agent', id: agentTabId('local:a') }, expect.objectContaining({ kind: 'shell', n: 1, status: 'idle' })]);
+    expect(tabs).toEqual([]);
     expect(st.tabs('local:a')).toBe(tabs);
-    expect(st.active('local:a')).toBe('local:a#agent');
+    expect(st.active('local:a')).toBe(changesTabId('local:a'));
+    expect(placeCalls).toEqual([]);
   });
 
-  it('shell 1 opens where the session works, on its machine, asked once', () => {
+  it('the first shell opens where the session works, on its machine; the next ones where the first runs', () => {
     const st = store();
-    expect(st.tabs('local:a')[1]).toMatchObject({ dir: '/r/.worktrees/x', remote: false });
-    expect(st.tabs('ssh:b')[1]).toMatchObject({ dir: '/srv/app', remote: true });
-    st.tabs('local:a'); st.select('local:a', 'local:a#shell-1'); st.link('ssh:b');
+    expect(plus(st, 'local:a')).toMatchObject({ n: 1, dir: '/r/.worktrees/x', remote: false, status: 'idle' });
+    expect(plus(st, 'ssh:b')).toMatchObject({ dir: '/srv/app', remote: true });
+    expect(plus(st, 'local:a')).toMatchObject({ n: 2, dir: '/r/.worktrees/x', remote: false });
     expect(placeCalls).toEqual(['local:a', 'ssh:b']);
   });
 
   it('shell 1 of an ssh session that loses its connection ends « lost »', async () => {
-    const st = store(); const [, shell] = st.tabs('ssh:b');
+    const st = store(); const shell = plus(st, 'ssh:b');
     st.select('ssh:b', shell!.id); await tick();
     backend.opens[0]!.on.exit(255);
     expect(shellOf(st, 'ssh:b', shell!.id).end).toEqual({ code: 255, lost: true });
   });
 
   it('a shell starts when first shown and survives hiding the pane and other sessions', async () => {
-    const st = store(); const [, shell] = st.tabs('local:a');
+    const st = store(); const shell = plus(st, 'local:a');
     expect(backend.opens).toHaveLength(0);
     st.select('local:a', shell!.id); expect(backend.opens.at(-1)!.argv).toEqual(shellArgv('local:a'));
     expect(st.active('local:a')).toBe(shell!.id);
@@ -96,7 +99,7 @@ describe('TermStore tabs and shells', () => {
   });
 
   it('keys typed in a shell reach its process, and its output and size follow', async () => {
-    const st = store(); const [, shell] = st.tabs('local:a');
+    const st = store(); const shell = plus(st, 'local:a');
     st.select('local:a', shell!.id); await tick();
     const s = st.surface(shell!.id) as FakeSurface;
     s.type('ls\r'); s.resized(100, 30);
@@ -107,27 +110,37 @@ describe('TermStore tabs and shells', () => {
   });
 
   it('closing a shell kills it at once; « + » numbers the next', async () => {
-    const st = store(); const [, shell] = st.tabs('local:a');
+    const st = store(); const shell = plus(st, 'local:a');
     st.select('local:a', shell!.id); await tick();
     const s = st.surface(shell!.id) as FakeSurface;
     st.close('local:a', shell!.id);
     expect(backend.opens[0]!.closed).toBe(true);
     expect(s.disposed).toBe(true);
     expect(st.surface(shell!.id)).toBeUndefined();
-    expect(st.tabs('local:a').map(t => t.id)).toEqual(['local:a#agent']);
-    expect(st.active('local:a')).toBe('local:a#agent');
+    expect(st.tabs('local:a')).toEqual([]);
+    expect(st.active('local:a')).toBe(changesTabId('local:a'));
     const id = st.addShell('local:a', '/r', false);
     expect(shellOf(st, 'local:a', id)).toMatchObject({ n: 2, dir: '/r', remote: false, status: 'idle' });
   });
 
-  it('the agent tab cannot close', () => {
-    const st = store(); st.tabs('local:a');
-    st.close('local:a', agentTabId('local:a'));
-    expect(st.tabs('local:a')[0]).toEqual({ kind: 'agent', id: 'local:a#agent' });
+  it('a closed active shell hands over to its neighbour, the next one else the one before; Modifications cannot close', () => {
+    const st = store();
+    const [a, b, c] = [plus(st, 'local:a'), plus(st, 'local:a'), plus(st, 'local:a')];
+    st.select('local:a', b.id);
+    st.close('local:a', b.id);
+    expect(st.active('local:a')).toBe(c.id);
+    st.close('local:a', c.id);
+    expect(st.active('local:a')).toBe(a.id);
+    st.close('local:a', changesTabId('local:a'));
+    expect(st.active('local:a')).toBe(a.id);
+    st.select('local:a', changesTabId('local:a'));
+    expect(st.active('local:a')).toBe(changesTabId('local:a'));
+    st.select('local:a', 'local:a#shell-9');                               // no such tab: nothing changes
+    expect(st.active('local:a')).toBe(changesTabId('local:a'));
   });
 
   it('a shell closed while it is still opening is killed as soon as it opens, and never adopted', async () => {
-    const st = store(); const [, shell] = st.tabs('local:a');
+    const st = store(); const shell = plus(st, 'local:a');
     backend.hold(true);
     st.select('local:a', shell!.id);
     st.close('local:a', shell!.id);
@@ -137,7 +150,7 @@ describe('TermStore tabs and shells', () => {
   });
 
   it('a shell that exits ends with its code, and « Rouvrir » starts it again in the same tab', async () => {
-    const st = store(); const [, shell] = st.tabs('local:a');
+    const st = store(); const shell = plus(st, 'local:a');
     st.select('local:a', shell!.id); await tick();
     const s = st.surface(shell!.id);
     backend.opens[0]!.on.exit(0);
@@ -162,21 +175,21 @@ describe('TermStore tabs and shells', () => {
   });
 
   it('a local shell exiting with 255 is not « lost »', async () => {
-    const st = store(); const [, shell] = st.tabs('local:a');
+    const st = store(); const shell = plus(st, 'local:a');
     st.select('local:a', shell!.id); await tick();
     backend.opens[0]!.on.exit(255);
     expect(shellOf(st, 'local:a', shell!.id).end).toEqual({ code: 255, lost: false });
   });
 
   it('a shell with no argv is unavailable, not crashed', () => {
-    const st = store({ shellArgv: () => null }); const [, shell] = st.tabs('local:a');
+    const st = store({ shellArgv: () => null }); const shell = plus(st, 'local:a');
     st.select('local:a', shell!.id);
     expect(shellOf(st, 'local:a', shell!.id).status).toBe('unavailable');
     expect(backend.opens).toHaveLength(0);
   });
 
   it('a shell the backend refuses to open is unavailable', async () => {
-    const st = store(); const [, shell] = st.tabs('local:a');
+    const st = store(); const shell = plus(st, 'local:a');
     backend.hold(true);
     st.select('local:a', shell!.id);
     backend.opens[0]!.resolve(false); await tick();
@@ -184,7 +197,7 @@ describe('TermStore tabs and shells', () => {
   });
 
   it('the session ends: its shells stay open until their tab closes', async () => {
-    const st = store(); const [, shell] = st.tabs('local:a');
+    const st = store(); const shell = plus(st, 'local:a');
     st.showAgent('local:a', { kind: 'live' }); await tick();
     st.select('local:a', shell!.id); await tick();
     const opened = backend.opens.at(-1)!;
@@ -196,7 +209,7 @@ describe('TermStore tabs and shells', () => {
   it('a new theme reaches every xterm still open', async () => {
     const made: (FakeSurface & { themes: unknown[] })[] = [];
     const st = store({ surface: () => { const s = Object.assign(fakeSurface(), { themes: [] as unknown[] }); s.setTheme = t => { s.themes.push(t); }; made.push(s); return s; } });
-    const [, one] = st.tabs('local:a');
+    const one = plus(st, 'local:a');
     st.select('local:a', one!.id);
     const two = st.addShell('local:a', '/r', false); st.select('local:a', two);
     st.showAgent('local:a', { kind: 'live' }); await tick();
@@ -208,7 +221,7 @@ describe('TermStore tabs and shells', () => {
 
   it('notifies subscribers on changes, until they unsubscribe', async () => {
     const st = store(); const fn = vi.fn();
-    const off = st.subscribe(fn); const [, shell] = st.tabs('local:a');
+    const off = st.subscribe(fn); const shell = plus(st, 'local:a');
     st.select('local:a', shell!.id); await tick();
     expect(fn).toHaveBeenCalled();
     off(); fn.mockClear();
@@ -391,7 +404,7 @@ describe('TermStore size at open', () => {
   it('a shell takes the pane\'s size once its process is there', async () => {
     backend.hold(true);
     const sz = sizedSurface(); const st = store({ surface: sz.make });
-    const [, shell] = st.tabs('local:a');
+    const shell = plus(st, 'local:a');
     st.select('local:a', shell!.id);
     sz.fit(120, 40);
     backend.opens[0]!.resolve(true); await tick();
@@ -408,27 +421,12 @@ describe('TermStore size at open', () => {
   });
 });
 
-describe('a native session (OMP): shells only', () => {
-  const place = (id: string) => ({ dir: '/w/x', remote: false, native: id.startsWith('omp') });
-  it('has no agent tab: its first shell is the active tab, started as the pane shows; no agent is attached', async () => {
-    const st = store({ shellPlace: place });
-    expect(st.tabs('omp1').map(t => t.kind)).toEqual(['shell']);
-    expect(st.active('omp1')).toBe('omp1#shell-1');
-    expect(backend.opens).toHaveLength(0);                                 // nothing before the pane shows
+describe('a native session (OMP): no agent screen', () => {
+  it('nothing is attached nor started when its Terminal view shows: a shell waits for « Ouvrir un shell »', async () => {
+    const st = store();
     st.showAgent('omp1', { kind: 'native' }); await tick();
-    expect(backend.opens.map(o => o.argv)).toEqual([shellArgv('omp1')]); expect(agentCalls).toEqual([]);
-    st.showAgent('omp1', { kind: 'native' }); await tick();
-    expect(backend.opens).toHaveLength(1);                                 // shown again: the same shell, not a second
-    expect(st.tabs('claude1').map(t => t.kind)).toEqual(['agent', 'shell']); // the others are as they were
-  });
-  it('closing its last shell leaves a fresh one, not started, rather than an empty pane', async () => {
-    const st = store({ shellPlace: place });
-    st.select('omp1', 'omp1#shell-1'); await tick();
-    expect(backend.opens).toHaveLength(1);
-    st.close('omp1', 'omp1#shell-1');
-    expect(backend.opens[0]!.closed).toBe(true);
-    expect(st.tabs('omp1')).toEqual([expect.objectContaining({ kind: 'shell', id: 'omp1#shell-2', status: 'idle' })]);
-    expect(st.active('omp1')).toBe('omp1#shell-2');
+    expect(backend.opens).toHaveLength(0); expect(agentCalls).toEqual([]);
+    expect(st.tabs('omp1')).toEqual([]);
   });
 });
 
@@ -450,7 +448,7 @@ describe('TermStore input while opening', () => {
   it('a shell\'s answer, sent before it opens, reaches it once open', async () => {
     backend.hold(true);
     const st = store();
-    const [, shell] = st.tabs('local:a');
+    const shell = plus(st, 'local:a');
     st.select('local:a', shell!.id);
     (st.surface(shell!.id) as FakeSurface).type(REPORT);
     backend.opens[0]!.resolve(true); await tick();

@@ -43,6 +43,7 @@ export const en: Messages = {
       sessions: 'No session yet.', sessionsBody: 'A session runs an agent in a folder or a project.', newSession: 'Create a session',
       stopped: 'OpenRig is stopped.', stoppedBody: 'Starting it also starts the kernel: the operator, the advisor and the queue.', start: 'Start OpenRig', starting: 'Starting OpenRig…',
       retry: 'Retry', openPage: 'Open the OpenRig page',
+      noActive: 'No live agent.', noActiveBody: 'No project has an agent running. H shows every project.', showAll: 'Show every project',
       installedOn: (machine: string) => `It’s installed on ${machine}: start it from its page.`, offlineOf: (n: number, m: number) => `offline · ${n}/${m}`,
       noRig: 'No rig yet.', noRigBody: 'A rig is a team of agents.', noRigOperator: (name: string) => `${name}, the kernel’s operator, can help you put one together.`
     },
@@ -51,7 +52,7 @@ export const en: Messages = {
     yours: 'Your turn', yoursMore: (n) => `See the other ${n}`, yoursLess: 'Show less',
     allow: 'Yes', deny: 'No', reply: 'Reply', see: 'View',
     ofHelper: (parent) => `↳ ${parent}`,
-    hideDone: 'Hide finished sessions (H)', showDone: 'Show finished sessions (H)',
+    hideDone: 'Only projects with a live agent (H)', moreProjects: (n) => `+${n} ${pluralEn(n, 'project', 'projects')} with no live agent`,
     dense: 'Compact mode (D)', foldAll: 'Fold all',
     tree: 'Projects, branches and sessions',
     fold: (name) => `Fold ${name}`, unfold: (name) => `Unfold ${name}`,
@@ -266,7 +267,7 @@ export const en: Messages = {
     grouping: 'Group OpenRig’s seats', groupingBy: { projects: 'Projects', rigs: 'Rigs' }, groupingHint: { projects: 'Your projects’ sessions, without OpenRig’s seats', rigs: 'OpenRig’s seats: each rig, the kernel apart' }, 
     viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
     chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
-    terminalShow: 'Show the terminal', terminalHide: 'Hide the terminal', terminalShowTitle: 'Show the terminal (O)', terminalHideTitle: 'Hide the terminal (O)', terminalGone: 'Seat stopped: no terminal'
+    panelShow: 'Show the panel: shells and changes', panelHide: 'Hide the panel', panelShowTitle: 'Show the panel: shells and changes (O)', panelHideTitle: 'Hide the panel (O)', terminalGone: 'Seat stopped: no terminal'
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
@@ -559,7 +560,7 @@ export const en: Messages = {
     title: 'Keyboard shortcuts',
     intro: 'Active while the window has focus. Navigation keys stay available for typing and the terminal when they have focus.',
     outro: 'Ctrl / ⌘ K opens the search from any view. Y and N only act on the pinned request of the open session, never while typing.',
-    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes)'],['O','Show or hide the terminal'],['Ctrl `','Move between the thread and the terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
+    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes tab)'],['O','Show or hide the panel: shells and changes'],['Ctrl `','Switch between the thread and the agent’s screen, the keyboard follows'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
   },
   tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
   notify: {
@@ -762,11 +763,12 @@ export const en: Messages = {
   },
   session: {
     meta: 'Machine and repositories',
-    rigTerminalOnly: { title: 'No thread for this seat.', body: 'Ledge does not read the conversation of an OMP seat launched by OpenRig. Its terminal is open alongside: what you type there is sent to it.' },
+    rigTerminalOnly: { title: 'No thread for this seat.', body: 'Ledge does not read the conversation of an OMP seat launched by OpenRig. Its Terminal view shows its screen: what you type there is sent to it.' },
     rigStopped: { title: 'Seat stopped.', body: 'Its terminal is gone: the OpenRig page shows its rig.' }, badgeStopped: 'Stopped',
     subagent: 'Subagent',
     kidsPill: (n) => pluralEn(n, '1 subagent', `${n} subagents`), kidsPillTitle: 'Show the subagents in the sidebar',
-    views: { label: 'Session view', thread: 'Thread', changes: 'Changes' },
+    views: { label: 'Session view', thread: 'Thread', terminal: 'Terminal', changes: 'Changes' },
+    panel: { label: 'Panel: shells and changes', resize: 'Panel width', max: 'Enlarge the panel', unmax: 'Shrink the panel' },
     changes: {
       files: 'Changed files', count: (n) => pluralEn(n, '1 file', `${n} files`), toggle: (n) => `Files · ${n}`,
       labels: { add: 'Added', edit: 'Modified', write: 'Rewritten', delete: 'Deleted', rename: 'Renamed' },
@@ -799,11 +801,11 @@ export const en: Messages = {
     terminal: {
       title: 'Terminal', empty: 'No output received yet.',
       phoneHolds: (device, n) => `Phone at the keyboard: ${device} is typing into ${n}’s terminal.`, takeBack: 'Take the hand back',
-      resize: 'Terminal width', openFailed: (n) => `${n}’s terminal could not open.`,
+      openFailed: (n) => `${n}’s terminal could not open.`,
       agentTab: (n) => `${n} · agent`, shellTab: (n, dir) => `${n === 1 ? 'Shell' : `Shell ${n}`} · ${dir}`,
       addShell: 'New shell', closeTab: (label) => `Close ${label}`,
       local: 'wsl', remote: (host) => `ssh · ${host}`,
-      external: 'Open in an external terminal', max: 'Enlarge the terminal', unmax: 'Shrink the terminal',
+      external: 'Open in an external terminal',
       attached: 'Attached', attachedSsh: 'Attached over SSH', reconnecting: 'Reconnecting…', readOnly: 'Read only', offline: 'Offline', preview: 'Preview · read only',
       connecting: 'Connecting…', shell: 'Shell',
       tmuxTarget: (session, host) => (host ? `ssh ${host} · tmux · ${session}` : `tmux · ${session}`),
@@ -817,12 +819,15 @@ export const en: Messages = {
       retry: 'Retry',
       subagent: (h, p) => `${h} is a subagent of ${p} and has no terminal of its own: this is ${p}’s screen, read only.`,
       goParent: (p) => `Go to ${p}`,
-      outside: (n) => `${n} was started outside Ledge: no screen to attach. Here are its last lines, read only. Your shell is still available.`,
-      ended: (n) => `${n} has ended: here are its last lines, read only. Your shell is still available.`,
+      outside: (n) => `${n} was started outside Ledge: no screen to attach. Here are its last lines, read only.`,
+      ended: (n) => `${n} has ended: here are its last lines, read only.`,
       shellIntro: (n, dir) => `Shell opened in ${n}’s folder: ${dir}`,
       shellIntroSsh: (host, n, dir) => `Shell on ${host}, in ${n}’s folder: ${dir}`,
       shellEnded: (code) => `Shell ended (code ${code})`, shellLost: 'Shell ended: connection lost',
       reopen: 'Reopen', shellUnavailable: 'This folder cannot be opened in a shell.',
+      noAgentScreen: 'No agent screen', openShell: 'Open a shell',
+      nativeTitle: (n) => `Ledge drives ${n} itself: it has no agent screen.`,
+      nativeBody: 'Its work reads in the thread. You can open a shell in its folder, in the right panel.',
       toTerminal: (k) => `Give the keyboard to the terminal · Ctrl ${k}`, toThread: (k) => `The keyboard goes to the terminal · back to the thread: Ctrl ${k}`
     },
     pending: {
