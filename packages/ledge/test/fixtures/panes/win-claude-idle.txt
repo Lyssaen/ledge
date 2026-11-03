@@ -1,0 +1,10 @@
+ ▐▛███▛█   Claude Code v2.1.302
+▝▜██████▀  Opus 5.5 · Claude Team
+ ▝▝   ▝▝   ~\AppData\Local\Temp\conpty-probe
+
+  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> Try "how do I log an error?"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents                                               ◐ medium · /effort

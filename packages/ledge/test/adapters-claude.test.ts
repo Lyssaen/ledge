@@ -430,3 +430,19 @@ describe('claude adapter: a question with a preview (Claude Code 2.1.310 capture
     expect(claudeAdapter.replyPlan('Vert', verrou, plain)[0]).toEqual({ text: '4' });
   });
 });
+
+// Captured on Windows through ConPTY (spike): the input prompt and the dialog cursor are '>' there, not '❯'.
+describe('claude adapter on Windows glyphs', () => {
+  it('detects the workspace trust dialog with a > cursor', () => {
+    expect(claudeAdapter.detectPrompt(fx('win-claude-trust'))).toEqual({
+      kind: 'permission', text: 'Trust this folder? C:\\Users\\guill\\AppData\\Local\\Temp\\ledge-spike\\work', options: ['No, exit', 'Yes, I trust this folder']
+    });
+    const p = { kind: 'permission' as const, text: 'Trust this folder?', source: 'pane' as const };
+    expect(claudeAdapter.keysFor('accept', p, fx('win-claude-trust'))).toEqual([{ keys: ['Down', 'Enter'] }]);
+  });
+  it('sees the > input box at rest, no dialog, and the box out of the preview', () => {
+    expect(claudeAdapter.detectPrompt(fx('win-claude-idle'))).toBeNull();
+    expect(claudeAdapter.atRest!(fx('win-claude-idle'))).toBe(true);
+    expect(claudeAdapter.previewLines!(fx('win-claude-idle')).some(l => l.startsWith('> '))).toBe(false);
+  });
+});

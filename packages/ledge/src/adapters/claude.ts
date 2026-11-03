@@ -43,11 +43,13 @@ import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, bottomLines, flatten, show
 //   ────────────────────────
 //     Chat about this
 //   Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel
-const OPTION = /^\s*(?:❯\s*)?(\d+)\.\s+(\S.*?)\s*$/;
+/** The cursor that marks the input line and the selected option: ❯, or > where the console lacks the glyph (Windows). */
+const CURSOR = /^[❯>]\s*/;
+const OPTION = /^\s*(?:[❯>]\s*)?(\d+)\.\s+(\S.*?)\s*$/;
 const FOOTER = /^\s*(?:(?:Enter to select\b.*)?Esc to cancel\b|ctrl\+g to edit\b)/;
 const PLAN_FOOTER = /^\s*ctrl\+g to edit\b/;
 const PREVIEW_FOOTER = /\bn to add notes\b/;
-const CHAT_LINE = /^\s*(?:❯\s*)?Chat about this$/;
+const CHAT_LINE = /^\s*(?:[❯>]\s*)?Chat about this$/;
 /** Where the preview box starts on a line: two spaces at least, then its left edge. */
 const PREVIEW_EDGE = /\s{2,}[┌│└]/;
 const GUTTER = /^│\s*/;
@@ -220,9 +222,9 @@ function parseTrust(pane: string): Trust | null {
   while (o >= 0 && isBlank(lines[o]!)) o--;
   const block: string[] = [];
   while (o >= 0 && !isBlank(lines[o]!)) block.unshift(lines[o--]!);
-  const options = block.map(l => l.trim().replace(/^❯\s*/, ''));
+  const options = block.map(l => l.trim().replace(CURSOR, ''));
   const trust = options.findIndex(l => TRUST_OPTION.test(l));
-  const selected = block.findIndex(l => l.trim().startsWith('❯'));
+  const selected = block.findIndex(l => CURSOR.test(l.trim()));
   if (trust < 0 || selected < 0) return null;
   const at = lines.findIndex(l => /^\s*Accessing workspace:/.test(l));
   const path = at < 0 ? '' : lines.slice(at + 1, footer).find(l => !isBlank(l))?.trim() ?? '';
@@ -296,7 +298,7 @@ function inputBox(lines: string[]): { top: number; bottom: number } | null {
   // The top rule: the nearest rule above, with the ❯ input line right under it.
   for (let top = bottom - 1; top >= 0 && bottom - top <= INPUT_MAX + 1; top--) {
     if (!isInputTop(lines[top]!)) continue;
-    return lines[top + 1]!.trimStart().startsWith('❯') ? { top, bottom } : null;
+    return CURSOR.test(lines[top + 1]!.trimStart()) ? { top, bottom } : null;
   }
   return null;
 }
@@ -328,7 +330,7 @@ const BUSY = /\besc to interrupt\b/;
 //   ✶ Newspapering… (20s · ↓ 1.2k tokens)     working
 //   ✽ Waddling…                               working, its first second
 //   ✻ Sautéed for 25s · done 10:10 AM         at rest
-const SPINNER = /^[^\s❯●⎿│─]\s\S+…(?: \(|$)/;
+const SPINNER = /^[^\s❯>●⎿│─]\s\S+…(?: \(|$)/;
 
 function spinning(lines: string[], top: number): boolean {
   for (let i = top - 1; i >= 0; i--) if (/^\S/.test(lines[i]!)) return SPINNER.test(lines[i]!);
@@ -347,7 +349,7 @@ function atRest(pane: string): boolean {
 const digit = (n: number): KeyPlan => [{ text: String(n) }];
 
 /** The cursor ❯ is on option `n` (1-based). */
-const focused = (n: number) => { const row = new RegExp(`^\\s*❯\\s*${n}\\.\\s`, 'm'); return (p: string) => row.test(p); };
+const focused = (n: number) => { const row = new RegExp(`^\\s*[❯>]\\s*${n}\\.\\s`, 'm'); return (p: string) => row.test(p); };
 
 /**
  * Option `n` of the dialog on screen. A question with a preview only moves the cursor on a digit: Enter selects, once the
@@ -371,7 +373,7 @@ function optionNumber(text: string, pending: Pending | undefined): number | null
 const FREE_ROW = /^Type something\.?$/;
 // A question with a preview has no such row: « Chat about this », under the last option, declines it and gives the input
 // box back while Claude answers. Typed then, the text is queued and goes after that turn (2.1.310, seen in tmux).
-const CHAT_FOCUSED = /^\s*❯\s*Chat about this\s*$/m;
+const CHAT_FOCUSED = /^\s*[❯>]\s*Chat about this\s*$/m;
 const NO_FREE_ROW = 'no free-text row in this dialog, answer in the terminal';
 
 // Ctrl+U empties the field the cursor is in before a text goes in: a row's text, or the input's draft typed in the
@@ -395,7 +397,7 @@ function sentFrom(text: string): (pane: string) => boolean {
     const lines = pane.split('\n').map(l => l.replace(/\s+$/, ''));
     const box = inputBox(lines);
     if (!box) return true;
-    const draft = lines.slice(box.top + 1, box.bottom).join('').replace(/\s+/g, '').replace(/^❯/, '');
+    const draft = lines.slice(box.top + 1, box.bottom).join('').replace(/\s+/g, '').replace(/^[❯>]/, '');
     return !draft.includes('[Pastedtext#') && !(head && draft.startsWith(head));
   };
 }
