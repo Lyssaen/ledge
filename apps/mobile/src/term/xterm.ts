@@ -26,6 +26,8 @@ export interface XtermScreen extends TermScreen {
   onDrawn(fn: () => void): void;
   focus(): void;
   setTheme(t: TermTheme): void;
+  /** The keyboard's trace (temporary diagnostic): each event the phone's keyboard gives the terminal, and what leaves. */
+  onTrace?(fn: (line: string) => void): void;
   dispose(): void;
 }
 
@@ -45,13 +47,36 @@ export function createXterm(host: HTMLElement): XtermScreen {
   term.open(host);
   let input = false;
   const datas: Array<(d: string) => void> = [];
-  const emit = (d: string) => { if (input) for (const fn of datas) fn(d); };
+  const traces: Array<(line: string) => void> = [];
+  const t0 = performance.now();
+  const trace = (line: string) => { if (traces.length) { const ms = Math.round(performance.now() - t0); for (const fn of traces) fn(`${ms} ${line}`); } };
+  const emit = (d: string) => { trace(`→PC ${JSON.stringify(d)}`); if (input) for (const fn of datas) fn(d); };
   term.onData(emit);
+  const ta = term.textarea;
+  // The keyboard's trace: what Samsung's keyboard really does on a « / » is read on the phone, not guessed. Heard on the
+  // document while capturing, so each event is written before xterm handles it and before what it sends.
+  const unhear: Array<() => void> = [];
+  if (ta) {
+    const v = () => JSON.stringify(ta.value);
+    const hear = (type: string, line: (e: Event) => string) => {
+      const fn = (e: Event) => { if (e.target === ta) trace(line(e)); };
+      document.addEventListener(type, fn, true);
+      unhear.push(() => document.removeEventListener(type, fn, true));
+    };
+    for (const type of ['keydown', 'keyup', 'keypress']) {
+      hear(type, e => `${type} key=${JSON.stringify((e as KeyboardEvent).key)} code=${(e as KeyboardEvent).keyCode} val=${v()}`);
+    }
+    for (const type of ['beforeinput', 'input']) {
+      hear(type, e => { const ev = e as InputEvent; return `${type} ${ev.inputType} data=${JSON.stringify(ev.data)} comp=${ev.isComposing} val=${v()}`; });
+    }
+    for (const type of ['compositionstart', 'compositionupdate', 'compositionend']) {
+      hear(type, e => `${type} data=${JSON.stringify((e as CompositionEvent).data)} val=${v()}`);
+    }
+  }
   // In screen reader mode xterm drops text the phone's keyboard puts in without a key. Samsung's keyboard does just that on
   // a symbol: it takes the word back (Backspaces, which xterm sends) then types the word and the symbol again as text alone,
   // so the line was erased and the symbol lost. That text is typed here, as xterm itself does outside that mode.
   let keyDown = false;
-  const ta = term.textarea;
   ta?.addEventListener('keydown', () => { keyDown = true; }, true);
   ta?.addEventListener('keyup', () => { keyDown = false; }, true);
   ta?.addEventListener('input', e => {
@@ -77,6 +102,7 @@ export function createXterm(host: HTMLElement): XtermScreen {
     onDrawn: fn => { term.onWriteParsed(fn); },
     focus: () => term.focus(),
     setTheme: t => { term.options.theme = t; },
-    dispose: () => term.dispose()
+    onTrace: fn => { traces.push(fn); },
+    dispose: () => { for (const off of unhear) off(); term.dispose(); }
   };
 }

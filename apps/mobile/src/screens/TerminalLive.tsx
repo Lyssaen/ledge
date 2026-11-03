@@ -22,6 +22,9 @@ import { isApple } from './device';
 
 const L = copy.terminal.live2;
 const VIEW_KEY = 'ledge.mobile.terminalView';
+/** The keyboard's trace, a temporary diagnostic: on after five taps on « Au clavier », kept on until « Fermer ». */
+const TRACE_KEY = 'ledge.mobile.keyTrace';
+const TRACE_LINES = 300;
 type ViewMode = 'readable' | 'fit';
 const SETTLE = 10_000;
 
@@ -58,6 +61,14 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
   const [withEnter, setWithEnter] = useState(true);
   const [pasteFailed, setPasteFailed] = useState(false);
   const [map, setMap] = useState<{ left: number; width: number } | null>(null);
+  const [tracing, setTracing] = useState(() => { try { return localStore(storage)?.getItem(TRACE_KEY) === '1'; } catch { return false; } });
+  const [traceLines, setTraceLines] = useState<string[]>([]);
+  const [traceCopied, setTraceCopied] = useState(false);
+  const tracingRef = useRef(tracing);
+  tracingRef.current = tracing;
+  const tagTaps = useRef<number[]>([]);
+  const tracePre = useRef<HTMLPreElement>(null);
+  useEffect(() => { const el = tracePre.current; if (el) el.scrollTop = el.scrollHeight; }, [traceLines]);
   const following = useRef(true);
   const modsRef = useRef(mods);
   modsRef.current = mods;
@@ -72,6 +83,7 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
       if (gone) { xt.dispose(); return; }
       const c = new TermController(wireOf(link), session.id, xt);
       xt.onData(d => c.type(applyMods(d)));
+      xt.onTrace?.(line => { if (tracingRef.current) setTraceLines(ls => [...ls.slice(1 - TRACE_LINES), line]); });
       c.start();
       made = { c, xt };
       setCtl(c); setScreen(xt);
@@ -139,6 +151,19 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
     screen.setFont(Math.max(lo, pinch.current.px * (dist(e.touches) / pinch.current.d)));
   };
   const onTouchEnd = () => { pinch.current = null; };
+
+  const setTrace = (on: boolean) => {
+    setTracing(on); setTraceLines([]);
+    try { if (on) localStore(storage)?.setItem(TRACE_KEY, '1'); else localStore(storage)?.removeItem(TRACE_KEY); } catch { /* for this visit */ }
+  };
+  const tapTag = () => {
+    const t = Date.now();
+    tagTaps.current = [...tagTaps.current.filter(x => t - x < 3000), t];
+    if (tagTaps.current.length >= 5) { tagTaps.current = []; setTrace(!tracingRef.current); }
+  };
+  const copyTrace = () => {
+    void navigator.clipboard?.writeText?.(traceLines.join('\n')).then(() => { setTraceCopied(true); setTimeout(() => setTraceCopied(false), 1500); }, () => undefined);
+  };
 
   const pick = (v: ViewMode) => { setMode(v); saveView(v, storage); following.current = true; };
 
@@ -225,7 +250,7 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
           aria-label={L.screen(session.name)}
           className={`relative min-h-0 flex-1 overflow-auto rounded-card bg-term-bg p-2 ${held ? 'border-2 border-info' : 'border border-line'} ${offline || ended ? 'opacity-45' : ''}`}>
           <div ref={host} data-term="" className="w-max" />
-          {held && <span aria-hidden="true" className="absolute top-2 right-2 rounded-[6px] bg-info px-2 py-0.5 text-meta font-semibold text-white">{L.heldTag}</span>}
+          {held && <span aria-hidden="true" onClick={tapTag} className="absolute top-2 right-2 z-10 rounded-[6px] bg-info px-2 py-0.5 text-meta font-semibold text-white">{L.heldTag}</span>}
         </div>
         {map && !held && (
           <div aria-label={L.position} role="img" className="relative mt-2 h-1 flex-none rounded-full bg-raised">
@@ -241,6 +266,21 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
                 className="min-h-12 min-w-0 flex-1 rounded-control border border-input bg-transparent px-3 text-body" />
               <button type="submit" disabled={!line} aria-label={L.lineSend} className={buttonClass({ variant: 'primary', size: 'sm' })}><Icon name="arrowUp" /></button>
             </form>
+          )}
+          {tracing && (
+            <section aria-label={L.trace.title} className="flex flex-col gap-1 rounded-card border border-line bg-surface p-2">
+              <div className="flex items-center gap-1.5">
+                <b className="flex-1 text-meta font-semibold">{L.trace.title}</b>
+                {(['copy', 'clear', 'close'] as const).map(a => (
+                  <button key={a} type="button" onPointerDown={e => e.preventDefault()}
+                    onClick={() => (a === 'copy' ? copyTrace() : a === 'clear' ? setTraceLines([]) : setTrace(false))}
+                    className={buttonClass({ size: 'sm' })}>{a === 'copy' && traceCopied ? L.trace.copied : L.trace[a]}</button>
+                ))}
+              </div>
+              <pre ref={tracePre} data-trace="" className="max-h-[30vh] overflow-auto font-mono text-[10px] leading-[1.35] whitespace-pre-wrap break-all">
+                {traceLines.length ? traceLines.join('\n') : L.trace.empty}
+              </pre>
+            </section>
           )}
           {pasteFailed && <p role="alert" className="text-meta text-attention">{L.pasteFailed}</p>}
           <div role="toolbar" aria-label={L.keys} className="flex gap-1.5 overflow-x-auto py-1.5">

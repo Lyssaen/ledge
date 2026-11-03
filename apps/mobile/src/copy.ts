@@ -419,7 +419,8 @@ export const copy = {
       keyLabel: { esc: 'Échap', tab: 'Tabulation', ctrl: 'Contrôle', alt: 'Alt', left: 'Flèche gauche', up: 'Flèche haut', down: 'Flèche bas', right: 'Flèche droite', enter: 'Entrée', interrupt: 'Contrôle C', paste: 'Coller', line: 'Mode ligne' },
       armed: 'armé', locked: 'verrouillé',
       lineField: 'Ligne à taper dans le terminal', lineSend: 'Taper la ligne', withEnter: 'Avec ↵',
-      pasteFailed: 'Rien à coller, ou le téléphone a refusé l’accès au presse-papiers.'
+      pasteFailed: 'Rien à coller, ou le téléphone a refusé l’accès au presse-papiers.',
+      trace: { title: 'Trace du clavier', copy: 'Copier', copied: 'Copié', clear: 'Effacer', close: 'Fermer', empty: 'Tapez une touche : chaque événement du clavier et ce qui part vers le PC s’affichent ici.' }
     }
   },
   question: {

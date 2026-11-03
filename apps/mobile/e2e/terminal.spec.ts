@@ -93,6 +93,17 @@ test('the terminal streams at the PC\'s size, then types after the passkey', asy
       ta.dispatchEvent(new InputEvent('input', { data: 'abc/', inputType: 'insertText', bubbles: true, composed: true }));
     });
     await expect.poll(() => h.daemon.termTyped.join('')).toBe('ls\r//trucabc\x7f\x7f\x7fabc/');
+    // The keyboard's trace (temporary diagnostic): five taps on « Au clavier » show each keyboard event and what leaves.
+    for (let i = 0; i < 5; i++) await page.getByText(L.heldTag, { exact: true }).last().click();
+    await expect(page.getByRole('region', { name: L.trace.title })).toBeVisible();
+    await page.locator('.xterm-helper-textarea').focus();
+    await page.keyboard.type('/');
+    await expect(page.locator('[data-trace]')).toContainText('keydown key="/"');
+    await expect(page.locator('[data-trace]')).toContainText('→PC "/"');
+    await page.screenshot({ path: 'test-results/terminal-trace.png' });
+    await page.getByRole('button', { name: L.trace.close }).click();
+    await expect(page.getByRole('region', { name: L.trace.title })).toHaveCount(0);
+    await expect.poll(() => h.daemon.termTyped.join('')).toBe('ls\r//trucabc\x7f\x7f\x7fabc//');
     await expect(page.locator('.xterm-accessibility-tree')).toContainText('ls');
     await page.screenshot({ path: 'test-results/terminal-held.png' });
     await page.getByRole('button', { name: L.release }).click();
