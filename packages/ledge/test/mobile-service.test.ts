@@ -129,7 +129,7 @@ async function linkedPhone(ctx: Awaited<ReturnType<typeof signedIn>>): Promise<F
   await ctx.s.handle({ type: 'mobile.pairing.approve', id: p.id });
   expect(await result).toBe('ok');
   await phone.hello();
-  await until(() => ctx.s.state().pairings[0]?.state === 'linked' && ctx.s.state().devices[0]?.online === true, 'device linked');
+  await until(() => ctx.s.state().pairings[0]?.state === 'linked' && ctx.s.state().devices.some((d) => d.online), 'device linked');
   return phone;
 }
 
@@ -196,6 +196,39 @@ describe('mobile access service', () => {
     const ctx = await signedIn();
     await ctx.s.handle({ type: 'mobile.device.revoke', id: 'x' });
     expect(ctx.calls.revoked.map((c) => c.peer).sort()).toEqual([OLD, PEER].sort());
+  });
+
+  it('revoke: a peer another approved device now uses is neither denied nor revoked on the relay', async () => {
+    // The old iPad lost its keys and paired again from the same browser: same cookie, same peer, new device.
+    const OLD = 'd_oldoldoldoldoldo';
+    writeDevices([{ id: 'old', publicKey: 'k1', label: 'iPad', approvedAt: '2026-10-19T00:00:00Z', peers: [OLD, PEER], lastPeer: PEER }]);
+    const ctx = await signedIn();
+    const phone = await linkedPhone(ctx);
+    const id = await fingerprint(phone.publicKey);
+    // Confirming on PEER moved it to the new device.
+    const stored = readDevices();
+    expect(stored.find((d) => d.id === 'old')).toMatchObject({ peers: [OLD] });
+    expect(stored.find((d) => d.id === 'old')).not.toHaveProperty('lastPeer');
+    expect(stored.find((d) => d.id === id)!.peers).toEqual([PEER]);
+    const deniedBefore = phone.frames.filter((f) => f.k === 'denied').length;
+    await ctx.s.handle({ type: 'mobile.device.revoke', id: 'old' });
+    expect(ctx.calls.revoked.map((c) => c.peer)).toEqual([OLD]);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(phone.frames.filter((f) => f.k === 'denied').length).toBe(deniedBefore);
+    expect(ctx.s.state().devices.map((d) => d.id)).toEqual([id]);
+    expect(ctx.s.state().devices[0]!.online).toBe(true);
+    expect(await ctx.s.send(id, 'still here')).toBe(true);
+  });
+
+  it('revoke: a peer still listed by another device (a file written before ownership moved) is left alone', async () => {
+    writeDevices([
+      { id: 'old', publicKey: 'k1', label: 'iPad', approvedAt: '2026-10-19T00:00:00Z', lastPeer: PEER },
+      { id: 'new', publicKey: 'k2', label: 'iPad', approvedAt: '2026-11-03T00:00:00Z', lastPeer: PEER }
+    ]);
+    const ctx = await signedIn();
+    await ctx.s.handle({ type: 'mobile.device.revoke', id: 'old' });
+    expect(ctx.calls.revoked).toEqual([]);
+    expect(ctx.s.state().devices.map((d) => d.id)).toEqual(['new']);
   });
 
   it('a confirmed channel adds its peer to the device, once', async () => {

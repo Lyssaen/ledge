@@ -103,6 +103,14 @@ export async function createMobileService(opts: {
   const withPeer = (d: ApprovedDevice, peer: string): string[] =>
     [...peersOf(d).filter((p) => p !== peer), peer].slice(-MAX_DEVICE_PEERS);
 
+  /** The device without `peer` in its list or as its last peer. */
+  const withoutPeer = (d: ApprovedDevice, peer: string): ApprovedDevice => {
+    if (d.lastPeer !== peer && !d.peers?.includes(peer)) return d;
+    const { lastPeer, peers, ...rest } = d;
+    const left = (peers ?? []).filter((p) => p !== peer);
+    return { ...rest, ...(lastPeer && lastPeer !== peer ? { lastPeer } : {}), ...(left.length > 0 ? { peers: left } : {}) };
+  };
+
   const saveDevices = (next: ApprovedDevice[]) => {
     writeDevices(next); // first: a failing write leaves memory unchanged
     devices = next;
@@ -128,7 +136,9 @@ export async function createMobileService(opts: {
     onConfirmed(deviceId, peer) {
       if (devices.some((d) => d.id === deviceId)) {
         const at = new Date(now()).toISOString();
-        try { saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, lastPeer: peer, lastSeenAt: at, peers: withPeer(d, peer) } : d))); }
+        // A peer belongs to the device that confirmed on it last: a browser that lost its keys and paired again keeps its
+        // cookie, so the same peer; the old device no longer owns it, and revoking that one must not revoke this peer.
+        try { saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, lastPeer: peer, lastSeenAt: at, peers: withPeer(d, peer) } : withoutPeer(d, peer)))); }
         catch (e) { log(`mobile: devices.json not written (${(e as Error).message})`); }
       }
       pairing.linked(deviceId);
@@ -329,8 +339,10 @@ export async function createMobileService(opts: {
     log(`mobile: revoked device ${id}`);
     // Removed from the list first: dropDevice then answers the device's next msg with `denied`.
     channels.dropDevice(id);
-    // Every peer the device ever confirmed a channel on: an older relay session of it must not stay valid.
-    const peers = peersOf(d);
+    // Every peer the device ever confirmed a channel on: an older relay session of it must not stay valid. A peer another
+    // approved device uses (the same browser paired again under a new key) is left alone: only this device's channel goes.
+    const others = new Set(devices.flatMap(peersOf));
+    const peers = peersOf(d).filter((p) => !others.has(p));
     for (const p of peers) sendFrame(p, { k: 'denied' });
     changed();
     await Promise.all(peers.map((p) => revokeOnRelay(p)));
