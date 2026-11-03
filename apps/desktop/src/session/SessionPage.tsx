@@ -103,6 +103,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const [view, setView] = useState<View>('thread');
   const [file, setFile] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  // A session that becomes an OMP seat under the same id (its seat now runs OMP) has no Changes view: back on its note.
+  if (seat !== null && view !== 'thread') { setView('thread'); setListOpen(false); }
   // A new object each time: the same row lit again (« dans le fil » twice) comes into view again.
   const [flash, setFlash] = useState<{ id: string } | null>(null);
   const files = useMemo(() => (items ? changedFiles(items, session.cwd, helper?.id) : []), [items, session.cwd, helper?.id]);

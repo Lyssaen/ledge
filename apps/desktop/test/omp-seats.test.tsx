@@ -5,7 +5,7 @@ import type { Session } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
 import { RigGroups } from '../src/shell/sidebar/RigGroups';
 import type { SidebarOpenRig } from '../src/openrig/sidebarState';
-import { terminalShown } from '../src/session/prefs';
+import { SESSION_KEY, terminalShown } from '../src/session/prefs';
 import { boot, closeDaemons } from './helpers';
 
 beforeEach(() => localStorage.clear());
@@ -62,21 +62,22 @@ describe('OMP seats in the sidebar', () => {
 
 describe('whether the terminal shows beside a session', () => {
   it('the preference, for any session but an OMP seat of OpenRig', () => {
-    const claude = fakeSession('a');
-    expect(terminalShown(claude, false, null)).toBe(false);
-    expect(terminalShown(claude, true, null)).toBe(true);
-    expect(terminalShown(null, true, null)).toBe(true);
+    const claude = fakeSession('a'), closed = new Set(['a', 'rig-ivo']);
+    expect(terminalShown(claude, false, closed)).toBe(false);
+    expect(terminalShown(claude, true, closed)).toBe(true);
+    expect(terminalShown(null, true, closed)).toBe(true);
     // An OMP session Ledge launched itself (omp-rpc) is not a seat.
-    expect(terminalShown({ ...IVO, source: 'launcher', backend: 'omp-rpc' }, false, null)).toBe(false);
+    expect(terminalShown({ ...IVO, source: 'launcher', backend: 'omp-rpc' }, false, closed)).toBe(false);
   });
 
-  it('a running OMP seat opens on its terminal until it is closed on it; a stopped one has none', () => {
-    expect(terminalShown(IVO, false, null)).toBe(true);
-    expect(terminalShown(IVO, false, 'rig-ivo')).toBe(false);
-    expect(terminalShown(IVO, true, 'rig-ivo')).toBe(true);
-    expect(terminalShown(IVO, false, 'rig-pia')).toBe(true);
-    expect(terminalShown(TOM, true, null)).toBe(false);
-    expect(terminalShown({ ...PIA, archivedAt: '2026-11-03T09:30:00.000Z' }, true, null)).toBe(false);
+  it('a running OMP seat shows its terminal unless it was closed on that seat, whatever the preference; a stopped one has none', () => {
+    const none = new Set<string>(), ivo = new Set(['rig-ivo']);
+    expect(terminalShown(IVO, false, none)).toBe(true);
+    expect(terminalShown(IVO, false, ivo)).toBe(false);
+    expect(terminalShown(IVO, true, ivo)).toBe(false);
+    expect(terminalShown(PIA, true, ivo)).toBe(true);
+    expect(terminalShown(TOM, true, none)).toBe(false);
+    expect(terminalShown({ ...PIA, archivedAt: '2026-11-03T09:30:00.000Z' }, true, none)).toBe(false);
   });
 });
 
@@ -120,5 +121,62 @@ describe('an OMP seat’s page', () => {
     await user.click(screen.getByRole('button', { name: 'Open the OpenRig page' }));
     await waitFor(() => expect(document.querySelector('.or-page')).not.toBeNull());
     expect(document.querySelector('.seat-note')).toBeNull();
+  });
+
+  it('closing an OMP seat’s terminal is that seat’s alone: the preference and the other sessions keep theirs (review)', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ terminal: true, split: 0.5, termWidth: 0.46 }));
+    const LUC = fakeSession('rig-lu', { name: 'Lu', cwd: '/w/ledge', state: 'idle', source: 'rig', tmuxSession: 'pilot-lead@ledge-dev', rig: { seat: 'pilot-lead@ledge-dev', name: 'ledge-dev', role: 'pilot.lead' } });
+    const { side, user } = await boot({ sessions: [IVO, PIA, LUC], projects: { projects: [] } as never });
+    const term = () => screen.queryByRole('region', { name: 'Terminal' });
+    const open = async (name: string) => { await user.click(side.getByRole('button', { name: new RegExp(`^${name}`) })); await waitFor(() => expect(screen.getByRole('banner')).toHaveTextContent(name)); };
+    const hide = () => user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Hide the terminal' }));
+    await open('Lu');
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    // Closed on Ivo, then on Pia: each stays closed when it is opened again, Lu keeps its terminal, the preference is still on.
+    await open('Ivo'); await screen.findByRole('region', { name: 'Terminal' }); await hide();
+    await waitFor(() => expect(term()).toBeNull());
+    await open('Pia'); await screen.findByRole('region', { name: 'Terminal' }); await hide();
+    await waitFor(() => expect(term()).toBeNull());
+    await open('Lu');
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).terminal).toBe(true);
+    await open('Ivo');
+    await waitFor(() => expect(term()).toBeNull());
+    await open('Pia');
+    await waitFor(() => expect(term()).toBeNull());
+    // Shown again on Pia by the top bar's button, on Ivo by O: theirs again, the preference untouched.
+    await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Show the terminal' }));
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    await open('Ivo');
+    await waitFor(() => expect(term()).toBeNull());
+    await user.keyboard('o');
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).terminal).toBe(true);
+  });
+
+  it('with the preference off, an OMP seat still opens on its terminal, and opening it there does not turn the preference on', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ terminal: false, split: 0.5, termWidth: 0.46 }));
+    const LUC = fakeSession('rig-lu', { name: 'Lu', cwd: '/w/ledge', state: 'idle', source: 'rig', tmuxSession: 'pilot-lead@ledge-dev', rig: { seat: 'pilot-lead@ledge-dev', name: 'ledge-dev', role: 'pilot.lead' } });
+    const { side, user } = await boot({ sessions: [IVO, LUC], projects: { projects: [] } as never });
+    await user.click(side.getByRole('button', { name: /^Ivo/ }));
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    await user.click(side.getByRole('button', { name: /^Lu/ }));
+    await waitFor(() => expect(screen.getByRole('banner')).toHaveTextContent('Lu'));
+    expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).terminal).toBe(false);
+  });
+
+  it('a page left on Changes whose seat turns to OMP under the same id comes back to its note (review)', async () => {
+    const seatOf = { seat: 'dev-agent@dev-omp', name: 'dev-omp', role: 'dev.agent' };
+    const CLAUDE = fakeSession('rig-dev', { name: 'Ivo', cwd: '/w/dev-omp', state: 'idle', source: 'rig', tmuxSession: 'dev-agent@dev-omp', rig: seatOf });
+    const { d, side, user } = await boot({ sessions: [CLAUDE], projects: { projects: [] } as never });
+    await user.click(side.getByRole('button', { name: /^Ivo/ }));
+    await user.click(await screen.findByRole('tab', { name: /Changes/ }));
+    expect(screen.getByRole('tab', { name: /Changes/ })).toHaveAttribute('aria-selected', 'true');
+    d.upsert({ ...CLAUDE, tool: 'omp' });
+    await waitFor(() => expect(document.querySelector('.seat-note')).toBeVisible());
+    expect(document.querySelector('.seat-note')).toHaveTextContent('No thread for this seat.');
+    expect(screen.queryByRole('tab', { name: /Changes/ })).toBeNull();
+    expect(document.querySelector('.session-thread')).not.toHaveAttribute('hidden');
   });
 });

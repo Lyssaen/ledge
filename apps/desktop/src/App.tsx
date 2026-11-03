@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { canBroadcast, daemonStore, projectOf, useDaemon, type BroadcastTo, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
-import type { Project, Projects, Session } from '@ledge/protocol';
+import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
@@ -151,12 +151,22 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }), []);
   // Whether the terminal shows beside a session: it follows from one agent to the next and survives a restart.
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
+  // The OMP seats whose terminal was closed on their page (terminalShown): each one's own, the preference left alone.
+  const [seatsClosed, setSeatsClosed] = useState<ReadonlySet<string>>(() => new Set());
+  const seatTerminal = useCallback((id: string, on: boolean) => setSeatsClosed(c => {
+    if (c.has(id) === !on) return c;
+    const n = new Set(c); if (on) n.delete(id); else n.add(id); return n;
+  }), []);
+  // The sessions as last rendered: whether a « Terminal » asked by id is an OMP seat's.
+  const knownNow = useRef<readonly Session[]>([]);
   // Every « Terminal » (the session menu, a chat card, the island) opens the session's page with its pane, on the agent's tab.
   const showTerminal = useCallback((id: string) => {
     dispatch({ type: 'open', id });
-    setSessionPrefs(x => ({ ...x, terminal: true }));
+    const s = knownNow.current.find(x => x.id === id);
+    if (s && isOmpSeat(s)) seatTerminal(id, true);
+    else setSessionPrefs(x => ({ ...x, terminal: true }));
     termStore.select(id, agentTabId(id));
-  }, [setSessionPrefs, termStore]);
+  }, [setSessionPrefs, seatTerminal, termStore]);
   // « Open in Ledge » from the island: the shell has already brought the window forward; this shows what was asked.
   useEffect(() => onOpenTarget(raw => {
     const target = parseTarget(raw);
@@ -185,6 +195,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // stale, hence the dependencies); reconcile returns the same state when nothing changes, and then nothing is dispatched.
   // An archived session keeps its page (it reads, read-only): only a session the daemon no longer lists at all takes the place away.
   const known = useMemo(() => [...sessions, ...fleetView.archived], [sessions, fleetView.archived]);
+  knownNow.current = known;
   useEffect(() => { if (reconcile(nav, known, projects) !== nav) dispatch({ type: 'reconcile', sessions: known, projects }); }, [known, projects]);
 
   const projectIdOf = useCallback((s: Session) => (projects ? projectOf(s, projects) : null), [projects]);
@@ -215,15 +226,16 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const { threads } = useDaemon();
   const helper = session && place.kind === 'session' && place.helper !== undefined ? subagentOf(session, threads.get(session.id), place.helper, t.session.subagent) : null;
   useEffect(preloadPlaces, []);
-  // The OMP seat whose terminal was closed on its page: it opens on it otherwise (terminalShown).
-  const [seatClosed, setSeatClosed] = useState<string | null>(null);
-  const terminalOn = terminalShown(session, sessionPrefs.terminal, seatClosed);
+  const ompSeat = session !== null && isOmpSeat(session);
+  const terminalOn = terminalShown(session, sessionPrefs.terminal, seatsClosed);
   const shownPrefs = useMemo(() => ({ ...sessionPrefs, terminal: terminalOn }), [sessionPrefs, terminalOn]);
-  // A change from the page: a terminal it hides on an OMP seat is that seat's closing; one it leaves as shown keeps the preference.
+  // A change from the page: on an OMP seat, showing or hiding the terminal is that seat's alone; elsewhere, the preference's.
   const setShownPrefs = (fn: (p: SessionPrefs) => SessionPrefs) => {
     const next = fn(shownPrefs);
-    if (!next.terminal && terminalOn && session) setSeatClosed(session.id);
-    setSessionPrefs(x => ({ ...x, ...next, terminal: next.terminal === terminalOn ? x.terminal : next.terminal }));
+    if (ompSeat) {
+      if (next.terminal !== terminalOn) seatTerminal(session.id, next.terminal);
+      setSessionPrefs(x => ({ ...x, ...next, terminal: x.terminal }));
+    } else setSessionPrefs(x => ({ ...x, ...next }));
   };
   const toggleTerminal = () => setShownPrefs(p => ({ ...p, terminal: !p.terminal }));
   // Ctrl + ² from outside the terminal: it shows if hidden, then its open tab takes the keyboard. A pane just asked for draws
@@ -231,7 +243,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const toTerminal = () => {
     if (place.kind !== 'session' || !session) return false;
     const id = place.id;
-    if (!terminalOn) setSessionPrefs(p => ({ ...p, terminal: true }));
+    if (!terminalOn) setShownPrefs(p => ({ ...p, terminal: true }));
     requestAnimationFrame(() => termStore.surface(termStore.active(id))?.focus());
     return true;
   };
