@@ -44,6 +44,15 @@ describe('conptyPanes, with a fake pty', () => {
     expect(log).toHaveBeenCalledWith(expect.stringMatching(/k.*did not end/));
     expect(await p.hasSession('k')).toBe(false);
   });
+  it('an attach racing the exit is refused, never left waiting for an end that came already', async () => {
+    const f = fakePty(); const p = conptyPanes({ spawn: f.spawn });
+    await p.newSession({ name: 'a', cwd: tmpdir(), env: {}, command: [node] });
+    const ends: Array<number | null> = [];
+    const pending = p.attachTo('a', { data: () => {}, end: c => ends.push(c) });
+    f.exit(6);
+    const a = await pending;
+    expect(a === null || ends.length === 1).toBe(true);
+  });
   it('a capture racing the exit answers, and nothing complains of a disposed terminal', async () => {
     const f = fakePty(); const p = conptyPanes({ spawn: f.spawn });
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {}); const warns = vi.spyOn(console, 'warn').mockImplementation(() => {});

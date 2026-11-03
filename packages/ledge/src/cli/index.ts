@@ -44,7 +44,11 @@ async function main(argv: string[]): Promise<number> {
       const [{ startPaneHost }, { panehostPath }, { readDaemonToken }, { paths }] = await Promise.all([import('../panes/host.js'), import('../panes/protocol.js'), import('../auth.js'), import('../paths.js')]);
       const token = readDaemonToken();
       if (!token) { console.error('ledge panehost: no daemon token yet (start the daemon first)'); return 1; }
-      try { await (await startPaneHost({ path: panehostPath(process.platform, process.env, paths().dir), token })).closed; }
+      // The agents live in this process: a stray error is logged, never allowed to end it and them with it.
+      const { log } = await import('../log.js');
+      process.on('uncaughtException', e => log(`pane host: uncaught ${e.stack ?? e.message}`));
+      process.on('unhandledRejection', e => log(`pane host: unhandled ${(e as Error)?.stack ?? String(e)}`));
+      try { await (await startPaneHost({ path: panehostPath(process.platform, paths().dir, token), token })).closed; }
       catch (e) { if ((e as NodeJS.ErrnoException).code === 'EADDRINUSE') return 0; throw e; }
       return 0;
     }

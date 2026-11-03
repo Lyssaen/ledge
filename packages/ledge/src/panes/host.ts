@@ -1,9 +1,9 @@
 import { createServer, connect, type Socket } from 'node:net';
 import { existsSync, unlinkSync } from 'node:fs';
-import { timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { log as daemonLog } from '../log.js';
 import { conptyPanes, type PaneAttachment, type PanesTmux } from './conpty.js';
-import { frameLines, PANEHOST_PROTOCOL, type AttachFrame, type PaneRequest, type PaneResponse } from './protocol.js';
+import { frameLines, PANEHOST_PROTOCOL, proof, type AttachFrame, type PaneRequest, type PaneResponse } from './protocol.js';
 
 export interface PaneHost { path: string; close(): Promise<void>; isClosed(): boolean; closed: Promise<void> }
 
@@ -19,14 +19,18 @@ async function clearStaleSocket(path: string): Promise<void> {
 
 /**
  * `ledge panehost`: keeps the agents' ConPTY panes in a process of their own, so they outlive the daemon, and serves
- * them over a local socket (protocol.ts). Every connection proves it holds the daemon token first. With no pane and no
- * client for `idleExitMs` it closes: nothing is left to keep alive.
+ * them over a local socket (protocol.ts). Every connection proves it holds the daemon token first (handshake, the token
+ * never sent), within `helloMs` or it is closed. With no pane and no authenticated client for `idleExitMs` it closes:
+ * nothing is left to keep alive.
  */
-export async function startPaneHost(opts: { path: string; token: string; panes?: PanesTmux; idleExitMs?: number; log?: (line: string) => void }): Promise<PaneHost> {
+export async function startPaneHost(opts: { path: string; token: string; panes?: PanesTmux; idleExitMs?: number; helloMs?: number; log?: (line: string) => void }): Promise<PaneHost> {
   const panes = opts.panes ?? conptyPanes();
   const log = opts.log ?? daemonLog;
   const idleExitMs = opts.idleExitMs ?? 10 * 60_000;
+  const helloMs = opts.helloMs ?? 2000;
   const sockets = new Set<Socket>();
+  /** The connections that passed the handshake: only they keep the host up. */
+  const authed = new Set<Socket>();
   let closed = false, busyAt = Date.now();
   let resolveClosed!: () => void;
   const closedP = new Promise<void>(r => { resolveClosed = r; });
@@ -56,28 +60,43 @@ export async function startPaneHost(opts: { path: string; token: string; panes?:
   }
 
   const server = createServer(sock => {
-    sockets.add(sock); busyAt = Date.now();
-    let authed = false;
+    sockets.add(sock);
+    // Who has not proved the token in time is let go: a stray or hostile connection holds nothing open.
+    const helloTimer = setTimeout(() => { if (!authed.has(sock)) sock.destroy(); }, helloMs);
+    let hostNonce: string | null = null, clientNonce = '';
     let attached: { a: PaneAttachment; readOnly: boolean } | null = null;
     const reply = (r: PaneResponse) => { if (!sock.destroyed) sock.write(JSON.stringify(r) + '\n'); };
+    const refuse = (id: unknown, error: string) => { reply({ id: typeof id === 'number' ? id : 0, ok: false, error }); sock.end(); };
     const feed = frameLines(line => {
-      let msg: Record<string, unknown>;
-      try { msg = JSON.parse(line) as Record<string, unknown>; } catch { sock.destroy(); return; }
-      if (attached) { if (typeof msg.input === 'string' && !attached.readOnly) attached.a.write(msg.input); return; }
-      const req = msg as unknown as PaneRequest;
-      if (!authed) {
-        if (req.op === 'hello' && typeof req.token === 'string' && sameToken(req.token, opts.token)) {
-          if (req.protocol !== PANEHOST_PROTOCOL) { reply({ id: req.id, ok: false, error: `protocol ${PANEHOST_PROTOCOL}` }); sock.end(); return; }
-          authed = true; reply({ id: req.id, ok: true, value: { protocol: PANEHOST_PROTOCOL, pid: process.pid } }); return;
+      let msg: unknown;
+      try { msg = JSON.parse(line); } catch { sock.destroy(); return; }
+      // Only plain objects with a numeric id (or an attach's input) are frames; anything else ends this connection.
+      if (!msg || typeof msg !== 'object' || Array.isArray(msg)) { sock.destroy(); return; }
+      const m = msg as Record<string, unknown>;
+      if (attached) { if (typeof m.input === 'string' && !attached.readOnly) attached.a.write(m.input); return; }
+      if (typeof m.id !== 'number' || typeof m.op !== 'string') { sock.destroy(); return; }
+      const req = m as unknown as PaneRequest;
+      if (!authed.has(sock)) {
+        if (req.op === 'hello' && hostNonce === null) {
+          if (req.protocol !== PANEHOST_PROTOCOL) return refuse(req.id, `protocol ${PANEHOST_PROTOCOL}`);
+          if (typeof req.nonce !== 'string' || req.nonce.length < 16 || req.nonce.length > 128) return refuse(req.id, 'unauthorized');
+          clientNonce = req.nonce; hostNonce = randomBytes(16).toString('hex');
+          reply({ id: req.id, ok: true, value: { protocol: PANEHOST_PROTOCOL, nonce: hostNonce, proof: proof(opts.token, 'host', clientNonce, hostNonce) } });
+          return;
         }
-        reply({ id: req.id, ok: false, error: 'unauthorized' }); sock.end(); return;
+        if (req.op === 'auth' && hostNonce !== null && typeof req.proof === 'string' && sameToken(req.proof, proof(opts.token, 'client', clientNonce, hostNonce))) {
+          authed.add(sock); clearTimeout(helloTimer); busyAt = Date.now();
+          reply({ id: req.id, ok: true, value: { pid: process.pid } });
+          return;
+        }
+        return refuse(req.id, 'unauthorized');
       }
-      handle(sock, req, (a, readOnly) => { attached = { a, readOnly }; })
-        .then(value => reply({ id: req.id, ok: true, ...(value === undefined ? {} : { value }) }), (e: Error) => reply({ id: req.id, ok: false, error: e.message }));
+      handle(sock, req, (a, readOnly) => { if (sock.destroyed) a.detach(); else attached = { a, readOnly }; })
+        .then(value => reply({ id: req.id, ok: true, ...(value === undefined ? {} : { value }) }), (e: Error) => reply({ id: req.id, ok: false, error: e?.message ?? String(e) }));
     });
     sock.on('data', chunk => { try { feed(chunk); } catch { sock.destroy(); } });
     sock.on('error', () => {});
-    sock.on('close', () => { sockets.delete(sock); attached?.a.detach(); busyAt = Date.now(); });
+    sock.on('close', () => { clearTimeout(helloTimer); sockets.delete(sock); authed.delete(sock); attached?.a.detach(); busyAt = Date.now(); });
   });
 
   await clearStaleSocket(opts.path);
@@ -94,7 +113,7 @@ export async function startPaneHost(opts: { path: string; token: string; panes?:
   }
   const idle = setInterval(() => {
     void panes.listSessions().then(names => {
-      if (sockets.size || names.length) { busyAt = Date.now(); return; }
+      if (authed.size || names.length) { busyAt = Date.now(); return; }
       if (Date.now() - busyAt >= idleExitMs) { log(`pane host idle for ${idleExitMs} ms: closing`); void close(); }
     });
   }, Math.max(50, Math.min(idleExitMs / 3, 30_000)));

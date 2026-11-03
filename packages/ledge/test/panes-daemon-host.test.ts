@@ -26,7 +26,8 @@ beforeAll(async () => {
   process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-dh-')); process.env.LEDGE_PANES = 'panehost';
   await ensureLedgeDir();
   // The host the daemon would start (ledge panehost), here in this process.
-  host = await startPaneHost({ path: panehostPath(process.platform, process.env, paths().dir), token: await ensureDaemonToken() });
+  const token = await ensureDaemonToken();
+  host = await startPaneHost({ path: panehostPath(process.platform, paths().dir, token), token });
 });
 afterAll(async () => {
   await host?.close();
@@ -54,7 +55,7 @@ describe.skipIf(!pty)('the daemon on the pane host', () => {
     await until(async () => (await state(a.port, id))?.state === 'starting', 8000);
     await new Promise(r => setTimeout(r, 500));
     // The pane is the host's, not a tmux server's.
-    const direct = paneHostClient({ path: panehostPath(process.platform, process.env, paths().dir), token: readDaemonToken, start: () => {} });
+    const direct = paneHostClient({ path: () => panehostPath(process.platform, paths().dir, readDaemonToken()!), token: readDaemonToken, start: () => {} });
     expect(await direct.listSessions()).toContain(`ledge-${id}`);
     direct.close();
     await a.stop();

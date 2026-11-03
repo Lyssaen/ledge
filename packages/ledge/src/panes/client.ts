@@ -1,7 +1,8 @@
 import { connect, type Socket } from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn as nodeSpawn } from 'node:child_process';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Tmux } from '../tmux.js';
-import { frameLines, PANEHOST_PROTOCOL, type AttachFrame, type PaneRequest, type PaneResponse } from './protocol.js';
+import { frameLines, PANEHOST_PROTOCOL, proof, type AttachFrame, type PaneRequest, type PaneResponse } from './protocol.js';
 
 type Op = PaneRequest extends infer R ? R extends { op: infer O } ? O : never : never;
 /** The fields of the request `op` names (a member may stand for several ops: `width`, `hasSession`…). */
@@ -15,10 +16,13 @@ export type PaneHostClient = Tmux & {
   close(): void;
 };
 
-/** Starts `ledge panehost` on its own: detached, so it outlives the daemon that started it. */
-export function startDetachedHost(): void {
-  spawn(process.execPath, [process.argv[1]!, 'panehost'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+/** Starts `ledge panehost` on its own: detached, so it outlives the daemon that started it, and in the Ledge folder,
+ *  not the daemon's working folder (an update may replace the install it runs from). */
+export function startDetachedHost(ledgeDir: string, spawn: typeof nodeSpawn = nodeSpawn): void {
+  spawn(process.execPath, [process.argv[1]!, 'panehost'], { cwd: ledgeDir, detached: true, stdio: 'ignore', windowsHide: true }).unref();
 }
+
+const sameHex = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 
 const unreachable = (e: NodeJS.ErrnoException) => e.code === 'ENOENT' || e.code === 'ECONNREFUSED';
 
@@ -30,12 +34,12 @@ interface Conn { sock: Socket; request<O extends Op>(op: O, body: Body<O>): Prom
  * starts one (`start`) and tries again for `connectMs`. A dropped connection fails what was in flight; the next call
  * connects again (starting a host again if none answers).
  */
-export function paneHostClient(opts: { path: string; token: () => string | undefined; start: () => void; connectMs?: number }): PaneHostClient {
+export function paneHostClient(opts: { path: () => string; token: () => string | undefined; start: () => void; connectMs?: number }): PaneHostClient {
   const connectMs = opts.connectMs ?? 5000;
   let conn: Promise<Conn> | null = null;
   const socks = new Set<Socket>();
 
-  const once = () => new Promise<Socket>((res, rej) => { const s = connect(opts.path); s.once('connect', () => res(s)); s.once('error', rej); });
+  const once = () => new Promise<Socket>((res, rej) => { const s = connect(opts.path()); s.once('connect', () => res(s)); s.once('error', rej); });
 
   async function open(): Promise<Conn> {
     let sock: Socket | undefined, started = false;
@@ -54,14 +58,18 @@ export function paneHostClient(opts: { path: string; token: () => string | undef
     let frameSink: ((f: Record<string, unknown>) => void) | null = null;
     let nextId = 0;
     const s = sock;
-    s.on('data', frameLines(line => {
-      const msg = JSON.parse(line) as Record<string, unknown>;
+    const feed = frameLines(line => {
+      let msg: Record<string, unknown>;
+      // A line that is not ours ends the connection: what was in flight fails, the daemon goes on.
+      try { msg = JSON.parse(line) as Record<string, unknown>; if (!msg || typeof msg !== 'object') throw new Error('not an object'); }
+      catch { s.destroy(); return; }
       if (typeof msg.id === 'number' && pending.has(msg.id)) {
         const p = pending.get(msg.id)!; pending.delete(msg.id);
         const r = msg as unknown as PaneResponse;
         if (r.ok) p.res(r.value); else p.rej(new Error(r.error));
       } else frameSink?.(msg);
-    }));
+    });
+    s.on('data', chunk => { try { feed(chunk); } catch { s.destroy(); } });
     s.on('error', () => {});
     s.on('close', () => { socks.delete(s); for (const p of pending.values()) p.rej(new Error('pane host connection closed')); pending.clear(); frameSink?.({ closed: true }); });
     const c: Conn = {
@@ -75,7 +83,13 @@ export function paneHostClient(opts: { path: string; token: () => string | undef
     };
     const token = opts.token();
     if (!token) { s.destroy(); throw new Error('pane host: no daemon token'); }
-    await c.request('hello', { token, protocol: PANEHOST_PROTOCOL });
+    // The host proves it holds the token before this side proves anything: a socket squatting the name learns nothing.
+    const clientNonce = randomBytes(16).toString('hex');
+    const h = await c.request('hello', { protocol: PANEHOST_PROTOCOL, nonce: clientNonce }) as { nonce?: unknown; proof?: unknown } | undefined;
+    if (typeof h?.nonce !== 'string' || typeof h.proof !== 'string' || !sameHex(h.proof, proof(token, 'host', clientNonce, h.nonce))) {
+      s.destroy(); throw new Error('pane host could not prove the token');
+    }
+    await c.request('auth', { proof: proof(token, 'client', clientNonce, h.nonce) });
     return c;
   }
 

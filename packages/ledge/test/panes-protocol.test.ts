@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameLines, panehostPath, PANEHOST_PROTOCOL } from '../src/panes/protocol.js';
+import { frameLines, panehostPath, PANEHOST_PROTOCOL, proof } from '../src/panes/protocol.js';
 
 describe('frameLines', () => {
   it('joins a frame split across chunks and splits two frames in one chunk', () => {
@@ -24,11 +24,24 @@ describe('frameLines', () => {
 });
 
 describe('panehostPath', () => {
-  it('is a named pipe per Ledge folder on Windows, a socket in it elsewhere', () => {
-    const a = panehostPath('win32', {}, 'C:\\Users\\a\\.ledge');
-    expect(a).toMatch(/^\\\\\.\\pipe\\ledge-panes-[0-9a-f]{16}$/);
-    expect(panehostPath('win32', {}, 'C:\\Users\\b\\.ledge')).not.toBe(a);
-    expect(panehostPath('linux', {}, '/h/.ledge')).toBe('/h/.ledge/panes.sock');
+  it('on Windows a named pipe named after the token: another account cannot know it ahead of the host', () => {
+    const a = panehostPath('win32', 'C:\\Users\\a\\.ledge', 'a'.repeat(64));
+    expect(a).toMatch(/^\\\\\.\\pipe\\ledge-panes-[0-9a-f]{32}$/);
+    expect(panehostPath('win32', 'C:\\Users\\a\\.ledge', 'b'.repeat(64))).not.toBe(a);
+    expect(a).not.toContain('a'.repeat(16));
   });
+  it('elsewhere a socket in the Ledge folder', () => expect(panehostPath('linux', '/h/.ledge', 'a'.repeat(64))).toBe('/h/.ledge/panes.sock'));
   it('speaks protocol 1', () => expect(PANEHOST_PROTOCOL).toBe(1));
+});
+
+describe('proof', () => {
+  it('binds the token, the side and both nonces, and never contains the token', () => {
+    const t = 'f'.repeat(64);
+    const p = proof(t, 'host', 'n1', 'n2');
+    expect(p).toMatch(/^[0-9a-f]{64}$/);
+    expect(p).not.toContain(t);
+    expect(proof(t, 'client', 'n1', 'n2')).not.toBe(p);
+    expect(proof(t, 'host', 'n1', 'n3')).not.toBe(p);
+    expect(proof('e'.repeat(64), 'host', 'n1', 'n2')).not.toBe(p);
+  });
 });

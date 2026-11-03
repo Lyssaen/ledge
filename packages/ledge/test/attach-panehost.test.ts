@@ -17,9 +17,9 @@ let host: PaneHost | undefined;
 afterEach(async () => { await host?.close(); host = undefined; });
 
 async function setup() {
-  const path = panehostPath(process.platform, {}, mkdtempSync(join(tmpdir(), 'ledge-attach-')));
+  const path = panehostPath(process.platform, mkdtempSync(join(tmpdir(), 'ledge-attach-')), TOKEN);
   host = await startPaneHost({ path, token: TOKEN });
-  const client = paneHostClient({ path, token: () => TOKEN, start: () => {} });
+  const client = paneHostClient({ path: () => path, token: () => TOKEN, start: () => {} });
   await client.newSession({ name: 'ledge-ab12', cwd: tmpdir(), env: process.env as Record<string, string>, command: [node, '-e', ECHO] });
   const end = Date.now() + 5000;
   while (Date.now() < end && !(await client.capture('ledge-ab12', 20))?.includes('ready')) await new Promise(r => setTimeout(r, 50));

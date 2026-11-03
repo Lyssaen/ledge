@@ -10,7 +10,7 @@ import { panehostPath } from './protocol.js';
  *  Ledge's own server for its sessions and the default one for OpenRig's seats. */
 export function pickTmux(platform: NodeJS.Platform, env: NodeJS.ProcessEnv, socket = 'ledge'): Tmux {
   if (env.LEDGE_PANES === 'conpty') return conptyPanes();
-  if (usesPaneHost(platform, env)) return paneHostClient({ path: panehostPath(platform, env, paths().dir), token: readDaemonToken, start: startDetachedHost });
+  if (usesPaneHost(platform, env)) return paneHostClient({ path: () => panehostPath(platform, paths().dir, readDaemonToken() ?? ''), token: readDaemonToken, start: () => startDetachedHost(paths().dir) });
   return routedTmux(realTmux(socket), realTmux(null));
 }
 

@@ -4,7 +4,7 @@ import { connect, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startPaneHost } from '../src/panes/host.js';
-import { frameLines, panehostPath, PANEHOST_PROTOCOL } from '../src/panes/protocol.js';
+import { frameLines, panehostPath, PANEHOST_PROTOCOL, proof } from '../src/panes/protocol.js';
 
 // A real pseudo-terminal under the host: as test/panes-conpty.test.ts, these run where node-pty loads.
 const pty = await import('node-pty').then(() => true, () => false);
@@ -34,13 +34,20 @@ function client(path: string) {
   };
   return { sock, frames, req, closed: () => closed, send: (o: object) => sock.write(JSON.stringify(o) + '\n') };
 }
-async function host(idleExitMs?: number) {
-  const path = panehostPath(process.platform, {}, mkdtempSync(join(tmpdir(), 'ledge-host-')));
-  const h = await startPaneHost({ path, token: TOKEN, ...(idleExitMs ? { idleExitMs } : {}) });
+async function host(idleExitMs?: number, helloMs?: number) {
+  const path = panehostPath(process.platform, mkdtempSync(join(tmpdir(), 'ledge-host-')), TOKEN);
+  const h = await startPaneHost({ path, token: TOKEN, ...(idleExitMs ? { idleExitMs } : {}), ...(helloMs ? { helloMs } : {}) });
   hosts.push(h);
   return h;
 }
-const hello = (c: ReturnType<typeof client>) => c.req({ op: 'hello', token: TOKEN, protocol: PANEHOST_PROTOCOL });
+/** The handshake: the host proves the token first, then the client; the token itself never crosses the socket. */
+async function hello(c: ReturnType<typeof client>, token = TOKEN) {
+  const nonce = 'n'.repeat(32);
+  const h = await c.req({ op: 'hello', protocol: PANEHOST_PROTOCOL, nonce }) as { ok: boolean; value?: { nonce: string; proof: string } };
+  if (!h?.ok) return h;
+  expect(h.value!.proof).toBe(proof(TOKEN, 'host', nonce, h.value!.nonce));
+  return c.req({ op: 'auth', proof: proof(token, 'client', nonce, h.value!.nonce) });
+}
 const agent = (script: string) => ({ name: `p${Math.random().toString(36).slice(2, 8)}`, cwd: tmpdir(), env: process.env as Record<string, string>, command: [node, '-e', script] });
 const ECHO = "process.stdin.setRawMode(true); let b=''; process.stdin.on('data', d => { b += d; if (b.includes('\\r')) { console.log('\\ngot:' + b.trim()); b=''; } }); console.log('ready')";
 
@@ -51,11 +58,30 @@ describe.skipIf(!pty)('pane host', () => {
     expect(await a.req({ op: 'listSessions' })).toMatchObject({ ok: false, error: 'unauthorized' });
     await until(() => a.closed());
     const b = client(h.path);
-    expect(await b.req({ op: 'hello', token: 'b'.repeat(64), protocol: PANEHOST_PROTOCOL })).toMatchObject({ ok: false, error: 'unauthorized' });
+    expect(await hello(b, 'b'.repeat(64))).toMatchObject({ ok: false, error: 'unauthorized' });
     await until(() => b.closed());
     const c = client(h.path);
-    expect(await c.req({ op: 'hello', token: TOKEN, protocol: 99 })).toMatchObject({ ok: false, error: `protocol ${PANEHOST_PROTOCOL}` });
+    expect(await c.req({ op: 'hello', protocol: 99, nonce: 'x'.repeat(32) })).toMatchObject({ ok: false, error: `protocol ${PANEHOST_PROTOCOL}` });
     await until(() => c.closed());
+    expect(a.frames.concat(b.frames, c.frames).map(f => JSON.stringify(f)).join('')).not.toContain(TOKEN);
+  });
+
+  it('closes a connection that does not authenticate in time, and does not stay up for it', async () => {
+    const h = await host(300, 200);
+    const silent = client(h.path);
+    await until(() => silent.closed(), 2000);
+    const half = client(h.path);
+    await half.req({ op: 'hello', protocol: PANEHOST_PROTOCOL, nonce: 'n'.repeat(32) });
+    await until(() => half.closed(), 2000);
+    await until(() => h.isClosed(), 3000);
+  });
+
+  it('drops a malformed frame and keeps serving', async () => {
+    const h = await host(); const c = client(h.path); await hello(c);
+    for (const bad of ['null', '[]', '42', '"x"', '{"op":"capture"}']) c.sock.write(bad + '\n');
+    await new Promise(r => setTimeout(r, 300));
+    const d = client(h.path); await hello(d);
+    expect(await d.req({ op: 'listSessions' })).toMatchObject({ ok: true, value: [] });
   });
 
   it('serves the Tmux ops', async () => {

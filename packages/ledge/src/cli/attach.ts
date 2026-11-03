@@ -91,7 +91,7 @@ export async function attach(id: string, opts: AttachOptions = {}): Promise<numb
 /** The pane host's client of this Ledge folder; attach never starts a host: without one there is no pane to show. */
 async function localPaneHost(): Promise<Pick<PaneHostClient, 'hasSession' | 'attach' | 'close'>> {
   const [{ paneHostClient }, { panehostPath }, { readDaemonToken }, { paths }] = await Promise.all([import('../panes/client.js'), import('../panes/protocol.js'), import('../auth.js'), import('../paths.js')]);
-  return paneHostClient({ path: panehostPath(process.platform, process.env, paths().dir), token: readDaemonToken, start: () => {}, connectMs: 1000 });
+  return paneHostClient({ path: () => panehostPath(process.platform, paths().dir, readDaemonToken() ?? ''), token: readDaemonToken, start: () => {}, connectMs: 1000 });
 }
 
 /** Windows: the pane streamed through the pane host, this terminal raw while attached. Resolves with the agent's exit
@@ -106,6 +106,7 @@ async function attachThroughHost(id: string, opts: AttachOptions): Promise<numbe
     const raw = tty.isTTY === true && typeof tty.setRawMode === 'function';
     if (raw) tty.setRawMode(true);
     try { return (await host.attach(name, { input, output, readOnly: opts.readOnly })) ?? 0; }
+    catch (e) { console.error(`ledge attach: ${(e as Error).message}`); return 1; }
     finally { if (raw) tty.setRawMode(false); if (!opts.io) process.stdin.pause(); }
   } finally { if (!opts.paneHost) host.close(); }
 }

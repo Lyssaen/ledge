@@ -130,6 +130,8 @@ export function conptyPanes(opts: { cols?: number; rows?: number; spawn?: typeof
     async attachTo(name, sink) {
       const p = get(name); if (!p) return null;
       await settle(p.term);
+      // The pane may have ended while its screen settled: its sinks were ended then, a new one would wait forever.
+      if (live.get(name) !== p) return null;
       const screen = p.serializer.serialize();
       p.sinks.add(sink);
       return { screen, write: input => { void enqueue(p, () => typeSliced(p, input)); }, detach: () => { p.sinks.delete(sink); } };
