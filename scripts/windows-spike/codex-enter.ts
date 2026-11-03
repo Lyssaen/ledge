@@ -13,13 +13,13 @@ for (const d of delays.map(Number)) {
   while (Date.now() < end && !codex.atRest!((await panes.capture('c', 200)) ?? '')) await sleep(200);
   await sleep(1500);
   const t = Date.now();
-  await panes.sendText('c', LONG);
+  await panes.sendText('c', process.env.BRACKET ? `\x1b[200~${LONG}\x1b[201~` : LONG);
   const typedMs = Date.now() - t;
   await sleep(d);
   await panes.sendKeys('c', ['Enter']);
   await sleep(2500);
   const pane = (await panes.capture('c', 200)) ?? '';
-  const submitted = /esc to interrupt|Working|Worked for/.test(pane);
+  const submitted = /esc to interrupt|Working|Worked for|^• /m.test(pane) && !/\[Pasted Content/.test(pane.split('\n').filter(l => /^›/.test(l)).at(-1) ?? '');
   const draftHasText = pane.split('\n').some(l => /^›\s+\S/.test(l) && /Ligne/.test(l));
   console.log(JSON.stringify({ delayMs: d, typedMs, submitted, draftStillHolds: draftHasText && !submitted }));
   if (process.env.SHOW) console.log(pane.split('\n').filter(l => l.trim() && !/[⣿⠿⢸]/.test(l)).slice(-14).map(l => '|' + l.slice(0, 160)).join('\n'));
