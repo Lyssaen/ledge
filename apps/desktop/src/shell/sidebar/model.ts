@@ -1,14 +1,10 @@
-import { isBusy } from '@ledge/fleet';
-import type { Helper, Projects, Session } from '@ledge/protocol';
+import { isArchived, type Helper, type Projects, type Session } from '@ledge/protocol';
 import { fold, taskOf } from '../../nav/agents';
 
 const UNASSIGNED = 'Sans projet';
 
 export const branchOf = (s: Pick<Session, 'branch'>): string => s.branch?.trim() || 'main';
 
-/** Exited, or at rest with no subagent still at work (a background one outlives its parent's turn). */
-export const isFinished = (s: Session): boolean =>
-  !s.offline && (s.state === 'exited' || (s.state === 'idle' && !isBusy(s)));
 
 export interface BranchGroup {
   branch: string;
@@ -52,6 +48,22 @@ function projectGroup(id: string | null, name: string, sessions: readonly Sessio
     flatten: id === null || branches.length <= 1,
     branches
   };
+}
+
+/** A live agent (docs/mockups/ledge-projects-eye.html): neither ended nor archived — working, waiting, in error, at rest or offline. */
+export const isLive = (s: Session): boolean => s.state !== 'exited' && !isArchived(s);
+
+/** The projects the tree shows by the eye (docs/mockups/ledge-projects-eye.html). Pressed: those with a live agent, and how many of
+ *  the others it hides. Released: every project of the registry, those without a session included; « Sans projet » only with
+ *  sessions. A project still shows while a session is dragged (to be dropped on it) and while it is the filter. Without any
+ *  session, none shows (but the filter): the tree says there is none yet. */
+export function eyeGroups(groups: readonly ProjectGroup[], hideDone: boolean, keep: { dragging: boolean; filter?: string | null | undefined }): { shown: ProjectGroup[]; hidden: number } {
+  const sessions = (g: ProjectGroup) => g.branches.flatMap(b => b.sessions);
+  const kept = (g: ProjectGroup) => (g.id !== null && keep.dragging) || (g.id !== null && keep.filter === g.id);
+  // No session at all: the tree's own empty state (« Aucune session pour l'instant »), whatever the eye.
+  if (!groups.some(g => sessions(g).length > 0)) return { shown: groups.filter(kept), hidden: 0 };
+  const shown = groups.filter(g => kept(g) || (hideDone ? sessions(g).some(isLive) : g.id !== null || sessions(g).length > 0));
+  return { shown, hidden: hideDone ? groups.length - shown.length : 0 };
 }
 
 export function treeModel(

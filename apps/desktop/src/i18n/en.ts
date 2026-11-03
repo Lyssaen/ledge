@@ -43,6 +43,7 @@ export const en: Messages = {
       sessions: 'No session yet.', sessionsBody: 'A session runs an agent in a folder or a project.', newSession: 'Create a session',
       stopped: 'OpenRig is stopped.', stoppedBody: 'Starting it also starts the kernel: the operator, the advisor and the queue.', start: 'Start OpenRig', starting: 'Starting OpenRig…',
       retry: 'Retry', openPage: 'Open the OpenRig page',
+      noActive: 'No live agent.', noActiveBody: 'No project has an agent running. H shows every project.', showAll: 'Show every project',
       installedOn: (machine: string) => `It’s installed on ${machine}: start it from its page.`, offlineOf: (n: number, m: number) => `offline · ${n}/${m}`,
       noRig: 'No rig yet.', noRigBody: 'A rig is a team of agents.', noRigOperator: (name: string) => `${name}, the kernel’s operator, can help you put one together.`
     },
@@ -51,7 +52,7 @@ export const en: Messages = {
     yours: 'Your turn', yoursMore: (n) => `See the other ${n}`, yoursLess: 'Show less',
     allow: 'Yes', deny: 'No', reply: 'Reply', see: 'View',
     ofHelper: (parent) => `↳ ${parent}`,
-    hideDone: 'Hide finished sessions (H)', showDone: 'Show finished sessions (H)',
+    hideDone: 'Only projects with a live agent (H)', moreProjects: (n) => `+${n} ${pluralEn(n, 'project', 'projects')} with no live agent`,
     dense: 'Compact mode (D)', foldAll: 'Fold all',
     tree: 'Projects, branches and sessions',
     fold: (name) => `Fold ${name}`, unfold: (name) => `Unfold ${name}`,

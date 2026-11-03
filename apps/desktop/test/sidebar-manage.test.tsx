@@ -78,7 +78,7 @@ describe('archive and delete from the sidebar tree', () => {
     expect(tree.getByRole('button', { name: /^Bix/ })).toBeVisible();
     // Once shown, the row has nothing left to offer: it goes, and nothing was archived on the way.
     expect(tree.queryByRole('button', { name: '+1 finished' })).toBeNull();
-    expect(side.getByRole('tree').querySelector('.st-more')).toBeNull();
+    expect(side.getByRole('tree').querySelector('.st-more:not(.st-more-projects)')).toBeNull();
     expect(archives(d)).toEqual([]);
   });
 
