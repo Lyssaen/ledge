@@ -8,16 +8,15 @@
 .st-fill{flex:1}
 .st-ask{margin:10px 10px 0;height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);cursor:text}
 .st-ask:focus-within,.st-ask.on{border-color:var(--ring)}
-.st-ask input{flex:1;min-width:0;border:0;background:transparent;color:var(--sidebar-foreground);font:13px 'Geist',system-ui,sans-serif;outline:none}
-.st-ask input::placeholder{color:var(--muted-foreground)}
 .st .st-mascot{display:inline-flex;flex:none}
-.st-views{display:flex;flex-direction:column;gap:2px;margin:10px 10px 6px;padding:2px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
-.st .st-views button{flex:1;height:28px;display:flex;align-items:center;gap:7px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st-views{display:flex;flex-direction:column;gap:2px;margin:10px 10px 8px;padding:4px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-views button{flex:1;height:30px;display:flex;align-items:center;gap:9px;padding:0 10px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
 .st .st-views button:hover{color:var(--sidebar-foreground)}
 .st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
 .st .st-views button.on svg{color:var(--sidebar-primary)}
 .st-views small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
-.st-scroll{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:10px}
+/* The scrollbar's gutter is kept (thin: 10 px) and stands for the right padding, so the kernel box keeps the views' edges whether the list scrolls or not. */
+.st-scroll{flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable;padding:2px 0 8px 8px;display:flex;flex-direction:column;gap:10px}
 .st-label{display:flex;align-items:center;gap:4px;height:26px;padding:0 2px 0 8px;font-size:11px;color:var(--muted-foreground)}
 .st-badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:grid;place-items:center;font:600 10px 'Geist Mono',monospace;background:var(--sidebar-primary);color:var(--sidebar-primary-foreground,var(--primary-foreground))}
 .st .st-icon{width:24px;height:24px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
@@ -45,6 +44,7 @@
 .st-row{--d:0;position:relative;display:flex;align-items:center;gap:6px;min-height:28px;padding:0 6px 0 calc(4px + var(--d) * 14px);border-radius:var(--radius-sm);font-size:13px;color:var(--muted-foreground)}
 .st-row:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
 .st-row.sel{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
+.st-row.picked{background:color-mix(in srgb,var(--sidebar-primary) 14%,transparent);color:var(--sidebar-foreground);box-shadow:inset 2px 0 0 var(--sidebar-primary)}
 .st-row.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));outline:1.5px solid var(--sidebar-primary)}
 .st-project.drop-over{background:color-mix(in srgb,var(--sidebar-primary) 16%,var(--sidebar-accent));color:var(--foreground);outline:1.5px solid var(--sidebar-primary)}
 .is-dragging .st-project:not(.drop-over){outline:1px dashed var(--input);outline-offset:-1px}
@@ -111,6 +111,12 @@
 .st-dense .st-agent .st-main{flex-direction:row;gap:6px;align-items:baseline;padding:2px 0}
 .st-dense .st-agent>.st-chev,.st-dense .st-agent>.st-gap,.st-dense .st-bot,.st-dense .st-time,.st-dense .st-kids{margin-top:0}
 .st-dense .st-acts{top:1px}
+/* The sessions picked with Ctrl/⌘ + click: « Écrire aux N sessions… » and « Annuler », above the foot. */
+.st-picked{flex:none;display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--sidebar-border);font-size:12px}
+.st .st-picked-write{display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--radius-sm);background:var(--primary);color:var(--primary-foreground);font-weight:500}
+.st .st-picked-write:hover{background:var(--primary-hover)}
+.st .st-picked-cancel{height:28px;padding:0 8px;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.st .st-picked-cancel:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
 /* Machines and Settings at the foot. */
 .st-foot{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground);overflow:hidden}
 .st .st-mach{display:flex;align-items:center;gap:5px;white-space:nowrap}
@@ -136,9 +142,9 @@
  .st kbd{display:none!important}
  .st .st-keys-tip kbd{display:inline-flex!important}
  .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
- .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask input,.st-ask kbd{display:none}
+ .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask kbd{display:none}
  .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
- .st-attn,.st-label,.st-help,.st-agent,.st-branch,.st-more,.st-archives{display:none}
+ .st-attn,.st-label,.st-help,.st-empty,.st-kernel-box,.st-agent,.st-branch,.st-more,.st-archives{display:none}
  .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
  .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
  .st-project .side-swatch{width:16px;height:16px;border-radius:5px}
@@ -147,12 +153,11 @@
 }
 
 /* Ledge's entry (ledge home spec §2.1): the resident, « Ledge. », the live line and /, the question field under it; lit while the home view shows. */
-.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:4px;padding:6px 8px 6px;cursor:default}
+.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:0;padding:8px 14px;cursor:default}
 .st-ledge .st-ledge-entry{display:flex;align-items:center;gap:8px;width:100%;padding:2px 0;border:0;background:none;color:var(--sidebar-foreground);text-align:left;cursor:pointer}
 .st-ledge .st-ledge-names{display:flex;flex-direction:column;flex:1;min-width:0;line-height:14px}
 .st-ledge .st-ledge-brand{font-size:13px;font-weight:650}
 .st-ledge .st-ledge-line{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st-ledge input{height:26px;padding:0 6px;border:1px solid var(--input)!important;border-radius:var(--radius-sm);background:var(--sidebar)!important}
 .st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
 @media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
 .st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}
@@ -162,6 +167,33 @@
 /* OpenRig's groups (docs/mockups/ledge-openrig-groups.html): a rig's hexagon, the kernel's. */
 .st-rig-hex{display:inline-grid;place-items:center;color:var(--info);flex:none}
 .st-kernel-hex{display:inline-grid;place-items:center;color:#8b5cf6;margin-right:4px}
-.st-grouping{display:flex;gap:2px;margin:6px 10px 2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
-.st .st-grouping button{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 8px;height:24px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
+.st-grouping{display:flex;flex:none;gap:2px;margin:0 10px 8px;padding:4px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.st .st-grouping button{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 8px;height:26px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
 .st .st-grouping button[aria-checked=true]{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+
+/* docs/mockups/ledge-sidebar-tidy.html, point 7 · Kernel, the operational layer: a tinted box in the kernel's violet, the
+   same outer edges as the views and the toggle (the list's 8 px + 2 px = 10 px). Its header says the kernel's real state. */
+.st-kernel-box{--kv:#8b5cf6;margin:0 0 0 2px;padding:2px 4px 4px;border:1px solid color-mix(in srgb,var(--kv) 34%,var(--border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--kv) 7%,var(--sidebar))}
+:root[data-theme="dark"] .st-kernel-box{--kv:#a78bfa;background:color-mix(in srgb,var(--kv) 9%,var(--sidebar))}
+.st-kernel-box .st-label{padding:0 6px}
+.st-kernel-box .st-kernel-name{color:var(--sidebar-foreground);font-weight:600}
+.st-kernel-tag{display:flex;align-items:center;gap:5px;font:500 10px 'Geist Mono',monospace;color:color-mix(in srgb,var(--kv) 75%,var(--muted-foreground))}
+.st-kernel-tag i{width:6px;height:6px;border-radius:50%;background:var(--muted-foreground)}
+.st-kernel-tag[data-state="ready"] i{background:var(--success)}
+.st-kernel-tag[data-state="starting"] i{background:var(--warning)}
+.st-kernel-box .st-row{padding-left:6px}
+.st-kernel-box .st-row:hover,.st-kernel-box .st-row.sel{background:color-mix(in srgb,var(--kv) 14%,var(--sidebar))}
+/* Point 3 · Empty states: a quiet box in the list, its one action as an outline button. */
+.st-empty{margin:2px 0 0 2px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:3px}
+.st-empty strong{font-size:13px;font-weight:500;color:var(--sidebar-foreground);line-height:18px}
+.st-empty p{margin:0;font-size:12px;line-height:17px;color:var(--muted-foreground)}
+.st-empty p.err{color:var(--danger-text)}
+.st .st-empty-btn{margin-top:8px;height:30px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--input);border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--sidebar-foreground);text-align:center}
+.st .st-empty-btn:hover{background:var(--sidebar-accent)}
+.st .st-empty-btn[disabled]{opacity:1;color:var(--muted-foreground);cursor:default}
+.st .st-empty-btn[disabled]:hover{background:none}
+.st .st-empty-link{margin-top:4px;align-self:center;font-size:11px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:2px}
+.st .st-empty-link:hover{color:var(--sidebar-foreground)}
+.st-spin{width:12px;height:12px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:st-spin .9s linear infinite}
+@keyframes st-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.st-spin{animation:none}}

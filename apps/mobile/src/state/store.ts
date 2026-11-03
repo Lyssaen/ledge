@@ -35,7 +35,7 @@ export interface MobileState {
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true } | null;
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
   models: Record<string, { models: PhoneModelChoice[]; error?: true }>;
   /** The slash commands of each session's agent, by session id, as `session.commands.listing` said; `at` when they came. `error`: they could not be read. */
@@ -105,6 +105,8 @@ export interface MobileStore {
   requestCommands(id: string): void;
   /** Changes a live session's model and effort (`null`: the agent's own default). Resolves when the PC answers; a late failure lands in `getState().modelFailures`. */
   changeModel(id: string, model: string | null, effort: string | null): Promise<ChatAction>;
+  /** Writes one message to several sessions at once (at most 32). Resolves when the PC answers, with who got it (`sent`, names) and who did not. */
+  broadcast(sessions: string[], text: string): Promise<ChatAction & { sent?: string[]; refused?: { name: string; reason: string }[] }>;
   /**
    * Installs `version` on the PC then restarts its daemon (`update`), or restarts it alone (`restart`), after the device's
    * confirmation. Once applied, `getState().pc` follows it until the PC comes back with it, refuses, or `PC_STALL_MS` passes.
@@ -474,7 +476,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         }
         stopTimer(m.op);
         const { reason: _old, ...rest } = o;
-        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.how ? { how: m.how } : {}) }));
+        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.how ? { how: m.how } : {}), ...(m.sent ? { sent: m.sent } : {}), ...(m.refused ? { refused: m.refused } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
         if (m.status === 'rejected' && m.reason === 'stale' && ready() && o.message.type.startsWith('session.') && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
         return;
@@ -657,6 +659,15 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       // A new change answers the last failure: it is not shown against the one being tried.
       if (id in state.modelFailures) { const { [id]: _drop, ...rest } = state.modelFailures; set({ modelFailures: rest }); }
       return finalOf(op);
+    },
+
+    async broadcast(sessions, text) {
+      const op = write(o => ({ type: 'session.broadcast', op: o, sessions, text }));
+      if (op === null) return { status: 'failed' };
+      const done = await finalOf(op);
+      const o = state.ops[op];
+      // Nobody reached is `failed` with the refusals still told.
+      return o?.sent ? { ...done, sent: o.sent, refused: o.refused ?? [] } : done;
     },
 
     async pcAction(action, version) {

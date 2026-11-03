@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { projectOf, useProjects, useTasks, type DaemonClient } from '@ledge/fleet';
+import { canBroadcast, projectOf, useProjects, useTasks, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
 import { Button } from '@ledge/ui/ui/Button';
@@ -86,7 +86,7 @@ function AtelierAlone({ client }: { client?: DaemonClient }) {
       <div className={`application atelier-alone ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} inert={blocked}>
         <section className="workspace">
           <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
-            tasks={tasks}
+            tasks={tasks} broadcast={canBroadcast(machines)}
             tools={nav.fullscreen && <>
               <span className="zoom-sep" />
               <Button variant="ghost" size="icon" aria-label={t.top.fullscreenExit} title={t.top.fullscreenExit} onClick={() => dispatch({ type: 'fullscreen', on: false })}>

@@ -27,7 +27,7 @@ export const fr = {
     interrupt: 'interrompre', next: 'suivante en attente', unfold: 'déplier', send: 'envoyer / lancer', nextCard: 'carte suivante',
     newChat: 'nouvelle conversation', stopAnswer: 'arrêter la réponse', nextField: 'champ suivant', choose: 'choisir', tick: 'cocher',
     start: 'lancer', cancel: 'annuler', change: 'changer', scroll: 'défiler', space: 'espace', redraw: 'autre nom',
-    handover: 'passer le relais', decide: 'répondre à la décision', sendAnswer: 'envoyer la réponse', edit: 'modifier',
+    handover: 'passer le relais', writeProject: 'écrire à tout le projet', decide: 'répondre à la décision', sendAnswer: 'envoyer la réponse', edit: 'modifier',
     sendOnly: 'envoyer', newLine: 'nouvelle ligne', keepAndLeave: 'garder et sortir', lineHistory: 'ligne · historique', history: 'historique',
     word: 'mot', clear: 'effacer', resend: 'renvoyer', backToDraft: 'revenir au brouillon', keep: 'garder', wipe: 'effacer',
     line: 'ligne', page: 'page', end: 'fin', question: 'question', conversation: 'conversation', cycle: 'cartes · conversation',
@@ -49,6 +49,7 @@ export const fr = {
     relievedBy: (name: string) => `relevée par ${name}`, relieves: (name: string) => `relève de ${name}`,
     ledgeTask: (owner: string, title: string, state: 'done' | 'refused' | 'dropped') => `${owner} a ${state === 'done' ? 'fini' : state === 'refused' ? 'refusé' : 'abandonné'} « ${title} » · tâche de Ledge`,
     decision: (giver: string, title: string) => `${giver} te demande : ${title}`,
+    writeProjectTitle: (project: string) => `Écrire à tout le projet ${project}`, writeProjectHint: 'Ton message, tel que chaque session le lira…',
     decisionTitle: (giver: string, title: string) => `Répondre à ${giver} · ${title}`, decisionHint: 'Ta réponse, telle que la session la lira…',
     confirmAnswer: (giver: string) => `Envoyer à ${giver} ? Une réponse ne se reprend pas`
   },
@@ -130,6 +131,10 @@ export const fr = {
   },
   toast: {
     answerFailed: (why: string) => `Réponse non envoyée : ${why}`,
+    noProject: "cette session n'est dans aucun projet",
+    broadcastSent: (names: string, refused: string) => `✓ Envoyé à ${names}${refused ? ` · ${refused}` : ''}`,
+    broadcastNobody: (why: string) => `Non envoyé : ${why}`,
+    broadcastSilent: "aucune machine n'a répondu : il est peut-être parti, vérifie avant de renvoyer",
     handover: (n: string) => `${n} écrit son bilan : une nouvelle session prendra sa place`, handoverRefused: (why: string) => `Relève refusée : ${why}`,
     accept: (n: string) => `✓ ${n} : autorisé`, deny: (n: string) => `✓ ${n} : refusé`, always: (n: string) => `✓ ${n} : toujours autorisé`,
     option: (n: string, k: number) => `✓ ${n} : option ${k} envoyée`, reply: (n: string) => `✓ Réponse envoyée à ${n}`,

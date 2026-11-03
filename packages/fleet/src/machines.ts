@@ -4,6 +4,9 @@ import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects,
 import { useSyncExternalStore } from 'react';
 import { DAEMON_PROTOCOL_PREFIX, type TokenSource } from './token';
 
+/** Where a `session.broadcast` goes, and its answer. */
+export type BroadcastTo = Extract<ClientMessage, { type: 'session.broadcast' }>['to'];
+export type BroadcastResult = Extract<ServerMessage, { type: 'session.broadcast.result' }>;
 /** The url exists for `local` only: set by the fleet, never persisted nor sent. */
 export type MachineConfig = Machine & { url?: string };
 export interface MachineState extends MachineConfig { status: DaemonStatus; ready: boolean; recents: Recent[]; sessions: Session[]; launcher: string[] | null; version?: string; daemon?: DaemonInfo; error?: string }
@@ -60,10 +63,17 @@ export interface Fleet {
   contextNear(): number | undefined;
   /** Sets it on the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */
   setContextNear(near: number): void;
+  /** Writes `text` to a project or to sessions on every machine that holds them, each daemon writing to its own (broadcast
+   *  spec), and resolves with the merged `session.broadcast.result` of that `rid`. A machine whose daemon (or, for a remote,
+   *  the local SSH gateway) does not announce `broadcast` is sent nothing: « version trop ancienne ». Nobody reached: `reason`,
+   *  BROADCAST_SILENT when every machine asked was silent past BROADCAST_TIMEOUT_MS. A resend with the same `rid` is answered once. */
+  broadcast(to: BroadcastTo, text: string, rid?: string): Promise<BroadcastResult>;
 }
 /** A refused mobile.* command, as the Mobile access settings say it. */
 export interface MobileError { request: string; message: string; code?: string }
 export const LOCAL_MACHINE: MachineConfig = { id: 'local', label: 'Local', url: 'ws://127.0.0.1:47831' };
+/** The local daemon takes `session.broadcast` (its snapshot says so): the app offers to write to a project or a selection only then. */
+export const canBroadcast = (machines: readonly Pick<MachineState, 'id' | 'daemon'>[]): boolean => !!machines.find(m => m.id === LOCAL_MACHINE.id)?.daemon?.broadcast;
 /** The shared list rules live in the protocol; the fleet only pins the local URL (spec §5.1). */
 export function parseMachines(raw: unknown): MachineConfig[] {
   const list = MachinesSchema.parse(Array.isArray(raw) ? raw.map(m => { const rest = { ...(m ?? {}) } as Record<string, unknown>; delete rest.url; return rest; }) : raw);

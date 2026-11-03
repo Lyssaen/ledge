@@ -44,7 +44,7 @@ test('launching a rig: 3 builders and 3 reviewers, checked, then launched', asyn
   const daemon = await fakeDaemon(page, [session('otto')], { openrig: STATE, rigSpecs: SPECS });
   await page.goto('/');
   await page.getByRole('button', { name: 'OpenRig' }).click();
-  await page.getByRole('button', { name: 'Lancer un rig…' }).click();
+  await page.locator('.or-head').getByRole('button', { name: 'Lancer un rig…' }).click();
   await page.getByRole('radio', { name: /^starter/ }).click();
   await page.getByLabel('Dossier de travail').fill('~/Workspace/ledge');
   await page.getByLabel('Nom du rig').fill('ledge-scale');

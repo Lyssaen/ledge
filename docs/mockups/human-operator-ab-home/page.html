@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Accueil Ledge, mise en page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/*BASE*/
+/* ===== Home layout ===== */
+.tabs2{display:flex;gap:2px;padding:2px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
+.tabs2 span{height:26px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:var(--radius-sm);font-size:12.5px;color:var(--muted-foreground)}
+.tabs2 span.on{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
+.tabs2 .n{font:600 10px 'Geist Mono',monospace;min-width:16px;height:16px;padding:0 4px;border-radius:999px;display:inline-grid;place-items:center;background:var(--sidebar-primary);color:var(--primary-foreground)}
+.tabs2 .c{font:500 10.5px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.ch{display:flex;align-items:center;gap:6px;padding:0 0 10px;border-bottom:1px solid var(--border)}
+.ch h5{margin:0;font-size:13px;font-weight:600}
+.ch .sp{flex:1}
+.icon-btn{width:26px;height:26px;display:inline-grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted-foreground)}
+.icon-btn.on{background:var(--sidebar-accent);color:var(--foreground)}
+.trow{display:grid;grid-template-columns:96px 1fr 120px 80px;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--border);font-size:12.5px}
+.trow code{font:11px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.trow small{color:var(--muted-foreground)}
+.trow.sel{background:var(--sidebar-accent);border-radius:6px}
+.filters{display:flex;gap:6px;align-items:center}
+.sel-box{height:26px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--input);border-radius:var(--radius-sm);font-size:12px;background:var(--well)}
+.hrow{display:flex;flex-direction:column;gap:2px;padding:8px 6px;border-bottom:1px solid var(--border);font-size:12.5px}
+.hrow small{color:var(--muted-foreground);font:11px 'Geist Mono',monospace}
+.map{border-collapse:collapse;width:100%;font-size:13px}
+.map th,.map td{border-bottom:1px solid rgba(127,127,127,.25);padding:7px 10px;text-align:left;vertical-align:top}
+.map th{font-weight:600;opacity:.7;font-size:12px}
+.app.narrow{width:900px}
+.shot.n900{width:450px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Accueil Ledge : où vont Tâches, Historique et « Le point »</h1>
+      <p class="lead"><b>Validé le 2 novembre à 20:04</b>, avec les trois recommandations : Tâches en second onglet du centre, Historique dans l'en-tête de la conversation, seuil de 1 180 px. Complément à <code>ledge-human-operator-ab.html</code> (direction A+B, validée), pour le lot de refonte de l'accueil, qui est à part.
+        Aujourd'hui, l'accueil a trois onglets (Conversation · Tâches · Historique), et « Le point » est épinglé en tête de la conversation.
+        Proposition : <b>la colonne centrale garde « À toi » et prend « Tâches » en second onglet</b> ; <b>la conversation reste à droite et porte l'Historique dans son en-tête</b>.
+        « Le point » se fond dans « À toi ». Clique sur un écran pour le voir en taille réelle.</p>
+    </div>
+    <div class="switch" role="radiogroup" aria-label="Thème"><button data-th="dark" class="on">Sombre</button><button data-th="light">Clair</button></div>
+  </header>
+
+  <h2 class="rowtitle" style="margin:30px 0 10px">Avant → après</h2>
+  <div class="notes" style="margin-top:0;max-width:1240px">
+    <table class="map">
+      <tr><th>Aujourd'hui (LedgeHome)</th><th>Dans le nouvel accueil</th><th>Pourquoi</th></tr>
+      <tr><td>Onglet <b>Conversation</b></td><td>Toujours visible, colonne de droite. Plus d'onglet.</td><td>On parle à Ledge pendant qu'on lit À toi : les deux restent ensemble.</td></tr>
+      <tr><td>« Le point » › <b>À toi</b> (accords, décisions, tâches closes, relais de contexte)</td><td>La colonne centrale « À toi » elle-même (onglet par défaut). Les tâches closes de Ledge y arrivent dans « Nouvelles », avec « Voir » et « Ranger ».</td><td>Une seule liste de ce qui t'attend, au lieu de deux.</td></tr>
+      <tr><td>« Le point » › <b>Confiées par Ledge</b></td><td>Onglet <b>Tâches</b>, filtre « Ledge ». Une tâche qui se ferme remonte aussi dans À toi › Nouvelles.</td><td>Ce sont des tâches en cours, pas des demandes pour toi.</td></tr>
+      <tr><td>« Le point » › <b>Résumer la journée</b></td><td>Pastille du champ de la conversation, à côté de « Nouvel objectif ».</td><td>C'est une question posée à Ledge.</td></tr>
+      <tr><td>Onglet <b>Tâches · n</b> (filtres état et donneur, détail, Répondre)</td><td>Second onglet de la colonne centrale : <b>À toi · n | Tâches · n</b>. Mêmes filtres et même détail. Les décisions ouvertes restent dans À toi ; le filtre « Décisions » montre leur historique.</td><td>Les tâches sont du suivi : à côté d'À toi, sans le remplacer.</td></tr>
+      <tr><td>Onglet <b>Historique</b> (questions du jour)</td><td>Bouton horloge dans l'en-tête de la conversation : la liste remplace le fil, avec « ← Conversation ». Un clic rouvre le fil sur la question.</td><td>L'historique appartient à la conversation.</td></tr>
+      <tr><td>Bouton <b>Nouvelle conversation</b> de l'en-tête</td><td>En-tête de la colonne conversation, à côté de l'Historique.</td><td>Même endroit que l'Historique.</td></tr>
+      <tr><td>Fenêtre étroite</td><td>Moins de 1 180 px : la conversation passe en troisième onglet, <b>À toi · Tâches · Ledge</b>.</td><td>Deux colonnes ne tiennent plus.</td></tr>
+    </table>
+  </div>
+
+  <div class="grid" id="grid" style="grid-template-columns:repeat(2,600px)"></div>
+
+  <section class="notes">
+    <h2>Fiche</h2>
+    <h3>Textes (FR · EN)</h3>
+    <ul>
+      <li>Onglets du centre : « À toi » · « Yours » ; « Tâches » · « Tasks » (clés existantes <code>home.tabs.tasks(n)</code> et <code>home.point.yours</code>). Troisième onglet en fenêtre étroite : « Ledge » · « Ledge ».</li>
+      <li>En-tête de la conversation : « Ledge » ; boutons « Historique » · « History » (<code>home.tabs.history</code>) et « Nouvelle conversation » (existant).</li>
+      <li>Historique ouvert : « ← Conversation » · « ← Conversation » ; vide : <code>home.history.none</code> (existant).</li>
+      <li>Pastille du champ : « Résumer la journée » (<code>home.point.summarize</code>, existant).</li>
+    </ul>
+    <h3>Comportements</h3>
+    <ul>
+      <li><kbd class="k">/</kbd> ouvre l'accueil, onglet À toi, et met le focus dans le champ de la conversation (comme aujourd'hui avec l'onglet Conversation).</li>
+      <li>La navigation <code>{ kind: 'home', tab }</code> garde <code>'tasks'</code> ; <code>'conversation'</code> devient l'onglet À toi (conversation visible à droite), et <code>'history'</code> ouvre À toi avec l'historique dans la colonne de droite.</li>
+      <li>« Voir » sur une tâche close (dans À toi) ouvre l'onglet Tâches sur son détail, comme <code>onShowTask</code> aujourd'hui.</li>
+    </ul>
+    <h3>Questions tranchées (validé 20:04, recommandations retenues)</h3>
+    <ol>
+      <li>Tâches en <b>second onglet du centre</b> (ma proposition), ou en <b>section repliée au bas d'À toi</b> ? L'onglet garde À toi court ; la section évite un clic.</li>
+      <li>Historique dans l'en-tête de la conversation : d'accord ? (Alternative : dans Tâches, mais ce ne sont pas des tâches.)</li>
+      <li>Seuil de la fenêtre étroite : 1 180 px, à vérifier sur ton écran.</li>
+    </ol>
+  </section>
+</div>
+<div class="lightbox" id="lb"></div>
+<script>
+const P = {
+  grid: ['M3 3h7v7H3z','M14 3h7v7h-7z','M3 14h7v7H3z','M14 14h7v7h-7z'],
+  rig: ['M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5z','M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7'],
+  dense: ['M4 4h16','M4 8h16','M4 12h16','M4 16h16','M4 20h16'],
+  fold: ['m7 20 5-5 5 5','m7 4 5 5 5-5'],
+  plus: ['M12 5v14','M5 12h14'],
+  chev: ['m9 18 6-6-6-6'],
+  chevDown: ['m6 9 6 6 6-6'],
+  back: ['m15 18-6-6 6-6'],
+  help: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6','M12 17h.01'],
+  gear: ['M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6','M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z'],
+  send: ['M5 12h14','m13 6 6 6-6 6'],
+  target: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8','M12 12h.01'],
+  clock: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18','M12 7v5l3 2'],
+  newc: ['M4 20h4L19 9l-4-4L4 16z','M14 6l4 4'],
+  check: ['m5 12 5 5 9-10'],
+  file: ['M6 3h8l4 4v14H6z','M14 3v4h4']
+};
+const ic = (d, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d.map(x => `<path d="${x}"/>`).join('')}</svg>`;
+const hx = (k = false, s = 13) => `<span class="hex${k ? ' k' : ''}">${ic(P.rig, s)}</span>`;
+const src = t => `<span class="src">${ic(P.file, 11)}${t}</span>`;
+const RIG = [['Bix','pilot','claude','work'],['Lu','design.ux','claude'],['Ida','dev.front','claude','work'],['Pim','review.qa','codex'],['Pim','dev.back','claude']];
+const KERNEL = [['Nova','advisor','claude'],['Max','operator','claude'],['Rex','queue','claude']];
+const seat = (s, d, ask) => `<div class="st-row st-agent" style="--d:${d}"><span class="st-gap"></span><span class="st-bot"><i class="bot ${s[2] === 'codex' ? 'codex' : ''} ${ask ? 'ap' : s[3] || ''}"></i></span><button class="st-main"><strong>${s[0]}</strong><span class="mono">${s[1]} · ${s[2]}</span></button><span class="st-time${ask ? ' t-approval' : ''}">${ask || ''}</span></div>`;
+const sidebar = () => `<aside class="sidebar st v2 st-dense">
+  <div class="st-ask st-ledge on"><button class="st-ledge-entry"><span class="st-mascot"><i class="mascot s"></i></span><span class="st-ledge-names"><span class="st-ledge-brand">Ledge<span style="color:var(--sidebar-primary)">.</span></span><small class="st-ledge-line">2 à toi</small></span><kbd class="k">/</kbd></button></div>
+  <nav class="st-views"><button>${ic(P.grid, 13)}<span>Atelier</span><span class="st-fill"></span><small>9 actifs</small></button><button>${ic(P.rig, 13)}<span>OpenRig</span></button></nav>
+  <div class="st-grouping"><button aria-checked="false">Projets</button><button aria-checked="true">Rigs</button></div>
+  <div class="st-scroll"><section class="st-kernel-box"><div class="st-label">${hx(true, 12)}<span class="st-kernel-name" style="margin-left:4px">Kernel</span><span class="st-fill"></span><span class="st-kernel-tag"><i></i>opérationnel</span></div><div>${KERNEL.map(s => seat(s, 0)).join('')}</div></section>
+  <section><div class="st-label"><span>Rigs</span><span class="st-fill"></span><button class="st-icon on">${ic(P.dense)}</button><button class="st-icon">${ic(P.fold)}</button><button class="st-icon">${ic(P.plus)}</button></div><div><div class="st-row st-project st-rig" style="--d:0"><button class="st-chev"><span class="open">${ic(P.chev, 12)}</span></button><span class="st-rig-hex">${ic(P.rig, 13)}</span><button class="st-main"><strong>ledge-dev</strong><span class="mono">ledge</span></button><span class="st-tally"><span class="t-need"><i></i>1</span><span class="t-work"><i></i>2</span></span></div>${RIG.map((s, i) => seat(s, 1, i === 0 ? 'décision' : '')).join('')}</div></section></div>
+  <div class="st-foot"><button class="st-mach"><i class="machine-dot"></i>WSL<small>9</small></button><span class="st-fill"></span><button class="st-icon">${ic(P.help, 15)}</button><button class="st-icon">${ic(P.gear, 15)}</button></div></aside>`;
+const app = (main, narrow = false) => `<div class="app${narrow ? ' narrow' : ''}"><div class="tb"><b>Ledge<i>.</i></b><span class="sp"></span><span class="badge">● 2</span><span class="wc">— ▢ ✕</span></div><div class="body">${sidebar()}<div class="main">${main}</div></div></div>`;
+const tabs = (on, narrow = false) => `<div class="tabs2"><span class="${on === 'yours' ? 'on' : ''}">À toi <b class="n">2</b></span><span class="${on === 'tasks' ? 'on' : ''}">Tâches <span class="c">5</span></span>${narrow ? `<span class="${on === 'ledge' ? 'on' : ''}"><i class="mascot s" style="width:14px;height:14px"></i>Ledge</span>` : ''}</div>`;
+const head = (on, narrow) => `<div class="mh"><i class="mascot s"></i>${tabs(on, narrow)}<span class="sp"></span>${narrow ? '' : `<span class="sub">Ledge décide seul : aucun sujet</span>`}</div>`;
+const decision = () => `<div class="card hot"><div class="who">${hx()}<strong>ledge-dev</strong> · Bix <span class="mono">pilot</span><span class="pill dec">décision</span><span class="sp"></span><time>4 min</time></div><h4>Tâches dans l'accueil : onglet ou section repliée ?</h4><div class="acts">${src('ledge-human-operator-ab-home.html')}</div><div class="acts"><button class="btn pri">Onglet · recommandé</button><button class="btn">Section repliée</button><button class="btn ghost">Répondre autrement…</button></div></div>`;
+const accord = () => `<div class="card"><div class="who"><i class="bot ap"></i><strong>Otto</strong> · Ledge <span class="mono">main</span><span class="pill dec">accord</span><span class="sp"></span><time>2 min</time></div><h4 style="font-size:13px">Lancer <span class="mono">pnpm test</span> ?</h4><div class="acts"><button class="btn pri sm">Oui</button><button class="btn sm">Non</button></div></div>`;
+const news = () => `<div class="card" style="gap:0;padding:4px 14px">${[['Otto a fini « Câbler la liste des sessions »','tâche de Ledge · 18:50',true],['Lu a rendu la maquette A+B','design.ux · 19:40',false]].map(u => `<div class="mini-row">${ic(P.check, 13)}<span>${u[0]}</span><span class="sp"></span><span class="t">${u[1]}</span>${u[2] ? '<button class="btn sm ghost">Voir</button><button class="btn sm ghost">Ranger</button>' : ''}</div>`).join('')}</div>`;
+const convo = (history = false) => history
+  ? `<div class="col side"><div class="ch"><button class="icon-btn">${ic(P.back, 14)}</button><h5>Conversation</h5><span class="sp"></span><button class="icon-btn on" title="Historique">${ic(P.clock, 14)}</button><button class="icon-btn" title="Nouvelle conversation">${ic(P.newc, 14)}</button></div>
+     <div class="sec">Aujourd'hui</div>${[['Résume la journée : ce qui a avancé…','19:12'],['Qui a besoin de moi ?','17:40'],['Confie une tâche à Otto : câbler la liste…','15:03'],['Pourquoi Ida est bloquée ?','11:26']].map(h => `<div class="hrow"><span>${h[0]}</span><small>${h[1]}</small></div>`).join('')}</div>`
+  : `<div class="col side"><div class="ch"><i class="mascot s"></i><h5>Ledge</h5><span class="sp"></span><button class="icon-btn" title="Historique">${ic(P.clock, 14)}</button><button class="icon-btn" title="Nouvelle conversation">${ic(P.newc, 14)}</button></div>
+     <div class="msg"><i class="mascot s"></i><div class="body2"><div class="name">Ledge</div><div class="txt" style="font-size:12.5px">ledge-dev attend une décision de toi, et Otto ton accord pour lancer les tests.</div></div></div>
+     <div class="composer"><span class="ph">Écrire à Ledge…</span><div class="row"><span class="chip">${ic(P.target, 11)} Objectif</span><span class="chip">Résumer la journée</span></div></div></div>`;
+const yours = () => `<div class="sec">Décisions <span class="n">1</span></div>${decision()}<div class="sec">Accords <span class="n">1</span></div>${accord()}<div class="sec">Nouvelles</div>${news()}`;
+const tasksList = () => `<div class="filters"><span class="sel-box">Ouvertes ${ic(P.chevDown, 11)}</span><span class="sel-box">Donneur : tous ${ic(P.chevDown, 11)}</span><span class="sp" style="flex:1"></span><span class="fine">5 ouvertes · 3 closes aujourd'hui</span></div>
+  <div>${[['t91b0d4','Pochette dans l’encoche','de Ledge à ledge-dev','prise'],['t77c2a1','Câbler la liste des sessions','de Ledge à Otto','terminée',1],['qitem-…1955','Lot 1 À toi : cartes','de Bix à Ida','prise'],['t55e910','Tests des notifications','de Nova à Echo','ouverte'],['qitem-…1926','Maquette A+B','de Bix à Lu','terminée']].map(r => `<div class="trow${r[4] ? ' sel' : ''}"><code>${r[0]}</code><span><b style="font-weight:500">${r[1]}</b></span><small>${r[2]}</small><span class="pill${r[3] === 'terminée' ? ' ok' : ' task'}">${r[3]}</span></div>`).join('')}</div>
+  <div class="card" style="gap:5px"><h4 style="font-size:13px">t77c2a1 · Câbler la liste des sessions</h4><p>de Ledge à Otto · terminée</p><p><b>Résultat</b> · la liste des sessions est câblée sur le flux du daemon, tests verts.</p><p class="fine">Historique : confiée 15:03 · prise 15:04 · terminée 18:50</p></div>`;
+
+const SCREENS = {
+  yours: ['Onglet « À toi » (par défaut)', 'La colonne centrale garde « À toi ». « Le point » s’y fond : les tâches closes de Ledge arrivent dans Nouvelles, avec « Voir » et « Ranger ». La conversation est à droite, avec Historique et Nouvelle conversation dans son en-tête.', () => app(`${head('yours')}<div class="mc"><div class="col">${yours()}</div>${convo()}</div>`)],
+  tasks: ['Onglet « Tâches »', 'Les filtres (état, donneur) et le détail actuels. Les décisions ouvertes restent dans À toi ; le filtre « Décisions » sert à retrouver celles qui sont réglées. La conversation reste à droite.', () => app(`${head('tasks')}<div class="mc"><div class="col">${tasksList()}</div>${convo()}</div>`)],
+  history: ['Historique ouvert', 'Le bouton horloge remplace le fil par les questions du jour. Un clic rouvre le fil sur la question ; « ← » revient à la conversation.', () => app(`${head('yours')}<div class="mc"><div class="col">${yours()}</div>${convo(true)}</div>`)],
+  narrow: ['Fenêtre étroite (900 px)', 'Sous 1 180 px, la colonne de droite ne tient plus : la conversation devient le troisième onglet « Ledge ».', () => app(`${head('yours', true)}<div class="mc"><div class="col">${yours()}</div></div>`, true)]
+};
+document.getElementById('grid').innerHTML = Object.entries(SCREENS).map(([k, [t, cap, f]]) => `<div class="cell"><div class="rowtitle" style="margin:18px 0 8px">${t}</div><div class="shot${k === 'narrow' ? ' n900' : ''}" id="s-${k}">${f()}</div><div class="shot-cap">${cap}</div></div>`).join('');
+const setTheme = th => {
+  document.body.classList.toggle('dark-page', th === 'dark');
+  document.querySelectorAll('.shot, #lb').forEach(s => { s.classList.remove('th-dark', 'th-light'); s.classList.add('th-' + th); });
+  document.querySelectorAll('.switch button').forEach(b => b.classList.toggle('on', b.dataset.th === th));
+};
+document.querySelectorAll('.switch button').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.th)));
+setTheme(new URLSearchParams(location.search).get('theme') || 'dark');
+const lb = document.getElementById('lb');
+document.addEventListener('click', e => { const s = e.target.closest('.shot'); if (s) { lb.innerHTML = s.innerHTML; lb.classList.add('on'); return; } if (e.target.closest('#lb')) lb.classList.remove('on'); });
+window.openShot = id => { const s = document.getElementById(id); lb.innerHTML = s.innerHTML; lb.classList.add('on'); };
+</script>
+</body>
+</html>

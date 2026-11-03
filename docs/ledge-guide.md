@@ -181,6 +181,15 @@ Y renvoyer l'utilisateur pour lancer lui-même une session avec des réglages pr
 
 Crée (« Nouveau projet »), modifie ou supprime un projet. On y donne son nom, sa couleur, sa description, ses dossiers et ses dépôts. On l'ouvre aussi pour ranger une session dans un nouveau projet, ou pour vérifier un projet que Ledge a proposé.
 
+#### Écrire à plusieurs sessions (`broadcast`)
+
+S'ouvre par « Écrire à tout le projet… » dans le menu de la plaque d'un projet de l'atelier, par le ✉ de la ligne d'un projet dans la barre latérale, ou par « Écrire aux N sessions… » une fois plusieurs sessions choisies dans la barre latérale avec `Ctrl`+clic (`Échap` vide la sélection).
+- **Champ :** le message. « Envoyer » l'écrit à chaque session lancée par Ledge et vivante, sur chaque machine où le projet ou la sélection a des sessions ; chacune le reçoit dans sa file, à la fin de son tour.
+- Le compte rendu dit à qui il a été remis et qui l'a refusé, avec la raison ; une machine hors ligne, trop ancienne ou muette y est nommée.
+- Ces entrées n'apparaissent que si le daemon local connaît l'envoi groupé ; une machine distante plus ancienne ne reçoit rien et est dite « version trop ancienne ».
+
+Y renvoyer l'utilisateur pour donner la même consigne à toutes les sessions d'un projet ou à quelques-unes d'un coup.
+
 ### Chat ancré
 
 `Ctrl+/` ouvre le chat de Ledge à droite de la vue courante. On y pose les mêmes questions et on y valide les mêmes cartes que dans la conversation de l'accueil. « Nouvelle conversation » repart de zéro. Les conversations sont quotidiennes.

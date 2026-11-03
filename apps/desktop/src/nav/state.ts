@@ -9,29 +9,34 @@ export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island'
 /** The tabs of Ledge's home view (ledge home spec §2.2). */
 export type HomeTab = 'conversation' | 'tasks' | 'history';
 export const HOME_TABS: readonly HomeTab[] = ['conversation', 'tasks', 'history'];
+/** A dialog of the OpenRig page to open on arrival (docs/mockups/ledge-sidebar-tidy.html): the rig launch form, or a running rig's seats. */
+export type OpenRigOpen = { launch: true } | { reseat: string };
+
 export type Place =
   /** Ledge's home view, where the app opens (ledge home spec §2.1): `view` and `project` are the atelier's, kept for the
    *  way back; `back` is the place Échap returns to (none at start: the atelier). */
   | { kind: 'home'; tab: HomeTab; view: View; project: ProjectFilter; back?: Exclude<Place, { kind: 'settings' } | { kind: 'home' }>; /** The task « Tâches » opens on. */ task?: string }
   | { kind: 'overview'; view: View; project: ProjectFilter }
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
-  | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
+  | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; doc?: string; view: View; project: ProjectFilter }
   | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> }
   /** OpenRig on a machine (docs/mockups/ledge-openrig.html): its daemon, its kernel and its rigs. `machine`: the one shown, local when absent.
    *  `section` 'roles': its roles (docs/mockups/ledge-openrig-roles.html), `role` the one open (library id), `seat` the seat
    *  it is seen from (`rig/logicalId`), from the spec when absent. */
-  | { kind: 'openrig'; machine?: string; section?: 'roles'; role?: string; seat?: string; view: View; project: ProjectFilter };
+  | { kind: 'openrig'; machine?: string; section?: 'roles'; role?: string; seat?: string; open?: OpenRigOpen; view: View; project: ProjectFilter };
 export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
   | { kind: 'launch'; project?: string }   // project : la table ou le projet d'où on l'a demandée (lot 7)
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string }
+  // to : un projet (son id) ou les sessions choisies dans la barre latérale (ids qualifiés) ; la flotte envoie à chaque machine qui en a sa part (broadcast)
+  | { kind: 'broadcast'; to: { project: string } | { sessions: string[] } }
   | null;
 /** Every place and dialog kind, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new kind fails to compile until it is listed here. */
 const PLACE_KIND: Record<Place['kind'], true> = { home: true, overview: true, session: true, settings: true, openrig: true };
 export const PLACE_KINDS = Object.keys(PLACE_KIND) as Place['kind'][];
-const MODAL_KIND: Record<NonNullable<Modal>['kind'], true> = { search: true, shortcuts: true, launch: true, project: true };
+const MODAL_KIND: Record<NonNullable<Modal>['kind'], true> = { search: true, shortcuts: true, launch: true, project: true, broadcast: true };
 export const MODAL_KINDS = Object.keys(MODAL_KIND) as NonNullable<Modal>['kind'][];
 /** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
 export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }
@@ -42,11 +47,11 @@ export type NavAction =
   | { type: 'ledge'; tab?: HomeTab; task?: string }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
   | { type: 'filter'; project: ProjectFilter }
-  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string }
+  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string; /** A file to open in its side pane on arrival (« À toi »'s source). */ doc?: string }
   | { type: 'settings'; section?: SectionId }
   /** The OpenRig page, on a machine (the one shown before, else local), on its rigs or its roles (the section shown before,
    *  else the rigs). `role`: open that role, seen from `seat` (`rig/logicalId`) or from its spec. */
-  | { type: 'openrig'; machine?: string; section?: 'rigs' | 'roles'; role?: string; seat?: string }
+  | { type: 'openrig'; machine?: string; section?: 'rigs' | 'roles'; role?: string; seat?: string; open?: OpenRigOpen }
   | { type: 'modal'; modal: Modal }
   | { type: 'chat'; open?: boolean }
   | { type: 'fullscreen'; on: boolean }
@@ -79,7 +84,7 @@ export function navReducer(s: NavState, a: NavAction): NavState {
     }
     case 'open': {
       const b = baseOf(place);
-      return { ...s, place: { kind: 'session', id: a.id, ...(a.helper !== undefined && { helper: a.helper }), ...(a.focus !== undefined && { focus: a.focus }), ...(a.item !== undefined && { item: a.item }), view: b.view, project: b.project }, modal: null, chat: false };
+      return { ...s, place: { kind: 'session', id: a.id, ...(a.helper !== undefined && { helper: a.helper }), ...(a.focus !== undefined && { focus: a.focus }), ...(a.item !== undefined && { item: a.item }), ...(a.doc !== undefined && { doc: a.doc }), view: b.view, project: b.project }, modal: null, chat: false };
     }
     case 'settings':
       return { ...s, place: { kind: 'settings', section: a.section ?? 'general', back: baseOf(place) }, modal: null, chat: false };
@@ -92,7 +97,7 @@ export function navReducer(s: NavState, a: NavAction): NavState {
       const same = prev !== undefined && machine === prev.machine;
       const role = a.role ?? (same ? prev.role : undefined);
       const seat = a.role !== undefined ? a.seat : same ? prev.seat : undefined;
-      return { ...s, place: { kind: 'openrig', ...(machine !== undefined ? { machine } : {}), ...(section === 'roles' ? { section } : {}), ...(role !== undefined ? { role } : {}), ...(seat !== undefined ? { seat } : {}), view: b.view, project: b.project }, modal: null, chat: false };
+      return { ...s, place: { kind: 'openrig', ...(machine !== undefined ? { machine } : {}), ...(section === 'roles' ? { section } : {}), ...(role !== undefined ? { role } : {}), ...(seat !== undefined ? { seat } : {}), ...(a.open !== undefined && section !== 'roles' ? { open: a.open } : {}), view: b.view, project: b.project }, modal: null, chat: false };
     }
     case 'modal': return { ...s, modal: a.modal };
     case 'chat': {

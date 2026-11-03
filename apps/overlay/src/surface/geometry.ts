@@ -1,3 +1,7 @@
+/** The share of the work area's height an open view may take (the closed notch is not concerned). */
+export const OPEN_MAX_SHARE = 0.5;
+/** The tallest an open view may be on a work area `screenH` high (in the same units). */
+export const openMaxH = (screenH: number) => Math.min(screenH - SIZES.margin, Math.floor(screenH * OPEN_MAX_SHARE));
 export const SIZES = { bubbleW: 440, bubbleH: 128, listW: 380, sessionW: 480, readingW: 800, readerW: 560, readerExpandedW: 800, expandedMaxW: 1200, readerH: 760, rowH: 58, headerH: 72, footerH: 44, margin: 40, settingsH: 360, helpH: 420, launchH: 600, chatH: 560, emptyH: 200, groupH: 28, separatorH: 1 } as const;
 /** The compact island, a row along the top edge (spec 2026-10-12 §3): margins, the Ledge mascot, the separator, the
  *  companions, the "+n" pill past six, the DND moon; and the discreet strip with one dot per session. */
@@ -20,52 +24,22 @@ const DETAIL_FALLBACK_H: Record<'settings' | 'help' | 'launch', number> = { sett
 export interface Slot { id: string; size: number; center: number }
 export interface Layout { left: number; top: number; w: number; h: number; slots: Slot[]; handle: { left: number; w: number; h: number } }
 
-/** The island groups the companions by machine (this machine first, the others in list order) and shows each
- *  machine's asks first, then its other sessions in list order (stable). One machine: asks first, then the others. */
-export function islandOrder<T extends { pending: boolean; machine?: string }>(bots: T[]): T[] {
-  const machines = [...new Set(['local', ...bots.map(b => b.machine ?? 'local')])];
-  return machines.flatMap(m => { const own = bots.filter(b => (b.machine ?? 'local') === m); return [...own.filter(b => b.pending), ...own.filter(b => !b.pending)]; });
+/** The closed notch's pieces (mockup docs/mockups/ledge-notch-activity.html): Ledge alone, the activity line, the music. */
+export const NOTCH = { lineGap: 10, lineMax: 420, lineMaxOpen: 220, moonGap: 6, sepL: 12, sepR: 10, cover: 24, titles: 168, titlesGap: 8, ctl: 28, ctlGap: 2, max: 640, eq: 5, filetGap: 4 } as const;
+
+/** What the closed notch draws, for its width before (or without) a measurement. `line` is the line's estimated width. */
+export interface NotchContent { pip?: boolean; playing?: boolean; music?: boolean; musicOpen?: boolean; dnd?: boolean; line?: number }
+
+/** The resting filet: Ledge's mark, then the update dash and the music bars, 4 px apart. */
+export function filetWidth(c: NotchContent = {}): number {
+  return FILET.pad * 2 + FILET.ledge + (c.pip ? NOTCH.filetGap + FILET.pip : 0) + (c.playing ? NOTCH.filetGap + NOTCH.eq : 0);
 }
 
-/** Whether a pipe (a separator like the one after the mascot) stands before `b`: it starts another machine's group. */
-export const pipeBefore = (prev: { id: string; machine?: string } | undefined, b: { id: string; machine?: string }): boolean => !!prev && (prev.machine ?? 'local') !== (b.machine ?? 'local');
-
-/** The pipes between the shown companions' machines (`ordered` as given by `islandOrder`). */
-export const islandPipes = (ordered: Array<{ id: string; machine?: string }>): number => ordered.slice(0, ISLAND.max).filter((b, i, a) => pipeBefore(a[i - 1], b)).length;
-
-/** The compact island's width for `n` sessions: six companions at most, then the "+n" pill; the DND moon when on;
- *  `pipes` separators between machines (`islandPipes`). */
-export function islandWidth(n: number, dnd = false, pipes = 0): number {
-  const moon = dnd ? ISLAND.gap + ISLAND.moon : 0;
-  if (n === 0) return ISLAND.padL + ISLAND.resident + moon + ISLAND.padR;
-  const shown = Math.min(n, ISLAND.max);
-  return ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap + shown * ISLAND.companion + (shown - 1) * ISLAND.gap + pipes * (ISLAND.sepGap + SIZES.separatorH) + (n > ISLAND.max ? ISLAND.gap + ISLAND.pill : 0) + moon + ISLAND.padR;
-}
-
-/** One machine's dashes: 5 px each, 2 px between them. */
-export const filetGroupWidth = (n: number) => n <= 0 ? 0 : n * FILET.dash + (n - 1) * FILET.gap;
-
-/** The resting notch's width. `groups` is the session count of each machine, in island order. `pip` adds the update dash. */
-export function filetWidth(groups: number[], pip = false): number {
-  return FILET.pad * 2 + FILET.ledge + groups.reduce((w, n) => w + FILET.sep + filetGroupWidth(n), 0) + (pip ? FILET.pip : 0);
-}
-
-/** The machines of an `islandOrder` list, each kept together. */
-export function machineGroups<T extends { machine?: string }>(ordered: T[]): T[][] {
-  const groups: T[][] = [];
-  for (const b of ordered) {
-    const machine = b.machine ?? 'local';
-    const last = groups[groups.length - 1];
-    if (!last || (last[0]!.machine ?? 'local') !== machine) groups.push([b]);
-    else last.push(b);
-  }
-  return groups;
-}
-
-/** The discreet strip's width: one dot per session (six at most), never narrower than the bare island. */
-export function stripWidth(n: number): number {
-  const shown = Math.min(n, ISLAND.max);
-  return Math.max(islandWidth(0), 2 * ISLAND.stripPad + shown * ISLAND.dotW + Math.max(0, shown - 1) * ISLAND.dotGap);
+/** The awake notch: Ledge, the DND moon, the line (420 px at most, 220 while the music controls are open), the music. */
+export function awakeWidth(c: NotchContent = {}): number {
+  const line = c.line ? NOTCH.lineGap + Math.min(c.line, c.musicOpen ? NOTCH.lineMaxOpen : NOTCH.lineMax) : 0;
+  const music = c.music ? NOTCH.sepL + SIZES.separatorH + NOTCH.sepR + NOTCH.cover + (c.musicOpen ? 2 * NOTCH.titlesGap + NOTCH.titles + 3 * NOTCH.ctl + 2 * NOTCH.ctlGap : 0) : 0;
+  return Math.min(NOTCH.max, ISLAND.padL + ISLAND.resident + (c.dnd ? NOTCH.moonGap + ISLAND.moon : 0) + line + music + ISLAND.padL);
 }
 
 export const islandAxis = (screenW: number, position: IslandPosition = 'center'): number =>
@@ -76,38 +50,21 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 export const expandedWidth = (screenW: number, min: number) => clamp(Math.round(screenW * 0.6), min, SIZES.expandedMaxW);
 
 /** `detailH` is the measured height of the settings or help view (the fixed sizes are fallbacks). `listExtraH` is the extra height of the list: an expanded (focused) row, the notice, the update card. `bubbleH` is the measured bubble height; `SIZES.bubbleH` is only the fallback before the first measurement. `strip` draws the discreet strip instead of the compact island (handle mode only). */
-export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; /** The update dash on the resting notch. */ pip?: boolean; /** The pointer is over the notch: the compact island instead of the filet (handle mode). */ awake?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
+export interface LayoutInput { bots: Array<{ id: string; pending: boolean; machine?: string }>; /** The closed notch's measured width (base px); absent or 0: estimated from `notch`. */ handleW?: number; notch?: NotchContent; mode: Mode; screenH: number; screenW: number; position?: IslandPosition; strip?: boolean; /** The update dash on the resting notch. */ pip?: boolean; /** The pointer is over the notch: the compact island instead of the filet (handle mode). */ awake?: boolean; dnd?: boolean; readerExpanded?: boolean; bubbleH?: number; sessionH?: number; /** Measured height of the open helper view. */ helperH?: number; reading?: boolean; listExtraH?: number; groups?: number; detailH?: number; /** Extra height of the ask field above the list rows (`ASK_H`). */ askH?: number }
 
 /** Everything hangs from the top edge of the work area, centred on the island's axis; `left` is clamped into the screen. */
 export function layout(input: LayoutInput): Layout {
   const { bots, mode, screenH, screenW } = input;
   const n = bots.length;
-  const maxH = screenH - SIZES.margin;
+  // An open view never takes more than half the work area's height (user's rule, 2026-11-02): past it, its content scrolls.
+  const maxH = openMaxH(screenH);
   const axis = islandAxis(screenW, input.position);
   const place = (w: number) => clamp(Math.round(axis - w / 2), 0, Math.max(0, screenW - w));
-  const ordered = islandOrder(bots);
-  const groups = machineGroups(ordered);
-  // At rest the notch is the filet; awake (under the pointer) it is the compact island with its robots.
+  // At rest the notch is the filet; awake it is Ledge, the line and the music, as wide as they are (measured).
   const filet = mode === 'handle' && !input.awake;
-  const handleW = filet ? filetWidth(groups.map(g => g.length), !!input.pip) : islandWidth(n, input.dnd, islandPipes(ordered));
+  const handleW = input.handleW || (filet ? filetWidth({ ...input.notch, pip: input.pip }) : awakeWidth({ ...input.notch, dnd: input.dnd }));
   const handle = { left: place(handleW), w: handleW, h: filet ? FILET.h : ISLAND.h };
   const slots: Slot[] = [];
-  if (filet) {
-    let cursor = FILET.pad + FILET.ledge;
-    for (const group of groups) {
-      cursor += FILET.sep;
-      group.forEach((b, i) => {
-        slots.push({ id: b.id, size: FILET.dash, center: handle.left + cursor + FILET.dash / 2 });
-        cursor += FILET.dash + (i < group.length - 1 ? FILET.gap : 0);
-      });
-    }
-  } else {
-    let x = handle.left + ISLAND.padL + ISLAND.resident + ISLAND.sepGap + SIZES.separatorH + ISLAND.sepGap;
-    ordered.slice(0, ISLAND.max).forEach((b, i, shown) => {
-      if (pipeBefore(shown[i - 1], b)) x += ISLAND.sepGap + SIZES.separatorH;
-      slots.push({ id: b.id, size: ISLAND.companion, center: x + ISLAND.companion / 2 }); x += ISLAND.companion + ISLAND.gap;
-    });
-  }
   const view = (w: number, h: number): Layout => ({ left: place(w), top: 0, w, h: Math.min(maxH, h), slots, handle });
   if (mode === 'handle') return { left: handle.left, top: 0, w: handleW, h: handle.h, slots, handle };
   if (mode === 'bubble') return view(SIZES.bubbleW, input.bubbleH ?? SIZES.bubbleH);
