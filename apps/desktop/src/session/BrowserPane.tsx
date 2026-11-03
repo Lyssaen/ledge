@@ -30,6 +30,8 @@ export interface BrowserPaneProps {
 
 /** How long « Otto a rouvert son navigateur » stays (design-ux 6). */
 export const REOPENED_MS = 4000;
+/** How long the live frame stays empty before « En attente de la première image… » shows (design-ux 17:39Z). */
+export const WAIT_TEXT_MS = 500;
 
 /**
  * The « Navigateur » tab (docs/mockups/ledge-browser-live.html): the agent's own browser on « Direct » (« Fermé » once closed),
@@ -87,7 +89,7 @@ export function BrowserPane(p: BrowserPaneProps): JSX.Element {
     <>
       {head(tb.tab, '')}
       <div className="side-body browser-live">
-        {kind === 'live' ? <LiveSide session={session} browser={browser!} frame={frame} fps={fps} seat={p.seat} reopened={reopened} action={p.seat ? null : lastActionOf(p.items)} onShowInThread={p.onShowInThread} />
+        {kind === 'live' ? <LiveSide key={pageOf(browser)} session={session} browser={browser!} frame={frame} fps={fps} seat={p.seat} reopened={reopened} action={p.seat ? null : lastActionOf(p.items)} onShowInThread={p.onShowInThread} />
           : kind === 'closed' ? <ClosedSide session={session} browser={browser!} frame={frame} seat={p.seat} />
           : kind === 'off' ? <OffSide session={session} client={p.client} />
           : <RemoteSide session={session} onCaptures={() => setSide('captures')} />}
@@ -124,6 +126,14 @@ function LiveSide({ session, browser, frame, fps, seat, reopened, action, onShow
   // this page (its address) and of this live period, never an older page's (review qitem-20261103173211).
   const keptHere = browser.image !== undefined && browser.image.url === browser.url && (!browser.since || Date.parse(browser.image.at) >= Date.parse(browser.since));
   const shown = frame && (frame.live || keptHere) ? frame : null;
+  // No image of this page yet: the frame empty at once, « En attente… » only past half a second, so a quick navigation does not
+  // flash a text (design-ux 17:39Z). Keyed by the page, a new page starts over.
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    if (shown) { setLate(false); return; }
+    const timer = setTimeout(() => setLate(true), WAIT_TEXT_MS);
+    return () => clearTimeout(timer);
+  }, [shown === null]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <>
       <div className="browser-live-head">
@@ -134,7 +144,7 @@ function LiveSide({ session, browser, frame, fps, seat, reopened, action, onShow
       </div>
       <UrlLine url={browser.url} title={browser.title} seat={seat} closed={false} image />
       <div className={cls('browser-screen live', !shown && 'wait')} title={tb.readOnly(session.name)} data-testid="browser-screen">
-        {shown ? <img src={shown.src} alt={tb.live} draggable={false} /> : <span className="muted">{tb.waiting}</span>}
+        {shown ? <img src={shown.src} alt={tb.live} draggable={false} /> : late && <span className="muted">{tb.waiting}</span>}
         {reopened && <div className="browser-toast" role="status"><i className="live-dot" aria-hidden="true" />{tb.reopened(session.name)}</div>}
       </div>
       {seat

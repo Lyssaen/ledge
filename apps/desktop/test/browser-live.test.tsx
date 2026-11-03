@@ -114,7 +114,7 @@ describe('a Claude session’s browser', () => {
     act(() => d.browser(live('otto', { url: 'https://example.com/new', title: 'New', since: new Date().toISOString() })));
     await waitFor(() => expect(document.querySelector('.browser-address')).toHaveTextContent('example.com/new'));
     await waitFor(() => expect(watches(d).filter(w => w === 'browser.watch:otto').length).toBeGreaterThanOrEqual(3));
-    expect(screen.getByTestId('browser-screen')).toHaveTextContent('Waiting for the first image…');
+    await waitFor(() => expect(screen.getByTestId('browser-screen')).toHaveTextContent('Waiting for the first image…'));
     expect(screen.getByTestId('browser-screen').querySelector('img')).toBeNull();
     // Its first frame of the film shows.
     act(() => d.frame({ id: 'otto', data: 'TkVX', at: new Date().toISOString() }));
@@ -130,7 +130,10 @@ describe('a Claude session’s browser', () => {
     // B: same live period, another address, no image of it yet.
     act(() => d.browser(live('otto', { url: 'https://example.com/new', title: 'New', image: { at: SHOT, url: URL } })));
     await waitFor(() => expect(document.querySelector('.browser-address')).toHaveTextContent('example.com/new'));
-    expect(screen.getByTestId('browser-screen')).toHaveTextContent('Waiting for the first image…');
+    // The frame empty at once, its text only past half a second (design-ux 17:39Z).
+    expect(screen.getByTestId('browser-screen').querySelector('img')).toBeNull();
+    expect(screen.getByTestId('browser-screen')).not.toHaveTextContent('Waiting');
+    await waitFor(() => expect(screen.getByTestId('browser-screen')).toHaveTextContent('Waiting for the first image…'));
     // The kept image a new watch sends (the Captures side and back) is still A's: not shown under B.
     await user.click(pane().getByRole('tab', { name: /^Captures/ }));
     await user.click(pane().getByRole('tab', { name: /^Live/ }));
