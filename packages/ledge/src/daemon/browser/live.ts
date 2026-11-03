@@ -51,6 +51,8 @@ interface Track {
 /** The agent's tabs: pages, not Chrome's own (its omnibox popup, devtools, extensions). */
 const agentPage = (info: { type?: unknown; url?: unknown }): boolean =>
   info.type === 'page' && typeof info.url === 'string' && !/^(?:chrome|chrome-untrusted|chrome-extension|devtools|edge):/i.test(info.url);
+/** An undated frame this soon after its tab's navigation may be of either page. */
+const UNDATED_MS = 500;
 const cut = (s: string | undefined, max: number): string | undefined => (s === undefined ? undefined : s.slice(0, max));
 
 /**
@@ -272,12 +274,16 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     if (t.cdp) await refresh(t, t.cdp);
     const cdp = t.cdp, top = active(t);
     if (!cdp || !top) return null;
-    const { sessionId } = await cdp.call('Target.attachToTarget', { targetId: top[0], flatten: true }) as { sessionId: string };
+    // The page as it is now: an image of it is said to be of it, and is let go if the tab moves on while it is taken.
+    const [targetId, p] = top;
+    const of = { url: p.url, title: p.title, page: pageId(p), nav: p.nav };
+    const { sessionId } = await cdp.call('Target.attachToTarget', { targetId, flatten: true }) as { sessionId: string };
     try {
       const r = await cdp.call('Page.captureScreenshot', { format: 'jpeg', quality: 60 }, sessionId);
       const data = typeof r.data === 'string' ? r.data : '';
       if (!data || data.length > BROWSER_FRAME_MAX) return null;
-      return { data, at: iso(), url: top[1].url, title: top[1].title, page: pageId(top[1]) };
+      if (t.pages.get(targetId) !== p || p.nav !== of.nav) return null;
+      return { data, at: iso(), url: of.url, title: of.title, page: of.page };
     } finally { await cdp.call('Target.detachFromTarget', { sessionId }).catch(() => {}); }
   }
 
@@ -303,11 +309,14 @@ export function createBrowserLive(deps: BrowserLiveDeps) {
     void cdp.call('Page.screencastFrameAck', { sessionId: e.params.sessionId }, f.sessionId).catch(() => {});
     const data = e.params.data, meta = e.params.metadata as { deviceWidth?: number; deviceHeight?: number; timestamp?: number } | undefined;
     if (typeof data !== 'string' || !data || data.length > BROWSER_FRAME_MAX) return;
-    f.lastCastAt = now(); f.lastData = data;
     // The film's own tab, not the one in front now; a frame Chrome drew before the tab's last navigation is of the one before.
     const p = t.pages.get(f.targetId);
     if (!p) return;
     const drawn = typeof meta?.timestamp === 'number' ? meta.timestamp * 1000 : undefined;
+    // Undated (its time is optional in CDP) and just after a navigation: of which page, nobody can say; let go (the
+    // images taken when the film is quiet fill in).
+    if (drawn === undefined && p.nav > 0 && now() - p.navAt < UNDATED_MS) return;
+    f.lastCastAt = now(); f.lastData = data;
     const nav = drawn !== undefined && drawn < p.navAt && p.nav > 0 ? p.nav - 1 : p.nav;
     frame(t, data, { url: p.url, title: p.title, page: pageId(p, nav) }, meta?.deviceWidth, meta?.deviceHeight);
   }

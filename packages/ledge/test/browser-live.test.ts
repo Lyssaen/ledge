@@ -130,7 +130,7 @@ function fakeBrowser(pages: { id: string; url: string; title: string }[] = []) {
   const closes: (() => void)[] = [];
   let closed = false, next = 0, shot = 0;
   /** What the next screenshots show: a new image each time unless the page is set to stand still. */
-  const view = { still: null as string | null };
+  const view = { still: null as string | null, hold: false, release: undefined as (() => void) | undefined };
   const cdp: Cdp = {
     async call(method, params = {}, sessionId) {
       if (!CDP_ALLOWED.has(method)) throw new CdpRefused(method);
@@ -138,7 +138,11 @@ function fakeBrowser(pages: { id: string; url: string; title: string }[] = []) {
       calls.push({ method, params, ...(sessionId ? { sessionId } : {}) });
       if (method === 'Target.getTargets') return { targetInfos: pages.map(p => ({ targetId: p.id, type: 'page', url: p.url, title: p.title })) };
       if (method === 'Target.attachToTarget') return { sessionId: `S${++next}` };
-      if (method === 'Page.captureScreenshot') return { data: view.still ?? `/9j/shot${++shot}` };
+      if (method === 'Page.captureScreenshot') {
+        const data = view.still ?? `/9j/shot${++shot}`;
+        if (view.hold) { const release = new Promise<void>(r => { view.release = r; }); view.hold = false; await release; }
+        return { data };
+      }
       return {};
     },
     onEvent(fn) { listeners.push(fn); },
@@ -442,6 +446,39 @@ describe('createBrowserLive: the agent\'s browser, followed', () => {
       b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/old', sessionId: 3, metadata: { timestamp: before } } });
       b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/new', sessionId: 4, metadata: { timestamp: clock / 1000 + 0.005 } } });
       expect(got.filter(m => m.type === 'browser.frame' && m.live).slice(-2).map(m => m.type === 'browser.frame' ? [m.data, m.page] : [])).toEqual([['/9j/old', '1.0'], ['/9j/new', '1.1']]);
+      svc.stop();
+    });
+
+    it('an image whose tab navigates while it is taken is let go, kept or filmed; an undated frame just after a navigation too', async () => {
+      const { svc, b } = await liveOtto();
+      // The kept image: the capture of page 1.0 is answered after the tab went on to /b.
+      b.view.hold = true;
+      svc.poke('otto');
+      await advance(1300);
+      await vi.waitFor(() => expect(b.view.release).toBeTypeOf('function'));
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/b', 'B');
+      b.view.release!(); b.view.release = undefined;
+      await advance(10);
+      expect(last()).toMatchObject({ url: 'http://localhost/b', page: '1.1' });
+      expect(last()?.image).toBeUndefined();
+      // Watched, the film quiet: the image taken for it is let go the same way.
+      const { got, sink } = sinkOf();
+      svc.watch('otto', sink);
+      await vi.waitFor(() => expect(b.methods()).toContain('Page.startScreencast'));
+      const film = b.calls.find(c => c.method === 'Page.startScreencast')!.sessionId;
+      b.view.hold = true;
+      await advance(1100);
+      await vi.waitFor(() => expect(b.view.release).toBeTypeOf('function'));
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/c', 'C');
+      b.view.release!();
+      await advance(10);
+      expect(got.filter(m => m.type === 'browser.frame' && m.live)).toEqual([]);
+      // An undated frame right after that navigation: of which page, unknown; not sent. Dated, or later: sent as 1.2.
+      b.emit({ method: 'Page.screencastFrame', sessionId: film, params: { data: '/9j/undated', sessionId: 1 } });
+      expect(got.filter(m => m.type === 'browser.frame' && m.live)).toEqual([]);
+      await advance(600);
+      b.emit({ method: 'Page.screencastFrame', sessionId: film, params: { data: '/9j/later', sessionId: 2 } });
+      expect(got.filter(m => m.type === 'browser.frame' && m.live).map(m => m.type === 'browser.frame' ? [m.data, m.page] : [])).toEqual([['/9j/later', '1.2']]);
       svc.stop();
     });
 
