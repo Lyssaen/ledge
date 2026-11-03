@@ -7,6 +7,31 @@ const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'co
 
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
+  asks: {
+    sections: { decisions: 'Decisions', questions: 'Questions', updates: 'Updates' },
+    pill: { decision: 'decision', question: 'question', update: 'update', parked: 'waiting on you' },
+    priority: { urgent: 'urgent', critical: 'critical' },
+    recommended: (label) => `${label} · recommended`,
+    recommendedBy: (seat) => `Recommended by ${seat}`,
+    readAll: 'Show all', details: 'Details',
+    answerOther: 'Answer another way…', answerParked: 'Answer…', writeAnswer: 'Write an answer…',
+    placeholder: 'Your answer, in a few words…', placeholderParked: (seat) => `What ${seat} should do…`,
+    send: 'Send', cancel: 'Cancel', keys: 'Ctrl Enter · Esc', seen: 'Seen',
+    progress: (n, total) => `${n}/${total} answered · the answer goes with the last one`,
+    notSent: (why) => `Not sent: ${why}`, retry: 'Retry',
+    uncertain: 'Uncertain: the answer may have been sent. Retrying won’t send it twice.',
+    settlesAll: 'This answer settles the whole request, including unanswered questions.',
+    stopped: 'OpenRig is stopped',
+    sentTo: 'Sent to', already: 'Already settled elsewhere',
+    partial: 'List may be incomplete: OpenRig did not answer the last read.',
+    channel: {
+      no_person: { title: 'Ledge is not OpenRig’s human channel yet.', body: 'Rigs still go through Max, or the kernel’s TUI. Their requests don’t arrive here.' },
+      openrig_stopped: { title: 'OpenRig is stopped: rigs cannot write to you.', body: 'Your projects’ sessions still come here.' },
+      unreachable: { title: 'OpenRig is not responding.', body: '' },
+      no_default: { title: 'OpenRig has several people, and none is the default.', body: 'So its requests don’t arrive here. To set one:' },
+      not_installed: { title: (machine) => `OpenRig is not installed on ${machine}.`, body: 'Your projects’ sessions still come here.' }
+    }
+  },
   side: {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name) => `The rig ${name} on the OpenRig page`, rigAsks: (n) => `${n} ${pluralEn(n, 'request', 'requests')}`, 
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',

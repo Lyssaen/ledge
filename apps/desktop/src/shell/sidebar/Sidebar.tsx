@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import type { MachineState } from '@ledge/fleet';
-import { BROADCAST_SESSIONS_MAX, type Project, type Projects, type Session } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX, type HumanAsk, type Project, type Projects, type Session } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
@@ -50,6 +50,9 @@ export function Sidebar(p: {
   ledge?: { closedTasks: number };
   /** Ledge's tasks: « À toi »'s decisions and closed Ledge tasks (roles spec §3.7), and the sessions near their context limit. */
   tasksApi?: TasksApi;
+  /** « À toi »: what OpenRig's rigs ask the person; « Voir » opens the home on the card. */
+  asks?: readonly HumanAsk[];
+  onSeeAsk?(id: string): void;
 }): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -145,7 +148,7 @@ export function Sidebar(p: {
           <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
           <span className="st-ledge-names">
             <span className="st-ledge-brand">Ledge<span className="brand-dot">.</span></span>
-            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + decisions.length + (p.ledge?.closedTasks ?? 0) + near.length)}</small>
+            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + decisions.length + (p.ledge?.closedTasks ?? 0) + near.length + (p.asks?.length ?? 0))}</small>
           </span>
           <Kbd>/</Kbd>
         </button>
@@ -166,6 +169,7 @@ export function Sidebar(p: {
       )}
       <div className="st-scroll">
         <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
+          rigAsks={p.asks ?? []} sessions={p.sessions} {...(p.onSeeAsk ? { onSeeAsk: p.onSeeAsk } : {})}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
           decisions={decisions} answer={p.tasksApi?.answer}
@@ -194,7 +198,7 @@ export function Sidebar(p: {
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>}
         {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
-          dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} />}
+          dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []} />}
         <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}

@@ -1,0 +1,101 @@
+/* « À toi »: OpenRig's asks (docs/mockups/ledge-human-operator-ab-lot1.html, « Lot 1 cards »). Values from the mockup, on the tokens. */
+.ask-col { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.ask-col button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.ask-sec { display: flex; flex-direction: column; gap: 8px; }
+.ask-sec-title { display: flex; align-items: center; gap: 6px; margin: 2px 0 0; font: 500 11px 'Geist', sans-serif; color: var(--muted-foreground); }
+.ask-n { font: 600 10px 'Geist Mono', monospace; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; display: inline-grid; place-items: center; background: var(--sidebar-primary); color: var(--primary-foreground); }
+.ask-fill { flex: 1; }
+.ask-mono { font-family: 'Geist Mono', monospace; }
+
+.ask-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 19px; }
+.ask-card:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ask-card.hot { border-color: color-mix(in srgb, var(--sidebar-primary) 45%, var(--border)); }
+.ask-card h4 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--foreground); }
+.ask-who { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted-foreground); min-width: 0; }
+.ask-who strong { color: var(--foreground); font-weight: 600; }
+.ask-who time { font: 11px 'Geist Mono', monospace; flex: none; }
+.ask-who .ask-mono { font-size: 11.5px; }
+.ask-hex { display: inline-grid; place-items: center; color: var(--info); flex: none; }
+.ask-col .ask-seat { color: inherit; }
+.ask-col .ask-seat:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
+.ask-pill { font: 500 10px 'Geist Mono', monospace; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); white-space: nowrap; }
+.ask-pill-decision { border-color: color-mix(in srgb, var(--sidebar-primary) 50%, var(--border)); color: var(--sidebar-primary); }
+.ask-pill-question, .ask-pill-parked { border-color: color-mix(in srgb, var(--warning) 50%, var(--border)); color: var(--warning); }
+.ask-pill-urgent { border-color: var(--sidebar-primary); background: var(--sidebar-primary); color: #fff; }
+
+.ask-body { margin: 0; font-size: 12.5px; line-height: 18px; color: var(--muted-foreground); white-space: pre-line; overflow-wrap: anywhere; }
+.ask-body.clamp3, .ask-body.clamp2 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.ask-body.clamp3 { -webkit-line-clamp: 3; }
+.ask-body.clamp2 { -webkit-line-clamp: 2; }
+.ask-col .ask-more { font-size: 12px; color: var(--muted-foreground); text-decoration: underline; text-underline-offset: 2px; align-self: flex-start; }
+.ask-col .ask-more:hover { color: var(--foreground); }
+.ask-col .ask-fold { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted-foreground); align-self: flex-start; }
+.ask-chev { display: grid; transition: transform .15s; }
+.ask-chev.open { transform: rotate(90deg); }
+
+.ask-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ask-col .ask-btn { height: 28px; padding: 0 11px; border-radius: var(--radius-sm); border: 1px solid var(--input); font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--foreground); }
+.ask-col .ask-btn:hover:not(:disabled) { background: var(--sidebar-accent); }
+.ask-col .ask-btn.pri { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.ask-col .ask-btn.pri:hover:not(:disabled) { background: var(--primary-hover); }
+.ask-col .ask-btn.ghost { border-color: transparent; color: var(--muted-foreground); }
+.ask-col .ask-btn.ghost:hover:not(:disabled) { color: var(--foreground); }
+.ask-col .ask-btn.sm { height: 24px; padding: 0 8px; font-size: 11px; }
+.ask-col .ask-btn:disabled { opacity: .5; cursor: default; }
+.ask-fine { font-size: 11px; color: var(--muted-foreground); }
+.ask-keys { margin-left: auto; }
+.ask-col .ask-src { display: inline-flex; align-items: center; gap: 4px; font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; height: 20px; background: var(--well); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-col .ask-src:hover { color: var(--foreground); }
+
+.ask-q { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
+.ask-qt { font-size: 13px; font-weight: 500; }
+.ask-chosen { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted-foreground); }
+.ask-foot { border-top: 1px solid var(--border); padding-top: 8px; }
+
+.ask-compose { display: flex; flex-direction: column; gap: 8px; }
+.ask-field { min-height: 72px; resize: vertical; border: 1px solid var(--ring); border-radius: var(--radius-md); background: var(--well); padding: 9px 11px; font: 13px/19px 'Geist', system-ui, sans-serif; color: var(--foreground); outline: none; }
+.ask-field::placeholder { color: var(--muted-foreground); }
+
+.ask-err { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--danger-text); padding-top: 6px; border-top: 1px solid var(--border); }
+.ask-spin { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; display: inline-block; animation: ask-spin .9s linear infinite; }
+@keyframes ask-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ask-spin { animation: none; } }
+
+.ask-update { gap: 6px; }
+.ask-update-row { display: flex; gap: 10px; align-items: flex-start; }
+.ask-update-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ask-update-text b { font-size: 13px; font-weight: 500; color: var(--foreground); }
+
+.ask-done { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); font-size: 12.5px; color: var(--muted-foreground); }
+.ask-done b { color: var(--foreground); font-weight: 500; }
+
+.ask-banner { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--well); color: var(--foreground); }
+.ask-banner-warn { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: color-mix(in srgb, var(--warning) 7%, var(--card)); }
+.ask-banner-err { border-color: color-mix(in srgb, var(--danger-text) 45%, var(--border)); background: color-mix(in srgb, var(--danger-text) 6%, var(--card)); }
+.ask-banner-text { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ask-banner-text b { font-size: 13px; font-weight: 600; }
+.ask-banner-text p { margin: 0; font-size: 12.5px; line-height: 18px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+
+/* The sidebar's « À toi » line for an ask: the same urgency pill, smaller. */
+.st-ask-urgent { flex: none; font: 500 9.5px 'Geist Mono', monospace; padding: 0 5px; border-radius: 999px; background: var(--sidebar-primary); color: #fff; }
+.st-rig-ask .st-bot { display: grid; place-items: center; }
+
+/* A piece of news waits on no answer: its section's count is neutral (design-ux). */
+.ask-n.neutral { background: var(--muted); color: var(--muted-foreground); }
+/* One line atop the column when a read of OpenRig failed and the list kept the known asks (design-ux). */
+.ask-partial { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); }
+
+/* The body rendered from Markdown (unfolded, or short enough): the threads' renderer, at the card's size and tone. */
+.ask-md { white-space: normal; }
+.ask-md .ledge-thread-md { font-size: 12.5px; line-height: 18px; color: var(--muted-foreground); }
+.ask-md .ledge-thread-md > :first-child { margin-top: 0; }
+.ask-md .ledge-thread-md > :last-child { margin-bottom: 0; }
+
+/* « Envoi incertain » (the answer may have gone): amber, not red (design-ux). */
+.ask-err.ask-uncertain { color: var(--warning); }
+/* Words on a request with several questions settle all of it: said before Send. */
+.ask-warn { margin: 0; font-size: 12px; line-height: 17px; color: var(--warning); }
+
+/* A source nothing here can open: shown, not offered. */
+.ask-col .ask-src-inert { cursor: default; }
+.ask-col .ask-src-inert:hover { color: var(--muted-foreground); }

@@ -18,7 +18,7 @@ export type Place =
   | { kind: 'home'; tab: HomeTab; view: View; project: ProjectFilter; back?: Exclude<Place, { kind: 'settings' } | { kind: 'home' }>; /** The task « Tâches » opens on. */ task?: string }
   | { kind: 'overview'; view: View; project: ProjectFilter }
   /** helper : la page d'un sous-agent de `id` ; focus : la réponse prend le focus à l'arrivée (« Répondre ») ; item : le message (id du fil) que la page met en vue et allume (« Voir dans le fil de X »). */
-  | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; view: View; project: ProjectFilter }
+  | { kind: 'session'; id: string; helper?: string; focus?: 'reply'; item?: string; doc?: string; view: View; project: ProjectFilter }
   | { kind: 'settings'; section: SectionId; back: Exclude<Place, { kind: 'settings' }> }
   /** OpenRig on a machine (docs/mockups/ledge-openrig.html): its daemon, its kernel and its rigs. `machine`: the one shown, local when absent.
    *  `section` 'roles': its roles (docs/mockups/ledge-openrig-roles.html), `role` the one open (library id), `seat` the seat
@@ -47,7 +47,7 @@ export type NavAction =
   | { type: 'ledge'; tab?: HomeTab; task?: string }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
   | { type: 'filter'; project: ProjectFilter }
-  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string }
+  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string; /** A file to open in its side pane on arrival (« À toi »'s source). */ doc?: string }
   | { type: 'settings'; section?: SectionId }
   /** The OpenRig page, on a machine (the one shown before, else local), on its rigs or its roles (the section shown before,
    *  else the rigs). `role`: open that role, seen from `seat` (`rig/logicalId`) or from its spec. */
@@ -84,7 +84,7 @@ export function navReducer(s: NavState, a: NavAction): NavState {
     }
     case 'open': {
       const b = baseOf(place);
-      return { ...s, place: { kind: 'session', id: a.id, ...(a.helper !== undefined && { helper: a.helper }), ...(a.focus !== undefined && { focus: a.focus }), ...(a.item !== undefined && { item: a.item }), view: b.view, project: b.project }, modal: null, chat: false };
+      return { ...s, place: { kind: 'session', id: a.id, ...(a.helper !== undefined && { helper: a.helper }), ...(a.focus !== undefined && { focus: a.focus }), ...(a.item !== undefined && { item: a.item }), ...(a.doc !== undefined && { doc: a.doc }), view: b.view, project: b.project }, modal: null, chat: false };
     }
     case 'settings':
       return { ...s, place: { kind: 'settings', section: a.section ?? 'general', back: baseOf(place) }, modal: null, chat: false };
