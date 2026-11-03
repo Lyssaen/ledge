@@ -28,6 +28,13 @@ describe('conptyPanes', () => {
     expect(await panes.width!(s)).toBe(80);
   });
 
+  it('keeps a full-width rule and the line under it apart (ConPTY marks the row after a full one as wrapped)', async () => {
+    const s = name();
+    await panes.newSession({ name: s, cwd: tmpdir(), env: process.env as Record<string, string>, command: [node, '-e', "process.stdout.write('\u2500'.repeat(80) + '\\r\\n Create file\\r\\n'); setTimeout(() => {}, 5000)"] });
+    await until(async () => /Create file/.test((await panes.capture(s, 50)) ?? ''));
+    expect((await panes.capture(s, 50))!.split('\n')).toContain(' Create file');
+  });
+
   it('drops the unset variables', async () => {
     const s = name();
     await panes.newSession({ name: s, cwd: tmpdir(), env: { ...process.env, A: '1', B: '2' } as Record<string, string>, unset: ['B'], command: [node, '-e', 'console.log(`A=${process.env.A} B=${process.env.B}`); setTimeout(() => {}, 5000)'] });
