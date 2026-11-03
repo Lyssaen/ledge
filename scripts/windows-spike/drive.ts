@@ -154,8 +154,16 @@ async function main() {
   const t = Date.now();
   try {
     // First run in the work folder: the agent asks to trust it. Ledge parses it as a permission; the driver accepts that.
-    let s = await until(id, x => idle(x) || x.pending?.kind === 'permission', 90_000, 'launch');
+    let s = await until(id, x => idle(x) || !!x.pending, 90_000, 'launch');
     let trusted: boolean | null = null;
+    // Codex on Windows first asks how to sandbox itself: the design's choice is the strictest one without admin rights.
+    if (s.pending?.kind === 'question' && /sandbox/i.test(s.pending.text)) {
+      const n = (s.pending.options ?? []).findIndex(o => /non-admin/i.test(o)) + 1;
+      if (n < 1) throw new Error(`launch: no non-admin sandbox among ${JSON.stringify(s.pending.options)}`);
+      save(id, 'launch-sandbox'); emit({ ev: 'answer-sandbox', option: s.pending.options![n - 1] });
+      send({ type: 'session.reply', id, text: String(n) });
+      s = await until(id, x => idle(x) || (!!x.pending && !/sandbox/i.test(x.pending.text)), 90_000, 'launch-sandbox');
+    }
     if (s.pending?.kind === 'permission') {
       if (!/trust/i.test(s.pending.text + (s.pending.options ?? []).join(' '))) throw new Error(`launch: an unexpected permission ${JSON.stringify(s.pending.text)}`);
       save(id, 'launch-trust'); emit({ ev: 'accept-trust', text: s.pending.text }); trusted = true;

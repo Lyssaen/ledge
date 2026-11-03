@@ -169,3 +169,19 @@ describe('codex adapter: the dialog on screen must be the request (lot 6a review
     expect(codexAdapter.keysFor('accept', pending('permission'))).toEqual([{ text: 'y' }]);
   });
 });
+
+// Captured on Windows through ConPTY (spike): Codex asks once how to sandbox itself, over the picker footer.
+describe('codex adapter: the Windows sandbox setup', () => {
+  const pane = readFileSync(new URL('./fixtures/panes/win-codex-sandbox.txt', import.meta.url), 'utf8');
+  it('is a question for the user, with its three choices', () => {
+    expect(codexAdapter.detectPrompt(pane)).toEqual({
+      kind: 'question', text: 'Set up the Codex agent sandbox (Windows)',
+      options: ['Set up default sandbox (requires Administrator permissions)', 'Use non-admin sandbox (higher risk if prompt injected)', 'Quit'],
+    });
+    expect(codexAdapter.promptStillVisible(pane)).toBe(true);
+  });
+  it('is answered by its number then Enter (a digit only moves the cursor there)', () => {
+    const p: Pending = { kind: 'question', text: 'Set up the Codex agent sandbox (Windows)', source: 'pane' };
+    expect(codexAdapter.replyPlan('2', p, pane)).toEqual([{ text: '2' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
+  });
+});

@@ -24,6 +24,8 @@ import { NO_ALWAYS, NO_NOTE, Refusal, assertDialogIs, flatten, shownCommand, typ
 const APPROVAL_FOOTER = /^\s*Press enter to confirm or esc to cancel\s*$/;
 const QUESTION_FOOTER = /\benter to submit\b/;
 const SELECT_FOOTER = /^\s*enter select · esc back\s*$/;
+/** The header of the sandbox setup Codex shows on Windows at its first start. */
+const SANDBOX_SETUP = /^\s*Set up the Codex agent sandbox\b/;
 const CONFIRM_FOOTER = /^\s*enter confirm · esc skip\s*$/;
 const FOOTERS = [APPROVAL_FOOTER, QUESTION_FOOTER, SELECT_FOOTER, CONFIRM_FOOTER];
 const OPTION = /^\s*(?:›\s*)?(\d+)\.\s+(\S.*)$/;
@@ -42,7 +44,7 @@ function lastLine(lines: string[]): number {
 }
 
 /** `raw`: each option as drawn, its key hint (`(p)`) still at the end. */
-type Dialog = { kind: 'approval' | 'question' | 'plan' | 'confirm'; header: string[]; options: string[]; details: string[]; raw: string[] };
+type Dialog = { kind: 'approval' | 'question' | 'plan' | 'confirm' | 'sandbox'; header: string[]; options: string[]; details: string[]; raw: string[] };
 
 /** Option label: the description after two spaces and the key hint (`(y)`, `(esc)`) left out. */
 const label = (text: string) => text.split(/\s{2,}/)[0]!.replace(/\s+\([a-z]+\)$/, '').trim();
@@ -75,7 +77,9 @@ function parseDialog(pane: string): Dialog | null {
   }
   const f = lines[footer]!;
   const kind = APPROVAL_FOOTER.test(f) ? 'approval' : QUESTION_FOOTER.test(f) ? 'question' : SELECT_FOOTER.test(f) ? 'plan' : 'confirm';
-  // A select footer is also any picker the user opens (/model, /permissions): only the plan question is the agent's.
+  // A select footer is also any picker the user opens (/model, /permissions): only the plan question is the agent's,
+  // and, on Windows, the sandbox setup Codex asks before anything else (spike, 0.166).
+  if (kind === 'plan' && header.some(l => SANDBOX_SETUP.test(l))) return { kind: 'sandbox', header, options: raw.map(label), details: raw.map(detail), raw };
   if (kind === 'plan' && !header.some(l => /^\s*Implement this plan\?\s*$/.test(l))) return null;
   return { kind, header, options: raw.map(label), details: raw.map(detail), raw };
 }
@@ -122,6 +126,7 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   if (!d) return null;
   if (d.kind === 'question') return { kind: 'question', text: questionText(d.header), options: d.options, ...(d.details.some(Boolean) ? { optionDetails: d.details } : {}) };
   if (d.kind === 'plan') return { kind: 'plan', text: 'Implement this plan?', options: d.options };
+  if (d.kind === 'sandbox') return { kind: 'question', text: 'Set up the Codex agent sandbox (Windows)', options: d.options };
   if (d.kind === 'confirm') return { kind: 'permission', text: confirmText(d.header), options: d.options };
   const cmd = d.header.findIndex(l => /^\s*\$\s/.test(l));
   const command = cmd >= 0 ? shownCommand(rawRun(d.header, cmd)) : undefined;
@@ -222,7 +227,7 @@ export const codexAdapter: Adapter = {
   keysFor(decision, pending, pane, note) {
     const d = pane ? parseDialog(pane) : null;
     // An approval or the hooks review answers a permission (or a diff).
-    if (d) assertDialogIs(pending, d.kind === 'approval' || d.kind === 'confirm' ? 'permission' : d.kind);
+    if (d) assertDialogIs(pending, d.kind === 'approval' || d.kind === 'confirm' ? 'permission' : d.kind === 'sandbox' ? 'question' : d.kind);
     if (decision === 'always') return alwaysKeys(d);
     if (decision === 'deny' && note) return noteKeys(d, note);
     if (decision === 'deny') {
@@ -244,8 +249,10 @@ export const codexAdapter: Adapter = {
     // "Yes, proceed" runs this one command (or applies this one edit); `p` / `a` would stop asking.
     return [{ text: 'y' }];
   },
-  replyPlan(text, pending) {
+  replyPlan(text, pending, pane) {
     const flat = flatten(text);
+    // The sandbox picker: a digit only moves the cursor to that row, Enter takes it.
+    if (pending?.kind === 'question' && /^[1-9]$/.test(flat) && pane && parseDialog(pane)?.kind === 'sandbox') return [...digit(Number(flat)), { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
     if (pending?.kind === 'question' && /^[1-9]$/.test(flat)) return digit(Number(flat));
     return [{ text: flat }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }];
   },
