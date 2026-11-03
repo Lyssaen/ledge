@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync, lstatSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { enableLive, playwrightConfigPath } from '../src/daemon/browser/enable.js';
@@ -64,6 +64,17 @@ describe('enableLive: « Activer le direct… », the one line Ledge adds to the
       expect(await enableLive('r', home)).toMatchObject({ outcome: 'enabled' });
       expect(mode()).toBe(m);
     }
+  });
+
+  it('two asked together: one adds the line, the other finds it there; no copy left behind', async () => {
+    settings({ PLAYWRIGHT_MCP_CONFIG: config });
+    mkdirSync(join(home, '.config', 'playwright-mcp'), { recursive: true });
+    writeFileSync(config, '{}'); chmodSync(config, 0o600);
+    const both = await Promise.all([enableLive('a', home), enableLive('b', home), enableLive('c', home)]);
+    expect(both.map(r => r.outcome)).toEqual(['enabled', 'already', 'already']);
+    expect(read()).toEqual({ browser: { launchOptions: { args: ['--remote-debugging-port=0'] } } });
+    expect(statSync(config).mode & 0o777).toBe(0o600);
+    expect(readdirSync(join(home, '.config', 'playwright-mcp'))).toEqual(['config.json']);
   });
 
   it('a config kept elsewhere behind a link: the file it points to changes, the link stays', async () => {

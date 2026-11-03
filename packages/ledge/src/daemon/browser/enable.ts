@@ -1,4 +1,5 @@
-import { chmod, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, open, readFile, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { BrowserEnabled } from '@ledge/protocol';
 
@@ -27,7 +28,15 @@ export async function playwrightConfigPath(home: string): Promise<string | null>
  * Playwright browser then opens a CDP port on 127.0.0.1, which Ledge watches. Playwright reads its config when its server
  * starts: the line applies to the sessions started after it. Never called without the person's confirmation.
  */
-export async function enableLive(rid: string, home: string): Promise<BrowserEnabled> {
+/** One « Activer le direct » at a time: a second one, asked together, finds the line there (`already`). */
+let turn: Promise<unknown> = Promise.resolve();
+export function enableLive(rid: string, home: string): Promise<BrowserEnabled> {
+  const run = turn.then(() => enableOnce(rid, home), () => enableOnce(rid, home));
+  turn = run.catch(() => {});
+  return run;
+}
+
+async function enableOnce(rid: string, home: string): Promise<BrowserEnabled> {
   const path = await playwrightConfigPath(home);
   if (!path) return { type: 'browser.enabled', rid, outcome: 'refused', reason: 'not_configured' };
   let text: string | null;
@@ -58,14 +67,20 @@ export async function enableLive(rid: string, home: string): Promise<BrowserEnab
     await mkdir(dirname(target), { recursive: true });
     // The file keeps its permissions; a new one is the owner's only. The copy is made private before anything is in it.
     const mode = text === null ? 0o600 : (await stat(target)).mode & 0o777;
-    const tmp = `${target}.ledge-${process.pid}.tmp`;
+    // A name no one else uses; written through the descriptor opened private, so that nothing can make it readable before
+    // its final mode; removed on failure only when this call made it.
+    const tmp = `${target}.ledge-${randomUUID()}.tmp`;
+    let made = false;
     try {
-      await writeFile(tmp, '', { mode: 0o600, flag: 'wx' });
-      await chmod(tmp, 0o600);
-      await writeFile(tmp, `${out}\n`);
-      await chmod(tmp, mode);
+      const fh = await open(tmp, 'wx', 0o600);
+      made = true;
+      try {
+        await fh.chmod(0o600);
+        await fh.writeFile(`${out}\n`);
+        await fh.chmod(mode);
+      } finally { await fh.close(); }
       await rename(tmp, target);
-    } catch (e) { await unlink(tmp).catch(() => {}); throw e; }
+    } catch (e) { if (made) await unlink(tmp).catch(() => {}); throw e; }
   } catch { return { type: 'browser.enabled', rid, outcome: 'refused', reason: 'write_failed', path }; }
   return { type: 'browser.enabled', rid, outcome: 'enabled', path };
 }
