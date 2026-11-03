@@ -430,6 +430,20 @@ describe('the project dialog', () => {
     expect(onClose).toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('opened with addFolder on an existing project, the folder browser is open; without it, closed', async () => {
+    const client = { send: vi.fn(), request: vi.fn(() => new Promise(() => {})), on: vi.fn(() => () => {}) } as unknown as DaemonClient;
+    const dialog = (addFolder: boolean) => <LangProvider lang="en"><ProjectDialog edit="ledge" addFolder={addFolder} projects={PROJECTS} sessions={[]} machines={[]} client={client} fleet={{ setProjects: vi.fn() }}
+      projectIdOf={() => null} onClose={vi.fn()} onSaved={vi.fn()} onDeleted={vi.fn()} /></LangProvider>;
+    const { unmount } = render(dialog(true));
+    const editor = within(screen.getByRole('dialog', { name: 'Edit Ledge' }));
+    expect(await editor.findByRole('radiogroup', { name: 'Machine to browse' })).toBeInTheDocument();
+    unmount();
+    render(dialog(false));
+    const plain = within(screen.getByRole('dialog', { name: 'Edit Ledge' }));
+    await plain.findByRole('textbox', { name: /name/i });
+    expect(plain.queryByRole('radiogroup', { name: 'Machine to browse' })).toBeNull();
+  });
 });
 
 describe('the notice of a new project with its agents', () => {

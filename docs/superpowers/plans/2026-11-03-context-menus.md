@@ -99,7 +99,7 @@
 - Produces: `ProjectDialog` prop `addFolder?: boolean` and `ProjectEditor` prop `addFolder?: boolean`. The initial state becomes `useState(p.addFolder === true || (p.mode === 'new' && p.initial.repos.length === 0))`.
 - Consumes: nothing.
 
-- [ ] **Step 1: Write the failing test**: `it('opened with addFolder on an existing project, the folder browser is open; without it, closed')`. Render `<ProjectDialog edit="ledge" addFolder …>` with `PROJECTS`. The folder browser's machine picker (`getByRole('radiogroup', { name: 'Machines' })`) is present. Without `addFolder`, it is absent.
+- [ ] **Step 1: Write the failing test**: `it('opened with addFolder on an existing project, the folder browser is open; without it, closed')`. Render `<ProjectDialog edit="ledge" addFolder …>` with `PROJECTS`. The folder browser's machine picker (`getByRole('radiogroup', { name: 'Machine to browse' })`) is present. Without `addFolder`, it is absent.
 - [ ] **Step 2: Run** `pnpm vitest run test/project-editor.test.tsx`. Expected: FAIL.
 - [ ] **Step 3: Thread `addFolder`** from the modal through `ProjectDialog` and `EditorPlace` to `ProjectEditor`'s initial `adding`.
 - [ ] **Step 4: Run** the same command. Expected: PASS.

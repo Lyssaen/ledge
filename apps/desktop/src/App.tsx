@@ -346,7 +346,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         </Modal>
       )}
       {nav.modal?.kind === 'project' && (
-        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}|${nav.modal.proposal ?? ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete}
+        <ProjectDialog key={`${nav.modal.edit ?? ''}|${nav.modal.file ?? ''}|${nav.modal.delete ? 'delete' : ''}|${nav.modal.proposal ?? ''}|${nav.modal.addFolder ? 'add' : ''}`} edit={nav.modal.edit} file={nav.modal.file} startDeleting={nav.modal.delete} addFolder={nav.modal.addFolder}
           proposal={nav.modal.proposal} projects={projects} sessions={sessions} machines={machines} client={fleetClient} fleet={fleet} projectIdOf={projectIdOf} paused={nav.paused}
           notify={notify} onClose={close} onSaved={projectSaved} onDeleted={projectDeleted} />
       )}

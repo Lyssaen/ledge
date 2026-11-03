@@ -18,8 +18,8 @@ export type EditorPhase = { kind: 'form' } | { kind: 'scan' } | { kind: 'proposa
  *  `startDeleting` (Settings › Projects' « Supprimer ») opens a project straight on that view, and its « Annuler » closes the dialog.
  *  `proposal` (lot 11): the pid of a proposal kept by rememberProposal, opened on its draft (a new project, or « Ajouter à » its
  *  target); a pid no longer known closes the dialog and `notify` says so. The editor names its phases (Ledge's scan, a proposal). */
-export function ProjectDialog({ edit, file, startDeleting, proposal, projects, sessions, machines, client, fleet, projectIdOf, paused = false, notify, onClose, onSaved, onDeleted }: {
-  edit?: string; file?: string; startDeleting?: boolean; proposal?: string; projects: Projects | null; sessions: readonly Session[]; machines: readonly MachineState[];
+export function ProjectDialog({ edit, file, startDeleting, addFolder, proposal, projects, sessions, machines, client, fleet, projectIdOf, paused = false, notify, onClose, onSaved, onDeleted }: {
+  edit?: string; file?: string; startDeleting?: boolean; addFolder?: boolean; proposal?: string; projects: Projects | null; sessions: readonly Session[]; machines: readonly MachineState[];
   client: DaemonClient; fleet: Pick<Fleet, 'setProjects'>; projectIdOf(s: Session): string | null; paused?: boolean; notify?(text: string): void;
   onClose(): void; onSaved(id: string, created: boolean, filed: Session[]): void;
   onDeleted(id: string, name: string, moveTo: string | null, agents: number): void;
@@ -59,7 +59,7 @@ export function ProjectDialog({ edit, file, startDeleting, proposal, projects, s
     <Modal title={title} wide className="project-modal" onClose={onClose}>
       <EditorPlace mode={initial.id !== undefined ? 'edit' : 'new'} initial={initial} proposal={opened?.proposal} projects={projects ?? NO_STATE} sessions={sessions} machines={machines}
         client={client} fleet={fleet} projectIdOf={projectIdOf} paused={paused} onPhase={setPhase} onClose={onClose} onSaved={onSaved}
-        deleting={edit !== undefined && deleting} onDeleting={leaveDeleting} onDeleted={onDeleted} />
+        addFolder={addFolder === true} deleting={edit !== undefined && deleting} onDeleting={leaveDeleting} onDeleted={onDeleted} />
     </Modal>
   );
 }
