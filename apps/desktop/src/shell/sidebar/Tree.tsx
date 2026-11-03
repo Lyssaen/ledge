@@ -10,12 +10,14 @@ import { RigTag } from '../../openrig/RigTag';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
 import { AutoMark, HelperBot, SessionBot } from '../SessionBot';
+import type { MenuTarget } from '../../manage/useContextMenu';
+import { isMenuKey, menuPoint } from './menuPoint';
 import { isFinished, type ProjectGroup } from './model';
 
 const branchIcon = ['M6 3v12', 'M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M18 9a9 9 0 0 1-9 9'];
 
 /** A row the keyboard walks: Left folds it (or goes to its parent), Right unfolds it. `session` is set only for a principal. */
-interface Nav { toggle?: () => void; open?: boolean; parent?: string; session?: Session }
+interface Nav { toggle?: () => void; open?: boolean; parent?: string; session?: Session; target?: MenuTarget }
 
 /** A project's fold key (« Sans projet »: `p:none`); a branch's is `p:<id>:<branch>`. */
 export const projectKey = (id: string | null): string => `p:${id ?? 'none'}`;
@@ -72,7 +74,8 @@ export function Tree(p: {
   /** The sessions picked with Ctrl/⌘ + click, to write to them together; a plain click still opens. No `onPick`, no picking. */
   picked: ReadonlySet<string>;
   onPick?(id: string): void;
-  onMenu(id: string, e: MouseEvent): void;
+  /** A row's menu (right click, its « … », the menu key): what it is on, where, and the control the focus goes back to. */
+  onMenu(target: MenuTarget, at: { x: number; y: number }, opener: HTMLElement | null): void;
   onArchive(ids: string[]): void;
   onDelete(ids: string[]): void;
   onTerminal(s: Session): void;
@@ -126,6 +129,12 @@ export function Tree(p: {
   const tabKey = p.current && placeOf(p.groups, p.current) ? p.current : (p.groups[0] ? projectKey(p.groups[0].id) : '');
   const tabOf = (key: string) => key === tabKey ? 0 : -1;
 
+  const menuOn = (target: MenuTarget, e: MouseEvent<HTMLElement>) => {
+    e.preventDefault();
+    const el = e.currentTarget;
+    p.onMenu(target, menuPoint(e, el), el.querySelector<HTMLElement>('[data-tree-key]') ?? el);
+  };
+
   const onTreeKey = (e: ReactKeyboardEvent) => {
     const el = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('[data-tree-key]') : null;
     if (!el || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -139,6 +148,7 @@ export function Tree(p: {
     else if (e.key === 'ArrowUp') items[Math.max(0, i - 1)]?.focus();
     else if (e.key === 'ArrowLeft') { if (n?.toggle && n.open) n.toggle(); else focusKey(n?.parent); }
     else if (e.key === 'ArrowRight') { if (n?.toggle && !n.open) n.toggle(); else items[i + 1]?.focus(); }
+    else if (isMenuKey(e)) { if (n?.target) p.onMenu(n.target, menuPoint(e, el), el); }
     else if (k === 'e') { if (n?.session) p.onArchive([n.session.id]); }
     else if (e.key === 'Delete') { if (n?.session) p.onDelete([n.session.id]); }
     else if (k === 'j' || k === 'k') { /* the atelier walks with these; the tree keeps them */ }
@@ -160,7 +170,7 @@ export function Tree(p: {
     const open = subs.length > 0 && auto !== kids.has(s.id);
     const toggle = subs.length > 0 ? () => flip(kids, setKids, s.id) : undefined;
     const treeKey = helper ? `${s.id}:${helper.id}` : s.id;
-    if (!helper) nav.current.set(s.id, { toggle, open, parent: parentKey, session: s });
+    if (!helper) nav.current.set(s.id, { toggle, open, parent: parentKey, session: s, target: { kind: 'session', id: s.id } });
     else nav.current.set(treeKey, { parent: s.id });
     const selected = !helper && p.current === s.id;
     const name = helper ? helper.kind : s.name;
@@ -174,7 +184,7 @@ export function Tree(p: {
         aria-selected={selected} aria-current={selected ? 'true' : undefined}
         className={cls('st-row st-agent', selected && 'sel', !helper && p.picked.has(s.id) && 'picked', !helper && isFinished(s) && 'done', s.offline && 'off', !!helper && 'helper')}
         style={{ '--d': depth } as CSSProperties}
-        onContextMenu={helper ? undefined : e => { e.preventDefault(); p.onMenu(s.id, e); }}>
+        onContextMenu={helper ? undefined : e => menuOn({ kind: 'session', id: s.id }, e)}>
         {toggle ? <Chevron open={open} label={open ? t.side.foldKids(name) : t.side.unfoldKids(name)} onClick={toggle} /> : <span className="st-gap" />}
         <span className="st-bot">{helper
           ? <HelperBot helper={helper} parent={s} size={16} paused={p.paused} />
@@ -189,7 +199,7 @@ export function Tree(p: {
         <span className="st-acts">
           <button type="button" tabIndex={-1} aria-label={t.side.terminalOne(name)} title="Terminal · T" onClick={() => p.onTerminal(s)}><Icon d={SHELL_ICONS.terminal} size={13} /></button>
           {!helper && <button type="button" tabIndex={-1} aria-label={t.side.archiveOne(s.name)} title={`${t.manage.menu.archive} · E`} onClick={() => p.onArchive([s.id])}><Icon d={SHELL_ICONS.archive} size={13} /></button>}
-          {!helper && <button type="button" tabIndex={-1} aria-label={t.side.manageOne(s.name)} aria-haspopup="menu" title={t.manage.menu.more} onClick={e => p.onMenu(s.id, e)}><Icon d={[]} fill={SHELL_ICONS.dots} size={13} /></button>}
+          {!helper && <button type="button" tabIndex={-1} aria-label={t.side.manageOne(s.name)} aria-haspopup="menu" title={t.manage.menu.more} onClick={e => menuOn({ kind: 'session', id: s.id }, e)}><Icon d={[]} fill={SHELL_ICONS.dots} size={13} /></button>}
         </span>
       </div>
     );
@@ -249,11 +259,12 @@ export function Tree(p: {
     const branch = g.branches.length === 1 ? g.branches[0]!.branch : undefined;
     const sub = g.flatten && branch && g.repo ? `${g.repo} · ${branch}` : (!g.flatten && g.repo ? g.repo : '');
     const project = g.id ? p.projects?.projects.find(x => x.id === g.id) ?? null : null;
-    nav.current.set(pkey, { toggle, open });
+    const target: MenuTarget = g.id ? { kind: 'project', id: g.id } : { kind: 'unassigned' };
+    nav.current.set(pkey, { toggle, open, target });
     rows.push(
       <div key={pkey} role="treeitem" aria-level={1} aria-expanded={has ? open : undefined}
         className={cls('st-row st-project', p.filter === (g.id ?? 'none') && !p.current && 'sel', g.id !== null && p.filing.over === g.id && 'drop-over')}
-        style={{ '--d': 0 } as CSSProperties} {...(g.id ? p.filing.dropProps(g.id) : {})}>
+        style={{ '--d': 0 } as CSSProperties} {...(g.id ? p.filing.dropProps(g.id) : {})} onContextMenu={e => menuOn(target, e)}>
         {toggle ? <Chevron open={open} label={open ? t.side.fold(label) : t.side.unfold(label)} onClick={toggle} /> : <span className="st-gap" />}
         <ProjectSwatch project={project} />
         <button type="button" className="st-main" data-tree-key={pkey} tabIndex={tabOf(pkey)} title={t.side.filterProject(label)} onClick={() => p.onHome(g.id ?? 'none')}>

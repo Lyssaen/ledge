@@ -8,6 +8,7 @@ import type { Filing } from '../../atelier/filing';
 import type { Decisions } from '../../fleet/decisions';
 import { useI18n } from '../../i18n/lang';
 import type { Wait } from '../../list/time';
+import type { ContextMenuState } from '../../manage/useContextMenu';
 import type { SessionActions } from '../../manage/useSessionActions';
 import { useMotionPreferences } from '../../motionPreferences';
 import { activeCount } from '../../nav/agents';
@@ -22,6 +23,7 @@ import { attentionOf, treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
 import { RigGroups } from './RigGroups';
+import { SidebarMenuHost } from './SidebarMenus';
 import { setGrouping, useGrouping } from '../../openrig/grouping';
 import type { SidebarOpenRig } from '../../openrig/sidebarState';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
@@ -36,8 +38,10 @@ export function Sidebar(p: {
   order: readonly Session[]; projectIdOf: (s: Session) => string | null;
   filing: Filing; actions: SessionActions; decisions: Decisions;
   waits: ReadonlyMap<string, Wait>;
-  /** `opened`: a session's menu shows; Échap is its own then, the selection stays. */
-  menu: { open(id: string, at: { x: number; y: number }, opener?: HTMLElement): void; opened?: boolean };
+  /** The window's one context menu: a session's (rendered by the app) or one of the sidebar's own (rendered here). While one shows, Échap is its own. */
+  menu: ContextMenuState;
+  /** A short notice (the toast): « Tout restaurer » says what it did once. */
+  notify(text: string): void;
   /** The local daemon takes a broadcast: the ✉ of a project row and the Ctrl/⌘ + click selection are offered. */
   broadcast?: boolean;
   /** Bumped by each broadcast that reached someone: the selection is kept until then, emptied then. */
@@ -95,7 +99,7 @@ export function Sidebar(p: {
   const decisions = useMemo(() => (p.tasksApi ? openDecisions(p.tasksApi.tasks) : []), [p.tasksApi]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
-  keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null || !!p.menu.opened };
+  keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null || p.menu.menu !== null };
   // Alt ↓ opens the next waiting session. Ctrl ⇧ E focuses its tree row, or the first row when none is open.
   // A dialog, a confirmation, the chat, or a text field already owns the key (same rule as the window shortcuts).
   useEffect(() => {
@@ -181,7 +185,7 @@ export function Sidebar(p: {
           onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.tasksApi?.putLater(s); }}
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
-            p.menu.open(id, { x: e.clientX, y: e.clientY }, host);
+            p.menu.open(id, { x: e.clientX, y: e.clientY }, host ?? null);
           }} />
         {!byRig && <section aria-label={t.side.projects}>
           <Tree groups={shownGroups} closed={closed} onClosed={setClosed} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
@@ -191,10 +195,7 @@ export function Sidebar(p: {
             onLaunch={project => p.dispatch({ type: 'modal', modal: { kind: 'launch', ...(project !== undefined ? { project } : {}) } })}
             onBroadcast={p.broadcast ? project => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project } } }) : undefined}
             picked={picked} onPick={p.broadcast ? pick : undefined}
-            onMenu={(id, e) => {
-              const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
-              p.menu.open(id, { x: e.clientX, y: e.clientY }, host?.querySelector<HTMLElement>('[data-tree-key]') ?? host);
-            }}
+            onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
             onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
@@ -207,6 +208,8 @@ export function Sidebar(p: {
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
           onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused} />
       </div>
+      <SidebarMenuHost state={p.menu} projects={p.projects} groups={groups} archived={p.archived} actions={p.actions} dispatch={p.dispatch}
+        broadcast={!!p.broadcast} closed={closed} onClosed={setClosed} archivesOpen={archivesOpen} onArchivesOpen={setArchivesOpen} notify={p.notify} />
       {p.broadcast && pickedIds.length >= 2 && (
         <div className="st-picked" role="region" aria-label={t.broadcast.picked}>
           <button type="button" className="st-picked-write" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { sessions: pickedIds } } })}>

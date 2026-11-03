@@ -83,6 +83,16 @@ export const fr = {
     kids: (n: number) => `${n} ${plural(n, 'sous-agent', 'sous-agents')}`,
     wt: 'Worktree lié',
     tallyNeed: 'à décider', tallyWork: 'au travail', tallyOff: 'hors ligne', tallyDone: 'terminées',
+    // Les menus du clic droit dans la barre latérale : un projet, « Sans projet », l'en-tête Archives, une archive.
+    ctx: {
+      label: (name: string) => `Actions pour ${name}`,
+      newHere: 'Nouvelle session ici', broadcast: 'Écrire à tout le projet…', addFolder: 'Ajouter un dossier…', edit: 'Modifier le projet…',
+      fold: 'Replier', unfold: 'Déplier', deleteProject: 'Supprimer le projet…', newSession: 'Nouvelle session…', newProject: 'Nouveau projet…',
+      deleteAll: (n: number) => `Tout supprimer (${n})…`,
+      skipped: (k: number) => `${k} ${plural(k, 'gardée', 'gardées')} : leur machine doit mettre Ledge à jour`,
+      restoreAll: 'Tout restaurer', restoredAll: (n: number) => `${n} ${plural(n, 'session remise à sa table', 'sessions remises à leur table')}.`,
+      read: 'Lire'
+    },
     archives: 'Archives', archiveFilter: 'Filtrer les archives', archiveFilterPh: 'Filtrer les archives…',
     archiveEmpty: 'Rien d’archivé pour l’instant.', archiveNone: 'Aucune archive ne correspond.',
     read: (name: string, project: string, task: string, when: string) => `Relire ${name}, ${project}, ${task}, archivée ${when}`,
