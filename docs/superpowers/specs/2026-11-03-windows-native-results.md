@@ -127,8 +127,95 @@ Already visible:
   `figures` kind for Windows consoles. The Claude adapter matches `✔` (`src/adapters/claude.ts`: `☒ … ✔ Submit`,
   `replace(/\s+✔$/, '')`) and `❯`: its dialog parsing must accept the Windows glyphs too.
 
-Typing, Ctrl+U, `/exit` and the exit code: **pending**, once Claude is set up on Windows (theme + login, done by the
-user in a Windows terminal). Results will be added here.
+### Run 2: a dialog taken for the input box
+
+After the user set Claude up (theme, login, folder trust, in a Windows terminal), Claude opened on a **"Try the new
+fullscreen renderer?"** upsell. The first probe's detector (a rule + any line starting with `>`) took the dialog's
+`  > 1. Yes, try it` for the input box: `bonjour` went nowhere, and the Enter after `/exit` **accepted** the upsell
+(`"tui": "fullscreen"` written to `%USERPROFILE%\.claude\settings.json`; Otto-2 removed it afterwards, back to the
+user's `{"theme": "dark"}`). Lessons for the adapters, platform-independent: a dialog's cursor line must never pass for
+the input prompt, and an unknown dialog is dismissed with Esc, never confirmed with Enter.
+
+One observation from that run, in the fullscreen renderer: the prompt line and the status line under it were flagged
+`isWrapped` (`~`) right after a full-width (120 col) rule:
+
+```
+ 36|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 37~> Try "create a util logging.py that..."
+ 38|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 39~  ⏵⏵ auto mode on (shift+tab to cycle)
+```
+
+A `capture-pane -J`-style join on `isWrapped` would glue the rule and the prompt into one line. Not seen in the default
+renderer (runs 3–5). To compare with tmux's own wrap flag on the same screen before relying on it.
+
+### Runs 3–5: the full sequence (default renderer)
+
+The probe now requires the prompt at **column 0 right under a rule** and dismisses any `Enter to confirm · Esc to …`
+dialog with Esc (none appeared in these runs).
+
+Capture 1, input box (`row|text`):
+
+```
+  0| ▐▛███▛█   Claude Code v2.1.302
+  1|▝▜██████▀  Opus 5.5 · Claude Team
+  2| ▝▝   ▝▝   ~\AppData\Local\Temp\conpty-probe
+  3|
+  4|  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+  5|
+  6|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  7|> Try "how do I log an error?"
+  8|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  9|  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents                                               ◐ medium · /effort
+```
+
+Capture 2, after typing `bonjour` one character at a time (40 ms apart):
+
+```
+  0| ▐▛███▛█   Claude Code v2.1.302
+  1|▝▜██████▀  Opus 5.5 · Claude Team
+  2| ▝▝   ▝▝   ~\AppData\Local\Temp\conpty-probe
+  3|
+  4|  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+  5|
+  6|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  7|> bonjour
+  8|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  9|  ⏵⏵ auto mode on (shift+tab to cycle)                                                              ◐ medium · /effort
+```
+
+Capture 3, after Ctrl+U (`\x15`):
+
+```
+  0| ▐▛███▛█   Claude Code v2.1.302
+  1|▝▜██████▀  Opus 5.5 · Claude Team
+  2| ▝▝   ▝▝   ~\AppData\Local\Temp\conpty-probe
+  3|
+  4|  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+  5|
+  6|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  7|> Try "how do I log an error?"
+  8|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  9|  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents                                     Ctrl+Y to paste deleted text
+```
+
+| | Run 3 | Run 4 | Run 5 |
+|---|---|---|---|
+| start → input box | 1476 ms | 1653 ms | 1547 ms |
+| `bonjour` echoed in the prompt | yes | yes | yes |
+| Ctrl+U cleared the input | yes | yes | yes |
+| `/exit`, 150 ms, Enter → Claude exited | yes | yes | yes |
+| Enter → process exit | 2201 ms | 2165 ms | 2208 ms |
+| exit code | 0 | 0 | 0 |
+
+Results:
+
+- **Box drawing and Unicode intact**: rules `─`, logo blocks `▐▛███▛█`, `⏵⏵`, `◐`, `←`, `·`; no U+FFFD in 9290 raw bytes.
+- **Glyphs differ from Linux**: the input prompt is **`>`**, not `❯` (the raw stream has no `❯` at all), and selections
+  show `√`. The adapters' prompt and dialog patterns must accept both.
+- **Input works as under tmux** for this simple case: characters typed one at a time, Ctrl+U, `/exit` + 150 ms + Enter.
+  Not covered here: paste bursts, long inputs, dialogs (permission, question), resize.
+- The exit code comes straight from ConPTY (`onExit`), with no shell wrapper.
 
 ## 4. Hook latency
 

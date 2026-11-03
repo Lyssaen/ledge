@@ -60,21 +60,41 @@ const waitFor = async (pred, label, limit = timeout) => {
 };
 const type = async (s, gap = 40) => { for (const c of s) { pty.write(c); await sleep(gap); } };
 
-// Claude Code's input box: a full-width rule and a prompt line starting with ❯ or >.
-const inputBox = t => /^─{20,}/m.test(t) && /^\s*[❯>]( | |$)/m.test(t) && !/trust (the files in )?this folder/i.test(t);
-const result = { claude, cols: COLS, rows: ROWS, cwd: process.cwd(), timings: {} };
+// Claude Code's input box: a prompt line at column 0 (❯ on Linux, > on Windows) right under a full-width rule. Dialogs
+// indent their cursor ("  > 1. Yes"), so they do not match.
+const promptLine = t => { const ls = t.split('\n'); const i = ls.findLastIndex((l, k) => /^[❯>](\s|$)/.test(l) && /^─{20,}/.test(ls[k - 1] ?? '')); return i < 0 ? null : ls[i]; };
+// A dialog in front of the input box (first-run notices, upsells): dismissed with Esc, never confirmed.
+const dialog = t => /Enter to confirm · Esc to (cancel|skip)/.test(t) || /trust (the files in )?this folder/i.test(t);
+const result = { claude, cols: COLS, rows: ROWS, cwd: process.cwd(), timings: {}, dismissed: [] };
+const waitInputBox = async () => {
+  const end = performance.now() + timeout;
+  while (performance.now() < end && !exit) {
+    const t = await screenText();
+    if (/trust (the files in )?this folder/i.test(t)) { result.blockedOn = 'folder trust dialog'; return false; }
+    if (dialog(t)) {
+      const title = t.split('\n').map(l => l.trim()).filter(Boolean).find(l => l.endsWith('?')) ?? 'dialog';
+      if (result.dismissed.at(-1) !== title) { log('dismiss', JSON.stringify(title)); result.dismissed.push(title); await capture(`0-dialog-${result.dismissed.length}`); }
+      pty.write('\x1b'); await sleep(500); continue;
+    }
+    if (promptLine(t) !== null) return true;
+    await sleep(100);
+  }
+  return false;
+};
 try {
-  const ready = await waitFor(inputBox, 'input box');
+  const ready = await waitInputBox();
   result.timings.inputBoxMs = ready ? ms() : null;
   await capture('1-ready');
   if (!ready) { result.blockedOn = (await screenText()).split('\n').filter(l => l.trim()).slice(0, 12); throw new Error('no input box'); }
   await sleep(500);
   await type('bonjour');
-  result.typed = await waitFor(t => /[❯>]\s*bonjour/.test(t), 'bonjour echoed', 5000);
+  result.typed = await waitFor(t => /bonjour/.test(promptLine(t) ?? ''), 'bonjour echoed', 5000);
+  result.promptAfterTyping = promptLine(await screenText());
   await sleep(300);
   await capture('2-typed');
   pty.write('\x15'); // Ctrl+U
-  result.ctrlUCleared = await waitFor(t => !/bonjour/.test(t), 'Ctrl+U cleared', 5000);
+  result.ctrlUCleared = await waitFor(t => promptLine(t) !== null && !/bonjour/.test(promptLine(t)), 'Ctrl+U cleared', 5000);
+  result.promptAfterCtrlU = promptLine(await screenText());
   await sleep(300);
   await capture('3-ctrl-u');
   await type('/exit');
