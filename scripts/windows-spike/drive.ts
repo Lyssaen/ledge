@@ -153,7 +153,14 @@ async function main() {
   const id = launched.id; emit({ ev: 'launched', id });
   const t = Date.now();
   try {
-    await until(id, idle, 90_000, 'launch');
+    // First run in the work folder: the agent asks to trust it. Ledge parses it as a permission; the driver accepts that.
+    let s = await until(id, x => idle(x) || x.pending?.kind === 'permission', 90_000, 'launch');
+    if (s.pending?.kind === 'permission') {
+      if (!/trust/i.test(s.pending.text + (s.pending.options ?? []).join(' '))) throw new Error(`launch: an unexpected permission ${JSON.stringify(s.pending.text)}`);
+      save(id, 'launch-trust'); emit({ ev: 'accept-trust', text: s.pending.text });
+      send({ type: 'session.decide', id, decision: 'accept' });
+      s = await until(id, idle, 90_000, 'launch-trusted');
+    }
     const f = save(id, 'launch-idle');
     result(1, 'launch', true, `idle after ${Date.now() - t} ms, preview ${f}`);
     const lines = previews.get(id) ?? [];
