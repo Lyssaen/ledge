@@ -125,6 +125,8 @@ const SwitchableSessionSchema = SessionSchema.extend({ canSwitch: z.literal(true
 export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   id: true, name: true, tool: true, project: true, title: true, topic: true, repo: true, branch: true, worktree: true,
   state: true, helpers: true, lastReply: true, startedAt: true, lastActivityAt: true,
+  /** Who answered its last request, so « Déjà traitée » can say where. */
+  lastAnswer: true,
   /** Its model, effort and the change waiting for its next free moment: the phone shows them and offers to change them. */
   model: true, effort: true, modelNext: true, canSwitch: true,
   /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */

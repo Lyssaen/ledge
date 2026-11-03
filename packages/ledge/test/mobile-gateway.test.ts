@@ -382,7 +382,7 @@ describe('phone gateway: writes', () => {
     await flush();
     g.send('dev1', m);
     await flush();
-    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'b', text: 'hello' }]);
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'b', text: 'hello', by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
     expect(g.results('dev1').map(r => r.type === 'operation.result' && r.status)).toEqual(['received', 'applied', 'applied']);
   });
 
@@ -445,7 +445,7 @@ describe('phone gateway: writes', () => {
     const m = { type: 'session.reply', op: randomUUID(), id: 'c', text: 'go on', expect: null };
     g.send('dev1', m);
     await flush();
-    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'c', text: 'go on' }]);
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'c', text: 'go on', by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
     expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
   });
 
@@ -459,7 +459,7 @@ describe('phone gateway: writes', () => {
     expect(g.dispatched).toEqual([]);
     g.send('dev1', two);
     await flush();
-    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'q', text: '2' }]);
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'q', text: '2', by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
   });
 
   it('two operations running at once each get their own outcome', async () => {
@@ -892,7 +892,7 @@ describe('phone gateway: a high-impact accept carries a device assertion', () =>
     g.send('dev1', withAssertion(m, auth.get(rp, await challengeFor(g, 'r', RPC), { counter: 1 })));
     await flush();
     expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
-    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'r', text: 'yes' }]);
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'r', text: 'yes', by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
   });
 
   it('an assertion no check binds is stale and spends no challenge: a reply with a null expect while idle, a decide on a low request', async () => {
@@ -1741,13 +1741,15 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
     const owner = c.chats.owner;
     c.chats.owner = (qid: string) => (qid === QPC ? 'desktop' as never : owner(qid));
     const calls: Array<[string, string, number[] | undefined, true | undefined]> = [];
-    const actChat = async (thread: string, qid: string, _rid: string, r?: number[], confirmed?: true, deny?: true) => {
+    const bys: unknown[] = [];
+    const actChat = async (thread: string, qid: string, _rid: string, r?: number[], confirmed?: true, deny?: true, by?: unknown) => {
       calls.push([thread, qid, r, confirmed, ...(deny ? [deny] : [])] as never);
+      bys.push(by);
       if (result instanceof Error) throw result;
       return result ?? { done: r ?? [], failed: [] };
     };
     const g = setup({ chats: c.chats, actChat: actChat as never, relayUrl: 'https://relay.test' });
-    return { calls, g };
+    return { calls, g, bys };
   }
   type G = ReturnType<typeof setup>;
   const enroll = async (g: G) => {
@@ -1808,12 +1810,14 @@ describe('phone gateway: generic cards (spec 2026-10-26 action registry §9)', (
 
   it('« Refuser » a request: no passkey, no confirmation, and allowed on a request shown cut; only on a request', async () => {
     const accept: Row = { action: 'session.decide', args: { session: 'a', decision: 'accept' }, summary: 'Accepter', risk: 'destructive', detail: 'x'.repeat(3000) };
-    const { calls, g } = make([accept]);
+    const { calls, g, bys } = make([accept]);
     const m = { type: 'chat.act', op: randomUUID(), qid: QA, deny: true };
     g.send('dev1', m);
     await flush();
     expect(last(g)).toEqual({ type: 'operation.result', op: m.op, status: 'applied' });
     expect(calls).toEqual([['device:dev1', QA, [0], undefined, true]]);
+    // The request is said refused by this device, as from its own « Refuser ».
+    expect(bys).toEqual([{ kind: 'device', id: 'dev1', name: 'dev1' }]);
     // As on the PC, only the rows still open count: a row already done does not stop « Refuser ».
     const mixed = make([{ ...cancel, state: 'done' }, { ...accept, detail: 'Bash: rm' }]);
     mixed.g.send('dev1', { type: 'chat.act', op: randomUUID(), qid: QA, deny: true });
@@ -2036,7 +2040,7 @@ describe('phone gateway: images', () => {
     const id = (g.got('dev1')[0] as { ref: { id: string } }).ref.id;
     g.send('dev1', { type: 'session.reply', op: randomUUID(), id: 'c', text: '', attachments: [id], expect: null });
     await flush();
-    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'c', text: '', attachments: [id] }]);
+    expect(g.dispatched).toEqual([{ type: 'session.reply', id: 'c', text: '', attachments: [id], by: { kind: 'device', id: 'dev1', name: 'dev1' } }]);
   });
 
   it('refuses an empty reply with no images as invalid, dispatching nothing', async () => {

@@ -479,6 +479,7 @@ export const copy = {
     /** Who answered, when the thread says it (docs/mockups/mobile-multi-device.html, part 1). */
     titleOn: (where: string) => `Déjà traitée sur ${where}`, titleElsewhere: 'Déjà traitée ailleurs',
     decided: (what: 'accept' | 'deny' | 'always', time: string) => `${what === 'deny' ? 'Refusée' : 'Acceptée'} à ${time}. Aucune nouvelle décision n’a été envoyée.`,
+    answered: (time: string) => `Répondue à ${time}. Aucune nouvelle réponse n’a été envoyée.`,
     staleTitle: 'Cette demande ne figure plus dans le dernier état connu.', staleBody: 'Reconnectez-vous pour vérifier si elle attend toujours une décision.'
   },
   loading: 'Chargement de la demande…',

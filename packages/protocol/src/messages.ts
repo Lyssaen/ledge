@@ -254,7 +254,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** `steer`: OMP only, redirect the turn running now instead of queueing the text after it. */
   /** OMP's `ask`: the answers to every question of the dialog `requestId`, in order (`selected` labels, and/or free `text`); `cancel` declines it. */
   z.object({ type: z.literal('session.answer'), id: z.string(), requestId: z.string().min(1).max(200), answers: z.array(z.object({ id: z.string(), selected: z.array(z.string().max(2000)).max(100), text: z.string().max(20000).optional() })).max(50), cancel: z.boolean().optional() }),
-  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string(), attachments: z.array(AttachmentIdSchema).max(ATTACHMENTS_MAX).optional(), steer: z.boolean().optional() }),
+  /** `by`: as session.decide's, who answers when the reply answers a request (set by the phone gateway for a device; absent, the PC). */
+  z.object({ type: z.literal('session.reply'), id: z.string(), text: z.string(), attachments: z.array(AttachmentIdSchema).max(ATTACHMENTS_MAX).optional(), steer: z.boolean().optional(), by: DecidedBySchema.optional() }),
   /** The chat card's instruction (spec 2026-10-12 relay §4): sent now if the session is free, else queued until it is. */
   z.object({ type: z.literal('session.relay'), qid: z.string().min(1) }),
   /** Takes the card's queued instruction back out of the queue. */

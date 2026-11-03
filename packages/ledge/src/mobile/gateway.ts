@@ -113,7 +113,7 @@ export function createPhoneGateway(deps: {
   /** Closes the sessions of a turn's close card, on that thread (its own emitter and marks). */
   closeChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ closed: Array<{ row: number; id: string; how: CloseHow }>; failed: Array<{ row: number; message: string }> }>;
   /** Applies the rows of a turn's generic card, on that thread (its own emitter and marks); `rid` names the request. */
-  actChat?: (thread: ChatThreadId, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true) => Promise<{ done: number[]; failed: Array<{ row: number; message: string }> }>;
+  actChat?: (thread: ChatThreadId, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) => Promise<{ done: number[]; failed: Array<{ row: number; message: string }> }>;
   /** A device's question ended (answered, or with a code). */
   onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
   chatThrottleMs?: number;
@@ -395,7 +395,8 @@ export function createPhoneGateway(deps: {
       case 'session.decide':
         // `by` is the gateway's own: the device that sent it, as it is named now (nothing the device wrote is kept).
         return { type: 'session.decide', id: msg.id, decision: msg.decision, ...(msg.note !== undefined ? { note: msg.note } : {}), expect: { kind: msg.expect.kind, text: msg.expect.text, key: msg.expect.key }, by: decidedBy(deviceId) };
-      case 'session.reply': return { type: 'session.reply', id: msg.id, text: msg.text, ...(msg.attachments?.length ? { attachments: msg.attachments } : {}) };
+      // `by` as for a decision: it only counts when the reply answers a request.
+      case 'session.reply': return { type: 'session.reply', id: msg.id, text: msg.text, ...(msg.attachments?.length ? { attachments: msg.attachments } : {}), by: decidedBy(deviceId) };
       case 'session.answer': return { type: 'session.answer', id: msg.id, requestId: msg.requestId, answers: msg.answers, ...(msg.cancel ? { cancel: true } : {}) };
       case 'session.interrupt': return { type: 'session.interrupt', id: msg.id };
       case 'session.model': return { type: 'session.model', id: msg.id, model: msg.model, effort: msg.effort };
@@ -526,7 +527,7 @@ export function createPhoneGateway(deps: {
       if (refused) return refused;
     }
     try {
-      const done = await deps.actChat(`device:${deviceId}`, msg.qid, `phone:${msg.op}`, todo, msg.confirmed, msg.deny);
+      const done = await deps.actChat(`device:${deviceId}`, msg.qid, `phone:${msg.op}`, todo, msg.confirmed, msg.deny, decidedBy(deviceId));
       return done.failed.length === 0 && done.done.length > 0 ? { status: 'applied' } : { status: 'failed' };
     } catch (e) {
       if (e instanceof ActRefused) return e.code ? { status: 'rejected', reason: e.code } : { status: 'failed' };

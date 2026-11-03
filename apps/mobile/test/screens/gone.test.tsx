@@ -54,6 +54,18 @@ describe('a request that no longer waits', () => {
     expect(screen.getByRole('heading', { name: 'Déjà traitée ailleurs' })).toBeInTheDocument();
   });
 
+  it('the PC’s record of who answered this very request wins, a question included, and no thread is asked', () => {
+    const q = session('b', { name: 'Nova', state: 'waiting_input', pending: pending({ kind: 'question', key: 'kq', text: 'Quel schéma ?' }) });
+    const qItem = requestsOf([q])[0]!;
+    const t = setup();
+    const { pending: _, ...rest } = q;
+    act(() => t.deliver({ ...snapshot([{ ...rest, state: 'working', lastAnswer: { key: qItem.key, by: { kind: 'device', id: 'fp-ipad', name: 'iPad' }, at: AT } }], 'PC-Desan'), device: { confirm: true, id: 'fp-self' } } as PhoneServerMessage));
+    render(<Gone store={t.store} item={qItem} />);
+    expect(screen.getByRole('heading', { name: 'Déjà traitée sur iPad' })).toBeInTheDocument();
+    expect(screen.getByText(`Répondue à ${time}. Aucune nouvelle réponse n’a été envoyée.`)).toBeInTheDocument();
+    expect(t.of('session.thread')).toEqual([]);
+  });
+
   it('offline, says only that it is no longer in the last known state', () => {
     const t = setup('pc_offline');
     render(<Gone store={t.store} stale item={item} />);
