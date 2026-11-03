@@ -26,6 +26,7 @@ const sessions = new Map<string, Session>();
 const previews = new Map<string, string[]>();
 const threads = new Map<string, ThreadItem[]>();
 let client!: Client;
+let lastError = '';
 
 /** Reads every message the daemon sends, keeping the last state of each session and its preview. */
 async function pump() {
@@ -40,7 +41,7 @@ async function pump() {
         emit({ ev: 'state', id: m.session.id, state: m.session.state, pending: m.session.pending ? { kind: m.session.pending.kind, text: m.session.pending.text.slice(0, 120), options: m.session.pending.options } : undefined });
     } else if (m.type === 'session.preview') previews.set(m.id, m.lines);
     else if (m.type === 'session.thread') threads.set(m.id, m.items);
-    else if (m.type === 'error') emit({ ev: 'daemon-error', message: (m as { message?: string }).message });
+    else if (m.type === 'error') { lastError = (m as { message?: string }).message ?? ''; emit({ ev: 'daemon-error', message: lastError }); }
   }
 }
 const send = (msg: ClientMessage) => client.send(msg);
@@ -119,7 +120,14 @@ const checks: Check[] = [
     save(id, 'question-dialog');
     const i = (s.pending!.options ?? []).findIndex(o => /bleu/i.test(o));
     if (i < 0) throw new Error(`no Bleu among ${JSON.stringify(s.pending!.options)}`);
-    send({ type: 'session.reply', id, text: String(i + 1) });
+    // The hook can name the question before Claude has drawn it: the daemon refuses to type on a screen without it.
+    // A person answers later; the driver tries again once a second, ten times.
+    for (let n = 0; n < 10; n++) {
+      lastError = '';
+      send({ type: 'session.reply', id, text: String(i + 1) });
+      await sleep(1000);
+      if (!/no prompt visible/i.test(lastError)) break;
+    }
     await until(id, idle, 120_000, 'question-answered');
     save(id, 'question-after');
     const said = (await thread(id)).filter(x => x.kind === 'message').map(x => (x as { text: string }).text).at(-1) ?? '';

@@ -118,7 +118,8 @@ describe('codex adapter: keys', () => {
     expect(codexAdapter.keysFor('accept', pending('permission', { source: 'pane' }), p)).toEqual([{ text: '2' }, { keys: ['Enter'] }]);
     expect(codexAdapter.keysFor('deny', pending('permission', { source: 'pane' }), p)).toEqual([{ keys: ['Escape'] }]);
   });
-  it('a reply is typed, then Enter after a pause (Enter inside a paste burst is a newline)', () => {
+  // The tmux plan; on Windows the reply waits for its draft first (see 'a reply on Windows (ConPTY)').
+  it.skipIf(process.platform === 'win32')('a reply is typed, then Enter after a pause (Enter inside a paste burst is a newline)', () => {
     expect(codexAdapter.replyPlan('run the\ntests')).toEqual([{ text: 'run the tests' }, { waitMs: REPLY_ENTER_DELAY_MS }, { keys: ['Enter'] }]);
   });
   it('a digit answers a question at once', () => {

@@ -66,7 +66,7 @@ describe('conptyPanes', () => {
     const writes: Array<{ at: number; data: string }> = [];
     const fake = (() => ({ pid: 1, onData: () => {}, onExit: () => {}, write: (data: string) => { writes.push({ at: Date.now(), data }); }, kill: () => {} })) as unknown as Parameters<typeof conptyPanes>[0] extends infer O ? O extends { spawn?: infer F } ? F : never : never;
     const p = conptyPanes({ spawn: fake });
-    await p.newSession({ name: 'w', cwd: tmpdir(), env: {}, command: ['x'] });
+    await p.newSession({ name: 'w', cwd: tmpdir(), env: {}, command: [node] });
     const text = 'é'.repeat(600);
     await p.sendText('w', text);
     expect(writes.map(w => w.data.length)).toEqual([256, 256, 88]);
