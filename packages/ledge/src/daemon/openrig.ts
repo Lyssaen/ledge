@@ -33,6 +33,14 @@ const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const int = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
 const parse = (text: string): unknown => { try { return JSON.parse(text); } catch { return undefined; } };
 
+/** Where a spec of `rig specs ls` comes from, as the fronts read it: `user` the person's own (OpenRig 0.7.7 says `user_file`),
+ *  `builtin` shipped with OpenRig, any other kind as OpenRig names it. */
+export function specSource(raw: unknown): string {
+  const s = str(raw);
+  if (!s) return 'unknown';
+  return s === 'user' || s.startsWith('user_') ? 'user' : s === 'builtin' || s.startsWith('builtin_') ? 'builtin' : s;
+}
+
 /** One seat of `rig ps --nodes --json`. */
 export function toSeat(raw: unknown): RigSeat | null {
   const n = obj(raw);
@@ -297,7 +305,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       const e = obj(raw), name = str(e.name), path = str(e.resolvedSourcePath) ?? str(e.sourcePath);
       if (e.kind !== 'rig' || !name || !path || name === KERNEL_RIG) continue;
       const text = await files.read(path).catch(() => null);
-      const spec = text === null ? null : readSpec(text, { name, source: str(e.sourceType) ?? 'unknown', path, ...(str(e.summary) ? { summary: str(e.summary)!.trim() } : {}) });
+      const spec = text === null ? null : readSpec(text, { name, source: specSource(e.sourceType), path, ...(str(e.summary) ? { summary: str(e.summary)!.trim() } : {}) });
       if (spec) out.push(spec);
     }
     return { specs: out.sort((a, b) => (a.source === b.source ? a.name.localeCompare(b.name) : a.source === 'user' ? -1 : 1)) };

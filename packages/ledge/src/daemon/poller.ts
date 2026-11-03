@@ -6,6 +6,7 @@ import { adapterFor as defaultAdapterFor, buildPreview, PREVIEW_CAPTURE_LINES } 
 import { log } from '../log.js';
 import { gitInfo as defaultGitInfo } from './git.js';
 import { claudePlan } from './transcript.js';
+import { isOmpSeat } from './omp/seats.js';
 
 export { PREVIEW_LINES } from '../adapters/index.js';
 /** Prompt detection reads the pane's last lines: a dialog with a long diff or many options is taller than 30 lines. */
@@ -92,6 +93,8 @@ export function startPoller(opts: {
       forget(s.id);
       return;
     }
+    // An OMP seat of OpenRig: its pane only says whether it is still there; its state comes from OMP's journal (omp/seats.ts).
+    if (isOmpSeat(s)) return;
     // One capture serves both: the preview reads the whole screen and some scrollback, prompt
     // detection reads only its last DETECT_LINES (what a DETECT_LINES capture would have returned).
     const full = await tmux.capture(s.tmuxSession, PREVIEW_CAPTURE_LINES);

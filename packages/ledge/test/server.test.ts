@@ -2803,6 +2803,35 @@ describe('server: OpenRig seats found by Ledge itself', () => {
   });
 });
 
+describe('server: an OMP seat of OpenRig', () => {
+  it('is followed as an OMP session under its rig, for its state only: nothing typed into its pane, nothing of its screen sent', async () => {
+    const node = { logicalId: 'dev.agent', session: 'dev-agent@dev-omp', runtime: 'omp', model: 'anthropic/claude-sonnet-5-5', sessionStatus: 'running', lifecycleState: 'running', activity: 'unknown', stopped: false, work: 1 };
+    const state = { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, at: '2026-11-03T09:00:00.000Z', rigs: [
+      { id: 'D', name: 'dev-omp', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node] }] };
+    const seatTmux = fakeTmux({ 'dev-agent@dev-omp': ['you ▸ go', '  ⚙ bash …', '  ⚙ bash done'] });
+    const ticks: string[] = [];
+    const srv2 = await startServer({ store, tmux: seatTmux, port: 0, ompSeats: { tick: async () => {}, start: () => { ticks.push('start'); }, stop: () => { ticks.push('stop'); } }, openrig: { row: async () => ({ error: 'not_found' }),
+      async state() { return state; }, async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
+      async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; }, ...NO_ROLES
+    } });
+    const c = await connect({ port: srv2.port });
+    await c.next('snapshot');
+    c.send({ type: 'openrig.status', requestId: 'r' });
+    await c.next('openrig.state');
+    await vi.waitFor(() => expect(store.get('rig-dev-agent-dev-omp')).toMatchObject({ tool: 'omp', source: 'rig', tmuxSession: 'dev-agent@dev-omp', state: 'idle', rig: { seat: 'dev-agent@dev-omp', name: 'dev-omp', role: 'dev.agent' } }));
+    expect(store.get('rig-dev-agent-dev-omp')?.backend).toBeUndefined();
+    c.send({ type: 'session.reply', id: 'rig-dev-agent-dev-omp', text: 'et les tests ?' });
+    expect(await c.next('error')).toMatchObject({ id: 'rig-dev-agent-dev-omp', code: 'read_only' });
+    c.send({ type: 'session.interrupt', id: 'rig-dev-agent-dev-omp' });
+    expect(await c.next('error')).toMatchObject({ id: 'rig-dev-agent-dev-omp', code: 'read_only' });
+    c.send({ type: 'session.kill', id: 'rig-dev-agent-dev-omp' });
+    expect(await c.next('error')).toMatchObject({ code: 'read_only' });
+    expect(seatTmux.sent.filter(x => x[1] === 'dev-agent@dev-omp')).toEqual([]);
+    c.close(); await srv2.close();
+    expect(ticks).toEqual(['start', 'stop']);
+  });
+});
+
 describe('close a session', () => {
   const CLOSE = { freeMs: 200, exitMs: 200 };
   /** A fake terminal whose agent leaves when the exit command is submitted (`leaves`): its pane goes, the poller sees it gone. */

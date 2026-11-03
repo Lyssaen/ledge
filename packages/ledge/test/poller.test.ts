@@ -168,6 +168,19 @@ describe('poller', () => {
     expect(store.get('a')!.archivedAt).toBeDefined();
     p.stop();
   });
+  it('an OMP seat of OpenRig: its screen is never read nor sent, its pane gone is its stop', async () => {
+    const seat = 'dev-agent@dev-omp';
+    panes[seat] = 'you ▸ go\n  ⚙ bash …'; store.upsert(mk('s', { tool: 'omp', source: 'rig', tmuxSession: seat, rig: { seat, name: 'dev-omp' } }));
+    const captured: string[] = []; const tmux = fakeTmux(panes); const capture = tmux.capture.bind(tmux);
+    tmux.capture = async (n, l) => { captured.push(n); return capture(n, l); };
+    const p = startPoller({ store, tmux, intervalMs: 100000, deadCheckMs: 0, now, broadcastPreview: (_id, lines) => { previews.push(lines); } });
+    clock += 1000; await p.tick(); clock += 1000; await p.tick();
+    expect(captured).toEqual([]); expect(previews).toEqual([]);
+    expect(store.get('s')!.state).toBe('working');
+    delete panes[seat]; clock += 1000; await p.tick();
+    expect(store.get('s')!.state).toBe('exited');
+    p.stop();
+  });
   it('archives an exited session after retireMs instead of removing it', async () => {
     const changes: string[] = [];
     store.upsert(mk('a', { state: 'exited', exitCode: 0, exitedAt: now() }));
