@@ -45,6 +45,16 @@ describe('conptyPanes', () => {
     await expect(panes.sendText(s, 'a\nb')).rejects.toThrow(/newlines/);
   });
 
+  it('types a long text whole (one big ConPTY write keeps only its end)', async () => {
+    const s = name();
+    await panes.newSession({ name: s, cwd: tmpdir(), env: process.env as Record<string, string>, command: [node, '-e', "process.stdin.setRawMode(true); let n = 0; process.stdin.on('data', d => { const t = String(d); const i = t.indexOf('\\r'); if (i < 0) n += t.length; else { console.log('\\ncount=' + (n + i)); n = 0; } })"] });
+    await new Promise(r => setTimeout(r, 500));
+    await panes.sendText(s, 'x'.repeat(5000));
+    await panes.sendKeys(s, ['Enter']);
+    await until(async () => /count=\d+/.test((await panes.capture(s, 50)) ?? ''));
+    expect(/count=(\d+)/.exec((await panes.capture(s, 50))!)![1]).toBe('5000');
+  }, 20_000);
+
   it('reports exit', async () => {
     const s = name();
     await panes.newSession({ name: s, cwd: tmpdir(), env: process.env as Record<string, string>, command: [node, '-e', 'process.exit(3)'] });
