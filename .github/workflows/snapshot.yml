@@ -1,9 +1,9 @@
-# A snapshot is a prerelease from ledge-open-rig, independent of the v* release workflow.
+# A snapshot is a prerelease from the snapshot branch, independent of the v* release workflow.
 name: Snapshot
 
 on:
   push:
-    branches: [ledge-open-rig]
+    branches: [snapshot]
   workflow_dispatch:
 
 permissions:
