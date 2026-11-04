@@ -55,7 +55,15 @@ export const copy = {
       /** A decision a session put to the user: answered in the chat, through the card Ledge proposes. */
       decision: 'Décision', asks: 'te demande', answer: 'Répondre', answerLabel: (title: string) => `Répondre à « ${title} »`,
       someone: 'Une session',
-      answerDraft: (title: string, id: string, name: string) => `Réponse à la décision « ${title} » (${id}) de ${name} : `
+      answerDraft: (title: string, id: string, name: string) => `Réponse à la décision « ${title} » (${id}) de ${name} : `,
+      /** A proposal about the notes (docs/mockups/ledge-brain-notes.html, part 2): answered here, a « yes » with the device's check. */
+      note: {
+        tag: 'Note', add: (note: string) => `propose d’ajouter à la note ${note}`, create: (note: string) => `propose une nouvelle note ${note}`,
+        flag: (note: string) => `signale la note ${note} comme fausse ou périmée`, source: (s: string) => `Source : ${s}`,
+        yes: 'Ajouter', edit: 'Modifier', no: 'Refuser', mark: 'Marquer à revoir', ignore: 'Ignorer', createYes: 'Créer la note', editYes: 'Ajouter ce texte', cancel: 'Annuler',
+        field: 'Le texte ajouté sous « Ajouts »', titleField: 'Titre', whenField: 'Quand la lire',
+        failed: 'Pas envoyé : réessayez.', confirmRequired: 'Protégez d’abord vos accords depuis Connexion : ajouter demande la passkey de cet appareil.', cancelled: 'Vérification annulée. Rien n’a été écrit.', expired: 'La vérification a expiré. Recommencez.', stale: 'Déjà traitée ailleurs.'
+      }
     },
     task: {
       label: 'Tâche à confier', give: 'Confier',
@@ -116,7 +124,7 @@ export const copy = {
       verbs: {
         'session.model': 'Changer', 'session.interrupt': 'Interrompre', 'session.archive': 'Archiver', 'session.restore': 'Restaurer', 'session.resume': 'Reprendre',
         'session.decide': 'Accepter',
-        'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre'
+        'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre', 'note.add': 'Ajouter'
       } as Record<string, string>,
       apply: 'Appliquer', deny: 'Refuser', ignore: 'Ignorer', review: 'Revoir', retry: 'Réessayer', running: 'En cours…',
       done: (at: string) => `Appliquée${at ? ` · ${at}` : ''}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé${at ? ` · ${at}` : ''}`,

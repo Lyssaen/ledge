@@ -16,6 +16,8 @@ import { SlashCommandSchema } from './commands.js';
 import { HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema } from './openrig.js';
 import { QitemIdSchema, RigRowSchema } from './rigMessages.js';
 import { ProjectColorSchema, ProjectIdSchema } from './projects.js';
+import { BrainChoiceSchema } from './tasks.js';
+import { BrainProposalSchema } from './tasks.js';
 
 /** A queue row's state on the phone (docs/mockups/ledge-openrig-messages.html, decision 2): the PC's own, its summary shortened. */
 export const PHONE_ROW_SUMMARY_MAX = 200;
@@ -179,7 +181,7 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 /** `pc`: updating or restarting the PC's daemon (spec 2026-10-28 mobile daemon update). */
 /** `terminal`: taking the hand on a session's terminal (spec 2026-11-02 mobile terminal), bound to the session. */
 /** `rig`: an answer to what OpenRig asks the person (« À toi », lot 3), bound to the row and to that very answer. */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig']);
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -233,7 +235,9 @@ export const PhoneTaskSchema = z.object({
   /** Who gave it: `ledge` for Ledge's own; a session for a decision it put to the user (owner `ledge`), with its detail (the options). */
   giver: z.string().max(100).optional(), giverName: z.string().max(80).optional(), text: z.string().max(TOOL_TEXT_MAX).optional(),
   state: z.enum(['open', 'taken', 'done', 'refused', 'dropped']), result: z.string().max(TOOL_TEXT_MAX).optional(), cut: z.literal(true).optional(),
-  at: z.string(), updatedAt: z.string(), seen: z.literal(true).optional()
+  at: z.string(), updatedAt: z.string(), seen: z.literal(true).optional(),
+  /** A proposal about the user's notes (brain spec §3.6): the phone answers it with its buttons (`brain.answer`). */
+  brain: BrainProposalSchema.optional()
 }).strict();
 export type PhoneTask = z.infer<typeof PhoneTaskSchema>;
 
@@ -303,7 +307,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
    */
   z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional(),
     /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional(),
-    /** A `rig` challenge: the OpenRig row and the exact answer it covers. */ qitem: z.string().min(1).max(200).optional(), answer: HumanAnswerSchema.optional() }),
+    /** A `rig` challenge: the OpenRig row and the exact answer it covers. */ qitem: z.string().min(1).max(200).optional(), answer: HumanAnswerSchema.optional(),
+    /** A `note` challenge: the proposal (a task) and the exact choice it covers. */ task: z.string().min(1).max(40).optional(), choice: BrainChoiceSchema.optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -369,6 +374,9 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     deny: z.literal(true).optional() }),
   /** « Ignorer » the turn's cards, or `undo` (« Revoir »), as the local `chat.ignore`. */
   z.object({ type: z.literal('chat.ignore'), op: OperationIdSchema, qid: OperationIdSchema, undo: z.literal(true).optional() }),
+  /** The user's answer to a proposal about the notes (brain spec, lot 4): a `yes` carries an assertion of purpose `note` bound to the
+   *  task and that exact choice; a `no` needs none. */
+  z.object({ type: z.literal('brain.answer'), op: OperationIdSchema, task: z.string().min(1).max(40), choice: BrainChoiceSchema, assertion: AssertionSchema.optional() }),
   /** Puts a closed task Ledge gave away from « À traiter ». */
   z.object({ type: z.literal('task.seen'), op: OperationIdSchema, task: z.string().min(1).max(40) }),
   /** Streams a session's pane, read-only; answered by `term.opened` or `operation.result` (rejected). */

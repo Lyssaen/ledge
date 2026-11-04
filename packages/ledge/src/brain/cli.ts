@@ -5,16 +5,25 @@ import { BrainProposalSchema, LEDGE_GIVER, type BrainProposal } from '@ledge/pro
 import { connect, type Client } from '../client.js';
 import { CODEX_HOOK_VAR } from '../spawn.js';
 
-export const BRAIN_WRITE_USAGE = `ledge brain propose <nom|new:<nom>> "<fait>" ["<comment tu le sais>"]   proposer un fait durable pour une note (l'utilisateur valide)
+export const BRAIN_WRITE_USAGE = `ledge brain propose <nom|new:<nom>> "<fait>" ["<comment tu le sais>"] [--title "<titre>"] [--when "<quand la lire>"]
+                                                                           proposer un fait durable pour une note (l'utilisateur valide ; --title et --when : une nouvelle note)
 ledge brain flag <nom> "<ce qui ne va pas>"                                signaler une note fausse ou périmée (l'utilisateur valide)`;
 const BRAIN_MS = 4000;
 
 /** The proposal `ledge brain propose|flag …` makes, or a usage line. */
-export function brainWriteArgs(args: string[]): BrainProposal | string {
+export function brainWriteArgs(all: string[]): BrainProposal | string {
+  const flags: Record<string, string> = {}; const args: string[] = [];
+  for (let i = 0; i < all.length; i++) {
+    const a = all[i]!;
+    if (a === '--title' || a === '--when') { const v = all[++i]; if (v === undefined || flags[a.slice(2)] !== undefined) return BRAIN_WRITE_USAGE; flags[a.slice(2)] = v; }
+    else args.push(a);
+  }
   const [op, target, fact, source, ...rest] = args;
+  if ((flags.title !== undefined || flags.when !== undefined) && !(op === 'propose' && target?.startsWith('new:'))) return `refusé : --title et --when sont pour une nouvelle note (new:<nom>)\n${BRAIN_WRITE_USAGE}`;
   if ((op !== 'propose' && op !== 'flag') || !target || !fact || rest.length || (op === 'flag' && source !== undefined)) return BRAIN_WRITE_USAGE;
   const create = target.startsWith('new:');
-  const p = BrainProposalSchema.safeParse({ kind: op === 'propose' ? 'add' : 'flag', note: create ? target.slice(4) : target, ...(create ? { create: true } : {}), fact, ...(source?.trim() ? { source } : {}) });
+  const p = BrainProposalSchema.safeParse({ kind: op === 'propose' ? 'add' : 'flag', note: create ? target.slice(4) : target, ...(create ? { create: true } : {}), fact, ...(source?.trim() ? { source } : {}),
+    ...(flags.title?.trim() ? { title: flags.title } : {}), ...(flags.when?.trim() ? { when: flags.when } : {}) });
   if (!p.success) return `refusé : ${p.error.issues[0]?.path.join('.') === 'note' ? 'un nom de note en lettres, chiffres, « . », « _ » et « - »' : 'un fait de 500 caractères au plus, une source de 300'}\n${BRAIN_WRITE_USAGE}`;
   return p.data;
 }

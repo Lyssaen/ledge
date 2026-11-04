@@ -37,7 +37,8 @@ const fr: ActionWords = {
     'session.decide': v => need(v, ['session', 'decision', 'kind'], w => `${w.decision === 'deny' ? 'Refuser' : 'Accepter'} la demande de ${w.kind} de ${b(w.session)}${v.note ? ', avec une note' : ''}`),
     'task.cancel': v => need(v, ['task', 'owner'], w => `Annuler la tâche « ${short(w.task)} » de ${b(w.owner)}`),
     'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Passer la tâche « ${short(w.task)} » de ${b(w.owner)} à ${b(w.session)}`),
-    'task.answer': v => need(v, ['task', 'session'], w => `Répondre à la décision « ${short(w.task)} » de ${b(w.session)}`)
+    'task.answer': v => need(v, ['task', 'session'], w => `Répondre à la décision « ${short(w.task)} » de ${b(w.session)}`),
+    'note.add': v => need(v, ['note'], w => `Ajouter à la note ${b(w.note)}`)
   },
   why: (code, action, v) => {
     const s = v.session ? b(v.session) : undefined, k = v.task ? `« ${short(v.task)} »` : undefined;
@@ -78,7 +79,8 @@ const en: ActionWords = {
     'session.decide': v => need(v, ['session', 'decision', 'kind'], w => `${w.decision === 'deny' ? 'Deny' : 'Accept'} ${b(w.session)}’s ${w.kind} request${v.note ? ', with a note' : ''}`),
     'task.cancel': v => need(v, ['task', 'owner'], w => `Cancel ${b(w.owner)}’s task “${short(w.task)}”`),
     'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Pass ${b(w.owner)}’s task “${short(w.task)}” to ${b(w.session)}`),
-    'task.answer': v => need(v, ['task', 'session'], w => `Answer ${b(w.session)}’s decision “${short(w.task)}”`)
+    'task.answer': v => need(v, ['task', 'session'], w => `Answer ${b(w.session)}’s decision “${short(w.task)}”`),
+    'note.add': v => need(v, ['note'], w => `Add to the note ${b(w.note)}`)
   },
   why: (code, action, v) => {
     const s = v.session ? b(v.session) : undefined, k = v.task ? `“${short(v.task)}”` : undefined;

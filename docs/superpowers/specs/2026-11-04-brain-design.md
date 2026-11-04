@@ -186,7 +186,11 @@ only the user does.
   flag lifecycle, notice to the session.
 - **Lot 3 — freshness**: §3.7 and the Settings list. The index part is built on `feat/brain-lot3` (2026-11-04): « ancienne
   (N jours) » in the sessions' index, « OLD » in the chat's. The Settings list moves to lot 4.
-- **Lot 4 — the screens**, after the user approves the mockup (`docs/mockups/ledge-brain-notes.html`): proposal and flag
+- **Lot 4 — the screens**, approved by the user on 2026-11-04 and built on `feat/brain-lot4` (`brain.answer`, `brain.list`,
+  `brain.note`, `brain.add` for the local fronts; the phone's `brain.answer` with a passkey of purpose `note` bound to the
+  task and the exact choice; the registry's `note.add`). Two differences from the mockup: « Modifier » on the phone edits in
+  the card instead of a sheet, and « Ouvrir le dossier » opens a terminal in the folder (the desktop has no file manager
+  bridge into WSL). The mockup (`docs/mockups/ledge-brain-notes.html`): proposal and flag
   buttons in « À toi » on the desktop and the phone, Réglages › Notes (read-only, « Vérifiée aujourd'hui » and « Effacer le
   signalement » as the only writes), and the chat's `note.add` card for « retiens que… ».
 

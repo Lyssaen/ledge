@@ -43,7 +43,7 @@ export function brainContext(notes: readonly Note[]): string {
       ...(notes.length > shown.length ? [`- et ${notes.length - shown.length} autre(s) : \`ledge brain\``] : [])
     );
   }
-  lines.push("Tu apprends un fait durable sur l'environnement (pas sur le code) : `ledge brain propose <nom> \"<fait>\" \"<comment tu le sais>\"` (`new:<nom>` pour une nouvelle note) ; une note te semble fausse : `ledge brain flag <nom> \"<ce qui ne va pas>\"`. Jamais la valeur d'un secret. L'utilisateur valide avant que rien ne s'écrive.");
+  lines.push("Tu apprends un fait durable sur l'environnement (pas sur le code) : `ledge brain propose <nom> \"<fait>\" \"<comment tu le sais>\"` (`new:<nom>` pour une nouvelle note, avec `--title \"<titre>\" --when \"<quand la lire>\"`) ; une note te semble fausse : `ledge brain flag <nom> \"<ce qui ne va pas>\"`. Jamais la valeur d'un secret. L'utilisateur valide avant que rien ne s'écrive.");
   return lines.join('\n');
 }
 

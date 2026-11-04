@@ -18,6 +18,7 @@ import { Sounds } from './Sounds';
 import { Machines } from './Machines';
 import { Mobile, mobileAsks, mobileDown, PHONE } from './Mobile';
 import { Projects } from './Projects';
+import { Notes } from './Notes';
 import { Shortcuts } from './Shortcuts';
 import { About } from './About';
 import { shownOf } from './machineDrafts';
@@ -60,6 +61,7 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   machines: ['M3 4h18v12H3z', 'M12 16v4', 'M8 20h8'],
   mobile: PHONE,
   projects: ICONS.folder.d,
+  notes: ['M6 3h9l3 3v15H6z', 'M9 9h6', 'M9 13h6', 'M9 17h4'],
   shortcuts: ['M2 6h20v12H2z', 'M6 10h.01', 'M10 10h.01', 'M14 10h.01', 'M18 10h.01', 'M7 14h10'],
   about: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 16v-4', 'M12 8h.01']
 };
@@ -74,6 +76,7 @@ function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContex
   if (section === 'machines') return <Machines ctx={ctx} />;
   if (section === 'mobile') return <Mobile ctx={ctx} />;
   if (section === 'projects') return <Projects ctx={ctx} />;
+  if (section === 'notes') return <Notes ctx={ctx} />;
   if (section === 'shortcuts') return <Shortcuts ctx={ctx} />;
   return <About ctx={ctx} />;
 }

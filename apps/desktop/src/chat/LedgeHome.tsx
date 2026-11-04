@@ -20,6 +20,7 @@ import { attentionOf, quickDecide } from '../shell/sidebar/model';
 import { useDefaultTool } from '../settings/tool';
 import { HOME_TABS, type HomeTab, type NavAction } from '../nav/state';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../tasks/useTasksApi';
+import { NoteDecision } from '../tasks/NoteDecision';
 import { DecisionAnswer } from '../tasks/DecisionAnswer';
 import type { Wait } from '../list/time';
 import { useAgentHighlight } from './useAgentHighlight';
@@ -108,7 +109,7 @@ export function LePoint({ view, api, decisions, waits, dispatch, onAsk, onShowTa
               </> : <button type="button" className="st-qa" onClick={() => dispatch({ type: 'open', id: item.session.id, ...(item.helper ? { helper: item.helper.id } : {}), ...(item.kind === 'question' ? { focus: 'reply' as const } : {}) })}>{p.see}</button>}
             </div>
           ))}
-          {asked.map(x => (
+          {asked.map(x => x.brain ? <NoteDecision key={x.id} task={{ ...x, brain: x.brain }} api={api} /> : (
             <div key={x.id} className="lp-decision" data-decision={x.id}>
               <div className="lp-row">
                 <span className="lp-mark lp-asked" aria-hidden>?</span>
@@ -194,7 +195,8 @@ function TasksTab({ api, shown, onShow }: { api: TasksApi; shown: string | null;
           <p className="lp-none">{c.from(detail.giverName, detail.ownerName)} · {t.chat.task.state[detail.state]}</p>
           {detail.text && <p className="home-task-text">{detail.text}</p>}
           {detail.result && <p><strong>{detail.state === 'done' ? c.result : c.reason} :</strong> {detail.result}</p>}
-          {openDecision(detail) && (answering === detail.id
+          {openDecision(detail) && detail.brain && <NoteDecision task={{ ...detail, brain: detail.brain }} api={api} />}
+          {openDecision(detail) && !detail.brain && (answering === detail.id
             ? <DecisionAnswer task={detail} api={api} onClose={() => setAnswering(null)} />
             : <Button variant="primary" size="sm" onClick={() => setAnswering(detail.id)}>{t.decision.answer}</Button>)}
           <h4>{c.log}</h4>

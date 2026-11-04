@@ -10,6 +10,7 @@ export * from './projects.js';
 export * from './broadcast.js';
 export * from './messages.js';
 export * from './tasks.js';
+export * from './brain.js';
 export * from './names.js';
 export * from './proposal.js';
 export * from './repos.js';

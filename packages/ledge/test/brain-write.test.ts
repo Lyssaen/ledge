@@ -28,8 +28,8 @@ describe('the answer', () => {
   });
   it('the decision says what « oui » writes, as two ready answers', () => {
     const t = proposalTask(add('machines', 'Le Pi a 1 Go de RAM', { source: 'free -h sur le Pi' }));
-    expect(t.title).toBe('Note machines : ajouter ce fait ? (oui, non, ou « oui : ton texte »)');
-    expect(t.text.split('\n')).toEqual(['oui — ajouter à la note machines : « Le Pi a 1 Go de RAM » (source : free -h sur le Pi)', 'non — ne rien écrire']);
+    expect(t.title).toBe('Note machines : ajouter ce fait ?');
+    expect(t.text.split('\n')).toEqual(['oui — ajouter à la note machines : « Le Pi a 1 Go de RAM » (source : free -h sur le Pi)', 'non — ne rien écrire', 'oui : <ton texte> — écrire ton texte à la place']);
     expect(proposalTask({ kind: 'flag', note: 'reseau', fact: 'la box a changé' }).text).toBe('oui — marquer la note reseau « à revoir » : la box a changé\nnon — ne rien marquer');
   });
 });
@@ -68,7 +68,7 @@ describe('applyProposal', () => {
   });
   it('creates a new note, never over one that appeared meanwhile', () => {
     expect(applyProposal(add('bots', 'Les bots tournent sur la tablette', { create: true }), 'oui', 'Pim', T0, from)).toBe('note bots créée avec : Les bots tournent sur la tablette');
-    expect(readFileSync(join(from, 'bots.md'), 'utf8')).toContain('title: bots\nwhen: (à compléter)\n---\n\n## Ajouts\n\n- Les bots tournent sur la tablette (proposé par Pim');
+    expect(readFileSync(join(from, 'bots.md'), 'utf8')).toContain('title: "bots"\nwhen: "(à compléter)"\n---\n\n## Ajouts\n\n- Les bots tournent sur la tablette (proposé par Pim');
     expect(applyProposal(add('bots', 'autre', { create: true }), 'oui', 'Pim', T0, from)).toContain('ajouté à la note bots');
   });
   it('a flag shows « à revoir » in both indexes until the user edits the note; Ledge\'s own additions do not clear it', async () => {
@@ -93,6 +93,8 @@ describe('ledge brain propose / flag: the command', () => {
   it('reads its arguments, new:<nom> for a new note', () => {
     expect(brainWriteArgs(['propose', 'machines', 'Le Pi a 1 Go', 'free -h'])).toEqual({ kind: 'add', note: 'machines', fact: 'Le Pi a 1 Go', source: 'free -h' });
     expect(brainWriteArgs(['propose', 'new:bots', 'x'])).toEqual({ kind: 'add', note: 'bots', create: true, fact: 'x' });
+    expect(brainWriteArgs(['propose', 'new:bots', 'x', '--title', 'Les bots', '--when', 'un bot'])).toEqual({ kind: 'add', note: 'bots', create: true, fact: 'x', title: 'Les bots', when: 'un bot' });
+    expect(brainWriteArgs(['propose', 'machines', 'x', '--title', 'T'])).toContain('nouvelle note');
     expect(brainWriteArgs(['flag', 'reseau', 'la box a changé'])).toEqual({ kind: 'flag', note: 'reseau', fact: 'la box a changé' });
     expect(brainWriteArgs(['flag', 'reseau', 'x', 'y'])).toContain('ledge brain flag');
     expect(brainWriteArgs(['propose', '../etc', 'x'])).toContain('nom de note');
@@ -128,7 +130,7 @@ describe('a proposal through the daemon', () => {
     expect((await c.next('task.result', 3000)).reason).toContain('ne connaît pas la note « nope »');
     c.send({ type: 'task.cmd', rid: 'p2', by: ann, op: 'give', to: 'ledge', brain: { kind: 'add', note: 'machines', fact: 'Le Pi a 1 Go de RAM', source: 'free -h' } });
     const d = (await c.next('task.result', 3000)).task!;
-    expect(d).toMatchObject({ owner: 'ledge', title: 'Note machines : ajouter ce fait ? (oui, non, ou « oui : ton texte »)', brain: { note: 'machines' } });
+    expect(d).toMatchObject({ owner: 'ledge', title: 'Note machines : ajouter ce fait ?', brain: { note: 'machines' } });
     expect(readFileSync(join(from, 'machines.md'), 'utf8')).toBe('# Machines\n');
     c.send({ type: 'action.run', rid: 'a1', action: 'task.answer', args: { task: d.id, answer: 'oui' }, confirmed: true } as never);
     expect((await c.next('action.result', 5000)).reason).toBeUndefined();

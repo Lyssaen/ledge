@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, taskClosed, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
+import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, taskClosed, type BrainChoice, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type DecidedBy, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -53,7 +53,7 @@ import type { ChatMessage } from '../chat/service.js';
 import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
 import { createMailbox, type MailboxDeps, type MailJournal } from './mailbox.js';
 import { broadcastFromSession, broadcastFromUser } from './broadcast.js';
-import { applyProposal, checkProposal } from '../brain/write.js';
+import { addFromUser, applyProposal, checkProposal, clearFlag, markChecked, noteInfos } from '../brain/write.js';
 import { notesDir } from '../brain/notes.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createHandovers, heldNames } from './handover.js';
@@ -1006,6 +1006,13 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const LEDGE_READS: ReadonlySet<Extract<ClientMessage, { type: 'task.cmd' }>['op']> = new Set(['list', 'show', 'seen']);
   /** A resolved row through the daemon's own handler: its failure is the handler's `error`, or the reason its `task.result`
    *  carries. Ledge's own task commands go straight to the tasks: `by: 'ledge'` is never taken from a client (handle refuses it). */
+  /** A proposal about the notes answered with its buttons (desktop, phone): closed by Ledge, written by the tasks' brain hook. */
+  function answerProposal(task: string, choice: BrainChoice, rid: string): { reason?: string; result?: string } {
+    const t = tasks.all().find(x => x.id === task);
+    if (!t || !t.brain || t.owner !== LEDGE_GIVER) return { reason: `aucune proposition de note ${task}` };
+    const r = tasks.run({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'done', task, text: choice.yes ? 'oui' : 'non', choice });
+    return r.reason !== undefined ? { reason: r.reason } : { ...(r.task?.result ? { result: r.task.result } : {}) };
+  }
   async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string, by?: DecidedBy): Promise<{ failure?: string }> {
     const made = actionMessage(row, rid);
     // A request answered from a device's card is that device's decision (`by`, the gateway's); from the PC's, none: the PC.
@@ -1015,6 +1022,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     await handle(out, m => {
       if (m.type === 'error') failure ??= m.message;
       else if (m.type === 'task.result' && m.reason) failure ??= m.reason;
+      else if (m.type === 'brain.result' && m.reason) failure ??= m.reason;
     });
     return failure !== undefined ? { failure } : {};
   }
@@ -1458,6 +1466,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           if (why) return reply({ type: 'task.result', rid: msg.rid, reason: why });
         }
         return reply(tasks.run(msg));
+      }
+      // The brain's screens (lot 4): a proposal's buttons, Réglages › Notes and its two writes.
+      case 'brain.answer': {
+        const r = answerProposal(msg.task, msg.choice, msg.rid);
+        return reply({ type: 'brain.result', rid: msg.rid, ...r });
+      }
+      case 'brain.add': return reply({ type: 'brain.result', rid: msg.rid, ...addFromUser(msg.note, msg.fact, now(), notesDir(), msg.source) });
+      case 'brain.list': return reply({ type: 'brain.result', rid: msg.rid, dir: notesDir(), notes: await noteInfos(notesDir()) });
+      case 'brain.note': {
+        const reason = msg.op === 'checked' ? markChecked(msg.note, now().slice(0, 10), notesDir()) : clearFlag(msg.note, notesDir());
+        return reply({ type: 'brain.result', rid: msg.rid, ...(reason ? { reason } : {}), dir: notesDir(), notes: await noteInfos(notesDir()) });
       }
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
       case 'session.relay': return setAside(msg.qid) ? refuse(SET_ASIDE) : relay.request(msg.qid);

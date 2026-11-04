@@ -300,3 +300,16 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .set-well.pair-result{margin:0;font-size:13px;line-height:20px}
 .set-well.pair-result>svg{margin-top:2px}
 .device-rename .set-input{flex:1;min-width:180px;max-width:280px}
+/* Settings › Notes (docs/mockups/ledge-brain-notes.html, part 3). */
+.notes-state{margin:0;padding:10px 0}
+.note-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;padding:12px 0;border-top:1px solid var(--border);min-width:0}
+.note-main{display:flex;flex-direction:column;gap:4px;min-width:0}
+.note-name{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);font-weight:400}
+.note-chips{display:flex;flex-wrap:wrap;gap:6px}
+.note-scope{color:var(--sidebar-primary)}
+.note-old{color:var(--warning)}
+.note-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.note-flag{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius-sm);background:color-mix(in srgb,var(--warning) 12%,transparent);font-size:12px;min-width:0}
+.note-flag strong{color:var(--warning)}
+.note-flag>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.note-text{grid-column:1/-1;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--well);max-height:420px;overflow:auto;font-size:13px}

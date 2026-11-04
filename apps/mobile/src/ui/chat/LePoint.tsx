@@ -8,6 +8,7 @@ import type { MobileStore } from '../../state/store';
 import { useNow } from '../../useNow';
 import { buttonClass } from '../Button';
 import { Tag } from '../Tag';
+import { NoteProposal } from './NoteProposal';
 
 const SMALL = buttonClass({ size: 'sm', className: 'min-w-[64px] flex-none' });
 const YES = buttonClass({ variant: 'primary', size: 'sm', className: 'min-w-[64px] flex-none' });
@@ -74,7 +75,7 @@ export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = C
               </div>
             );
           })}
-          {decisions.map(t => (
+          {decisions.map(t => t.brain ? <NoteProposal key={`decision:${t.id}`} task={{ ...t, brain: t.brain }} store={store} fresh={fresh} /> : (
             <div key={`decision:${t.id}`} className="flex items-start gap-2">
               <span className="mt-2 flex"><Dot tone="attention" /></span>
               <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-body">

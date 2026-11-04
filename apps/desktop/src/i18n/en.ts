@@ -271,7 +271,7 @@ export const en: Messages = {
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
-  sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', notes: 'Notes', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
@@ -284,6 +284,7 @@ export const en: Messages = {
       machines: 'This machine and your SSH servers. One list for the notch and Ledge Desktop.',
       mobile: 'Drive your agents from your phone, through the relay server. The content is end-to-end encrypted: the server can neither read nor change it.',
       projects: 'Projects, repositories and remembered folders.',
+      notes: 'What Ledge knows of your environment: your notes, for the chat and the sessions.',
       shortcuts: 'In the app, and anywhere in Windows.',
       about: 'Versions and updates.'
     },
@@ -517,6 +518,18 @@ export const en: Messages = {
       title: 'In Ledge Desktop',
       note: 'Y and N act only on the pinned request of the open session, never while typing.'
     },
+    notes: {
+      title: 'Notes', intro: 'The chat reads them at every question. A session Ledge launched gets the index of its project’s notes and reads one with `ledge brain <name>`.',
+      count: (n: number) => (n === 1 ? '1 note' : `${n} notes`), openFolder: 'Open the folder', openFolderHint: 'A terminal opens in the notes folder.',
+      loading: 'Reading the notes…', failed: 'Ledge could not read the notes.', none: 'No notes. Add Markdown files to this folder, with a `title` and `when` header if you like.',
+      when: (w: string) => `When to read it: ${w}`, firstLine: (l: string) => `First line: ${l}`,
+      scope: { all: 'Chat and sessions', chat: 'Chat only', sessions: 'Sessions only' } as Record<'all' | 'chat' | 'sessions', string>,
+      allProjects: 'Every project', projects: (list: string) => `Projects: ${list}`,
+      checked: (d: string) => `checked ${d}`, modified: (d: string) => `modified ${d}`, old: 'old', additions: (n: number) => (n === 1 ? '1 addition' : `${n} additions`), truncated: 'long: only its start is read',
+      open: 'Open', close: 'Close', checkToday: 'Checked today', flagged: 'To check', flagBy: (by: string, d: string) => `${by}, ${d}`, unflag: 'Clear the flag',
+      readFailed: 'Ledge could not read this note.', footer: '“Chat only”, the projects and the date are set in the note’s header (`scope`, `projects`, `checked`). A note becomes “old” after 60 days without a check or a change.',
+      done: { checked: (name: string) => `${name}: checked today`, unflag: (name: string) => `${name}: flag cleared` }
+    },
     about: {
       tagline: 'A new way of working with your agents. The notch and Ledge Desktop, one application.',
       versions: 'Versions', app: 'Ledge Desktop', daemon: (label) => `Daemon · ${label}`,
@@ -660,7 +673,13 @@ export const en: Messages = {
     send: 'Send the answer', cancel: 'Cancel',
     review: (giver: string) => `Your answer to ${giver}, as it will go. An answer cannot be taken back.`, confirm: 'Confirm and send', edit: 'Edit', sending: 'Sending…',
     failed: (reason: string) => `Answer refused: ${reason}`,
-    silent: 'Ledge did not confirm the answer. Check the task before trying again.'
+    silent: 'Ledge did not confirm the answer. Check the task before trying again.',
+    note: {
+      add: (giver: string, note: string) => `${giver} suggests adding to the note ${note}`, create: (giver: string, note: string) => `${giver} suggests a new note ${note}`,
+      flag: (giver: string, note: string) => `${giver} flags the note ${note} as wrong or out of date`, source: (s: string) => `Source: ${s}`,
+      yes: 'Add', edit: 'Edit', no: 'Refuse', mark: 'Mark to check', ignore: 'Ignore', createYes: 'Create the note', editYes: 'Add this text', cancel: 'Cancel',
+      field: 'The text added under “Ajouts”', titleField: 'Title', whenField: 'When to read it', sending: 'Sending…', failed: (reason: string) => `Refused: ${reason}`
+    }
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · context ${pct} %`, nearHint: 'near its limit', failedShort: (name: string) => `Relief of ${name} failed`, retry: 'Retry',

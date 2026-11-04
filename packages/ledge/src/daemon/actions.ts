@@ -2,6 +2,7 @@
 // the message the daemon already handles that applies it. The chat's generic card and, in #93, the CLI share it.
 import { backendOf, isArchived, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type Session, type Task } from '@ledge/protocol';
 import { isOmpSeat } from './omp/seats.js';
+import { noteName } from '../brain/write.js';
 
 export interface ResolveCtx {
   sessions: readonly Session[]; tasks: readonly Task[];
@@ -105,6 +106,12 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
     return row('task.answer', { task: t.id, answer }, `Répondre à la décision « ${title(t)} » de ${b(t.giverName)}`,
       { task: t.title, session: t.giverName, answer }, { session: t.giver, ...detailOf(answer) });
   },
+  'note.add': a => {
+    const note = noteName(String(a.note));
+    if (!note) return no('unknown', `unknown note ${String(a.note)}`);
+    const fact = String(a.fact);
+    return row('note.add', { note, fact, ...(a.source ? { source: String(a.source) } : {}) }, `Ajouter à la note ${b(note)}`, { note, fact }, detailOf(fact));
+  },
   'task.pass': (a, ctx) => {
     const t = taskOf(String(a.task), ctx);
     if (isRefusal(t)) return t;
@@ -173,6 +180,7 @@ export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: strin
     }
     case 'task.cancel': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'cancel', task: String(a.task), ...(a.reason ? { text: String(a.reason) } : {}) };
     case 'task.answer': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'done', task: String(a.task), text: String(a.answer) };
+    case 'note.add': return { type: 'brain.add', rid, note: String(a.note), fact: String(a.fact), ...(a.source ? { source: String(a.source) } : {}) };
     case 'task.pass': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'pass', task: String(a.task), to: String(a.to), ...(a.note ? { text: String(a.note) } : {}) };
     default: throw new Error(`${r.action} is not a generic action`);
   }

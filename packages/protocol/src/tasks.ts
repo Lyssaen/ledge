@@ -32,9 +32,26 @@ export const NoteNameSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,59}
  *  a note as to be checked. Nothing is written before the user answers « oui ». */
 export const BrainProposalSchema = z.object({
   kind: z.enum(['add', 'flag']), note: NoteNameSchema, create: z.boolean().optional(),
-  fact: z.string().trim().min(1).max(BRAIN_FACT_MAX), source: z.string().trim().min(1).max(BRAIN_SOURCE_MAX).optional()
+  fact: z.string().trim().min(1).max(BRAIN_FACT_MAX), source: z.string().trim().min(1).max(BRAIN_SOURCE_MAX).optional(),
+  /** A new note's title and « quand la lire », as the session proposes them (the user may correct them). */
+  title: z.string().trim().min(1).max(200).optional(), when: z.string().trim().min(1).max(300).optional()
 });
 export type BrainProposal = z.infer<typeof BrainProposalSchema>;
+
+/** A note's title and « quand la lire » as the user may correct them on a new note's card (brain spec §3.6, mockup lot 4). */
+export const NOTE_TITLE_MAX = 200;
+export const NOTE_WHEN_MAX = 300;
+const oneLineOf = (max: number) => z.string().trim().min(1).max(max).refine(s => !/[\r\n]/.test(s), 'one line');
+
+/**
+ * The user's answer to a proposal about the notes, from a button (docs/mockups/ledge-brain-notes.html): `yes` writes (« Ajouter »,
+ * « Marquer à revoir », « Créer la note »), `no` writes nothing (« Refuser », « Ignorer »). `text` replaces the proposed fact
+ * (« Modifier »); `title` and `when` a new note's.
+ */
+export const BrainChoiceSchema = z.object({
+  yes: z.boolean(), text: oneLineOf(BRAIN_FACT_MAX).optional(), title: oneLineOf(NOTE_TITLE_MAX).optional(), when: oneLineOf(NOTE_WHEN_MAX).optional()
+}).strict();
+export type BrainChoice = z.infer<typeof BrainChoiceSchema>;
 
 /** A piece of work one session gives another (spec 2026-10-25 session tasks): `giver` and `owner` are session ids,
  *  their names as they were then, or `ledge` for a task the user gave through Ledge (roles spec §3.7); `open` until its owner takes it, closed by `done`, `refused` or `dropped` (the owner
@@ -80,7 +97,9 @@ export const TaskCmdSchema = z.object({
   title: z.string().min(1).max(TASK_TITLE_MAX).optional(), text: z.string().max(TASK_TEXT_MAX).optional(), all: z.boolean().optional(),
   qid: z.string().min(1).optional(), row: z.number().int().min(0).max(7).optional(),
   /** A `give` to `ledge` only: a proposal about the user's notes, whose title and detail the daemon writes. */
-  brain: BrainProposalSchema.optional()
+  brain: BrainProposalSchema.optional(),
+  /** A `done` by Ledge of such a proposal, from its buttons: what to write, instead of reading `text`. */
+  choice: BrainChoiceSchema.optional()
 });
 /** Every change of every task, to every local front (issue #92); a task Ledge gave never has its outcome typed into a terminal (roles spec §3.7). */
 export const TaskUpdatedSchema = z.object({ type: z.literal('task.updated'), task: TaskSchema });
