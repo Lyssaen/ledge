@@ -25,6 +25,8 @@ const DOUBLE_MS = 320, DOUBLE_PX = 30;
 const NO_FRAME = 'button,a,[role=button],.unassigned-card';
 /** The tiles the fit measures. */
 const TILES = '.atelier-room,.unassigned-zone';
+/** Between Ledge's label (« Votre assistant ») and the « Sans projet » frame under it (atelier units). */
+const UNDER_LEDGE = 12;
 
 /** Kept for the page's life (module state): the zoom chosen by hand (null: the fit) and where the floor was scrolled. */
 let kept: { zoom: number | null; left: number; top: number } = { zoom: null, left: 0, top: 0 };
@@ -52,6 +54,10 @@ export function useIpadView(refit: readonly unknown[]): IpadView {
     // Measured in one column first, so a room's own width and height are read whatever the flow.
     s.padding = `${IPAD_PAD.top}px ${IPAD_PAD.side}px ${IPAD_PAD.bottom}px`;
     s.flexWrap = 'wrap'; s.width = 'max-content'; s.maxWidth = 'none'; s.minHeight = ''; s.alignContent = 'flex-start'; s.gap = '0 8px';
+    // Ledge's desk sits over the floor's top padding and runs past it: « Sans projet », when it is the first tile, starts under the
+    // desk's measured bottom (its height follows the fonts), never on its label (--ledge-clear, ipad.css). The rooms' rails start lower.
+    const corner = shell.querySelector<HTMLElement>('.ledge-corner');
+    s.setProperty('--ledge-clear', `${corner ? Math.max(0, corner.offsetTop + corner.offsetHeight + UNDER_LEDGE - IPAD_PAD.top) : 0}px`);
     const rooms = [...shell.querySelectorAll<HTMLElement>(TILES)].map(r => ({ w: r.offsetWidth, h: r.offsetHeight })).filter(r => r.w > 0);
     const { zoom, along } = ipadFit(rooms, view, orient);
     if (along === 'row') { s.flexWrap = 'nowrap'; s.width = 'max-content'; s.justifyContent = 'flex-start'; }

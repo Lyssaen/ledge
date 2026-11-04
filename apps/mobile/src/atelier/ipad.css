@@ -22,6 +22,9 @@
 .atelier-ipad .ledge-btn[data-variant="ghost"] { background: transparent; color: var(--muted-foreground); }
 .atelier-ipad .ledge-btn[data-variant="secondary"] { background: var(--secondary); color: var(--secondary-foreground); border-color: var(--border); }
 .atelier-ipad .ledge-desk:disabled { cursor: default; }
+/* Without a room before it, « Sans projet » is the first tile, right under Ledge's desk: it starts below the desk, whatever the
+   desk's height (useIpadView measures it into --ledge-clear). After the rooms (at the row's end, the column's foot) it keeps its place. */
+.atelier-ipad .overview-scroll.atelier .office-shell .project-grid:empty + .unassigned-zone { margin-top: max(26px, var(--ledge-clear, 0px)); }
 
 /* The zoom bar at touch size (44 pt), the legend beside it; the last known state, its colours dimmed. */
 .atelier-ipad .zoom-controls { right: 16px; bottom: 16px; }

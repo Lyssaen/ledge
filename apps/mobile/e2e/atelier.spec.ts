@@ -143,6 +143,26 @@ for (const theme of ['dark', 'light'] as const) {
   });
 }
 
+test('« Sans projet » alone starts under Ledge\'s desk, never on « Votre assistant », the panel open or not', async ({ page }) => {
+  const loose = ['kit', 'ana', 'rox'].map((id, k) => ({ ...unfiled[0]!, id, name: id[0]!.toUpperCase() + id.slice(1), topic: `Essai ${k + 1}` }));
+  Object.assign(h.daemon, { sessions: loose, projects: [] });
+  const clear = () => page.evaluate(() => {
+    const desk = document.querySelector('.ledge-desk')!.getBoundingClientRect(), zone = document.querySelector('.unassigned-zone')!.getBoundingClientRect();
+    return Math.round(zone.top - desk.bottom);
+  });
+  await pair(page);
+  for (const size of [{ width: 1600, height: 1000 }, LAND, PORT]) {
+    await page.setViewportSize(size);
+    await atelierTab(page).click();
+    await expect(page.locator('.unassigned-zone')).toBeVisible();
+    await expect.poll(clear, `${size.width} × ${size.height}`).toBeGreaterThanOrEqual(8);
+    await page.locator('.unassigned-zone [data-agent="kit"]').click();
+    await expect(panel(page)).toBeVisible();
+    await expect.poll(clear, `${size.width} × ${size.height}, the panel open`).toBeGreaterThanOrEqual(8);
+    await panel(page).getByRole('button', { name: copy.atelier.closePanel }).click();
+  }
+});
+
 test('the cases: an OMP seat, « Sans projet », a double tap, the PC offline', async ({ page, browserName }) => {
   await pair(page);
   await atelierTab(page).click();
