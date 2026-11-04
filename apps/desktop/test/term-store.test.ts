@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PtyBackend, PtyEvents } from '../src/term/backend';
 import type { TermSurface } from '../src/term/surface';
 import { TermStore, agentTabId, changesTabId, type Tab, type TermDeps } from '../src/term/store';
+import type { AgentRoute, AgentStream, StreamEvents } from '../src/term/stream';
 
 type Open = { argv: string[]; on: PtyEvents; closed: boolean; writes: string[]; sizes: [number, number][]; resolve(ok: boolean): void };
 type FakeSurface = TermSurface & { written: (Uint8Array | string)[]; readOnly: boolean; disposed: boolean; type(d: string): void; resized(c: number, r: number): void };
@@ -231,6 +232,24 @@ describe('TermStore tabs and shells', () => {
 });
 
 describe('TermStore agent attachment', () => {
+  it('waits for the machine, then streams the pane and leaves the pseudo-terminal alone', () => {
+    let route: AgentRoute = 'wait';
+    const seen: Array<{ id: string; readOnly: boolean; on: StreamEvents }> = [];
+    const stream: AgentStream = { open: (id, readOnly, _size, on) => { seen.push({ id, readOnly, on }); return { write: () => {}, resize: () => {}, close: () => {} }; } };
+    const st = store({ agentRoute: () => route, stream });
+    st.showAgent('local:a', { kind: 'live' });
+    expect(backend.opens).toHaveLength(0);
+    expect(seen).toHaveLength(0);
+    route = 'stream';
+    st.refreshAgent();
+    expect(backend.opens).toHaveLength(0);
+    expect(seen.map(s => [s.id, s.readOnly])).toEqual([['local:a', false]]);
+    const surface = st.surface(agentTabId('local:a')) as FakeSurface;
+    seen[0]!.on.screen('painted');
+    expect(surface.written).toEqual(['painted']);
+    expect(st.link('local:a')).toEqual({ state: 'attached', attempt: 0 });
+  });
+
   it('the agent tab attaches to the session, with keys going to the agent', async () => {
     const st = store();
     st.showAgent('local:a', { kind: 'live' }); await tick();

@@ -323,6 +323,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     // The agent's browser (docs/mockups/ledge-browser-live.html): its state kept to send again after a snapshot, its frames relayed as they come.
     if (m.type === 'browser.live') { if (m.state === 'none') p.browsers.delete(m.id); else p.browsers.set(m.id, m); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'browser.frame') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
+    // The agent screen (spec 2026-11-04): the same bytes, with the session qualified, from whichever machine runs it.
+    if (m.type === 'term.opened' || m.type === 'term.output' || m.type === 'term.size' || m.type === 'term.exit') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.preview') { p.previews.set(m.id, m.lines); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { if (!closeRows.has(machine)) operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }

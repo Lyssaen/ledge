@@ -60,7 +60,9 @@ import { loadSessionPrefs, saveSessionPrefs, viewShown, type SessionPrefs, type 
 import { subagentOf } from './session/exchanges';
 import { useStored } from './state/useStored';
 import { ptyBackend } from './term/backend';
+import { paintScreen } from './term/paint';
 import { TermStore } from './term/store';
+import { agentRoute, createAgentStream } from './term/stream';
 import { focusAgentView } from './session/agentFocus';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
@@ -85,6 +87,13 @@ function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
       return chunk.createSurface({ theme: rootTermTheme(), onThread, openUrl });
     },
     agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
+    // The harness pane, once the machine says it can stream it. Until the snapshot arrives, nothing attaches.
+    agentRoute: id => {
+      const { sessions, archived } = daemonStore.getState();
+      const s = sessions.find(x => x.id === id) ?? archived.find(x => x.id === id);
+      return agentRoute(s, client.fleet?.machines().find(m => m.id === (s?.machineId ?? 'local')));
+    },
+    stream: createAgentStream(client, paintScreen),
     shellArgv: id => client.fleet?.shell(id) ?? null,
     // A first shell opens where the session works (its worktree, else its folder), over ssh when its machine is reached that way.
     shellPlace: id => {
@@ -100,6 +109,7 @@ function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
     mo.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
     return () => mo.disconnect();
   }, [store]);
+  useEffect(() => client.fleet?.subscribe(() => store.refreshAgent()), [client, store]);
   return store;
 }
 

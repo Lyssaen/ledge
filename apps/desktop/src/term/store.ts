@@ -2,6 +2,7 @@ import type { PtyBackend, PtyHandle } from './backend';
 import type { TermSurface } from './surface';
 import type { TermTheme } from './theme';
 import { reconnectDelay, type AgentMode } from './mode';
+import type { AgentRoute, AgentStream } from './stream';
 
 /** A shell of the right panel (Fil | Terminal v3): the agent's screen is no tab, it is the session's Terminal view. */
 export type Tab = { kind: 'shell'; id: string; n: number; dir: string; remote: boolean; status: 'idle' | 'running' | 'ended' | 'unavailable'; end?: { code: number | null; lost: boolean } };
@@ -11,7 +12,7 @@ export type AgentLink = { state: 'attached' | 'reconnecting' | 'off'; attempt: n
 export const agentTabId = (sessionId: string): string => `${sessionId}#agent`;
 /** The right panel's first tab, « ± Modifications »: fixed, never closed, and where the panel opens while it has no shell. */
 export const changesTabId = (sessionId: string): string => `${sessionId}#changes`;
-export interface TermDeps { backend: PtyBackend | null; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout }
+export interface TermDeps { backend: PtyBackend | null; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout; /** Absent: the agent screen is always the pseudo-terminal, as before the control stream. */ agentRoute?: (sessionId: string) => AgentRoute; stream?: AgentStream }
 
 const OFF: AgentLink = { state: 'off', attempt: 0 };
 /** `ssh`'s exit code when the connection fails or drops. */
@@ -112,8 +113,14 @@ export class TermStore {
     this.emit();
   }
 
+  /** The machine's snapshot arrived, or its flag did: attach by whichever path that now says. */
+  refreshAgent(): void {
+    if (this.shown) this.showAgent(this.shown.sid, this.shown.mode);
+  }
+
   showAgent(sessionId: string, mode: AgentMode): void {
-    const key = JSON.stringify(mode);
+    const route = mode.kind === 'live' || mode.kind === 'parent' ? (this.deps.agentRoute?.(sessionId) ?? 'pty') : '';
+    const key = JSON.stringify(mode) + route;
     // Re-renders call this again and again: the same session in the same mode keeps its attachment.
     if (this.shown?.sid === sessionId && this.shown.key === key) return;
     this.leave();
@@ -230,9 +237,15 @@ export class TermStore {
   }
 
   private connect(): void {
-    const { backend } = this.deps;
-    if (!this.shown || !backend) return;
+    if (!this.shown) return;
     const { sid, mode } = this.shown;
+    if (mode.kind !== 'live' && mode.kind !== 'parent') return;
+    const route = this.deps.agentRoute?.(sid) ?? 'pty';
+    // The machine has not answered yet: opening the pseudo-terminal now would only be torn down once the stream is known.
+    if (route === 'wait') return;
+    if (route === 'stream' && this.deps.stream) { this.connectStream(); return; }
+    const { backend } = this.deps;
+    if (!backend) return;
     const readOnly = mode.kind === 'parent';
     const argv = this.deps.agentArgv(sid, readOnly);
     if (!argv) { this.setLink(sid, OFF); return; }
@@ -254,6 +267,30 @@ export class TermStore {
       data: b => { if (current()) surface.write(b); },
       exit: () => { if (current()) this.dropped(); }
     }).then(adopt, () => adopt(null));
+  }
+
+  /** The agent's screen over the daemon's control stream: xterm writes the bytes, and nothing nests a second emulator. */
+  private connectStream(): void {
+    const stream = this.deps.stream;
+    if (!this.shown || !stream) return;
+    const { sid, mode } = this.shown;
+    const readOnly = mode.kind === 'parent';
+    const surface = this.surfaceFor(agentTabId(sid), () => (this.shown?.sid === sid ? this.attachment : null));
+    surface.setReadOnly(readOnly);
+    const run: Run = { handle: null, typed: [] };
+    const current = () => this.attachment === run;
+    this.attachment = run;
+    this.openedAt = this.now();
+    const handle = stream.open(sid, readOnly, surface.size(), {
+      screen: text => { if (current()) surface.write(text); },
+      data: b => { if (current()) surface.write(b); },
+      exit: () => { if (current()) this.dropped(); }
+    });
+    if (!current()) { handle.close(); return; }
+    adoptHandle(run, handle);
+    syncSize(handle, surface);
+    this.setLink(sid, { state: 'attached', attempt: 0 });
+    this.emit();
   }
 
   /** Every end of a live attachment is a lost connection: tmux keeps the agent, and redraws it on the next attach. */

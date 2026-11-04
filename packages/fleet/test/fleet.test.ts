@@ -53,6 +53,15 @@ describe('multi-machine connections', () => {
     client.send({ type: 'session.decide', id: 'server:same', decision: 'accept' });
     expect(local.sent).toEqual([]); expect(server.sent).toEqual([]);
   });
+  it('qualifies the agent screen, whichever machine streams it', () => {
+    const { got, server } = setup();
+    server.emit({ type: 'term.output', id: 'same', data: 'aGk=' });
+    server.emit({ type: 'term.exit', id: 'same', why: 'gone' });
+    expect(got.filter(m => m.type === 'term.output' || m.type === 'term.exit')).toEqual([
+      { type: 'term.output', id: 'server:same', data: 'aGk=' },
+      { type: 'term.exit', id: 'server:same', why: 'gone' }
+    ]);
+  });
   it('qualifies the session of a thread message, whichever machine sent it', () => {
     const { got, local, server } = setup();
     const at = new Date().toISOString();
