@@ -2,13 +2,14 @@
 @import "@ledge/ui/styles/base.css";
 @import "./shell.css";
 @import "./sidebar.css";
-@import "./atelier.css";
+@import "@ledge/ui/atelier/atelier.css";
 @import "./list.css";
 @import "./session.css";
 @import "./launch.css";
 @import "./projects.css";
 @import "./settings.css";
 @import "./openrig.css";
+@import "@ledge/ui/atelier/rig-rooms.css";
 @import "./openrig-roles.css";
 @import "./asks.css";
 

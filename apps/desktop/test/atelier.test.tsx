@@ -371,7 +371,7 @@ describe('the atelier', () => {
       expect(document.querySelector('.task-wire path')).not.toBeNull();
       expect(document.querySelector('.exchange-ticket')).toBeNull();
       for (const sel of ['.office-reduced .exchange-ticket', '.office-paused .exchange-ticket']) expect(declarations('atelier.css', sel)).toContain('display:none');
-      const motion = readFileSync(resolve(__dirname, '../src/styles/atelier.css'), 'utf8').match(/@media\(prefers-reduced-motion:reduce\)\{\.exchange-wire[^@]*/)![0];
+      const motion = readFileSync(resolve(__dirname, '../../../packages/ui/src/atelier/atelier.css'), 'utf8').match(/@media\(prefers-reduced-motion:reduce\)\{\.exchange-wire[^@]*/)![0];
       expect(motion).toMatch(/\.exchange-ticket[^{]*\{display:none\}/);
     });
     it('paused, with motion: the line stays, no ticket travels', async () => {

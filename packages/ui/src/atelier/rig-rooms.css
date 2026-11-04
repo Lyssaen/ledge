@@ -1,0 +1,9 @@
+/* A rig's room in the Atelier (docs/mockups/ledge-openrig-groups.html, view 1): its plaque and the kernel's floor. Moved from
+   apps/desktop/src/styles/openrig.css (shared with the mobile app's Atelier); Desktop imports it right after openrig.css. */
+.rig-room .seat-rig-tag { display: none; }
+.rig-plaque .rig-hex { display: inline-grid; place-items: center; color: var(--info); }
+.kernel-room .rig-plaque .rig-hex { color: #b9a2f0; }
+.rig-plaque .plaque-where { font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rig-plaque .plaque-btn { margin-left: 4px; height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--input); background: var(--background); color: var(--foreground); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.rig-plaque .plaque-btn:hover { background: var(--muted); }
+.kernel-room { --room-floor: color-mix(in oklab, #8b5cf6 10%, var(--background)); }
