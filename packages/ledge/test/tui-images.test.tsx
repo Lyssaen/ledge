@@ -4,6 +4,7 @@ import type { ClientMessage } from '@ledge/protocol';
 import type { ClipboardImage } from '../src/tui/clipboard.js';
 import { until } from './helpers.js';
 import { startTui } from './tui-fixture.js';
+import { linuxOnly } from './platform.js';
 
 const sent = <T extends ClientMessage['type']>(received: ClientMessage[], type: T) => received.filter((m): m is Extract<ClientMessage, { type: T }> => m.type === type);
 const ALT_V = '\u001bv';
@@ -88,7 +89,7 @@ describe('ledge tui: images in a session reply', () => {
     } finally { await tui.cleanup(); }
   });
 
-  it('o opens the newest image of the exchange: its bytes are fetched into a file handed to the viewer', async () => {
+  linuxOnly('hidden-in-native')('o opens the newest image of the exchange: its bytes are fetched into a file handed to the viewer', async () => {
     const opened: Array<{ file: string; bytes: Buffer }> = [];
     const tui = await startTui({ openFile: async file => { opened.push({ file, bytes: readFileSync(file) }); } });
     const id = 'd'.repeat(64);

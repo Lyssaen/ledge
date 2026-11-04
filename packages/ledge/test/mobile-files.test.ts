@@ -8,6 +8,7 @@ import {
   readMobileConfig, writeMobileConfig, readRelaySession, writeRelaySession, clearRelaySession,
   loadPcIdentity, readDevices, writeDevices
 } from '../src/mobile/files.js';
+import { linuxOnly } from './platform.js';
 
 const mode = (f: string) => statSync(f).mode & 0o777;
 const session = (relayUrl: string) => ({ token: 't', accountId: 'a', login: 'l', relayUrl });
@@ -50,7 +51,7 @@ describe('mobile files', () => {
     expect(readMobileConfig()).toEqual({ enabled: true, relayUrl: 'https://relay.example' });
   });
 
-  it('round-trips the config, session and devices, each at 0600', () => {
+  linuxOnly('posix-modes')('round-trips the config, session and devices, each at 0600', () => {
     writeMobileConfig({ enabled: true, relayUrl: 'https://a.example' });
     writeRelaySession(session('https://a.example'));
     writeDevices([{ id: 'x', publicKey: 'k', label: 'Phone', approvedAt: '2026-10-19T00:00:00Z' }]);
@@ -79,7 +80,7 @@ describe('mobile files', () => {
     expect(readDevices()).toEqual([]);
   });
 
-  it('keeps the same PC key across loads, stored as bare PKCS8 at 0600', async () => {
+  linuxOnly('posix-modes')('keeps the same PC key across loads, stored as bare PKCS8 at 0600', async () => {
     const a = await loadPcIdentity();
     const b = await loadPcIdentity();
     expect(await exportIdentity(b)).toBe(await exportIdentity(a));
@@ -91,7 +92,7 @@ describe('mobile files', () => {
     expect(existsSync(`${paths().mobileKey}.${process.pid}.tmp`)).toBe(false);
   });
 
-  it('moves an invalid PC key aside at 0600 before creating a new one', async () => {
+  linuxOnly('posix-modes')('moves an invalid PC key aside at 0600 before creating a new one', async () => {
     const dir = dirname(paths().mobileKey);
     const bad = () => readdirSync(dir).filter((f) => f.startsWith(`${basename(paths().mobileKey)}.bad-`));
     for (const f of bad()) rmSync(join(dir, f));
@@ -111,7 +112,7 @@ describe('mobile files', () => {
   describe.skipIf(process.getuid?.() === 0)('a file that exists but cannot be read', () => {
     const lock = (f: string) => { chmodSync(f, 0o000); return () => chmodSync(f, 0o600); };
 
-    it('keeps the PC key: loadPcIdentity throws and does not replace the file', async () => {
+    linuxOnly('posix-modes')('keeps the PC key: loadPcIdentity throws and does not replace the file', async () => {
       await loadPcIdentity();
       const before = readFileSync(paths().mobileKey, 'utf8');
       const unlock = lock(paths().mobileKey);
@@ -121,7 +122,7 @@ describe('mobile files', () => {
       expect(readFileSync(paths().mobileKey, 'utf8')).toBe(before);
     });
 
-    it('keeps the approved devices: readDevices throws, the file is untouched, the message holds no content', () => {
+    linuxOnly('posix-modes')('keeps the approved devices: readDevices throws, the file is untouched, the message holds no content', () => {
       writeDevices([{ id: 'secret-id', publicKey: 'k', label: 'Phone', approvedAt: '2026-10-19T00:00:00Z' }]);
       const before = readFileSync(paths().devices, 'utf8');
       const unlock = lock(paths().devices);
@@ -132,7 +133,7 @@ describe('mobile files', () => {
       expect(readFileSync(paths().devices, 'utf8')).toBe(before);
     });
 
-    it('throws for the config and the session too, rather than reading them as absent', () => {
+    linuxOnly('posix-modes')('throws for the config and the session too, rather than reading them as absent', () => {
       writeMobileConfig({ enabled: true, relayUrl: 'https://a.example' });
       const unlock = lock(paths().mobile);
       try { expect(() => readMobileConfig()).toThrow(/mobile\.json/); } finally { unlock(); }

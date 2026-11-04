@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { ensureLedgeDir } from '../src/paths.js';
 import { newSessionCommand, systemdAvailable, realTmux, run } from '../src/tmux.js';
 import { killTestServer } from './helpers.js';
+import { isWindows, linuxOnly } from './platform.js';
 
 describe('newSessionCommand', () => {
   it('runs tmux directly when not scoped', () => {
@@ -19,7 +20,7 @@ describe('newSessionCommand', () => {
 });
 
 describe('systemdAvailable', () => {
-  it('needs the user manager socket under XDG_RUNTIME_DIR', () => {
+  linuxOnly('tmux')('needs the user manager socket under XDG_RUNTIME_DIR', () => {
     expect(systemdAvailable({ XDG_RUNTIME_DIR: '/run/user/1000' }, p => p === '/run/user/1000/systemd/private')).toBe(true);
     expect(systemdAvailable({ XDG_RUNTIME_DIR: '/run/user/1000' }, () => false)).toBe(false);
     expect(systemdAvailable({}, () => true)).toBe(false);
@@ -27,7 +28,7 @@ describe('systemdAvailable', () => {
 });
 
 const socket = `ledge-scope-${process.pid}-${Date.now()}`;
-afterAll(async () => { await killTestServer(socket); });
+afterAll(async () => { if (!isWindows) await killTestServer(socket); });
 
 describe.skipIf(!systemdAvailable())('a scoped server (real systemd)', () => {
   it('lives in its own ledge-tmux scope, not in the caller cgroup', async () => {
@@ -44,10 +45,10 @@ describe.skipIf(!systemdAvailable())('a scoped server (real systemd)', () => {
 });
 
 const fallback = `ledge-noscope-${process.pid}-${Date.now()}`;
-afterAll(async () => { await killTestServer(fallback); });
+afterAll(async () => { if (!isWindows) await killTestServer(fallback); });
 
 describe('a scope that cannot be opened', () => {
-  it('still starts tmux, unscoped, so agents can launch', async () => {
+  linuxOnly('tmux')('still starts tmux, unscoped, so agents can launch', async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); await ensureLedgeDir();
     // A systemd-run that always fails, found first on the client PATH.
     const bin = mkdtempSync(join(tmpdir(), 'ledge-bin-'));

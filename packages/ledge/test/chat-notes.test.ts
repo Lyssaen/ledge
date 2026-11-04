@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { ChatStep } from '@ledge/protocol';
 import { NOTES_INDEX, writeNotes } from '../src/chat/notes.js';
 import { writeContext, stepFor } from '../src/chat/context.js';
+import { linuxOnly, needsSymlinks } from './platform.js';
 
 const T0 = '2026-10-11T10:00:00.000Z';
 const tmp = () => mkdtempSync(join(tmpdir(), 'notes-'));
@@ -49,7 +50,7 @@ describe('writeNotes', () => {
     expect(indexLine(dir, 'context-small.md')).not.toContain('TRUNCATED');
   });
 
-  it('reads only regular .md files directly in the folder, and keeps names safe and unique', async () => {
+  needsSymlinks('reads only regular .md files directly in the folder, and keeps names safe and unique', async () => {
     const from = notes({ 'a b.md': 'one', 'a-b.md': 'two', 'notes.txt': 'no', '.hidden.md': 'h' });
     mkdirSync(join(from, 'sub.md')); symlinkSync(join(from, 'a-b.md'), join(from, 'link.md'));
     const dir = tmp();
@@ -69,7 +70,7 @@ describe('writeNotes', () => {
 });
 
 describe('writeContext with notes', () => {
-  it('writes the index and the copies only when a notes folder is given; a copy read is a step', async () => {
+  linuxOnly('hidden-in-native')('writes the index and the copies only when a notes folder is given; a copy read is a step', async () => {
     const from = notes({ 'machines.md': 'x' });
     const dir = tmp();
     const ctx = await writeContext(dir, { sessions: [], now: T0, capture: async () => null, git: async () => null, notesDir: from });

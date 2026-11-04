@@ -3,6 +3,7 @@ import { parse } from 'yaml';
 import { RigLaunchSchema, type RigLaunch } from '@ledge/protocol';
 import { changesSpec, composeSpec, expandEdge, readSpec, seatIds } from '../src/daemon/rigSpec.js';
 import { createOpenRig, readCheck, type RigRun } from '../src/daemon/openrig.js';
+import { linuxOnly } from './platform.js';
 
 // OpenRig 0.6.14's shipped starter (daemon/specs/rigs/launch/starter/rig.yaml).
 const STARTER = `version: "0.2"
@@ -58,7 +59,7 @@ describe('rig specs', () => {
     expect(expandEdge(['b', 'b-2'], ['r', 'r-2'], 'all')).toHaveLength(4);
     expect(expandEdge([], ['r'], 'all')).toEqual([]);
   });
-  it('3 builders and 3 reviewers: six seats copied from the first, paired links, absolute agents, the new name', () => {
+  linuxOnly('hidden-in-native')('3 builders and 3 reviewers: six seats copied from the first, paired links, absolute agents, the new name', () => {
     const { yaml, seats } = composeSpec(parse(STARTER), DIR, launch({ seats: { 'dev.build': 3, 'dev.review': 3 } }));
     expect(seats).toBe(6);
     const d = parse(yaml);
@@ -125,20 +126,20 @@ describe('launching a rig', () => {
     const { rig } = setup({ 'specs ls': { code: 1, stderr: 'Error: Daemon not running.\n' } });
     expect(await rig.specs()).toEqual({ specs: [], error: 'daemon_stopped' });
   });
-  it('an unchanged spec under its own name launches from the library, in the folder asked', async () => {
+  linuxOnly('hidden-in-native')('an unchanged spec under its own name launches from the library, in the folder asked', async () => {
     const { rig, calls, written } = setup();
     const r = await rig.launch(launch({ cwd: '~/w', name: 'starter' }));
     expect(r).toMatchObject({ ok: true, plan: false, seats: 2, commands: ['rig up starter --cwd /home/me/w --yes'] });
     expect(calls.at(-1)).toEqual(['up', 'starter', '--cwd', '/home/me/w', '--yes', '--json']);
     expect(written.size).toBe(0);
   });
-  it('another name is a composed copy: OpenRig names a rig after its spec', async () => {
+  linuxOnly('hidden-in-native')('another name is a composed copy: OpenRig names a rig after its spec', async () => {
     const { rig, written } = setup();
     const r = await rig.launch(launch({ name: 'alpha' }));
     expect(r.commands).toEqual(['rig up /home/me/.ledge/rigs/alpha/rig.yaml --cwd /w/ledge --yes']);
     expect(parse(written.get('/home/me/.ledge/rigs/alpha/rig.yaml')!).name).toBe('alpha');
   });
-  it('a changed spec is composed beside its folder\'s copy, checked with --plan, and kept in the library when asked', async () => {
+  linuxOnly('hidden-in-native')('a changed spec is composed beside its folder\'s copy, checked with --plan, and kept in the library when asked', async () => {
     const { rig, calls, written, copied } = setup();
     const check = await rig.launch(launch({ seats: { 'dev.build': 3, 'dev.review': 3 }, plan: true }));
     expect(check).toMatchObject({ ok: true, plan: true, seats: 6, commands: ['rig up /home/me/.ledge/rigs/ledge-scale/rig.yaml --cwd /w/ledge --plan'] });
@@ -190,7 +191,7 @@ describe('changing a running rig\'s seats', () => {
     expect(seatPlan(nodes('dev.build', 'dev.build-2', 'dev.build-3'), { 'dev.build': 1 }).remove).toEqual(['dev.build-3', 'dev.build-2']);
     expect(seatPlan(nodes('dev.build'), { 'dev.build': 0, 'dev.qa': 2 }).remove).toEqual(['dev.build']);
   });
-  it('a fragment in snake_case, the env names kept, the agent made absolute from the rig\'s folder', async () => {
+  linuxOnly('hidden-in-native')('a fragment in snake_case, the env names kept, the agent made absolute from the rig\'s folder', async () => {
     const { fragmentOf, memberOf } = await import('../src/daemon/rigSpec.js');
     const f = fragmentOf(memberOf(SHOW, 'dev', 'build')!, 'build-2', DIR)!;
     expect(f).toMatchObject({ id: 'build-2', agent_ref: 'path:/opt/openrig/daemon/specs/agents/development/implementer', restore_policy: 'resume_if_possible', env: { MY_VAR: '1' }, startup: { files: [{ delivery_hint: 'send_text' }] } });
@@ -233,18 +234,18 @@ describe('OpenRig 0.7: rig up --name and rig edge', () => {
     const fs = { read: async (p: string) => { if (p === `${DIR}/rig.yaml`) return STARTER; throw new Error('ENOENT'); }, exists: (p: string) => p === '/w/ledge', copyDir: async () => {}, write: async (p: string, t: string) => { written.set(p, t); } };
     return { rig: createOpenRig({ run, fs, home: '/home/me', rigsDir: '/r' }), calls, written };
   }
-  it('0.7 launches the library spec under another name with --name, and remembers where it came from', async () => {
+  linuxOnly('hidden-in-native')('0.7 launches the library spec under another name with --name, and remembers where it came from', async () => {
     const { rig: r, calls, written } = rig('0.7.7');
     const res = await r.launch(launch({ name: 'alpha' }));
     expect(res.commands).toEqual(['rig up starter --name alpha --cwd /w/ledge --yes']);
     expect(calls.some(c => c[0] === 'up' && c[1] === 'starter')).toBe(true);
     expect(JSON.parse(written.get('/r/alpha/source.json')!)).toEqual({ spec: 'starter', path: `${DIR}/rig.yaml` });
   });
-  it('0.6 composes a copy for another name, as before', async () => {
+  linuxOnly('hidden-in-native')('0.6 composes a copy for another name, as before', async () => {
     const { rig: r } = rig('0.6.14');
     expect((await r.launch(launch({ name: 'alpha' }))).commands).toEqual(['rig up /r/alpha/rig.yaml --cwd /w/ledge --yes']);
   });
-  it('0.7 adds the seats, links them by pairs, then snapshots', async () => {
+  linuxOnly('hidden-in-native')('0.7 adds the seats, links them by pairs, then snapshots', async () => {
     const { rig: r, written } = rig('0.7.7');
     const res = await r.reseat('starter', { 'dev.build': 2, 'dev.review': 2 });
     expect(res).toMatchObject({ ok: true, added: ['dev.build-2', 'dev.review-2'], removed: [], links: 2 });
@@ -282,7 +283,7 @@ describe('permissions at launch', () => {
     expect(spec?.policy).toBe('builtin:standard');
     expect(RigLaunchSchema.safeParse({ spec: 'starter', cwd: '/w', name: 'x', policy: 'root' }).success).toBe(false);
   });
-  it('accepting the first-launch warnings adds --non-interruptive', async () => {
+  linuxOnly('hidden-in-native')('accepting the first-launch warnings adds --non-interruptive', async () => {
     const calls: string[][] = [];
     const run: RigRun = async args => { calls.push(args); return { code: 0, stdout: args[0] === 'specs' ? JSON.stringify([{ kind: 'rig', name: 'starter', sourceType: 'builtin', resolvedSourcePath: `${DIR}/rig.yaml` }]) : '{}', stderr: '' }; };
     const fs = { read: async () => STARTER, exists: () => true, copyDir: async () => {}, write: async () => {} };

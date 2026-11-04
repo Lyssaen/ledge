@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { OpenRigActionSchema, OpenRigStateSchema, parseClientMessage } from '@ledge/protocol';
 import { createOpenRig, readRow, ROW_TTL_MS, failure, findRig, planAction, readState, showCommand, type RigRun } from '../src/daemon/openrig.js';
+import { linuxOnly } from './platform.js';
 
 // What OpenRig 0.6.14 printed on 2026-11-02, daemon started with --no-kernel (trimmed to the fields Ledge reads, plus a few it ignores).
 const STATUS = {
@@ -145,7 +146,7 @@ describe('createOpenRig', () => {
 describe('findRig', () => {
   const home = '/h';
   const at = (...files: string[]) => (p: string) => files.includes(p);
-  it('the PATH first, then the newest nvm Node (fish, then bash), then volta and npm', () => {
+  linuxOnly('hidden-in-native')('the PATH first, then the newest nvm Node (fish, then bash), then volta and npm', () => {
     const list = (dir: string) => (dir === '/h/.local/share/nvm' ? ['v22.1.0', 'v26.7.0', 'v9.0.0'] : dir === '/h/.nvm/versions/node' ? ['v24.0.0'] : []);
     expect(findRig({ HOME: home, PATH: '/usr/bin:/opt/rig' }, at('/opt/rig/rig', '/h/.local/share/nvm/v26.7.0/bin/rig'), list)).toBe('/opt/rig');
     expect(findRig({ HOME: home, PATH: '/usr/bin' }, at('/h/.local/share/nvm/v22.1.0/bin/rig', '/h/.local/share/nvm/v26.7.0/bin/rig'), list)).toBe('/h/.local/share/nvm/v26.7.0/bin');

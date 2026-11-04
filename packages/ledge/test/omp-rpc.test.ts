@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { ChunkAssembler, OmpRpc, RpcError, lineReader } from '../src/daemon/omp/rpc.js';
+import { linuxOnly } from './platform.js';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
 const start = (args: string[] = [], env: NodeJS.ProcessEnv = {}) => OmpRpc.start({ command: FAKE, args: ['--session-dir', '/tmp/ledge-fake-omp', ...args], cwd: '/tmp', env: { ...process.env, ...env } });
@@ -64,7 +65,7 @@ describe('OmpRpc', () => {
   it('fails the start with the process\'s stderr when it dies before ready', async () => {
     await expect(start([], { FAKE_OMP_DIE: '3' })).rejects.toThrow(/omp: no credentials/);
   });
-  it('rejects the commands in flight and reports the exit when the process ends under them', async () => {
+  linuxOnly('posix-signals')('rejects the commands in flight and reports the exit when the process ends under them', async () => {
     const rpc = await start();
     const exit = new Promise(res => rpc.onExit(res));
     await rpc.request('prompt', { message: 'slow' });

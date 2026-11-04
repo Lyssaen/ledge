@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readDocument } from '../src/daemon/documents.js';
+import { linuxOnly, needsSymlinks } from './platform.js';
 
 const dirs: string[] = [];
 async function dir() { const d = await mkdtemp(join(tmpdir(), 'ledge-doc-')); dirs.push(d); return d; }
@@ -26,19 +27,19 @@ describe('readDocument', () => {
     expect(await readDocument(req('README.md'), { cwd: root, workdir, home: root })).toMatchObject({ type: 'document.content', path: join(root, 'README.md') });
     expect(await readDocument(req('missing.md'), { cwd: root, workdir, home: root })).toMatchObject({ type: 'document.error', code: 'not_found' });
   });
-  it('reads home, absolute skills, names with spaces and regular symlink targets', async () => {
+  needsSymlinks('reads home, absolute skills, names with spaces and regular symlink targets', async () => {
     const root = await dir(); await writeFile(join(root, 'My Skill.md'), 'étape'); await symlink(join(root, 'My Skill.md'), join(root, 'SKILL.md'));
     expect(await readDocument(req('~/My Skill.md'), { home: root })).toMatchObject({ type: 'document.content', text: 'étape' });
     expect(await readDocument(req(join(root, 'SKILL.md')), { home: root })).toMatchObject({ type: 'document.content', text: 'étape' });
   });
-  it('rejects ambiguous, missing, non-Markdown and non-files without blocking', async () => {
+  linuxOnly('hidden-in-native')('rejects ambiguous, missing, non-Markdown and non-files without blocking', async () => {
     const root = await dir(); await mkdir(join(root, 'folder.md')); await writeFile(join(root, 'note.txt'), 'x');
     expect(await readDocument(req('note.md'), { home: root })).toMatchObject({ type: 'document.error', code: 'ambiguous_path' });
     expect(await readDocument(req(join(root, 'missing.md')), { home: root })).toMatchObject({ type: 'document.error', code: 'not_found' });
     expect(await readDocument(req(join(root, 'folder.md')), { home: root })).toMatchObject({ type: 'document.error', code: 'not_file' });
     expect(await readDocument(req(join(root, 'note.txt')), { home: root })).toMatchObject({ type: 'document.error', code: 'unsupported_type' });
   });
-  it('accepts 1 MiB exactly and rejects one byte more or malformed UTF-8', async () => {
+  linuxOnly('hidden-in-native')('accepts 1 MiB exactly and rejects one byte more or malformed UTF-8', async () => {
     const root = await dir(); const file = join(root, 'limit.md');
     await writeFile(file, Buffer.alloc(1_048_576, 97));
     expect(await readDocument(req(file), { home: root })).toMatchObject({ type: 'document.content', bytes: 1_048_576 });

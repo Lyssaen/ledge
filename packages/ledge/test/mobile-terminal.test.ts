@@ -10,6 +10,7 @@ import {
 import { realTmux, run } from '../src/tmux.js';
 import { ensureLedgeDir } from '../src/paths.js';
 import { killTestServer } from './helpers.js';
+import { linuxOnlySuite } from './platform.js';
 
 const OP = '6f1c3a52-2f0b-4c1e-9d3a-0a1b2c3d4e5f';
 
@@ -259,7 +260,7 @@ describe('terminal host', () => {
   });
 });
 
-describe('terminal host on a real tmux', () => {
+linuxOnlySuite('tmux')('terminal host on a real tmux', () => {
   const socket = `ledge-term-${process.pid}-${Date.now()}`;
   const tmux = realTmux(socket, { scope: async () => false });
   const name = 'ledge-term1';

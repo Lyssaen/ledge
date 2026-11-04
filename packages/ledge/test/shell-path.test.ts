@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { envCommand, loginShellEnv, parseEnv } from '../src/shell-path.js';
 import { parseRegQuery, windowsRegistryEnv, userEnv, regCommand, overlayEnv } from '../src/shell-path.js';
+import { linuxOnly } from './platform.js';
 
 describe('envCommand', () => {
   it('asks any login shell for its environment, NUL-separated', () => {
@@ -17,7 +18,7 @@ describe('parseEnv', () => {
 });
 
 describe('loginShellEnv', () => {
-  it('returns the environment a login shell starts with', async () => {
+  linuxOnly('linux-flow')('returns the environment a login shell starts with', async () => {
     const env = await loginShellEnv({ shell: '/bin/sh', command: () => ['/bin/sh', '-c', 'HTTPS_PROXY=http://p:8080 env -0'] });
     expect(env.PATH?.split(':')).toContain('/usr/bin');
     expect(env.HTTPS_PROXY).toBe('http://p:8080');

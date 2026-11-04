@@ -11,6 +11,7 @@ import { readRevocations, writeDevices, writeMobileConfig, writeRelaySession, wr
 import { paths } from '../src/paths.js';
 import { startTestRelay, TEST_ACCOUNT, type TestRelay } from './mobile-relay-harness.js';
 import { fakeDevice, type FakeDevice } from './mobile-fake-device.js';
+import { linuxOnly } from './platform.js';
 
 const DEVICE_CODE = 'dc-secret-0123456789';
 const USER_CODE = 'WDJB-MJHT';
@@ -134,7 +135,7 @@ async function linkedPhone(ctx: Awaited<ReturnType<typeof signedIn>>): Promise<F
 }
 
 describe('mobile access service', () => {
-  it('set then signin: the code is shown, then the account, the link online and the session file in 0600', async () => {
+  linuxOnly('posix-modes')('set then signin: the code is shown, then the account, the link online and the session file in 0600', async () => {
     const ctx = await signedIn();
     expect(JSON.parse(ctx.during).signin.userCode).toBe(USER_CODE);
     const st = ctx.s.state();
@@ -316,7 +317,7 @@ describe('relay revocations', () => {
     return fetch(input, init);
   };
 
-  it('a relay that answers 503 keeps the entry (0600); the link online again retries, a 200 removes it', async () => {
+  linuxOnly('posix-modes')('a relay that answers 503 keeps the entry (0600); the link online again retries, a 200 removes it', async () => {
     const mode = { status: 503 as number | 'network' };
     const ctx = await signedIn({ fetchImpl: revokeAnswering(mode) });
     const phone = await linkedPhone(ctx);
@@ -426,7 +427,7 @@ describe('push through the relay', () => {
     expect(await s.sendPush(MSG)).toEqual({ result: 'failed' });
   });
 
-  it('setPush stores the subscription with the device (0600), removes it with null, and refuses an unknown device', async () => {
+  linuxOnly('posix-modes')('setPush stores the subscription with the device (0600), removes it with null, and refuses an unknown device', async () => {
     const ctx = await signedIn();
     const phone = await linkedPhone(ctx);
     const id = await fingerprint(phone.publicKey);

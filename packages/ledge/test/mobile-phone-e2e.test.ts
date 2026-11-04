@@ -15,6 +15,7 @@ import { startTestRelay, TEST_ACCOUNT } from './mobile-relay-harness.js';
 import { fakeDevice, type FakeDevice } from './mobile-fake-device.js';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
 import { rpOf } from '../src/mobile/webauthn.js';
+import { linuxOnly } from './platform.js';
 
 const T0 = '2026-10-20T08:00:00.000Z';
 const PEER = 'd_bbbbbbbbbbbbbbbb';
@@ -113,7 +114,7 @@ describe('phone protocol end to end', () => {
     expect(tmux.sent).toHaveLength(1);
   }, 20_000);
 
-  it('« À toi » over the relay: the phone reads this PC\'s OpenRig asks, gets a change pushed, and a « Vu » goes and comes back once', async () => {
+  linuxOnly('hidden-in-native')('« À toi » over the relay: the phone reads this PC\'s OpenRig asks, gets a change pushed, and a « Vu » goes and comes back once', async () => {
     const channel = { state: 'ready' as const, person: { address: 'ledge@external', name: 'Ledge' }, slack: false };
     const ask = { id: 'qitem-n', kind: 'update' as const, alert: false, priority: 'routine' as const, from: { seat: 'design-ux@ledge-dev', rig: 'ledge-dev', role: 'design.ux' },
       summary: 'La maquette est prête', body: 'Texte', bodyTruncated: false, detail: null, evidenceRef: null, questions: [], createdAt: T0, updatedAt: T0 };

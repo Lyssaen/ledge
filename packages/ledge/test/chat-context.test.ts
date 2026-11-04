@@ -5,12 +5,13 @@ import { dirname } from 'node:path';
 import { join } from 'node:path';
 import type { Projects, Session } from '@ledge/protocol';
 import { writeContext, stepFor } from '../src/chat/context.js';
+import { linuxOnly } from './platform.js';
 
 const T0 = '2026-10-11T10:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'Otto', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge', tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra });
 
 describe('writeContext', () => {
-  it('writes folders.md from the recent folders, most recent first, and no step for it', async () => {
+  linuxOnly('hidden-in-native')('writes folders.md from the recent folders, most recent first, and no step for it', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
     const recents = [{ cwd: '/w/ledge', project: 'ledge', lastAt: '2026-10-12T09:00:00.000Z' }, { cwd: '/w/api', project: 'api', lastAt: '2026-10-11T09:00:00.000Z' }];
     const ctx = await writeContext(dir, { sessions: [], recents, now: T0, capture: async () => null, git: async () => null });
@@ -31,7 +32,7 @@ describe('writeContext', () => {
     rules: [{ machine: 'local', path: '/tmp/scratch', project: 'api' }]
   };
 
-  it('writes projects.md with each project, its description, its repositories and the remembered folders', async () => {
+  linuxOnly('hidden-in-native')('writes projects.md with each project, its description, its repositories and the remembered folders', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
     const ctx = await writeContext(dir, { sessions: [], projects: PROJECTS, now: T0, capture: async () => null, git: async () => null });
     const md = readFileSync(join(dir, 'projects.md'), 'utf8');
@@ -81,7 +82,7 @@ describe('writeContext', () => {
     expect(section('Otto')).toContain('- Project: Ledge'); expect(section('Nova')).toContain('- Project: no project'); expect(section('Zed')).toContain('- Project: Ledge');
   });
 
-  it('writes sessions.md and one file per source, and maps them to steps', async () => {
+  linuxOnly('hidden-in-native')('writes sessions.md and one file per source, and maps them to steps', async () => {
     const dir = join(mkdtempSync(join(tmpdir(), 'ledge-chat-')), 'context');
     const sessions = [
       mk('a', { topic: 'Hooks', repo: 'ledge', repoPath: '/w/ledge', branch: 'main', pending: { kind: 'permission', text: 'git push', source: 'hook' }, lastReply: { text: 'Fini.', at: T0 } }),
@@ -102,7 +103,7 @@ describe('writeContext', () => {
     expect(nova).toContain('- read-only: Ledge cannot send to it');
     expect(md.slice(0, md.indexOf('## Nova'))).not.toContain('read-only');
   });
-  it('never hands the model the home folder, the root or a parent of the home', async () => {
+  linuxOnly('hidden-in-native')('never hands the model the home folder, the root or a parent of the home', async () => {
     const dir = join(mkdtempSync(join(tmpdir(), 'ledge-chat-')), 'context');
     const repo = join(homedir(), 'w', 'repo');
     const sessions = [mk('a', { cwd: homedir() }), mk('b', { cwd: '/' }), mk('c', { cwd: dirname(homedir()) }), mk('d', { cwd: `${homedir()}/` }), mk('e', { cwd: repo })];

@@ -3,6 +3,7 @@ import { ClientMessageSchema, RoleDetailSchema, RoleSummarySchema } from '@ledge
 import { createServer } from 'node:http';
 import { createOpenRig, localGet, type RigRun } from '../src/daemon/openrig.js';
 import { hasManagedBlock, importPath, layerOf, parseSpec, specPath } from '../src/daemon/openrigRoles.js';
+import { linuxOnly } from './platform.js';
 
 // The ledge-dev rig as OpenRig 0.7.7 showed it on 2026-11-02 (trimmed): library under ~/.openrig/specs/openrig, the running
 // rig launched from the copy Ledge composed under ~/.ledge/rigs/ledge-dev, the repository at ~/Workspace/ledge.
@@ -235,7 +236,7 @@ describe('OpenRig roles: the list', () => {
 });
 
 describe('OpenRig roles: one role, from its spec', () => {
-  it('ledge-lead: defaults, its import resolved, each uses list with where it comes from, its role.md first', async () => {
+  linuxOnly('hidden-in-native')('ledge-lead: defaults, its import resolved, each uses list with where it comes from, its role.md first', async () => {
     const { role } = await world().rig.role('f95e');
     expect(RoleDetailSchema.parse(role)).toEqual(role);
     const r = role!;
@@ -259,13 +260,13 @@ describe('OpenRig roles: one role, from its spec', () => {
     expect(r.unavailable).toEqual(['harness_prompt', 'effective_settings', 'delivered_content', 'harness_own_files']);
     expect(r.openrigVersion).toBe('0.7.7');
   });
-  it('the repository copy, found in a seat folder under the library path: identical, or not', async () => {
+  linuxOnly('hidden-in-native')('the repository copy, found in a seat folder under the library path: identical, or not', async () => {
     const lead = (await world().rig.role('f95e')).role!;
     expect(lead.file).toMatchObject({ path: `${LIB}/agents/lead/agent.yaml`, relativePath: 'openrig/agents/lead/agent.yaml', copies: [{ kind: 'repo', path: `${REPO}/openrig/agents/lead/agent.yaml`, identical: true }] });
     const dev = (await world().rig.role('2158')).role!;
     expect(dev.file.copies).toMatchObject([{ path: `${REPO}/openrig/agents/developer/agent.yaml`, identical: false }]);
   });
-  it('a builtin with two profiles: preferences over defaults, an unwritten list « not declared », a bare skill nobody declares resolved at launch', async () => {
+  linuxOnly('hidden-in-native')('a builtin with two profiles: preferences over defaults, an unwritten list « not declared », a bare skill nobody declares resolved at launch', async () => {
     const r = (await world().rig.role('3a28')).role!;
     expect(r.profiles.map(p => p.name)).toEqual(['default', 'advisor']);
     const [def, adv] = r.profiles as [typeof r.profiles[0], typeof r.profiles[0]];
@@ -304,7 +305,7 @@ describe('OpenRig roles: one role, from its spec', () => {
     expect((await w.rig.role('dead')).role!.error).toEqual({ kind: 'missing', message: 'file not found' });
     expect(await w.rig.role('nope')).toEqual({ error: 'role_not_found' });
   });
-  it('a bare id two imports declare is ambiguous: Ledge does not choose', async () => {
+  linuxOnly('hidden-in-native')('a bare id two imports declare is ambiguous: Ledge does not choose', async () => {
     const two = `name: two\nversion: "1"\nimports:\n  - ref: local:../a\n  - ref: local:../b\nprofiles:\n  default:\n    uses:\n      skills: [frontend-design]\n`;
     const kit = (n: string) => `name: ${n}\nversion: "1"\nresources:\n  skills:\n    - id: frontend-design\n      path: skills/frontend-design\n`;
     const parsed = parseSpec(two);
@@ -319,7 +320,7 @@ describe('OpenRig roles: one role, from its spec', () => {
 });
 
 describe('OpenRig roles: one role, from its seats', () => {
-  it('dev.front: what it runs (member over the spec), what the member adds, the startup in OpenRig order sorted into layers', async () => {
+  linuxOnly('hidden-in-native')('dev.front: what it runs (member over the spec), what the member adds, the startup in OpenRig order sorted into layers', async () => {
     const r = (await world().rig.role('2158')).role!;
     expect(r.seats).toHaveLength(1);
     const s = r.seats[0]!;
@@ -353,7 +354,7 @@ describe('OpenRig roles: one role, from its seats', () => {
     expect(s.roleDocs.map(e => [e.path, e.layer, e.absolutePath])).toEqual([
       ['guidance/role.md', 'agent', `${LIB}/agents/developer/guidance/role.md`], ['guidance/scope-front.md', 'member', `${RIG}/guidance/scope-front.md`]]);
   });
-  it('a member that writes no runtime: its blocks go where the resolved runtime puts them (the profile’s, the defaults’)', async () => {
+  linuxOnly('hidden-in-native')('a member that writes no runtime: its blocks go where the resolved runtime puts them (the profile’s, the defaults’)', async () => {
     const noRuntime = RIG_YAML.replace('        runtime: claude-code\n        model: claude-opus-5-5\n        cwd: ~/Workspace/ledge\n        startup:', '        model: claude-opus-5-5\n        cwd: ~/Workspace/ledge\n        startup:');
     expect(noRuntime).not.toBe(RIG_YAML);
     const shown = { ...SPEC_SHOW, pods: SPEC_SHOW.pods.map(p => ({ ...p, members: p.members.map(({ runtime: _r, ...m }) => m) })) };
@@ -364,7 +365,7 @@ describe('OpenRig roles: one role, from its seats', () => {
     expect(merged.every(e => e.into === `${REPO}/CLAUDE.md`)).toBe(true);
     expect(merged.find(e => e.path === 'CULTURE.md')!.delivered).toBe(true);
   });
-  it('the runtime OpenRig launched decides over the spec: a Codex node writes into AGENTS.md', async () => {
+  linuxOnly('hidden-in-native')('the runtime OpenRig launched decides over the spec: a Codex node writes into AGENTS.md', async () => {
     const w = world({ files: { [`${REPO}/AGENTS.md`]: '<!-- BEGIN OpenRig MANAGED BLOCK: CULTURE.md -->' }, nodeRuntime: 'codex' });
     const s = (await w.rig.role('2158')).role!.seats[0]!;
     const culture = s.live!.startup.find(e => e.path === 'CULTURE.md')!;
@@ -375,7 +376,7 @@ describe('OpenRig roles: one role, from its seats', () => {
     const text = JSON.stringify(r);
     for (const leak of ['SECRET-TOKEN', 'resumeToken', 'resumeCommand', 'recoveryGuidance', 'dangerously-skip-permissions', 'identityVerdict', 'recentEvents']) expect(text).not.toContain(leak);
   });
-  it('OpenRig HTTP not answering: the seat from the rig spec, no live view', async () => {
+  linuxOnly('hidden-in-native')('OpenRig HTTP not answering: the seat from the rig spec, no live view', async () => {
     const r = (await world({ http: false }).rig.role('2158')).role!;
     expect(r.seats[0]!.live).toBeUndefined();
     expect(r.seats[0]!.model.value).toBe('claude-opus-5-5');
@@ -385,7 +386,7 @@ describe('OpenRig roles: one role, from its seats', () => {
 });
 
 describe('OpenRig roles: a file', () => {
-  it('reads a path the role detail lists: role.md, fragment, a seat startup file, the rig spec, the repository copy', async () => {
+  linuxOnly('hidden-in-native')('reads a path the role detail lists: role.md, fragment, a seat startup file, the rig spec, the repository copy', async () => {
     const w = world();
     expect(await w.rig.roleFile('2158', `${LIB}/agents/developer/guidance/role.md`)).toEqual({ content: '# Rôle : développeur\n', size: 23 });
     expect((await w.rig.roleFile('2158', `${LIB}/agents/shared/runtime/claude-settings.fragment.json`)).content).toContain('enabledMcpjsonServers');
@@ -416,7 +417,7 @@ describe('OpenRig roles: a file', () => {
 });
 
 describe('OpenRig roles: pieces', () => {
-  it('paths as specs write them', () => {
+  linuxOnly('hidden-in-native')('paths as specs write them', () => {
     expect(specPath('openrig-home:plugins/openrig-core', '/s', H, `${H}/.openrig`)).toBe(`${H}/.openrig/plugins/openrig-core`);
     expect(specPath('~/x', '/s', H, '/o')).toBe(`${H}/x`);
     expect(specPath('guidance/role.md', '/s/lead', H, '/o')).toBe('/s/lead/guidance/role.md');
@@ -428,7 +429,7 @@ describe('OpenRig roles: pieces', () => {
     expect(hasManagedBlock(CLAUDE, 'CULTURE.md')).toBe(true);
     expect(hasManagedBlock(CLAUDE, 'openrig-seat-skills.md')).toBe(false);
   });
-  it('a file that lives nowhere known is an unknown layer', () => {
+  linuxOnly('hidden-in-native')('a file that lives nowhere known is an unknown layer', () => {
     const c = { agentDir: '/a', rigRoot: '/r', profileFiles: new Set<string>(), memberFiles: new Set<string>(), podFiles: new Set<string>(), openrigHome: `${H}/.openrig`, rig: 'x', logicalId: 'p.m', podId: 'p' };
     expect(layerOf('/elsewhere', 'f.md', c)).toBe('unknown');
     expect(layerOf(`${H}/.openrig/state/seats/01R/review.qa/codex`, 'openrig-seat-skills.md', c)).toBe('seat');

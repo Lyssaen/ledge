@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { reapOwner, writeOwner } from '../src/daemon/omp/owner.js';
+import { linuxOnly } from './platform.js';
 
 const kids: ChildProcess[] = [];
 afterEach(() => { for (const k of kids.splice(0)) k.kill('SIGKILL'); });
@@ -12,7 +13,7 @@ const gone = (k: ChildProcess) => new Promise<boolean>(res => { if (k.exitCode !
 const dirWith = async (pid: number) => { const d = mkdtempSync(join(tmpdir(), 'ledge-owner-')); await writeOwner(d, pid); return d; };
 
 describe('reapOwner: one writer per conversation', () => {
-  it('ends an OMP a previous daemon left running in this session directory', async () => {
+  linuxOnly('posix-signals')('ends an OMP a previous daemon left running in this session directory', async () => {
     const d = mkdtempSync(join(tmpdir(), 'ledge-owner-'));
     const k = sleeper(['--session-dir', d]); await writeOwner(d, k.pid);
     expect(await reapOwner(d, { graceMs: 1000 })).toBe(true);
@@ -31,7 +32,7 @@ describe('reapOwner: one writer per conversation', () => {
     const dead = sleeper(['--session-dir', 'x']); dead.kill('SIGKILL'); await gone(dead);
     expect(await reapOwner(await dirWith(dead.pid!))).toBe(false);
   });
-  it('escalates to SIGKILL when the process ignores SIGTERM', async () => {
+  linuxOnly('posix-signals')('escalates to SIGKILL when the process ignores SIGTERM', async () => {
     const d = mkdtempSync(join(tmpdir(), 'ledge-owner-'));
     const k = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)", '--', '--session-dir', d], { stdio: 'ignore' }); kids.push(k);
     await new Promise(r => setTimeout(r, 300));

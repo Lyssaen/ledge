@@ -9,6 +9,7 @@ import { PassThrough } from 'node:stream';
 import { NOTE_MAX, parseServerMessage, type Projects, type ServerMessage, type Session, type Task } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createChat, droppedNote, tooWide, TOO_MANY } from '../src/chat/service.js';
+import { linuxOnly } from './platform.js';
 
 // The daemon's log lines, read here (a dropped project path is logged with its reason).
 const logged = vi.hoisted(() => [] as string[]);
@@ -183,13 +184,13 @@ describe('chat service', () => {
     expect(out[1]?.type).toBe('chat.step');
   });
 
-  it('records the sessions step once', async () => {
+  linuxOnly('hidden-in-native')('records the sessions step once', async () => {
     const { chat } = setup();
     await chat.ask('q1', 'x', () => {});
     expect(chat.history().at(-1)?.steps).toEqual([{ kind: 'sessions' }]);
   });
 
-  it('keeps only the last 50 turns (in-process fake child, no real spawn)', async () => {
+  linuxOnly('hidden-in-native')('keeps only the last 50 turns (in-process fake child, no real spawn)', async () => {
     const spawn = (() => {
       const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), kill: () => { child.emit('close', null); } });
       setImmediate(() => {
@@ -243,7 +244,7 @@ describe('chat service', () => {
     expect(chat.history()[0]!.answer).toContain('- ledge: /w/ledge');
   });
 
-  it('a valid block becomes the turn proposal, joined to chat.done, and leaves the text', async () => {
+  linuxOnly('hidden-in-native')('a valid block becomes the turn proposal, joined to chat.done, and leaves the text', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'proj-'));
     const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(`{"cwd": "${dir}/", "prompt": " Corrige le build "}`) }) });
     const out: ServerMessage[] = [];
@@ -256,7 +257,7 @@ describe('chat service', () => {
 
   describe('several sessions in one answer (#24)', () => {
     const fences = (...jsons: string[]) => 'Je lance ces sessions.\n\n' + jsons.map(j => '```ledge-session\n' + j + '\n```').join('\n');
-    it('every valid block is a row, in order; the first stays the turn proposal for older clients', async () => {
+    linuxOnly('hidden-in-native')('every valid block is a row, in order; the first stays the turn proposal for older clients', async () => {
       const a = mkdtempSync(join(tmpdir(), 'a-')), b = mkdtempSync(join(tmpdir(), 'b-'));
       const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fences(`{"cwd": "${a}"}`, `{"cwd": "${b}", "prompt": "Rebase"}`) }) });
       const out: ServerMessage[] = [];
@@ -266,13 +267,13 @@ describe('chat service', () => {
       expect(chat.proposal('q1', 1)).toEqual(pb);
       expect(chat.proposal('q1', 2)).toBeUndefined();
     });
-    it('a bad or missing folder drops its row only', async () => {
+    linuxOnly('hidden-in-native')('a bad or missing folder drops its row only', async () => {
       const a = mkdtempSync(join(tmpdir(), 'a-'));
       const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fences('{"cwd": "/nope/ledge-missing"}', `{"cwd": "${a}"}`, '{"cwd":') }) });
       await chat.ask('q1', 'x', () => {});
       expect(chat.history()[0]!.proposals).toEqual([{ cwd: a, project: basename(a), tool: 'claude' }]);
     });
-    it('keeps the first 8 rows and logs the rest', async () => {
+    linuxOnly('hidden-in-native')('keeps the first 8 rows and logs the rest', async () => {
       const dirs = Array.from({ length: 10 }, (_, i) => mkdtempSync(join(tmpdir(), `d${i}-`)));
       const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fences(...dirs.map(d => `{"cwd": "${d}"}`)) }) });
       logged.length = 0;
@@ -280,7 +281,7 @@ describe('chat service', () => {
       expect(chat.history()[0]!.proposals!.map(p => p.cwd)).toEqual(dirs.slice(0, 8));
       expect(logged.some(l => l.includes('2 sessions beyond 8 ignored'))).toBe(true);
     });
-    it('marks each row on its own; the first row mirrors the turn proposal', async () => {
+    linuxOnly('hidden-in-native')('marks each row on its own; the first row mirrors the turn proposal', async () => {
       const a = mkdtempSync(join(tmpdir(), 'a-')), b = mkdtempSync(join(tmpdir(), 'b-'));
       const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fences(`{"cwd": "${a}"}`, `{"cwd": "${b}"}`) }) });
       await chat.ask('q1', 'x', () => {});
@@ -326,7 +327,7 @@ describe('chat service', () => {
     expect(chat.proposal('q1')).toBeUndefined();
   });
 
-  it('markLaunched and markFailed update the proposal and tell every client', async () => {
+  linuxOnly('hidden-in-native')('markLaunched and markFailed update the proposal and tell every client', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'proj-'));
     const { chat } = setup({ env: async () => ({ ...process.env, FAKE_ANSWER: fence(`{"cwd": "${dir}"}`) }) });
     await chat.ask('q1', 'x', () => {});
@@ -365,7 +366,7 @@ describe('chat service', () => {
         expect(chat.history()[0]).not.toHaveProperty('projectProposal');
       }
     });
-    it('drops / and a home (the user\'s, ~ included), as the Settings proposer does, and keeps the rest', async () => {
+    linuxOnly('hidden-in-native')('drops / and a home (the user\'s, ~ included), as the Settings proposer does, and keeps the rest', async () => {
       const userHome = mkdtempSync(join(tmpdir(), 'home-')); mkdirSync(join(userHome, 'paper'));
       const block = JSON.stringify({ name: 'Paper', repos: [{ path: '/', why: 'root' }, { path: '~', why: 'home' }, { path: userHome + '/', why: 'home again' }, { path: '~/paper', why: 'kept' }] });
       const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(block) }) });
@@ -383,7 +384,7 @@ describe('chat service', () => {
       for (const p of ['/home/me/dev', '/home/me/dev/paper', '/w/ledge', '/mnt/c/Users/kim/dev', '/srv/me/other']) expect(tooWide(p, home)).toBeNull();
       expect(tooWide('/srv/me/homework', '/srv/me/home')).toBeNull();
     });
-    it('drops what holds the user\'s home and a top-level folder, each with its log line, and keeps the rest', async () => {
+    linuxOnly('hidden-in-native')('drops what holds the user\'s home and a top-level folder, each with its log line, and keeps the rest', async () => {
       const outer = mkdtempSync(join(tmpdir(), 'outer-'));
       const userHome = join(outer, 'me'); mkdirSync(join(userHome, 'paper'), { recursive: true });
       const block = JSON.stringify({ name: 'Paper', repos: [{ path: outer, why: 'holds the home' }, { path: '/usr', why: 'top level' }, { path: '~/paper', why: 'kept' }] });
@@ -394,7 +395,7 @@ describe('chat service', () => {
       expect(logged).toContain(`chat q1: project path dropped: a folder holding the home: ${outer}`);
       expect(logged).toContain('chat q1: project path dropped: a top-level folder: /usr');
     });
-    it('only / and homes: no proposal', async () => {
+    linuxOnly('hidden-in-native')('only / and homes: no proposal', async () => {
       const userHome = mkdtempSync(join(tmpdir(), 'home-'));
       const { chat } = setup({ userHome, env: async () => ({ ...process.env, FAKE_ANSWER: projectFence(JSON.stringify({ name: 'P', repos: [{ path: '/', why: 'x' }, { path: '~', why: 'y' }] })) }) });
       await chat.ask('q1', 'x', () => {});
@@ -562,7 +563,7 @@ describe('chat service', () => {
       const c = (await asked('codex', 'codex')).argv;
       expect(c.slice(-3)).toEqual(['-i', png, '-']);
     });
-    it('Cursor gets the image copied next to its context and named in the text', async () => {
+    linuxOnly('hidden-in-native')('Cursor gets the image copied next to its context and named in the text', async () => {
       const r = await asked('cursor', 'cursor');
       expect(r.stdin).toMatch(/Que vois-tu \? \[Image attached: .*\/image-1\.png\]$/);
     });

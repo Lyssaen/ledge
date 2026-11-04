@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cursorArgs, parseCursorLine, runCursor } from '../src/chat/cursor.js';
+import { linuxOnly } from './platform.js';
 
 const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
 const opts = (extra = {}) => ({ question: 'Où en sont les autres ?', cwd: process.cwd(), addDirs: ['/w/ledge'], sessionId: '11111111-1111-4111-8111-111111111111', resume: false, env: { ...process.env }, bin: [process.execPath, FAKE], ...extra });
@@ -51,7 +52,7 @@ describe('runCursor', () => {
 });
 
 describe('runCursor images', () => {
-  it('copies each image into cwd as image-N.<ext> and ends stdin with the brackets', async () => {
+  linuxOnly('hidden-in-native')('copies each image into cwd as image-N.<ext> and ends stdin with the brackets', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'ledge-cur-')); const src = join(cwd, '..', `src-${Date.now()}.png`);
     writeFileSync(src, 'x'); writeFileSync(`${src}.jpg`, 'y');
     const log = join(cwd, '..', `log-${Date.now()}.jsonl`);

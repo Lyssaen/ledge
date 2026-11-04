@@ -9,6 +9,7 @@ import { realTmux, type Tmux } from '../src/tmux.js';
 import { killTestServer } from './helpers.js';
 import { connect } from '../src/client.js';
 import { ensureLedgeDir, paths } from '../src/paths.js';
+import { linuxOnly } from './platform.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -36,7 +37,7 @@ describe('startDaemon: OMP sessions', () => {
 });
 
 describe('startDaemon', () => {
-  it('restores live sessions, marks dead ones exited, keeps hook-only ones and serves a snapshot', async () => {
+  linuxOnly('tmux')('restores live sessions, marks dead ones exited, keeps hook-only ones and serves a snapshot', async () => {
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-'));
     const socket = `ledge-test-${process.pid}-${Date.now()}`;
     const tmux = realTmux(socket, { scope: async () => false });

@@ -4,6 +4,7 @@ import { CAPTURE_RAW_MAX } from '@ledge/protocol';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { toolImages } from '../src/cli/toolImages.js';
+import { linuxOnly, needsSymlinks } from './platform.js';
 
 const claude = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
 const mcp = { type: 'image', data: 'BBBB', mimeType: 'image/jpeg' };
@@ -32,7 +33,7 @@ describe('toolImages', () => {
     };
     const text = (path: string) => ({ type: 'text', text: `[Image: source: ${path}]` });
 
-    it('reads the file named by a text block when there is no image block', () => {
+    linuxOnly('hidden-in-native')('reads the file named by a text block when there is no image block', () => {
       const { home, file } = setup();
       expect(toolImages([{ type: 'text', text: 'Took it' }, text(file)], home).images).toEqual([{ mime: 'image/png', data: png.toString('base64') }]);
     });
@@ -40,7 +41,7 @@ describe('toolImages', () => {
       const { home, file } = setup();
       expect(toolImages([claude, text(file)], home).images).toEqual([{ mime: 'image/png', data: 'AAAA' }]);
     });
-    it('refuses a path outside <home>/.claude/projects, a symlink out of it, a missing or non-image file', () => {
+    needsSymlinks('refuses a path outside <home>/.claude/projects, a symlink out of it, a missing or non-image file', () => {
       const { home, file } = setup();
       const outside = join(home, 'secret.png'); writeFileSync(outside, png);
       const link = join(home, '.claude', 'projects', 'link.png'); symlinkSync(outside, link);
@@ -48,7 +49,7 @@ describe('toolImages', () => {
       for (const p of [outside, link, notImage, join(home, '.claude', 'projects', 'nope.png'), `${join(home, '.claude', 'projects')}/../secret.png`]) expect(toolImages([text(p)], home)).toEqual({ images: [], dropped: false });
       expect(toolImages([text(file)], home).images).toHaveLength(1);
     });
-    it('does not read a file over CAPTURE_RAW_MAX, and counts it dropped', () => {
+    linuxOnly('hidden-in-native')('does not read a file over CAPTURE_RAW_MAX, and counts it dropped', () => {
       const { home, file } = setup();
       const big = join(home, '.claude', 'projects', 'big.png'); writeFileSync(big, png); truncateSync(big, CAPTURE_RAW_MAX + 1);
       expect(toolImages([text(big)], home)).toEqual({ images: [], dropped: true });

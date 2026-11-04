@@ -6,6 +6,7 @@ import { ACTIONS, NEVER_PROPOSED } from '@ledge/protocol';
 import { installedAgents, ledgeMd, readGuide } from '../src/chat/guide.js';
 import { writeContext, stepFor } from '../src/chat/context.js';
 import { buildPersona } from '../src/chat/persona.js';
+import { linuxOnly } from './platform.js';
 
 const T0 = '2026-10-11T10:00:00.000Z';
 const tmp = () => mkdtempSync(join(tmpdir(), 'guide-'));
@@ -33,7 +34,7 @@ describe('ledge.md', () => {
     expect(ledgeMd({ guide: 'g', agents: [] })).toContain('none found');
   });
 
-  it('writeContext writes it when asked, as a step', async () => {
+  linuxOnly('hidden-in-native')('writeContext writes it when asked, as a step', async () => {
     const dir = tmp();
     const ctx = await writeContext(dir, { sessions: [], now: T0, capture: async () => null, git: async () => null, ledge: { guide: '# G', version: '9.9.9' } });
     expect(readFileSync(join(dir, 'ledge.md'), 'utf8')).toContain('9.9.9');
@@ -43,7 +44,7 @@ describe('ledge.md', () => {
     expect(existsSync(join(none, 'ledge.md'))).toBe(false);
   });
 
-  it('finds the agents whose executable is on the PATH, executable only', async () => {
+  linuxOnly('hidden-in-native')('finds the agents whose executable is on the PATH, executable only', async () => {
     const a = tmp(); const b = tmp();
     writeFileSync(join(a, 'claude'), ''); chmodSync(join(a, 'claude'), 0o755);
     writeFileSync(join(b, 'cursor-agent'), ''); chmodSync(join(b, 'cursor-agent'), 0o755);

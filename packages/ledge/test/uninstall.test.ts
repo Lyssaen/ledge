@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, SERVICE, writeBin, type Runner } from '../src/cli/setup.js';
 import { removeClaudeHooks, removeCursorHooks, removeService, runUninstall, uninstallArgs } from '../src/cli/uninstall.js';
+import { needsSymlinks } from './platform.js';
 
 type Call = [string, string[]];
 const fakeRun = (answers: Record<string, { code: number; stdout?: string; stderr?: string }> = {}) => {
@@ -94,7 +95,7 @@ describe('runUninstall', () => {
     return { settingsPath, codexDir: join(d, 'codex'), cursorDir: join(d, 'cursor') };
   };
 
-  it('removes the hooks and the link, keeps ~/.ledge, reports running sessions without killing them', async () => {
+  needsSymlinks('removes the hooks and the link, keeps ~/.ledge, reports running sessions without killing them', async () => {
     const d = tmp(); const files = setupFiles(d);
     mkdirSync(process.env.LEDGE_HOME!); writeFileSync(join(process.env.LEDGE_HOME!, 'sessions.json'), '[]');
     const script = join(d, 'index.js'); writeFileSync(script, '');
@@ -112,7 +113,7 @@ describe('runUninstall', () => {
     expect(text).toContain('2 sessions still running');
   });
 
-  it('with purge removes ~/.ledge; a ledge link to something else stays', async () => {
+  needsSymlinks('with purge removes ~/.ledge; a ledge link to something else stays', async () => {
     const d = tmp(); const files = setupFiles(d);
     mkdirSync(process.env.LEDGE_HOME!);
     const other = join(d, 'other.js'); writeFileSync(other, '');
@@ -124,7 +125,7 @@ describe('runUninstall', () => {
     expect(existsSync(link)).toBe(true);
   });
 
-  it('removes the script ledge setup wrote in place of the link', async () => {
+  needsSymlinks('removes the script ledge setup wrote in place of the link', async () => {
     const d = tmp(); const files = setupFiles(d);
     mkdirSync(process.env.LEDGE_HOME!);
     const script = join(d, 'dist', 'cli', 'index.js'); mkdirSync(join(d, 'dist', 'cli'), { recursive: true }); writeFileSync(script, '');

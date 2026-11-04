@@ -10,12 +10,13 @@ import { connect } from '../src/client.js';
 import { Store } from '../src/daemon/store.js';
 import type { Tmux } from '../src/tmux.js';
 import { authHeaders } from './helpers.js';
+import { linuxOnly } from './platform.js';
 
 
 describe('daemon token file', () => {
   beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-auth-')); });
 
-  it('creates a 0600 token of 64 hex chars', async () => {
+  linuxOnly('posix-modes')('creates a 0600 token of 64 hex chars', async () => {
     await ensureDaemonToken();
     expect(statSync(paths().token).mode & 0o777).toBe(0o600);
     expect(readFileSync(paths().token, 'utf8')).toMatch(/^[0-9a-f]{64}\n$/);

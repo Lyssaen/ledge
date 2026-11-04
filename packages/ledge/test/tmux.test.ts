@@ -5,6 +5,7 @@ import { ensureLedgeDir } from '../src/paths.js';
 import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { isWindows, linuxOnly } from './platform.js';
 
 const socket = `ledge-test-${process.pid}-${Date.now()}`;
 const tmux = realTmux(socket, { scope: async () => false });
@@ -12,10 +13,10 @@ const name = 'ledge-t1';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 beforeAll(async () => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-')); await ensureLedgeDir(); });
-afterAll(async () => { await killTestServer(socket); });
+afterAll(async () => { if (!isWindows) await killTestServer(socket); });
 
 describe('tmux', () => {
-  it('creates a session running a command with env and cwd', async () => {
+  linuxOnly('tmux')('creates a session running a command with env and cwd', async () => {
     await tmux.newSession({ name, cwd: '/tmp', env: { LEDGE_SESSION: 't1' }, command: ['sh', '-c', 'echo "LS=$LEDGE_SESSION PWD=$(pwd)"; cat'] });
     await sleep(300);
     expect(await tmux.hasSession(name)).toBe(true);
@@ -23,25 +24,25 @@ describe('tmux', () => {
     const out = await tmux.capture(name, 5);
     expect(out).toContain('LS=t1 PWD=/tmp');
   });
-  it('gives a detached pane the PATH of its env (tmux hands it the client PATH otherwise)', async () => {
+  linuxOnly('tmux')('gives a detached pane the PATH of its env (tmux hands it the client PATH otherwise)', async () => {
     const n = 'ledge-path';
     await tmux.newSession({ name: n, cwd: '/tmp', env: { PATH: '/ledge-test-first:/usr/bin:/bin' }, command: ['/bin/sh', '-c', 'echo "P=$PATH"; cat'] });
     await sleep(300);
     expect(await tmux.capture(n, 5)).toContain('P=/ledge-test-first:/usr/bin:/bin');
     await tmux.killSession(n);
   });
-  it('sets a session option the terminal title can show', async () => {
+  linuxOnly('tmux')('sets a session option the terminal title can show', async () => {
     await tmux.setOption(name, '@ledge_title', 'Otto · x');
     expect((await run(['-L', socket, 'show-option', '-v', '-t', `=${name}:`, '@ledge_title'])).stdout.trim()).toBe('Otto · x');
   });
-  it('sends text literally, then Enter separately', async () => {
+  linuxOnly('tmux')('sends text literally, then Enter separately', async () => {
     await tmux.sendText(name, '-n ; echo not-a-flag');
     await tmux.sendKeys(name, ['Enter']);
     await sleep(300);
     const out = await tmux.capture(name, 5);
     expect(out).toContain('-n ; echo not-a-flag');
   });
-  it('capture returns only the last N lines', async () => {
+  linuxOnly('tmux')('capture returns only the last N lines', async () => {
     const n = 'ledge-t2';
     await tmux.newSession({ name: n, cwd: '/tmp', env: {}, command: ['sh', '-c', 'for i in $(seq 1 40); do echo line$i; done; cat'] });
     await sleep(400);
@@ -49,7 +50,7 @@ describe('tmux', () => {
     expect(out!.split('\n')).toEqual(['line36', 'line37', 'line38', 'line39', 'line40']);
     await tmux.killSession(n);
   });
-  it('sends a trailing or lone semicolon literally', async () => {
+  linuxOnly('tmux')('sends a trailing or lone semicolon literally', async () => {
     const n = 'ledge-t3';
     await tmux.newSession({ name: n, cwd: '/tmp', env: {}, command: ['cat'] });
     await sleep(200);
@@ -61,7 +62,7 @@ describe('tmux', () => {
     expect((await tmux.capture(n, 10))!.split('\n')).toEqual(['echo hi;', 'echo hi;', ';', ';']);
     await tmux.killSession(n);
   });
-  it('sends a key name as a key: C-u is Ctrl+U (here the line kill of a cooked tty), never the text « C-u »', async () => {
+  linuxOnly('tmux')('sends a key name as a key: C-u is Ctrl+U (here the line kill of a cooked tty), never the text « C-u »', async () => {
     const n = 'ledge-t4';
     await tmux.newSession({ name: n, cwd: '/tmp', env: {}, command: ['cat'] });
     await sleep(200);
@@ -77,7 +78,7 @@ describe('tmux', () => {
     await expect(tmux.sendText(name, 'a\nb')).rejects.toThrow(/newline/);
     await expect(tmux.sendText(name, 'a\rb')).rejects.toThrow(/newline/);
   });
-  it('does not prefix-match other sessions', async () => {
+  linuxOnly('tmux')('does not prefix-match other sessions', async () => {
     for (const n of ['ledge-p1', 'ledge-p10']) await tmux.newSession({ name: n, cwd: '/tmp', env: {}, command: ['cat'] });
     await sleep(200);
     await tmux.killSession('ledge-p1');
@@ -105,7 +106,7 @@ describe('tmux', () => {
 });
 
 describe('test helpers', () => {
-  it('killTestServer kills the throwaway server and removes its socket file', async () => {
+  linuxOnly('tmux')('killTestServer kills the throwaway server and removes its socket file', async () => {
     const sock = `ledge-test-helper-${process.pid}-${Date.now()}`;
     const t = realTmux(sock, { scope: async () => false });
     await t.newSession({ name: 'h', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
@@ -117,7 +118,7 @@ describe('test helpers', () => {
 });
 
 describe('tmux no server', () => {
-  it('listSessions is empty when no server runs on the socket', async () => {
+  linuxOnly('tmux')('listSessions is empty when no server runs on the socket', async () => {
     expect(await realTmux(`ledge-test-none-${process.pid}`).listSessions()).toEqual([]);
   });
 });
