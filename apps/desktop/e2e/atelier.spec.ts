@@ -230,3 +230,23 @@ test('a message between agents: the bubble over Otto, an upright envelope flying
   await expect(page.locator('.exchange-wire path')).toHaveCount(1);
   await expect(envelope).toHaveCount(0);
 });
+
+test('the tiles start under Ledge\'s corner at every width, however tall its label grows (iPad, chat open)', async ({ page }) => {
+  const loose = ['ua', 'ub', 'uc'].map(id => session(id, { name: id.toUpperCase(), cwd: `/tmp/${id}`, project: `x-${id}` }));
+  await fakeDaemon(page, [eight[0]!, eight[4]!, kit, ...loose], { projects: twoProjects });
+  // A taller desk than Chromium's own fonts give, as Safari's do on an iPad: the mosaic must make room for it, not run into it.
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+    const style = document.createElement('style'); style.textContent = '.ledge-desk>small{font-size:16px;line-height:64px}'; document.head.append(style);
+  }));
+  for (const [width, height, chat] of [[1600, 1000, true], [1600, 1000, false], [1180, 820, true], [820, 1180, false], [390, 844, false]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/'); await openAtelier(page);
+    await expect(page.locator('.unassigned-zone')).toBeVisible();
+    if (chat) await page.keyboard.press('Control+/');
+    await expect.poll(async () => page.evaluate(() => {
+      const corner = document.querySelector('.ledge-corner')!.getBoundingClientRect();
+      const tiles = [...document.querySelectorAll('.project-room,.unassigned-zone')].map(e => e.getBoundingClientRect());
+      return tiles.filter(t => t.top < corner.bottom && t.left < corner.right && t.right > corner.left).length;
+    }), `${width}x${height}${chat ? ', chat open' : ''}: no tile under Ledge's label`).toBe(0);
+  }
+});

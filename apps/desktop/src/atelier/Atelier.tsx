@@ -158,21 +158,24 @@ export function Atelier({ nav, dispatch, sessions, projects, order, projectIdOf,
         <div ref={view.shellRef} className={`office-shell ${nav.paused ? 'office-paused' : ''} ${reduced ? 'office-reduced' : ''}`}>
           <MessageLayer sessions={sessions} clock={clock} paused={nav.paused} reduced={reduced} dispatch={dispatch} tasks={tasks} />
           <LedgeDesk count={activeCount(sessions)} chat={nav.chat} paused={nav.paused} onClick={() => dispatch({ type: 'chat' })} />
-          <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
-            {scene.rooms.map(({ project, tables, rig }) => (
-              <ProjectRoom key={project.id} project={project} tables={tables} rig={rig} sessions={sessions} width={roomTileWidth(tables, seats)} dispatch={dispatch} broadcast={broadcast}>
-                {tables.map(table => (
-                  <ProjectTable key={table.key} table={table} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
-                    isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
-                    actions={actions} menuId={menu.menu?.target.kind === 'session' ? menu.menu.target.id : null} onMenu={menuAt}
-                    seatDrag={seatDrag} tableDrop={rig ? undefined : tableDrop(table, project.id)} />
-                ))}
-              </ProjectRoom>
-            ))}
+          {/* Ledge's corner is a row of its own above the mosaic (atelier-corner.css): the tiles start under it at any width. */}
+          <div className="atelier-tiles">
+            <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
+              {scene.rooms.map(({ project, tables, rig }) => (
+                <ProjectRoom key={project.id} project={project} tables={tables} rig={rig} sessions={sessions} width={roomTileWidth(tables, seats)} dispatch={dispatch} broadcast={broadcast}>
+                  {tables.map(table => (
+                    <ProjectTable key={table.key} table={table} project={project} mains={table.mains} order={order} helpers={nav.helpers} seats={seats} paused={nav.paused}
+                      isolated={filter === project.id} focusedId={focusedId} seated={filing.seated} dispatch={dispatch} filing={filing}
+                      actions={actions} menuId={menu.menu?.target.kind === 'session' ? menu.menu.target.id : null} onMenu={menuAt}
+                      seatDrag={seatDrag} tableDrop={rig ? undefined : tableDrop(table, project.id)} />
+                  ))}
+                </ProjectRoom>
+              ))}
+            </div>
+            {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
+            <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
+              filing={filing} projects={projects?.projects ?? []} onMenu={menuAt} />
           </div>
-          {scene.empty && <EmptyProject project={scene.empty} dispatch={dispatch} />}
-          <Unassigned sessions={scene.unassigned} order={order} focusedId={focusedId} paused={nav.paused} dispatch={dispatch}
-            filing={filing} projects={projects?.projects ?? []} onMenu={menuAt} />
         </div>
       </div>
       <div className="workspace-legend">

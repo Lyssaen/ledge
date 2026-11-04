@@ -1,0 +1,7 @@
+/* Ledge Desktop's own atelier layout, over @ledge/ui's atelier.css (the iPad keeps that one; apps/mobile, useIpadView).
+   Ledge's corner is in the flow, a row of its own above the tiles: the mosaic starts under it whatever its height (the bubble,
+   the fonts), where a fixed 104px top padding let « Sans projet » run into « Votre assistant ». The side padding comes from the
+   fit (--atelier-pad, useAtelierView); the corner backs out of it to keep 18px from the shell's left edge. */
+.overview-scroll.atelier .office-shell{flex-direction:column;flex-wrap:nowrap;justify-content:flex-start;padding:14px var(--atelier-pad,56px) 44px}
+.overview-scroll.atelier .ledge-corner{position:relative;top:auto;left:auto;align-self:flex-start;flex:none;margin-left:calc(18px - var(--atelier-pad,56px))}
+.overview-scroll.atelier .atelier-tiles{flex:1 1 auto;display:flex;flex-wrap:wrap;align-content:space-evenly;justify-content:center;gap:0 12px}
