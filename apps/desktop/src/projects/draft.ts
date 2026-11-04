@@ -1,4 +1,4 @@
-import { normalizePath, type Project, type ProjectColor, type Projects, type Repo, type Session } from '@ledge/protocol';
+import { normalizePath, pathKey, samePath, type Project, type ProjectColor, type Projects, type Repo, type Session } from '@ledge/protocol';
 import { newProjectId, withProject, withRule, type Proposal, type Why } from '@ledge/fleet';
 import { ruleFor } from '../atelier/filing';
 
@@ -10,7 +10,8 @@ export const COLOR_ORDER: readonly ProjectColor[] = ['blue', 'green', 'amber', '
 export interface ProjectDraft { id?: string; name: string; color: ProjectColor; description: string; repos: Repo[]; file: string[]; proposed?: Record<string, { why: Why; checked: boolean }> }
 
 /** A repository's key: machine and normalised path. */
-export const repoKey = (machine: string, path: string): string => `${machine}\n${normalizePath(path)}`;
+/** One key per folder: a Windows folder in another spelling (case, `/`) is the same repository. */
+export const repoKey = (machine: string, path: string): string => `${machine}\n${pathKey(path)}`;
 
 const counts = (d: ProjectDraft, r: Repo) => d.proposed?.[repoKey(r.machine, r.path)]?.checked !== false;
 /** The repositories that count: all of them but the proposed ones unchecked. */
@@ -100,7 +101,7 @@ export function draftProblem(d: ProjectDraft, state: Projects): DraftProblem | n
 
 /** Another project (not the draft's own) that also owns this repo. */
 export function alsoIn(repo: Repo, d: ProjectDraft, state: Projects): Project | undefined {
-  return state.projects.find(p => p.id !== d.id && p.repos.some(r => r.machine === repo.machine && normalizePath(r.path) === normalizePath(repo.path)));
+  return state.projects.find(p => p.id !== d.id && p.repos.some(r => r.machine === repo.machine && samePath(r.path, repo.path)));
 }
 
 /** The state to send: the project (id kept, or `newProjectId` for a new one) with the repositories that count, then a rule for each checked session. */
@@ -121,7 +122,7 @@ export function deletion(state: Projects, id: string, sessions: readonly Session
 export function sameDraft(a: ProjectDraft, b: ProjectDraft): boolean {
   const ra = keptRepos(a), rb = keptRepos(b);
   return a.name === b.name && a.color === b.color && a.description === b.description
-    && ra.length === rb.length && ra.every((r, i) => r.machine === rb[i]!.machine && normalizePath(r.path) === normalizePath(rb[i]!.path))
+    && ra.length === rb.length && ra.every((r, i) => r.machine === rb[i]!.machine && samePath(r.path, rb[i]!.path))
     && a.file.length === b.file.length && a.file.every((x, i) => x === b.file[i]);
 }
 

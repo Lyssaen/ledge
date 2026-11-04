@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { normalizePath, projectOf, type ChatTurn, type Projects } from '@ledge/protocol';
+import { normalizePath, pathUnder, projectOf, samePath, type ChatTurn, type Projects } from '@ledge/protocol';
 import { firstFreeColor, type Proposal, type ProposedRepo } from '@ledge/fleet';
 import { useI18n } from '../i18n/lang';
 import { nameKey } from '../projects/draft';
@@ -25,10 +25,10 @@ export function proposalFromTurn(turn: ChatTurn | undefined, projects: Projects,
   if (!turn || !block) return { problem: 'gone' };
   const machine = turn.machineId ?? 'local';
   const target = block.addTo === undefined ? undefined : projectNamed(projects, block.addTo);
-  const listed = (path: string) => !!target?.repos.some(r => r.machine === machine && normalizePath(r.path) === path);
+  const listed = (path: string) => !!target?.repos.some(r => r.machine === machine && samePath(r.path, path));
   // A folder that holds another project's repository on this machine would take it in: left out too.
   const others = projects.projects.filter(p => p.id !== target?.id).flatMap(p => p.repos).filter(r => r.machine === machine).map(r => normalizePath(r.path));
-  const holdsOther = (path: string) => others.some(o => o.startsWith(path === '/' ? '/' : `${path}/`) && o !== path);
+  const holdsOther = (path: string) => others.some(o => pathUnder(o, path) && !samePath(o, path));
   const mine = block.repos
     .map(r => ({ machine, path: normalizePath(r.path), why: { kind: 'chat' as const, text: r.why } }))
     .filter(r => { const owner = projectOf({ machineId: machine, cwd: r.path }, projects); return (owner === null || owner === target?.id) && !holdsOther(r.path); });

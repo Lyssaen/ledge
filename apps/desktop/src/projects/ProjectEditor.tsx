@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type ReactNode } from 'react';
 import { proposeFor, proposeProjects, withoutProject, type DaemonClient, type Fleet, type MachineState, type Proposal } from '@ledge/fleet';
-import { normalizePath, PROJECT_COLORS, type Projects, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
+import { baseName as baseOf, normalizePath, PROJECT_COLORS, samePath, type Projects, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
+import { useFeatures } from '../native/mode';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -19,7 +20,8 @@ import { ProjectSwatch } from './ProjectSwatch';
 import { useLedgeScan } from './useLedgeScan';
 import { useProjectSave } from './useProjectSave';
 
-const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path;
+// Both path shapes (paths.ts): `C:\Users\po\work` is « work » as `/home/po/work` is.
+const baseName = (path: string) => baseOf(path);
 /** How long the scan's finished steps stay in view before the proposal replaces them. */
 const SETTLE_MS = 400;
 /** « Demander à Ledge »'s sparkles (the mockup's). */
@@ -61,6 +63,8 @@ export function ProjectEditor(p: {
   onDeleted(id: string, name: string, moveTo: string | null, agents: number): void;
 }): JSX.Element {
   const { t } = useI18n();
+  // Native mode's first round has no Ledge chat: neither « Let Ledge do it » nor « Ask Ledge ».
+  const ledgeHelps = useFeatures().chat;
   const c = t.projects;
   const { machines, projects } = p;
   const theme = useTheme();
@@ -198,7 +202,7 @@ export function ProjectEditor(p: {
     const rows = reposRef.current?.querySelectorAll<HTMLElement>('.pe-repo-remove') ?? [];
     (rows[i] ?? rows[i - 1] ?? addRef.current ?? reposRef.current?.querySelector<HTMLElement>('.picker-typed input'))?.focus();
   }, [d.repos]);
-  const taken = (machine: string, path: string) => d.repos.some(r => r.machine === machine && normalizePath(r.path) === path);
+  const taken = (machine: string, path: string) => d.repos.some(r => r.machine === machine && samePath(r.path, path));
   // A repository belongs to one project: the browser flags a folder another project has (« Déjà dans {p} »).
   const ownerOf = (machine: string, path: string) => alsoIn({ machine, path }, d, projects)?.name ?? null;
   const onAdd = ({ branch, ...repo }: Repo & { branch: string | null }) => {
@@ -346,12 +350,12 @@ export function ProjectEditor(p: {
   const limitedNote = limited.length > 0 ? c.ledge.limited(limited) : '';
   // A scan cut short may have missed a deeper repository: the folder browser adds it by hand (#22).
   const browse = limited.length > 0 && !adding ? <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>{c.ledge.browse}</Button> : null;
-  const canAsk = !proposal && !fresh && !nothing && (d.name.trim() !== '' || d.repos.length > 0);
+  const canAsk = ledgeHelps && !proposal && !fresh && !nothing && (d.name.trim() !== '' || d.repos.length > 0);
   return (
     <form className="pe" onSubmit={e => { e.preventDefault(); save(); }} onKeyDown={onKeyDown}>
       {groups.map(([machine, paths]) => <Inspect key={machine} client={p.client} machine={machine} paths={paths} onInfos={onInfos} />)}
       <div className="pe-body">
-        {fresh && !nothing && (
+        {ledgeHelps && fresh && !nothing && (
           <div className="pe-ledge">
             <ResidentMascot size={44} theme={theme} paused={p.paused} reducedMotion={reduced} />
             <div><strong>{c.ledge.offerTitle}</strong><span>{c.ledge.offerBody}</span></div>

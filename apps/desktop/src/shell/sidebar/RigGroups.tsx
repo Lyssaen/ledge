@@ -1,3 +1,4 @@
+import { baseName } from '@ledge/protocol';
 import { useState, type CSSProperties, type JSX } from 'react';
 import { isStoppedOmpSeat, type HumanAsk, type Session } from '@ledge/protocol';
 import { isAskSeat, markOf } from '../../asks/model';
@@ -134,7 +135,7 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
                     <button type="button" className="st-chev" aria-label={open ? t.side.fold(name) : t.side.unfold(name)} onClick={flip}><span className={open ? 'open' : undefined}><Icon d={ICONS.chevronRight.d} size={12} /></span></button>
                     <span className="st-rig-hex" aria-hidden="true"><Icon d={SHELL_ICONS.rig} size={13} /></span>
                     <button type="button" className="st-main" title={t.side.rigOf(name)} onClick={() => dispatch({ type: 'openrig' })}>
-                      <strong>{name}</strong><span className="mono">{seats[0]!.cwd.split('/').filter(Boolean).at(-1) ?? ''}</span>
+                      <strong>{name}</strong><span className="mono">{seats[0]!.cwd ? baseName(seats[0]!.cwd) : ''}</span>
                     </button>
                     <span className="st-tally">{ask > 0 && <span className="t-need" title={t.side.rigAsks(ask)}><i />{ask}</span>}{working > 0 && <span className="t-work"><i />{working}</span>}</span>
                     <span className="st-acts">

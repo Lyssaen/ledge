@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { splitId } from '@ledge/fleet';
-import { normalizePath, type Session } from '@ledge/protocol';
+import { samePath, type Session } from '@ledge/protocol';
 import type { FleetView } from '../fleet/useFleet';
 import { LAUNCH_TIMEOUT_MS, type LaunchMessage } from './model';
 
@@ -16,7 +16,7 @@ interface Awaited { msg: LaunchMessage; launchedSeq: number; errorSeq: number; t
 export function answers(msg: LaunchMessage, id: string, sessions: readonly Pick<Session, 'id' | 'tool' | 'cwd'>[]): boolean {
   if (splitId(id)?.machine !== (msg.machineId ?? 'local')) return false;
   const s = sessions.find(x => x.id === id);
-  return !s || (s.tool === msg.tool && normalizePath(s.cwd) === normalizePath(msg.cwd));
+  return !s || (s.tool === msg.tool && samePath(s.cwd, msg.cwd));
 }
 
 /** One launch at a time, nothing optimistic: `launch` sends, then the next `lastLaunched` (a seq above the one seen before the send)

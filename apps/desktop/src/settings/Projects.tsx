@@ -1,3 +1,4 @@
+import { baseName } from '@ledge/protocol';
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import type { Projects as ProjectsState, RepoInfo, Rule } from '@ledge/protocol';
@@ -15,7 +16,8 @@ import { Suggestions } from './Suggestions';
 const NO_STATE: ProjectsState = { projects: [], rules: [] };
 const keyOf = (r: { machine: string; path: string }) => `${r.machine}\n${r.path}`;
 const sameFolder = (a: { machine: string; path: string }, b: { machine: string; path: string }) => a.machine === b.machine && a.path === b.path;
-const basename = (path: string) => path.split('/').filter(Boolean).at(-1) ?? path;
+// Both path shapes (paths.ts).
+const basename = (path: string) => baseName(path);
 
 /** One machine's repositories, inspected (useRepoInfo, lot 7): the answer goes up to the list. */
 function Inspect({ client, machine, paths, onInfos }: { client: DaemonClient; machine: string; paths: readonly string[]; onInfos(machine: string, infos: ReadonlyMap<string, RepoInfo>): void }): null {
