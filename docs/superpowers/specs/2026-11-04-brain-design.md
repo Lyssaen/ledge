@@ -66,12 +66,12 @@ Front matter, every field optional, an older note reads unchanged:
 
 ### 3.2 What Ledge says of itself (the generated part)
 
-Already generated for the chat, made readable by sessions under fixed names that cannot clash with a note
-(a note named like one of them is listed under `note:<name>`):
+Already generated for the chat, made readable by sessions under `@` names, which no note can take (a note keeps its
+plain name: the user's `machines.md` stays `machines`):
 
-- `ledge`: `ledge.md` as today (guide + version + agents installed + actions).
-- `projects`: the projects, their repositories per machine (what `projects.md` holds).
-- `machines`: the machines the daemon knows (`daemon/machines.ts`), name and reachability, no credentials.
+- `@ledge`: `ledge.md` as today (guide + version + agents installed + actions).
+- `@projects`: the projects, their repositories per machine (what `projects.md` holds).
+- `@machines`: the machines the daemon knows (`daemon/machines.ts`), label, id and ssh alias, no credentials.
 
 `sessions` and `tasks` are not duplicated: `ledge who` and `ledge task list` already answer.
 
@@ -82,8 +82,10 @@ Already generated for the chat, made readable by sessions under fixed names that
   `{ name, title, when, scope, projects, modifiedAt, checkedAt?, truncated, doubtful? }`, sorted by name, capped at
   `NOTES_MAX` (200) and `NOTE_MAX` (32 KiB) as today.
 - `chat/notes.ts` becomes a thin writer over it (same files, same steps), filtered on `scope !== 'sessions'`.
-- Daemon requests `brain.list { for: sessionId }` and `brain.show { name, for }`: the daemon applies `scope` and
-  `projects` for that session, so a hook-side bug cannot leak a `chat` note.
+- No daemon request (as built in lot 1): the hook and `ledge brain` read the folder and `projects.json` on this machine,
+  as the user. `scope` and `projects` decide what Ledge *offers*; they are not a protection, since a session with a shell
+  can read `~/.ledge/context` itself. The chat, confined to its folder (`--restricted`), is the one reader `scope` does
+  bound.
 
 ### 3.4 Sessions: the hook and the CLI
 
@@ -91,11 +93,18 @@ Already generated for the chat, made readable by sessions under fixed names that
 lines (the rest: « et N autres : `ledge brain` »):
 
 ```
-Ce que Ledge sait de ton environnement (notes de l'utilisateur, à lire seulement si ton travail en a besoin) :
+Ce que Ledge sait de lui-même (ses écrans, ses commandes, ses actions) : `ledge brain @ledge` ; tout ce qu'il sait : `ledge brain`.
+Notes de l'utilisateur sur son environnement (machines, services, habitudes), à lire avec `ledge brain <nom>` seulement si
+ton travail en a besoin ; pour le code, le CLAUDE.md ou AGENTS.md du dépôt prime :
 - machines — « Les machines du homelab » — quand : une question sur une machine précise… — vérifiée le 2026-11-01
 - reseau — « … » — quand : … — modifiée le 2026-10-30
-Lis-en une avec `ledge brain <nom>` ; `ledge brain ledge` dit ce qu'est Ledge. Pour le code, le CLAUDE.md ou AGENTS.md
-du dépôt prime. Tu apprends un fait durable sur l'environnement : `ledge brain propose <nom> "<fait>" "<comment tu le sais>"`.
+```
+
+The first line is always there; the notes' part only when the project is offered some. Lot 2 adds the `propose` and
+`flag` sentences:
+
+```
+Tu apprends un fait durable sur l'environnement : `ledge brain propose <nom> "<fait>" "<comment tu le sais>"`.
 Une note te semble fausse : `ledge brain flag <nom> "<ce qui ne va pas>"`. L'utilisateur valide avant que rien ne s'écrive.
 ```
 
@@ -106,8 +115,8 @@ CLI (`packages/ledge/src/cli/brain.ts`, `case 'brain'` in `cli/index.ts`):
 - `ledge brain propose <name|new:<name>> "<fact>" "<source>"` — §3.6.
 - `ledge brain flag <name> "<what is wrong>"` — §3.6.
 
-For Codex, Cursor and OMP, whose shell cannot reach the daemon, `parseLedgeCommand` and `runLedgeCommand`
-(`cli/hook.ts:470`) learn `brain` like `who`, `read`, `task` and `handover`, and the Codex / OMP hook sentence names it.
+`ledge brain` needs no daemon: it runs in Codex's read-only sandbox as it is (the sandbox reads the whole disk), so it is
+not intercepted like `who`. The write-back commands of lot 2 need the daemon, and are.
 
 Size: the block is ~1.5 KiB for 5 notes, told once at start, resume and clear (as the identity is).
 
@@ -164,7 +173,7 @@ only the user does.
   7. `folders.md`: leave out folders under the OS temporary directory.
   8. `tasks.md` « closed today » against `input.now`'s date.
   9. Codex chat: replace `disk-full-read-access` by the context folder and `addDirs`, or document why not.
-- **Lot 1 — read**: §3.1–3.5 without `propose`/`flag`. Tests: index parsing (scope, projects, checked, clash with a
+- **Lot 1 — read**: §3.1–3.5 without `propose`/`flag`. Built on `feat/brain-lot1` (2026-11-04) with the defaults of §6. Tests: index parsing (scope, projects, checked, clash with a
   generated name), daemon filtering per session, hook block (cap, empty), CLI on all four harnesses, chat unchanged
   for an older notes folder.
 - **Lot 2 — write-back**: §3.6, after the mockup. Tests: append and create, redaction refusal, scope refusal, caps,
@@ -180,6 +189,9 @@ only the user does.
 - **Token cost.** The index only, capped at 20 lines, once per start.
 
 ## 6. Open questions for the user
+
+Lot 1 was built with the first answer of each; Q2 is the user's note, left untouched: `scope: chat` in its front
+matter keeps it out of the sessions' index.
 
 1. Name: « Cerveau » in the UI and `ledge brain` in the CLI, or keep « contexte » / `ledge context` (already the
    folder's name, but « contexte » also means the context window and the handover)?
