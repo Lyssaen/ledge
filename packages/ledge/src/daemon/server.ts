@@ -67,6 +67,8 @@ import { pushFor, resolvedFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
+import { createBrowserLive, type BrowserLiveService } from './browser/live.js';
+import { enableLive } from './browser/enable.js';
 
 /** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
 function withoutHarness(s: Session): Session {
@@ -193,7 +195,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; browserLive?: BrowserLiveService; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -288,7 +290,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
   }
   const SEATS_EVERY_MS = 30_000;
-  const ompSeats = opts.ompSeats ?? createOmpSeats({ store });
+  /** The agents' own browsers, live (docs/mockups/ledge-browser-live.html); its changes go to the local fronts once they exist. */
+  let emitBrowser: (m: ServerMessage) => void = () => {};
+  const browserLive = opts.browserLive ?? createBrowserLive({ store, panePid: async name => (tmux.panePid ? tmux.panePid(name) : null), emit: m => emitBrowser(m) });
+  // An OMP seat drives its browser through `eval`: its result is a moment to keep an image.
+  const ompSeats = opts.ompSeats ?? createOmpSeats({ store, onTool: (id, tool) => { if (tool === 'eval' || /browser/i.test(tool)) browserLive.poke(id); } });
   ompSeats.start();
   const seatTimer = setInterval(() => { void openrig.state().then(discoverSeats).catch(e => log(`openrig: seats not read: ${(e as Error).message}`)); }, SEATS_EVERY_MS);
   seatTimer.unref?.();
@@ -389,6 +395,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   let notifyDecision: ((task: Task) => void) | undefined;
   /** Every local front gets it; the phone gateway passes on only what it knows. */
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
+  // The browsers' states reach the local fronts only: neither a phone nor a remote peer.
+  emitBrowser = msg => { for (const c of localClients) send(c, msg); };
+  browserLive.start();
   threads.setEmitter('desktop', broadcast);
   const history = opts.history;
   await attachments.load().catch(e => log(`attachments not loaded: ${(e as Error).message}`));
@@ -506,7 +515,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -514,7 +523,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     else if (unavailable) reply({ type: 'mobile', state: unavailable });
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
-    reply(contextMsg()); // last: the context threshold (context handover spec §3.2)
+    reply(contextMsg()); // the context threshold (context handover spec §3.2)
+    for (const m of browserLive.states()) reply(m); // last: the agents' browsers that are not `none`
   };
   const preview = (id: string, lines: string[]) => {
     if (!store.get(id)) return;
@@ -1183,6 +1193,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'snapshot.request': return sendSnapshot(reply);
+      case 'browser.watch': return browserLive.watch(msg.id, reply);
+      case 'browser.unwatch': return browserLive.unwatch(msg.id, reply);
+      // « Activer le direct… »: the message carries the person's confirmation (`confirmed: true`), never sent on its own.
+      case 'browser.enable': return reply(await enableLive(msg.rid, opts.home ?? process.env.HOME ?? ''));
       case 'machines.set': {
         writeMachines(msg.machines, machinesFile); // first: a failing write leaves memory unchanged and reaches the sender
         machines = msg.machines; // already validated by parseClientMessage
@@ -1275,6 +1289,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const terminal = ev.name === 'SessionEnd' || ev.name === 'PaneGone';
         // The end of the agent a model change replaced: the one resumed in its place goes on.
         if (terminal && ev.source === 'hook' && replacedLately(msg.id)) return;
+        // The agent used its Playwright browser: look for it now rather than at the next search, and keep an image after.
+        if ((ev.name === 'PreToolUse' || ev.name === 'PostToolUse') && ev.tool && /^mcp__.*playwright.*__browser_/i.test(ev.tool)) browserLive.poke(msg.id);
         const stored = store.get(msg.id);
         // A hook from an archived session still running (hook_only): it is alive again. An exited one stays archived,
         // and so does one whose hook says it ends.
@@ -1642,6 +1658,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
     localClients.add(ws); ws.once('close', () => localClients.delete(ws));
     const reply: Reply = m => send(ws, m);
+    ws.once('close', () => browserLive.unwatchAll(reply));
     sendSnapshot(reply);
     ws.on('message', data => {
       let msg: ClientMessage;
@@ -1668,6 +1685,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

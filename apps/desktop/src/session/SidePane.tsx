@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
-import type { Session } from '@ledge/protocol';
+import type { Session, ThreadItem } from '@ledge/protocol';
 import { MarkdownDocument, type DocumentHeading } from '@ledge/ui/documents/markdown';
 import type { DocumentReference } from '@ledge/ui/documents/references';
 import { Button } from '@ledge/ui/ui/Button';
@@ -9,7 +9,8 @@ import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
-import { BrowserTab, type CaptureFocus } from './BrowserTab';
+import type { CaptureFocus } from './BrowserTab';
+import { BrowserPane } from './BrowserPane';
 import type { Capture } from './captures';
 import { findFile, nameOf, relativeTo, type ChangedFile } from './changedFiles';
 import { ConversationTab } from './ConversationTab';
@@ -72,6 +73,8 @@ export interface SidePaneProps {
   onOpenPeer(peer: Session, item?: string): void;
   /** The « Navigateur » tab: the page's captures, where it is asked to open, a subagent's name by its id. */
   captures: readonly Capture[]; captureFocus: CaptureFocus; helperName(id: string): string | undefined;
+  /** The thread (the agent's last browser action) and whether the page is an OMP seat's (docs/mockups/ledge-browser-live.html). */
+  items: readonly ThreadItem[] | undefined; seat: boolean;
   /** « dans le fil » on a capture: its tool row lit in the thread; `covered` as for onLight. */
   onShowInThread(toolId: string, covered: boolean): void;
 }
@@ -168,7 +171,7 @@ export function SidePane(p: SidePaneProps): JSX.Element | null {
         {tab.kind === 'doc' ? <DocTab key={active} path={tab.path} head={head} session={session} client={p.client} onDocument={p.onDocument} />
           : tab.kind === 'diff' ? <DiffTab key={active} path={tab.path} head={head} files={files} cwd={session.cwd} onAllChanges={p.onAllChanges} />
           : tab.kind === 'plan' ? <PlanTab key={active} entry={plan(tab.key)} path={pathOf(tab)} head={head} onDocument={p.onDocument} />
-          : tab.kind === 'browser' ? <BrowserTab key={active} captures={p.captures} focus={p.captureFocus} client={p.client} session={session} helperName={p.helperName}
+          : tab.kind === 'browser' ? <BrowserPane key={`${active}:${session.id}`} captures={p.captures} focus={p.captureFocus} client={p.client} session={session} helperName={p.helperName} items={p.items} seat={p.seat}
               head={head} onShowInThread={id => p.onShowInThread(id, covered())} onClose={() => p.onClose(active)} />
           : conv && <ConversationTab key={active} self={session} view={conv} buttons={buttons}
               onLight={id => p.onLight(id, covered())} onOpenPeer={item => conv.peer && p.onOpenPeer(conv.peer, item)} />}

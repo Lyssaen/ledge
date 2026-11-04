@@ -1,10 +1,12 @@
-import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
+import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload, type BrowserLive } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
-type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>; off: (() => void)[]; error?: string; restarting?: boolean };
+type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>;
+  /** Its sessions' browser (browser.live), the ones not `none`: sent again after each snapshot the fleet publishes. */
+  browsers: Map<string, BrowserLive>; off: (() => void)[]; error?: string; restarting?: boolean };
 const toWire = (list: MachineConfig[]): Machine[] => list.map(({ id, label, ssh, disabled }) => ({ id, label, ...(ssh ? { ssh } : {}), ...(disabled ? { disabled: true } : {}) }));
 type Binding = { machine: string; raw: string };
 /** The commands tracked as a machine's operation in flight (`operations`, set in `send`): their answer, their refusal or the machine's drop ends it. */
@@ -221,6 +223,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     const primary = peers.get('local')?.snapshot;
     emit({ type: 'snapshot', sessions: [...peers.values()].filter(p => available(p) || stale(p)).flatMap(p => p.snapshot!.sessions.map(s => session(p, s))), recents: available(peers.get(selected)) ? peers.get(selected)!.snapshot!.recents : [], launcher: primary?.launcher, daemon: primary?.daemon });
     for (const p of peers.values()) if (available(p) || stale(p)) for (const [id, lines] of p.previews) emit({ type: 'session.preview', id: qualify(p.config.id, id), lines });
+    for (const p of peers.values()) if (available(p)) for (const b of p.browsers.values()) emit({ ...b, id: qualify(p.config.id, b.id) });
     const next = status(); if (next !== lastStatus) { lastStatus = next; statuses.forEach(fn => fn(next)); }
     listeners.forEach(fn => fn());
   }
@@ -309,14 +312,17 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'update.failed') p.restarting = false;
     if (m.type === 'snapshot') {
       if (p.config.ssh && m.sshAlias !== p.config.ssh) { p.error = 'Update the local Ledge daemon: SSH transport is unavailable'; p.client.close(); publish(); return; }
-      p.snapshot = m; p.fresh = true; p.error = undefined; p.restarting = false; p.previews.clear(); publish();
+      p.snapshot = m; p.fresh = true; p.error = undefined; p.restarting = false; p.previews.clear(); p.browsers.clear(); publish();
       if (machine === 'local') askTasks(p);
       return;
     }
     // A session's traffic is relayed as it came, qualified; a peer without a snapshot yet has nothing to relay against.
     if (m.type === 'session.updated') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: [...p.snapshot.sessions.filter(s => s.id !== m.session.id), m.session] }; if (available(p)) emit({ type: 'session.updated', session: session(p, m.session) }); refresh(); return; }
-    if (m.type === 'session.removed') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: p.snapshot.sessions.filter(s => s.id !== m.id) }; p.previews.delete(m.id); emit({ ...m, id: qualify(machine, m.id) }); refresh(); return; }
+    if (m.type === 'session.removed') { if (p.snapshot) p.snapshot = { ...p.snapshot, sessions: p.snapshot.sessions.filter(s => s.id !== m.id) }; p.previews.delete(m.id); p.browsers.delete(m.id); emit({ ...m, id: qualify(machine, m.id) }); refresh(); return; }
     if (m.type === 'recents') { if (p.snapshot) p.snapshot = { ...p.snapshot, recents: m.recents }; if (machine === selected && available(p)) emit(m); refresh(); return; }
+    // The agent's browser (docs/mockups/ledge-browser-live.html): its state kept to send again after a snapshot, its frames relayed as they come.
+    if (m.type === 'browser.live') { if (m.state === 'none') p.browsers.delete(m.id); else p.browsers.set(m.id, m); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
+    if (m.type === 'browser.frame') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.preview') { p.previews.set(m.id, m.lines); if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.thread' || m.type === 'session.thread.item' || m.type === 'session.queue.restored') { if (available(p)) emit({ ...m, id: qualify(machine, m.id) }); return; }
     if (m.type === 'session.launched') { if (!closeRows.has(machine)) operations.delete(machine); emit({ ...m, id: qualify(machine, m.id) }); return; }
@@ -503,7 +509,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   }
   function add(c: MachineConfig) {
     const client = makeClient({ url: machineUrl(c, configs[0]!), token: opts.token });
-    const p: Peer = { config: c, client, status: 'connecting', fresh: false, snapshot: null, previews: new Map(), off: [] }; peers.set(c.id, p);
+    const p: Peer = { config: c, client, status: 'connecting', fresh: false, snapshot: null, previews: new Map(), browsers: new Map(), off: [] }; peers.set(c.id, p);
     p.off.push(client.onMessage(m => receive(p, m)), client.onStatus(s => {
       const shown = shows(p);
       p.status = s;
@@ -628,7 +634,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
           listings.set(msg.requestId, { machine, path: msg.parent, created: `${msg.parent === '/' ? '' : msg.parent}/${msg.name.trim()}` });
         }
       }
-      if (msg.type === 'update.daemon') machine = 'local';
+      // « Activer le direct… » changes this machine's Playwright config: the local daemon's.
+      if (msg.type === 'update.daemon' || msg.type === 'browser.enable') machine = 'local';
       if (msg.type === 'session.broadcast') { sendBroadcast(msg); return; }
       // Ledge's tasks are the local daemon's: its sessions are named there without their machine.
       if ((msg.type === 'task.cmd' && !msg.qid) || msg.type === 'action.run') machine = 'local';

@@ -12,6 +12,7 @@ import { RigSeatNameSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigG
 import { OpenRigRowSchema, OpenRigRowStateSchema } from './rigMessages.js';
 import { OpenRigRoleDetailSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
+import { BrowserEnableSchema, BrowserEnabledSchema, BrowserFrameSchema, BrowserLiveSchema, BrowserUnwatchSchema, BrowserWatchSchema } from './browser.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
 import { MachinesSchema } from './machines.js';
@@ -101,12 +102,16 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Answers `openrig.row`: a queue row's state, for the OpenRig task cards of a thread. */ openrigRows: z.boolean().optional(),
   /** Answers `openrig.asks` and `openrig.answer`: what OpenRig asks the person, and their answers (« À toi »). */ openrigAsks: z.boolean().optional(),
   /** Answers `openrig.goal.send`, `openrig.goals` and `openrig.goal.reply`: goals given to Max (lot 2). */ openrigGoals: z.boolean().optional(),
-  /** Takes `session.broadcast` (its `ledge bridge` too, on this machine): a client sends it only when this is set. */ broadcast: z.boolean().optional() });
+  /** Takes `session.broadcast` (its `ledge bridge` too, on this machine): a client sends it only when this is set. */ broadcast: z.boolean().optional(),
+  /** Sends `browser.live` and answers `browser.watch`, `browser.unwatch` and `browser.enable`: the agent's browser, live. */ browserLive: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
 
 export const ServerMessageSchema = z.discriminatedUnion('type', [
+  BrowserLiveSchema,
+  BrowserFrameSchema,
+  BrowserEnabledSchema,
   SessionModelAcceptedSchema,
   z.object({ type: z.literal('chat.routed'), qid: z.string(), result: RouteResultSchema }),
   DocumentContentSchema,
@@ -209,6 +214,9 @@ export const SUMMARY_MAX = 500;
 const launchRows = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).min(1).max(MAX_PROPOSALS).refine(r => new Set(r).size === r.length, 'a row twice');
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
+  BrowserWatchSchema,
+  BrowserUnwatchSchema,
+  BrowserEnableSchema,
   z.object({ type: z.literal('chat.route'), qid: z.string().min(1).max(100), text: z.string().min(1).max(20000), tool: ToolSchema.optional(), context: RoutingContextSchema }),
   DocumentReadSchema,
   AttachmentPutSchema,

@@ -1,0 +1,554 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { WebSocketServer } from 'ws';
+import type { BrowserFrame, BrowserLive, Session } from '@ledge/protocol';
+import { Store } from '../src/daemon/store.js';
+import { findBrowsers, type ProcFs } from '../src/daemon/browser/proc.js';
+import { CDP_ALLOWED, CdpRefused, connectCdp, type Cdp, type CdpEvent } from '../src/daemon/browser/cdp.js';
+import { createBrowserLive } from '../src/daemon/browser/live.js';
+
+// ---- a process table: a pane, the agent under it, its browsers
+
+interface Proc { ppid: number; args: string[] }
+function procOf(procs: Record<number, Proc>, files: Record<string, string> = {}): ProcFs & { procs: Record<number, Proc>; files: Record<string, string> } {
+  return {
+    procs, files,
+    async pids() { return Object.keys(procs).map(Number); },
+    async ppid(pid) { return procs[pid]?.ppid ?? null; },
+    async cmdline(pid) { return procs[pid]?.args ?? null; },
+    async read(path) { return files[path] ?? null; }
+  };
+}
+const PLAYWRIGHT_PROFILE = '/home/u/.cache/ms-playwright-mcp/mcp-chrome-b2a7625';
+const OMP_PROFILE = '/home/u/.openrig/state/omp/design-maquettiste@dev-omp/.omp/run/daemons/96e8/omp.browser.headless.profile';
+/** Claude in pane 100: its Playwright MCP server, a Chrome on a pipe (Playwright's default), that Chrome's renderer. */
+const claudeTree = (chromeArgs: string[]): Record<number, Proc> => ({
+  100: { ppid: 1, args: ['bash', '-l'] },
+  101: { ppid: 100, args: ['/home/u/.local/bin/claude'] },
+  102: { ppid: 101, args: ['npm', 'exec', '@playwright/mcp@latest'] },
+  103: { ppid: 102, args: ['node', '/home/u/.npm/_npx/x/node_modules/.bin/playwright-mcp'] },
+  104: { ppid: 103, args: ['/opt/google/chrome/chrome', '--disable-field-trial-config', `--user-data-dir=${PLAYWRIGHT_PROFILE}`, ...chromeArgs, 'about:blank'] },
+  105: { ppid: 104, args: ['/opt/google/chrome/chrome', '--type=renderer', `--user-data-dir=${PLAYWRIGHT_PROFILE}`] },
+  // Another session's browser, outside this pane.
+  900: { ppid: 1, args: ['/opt/google/chrome/chrome', '--remote-debugging-port=0', '--user-data-dir=/elsewhere'] }
+});
+
+describe('findBrowsers: the agent\'s Chrome under its pane', () => {
+  it('Claude\'s Playwright Chrome on a pipe only: found, not watchable', async () => {
+    const fs = procOf(claudeTree(['--remote-debugging-pipe']));
+    expect(await findBrowsers(100, fs)).toEqual([{ pid: 104, userDataDir: PLAYWRIGHT_PROFILE, pipeOnly: true }]);
+  });
+
+  it('with a port as well (« Activer le direct »): its endpoint, from DevToolsActivePort', async () => {
+    const fs = procOf(claudeTree(['--remote-debugging-port=0', '--remote-debugging-pipe']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b4b49a0c-0bc1-4521-ae96-65a1a7e1b832\n' });
+    expect(await findBrowsers(100, fs)).toEqual([{ pid: 104, userDataDir: PLAYWRIGHT_PROFILE, pipeOnly: false, port: 40712, path: '/devtools/browser/b4b49a0c-0bc1-4521-ae96-65a1a7e1b832' }]);
+  });
+
+  it('an OMP seat\'s headless browser, deep under the runner; a port file that is not Chrome\'s own is ignored', async () => {
+    const procs: Record<number, Proc> = {
+      200: { ppid: 1, args: ['bash', '-l'] },
+      201: { ppid: 200, args: ['node', 'pi-runner.js', '--runtime', 'omp'] },
+      202: { ppid: 201, args: ['bun', 'cli.js', '--mode', 'rpc'] },
+      203: { ppid: 202, args: ['bun', 'cli.js', '__omp_worker_daemon_broker'] },
+      204: { ppid: 203, args: ['/usr/bin/google-chrome-stable', '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${OMP_PROFILE}`] }
+    };
+    expect(await findBrowsers(200, procOf(procs, { [`${OMP_PROFILE}/DevToolsActivePort`]: '41556\n/devtools/browser/7d591d76\n' })))
+      .toEqual([{ pid: 204, userDataDir: OMP_PROFILE, pipeOnly: false, port: 41556, path: '/devtools/browser/7d591d76' }]);
+    for (const bad of ['41556\n/json/version\n', '99999\n/devtools/browser/x\n', 'x\n/devtools/browser/x\n', '41556\n/devtools/browser/../../x\n'])
+      expect((await findBrowsers(200, procOf(procs, { [`${OMP_PROFILE}/DevToolsActivePort`]: bad })))[0]).not.toHaveProperty('port');
+  });
+
+  it('Chrome\'s rewritten title (its arguments in one string): read the same', async () => {
+    const one = `/opt/google/chrome/chrome --headless=new --remote-debugging-port=0 --user-data-dir=${OMP_PROFILE} --no-first-run --use-angle=swiftshader-webgl about:blank`;
+    const pipe = `/opt/google/chrome/chrome --user-data-dir=${PLAYWRIGHT_PROFILE} --remote-debugging-pipe about:blank`;
+    const fs = procOf({ 1: { ppid: 0, args: ['init'] }, 300: { ppid: 1, args: ['bash'] }, 301: { ppid: 300, args: [one] }, 302: { ppid: 300, args: [pipe] },
+      303: { ppid: 301, args: [`/opt/google/chrome/chrome --type=renderer --user-data-dir=${OMP_PROFILE} --remote-debugging-port=0`] } },
+    { [`${OMP_PROFILE}/DevToolsActivePort`]: '41730\n/devtools/browser/feddcf35\n' });
+    expect(await findBrowsers(300, fs)).toEqual(expect.arrayContaining([
+      { pid: 301, userDataDir: OMP_PROFILE, pipeOnly: false, port: 41730, path: '/devtools/browser/feddcf35' },
+      { pid: 302, userDataDir: PLAYWRIGHT_PROFILE, pipeOnly: true }]));
+    expect(await findBrowsers(300, fs)).toHaveLength(2);
+  });
+
+  it('nothing but Chrome\'s main process: neither its renderers, nor another program, nor a Chrome outside the pane', async () => {
+    const fs = procOf({ 100: { ppid: 1, args: ['bash'] }, 101: { ppid: 100, args: ['node', 'chrome-like.js', '--user-data-dir=/x'] }, 900: claudeTree([])[900]! });
+    expect(await findBrowsers(100, fs)).toEqual([]);
+  });
+});
+
+// ---- the CDP allow-list, on a real WebSocket
+
+describe('connectCdp: only the commands of the allow-list ever leave Ledge', () => {
+  let wss: WebSocketServer; let received: string[]; let url: string;
+  beforeEach(async () => {
+    received = [];
+    wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await new Promise<void>(r => wss.once('listening', () => r()));
+    wss.on('connection', ws => ws.on('message', data => {
+      const m = JSON.parse(String(data)) as { id: number; method: string };
+      received.push(m.method);
+      ws.send(JSON.stringify({ id: m.id, result: { ok: m.method } }));
+      if (m.method === 'Target.setDiscoverTargets') ws.send(JSON.stringify({ method: 'Target.targetCreated', params: { targetInfo: { targetId: 'T1', type: 'page', url: 'about:blank', title: '' } } }));
+    }));
+    url = `ws://127.0.0.1:${(wss.address() as { port: number }).port}/devtools/browser/x`;
+  });
+  afterEach(() => new Promise<void>(r => wss.close(() => r())));
+
+  it('sends an allowed command and gets its answer and the browser\'s events', async () => {
+    const cdp = await connectCdp(url);
+    const events: CdpEvent[] = [];
+    cdp.onEvent(e => events.push(e));
+    expect(await cdp.call('Target.setDiscoverTargets', { discover: true })).toEqual({ ok: 'Target.setDiscoverTargets' });
+    await vi.waitFor(() => expect(events).toEqual([{ method: 'Target.targetCreated', params: { targetInfo: { targetId: 'T1', type: 'page', url: 'about:blank', title: '' } } }]));
+    cdp.close();
+  });
+
+  it('refuses, without sending anything, every command that could click, type, run a script or change the page', async () => {
+    const cdp = await connectCdp(url);
+    for (const m of ['Input.dispatchMouseEvent', 'Input.dispatchKeyEvent', 'Input.insertText', 'Runtime.evaluate', 'Runtime.callFunctionOn', 'Page.navigate', 'Page.reload', 'DOM.setAttributeValue', 'Emulation.setDeviceMetricsOverride', 'Target.closeTarget', 'Target.createTarget', 'Browser.close'])
+      await expect(cdp.call(m)).rejects.toBeInstanceOf(CdpRefused);
+    await cdp.call('Target.getTargets');
+    expect(received).toEqual(['Target.getTargets']);
+    for (const m of CDP_ALLOWED) expect(m).toMatch(/^(Target\.(getTargets|setDiscoverTargets|attachToTarget|detachFromTarget)|Page\.(startScreencast|stopScreencast|screencastFrameAck|captureScreenshot))$/);
+    cdp.close();
+  });
+
+  it('tells when the browser goes', async () => {
+    const cdp = await connectCdp(url);
+    const closed = new Promise<void>(r => cdp.onClose(r));
+    for (const c of wss.clients) c.terminate();
+    await closed;
+    await expect(cdp.call('Target.getTargets')).rejects.toThrow(/closed/);
+  });
+});
+
+// ---- the service, over a fake browser
+
+/** A browser as CDP shows it: its tabs, what Ledge sent it (all through the real allow-list), and its events on demand. */
+function fakeBrowser(pages: { id: string; url: string; title: string }[] = []) {
+  const calls: { method: string; params: Record<string, unknown>; sessionId?: string }[] = [];
+  const listeners: ((e: CdpEvent) => void)[] = [];
+  const closes: (() => void)[] = [];
+  let closed = false, next = 0, shot = 0;
+  /** What the next screenshots show: a new image each time unless the page is set to stand still. */
+  const view = { still: null as string | null, hold: false, release: undefined as (() => void) | undefined,
+    /** The next attachToTarget waits for `attached()`. */ holdAttach: false, attached: undefined as (() => void) | undefined };
+  const cdp: Cdp = {
+    async call(method, params = {}, sessionId) {
+      if (!CDP_ALLOWED.has(method)) throw new CdpRefused(method);
+      if (closed) throw new Error('CDP connection closed');
+      calls.push({ method, params, ...(sessionId ? { sessionId } : {}) });
+      if (method === 'Target.getTargets') return { targetInfos: pages.map(p => ({ targetId: p.id, type: 'page', url: p.url, title: p.title })) };
+      if (method === 'Target.attachToTarget') {
+        const sessionId = `S${++next}`;
+        if (view.holdAttach) { view.holdAttach = false; await new Promise<void>(r => { view.attached = r; }); }
+        return { sessionId };
+      }
+      if (method === 'Page.captureScreenshot') {
+        const data = view.still ?? `/9j/shot${++shot}`;
+        if (view.hold) { const release = new Promise<void>(r => { view.release = r; }); view.hold = false; await release; }
+        return { data };
+      }
+      return {};
+    },
+    onEvent(fn) { listeners.push(fn); },
+    onClose(fn) { if (closed) fn(); else closes.push(fn); },
+    close() { if (closed) return; closed = true; for (const fn of closes) fn(); }
+  };
+  return {
+    cdp, calls, view,
+    emit(e: CdpEvent) { for (const fn of listeners) fn(e); },
+    tab(method: 'Target.targetCreated' | 'Target.targetInfoChanged', id: string, url: string, title = '', type = 'page') {
+      const i = pages.findIndex(p => p.id === id);
+      if (type === 'page') { if (i === -1) pages.push({ id, url, title }); else pages[i] = { id, url, title }; }
+      this.emit({ method, params: { targetInfo: { targetId: id, type, url, title } } });
+    },
+    destroy(id: string) { const i = pages.findIndex(p => p.id === id); if (i !== -1) pages.splice(i, 1); this.emit({ method: 'Target.targetDestroyed', params: { targetId: id } }); },
+    /** A title the page set itself, that Chrome does not announce. */
+    retitle(id: string, title: string) { const p = pages.find(x => x.id === id); if (p) p.title = title; },
+    gone() { cdp.close(); },
+    methods: () => calls.map(c => c.method)
+  };
+}
+
+const T0 = Date.parse('2026-11-03T15:00:00.000Z');
+const session = (o: Partial<Session> = {}): Session => ({ id: 'otto', name: 'Otto', tool: 'claude', cwd: '/w', project: 'w', title: 'Otto', tmuxSession: 'ledge-otto', state: 'working', helpers: [],
+  startedAt: '2026-11-03T14:00:00.000Z', lastActivityAt: '2026-11-03T14:00:00.000Z', source: 'launcher', ...o });
+
+describe('createBrowserLive: the agent\'s browser, followed', () => {
+  let store: Store; let emitted: BrowserLive[]; let clock: number;
+  beforeEach(() => { vi.useFakeTimers(); clock = T0; store = new Store(); emitted = []; });
+  afterEach(() => { vi.useRealTimers(); });
+  const now = () => clock;
+  const advance = async (ms: number) => { clock += ms; await vi.advanceTimersByTimeAsync(ms); };
+  const last = () => emitted.at(-1);
+
+  function service(fs: ProcFs, browser?: ReturnType<typeof fakeBrowser>, panes: Record<string, number> = { 'ledge-otto': 100 }) {
+    const connected: string[] = [];
+    const svc = createBrowserLive({ store, panePid: async n => panes[n] ?? null, emit: m => emitted.push(m), procfs: fs, now, intervalMs: 5000, debounceMs: 1000, captureMinMs: 5000, quietMs: 1000, fastMs: 500, stillMs: 3000,
+      connect: async url => { connected.push(url); if (!browser) throw new Error('ECONNREFUSED'); return browser.cdp; } });
+    return { svc, connected };
+  }
+
+  it('Claude with Playwright on a pipe only: « off »; once gone, nothing', async () => {
+    store.upsert(session());
+    const fs = procOf(claudeTree(['--remote-debugging-pipe']));
+    const { svc, connected } = service(fs);
+    await svc.tick();
+    expect(last()).toMatchObject({ type: 'browser.live', id: 'otto', state: 'off', tabs: 0, since: '2026-11-03T15:00:00.000Z' });
+    expect(connected).toEqual([]);
+    delete fs.procs[104]; delete fs.procs[105];
+    await svc.tick();
+    expect(last()).toMatchObject({ state: 'none' });
+    svc.stop();
+  });
+
+  it('Claude with the port: live on its tab, an image kept after the agent\'s actions (grouped, at most one per 5 s), closed with it', async () => {
+    store.upsert(session());
+    const fs = procOf(claudeTree(['--remote-debugging-port=0', '--remote-debugging-pipe']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b4b4\n' });
+    const b = fakeBrowser([{ id: 'T1', url: 'about:blank', title: 'about:blank' }]);
+    const { svc, connected } = service(fs, b);
+    await svc.tick();
+    expect(connected).toEqual(['ws://127.0.0.1:40712/devtools/browser/b4b4']);
+    expect(last()).toMatchObject({ state: 'live', tabs: 1, url: 'about:blank', since: '2026-11-03T15:00:00.000Z' });
+    // The agent goes to its mockup: the tab changes, then its hook says it acted.
+    b.tab('Target.targetInfoChanged', 'T1', 'http://localhost:8733/ledge-openrig-omp.html', 'Ledge · OpenRig');
+    expect(last()).toMatchObject({ state: 'live', url: 'http://localhost:8733/ledge-openrig-omp.html', title: 'Ledge · OpenRig' });
+    svc.poke('otto');
+    await advance(1200);
+    const shots = () => b.methods().filter(m => m === 'Page.captureScreenshot').length;
+    expect(shots()).toBe(1);
+    // The poke's search (0.2 s), then the agent's actions grouped over 1 s.
+    expect(last()?.image).toEqual({ at: '2026-11-03T15:00:01.200Z', url: 'http://localhost:8733/ledge-openrig-omp.html', title: 'Ledge · OpenRig', page: '1.1' });
+    // The capture attaches to the tab and leaves it at once.
+    expect(b.methods().slice(-3)).toEqual(['Target.attachToTarget', 'Page.captureScreenshot', 'Target.detachFromTarget']);
+    // Three more actions within a second: one image, not before 5 s after the first.
+    svc.poke('otto'); await advance(300); svc.poke('otto'); await advance(300); svc.poke('otto');
+    await advance(2000);
+    expect(shots()).toBe(1);
+    await advance(3000);
+    expect(shots()).toBe(2);
+    // The agent closes its browser (Playwright: the tab, then the browser): closed, the browser, keeping the last image.
+    b.destroy('T1');
+    expect(last()).toMatchObject({ state: 'closed', closed: 'tabs' });
+    b.gone();
+    expect(last()).toMatchObject({ state: 'closed', closed: 'browser', closedAt: expect.any(String), tabs: 0, url: 'http://localhost:8733/ledge-openrig-omp.html', image: { at: expect.any(String) } });
+    // Its session ends soon after: it stopped with it.
+    store.upsert({ ...store.get('otto')!, state: 'exited', exitedAt: new Date(clock).toISOString() });
+    await svc.tick();
+    expect(last()).toMatchObject({ state: 'closed', closed: 'stopped' });
+    expect(new Set(b.methods()).size).toBeGreaterThan(0);
+    for (const m of b.methods()) expect(CDP_ALLOWED.has(m)).toBe(true);
+    svc.stop();
+  });
+
+  it('an OMP seat: its browser open with no tab is nothing; a tab makes it live, its last tab closed is « tabs », the seat stopping is « stopped »', async () => {
+    store.upsert(session({ id: 'mia', name: 'Mia', tool: 'omp', tmuxSession: 'design-maquettiste@dev-omp', source: 'rig', rig: { seat: 'design-maquettiste@dev-omp', name: 'dev-omp' } }));
+    const fs = procOf({ 200: { ppid: 1, args: ['bash'] }, 201: { ppid: 200, args: ['/usr/bin/google-chrome-stable', '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${OMP_PROFILE}`] } },
+      { [`${OMP_PROFILE}/DevToolsActivePort`]: '41556\n/devtools/browser/7d59\n' });
+    const b = fakeBrowser([]);
+    const { svc } = service(fs, b, { 'design-maquettiste@dev-omp': 200 });
+    await svc.tick();
+    expect(emitted).toEqual([]);
+    expect(svc.states()).toEqual([]);
+    // Mia opens a tab and fills it with setContent: about:blank, its title from the page.
+    b.tab('Target.targetCreated', 'M1', 'about:blank', 'about:blank');
+    b.tab('Target.targetInfoChanged', 'M1', 'about:blank', 'ST7-251 · lien');
+    expect(last()).toMatchObject({ id: 'mia', state: 'live', tabs: 1, url: 'about:blank', title: 'ST7-251 · lien' });
+    // Chrome's own pages never count.
+    b.tab('Target.targetCreated', 'X', 'chrome://omnibox-popup.top-chrome/', '');
+    expect(last()).toMatchObject({ tabs: 1 });
+    await advance(1100);
+    expect(last()?.image).toMatchObject({ title: 'ST7-251 · lien' });
+    b.destroy('M1');
+    expect(last()).toMatchObject({ state: 'closed', closed: 'tabs', tabs: 0, title: 'ST7-251 · lien', image: { title: 'ST7-251 · lien' } });
+    // A new tab later: live again.
+    b.tab('Target.targetCreated', 'M2', 'about:blank', 'about:blank');
+    expect(last()).toMatchObject({ state: 'live', tabs: 1 });
+    expect(last()).not.toHaveProperty('closed');
+    // The seat stops: its browser goes with it.
+    b.gone();
+    expect(last()).toMatchObject({ state: 'closed', closed: 'stopped' });
+    svc.stop();
+  });
+
+  it('asks tmux for the pane\'s program once, again only when it is gone', async () => {
+    store.upsert(session());
+    const fs = procOf(claudeTree(['--remote-debugging-pipe']));
+    const asked: string[] = [];
+    const svc = createBrowserLive({ store, panePid: async n => { asked.push(n); return 100; }, emit: m => emitted.push(m), procfs: fs, now });
+    await svc.tick(); await svc.tick(); await svc.tick();
+    expect(asked).toEqual(['ledge-otto']);
+    // The pane and its programs gone (the session restarted in a new pane): asked again.
+    for (const pid of [100, 101, 102, 103, 104, 105]) delete fs.procs[pid];
+    await svc.tick();
+    expect(asked).toEqual(['ledge-otto', 'ledge-otto']);
+    svc.stop();
+  });
+
+  it('a port file left by an earlier browser: no connection, no state, tried again later', async () => {
+    store.upsert(session());
+    const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/old\n' });
+    const { svc, connected } = service(fs);
+    await svc.tick(); await svc.tick();
+    expect(connected).toHaveLength(2);
+    expect(emitted).toEqual([]);
+    svc.stop();
+  });
+
+  it('a connection that opens but cannot start following is let go and tried again', async () => {
+    store.upsert(session());
+    const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b\n' });
+    const broken = fakeBrowser([{ id: 'T1', url: 'http://localhost/a', title: 'A' }]);
+    const call = broken.cdp.call.bind(broken.cdp);
+    broken.cdp.call = async (m, p, sid) => { if (m === 'Target.setDiscoverTargets') throw new Error('CDP Target.setDiscoverTargets timed out'); return call(m, p, sid); };
+    const good = fakeBrowser([{ id: 'T1', url: 'http://localhost/a', title: 'A' }]);
+    const given = [broken, good];
+    const closed: string[] = [];
+    broken.cdp.onClose(() => closed.push('broken'));
+    const svc = createBrowserLive({ store, panePid: async () => 100, emit: m => emitted.push(m), procfs: fs, now, connect: async () => given.shift()!.cdp });
+    await svc.tick();
+    expect(closed).toEqual(['broken']);
+    expect(emitted).toEqual([]);
+    await svc.tick();
+    expect(given).toEqual([]);
+    expect(last()).toMatchObject({ state: 'live', url: 'http://localhost/a' });
+    // The broken one going later changes nothing.
+    broken.gone();
+    expect(last()).toMatchObject({ state: 'live' });
+    svc.stop();
+  });
+
+  it('a session forgotten by Ledge takes its browser state with it', async () => {
+    store.upsert(session());
+    const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b\n' });
+    const b = fakeBrowser([{ id: 'T1', url: 'http://localhost/a', title: 'A' }]);
+    const { svc } = service(fs, b);
+    await svc.tick();
+    store.remove('otto');
+    await svc.tick();
+    expect(last()).toEqual({ type: 'browser.live', id: 'otto', state: 'none', tabs: 0 });
+    expect(svc.states()).toEqual([]);
+    svc.stop();
+  });
+
+  describe('watching', () => {
+    async function liveOtto() {
+      store.upsert(session());
+      const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b\n' });
+      const b = fakeBrowser([{ id: 'T1', url: 'http://localhost/a', title: 'A' }]);
+      const { svc } = service(fs, b);
+      await svc.tick();
+      return { svc, b };
+    }
+    const sinkOf = () => { const got: (BrowserLive | BrowserFrame)[] = []; return { got, sink: (m: BrowserLive | BrowserFrame) => { got.push(m); } }; };
+
+    it('a front gets the state, the last image, then the film of the agent\'s tab; it stops when nobody watches', async () => {
+      const { svc, b } = await liveOtto();
+      await advance(1100);
+      const { got, sink } = sinkOf();
+      svc.watch('otto', sink);
+      expect(got[0]).toMatchObject({ type: 'browser.live', state: 'live', url: 'http://localhost/a' });
+      expect(got[1]).toMatchObject({ type: 'browser.frame', live: false, data: '/9j/shot1' });
+      await vi.waitFor(() => expect(b.methods()).toContain('Page.startScreencast'));
+      const film = b.calls.find(c => c.method === 'Page.startScreencast')!;
+      b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: '/9j/frame1', sessionId: 7, metadata: { deviceWidth: 1280, deviceHeight: 800 } } });
+      expect(got.at(-1)).toMatchObject({ type: 'browser.frame', id: 'otto', data: '/9j/frame1', live: true, width: 1280, height: 800 });
+      await vi.waitFor(() => expect(b.calls).toContainEqual({ method: 'Page.screencastFrameAck', params: { sessionId: 7 }, sessionId: film.sessionId }));
+      // A frame of another attachment (a capture) is not the film.
+      b.emit({ method: 'Page.screencastFrame', sessionId: 'S99', params: { data: '/9j/other', sessionId: 8 } });
+      expect(got.filter(m => m.type === 'browser.frame' && m.live)).toHaveLength(1);
+      svc.unwatch('otto', sink);
+      await vi.waitFor(() => expect(b.methods().slice(-2)).toEqual(['Page.stopScreencast', 'Target.detachFromTarget']));
+      b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: '/9j/late', sessionId: 9 } });
+      expect(got.filter(m => m.type === 'browser.frame' && m.live)).toHaveLength(1);
+      for (const m of b.methods()) expect(CDP_ALLOWED.has(m)).toBe(true);
+      svc.stop();
+    });
+
+    it('follows the tab the agent works in; a front gone stops its film', async () => {
+      const { svc, b } = await liveOtto();
+      const { sink } = sinkOf();
+      svc.watch('otto', sink);
+      await vi.waitFor(() => expect(b.methods()).toContain('Page.startScreencast'));
+      await advance(10);
+      b.tab('Target.targetCreated', 'T2', 'http://localhost/b', 'B');
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Target.attachToTarget').map(c => c.params.targetId)).toContain('T2'));
+      await vi.waitFor(() => expect(b.methods().filter(m => m === 'Page.startScreencast')).toHaveLength(2));
+      svc.unwatchAll(sink);
+      await vi.waitFor(() => expect(b.methods().filter(m => m === 'Page.stopScreencast')).toHaveLength(2));
+      svc.stop();
+    });
+
+    it('a tab whose film stops (OMP\'s, hidden once frozen): filmed by images, fast while it changes, slower while it does not, the film again when it sends', async () => {
+      const { svc, b } = await liveOtto();
+      const { got, sink } = sinkOf();
+      svc.watch('otto', sink);
+      await vi.waitFor(() => expect(b.methods()).toContain('Page.startScreencast'));
+      const film = b.calls.find(c => c.method === 'Page.startScreencast')!;
+      const live = () => got.filter(m => m.type === 'browser.frame' && m.live).length;
+      // The film runs: no image taken besides it.
+      for (let i = 0; i < 4; i++) { b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: `/9j/cast${i}`, sessionId: i } }); await advance(250); }
+      expect(b.methods().filter(m => m === 'Page.captureScreenshot')).toEqual([]);
+      // Frozen, then woken but hidden: the film sends nothing. After 1 s, an image every 0.5 s while the page changes.
+      await advance(1000);
+      const before = live();
+      await advance(2000);
+      expect(live() - before).toBeGreaterThanOrEqual(4);
+      // The page stands still: the same image is not sent again, and asked less and less often (1, 2, 3 s).
+      b.view.still = '/9j/same';
+      await advance(600);
+      const shots = () => b.methods().filter(m => m === 'Page.captureScreenshot').length;
+      const s0 = shots(), l0 = live();
+      await advance(6000);
+      expect(live() - l0).toBeLessThanOrEqual(1);
+      expect(shots() - s0).toBeLessThanOrEqual(4);
+      // It changes again: fast again.
+      b.view.still = null;
+      await advance(3500);
+      const l1 = live();
+      await advance(1500);
+      expect(live() - l1).toBeGreaterThanOrEqual(2);
+      // The film sends again (the tab visible): it takes over, no more images taken.
+      for (let i = 0; i < 6; i++) { b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: `/9j/back${i}`, sessionId: 10 + i } }); await advance(250); }
+      const s1 = shots();
+      for (let i = 0; i < 6; i++) { b.emit({ method: 'Page.screencastFrame', sessionId: film.sessionId, params: { data: `/9j/more${i}`, sessionId: 20 + i } }); await advance(250); }
+      expect(shots()).toBe(s1);
+      for (const m of b.methods()) expect(CDP_ALLOWED.has(m)).toBe(true);
+      svc.stop();
+    });
+
+    it('each image says its page: two tabs on one address differ, a late frame of the tab left keeps its own page', async () => {
+      store.upsert(session());
+      const fs = procOf(claudeTree(['--remote-debugging-port=0']), { [`${PLAYWRIGHT_PROFILE}/DevToolsActivePort`]: '40712\n/devtools/browser/b\n' });
+      const b = fakeBrowser([{ id: 'T1', url: 'http://localhost/a', title: 'A' }]);
+      const { svc } = service(fs, b);
+      await svc.tick();
+      expect(last()).toMatchObject({ state: 'live', page: '1.0' });
+      // A second tab on the same address: another page.
+      await advance(10);
+      b.tab('Target.targetCreated', 'T2', 'http://localhost/a', 'A');
+      expect(last()).toMatchObject({ url: 'http://localhost/a', tabs: 2, page: '2.0' });
+      const { got, sink } = sinkOf();
+      svc.watch('otto', sink);
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(1));
+      const film2 = b.calls.filter(c => c.method === 'Page.startScreencast')[0]!.sessionId;
+      b.emit({ method: 'Page.screencastFrame', sessionId: film2, params: { data: '/9j/t2', sessionId: 1 } });
+      expect(got.at(-1)).toMatchObject({ type: 'browser.frame', data: '/9j/t2', page: '2.0' });
+      // The agent goes back to the first tab: the state says page 1.0 at once; a frame of the second tab arriving late says 2.0.
+      await advance(10);
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/a', 'A again');
+      expect(last()).toMatchObject({ url: 'http://localhost/a', page: '1.0' });
+      b.emit({ method: 'Page.screencastFrame', sessionId: film2, params: { data: '/9j/t2-late', sessionId: 2 } });
+      const late = got.filter(m => m.type === 'browser.frame' && m.data === '/9j/t2-late');
+      expect(late.every(m => m.type === 'browser.frame' && m.page === '2.0')).toBe(true);
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(2));
+      const film1 = b.calls.filter(c => c.method === 'Page.startScreencast')[1]!.sessionId;
+      // The first tab navigates: page 1.1, and its film starts anew. Whatever its old film still sends, dated or not, is
+      // never shown as the new page; the new film's frames are 1.1.
+      await advance(10);
+      const before = clock / 1000 - 0.005;
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/b', 'B');
+      expect(last()).toMatchObject({ url: 'http://localhost/b', page: '1.1' });
+      b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/old', sessionId: 3, metadata: { timestamp: before } } });
+      b.emit({ method: 'Page.screencastFrame', sessionId: film1, params: { data: '/9j/old-undated', sessionId: 4 } });
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(3));
+      const film1b = b.calls.filter(c => c.method === 'Page.startScreencast')[2]!.sessionId;
+      b.emit({ method: 'Page.screencastFrame', sessionId: film1b, params: { data: '/9j/new', sessionId: 5, metadata: { timestamp: clock / 1000 + 0.005 } } });
+      const frames = got.filter(m => m.type === 'browser.frame' && m.live).map(m => m.type === 'browser.frame' ? [m.data, m.page] : []);
+      expect(frames.filter(([, p]) => p === '1.1')).toEqual([['/9j/new', '1.1']]);
+      expect(frames.some(([d]) => d === '/9j/old-undated')).toBe(false);
+      expect(frames.filter(([d]) => d === '/9j/old').every(([, p]) => p === '1.0')).toBe(true);
+      svc.stop();
+    });
+
+    it('an image whose tab navigates while it is taken is let go, kept or filmed; an undated frame just after a navigation too', async () => {
+      const { svc, b } = await liveOtto();
+      // The kept image: the capture of page 1.0 is answered after the tab went on to /b.
+      b.view.hold = true;
+      svc.poke('otto');
+      await advance(1300);
+      await vi.waitFor(() => expect(b.view.release).toBeTypeOf('function'));
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/b', 'B');
+      b.view.release!(); b.view.release = undefined;
+      await advance(10);
+      expect(last()).toMatchObject({ url: 'http://localhost/b', page: '1.1' });
+      expect(last()?.image).toBeUndefined();
+      // Watched, the film quiet: the image taken for it is let go the same way.
+      const { got, sink } = sinkOf();
+      svc.watch('otto', sink);
+      await vi.waitFor(() => expect(b.methods()).toContain('Page.startScreencast'));
+      const film = b.calls.find(c => c.method === 'Page.startScreencast')!.sessionId;
+      b.view.hold = true;
+      await advance(1100);
+      await vi.waitFor(() => expect(b.view.release).toBeTypeOf('function'));
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/c', 'C');
+      b.view.release!();
+      await advance(10);
+      expect(got.filter(m => m.type === 'browser.frame' && m.live)).toEqual([]);
+      // The film of the tab that navigated is stopped and started anew. An undated frame of the old film, however late, is
+      // of no known page: never sent. An undated frame of the new film is of the new page (1.2).
+      await vi.waitFor(() => expect(b.calls.filter(c => c.method === 'Page.startScreencast')).toHaveLength(2));
+      expect(b.calls).toContainEqual({ method: 'Page.stopScreencast', params: {}, sessionId: film });
+      const film2 = b.calls.filter(c => c.method === 'Page.startScreencast')[1]!.sessionId;
+      const sent = () => got.filter(m => m.type === 'browser.frame' && m.live).map(m => m.type === 'browser.frame' ? [m.data, m.page] : []);
+      b.emit({ method: 'Page.screencastFrame', sessionId: film, params: { data: '/9j/undated', sessionId: 1 } });
+      await advance(600);
+      b.emit({ method: 'Page.screencastFrame', sessionId: film, params: { data: '/9j/old-late', sessionId: 2 } });
+      expect(sent().filter(([d]) => d === '/9j/undated' || d === '/9j/old-late')).toEqual([]);
+      b.emit({ method: 'Page.screencastFrame', sessionId: film2, params: { data: '/9j/new', sessionId: 3 } });
+      expect(sent().at(-1)).toEqual(['/9j/new', '1.2']);
+      svc.stop();
+    });
+
+    it('a film started anew after a navigation is of the new page, even in the same millisecond; a navigation during its start starts it again', async () => {
+      const { svc, b } = await liveOtto();
+      const { got, sink } = sinkOf();
+      const starts = () => b.calls.filter(c => c.method === 'Page.startScreencast').map(c => c.sessionId!);
+      const sent = () => got.filter(m => m.type === 'browser.frame' && m.live).map(m => m.type === 'browser.frame' ? [m.data, m.page] : []);
+      svc.watch('otto', sink);
+      await vi.waitFor(() => expect(starts()).toHaveLength(1));
+      // The clock does not move: the navigation and the new film share their millisecond.
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/b', 'B');
+      await vi.waitFor(() => expect(starts()).toHaveLength(2));
+      b.emit({ method: 'Page.screencastFrame', sessionId: starts()[1], params: { data: '/9j/b', sessionId: 1 } });
+      expect(sent().at(-1)).toEqual(['/9j/b', '1.1']);
+      // A navigation while the next film is being attached: that film, started on 1.1, is replaced by one on 1.2.
+      b.view.holdAttach = true;
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/c', 'C');
+      await vi.waitFor(() => expect(b.view.attached).toBeTypeOf('function'));
+      b.tab('Target.targetInfoChanged', 'T1', 'http://localhost/d', 'D');
+      b.view.attached!();
+      await vi.waitFor(() => expect(starts().length).toBeGreaterThanOrEqual(4));
+      const stale = starts()[2]!, fresh = starts().at(-1)!;
+      b.emit({ method: 'Page.screencastFrame', sessionId: stale, params: { data: '/9j/stale', sessionId: 2 } });
+      b.emit({ method: 'Page.screencastFrame', sessionId: fresh, params: { data: '/9j/d', sessionId: 3 } });
+      expect(sent().some(([d]) => d === '/9j/stale')).toBe(false);
+      expect(sent().at(-1)).toEqual(['/9j/d', '1.3']);
+      svc.stop();
+    });
+
+    it('the kept image says its page, in the state and in the frame sent on watch', async () => {
+      const { svc } = await liveOtto();
+      await advance(1100);
+      expect(last()).toMatchObject({ page: '1.0', image: { page: '1.0' } });
+      const { got, sink } = sinkOf();
+      svc.watch('otto', sink);
+      expect(got[1]).toMatchObject({ type: 'browser.frame', live: false, page: '1.0' });
+      svc.stop();
+    });
+
+    it('an unknown session is « none »; watching a closed browser gives its last image', async () => {
+      const { svc, b } = await liveOtto();
+      const a = sinkOf();
+      svc.watch('nobody', a.sink);
+      expect(a.got).toEqual([{ type: 'browser.live', id: 'nobody', state: 'none', tabs: 0 }]);
+      await advance(1100);
+      b.gone();
+      const c = sinkOf();
+      svc.watch('otto', c.sink);
+      expect(c.got.map(m => m.type === 'browser.frame' ? `frame:${m.live}` : m.state)).toEqual(['closed', 'frame:false']);
+      expect(b.methods().filter(m => m === 'Page.startScreencast')).toEqual([]);
+      svc.stop();
+    });
+  });
+});

@@ -45,6 +45,16 @@ export function entryState(raw: unknown): { state: 'working' | 'idle'; at?: stri
   return typeof m.stopReason === 'string' ? of(m.stopReason === 'toolUse' ? 'working' : 'idle') : null;
 }
 
+/** The tool an entry starts (`tool_execution_start`) or carries the result of; null for any other entry. */
+export function toolOf(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const e = raw as Record<string, unknown>;
+  const name = e.type === 'custom' && e.customType === 'tool_execution_start' && e.data && typeof e.data === 'object' ? (e.data as Record<string, unknown>).toolName
+    : e.type === 'message' && e.message && typeof e.message === 'object' && (e.message as Record<string, unknown>).role === 'toolResult' ? (e.message as Record<string, unknown>).toolName
+      : undefined;
+  return typeof name === 'string' && name ? name : null;
+}
+
 interface Follow { file: string; offset: number }
 
 /** The position of the first newline at or after `from`, or -1 before `size`. */
@@ -65,6 +75,8 @@ export interface OmpSeatsDeps {
   /** `<OPENRIG_HOME>/state/omp`. */
   root?: string;
   intervalMs?: number;
+  /** Each tool the seat starts or gets the result of, read on in its journal (not at the first reading): `eval` drives its browser. */
+  onTool?: (id: string, tool: string) => void;
 }
 
 export function createOmpSeats(deps: OmpSeatsDeps) {
@@ -123,6 +135,8 @@ export function createOmpSeats(deps: OmpSeatsDeps) {
       let entry: unknown;
       try { entry = JSON.parse(line); } catch { continue; }
       last = entryState(entry) ?? last;
+      const tool = toolOf(entry);
+      if (tool && deps.onTool) deps.onTool(s.id, tool);
     }
     if (last) apply(s.id, last);
   }

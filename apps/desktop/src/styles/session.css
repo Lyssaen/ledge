@@ -713,3 +713,49 @@ details.rig-raw pre,.rig-bad .rawbox{margin:6px 0 0;padding:8px 10px;border:1px 
 @media (prefers-reduced-motion:reduce){details.rig-raw summary svg{transition:none}}
 .tcard .st.notHanded{color:var(--danger-text);background:var(--status-danger-soft)}
 .fold-row.rig-fold{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+
+/* The agent's browser, live (docs/mockups/ledge-browser-live.html): the head's button, the Direct | Captures switch, the
+   live side (red, its film), the closed side (grey, dashed, its last image dated), the boxes when there is no film. */
+.live-dot{display:inline-block;flex:none;width:7px;height:7px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 3px color-mix(in srgb,#ef4444 22%,transparent);animation:live-pulse 1.6s ease-in-out infinite}
+@keyframes live-pulse{50%{box-shadow:0 0 0 5px color-mix(in srgb,#ef4444 8%,transparent)}}
+@media (prefers-reduced-motion:reduce){.live-dot{animation:none}}
+.off-dot{display:inline-block;flex:none;width:7px;height:7px;border-radius:50%;background:var(--muted-foreground);opacity:.7}
+.browser-pill-live{color:var(--foreground);border-color:color-mix(in srgb,#ef4444 50%,transparent)}
+.browser-pill-closed{color:var(--muted-foreground)}
+.browser-pill-state{color:var(--muted-foreground);margin-left:-2px}
+.browser-switch{position:relative;display:flex;gap:2px;padding:2px;margin-right:6px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--muted)}
+.browser-switch [role=tab]{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;border-radius:calc(var(--radius-md) - 2px);font-size:12px;color:var(--muted-foreground);white-space:nowrap}
+.browser-switch [role=tab][aria-selected=true]{background:var(--sidebar);color:var(--foreground);box-shadow:0 1px 2px rgb(0 0 0/.18)}
+.browser-live{position:relative;padding:12px 14px 14px;gap:10px}
+.browser-live-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.browser-live-head .ledge-btn,.browser-last .ledge-btn,.browser-confirm .ledge-btn,.browser-problem .ledge-btn{height:28px!important;font-size:12px!important;padding:0 9px!important;gap:6px!important}
+.browser-live-badge{display:inline-flex;align-items:center;gap:7px;height:22px;padding:0 9px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#ef4444;background:color-mix(in srgb,#ef4444 12%,transparent);border:1px solid color-mix(in srgb,#ef4444 35%,transparent)}
+.browser-closed-badge{display:inline-flex;align-items:center;gap:7px;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;color:var(--muted-foreground);background:var(--muted);border:1px solid var(--border)}
+.browser-driver{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-foreground)}
+.browser-fps{font-size:10.5px;color:var(--muted-foreground)}
+.browser-address{display:flex;align-items:center;gap:8px;min-width:0;height:28px;flex-shrink:0;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--well);font-size:11.5px;color:var(--muted-foreground)}
+.browser-address code{color:var(--foreground);font:11.5px 'Geist Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.browser-address>span{white-space:nowrap}
+.browser-address .muted{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.browser-screen{position:relative;flex:1;min-height:180px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:#fff;cursor:not-allowed}
+.browser-screen img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;user-select:none}
+.browser-screen.live{border:2px solid color-mix(in srgb,#ef4444 55%,transparent)}
+.browser-screen.closed{border-style:dashed;background:var(--well);cursor:default}
+.browser-screen.closed img{filter:grayscale(1) opacity(.55)}
+.browser-screen.wait{display:grid;place-items:center;background:var(--well);font-size:12px}
+.browser-stamp{position:absolute;left:10px;bottom:10px;padding:3px 8px;border-radius:6px;font-size:11px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border)}
+.browser-toast{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:11.5px;white-space:nowrap;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);box-shadow:var(--shadow-overlay)}
+.browser-toast.floating{top:calc(100% + 10px);z-index:2}
+.browser-last{display:flex;align-items:center;gap:8px;font-size:12px;min-width:0;flex-shrink:0}
+.browser-last code{font:11.5px 'Geist Mono',monospace;white-space:nowrap}
+.browser-verb{color:var(--info);font-weight:500;flex:none}
+.browser-object{display:inline-flex;align-items:center;gap:8px;min-width:0;overflow:hidden}
+.browser-hint{margin:0;font-size:11.5px;line-height:16px;color:var(--muted-foreground)}
+.browser-problem{gap:8px}
+.browser-problem p{max-width:320px;margin:0}
+.browser-problem code{font:11px 'Geist Mono',monospace;color:var(--foreground)}
+.browser-ok{color:var(--success);display:inline-flex}
+.browser-confirm{margin:auto;max-width:440px;display:flex;flex-direction:column;gap:8px;padding:16px 18px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--card);font-size:12.5px;line-height:18px}
+.browser-confirm p{margin:0}
+.browser-confirm code{font:11px 'Geist Mono',monospace}
+.browser-confirm-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}

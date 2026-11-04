@@ -2,6 +2,7 @@ export * from './attachments.js';
 export * from './chat.js';
 export * from './decisions.js';
 export * from './documents.js';
+export * from './browser.js';
 export * from './session.js';
 export * from './machines.js';
 export * from './island.js';

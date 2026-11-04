@@ -26,6 +26,7 @@ import type { SessionActions } from '../manage/useSessionActions';
 import { Reply } from './Reply';
 import type { CaptureFocus } from './BrowserTab';
 import { capturesOf } from './captures';
+import { isLocal, kindOf, pillOf, useBrowser } from './browserLive';
 import { SidePane, tabId, type PanePlan, type PaneTab } from './SidePane';
 import { Tags, Thread } from './Thread';
 import { marksOf } from './markers';
@@ -128,6 +129,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const returning = useRef<'restore' | 'aim' | null>(null);
   const viewNow = useRef(view);
   viewNow.current = view;
+  const seatNow = useRef(seat !== null);
+  seatNow.current = seat !== null;
   // A view changed from here: the thread comes back where it was left. `focus`: the keyboard follows (a click; the arrows
   // keep it on the switch): into the agent's screen, or back to the thread.
   const switchView = (v: SessionView, focus: boolean) => {
@@ -161,6 +164,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     const id = tabId(tab);
     setTabs(ts => (ts.some(x => tabId(x) === id) ? ts : [...ts, tab]));
     setActiveTab(id);
+    // An OMP seat's browser shows beside its Terminal (docs/mockups/ledge-browser-live.html, view 2): the view stays.
+    if (tab.kind === 'browser' && seatNow.current) return;
     if (viewNow.current !== 'thread') { returning.current = 'restore'; onView('thread'); }
   }, [onView]);
   const openDoc = useCallback((path: string) => openTab({ kind: 'doc', path }), [openTab]);
@@ -181,6 +186,8 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
 const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', peer }), [openTab]);
   /* The « Navigateur » tab: every image the thread's tool rows hold, opened on one (a thumbnail) or on the latest (null: the head's button). */
   const captures = useMemo(() => capturesOf(items ?? []), [items]);
+  // The agent's own browser, live or as it last showed (docs/mockups/ledge-browser-live.html).
+  const browser = useBrowser(session);
   const [captureFocus, setCaptureFocus] = useState<CaptureFocus>({ key: null });
   const openCapture = useCallback((key: string | null) => { setCaptureFocus({ key }); openTab({ kind: 'browser' }); }, [openTab]);
   const onCapture = useCallback((toolId: string, index: number) => openCapture(`${toolId}:${index}`), [openCapture]);
@@ -197,7 +204,8 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
     if (activeTab === id) setActiveTab(next.length > 0 ? tabId(next[Math.min(at, next.length - 1)]!) : null);
   };
   const active = tabs.find(x => tabId(x) === activeTab);
-  const paneShown = active !== undefined && view === 'thread';
+  // On Terminal only an OMP seat's browser shows beside its screen; any other tab is the thread's.
+  const paneShown = active !== undefined && (view === 'thread' || (seat !== null && active.kind === 'browser'));
   const planOpen = active?.kind === 'plan' ? active.key : null;
   const convOpen = active?.kind === 'conv' ? active.peer : null;
   // The open Conversation tabs, active or not: each one's peer thread is asked and its bubbles merged here (SidePane mounts
@@ -442,6 +450,8 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   const place = p.nav.place;
   const share = contextShare(session.context);
   const kids = helper === null ? session.helpers ?? [] : [];
+  const tb = t.session.browser;
+  const pill = pillOf(kindOf(browser, isLocal(session)), captures.length);
   return (
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
       <div className="pane-heading">
@@ -467,12 +477,15 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
           ? <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.handover!.to! })}>{t.handover.relievedBy(session.handover.toName ?? '')}</button>
           : <span className={cls('pane-relief', session.handover.state === 'failed' && 'failed')} role="status">{t.handover.state[session.handover.state]}{session.handover.auto ? ` · ${t.handover.auto}` : ''}{session.handover.reason ? ` : ${session.handover.reason}` : ''}</span>)}
         {session.relieves && <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.relieves!.id })}>{t.handover.relieves(session.relieves.name)}</button>}
-        {(tags || kids.length > 0 || captures.length > 0) && <span className="spacer" />}
+        {(tags || kids.length > 0 || pill !== null) && <span className="spacer" />}
         {tags && <Tags tags={tags} />}
         {kids.length > 0 && <><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
-        {captures.length > 0 && (
-          <button type="button" className="kids-pill browser-pill" aria-label={t.session.browser.pill(captures.length)} title={t.session.browser.pill(captures.length)} onClick={() => openCapture(null)}>
-            <Icon d={SHELL_ICONS.browser} size={13} />{t.session.browser.tab}<span className="tab-count mono">{captures.length}</span>
+        {pill !== null && (
+          <button type="button" className={cls('kids-pill browser-pill', pill !== 'captures' && `browser-pill-${pill}`)} onClick={() => openCapture(null)}
+            {...(pill === 'captures' && captures.length > 0 ? { 'aria-label': tb.pill(captures.length), title: tb.pill(captures.length) } : { title: tb.pillTitle(session.name, pill === 'captures' ? null : pill, captures.length) })}>
+            {pill === 'live' ? <i className="live-dot" aria-hidden="true" /> : <Icon d={SHELL_ICONS.browser} size={13} />}
+            {tb.tab}{pill !== 'captures' && <span className="browser-pill-state">· {tb.pillState[pill]}</span>}
+            {captures.length > 0 && <span className="tab-count mono">{captures.length}</span>}
           </button>
         )}
       </div>
@@ -517,7 +530,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
             onAllChanges={p.onAllChanges} onDocument={openDoc} session={session} files={files} client={p.client} plans={plans} convs={convs}
-            onLight={lightMessage} captures={captures} captureFocus={captureFocus} helperName={helperName} onShowInThread={showCapture} onOpenPeer={(peer, item) => p.dispatch({ type: 'open', id: peer.id, ...(item !== undefined && { item }) })} />
+            onLight={lightMessage} captures={captures} captureFocus={captureFocus} items={items} seat={seat !== null} helperName={helperName} onShowInThread={showCapture} onOpenPeer={(peer, item) => p.dispatch({ type: 'open', id: peer.id, ...(item !== undefined && { item }) })} />
         )}
       </div>
     </section>

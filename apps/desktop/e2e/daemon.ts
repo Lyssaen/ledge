@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { HumanAsk, HumanChannel, OpenRigAnswered, OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { BrowserLive, HumanAsk, HumanChannel, OpenRigAnswered, OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -37,7 +37,9 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
  *  The route is anchored so it never catches `/ssh/<alias>` (see `fakeRemote`). Register before `page.goto`. */
 /** What a daemon answers about OpenRig's roles: the list, each role by library id, each file by absolute path. */
 export interface FakeRoles { list: RoleSummary[]; details: Record<string, RoleDetail>; files: Record<string, string>; openrigVersion?: string }
-export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; /** What `session.commands` answers, for every session. */ commands?: SlashCommand[]; openrig?: OpenRigState; rigSpecs?: RigSpec[]; /** Images the daemon already holds, by id (no preview: a preview get is served the whole image). */ images?: Record<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }>; roles?: FakeRoles; /** « À toi » (docs/vision/ledge-human-channel-contract.md): the channel and what OpenRig asks the person; answers end as `answered`. */ asks?: { channel: HumanChannel; asks: HumanAsk[]; answered?: Partial<OpenRigAnswered> } } = {}) {
+export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; /** What `session.commands` answers, for every session. */ commands?: SlashCommand[]; openrig?: OpenRigState; rigSpecs?: RigSpec[]; /** Images the daemon already holds, by id (no preview: a preview get is served the whole image). */ images?: Record<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }>; roles?: FakeRoles; /** « À toi » (docs/vision/ledge-human-channel-contract.md): the channel and what OpenRig asks the person; answers end as `answered`. */ asks?: { channel: HumanChannel; asks: HumanAsk[]; answered?: Partial<OpenRigAnswered> };
+  /** The agents' browsers (docs/mockups/ledge-browser-live.html), by session: their state, and the image a `browser.watch` gets (JPEG, base64). */
+  browsers?: Record<string, { live: Omit<BrowserLive, 'type'>; frame?: string }> } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -49,6 +51,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   let launches = 0;
   const turns = new Map<string, ChatTurn>();
   const images = new Map<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; preview: boolean }>(Object.entries(extras.images ?? {}).map(([id, i]) => [id, { ...i, preview: false }]));
+  const browsers = new Map(Object.entries(extras.browsers ?? {}));
   await page.routeWebSocket(/127\.0\.0\.1:47831\/?$/, ws => {
     if (!up) { ws.close(); return; }
     socket = ws;
@@ -56,10 +59,16 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     ws.send(JSON.stringify({ type: 'machines', machines }));
     if (projects) ws.send(JSON.stringify({ type: 'projects', projects }));
     if (island !== 'unknown') ws.send(JSON.stringify({ type: 'island', prefs: island }));
+    for (const b of browsers.values()) if (b.live.state !== 'none') ws.send(JSON.stringify({ type: 'browser.live', ...b.live }));
     ws.onMessage(m => {
       let msg: ClientMessage;
       try { msg = JSON.parse(String(m)); } catch { return; }
       received.push(msg);
+      if (msg.type === 'browser.watch') {
+        const b = browsers.get(msg.id);
+        ws.send(JSON.stringify({ type: 'browser.live', ...(b?.live ?? { id: msg.id, state: 'none', tabs: 0 }) }));
+        if (b?.frame) ws.send(JSON.stringify({ type: 'browser.frame', id: msg.id, data: b.frame, at: b.live.image?.at ?? new Date().toISOString(), width: 1280, height: 800, live: b.live.state === 'live' }));
+      }
       // OpenRig (docs/mockups/ledge-openrig.html): a status answers `extras.openrig`; an action succeeds and broadcasts it again.
       if (msg.type === 'openrig.status' && extras.openrig) ws.send(JSON.stringify({ type: 'openrig.state', requestId: msg.requestId, state: extras.openrig }));
       if (msg.type === 'openrig.seats') ws.send(JSON.stringify({ type: 'openrig.reseated', requestId: msg.requestId, ok: true, commands: [], added: ['dev.build-2', 'dev.build-3', 'dev.review-2', 'dev.review-3'], removed: [], links: 4 }));
@@ -186,6 +195,11 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     item(id: string, item: ThreadItem) { const items = threads.get(id) ?? []; const at = items.findIndex(i => i.id === item.id); if (at >= 0) items[at] = item; else items.push(item); threads.set(id, items); push({ type: 'session.thread.item', id, item }); },
     /** Pushes a session's terminal preview. */
     preview(id: string, lines: string[]) { push({ type: 'session.preview', id, lines }); },
+    /** The agent's browser changes (broadcast as `browser.live`); `frame`, the image a later watch gets, and a film frame now when live. */
+    browser(live: Omit<BrowserLive, 'type'>, frame?: string) {
+      browsers.set(live.id, { live, frame: frame ?? browsers.get(live.id)?.frame }); push({ type: 'browser.live', ...live });
+      if (frame && live.state === 'live') push({ type: 'browser.frame', id: live.id, data: frame, at: new Date().toISOString(), width: 1280, height: 800, live: true });
+    },
     /** Drops the local daemon and refuses new connections, so the fleet's own reconnect cannot quietly bring it back (see `fakeRemote`). */
     close() { up = false; socket?.close(); socket = null; }
   };

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { isArchived, type ChatTurn, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
+import { isArchived, type BrowserLive, type ChatTurn, type DaemonInfo, type Recent, type ServerMessage, type Session, type ThreadItem } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 
 /** A daemon `error` reply; `seq` tells two identical messages apart. */
@@ -17,6 +17,8 @@ export interface DaemonState {
   errors: readonly DaemonError[];
   /** Native tracking: the threads received so far, by session (asked for when a session opens). */
   threads: Map<string, ThreadItem[]>;
+  /** The agent's browser by session (browser.live), the ones whose state is not `none`. */
+  browsers: Map<string, BrowserLive>;
   /** The folders of past sessions, most recent first (the launch form's suggestions). */
   recents: Recent[];
   /** The command that runs `ledge` inside WSL, from the snapshot; null until known. */
@@ -34,7 +36,7 @@ export interface DaemonState {
 }
 /** The daemon's last `folder.listing` answer (to this client's `folder.list` or `folder.create`); `seq` tells two apart. */
 export type FolderListing = Omit<Extract<ServerMessage, { type: 'folder.listing' }>, 'type'> & { seq: number };
-const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
+const empty = (): DaemonState => ({ sessions: [], archived: [], byId: new Map(), status: 'connecting', previews: new Map(), threads: new Map(), browsers: new Map(), lastError: null, errors: [], recents: [], launcher: null, lastLaunched: null, lastListing: null, chat: [], chatLive: null, daemon: null, snapshotSeq: 0, lastUpdate: null });
 const archivedOf = (m: Map<string, Session>) => [...m.values()].filter(isArchived).sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '') || a.id.localeCompare(b.id));
 let state: DaemonState = empty();
 const subs = new Set<() => void>();
@@ -49,6 +51,8 @@ export const daemonStore = {
   /** The overlay lists its own question at once; the daemon's events fill it in. */
   beginTurn(turn: ChatTurn) { state = { ...state, chat: [...state.chat.filter(t => t.qid !== turn.qid), turn], chatLive: null }; emit(); },
   apply(m: ServerMessage) {
+    // The browser's frames (up to ≈ 11 a second) and the answer to « Activer le direct » go to whoever listens for them, never through the state.
+    if (m.type === 'browser.frame' || m.type === 'browser.enabled') return;
     if (m.type === 'chat.history') { state = { ...state, chat: m.turns, chatLive: null }; emit(); return; }
     if (m.type === 'chat.step' || m.type === 'chat.delta' || m.type === 'chat.done' || m.type === 'chat.error') {
       const chat = state.chat.map(t => t.qid !== m.qid ? t
@@ -66,11 +70,13 @@ export const daemonStore = {
     if (m.type === 'folder.listing') { const { type: _, ...l } = m; state = { ...state, lastListing: { ...l, seq: (state.lastListing?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'update.progress' || m.type === 'update.failed') { state = { ...state, lastUpdate: { msg: m, seq: (state.lastUpdate?.seq ?? 0) + 1 } }; emit(); return; }
     if (m.type === 'recents') { state = { ...state, recents: m.recents }; emit(); return; }
-    const byId = new Map(state.byId); const previews = new Map(state.previews); const threads = new Map(state.threads);
+    const byId = new Map(state.byId); const previews = new Map(state.previews); const threads = new Map(state.threads); const browsers = new Map(state.browsers);
     let { recents, launcher, daemon, snapshotSeq } = state;
     switch (m.type) {
       case 'snapshot':
         byId.clear(); for (const s of m.sessions) byId.set(s.id, s); for (const id of previews.keys()) if (!byId.has(id)) previews.delete(id);
+        // The daemon (and the fleet after each snapshot it publishes) sends again every browser that is not `none`.
+        browsers.clear();
         recents = m.recents ?? []; launcher = m.launcher ?? null;
         daemon = m.daemon ?? null; snapshotSeq += 1;
         // A session frozen by keepStale (spec 2026-10-14 §6) keeps the thread already received: its machine cannot be
@@ -78,7 +84,8 @@ export const daemonStore = {
         for (const id of [...threads.keys()]) if (!byId.get(id)?.offline) threads.delete(id);
         break;
       case 'session.updated': byId.set(m.session.id, m.session); break;
-      case 'session.removed': byId.delete(m.id); previews.delete(m.id); threads.delete(m.id); break;
+      case 'session.removed': byId.delete(m.id); previews.delete(m.id); threads.delete(m.id); browsers.delete(m.id); break;
+      case 'browser.live': if (m.state === 'none') browsers.delete(m.id); else browsers.set(m.id, m); break;
       case 'session.preview': previews.set(m.id, m.lines); break;
       case 'session.thread': threads.set(m.id, m.items); break;
       case 'session.thread.item': {
@@ -89,7 +96,7 @@ export const daemonStore = {
         break;
       }
     }
-    state = { ...state, byId, previews, threads, sessions: sorted(byId), archived: archivedOf(byId), recents, launcher, daemon, snapshotSeq }; emit();
+    state = { ...state, byId, previews, threads, browsers, sessions: sorted(byId), archived: archivedOf(byId), recents, launcher, daemon, snapshotSeq }; emit();
   }
 };
 
