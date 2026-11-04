@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
+import { isNative } from '../native/mode';
 import { useOpenRig, useOpenRigRoles, type OpenRigView } from '@ledge/fleet/openrig';
 import type { OpenRigAction, OpenRigState, Projects, Rig, RigSeat, RoleSummary, Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
@@ -23,6 +24,14 @@ type Tone = 'ok' | 'off' | 'info' | 'warn' | 'err';
 const Pill = ({ tone, children }: { tone: Tone; children: React.ReactNode }) => <span className={`or-pill or-${tone}`}>{children}</span>;
 const Dot = ({ tone }: { tone: Tone }) => <span className={`or-dot or-${tone}`} aria-hidden />;
 
+/** The machine the OpenRig page shows: the one asked, else this computer's, else the first. In native mode (Windows
+ *  without WSL) OpenRig never runs on this computer: the first SSH machine (the EC2) comes first. */
+export function openRigMachine<M extends Pick<MachineState, 'id' | 'ssh'>>(machines: readonly M[], machine: string | undefined, native: boolean): M | undefined {
+  const asked = machines.find(m => m.id === machine);
+  if (asked) return asked;
+  return (native ? machines.find(m => !!m.ssh) : undefined) ?? machines.find(m => m.id === 'local') ?? machines[0];
+}
+
 /**
  * OpenRig on a machine (docs/mockups/ledge-openrig.html, view 1): the machines on top, the daemon and the kernel, then
  * the rigs, each unfolding its seats. A stop or a restart asks first (view 2); every action shows the `rig` command it runs.
@@ -30,7 +39,7 @@ const Dot = ({ tone }: { tone: Tone }) => <span className={`or-dot or-${tone}`} 
 export function OpenRigPage({ client, machines, machine, section = 'rigs', role, seat, open, projects = null, sessions = [], dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; section?: 'rigs' | 'roles'; role?: string; seat?: string; open?: OpenRigOpen | undefined; projects?: Projects | null; sessions?: readonly Session[]; dispatch: (a: NavAction) => void }) {
   const { t, lang } = useI18n();
   const o = t.openrig;
-  const shown = machines.find(m => m.id === machine) ?? machines.find(m => m.id === 'local') ?? machines[0];
+  const shown = openRigMachine(machines, machine, isNative());
   const id = shown?.id ?? 'local';
   const rig = useOpenRig(client, shown?.ready === false ? null : id);
   // The roles (docs/mockups/ledge-openrig-roles.html): asked once per machine, for the Roles view, its count and each seat's role link.

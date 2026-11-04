@@ -49,6 +49,16 @@ export const fr = {
     }
   },
   native: { title: 'Sessions', hint: 'Vos sessions sont dans la barre de gauche. Lancez-en une nouvelle ici.', launch: 'Lancer une session' },
+  /** Native mode (Windows without WSL): what replaces the copy that speaks of WSL (native/copy.ts lays it over). */
+  nativeCopy: {
+    daemonOutdated: 'Ce Ledge Desktop a besoin d’un démon plus récent : mettez Ledge Desktop à jour ; Ledge se reconnecte tout seul.',
+    noteLead: 'Ledge rejoint vos serveurs par SSH, depuis ce PC. ', localKind: 'Local · Windows',
+    aliasHint: 'Nom d’un bloc Host de %USERPROFILE%\\.ssh\\config.', checklist0: 'L’alias fonctionne depuis ce PC, sans mot de passe.',
+    alias: 'Alias introuvable. Ajoutez un bloc Host pour cet alias dans %USERPROFILE%\\.ssh\\config.',
+    key: 'La clé SSH est refusée. Vérifiez IdentityFile pour cet alias dans %USERPROFILE%\\.ssh\\config.',
+    hostKey: 'La clé du serveur n’est pas encore approuvée. Connectez-vous une fois depuis ce PC avec ssh et cet alias.',
+    terminalLocal: 'windows'
+  },
   side: {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name: string) => `Le rig ${name} sur la page OpenRig`, rigAsks: (n: number) => `${n} ${n > 1 ? 'demandes' : 'demande'}`, 
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',

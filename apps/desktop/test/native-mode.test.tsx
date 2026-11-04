@@ -21,7 +21,7 @@ describe('native mode', () => {
   it('features: everything in WSL mode, nothing outside the acceptance bar in native mode', () => {
     expect(Object.values(features(false)).every(Boolean)).toBe(true);
     expect(Object.values(features(true)).some(Boolean)).toBe(false);
-    expect(Object.keys(features(true)).sort()).toEqual(['atelier', 'broadcast', 'captures', 'chat', 'daemonUpdates', 'documents', 'island', 'mobile', 'shells', 'tasks']);
+    expect(Object.keys(features(true)).sort()).toEqual(['atelier', 'broadcast', 'captures', 'chat', 'documents', 'island', 'mobile', 'shells', 'tasks']);
   });
 
   it('outside Tauri the mode is WSL on 47831', async () => {

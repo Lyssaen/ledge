@@ -1,5 +1,6 @@
 import type { Session } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
+import { useFeatures } from '../native/mode';
 import type { Wait } from '../list/time';
 import { useI18n } from '../i18n/lang';
 import { dotOf } from '../nav/agents';
@@ -23,6 +24,7 @@ export function waitingSessions(sessions: readonly Session[], waits: ReadonlyMap
  *  (Tauri drags and maximises on a double click from the element that carries the attribute, not from its children). */
 export function TitleBar({ dispatch, sessions, waits, blocked }: { blocked: boolean; dispatch: (a: NavAction) => void; sessions: readonly Session[]; waits: ReadonlyMap<string, Wait> }) {
   const { t } = useI18n();
+  const { chat } = useFeatures();
   const [dnd, setDnd] = useDnd();
   const waiting = waitingSessions(sessions, waits);
   const first = waiting[0];
@@ -41,9 +43,9 @@ export function TitleBar({ dispatch, sessions, waits, blocked }: { blocked: bool
         <button className="titlebar-ib" disabled={blocked} aria-label={t.titlebar.dnd} title={dnd ? t.titlebar.dndOn : t.titlebar.dnd} aria-pressed={dnd} onClick={() => setDnd(!dnd)}>
           <Icon d={BELL} size={16} />
         </button>
-        <button className="titlebar-ib" disabled={blocked} aria-label={t.side.chat} title={t.top.chat} onClick={() => dispatch({ type: 'chat', open: true })}>
+        {chat && <button className="titlebar-ib" disabled={blocked} aria-label={t.side.chat} title={t.top.chat} onClick={() => dispatch({ type: 'chat', open: true })}>
           <Icon d={SHELL_ICONS.chat} size={16} />
-        </button>
+        </button>}
         </div>
         <WindowCaps />
       </div>

@@ -3,6 +3,7 @@ import type { Session } from '@ledge/protocol';
 import type { NavAction, NavState } from './state';
 import type { ScreenKeys } from './screenKeys';
 import { termKey } from '../term/keys';
+import { isNative } from '../native/mode';
 
 const typing = (el: Element | null): boolean => {
   if (!(el instanceof HTMLElement)) return false;
@@ -38,8 +39,9 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       if (state.modal?.kind === 'search') return;
       // / goes to Ledge's home view, its composer focused (ledge home spec §2.1); in a field, / is typed. Ctrl / asks Ledge
       // beside what is shown, in the docked panel (already open: its field takes the focus again).
-      if (!state.modal && e.key === '/' && mod && !e.altKey) { e.preventDefault(); dispatch({ type: 'chat', open: true }); return; }
-      if (!state.modal && e.key === '/' && !mod && !e.altKey && !typing(document.activeElement)) { e.preventDefault(); dispatch({ type: 'ledge' }); return; }
+      // Native mode's first round has no Ledge chat: / and Ctrl / are plain keys there.
+      if (!state.modal && e.key === '/' && !isNative() && mod && !e.altKey) { e.preventDefault(); dispatch({ type: 'chat', open: true }); return; }
+      if (!state.modal && e.key === '/' && !isNative() && !mod && !e.altKey && !typing(document.activeElement)) { e.preventDefault(); dispatch({ type: 'ledge' }); return; }
       if (state.modal || state.chat || typing(document.activeElement)) return;
 
       const { place } = state;

@@ -33,6 +33,15 @@ export const en: Messages = {
     }
   },
   native: { title: 'Sessions', hint: 'Your sessions are in the sidebar. Start a new one here.', launch: 'Launch a session' },
+  nativeCopy: {
+    daemonOutdated: 'This Ledge Desktop needs a newer daemon: update Ledge Desktop; Ledge reconnects by itself.',
+    noteLead: 'Ledge reaches your servers over SSH, from this PC. ', localKind: 'Local · Windows',
+    aliasHint: 'Name of a Host block in %USERPROFILE%\\.ssh\\config.', checklist0: 'The alias works from this PC, without a password.',
+    alias: 'Alias not found. Add a Host block for this alias to %USERPROFILE%\\.ssh\\config.',
+    key: 'The SSH key is refused. Check IdentityFile for this alias in %USERPROFILE%\\.ssh\\config.',
+    hostKey: 'The server’s host key is not approved yet. Connect once from this PC with ssh and this alias.',
+    terminalLocal: 'windows'
+  },
   side: {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name) => `The rig ${name} on the OpenRig page`, rigAsks: (n) => `${n} ${pluralEn(n, 'request', 'requests')}`, 
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
