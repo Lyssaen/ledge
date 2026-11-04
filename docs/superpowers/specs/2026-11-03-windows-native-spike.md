@@ -261,3 +261,10 @@ Two bugs were found and fixed during this run:
 
 - **Pruning took a copy in use for a free one.** Windows lets a running program's folder be renamed, so the rename test was not enough. Pruning now checks whether the copy's `node.exe` can be opened for writing. The test `pruning_keeps_a_copy_whose_node_exe_is_running` was RED, then GREEN.
 - **`daemon.stop` sent from Rust was lost.** Closing the connection with unread messages made Windows reset it before the daemon read the frame. `try_stop` now keeps reading until the daemon closes the connection. Check 3 above shows the move without any manual help.
+
+After the final review:
+
+- **Where the copies live:** they moved to Desktop's local app data, `%LOCALAPPDATA%\be.paradow.ledge.desktop\runtime\<version>`. A roaming profile would otherwise carry 0.5 to 1.1 GB. The PC run above still used the earlier location.
+- **The token's rights:** the daemon now sets them on Windows with `icacls /inheritance:r /grant:r <user>:F *S-1-5-18:F`. On the PC, a file in the folder that inherited a domain SID ends up with SYSTEM and the user only.
+- **The runtime check:** `scripts/windows-runtime/check.mjs` now opens a real ConPTY pane, so a missing `conpty.node` fails the build.
+- **Ledge's dependencies:** they install from a committed lockfile with `npm ci`.
