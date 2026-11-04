@@ -209,6 +209,10 @@ Les demandes en attente, les plus anciennes d'abord, filtrées par type (autoris
 
 Les sessions par projet. Une session ouvre son fil.
 
+### Atelier (`atelier`)
+
+Sur iPad seulement, avec un PC qui le propose : l'Atelier de Ledge Desktop, ses pièces par projet et par rig, ses agents et leurs sous-agents. Il s'ouvre lisible, une pièce entière à l'écran ; on fait glisser d'un doigt, on pince pour zoomer, « Ajuster » revient à la vue lisible, un double toucher cadre une pièce. Toucher un agent ouvre sa session dans un panneau par-dessus (« Plein écran » mène à son fil). Le nom d'une pièce ouvre ses agents et « Écrire au groupe ». Le bureau de Ledge ouvre le chat.
+
 ### Ledge (`chat`)
 
 Le chat de Ledge sur le téléphone, avec « Le point ». Les cartes proposent une session ou une tâche. Cette conversation est propre au téléphone.

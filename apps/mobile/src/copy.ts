@@ -30,10 +30,10 @@ export const copy = {
     offlineNote: 'Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
   nav: {
-    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge',
+    label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge', atelier: 'Atelier',
     /** « Retour », named after the screen it leads to; plain when that screen is not known (after a reload). */
     back: 'Retour',
-    backTo: { inbox: 'Retour aux demandes', agents: 'Retour aux agents', chat: 'Retour à Ledge', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
+    backTo: { inbox: 'Retour aux demandes', agents: 'Retour aux agents', chat: 'Retour à Ledge', atelier: 'Retour à l’Atelier', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
   },
   images: {
     attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',
@@ -708,5 +708,41 @@ export const copy = {
     seen: (when: string) => `vu à ${when}`,
     badge: 'Hors ligne',
     pcOffline: 'PC hors ligne'
+  },
+  /** The Atelier on iPad (docs/mockups/ledge-ipad-atelier.html): the PC's rooms, tables and agents, as Ledge Desktop draws them. */
+  atelier: {
+    title: 'Atelier',
+    subtitle: (agents: number, rooms: number, waiting: number) =>
+      `${agents} ${agents > 1 ? 'agents' : 'agent'} · ${rooms} ${rooms > 1 ? 'pièces' : 'pièce'}${waiting ? ` · ${waiting} ${waiting > 1 ? 'attendent' : 'attend'}` : ''}`,
+    region: 'Atelier',
+    fullScreen: 'Plein écran', closePanel: 'Fermer le panneau', closeTitle: 'Fermer',
+    session: (name: string) => `Session de ${name}`,
+    room: (name: string) => `Pièce ${name}`,
+    roomAgents: (n: number) => `${n} ${n > 1 ? 'agents' : 'agent'}`,
+    ompNoThread: 'Pas de fil pour ce siège.',
+    ompBody: 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Son terminal montre son écran.',
+    ompTerminal: 'Ouvrir son terminal',
+    /** Ledge Desktop's words for the same drawing (apps/desktop/src/i18n/fr.ts: atelier, rooms, zoom). */
+    table: (name: string) => `Table ${name}`,
+    conversations: (name: string) => `Agents de la pièce ${name}`,
+    seat: (name: string, task: string) => `${name}, ${task}`,
+    helperSeat: (kind: string, parent: string, task: string) => `${kind}, sous-agent de ${parent} : ${task}`,
+    desk: 'Parler à Ledge',
+    watching: (n: number) => `Je veille sur ${n} ${n > 1 ? 'agents' : 'agent'}.`,
+    assistant: 'Votre assistant',
+    unassigned: 'Sans projet',
+    unassignedHint: 'Ledge ne relie ces sessions à aucun projet. On les range depuis le PC.',
+    legend: { working: 'En cours', approval: 'Votre accord', question: 'Une question', done: 'Terminé ou hors ligne', helper: 'Un petit bot est un sous-agent.' },
+    plaqueCounts: (n: number) => `${n} ${n > 1 ? 'sessions' : 'session'}`,
+    waiting: (n: number) => `${n} ${n > 1 ? 'attendent' : 'attend'}`,
+    working: (n: number) => `${n} au travail`,
+    roomMenu: (name: string) => `Agents de la pièce ${name}`,
+    rigRoom: (kind: 'rig' | 'kernel', name: string) => (kind === 'kernel' ? 'Salle du kernel OpenRig' : `Salle du rig ${name}`),
+    kernel: 'Kernel', kernelWhere: 'OpenRig · opérateur, advisor, file',
+    /** docs/mockups/ledge-ipad-atelier.html (cd66c403): the folder's name, the phone has no path. */
+    rigWhere: (folder: string, project: string | null) => ['rig', folder, project ? `projet ${project}` : ''].filter(Boolean).join(' · '),
+    entrance: 'ENTRÉE',
+    more: (n: number) => `+${n} à cette table`,
+    zoom: { bar: 'Zoom de l’atelier', out: 'Dézoomer', in: 'Zoomer', reset: 'Revenir à 100 %', fit: 'Ajuster', fitTitle: 'Revenir à la vue lisible' }
   }
 } as const;

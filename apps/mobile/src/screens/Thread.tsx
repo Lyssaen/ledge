@@ -87,7 +87,20 @@ function Bubble({ item, store, storage }: { item: ThreadItem; store: MobileStore
  * One agent's thread: what was said and decided, and a way to give an instruction while the agent is free.
  * Open, the session is watched (the PC pushes its new items) and marked read up to the last item shown.
  */
-export function Thread({ store, sessionId, storage, onReconnect }: { store: MobileStore; sessionId: string; storage?: Storage; onReconnect?: () => void }) {
+/** A thread opened in the Atelier's panel (docs/mockups/ledge-ipad-atelier.html, choice A): no « Retour », but « Plein écran » and ×. */
+export interface ThreadPanel { onClose(): void }
+
+/** The panel's own buttons: « Plein écran » leads to the thread's screen, × closes the panel. */
+function PanelButtons({ sessionId, panel }: { sessionId: string; panel: ThreadPanel }) {
+  return (
+    <>
+      <a href={href({ name: 'thread', sessionId })} aria-label={copy.atelier.fullScreen} title={copy.atelier.fullScreen} className={iconButtonClass({ variant: 'outline' })}><Icon name="external" /></a>
+      <button type="button" onClick={panel.onClose} aria-label={copy.atelier.closePanel} title={copy.atelier.closeTitle} className={iconButtonClass({})}><Icon name="close" /></button>
+    </>
+  );
+}
+
+export function Thread({ store, sessionId, storage, onReconnect, panel }: { store: MobileStore; sessionId: string; storage?: Storage; onReconnect?: () => void; panel?: ThreadPanel }) {
   const state = useMobile(store);
   const now = useNow();
   const session = state.sessions.get(sessionId);
@@ -159,9 +172,10 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
       <>
         <header className="flex-none border-b border-line pt-2 pb-3">
           <div className="flex items-center gap-2.5">
-            <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />
+            {!panel && <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />}
             <span className="min-w-0 flex-1 truncate">{copy.thread.title}</span>
             <LinkStatus link={linkView(state)} />
+            {panel && <button type="button" onClick={panel.onClose} aria-label={copy.atelier.closePanel} title={copy.atelier.closeTitle} className={iconButtonClass({})}><Icon name="close" /></button>}
           </div>
         </header>
         <main className="min-h-0 flex-1 pt-7 text-body text-muted" role="status">{waiting ? copy.thread.loading : copy.thread.unknown}</main>
@@ -198,22 +212,24 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
   const endError = ending.kind === 'open' && ending.error && ending.error.op !== cleared ? ending.error : null;
   const openSheet = (mode: 'close' | 'resume') => { setCleared(endOp); setSent(false); setSheet(mode); };
   // The repository and branch: a line of their own, or after the name on a phone on its side.
-  const where = <>{session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</>;
+  // An OMP seat launched by OpenRig has no thread Ledge reads: in the panel, its terminal instead (as on Desktop).
+  const omp = !!panel && session.tool === 'omp';
+  const where = <>{panel && session.rig ? `${session.rig.name}${session.rig.role ? ` · ${session.rig.role}` : ''}` : session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</>;
 
   return (
     <>
       <header className="flex-none border-b border-line pt-2 pb-3 phone-side:pt-1 phone-side:pb-2">
         <div className="flex items-center gap-2.5">
-          <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />
+          {!panel && <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />}
           <MobileBot tool={session.tool} seed={session.id} state={session.state} frozen={!fresh} />
           <div className="min-w-0 flex-1">
-            <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere] phone-side:truncate phone-side:text-base">{session.topic ?? session.project}</h1>
+            <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere] phone-side:truncate phone-side:text-base">{omp ? session.name : session.topic ?? session.project}</h1>
             <p className="mt-[3px] text-meta text-muted phone-side:truncate">{session.name} · {copy.tools[session.tool]}<span className="hidden phone-side:inline"> · {where}</span></p>
           </div>
           <a href={href({ name: 'terminal', sessionId })} aria-label={copy.thread.terminal(session.name)} className={iconButtonClass({ variant: 'outline' })}>
             <Icon name="terminal" />
           </a>
-          {closable && session.state !== 'exited' && (
+          {closable && !omp && session.state !== 'exited' && (
             <button
               type="button" aria-label={shut ? copy.sessionEnd.closingNamed(session.name) : copy.sessionEnd.close(session.name)} title={shut ? copy.sessionEnd.closingNamed(session.name) : copy.sessionEnd.close(session.name)}
               aria-disabled={shut || undefined} onClick={() => { if (!shut) openSheet('close'); }} className={iconButtonClass({ variant: 'outline', className: shut ? 'opacity-45' : '' })}
@@ -221,9 +237,17 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
               <Icon name="power" />
             </button>
           )}
+          {panel && <PanelButtons sessionId={sessionId} panel={panel} />}
         </div>
         <p className="mt-2 ml-[46px] text-meta [overflow-wrap:anywhere] text-muted phone-side:hidden">{where}</p>
       </header>
+      {omp ? (
+        <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <h2 className="text-heading">{copy.atelier.ompNoThread}</h2>
+          <p className="max-w-[320px] text-body text-muted">{copy.atelier.ompBody}</p>
+          <a href={href({ name: 'terminal', sessionId })} className={buttonClass({ variant: 'primary' })}><Icon name="terminal" />{copy.atelier.ompTerminal}</a>
+        </main>
+      ) : <>
       <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4 phone-side:pt-3 phone-side:pb-3">
         {state.daemon?.checklist && state.checklists.get(sessionId) && <Checklist checklist={state.checklists.get(sessionId)!} current={session?.checklist?.current} />}
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
@@ -237,6 +261,7 @@ export function Thread({ store, sessionId, storage, onReconnect }: { store: Mobi
           alert={endError && <EndErrorNotice error={endError} fresh={fresh} onRetry={() => openSheet('close')} onReconnect={onReconnect} />}
           {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
         : <EndFooter key={ending.kind} ending={ending.kind === 'ended' && ending.error?.op === cleared ? { ...ending, error: null } : ending} name={session.name} canResume={closable} resumeHeld={resumeHeld(session, ops, boot, now)} readOnly={!!session.readOnly} fresh={fresh} focus={sent} onResume={() => openSheet('resume')} onReconnect={onReconnect} />}
+      </>}
       {sheet && <EndSheet store={store} session={session} mode={sheet} onClose={() => setSheet(null)} onSent={() => { setSent(true); setSheet(null); }} onReconnect={onReconnect} />}
     </>
   );

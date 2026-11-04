@@ -4,6 +4,8 @@ import { useSyncExternalStore } from 'react';
 export type Route =
   | { name: 'inbox' }
   | { name: 'agents' }
+  /** The Atelier (iPad, a PC with `daemon.atelier`); `#/atelier/<sid>` has a session's panel open over it. */
+  | { name: 'atelier'; sessionId?: string }
   | { name: 'chat' }
   | { name: 'thread'; sessionId: string }
   | { name: 'terminal'; sessionId: string }
@@ -11,7 +13,7 @@ export type Route =
   | { name: 'connection' };
 
 /** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
-const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, chat: true, thread: true, terminal: true, request: true, connection: true };
+const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, atelier: true, chat: true, thread: true, terminal: true, request: true, connection: true };
 export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
 
 const SIMPLE = ['agents', 'chat', 'connection'] as const;
@@ -21,6 +23,7 @@ export function parseRoute(hash: string): Route {
   try {
     if (parts[0] === 'request' && parts.length === 3) return { name: 'request', sessionId: decodeURIComponent(parts[1]!), key: decodeURIComponent(parts[2]!) };
     if ((parts[0] === 'thread' || parts[0] === 'terminal') && parts.length === 2) return { name: parts[0], sessionId: decodeURIComponent(parts[1]!) };
+    if (parts[0] === 'atelier' && parts.length <= 2) return parts[1] ? { name: 'atelier', sessionId: decodeURIComponent(parts[1]) } : { name: 'atelier' };
   } catch { /* malformed escape: fall through to the inbox */ }
   const simple = SIMPLE.find((n) => n === parts[0]);
   if (simple && parts.length === 1) return { name: simple };
@@ -30,6 +33,7 @@ export function parseRoute(hash: string): Route {
 export function href(r: Route): string {
   if (r.name === 'request') return `#/request/${encodeURIComponent(r.sessionId)}/${encodeURIComponent(r.key)}`;
   if (r.name === 'thread' || r.name === 'terminal') return `#/${r.name}/${encodeURIComponent(r.sessionId)}`;
+  if (r.name === 'atelier') return r.sessionId ? `#/atelier/${encodeURIComponent(r.sessionId)}` : '#/atelier';
   return r.name === 'inbox' ? '#/' : `#/${r.name}`;
 }
 

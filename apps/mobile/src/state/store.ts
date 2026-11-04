@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type DeviceKind, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -36,7 +36,9 @@ export interface MobileState {
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true } | null;
+  /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
+  projects: PhoneProject[];
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
   models: Record<string, { models: PhoneModelChoice[]; error?: true }>;
   /** The slash commands of each session's agent, by session id, as `session.commands.listing` said; `at` when they came. `error`: they could not be read. */
@@ -208,6 +210,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     capabilities: null,
     device: null,
     daemon: last?.daemon ?? null,
+    projects: last?.projects ?? [],
     models: {},
     commands: {},
     rigRows: {},
@@ -295,7 +298,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   const persist = () => {
     previewsDirty = false;
     saveLastState({
-      sessions: [...state.sessions.values()], previews: Object.fromEntries(state.previews), daemon: state.daemon, syncedAt: state.syncedAt
+      sessions: [...state.sessions.values()], previews: Object.fromEntries(state.previews), daemon: state.daemon, syncedAt: state.syncedAt, projects: state.projects
     }, storage);
   };
   const setOps = (ops: Record<string, Op>) => {
@@ -383,7 +386,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const pc = pcSnapshot(state.pc, m.daemon);
         if (!pcRunning(pc)) stopPcWatch();
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
-        set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {}, commands: {} } : {}) });
+        set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, projects: m.projects ?? [], fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {}, commands: {} } : {}) });
         persist();
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -418,6 +421,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         set({ pc });
         return;
       }
+      case 'projects':
+        set({ projects: m.projects });
+        persist();
+        return;
       case 'tasks':
         set({ tasks: new Map(m.tasks.map(x => [x.id, x])) });
         return;
@@ -594,7 +601,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {} });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {} });
     modelAsks.clear(); commandAsks.clear(); rigAsks.clear();
     stopPcWatch();
   }

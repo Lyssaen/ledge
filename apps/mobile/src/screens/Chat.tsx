@@ -14,6 +14,7 @@ import type { PhoneTask } from '@ledge/protocol';
 import { chipClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 import { Mascot } from '../ui/MobileBot';
+import { useAtelierTab } from '../ui/layout';
 
 /** The suggestions: the first needs nothing, the others a real session and a real repo of the snapshot. */
 function suggestionsOf(sessions: { name: string; repo?: string }[]): string[] {
@@ -28,6 +29,7 @@ function suggestionsOf(sessions: { name: string; repo?: string }[]): string[] {
 
 export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }) {
   const state = useMobile(store);
+  const atelierTab = useAtelierTab(state.daemon);
   const chat = useChat(store);
   const sessions = [...state.sessions.values()];
   const repos = new Set(sessions.map(s => s.repo).filter(Boolean));
@@ -115,7 +117,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
       </main>
       {note && <p role="status" className="flex-none pb-2 text-body text-attention">{note}</p>}
       <Composer value={text} onChange={setText} onSend={send} canSend={(text.trim() !== '' || images.items.length > 0) && images.ready && !running && !offline} images={images} attachDisabled={running || offline} fieldRef={field} />
-      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="chat" chat />
+      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="chat" chat atelier={atelierTab} />
     </>
   );
 }

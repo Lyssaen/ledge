@@ -7,6 +7,11 @@
 @import '@ledge/ui/styles/tokens.css' layer(ledge-ui);
 @import '@ledge/ui/bots/bots.css' layer(ledge-ui);
 @import '@ledge/ui/bots/resident.css' layer(ledge-ui);
+/* The Atelier on iPad: Ledge Desktop's drawing in a layer above Tailwind's (its preflight would reset the seats' buttons), the
+   iPad's own rules after it (atelier/ipad.css). */
+@import '@ledge/ui/atelier/atelier.css' layer(atelier);
+@import '@ledge/ui/atelier/rig-rooms.css' layer(atelier);
+@import './atelier/ipad.css';
 
 /* The mobile UI's colours are the shared tokens of @ledge/ui (tokens.css), light or dark after `data-theme` (src/theme.ts):
    the same meaning as on the desktop. `inline`, so each utility reads the variable of the theme shown. */

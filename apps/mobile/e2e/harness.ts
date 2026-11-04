@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   DevicePollResponseSchema, DeviceStartResponseSchema, PHONE_PROTOCOL,
-  type PhoneChatTurn, type PhoneClientMessage, type PhoneServerMessage, type PhoneSession, type PushSubscription
+  type PhoneChatTurn, type PhoneClientMessage, type PhoneProject, type PhoneServerMessage, type PhoneSession, type PushSubscription, type ThreadItem
 } from '@ledge/protocol';
 import { startAccountsRelay } from '../../relay/src/app';
 import type { AccountsConfig } from '../../relay/src/config';
@@ -74,6 +74,14 @@ export interface FakeDaemon {
   terminal: boolean;
   /** What the phone typed into a held terminal, in order. */
   termTyped: string[];
+  /** Set: the snapshot says `daemon.atelier` and carries these projects (the iPad's Atelier); null: an older PC. */
+  projects: PhoneProject[] | null;
+  /** True: the snapshot says `daemon.broadcast`, and the PC takes « Écrire au groupe ». */
+  broadcast: boolean;
+  /** The broadcasts the PC took: the sessions and the text. */
+  broadcasts: { sessions: string[]; text: string }[];
+  /** Each session's thread, as `session.thread` answers it (none: an empty thread). */
+  threads: Record<string, ThreadItem[]>;
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
@@ -84,7 +92,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [], terminal: false, termTyped: [],
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [], terminal: false, termTyped: [], projects: null, broadcast: false, broadcasts: [], threads: {},
     finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
@@ -94,7 +102,8 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}), ...(d.terminal ? { terminal: true as const, terminalInput: true as const } : {}) },
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}), ...(d.terminal ? { terminal: true as const, terminalInput: true as const } : {}), ...(d.projects ? { atelier: true as const } : {}), ...(d.broadcast ? { broadcast: true as const } : {}) },
+    ...(d.projects ? { projects: d.projects } : {}),
     ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
   /** The scripted answer: short on purpose, a card is never cut (TOOL_TEXT_MAX). */
@@ -186,6 +195,12 @@ function runDaemon(pc: FakePc): FakeDaemon {
     if (m.type === 'snapshot.request') return pc.send(snapshot());
     if (d.terminal && m.type.startsWith('term.')) return terminalMessage(m);
     if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close')) return chatMessage(m);
+    if (m.type === 'session.thread') return pc.send({ type: 'session.thread', id: m.id, items: d.threads[m.id] ?? [], cut: [], more: false });
+    if (m.type === 'session.broadcast' && d.broadcast) {
+      d.broadcasts.push({ sessions: m.sessions, text: m.text });
+      const names = m.sessions.map(id => d.sessions.find(x => x.id === id)?.name ?? id);
+      return pc.send({ type: 'operation.result', op: m.op, status: 'applied', sent: names });
+    }
     if (m.type === 'session.pending') {
       const s = d.sessions.find((x) => x.id === m.id);
       return s && pc.send({ type: 'session.updated', session: s });
