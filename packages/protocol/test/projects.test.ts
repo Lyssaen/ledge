@@ -63,3 +63,17 @@ describe('projectOf', () => {
     expect(projectOf(at('/tmp/scratch'), { projects: [A], rules: [{ machine: 'local', path: '/tmp/scratch', project: 'zz' }] })).toBeNull();
   });
 });
+
+describe('Windows folders (native Windows, spec 2026-11-03 §1)', () => {
+  it('a project takes a Windows folder and holds its sessions, any spelling', () => {
+    const state = ProjectsSchema.parse({ projects: [p('w', 'W', [r('local', 'C:\\Users\\po\\work')])], rules: [] });
+    expect(projectOf({ machineId: 'local', cwd: 'c:\\users\\po\\work\\api' }, state)).toBe('w');
+    expect(projectOf({ machineId: 'local', cwd: 'C:/Users/po/work' }, state)).toBe('w');
+    expect(projectOf({ machineId: 'local', cwd: 'C:\\Users\\po\\workshop' }, state)).toBeNull();
+  });
+  it('a Windows path must be stored normalized; duplicates are found across spellings', () => {
+    expect(ProjectsSchema.safeParse({ projects: [p('w', 'W', [r('local', 'C:/Users/po/work/')])], rules: [] }).success).toBe(false);
+    expect(ProjectsSchema.safeParse({ projects: [p('w', 'W', [r('local', 'C:\\Users\\po\\work')])], rules: [] }).success).toBe(true);
+    expect(projectsProblems({ projects: [p('w', 'W', [r('local', 'C:\\Users\\po\\work'), r('local', 'C:\\USERS\\po\\work')])], rules: [] }).map(x => x.code)).toEqual(['duplicate_repo']);
+  });
+});

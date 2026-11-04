@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { MachineIdSchema } from './machines.js';
 import type { Session } from './session.js';
+import { isAbsolutePath, normalizePath, pathKey, pathUnder } from './paths.js';
+
+export { normalizePath };
 
 /** The eight project colours of the mockup, stored by key so a front may restyle them. */
 export const PROJECT_COLORS = { blue: '#3b82f6', green: '#10b981', amber: '#f59e0b', violet: '#8b5cf6', teal: '#14b8a6', pink: '#ec4899', red: '#ef4444', slate: '#64748b' } as const;
@@ -9,12 +12,8 @@ export type ProjectColor = z.infer<typeof ProjectColorSchema>;
 
 export const ProjectIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 
-/** An absolute POSIX path as the projects store it: trimmed, no repeated slash, no trailing slash but for `/`. */
-export function normalizePath(raw: string): string {
-  const p = raw.trim().replace(/\/+/g, '/');
-  return p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p;
-}
-const PathSchema = z.string().max(4096).refine(p => p.startsWith('/') && p === normalizePath(p), 'an absolute, normalized path');
+/** An absolute path in its written form (paths.ts): POSIX as before, or Windows on a native Windows daemon. */
+const PathSchema = z.string().max(4096).refine(p => isAbsolutePath(p) && p === normalizePath(p), 'an absolute, normalized path');
 
 /** A folder on one machine: a Git repository or a plain folder (the branch is detected when shown, never stored). */
 export const RepoSchema = z.object({ machine: MachineIdSchema, path: PathSchema });
@@ -47,13 +46,13 @@ export function projectsProblems(p: { projects: readonly Project[]; rules: reado
     if (names.has(name)) out.push({ code: 'duplicate_name', path: ['projects', i, 'name'] });
     names.add(name);
     project.repos.forEach((repo, j) => {
-      const key = `${repo.machine}\n${repo.path}`;
+      const key = `${repo.machine}\n${pathKey(repo.path)}`;
       if (repos.has(key)) out.push({ code: 'duplicate_repo', path: ['projects', i, 'repos', j] });
       repos.add(key);
     });
   });
   p.rules.forEach((rule, i) => {
-    const key = `${rule.machine}\n${rule.path}`;
+    const key = `${rule.machine}\n${pathKey(rule.path)}`;
     if (rules.has(key)) out.push({ code: 'duplicate_rule', path: ['rules', i] });
     rules.add(key);
     if (!ids.has(rule.project)) out.push({ code: 'unknown_project', path: ['rules', i, 'project'] });
@@ -68,7 +67,6 @@ export type Projects = z.infer<typeof ProjectsSchema>;
 
 export const DEFAULT_PROJECTS: Projects = { projects: [], rules: [] };
 
-const under = (cwd: string, path: string) => path === '/' || cwd === path || cwd.startsWith(`${path}/`);
 
 /**
  * The project a session belongs to (build spec §5): among the repos and rules of the session's machine whose folder holds its
@@ -81,7 +79,7 @@ export function projectOf(session: Pick<Session, 'machineId' | 'cwd'>, state: Pr
   const candidates = [
     ...state.projects.flatMap(p => p.repos.filter(r => r.machine === machine).map(r => ({ project: p.id, path: r.path, rule: false }))),
     ...state.rules.filter(r => r.machine === machine && known.has(r.project)).map(r => ({ project: r.project, path: r.path, rule: true }))
-  ].filter(c => under(cwd, c.path));
+  ].filter(c => pathUnder(cwd, c.path));
   candidates.sort((x, y) => y.path.length - x.path.length || Number(y.rule) - Number(x.rule));
   return candidates[0]?.project ?? null;
 }
