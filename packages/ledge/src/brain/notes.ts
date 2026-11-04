@@ -146,3 +146,12 @@ export function forSession(notes: readonly Note[], project: { id: string; name: 
 
 /** « vérifiée le … » when the note says so, else « modifiée le … » (its file's date). */
 export const noteDate = (n: Note): string => (n.checkedAt ? `vérifiée le ${n.checkedAt}` : `modifiée le ${n.modifiedAt.slice(0, 10)}`);
+
+/** Past this many days without a check nor a change, a note is old: read it, but check before relying on it (spec §3.7). */
+export const OLD_DAYS = 60;
+/** The days since the note was last checked or changed, whichever is later, when past OLD_DAYS; else null. */
+export function oldFor(n: Pick<Note, 'checkedAt' | 'modifiedAt'>, now = new Date().toISOString()): number | null {
+  const last = Math.max(Date.parse(n.modifiedAt), n.checkedAt ? Date.parse(`${n.checkedAt}T23:59:59Z`) : 0);
+  const days = Math.floor((Date.parse(now) - last) / 86_400_000);
+  return days > OLD_DAYS ? days : null;
+}

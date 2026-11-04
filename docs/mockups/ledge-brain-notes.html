@@ -1,0 +1,270 @@
+<title>Cerveau de Ledge</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Planches de référence (lot 4 du cerveau) : les tokens de @ledge/ui (packages/ui/src/styles/tokens.css) et des
+   maquettes précédentes. Une partie par élément à valider ; desktop à l'échelle 1, téléphone à 360 px. */
+:root {
+  --bg: oklch(1 0 0); --surface: oklch(1 0 0); --raised: oklch(0.97 0 0); --fg: oklch(0.145 0 0); --muted: oklch(0.556 0 0);
+  --line: oklch(0.922 0 0); --input: oklch(0.922 0 0); --sidebar: oklch(0.985 0 0);
+  --ok: #059669; --attention: #b45309; --info: #2563eb; --danger: oklch(0.505 0.213 27.518);
+  --page: #f4f4f5; --note: #fffbe6; --note-line: #e9d98a; --quote: oklch(0.97 0.01 250); --on-info: #fff;
+  --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif; --mono: "Geist Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.145 0 0); --surface: oklch(0.205 0 0); --raised: oklch(0.269 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.708 0 0);
+    --line: #ffffff1a; --input: #ffffff26; --sidebar: oklch(0.18 0 0); --ok: #34d399; --attention: #fbbf24; --info: #60a5fa; --danger: oklch(0.704 0.191 22.216);
+    --page: #0b0b0c; --note: #23200f; --note-line: #4a4320; --quote: oklch(0.24 0.02 250); --on-info: #0b0b0c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(0.145 0 0); --surface: oklch(0.205 0 0); --raised: oklch(0.269 0 0); --fg: oklch(0.985 0 0); --muted: oklch(0.708 0 0);
+  --line: #ffffff1a; --input: #ffffff26; --sidebar: oklch(0.18 0 0); --ok: #34d399; --attention: #fbbf24; --info: #60a5fa; --danger: oklch(0.704 0.191 22.216);
+  --page: #0b0b0c; --note: #23200f; --note-line: #4a4320; --quote: oklch(0.24 0.02 250); --on-info: #0b0b0c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.5 var(--sans); }
+.doc { max-width: 1240px; margin: 0 auto; padding-block: 32px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: 26px; line-height: 32px; margin: 0 0 6px; letter-spacing: -.5px; text-wrap: balance; }
+.lede { color: var(--muted); max-width: 760px; margin: 0; }
+h2.part { font-size: 18px; margin: 48px 0 4px; text-wrap: balance; }
+.part-note { color: var(--muted); margin: 0 0 18px; max-width: 760px; }
+.row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+.cell { width: 380px; max-width: 100%; min-width: 0; }
+.cell.wide { width: 820px; }
+.cap { font-weight: 600; margin: 0 0 8px; }
+.cap small { display: block; font-weight: 400; color: var(--muted); }
+code { font-family: var(--mono); font-size: .92em; }
+.decide { margin-top: 32px; padding: 16px 18px; border: 1px solid var(--note-line); background: var(--note); border-radius: 12px; max-width: 820px; }
+.decide h2 { margin: 0 0 8px; font-size: 16px; }
+.decide ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+/* « Le point » › « À toi » du desktop (LedgeHome.tsx : .lp-row, .lp-decision, .st-qa). */
+.pane { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; }
+.pane h3 { margin: 0; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.badge { font-size: 11px; font-weight: 600; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--fg); color: var(--bg); display: inline-grid; place-items: center; }
+.lp-decision { display: grid; gap: 8px; padding: 10px; border-radius: 10px; background: var(--raised); }
+.lp-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.mark { width: 18px; height: 18px; flex: none; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: color-mix(in oklch, var(--info) 16%, transparent); color: var(--info); margin-top: 1px; }
+.mark.flag { background: color-mix(in oklch, var(--attention) 18%, transparent); color: var(--attention); }
+.lp-text { flex: 1; min-width: 0; font-size: 13px; line-height: 19px; }
+.quote { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--quote); font-size: 13px; line-height: 19px; }
+.src { font-size: 12px; color: var(--muted); }
+.src code { font-size: 11.5px; }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.qa { height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--input); background: var(--surface); color: var(--fg); font: 500 12px/1 var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.qa.pri { background: var(--fg); color: var(--bg); border-color: transparent; }
+.qa.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.qa:focus-visible, .field:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.field { width: 100%; border: 1px solid var(--input); border-radius: 8px; background: var(--surface); color: var(--fg); font: 13px/19px var(--sans); padding: 7px 9px; resize: vertical; }
+label.lab { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.done { font-size: 12px; color: var(--ok); display: flex; gap: 6px; align-items: center; }
+.done.off { color: var(--muted); }
+
+/* Le téléphone : 360 × 640, gouttière 16 px. */
+.phone { width: 360px; max-width: 100%; border-radius: 32px; border: 1px solid var(--line); background: var(--bg); overflow: hidden; padding: 0 16px 20px; }
+.sbar { height: 34px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; padding: 0 6px; }
+.ph-title { font-size: 18px; font-weight: 600; margin: 6px 0 12px; }
+.phone .qa { height: 40px; padding: 0 14px; font-size: 14px; border-radius: 10px; }
+.phone .lp-text, .phone .quote { font-size: 14px; line-height: 21px; }
+
+/* Réglages (SettingsPage.tsx) : la liste à gauche, la page à droite. */
+.win { display: grid; grid-template-columns: 200px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); min-height: 520px; }
+.nav { background: var(--sidebar); border-right: 1px solid var(--line); padding: 14px 10px; display: grid; align-content: start; gap: 2px; font-size: 13px; }
+.nav span { padding: 6px 10px; border-radius: 8px; color: var(--muted); }
+.nav span.on { background: var(--raised); color: var(--fg); font-weight: 600; }
+.page { padding: 20px 24px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.page h3 { margin: 0; font-size: 18px; }
+.page .intro { margin: 0; color: var(--muted); font-size: 13px; max-width: 62ch; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.toolbar .path { font: 12px var(--mono); color: var(--muted); margin-right: auto; overflow-wrap: anywhere; }
+.notes { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.note { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.note:first-child { border-top: 0; }
+.note .name { font-weight: 600; font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.note .name code { font-weight: 400; color: var(--muted); font-size: 12px; }
+.note .when { grid-column: 1; font-size: 12.5px; color: var(--muted); margin: 0; }
+.note .chips { grid-column: 1; display: flex; flex-wrap: wrap; gap: 6px; }
+.note .side { grid-column: 2; grid-row: 1 / span 3; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.chip { font-size: 11px; line-height: 18px; padding: 0 7px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.scope { border-color: color-mix(in oklch, var(--info) 40%, var(--line)); color: var(--info); }
+.chip.old { border-color: color-mix(in oklch, var(--attention) 45%, var(--line)); color: var(--attention); }
+.chip.date { font-variant-numeric: tabular-nums; }
+.flagline { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 7px 10px; border-radius: 8px; background: color-mix(in oklch, var(--attention) 12%, transparent); font-size: 12.5px; }
+.flagline b { color: var(--attention); }
+.flagline .qa { margin-left: auto; }
+
+/* Le chat : la carte générique (packages/ui/src/chat/ActionCard.tsx). */
+.chat { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; }
+.q { justify-self: end; max-width: 80%; background: var(--raised); padding: 8px 12px; border-radius: 12px; font-size: 13px; }
+.a { font-size: 13px; line-height: 20px; margin: 0; }
+.card { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.card-row { display: flex; gap: 10px; padding: 10px 12px; align-items: flex-start; }
+.card-row .lp-text b { font-weight: 600; }
+.risk { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.card-foot { display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 8px 12px; border-top: 1px solid var(--line); }
+
+@media (max-width: 720px) {
+  .win { grid-template-columns: 1fr; }
+  .nav { grid-auto-flow: column; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .note { grid-template-columns: 1fr; }
+  .note .side { grid-column: 1; grid-row: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="doc">
+  <h1>Cerveau de Ledge : les écrans</h1>
+  <p class="lede">Lot 4 de la spec du cerveau. Aujourd'hui, une proposition de note arrive comme une décision en texte libre (« oui », « non », « oui : ton texte »). Ces planches la remplacent par des boutons, ajoutent une page Réglages › Notes et une carte du chat pour « retiens que… ». Les textes sont ceux que l'interface afficherait.</p>
+
+  <h2 class="part">1. « À toi » sur le desktop : une proposition de note</h2>
+  <p class="part-note">Même place que les décisions des sessions, dans « Le point ». Le fait est cité tel qu'il sera écrit ; la source dit d'où la session le tient. « Modifier » ouvre le texte avant l'ajout. Rien ne s'écrit avant un clic sur « Ajouter ».</p>
+  <div class="row">
+    <div class="cell">
+      <p class="cap">Proposée<small>Une session propose un fait pour une note qui existe.</small></p>
+      <div class="pane">
+        <h3>À toi <span class="badge">2</span></h3>
+        <div class="lp-decision">
+          <div class="lp-row"><span class="mark" aria-hidden="true">+</span><span class="lp-text"><strong>Nova</strong> propose d'ajouter à la note <strong>machines</strong></span></div>
+          <p class="quote">Le Pi n'a plus que 906 Mo de RAM ; Docker y est en version 29.6.</p>
+          <span class="src">Source : <code>free -h</code> et <code>docker version</code> sur le Pi, 14:02</span>
+          <div class="acts"><button type="button" class="qa pri">Ajouter</button><button type="button" class="qa">Modifier</button><button type="button" class="qa ghost">Refuser</button></div>
+        </div>
+        <div class="lp-decision">
+          <div class="lp-row"><span class="mark flag" aria-hidden="true">!</span><span class="lp-text"><strong>Pim</strong> signale la note <strong>reseau</strong> comme fausse ou périmée</span></div>
+          <p class="quote">La box n'est plus la VOO : l'adresse 192.168.0.1 ne répond plus.</p>
+          <div class="acts"><button type="button" class="qa pri">Marquer à revoir</button><button type="button" class="qa ghost">Ignorer</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="cell">
+      <p class="cap">« Modifier »<small>Le fait devient un champ. « Ajouter ce texte » écrit la version de l'utilisateur, marquée « corrigé par l'utilisateur ».</small></p>
+      <div class="pane">
+        <h3>À toi <span class="badge">2</span></h3>
+        <div class="lp-decision">
+          <div class="lp-row"><span class="mark" aria-hidden="true">+</span><span class="lp-text"><strong>Nova</strong> propose d'ajouter à la note <strong>machines</strong></span></div>
+          <label class="lab" for="edit-fact">Le texte ajouté sous « Ajouts »
+            <textarea id="edit-fact" class="field" rows="3">Le Pi a 906 Mo de RAM (vérifié le 4 novembre) ; Docker 29.6.</textarea>
+          </label>
+          <div class="acts"><button type="button" class="qa pri">Ajouter ce texte</button><button type="button" class="qa ghost">Annuler</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="cell">
+      <p class="cap">Une nouvelle note<small>Le titre et « quand la lire » sont proposés par la session ; l'utilisateur les corrige avant de créer.</small></p>
+      <div class="pane">
+        <h3>À toi <span class="badge">1</span></h3>
+        <div class="lp-decision">
+          <div class="lp-row"><span class="mark" aria-hidden="true">+</span><span class="lp-text"><strong>Otto</strong> propose une nouvelle note <strong>bots</strong></span></div>
+          <label class="lab" for="new-title">Titre<input id="new-title" class="field" value="Les bots de la tablette"></label>
+          <label class="lab" for="new-when">Quand la lire<input id="new-when" class="field" value="une question sur budget-bots, refurb-tracker ou value-bets"></label>
+          <p class="quote">Les trois bots tournent en stacks Portainer sur la tablette (environnement 8).</p>
+          <div class="acts"><button type="button" class="qa pri">Créer la note</button><button type="button" class="qa ghost">Refuser</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="cell">
+      <p class="cap">Après la réponse<small>La ligne reste dans « Tâches » ; « À toi » la retire. La session reçoit le résultat.</small></p>
+      <div class="pane">
+        <div class="lp-row"><span class="mark" aria-hidden="true">+</span><span class="lp-text"><strong>Nova</strong> · note machines</span></div>
+        <span class="done">✓ Ajouté à machines · 14:05</span>
+        <div class="lp-row"><span class="mark flag" aria-hidden="true">!</span><span class="lp-text"><strong>Pim</strong> · note reseau</span></div>
+        <span class="done off">Ignoré · rien n'est marqué · 14:06</span>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="part">2. Sur le téléphone</h2>
+  <p class="part-note">Les mêmes boutons dans « Le point », sans passer par le champ du chat. « Ajouter » demande la vérification de l'appareil, comme les autres actions (<code>act</code>). « Modifier » ouvre le texte dans une feuille.</p>
+  <div class="row">
+    <div class="cell">
+      <div class="phone">
+        <div class="sbar"><span>14:03</span><span>●●● 5G</span></div>
+        <p class="ph-title">Le point</p>
+        <div class="pane">
+          <h3>À toi <span class="badge">1</span></h3>
+          <div class="lp-decision">
+            <div class="lp-row"><span class="mark" aria-hidden="true">+</span><span class="lp-text"><strong>Nova</strong> propose d'ajouter à la note <strong>machines</strong></span></div>
+            <p class="quote">Le Pi n'a plus que 906 Mo de RAM ; Docker y est en version 29.6.</p>
+            <span class="src">Source : <code>free -h</code> sur le Pi</span>
+            <div class="acts"><button type="button" class="qa pri">Ajouter</button><button type="button" class="qa">Modifier</button><button type="button" class="qa ghost">Refuser</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="part">3. Réglages › Notes</h2>
+  <p class="part-note">Une page de lecture : ce que Ledge sait de tes notes et ce qu'il en propose. Le texte d'une note se change dans le fichier (« Ouvrir » l'affiche dans le lecteur Markdown de Ledge). Deux gestes seulement écrivent : « Vérifiée aujourd'hui » met <code>checked</code> à la date du jour, « Effacer le signalement » retire « à revoir ».</p>
+  <div class="row">
+    <div class="cell wide">
+      <div class="win">
+        <nav class="nav" aria-label="Réglages"><span>Général</span><span>Apparence</span><span>Projets</span><span>Machines</span><span class="on">Notes</span><span>Encoche</span><span>Notifications</span><span>Accès mobile</span><span>À propos</span></nav>
+        <section class="page">
+          <h3>Notes</h3>
+          <p class="intro">Le chat les lit à chaque question. Une session lancée par Ledge reçoit l'index de celles de son projet et en lit une avec <code>ledge brain &lt;nom&gt;</code>.</p>
+          <div class="toolbar"><span class="path">~/.ledge/context · 5 notes</span><button type="button" class="qa">Ouvrir le dossier</button></div>
+          <div class="notes">
+            <div class="note">
+              <span class="name">Les machines du homelab <code>machines</code></span>
+              <p class="when">Quand la lire : une question sur une machine précise, son matériel, ce qui y tourne, comment s'y connecter</p>
+              <div class="chips"><span class="chip">Chat et sessions</span><span class="chip">Tous les projets</span><span class="chip date">vérifiée le 01/11/2026</span><span class="chip">2 ajouts</span></div>
+              <div class="side"><button type="button" class="qa">Ouvrir</button><button type="button" class="qa ghost">Vérifiée aujourd'hui</button></div>
+            </div>
+            <div class="note">
+              <span class="name">Réseau domestique <code>reseau</code></span>
+              <p class="when">Quand la lire : une question sur le réseau, une adresse IP, le DNS, la box ou le Wi-Fi</p>
+              <div class="chips"><span class="chip">Chat et sessions</span><span class="chip">Tous les projets</span><span class="chip date">modifiée le 01/11/2026</span></div>
+              <div class="side"><button type="button" class="qa">Ouvrir</button><button type="button" class="qa ghost">Vérifiée aujourd'hui</button></div>
+              <div class="flagline"><b>À revoir</b><span>La box n'est plus la VOO : l'adresse 192.168.0.1 ne répond plus. · Pim, le 04/11</span><button type="button" class="qa ghost">Effacer le signalement</button></div>
+            </div>
+            <div class="note">
+              <span class="name">Accès et emplacement des secrets <code>acces-et-secrets</code></span>
+              <p class="when">Quand la lire : comment se connecter à une machine ou un service, où se trouve un mot de passe ou une clé</p>
+              <div class="chips"><span class="chip scope">Chat seulement</span><span class="chip">Tous les projets</span><span class="chip date">modifiée le 01/11/2026</span></div>
+              <div class="side"><button type="button" class="qa">Ouvrir</button><button type="button" class="qa ghost">Vérifiée aujourd'hui</button></div>
+            </div>
+            <div class="note">
+              <span class="name">Bots et déploiement <code>bots-deploiement</code></span>
+              <p class="when">Quand la lire : un bot, sa mise à jour, un retour arrière, ses données ou ses secrets</p>
+              <div class="chips"><span class="chip">Chat et sessions</span><span class="chip">Projets : budget-bots, value-bets</span><span class="chip date old">modifiée le 28/08/2026 · ancienne</span></div>
+              <div class="side"><button type="button" class="qa">Ouvrir</button><button type="button" class="qa ghost">Vérifiée aujourd'hui</button></div>
+            </div>
+          </div>
+          <p class="intro">« Chat seulement », les projets et la date se règlent dans l'en-tête de la note (<code>scope</code>, <code>projects</code>, <code>checked</code>). Une note devient « ancienne » après 60 jours sans vérification ni modification.</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="part">4. Le chat : « retiens que… »</h2>
+  <p class="part-note">Une nouvelle action du chat, <code>note.add</code>, sur la carte générique : l'utilisateur dit un fait et demande de le garder ; Ledge choisit la note d'après l'index, ou demande laquelle. « Appliquer » écrit, comme pour une proposition validée, signé « dit par l'utilisateur ».</p>
+  <div class="row">
+    <div class="cell">
+      <div class="chat">
+        <div class="q">Retiens que Legion a maintenant 64 Go de RAM.</div>
+        <p class="a">Je l'ajoute à ta note <strong>machines</strong>, qui décrit Legion (vérifiée le 01/11).</p>
+        <div class="card">
+          <div class="card-row">
+            <span class="mark" aria-hidden="true">+</span>
+            <span class="lp-text"><b>Ajouter à la note machines</b><br>« Legion a 64 Go de RAM. »<br><span class="risk">↺ réversible : la ligne s'efface à la main</span></span>
+          </div>
+          <div class="card-foot"><button type="button" class="qa pri">Appliquer</button><button type="button" class="qa">Refuser</button><button type="button" class="qa ghost">Ignorer</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="decide" aria-label="À trancher">
+    <h2>À trancher sur ces planches</h2>
+    <ol>
+      <li>Les boutons de la proposition : « Ajouter », « Modifier », « Refuser » ; du signalement : « Marquer à revoir », « Ignorer ».</li>
+      <li>Le téléphone répond sur place, avec la vérification de l'appareil, au lieu de passer par le champ du chat.</li>
+      <li>Réglages › Notes reste une page de lecture, avec deux seuls gestes qui écrivent : « Vérifiée aujourd'hui » et « Effacer le signalement ».</li>
+      <li>La carte <code>note.add</code> du chat, pour « retiens que… ».</li>
+    </ol>
+  </section>
+</div>

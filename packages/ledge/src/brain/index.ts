@@ -6,7 +6,7 @@ import { readProjects } from '../daemon/projects.js';
 import { installedAgents, ledgeMd, readGuide } from '../chat/guide.js';
 import { projectsMd } from '../chat/context.js';
 import { LEDGE_VERSION } from '../version.js';
-import { forSession, NOTE_MAX, noteDate, notesDir, oneLine, readNotes, type Note } from './notes.js';
+import { forSession, NOTE_MAX, noteDate, notesDir, oldFor, oneLine, readNotes, type Note } from './notes.js';
 
 /** The most notes a session is told of when it starts: the rest is one `ledge brain` away. */
 export const INDEX_TOLD = 20;
@@ -27,8 +27,7 @@ export function projectFor(cwd: string, projects: Projects = readProjects()): { 
 }
 
 /** One index line: the name `ledge brain` takes, the title, when to read it, its date. */
-export const indexLine = (n: Note): string =>
-  `- ${n.name} — « ${n.title} » — ${n.when ? `quand : ${n.when}` : `première ligne : ${n.firstLine || '(vide)'}`} — ${noteDate(n)}${n.truncated ? ' — longue : seul le début est lu' : ''}${n.flag ? ` — à revoir : ${oneLine(n.flag)}` : ''}`;
+export const indexLine = (n: Note, now?: string): string => { const old = oldFor(n, now); return `- ${n.name} — « ${n.title} » — ${n.when ? `quand : ${n.when}` : `première ligne : ${n.firstLine || '(vide)'}`} — ${noteDate(n)}${old ? ` — ancienne (${old} jours) : vérifie avant de t'y fier` : ''}${n.truncated ? ' — longue : seul le début est lu' : ''}${n.flag ? ` — à revoir : ${oneLine(n.flag)}` : ''}`; };
 
 /**
  * The brain block of a launched session's start context: how to read what Ledge says of itself, then the index of the notes
@@ -40,7 +39,7 @@ export function brainContext(notes: readonly Note[]): string {
     const shown = notes.slice(0, INDEX_TOLD);
     lines.push(
       "Notes de l'utilisateur sur son environnement (machines, services, habitudes), à lire avec `ledge brain <nom>` seulement si ton travail en a besoin ; pour le code, le CLAUDE.md ou AGENTS.md du dépôt prime :",
-      ...shown.map(indexLine),
+      ...shown.map(n => indexLine(n)),
       ...(notes.length > shown.length ? [`- et ${notes.length - shown.length} autre(s) : \`ledge brain\``] : [])
     );
   }
