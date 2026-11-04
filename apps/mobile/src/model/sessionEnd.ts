@@ -71,6 +71,28 @@ function resumeError(o: EndOp, name: string, lost: boolean): EndError {
  */
 const restarted = (o: EndOp, session: PhoneSession) => o.startedAt !== undefined && session.startedAt !== o.startedAt;
 
+/**
+ * Ties each close sent while its session was `starting` to the run that start gives (#133). The spawn replaces the interim
+ * `startedAt` the close kept: the first new one the phone sees is the run the close ends, unless it comes too late to be sure
+ * (`SETTLE_MS` after the send: the phone may have missed that run and see a later one), in which case the close keeps its
+ * interim run and reads as over, as before. A start that fails, or an end on the interim record, keeps it too: that end is
+ * its own. `sessions`: the sessions the PC just told of. The same object when nothing changes.
+ */
+export function adoptRuns(ops: Record<string, Op>, sessions: Iterable<PhoneSession>, now: number = Date.now()): Record<string, Op> {
+  let out = ops;
+  for (const s of sessions) {
+    for (const o of Object.values(ops)) {
+      if (!o.starting || o.message.type !== 'session.close' || o.message.id !== s.id) continue;
+      if (s.startedAt === o.startedAt && s.state === 'starting') continue;
+      const { starting: _s, ...rest } = o;
+      const adopt = s.startedAt !== o.startedAt && now - Date.parse(o.at) < SETTLE_MS;
+      if (out === ops) out = { ...ops };
+      out[o.op] = adopt ? { ...rest, startedAt: s.startedAt } : rest;
+    }
+  }
+  return out;
+}
+
 /** Whether the session's current end is the one this close produced: ended, and not started again since the close was sent. */
 const ownEnd = (o: EndOp, session: PhoneSession) => session.state === 'exited' && !restarted(o, session);
 

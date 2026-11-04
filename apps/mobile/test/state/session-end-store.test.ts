@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { closedHere, endingOf } from '../../src/model/sessionEnd';
 import { createStore, type MobileStore } from '../../src/state/store';
 import { OPS_KEY } from '../../src/state/operations';
 import { session } from '../model/fixtures';
@@ -58,6 +59,29 @@ describe('a session closed or resumed from its page, in the store', () => {
     t.deliver({ type: 'session.updated', session: session('a', { name: 'Nova', state: 'exited' }) });
     const resume = t.store.sessionResume('a', assertion)!;
     expect(t.store.getState().ops[resume]).toMatchObject({ startedAt: session('a').startedAt });
+  });
+
+  it('a close sent while the session starts takes the startedAt of the run that start gives, then owns its end (#133)', () => {
+    const t = setup();
+    const S0 = session('a').startedAt, S2 = new Date().toISOString();
+    t.deliver({ type: 'session.updated', session: session('a', { name: 'Nova', state: 'starting' }) });
+    const close = t.store.sessionClose('a', assertion)!;
+    expect(t.store.getState().ops[close]).toMatchObject({ startedAt: S0, starting: true });
+    t.deliver({ type: 'operation.result', op: close, status: 'received' });
+    t.deliver({ type: 'session.updated', session: session('a', { name: 'Nova', state: 'idle', startedAt: S2 }) });
+    expect(t.store.getState().ops[close]).toMatchObject({ startedAt: S2 });
+    expect(t.store.getState().ops[close]!.starting).toBeUndefined();
+    t.deliver({ type: 'operation.result', op: close, status: 'applied', how: 'killed' });
+    const ended = session('a', { name: 'Nova', state: 'exited', startedAt: S2 });
+    t.deliver({ type: 'session.updated', session: ended });
+    expect(closedHere(ended, t.store.getState().ops)).toBe(true);
+    expect(endingOf(ended, t.store.getState().ops)).toMatchObject({ kind: 'ended', killed: true });
+  });
+
+  it('a close sent on a running session is not marked: a later start is not its run', () => {
+    const t = setup();
+    const close = t.store.sessionClose('a', assertion)!;
+    expect(t.store.getState().ops[close]!.starting).toBeUndefined();
   });
 
   it('sends the resume with its assertion', () => {

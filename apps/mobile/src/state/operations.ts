@@ -26,6 +26,11 @@ export interface Op {
   refused?: { name: string; reason: string }[];
   /** A `session.close` or `session.resume`: the session's `startedAt` (the PC's) when it was sent. A new one says it was started again since. */
   startedAt?: string;
+  /**
+   * A `session.close` sent while the session was `starting` (a resume or a model change under way): the run it ends is the
+   * one the spawn is about to give its new `startedAt`, which `adoptRuns` then keeps in place of the interim one.
+   */
+  starting?: true;
   /** When the phone first sent it. */
   at: string;
   /** The PC said `received` (or a final status): it may have applied the op. Absent on an op that never got that far. */
