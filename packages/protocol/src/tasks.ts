@@ -23,6 +23,19 @@ export const TaskLogEntrySchema = z.object({
 });
 export type TaskLogEntry = z.infer<typeof TaskLogEntrySchema>;
 
+/** A brain proposal's limits (brain spec §3.6): a fact or what is wrong, and where it comes from. */
+export const BRAIN_FACT_MAX = 500;
+export const BRAIN_SOURCE_MAX = 300;
+/** A note's name as `ledge brain` takes it: the file name without `.md`. */
+export const NoteNameSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$/);
+/** What a decision about the user's notes asks (brain spec §3.6): `add` a dated fact to a note (`create`: a new note), or `flag`
+ *  a note as to be checked. Nothing is written before the user answers « oui ». */
+export const BrainProposalSchema = z.object({
+  kind: z.enum(['add', 'flag']), note: NoteNameSchema, create: z.boolean().optional(),
+  fact: z.string().trim().min(1).max(BRAIN_FACT_MAX), source: z.string().trim().min(1).max(BRAIN_SOURCE_MAX).optional()
+});
+export type BrainProposal = z.infer<typeof BrainProposalSchema>;
+
 /** A piece of work one session gives another (spec 2026-10-25 session tasks): `giver` and `owner` are session ids,
  *  their names as they were then, or `ledge` for a task the user gave through Ledge (roles spec §3.7); `open` until its owner takes it, closed by `done`, `refused` or `dropped` (the owner
  *  ended with it). `log` keeps the passes and the closes. */
@@ -37,7 +50,9 @@ export const TaskSchema = z.object({
   /** A task Ledge gave and the user put away from « À toi » once closed. */
   seen: z.boolean().optional(),
   at: z.string(), updatedAt: z.string(),
-  log: z.array(TaskLogEntrySchema)
+  log: z.array(TaskLogEntrySchema),
+  /** A decision about the user's notes: its answer writes them (brain spec §3.6). */
+  brain: BrainProposalSchema.optional()
 });
 export type Task = z.infer<typeof TaskSchema>;
 
@@ -63,7 +78,9 @@ export const TaskCmdSchema = z.object({
   op: z.enum(['give', 'take', 'done', 'refuse', 'pass', 'show', 'list', 'seen', 'cancel']),
   task: z.string().min(1).max(40).optional(), to: z.string().min(1).optional(),
   title: z.string().min(1).max(TASK_TITLE_MAX).optional(), text: z.string().max(TASK_TEXT_MAX).optional(), all: z.boolean().optional(),
-  qid: z.string().min(1).optional(), row: z.number().int().min(0).max(7).optional()
+  qid: z.string().min(1).optional(), row: z.number().int().min(0).max(7).optional(),
+  /** A `give` to `ledge` only: a proposal about the user's notes, whose title and detail the daemon writes. */
+  brain: BrainProposalSchema.optional()
 });
 /** Every change of every task, to every local front (issue #92); a task Ledge gave never has its outcome typed into a terminal (roles spec §3.7). */
 export const TaskUpdatedSchema = z.object({ type: z.literal('task.updated'), task: TaskSchema });

@@ -11,6 +11,7 @@ import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs'
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
 import { sessionBrain } from '../brain/index.js';
+import { brainWriteOnClient } from '../brain/cli.js';
 import { broadcastLine, parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
 import { taskOnClient } from './task.js';
 import { handoverOnClient } from './handover.js';
@@ -478,6 +479,7 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
   else if (cmd.cmd === 'read') line = (await readOnClient(client, cmd.args, from, left())).line;
   else if (cmd.cmd === 'task') line = (await taskOnClient(client, cmd.args, from, left())).line;
   else if (cmd.cmd === 'handover') line = (await handoverOnClient(client, cmd.args, from, left())).line;
+  else if (cmd.cmd === 'brain') line = (await brainWriteOnClient(client, cmd.args, from, left())).line;
   else line = (await sendOnClient(client, cmd.args, from, left())).line;
   return deny(line);
 }
