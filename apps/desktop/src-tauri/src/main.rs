@@ -163,10 +163,26 @@ fn start_native(app: &AppHandle) {
     let (port, home) = (mode.port, mode.home.clone());
     let port_override = std::env::var("LEDGE_PORT").is_ok();
     let env = |k: &str| std::env::var(k).ok();
-    let rt = native::runtime(&env, app.path().resource_dir().ok().as_deref(), &|p| p.exists());
+    let source = native::runtime_source(&env, app.path().resource_dir().ok().as_deref(), &|p| p.exists());
     let app = app.clone();
     std::thread::spawn(move || {
         let Some(home) = home else { return };
+        // The bundled runtime runs from its per-version copy (an update may replace the install folder meanwhile).
+        let rt = match source {
+            Some(native::RuntimeSource::Override(rt)) => Some(rt),
+            Some(native::RuntimeSource::Bundled(dir)) => match native::stage_runtime(&dir, &home) {
+                Ok(copy) => {
+                    append_log(&home, &format!("runtime: {}", copy.display()));
+                    let rt = native::runtime_from_dir(&copy, &|p| p.exists());
+                    if let Some(v) = rt.as_ref().and_then(|r| r.version.clone()) {
+                        for old in native::prune_runtimes(&home, &v) { append_log(&home, &format!("runtime {old} removed")); }
+                    }
+                    rt
+                }
+                Err(e) => { append_log(&home, &format!("the bundled runtime could not be copied: {e}")); None }
+            },
+            None => None,
+        };
         let Some(rt) = rt else { append_log(&home, "no Ledge runtime found (LEDGE_NODE + LEDGE_CLI, or the bundled runtime folder): the daemon is not started"); return };
         run_setup(&rt, &home);
         let sup = std::sync::Arc::new(Supervisor::start(windows_ops(rt, home, port, port_override)));

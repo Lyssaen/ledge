@@ -133,6 +133,21 @@ pub fn is_node_image(image: &str) -> bool {
     lower.ends_with("\\node.exe") || lower == "node.exe"
 }
 
+/// What the daemon's environment gains from the bundled runtime: `CLAUDE_CODE_GIT_BASH_PATH` to its Git Bash (unless the
+/// environment already names one), and its `git\cmd` first on PATH. Nothing for a runtime without Git (the override).
+pub fn daemon_env(base: &[(String, String)], rt: &crate::native::Runtime) -> Vec<(String, String)> {
+    let get = |k: &str| base.iter().find(|(a, _)| a.eq_ignore_ascii_case(k)).map(|(_, v)| v.clone());
+    let mut out = Vec::new();
+    if let Some(bash) = &rt.git_bash {
+        if get("CLAUDE_CODE_GIT_BASH_PATH").is_none() { out.push(("CLAUDE_CODE_GIT_BASH_PATH".to_string(), bash.to_string_lossy().to_string())); }
+    }
+    if let Some(cmd) = &rt.git_cmd {
+        let path = get("PATH").unwrap_or_default();
+        out.push(("PATH".to_string(), if path.is_empty() { cmd.to_string_lossy().to_string() } else { format!("{};{path}", cmd.to_string_lossy()) }));
+    }
+    out
+}
+
 /// The supervisor's journal line: the seconds since 1970, then the line.
 pub fn log_line(now_secs: u64, line: &str) -> String { format!("{now_secs} {line}\n") }
 
@@ -195,6 +210,8 @@ mod win {
             c.arg(&self.rt.cli).arg("daemon").current_dir(&self.home).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
             // Desktop's own LEDGE_HOME is already in the environment the child inherits; the port only when overridden.
             if self.port_override { c.env("LEDGE_PORT", self.port.to_string()); }
+            // The bundled Git Bash for Claude Code, the bundled git first on PATH.
+            for (k, v) in daemon_env(&std::env::vars().collect::<Vec<_>>(), &self.rt) { c.env(k, v); }
             // Its own process group, no console, and out of any job Desktop is in: it outlives Desktop.
             c.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | if breakaway { CREATE_BREAKAWAY_FROM_JOB } else { 0 });
             c
@@ -404,5 +421,17 @@ mod tests {
         let c = f.calls();
         assert!(!c.iter().any(|x| x == "spawn") || c.iter().any(|x| x == "stop"), "a daemon started after the stop answered: {c:?}");
         assert!(!c.iter().skip_while(|x| *x != "stop").any(|x| x == "spawn"), "spawned after the stop: {c:?}");
+    }
+
+    #[test] fn the_daemon_is_spawned_with_the_bundled_git_bash_unless_one_is_set() {
+        use crate::native::Runtime;
+        let rt = Runtime { git_bash: Some(r"C:\rt\git\bin\bash.exe".into()), git_cmd: Some(r"C:\rt\git\cmd".into()), ..Runtime::plain(r"C:\rt\node.exe".into(), r"C:\rt\cli.js".into()) };
+        let base = vec![("Path".to_string(), r"C:\Windows".to_string())];
+        let env = daemon_env(&base, &rt);
+        assert!(env.contains(&("CLAUDE_CODE_GIT_BASH_PATH".to_string(), r"C:\rt\git\bin\bash.exe".to_string())));
+        assert!(env.contains(&("PATH".to_string(), r"C:\rt\git\cmd;C:\Windows".to_string())));
+        let set = vec![("claude_code_git_bash_path".to_string(), r"D:\git\bash.exe".to_string())];
+        assert!(!daemon_env(&set, &rt).iter().any(|(k, _)| k == "CLAUDE_CODE_GIT_BASH_PATH"), "one already set is kept");
+        assert!(daemon_env(&base, &Runtime::plain(r"C:\n.exe".into(), r"C:\c.js".into())).is_empty(), "an override runtime without Git changes nothing");
     }
 }
