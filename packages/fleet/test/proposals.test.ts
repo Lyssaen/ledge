@@ -78,6 +78,14 @@ describe('proposeProjects', () => {
     expect(p.repos.map(x => x.path)).toEqual(['/home/me/Documents', '/home/me/Téléchargements']);
   });
 
+  it('proposals group Windows folders by their real parent, not "C"', () => {
+    const r = proposeProjects({ ...input, sessions: [...sessions, session('local:wa', 'Wa', 'C:\\a\\x'), session('local:wb', 'Wb', 'C:\\b\\y')] });
+    const pa = r.find(x => x.file.includes('local:wa'))!, pb = r.find(x => x.file.includes('local:wb'))!;
+    expect(pa).not.toBe(pb);
+    expect(pa.repos.map(x => x.path)).toEqual(['C:\\a\\x']);
+    expect([pa.name, pb.name]).toEqual(['X', 'Y']);
+  });
+
   it("an agents' proposal retargets only on its own folders", () => {
     const taken: Projects = { ...projects, projects: [...projects.projects, { id: 'logs', name: 'log', color: 'red', description: '', repos: [] }] };
     const r = proposeProjects({ ...input, projects: taken });

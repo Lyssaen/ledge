@@ -1,4 +1,4 @@
-import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
+import { joinPath, samePath, broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -327,7 +327,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'folder.listing') {
       if (m.requestId !== undefined && listings.has(m.requestId)) { if (listings.get(m.requestId)!.machine === machine) { listings.delete(m.requestId); emit(m); } return; }
       // A daemon before 0.9.1 answers folder.create without its requestId: the listing of the new folder, or of the parent with the refusal.
-      const creation = m.requestId === undefined ? [...listings].find(([, l]) => l.machine === machine && l.created !== undefined && (m.error === undefined ? m.path === l.created : m.path === l.path)) : undefined;
+      const creation = m.requestId === undefined ? [...listings].find(([, l]) => l.machine === machine && l.created !== undefined && (m.error === undefined ? samePath(m.path, l.created!) : samePath(m.path, l.path))) : undefined;
       if (creation) { listings.delete(creation[0]); emit({ ...m, requestId: creation[0] }); return; }
       if (m.requestId === undefined && machine === selected) emit(m);
       return;
@@ -627,7 +627,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const { machineId: _m, ...rest } = msg; outgoing = rest;
         if (msg.requestId !== undefined) {
           if (!available(peers.get(machine))) { emit({ type: 'folder.listing', requestId: msg.requestId, path: msg.parent, parent: null, entries: [], error: 'offline' }); return; }
-          listings.set(msg.requestId, { machine, path: msg.parent, created: `${msg.parent === '/' ? '' : msg.parent}/${msg.name.trim()}` });
+          listings.set(msg.requestId, { machine, path: msg.parent, created: joinPath(msg.parent, msg.name.trim()) });
         }
       }
       if (msg.type === 'update.daemon') machine = 'local';
