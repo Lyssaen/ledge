@@ -15,6 +15,7 @@ import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } fr
 import { SlashCommandSchema } from './commands.js';
 import { HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema } from './openrig.js';
 import { QitemIdSchema, RigRowSchema } from './rigMessages.js';
+import { ProjectColorSchema, ProjectIdSchema } from './projects.js';
 
 /** A queue row's state on the phone (docs/mockups/ledge-openrig-messages.html, decision 2): the PC's own, its summary shortened. */
 export const PHONE_ROW_SUMMARY_MAX = 200;
@@ -121,6 +122,15 @@ export type PhonePending = z.infer<typeof PhonePendingSchema>;
 /** What the phone's session carries of a model change (#58) that no session has: the daemon can switch it from a phone. */
 const SwitchableSessionSchema = SessionSchema.extend({ canSwitch: z.literal(true).optional() });
 
+/**
+ * One of the user's projects as the phone sees it, for the Atelier (docs/mockups/ledge-ipad-atelier.html): its id, name and
+ * colour, in the user's order. Never its folders nor its rules: the daemon places each session itself (`PhoneSession.projectId`).
+ */
+export const PhoneProjectSchema = z.object({ id: ProjectIdSchema, name: z.string().max(80), color: ProjectColorSchema });
+export type PhoneProject = z.infer<typeof PhoneProjectSchema>;
+export const PHONE_PROJECTS_MAX = 100;
+export const PHONE_RIG_NAME_MAX = 100;
+
 /** A session as the phone sees it: no folder, no tmux name, no machine, no message to another agent. */
 export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   id: true, name: true, tool: true, project: true, title: true, topic: true, repo: true, branch: true, worktree: true,
@@ -135,7 +145,11 @@ export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   exitedAt: true
 }).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional(),
   /** Absent: the agent has no checklist. */ checklist: PhoneChecklistSummarySchema.optional(),
-  /** Started without Ledge (`hook_only`): the phone can neither close nor resume it. */ readOnly: z.literal(true).optional() });
+  /** Started without Ledge (`hook_only`): the phone can neither close nor resume it. */ readOnly: z.literal(true).optional(),
+  /** Its room in the Atelier (`daemon.atelier`): the user's project it belongs to, placed by the PC as the desktop places it; absent: none (« Sans projet »). */
+  projectId: ProjectIdSchema.optional(),
+  /** The OpenRig seat it is (`daemon.atelier`): its rig and its role once OpenRig named it. Never the seat's folder. */
+  rig: z.object({ name: z.string().max(PHONE_RIG_NAME_MAX), role: z.string().max(PHONE_RIG_NAME_MAX).optional() }).optional() });
 export type PhoneSession = z.infer<typeof PhoneSessionSchema>;
 
 /** Base64url without padding: what WebAuthn fields look like once the phone encodes them. */
@@ -406,7 +420,11 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon answers `session.commands`. */ commands: z.literal(true).optional(),
     /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
     /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),
-    /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional() }), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
+    /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional(),
+    /** The Atelier: the snapshot carries `projects`, each session its `projectId` and `rig`, and `projects` follows each change. Absent (an older PC): no Atelier. */
+    atelier: z.literal(true).optional() }),
+  /** The user's projects (`daemon.atelier`), whole, in their order: absent from an older PC's snapshot. */
+  projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX).optional(), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
     /** This device's id (its fingerprint, as decisions name it in `by`), its kind, and the name the user gave it (absent: none given). */
     id: z.string().optional(), kind: DeviceKindSchema.optional(), name: z.string().optional() }).optional() }),
   /** « À toi » on this PC: the answer to `openrig.asks`, then each change, whole. */
@@ -418,6 +436,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     rejected: z.enum(['confirm_required', 'assertion_invalid', 'assertion_expired', 'unavailable']).optional() }),
   z.object({ type: z.literal('confirm.challenge'), purpose: ConfirmPurposeSchema, challenge: B64U.max(64), rpId: z.string().max(253), credentialId: B64U.max(1_366).optional(), expiresInMs: z.number().int().positive() }),
   z.object({ type: z.literal('session.updated'), session: PhoneSessionSchema }),
+  /** The user's projects changed (a name, a colour, one added or removed, the order) (`daemon.atelier`): the list, whole. A session placed
+   *  elsewhere by the change follows as its own `session.updated`, after this. */
+  z.object({ type: z.literal('projects'), projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX) }),
   z.object({ type: z.literal('session.removed'), id: z.string() }),
   /** A session's checklist, sent to the phone that watches it; `null`: it has none (any more). */
   z.object({ type: z.literal('session.checklist'), id: z.string(), checklist: PhoneChecklistSchema.nullable() }),
