@@ -25,6 +25,7 @@ import { writeMachines } from '../src/daemon/machines.js';
 import { writeProjects } from '../src/daemon/projects.js';
 import { createMobileService } from '../src/mobile/service.js';
 import { mailId } from '../src/daemon/crossSession.js';
+import { linuxOnly } from './platform.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
@@ -216,7 +217,7 @@ describe('server: origin check', () => {
 });
 
 describe('server', () => {
-  it('returns document content and errors only to the requesting socket without touching tmux', async () => {
+  linuxOnly('hidden-in-native')('returns document content and errors only to the requesting socket without touching tmux', async () => {
     const file = join(mkdtempSync(join(tmpdir(), 'ledge-doc-')), 'plan.md');
     writeFileSync(file, '# Plan\n');
     const first = await connect({ port: srv.port }); await first.next('snapshot');
@@ -760,7 +761,7 @@ describe('server', () => {
 
   describe('session.message', () => {
     const line = 'Salut';
-    it('task.cmd gives a task and the owner gets its pointer typed', async () => {
+    linuxOnly('hidden-in-native')('task.cmd gives a task and the owner gets its pointer typed', async () => {
       tmux = fakeTmux({ 'ledge-b': [fx('codex-idle-after-turn')] }); await srv.close();
       srv = await startServer({ store, tmux, port: 0 });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
@@ -860,7 +861,7 @@ describe('server', () => {
       expect(await c.next('message.body', 3000)).toMatchObject({ id, reason: expect.stringContaining("ne t'est pas adressé") });
       c.close();
     });
-    it('to a free Codex is acked accepted and typed', async () => {
+    linuxOnly('hidden-in-native')('to a free Codex is acked accepted and typed', async () => {
       tmux = fakeTmux({ 'ledge-b': [fx('codex-idle-after-turn')] }); await srv.close();
       srv = await startServer({ store, tmux, port: 0 });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
@@ -880,7 +881,7 @@ describe('server', () => {
       expect(tmux.sent).toEqual([]);
       c.close();
     });
-    it("the card in the sender's thread goes sending → delivered", async () => {
+    linuxOnly('hidden-in-native')("the card in the sender's thread goes sending → delivered", async () => {
       tmux = fakeTmux({ 'ledge-b': [fx('codex-idle-after-turn')] }); await srv.close();
       const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
@@ -1900,7 +1901,7 @@ describe('server', () => {
       const s = store.get(launched.id)!;
       expect(s.agentSessionId).toBe(uuid);
       const dir = join(home(), 'my_app.v2').replace(/[^a-zA-Z0-9]/g, '-');
-      expect(s.transcriptPath).toMatch(new RegExp(`/projects/${dir}/${uuid}\\.jsonl$`));
+      expect(s.transcriptPath).toMatch(new RegExp(`[\\\\/]projects[\\\\/]${dir}[\\\\/]${uuid}\\.jsonl$`));
       c.send({ type: 'session.launch', tool: 'claude', cwd: join(home(), 'my_app.v2'), continue: true });
       const resumed = await c.next('session.launched');
       expect(tmux.created[1]!.command).toEqual(['claude', '--continue']);
@@ -2112,7 +2113,7 @@ describe('server', () => {
 });
 
 describe('chat', () => {
-  it('answers a question with steps, deltas and a result, then serves it in the history', async () => {
+  linuxOnly('hidden-in-native')('answers a question with steps, deltas and a result, then serves it in the history', async () => {
     store.upsert(mk('a', { topic: 'Hooks' }));
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     expect((await c.next('chat.history')).turns).toEqual([]);
@@ -2164,7 +2165,8 @@ describe('update.daemon', () => {
   it('sends the daemon info in the snapshot and routes update.daemon to the updater', async () => {
     await srv.close();
     const seen: string[] = [];
-    srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), daemon: { version: '0.2.2', install: 'npm', systemd: true },
+    // A Linux daemon's info (a Windows one adds `agents`).
+    srv = await startServer({ store, tmux, port: 0, platform: 'linux', agentEnv: async () => ({ ...process.env }), daemon: { version: '0.2.2', install: 'npm', systemd: true },
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
@@ -2177,7 +2179,7 @@ describe('update.daemon', () => {
   it('answers busy to the second overlay only, the first keeps its flow', async () => {
     await srv.close();
     let release!: () => void;
-    const updater = createDaemonUpdater({ info: () => ({ version: '0.2.2', install: 'npm', systemd: true }), atRisk: async () => false,
+    const updater = createDaemonUpdater({ platform: 'linux', info: () => ({ version: '0.2.2', install: 'npm', systemd: true }), atRisk: async () => false,
       npm: () => new Promise(r => { release = () => r({ code: 1, output: 'x' }); }), restart: async () => 0, save: async () => {} });
     srv = await startServer({ store, tmux, port: 0, agentEnv: async () => ({ ...process.env }), daemon: { version: '0.2.2', install: 'npm', systemd: true }, updater });
     const a = await connect({ port: srv.port }); const b = await connect({ port: srv.port });
