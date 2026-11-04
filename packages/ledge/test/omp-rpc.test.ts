@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { ChunkAssembler, OmpRpc, RpcError, lineReader } from '../src/daemon/omp/rpc.js';
-import { linuxOnly } from './platform.js';
+import { linuxOnlySuite } from './platform.js';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
 const start = (args: string[] = [], env: NodeJS.ProcessEnv = {}) => OmpRpc.start({ command: FAKE, args: ['--session-dir', '/tmp/ledge-fake-omp', ...args], cwd: '/tmp', env: { ...process.env, ...env } });
@@ -30,7 +30,8 @@ describe('lineReader', () => {
   });
 });
 
-describe('OmpRpc', () => {
+// OMP is not on Windows (spec 2026-11-03 §2): its RPC tests fail on the Windows CI runner (the fake process exits early).
+linuxOnlySuite('hidden-in-native')('OmpRpc', () => {
   it('waits for ready, answers a command by its id and resolves with its data', async () => {
     const rpc = await start();
     expect(rpc.ready).toMatchObject({ protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576 });
@@ -65,7 +66,7 @@ describe('OmpRpc', () => {
   it('fails the start with the process\'s stderr when it dies before ready', async () => {
     await expect(start([], { FAKE_OMP_DIE: '3' })).rejects.toThrow(/omp: no credentials/);
   });
-  linuxOnly('posix-signals')('rejects the commands in flight and reports the exit when the process ends under them', async () => {
+  it('rejects the commands in flight and reports the exit when the process ends under them', async () => {
     const rpc = await start();
     const exit = new Promise(res => rpc.onExit(res));
     await rpc.request('prompt', { message: 'slow' });
@@ -81,7 +82,7 @@ describe('OmpRpc', () => {
   });
 });
 
-describe('protocol 2: rpc_chunk', () => {
+linuxOnlySuite('hidden-in-native')('protocol 2: rpc_chunk', () => {
   it('negotiates 2 when announced, and a response past 1 MiB comes back whole, multi-byte text split across chunks included', async () => {
     const rpc = await start();
     expect(rpc.protocol).toBe(2);

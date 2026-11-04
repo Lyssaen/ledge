@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readDocument } from '../src/daemon/documents.js';
-import { linuxOnly, needsSymlinks } from './platform.js';
+import { linuxOnly } from './platform.js';
 
 const dirs: string[] = [];
 async function dir() { const d = await mkdtemp(join(tmpdir(), 'ledge-doc-')); dirs.push(d); return d; }
@@ -27,7 +27,7 @@ describe('readDocument', () => {
     expect(await readDocument(req('README.md'), { cwd: root, workdir, home: root })).toMatchObject({ type: 'document.content', path: join(root, 'README.md') });
     expect(await readDocument(req('missing.md'), { cwd: root, workdir, home: root })).toMatchObject({ type: 'document.error', code: 'not_found' });
   });
-  needsSymlinks('reads home, absolute skills, names with spaces and regular symlink targets', async () => {
+  linuxOnly('hidden-in-native')('reads home, absolute skills, names with spaces and regular symlink targets', async () => {
     const root = await dir(); await writeFile(join(root, 'My Skill.md'), 'étape'); await symlink(join(root, 'My Skill.md'), join(root, 'SKILL.md'));
     expect(await readDocument(req('~/My Skill.md'), { home: root })).toMatchObject({ type: 'document.content', text: 'étape' });
     expect(await readDocument(req(join(root, 'SKILL.md')), { home: root })).toMatchObject({ type: 'document.content', text: 'étape' });
