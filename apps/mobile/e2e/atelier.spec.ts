@@ -78,6 +78,19 @@ for (const theme of ['dark', 'light'] as const) {
     expect(box.x + box.width).toBeGreaterThan(LAND.width - 20);
     expect(box.width).toBeLessThan(460);
     await shot(page, `b-session-land-${theme}`, browserName);
+    // The request opens in the panel (pilot-lead 12:14Z, design-ux 12:17Z): « Retour au fil » comes back, a decision applied too.
+    await expect(panel(page).getByText(copy.atelier.awaiting, { exact: true })).toBeVisible();
+    await panel(page).getByRole('link', { name: copy.thread.examine }).click();
+    await expect(page).toHaveURL(/#\/atelier\/otto\/request\/p1$/);
+    await expect(panel(page).getByRole('button', { name: copy.decide.allow })).toBeVisible();
+    await shot(page, `b-request-land-${theme}`, browserName);
+    await panel(page).getByRole('button', { name: copy.nav.backTo.thread! }).click();
+    await expect(page).toHaveURL(/#\/atelier\/otto$/);
+    await panel(page).getByRole('link', { name: copy.thread.examine }).click();
+    await panel(page).getByRole('button', { name: copy.decide.allow }).click();
+    await expect(page).toHaveURL(/#\/atelier\/otto$/);
+    await expect(panel(page).getByRole('link', { name: copy.thread.examine })).toHaveCount(0);
+    expect(h.daemon.typed).toHaveLength(1);
     await seat(page, 'nova').click();
     await expect(panel(page).getByRole('heading', { name: 'Reconnexion SSH' })).toBeVisible();
     await expect(panel(page).getByText('La reconnexion SSH boucle quand le Wi-Fi revient.')).toBeVisible();

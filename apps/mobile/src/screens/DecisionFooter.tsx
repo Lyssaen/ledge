@@ -15,6 +15,8 @@ const half = (variant?: 'primary') => buttonClass({ variant, className: 'flex-1'
 const full = (variant?: 'primary' | 'ghost') => buttonClass({ variant, block: true });
 
 export interface DecisionFooterProps {
+  /** Where « Voir le fil de … » leads: the thread's screen, or the Atelier's panel (its thread there). */
+  threadHref?: string;
   item: InboxItem;
   outcome: Outcome;
   /** The PC's state now: offline, nothing is sent. */
@@ -72,7 +74,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
   const [checking, setChecking] = useBusy();
   const platform = usePlatform();
 
-  const thread = <a href={href({ name: 'thread', sessionId: item.sessionId })} className={full('ghost')}>{copy.result.thread(item.botName)}</a>;
+  const thread = <a href={p.threadHref ?? href({ name: 'thread', sessionId: item.sessionId })} className={full('ghost')}>{copy.result.thread(item.botName)}</a>;
   // The board's order: what to do, then the way to the thread, then what a tap does.
   const wrap = (children: ReactNode, hint?: string, withThread = true) => (
     <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-4">

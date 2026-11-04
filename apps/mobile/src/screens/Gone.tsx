@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { copy } from '../copy';
 import { decidedFrom } from '../model/thread';
 import { clock } from './Inbox';
@@ -17,7 +17,8 @@ const PRIMARY = buttonClass({ variant: 'primary', block: true });
  * Only a fresh state may say it is handled (the board's Result, without a decision of this device's):
  * offline (`stale`), the phone knows nothing newer than its last state, and says only that it is no longer in it.
  */
-export function Gone({ store, stale = false, item }: { store: MobileStore; stale?: boolean; item?: InboxItem | undefined }) {
+/** `panel`: in the Atelier's panel, its own head, and the way back to the thread instead of the requests. */
+export function Gone({ store, stale = false, item, panel }: { store: MobileStore; stale?: boolean; item?: InboxItem | undefined; panel?: { header: ReactNode; back: { href: string; label: string } } }) {
   const state = useMobile(store);
   const link = linkView(state);
   const sessionId = item?.sessionId;
@@ -32,11 +33,11 @@ export function Gone({ store, stale = false, item }: { store: MobileStore; stale
   if (stale) {
     return (
       <>
-        <BackHeader title={copy.gone.header} fallback={backRoute} label={copy.detail.back} link={link} />
+        {panel ? panel.header : <BackHeader title={copy.gone.header} fallback={backRoute} label={copy.detail.back} link={link} />}
         <main className="min-h-0 flex-1 overflow-y-auto pt-7">
           <h1 className="text-display leading-[1.25] font-semibold tracking-[-1px]">{copy.gone.staleTitle}</h1>
           <p className="mt-2.5 text-body text-muted">{copy.gone.staleBody}</p>
-          <a href={back} className={`mt-6 ${PRIMARY}`}>{copy.gone.back}</a>
+          <a href={panel?.back.href ?? back} className={`mt-6 ${PRIMARY}`}>{panel?.back.label ?? copy.gone.back}</a>
         </main>
       </>
     );

@@ -32,7 +32,8 @@ function AgentReply({ text }: { text: string }) {
 
 const Cut = ({ align }: { align: 'start' | 'end' }) => <div className={`text-meta text-muted ${align === 'end' ? 'text-right' : ''}`}>{copy.thread.cut}</div>;
 
-function Bubble({ item, store, storage }: { item: ThreadItem; store: MobileStore; storage?: Storage | undefined }) {
+/** `inPanel`: in the Atelier's panel, a request opens there, to be decided without leaving the Atelier. */
+function Bubble({ item, store, storage, inPanel = false }: { item: ThreadItem; store: MobileStore; storage?: Storage | undefined; inPanel?: boolean }) {
   switch (item.kind) {
     case 'time': return <div className="text-center font-mono text-meta text-muted">{item.label}</div>;
     case 'rig-message': case 'rig-task': case 'rig-notice': case 'rig-fold': case 'rig-unreadable': case 'rig-raw': return <RigItem e={item} storage={storage} store={store} />;
@@ -72,9 +73,9 @@ function Bubble({ item, store, storage }: { item: ThreadItem; store: MobileStore
     }
     case 'event': return <div className="text-center text-meta text-muted">{item.label}</div>;
     case 'awaiting': return (
-      <Notice title={copy.thread.awaiting} tone={item.item.kind === 'question' ? 'warning' : 'approval'}>
+      <Notice title={inPanel ? copy.atelier.awaiting : copy.thread.awaiting} tone={item.item.kind === 'question' ? 'warning' : 'approval'}>
         <p className="[overflow-wrap:anywhere]">{headline(item.item)}</p>
-        <a href={href({ name: 'request', sessionId: item.item.sessionId, key: item.item.key })} className={buttonClass({ block: true, className: 'mt-3' })}>
+        <a href={href(inPanel ? { name: 'atelier', sessionId: item.item.sessionId, requestKey: item.item.key } : { name: 'request', sessionId: item.item.sessionId, key: item.item.key })} className={buttonClass({ block: true, className: 'mt-3' })}>
           {copy.thread.examine}
           <Icon name="arrowRight" />
         </a>
@@ -253,7 +254,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
-        {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} />)}
+        {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} inPanel={!!panel} />)}
       </main>
       {ending.kind === 'open'
         ? <Reply name={session.name} focusAtEnd={focusOnOpen} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}

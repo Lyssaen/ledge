@@ -11,6 +11,7 @@ import { requestsOf } from '../model/requests';
 import { closedTasks } from '../model/tasks';
 import { sessionStatus } from '../model/agents';
 import { GroupWrite } from '../screens/Agents';
+import { RequestDetail } from '../screens/RequestDetail';
 import { Thread } from '../screens/Thread';
 import { LinkStatus, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
@@ -107,7 +108,7 @@ function roomOf(scene: AtelierScene<AtelierPhone, PhoneProject>, id: string): { 
   return { name: room.rig?.kind === 'kernel' ? copy.atelier.kernel : room.project.name, ids: room.tables.flatMap(t => t.mains.map(s => s.id)) };
 }
 
-export function AtelierScreen({ store, sessionId, storage, onReconnect }: { store: MobileStore; sessionId?: string; storage?: Storage; onReconnect?: () => void }): JSX.Element {
+export function AtelierScreen({ store, sessionId, requestKey, storage, onReconnect }: { store: MobileStore; sessionId?: string; requestKey?: string; storage?: Storage; onReconnect?: () => void }): JSX.Element {
   const state = useMobile(store);
   const offline = !state.fresh;
   const sessions = useMemo(() => [...state.sessions.values()], [state.sessions]);
@@ -172,7 +173,10 @@ export function AtelierScreen({ store, sessionId, storage, onReconnect }: { stor
       </div>
       {sessionId && (
         <Panel label={copy.atelier.session(shown?.name ?? '')} onClose={close}>
-          <Thread key={sessionId} store={store} sessionId={sessionId} storage={storage} onReconnect={onReconnect} panel={{ onClose: close }} />
+          {requestKey
+            ? <RequestDetail key={`${sessionId}:request`} store={store} sessionId={sessionId} requestKey={requestKey} onReconnect={onReconnect}
+                panel={{ onBack: () => replaceRoute({ name: 'atelier', sessionId }), onClose: close }} />
+            : <Thread key={sessionId} store={store} sessionId={sessionId} storage={storage} onReconnect={onReconnect} panel={{ onClose: close }} />}
         </Panel>
       )}
       {!sessionId && room && sheet && <RoomSheet store={store} name={room.name} ids={room.ids} onOpen={open} onClose={() => setSheet(null)} />}

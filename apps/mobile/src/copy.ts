@@ -722,6 +722,8 @@ export const copy = {
     ompNoThread: 'Pas de fil pour ce siège.',
     ompBody: 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Son terminal montre son écran.',
     ompTerminal: 'Ouvrir son terminal',
+    /** The thread's card in the panel: the request opens there, not in « À traiter » (design-ux 12:17Z). */
+    awaiting: 'Décision attendue',
     /** Ledge Desktop's words for the same drawing (apps/desktop/src/i18n/fr.ts: atelier, rooms, zoom). */
     table: (name: string) => `Table ${name}`,
     conversations: (name: string) => `Agents de la pièce ${name}`,

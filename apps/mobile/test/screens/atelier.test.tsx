@@ -58,6 +58,8 @@ describe('the Atelier route', () => {
     expect(parseRoute('#/atelier/a%2Fb')).toEqual({ name: 'atelier', sessionId: 'a/b' });
     expect(href({ name: 'atelier' })).toBe('#/atelier');
     expect(href({ name: 'atelier', sessionId: 'a/b' })).toBe('#/atelier/a%2Fb');
+    expect(parseRoute('#/atelier/otto/request/p%201')).toEqual({ name: 'atelier', sessionId: 'otto', requestKey: 'p 1' });
+    expect(href({ name: 'atelier', sessionId: 'otto', requestKey: 'p 1' })).toBe('#/atelier/otto/request/p%201');
   });
 });
 
@@ -109,11 +111,11 @@ describe('the Atelier tab', () => {
 });
 
 describe('the Atelier screen', () => {
-  const open = (sessionId?: string) => {
+  const open = (sessionId?: string, requestKey?: string) => {
     const t = setup();
     t.deliver(atelier(sessions));
     wide(true);
-    const r = render(<AtelierScreen store={t.store} {...(sessionId ? { sessionId } : {})} />);
+    const r = render(<AtelierScreen store={t.store} {...(sessionId ? { sessionId } : {})} {...(requestKey ? { requestKey } : {})} />);
     return { ...t, ...r };
   };
 
@@ -153,6 +155,41 @@ describe('the Atelier screen', () => {
     expect(within(omp).getByRole('heading', { name: copy.atelier.ompNoThread })).toBeInTheDocument();
     expect(within(omp).getByRole('link', { name: copy.atelier.ompTerminal })).toHaveAttribute('href', '#/terminal/mia');
     expect(within(omp).queryByRole('button', { name: copy.sessionEnd.close('Mia') })).toBeNull();
+  });
+
+  it('the thread’s request opens in the panel; « Retour au fil » and a decision applied give the thread back', () => {
+    const t = open('otto');
+    const panel = () => screen.getByRole('complementary', { name: copy.atelier.session('Otto') });
+    expect(within(panel()).getByText(copy.atelier.awaiting, { exact: true })).toBeInTheDocument();
+    expect(within(panel()).getByRole('link', { name: copy.thread.examine })).toHaveAttribute('href', '#/atelier/otto/request/p1');
+    t.unmount();
+    const r = open('otto', 'p1');
+    // The way back to the thread stays in the panel, the footer's too.
+    expect(within(panel()).getByRole('link', { name: copy.result.thread('Otto') })).toHaveAttribute('href', '#/atelier/otto');
+    fireEvent.click(within(panel()).getByRole('button', { name: copy.nav.backTo.thread! }));
+    expect(globalThis.location.hash).toBe('#/atelier/otto');
+    globalThis.location.hash = '#/atelier/otto/request/p1';
+    fireEvent.click(within(panel()).getByRole('button', { name: copy.decide.allow }));
+    const decide = r.of('session.decide').at(-1)!;
+    expect(decide).toMatchObject({ id: 'otto', decision: 'accept' });
+    // Sent, not applied yet: the request stays.
+    expect(globalThis.location.hash).toBe('#/atelier/otto/request/p1');
+    act(() => {
+      r.deliver({ type: 'operation.result', op: decide.op, status: 'applied' });
+      r.deliver({ type: 'session.updated', session: { ...sessions[0]!, pending: undefined, state: 'working' } });
+    });
+    expect(globalThis.location.hash).toBe('#/atelier/otto');
+  });
+
+  it('offline, a request gone is not said handled: the panel stays on it', () => {
+    const t = setup();
+    t.deliver(atelier(sessions));
+    act(() => t.set('pc_offline'));
+    wide(true);
+    globalThis.location.hash = '#/atelier/luna/request/zz';
+    render(<AtelierScreen store={t.store} sessionId="luna" requestKey="zz" />);
+    expect(globalThis.location.hash).toBe('#/atelier/luna/request/zz');
+    expect(screen.getByRole('button', { name: copy.nav.backTo.thread! })).toBeInTheDocument();
   });
 
   it('a room’s name opens its sheet: its agents, « Écrire au groupe » to the live ones', async () => {

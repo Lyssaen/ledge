@@ -41,6 +41,7 @@ function HelperBot({ helper, parent, size, frozen }: { helper: Helper; parent: P
   return <Bot tool={parent.tool} state={state} pose={poseFor(seed, state)} size={size} theme={theme} seed={seed} frozen={frozen} readOnly={!!parent.readOnly} />;
 }
 const StateBadge = ({ state }: { state: BotState }) => <Badge state={state} />;
+/** Desktop's swatch element; not drawn on iPad (atelier/ipad.css), as in the validated mockup. */
 const Swatch = ({ color }: { color: string | null }) => (color ? <i className="side-swatch" style={{ background: color }} /> : <i className="filter-none" />);
 
 /** The plant drawings of Desktop's decor (apps/desktop/src/atelier/Plants.tsx), unchanged. */

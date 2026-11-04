@@ -16,8 +16,8 @@
 .atelier-ipad .overview-scroll.atelier { padding-bottom: 0 !important; }
 .atelier-ipad .muted { color: var(--muted-foreground); }
 .atelier-ipad .spacer { flex: 1; }
-.atelier-ipad .side-swatch { width: 9px; height: 9px; border-radius: 3px; margin: 0 3px; flex-shrink: 0; background: var(--info); }
-.atelier-ipad .filter-none { width: 9px; height: 9px; border-radius: 3px; border: 1.5px dashed var(--muted-foreground); flex-shrink: 0; }
+/* No project swatch on the plaques and the rug labels (review-qa 12:24Z): the validated mockup shows none. The element stays, as on
+   Desktop, unstyled (Desktop's sidebar.css draws it), so the plaques keep the mockup's spacing. */
 .atelier-ipad .ledge-btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; }
 .atelier-ipad .ledge-btn[data-variant="ghost"] { background: transparent; color: var(--muted-foreground); }
 .atelier-ipad .ledge-btn[data-variant="secondary"] { background: var(--secondary); color: var(--secondary-foreground); border-color: var(--border); }

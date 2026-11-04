@@ -225,7 +225,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
         case 'inbox': return <Split list={inbox()} detail={<SplitEmpty {...copy.split.request} />} />;
         case 'request': return <Split list={inbox()} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />} />;
         case 'agents': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<SplitEmpty {...copy.split.agent} />} />;
-        case 'atelier': if (mobile.daemon?.atelier) return <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} storage={storage} onReconnect={retry} />; break;
+        case 'atelier': if (mobile.daemon?.atelier) return <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} {...(route.requestKey ? { requestKey: route.requestKey } : {})} storage={storage} onReconnect={retry} />; break;
         case 'thread': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
         case 'terminal': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
         default: break;
