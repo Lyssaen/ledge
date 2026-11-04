@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { claudeModels, codexConfig, createModels, parseCodexModels, parseCursorModels, type ModelsRun } from '../src/daemon/models.js';
+import { join } from 'node:path';
 
 const levels = (...e: string[]) => e.map(effort => ({ effort, description: effort }));
 const CODEX = JSON.stringify({ models: [
@@ -49,7 +50,7 @@ describe('models (#58)', () => {
     expect(await models.list('cursor')).toEqual({ models: [], error: 'Not logged in' });
     fail = false; expect((await models.list('cursor')).models[0]).toMatchObject({ id: 'auto', isDefault: true });
     expect((await models.list('claude')).models.find(m => m.isDefault)?.id).toBe('sonnet');
-    expect(read).toEqual(['/cx/config.toml', '/cx/config.toml', '/h/.claude/settings.json']);
+    expect(read).toEqual([join('/cx', 'config.toml'), join('/cx', 'config.toml'), join('/h', '.claude', 'settings.json')]);
     expect(await createModels({ run: async () => ({ code: null, stdout: '', stderr: 'spawn codex ENOENT' }), env: async () => ({}) }).list('codex')).toEqual({ models: [], error: 'not installed' });
   });
 });

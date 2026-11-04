@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { homedir } from 'node:os';
 import { daemonInfo, gitRoot, installKind, underSystemd, manualCommand } from '../src/update/self.js';
 import { LEDGE_VERSION } from '../src/version.js';
+import { linuxOnly } from './platform.js';
 
 const NPM = '/home/u/.local/share/nvm/v26.7.0/lib/node_modules/@paradow/ledge/dist/cli/index.js';
 const CLONE = '/home/u/soft/ledge/packages/ledge/dist/cli/index.js';
@@ -9,7 +10,7 @@ const hasGit = (p: string) => p === '/home/u/soft/ledge/.git';
 
 describe('installKind', () => {
   it('is npm under a global node_modules', () => { expect(installKind(NPM, hasGit)).toBe('npm'); });
-  it('is git inside a clone', () => { expect(installKind(CLONE, hasGit)).toBe('git'); expect(gitRoot(CLONE, hasGit)).toBe('/home/u/soft/ledge'); });
+  linuxOnly('linux-flow')('is git inside a clone', () => { expect(installKind(CLONE, hasGit)).toBe('git'); expect(gitRoot(CLONE, hasGit)).toBe('/home/u/soft/ledge'); });
   it('is unknown elsewhere', () => { expect(installKind('/opt/ledge/index.js', () => false)).toBe('unknown'); });
 });
 

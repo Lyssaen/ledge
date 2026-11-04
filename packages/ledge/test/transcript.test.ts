@@ -80,8 +80,8 @@ describe('codexPlan', () => {
 
 describe('Claude Code transcript without hooks', () => {
   it('lives under the projects folder, named after the cwd with every non alphanumeric character a dash', () => {
-    expect(claudeTranscriptPath('/home/jde/.ledge/my_app', 'u-1', { HOME: '/home/jde' })).toBe('/home/jde/.claude/projects/-home-jde--ledge-my-app/u-1.jsonl');
-    expect(claudeTranscriptPath('/w/p', 'u-1', { HOME: '/home/jde', CLAUDE_CONFIG_DIR: '/cfg/claude' })).toBe('/cfg/claude/projects/-w-p/u-1.jsonl');
+    expect(claudeTranscriptPath('/home/jde/.ledge/my_app', 'u-1', { HOME: '/home/jde' })).toBe(join('/home/jde', '.claude', 'projects', '-home-jde--ledge-my-app', 'u-1.jsonl'));
+    expect(claudeTranscriptPath('/w/p', 'u-1', { HOME: '/home/jde', CLAUDE_CONFIG_DIR: '/cfg/claude' })).toBe(join('/cfg/claude', 'projects', '-w-p', 'u-1.jsonl'));
     // Claude Code shortens a folder name over 200 characters with a hash of its own: no guess.
     expect(claudeTranscriptPath(`/${'a'.repeat(210)}`, 'u-1', { HOME: '/home/jde' })).toBeUndefined();
   });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { DaemonInfo, ServerMessage } from '@ledge/protocol';
 import { createDaemonUpdater, npmCommand, npmEnv, lastLines, realUpdaterDeps, type UpdaterDeps } from '../src/update/run-update.js';
+import { linuxOnly } from './platform.js';
 
 const NPM_INFO: DaemonInfo = { version: '0.2.2', install: 'npm', systemd: true };
 function deps(over: Partial<UpdaterDeps> = {}): UpdaterDeps & { calls: string[] } {
@@ -17,7 +18,7 @@ function deps(over: Partial<UpdaterDeps> = {}): UpdaterDeps & { calls: string[] 
 const collect = () => { const sent: ServerMessage[] = []; return { sent, send: (m: ServerMessage) => { sent.push(m); } }; };
 
 describe('npmCommand', () => {
-  it('uses the npm next to the running node, not the one on PATH', () => {
+  linuxOnly('linux-flow')('uses the npm next to the running node, not the one on PATH', () => {
     expect(npmCommand('/home/u/.local/share/nvm/v26.7.0/bin/node', '0.3.0')).toEqual({ file: '/home/u/.local/share/nvm/v26.7.0/bin/npm', args: ['i', '-g', '@paradow/ledge@0.3.0'] });
   });
 });
@@ -37,7 +38,7 @@ describe('lastLines', () => {
 });
 
 describe('createDaemonUpdater', () => {
-  it('installs, says so, saves the journal, then restarts', async () => {
+  linuxOnly('linux-flow')('installs, says so, saves the journal, then restarts', async () => {
     const d = deps(); const { sent, send } = collect();
     await createDaemonUpdater(d).update('0.3.0', send);
     expect(sent).toEqual([{ type: 'update.progress', version: '0.3.0', step: 'installing' }, { type: 'update.progress', version: '0.3.0', step: 'restarting' }]);
@@ -55,7 +56,7 @@ describe('createDaemonUpdater', () => {
     expect(sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'git-install', command: 'cd /c && git pull' }]);
     expect(d.calls).toEqual([]);
   });
-  it('refuses without systemd and gives the npm command', async () => {
+  linuxOnly('linux-flow')('refuses without systemd and gives the npm command', async () => {
     const d = deps({ info: () => ({ ...NPM_INFO, systemd: false }) }); const { sent, send } = collect();
     await createDaemonUpdater(d).update('0.3.0', send);
     expect(sent[0]).toMatchObject({ reason: 'no-systemd', command: '/home/u/.local/share/nvm/v26.7.0/bin/npm i -g @paradow/ledge@0.3.0' });

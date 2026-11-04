@@ -3,6 +3,7 @@ import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { SessionCommandsListingSchema } from '@ledge/protocol';
 import { CLAUDE_PROBE_ARGS, claudeSlashRefusal, createCommands, parseClaudeCommands, probeClaude } from '../src/daemon/commands.js';
+import { join } from 'node:path';
 
 // The shapes Claude Code 2.1.316 answers `initialize` with (trimmed).
 const RAW = [
@@ -111,8 +112,8 @@ describe('createCommands', () => {
     expect(a).toBe(b); expect(a.commands.some(c => c.name === 'git:push-it')).toBe(true);
     await commands.list('claude', '/p'); expect(probes).toEqual(['/p']);
     await commands.list('claude', '/q'); expect(probes).toEqual(['/p', '/q']);
-    marks.set('/p/.claude/commands', 5); await commands.list('claude', '/p'); expect(probes).toHaveLength(3);
-    marks.set('/h/.claude/skills', 7); await commands.list('claude', '/p'); expect(probes).toHaveLength(4);
+    marks.set(join('/p', '.claude', 'commands'), 5); await commands.list('claude', '/p'); expect(probes).toHaveLength(3);
+    marks.set(join('/h', '.claude', 'skills'), 7); await commands.list('claude', '/p'); expect(probes).toHaveLength(4);
     t = 200; fail = true; expect(await commands.list('claude', '/p')).toEqual({ commands: [], error: 'boom' });
     fail = false; expect((await commands.list('claude', '/p')).commands.length).toBeGreaterThan(0); expect(probes).toHaveLength(6);
   });
