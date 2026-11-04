@@ -268,3 +268,19 @@ After the final review:
 - **The token's rights:** the daemon now sets them on Windows with `icacls /inheritance:r /grant:r <user>:F *S-1-5-18:F`. On the PC, a file in the folder that inherited a domain SID ends up with SYSTEM and the user only.
 - **The runtime check:** `scripts/windows-runtime/check.mjs` now opens a real ConPTY pane, so a missing `conpty.node` fails the build.
 - **Ledge's dependencies:** they install from a committed lockfile with `npm ci`.
+
+## Agents on demand (step 6)
+
+Plan: `docs/superpowers/plans/2026-11-04-windows-agents.md`.
+
+**Test setup:** the branch's debug Desktop in native mode, without the spike's Codex on PATH. Codex was the only real install tested, as the user chose: an install writes into the real profile, and that can't be isolated, because the daemon takes `USERPROFILE` and `LOCALAPPDATA` from the session registry.
+
+| Check | Result |
+|---|---|
+| 1. The Agents card | Settings › General shows « Agents ». Claude Code reads `2.1.302 (Claude Code)` (the winget install, found on the user's Path). Codex reads « Non installé ». |
+| 2. A failure | With a test `CODEX_HOME` under `%TEMP%`, OpenAI's installer stopped with « Installed Codex command did not report expected version 0.166.0 ». The card showed the message, the output tail and the manual command, as planned. **Cause:** `codex.exe` warns on stderr when `CODEX_HOME` is under a temp folder, and the installer's `2>$null` turns that warning into an error in Windows PowerShell 5.1. This is a test-setup artifact: on the PO's PC, `CODEX_HOME` is `%USERPROFILE%\.codex`. |
+| 3. Codex installed | With a test `CODEX_HOME` under the profile instead, « Installer » finishes. The card reads `codex-cli 0.166.0` with the login hint. Files land in `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` and `$CODEX_HOME\packages\standalone`, and the installer adds its `bin` to the user's Path. |
+| 4. A Codex session from Desktop | Codex chosen in the form (which offers Claude Code and Codex only). Codex first asks to trust Ledge's hooks in the new home: « Trust the new Codex hooks? 10 hooks are new or changed. ». It was answered « Oui » from « À toi ». Codex then answered the harmless prompt and went back to « Disponible ». |
+| Cleanup | The user Path entry the installer added was removed. `Programs\OpenAI`, the test `CODEX_HOME` and a `~\.codex` created by a manual `codex --version` during diagnosis (none existed before) were removed. `settings.json` and the user's Desktop were restored. |
+
+**Seen during the run:** the page shows the card only once connected. A first launch with no token yet connects after the client's backoff, which can take several seconds.
