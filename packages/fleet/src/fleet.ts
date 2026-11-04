@@ -53,6 +53,8 @@ export interface FleetOptions {
   keepStale?: boolean;
   /** Trust the local daemon's `machines` list once it sends one (spec §5.3). Off: localStorage only. */
   machinesFromDaemon?: boolean;
+  /** The local daemon's address when it is not LOCAL_MACHINE's (Desktop's native mode on another port): SSH probes go there. */
+  localUrl?: string;
   /** The daemon token every connection and probe presents (Ledge Desktop, the notch). Absent: no token, today's behaviour. */
   token?: TokenSource;
 }
@@ -666,7 +668,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       },
       configured: () => configs,
       machinesSource: () => source,
-      probe: ssh => probeMachine(configs[0]!.url!, ssh, { token: opts.token }),
+      probe: ssh => probeMachine(opts.localUrl ?? configs[0]!.url!, ssh, { token: opts.token }),
       // The last try's error is forgotten: the machine is « connecting » until its next answer (a snapshot, or an error again).
       retry(id) { const p = peers.get(id); if (!p || !connected) return; p.error = undefined; p.client.connect(); publish(); },
       terminal(id, opts) { const origin = splitId(id); const m = state.find(x => x.id === origin?.machine); return origin && m ? terminalCommand(m, origin.id, opts) : null; },

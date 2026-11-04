@@ -48,6 +48,7 @@ export const fr = {
       not_installed: { title: (machine: string) => `OpenRig n’est pas installé sur ${machine}.`, body: 'Les sessions de tes projets passent toujours par ici.' }
     }
   },
+  native: { title: 'Sessions', hint: 'Vos sessions sont dans la barre de gauche. Lancez-en une nouvelle ici.', launch: 'Lancer une session' },
   side: {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name: string) => `Le rig ${name} sur la page OpenRig`, rigAsks: (n: number) => `${n} ${n > 1 ? 'demandes' : 'demande'}`, 
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',

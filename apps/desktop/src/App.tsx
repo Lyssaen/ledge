@@ -66,6 +66,8 @@ import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
+import { isNative } from './native/mode';
+import { NativeOverview } from './native/NativeOverview';
 
 const NO_PROJECTS: readonly Project[] = [];
 
@@ -127,7 +129,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const sidebarOpenRig = useSidebarOpenRig(fleetClient, machines);
   const tokenMissing = useTokenMissing(daemonTokenSource());
   const { t, lang } = useI18n();
-  const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
+  const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview(), isNative() ? 'atelier' : 'home'));
   // The header's Archived pill bumps this; Archives unfolds and scrolls on each change (0 never counts).
   const [revealArchives, setRevealArchives] = useState(0);
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
@@ -360,6 +362,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             : place.kind === 'openrig' ? <OpenRigPage client={fleetClient} machines={machines} machine={place.machine} section={place.section ?? 'rigs'} role={place.role} seat={place.seat} open={place.open} projects={projects} sessions={sessions} dispatch={dispatch} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
                 prefs={shownPrefs} setPrefs={setShownPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
+            : isNative() ? <NativeOverview dispatch={dispatch} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
                 tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />}

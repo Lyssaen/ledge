@@ -11,6 +11,7 @@ import { bootLanguages, BOOT_FAILURE } from './i18n/boot';
 import { recordToastsForTests } from './shell/Toast';
 import type { PtyBackend } from './term/backend';
 import { isAtelierWindow } from './atelier/detach';
+import { loadNativeInfo } from './native/mode';
 
 purgeObsolete();
 
@@ -40,7 +41,8 @@ if (import.meta.env.VITE_LEDGE_E2E) {
 // stays empty only for that instant. The other language loads when it is asked for. If no table loads, a bilingual line says so.
 // The detached Atelier's window (#21) loads the same page: it shows the Atelier alone, and leaves the updates to the main window.
 const atelier = isAtelierWindow();
-void Promise.all([bootLanguages(loadMessages, loadLang()), atelier]).then(async ([boot, alone]) => {
+// The mode comes with them: the first render already knows the daemon's port and what this mode shows.
+void Promise.all([bootLanguages(loadMessages, loadLang()), atelier, loadNativeInfo()]).then(async ([boot, alone]) => {
   const root = document.getElementById('root')!;
   if (boot.ok && alone) { const { AtelierApp } = await import('./atelier/AtelierWindow'); createRoot(root).render(<AtelierApp lang={boot.lang} />); return; }
   if (boot.ok) { createRoot(root).render(<App lang={boot.lang} />); return; }

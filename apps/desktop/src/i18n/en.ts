@@ -32,6 +32,7 @@ export const en: Messages = {
       not_installed: { title: (machine) => `OpenRig is not installed on ${machine}.`, body: 'Your projects’ sessions still come here.' }
     }
   },
+  native: { title: 'Sessions', hint: 'Your sessions are in the sidebar. Start a new one here.', launch: 'Launch a session' },
   side: {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name) => `The rig ${name} on the OpenRig page`, rigAsks: (n) => `${n} ${pluralEn(n, 'request', 'requests')}`, 
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
