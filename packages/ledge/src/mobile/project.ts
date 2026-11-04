@@ -4,6 +4,7 @@ import { PHONE_COMMANDS_MAX, PhoneSlashCommandSchema, type PhoneSlashCommand, ty
 import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
 import type { PhoneChecklist, PhoneChecklistSummary, Todo } from '@ledge/protocol';
 import type { RigInfo, CapabilitiesByTool, FileChange, Pending, PhonePending, PhoneSession, PhoneTask, Session, Task, ThreadItem, Tool } from '@ledge/protocol';
+import { PHONE_PROJECTS_MAX, PHONE_RIG_NAME_MAX, projectOf, type PhoneProject, type Projects } from '@ledge/protocol';
 import { adapterFor } from '../adapters/index.js';
 import { riskOf } from './risk.js';
 
@@ -74,7 +75,25 @@ export function checklistSummary(todos: readonly Todo[] | null): PhoneChecklistS
   };
 }
 
-export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChecklistSummary): PhoneSession {
+/** The user's projects for the Atelier: id, name and colour, in their order. Never a folder nor a rule. */
+export function toPhoneProjects(p: Projects): PhoneProject[] {
+  return p.projects.slice(0, PHONE_PROJECTS_MAX).map(x => ({ id: x.id, name: clip(x.name, 80).text, color: x.color }));
+}
+
+/**
+ * Where the Atelier puts a session: the user's project it belongs to, placed as the desktop places this PC's sessions (the
+ * fleet calls this machine `local`), and its OpenRig rig and role, without the seat.
+ */
+export function atelierOf(s: Session, projects: Projects): Pick<PhoneSession, 'projectId' | 'rig'> {
+  const projectId = projectOf({ machineId: 'local', cwd: s.cwd }, projects);
+  return {
+    ...(projectId !== null ? { projectId } : {}),
+    ...(s.rig ? { rig: { name: clip(s.rig.name, PHONE_RIG_NAME_MAX).text, ...(s.rig.role !== undefined ? { role: clip(s.rig.role, PHONE_RIG_NAME_MAX).text } : {}) } } : {})
+  };
+}
+
+/** `projects`: the daemon feeds the Atelier (`daemon.atelier`): the session gets its project and its rig. */
+export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChecklistSummary, projects?: Projects): PhoneSession {
   const pending = toPhoneRequest(s, SNAPSHOT_BODY_MAX);
   return {
     id: s.id, name: s.name, tool: s.tool, project: s.project, title: s.title, state: s.state,
@@ -100,6 +119,7 @@ export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChec
     ...(s.lastReply ? { lastReply: { text: clip(s.lastReply.text, TOOL_TEXT_MAX).text, at: s.lastReply.at, ...pickSet(s.lastReply, ['plan']) } } : {}),
     ...(pending ? { pending } : {}),
     ...(checklist ? { checklist } : {}),
+    ...(projects ? atelierOf(s, projects) : {}),
     unread: !!s.lastReply && s.lastReply.at > readAt
   };
 }
