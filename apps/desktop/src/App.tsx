@@ -356,7 +356,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
           asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         <section className="workspace">
-          {tokenMissing && <DaemonOutdated />}
+          {/* Native mode: Desktop runs the daemon, which writes its token at its first start; a missing token is a start under way. */}
+          {tokenMissing && !isNative() && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
             onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={f.atelier && canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.target.kind === 'session' && sessionMenu.menu.target.id === session?.id, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />

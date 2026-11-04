@@ -36,7 +36,8 @@ pub trait Ops: Send + Sync {
 pub const PORT_POLL: Duration = Duration::from_secs(2);
 
 #[derive(Default)]
-struct State { stopping: bool, up: bool, exits: u64 }
+/// `starting`: the loop is between its stop check and the daemon running (adopted or spawned); a stop waits for it.
+struct State { stopping: bool, starting: bool, up: bool, exits: u64 }
 
 /// The daemon's keeper: one thread, for the life of Desktop.
 pub struct Supervisor { ops: Arc<dyn Ops>, state: Arc<(Mutex<State>, Condvar)> }
@@ -54,14 +55,23 @@ impl Supervisor {
     /// `resume()`. True when it ended (or none was running).
     pub fn stop_and_wait(&self, timeout: Duration) -> bool {
         let (lock, cv) = &*self.state;
+        let deadline = std::time::Instant::now() + timeout;
         let mut st = lock.lock().unwrap();
         st.stopping = true;
-        if !st.up { return true; }
+        // A start under way finishes first (it may already be spawning): then there is a daemon to stop, or none.
+        st = cv.wait_timeout_while(st, timeout, |s| s.starting).unwrap().0;
+        if !st.up { return !st.starting; }
         let before = st.exits;
         drop(st);
         self.ops.log("stopping the daemon (daemon.stop)");
-        if !self.ops.send_stop() { self.ops.log("daemon.stop could not be sent"); return false; }
-        let (st, _) = cv.wait_timeout_while(lock.lock().unwrap(), timeout, |s| s.exits == before).unwrap();
+        // A daemon just spawned may not listen yet: the stop is sent again until it goes or the time is up.
+        while !self.ops.send_stop() {
+            if lock.lock().unwrap().exits != before { return true; }
+            if std::time::Instant::now() >= deadline { self.ops.log("daemon.stop could not be sent"); return false; }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        let (st, _) = cv.wait_timeout_while(lock.lock().unwrap(), left, |s| s.exits == before).unwrap();
         st.exits != before
     }
 
@@ -78,9 +88,10 @@ fn run(ops: Arc<dyn Ops>, state: Arc<(Mutex<State>, Condvar)>) {
     // Half the first wait: the first crash waits MIN_DELAY.
     let mut delay = MIN_DELAY / 2;
     loop {
-        drop(cv.wait_while(lock.lock().unwrap(), |s| s.stopping).unwrap());
+        // The stop check and the start mark are one step under the lock: a stop asked after it waits for this start.
+        cv.wait_while(lock.lock().unwrap(), |s| s.stopping).unwrap().starting = true;
         let started = ops.now();
-        let set_up = |up: bool| { let mut s = lock.lock().unwrap(); s.up = up; if !up { s.exits += 1; } cv.notify_all(); };
+        let set_up = |up: bool| { let mut s = lock.lock().unwrap(); s.up = up; s.starting = false; if !up { s.exits += 1; } cv.notify_all(); };
         if ops.port_open() {
             match ops.read_pid().and_then(|pid| ops.open(pid)) {
                 Some(mut p) => { ops.log(&format!("adopted the running daemon (pid {})", p.pid())); set_up(true); p.wait(); }
@@ -90,6 +101,10 @@ fn run(ops: Arc<dyn Ops>, state: Arc<(Mutex<State>, Condvar)>) {
                     while ops.port_open() { ops.sleep(PORT_POLL); }
                 }
             }
+        } else if lock.lock().unwrap().stopping {
+            // A stop came during the check: no daemon is started.
+            let mut s = lock.lock().unwrap(); s.starting = false; cv.notify_all();
+            continue;
         } else {
             match ops.spawn() {
                 Ok(mut p) => { ops.log(&format!("started the daemon (pid {})", p.pid())); set_up(true); p.wait(); }
@@ -260,6 +275,8 @@ mod tests {
         stop_works: bool,
         calls: Mutex<Vec<String>>,
         clock: Mutex<Duration>,
+        /// When set, the first `port_open` waits here: the loop is caught between its stop check and its start.
+        gate: Mutex<Option<mpsc::Receiver<()>>>,
     }
     impl Fake {
         fn call(&self, c: String) { self.calls.lock().unwrap().push(c); }
@@ -271,7 +288,11 @@ mod tests {
         }
     }
     impl Ops for Fake {
-        fn port_open(&self) -> bool { self.port.lock().unwrap().pop_front().unwrap_or(self.port_default) }
+        fn port_open(&self) -> bool {
+            let gate = self.gate.lock().unwrap().take();
+            if let Some(rx) = gate { self.call("port?".into()); let _ = rx.recv(); }
+            self.port.lock().unwrap().pop_front().unwrap_or(self.port_default)
+        }
         fn read_pid(&self) -> Option<u32> { self.pid_file }
         fn open(&self, pid: u32) -> Option<Box<dyn Proc>> {
             self.call(format!("open {pid}"));
@@ -366,5 +387,22 @@ mod tests {
         assert!(!is_node_image(r"C:\Windows\System32\svchost.exe"));
         assert!(!is_node_image(r"C:\evil\notnode.exe"));
         assert_eq!(log_line(5, "started"), "5 started\n");
+    }
+
+    #[test] fn a_stop_during_a_start_waits_for_it_and_never_lets_a_daemon_start_after() {
+        let (open_gate, gate) = mpsc::channel();
+        let f = Arc::new(Fake { stop_works: true, gate: Mutex::new(Some(gate)), ..Default::default() });
+        let s = Arc::new(Supervisor::start(f.clone()));
+        until(&f, |c| c.contains(&"port?".to_string()));
+        // The loop is inside its start: a stop asked now must not answer « nothing runs » and then see a daemon start.
+        let s2 = s.clone();
+        let stop = std::thread::spawn(move || s2.stop_and_wait(Duration::from_secs(2)));
+        std::thread::sleep(Duration::from_millis(50));
+        open_gate.send(()).unwrap();
+        assert!(stop.join().unwrap());
+        std::thread::sleep(Duration::from_millis(50));
+        let c = f.calls();
+        assert!(!c.iter().any(|x| x == "spawn") || c.iter().any(|x| x == "stop"), "a daemon started after the stop answered: {c:?}");
+        assert!(!c.iter().skip_while(|x| *x != "stop").any(|x| x == "spawn"), "spawned after the stop: {c:?}");
     }
 }
