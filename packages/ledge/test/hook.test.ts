@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { sessionKey } from '../src/auth.js';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -529,12 +530,12 @@ describe('session identity (SessionStart additionalContext)', () => {
     store.upsert(pim({ id: '9d8e', name: 'Bix', tmuxSession: 'ledge-9d8e' }));
     const srv = await startServer({ store, tmux: {} as never, port: 0 });
     const c = await connect({ port: srv.port });
-    const give = async (by: string, to: string, title: string) => { c.send({ type: 'task.cmd', rid: title, by, op: 'give', to, title }); return (await c.next('task.result')).task!; };
+    const give = async (by: string, to: string, title: string) => { c.send({ type: 'task.cmd', rid: title, by, key: sessionKey(by), op: 'give', to, title }); return (await c.next('task.result')).task!; };
     process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Pim';
     try {
       const mine = await give('9d8e', 'Pim', 'Tests de roles.ts');
       const done = await give('9d8e', 'Pim', 'Déjà fini');
-      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', op: 'done', task: done.id, text: 'fait' }); await c.next('task.result');
+      c.send({ type: 'task.cmd', rid: 'd', by: '7f3a', key: sessionKey('7f3a'), op: 'done', task: done.id, text: 'fait' }); await c.next('task.result');
       await give('7f3a', 'Bix', 'Relire le hook');
       const out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: '/w/ledge-wt', source: 'compact' }), { port: srv.port }));
       expect(out.additionalContext).toContain('Tes tâches en cours (elles sont gardées par Ledge, pas dans ta conversation) :');

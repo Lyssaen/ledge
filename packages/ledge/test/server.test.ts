@@ -768,7 +768,7 @@ describe('server', () => {
       srv = await startServer({ store, tmux, port: 0 });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
-      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', key: sessionKey('a'), op: 'give', to: 'Pim', title: 'Lance les tests' });
       const r = await c.next('task.result', 3000);
       expect(r.task).toMatchObject({ owner: 'b', state: 'open', title: 'Lance les tests' });
       await until(() => tmux.sent.some(x => x[0] === 'keys' && x[2] === 'Enter'), 3000);
@@ -780,7 +780,7 @@ describe('server', () => {
     it('a task given between two sessions reaches the fronts with its transmission, and Ledge lists it (#92)', async () => {
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
-      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      c.send({ type: 'task.cmd', rid: 't-r1', by: 'a', key: sessionKey('a'), op: 'give', to: 'Pim', title: 'Lance les tests' });
       const { task } = await c.next('task.updated', 3000);
       await c.next('task.result', 3000);
       expect(task).toMatchObject({ giver: 'a', owner: 'b' });
@@ -794,12 +794,12 @@ describe('server', () => {
       const card = ledgeCard(); const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history, chat: card.chat });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
-      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', key: sessionKey('a'), op: 'give', to: 'Pim', title: 'Lance les tests' });
       const given = (await c.next('task.result', 3000)).task!;
       expect(history.items('a')).toEqual([expect.objectContaining({ kind: 'notice', id: `task-${given.id}-0`, taskOp: 'give', outgoing: true, name: 'Pim', peer: 'b' })]);
       card.give(c, 'g2', { to: 'Pim', title: 'Relis' });
       const mine = (await c.next('task.result', 3000)).task!;
-      c.send({ type: 'task.cmd', rid: 'd', by: 'b', op: 'done', task: mine.id, text: 'ok' });
+      c.send({ type: 'task.cmd', rid: 'd', by: 'b', key: sessionKey('b'), op: 'done', task: mine.id, text: 'ok' });
       await c.next('task.result', 3000);
       const outgoing = history.items('b').filter(i => i.kind === 'notice' && i.outgoing);
       expect(outgoing).toEqual([expect.objectContaining({ id: `task-${mine.id}-1`, taskOp: 'done', name: 'Ledge', summary: 'Relis\nok' })]);
@@ -815,13 +815,13 @@ describe('server', () => {
       const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
-      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'A' });
+      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', key: sessionKey('a'), op: 'give', to: 'Pim', title: 'A' });
       const a = (await c.next('task.result', 3000)).task!;
-      c.send({ type: 'task.cmd', rid: 'g2', by: 'a', op: 'give', to: 'Pim', title: 'B' });
+      c.send({ type: 'task.cmd', rid: 'g2', by: 'a', key: sessionKey('a'), op: 'give', to: 'Pim', title: 'B' });
       const b = (await c.next('task.result', 3000)).task!;
-      c.send({ type: 'task.cmd', rid: 'r', by: 'a', op: 'refuse', task: a.id, text: 'plus besoin' });
+      c.send({ type: 'task.cmd', rid: 'r', by: 'a', key: sessionKey('a'), op: 'refuse', task: a.id, text: 'plus besoin' });
       await c.next('task.result', 3000);
-      c.send({ type: 'task.cmd', rid: 'x', by: 'a', op: 'cancel', task: b.id, text: 'plus besoin' });
+      c.send({ type: 'task.cmd', rid: 'x', by: 'a', key: sessionKey('a'), op: 'cancel', task: b.id, text: 'plus besoin' });
       await c.next('task.result', 3000);
       const cancels = history.items('a').filter(i => i.kind === 'notice' && i.taskOp === 'cancel');
       expect(cancels.map(i => i.id)).toEqual([`task-${a.id}-1`, `task-${b.id}-1`]);
@@ -832,7 +832,7 @@ describe('server', () => {
       const card = ledgeCard(); const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history, chat: card.chat });
       store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
       const c = await connect({ port: srv.port }); await c.next('snapshot');
-      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', op: 'give', to: 'Pim', title: 'A' });
+      c.send({ type: 'task.cmd', rid: 'g1', by: 'a', key: sessionKey('a'), op: 'give', to: 'Pim', title: 'A' });
       const a = (await c.next('task.result', 3000)).task!;
       // Ledge cancels over a session's head only as the user's action (the chat's card, action.run), never as a client's task.cmd.
       const cancel = async (task: string) => {
@@ -3411,7 +3411,7 @@ describe('close a session', () => {
         await closing({}, { chat });
         store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
         const c = await connect({ port: srv.port }); await c.next('snapshot');
-        c.send({ type: 'task.cmd', rid: 't1', by: 'a', op: 'give', to: 'Pim', title: 'Lance les tests' });
+        c.send({ type: 'task.cmd', rid: 't1', by: 'a', key: sessionKey('a'), op: 'give', to: 'Pim', title: 'Lance les tests' });
         const id = (await c.next('task.result', 3000)).task!.id;
         c.send({ type: 'task.cmd', rid: 't2', by: 'ledge', op: 'cancel', task: id });
         expect((await c.next('task.result', 3000)).reason).toBe('seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge');
@@ -3428,7 +3428,7 @@ describe('close a session', () => {
         await closing({}, { chat });
         store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
         const c = await connect({ port: srv.port }); await c.next('snapshot');
-        c.send({ type: 'task.cmd', rid: 't1', by: 'a', op: 'give', to: 'ledge', title: 'Merger ?', text: 'oui / non' });
+        c.send({ type: 'task.cmd', rid: 't1', by: 'a', key: sessionKey('a'), op: 'give', to: 'ledge', title: 'Merger ?', text: 'oui / non' });
         const id = (await c.next('task.result', 3000)).task!.id;
         const refused = 'seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge';
         for (const op of [
@@ -3455,13 +3455,30 @@ describe('close a session', () => {
         await closing({});
         store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' })); store.upsert(mk('c', { name: 'Ida', state: 'idle' }));
         const c = await connect({ port: srv.port }); await c.next('snapshot');
-        const run = async (by: string, ...args: string[]) => (await taskOnClient(c, args, by, 3000)).line;
+        const run = async (by: string, ...args: string[]) => (await taskOnClient(c, args, by, 3000, sessionKey(by))).line;
         const id = (await run('a', 'give', 'Pim', 'Lance les tests')).match(/t[0-9a-f]{6}/)![0];
         expect(await run('b', 'take', id)).toBe(`tâche ${id} prise`);
         expect(await run('b', 'pass', id, 'Ida')).toBe(`tâche ${id} passée à Ida`);
         expect(await run('c', 'refuse', id, 'pas pour moi')).toBe(`tâche ${id} refusée ; Ledge prévient Otto`);
         const again = (await run('a', 'give', 'Pim', 'Relis')).match(/t[0-9a-f]{6}/)![0];
         expect(await run('b', 'done', again, 'relu')).toBe(`tâche ${again} terminée ; Ledge prévient Otto`);
+        c.close();
+      });
+      it('#152: a session acts on a task only with its own key; reads need none', async () => {
+        await closing({});
+        store.upsert(mk('a')); store.upsert(mk('b', { name: 'Pim', tool: 'codex', state: 'idle' }));
+        const c = await connect({ port: srv.port }); await c.next('snapshot');
+        let n = 0;
+        const ask = async (m: Record<string, unknown>) => { c.send({ type: 'task.cmd', rid: `k${++n}`, ...m } as never); return c.next('task.result', 3000); };
+        const id = (await ask({ by: 'a', key: sessionKey('a'), op: 'give', to: 'Pim', title: 'Lance les tests' })).task!.id;
+        // Another session's key, or none: refused, and the task is untouched.
+        expect((await ask({ by: 'b', key: sessionKey('a'), op: 'take', task: id })).reason).toContain('ne correspond pas');
+        for (const op of [{ op: 'take', task: id }, { op: 'done', task: id, text: 'x' }, { op: 'refuse', task: id, text: 'x' }, { op: 'pass', task: id, to: 'Otto' }, { op: 'cancel', task: id }, { op: 'give', to: 'Otto', title: 'x' }])
+          expect((await ask({ by: 'b', ...op })).reason, op.op).toContain('pas de clé');
+        expect((await ask({ by: 'b', op: 'show', task: id })).task).toMatchObject({ id, state: 'open', owner: 'b' });
+        expect((await ask({ by: 'b', op: 'list' })).tasks?.map(t => t.id)).toEqual([id]);
+        // Its own key: it acts.
+        expect((await ask({ by: 'b', key: sessionKey('b'), op: 'take', task: id })).task).toMatchObject({ id, state: 'taken' });
         c.close();
       });
     });

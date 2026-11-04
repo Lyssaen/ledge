@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { LEDGE_GIVER, TASK_TEXT_MAX, TASK_TITLE_MAX, type ClientMessage, type Task } from '@ledge/protocol';
 import { connect, type Client } from '../client.js';
 import { CODEX_HOOK_VAR } from '../spawn.js';
+import { SESSION_KEY_VAR } from '../auth.js';
 
 export const TASK_USAGE = `ledge task give <nom> "<titre>" ["<détail>"]   confier un travail à une session
 ledge task give ledge "<question>" "<options, recommandation>"   une décision pour l'utilisateur ; sa réponse te réveille
@@ -15,7 +16,7 @@ ledge task pass <id> <nom> ["<note>"]     la passer à une autre session`;
 const TASK_MS = 4000;
 const ID = /^t[0-9a-f]{6}$/;
 
-type Op = Omit<Extract<ClientMessage, { type: 'task.cmd' }>, 'type' | 'rid' | 'by'>;
+type Op = Omit<Extract<ClientMessage, { type: 'task.cmd' }>, 'type' | 'rid' | 'by' | 'key'>;
 
 /** The arguments of `ledge task`, or `undefined` when they do not fit its usage. */
 export function taskArgs(args: string[]): Op | undefined {
@@ -49,14 +50,14 @@ export function formatTask(t: Task): string {
   ].join('\n');
 }
 
-/** `ledge task …` over an already-connected client, as session `by`. */
-export async function taskOnClient(client: Client, args: string[], by: string, ms: number): Promise<{ line: string; code: number }> {
+/** `ledge task …` over an already-connected client, as session `by`, with the key Ledge gave it (#152: without it, it only reads). */
+export async function taskOnClient(client: Client, args: string[], by: string, ms: number, key?: string): Promise<{ line: string; code: number }> {
   const op = taskArgs(args);
   if (!op) return { line: TASK_USAGE, code: 1 };
   // Only a front gives in Ledge's name: never a session, whatever its environment says.
   if (by === LEDGE_GIVER) return { line: 'refusé : seul Ledge confie une tâche en son nom', code: 1 };
   try {
-    client.send({ type: 'task.cmd', rid: randomUUID(), by, ...op });
+    client.send({ type: 'task.cmd', rid: randomUUID(), by, ...(key ? { key } : {}), ...op });
     const r = await client.next('task.result', ms);
     if (r.reason !== undefined) return { line: `refusé : ${r.reason}`, code: 1 };
     if (op.op === 'list') {
@@ -89,6 +90,6 @@ export async function runTask(args: string[], opts: { port?: number; env?: NodeJ
   let client;
   try { client = await connect({ port: opts.port, timeoutMs: left() }); }
   catch { return { line: 'daemon not running (start a session with `ledge claude`, or run `ledge daemon`)', code: 1 }; }
-  try { return await taskOnClient(client, args, by, left()); }
+  try { return await taskOnClient(client, args, by, left(), env[SESSION_KEY_VAR]); }
   finally { await client.close(); }
 }

@@ -10,6 +10,7 @@ import { messageNote } from '../daemon/crossSession.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
+import { SESSION_KEY_VAR } from '../auth.js';
 import { sessionBrain } from '../brain/index.js';
 import { brainWriteOnClient } from '../brain/cli.js';
 import { broadcastLine, parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
@@ -477,9 +478,10 @@ async function runLedgeCommand(client: Client, cmd: NonNullable<ReturnType<typeo
   let line: string;
   if (cmd.cmd === 'who') line = await whoOnClient(client, from, left());
   else if (cmd.cmd === 'read') line = (await readOnClient(client, cmd.args, from, left())).line;
-  else if (cmd.cmd === 'task') line = (await taskOnClient(client, cmd.args, from, left())).line;
+  // A task or a proposal acts in the session's name: its key, which Codex hands its hooks with the session's id (agentIdArgs).
+  else if (cmd.cmd === 'task') line = (await taskOnClient(client, cmd.args, from, left(), process.env[SESSION_KEY_VAR])).line;
   else if (cmd.cmd === 'handover') line = (await handoverOnClient(client, cmd.args, from, left())).line;
-  else if (cmd.cmd === 'brain') line = (await brainWriteOnClient(client, cmd.args, from, left())).line;
+  else if (cmd.cmd === 'brain') line = (await brainWriteOnClient(client, cmd.args, from, left(), process.env[SESSION_KEY_VAR])).line;
   else line = (await sendOnClient(client, cmd.args, from, left())).line;
   return deny(line);
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { sessionKey } from '../src/auth.js';
 import { mkdirSync, mkdtempSync, readFileSync, existsSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -126,9 +127,9 @@ describe('a proposal through the daemon', () => {
     note('machines.md', '# Machines\n');
     c.send({ type: 'session.launch', tool: 'claude', cwd: home, name: 'ann' });
     const ann = (await c.next('session.launched', 5000)).id;
-    c.send({ type: 'task.cmd', rid: 'p1', by: ann, op: 'give', to: 'ledge', brain: { kind: 'add', note: 'nope', fact: 'x' } });
+    c.send({ type: 'task.cmd', rid: 'p1', by: ann, key: sessionKey(ann), op: 'give', to: 'ledge', brain: { kind: 'add', note: 'nope', fact: 'x' } });
     expect((await c.next('task.result', 3000)).reason).toContain('ne connaît pas la note « nope »');
-    c.send({ type: 'task.cmd', rid: 'p2', by: ann, op: 'give', to: 'ledge', brain: { kind: 'add', note: 'machines', fact: 'Le Pi a 1 Go de RAM', source: 'free -h' } });
+    c.send({ type: 'task.cmd', rid: 'p2', by: ann, key: sessionKey(ann), op: 'give', to: 'ledge', brain: { kind: 'add', note: 'machines', fact: 'Le Pi a 1 Go de RAM', source: 'free -h' } });
     const d = (await c.next('task.result', 3000)).task!;
     expect(d).toMatchObject({ owner: 'ledge', title: 'Note machines : ajouter ce fait ?', brain: { note: 'machines' } });
     expect(readFileSync(join(from, 'machines.md'), 'utf8')).toBe('# Machines\n');

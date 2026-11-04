@@ -96,6 +96,8 @@ export const TaskCmdSchema = z.object({
   task: z.string().min(1).max(40).optional(), to: z.string().min(1).optional(),
   title: z.string().min(1).max(TASK_TITLE_MAX).optional(), text: z.string().max(TASK_TEXT_MAX).optional(), all: z.boolean().optional(),
   qid: z.string().min(1).optional(), row: z.number().int().min(0).max(7).optional(),
+  /** Session `by`'s key (#93, #152): without it, a session only reads (`list`, `show`, `seen`). */
+  key: z.string().min(1).max(128).optional(),
   /** A `give` to `ledge` only: a proposal about the user's notes, whose title and detail the daemon writes. */
   brain: BrainProposalSchema.optional(),
   /** A `done` by Ledge of such a proposal, from its buttons: what to write, instead of reading `text`. */
