@@ -5,3 +5,4 @@ pub mod autostart;
 pub mod desktop;
 pub mod pty;
 pub mod wsl_keepalive;
+pub mod native;

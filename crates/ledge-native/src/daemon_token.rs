@@ -16,12 +16,17 @@ pub fn wsl_args() -> [&'static str; 4] {
 /// trimmed), exit 3 means no file, anything else is unavailable.
 pub fn outcome(code: Option<i32>, stdout: &[u8]) -> TokenRead {
     match code {
-        Some(0) => match std::str::from_utf8(stdout).map(str::trim) {
-            Ok(t) if t.len() == 64 && t.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) => TokenRead::Token(t.to_string()),
-            _ => TokenRead::Unavailable,
-        },
+        Some(0) => valid_token(stdout).map_or(TokenRead::Unavailable, TokenRead::Token),
         Some(ABSENT_EXIT) => TokenRead::Absent,
         _ => TokenRead::Unavailable,
+    }
+}
+
+/// The token in `bytes`: exactly 64 lowercase hex chars once surrounding whitespace is trimmed.
+pub fn valid_token(bytes: &[u8]) -> Option<String> {
+    match std::str::from_utf8(bytes).map(str::trim) {
+        Ok(t) if t.len() == 64 && t.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) => Some(t.to_string()),
+        _ => None,
     }
 }
 
