@@ -14,8 +14,14 @@ permissions:
 jobs:
   daemon-tests:
     runs-on: windows-latest
+    # A hung run (a pane host or node-pty handle left open) ends here, not after GitHub's 6 h.
+    timeout-minutes: 30
     env:
-      MAX_WINDOWS_SKIPS: 154
+      MAX_WINDOWS_SKIPS: 147
+      # The runner's own temp folder has no 8.3 short name (C:\Users\RUNNER~1\…): realpath would expand it and paths
+      # the tests build with tmpdir() would no longer match.
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

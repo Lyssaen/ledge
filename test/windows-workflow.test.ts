@@ -16,6 +16,11 @@ describe('the Windows workflow', () => {
     expect(text.indexOf('pnpm install --frozen-lockfile')).toBeGreaterThan(0);
     expect(text.indexOf('pnpm --filter @paradow/ledge exec vitest run')).toBeGreaterThan(text.indexOf('pnpm install --frozen-lockfile'));
   });
+  it('gives the job a time limit and a temp folder without an 8.3 short name (realpath would expand RUNNER~1)', () => {
+    expect(text).toMatch(/timeout-minutes: \d+/);
+    expect(text).toContain('TEMP: ${{ runner.temp }}');
+    expect(text).toContain('TMP: ${{ runner.temp }}');
+  });
   it('fails above a ceiling of skipped tests, and says whether links can be made', () => {
     expect(text).toMatch(/MAX_WINDOWS_SKIPS: \d+/);
     expect(text).toContain('symlinks:');

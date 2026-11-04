@@ -3,9 +3,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { SCAN_DEPTH, SCAN_DIRS, SCAN_MS, SCAN_REPOS, SKIP, extraRoots, scanRepos } from '../src/daemon/scan.js';
-import { linuxOnly, needsSymlinks } from './platform.js';
+import { needsSymlinks } from './platform.js';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'ledge-scan-'));
 const git = (...args: string[]) => execFileSync('git', args, { stdio: 'ignore' });
@@ -38,7 +38,7 @@ describe('scanRepos', () => {
     expect(s.read.some(p => p.startsWith(join(home, 'node_modules')) || p.startsWith(join(home, '.hidden')))).toBe(false);
   });
 
-  linuxOnly('hidden-in-native')('names a repository by its manifest: package.json’s name, else pom.xml’s own artifactId (not its parent’s); a broken one names nothing (#22)', async () => {
+  it('names a repository by its manifest: package.json’s name, else pom.xml’s own artifactId (not its parent’s); a broken one names nothing (#22)', async () => {
     const home = tmp();
     repo(join(home, 'w/front'));
     writeFileSync(join(home, 'w/front/package.json'), JSON.stringify({ name: '@speos/communication-front', version: '1.0.0' }));
@@ -47,7 +47,7 @@ describe('scanRepos', () => {
     repo(join(home, 'w/broken'));
     writeFileSync(join(home, 'w/broken/package.json'), '{ not json');
     const out = await scanRepos({ home });
-    const named = Object.fromEntries(out.repos.map(r => [r.path.slice(home.length + 1), r.manifest]));
+    const named = Object.fromEntries(out.repos.map(r => [r.path.slice(home.length + 1).split(sep).join('/'), r.manifest]));
     expect(named).toEqual({ 'w/back': 'communication-api', 'w/broken': undefined, 'w/front': '@speos/communication-front' });
     expect(out.repos.find(r => r.path.endsWith('broken'))).not.toHaveProperty('manifest');
   });
@@ -203,13 +203,13 @@ describe('scanRepos', () => {
 });
 
 describe('extraRoots', () => {
-  linuxOnly('hidden-in-native')('the parents of folders outside home, once each; nothing for folders under home', () => {
-    expect(extraRoots('/home/u', ['/home/u/w/a', '/mnt/c/dev/ledge', '/mnt/c/dev/notes', '/srv/app/', '/home/u'])).toEqual(['/mnt/c/dev', '/srv']);
+  it('the parents of folders outside home, once each; nothing for folders under home', () => {
+    expect(extraRoots('/home/u', ['/home/u/w/a', '/mnt/c/dev/ledge', '/mnt/c/dev/notes', '/srv/app/', '/home/u'])).toEqual([resolve('/mnt/c/dev'), resolve('/srv')]);
   });
-  linuxOnly('hidden-in-native')('a folder whose parent is the filesystem root stands for itself; the root itself is never walked', () => {
-    expect(extraRoots('/home/u', ['/opt', '/'])).toEqual(['/opt']);
+  it('a folder whose parent is the filesystem root stands for itself; the root itself is never walked', () => {
+    expect(extraRoots('/home/u', ['/opt', '/'])).toEqual([resolve('/opt')]);
   });
-  linuxOnly('hidden-in-native')('a sibling of home whose name starts like it is not under home', () => {
-    expect(extraRoots('/home/u', ['/home/u2/x'])).toEqual(['/home/u2']);
+  it('a sibling of home whose name starts like it is not under home', () => {
+    expect(extraRoots('/home/u', ['/home/u2/x'])).toEqual([resolve('/home/u2')]);
   });
 });

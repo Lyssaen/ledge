@@ -35,7 +35,9 @@ export function linuxOnlySuite(reason: SkipReason): typeof describe {
 /** Whether this machine lets the tests make links (probed once, in the OS temp folder, then removed). */
 export const canSymlink: boolean = (() => {
   const dir = mkdtempSync(join(tmpdir(), 'ledge-link-probe-'));
-  try { writeFileSync(join(dir, 'a'), ''); symlinkSync(join(dir, 'a'), join(dir, 'b')); return true; } catch { return false; } finally { rmSync(dir, { recursive: true, force: true }); }
+  try { writeFileSync(join(dir, 'a'), ''); symlinkSync(join(dir, 'a'), join(dir, 'b')); return true; } catch { return false; }
+  // An antivirus holding the new file a moment must not fail every file that imports this one.
+  finally { try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* left in the OS temp folder */ } }
 })();
 
 /** `it`, skipped where links cannot be made (a Windows PC without Developer Mode). */

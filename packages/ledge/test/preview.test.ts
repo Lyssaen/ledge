@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { claudeAdapter } from '../src/adapters/claude.js';
 import { buildPreview, tidyLines, PREVIEW_LINES } from '../src/adapters/preview.js';
 import { DETECT_LINES } from '../src/daemon/poller.js';
-import { linuxOnly } from './platform.js';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
 /** What Tmux.capture returns: trailing whitespace trimmed, last `n` lines. */
@@ -22,7 +21,7 @@ describe('terminal preview', () => {
     expect(lines[0]).not.toBe('');
     expect(lines.some((l, i) => l === '' && lines[i + 1] === '')).toBe(false);
   });
-  linuxOnly('tmux')('the old cut (last 30 raw lines) only showed blanks and the input box', () => {
+  it('the old cut (last 30 raw lines) only showed blanks and the input box', () => {
     const raw = capture(fx('claude2-fullscreen-idle'), 60).split('\n').slice(-30).filter(l => l.trim());
     expect(raw.every(l => /^─+$/.test(l) || l.startsWith('❯') || l.includes('auto mode on'))).toBe(true);
   });

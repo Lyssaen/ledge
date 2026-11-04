@@ -3,8 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, truncateSync } from
 import { CAPTURE_RAW_MAX } from '@ledge/protocol';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { toolImages } from '../src/cli/toolImages.js';
-import { linuxOnly, needsSymlinks } from './platform.js';
+import { imageSourceOf, toolImages } from '../src/cli/toolImages.js';
+import { needsSymlinks } from './platform.js';
 
 const claude = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
 const mcp = { type: 'image', data: 'BBBB', mimeType: 'image/jpeg' };
@@ -33,7 +33,7 @@ describe('toolImages', () => {
     };
     const text = (path: string) => ({ type: 'text', text: `[Image: source: ${path}]` });
 
-    linuxOnly('hidden-in-native')('reads the file named by a text block when there is no image block', () => {
+    it('reads the file named by a text block when there is no image block', () => {
       const { home, file } = setup();
       expect(toolImages([{ type: 'text', text: 'Took it' }, text(file)], home).images).toEqual([{ mime: 'image/png', data: png.toString('base64') }]);
     });
@@ -49,11 +49,18 @@ describe('toolImages', () => {
       for (const p of [outside, link, notImage, join(home, '.claude', 'projects', 'nope.png'), `${join(home, '.claude', 'projects')}/../secret.png`]) expect(toolImages([text(p)], home)).toEqual({ images: [], dropped: false });
       expect(toolImages([text(file)], home).images).toHaveLength(1);
     });
-    linuxOnly('hidden-in-native')('does not read a file over CAPTURE_RAW_MAX, and counts it dropped', () => {
+    it('does not read a file over CAPTURE_RAW_MAX, and counts it dropped', () => {
       const { home, file } = setup();
       const big = join(home, '.claude', 'projects', 'big.png'); writeFileSync(big, png); truncateSync(big, CAPTURE_RAW_MAX + 1);
       expect(toolImages([text(big)], home)).toEqual({ images: [], dropped: true });
       expect(toolImages([{ type: 'text', text: `[Image: source: ${big}]\n[Image: source: ${file}]` }], home)).toEqual({ images: [{ mime: 'image/png', data: png.toString('base64') }], dropped: true });
     });
+  });
+
+  it('reads the source line of a Windows path as well as a POSIX one (Claude Code on native Windows)', () => {
+    expect(imageSourceOf('[Image: source: C:\\Users\\po\\.claude\\projects\\p\\a.png]')).toBe('C:\\Users\\po\\.claude\\projects\\p\\a.png');
+    expect(imageSourceOf('[Image: source: c:/u/a.png]')).toBe('c:/u/a.png');
+    expect(imageSourceOf('[Image: source: /home/u/a.png]')).toBe('/home/u/a.png');
+    expect(imageSourceOf('[Image: source: a.png]')).toBeUndefined();
   });
 });
