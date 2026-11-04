@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 
-use crate::terminal::wsl_arg_ok;
+use crate::terminal::{native_arg_ok, wsl_arg_ok};
 
 /// The `wsl.exe` arguments that run `argv` as is, without the user's shell; `None` when WSL would mangle one of them.
 pub fn wsl_command(argv: &[String]) -> Option<Vec<String>> {
@@ -15,6 +15,12 @@ pub fn wsl_command(argv: &[String]) -> Option<Vec<String>> {
     let mut args = vec!["--exec".to_string()];
     args.extend(argv.iter().cloned());
     Some(args)
+}
+
+/// The program and its arguments for `argv` run as is (native mode); `None` when one cannot reach it unchanged.
+pub fn native_command(argv: &[String]) -> Option<(String, Vec<String>)> {
+    let (program, args) = argv.split_first()?;
+    argv.iter().all(|a| native_arg_ok(a)).then(|| (program.clone(), args.to_vec()))
 }
 
 /// How long the exit waits for the last output once the child is gone: ConPTY keeps its pipe open until the pty closes.
@@ -137,5 +143,16 @@ mod tests {
         let (pty, _out, rx) = if cfg!(windows) { run("ping", &["-n", "30", "127.0.0.1"]) } else { run("sleep", &["30"]) };
         pty.kill();
         assert_eq!(rx.recv_timeout(Duration::from_secs(2)), Ok(None));
+    }
+}
+
+#[cfg(test)]
+mod native_tests {
+    use super::*;
+    #[test] fn native_command_runs_argv_as_is() {
+        let argv: Vec<String> = ["ssh", "-t", "--", "ec2", "'node' 'cli' 'attach' 'x'"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(native_command(&argv), Some(("ssh".to_string(), argv[1..].to_vec())));
+        assert_eq!(native_command(&[]), None);
+        assert_eq!(native_command(&["node.exe".to_string(), "a\"b".to_string()]), None);
     }
 }

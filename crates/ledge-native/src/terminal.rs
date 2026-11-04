@@ -29,6 +29,29 @@ pub fn terminal_args(title: &str, command: &[String]) -> Vec<String> {
     args
 }
 
+/// True when `s` reaches a Windows program as one argument, unchanged, without WSL in between (native mode): Rust quotes
+/// it for the command line, and Windows Terminal re-splits its command line by the same rules. A `"` or a control
+/// character cannot make that trip through `wt.exe`; a final backslash can, since nothing escapes the closing quote here.
+pub fn native_arg_ok(s: &str) -> bool { !s.is_empty() && !s.chars().any(|c| c == '"' || c.is_control()) }
+
+/// The `wt.exe` arguments that open a tab titled `title` running `argv` itself (native mode: no `wsl.exe`).
+pub fn native_terminal_args(title: &str, argv: &[String]) -> Vec<String> {
+    let mut args: Vec<String> = ["-w", "0", "new-tab", "--title"].iter().map(|s| s.to_string()).collect();
+    args.push(wt_arg(title));
+    args.extend(argv.iter().map(|a| wt_arg(a)));
+    args
+}
+
+/// Opens a Windows Terminal tab running `argv` itself; true once `wt.exe` was spawned.
+pub fn open_native(title: &str, argv: &[String]) -> Result<bool, String> {
+    if argv.is_empty() { return Err("empty command".into()); }
+    if !argv.iter().all(|a| native_arg_ok(a)) { return Err("an argument Windows cannot receive as is".into()); }
+    #[cfg(windows)]
+    { return std::process::Command::new("wt.exe").args(native_terminal_args(title, argv)).spawn().map(|_| true).map_err(|e| format!("wt.exe: {e}")); }
+    #[cfg(not(windows))]
+    { let _ = title; Ok(false) }
+}
+
 /// Brings the Windows Terminal window whose title contains `wanted` forward, else any Windows Terminal window.
 #[cfg(windows)]
 pub fn focus(title: &str) -> bool {
@@ -104,4 +127,14 @@ mod tests {
         assert!(!title_matches("Visual Studio Code", "Pim · speos-api"));
     }
     #[test] fn open_refuses_an_empty_command() { assert_eq!(open("x", &[]), Err("empty command".into())); }
+
+    #[test] fn native_terminal_args_escape_semicolons_and_refuse_quotes() {
+        let argv: Vec<String> = [r"C:\Program Files\Ledge\runtime\node.exe", r"C:\Users\élise\cli.js", "attach", "a;b"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(native_terminal_args("demo;x", &argv), ["-w", "0", "new-tab", "--title", "demo\\;x", r"C:\Program Files\Ledge\runtime\node.exe", r"C:\Users\élise\cli.js", "attach", "a\\;b"]);
+        assert!(!native_arg_ok("a\"b")); assert!(!native_arg_ok("")); assert!(!native_arg_ok("a\nb"));
+        assert!(native_arg_ok(r"C:\dir\"));
+        let quoted: Vec<String> = ["node.exe", "x\"y"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(open_native("x", &quoted), Err("an argument Windows cannot receive as is".into()));
+        assert_eq!(open_native("x", &[]), Err("empty command".into()));
+    }
 }
