@@ -30,6 +30,13 @@ pub trait Ops: Send + Sync {
     /// A monotonic clock (tests drive it through `sleep`).
     fn now(&self) -> Duration;
     fn log(&self, line: &str);
+    /// The running daemon's version, as its snapshot says it; None when it cannot be read.
+    fn running_version(&self) -> Option<String>;
+}
+
+/// Whether Desktop moves the adopted daemon to the version it carries: only when both are known and differ (an update).
+pub fn needs_move(running: Option<&str>, bundled: Option<&str>) -> bool {
+    matches!((running, bundled), (Some(r), Some(b)) if r != b)
 }
 
 /// How often an adopted daemon whose process could not be opened is checked through its port.
@@ -44,10 +51,14 @@ pub struct Supervisor { ops: Arc<dyn Ops>, state: Arc<(Mutex<State>, Condvar)> }
 
 impl Supervisor {
     /// Starts the keeper's thread and returns at once.
-    pub fn start(ops: Arc<dyn Ops>) -> Supervisor {
+    pub fn start(ops: Arc<dyn Ops>) -> Supervisor { Supervisor::start_with(ops, None) }
+
+    /// As `start`, with the version of the runtime Desktop carries: an adopted daemon of another version is moved to it
+    /// once (stopped over the protocol, the bundled one started at once); the agents stay in the pane host.
+    pub fn start_with(ops: Arc<dyn Ops>, bundled: Option<String>) -> Supervisor {
         let state = Arc::new((Mutex::new(State::default()), Condvar::new()));
         let (o, st) = (ops.clone(), state.clone());
-        std::thread::spawn(move || run(o, st));
+        std::thread::spawn(move || run(o, st, bundled));
         Supervisor { ops, state }
     }
 
@@ -83,8 +94,10 @@ impl Supervisor {
     }
 }
 
-fn run(ops: Arc<dyn Ops>, state: Arc<(Mutex<State>, Condvar)>) {
+fn run(ops: Arc<dyn Ops>, state: Arc<(Mutex<State>, Condvar)>, bundled: Option<String>) {
     let (lock, cv) = &*state;
+    // An update moves the adopted daemon once per launch; a later adoption (after a crash) is left as it is.
+    let mut move_checked = false;
     // Half the first wait: the first crash waits MIN_DELAY.
     let mut delay = MIN_DELAY / 2;
     loop {
@@ -92,14 +105,25 @@ fn run(ops: Arc<dyn Ops>, state: Arc<(Mutex<State>, Condvar)>) {
         cv.wait_while(lock.lock().unwrap(), |s| s.stopping).unwrap().starting = true;
         let started = ops.now();
         let set_up = |up: bool| { let mut s = lock.lock().unwrap(); s.up = up; s.starting = false; if !up { s.exits += 1; } cv.notify_all(); };
+        let mut moving = false;
         if ops.port_open() {
-            match ops.read_pid().and_then(|pid| ops.open(pid)) {
-                Some(mut p) => { ops.log(&format!("adopted the running daemon (pid {})", p.pid())); set_up(true); p.wait(); }
-                None => {
-                    ops.log("adopted the running daemon (its process could not be opened: watching its port)");
-                    set_up(true);
-                    while ops.port_open() { ops.sleep(PORT_POLL); }
+            let adopted = ops.read_pid().and_then(|pid| ops.open(pid));
+            match &adopted {
+                Some(p) => ops.log(&format!("adopted the running daemon (pid {})", p.pid())),
+                None => ops.log("adopted the running daemon (its process could not be opened: watching its port)"),
+            }
+            set_up(true);
+            if !move_checked {
+                move_checked = true;
+                let running = ops.running_version();
+                if needs_move(running.as_deref(), bundled.as_deref()) {
+                    ops.log(&format!("moving the daemon from {} to {}", running.unwrap_or_default(), bundled.clone().unwrap_or_default()));
+                    moving = ops.send_stop();
                 }
+            }
+            match adopted {
+                Some(mut p) => p.wait(),
+                None => while ops.port_open() { ops.sleep(PORT_POLL); },
             }
         } else if lock.lock().unwrap().stopping {
             // A stop came during the check: no daemon is started.
@@ -113,6 +137,8 @@ fn run(ops: Arc<dyn Ops>, state: Arc<(Mutex<State>, Condvar)>) {
         }
         set_up(false);
         if lock.lock().unwrap().stopping { ops.log("the daemon stopped"); continue; }
+        // A planned move is not a crash: the bundled daemon starts at once.
+        if moving { continue; }
         delay = next_delay(ops.now().saturating_sub(started), delay);
         ops.log(&format!("the daemon ended: starting it again in {} s", delay.as_secs()));
         ops.sleep(delay);
@@ -131,6 +157,21 @@ pub fn is_snapshot(text: &str) -> bool {
 pub fn is_node_image(image: &str) -> bool {
     let lower = image.to_lowercase();
     lower.ends_with("\\node.exe") || lower == "node.exe"
+}
+
+/// What the daemon's environment gains from the bundled runtime: `CLAUDE_CODE_GIT_BASH_PATH` to its Git Bash (unless the
+/// environment already names one), and its `git\cmd` first on PATH. Nothing for a runtime without Git (the override).
+pub fn daemon_env(base: &[(String, String)], rt: &crate::native::Runtime) -> Vec<(String, String)> {
+    let get = |k: &str| base.iter().find(|(a, _)| a.eq_ignore_ascii_case(k)).map(|(_, v)| v.clone());
+    let mut out = Vec::new();
+    if let Some(bash) = &rt.git_bash {
+        if get("CLAUDE_CODE_GIT_BASH_PATH").is_none() { out.push(("CLAUDE_CODE_GIT_BASH_PATH".to_string(), bash.to_string_lossy().to_string())); }
+    }
+    if let Some(cmd) = &rt.git_cmd {
+        let path = get("PATH").unwrap_or_default();
+        out.push(("PATH".to_string(), if path.is_empty() { cmd.to_string_lossy().to_string() } else { format!("{};{path}", cmd.to_string_lossy()) }));
+    }
+    out
 }
 
 /// The supervisor's journal line: the seconds since 1970, then the line.
@@ -195,11 +236,14 @@ mod win {
             c.arg(&self.rt.cli).arg("daemon").current_dir(&self.home).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
             // Desktop's own LEDGE_HOME is already in the environment the child inherits; the port only when overridden.
             if self.port_override { c.env("LEDGE_PORT", self.port.to_string()); }
+            // The bundled Git Bash for Claude Code, the bundled git first on PATH.
+            for (k, v) in daemon_env(&std::env::vars().collect::<Vec<_>>(), &self.rt) { c.env(k, v); }
             // Its own process group, no console, and out of any job Desktop is in: it outlives Desktop.
             c.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | if breakaway { CREATE_BREAKAWAY_FROM_JOB } else { 0 });
             c
         }
-        fn try_stop(&self) -> Option<()> {
+        /// The daemon's WebSocket, authenticated with its token, once its first snapshot came; with that snapshot.
+        fn snapshot(&self) -> Option<(tungstenite::WebSocket<TcpStream>, serde_json::Value)> {
             use tungstenite::client::IntoClientRequest;
             use tungstenite::Message;
             let TokenRead::Token(token) = read_token_file(&self.home.join("token")) else { return None };
@@ -211,9 +255,19 @@ mod win {
             let deadline = Instant::now() + Duration::from_secs(3);
             loop {
                 if Instant::now() > deadline { return None; }
-                match ws.read().ok()? { Message::Text(t) if is_snapshot(t.as_ref()) => break, _ => {} }
+                if let Message::Text(t) = ws.read().ok()? {
+                    if is_snapshot(t.as_ref()) { let v = serde_json::from_str(t.as_ref()).ok()?; return Some((ws, v)); }
+                }
             }
+        }
+        fn try_stop(&self) -> Option<()> {
+            use tungstenite::Message;
+            let (mut ws, _) = self.snapshot()?;
             ws.send(Message::Text(STOP_MESSAGE.into())).ok()?;
+            // Read on until the daemon closes the connection as it stops (3 s at most): closing first, with its messages
+            // unread, makes Windows reset the connection, and the daemon may never read the stop.
+            let until = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < until { if ws.read().is_err() { break; } }
             let _ = ws.close(None);
             Some(())
         }
@@ -240,6 +294,11 @@ mod win {
         fn sleep(&self, d: Duration) { std::thread::sleep(d) }
         fn now(&self) -> Duration { self.started.elapsed() }
         fn log(&self, line: &str) { append_log(&self.home, line) }
+        fn running_version(&self) -> Option<String> {
+            let (mut ws, v) = self.snapshot()?;
+            let _ = ws.close(None);
+            v.get("daemon")?.get("version")?.as_str().map(str::to_string)
+        }
     }
 
     /// The real supervisor's operations: `rt` run in `home`, on `port` (passed to the daemon when `port_override`).
@@ -277,6 +336,8 @@ mod tests {
         clock: Mutex<Duration>,
         /// When set, the first `port_open` waits here: the loop is caught between its stop check and its start.
         gate: Mutex<Option<mpsc::Receiver<()>>>,
+        /// The running daemon's version as its snapshot says it.
+        version: Option<String>,
     }
     impl Fake {
         fn call(&self, c: String) { self.calls.lock().unwrap().push(c); }
@@ -317,6 +378,7 @@ mod tests {
         }
         fn now(&self) -> Duration { *self.clock.lock().unwrap() }
         fn log(&self, _line: &str) {}
+        fn running_version(&self) -> Option<String> { self.call("version?".into()); self.version.clone() }
     }
 
     fn until(f: &Fake, pred: impl Fn(&[String]) -> bool) -> Vec<String> {
@@ -404,5 +466,37 @@ mod tests {
         let c = f.calls();
         assert!(!c.iter().any(|x| x == "spawn") || c.iter().any(|x| x == "stop"), "a daemon started after the stop answered: {c:?}");
         assert!(!c.iter().skip_while(|x| *x != "stop").any(|x| x == "spawn"), "spawned after the stop: {c:?}");
+    }
+
+    #[test] fn the_daemon_is_spawned_with_the_bundled_git_bash_unless_one_is_set() {
+        use crate::native::Runtime;
+        let rt = Runtime { git_bash: Some(r"C:\rt\git\bin\bash.exe".into()), git_cmd: Some(r"C:\rt\git\cmd".into()), ..Runtime::plain(r"C:\rt\node.exe".into(), r"C:\rt\cli.js".into()) };
+        let base = vec![("Path".to_string(), r"C:\Windows".to_string())];
+        let env = daemon_env(&base, &rt);
+        assert!(env.contains(&("CLAUDE_CODE_GIT_BASH_PATH".to_string(), r"C:\rt\git\bin\bash.exe".to_string())));
+        assert!(env.contains(&("PATH".to_string(), r"C:\rt\git\cmd;C:\Windows".to_string())));
+        let set = vec![("claude_code_git_bash_path".to_string(), r"D:\git\bash.exe".to_string())];
+        assert!(!daemon_env(&set, &rt).iter().any(|(k, _)| k == "CLAUDE_CODE_GIT_BASH_PATH"), "one already set is kept");
+        assert!(daemon_env(&base, &Runtime::plain(r"C:\n.exe".into(), r"C:\c.js".into())).is_empty(), "an override runtime without Git changes nothing");
+    }
+
+    #[test] fn moves_to_the_new_version_only_when_the_running_one_is_known_and_different() {
+        assert!(needs_move(Some("0.41.0"), Some("0.42.0")));
+        assert!(!needs_move(Some("0.42.0"), Some("0.42.0")));
+        assert!(!needs_move(None, Some("0.42.0")));
+        assert!(!needs_move(Some("0.41.0"), None));
+    }
+    #[test] fn an_adopted_older_daemon_is_stopped_and_the_bundled_one_started_without_a_backoff_sleep() {
+        let f = Arc::new(Fake { port: Mutex::new(VecDeque::from([true])), port_default: false, pid_file: Some(42), node_pids: vec![42], stop_works: true, version: Some("0.41.0".into()), ..Default::default() });
+        let _s = Supervisor::start_with(f.clone(), Some("0.42.0".into()));
+        let c = until(&f, |c| count(c, "spawn") == 1);
+        assert_eq!(c, ["open 42", "version?", "stop", "spawn"]);
+    }
+    #[test] fn the_same_version_is_adopted_and_left_alone() {
+        let f = Arc::new(Fake { port_default: true, pid_file: Some(42), node_pids: vec![42], stop_works: true, version: Some("0.42.0".into()), ..Default::default() });
+        let _s = Supervisor::start_with(f.clone(), Some("0.42.0".into()));
+        until(&f, |c| c.contains(&"version?".to_string()));
+        std::thread::sleep(Duration::from_millis(40));
+        assert_eq!(f.calls(), ["open 42", "version?"]);
     }
 }

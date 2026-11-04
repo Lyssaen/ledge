@@ -130,6 +130,12 @@ pub fn subsystems(mode: Mode) -> Subsystems {
     Subsystems { keepalive: wsl, notch: wsl, media: wsl, supervisor: !wsl }
 }
 
+/// Where the runtime's per-version copies live: Desktop's local app data (`%LOCALAPPDATA%\\<identifier>`), which a roaming
+/// profile does not carry (a copy is 0.5 GB); the Ledge home only when Windows gives no such folder.
+pub fn runtime_base(local_app_data: Option<std::path::PathBuf>, home: &std::path::Path) -> std::path::PathBuf {
+    local_app_data.unwrap_or_else(|| home.to_path_buf())
+}
+
 /// The daemon's keeper, once native mode has started it.
 #[derive(Default)]
 pub struct Keeper(std::sync::Mutex<Option<std::sync::Arc<ledge_native::supervisor::Supervisor>>>);
@@ -163,13 +169,31 @@ fn start_native(app: &AppHandle) {
     let (port, home) = (mode.port, mode.home.clone());
     let port_override = std::env::var("LEDGE_PORT").is_ok();
     let env = |k: &str| std::env::var(k).ok();
-    let rt = native::runtime(&env, app.path().resource_dir().ok().as_deref(), &|p| p.exists());
+    let source = native::runtime_source(&env, app.path().resource_dir().ok().as_deref(), &|p| p.exists());
+    let local_data = app.path().app_local_data_dir().ok();
     let app = app.clone();
     std::thread::spawn(move || {
         let Some(home) = home else { return };
+        // The bundled runtime runs from its per-version copy (an update may replace the install folder meanwhile).
+        let rt = match source {
+            Some(native::RuntimeSource::Override(rt)) => Some(rt),
+            Some(native::RuntimeSource::Bundled(dir)) => match native::stage_runtime(&dir, &runtime_base(local_data, &home)) {
+                Ok(copy) => {
+                    append_log(&home, &format!("runtime: {}", copy.display()));
+                    let rt = native::runtime_from_dir(&copy, &|p| p.exists());
+                    if let Some(v) = rt.as_ref().and_then(|r| r.version.clone()) {
+                        for old in native::prune_runtimes(copy.parent().and_then(|p| p.parent()).unwrap_or(&home), &v) { append_log(&home, &format!("runtime {old} removed")); }
+                    }
+                    rt
+                }
+                Err(e) => { append_log(&home, &format!("the bundled runtime could not be copied: {e}")); None }
+            },
+            None => None,
+        };
         let Some(rt) = rt else { append_log(&home, "no Ledge runtime found (LEDGE_NODE + LEDGE_CLI, or the bundled runtime folder): the daemon is not started"); return };
         run_setup(&rt, &home);
-        let sup = std::sync::Arc::new(Supervisor::start(windows_ops(rt, home, port, port_override)));
+        let bundled = rt.version.clone();
+        let sup = std::sync::Arc::new(Supervisor::start_with(windows_ops(rt, home, port, port_override), bundled));
         *app.state::<Keeper>().0.lock().unwrap() = Some(sup);
     });
 }
@@ -409,7 +433,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_target, csp_for_port, launched_minimized, on_close, subsystems, tray_shows_window, tray_title, CloseAction, Subsystems};
+    use super::{checked_target, csp_for_port, runtime_base, launched_minimized, on_close, subsystems, tray_shows_window, tray_title, CloseAction, Subsystems};
     use ledge_native::native::Mode;
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
@@ -455,5 +479,13 @@ mod tests {
         let csp = "default-src 'self'; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831";
         assert_eq!(csp_for_port(csp, 47831), csp);
         assert_eq!(csp_for_port(csp, 27832), "default-src 'self'; connect-src ipc: http://ipc.localhost ws://127.0.0.1:27832");
+    }
+
+    #[test]
+    fn the_runtime_copies_live_in_local_app_data_not_in_the_roaming_profile() {
+        use std::path::PathBuf;
+        let home = PathBuf::from(r"C:\Users\po\.ledge");
+        assert_eq!(runtime_base(Some(PathBuf::from(r"C:\Users\po\AppData\Local\dev.ledge.desktop")), &home), PathBuf::from(r"C:\Users\po\AppData\Local\dev.ledge.desktop"));
+        assert_eq!(runtime_base(None, &home), home);
     }
 }

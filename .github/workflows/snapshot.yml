@@ -38,6 +38,9 @@ jobs:
         run: |
           pnpm --filter overlay typecheck
           pnpm --filter desktop typecheck
+      # The runtime a PC with nothing installed needs (spec 2026-11-03 §4.2.5): pinned Node, this commit's Ledge, PortableGit.
+      - name: Assemble the Windows runtime
+        run: node scripts/windows-runtime/assemble.mjs apps/desktop/src-tauri/runtime
       - name: Build the snapshot installer
         working-directory: apps/desktop
         env:
@@ -45,13 +48,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           LEDGE_SNAPSHOT_VERSION: ${{ steps.version.outputs.version }}
           VITE_LEDGE_SNAPSHOT_VERSION: ${{ steps.version.outputs.version }}
-        run: pnpm tauri build
+        run: pnpm tauri build --config src-tauri/tauri.runtime.conf.json
       - run: cargo test --workspace
       - name: Prepare the installer
         shell: pwsh
         run: |
           $installers = @(Get-ChildItem 'target/release/bundle/nsis/*-setup.exe')
           if ($installers.Count -ne 1) { throw "Expected one Desktop installer, found $($installers.Count)" }
+          Write-Host "Installer size: $([math]::Round($installers[0].Length / 1MB, 1)) MB"
+          if ($installers[0].Length -gt 300MB) { throw 'The installer is over 300MB' }
           Copy-Item $installers[0].FullName Ledge.Desktop.Snapshot-x64-setup.exe
           if (-not (Test-Path "$($installers[0].FullName).sig")) { throw 'Missing updater signature' }
           Copy-Item "$($installers[0].FullName).sig" Ledge.Desktop.Snapshot-x64-setup.exe.sig

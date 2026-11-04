@@ -234,3 +234,37 @@ Seen, left as they are:
 
 - The form still offers Cursor Agent and OMP in native mode; both are off on Windows.
 - The picker lists `AppData` and the other hidden or system folders, as planned.
+
+## Installer (step 5)
+
+Plan: `docs/superpowers/plans/2026-11-04-windows-installer.md`.
+
+**What the installer carries:** `scripts/windows-runtime/assemble.mjs` builds the runtime:
+
+- Node 22.23.3;
+- this commit's Ledge, with its production dependencies;
+- PortableGit 2.56.0.windows.4.
+
+Both downloads are pinned by SHA-256, and both hashes match the ones their publishers list. The script then checks what it built: `ledge --version`, `node-pty` loading, and Git Bash. The runtime is 555 MB uncompressed. The NSIS installer built on the PC with `--config src-tauri/tauri.runtime.conf.json` weighs **99.4 MB** and took 13.7 min to build.
+
+**Test setup:** the release executable run in place with native mode forced, `LEDGE_PORT=27832`, the spike's `LEDGE_HOME`, and no `LEDGE_NODE`/`LEDGE_CLI`.
+
+| Check | Result |
+|---|---|
+| 1. First launch | `runtime: …\home\runtime\0.41.0` is copied (about 15 s). The hooks in `settings.json` name the copied `node.exe`, and the daemon and pane host run from the copy. |
+| 2. Bundled Git Bash | A Claude session asked to run `cygpath -w /` (approved from Desktop) answers `…\home\runtime\0.41.0\git\`. |
+| 3. An update while the agent runs | `VERSION` was bumped to simulate a new build. `moving the daemon from 0.41.0 to 0.41.1`: the daemon logs `daemon.stop asked by a client`, and the new daemon starts at once from the 0.41.1 copy. The pane host keeps running from the intact 0.41.0 copy (15,887 files), the Claude session is still alive, and Desktop shows its thread. |
+| 4. Pruning | Once the pane host has stopped, the next launch removes the 0.41.0 copy. |
+| 5. Token ACL | Under `%USERPROFILE%` the inherited rights are the user, SYSTEM and Administrators (plus an AppContainer SID with only synchronize/execute). The test home under `%TEMP%` also inherits a domain SID with modify rights. **Check this on the PO's PC with the snapshot build.** If the profile there carries similar entries, the daemon should set the token's ACL explicitly. |
+
+Two bugs were found and fixed during this run:
+
+- **Pruning took a copy in use for a free one.** Windows lets a running program's folder be renamed, so the rename test was not enough. Pruning now checks whether the copy's `node.exe` can be opened for writing. The test `pruning_keeps_a_copy_whose_node_exe_is_running` was RED, then GREEN.
+- **`daemon.stop` sent from Rust was lost.** Closing the connection with unread messages made Windows reset it before the daemon read the frame. `try_stop` now keeps reading until the daemon closes the connection. Check 3 above shows the move without any manual help.
+
+After the final review:
+
+- **Where the copies live:** they moved to Desktop's local app data, `%LOCALAPPDATA%\be.paradow.ledge.desktop\runtime\<version>`. A roaming profile would otherwise carry 0.5 to 1.1 GB. The PC run above still used the earlier location.
+- **The token's rights:** the daemon now sets them on Windows with `icacls /inheritance:r /grant:r <user>:F *S-1-5-18:F`. On the PC, a file in the folder that inherited a domain SID ends up with SYSTEM and the user only.
+- **The runtime check:** `scripts/windows-runtime/check.mjs` now opens a real ConPTY pane, so a missing `conpty.node` fails the build.
+- **Ledge's dependencies:** they install from a committed lockfile with `npm ci`.
