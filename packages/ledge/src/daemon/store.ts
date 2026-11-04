@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { renameRetry } from '../fs-retry.js';
 import { dirname } from 'node:path';
-import { RecentSchema, SessionSchema, type Recent, type Session, type SessionEvent } from '@ledge/protocol';
+import { RecentSchema, SessionSchema, samePath, type Recent, type Session, type SessionEvent } from '@ledge/protocol';
 import { reduce } from './state.js';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
@@ -80,7 +80,8 @@ export class Store {
 
   /** Records a session's folder as the most recent one (one entry per folder, `MAX_RECENTS` kept). */
   touchRecent(cwd: string, project: string, at: string): void {
-    this.recentList = [{ cwd, project, lastAt: at }, ...this.recentList.filter(r => r.cwd !== cwd)].slice(0, MAX_RECENTS);
+    // One entry per folder: a Windows folder in another spelling (case, `/`) is the same one.
+    this.recentList = [{ cwd, project, lastAt: at }, ...this.recentList.filter(r => !samePath(r.cwd, cwd))].slice(0, MAX_RECENTS);
     this.emit({ type: 'recents', recents: this.recents() });
   }
 

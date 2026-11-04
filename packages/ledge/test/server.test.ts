@@ -307,6 +307,15 @@ describe('server', () => {
     c.close();
   });
 
+  it('a hook-only session on native Windows keeps its folder in one written form (projects match it whatever the shell typed)', async () => {
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'hw', cwd: 'c:/Users/po/work/', event: { name: 'UserPromptSubmit', at: T0, source: 'hook', text: 'go' } });
+    await c.next('session.updated');
+    expect(store.get('hw')?.cwd).toBe('C:\\Users\\po\\work');
+    expect(store.get('hw')?.project).toBe('work');
+    c.close();
+  });
+
   it('reads a session document from the folder its hooks report, once the agent moved into a worktree', async () => {
     const root = mkdtempSync(join(tmpdir(), 'ledge-doc-')); const workdir = join(root, 'wt'); mkdirSync(join(workdir, 'docs'), { recursive: true });
     writeFileSync(join(workdir, 'docs', 'plan.md'), '# Plan\n');

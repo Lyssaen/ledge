@@ -46,6 +46,7 @@ import { createOpenRig, execRun, type OpenRig } from './openrig.js';
 import { createHumanChannel, type HumanChannelService } from './openrigHuman.js';
 import { createGoals, type GoalsService } from './openrigGoals.js';
 import type { OpenRigState } from '@ledge/protocol';
+import { baseName, isWindowsPath, normalizePath } from '@ledge/protocol';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
@@ -1281,8 +1282,9 @@ export async function startServer(opts: { store: Store; /** What `daemon.stop` d
         if (!before && terminal) return; // never a new session from its end
         if (!before) {
           const taken = [...namesInUse(store.all()), ...heldNames(store.all())];
-          const cwd = msg.cwd ?? '';
-          const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
+          // A Windows folder in one written form (the shell may say `c:/users/…`): projects match it whatever was typed.
+          const cwd = msg.cwd && isWindowsPath(msg.cwd) ? normalizePath(msg.cwd) : msg.cwd ?? '';
+          const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: (isWindowsPath(cwd) ? baseName(cwd) : basename(cwd)) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
           store.upsert(base);
           store.apply(msg.id, msg.event); // through apply, so the history sees the session's first event too
         } else {

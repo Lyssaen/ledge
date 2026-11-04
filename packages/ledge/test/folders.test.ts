@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync, statSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { listFolder, createFolder, gitBranchOf } from '../src/daemon/folders.js';
+import { listFolder, createFolder, gitBranchOf, resolveFolder } from '../src/daemon/folders.js';
 import { inspectRepos } from '../src/daemon/repos.js';
 
 describe('folders: the launch form browser', () => {
@@ -113,5 +113,20 @@ describe('folders: the launch form browser', () => {
       repo(join(home, 'main'), 'trunk'); const wt = join(home, 'wt'); git(join(home, 'main'), 'worktree', 'add', '-q', '-b', 'side', wt);
       expect(await gitBranchOf(wt)).toBe('side');
     });
+  });
+});
+
+describe('Windows folders (native Windows)', () => {
+  it('~\\ expands like ~/', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-home-')); mkdirSync(join(home, 'sub'));
+    expect(await resolveFolder('~\\sub', home)).toBe(join(home, 'sub'));
+  });
+  it.skipIf(process.platform !== 'win32')('createFolder refuses a Windows-invalid name', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-home-'));
+    for (const bad of ['a:b', 'con', 'x.']) expect((await createFolder(home, bad, home)).error).toBe(`invalid folder name: ${bad}`);
+  });
+  it('createFolder keeps taking a name only Windows refuses on Linux', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-home-'));
+    expect((await createFolder(home, process.platform === 'win32' ? 'ok-name' : 'a:b', home)).error).toBeUndefined();
   });
 });

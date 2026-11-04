@@ -86,6 +86,11 @@ describe('Store recents', () => {
     expect(s.recents()).toEqual([{ cwd: '/w/a', project: 'a', lastAt: T2 }, { cwd: '/w/b', project: 'b', lastAt: T1 }]);
     expect(seen).toEqual(['recents', 'recents', 'recents']);
   });
+  it('keeps one recent per Windows folder, whatever its spelling', () => {
+    const s = new Store();
+    s.touchRecent('C:\\Users\\po\\work', 'work', T0); s.touchRecent('c:/users/po/work', 'work', T1);
+    expect(s.recents().map(r => [r.cwd, r.lastAt])).toEqual([['c:/users/po/work', T1]]);
+  });
   it('keeps the twelve most recent', () => {
     const s = new Store();
     for (let i = 0; i < 15; i++) s.touchRecent(`/w/${i}`, String(i), new Date(Date.parse(T0) + i * 1000).toISOString());

@@ -61,7 +61,7 @@ export async function inspectRepos(paths: readonly string[], opts: { home?: stri
   const git = opts.git ?? runGit;
   return Promise.all(paths.map(raw => slot(async (): Promise<RepoInfo> => {
     const input = raw.trim();
-    const path = resolve(input === '~' ? home : input.startsWith('~/') ? resolve(home, input.slice(2)) : input);
+    const path = resolve(input === '~' ? home : input.startsWith('~/') || input.startsWith('~\\') ? resolve(home, input.slice(2)) : input);
     let isDir = false;
     try { isDir = (await stat(path)).isDirectory(); } catch { /* missing */ }
     if (!isDir) return { path: raw, exists: false, branch: null };
