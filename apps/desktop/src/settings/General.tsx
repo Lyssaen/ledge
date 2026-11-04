@@ -68,7 +68,7 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const offersAgents = !!ctx.machines.find(m => m.id === 'local')?.daemon?.agents;
   return (
     <>
-      {offersAgents && <Agents client={ctx.client} />}
+      {offersAgents && <Agents client={ctx.client} epoch={ctx.machines.find(m => m.id === 'local')?.daemon} />}
       <Card>
         <Row label={g.lang} hint={g.langHint} error={langFailed ? g.langFailed : null}>
           {describedBy => <Segmented label={g.lang} value={ctx.lang} disabled={switching} describedBy={describedBy} onChange={chooseLang} options={LANGS.map(l => ({ value: l, label: g.langs[l], lang: l }))} />}

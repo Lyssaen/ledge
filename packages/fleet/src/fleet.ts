@@ -76,6 +76,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** `folder.list` / `folder.create` requestId -> the machine asked and the path (the parent of a creation), so only its `folder.listing` answers it
    *  (and a drop or a refusal answers « offline » or « not found »). `created`: where a creation lands, which an older daemon's untagged answer is matched by. */
   const listings = new Map<string, { machine: string; path: string; created?: string }>();
+  /** `agents.install` requestId -> the agent, while the local daemon installs it: a drop answers it (its outcome unknown). */
+  const agentInstalls = new Map<string, 'claude' | 'codex'>();
   /** `repos.scan` requestId -> the machine asked, so only its `repos.found` answers it (and a drop or a refusal answers « offline » or « outdated »). */
   const scans = new Map<string, string>();
   /** `attachment.put` / `attachment.get` requestId -> the machine asked, so only its answer is emitted (a drop answers « offline »). */
@@ -343,7 +345,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.requestId !== undefined) { if (rigAsks.get(m.requestId)?.machine !== machine) return; rigAsks.delete(m.requestId); }
       emit({ ...m, machineId: machine }); return;
     }
-    if (m.type === 'agents.listing' || m.type === 'agents.installed') { if (machine === 'local') emit(m); return; }
+    if (m.type === 'agents.listing' || m.type === 'agents.installed') { if (machine !== 'local') return; if (m.type === 'agents.installed') agentInstalls.delete(m.requestId); emit(m); return; }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'session.commands.listing') { const l = commandLists.get(m.requestId); if (l?.machine === machine) { commandLists.delete(m.requestId); emit({ ...m, id: l.id }); } return; }
     if (m.type === 'chat.routed') {
@@ -518,6 +520,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
         for (const b of [...broadcasts.values()]) if (b.waiting.has(c.id)) { b.refused.push(machineRefusal(c.id, 'hors ligne')); settleBroadcast(b, c.id); }
         answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedCommands(c.id, 'offline'); answerFailedRigs(c.id, 'offline');
+        if (c.id === 'local') for (const [requestId, tool] of agentInstalls) { agentInstalls.delete(requestId); emit({ type: 'agents.installed', requestId, tool, ok: false, code: null, output: 'The local Ledge daemon dropped during the install: its outcome is unknown. Check the agent below, or install it again.', error: 'failed' }); }
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
@@ -600,6 +603,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
           emit(msg.type === 'agents.status' ? { type: 'agents.listing', requestId: msg.requestId, agents: [] } : { type: 'agents.installed', requestId: msg.requestId, tool: msg.tool, ok: false, code: null, output: 'The local Ledge daemon is not connected.', error: 'failed' });
           return;
         }
+        if (msg.type === 'agents.install') agentInstalls.set(msg.requestId, msg.tool);
       }
       if (msg.type === 'models.list') {
         machine = msg.machineId ?? 'local';

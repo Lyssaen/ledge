@@ -9,10 +9,10 @@ import { Card, Row } from './controls';
 const NAMES: Record<InstallableTool, string> = { claude: 'Claude Code', codex: 'Codex' };
 
 /** Settings › General on native Windows: Claude Code and Codex, installed or not, and their install (spec 2026-11-03 §4.2.6). */
-export function Agents({ client }: { client: DaemonClient }): JSX.Element {
+export function Agents({ client, epoch }: { client: DaemonClient; /** The local daemon's info (new with each snapshot): asked again when it comes back. */ epoch?: unknown }): JSX.Element {
   const { t } = useI18n();
   const c = t.agents;
-  const view = useAgents(client, true);
+  const view = useAgents(client, true, epoch);
   const row = (tool: InstallableTool) => {
     const s: AgentStatus | undefined = view.agents?.find(a => a.tool === tool);
     const busy = view.installing === tool;

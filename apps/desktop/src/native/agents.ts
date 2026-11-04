@@ -22,7 +22,11 @@ function attach(client: DaemonClient): void {
   if (attached?.client === client) return;
   attached?.off();
   const off = client.onMessage(m => {
-    if (m.type === 'agents.listing' && m.requestId === pendingStatus) { pendingStatus = null; set({ agents: m.agents }); }
+    if (m.type === 'agents.listing' && m.requestId === pendingStatus) {
+      pendingStatus = null;
+      // An install this window did not start (a reconnect mid-install) shows as running until a listing says it ended.
+      set({ agents: m.agents, ...(pendingInstall ? {} : { installing: m.installing ?? null }) });
+    }
     if (m.type === 'agents.installed' && m.requestId === pendingInstall) {
       pendingInstall = null;
       const { type: _t, requestId: _r, ...last } = m;
@@ -49,10 +53,11 @@ export function installAgent(client: DaemonClient, tool: InstallableTool): void 
   client.send({ type: 'agents.install', requestId: pendingInstall, tool });
 }
 
-/** The agents' state; asked once `offered` (the local daemon says it offers agents). */
-export function useAgents(client: DaemonClient, offered: boolean): AgentsView {
+/** The agents' state; asked once `offered` (the local daemon says it offers agents), and again whenever `epoch` changes: the
+ *  local daemon's info, a new object with each snapshot, so a daemon that comes back (a restart, a reconnect) is asked anew. */
+export function useAgents(client: DaemonClient, offered: boolean, epoch?: unknown): AgentsView {
   const view = useSyncExternalStore(fn => { listeners.add(fn); return () => { listeners.delete(fn); }; }, () => state, () => state);
-  useEffect(() => { if (offered) refreshAgents(client); }, [client, offered]);
+  useEffect(() => { if (offered) refreshAgents(client); }, [client, offered, epoch]);
   return offered ? view : EMPTY;
 }
 

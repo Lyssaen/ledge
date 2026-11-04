@@ -14,6 +14,9 @@ describe('agents messages', () => {
     expect(parseServerMessage({ type: 'agents.installed', requestId: 'a2', tool: 'codex', ok: false, code: 1, output: 'blocked', error: 'failed' }).type).toBe('agents.installed');
     expect(() => parseServerMessage({ type: 'agents.installed', requestId: 'a2', tool: 'codex', ok: false, error: 'whatever' })).toThrow();
   });
+  it('a listing says which install is running', () => {
+    expect(parseServerMessage({ type: 'agents.listing', requestId: 'a1', agents: [], installing: 'codex' })).toMatchObject({ installing: 'codex' });
+  });
   it('the daemon says it offers it', () => {
     expect(DaemonInfoSchema.parse({ version: '1', install: 'npm', systemd: false, agents: true }).agents).toBe(true);
   });

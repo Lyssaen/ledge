@@ -197,7 +197,7 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; /** What `daemon.stop` does (startDaemon: stop, then exit when run by the CLI). */ onStop?: () => void; /** The daemon's platform (tests): `daemon.stop` is for Windows only. */ platform?: NodeJS.Platform; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; /** Native Windows: which agents are installed, and their install (tests inject it). */ agents?: { status(): Promise<AgentStatus[]>; install(tool: InstallableTool): Promise<Installed> } }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; /** What `daemon.stop` does (startDaemon: stop, then exit when run by the CLI). */ onStop?: () => void; /** The daemon's platform (tests): `daemon.stop` is for Windows only. */ platform?: NodeJS.Platform; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; /** Native Windows: which agents are installed, and their install (tests inject it). */ agents?: { status(): Promise<AgentStatus[]>; install(tool: InstallableTool): Promise<Installed>; installing(): InstallableTool | null } }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -208,7 +208,8 @@ export async function startServer(opts: { store: Store; /** What `daemon.stop` d
   const installer = createAgentInstaller({ platform: opts.platform ?? process.platform, env: agentEnv });
   const agents = opts.agents ?? {
     status: async () => { const env = await agentEnv(); return Promise.all((['claude', 'codex'] as const).map(t => agentStatus(t, env, runAgentCommand))); },
-    install: (tool: InstallableTool) => installer.install(tool)
+    install: (tool: InstallableTool) => installer.install(tool),
+    installing: () => installer.installing()
   };
   const offersAgents = (opts.platform ?? process.platform) === 'win32';
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
@@ -1138,7 +1139,7 @@ export async function startServer(opts: { store: Store; /** What `daemon.stop` d
       }
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
       case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
-      case 'agents.status': return reply({ type: 'agents.listing', requestId: msg.requestId, agents: offersAgents ? await agents.status() : [] });
+      case 'agents.status': return reply({ type: 'agents.listing', requestId: msg.requestId, agents: offersAgents ? await agents.status() : [], installing: offersAgents ? agents.installing() : null });
       case 'agents.install': return reply({ type: 'agents.installed', requestId: msg.requestId, ...(offersAgents ? await agents.install(msg.tool) : { tool: msg.tool, ok: false, error: 'not_offered' as const }) });
       // Answered even when the agent cannot be asked: the « / » list says so, and a command typed by hand still goes.
       case 'session.commands': {

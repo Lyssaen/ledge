@@ -9,8 +9,15 @@ import { windowsAgentDirs, windowsRegistryEnv } from '../src/shell-path.js';
 describe('agents on native Windows', () => {
   it('installCommand gives the official per-user installers', () => {
     expect(CODEX_RELEASE).toBe('0.166.0');
-    expect(installCommand('claude', 'T')).toEqual({ file: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) stable'] });
-    expect(installCommand('codex', 'C:\\t\\i.ps1')).toEqual({ file: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\\t\\i.ps1', '-Release', '0.166.0'], download: 'https://chatgpt.com/codex/install.ps1' });
+    expect(installCommand('claude')).toEqual({ file: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) stable'] });
+    // Codex's installer is fetched by PowerShell itself (irm honours the system proxy, as Claude's does), then run and removed.
+    const codex = installCommand('codex');
+    expect(codex.file).toBe('powershell.exe');
+    expect(codex.args.slice(0, 4)).toEqual(['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command']);
+    expect(codex.args[4]).toContain("irm https://chatgpt.com/codex/install.ps1 -OutFile $p");
+    expect(codex.args[4]).toContain('& $p -Release 0.166.0');
+    expect(codex.args[4]).toMatch(/finally \{ Remove-Item .*\$p.*\}; exit \$code$/);
+    expect(codex).not.toHaveProperty('download');
   });
 
   it('agentStatus finds a binary and reads its version', async () => {
@@ -26,7 +33,7 @@ describe('agents on native Windows', () => {
 
   it('a failed install answers its exit code and output tail', async () => {
     const lines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join('\r\n');
-    const i = createAgentInstaller({ platform: 'win32', run: async () => ({ code: 1, output: lines }), download: async () => {}, env: async () => ({}) });
+    const i = createAgentInstaller({ platform: 'win32', run: async () => ({ code: 1, output: lines }), env: async () => ({}) });
     const r = await i.install('claude');
     expect(r).toMatchObject({ tool: 'claude', ok: false, code: 1, error: 'failed' });
     expect(r.output!.split('\n')).toEqual(Array.from({ length: 20 }, (_, k) => `line ${k + 11}`));
@@ -35,7 +42,7 @@ describe('agents on native Windows', () => {
   it('one install at a time', async () => {
     let release!: () => void;
     const run: AgentRun = () => new Promise(r => { release = () => r({ code: 0, output: '' }); });
-    const i = createAgentInstaller({ platform: 'win32', run, download: async () => {}, env: async () => ({}) });
+    const i = createAgentInstaller({ platform: 'win32', run, env: async () => ({}) });
     const first = i.install('codex');
     await new Promise(r => setTimeout(r, 10));
     expect(await i.install('claude')).toEqual({ tool: 'claude', ok: false, error: 'busy' });
@@ -44,7 +51,7 @@ describe('agents on native Windows', () => {
   });
 
   it('install is refused off Windows', async () => {
-    const i = createAgentInstaller({ platform: 'linux', run: async () => ({ code: 0, output: '' }), download: async () => {}, env: async () => ({}) });
+    const i = createAgentInstaller({ platform: 'linux', run: async () => ({ code: 0, output: '' }), env: async () => ({}) });
     expect(await i.install('claude')).toEqual({ tool: 'claude', ok: false, error: 'not_offered' });
   });
 
@@ -65,7 +72,7 @@ describe('the daemon answers agents.* on native Windows', () => {
     const { connect } = await import('../src/client.js');
     process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-agents-srv-'));
     const daemon = { version: '0.41.0', install: 'npm' as const, systemd: false };
-    const agents = { status: async () => [{ tool: 'claude' as const, found: true, version: '2.1' }, { tool: 'codex' as const, found: false }], install: async (tool: 'claude' | 'codex') => ({ tool, ok: true }) };
+    const agents = { status: async () => [{ tool: 'claude' as const, found: true, version: '2.1' }, { tool: 'codex' as const, found: false }], install: async (tool: 'claude' | 'codex') => ({ tool, ok: true }), installing: () => null };
     for (const platform of ['win32', 'linux'] as const) {
       const srv = await startServer({ store: new Store(), tmux: realTmux(`ledge-agents-${platform}-${process.pid}`, { scope: async () => false }), port: 0, platform, daemon, agents });
       try {
@@ -74,7 +81,7 @@ describe('the daemon answers agents.* on native Windows', () => {
         expect(snap.daemon?.agents === true).toBe(platform === 'win32');
         if (platform === 'win32') {
           c.send({ type: 'agents.status', requestId: 's1' });
-          expect(await c.next('agents.listing')).toEqual({ type: 'agents.listing', requestId: 's1', agents: [{ tool: 'claude', found: true, version: '2.1' }, { tool: 'codex', found: false }] });
+          expect(await c.next('agents.listing')).toEqual({ type: 'agents.listing', requestId: 's1', agents: [{ tool: 'claude', found: true, version: '2.1' }, { tool: 'codex', found: false }], installing: null });
           c.send({ type: 'agents.install', requestId: 'i1', tool: 'codex' });
           expect(await c.next('agents.installed')).toEqual({ type: 'agents.installed', requestId: 'i1', tool: 'codex', ok: true });
         }

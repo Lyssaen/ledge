@@ -77,7 +77,7 @@ export function LaunchComposer(p: {
   const unavailable = form.tool === 'omp' && online && models.status === 'ready' && models.error ? models.error : null;
   // Native Windows: an agent not installed on this PC is said before the launch, with the way to install it.
   const TOOLS = isNative() ? NATIVE_TOOLS : ALL_TOOLS;
-  const agentsView = useAgents(p.client, form.machine === 'local' && !!chosen?.daemon?.agents);
+  const agentsView = useAgents(p.client, form.machine === 'local' && !!chosen?.daemon?.agents, chosen?.daemon);
   const notInstalled = (form.tool === 'claude' || form.tool === 'codex') && agentsView.agents?.find(a => a.tool === form.tool)?.found === false;
   const memo = loadPick(form.project, form.tool);
   const remembered = !!memo?.remembered && memo.model === form.model && memo.effort === form.effort;

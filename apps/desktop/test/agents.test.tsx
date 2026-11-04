@@ -27,7 +27,7 @@ afterEach(async () => { cleanup(); forgetAgents(); for (const d of daemons.splic
 const CLAUDE: AgentStatus = { tool: 'claude', found: true, path: 'C:\\Users\\po\\.local\\bin\\claude.exe', version: '2.1.302 (Claude Code)' };
 const NO_CODEX: AgentStatus = { tool: 'codex', found: false };
 
-async function boot(opts: { agents: boolean; native?: boolean; statuses?: () => AgentStatus[] }) {
+async function boot(opts: { agents: boolean; native?: boolean; statuses?: () => AgentStatus[]; installing?: 'claude' | 'codex' }) {
   shell.info = opts.native ? { mode: 'native', port: 47831 } : null;
   await loadNativeInfo(); await loadSettings(); await loadComposer(); await loadWorkspace();
   const d = await createMockDaemon(); daemons.push(d);
@@ -36,7 +36,7 @@ async function boot(opts: { agents: boolean; native?: boolean; statuses?: () => 
   d.extras.daemon = daemon;
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'idle' }));
   const statuses = opts.statuses ?? (() => [CLAUDE, NO_CODEX]);
-  d.onMessage(m => { if (m.type === 'agents.status') d.push({ type: 'agents.listing', requestId: m.requestId, agents: statuses() }); });
+  d.onMessage(m => { if (m.type === 'agents.status') d.push({ type: 'agents.listing', requestId: m.requestId, agents: statuses(), ...(opts.installing ? { installing: opts.installing } : {}) }); });
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
   await screen.findByRole('complementary', { name: 'Sidebar' });
   const user = userEvent.setup();
@@ -76,6 +76,24 @@ describe('the Agents card', () => {
     expect(await card.findByText('codex-cli 0.166.0')).toBeVisible();
     expect(card.getByText(/sign in from the session’s terminal/)).toBeVisible();
   });
+
+  it('a listing saying an install runs shows it (a Desktop reconnected mid-install), and the Install buttons wait', async () => {
+    const { user } = await boot({ agents: true, installing: 'codex' });
+    await openGeneral(user);
+    const card = within(await screen.findByRole('region', { name: 'Agents' }));
+    expect(await card.findByText('Installing…')).toBeVisible();
+    expect(card.getByRole('button', { name: 'Install Codex' })).toBeDisabled();
+  });
+
+  it('the status is asked again when the local daemon comes back', async () => {
+    const { d, user } = await boot({ agents: true });
+    await openGeneral(user);
+    await within(await screen.findByRole('region', { name: 'Agents' })).findByText('Not installed');
+    const asked = () => d.received.filter(m => m.type === 'agents.status').length;
+    const before = asked();
+    await d.dropClients();
+    await waitFor(() => expect(asked()).toBeGreaterThan(before), { timeout: 8000 });
+  }, 12000);
 
   it('a failure shows the output tail and the manual command', async () => {
     const { d, user } = await boot({ agents: true });

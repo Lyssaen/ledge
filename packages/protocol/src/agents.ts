@@ -20,7 +20,8 @@ export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 export const AgentsStatusSchema = z.object({ type: z.literal('agents.status'), requestId: z.string().min(1).max(100) });
 export const AgentsInstallSchema = z.object({ type: z.literal('agents.install'), requestId: z.string().min(1).max(100), tool: InstallableToolSchema });
 
-export const AgentsListingSchema = z.object({ type: z.literal('agents.listing'), requestId: z.string(), agents: z.array(AgentStatusSchema) });
+/** `installing`: the install the daemon runs now, if any (a Desktop that reconnects mid-install shows it). */
+export const AgentsListingSchema = z.object({ type: z.literal('agents.listing'), requestId: z.string(), agents: z.array(AgentStatusSchema), installing: InstallableToolSchema.nullable().optional() });
 /** An install's end: `ok`, or its exit code and the tail of its output; `busy` while another install runs, `not_offered`
  *  off native Windows. */
 export const AgentsInstalledSchema = z.object({

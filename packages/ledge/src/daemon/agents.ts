@@ -1,7 +1,4 @@
 import { execFile } from 'node:child_process';
-import { rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { CODEX_RELEASE, type AgentStatus, type InstallableTool } from '@ledge/protocol';
 
 export { CODEX_RELEASE };
@@ -14,14 +11,17 @@ import { resolveCommand } from '../panes/resolve.js';
  * guide recommends. Nothing is installed without the user's click.
  */
 
-const CODEX_INSTALLER = 'https://chatgpt.com/codex/install.ps1';
 const CLAUDE_INSTALL = '& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) stable';
+// PowerShell fetches Codex's installer itself (irm goes through the system proxy, as Claude's does; Node's fetch would not),
+// runs it, removes it, and exits with its code.
+const CODEX_INSTALL = "$p = Join-Path $env:TEMP ('ledge-codex-install-' + [guid]::NewGuid() + '.ps1'); $code = 0; "
+  + `try { irm https://chatgpt.com/codex/install.ps1 -OutFile $p; & $p -Release ${CODEX_RELEASE}; if ($LASTEXITCODE) { $code = $LASTEXITCODE } } `
+  + 'finally { Remove-Item -Force -ErrorAction SilentlyContinue $p }; exit $code';
 const PS = ['-NoProfile', '-ExecutionPolicy', 'Bypass'];
 
-/** The command that installs `tool`; for Codex, `download` is the installer the daemon saves to `tmpScript` first. */
-export function installCommand(tool: InstallableTool, tmpScript: string): { file: string; args: string[]; download?: string } {
-  if (tool === 'claude') return { file: 'powershell.exe', args: [...PS, '-Command', CLAUDE_INSTALL] };
-  return { file: 'powershell.exe', args: [...PS, '-File', tmpScript, '-Release', CODEX_RELEASE], download: CODEX_INSTALLER };
+/** The command that installs `tool`, its publisher's own installer in PowerShell. */
+export function installCommand(tool: InstallableTool): { file: string; args: string[] } {
+  return { file: 'powershell.exe', args: [...PS, '-Command', tool === 'claude' ? CLAUDE_INSTALL : CODEX_INSTALL] };
 }
 
 /** Runs `file args` without a shell, its streams together; `code` null when it could not start or ran out of time. */
@@ -49,33 +49,26 @@ export interface Installed { tool: InstallableTool; ok: boolean; code?: number |
 
 /** Installs one agent at a time, on native Windows only, within `timeoutMs` (10 min). A failure answers the exit code and
  *  the last 20 lines of output. */
-export function createAgentInstaller(deps: { platform?: NodeJS.Platform; run?: AgentRun; env: () => Promise<NodeJS.ProcessEnv>; download?: (url: string, to: string) => Promise<void>; timeoutMs?: number }) {
+export function createAgentInstaller(deps: { platform?: NodeJS.Platform; run?: AgentRun; env: () => Promise<NodeJS.ProcessEnv>; timeoutMs?: number }) {
   const platform = deps.platform ?? process.platform;
   const run = deps.run ?? runAgentCommand;
-  const download = deps.download ?? (async (url: string, to: string) => {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`download ${url}: HTTP ${res.status}`);
-    await writeFile(to, Buffer.from(await res.arrayBuffer()));
-  });
-  let running = false;
+  let running: InstallableTool | null = null;
   return {
-    busy: () => running,
+    /** The agent being installed, if any (the listing says it, so a Desktop that reconnects shows it). */
+    installing: () => running,
     async install(tool: InstallableTool): Promise<Installed> {
       if (platform !== 'win32') return { tool, ok: false, error: 'not_offered' };
       if (running) return { tool, ok: false, error: 'busy' };
-      running = true;
-      const tmp = join(tmpdir(), `ledge-${tool}-install-${process.pid}-${Date.now()}.ps1`);
+      running = tool;
       try {
-        const cmd = installCommand(tool, tmp);
-        if (cmd.download) await download(cmd.download, tmp);
+        const cmd = installCommand(tool);
         const r = await run(cmd.file, cmd.args, { timeoutMs: deps.timeoutMs ?? 10 * 60_000, env: await deps.env() });
         if (r.code === 0) return { tool, ok: true };
         return { tool, ok: false, code: r.code, output: r.output.split(/\r?\n/).filter(l => l.trim()).slice(-20).join('\n').slice(-8000), error: 'failed' };
       } catch (e) {
         return { tool, ok: false, code: null, output: (e as Error).message.slice(0, 2000), error: 'failed' };
       } finally {
-        running = false;
-        await rm(tmp, { force: true }).catch(() => {});
+        running = null;
       }
     }
   };
