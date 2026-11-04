@@ -13,6 +13,7 @@ import { runHook, identityContext } from '../src/cli/hook.js';
 import { printWho } from '../src/cli/who.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
+import { linuxOnly } from './platform.js';
 
 const T0 = '2026-11-02T10:00:00.000Z';
 const IDLE = readFileSync(new URL('./fixtures/panes/codex-idle-after-turn.txt', import.meta.url), 'utf8');
@@ -68,7 +69,7 @@ const cards = (id: string) => history.items(id).filter(i => i.kind === 'sent');
 const setState = (id: string, state: Session['state']) => store.upsert({ ...store.get(id)!, state });
 
 describe('broadcast from a session (session.message)', () => {
-  it('@projet:billing reaches the other live Ledge sessions of the project only, with one card (Review Focus 1)', async () => {
+  linuxOnly('hidden-in-native')('@projet:billing reaches the other live Ledge sessions of the project only, with one card (Review Focus 1)', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.message', rid: 'r1', from: 'a', to: '@projet:billing', text: 'Salut' });
     expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'r1', outcome: 'accepted', recipients: { sent: ['Nova'], refused: [] } });
@@ -82,7 +83,7 @@ describe('broadcast from a session (session.message)', () => {
     c.close();
   });
 
-  it('a list drops the sender and a duplicate, refuses an unknown name (Review Focus 2)', async () => {
+  linuxOnly('hidden-in-native')('a list drops the sender and a duplicate, refuses an unknown name (Review Focus 2)', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.message', rid: 'r2', from: 'a', to: 'Nova,Otto,Pim,nova,Ghost', text: 'Salut' });
     expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'r2', outcome: 'accepted',
@@ -126,7 +127,7 @@ describe('broadcast from a session (session.message)', () => {
     c.close();
   });
 
-  it('a busy recipient queues it behind what already waits, and gets it at the end of its turn (Review Focus 5)', async () => {
+  linuxOnly('hidden-in-native')('a busy recipient queues it behind what already waits, and gets it at the end of its turn (Review Focus 5)', async () => {
     setState('b', 'working');
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.message', rid: 'r0', from: 'o', to: 'Nova', text: 'Premier' });
@@ -145,7 +146,7 @@ describe('broadcast from a session (session.message)', () => {
     c.close();
   });
 
-  it('the card is delivered once one recipient got it, a failure elsewhere does not take it back', async () => {
+  linuxOnly('hidden-in-native')('the card is delivered once one recipient got it, a failure elsewhere does not take it back', async () => {
     setState('b', 'working'); setState('o', 'working');
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.message', rid: 'r9', from: 'a', to: 'Nova,Otto', text: 'Salut' });
@@ -159,7 +160,7 @@ describe('broadcast from a session (session.message)', () => {
     c.close();
   });
 
-  it('a delivered card stays delivered when another recipient fails afterwards', async () => {
+  linuxOnly('hidden-in-native')('a delivered card stays delivered when another recipient fails afterwards', async () => {
     setState('o', 'working');
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.message', rid: 'r12', from: 'a', to: 'Nova,Otto', text: 'Salut' });
@@ -183,7 +184,7 @@ describe('broadcast from a session (session.message)', () => {
     c.close();
   });
 
-  it('a message to one name is unchanged: same ack, same card', async () => {
+  linuxOnly('hidden-in-native')('a message to one name is unchanged: same ack, same card', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.message', rid: 'r11', from: 'a', to: 'Nova', text: 'Salut' });
     expect(await c.next('message.ack', 3000)).toEqual({ type: 'message.ack', rid: 'r11', outcome: 'accepted' });
@@ -346,7 +347,7 @@ describe('a Claude seat\'s SendMessage to a project or a list, through the real 
   beforeEach(() => { saved = process.env.LEDGE_SESSION; process.env.LEDGE_SESSION = 'c'; store.upsert(mk('c', 'Cleo', '/w/billing-api', { tool: 'claude', tmuxSession: 'ledge-c' })); });
   afterEach(() => { if (saved === undefined) delete process.env.LEDGE_SESSION; else process.env.LEDGE_SESSION = saved; });
 
-  it('@projet: denied with who got it, typed into the recipients, one card, still one after PostToolUseFailure', async () => {
+  linuxOnly('hidden-in-native')('@projet: denied with who got it, typed into the recipients, one card, still one after PostToolUseFailure', async () => {
     const r = out(await runHook('PreToolUse', send('@projet:billing'), { port: srv.port }));
     expect(r.permissionDecision).toBe('deny');
     expect(r).not.toHaveProperty('updatedInput');

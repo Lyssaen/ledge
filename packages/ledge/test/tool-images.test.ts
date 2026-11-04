@@ -3,7 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, truncateSync } from
 import { CAPTURE_RAW_MAX } from '@ledge/protocol';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { toolImages } from '../src/cli/toolImages.js';
+import { imageSourceOf, toolImages } from '../src/cli/toolImages.js';
+import { needsSymlinks } from './platform.js';
 
 const claude = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
 const mcp = { type: 'image', data: 'BBBB', mimeType: 'image/jpeg' };
@@ -40,7 +41,7 @@ describe('toolImages', () => {
       const { home, file } = setup();
       expect(toolImages([claude, text(file)], home).images).toEqual([{ mime: 'image/png', data: 'AAAA' }]);
     });
-    it('refuses a path outside <home>/.claude/projects, a symlink out of it, a missing or non-image file', () => {
+    needsSymlinks('refuses a path outside <home>/.claude/projects, a symlink out of it, a missing or non-image file', () => {
       const { home, file } = setup();
       const outside = join(home, 'secret.png'); writeFileSync(outside, png);
       const link = join(home, '.claude', 'projects', 'link.png'); symlinkSync(outside, link);
@@ -54,5 +55,12 @@ describe('toolImages', () => {
       expect(toolImages([text(big)], home)).toEqual({ images: [], dropped: true });
       expect(toolImages([{ type: 'text', text: `[Image: source: ${big}]\n[Image: source: ${file}]` }], home)).toEqual({ images: [{ mime: 'image/png', data: png.toString('base64') }], dropped: true });
     });
+  });
+
+  it('reads the source line of a Windows path as well as a POSIX one (Claude Code on native Windows)', () => {
+    expect(imageSourceOf('[Image: source: C:\\Users\\po\\.claude\\projects\\p\\a.png]')).toBe('C:\\Users\\po\\.claude\\projects\\p\\a.png');
+    expect(imageSourceOf('[Image: source: c:/u/a.png]')).toBe('c:/u/a.png');
+    expect(imageSourceOf('[Image: source: /home/u/a.png]')).toBe('/home/u/a.png');
+    expect(imageSourceOf('[Image: source: a.png]')).toBeUndefined();
   });
 });

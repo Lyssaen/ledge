@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { claudeAdapter, REPLY_ENTER_DELAY_MS } from '../src/adapters/claude.js';
 import { adapterFor } from '../src/adapters/index.js';
 import { bottomLines, dialogMismatch } from '../src/adapters/types.js';
+import { linuxOnly } from './platform.js';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
 /** The last `n` lines, trailing whitespace trimmed like Tmux.capture (the server reads its non-blank ones: bottomLines). */
@@ -396,7 +397,7 @@ describe('claude adapter: a question with a preview (Claude Code 2.1.310 capture
     expect(claudeAdapter.promptGone!(preview, verrou)).toBe(false);
     expect(claudeAdapter.promptGone!(fx('claude2-question-preview-chat-left'), verrou)).toBe(true);
   });
-  it('on Linux a > in the output above the dialog is not the cursor (diff prints `> 2. RWLock`)', () => {
+  linuxOnly('linux-flow')('on Linux a > in the output above the dialog is not the cursor (diff prints `> 2. RWLock`)', () => {
     const rule = preview.indexOf('\n───');
     const pane = preview.slice(0, rule) + '\n● Bash(diff a.md b.md)\n  ⎿  3c3\n     > 2. RWLock\n' + preview.slice(rule);
     expect((claudeAdapter.replyPlan('2', verrou, pane)[1] as Until).until(tail(pane, 30))).toBe(false);

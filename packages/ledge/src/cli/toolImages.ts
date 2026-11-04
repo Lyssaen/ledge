@@ -9,7 +9,11 @@ const isMime = (v: unknown): v is ImageMime => (IMAGE_MIMES as readonly string[]
 const obj = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === 'object' ? v as Record<string, unknown> : undefined);
 
 /** Claude Code prints `[Image: source: <path>]` after an image it saved in its own project store. */
-const SOURCE_LINE = /^\[Image: source: (\/.+)\]$/;
+// An absolute path: POSIX, or Windows (`C:\\…`, `c:/…`) where Claude Code runs natively.
+const SOURCE_LINE = /^\[Image: source: ((?:\/|[A-Za-z]:[\\/]).+)\]$/;
+
+/** The file a `[Image: source: <path>]` line names, when the path is absolute. */
+export const imageSourceOf = (line: string): string | undefined => SOURCE_LINE.exec(line.trim())?.[1];
 
 /** The file such a line names, only when it really lies under `<home>/.claude/projects/` (symlinks resolved); one over CAPTURE_RAW_MAX is not read: `'too_large'`. */
 function readSource(path: string, home: string): ToolImage | 'too_large' | undefined {
@@ -48,7 +52,7 @@ export function toolImages(response: unknown, home: string = homedir()): { image
     for (const b of blocks) {
       if (b.type !== 'text' || typeof b.text !== 'string') continue;
       for (const line of b.text.split('\n')) {
-        const path = SOURCE_LINE.exec(line.trim())?.[1];
+        const path = imageSourceOf(line);
         const image = path ? readSource(path, home) : undefined;
         if (image === 'too_large') dropped = true;
         else if (image) found.push(image);

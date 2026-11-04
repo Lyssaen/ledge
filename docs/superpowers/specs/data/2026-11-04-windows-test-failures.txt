@@ -1,0 +1,151 @@
+test/adapters-claude.test.ts > claude adapter: a question with a preview (Claude Code 2.1.310 captures) > on Linux a > in the output above the dialog is not the cursor (diff prints `> 2. RWLock`)
+test/attach.test.ts > ledge attach > --read-only attaches with tmux -r
+test/attach.test.ts > ledge attach > an OMP session has no terminal: it says so by name, and attaches nothing
+test/attach.test.ts > ledge attach > fails cleanly on an unknown or missing id
+test/attach.test.ts > ledge attach > renames the tab after the session and attaches this terminal to its pane
+test/attach.test.ts > ledge attach > still attaches without a daemon, under the pane name
+test/auth.test.ts > daemon token file > creates a 0600 token of 64 hex chars
+test/broadcast.test.ts > a Claude seat's SendMessage to a project or a list, through the real hook (Review Focus 4) > @projet: denied with who got it, typed into the recipients, one card, still one after PostToolUseFailure
+test/broadcast.test.ts > broadcast from a session (session.message) > @projet:billing reaches the other live Ledge sessions of the project only, with one card (Review Focus 1)
+test/broadcast.test.ts > broadcast from a session (session.message) > a busy recipient queues it behind what already waits, and gets it at the end of its turn (Review Focus 5)
+test/broadcast.test.ts > broadcast from a session (session.message) > a delivered card stays delivered when another recipient fails afterwards
+test/broadcast.test.ts > broadcast from a session (session.message) > a list drops the sender and a duplicate, refuses an unknown name (Review Focus 2)
+test/broadcast.test.ts > broadcast from a session (session.message) > a message to one name is unchanged: same ack, same card
+test/broadcast.test.ts > broadcast from a session (session.message) > the card is delivered once one recipient got it, a failure elsewhere does not take it back
+test/chat-context.test.ts > writeContext > never hands the model the home folder, the root or a parent of the home
+test/chat-context.test.ts > writeContext > writes folders.md from the recent folders, most recent first, and no step for it
+test/chat-context.test.ts > writeContext > writes projects.md with each project, its description, its repositories and the remembered folders
+test/chat-context.test.ts > writeContext > writes sessions.md and one file per source, and maps them to steps
+test/chat-cursor.test.ts > runCursor images > copies each image into cwd as image-N.<ext> and ends stdin with the brackets
+test/chat-guide.test.ts > ledge.md > finds the agents whose executable is on the PATH, executable only
+test/chat-guide.test.ts > ledge.md > writeContext writes it when asked, as a step
+test/chat-notes.test.ts > writeContext with notes > writes the index and the copies only when a notes folder is given; a copy read is a step
+test/chat-notes.test.ts > writeNotes > reads only regular .md files directly in the folder, and keeps names safe and unique
+test/chat-service.test.ts > chat service > a valid block becomes the turn proposal, joined to chat.done, and leaves the text
+test/chat-service.test.ts > chat service > images > Cursor gets the image copied next to its context and named in the text
+test/chat-service.test.ts > chat service > keeps only the last 50 turns (in-process fake child, no real spawn)
+test/chat-service.test.ts > chat service > markLaunched and markFailed update the proposal and tell every client
+test/chat-service.test.ts > chat service > project proposal (lot 11 task 5) > drops / and a home (the user's, ~ included), as the Settings proposer does, and keeps the rest
+test/chat-service.test.ts > chat service > project proposal (lot 11 task 5) > drops what holds the user's home and a top-level folder, each with its log line, and keeps the rest
+test/chat-service.test.ts > chat service > project proposal (lot 11 task 5) > only / and homes: no proposal
+test/chat-service.test.ts > chat service > records the sessions step once
+test/chat-service.test.ts > chat service > several sessions in one answer (#24) > a bad or missing folder drops its row only
+test/chat-service.test.ts > chat service > several sessions in one answer (#24) > every valid block is a row, in order; the first stays the turn proposal for older clients
+test/chat-service.test.ts > chat service > several sessions in one answer (#24) > keeps the first 8 rows and logs the rest
+test/chat-service.test.ts > chat service > several sessions in one answer (#24) > marks each row on its own; the first row mirrors the turn proposal
+test/commands.test.ts > createCommands > keeps a listing per folder for the TTL, unless a commands folder changes; one probe at a time; a failure is not kept
+test/daemon.test.ts > startDaemon > restores live sessions, marks dead ones exited, keeps hook-only ones and serves a snapshot
+test/documents.test.ts > readDocument > accepts 1 MiB exactly and rejects one byte more or malformed UTF-8
+test/documents.test.ts > readDocument > reads home, absolute skills, names with spaces and regular symlink targets
+test/documents.test.ts > readDocument > rejects ambiguous, missing, non-Markdown and non-files without blocking
+test/e2e.test.ts
+test/e2e.test.ts > end to end with a fake Claude Code > answers a question by option number: the digit alone selects it
+test/e2e.test.ts > end to end with a fake Claude Code > denies a permission with Escape
+test/e2e.test.ts > end to end with a fake Claude Code > survives a daemon restart: sessions are reloaded and dead ones marked exited
+test/e2e.test.ts > end to end with a fake Claude Code > tracks a permission, approves it from the client, sees the agent continue and exit
+test/folders.test.ts > folders: the launch form browser > follows a link to a folder and skips a dangling one
+test/folders.test.ts > folders: the launch form browser > lists a folder whose name has edge whitespace and echoes its path exactly, never the trimmed sibling
+test/history.test.ts > History > loads the readable journals and skips what it cannot read: a directory, an unreadable file, other names
+test/hook.test.ts > ledge hook (CLI) > a Cursor hook always exits 0 and answers {} on stdout, which lets the agent go on
+test/hook.test.ts > ledge hook (CLI) > always exits 0, even with invalid stdin and no daemon
+test/hook.test.ts > ledge hook (CLI) > takes the agent before the event (ledge hook codex Stop) and exits 0 too
+test/hook.test.ts > mapHook codex > underCodexDaemon walks the parents in /proc, a "(comm)" with spaces included
+test/launch.test.ts > launch > a detach leaves the agent running and registered, and returns 0
+test/launch.test.ts > launch > a failed attach never unregisters a live agent
+test/launch.test.ts > launch > after a detach, an exit while someone else is attached still ends the session
+test/launch.test.ts > launch > falls back to an untracked launch when the daemon stops answering during session creation
+test/launch.test.ts > launch > gives the agent the launcher's environment, not the tmux server's
+test/launch.test.ts > launch > returns the agent's exit code (not tmux attach's) and unregisters with it
+test/launch.test.ts > launch > returns the exit code of an agent that exits before the attach even starts
+test/launch.test.ts > launch > unregisters through a fresh connection, so a daemon restart meanwhile is survived
+test/launch.test.ts > launch > when no daemon can be reached, says so and still runs the agent
+test/launch.test.ts > launch > when the port belongs to another program, says so and still runs the agent untracked
+test/launch.test.ts > spawnSession > starts the agent without a launching Claude Code session's variables, even from the tmux server's global environment
+test/mobile-files.test.ts > mobile files > a file that exists but cannot be read > keeps the PC key: loadPcIdentity throws and does not replace the file
+test/mobile-files.test.ts > mobile files > a file that exists but cannot be read > keeps the approved devices: readDevices throws, the file is untouched, the message holds no content
+test/mobile-files.test.ts > mobile files > a file that exists but cannot be read > throws for the config and the session too, rather than reading them as absent
+test/mobile-files.test.ts > mobile files > keeps the same PC key across loads, stored as bare PKCS8 at 0600
+test/mobile-files.test.ts > mobile files > moves an invalid PC key aside at 0600 before creating a new one
+test/mobile-files.test.ts > mobile files > round-trips the config, session and devices, each at 0600
+test/mobile-phone-e2e.test.ts > phone protocol end to end > « À toi » over the relay: the phone reads this PC's OpenRig asks, gets a change pushed, and a « Vu » goes and comes back once
+test/mobile-service.test.ts > mobile access service > set then signin: the code is shown, then the account, the link online and the session file in 0600
+test/mobile-service.test.ts > push through the relay > setPush stores the subscription with the device (0600), removes it with null, and refuses an unknown device
+test/mobile-service.test.ts > relay revocations > a relay that answers 503 keeps the entry (0600); the link online again retries, a 200 removes it
+test/mobile-terminal.test.ts > terminal host on a real tmux
+test/models.test.ts > models (#58) > asks each agent once per TTL and once at a time, never keeps a failure, reads the configs from the agent env
+test/omp-host.test.ts > OmpHost > an unexpected exit ends the session with its signal state; a requested close reports nothing of its own
+test/omp-owner.test.ts > reapOwner: one writer per conversation > ends an OMP a previous daemon left running in this session directory
+test/omp-owner.test.ts > reapOwner: one writer per conversation > escalates to SIGKILL when the process ignores SIGTERM
+test/omp-rpc.test.ts > OmpRpc > rejects the commands in flight and reports the exit when the process ends under them
+test/omp-server.test.ts > server: OMP sessions > resuming ends the OMP a dead daemon left behind in the session directory before the new one starts
+test/openrig-roles.test.ts > OpenRig roles: a file > reads a path the role detail lists: role.md, fragment, a seat startup file, the rig spec, the repository copy
+test/openrig-roles.test.ts > OpenRig roles: one role, from its seats > OpenRig HTTP not answering: the seat from the rig spec, no live view
+test/openrig-roles.test.ts > OpenRig roles: one role, from its seats > a member that writes no runtime: its blocks go where the resolved runtime puts them (the profile’s, the defaults’)
+test/openrig-roles.test.ts > OpenRig roles: one role, from its seats > dev.front: what it runs (member over the spec), what the member adds, the startup in OpenRig order sorted into layers
+test/openrig-roles.test.ts > OpenRig roles: one role, from its seats > the runtime OpenRig launched decides over the spec: a Codex node writes into AGENTS.md
+test/openrig-roles.test.ts > OpenRig roles: one role, from its spec > a bare id two imports declare is ambiguous: Ledge does not choose
+test/openrig-roles.test.ts > OpenRig roles: one role, from its spec > a builtin with two profiles: preferences over defaults, an unwritten list « not declared », a bare skill nobody declares resolved at launch
+test/openrig-roles.test.ts > OpenRig roles: one role, from its spec > ledge-lead: defaults, its import resolved, each uses list with where it comes from, its role.md first
+test/openrig-roles.test.ts > OpenRig roles: one role, from its spec > the repository copy, found in a seat folder under the library path: identical, or not
+test/openrig-roles.test.ts > OpenRig roles: pieces > a file that lives nowhere known is an unknown layer
+test/openrig-roles.test.ts > OpenRig roles: pieces > paths as specs write them
+test/openrig.test.ts > findRig > the PATH first, then the newest nvm Node (fish, then bash), then volta and npm
+test/preview.test.ts > terminal preview > the old cut (last 30 raw lines) only showed blanks and the input box
+test/rig-spec.test.ts > OpenRig 0.7: rig up --name and rig edge > 0.6 composes a copy for another name, as before
+test/rig-spec.test.ts > OpenRig 0.7: rig up --name and rig edge > 0.7 adds the seats, links them by pairs, then snapshots
+test/rig-spec.test.ts > OpenRig 0.7: rig up --name and rig edge > 0.7 launches the library spec under another name with --name, and remembers where it came from
+test/rig-spec.test.ts > changing a running rig's seats > a fragment in snake_case, the env names kept, the agent made absolute from the rig's folder
+test/rig-spec.test.ts > launching a rig > a changed spec is composed beside its folder's copy, checked with --plan, and kept in the library when asked
+test/rig-spec.test.ts > launching a rig > an unchanged spec under its own name launches from the library, in the folder asked
+test/rig-spec.test.ts > launching a rig > another name is a composed copy: OpenRig names a rig after its spec
+test/rig-spec.test.ts > permissions at launch > accepting the first-launch warnings adds --non-interruptive
+test/rig-spec.test.ts > rig specs > 3 builders and 3 reviewers: six seats copied from the first, paired links, absolute agents, the new name
+test/scan.test.ts > extraRoots > a folder whose parent is the filesystem root stands for itself; the root itself is never walked
+test/scan.test.ts > extraRoots > a sibling of home whose name starts like it is not under home
+test/scan.test.ts > extraRoots > the parents of folders outside home, once each; nothing for folders under home
+test/scan.test.ts > scanRepos > names a repository by its manifest: package.json’s name, else pom.xml’s own artifactId (not its parent’s); a broken one names nothing (#22)
+test/scan.test.ts > scanRepos > never follows a symbolic link
+test/server.test.ts > chat > answers a question with steps, deltas and a result, then serves it in the history
+test/server.test.ts > server > launch from the overlay > Claude Code gets its session id from the launch, so its transcript is known without hooks; a resume keeps its own
+test/server.test.ts > server > returns document content and errors only to the requesting socket without touching tmux
+test/server.test.ts > server > session.message > task.cmd gives a task and the owner gets its pointer typed
+test/server.test.ts > server > session.message > the card in the sender's thread goes sending → delivered
+test/server.test.ts > server > session.message > to a free Codex is acked accepted and typed
+test/server.test.ts > update.daemon > answers busy to the second overlay only, the first keeps its flow
+test/server.test.ts > update.daemon > sends the daemon info in the snapshot and routes update.daemon to the updater
+test/setup.test.ts > runSetup > upgrades a settings.json wired by the earlier version, then is idempotent
+test/setup.test.ts > runSetup > wires Codex hooks when ~/.codex exists, then is idempotent
+test/setup.test.ts > runSetup > wires Cursor Agent hooks in an existing ~/.cursor, then is idempotent; skips them without one
+test/setup.test.ts > systemd service > is idempotent: same unit, already active and lingering, touches nothing
+test/setup.test.ts > systemd service > run through the ~/.local/bin/ledge link, setup writes a unit that runs the CLI, not the script put in the link's place
+test/setup.test.ts > systemd service > writes the unit, reloads, enables now and enables linger
+test/setup.test.ts > writeBin > leaves a foreign file and a foreign link alone
+test/setup.test.ts > writeBin > replaces a link to an older Ledge CLI
+test/setup.test.ts > writeBin > rewrites its own script for another CLI or node, and leaves an up-to-date one alone
+test/setup.test.ts > writeBin > runs the CLI with this node when the PATH has none (a launched session under nvm)
+test/setup.test.ts > writeBin > writes the script where no link exists yet (an npm install), creating its folder
+test/shell-path.test.ts > loginShellEnv > returns the environment a login shell starts with
+test/tmux-scope.test.ts
+test/tmux-scope.test.ts > a scope that cannot be opened > still starts tmux, unscoped, so agents can launch
+test/tmux-scope.test.ts > systemdAvailable > needs the user manager socket under XDG_RUNTIME_DIR
+test/tmux.test.ts
+test/tmux.test.ts > test helpers > killTestServer kills the throwaway server and removes its socket file
+test/tmux.test.ts > tmux > capture returns only the last N lines
+test/tmux.test.ts > tmux > creates a session running a command with env and cwd
+test/tmux.test.ts > tmux > does not prefix-match other sessions
+test/tmux.test.ts > tmux > gives a detached pane the PATH of its env (tmux hands it the client PATH otherwise)
+test/tmux.test.ts > tmux > sends a key name as a key: C-u is Ctrl+U (here the line kill of a cooked tty), never the text « C-u »
+test/tmux.test.ts > tmux > sends a trailing or lone semicolon literally
+test/tmux.test.ts > tmux > sends text literally, then Enter separately
+test/tmux.test.ts > tmux > sets a session option the terminal title can show
+test/tmux.test.ts > tmux no server > listSessions is empty when no server runs on the socket
+test/tool-images.test.ts > toolImages >
+test/transcript.test.ts > Claude Code transcript without hooks > lives under the projects folder, named after the cwd with every non alphanumeric character a dash
+test/tui-images.test.tsx > ledge tui: images in a session reply > o opens the newest image of the exchange: its bytes are fetched into a file handed to the viewer
+test/uninstall.test.ts > runUninstall > removes the hooks and the link, keeps ~/.ledge, reports running sessions without killing them
+test/uninstall.test.ts > runUninstall > removes the script ledge setup wrote in place of the link
+test/uninstall.test.ts > runUninstall > with purge removes ~/.ledge; a ledge link to something else stays
+test/update-run.test.ts > createDaemonUpdater > installs, says so, saves the journal, then restarts
+test/update-run.test.ts > createDaemonUpdater > refuses without systemd and gives the npm command
+test/update-run.test.ts > npmCommand > uses the npm next to the running node, not the one on PATH
+test/update-self.test.ts > installKind > is git inside a clone

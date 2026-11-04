@@ -9,6 +9,7 @@ import { createOmpHost } from '../src/daemon/omp/host.js';
 import { connect } from '../src/client.js';
 import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
+import { linuxOnly } from './platform.js';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
 // A tmux that is never asked for anything: an OMP session has no pane.
@@ -109,7 +110,7 @@ describe('server: OMP sessions', () => {
     expect(store.get(id)!.lastReply?.text).toBe('done: slow work'); // nothing the queue held ran
     await c.close();
   });
-  it('resuming ends the OMP a dead daemon left behind in the session directory before the new one starts', async () => {
+  linuxOnly('posix-signals')('resuming ends the OMP a dead daemon left behind in the session directory before the new one starts', async () => {
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.launch', tool: 'omp', cwd: dir });
     const { id } = await c.next('session.launched');

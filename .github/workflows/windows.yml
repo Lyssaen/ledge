@@ -1,0 +1,43 @@
+# The daemon's suite on native Windows (spec 2026-11-03 §4.2.8). Linux-only tests are skipped through
+# packages/ledge/test/platform.ts, each with its reason; the job fails above MAX_WINDOWS_SKIPS so it cannot go green by
+# skipping. Not required yet: it informs the PRs to snapshot and main until it has stayed green.
+name: Windows
+
+on:
+  pull_request:
+    branches: [snapshot, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  daemon-tests:
+    runs-on: windows-latest
+    # A hung run (a pane host or node-pty handle left open) ends here, not after GitHub's 6 h.
+    timeout-minutes: 30
+    env:
+      MAX_WINDOWS_SKIPS: 147
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Say whether links can be made here
+        run: |
+          node -e "const fs=require('fs'),os=require('os'),p=require('path');const d=fs.mkdtempSync(p.join(os.tmpdir(),'l-'));fs.writeFileSync(p.join(d,'a'),'');try{fs.symlinkSync(p.join(d,'a'),p.join(d,'b'));console.log('symlinks: yes')}catch{console.log('symlinks: no')}"
+      - name: The daemon's suite
+        # The runner's own temp folder has no 8.3 short name (C:\Users\RUNNER~1\…): realpath would expand it and paths the
+        # tests build with tmpdir() would no longer match. The runner context exists in a step's env, not the job's.
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pnpm --filter @paradow/ledge exec vitest run --reporter=default --reporter=json --outputFile.json=vitest-windows.json
+      - name: Skipped tests under the ceiling
+        if: always()
+        shell: bash
+        run: |
+          node -e "const r=require('./packages/ledge/vitest-windows.json');const s=r.numPendingTests+r.numTodoTests;console.log('skipped:',s,'of',r.numTotalTests,'(ceiling',process.env.MAX_WINDOWS_SKIPS+')');if(s>Number(process.env.MAX_WINDOWS_SKIPS))process.exit(1)"

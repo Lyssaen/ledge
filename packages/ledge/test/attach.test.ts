@@ -8,6 +8,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { realTmux, type Tmux } from '../src/tmux.js';
 import { killTestServer } from './helpers.js';
+import { linuxOnly } from './platform.js';
 
 const T0 = '2026-10-10T09:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -24,7 +25,7 @@ describe('ledge attach', () => {
   });
   afterEach(async () => { await srv.close(); await killTestServer(socket); vi.restoreAllMocks(); });
 
-  it('renames the tab after the session and attaches this terminal to its pane', async () => {
+  linuxOnly('tmux')('renames the tab after the session and attaches this terminal to its pane', async () => {
     await tmux.newSession({ name: 'ledge-ab12', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
     store.upsert(mk('ab12'));
     const written: string[] = []; const attachFn = vi.fn(async () => 0);
@@ -35,7 +36,7 @@ describe('ledge attach', () => {
     expect(args).toEqual(tmux.attachArgs('ledge-ab12'));
     expect(env.TMUX).toBeUndefined();
   });
-  it('--read-only attaches with tmux -r', async () => {
+  linuxOnly('tmux')('--read-only attaches with tmux -r', async () => {
     await tmux.newSession({ name: 'ledge-ef56', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
     const attachFn = vi.fn(async () => 0);
     expect(await attach('ef56', { port: 1, tmuxSocket: socket, readOnly: true, attach: attachFn, write: () => {} })).toBe(0);
@@ -43,7 +44,7 @@ describe('ledge attach', () => {
     expect(args).toEqual(tmux.attachArgs('ledge-ef56', { readOnly: true }));
     expect(args).toContain('-r');
   });
-  it('an OMP session has no terminal: it says so by name, and attaches nothing', async () => {
+  linuxOnly('tmux')('an OMP session has no terminal: it says so by name, and attaches nothing', async () => {
     store.upsert(mk('om01', { name: 'Noor', tool: 'omp', backend: 'omp-rpc', tmuxSession: null }));
     const errors: string[] = []; vi.spyOn(console, 'error').mockImplementation((m: string) => { errors.push(String(m)); });
     const attachFn = vi.fn(async () => 0);
@@ -54,13 +55,13 @@ describe('ledge attach', () => {
     expect(await attach('nope', { port: srv.port, tmuxSocket: socket, attach: attachFn, write: () => {} })).toBe(1);
     expect(errors[0]).toBe('ledge attach: no session nope');
   });
-  it('still attaches without a daemon, under the pane name', async () => {
+  linuxOnly('tmux')('still attaches without a daemon, under the pane name', async () => {
     await tmux.newSession({ name: 'ledge-cd34', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
     const written: string[] = [];
     expect(await attach('cd34', { port: 1, tmuxSocket: socket, attach: async () => 3, write: s => written.push(s) })).toBe(3);
     expect(written).toEqual(['\u001b]0;ledge-cd34\u0007']);
   });
-  it('fails cleanly on an unknown or missing id', async () => {
+  linuxOnly('tmux')('fails cleanly on an unknown or missing id', async () => {
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
     const attachFn = vi.fn(async () => 0);
     expect(await attach('nope', { port: srv.port, tmuxSocket: socket, attach: attachFn })).toBe(1);

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { listFolder, createFolder, gitBranchOf, resolveFolder } from '../src/daemon/folders.js';
 import { inspectRepos } from '../src/daemon/repos.js';
+import { linuxOnly, needsSymlinks } from './platform.js';
 
 describe('folders: the launch form browser', () => {
   let home: string;
@@ -15,7 +16,7 @@ describe('folders: the launch form browser', () => {
     writeFileSync(join(home, 'README.md'), 'x');
     expect(await listFolder(home, home)).toEqual({ type: 'folder.listing', path: home, parent: join(home, '..'), entries: ['Api', 'app9', 'app10', 'web'], repos: [] });
   });
-  it('follows a link to a folder and skips a dangling one', async () => {
+  needsSymlinks('follows a link to a folder and skips a dangling one', async () => {
     mkdirSync(join(home, 'real'));
     symlinkSync(join(home, 'real'), join(home, 'linked'));
     symlinkSync(join(home, 'gone'), join(home, 'dangling'));
@@ -32,7 +33,7 @@ describe('folders: the launch form browser', () => {
     expect(await listFolder('~/nope', home)).toEqual({ type: 'folder.listing', path: '~/nope', parent: null, entries: [], error: `no such folder: ${join(home, 'nope')}` });
     expect((await listFolder('relative', home)).error).toMatch(/not an absolute path/);
   });
-  it('lists a folder whose name has edge whitespace and echoes its path exactly, never the trimmed sibling', async () => {
+  linuxOnly('posix-names')('lists a folder whose name has edge whitespace and echoes its path exactly, never the trimmed sibling', async () => {
     for (const d of ['trail ', 'trail', ' lead']) mkdirSync(join(home, d));
     mkdirSync(join(home, 'trail ', 'inside'));
     expect((await listFolder(home, home)).entries).toEqual([' lead', 'trail', 'trail ']);

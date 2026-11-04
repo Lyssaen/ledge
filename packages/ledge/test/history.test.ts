@@ -6,6 +6,7 @@ import type { AttachmentRef, SessionEvent, Task, TaskTransmission } from '@ledge
 import { History, MAX_ITEMS, SYNC_MS, handBack, crossSession } from '../src/daemon/history.js';
 import { formatLedgeMessage, formatLedgeNotice, formatLedgeTask, mailId } from '../src/daemon/crossSession.js';
 import { paths } from '../src/paths.js';
+import { linuxOnly } from './platform.js';
 
 const T0 = '2026-10-13T10:00:00.000Z';
 const later = (s: number) => new Date(Date.parse(T0) + s * 1000).toISOString();
@@ -216,7 +217,7 @@ describe('History', () => {
     expect(() => readFileSync(join(dir, 'history', 's.jsonl'))).toThrow();
   });
 
-  it('loads the readable journals and skips what it cannot read: a directory, an unreadable file, other names', async () => {
+  linuxOnly('posix-modes')('loads the readable journals and skips what it cannot read: a directory, an unreadable file, other names', async () => {
     const hd = join(dir, 'history'); mkdirSync(join(hd, 'x.jsonl'), { recursive: true });
     const line = JSON.stringify({ kind: 'prompt', id: 'prompt-1', at: T0, turn: 1, text: 'ok' }) + '\n';
     writeFileSync(join(hd, 'ok.jsonl'), line);

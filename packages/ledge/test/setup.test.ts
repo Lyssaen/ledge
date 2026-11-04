@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, runSetup, CLAUDE_EVENTS, CODEX_EVENTS, CURSOR_EVENTS, systemdUnit, installService, SERVICE, writeBin } from '../src/cli/setup.js';
+import { linuxOnlySuite } from './platform.js';
 
 describe('mergeClaudeHooks', () => {
   it('appends a ledge entry to every event, keeping foreign hooks', () => {
@@ -95,10 +96,10 @@ describe('runSetup', () => {
   const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'ledge-setup-')); process.env.LEDGE_HOME = join(d, 'ledge'); process.env.CODEX_HOME = join(d, 'no-codex'); return d; };
   it('creates settings.json when missing, then is idempotent', async () => {
     const d = tmp(); const p = join(d, 'claude', 'settings.json');
-    await runSetup({ settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') });
+    await runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') });
     const first = readFileSync(p, 'utf8');
     expect(JSON.parse(first).hooks.Stop).toHaveLength(1);
-    expect((await runSetup({ settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).join('\n')).toContain('already present');
+    expect((await runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).join('\n')).toContain('already present');
     expect(readFileSync(p, 'utf8')).toBe(first);
   });
   it.each([
@@ -110,7 +111,7 @@ describe('runSetup', () => {
   ])('refuses malformed shape (%s) and leaves the file untouched', async (_n, content, msg) => {
     const d = tmp(); const p = join(d, 'settings.json');
     writeFileSync(p, content);
-    await expect(runSetup({ settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).rejects.toThrow(`${msg}, not modified`);
+    await expect(runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).rejects.toThrow(`${msg}, not modified`);
     expect(readFileSync(p, 'utf8')).toBe(content);
   });
   it('upgrades a settings.json wired by the earlier version, then is idempotent', async () => {
@@ -118,58 +119,58 @@ describe('runSetup', () => {
     const hooks: Record<string, unknown[]> = {};
     for (const ev of CLAUDE_EVENTS.slice(0, 7)) hooks[ev] = [{ hooks: [{ type: 'command', command: `ledge hook ${ev}`, timeout: 5 }] }];
     writeFileSync(p, JSON.stringify({ theme: 'dark', hooks }, null, 2) + '\n');
-    expect((await runSetup({ settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).join('\n')).toContain('hooks added');
+    expect((await runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).join('\n')).toContain('hooks added');
     const after = JSON.parse(readFileSync(p, 'utf8'));
     expect(after.theme).toBe('dark');
     for (const ev of CLAUDE_EVENTS) expect(after.hooks[ev]).toHaveLength(1);
     const text = readFileSync(p, 'utf8');
-    expect((await runSetup({ settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).join('\n')).toContain('already present');
+    expect((await runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).join('\n')).toContain('already present');
     expect(readFileSync(p, 'utf8')).toBe(text);
   });
   it('wires Codex hooks when ~/.codex exists, then is idempotent', async () => {
     const d = tmp(); const codexDir = join(d, 'codex'); mkdirSync(codexDir);
     writeFileSync(join(codexDir, 'hooks.json'), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: '/other Stop' }] }] } }));
-    const out = (await runSetup({ settingsPath: join(d, 'settings.json'), codexDir, service: false , cursorDir: join(d, 'cursor') })).join('\n');
+    const out = (await runSetup({ platform: 'linux', settingsPath: join(d, 'settings.json'), codexDir, service: false , cursorDir: join(d, 'cursor') })).join('\n');
     expect(out).toContain('Codex hooks added');
     expect(out).toContain('trust');
     const hooks = JSON.parse(readFileSync(join(codexDir, 'hooks.json'), 'utf8')).hooks;
     expect(hooks.Stop.map((e: { hooks: Array<{ command: string }> }) => e.hooks[0]!.command)).toEqual(['/other Stop', 'ledge hook codex Stop']);
     const text = readFileSync(join(codexDir, 'hooks.json'), 'utf8');
-    expect((await runSetup({ settingsPath: join(d, 'settings.json'), codexDir, service: false , cursorDir: join(d, 'cursor') })).join('\n')).toContain('Codex hooks already present');
+    expect((await runSetup({ platform: 'linux', settingsPath: join(d, 'settings.json'), codexDir, service: false , cursorDir: join(d, 'cursor') })).join('\n')).toContain('Codex hooks already present');
     expect(readFileSync(join(codexDir, 'hooks.json'), 'utf8')).toBe(text);
   });
   it('skips Codex when it is not installed (no ~/.codex)', async () => {
     const d = tmp(); const codexDir = join(d, 'codex');
-    expect((await runSetup({ settingsPath: join(d, 'settings.json'), codexDir, service: false , cursorDir: join(d, 'cursor') })).join('\n')).toContain('Codex not found');
+    expect((await runSetup({ platform: 'linux', settingsPath: join(d, 'settings.json'), codexDir, service: false , cursorDir: join(d, 'cursor') })).join('\n')).toContain('Codex not found');
     expect(existsSync(codexDir)).toBe(false);
   });
   it('wires Cursor Agent hooks in an existing ~/.cursor, then is idempotent; skips them without one', async () => {
     const d = tmp(); const p = join(d, 'settings.json'); const cursorDir = join(d, 'cursor');
-    expect((await runSetup({ settingsPath: p, service: false, cursorDir , codexDir: join(d, 'codex') })).join('\n')).toContain('Cursor Agent not found');
+    expect((await runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir , codexDir: join(d, 'codex') })).join('\n')).toContain('Cursor Agent not found');
     expect(existsSync(join(cursorDir, 'hooks.json'))).toBe(false);
     mkdirSync(cursorDir);
     writeFileSync(join(cursorDir, 'hooks.json'), JSON.stringify({ version: 1, hooks: { stop: [{ command: 'other-tool stop' }] } }));
-    expect((await runSetup({ settingsPath: p, service: false, cursorDir , codexDir: join(d, 'codex') })).join('\n')).toContain('Cursor Agent hooks added');
+    expect((await runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir , codexDir: join(d, 'codex') })).join('\n')).toContain('Cursor Agent hooks added');
     const text = readFileSync(join(cursorDir, 'hooks.json'), 'utf8');
     expect(JSON.parse(text).hooks.stop.map((h: { command: string }) => h.command)).toEqual(['other-tool stop', 'ledge hook cursor stop']);
-    expect((await runSetup({ settingsPath: p, service: false, cursorDir , codexDir: join(d, 'codex') })).join('\n')).toContain('Cursor Agent hooks already present');
+    expect((await runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir , codexDir: join(d, 'codex') })).join('\n')).toContain('Cursor Agent hooks already present');
     expect(readFileSync(join(cursorDir, 'hooks.json'), 'utf8')).toBe(text);
   });
   it('leaves no temp file behind after writing', async () => {
     const d = tmp(); const p = join(d, 'settings.json');
-    await runSetup({ settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') });
+    await runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') });
     expect(readdirSync(d).filter(f => f.endsWith('.tmp'))).toEqual([]);
   });
   it('refuses an existing settings.json that is not valid JSON and leaves it untouched', async () => {
     const d = tmp(); const p = join(d, 'settings.json');
     writeFileSync(p, '{ // comment\n "model": ');
-    await expect(runSetup({ settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).rejects.toThrow('settings.json is not valid JSON, not modified');
+    await expect(runSetup({ platform: 'linux', settingsPath: p, service: false, cursorDir: join(d, 'cursor') , codexDir: join(d, 'codex') })).rejects.toThrow('settings.json is not valid JSON, not modified');
     expect(readFileSync(p, 'utf8')).toBe('{ // comment\n "model": ');
     expect(existsSync(p)).toBe(true);
   });
 });
 
-describe('systemd service', () => {
+linuxOnlySuite('linux-flow')('systemd service', () => {
   type Call = [string, string[]];
   const fakeRun = (answers: Record<string, { code: number; stdout?: string }> = {}) => {
     const calls: Call[] = [];
@@ -212,7 +213,7 @@ describe('systemd service', () => {
     const cli = join(d, 'npm/dist/cli/index.js'); mkdirSync(join(cli, '..'), { recursive: true }); writeFileSync(cli, '');
     const link = join(d, 'bin/ledge'); mkdirSync(join(d, 'bin')); symlinkSync(cli, link);
     const f = fakeRun({ 'systemctl --user is-active': { code: 3 }, 'loginctl show-user': { code: 0, stdout: 'Linger=yes\n' } });
-    await runSetup({ settingsPath: join(d, 'settings.json'), codexDir: join(d, 'codex'), cursorDir: join(d, 'cursor'), cli: link, link, unitDir, run: f.run });
+    await runSetup({ platform: 'linux', settingsPath: join(d, 'settings.json'), codexDir: join(d, 'codex'), cursorDir: join(d, 'cursor'), cli: link, link, unitDir, run: f.run });
     expect(readFileSync(link, 'utf8')).toContain(cli);
     expect(readFileSync(join(unitDir, SERVICE), 'utf8')).toContain(` ${cli} daemon`);
   });
@@ -291,7 +292,7 @@ describe('systemd service', () => {
   });
 });
 
-describe('writeBin', () => {
+linuxOnlySuite('linux-flow')('writeBin', () => {
   const dir = () => mkdtempSync(join(tmpdir(), 'ledge-bin-'));
   /** A CLI that prints its arguments, under a `dist/cli/index.js` like the real one. */
   const cli = (d: string, where: string) => {

@@ -18,6 +18,7 @@ import { filesOf } from '../src/daemon/files.js';
 import { History } from '../src/daemon/history.js';
 import { AttachmentStore } from '../src/daemon/attachments.js';
 import type { AttachmentRef } from '@ledge/protocol';
+import { linuxOnly } from './platform.js';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
 const T = '2026-10-20T12:00:00.000Z';
@@ -105,7 +106,7 @@ describe('OmpHost', () => {
     await until(() => store.get(s.id)!.state === 'idle' && store.get(s.id)!.lastReply?.text === 'done: and then this');
     expect(texts).toEqual(['first turn with a tool', 'and then this']);
   });
-  it('an unexpected exit ends the session with its signal state; a requested close reports nothing of its own', async () => {
+  linuxOnly('posix-signals')('an unexpected exit ends the session with its signal state; a requested close reports nothing of its own', async () => {
     const a = await host.launch({ cwd: tmpdir() });
     await host.close(a.id);
     expect(store.get(a.id)!.state).toBe('idle'); // the caller records a requested end

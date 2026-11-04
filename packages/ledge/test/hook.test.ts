@@ -12,6 +12,7 @@ import { startServer } from '../src/daemon/server.js';
 import { Store } from '../src/daemon/store.js';
 import { connect } from '../src/client.js';
 import { paths } from '../src/paths.js';
+import { isWindows } from './platform.js';  // pnpm is pnpm.cmd there: a shell starts it
 
 const at = '2026-10-09T18:00:00.000Z';
 let home: string;
@@ -186,9 +187,9 @@ describe('mapHook codex', () => {
       const p = procs[Number(pid)]; if (!p) throw new Error('ENOENT');
       return file === 'stat' ? `${pid} (a b) S ${p.ppid} 1 1` : p.cmd.join('\0') + '\0';
     };
-    expect(underCodexDaemon(read)).toBe(true);
+    expect(underCodexDaemon(read, 'linux')).toBe(true);
     procs[800]!.cmd = ['/x/codex', '-c', 'shell_environment_policy.set.X="1"'];
-    expect(underCodexDaemon(read)).toBe(false);
+    expect(underCodexDaemon(read, 'linux')).toBe(false);
   });
   it('carries the agent and the folder, for a session Ledge did not launch', () => {
     expect(mapHook('codex', 'SessionStart', codex({ source: 'startup' }), at)).toMatchObject({ agent: 'codex', cwd: '/home/dev/demo' });
@@ -716,16 +717,16 @@ describe('SessionEnd against a live daemon', () => {
 const CLI_MS = 20_000;
 describe('ledge hook (CLI)', () => {
   it('always exits 0, even with invalid stdin and no daemon', () => {
-    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'Stop'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
+    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'Stop'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8', shell: isWindows });
     expect(r.status).toBe(0);
   }, CLI_MS);
   it('takes the agent before the event (ledge hook codex Stop) and exits 0 too', () => {
-    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'codex', 'Whatever'], { input: '{"session_id":"s"}', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
+    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'codex', 'Whatever'], { input: '{"session_id":"s"}', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8', shell: isWindows });
     expect(r.status).toBe(0);
     expect(readFileSync(join(home, 'daemon.log'), 'utf8')).toContain('hook codex Whatever ignored');
   }, CLI_MS);
   it('a Cursor hook always exits 0 and answers {} on stdout, which lets the agent go on', () => {
-    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'cursor', 'preToolUse'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8' });
+    const r = spawnSync('pnpm', ['exec', 'tsx', 'src/cli/index.ts', 'hook', 'cursor', 'preToolUse'], { input: '{{{', env: { ...process.env, LEDGE_HOME: home }, encoding: 'utf8', shell: isWindows });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe('{}');
   }, CLI_MS);

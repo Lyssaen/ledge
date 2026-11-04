@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { ChunkAssembler, OmpRpc, RpcError, lineReader } from '../src/daemon/omp/rpc.js';
+import { linuxOnlySuite } from './platform.js';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
 const start = (args: string[] = [], env: NodeJS.ProcessEnv = {}) => OmpRpc.start({ command: FAKE, args: ['--session-dir', '/tmp/ledge-fake-omp', ...args], cwd: '/tmp', env: { ...process.env, ...env } });
@@ -29,7 +30,8 @@ describe('lineReader', () => {
   });
 });
 
-describe('OmpRpc', () => {
+// OMP is not on Windows (spec 2026-11-03 §2): its RPC tests fail on the Windows CI runner (the fake process exits early).
+linuxOnlySuite('hidden-in-native')('OmpRpc', () => {
   it('waits for ready, answers a command by its id and resolves with its data', async () => {
     const rpc = await start();
     expect(rpc.ready).toMatchObject({ protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576 });
@@ -80,7 +82,7 @@ describe('OmpRpc', () => {
   });
 });
 
-describe('protocol 2: rpc_chunk', () => {
+linuxOnlySuite('hidden-in-native')('protocol 2: rpc_chunk', () => {
   it('negotiates 2 when announced, and a response past 1 MiB comes back whole, multi-byte text split across chunks included', async () => {
     const rpc = await start();
     expect(rpc.protocol).toBe(2);

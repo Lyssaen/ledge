@@ -284,3 +284,31 @@ Plan: `docs/superpowers/plans/2026-11-04-windows-agents.md`.
 | Cleanup | The user Path entry the installer added was removed. `Programs\OpenAI`, the test `CODEX_HOME` and a `~\.codex` created by a manual `codex --version` during diagnosis (none existed before) were removed. `settings.json` and the user's Desktop were restored. |
 
 **Seen during the run:** the page shows the card only once connected. A first launch with no token yet connects after the client's backoff, which can take several seconds.
+
+## The SSH link from native Windows (the EC2's part)
+
+**Setup.** Nothing changed in Ledge: the transport already starts `ssh` (`transport/ssh.ts`), which on Windows resolves to `C:\Windows\System32\OpenSSH\ssh.exe` (OpenSSH_for_Windows 9.5p2). The test server was `legion`, a Linux machine running the Ledge 0.42.0 service, standing in for the EC2. The Windows side was given, at the user's choice:
+
+- a dedicated key, `%USERPROFILE%\.ssh\id_ed25519_ledge_test`, without a passphrase (Ledge runs ssh in `BatchMode`), authorized on legion under the comment `ledge-windows-test`;
+- a `Host legion` block in `%USERPROFILE%\.ssh\config`;
+- legion's host key, copied from WSL's `known_hosts`, so `StrictHostKeyChecking=yes` holds without trusting a first connection.
+
+**Results.**
+
+| Check | Result |
+|---|---|
+| ssh with Ledge's options | `-T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15` from Windows logs in with the key. |
+| The daemon's `/ssh/legion` route (what Desktop opens for an SSH machine and for « Tester ») | The native daemon on the PC (port 27832) answers with legion's snapshot through `ledge bridge`: daemon 0.42.0, 3 sessions, the Linux launcher `/home/gch/.nvm/…/node …/cli/index.js`. |
+| A remote session's terminal | Desktop runs `ssh -t -- legion '<node>' '<cli>' attach <id>` (POSIX-quoted) in a Windows pseudo-terminal. The same command with `--version`, run through node-pty, answers `0.42.0` with exit 0: the quoting survives Windows' command line and `ssh -t`. |
+
+**Not covered here:**
+
+- OpenRig on the remote (legion has none). The OpenRig page and its `openrig.*` messages go to the remote daemon by the same route, with no Windows-specific code.
+- Attaching to a live remote agent (legion had none running, and none was launched there for the test).
+- Adding the machine in Desktop's Settings, which is the same front code as in WSL mode.
+
+**For the PO's PC:**
+
+- Provisioning a key and an `%USERPROFILE%\.ssh\config` alias for the EC2 is an ops task (spec §4.2.7).
+- The key must have no passphrase, or be held by the Windows ssh-agent service, since Ledge runs ssh in `BatchMode`.
+- The EC2's host key must be approved once.

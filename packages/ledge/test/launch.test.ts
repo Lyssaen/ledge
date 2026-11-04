@@ -12,6 +12,7 @@ import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
 import { killTestServer, until } from './helpers.js';
 import { realTmux, run, type Tmux } from '../src/tmux.js';
+import { linuxOnly } from './platform.js';
 
 const agent = fileURLToPath(new URL('./fake-agent.mjs', import.meta.url));
 const noop: Tmux = { async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; }, async hasSession() { return false; }, async listSessions() { return []; }, async setOption() {}, async killSession() {}, attachArgs: () => [] };
@@ -133,7 +134,7 @@ describe('launch', () => {
   afterEach(async () => { await srv.close(); await killTestServer(socket); vi.restoreAllMocks(); });
   const only = () => { const all = store.all(); expect(all).toHaveLength(1); return all[0]!; };
 
-  it("gives the agent the launcher's environment, not the tmux server's", async () => {
+  linuxOnly('tmux')("gives the agent the launcher's environment, not the tmux server's", async () => {
     // Start the server first: its global environment is frozen without the probe variables.
     await tmux.newSession({ name: 'warm', cwd: '/tmp', env: {}, command: ['sleep', '60'] });
     const out = join(process.env.LEDGE_HOME!, 'env-probe');
@@ -149,7 +150,7 @@ describe('launch', () => {
     expect(readFileSync(out, 'utf8')).toBe(`from the launcher|unset|${only().name}`);
   });
 
-  it("returns the agent's exit code (not tmux attach's) and unregisters with it", async () => {
+  linuxOnly('tmux')("returns the agent's exit code (not tmux attach's) and unregisters with it", async () => {
     const code = await launch('claude', ['--name', 'otto'], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'work', '400', 'exit', '7'], attach: ptyAttach });
     expect(code).toBe(7);
     await until(() => store.all()[0]?.state === 'exited');
@@ -157,7 +158,7 @@ describe('launch', () => {
     expect(await tmux.listSessions()).toEqual([]);
   });
 
-  it('unregisters through a fresh connection, so a daemon restart meanwhile is survived', async () => {
+  linuxOnly('tmux')('unregisters through a fresh connection, so a daemon restart meanwhile is survived', async () => {
     const code = await launch('claude', [], {
       port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'work', '600', 'exit', '3'],
       attach: async (args, env) => {
@@ -171,7 +172,7 @@ describe('launch', () => {
     expect(only().exitCode).toBe(3);
   });
 
-  it('a detach leaves the agent running and registered, and returns 0', async () => {
+  linuxOnly('tmux')('a detach leaves the agent running and registered, and returns 0', async () => {
     const code = await launch('claude', [], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'work', '60000'], attach: async () => 0 });
     expect(code).toBe(0);
     await until(() => store.all().length === 1);
@@ -179,7 +180,7 @@ describe('launch', () => {
     expect(await tmux.hasSession(only().tmuxSession!)).toBe(true);
   });
 
-  it('returns the exit code of an agent that exits before the attach even starts', async () => {
+  linuxOnly('tmux')('returns the exit code of an agent that exits before the attach even starts', async () => {
     const code = await launch('claude', [], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['sh', '-c', 'exit 9'], attach: ptyAttach });
     expect(code).toBe(9);
     await until(() => store.all()[0]?.state === 'exited');
@@ -187,7 +188,7 @@ describe('launch', () => {
     expect(readdirSync(process.env.LEDGE_HOME!).filter(f => f.startsWith('exit-'))).toEqual([]);
   });
 
-  it('after a detach, an exit while someone else is attached still ends the session', async () => {
+  linuxOnly('tmux')('after a detach, an exit while someone else is attached still ends the session', async () => {
     const code = await launch('claude', [], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'work', '1000', 'exit', '0'], attach: async () => 0 });
     expect(code).toBe(0);
     const name = only().tmuxSession!;
@@ -197,7 +198,7 @@ describe('launch', () => {
     expect(await tmux.hasSession(name)).toBe(false);
   });
 
-  it('a failed attach never unregisters a live agent', async () => {
+  linuxOnly('tmux')('a failed attach never unregisters a live agent', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const code = await launch('claude', [], { port: srv.port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'work', '60000'], attach: async () => 1 });
     expect(code).toBe(1);
@@ -206,7 +207,7 @@ describe('launch', () => {
     expect(err.mock.calls.flat().join('\n')).toMatch(/could not attach/);
   });
 
-  it('when the port belongs to another program, says so and still runs the agent untracked', async () => {
+  linuxOnly('tmux')('when the port belongs to another program, says so and still runs the agent untracked', async () => {
     const foreign = createServer(sock => sock.end());
     await new Promise<void>(r => foreign.listen(0, '127.0.0.1', r));
     const port = (foreign.address() as { port: number }).port;
@@ -220,7 +221,7 @@ describe('launch', () => {
     } finally { foreign.close(); }
   });
 
-  it('falls back to an untracked launch when the daemon stops answering during session creation', async () => {
+  linuxOnly('tmux')('falls back to an untracked launch when the daemon stops answering during session creation', async () => {
     // Speaks just enough Ledge to pass ensureDaemon, then ignores snapshot.request.
     const mute = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     await new Promise<void>(r => mute.once('listening', r));
@@ -233,7 +234,7 @@ describe('launch', () => {
     } finally { for (const c of mute.clients) c.terminate(); await new Promise(r => mute.close(r)); }
   });
 
-  it('when no daemon can be reached, says so and still runs the agent', async () => {
+  linuxOnly('tmux')('when no daemon can be reached, says so and still runs the agent', async () => {
     const port = await freePort();
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const code = await launch('claude', [], { port, tmuxSocket: socket, cwd: '/tmp', command: ['node', agent, 'exit', '0'], attach: ptyAttach, spawnDaemon: () => {}, retryDelayMs: 20 });
@@ -249,7 +250,7 @@ describe('spawnSession', () => {
     const s = await spawnSession({ tool: 'claude', id: 'ab12', args: ['--resume', 'u-1'], cwd: '/tmp', tmux, taken: { names: [], ids: ['ab12'] } });
     expect(s.id).toBe('ab12'); expect(created[0]!.name).toBe('ledge-ab12');
   });
-  it('starts the agent without a launching Claude Code session\'s variables, even from the tmux server\'s global environment', async () => {
+  linuxOnly('tmux')('starts the agent without a launching Claude Code session\'s variables, even from the tmux server\'s global environment', async () => {
     const socket = `ledge-test-env-${process.pid}-${Date.now()}`;
     const tmux = realTmux(socket, { scope: async () => false });
     try {
