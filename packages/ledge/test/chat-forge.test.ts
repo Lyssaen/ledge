@@ -97,6 +97,20 @@ describe('forge files', () => {
     now += 2_000; await forge.write(ctx(), p);
     expect(calls).toHaveLength(first * 2);
   });
+  it('read: false runs no forge command: what was read before, dated whatever its age, and « not read yet » otherwise', async () => {
+    let now = Date.parse(T);
+    const { run, calls } = fakeRun({ '/w/a': 'git@github.com:o/a.git' });
+    const forge = createForge({ run, now: () => new Date(now).toISOString() });
+    const p = projects([{ machine: 'local', path: '/w/a' }]);
+    let c = ctx(); await forge.write(c, p, { read: false });
+    expect(calls).toHaveLength(0);
+    expect(readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8')).toContain('github.com/o/a — not read yet');
+    expect(readFileSync(join(c.dir, 'forge.md'), 'utf8')).toContain('Ledge: forge-ledge.md');
+    await forge.write(ctx(), p); const read = calls.length;
+    now += 3_600_000; c = ctx(); await forge.write(c, p, { read: false });
+    expect(calls).toHaveLength(read);
+    expect(readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8')).toContain(`read at ${T}`);
+  });
   it('without projects, no file', async () => {
     const c = ctx(); await createForge({ run: fakeRun({}).run, now: () => T }).write(c, { projects: [], rules: [] });
     expect(existsSync(join(c.dir, 'forge.md'))).toBe(false);
@@ -112,7 +126,7 @@ describe('redact', () => {
 
 describe('asksForge', () => {
   it('recognises a question about issues, PR/MR, CI or what was merged', () => {
-    for (const q of ['quelles issues sont ouvertes sur ledge ?', 'où en est la MR de Pim ?', 'la CI de main est-elle verte ?', 'qu’est-ce qui a été mergé cette semaine ?', 'any open pull requests?', 'le pipeline a cassé ?'])
+    for (const q of ['quelles issues sont ouvertes sur ledge ?', 'où en est la MR de Pim ?', 'la CI de main est-elle verte ?', 'qu’est-ce qui a été mergé cette semaine ?', 'any open pull requests?', 'le pipeline a cassé ?', 'la build de main est rouge ?', 'des demandes de fusion en attente ?'])
       expect(asksForge(q)).toBe(true);
     for (const q of ['où en sont les autres ?', 'lance une session sur ledge']) expect(asksForge(q)).toBe(false);
   });

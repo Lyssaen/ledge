@@ -28,8 +28,11 @@ describe('claudeArgs', () => {
     const a = claudeArgs(opts());
     expect(a.slice(0, 2)).toEqual(['-p', '--restricted']);
     expect(a).toContain('--tools'); expect(a[a.indexOf('--tools') + 1]).toBe('Read,Grep,Glob');
-    for (const f of ['--permission-mode', '--output-format', '--verbose', '--include-partial-messages', '--max-turns', '--append-system-prompt', '--add-dir', '--session-id']) expect(a).toContain(f);
-    expect(a[a.indexOf('--append-system-prompt') + 1]).toBe(PERSONA);
+    for (const f of ['--permission-mode', '--output-format', '--verbose', '--include-partial-messages', '--max-turns', '--system-prompt', '--add-dir', '--session-id']) expect(a).toContain(f);
+    // The persona replaces Claude Code's own prompt, and no MCP server (claude.ai connectors included) is loaded.
+    expect(a[a.indexOf('--system-prompt') + 1]).toBe(PERSONA);
+    expect(a).not.toContain('--append-system-prompt');
+    expect(a).toContain('--strict-mcp-config'); expect(a).not.toContain('--mcp-config');
     expect(a).not.toContain('--resume'); expect(a).not.toContain('Bash');
     expect(claudeArgs(opts({ resume: true }))).toContain('--resume');
   });

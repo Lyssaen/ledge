@@ -9,6 +9,9 @@ import { runJsonl } from './run.js';
  */
 export function codexArgs(o: RunOptions): string[] {
   // `exec resume` rejects --sandbox and -C after the id (they belong to `exec`), but takes the rest, including -i.
+  // Codex's sandbox confines writes, not reads: read-only reads the whole disk whatever is passed, so the context folder and the
+  // repositories cannot be the only readable places as they are for Claude (`--restricted` + `--add-dir`) and OMP. The persona's
+  // « Ne lis que ce que la question demande » and the read-only shell are the guard here; `disk-full-read-access` only says so.
   const exec = ['--sandbox', 'read-only', '-C', o.cwd];
   const flags = ['--json', '--skip-git-repo-check', '--ignore-user-config', '-c', 'sandbox_permissions=["disk-full-read-access"]',
     '-c', `developer_instructions=${JSON.stringify(o.persona ?? buildPersona('codex'))}`, ...(o.images ?? []).flatMap(i => ['-i', i.path]), '-'];

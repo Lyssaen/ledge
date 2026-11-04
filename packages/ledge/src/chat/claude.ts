@@ -18,10 +18,14 @@ export interface RunOptions {
   images?: Array<{ path: string; mime: ImageMime }>;
 }
 
-/** `claude -p` headless, restricted to reading (spec §5.2); the question goes on stdin, never in argv. */
+/**
+ * `claude -p` headless, restricted to reading (spec §5.2); the question goes on stdin, never in argv. The persona is the whole
+ * system prompt: Claude Code's own (a terminal, code, games) is not Ledge's, and the working folder and the date still reach the
+ * model. `--strict-mcp-config` with no `--mcp-config` loads no MCP server, the account's claude.ai connectors included.
+ */
 export function claudeArgs(o: RunOptions): string[] {
-  return ['-p', '--restricted', '--tools', 'Read,Grep,Glob', '--permission-mode', 'dontAsk', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-    '--max-turns', String(o.maxTurns ?? 16), '--append-system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]), ...(o.resume ? ['--resume', o.sessionId] : ['--session-id', o.sessionId]),
+  return ['-p', '--restricted', '--strict-mcp-config', '--tools', 'Read,Grep,Glob', '--permission-mode', 'dontAsk', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
+    '--max-turns', String(o.maxTurns ?? 16), '--system-prompt', o.persona ?? PERSONA, ...o.addDirs.flatMap(d => ['--add-dir', d]), ...(o.resume ? ['--resume', o.sessionId] : ['--session-id', o.sessionId]),
     ...(o.images?.length ? ['--input-format', 'stream-json'] : [])];
 }
 

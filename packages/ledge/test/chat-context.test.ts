@@ -132,7 +132,7 @@ describe('writeContext: tasks', () => {
     const now = new Date().toISOString();
     const task = (id: string, extra: object) => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'a', ownerName: 'Otto', state: 'open' as const, at: T0, updatedAt: now, log: [], ...extra });
     await writeContext(dir, {
-      sessions: [mk('a')], now: T0, capture: async () => null, git: async () => null,
+      sessions: [mk('a')], now, capture: async () => null, git: async () => null,
       tasks: [task('t000001', { state: 'done', result: 'fait' }), task('t000002', {}), task('t000003', { state: 'done', updatedAt: '2020-01-01T00:00:00.000Z' })]
     });
     expect(existsSync(join(dir, 'roles.md'))).toBe(false);
@@ -141,5 +141,57 @@ describe('writeContext: tasks', () => {
     expect(tasks).toContain('t000001 « Tâche t000001 » — giver Ledge, owner Otto, done: fait');
     expect(tasks).toContain('t000002');
     expect(tasks).not.toContain('t000003');
+  });
+});
+
+describe('writeContext: what the actions need', () => {
+  it('« closed today » is the context\'s day, not the clock\'s; a task\'s detail follows it on one line, cut past 1 000 characters', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const task = (id: string, extra: object) => ({ id, title: `Tâche ${id}`, giver: 'a', giverName: 'Otto', owner: 'ledge', ownerName: 'Ledge', state: 'open' as const, at: T0, updatedAt: T0, log: [], ...extra });
+    await writeContext(dir, {
+      sessions: [], now: T0, capture: async () => null, git: async () => null,
+      tasks: [task('t1', { text: 'Fusionner feat/roles ?\nA) oui\nB) non — je recommande A' }), task('t2', { state: 'done', text: 'x'.repeat(1500) }), task('t3', { state: 'done', updatedAt: '2026-10-10T23:59:00.000Z' })]
+    });
+    const md = readFileSync(join(dir, 'tasks.md'), 'utf8');
+    expect(md).toContain('  - detail: Fusionner feat/roles ? A) oui B) non — je recommande A');
+    expect(md).toContain(`  - detail: ${'x'.repeat(1000)}… (cut: \`ledge task show t2\` has the rest)`);
+    expect(md).not.toContain('x'.repeat(1001));
+    expect(md).not.toContain('t3');
+  });
+
+  it('sessions.md says the model, the effort, the machine and the queued instructions when there are some', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    await writeContext(dir, { sessions: [mk('a', { model: 'claude-opus-5-5', effort: 'high', machineName: 'PC', offline: true, queue: [{ text: 'x', mode: 'follow_up' }] }), mk('b', { effort: 'low' })], now: T0, capture: async () => null, git: async () => null });
+    const md = readFileSync(join(dir, 'sessions.md'), 'utf8');
+    expect(md).toContain('- model: claude-opus-5-5, effort high');
+    expect(md).toContain("- model: the agent's default, effort low");
+    expect(md).toContain('- machine: PC (unreachable: last known state)');
+    expect(md).toContain('- queued instructions: 1 (sent once it is free)');
+  });
+
+  it('archived sessions are listed apart, with no terminal, reply nor git, and their folder is not readable', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const ctx = await writeContext(dir, { sessions: [mk('a', { cwd: '/w/old', archivedAt: T0, lastReply: { text: 'old', at: T0 } })], now: T0, capture: async () => ['x'], git: async () => 'g' });
+    const md = readFileSync(join(dir, 'sessions.md'), 'utf8');
+    expect(md).not.toContain('## Otto');
+    expect(md).toContain(`- Otto (claude), id a, folder /w/old, archived ${T0}`);
+    for (const f of ['pane-a.txt', 'reply-a.md', 'git-a.txt']) expect(existsSync(join(dir, f))).toBe(false);
+    expect(ctx.repoPaths).toEqual([]);
+  });
+
+  it('the projects\' repositories on this machine are readable even with no session, when they exist', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const repo = mkdtempSync(join(tmpdir(), 'repo-'));
+    const projects: Projects = { projects: [{ id: 'p', name: 'P', color: 'blue', description: '', repos: [{ machine: 'local', path: repo }, { machine: 'local', path: '/nowhere/gone' }, { machine: 'devbox', path: '/srv/p' }] }], rules: [] };
+    const ctx = await writeContext(dir, { sessions: [], projects, now: T0, capture: async () => null, git: async () => null });
+    expect(ctx.repoPaths).toEqual([repo]);
+  });
+
+  it('folders.md leaves out the folders under the temporary directory (an agent\'s scratchpad)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const recents = [{ cwd: join(tmpdir(), 'claude-1000', 'scratchpad', 'test-multi'), project: 'test-multi', lastAt: T0 }, { cwd: '/tmp/x', project: 'x', lastAt: T0 }, { cwd: '/w/ledge', project: 'ledge', lastAt: T0 }];
+    await writeContext(dir, { sessions: [], recents, now: T0, capture: async () => null, git: async () => null });
+    const md = readFileSync(join(dir, 'folders.md'), 'utf8');
+    expect(md).toContain('- ledge: /w/ledge'); expect(md).not.toContain('test-multi'); expect(md).not.toContain('/tmp/x');
   });
 });

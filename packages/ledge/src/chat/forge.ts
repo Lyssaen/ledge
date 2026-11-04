@@ -61,7 +61,7 @@ export function redact(text: string): string {
 
 /** A question the forge files can help with: issues, pull/merge requests, CI, what was merged. */
 export function asksForge(question: string): boolean {
-  return /\b(?:issues?|tickets?|PRs?|pull[- ]?requests?|MRs?|merge[- ]?requests?|merg\w*|CI|pipelines?|workflows?|github|gitlab|forge|actions)\b/i.test(question);
+  return /\b(?:issues?|tickets?|PRs?|pull[- ]?requests?|MRs?|merge[- ]?requests?|merg\w*|CI|pipelines?|workflows?|github|gitlab|forge|actions|builds?|checks?|releases?)\b|demandes? de fusion/i.test(question);
 }
 
 const execRun = (env: () => Promise<NodeJS.ProcessEnv>): ForgeRun => async (file, args, cwd) => {
@@ -77,8 +77,13 @@ const execRun = (env: () => Promise<NodeJS.ProcessEnv>): ForgeRun => async (file
 
 export interface ForgeDeps { run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => string; ttlMs?: number }
 export interface Forge {
-  /** Writes `forge.md` and a `forge-<project>.md` per project into the chat's folder and registers them as steps; nothing without projects. */
-  write(ctx: { dir: string; steps: Map<string, ChatStep> }, projects: Projects): Promise<void>;
+  /**
+   * Writes `forge.md` and a `forge-<project>.md` per project into the chat's folder and registers them as steps; nothing without
+   * projects. `read: false` runs no forge command: what was read before is written, dated, whatever its age, and a repository never
+   * read says so (a question that does not name issues, PR/MR or CI never waits on the network, yet the chat never takes a missing
+   * file for no access).
+   */
+  write(ctx: { dir: string; steps: Map<string, ChatStep> }, projects: Projects, opts?: { read?: boolean }): Promise<void>;
 }
 
 const NOT_LOGGED = /auth login|not logged|authenticat|unauthori[sz]ed|\b401\b|\b403\b/i;
@@ -110,16 +115,18 @@ export function createForge(deps: ForgeDeps = {}): Forge {
     cache.set(f.repo, fresh);
     return fresh;
   }
-  async function section(path: string): Promise<{ lines: string[]; source?: string }> {
+  async function section(path: string, read: boolean): Promise<{ lines: string[]; source?: string }> {
     const remote = await run('git', ['config', '--get', 'remote.origin.url'], path);
     const f = remote.code === 0 ? forgeOf(remote.stdout) : null;
     if (!f) return { lines: [`# ${path}`, '', 'This repository has no GitHub or GitLab remote (origin): nothing to read.', ''] };
-    const r = await reads(f);
+    const r = read ? await reads(f) : cache.get(f.repo);
+    if (!r) return { lines: [`# ${f.host}/${f.path} — not read yet`, `Local repository: ${path}`, '', 'Ledge reads this forge when a question is about issues, pull/merge requests or CI: nothing was read for this one.', ''], source: `${f.host}/${f.path}` };
     return { lines: [`# ${f.host}/${f.path} — read at ${r.at}`, `Local repository: ${path}`, '', ...r.lines], source: `${f.host}/${f.path}` };
   }
 
   return {
-    async write(ctx, projects) {
+    async write(ctx, projects, opts = {}) {
+      const read = opts.read ?? true;
       if (projects.projects.length === 0) return;
       const index = ['# GitHub / GitLab', '', 'What the daemon read from the forges of each project\'s repositories on this machine (open issues, pull/merge requests, CI). Each file says when it was read.', ''];
       await Promise.all(projects.projects.map(async p => {
@@ -127,7 +134,7 @@ export function createForge(deps: ForgeDeps = {}): Forge {
         const file = `forge-${p.id}.md`;
         const name = p.name.replace(/\s*[\r\n]+\s*/g, ' ').trim();
         if (local.length === 0) { index.push(`- ${name}: no repository on this machine`); return; }
-        const parts = await Promise.all(local.map(r => section(r.path)));
+        const parts = await Promise.all(local.map(r => section(r.path, read)));
         await writeFile(join(ctx.dir, file), parts.flatMap(s => s.lines).join('\n'));
         const sources = parts.flatMap(s => (s.source ? [s.source] : []));
         ctx.steps.set(file, { kind: 'repo', name, path: sources.join(', ') || file });
