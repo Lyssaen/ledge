@@ -3,6 +3,7 @@
 @import "./shell.css";
 @import "./sidebar.css";
 @import "@ledge/ui/atelier/atelier.css";
+@import "./atelier-corner.css";
 @import "./list.css";
 @import "./session.css";
 @import "./launch.css";

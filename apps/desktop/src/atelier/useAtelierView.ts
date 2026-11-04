@@ -32,6 +32,8 @@ const TAP_SLOP = 8;
 const OWN_SPACE = 'button,a,input,textarea,select,[role=button],[role=checkbox],[role=menuitem],[role=tab],[contenteditable=true]';
 /** What the floor keeps in sight: Ledge in its corner and the mosaic's tiles. */
 const TILES = '.ledge-corner,.project-room,.empty-project,.unassigned-zone';
+/** The shell's side padding, set by the fit: a custom property, so Ledge's corner can stay at the shell's left edge (atelier-corner.css). */
+const PAD_INLINE = '--atelier-pad';
 const NO_PAD = { left: 0, right: 0, top: 0, bottom: 0 };
 
 /** The atelier as a canvas (observatory.tsx, the first `useLayoutEffect`, `zoomAt`, `fitView`, `zoomTo`, `zoomStep` and the
@@ -86,7 +88,8 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
       : centreOf({ zoom: applied.current, left: scroll.scrollLeft - pad.current.left, top: scroll.scrollTop - pad.current.top }, { width: scroll.clientWidth, height: scroll.clientHeight });
     placeFloor(null);
     const s = shell.style;
-    s.width = s.paddingInline = s.minHeight = s.maxWidth = s.marginInline = '';
+    s.width = s.minHeight = s.maxWidth = s.marginInline = '';
+    s.removeProperty(PAD_INLINE);
     s.zoom = '1';
     // Measured as fitted (no scroll bars), whatever the manual zoom.
     scroll.classList.add('fitted');
@@ -120,8 +123,8 @@ export function useAtelierView(tiles: readonly number[], refit: readonly unknown
       s.maxWidth = `${best!.w}px`; s.zoom = String(z);
       // Then fill both axes: the floor spans the whole width (padding instead of a max width) and the leftover height.
       s.maxWidth = '';
-      s.paddingInline = `${Math.max(FLOOR_MARGIN, (shell.offsetWidth - best!.w) / 2 + FLOOR_MARGIN)}px`;
-      if (!fits()) { s.paddingInline = ''; s.maxWidth = `${best!.w}px`; }
+      s.setProperty(PAD_INLINE, `${Math.max(FLOOR_MARGIN, (shell.offsetWidth - best!.w) / 2 + FLOOR_MARGIN)}px`);
+      if (!fits()) { s.removeProperty(PAD_INLINE); s.maxWidth = `${best!.w}px`; }
       const extra = scroll.scrollHeight - shell.getBoundingClientRect().height;
       s.minHeight = `${Math.max(0, (scroll.clientHeight - extra - 4) / z)}px`;
       if (!fits()) s.minHeight = '';
