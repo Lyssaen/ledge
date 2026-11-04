@@ -13,6 +13,7 @@ Ledge veille sur les sessions d'agents de l'utilisateur : Claude Code, Codex, Cu
   - `ledge send` et `ledge read` servent aux messages entre sessions ;
   - `ledge task`, `ledge decide`, `ledge handover` et `ledge close` gèrent les tâches, les décisions, la passation de relais et la fermeture ;
   - `ledge brain` montre ce que Ledge sait de lui-même (`@ledge`, `@projects`, `@machines`) et l'index des notes de l'utilisateur ; `ledge brain <nom>` en lit une ;
+  - une session propose un fait durable pour une note avec `ledge brain propose <nom> "<fait>" "<source>"` (`new:<nom>` : une nouvelle note), ou en signale une fausse avec `ledge brain flag <nom> "<quoi>"`. C'est une décision posée à l'utilisateur, comme `ledge task give ledge` : « oui » écrit le fait daté sous `## Ajouts`, « oui : <texte> » écrit ce texte à la place, toute autre réponse n'écrit rien ;
   - `ledge tui` est Ledge dans un terminal ;
   - `ledge setup` et `ledge uninstall` installent et retirent les hooks et `~/.ledge`.
 - **Ledge Desktop** est l'application Windows : la fenêtre principale (accueil, atelier, sessions, réglages) et l'**encoche**.

@@ -6,7 +6,7 @@ import { readProjects } from '../daemon/projects.js';
 import { installedAgents, ledgeMd, readGuide } from '../chat/guide.js';
 import { projectsMd } from '../chat/context.js';
 import { LEDGE_VERSION } from '../version.js';
-import { forSession, NOTE_MAX, noteDate, notesDir, readNotes, type Note } from './notes.js';
+import { forSession, NOTE_MAX, noteDate, notesDir, oneLine, readNotes, type Note } from './notes.js';
 
 /** The most notes a session is told of when it starts: the rest is one `ledge brain` away. */
 export const INDEX_TOLD = 20;
@@ -28,7 +28,7 @@ export function projectFor(cwd: string, projects: Projects = readProjects()): { 
 
 /** One index line: the name `ledge brain` takes, the title, when to read it, its date. */
 export const indexLine = (n: Note): string =>
-  `- ${n.name} — « ${n.title} » — ${n.when ? `quand : ${n.when}` : `première ligne : ${n.firstLine || '(vide)'}`} — ${noteDate(n)}${n.truncated ? ' — longue : seul le début est lu' : ''}`;
+  `- ${n.name} — « ${n.title} » — ${n.when ? `quand : ${n.when}` : `première ligne : ${n.firstLine || '(vide)'}`} — ${noteDate(n)}${n.truncated ? ' — longue : seul le début est lu' : ''}${n.flag ? ` — à revoir : ${oneLine(n.flag)}` : ''}`;
 
 /**
  * The brain block of a launched session's start context: how to read what Ledge says of itself, then the index of the notes
@@ -44,6 +44,7 @@ export function brainContext(notes: readonly Note[]): string {
       ...(notes.length > shown.length ? [`- et ${notes.length - shown.length} autre(s) : \`ledge brain\``] : [])
     );
   }
+  lines.push("Tu apprends un fait durable sur l'environnement (pas sur le code) : `ledge brain propose <nom> \"<fait>\" \"<comment tu le sais>\"` (`new:<nom>` pour une nouvelle note) ; une note te semble fausse : `ledge brain flag <nom> \"<ce qui ne va pas>\"`. Jamais la valeur d'un secret. L'utilisateur valide avant que rien ne s'écrive.");
   return lines.join('\n');
 }
 

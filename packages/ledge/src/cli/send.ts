@@ -99,7 +99,7 @@ export async function readMessage(args: string[], opts: { port?: number; env?: N
  * the sandbox, so anything a shell would do beyond a plain word list (chaining, pipes, redirections, substitution,
  * comments, an unquoted backslash, newline or glob/tilde character) makes it `undefined`, as does an unclosed quote.
  */
-export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send' | 'read' | 'task' | 'handover'; args: string[] } | undefined {
+export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'send' | 'read' | 'task' | 'handover' | 'brain'; args: string[] } | undefined {
   command = command.replace(/[\r\n\s]+$/, ''); // a trailing newline ends the one command, it chains nothing
   const words: string[] = [];
   let word = ''; let inWord = false; let quote: '"' | "'" | undefined;
@@ -127,5 +127,7 @@ export function parseLedgeCommand(command: string): { cmd: 'who' } | { cmd: 'sen
   if (words[1] === 'read') return { cmd: 'read', args: words.slice(2) };
   if (words[1] === 'task') return { cmd: 'task', args: words.slice(2) };
   if (words[1] === 'handover') return { cmd: 'handover', args: words.slice(2) };
+  // Only the writes: `ledge brain` and `ledge brain <nom>` read this machine's files, in the agent's own shell.
+  if (words[1] === 'brain' && (words[2] === 'propose' || words[2] === 'flag')) return { cmd: 'brain', args: words.slice(2) };
   return undefined;
 }

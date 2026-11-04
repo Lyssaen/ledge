@@ -38,7 +38,13 @@ describe('readNotes', () => {
 
 describe('brainContext (a launched session\'s start context)', () => {
   it('always says how to read what Ledge says of itself; the notes\' index only when there are some, never their text', async () => {
-    expect(brainContext([])).toBe("Ce que Ledge sait de lui-même (ses écrans, ses commandes, ses actions) : `ledge brain @ledge` ; tout ce qu'il sait : `ledge brain`.");
+    const empty = brainContext([]);
+    expect(empty.split('\n')[0]).toBe("Ce que Ledge sait de lui-même (ses écrans, ses commandes, ses actions) : `ledge brain @ledge` ; tout ce qu'il sait : `ledge brain`.");
+    expect(empty).not.toContain('Notes de l\'utilisateur');
+    // How to propose a fact or flag a note, always: the user validates.
+    expect(empty).toContain('`ledge brain propose <nom> "<fait>" "<comment tu le sais>"`');
+    expect(empty).toContain('`ledge brain flag <nom> "<ce qui ne va pas>"`');
+    expect(empty).toContain('Jamais la valeur d\'un secret');
     note('reseau.md', '---\ntitle: Le réseau\nwhen: une question sur le réseau\nchecked: 2026-11-01\n---\nLe secret du réseau.\n');
     note('bots.md', 'Les bots tournent sur la tablette.\n');
     const text = brainContext((await readNotes(from)).notes);

@@ -176,7 +176,13 @@ only the user does.
 - **Lot 1 — read**: §3.1–3.5 without `propose`/`flag`. Built on `feat/brain-lot1` (2026-11-04) with the defaults of §6. Tests: index parsing (scope, projects, checked, clash with a
   generated name), daemon filtering per session, hook block (cap, empty), CLI on all four harnesses, chat unchanged
   for an older notes folder.
-- **Lot 2 — write-back**: §3.6, after the mockup. Tests: append and create, redaction refusal, scope refusal, caps,
+- **Lot 2 — write-back**: §3.6, after the mockup. Built on `feat/brain-lot2` (2026-11-04) **without new UI**, so without a
+  mockup: a proposal is a decision put to the user (a task given to Ledge carrying `brain`), shown and answered where every
+  decision already is (« À toi », `ledge decide`, the phone, the chat's `task.answer`). Its detail is two ready answers
+  (« oui — … », « non — … »), which the desktop offers as buttons; « oui : <texte> » writes that text instead; any other answer
+  writes nothing. The daemon checks the proposal before asking (unknown or chat-only note, secret-looking text, 3 pending per
+  session) and writes on the answer, in the task's close. Dedicated buttons and the Settings list stay for a later lot, with
+  their mockup; so does the chat's own `note.add` card (§3.5), which needs each front's copy. Tests: append and create, redaction refusal, scope refusal, caps,
   flag lifecycle, notice to the session.
 - **Lot 3 — freshness**: §3.7 and the Settings list.
 

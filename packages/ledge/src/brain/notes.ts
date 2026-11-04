@@ -1,7 +1,8 @@
 // The brain (spec 2026-11-04): the user's notes (`~/.ledge/context/*.md`) read once for both readers, the chat (copied into
 // its folder) and the sessions Ledge launched (an index in their start context, a note at a time with `ledge brain <name>`).
 import { open, readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { paths } from '../paths.js';
 
 /** The longest note read, in bytes: past it the text is cut, and the index says so. */
@@ -33,6 +34,25 @@ export interface Note {
   /** The body, front matter left out. */
   body: string;
   truncated: boolean;
+  /** « à revoir » : what a flag the user validated says, until the note changes by another hand than Ledge's. */
+  flag?: string;
+}
+
+/** What Ledge keeps beside the notes: the flags the user validated, and the date each note had once Ledge last wrote it. */
+export interface BrainState { flags: Array<{ note: string; what: string; by: string; at: string }>; written: Record<string, string> }
+export const brainFile = (from = notesDir()): string => join(dirname(from), 'brain.json');
+
+export function readBrainState(from = notesDir()): BrainState {
+  try {
+    const raw = JSON.parse(readFileSync(brainFile(from), 'utf8')) as Partial<BrainState>;
+    return { flags: Array.isArray(raw.flags) ? raw.flags : [], written: raw.written && typeof raw.written === 'object' ? raw.written : {} };
+  } catch { return { flags: [], written: {} }; }
+}
+/** A note's flag still stands until the note changes by another hand than Ledge's: its latest one, or none. */
+export function activeFlag(state: BrainState, note: string, modifiedAt: string): string | undefined {
+  const flag = state.flags.filter(f => f.note === note).at(-1);
+  if (!flag) return undefined;
+  return modifiedAt <= flag.at || state.written[note] === modifiedAt ? flag.what : undefined;
 }
 
 /** Where the user's notes are. */
@@ -92,6 +112,7 @@ export async function readNotes(from = notesDir(), max = NOTE_MAX): Promise<{ no
   let files: string[] = [];
   try { files = (await readdir(from, { withFileTypes: true })).filter(e => e.isFile() && /\.md$/i.test(e.name)).map(e => e.name).sort(); } catch { /* no notes folder */ }
   const notes: Note[] = [];
+  const state = readBrainState(from);
   for (const file of files.slice(0, NOTES_MAX)) {
     const path = join(from, file);
     let text: string; let size: number; let modifiedAt: string;
@@ -99,14 +120,16 @@ export async function readNotes(from = notesDir(), max = NOTE_MAX): Promise<{ no
     let fields: Record<string, string> = {}; let body = text;
     try { ({ fields, body } = frontMatter(text)); } catch { /* read as plain text */ }
     const checkedAt = dateOf(fields.checked);
+    const name = file.replace(/\.md$/i, '');
+    const flag = activeFlag(state, name, modifiedAt);
     notes.push({
-      name: file.replace(/\.md$/i, ''), file, path,
+      name, file, path,
       title: fields.title?.trim() ? oneLine(fields.title) : file,
       when: fields.when?.trim() ? oneLine(fields.when) : null,
       firstLine: oneLine(body.split('\n').find(l => l.trim()) ?? ''),
       scope: scopeOf(fields.scope?.trim()),
       projects: (fields.projects ?? '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean),
-      modifiedAt, ...(checkedAt ? { checkedAt } : {}), size, text, body, truncated: size > max
+      modifiedAt, ...(checkedAt ? { checkedAt } : {}), size, text, body, truncated: size > max, ...(flag ? { flag } : {})
     });
   }
   return { notes, more: Math.max(0, files.length - NOTES_MAX) };

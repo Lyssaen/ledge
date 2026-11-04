@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { backendOf, givenByLedge, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry } from '@ledge/protocol';
+import { backendOf, givenByLedge, type BrainProposal, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry } from '@ledge/protocol';
+import { proposalTask } from '../brain/write.js';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
 import { formatLedgeTask } from './crossSession.js';
@@ -21,6 +22,8 @@ export interface TasksDeps {
   now?: () => string;
   /** How long a session sits idle holding tasks before Ledge reminds it of them; PARKED_MS by default. */
   parkedMs?: number;
+  /** Writes the user's notes once a brain proposal is answered (brain spec §3.6): what its proposer is told. */
+  brain?: (p: BrainProposal, answer: string, by: string, at: string) => string;
 }
 export interface Tasks {
   run(cmd: TaskCmd): TaskResult; all(): Task[];
@@ -145,20 +148,24 @@ export function createTasks(d: TasksDeps): Tasks {
       return { type: 'task.result', rid: cmd.rid, tasks: mine.sort((a, b) => a.at.localeCompare(b.at)) };
     }
     if (cmd.op === 'give') {
-      if (!cmd.to || !cmd.title) return refuse('il faut un destinataire et un titre');
+      if (!cmd.to || (!cmd.title && !cmd.brain)) return refuse('il faut un destinataire et un titre');
+      if (cmd.brain && cmd.to.trim().toLowerCase() !== LEDGE_GIVER) return refuse('une proposition de note va à Ledge');
       // A decision for the user: Ledge holds it, nobody is typed to, the fronts show it; its answer (done) wakes the asker.
       if (cmd.to.trim().toLowerCase() === LEDGE_GIVER) {
         if (ledge) return refuse('tu ne peux pas te confier une tâche');
         const at = now();
-        const task: Task = { id: newId(), title: cmd.title.trim(), ...(cmd.text?.trim() ? { text: cmd.text.trim() } : {}), giver: me.id, giverName: me.name,
+        // A proposal about the user's notes: its title and detail are the daemon's, so the user reads what « oui » writes.
+        const asked = cmd.brain ? proposalTask(cmd.brain) : { title: cmd.title!.trim(), text: cmd.text?.trim() };
+        const task: Task = { id: newId(), title: asked.title, ...(asked.text ? { text: asked.text } : {}), giver: me.id, giverName: me.name,
           owner: LEDGE_GIVER, ownerName: 'Ledge', state: 'open', at, updatedAt: at,
-          log: [{ at, by: me.name, what: 'confiée à Ledge (décision)', ...sides('give', me, { id: LEDGE_GIVER, name: 'Ledge' }) }] };
+          log: [{ at, by: me.name, what: 'confiée à Ledge (décision)', ...sides('give', me, { id: LEDGE_GIVER, name: 'Ledge' }) }], ...(cmd.brain ? { brain: cmd.brain } : {}) };
         tasks.set(task.id, task); save();
         d.onTask?.(task, task.log[0]);
         return ok(task);
       }
       const t = target(cmd.to);
       if (typeof t === 'string') return refuse(t);
+      if (!cmd.title) return refuse('il faut un titre');
       if (t.id === me.id) return refuse('tu ne peux pas te confier une tâche');
       if (!reachable(t)) return refuse(`${t.name} n'a pas été lancée par Ledge : impossible de lui confier une tâche`);
       const at = now();
@@ -194,8 +201,10 @@ export function createTasks(d: TasksDeps): Tasks {
         const result = cmd.text?.trim();
         // OpenRig's closure reason: a giver must learn what came of its task.
         if (!result) return refuse('il faut un résultat : ledge task done <id> "<ce qui est fait, où, tests>"');
-        const done = put({ ...t, state: 'done', result }, me.name, `terminée : ${result}`, sides('done', ownerOf(t), giverOf(t)));
-        tellGiver(done, me.name, `terminée par ${me.name} : ${quote(result)}`);
+        // The user answered a proposal about the notes: written (or not) now, and its proposer is told what came of it.
+        const written = t.brain && d.brain ? d.brain(t.brain, result, t.giverName, now()) : undefined;
+        const done = put({ ...t, state: 'done', result: written ?? result }, me.name, `terminée : ${result}`, sides('done', ownerOf(t), giverOf(t)));
+        tellGiver(done, me.name, `terminée par ${me.name} : ${quote(written ?? result)}`);
         return ok(done);
       }
       case 'refuse': {

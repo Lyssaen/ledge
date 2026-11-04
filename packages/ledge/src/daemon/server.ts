@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
+import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, taskClosed, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type DecidedBy, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -53,6 +53,8 @@ import type { ChatMessage } from '../chat/service.js';
 import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
 import { createMailbox, type MailboxDeps, type MailJournal } from './mailbox.js';
 import { broadcastFromSession, broadcastFromUser } from './broadcast.js';
+import { applyProposal, checkProposal } from '../brain/write.js';
+import { notesDir } from '../brain/notes.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createHandovers, heldNames } from './handover.js';
 import { readContext } from './context.js';
@@ -456,7 +458,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   });
   // The relay keeps the refusal's code too: a phone words its card's failure from it, never from the PC's text.
   const relay = createRelay({ threads: cardThreads, store, replyTo: async (id, text) => { const r = await replyTo(id, text); return r && { message: r.message, code: r.code }; }, now, typing, closing, next: id => mailbox.kick(id) });
-  const tasks = createTasks({ store, mailbox, now, ...(opts.tasks ? { journal: opts.tasks } : {}), onTask: (task, entry) => {
+  const tasks = createTasks({ store, mailbox, now, ...(opts.tasks ? { journal: opts.tasks } : {}), brain: (p, answer, by, at) => applyProposal(p, answer, by, at, notesDir()), onTask: (task, entry) => {
     broadcast({ type: 'task.updated', task });
     // The card that gave it follows it, on whichever thread holds it: only Ledge gives from a card.
     if (givenByLedge(task)) for (const [thread, c] of cardThreads.all()) c.followTask?.(task, cardThreads.emitterOf(thread) ?? broadcast);
@@ -1449,6 +1451,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // A client naming itself `ledge` only reads (#142): Ledge acts from its chat's cards (giveFromCard above, actOnCard) and
         // answers a decision through task.answer (the user's, confirmed), both straight to the tasks, never through here.
         if (msg.by === LEDGE_GIVER && !LEDGE_READS.has(msg.op)) return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge' });
+        // A proposal about the user's notes (brain spec §3.6) is checked against the notes now, before the user is asked.
+        if (msg.brain) {
+          const pending = tasks.all().filter(t => t.giver === msg.by && t.brain && !taskClosed(t)).length;
+          const why = msg.op === 'give' ? await checkProposal(msg.brain, pending, notesDir()) : 'une proposition de note se donne (give)';
+          if (why) return reply({ type: 'task.result', rid: msg.rid, reason: why });
+        }
         return reply(tasks.run(msg));
       }
       // A chat card's instruction: a refusal reaches the requester as an `error`, the card's state everyone through chat.history.
