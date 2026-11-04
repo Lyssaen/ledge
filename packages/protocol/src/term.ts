@@ -36,10 +36,23 @@ export const TermResizeSchema = z.object({ type: z.literal('term.resize'), id, s
 export const PaneExitWhySchema = z.enum(['ended', 'gone', 'failed']);
 export type PaneExitWhy = z.infer<typeof PaneExitWhySchema>;
 
+/**
+ * The modes the program set before the watch began: xterm only sees bytes from then on, so it must be told.
+ * `paste` is not a tmux format: the daemon sets it for the harness pane, whose agents all take bracketed paste.
+ */
+export const TermModesSchema = z.object({
+  alt: z.boolean(), cursor: z.boolean(), appCursor: z.boolean(), appKeypad: z.boolean(),
+  mouse: z.enum(['none', 'standard', 'button', 'any']), sgr: z.boolean(), wrap: z.boolean(), insert: z.boolean(),
+  paste: z.boolean().optional()
+});
+export type TermModes = z.infer<typeof TermModesSchema>;
+
 export const TermOpenedSchema = z.object({
   type: z.literal('term.opened'), id, shell: shell.optional(), cols, rows,
   screen: z.string().max(TERM_PANE_SCREEN_MAX),
-  cursor: z.object({ x: z.number().int().nonnegative().max(1000), y: z.number().int().nonnegative().max(1000) })
+  cursor: z.object({ x: z.number().int().nonnegative().max(1000), y: z.number().int().nonnegative().max(1000) }),
+  /** Absent from an older daemon: the screen is painted with xterm's own modes, as before. */
+  modes: TermModesSchema.optional()
 });
 export const TermOutputSchema = z.object({ type: z.literal('term.output'), id, shell: shell.optional(), data: z.string().min(1).max(TERM_CHUNK_B64) });
 export const TermSizeSchema = z.object({ type: z.literal('term.size'), id, shell: shell.optional(), cols, rows });

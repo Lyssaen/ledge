@@ -1717,7 +1717,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // Only a session's id: a mobile.* id names a pairing or a device, never a session a front would fail.
         const { type, id } = (raw ?? {}) as { type?: unknown; id?: unknown };
         const named = typeof type === 'string' && type.length <= 64 ? type : undefined;
-        return reply({ type: 'error', message: 'invalid message', ...(named?.startsWith('session.') && typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(named ? { request: named } : {}), code: 'invalid' });
+        return reply({ type: 'error', message: 'invalid message', ...((named?.startsWith('session.') || named?.startsWith('term.')) && typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(named ? { request: named } : {}), code: 'invalid' });
       }
       void dispatch(msg, reply);
     });

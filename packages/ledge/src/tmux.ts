@@ -23,6 +23,8 @@ export interface Tmux {
   killSession(name: string): Promise<void>;
   /** Sets a user option (`@name`) on the session; the tmux conf shows `@ledge_title` as the terminal tab's title. */
   setOption(name: string, option: string, value: string): Promise<void>;
+  /** Unsets a window option of the session's window, so the global value applies again. */
+  unsetWindowOption?(name: string, option: string): Promise<void>;
   /** `readOnly` watches the pane without sending it keys (`attach-session -r`). */
   attachArgs(name: string, opts?: { readOnly?: boolean }): string[];
   /** A control client on the session (`-C`) that only reads and never counts for the window's size: the phone's terminal. */
@@ -123,6 +125,7 @@ export function realTmux(socket: string | null = 'ledge', opts: { scope?: () => 
       const r = await t(['set-option', '-t', `=${name}:`, option, value]);
       if (r.code !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
     },
+    async unsetWindowOption(name, option) { await t(['set-option', '-wu', '-t', `=${name}:`, option]); },
     async killSession(name) { await t(['kill-session', '-t', `=${name}`]); },
     attachArgs(name, opts) { return [...base(), 'attach-session', ...(opts?.readOnly ? ['-r'] : []), '-t', `=${name}`]; },
     controlArgs(name) { return [...base(), '-C', 'attach-session', '-t', `=${name}`, '-f', 'ignore-size,read-only']; }
@@ -155,6 +158,7 @@ export function routedTmux(own: Tmux, seats: Tmux): Tmux {
     },
     killSession: n => of(n).killSession(n),
     setOption: (n, option, value) => of(n).setOption(n, option, value),
+    unsetWindowOption: async (n, option) => { const t = of(n); await t.unsetWindowOption?.(n, option); },
     attachArgs: (n, opts) => of(n).attachArgs(n, opts),
     // Seats are refused a phone terminal (`rig`); only Ledge's own server is offered.
     controlArgs: n => (isSeatSession(n) ? null : own.controlArgs?.(n) ?? null)

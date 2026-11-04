@@ -17,6 +17,18 @@ import { createMobileService, type MobileService } from '../mobile/service.js';
 import { fileJournal } from './mailbox.js';
 import { tasksJournal } from './tasks.js';
 
+/** A shell born beside the daemon (`sh-` and 12 hex): its watch died with the last daemon, nobody can reach it again. */
+export const BORN_SHELL = /^sh-[0-9a-f]{12}$/;
+
+/**
+ * What a daemon that stopped without closing its desktop terminals left behind: shells nobody watches, and windows
+ * still held at a desktop's size (`window-size manual`). Both are undone before anything watches again.
+ */
+export async function settleTerminals(tmux: Pick<Tmux, 'killSession' | 'unsetWindowOption'>, live: Set<string>, sessions: readonly { tmuxSession?: string | null }[]): Promise<void> {
+  for (const name of live) if (BORN_SHELL.test(name)) await tmux.killSession(name).catch(e => log(`stale shell ${name} not killed: ${(e as Error).message}`));
+  for (const s of sessions) if (s.tmuxSession && live.has(s.tmuxSession) && !s.tmuxSession.includes('@')) await tmux.unsetWindowOption?.(s.tmuxSession, 'window-size').catch(() => undefined);
+}
+
 export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket?: string } = {}): Promise<{ stop(): Promise<void>; port: number }> {
   await ensureLedgeDir();
   const store = new Store();
@@ -28,6 +40,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   if (live) for (const s of store.all()) {
     if (s.tmuxSession && !live.has(s.tmuxSession)) store.apply(s.id, { name: 'PaneGone', at: new Date().toISOString(), source: 'daemon' });
   }
+  if (live) await settleTerminals(tmux, live, store.all());
   // An OMP process lives and dies with this daemon: after a restart its session is over, resumable from its journal.
   for (const s of store.all()) {
     if (backendOf(s) !== 'omp-rpc') continue;

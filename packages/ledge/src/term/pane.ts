@@ -1,7 +1,7 @@
 // The desktop's terminals: one tmux control client per watcher, on the session's machine. xterm.js is the only emulator.
 // A shell is its own short session (`owned`): closing it kills that session and never takes the agent's typing lock.
 // The phone uses the same control client and keeps its own batching. Logs carry reasons, never a byte of the pane.
-import { PaneExitWhy, TERM_CHUNK, TERM_CHUNK_B64, TERM_PANE_SCREEN_MAX } from '@ledge/protocol';
+import { PaneExitWhy, type TermModes, TERM_CHUNK, TERM_CHUNK_B64, TERM_PANE_SCREEN_MAX } from '@ledge/protocol';
 import { keyCommands, openControl, spawnControl, type ControlClient, type ControlEvent, type SpawnControl } from '../mobile/terminal.js';
 
 /** A batch leaves at the first of this and `TERM_CHUNK` bytes. Desktop has no relay budget to stay under. */
@@ -12,7 +12,7 @@ const OPEN_TIMEOUT_MS = 5_000;
 const RESTORE_MS = 20;
 
 type PaneMsg =
-  | { type: 'term.opened'; id: string; shell?: string; cols: number; rows: number; screen: string; cursor: { x: number; y: number } }
+  | { type: 'term.opened'; id: string; shell?: string; cols: number; rows: number; screen: string; cursor: { x: number; y: number }; modes?: TermModes }
   | { type: 'term.output'; id: string; shell?: string; data: string }
   | { type: 'term.size'; id: string; shell?: string; cols: number; rows: number }
   | { type: 'term.exit'; id: string; shell?: string; why: PaneExitWhy };
@@ -48,6 +48,17 @@ export interface PaneDeps {
 }
 
 const SAFE_NAME = /^[A-Za-z0-9_.-]+$/;
+/** The pane's place and size, then the modes xterm cannot see once the program set them before the watch. */
+const INFO_FORMAT = '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y} #{alternate_on}#{cursor_flag}#{keypad_cursor_flag}#{keypad_flag}#{mouse_standard_flag}#{mouse_button_flag}#{mouse_any_flag}#{mouse_sgr_flag}#{wrap_flag}#{insert_flag}';
+const INFO = /^(%\d+) (\d+) (\d+) (\d+) (\d+)(?: ([01]{10}))?$/;
+
+/** The flags `INFO_FORMAT` prints, in its order. `paste` is the caller's: tmux does not say. */
+export function modesOf(flags: string | undefined, paste: boolean): TermModes | undefined {
+  if (!flags) return undefined;
+  const f = (i: number) => flags[i] === '1';
+  const mouse = f(6) ? 'any' : f(5) ? 'button' : f(4) ? 'standard' : 'none';
+  return { alt: f(0), cursor: f(1), appCursor: f(2), appKeypad: f(3), mouse, sgr: f(7), wrap: f(8), insert: f(9), ...(paste ? { paste: true } : {}) };
+}
 const targetOf = (name: string) => `'=${name}:'`;
 
 interface Watch {
@@ -107,7 +118,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     const restore = w.sizing && releaseSize(w.tmuxName);
     if (w.owned) deps.killSession?.(w.tmuxName);
     // The restore has to leave the process before it is killed. An owned shell is killed outright: the session goes with it.
-    else if (restore && SAFE_NAME.test(w.tmuxName)) w.client.write(`set-option -w -t ${targetOf(w.tmuxName)} window-size latest\n`);
+    else if (restore && SAFE_NAME.test(w.tmuxName)) w.client.write(`set-option -wu -t ${targetOf(w.tmuxName)} window-size\n`);
     if (restore && !w.owned) later(() => w.client.kill(), RESTORE_MS); else w.client.kill();
     if (why) w.reply(stamp(w, { type: 'term.exit', id: w.id, why }));
     deps.log(`pane ${w.id}${w.shell ? ` shell ${w.shell}` : ''} ended (${why ?? 'closed'})`);
@@ -142,10 +153,13 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       if (set.ok) await w.client.command(`resize-window -x ${sized.cols} -y ${sized.rows} -t ${target}`);
       if ((w.state as Watch['state']) === 'closed') return;
     }
-    const info = await w.client.command(`display-message -p -t ${target} '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y}'`);
-    const cap = await w.client.command(`capture-pane -p -e -t ${target}`);
+    // Written together, so tmux runs both before reading the pane again: the cursor is the one of the captured screen.
+    const [cap, info] = await Promise.all([
+      w.client.command(`capture-pane -p -e -t ${target}`),
+      w.client.command(`display-message -p -t ${target} '${INFO_FORMAT}'`)
+    ]);
     if ((w.state as Watch['state']) === 'closed') return;
-    const m = info.ok ? /^(%\d+) (\d+) (\d+) (\d+) (\d+)$/.exec(info.lines[0] ?? '') : null;
+    const m = info.ok ? INFO.exec(info.lines[0] ?? '') : null;
     if (!m || !cap.ok) return end(w, 'failed');
     w.pane = m[1]!; w.cols = Number(m[2]); w.rows = Number(m[3]);
     let lines = cap.lines;
@@ -154,7 +168,8 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     if (text.length > TERM_PANE_SCREEN_MAX) text = text.slice(-TERM_PANE_SCREEN_MAX);
     w.state = 'live';
     w.openTimer?.stop(); w.openTimer = null;
-    send(w, { type: 'term.opened', id: w.id, cols: w.cols, rows: w.rows, screen: text, cursor: { x: Number(m[4]), y: Number(m[5]) } });
+    const modes = modesOf(m[6], !w.owned);
+    send(w, { type: 'term.opened', id: w.id, cols: w.cols, rows: w.rows, screen: text, cursor: { x: Number(m[4]), y: Number(m[5]) }, ...(modes ? { modes } : {}) });
     // A resize that arrived while the screen was taken: the capture shows the old grid, so the window follows now.
     if (w.want && sized && (w.want.cols !== sized.cols || w.want.rows !== sized.rows)) void w.client.command(`resize-window -x ${w.want.cols} -y ${w.want.rows} -t ${target}`);
     void drain(w);

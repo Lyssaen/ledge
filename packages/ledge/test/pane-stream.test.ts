@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ServerMessage } from '@ledge/protocol';
-import { createPaneHost, takeBytes, type PaneDeps } from '../src/term/pane.js';
+import { createPaneHost, modesOf, takeBytes, type PaneDeps } from '../src/term/pane.js';
 import type { ControlProcess } from '../src/mobile/terminal.js';
 
 describe('takeBytes', () => {
@@ -29,7 +29,7 @@ function fakeSpawn() {
       write(text: string) {
         const line = text.trim();
         p.written.push(line);
-        if (line.startsWith('display-message')) reply(['%0 80 24 1 2']);
+        if (line.startsWith('display-message')) reply(['%0 80 24 1 2 0010000010']);
         else if (line.startsWith('capture-pane')) reply(['hello', 'there']);
         else reply([]);
       },
@@ -53,6 +53,14 @@ function host(over: Partial<PaneDeps> = {}) {
   return { h, sent, reply, tmux };
 }
 
+describe('modesOf', () => {
+  it('reads the flags in order, the widest mouse mode winning, and leaves an older answer without modes', () => {
+    expect(modesOf('1100111100', false)).toEqual({ alt: true, cursor: true, appCursor: false, appKeypad: false, mouse: 'any', sgr: true, wrap: false, insert: false });
+    expect(modesOf('0000100000', true)?.mouse).toBe('standard');
+    expect(modesOf(undefined, true)).toBeUndefined();
+  });
+});
+
 describe('pane host', () => {
   afterEach(() => { vi.useRealTimers(); });
 
@@ -69,7 +77,9 @@ describe('pane host', () => {
       "set-option -w -t '=ledge-a:' window-size manual",
       "resize-window -x 100 -y 30 -t '=ledge-a:'"
     ]);
-    expect(sent[0]).toMatchObject({ type: 'term.opened', id: 'a', cols: 80, rows: 24, screen: 'hello\nthere', cursor: { x: 1, y: 2 } });
+    expect(sent[0]).toMatchObject({ type: 'term.opened', id: 'a', cols: 80, rows: 24, screen: 'hello\nthere', cursor: { x: 1, y: 2 },
+      // The modes the agent set before the watch, and bracketed paste for the harness pane.
+      modes: { alt: false, cursor: false, appCursor: true, appKeypad: false, mouse: 'none', sgr: false, wrap: true, insert: false, paste: true } });
     proc.emit('%output %0 hi\\015\\012\n');
     await vi.advanceTimersByTimeAsync(16);
     expect(sent.at(-1)).toEqual({ type: 'term.output', id: 'a', data: Buffer.from('hi\r\n').toString('base64') });
@@ -98,7 +108,7 @@ describe('pane host', () => {
     await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
     again.h.unwatch(again.reply, 'b');
-    expect(again.tmux.procs[0]!.written.at(-1)).toContain('window-size latest');
+    expect(again.tmux.procs[0]!.written.at(-1)).toContain('set-option -wu');
     expect(again.tmux.procs[0]!.killed).toBe(false);
     await vi.advanceTimersByTimeAsync(20);
     expect(again.tmux.procs[0]!.killed).toBe(true);
@@ -129,12 +139,14 @@ describe('pane host', () => {
     expect(tmux.procs.filter(p => !p.killed)).toHaveLength(3);
     const shell = sent.filter((m): m is Extract<ServerMessage, { type: 'term.opened' }> => m.type === 'term.opened' && m.shell === 's1');
     expect(shell.map(m => m.id)).toEqual(['a', 'b']);
+    // A shell's own program sets bracketed paste at its prompt: the daemon does not force it.
+    expect(shell[0]!.modes?.paste).toBeUndefined();
     h.input(reply, 'a', 'z', 's1');
     await vi.runOnlyPendingTimersAsync();
     expect(seen).toEqual([]);
     expect(tmux.procs[1]!.written.at(-1)).toBe('send-keys -t %0 -H 7a');
     h.unwatch(reply, 'a');
-    expect(tmux.procs[0]!.written.at(-1)).toContain('window-size latest');
+    expect(tmux.procs[0]!.written.at(-1)).toContain('set-option -wu');
     expect(tmux.procs[1]!.killed).toBe(false);
     h.unwatch(reply, 'a', 's1');
     expect(killed).toEqual(['sh-abc']);
