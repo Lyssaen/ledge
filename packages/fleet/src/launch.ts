@@ -1,5 +1,5 @@
 import { splitId, type MachineState } from './machines';
-import { pickName, type ClientMessage, type OmpApproval, type Project, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
+import { NAMES, pickName, type ClientMessage, type OmpApproval, type Project, type Repo, type RepoInfo, type Session } from '@ledge/protocol';
 
 export type Tool = Session['tool'];
 /** Harnesses that take several folders (Claude Code and OMP: `--add-dir`); the others get one repository at a time. */
@@ -9,6 +9,8 @@ export type LaunchMessage = Extract<ClientMessage, { type: 'session.launch' }>;
 /** `repos` are paths on `machine`. `tool` starts as the default agent (Settings › General). `model` and `effort` (#58): null leaves the agent's
  *  own default, nothing is passed. */
 export interface LaunchForm { tool: Tool; prompt: string; project: string | null; machine: string | null; repos: string[]; model: string | null; effort: string | null;
+  /** The agent's name as typed; blank or absent, Ledge picks a free one. */
+  name?: string;
   /** OMP's approval mode; the others ignore it. `always-ask` is what a daemon passes when nothing is sent. */
   approval: OmpApproval }
 /** The model and effort chosen for an agent, as the form keeps them per project. */
@@ -71,7 +73,23 @@ export function previewOf(f: LaunchForm, sessions: readonly Session[], projectId
   const machineOf = (s: Session) => splitId(s.id)?.machine ?? s.machineId ?? 'local';
   const taken = sessions.filter(s => s.state !== 'exited' && machineOf(s) === f.machine).map(s => s.name);
   const seated = f.project === null ? 0 : sessions.filter(s => projectIdOf(s) === f.project).length;
-  return { name: pickName(taken), seat: seated + 1 };
+  return { name: pickName(taken, f.name), seat: seated + 1 };
+}
+
+/** The names the user gave the project's agents before (not Ledge's own list), the latest first, but those a live agent holds:
+ *  offered as one-click picks in the launch form. */
+export function pastNames(sessions: readonly Session[], project: string | null, projectIdOf: (s: Session) => string | null, max = 6): string[] {
+  if (project === null) return [];
+  const live = new Set(sessions.filter(s => s.state !== 'exited' && !s.archivedAt).map(s => s.name.toLowerCase()));
+  const auto = (n: string) => NAMES.includes(n.replace(/-\d+$/, ''));
+  const seen = new Set<string>(); const out: string[] = [];
+  for (const s of [...sessions].filter(x => projectIdOf(x) === project).sort((a, b) => b.startedAt.localeCompare(a.startedAt))) {
+    const k = s.name.toLowerCase();
+    if (auto(s.name) || live.has(k) || seen.has(k)) continue;
+    seen.add(k); out.push(s.name);
+    if (out.length === max) break;
+  }
+  return out;
 }
 
 export function launchMessage(f: LaunchForm, name: string): LaunchMessage {

@@ -1169,6 +1169,8 @@ export const fr = {
     repos: (m: string) => `Dossiers et dépôts sur ${m}`, noGit: 'Dossier sans Git', notFound: 'introuvable', oneRepo: (t: string) => `Un seul dossier ou dépôt pour ${t}`,
     noRepos: (p: string, m: string) => `Aucun dossier ni dépôt de ${p} sur ${m}.`, editProject: 'Modifier le projet',
     noProjects: 'Aucun projet pour l’instant.', noProjectsBody: 'Créez un projet pour y lancer des agents.', newProject: 'Nouveau projet',
+    agentName: 'Nom de l’agent', agentNameAuto: (n: string) => `${n} (au hasard)`, agentNameHint: 'C’est son adresse : les autres agents lui écrivent sous ce nom. Lettres, chiffres, - et _ ; un nom déjà pris reçoit un suffixe.',
+    pastNames: 'Déjà utilisés dans ce projet',
     newAgent: 'Un nouvel agent', joins: (n: string, t: string) => `${n} rejoindra la table ${t}`, seat: (n: number, m: string, r: string) => `Place ${n} · ${m} · ${r}`, noRepo: 'aucun dossier ni dépôt',
     missing: { prompt: 'Écrivez la consigne', machine: 'Aucune machine en ligne', repos: 'Choisissez au moins un dossier ou un dépôt' } as Record<'prompt' | 'machine' | 'repos', string>,
     cancel: 'Annuler', launch: 'Lancer', launching: 'Lancement…',

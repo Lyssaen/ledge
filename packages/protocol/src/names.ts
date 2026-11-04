@@ -9,18 +9,29 @@ export const NAMES: readonly string[] = [
   'Ash', 'Bry', 'Cleo', 'Dax'
 ];
 
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+/** The longest name a session takes: room for the island's bubble, the sidebar row and `-N`. */
+export const NAME_MAX = 24;
 
-/** The first free name, or the preferred one (capitalized, suffixed `-2`, `-3`… while taken). */
+/** A name as an address: letters, digits, `-` and `_` only (a space, a comma, `@` or ` [ref]` would not resolve as `to`),
+ *  cut to NAME_MAX, the first letter capitalised and the rest as typed (« PrixMat » stays PrixMat). '' when nothing is left. */
+export function cleanName(raw: string): string {
+  const kept = [...raw.normalize('NFC').replace(/[^\p{L}\p{N}_-]/gu, '')].slice(0, NAME_MAX).join('');
+  return kept.charAt(0).toUpperCase() + kept.slice(1);
+}
+
+/** `ledge` addresses Ledge itself (`ledge task give ledge`): no session takes it. */
+const RESERVED = ['ledge'];
+
+/** The first free name, or the preferred one (cleaned, suffixed `-2`, `-3`… while taken). A name is taken whatever its case. */
 export function pickName(taken: Iterable<string>, preferred?: string): string {
-  const used = new Set(taken);
-  const free = (n: string) => !used.has(n);
+  const used = new Set([...taken].map(n => n.toLowerCase()));
+  for (const r of RESERVED) used.add(r);
+  const free = (n: string) => !used.has(n.toLowerCase());
   // A blank --name is no preference, not an empty name (which the session schema rejects).
-  const wanted = preferred?.trim();
+  const wanted = cleanName(preferred ?? '');
   if (wanted) {
-    const base = cap(wanted);
-    if (free(base)) return base;
-    for (let i = 2; ; i++) if (free(`${base}-${i}`)) return `${base}-${i}`;
+    if (free(wanted)) return wanted;
+    for (let i = 2; ; i++) if (free(`${wanted}-${i}`)) return `${wanted}-${i}`;
   }
   const first = NAMES.find(free);
   if (first) return first;

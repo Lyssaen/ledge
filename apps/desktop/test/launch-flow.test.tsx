@@ -15,6 +15,17 @@ const dialog = () => screen.queryByRole('dialog', { name: 'New session' });
 const launchButton = (form: ReturnType<typeof within>) => form.getByRole('button', { name: /Launch/ });
 
 describe('launching', () => {
+  it('the agent’s name is typed in the form: the preview shows it, its case kept, and the launch carries it', async () => {
+    const { d, user, form } = await openLaunch({ list: false });
+    const name = form.getByRole('textbox', { name: 'Agent name' });
+    expect(name).toHaveAttribute('placeholder', expect.stringMatching(/^\w+ \(random\)$/));
+    await user.type(name, 'prixMat');
+    expect(document.querySelector('.preview-line')!.textContent).toBe('PrixMat will join the Ledge table');
+    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await waitFor(() => expect(launches(d)).toHaveLength(1));
+    expect(launches(d)[0]).toMatchObject({ type: 'session.launch', name: 'PrixMat' });
+  });
   it('one launch at a time; launched: the form closes, the seat lights, the notice names agent and table', async () => {
     const { d, user, form } = await openLaunch({ list: false });
     await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');

@@ -1111,6 +1111,8 @@ export const en: Messages = {
     repos: (m) => `Folders and repositories on ${m}`, noGit: 'Folder without Git', notFound: 'not found', oneRepo: (t) => `One folder or repository only for ${t}`,
     noRepos: (p, m) => `No folder or repository of ${p} on ${m}.`, editProject: 'Edit the project',
     noProjects: 'No project yet.', noProjectsBody: 'Create a project to launch agents in it.', newProject: 'New project',
+    agentName: 'Agent name', agentNameAuto: (n) => `${n} (random)`, agentNameHint: 'It is its address: other agents write to it by this name. Letters, digits, - and _; a name already taken gets a suffix.',
+    pastNames: 'Used in this project before',
     newAgent: 'A new agent', joins: (n, t) => `${n} will join the ${t} table`, seat: (n, m, r) => `Seat ${n} · ${m} · ${r}`, noRepo: 'no folder or repository',
     missing: { prompt: 'Write the instruction', machine: 'No machine online', repos: 'Choose at least one folder or repository' },
     cancel: 'Cancel', launch: 'Launch', launching: 'Launching…',
