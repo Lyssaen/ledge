@@ -29,6 +29,8 @@ export const ICONS = {
   /** The desktop's (apps/desktop/src/shell/icons.ts): a speech bubble for the chat with Ledge, a grid for the agents. */
   chat: ['M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z'],
   grid: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'],
+  /** The Atelier's tab (docs/mockups/ledge-ipad-atelier.html): a house. */
+  atelier: ['M3 10.5 12 4l9 6.5', 'M5 9.5V20h14V9.5', 'M9 20v-5h6v5'],
   /** A clipboard with a check: an agent's checklist. */
   plan: ['M9 4h6v3H9z', 'M7 5H5v16h14V5h-2', 'm9 12 1.5 1.5L14 10', 'M9 17h6'],
   keyboard: ['M3 7h18v10H3z', 'M7 11h.01', 'M11 11h.01', 'M15 11h.01', 'M8 14h8'],

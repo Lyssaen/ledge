@@ -1591,6 +1591,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
     tasks: () => tasks.all(), contextNear: () => contextPrefs.near,
+    // The Atelier on the phone: the user's projects, the sessions placed in them as on the desktop; a `projects.set` follows by `forward`.
+    projects: () => projects,
     // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
     models: true,
     // A session's « Fermer » on the phone: the cards' close, so a close under way (a card's, another phone's) is shared.

@@ -9,13 +9,18 @@ export const WIDE_QUERY = '(min-width: 768px) and (min-height: 501px)';
 const media = () => (typeof globalThis.matchMedia === 'function' ? globalThis.matchMedia(WIDE_QUERY) : null);
 const subscribe = (fn: () => void) => {
   const m = media();
-  m?.addEventListener('change', fn);
-  return () => m?.removeEventListener('change', fn);
+  m?.addEventListener?.('change', fn);
+  return () => m?.removeEventListener?.('change', fn);
 };
 
 /** Whether the app shows two panes: the list on the left, what it opens on the right. */
 export function useWide(): boolean {
   return useSyncExternalStore(subscribe, () => media()?.matches ?? false, () => false);
+}
+
+/** The Atelier's tab (docs/mockups/ledge-ipad-atelier.html): a wide screen only, and a PC that sends its projects (`daemon.atelier`). */
+export function useAtelierTab(daemon: { atelier?: true } | null): boolean {
+  return useWide() && !!daemon?.atelier;
 }
 
 /** Two panes: `list` (the inbox or the agents, with the tabs) and `detail` (what it opened, or `empty`). */

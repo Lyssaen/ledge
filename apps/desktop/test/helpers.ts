@@ -18,8 +18,10 @@ import { loadHome } from '../src/chat/lazy';
 import { loadSettings } from '../src/settings/lazy';
 
 /** jsdom loads no stylesheet: the declarations of the top-level rules naming `selector` in one of the app's sheets (@media and @container blocks removed). */
+/** The Atelier's sheets live in @ledge/ui (shared with the mobile app's Atelier, iPad lot 1). */
+const SHARED_SHEETS = new Set(['atelier.css', 'rig-rooms.css']);
 export function declarations(sheet: string, selector: string): string {
-  const css = readFileSync(resolve(__dirname, '../src/styles', sheet), 'utf8')
+  const css = readFileSync(resolve(__dirname, SHARED_SHEETS.has(sheet) ? '../../../packages/ui/src/atelier' : '../src/styles', sheet), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/@(?:media|container)[^{]*\{(?:[^{}]*\{[^}]*\})*[^}]*\}/g, '');
   return [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(m => m[1]!.split(',').map(x => x.trim().replace(/\s+/g, ' ')).includes(selector)).map(m => m[2]!.replace(/\s+/g, '')).join(';');

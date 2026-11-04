@@ -4,6 +4,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
 import { openFromWorker, replaceRoute, useRoute } from './router';
+import { AtelierScreen } from './atelier/AtelierScreen';
 import { Agents } from './screens/Agents';
 import { Chat } from './screens/Chat';
 import { Compare } from './screens/Compare';
@@ -152,6 +153,10 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   useEffect(() => { if (chatOff) replaceRoute({ name: 'inbox' }); }, [chatOff]);
 
   const wide = useWide();
+  // `#/atelier` on a phone, or once the PC says it has no Atelier (an older daemon): the agents instead. Before the first
+  // snapshot the last known PC decides, so an offline iPad keeps its Atelier.
+  const atelierOff = route.name === 'atelier' && (!wide || ((mobile.fresh || mobile.daemon !== null) && !mobile.daemon?.atelier));
+  useEffect(() => { if (atelierOff) replaceRoute({ name: 'agents' }); }, [atelierOff]);
   // A device the PC knows by id but that has no name yet names itself once, after its model and browser (docs/mockups/
   // mobile-multi-device.html, part 3): the PC then shows « iPad · Safari », and so do the other devices' threads.
   const named = useRef(false);
@@ -220,13 +225,14 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
         case 'inbox': return <Split list={inbox()} detail={<SplitEmpty {...copy.split.request} />} />;
         case 'request': return <Split list={inbox()} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />} />;
         case 'agents': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<SplitEmpty {...copy.split.agent} />} />;
+        case 'atelier': if (mobile.daemon?.atelier) return <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} {...(route.requestKey ? { requestKey: route.requestKey } : {})} storage={storage} onReconnect={retry} />; break;
         case 'thread': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
         case 'terminal': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
         default: break;
       }
     }
     switch (route.name) {
-      case 'agents': return <Agents store={store} onReconnect={retry} />;
+      case 'agents': case 'atelier': return <Agents store={store} onReconnect={retry} />;
       case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
       case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
       case 'terminal': return <Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />;

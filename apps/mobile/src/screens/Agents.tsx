@@ -15,6 +15,7 @@ import { Tag } from '../ui/Tag';
 import { TabBar } from '../ui/TabBar';
 import { closedTasks } from '../model/tasks';
 import { Icon } from '../ui/icons';
+import { useAtelierTab } from '../ui/layout';
 
 /**
  * One session. A close of this phone under way reads « Fermeture… » over the session's own state; an ended one says when. Closing
@@ -67,7 +68,7 @@ function Row({ row, session, offline, threshold, plan, closing, now }: { row: Ag
 
 /** « Écrire au groupe »: a field under the head of a group; the answer says who got the message and who did not. `ids`: the
  *  group's live sessions; more than one broadcast takes is refused in words, never cut. */
-function GroupWrite({ store, label, ids, offline }: { store: MobileStore; label: string; ids: string[]; offline: boolean }) {
+export function GroupWrite({ store, label, ids, offline }: { store: MobileStore; label: string; ids: string[]; offline: boolean }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -106,6 +107,7 @@ function GroupWrite({ store, label, ids, offline }: { store: MobileStore; label:
 /** Every session of the PC, by repository, each opening its thread. */
 export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect?: () => void }) {
   const state = useMobile(store);
+  const atelierTab = useAtelierTab(state.daemon);
   const now = useNow();
   const sessions = [...state.sessions.values()];
   const groups = agentsOf(sessions);
@@ -136,7 +138,7 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
           </div>
         )}
       </main>
-      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="agents" chat={!!state.device?.chat} />
+      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="agents" chat={!!state.device?.chat} atelier={atelierTab} />
     </>
   );
 }

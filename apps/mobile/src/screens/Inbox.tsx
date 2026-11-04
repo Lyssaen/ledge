@@ -15,6 +15,7 @@ import { navigate } from '../router';
 import { buttonClass, chipClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 import { Tag } from '../ui/Tag';
+import { useAtelierTab } from '../ui/layout';
 
 type InboxFilter = Filter | 'tasks';
 const FILTERS: InboxFilter[] = ['all', 'permission', 'question', 'tasks'];
@@ -69,6 +70,7 @@ function TaskRow({ task, now, onSee }: { task: PhoneTask; now: number; onSee: ()
  */
 export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onReconnect?: () => void; notice?: ReactNode }) {
   const state = useMobile(store);
+  const atelierTab = useAtelierTab(state.daemon);
   const [filter, setFilter] = useState<InboxFilter>('all');
   const now = useNow();
   const all = requestsOf([...state.sessions.values()]);
@@ -105,7 +107,7 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
         )}
         {offline && <p className="mt-4 text-small text-muted">{copy.inbox.offlineNote}</p>}
       </main>
-      <TabBar count={all.length + closed.length} chat={!!state.device?.chat} />
+      <TabBar count={all.length + closed.length} chat={!!state.device?.chat} atelier={atelierTab} />
     </>
   );
 }

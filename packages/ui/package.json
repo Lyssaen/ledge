@@ -32,6 +32,8 @@
     "./i18n/lang": "./src/i18n/lang.tsx",
     "./i18n/copy": "./src/i18n/copy.tsx",
     "./styles/*": "./src/styles/*",
+    "./atelier/atelier.css": "./src/atelier/atelier.css",
+    "./atelier/rig-rooms.css": "./src/atelier/rig-rooms.css",
     "./test/*": "./test/*.ts"
   },
   "scripts": { "dev:mascots": "vite --open /mascots-logos.html", "test": "vitest run", "typecheck": "tsc --noEmit" },

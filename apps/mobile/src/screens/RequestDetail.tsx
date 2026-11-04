@@ -18,7 +18,7 @@ import { DecisionFooter } from './DecisionFooter';
 import { Gone } from './Gone';
 import { MultiQuestionForm, QuestionForm } from './QuestionForm';
 import { Result } from './Result';
-import { buttonClass } from '../ui/Button';
+import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 
 function Lost({ onReconnect }: { onReconnect?: (() => void) | undefined }) {
@@ -43,7 +43,24 @@ const resultTitle = (o: { decision?: string; answer?: string }) =>
  * it. A shortened request is asked whole. When the PC says the one decided was replaced (`stale`), the new one is
  * shown, to be read before deciding.
  */
-export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { store: MobileStore; sessionId: string; requestKey: string; onReconnect?: () => void }) {
+/** A request opened in the Atelier's panel (pilot-lead 12:14Z, option 2): « Retour au fil » and ×; once settled, back to the thread. */
+export interface RequestPanel { onBack(): void; onClose(): void }
+
+function PanelHeader({ title, panel }: { title: string; panel: RequestPanel }) {
+  return (
+    <header className="flex-none border-b border-line pt-2 pb-3">
+      <div className="flex items-center gap-2.5">
+        <button type="button" onClick={panel.onBack} className="-ml-1 flex min-h-11 items-center gap-1 pr-2 text-body text-muted active:text-fg">
+          <Icon name="back" />{copy.nav.backTo.thread}
+        </button>
+        <span className="min-w-0 flex-1 truncate">{title}</span>
+        <button type="button" onClick={panel.onClose} aria-label={copy.atelier.closePanel} title={copy.atelier.closeTitle} className={iconButtonClass({})}><Icon name="close" /></button>
+      </div>
+    </header>
+  );
+}
+
+export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel }: { store: MobileStore; sessionId: string; requestKey: string; onReconnect?: () => void; panel?: RequestPanel }) {
   const state = useMobile(store);
   const now = useNow();
   const { fresh, ops, capabilities } = state;
@@ -84,11 +101,17 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
     setChoice(null);
     setOtherText('');
     setPicked(null);
-    try { globalThis.history?.replaceState(globalThis.history.state, '', href({ name: 'request', sessionId, key: next })); } catch { /* the page keeps its address */ }
+    try { globalThis.history?.replaceState(globalThis.history.state, '', href(panel ? { name: 'atelier', sessionId, requestKey: next } : { name: 'request', sessionId, key: next })); } catch { /* the page keeps its address */ }
   }, [outcome.kind, next, sessionId]);
 
   const link = linkView(state);
   const backRoute = { name: 'inbox' } as const;
+  // In the panel (design-ux 12:17Z), a decision applied gives the thread back, which says what was decided; so does a request handled
+  // elsewhere, but only from the PC's state now (offline, a request gone is never said handled). Every other outcome stays here.
+  const settled = outcome.kind === 'applied' || (item === undefined && !(outcome.kind === 'sending' || outcome.kind === 'uncertain' || outcome.kind === 'rejected' || outcome.kind === 'failed' || outcome.kind === 'changed') && fresh);
+  const back = panel?.onBack;
+  useEffect(() => { if (settled && back) back(); }, [settled, back]);
+  const header = (title: string) => (panel ? <PanelHeader title={title} panel={panel} /> : <BackHeader title={title} fallback={backRoute} label={copy.detail.back} link={link} />);
 
   if (outcome.kind === 'applied') return <Result store={store} title={resultTitle(outcome)} body={copy.result.body} item={last.current} final />;
   // The request may vanish before its operation settles: the last version seen still says what was decided.
@@ -99,12 +122,12 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
     if (!fresh && state.syncedAt === null) {
       return (
         <>
-          <BackHeader title={copy.gone.header} fallback={backRoute} label={copy.detail.back} link={link} />
+          {header(copy.gone.header)}
           <main className="min-h-0 flex-1 pt-7 text-body text-muted" role="status">{copy.loading}</main>
         </>
       );
     }
-    return <Gone store={store} stale={!fresh} item={last.current} />;
+    return <Gone store={store} stale={!fresh} item={last.current} {...(panel ? { panel: { header: header(copy.gone.header), back: { href: href({ name: 'atelier', sessionId }), label: copy.nav.backTo.thread! } } } : {})} />;
   }
 
   const isQuestion = req.kind === 'question';
@@ -168,7 +191,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
 
   return (
     <>
-      <BackHeader title={copy.detail.heading[req.kind]} fallback={backRoute} label={copy.detail.back} link={link} />
+      {header(copy.detail.heading[req.kind])}
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
           <MobileBot tool={req.tool} seed={req.sessionId} state={state.sessions.get(sessionId)?.state ?? 'idle'} frozen={!fresh} />
@@ -223,7 +246,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect }: { s
         {!fresh && outcome.kind !== 'uncertain' && <div className="mt-4"><Lost onReconnect={onReconnect} /></div>}
       </main>
       <DecisionFooter
-        item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined}
+        item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined} {...(panel ? { threadHref: href({ name: 'atelier', sessionId }) } : {})}
         onReread={() => { setChanged(false); setChoice(null); setPicked(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d))}
         answerable={answerable} choice={choosingOther ? options.length : choice} onAnswer={send}
         answerBlocked={choosingOther ? free.problem !== null : choice === null || choice >= options.length}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema, PhoneChatTurnSchema, ConfirmPurposeSchema, b64Max, ATTACHMENT_MAX, PREVIEW_MAX, TERM_INPUT_MAX } from '../src/index.js';
+import { PhoneClientMessageSchema, PhoneServerMessageSchema, PhoneSessionSchema, UNTYPABLE, PHONE_PROTOCOL, OperationReasonSchema, SessionSchema, PAD_TIERS, PLAIN_MAX, padPlain, PushPayloadSchema, PhoneChatTurnSchema, ConfirmPurposeSchema, b64Max, ATTACHMENT_MAX, PREVIEW_MAX, TERM_INPUT_MAX, PhoneProjectSchema } from '../src/index.js';
 
 const OP = '123e4567-e89b-42d3-a456-426614174000';
 const expectKey = { kind: 'permission', text: 'Run ls', key: 'k1' };
@@ -448,5 +448,37 @@ describe('the agent\'s terminal (spec 2026-11-02)', () => {
     expect(() => PhoneClientMessageSchema.parse({ type: 'term.input', tid, n: -1, data: 'x' })).toThrow();
     expect(() => PhoneClientMessageSchema.parse({ type: 'term.close', tid: "t_x'; kill" })).toThrow();
     expect(() => PhoneServerMessageSchema.parse({ type: 'term.released', tid, why: 'because' })).toThrow();
+  });
+});
+
+describe('the Atelier on the phone (iPad lot 1)', () => {
+  const caps = { freeTextAnswer: true };
+  const snap = { type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: caps, codex: caps, cursor: caps, omp: caps }, daemon: { version: '1.0.0', name: 'pc' } };
+  const session = { id: 's1', name: 'Nova', tool: 'claude', project: 'p', title: 't', state: 'idle', helpers: [], startedAt: '2026-10-29T18:00:00.000Z', lastActivityAt: '2026-10-29T18:42:00.000Z', unread: false };
+
+  it('the daemon says it feeds the Atelier, with the projects in its snapshot; an older one says nothing', () => {
+    const projects = [{ id: 'ledge', name: 'Ledge', color: 'violet' }, { id: 'site', name: 'Site', color: 'teal' }];
+    expect(PhoneServerMessageSchema.parse({ ...snap, daemon: { ...snap.daemon, atelier: true }, projects })).toMatchObject({ daemon: { atelier: true }, projects });
+    const older = PhoneServerMessageSchema.parse(snap);
+    expect(older).not.toHaveProperty('projects');
+    expect((older as { daemon: object }).daemon).not.toHaveProperty('atelier');
+    expect(() => PhoneServerMessageSchema.parse({ ...snap, daemon: { ...snap.daemon, atelier: false } })).toThrow();
+  });
+  it('a project is its id, name and colour: its folders and rules never stay', () => {
+    const p = PhoneProjectSchema.parse({ id: 'ledge', name: 'Ledge', color: 'violet', description: 'd', repos: [{ machine: 'local', path: '/home/x/ledge' }], rules: [] });
+    expect(p).toEqual({ id: 'ledge', name: 'Ledge', color: 'violet' });
+    expect(() => PhoneProjectSchema.parse({ id: 'Not An Id', name: 'x', color: 'violet' })).toThrow();
+    expect(() => PhoneProjectSchema.parse({ id: 'ledge', name: 'x', color: 'mauve' })).toThrow();
+  });
+  it('the projects follow each change, whole', () => {
+    expect(PhoneServerMessageSchema.parse({ type: 'projects', projects: [] })).toEqual({ type: 'projects', projects: [] });
+    expect(() => PhoneServerMessageSchema.parse({ type: 'projects', projects: Array.from({ length: 101 }, (_, i) => ({ id: `p${i}`, name: 'x', color: 'blue' })) })).toThrow();
+  });
+  it('a session carries its project and its rig seat, never the seat itself', () => {
+    const s = PhoneSessionSchema.parse({ ...session, projectId: 'ledge', rig: { name: 'ledge-dev', role: 'dev.back', seat: 'dev-back@ledge-dev' } });
+    expect(s).toMatchObject({ projectId: 'ledge', rig: { name: 'ledge-dev', role: 'dev.back' } });
+    expect(s.rig).not.toHaveProperty('seat');
+    expect(PhoneSessionSchema.parse(session)).not.toHaveProperty('projectId');
+    expect(() => PhoneSessionSchema.parse({ ...session, projectId: '/home/x' })).toThrow();
   });
 });

@@ -9,8 +9,11 @@ const QUEUE_MESSAGES_MAX = 300;
 const QUEUE_BYTES_MAX = 8 * 1_048_576;
 
 export interface Outbox {
-  /** Queues `msg` for the device; a queued message with the same `key` is replaced in place. */
-  push(deviceId: string, msg: PhoneServerMessage, key?: string): void;
+  /**
+   * Queues `msg` for the device; a queued message with the same `key` is replaced in place. `last`: it is removed instead and the
+   * new one goes at the end, behind what was queued since (a session placed anew goes behind the projects list that places it).
+   */
+  push(deviceId: string, msg: PhoneServerMessage, key?: string, opts?: { last?: true }): void;
   /** Whether a message with this key still waits for the device (not yet handed to the relay). */
   queued(deviceId: string, key: string): boolean;
   /** Forgets everything queued for the device. */
@@ -112,10 +115,15 @@ export function createOutbox(opts: {
     }
   };
 
-  const enqueue = (deviceId: string, text: string, key: string | undefined, priority = false) => {
+  const enqueue = (deviceId: string, text: string, key: string | undefined, priority = false, last = false) => {
     const cost = costOf(text);
     let queue = queues.get(deviceId);
-    const at = key === undefined ? -1 : (queue?.findIndex((q) => q.key === key) ?? -1);
+    let at = key === undefined ? -1 : (queue?.findIndex((q) => q.key === key) ?? -1);
+    if (queue && at >= 0 && last && !queue[at]!.priority) {
+      queuedBytes.set(deviceId, (queuedBytes.get(deviceId) ?? 0) - queue[at]!.cost);
+      queue.splice(at, 1);
+      at = -1;
+    }
     if (queue && at >= 0) {
       queuedBytes.set(deviceId, (queuedBytes.get(deviceId) ?? 0) - queue[at]!.cost + cost);
       queue[at] = { key, text, cost, ...(queue[at]!.priority ? { priority: true as const } : {}) };
@@ -141,7 +149,7 @@ export function createOutbox(opts: {
   };
 
   return {
-    push(deviceId, msg, key) {
+    push(deviceId, msg, key, o) {
       if (closed) return;
       const json = JSON.stringify(msg);
       const padded = pad(json);
@@ -151,7 +159,7 @@ export function createOutbox(opts: {
         enqueue(deviceId, err, `too_large:${msg.type}`, true);
         return;
       }
-      enqueue(deviceId, padded, key, msg.type === 'operation.result' || msg.type === 'error');
+      enqueue(deviceId, padded, key, msg.type === 'operation.result' || msg.type === 'error', o?.last === true);
     },
     queued: (deviceId, key) => queues.get(deviceId)?.some(q => q.key === key) ?? false,
     drop(deviceId) { clear(deviceId); settle(); },
