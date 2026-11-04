@@ -214,3 +214,23 @@ Cosmetic leftovers in native mode:
 - The terminal footer says « tmux · ledge-<id> ».
 - Settings still mention the chat (default agent), the handover (max context) and « Retour à l'atelier ».
 - Cursor Agent and OMP are offered as default agent.
+
+## Windows paths in projects (the blocker found in step 4)
+
+Plan: `docs/superpowers/plans/2026-11-04-windows-project-paths.md`.
+
+A browser-safe path module (`packages/protocol/src/paths.ts`) reads both path shapes from the string itself. Windows paths are stored as `C:\a\b` and compared without regard to case or separators. POSIX behaviour is unchanged.
+
+Verified on the PC with the same setup as step 4: debug build, native mode, port 27832, and the page driven over CDP.
+
+| Check | Result |
+|---|---|
+| 1. Create a project by browsing | The picker opens on `C: / Users / guill` and goes down to `…\Temp\ledge-spike`. Its row reads `work`. Saving writes `"path": "C:\\Users\\guill\\AppData\\Local\\Temp\\ledge-spike\\work"` to `projects.json`. The session left over from step 4 (cwd under `work`) moves under the project at once. |
+| 2. Launch Claude in the project | « Nouvelle session dans Spike » with a harmless prompt. The form closes (launch answered), and the session shows under « Spike ». Its thread shows the prompt and Claude's answer. |
+| 3. Launch Codex in the project | Same, with Codex chosen in the form. The session « Pim » shows under « Spike », answers, and is « Disponible ». |
+| 4. Another spelling | `c:/users/guill/appdata/local/temp/ledge-spike/work/` typed in a new project gives « Déjà dans Spike ». |
+
+Seen, left as they are:
+
+- The form still offers Cursor Agent and OMP in native mode; both are off on Windows.
+- The picker lists `AppData` and the other hidden or system folders, as planned.
