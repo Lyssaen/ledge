@@ -88,7 +88,7 @@ describe('pane host', () => {
     expect(proc.written.some(l => l.startsWith('resize-window') || l.includes('window-size'))).toBe(false);
     h.input(reply, 'a', 'x');
     expect(proc.written.some(l => l.startsWith('send-keys'))).toBe(false);
-    h.unwatch(reply);
+    h.unwatch(reply, 'a');
     expect(proc.written.some(l => l.includes('window-size latest'))).toBe(false);
 
     const again = host();
@@ -97,7 +97,7 @@ describe('pane host', () => {
     await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
-    again.h.unwatch(again.reply);
+    again.h.unwatch(again.reply, 'b');
     expect(again.tmux.procs[0]!.written.at(-1)).toContain('window-size latest');
     expect(again.tmux.procs[0]!.killed).toBe(false);
     await vi.advanceTimersByTimeAsync(20);
@@ -109,5 +109,39 @@ describe('pane host', () => {
     h.watch(reply, { id: 'a', tmuxName: 'ledge a' }, { cols: 80, rows: 24 });
     expect(sent).toEqual([{ type: 'term.exit', id: 'a', why: 'failed' }]);
     expect(tmux.procs).toHaveLength(0);
+  });
+
+  it('keeps the agent watch beside a shell, and kills the shell session without the typing lock', async () => {
+    vi.useFakeTimers();
+    const killed: string[] = [];
+    const typing = new Set<string>();
+    const seen: string[] = [];
+    const lock = {
+      has: (id: string) => typing.has(id),
+      add: (id: string) => { seen.push(id); return typing.add(id); },
+      delete: (id: string) => typing.delete(id)
+    } as unknown as Set<string>;
+    const { h, sent, reply, tmux } = host({ typing: lock, killSession: n => { killed.push(n); } });
+    h.watch(reply, { id: 'a', tmuxName: 'ledge-a' }, { cols: 80, rows: 24 });
+    h.watch(reply, { id: 'a', tmuxName: 'sh-abc', shell: 's1', owned: true }, { cols: 40, rows: 12 });
+    h.watch(reply, { id: 'b', tmuxName: 'sh-def', shell: 's1', owned: true }, { cols: 40, rows: 12 });
+    for (let i = 0; i < 12; i++) await vi.runOnlyPendingTimersAsync();
+    expect(tmux.procs.filter(p => !p.killed)).toHaveLength(3);
+    const shell = sent.filter((m): m is Extract<ServerMessage, { type: 'term.opened' }> => m.type === 'term.opened' && m.shell === 's1');
+    expect(shell.map(m => m.id)).toEqual(['a', 'b']);
+    h.input(reply, 'a', 'z', 's1');
+    await vi.runOnlyPendingTimersAsync();
+    expect(seen).toEqual([]);
+    expect(tmux.procs[1]!.written.at(-1)).toBe('send-keys -t %0 -H 7a');
+    h.unwatch(reply, 'a');
+    expect(tmux.procs[0]!.written.at(-1)).toContain('window-size latest');
+    expect(tmux.procs[1]!.killed).toBe(false);
+    h.unwatch(reply, 'a', 's1');
+    expect(killed).toEqual(['sh-abc']);
+    expect(tmux.procs[1]!.written.some(l => l.includes('window-size latest'))).toBe(false);
+    expect(tmux.procs[1]!.killed).toBe(true);
+    h.release(reply);
+    expect(killed).toEqual(['sh-abc', 'sh-def']);
+    expect(sent.filter(m => m.type === 'term.exit')).toEqual([{ type: 'term.exit', id: 'b', shell: 's1', why: 'gone' }]);
   });
 });

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PtyBackend, PtyEvents } from '../src/term/backend';
 import type { TermSurface } from '../src/term/surface';
 import { TermStore, agentTabId, changesTabId, type Tab, type TermDeps } from '../src/term/store';
-import type { AgentRoute, AgentStream, StreamEvents } from '../src/term/stream';
+import type { AgentRoute, AgentStream, ShellStream, StreamEvents } from '../src/term/stream';
 
 type Open = { argv: string[]; on: PtyEvents; closed: boolean; writes: string[]; sizes: [number, number][]; resolve(ok: boolean): void };
 type FakeSurface = TermSurface & { written: (Uint8Array | string)[]; readOnly: boolean; disposed: boolean; type(d: string): void; resized(c: number, r: number): void };
@@ -248,6 +248,40 @@ describe('TermStore agent attachment', () => {
     seen[0]!.on.screen('painted');
     expect(surface.written).toEqual(['painted']);
     expect(st.link('local:a')).toEqual({ state: 'attached', attempt: 0 });
+  });
+
+  it('a shell waits, then is born on the daemon, and ends when the machine drops', () => {
+    let route: AgentRoute = 'wait';
+    const opened: Array<{ id: string; shell: string }> = [];
+    const closed: string[] = [];
+    const ends: Array<() => void> = [];
+    const shellStream: ShellStream = {
+      open: (id, shell, _size, on) => {
+        opened.push({ id, shell });
+        ends.push(() => on.exit());
+        return { write: () => {}, resize: () => {}, close: () => { closed.push(shell); } };
+      }
+    };
+    const st = store({ agentRoute: () => route, shellStream });
+    const shell = plus(st, 'local:a');
+    st.select('local:a', shell!.id);
+    expect(shellOf(st, 'local:a', shell!.id).status).toBe('idle');
+    expect(backend.opens).toHaveLength(0);
+    expect(opened).toEqual([]);
+    route = 'stream';
+    st.refreshAgent();
+    expect(opened).toEqual([{ id: 'local:a', shell: 's1' }]);
+    expect(backend.opens).toHaveLength(0);
+    expect(shellOf(st, 'local:a', shell!.id).status).toBe('running');
+    ends[0]!();
+    expect(shellOf(st, 'local:a', shell!.id).status).toBe('ended');
+    st.reopen('local:a', shell!.id);
+    expect(opened).toHaveLength(2);
+    route = 'wait';
+    st.refreshAgent();
+    expect(shellOf(st, 'local:a', shell!.id).status).toBe('ended');
+    expect(closed).toEqual(['s1']);
+    expect(opened).toHaveLength(2);
   });
 
   it('the agent tab attaches to the session, with keys going to the agent', async () => {

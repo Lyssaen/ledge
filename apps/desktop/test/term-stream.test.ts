@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
-import { agentRoute, createAgentStream, decodeChunk } from '../src/term/stream';
+import { agentRoute, createAgentStream, createShellStream, decodeChunk } from '../src/term/stream';
 import { paintScreen } from '../src/term/paint';
 
 describe('agentRoute', () => {
@@ -39,8 +39,34 @@ describe('the stream client', () => {
     handle.write('\x1b[1;1R');
     handle.write('q');
     expect(sent.filter(m => m.type === 'term.input')).toEqual([{ type: 'term.input', id: 'local:a', data: 'q' }]);
+    deliver({ type: 'term.output', id: 'local:a', shell: 's1', data: Buffer.from('no').toString('base64') });
+    expect(bytes).toHaveLength(1);
     handle.close();
     expect(sent.at(-1)).toEqual({ type: 'term.unwatch', id: 'local:a' });
     expect(decodeChunk(Buffer.from('ok').toString('base64'))).toEqual(new Uint8Array([0x6f, 0x6b]));
+  });
+
+  it('opens a shell by its tag and never paints it on the agent', () => {
+    const sent: ClientMessage[] = [];
+    let deliver: (m: ServerMessage) => void = () => {};
+    const client = {
+      send: (m: ClientMessage) => { sent.push(m); },
+      onMessage: (fn: (m: ServerMessage) => void) => { deliver = fn; return () => { deliver = () => {}; }; }
+    };
+    const bytes: Uint8Array[] = [];
+    let ended = 0;
+    const handle = createShellStream(client, paintScreen).open('local:a', 's1', { cols: 80, rows: 24 }, {
+      screen: () => {}, data: b => bytes.push(b), exit: () => { ended += 1; }
+    });
+    expect(sent[0]).toEqual({ type: 'term.shell', id: 'local:a', shell: 's1', cols: 80, rows: 24 });
+    deliver({ type: 'term.output', id: 'local:a', data: Buffer.from('A').toString('base64') });
+    deliver({ type: 'term.output', id: 'local:a', shell: 's1', data: Buffer.from('B').toString('base64') });
+    expect(bytes).toEqual([new Uint8Array([0x42])]);
+    handle.write('\x1b[1;1R');
+    handle.write('q');
+    expect(sent.filter(m => m.type === 'term.input')).toEqual([{ type: 'term.input', id: 'local:a', shell: 's1', data: 'q' }]);
+    handle.close();
+    expect(sent.at(-1)).toEqual({ type: 'term.unwatch', id: 'local:a', shell: 's1' });
+    expect(ended).toBe(0);
   });
 });

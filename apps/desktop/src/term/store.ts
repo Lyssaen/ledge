@@ -2,7 +2,7 @@ import type { PtyBackend, PtyHandle } from './backend';
 import type { TermSurface } from './surface';
 import type { TermTheme } from './theme';
 import { reconnectDelay, type AgentMode } from './mode';
-import type { AgentRoute, AgentStream } from './stream';
+import type { AgentRoute, AgentStream, ShellStream } from './stream';
 
 /** A shell of the right panel (Fil | Terminal v3): the agent's screen is no tab, it is the session's Terminal view. */
 export type Tab = { kind: 'shell'; id: string; n: number; dir: string; remote: boolean; status: 'idle' | 'running' | 'ended' | 'unavailable'; end?: { code: number | null; lost: boolean } };
@@ -12,7 +12,7 @@ export type AgentLink = { state: 'attached' | 'reconnecting' | 'off'; attempt: n
 export const agentTabId = (sessionId: string): string => `${sessionId}#agent`;
 /** The right panel's first tab, « ± Modifications »: fixed, never closed, and where the panel opens while it has no shell. */
 export const changesTabId = (sessionId: string): string => `${sessionId}#changes`;
-export interface TermDeps { backend: PtyBackend | null; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout; /** Absent: the agent screen is always the pseudo-terminal, as before the control stream. */ agentRoute?: (sessionId: string) => AgentRoute; stream?: AgentStream }
+export interface TermDeps { backend: PtyBackend | null; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout; /** Absent: the agent screen is always the pseudo-terminal, as before the control stream. */ agentRoute?: (sessionId: string) => AgentRoute; stream?: AgentStream; /** Shells born beside the daemon, when `agentRoute` says `stream`. Absent: a shell is the local pseudo-terminal. */ shellStream?: ShellStream }
 
 const OFF: AgentLink = { state: 'off', attempt: 0 };
 /** `ssh`'s exit code when the connection fails or drops. */
@@ -25,7 +25,7 @@ type Entry = { tabs: readonly Tab[]; active: string; next: number; link: AgentLi
 /** One open (or opening) pseudo-terminal; it is current while the store still points at it, stale once replaced or dropped.
  *  `typed` holds what the xterm sends before the handle is there: ConPTY asks for the cursor as it starts and draws nothing,
  *  reads no key, until that answer comes. */
-type Run = { handle: PtyHandle | null; typed: string[] };
+type Run = { handle: PtyHandle | null; typed: string[]; stream?: boolean };
 
 /** Sends `data` to the run's process, or keeps it until the process is there. */
 function type(run: Run | null, data: string): void {
@@ -113,9 +113,21 @@ export class TermStore {
     this.emit();
   }
 
-  /** The machine's snapshot arrived, or its flag did: attach by whichever path that now says. */
+  /** The machine's snapshot arrived, or its flag did: attach by whichever path that now says, and wake a shell that waited. */
   refreshAgent(): void {
     if (this.shown) this.showAgent(this.shown.sid, this.shown.mode);
+    if (!this.deps.agentRoute) return;
+    for (const [sid, e] of this.entries) {
+      const route = this.deps.agentRoute(sid);
+      // The socket dropped: the daemon already killed the owned session, so the tab ends. A new one is a fresh shell.
+      if (route === 'wait') {
+        for (const t of e.tabs) if (t.kind === 'shell' && t.status === 'running' && this.shells.get(t.id)?.stream) this.finishStream(sid, t.id);
+        continue;
+      }
+      if (route !== 'stream') continue;
+      const tab = e.tabs.find(t => t.id === e.active);
+      if (tab?.kind === 'shell' && tab.status === 'idle') this.start(sid, tab);
+    }
   }
 
   showAgent(sessionId: string, mode: AgentMode): void {
@@ -200,6 +212,10 @@ export class TermStore {
   }
 
   private start(sessionId: string, tab: ShellTab): void {
+    const route = this.deps.agentRoute?.(sessionId);
+    // The machine has not answered yet: leave the tab idle, so a later snapshot starts it once.
+    if (route === 'wait') return;
+    if (route === 'stream' && this.deps.shellStream) { this.startStream(sessionId, tab); return; }
     const { backend } = this.deps;
     const argv = backend ? this.deps.shellArgv(sessionId) : null;
     if (!backend || !argv) { this.setTab(sessionId, tab.id, { status: 'unavailable', end: undefined }); return; }
@@ -226,6 +242,41 @@ export class TermStore {
         this.emit();
       }
     }).then(adopt, () => adopt(null));
+  }
+
+  /** The shell over the daemon's control stream. It is not restarted when it ends: that would hide a command that died. */
+  private startStream(sessionId: string, tab: ShellTab): void {
+    const shells = this.deps.shellStream;
+    if (!shells) return;
+    const id = tab.id;
+    const surface = this.surfaceFor(id, () => this.shells.get(id) ?? null);
+    const run: Run = { handle: null, typed: [], stream: true };
+    const current = () => this.shells.get(id) === run;
+    this.shells.set(id, run);
+    this.setTab(sessionId, id, { status: 'running', end: undefined });
+    const handle = shells.open(sessionId, `s${tab.n}`, surface.size(), {
+      screen: text => { if (current()) surface.write(text); },
+      data: b => { if (current()) surface.write(b); },
+      exit: () => {
+        if (!current()) return;
+        this.shells.delete(id);
+        this.setTab(sessionId, id, { status: 'ended', end: { code: null, lost: false } });
+        this.emit();
+      }
+    });
+    if (!current()) { handle.close(); return; }
+    adoptHandle(run, handle);
+    syncSize(handle, surface);
+    this.emit();
+  }
+
+  /** The machine went away under a streamed shell: the tab ends, and nothing opens in its place. */
+  private finishStream(sessionId: string, tabId: string): void {
+    const run = this.shells.get(tabId);
+    run?.handle?.close();
+    this.shells.delete(tabId);
+    this.setTab(sessionId, tabId, { status: 'ended', end: { code: null, lost: false } });
+    this.emit();
   }
 
   /** Detaches the shown session's agent tab and cancels its reconnection; its screen stays as it was. */

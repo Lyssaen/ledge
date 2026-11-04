@@ -13,7 +13,7 @@ import { OpenRigRowSchema, OpenRigRowStateSchema } from './rigMessages.js';
 import { OpenRigRoleDetailSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { BrowserEnableSchema, BrowserEnabledSchema, BrowserFrameSchema, BrowserLiveSchema, BrowserUnwatchSchema, BrowserWatchSchema } from './browser.js';
-import { TermExitSchema, TermInputSchema, TermOpenedSchema, TermOutputSchema, TermResizeSchema, TermSizeSchema, TermUnwatchSchema, TermWatchSchema } from './term.js';
+import { TermExitSchema, TermInputSchema, TermOpenedSchema, TermOutputSchema, TermResizeSchema, TermShellSchema, TermSizeSchema, TermUnwatchSchema, TermWatchSchema } from './term.js';
 import { RoutingContextSchema, RouteResultSchema } from './routing.js';
 import { SshAliasSchema } from './ssh.js';
 import { MachinesSchema } from './machines.js';
@@ -105,7 +105,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Answers `openrig.goal.send`, `openrig.goals` and `openrig.goal.reply`: goals given to Max (lot 2). */ openrigGoals: z.boolean().optional(),
   /** Takes `session.broadcast` (its `ledge bridge` too, on this machine): a client sends it only when this is set. */ broadcast: z.boolean().optional(),
   /** Sends `browser.live` and answers `browser.watch`, `browser.unwatch` and `browser.enable`: the agent's browser, live. */ browserLive: z.boolean().optional(),
-  /** Answers `term.watch`: the agent screen as a tmux control stream, xterm.js the only emulator. */ terminalStream: z.boolean().optional() });
+  /** Answers `term.watch` and `term.shell`: the pane and the shells as a tmux control stream, xterm.js the only emulator. */ terminalStream: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -224,6 +224,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   BrowserUnwatchSchema,
   BrowserEnableSchema,
   TermWatchSchema,
+  TermShellSchema,
   TermUnwatchSchema,
   TermInputSchema,
   TermResizeSchema,

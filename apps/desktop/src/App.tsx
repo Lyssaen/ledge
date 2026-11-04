@@ -62,7 +62,7 @@ import { useStored } from './state/useStored';
 import { ptyBackend } from './term/backend';
 import { paintScreen } from './term/paint';
 import { TermStore } from './term/store';
-import { agentRoute, createAgentStream } from './term/stream';
+import { agentRoute, createAgentStream, createShellStream } from './term/stream';
 import { focusAgentView } from './session/agentFocus';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
@@ -94,6 +94,7 @@ function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
       return agentRoute(s, client.fleet?.machines().find(m => m.id === (s?.machineId ?? 'local')));
     },
     stream: createAgentStream(client, paintScreen),
+    shellStream: createShellStream(client, paintScreen),
     shellArgv: id => client.fleet?.shell(id) ?? null,
     // A first shell opens where the session works (its worktree, else its folder), over ssh when its machine is reached that way.
     shellPlace: id => {

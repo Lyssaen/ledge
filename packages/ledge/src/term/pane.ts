@@ -1,8 +1,8 @@
-// The desktop's agent screen: one tmux control client per watcher, on the session's machine. xterm.js is the only
-// emulator. The phone keeps its own host (mobile/terminal.ts); both may attach, and only a watcher that types sets
-// the window size. Logs carry reasons, never a byte of the pane.
+// The desktop's terminals: one tmux control client per watcher, on the session's machine. xterm.js is the only emulator.
+// A shell is its own short session (`owned`): closing it kills that session and never takes the agent's typing lock.
+// The phone uses the same control client and keeps its own batching. Logs carry reasons, never a byte of the pane.
 import { PaneExitWhy, TERM_CHUNK, TERM_CHUNK_B64, TERM_PANE_SCREEN_MAX } from '@ledge/protocol';
-import { ControlParser, keyCommands, spawnControl, type ControlEvent, type ControlProcess, type SpawnControl } from '../mobile/terminal.js';
+import { keyCommands, openControl, spawnControl, type ControlClient, type ControlEvent, type SpawnControl } from '../mobile/terminal.js';
 
 /** A batch leaves at the first of this and `TERM_CHUNK` bytes. Desktop has no relay budget to stay under. */
 const TICK_MS = 16;
@@ -11,15 +11,25 @@ const BEHIND_BYTES = 262_144;
 const OPEN_TIMEOUT_MS = 5_000;
 const RESTORE_MS = 20;
 
-export interface PaneReply { (msg: { type: 'term.opened'; id: string; cols: number; rows: number; screen: string; cursor: { x: number; y: number } } | { type: 'term.output'; id: string; data: string } | { type: 'term.size'; id: string; cols: number; rows: number } | { type: 'term.exit'; id: string; why: PaneExitWhy }): void }
+type PaneMsg =
+  | { type: 'term.opened'; id: string; shell?: string; cols: number; rows: number; screen: string; cursor: { x: number; y: number } }
+  | { type: 'term.output'; id: string; shell?: string; data: string }
+  | { type: 'term.size'; id: string; shell?: string; cols: number; rows: number }
+  | { type: 'term.exit'; id: string; shell?: string; why: PaneExitWhy };
+
+export interface PaneReply { (msg: PaneMsg): void }
+
+export interface PaneSession { id: string; tmuxName: string; shell?: string; owned?: boolean }
 
 export interface PaneHost {
-  /** `size` null: read-only, the pane's size stays whatever it is. */
-  watch(reply: PaneReply, session: { id: string; tmuxName: string }, size: { cols: number; rows: number } | null): void;
-  input(reply: PaneReply, id: string, data: string): void;
-  resize(reply: PaneReply, id: string, cols: number, rows: number): void;
-  /** The front closed its screen, or its socket did. */
-  unwatch(reply: PaneReply): void;
+  /** `size` null: read-only, the pane's size stays whatever it is. A new watch replaces only the same shell of the same session. */
+  watch(reply: PaneReply, session: PaneSession, size: { cols: number; rows: number } | null): void;
+  input(reply: PaneReply, id: string, data: string, shell?: string): void;
+  resize(reply: PaneReply, id: string, cols: number, rows: number, shell?: string): void;
+  /** The front closed one screen. No `shell`: the harness pane of `id`. */
+  unwatch(reply: PaneReply, id: string, shell?: string): void;
+  /** The socket closed: every watch on it ends. An owned shell is told `gone`. */
+  release(reply: PaneReply): void;
   /** The session is gone: every watcher of it is told `ended`. */
   drop(sessionId: string): void;
   stop(): void;
@@ -28,8 +38,10 @@ export interface PaneHost {
 export interface PaneDeps {
   controlArgs(tmuxName: string): string[] | null;
   spawn?: SpawnControl;
-  /** Sessions something is already typing into: a watcher's keys wait, then hold the same set. */
+  /** Sessions something is already typing into: a watcher's keys wait, then hold the same set. Shells do not. */
   typing?: Set<string>;
+  /** An owned shell's tmux session, killed when its watch ends. */
+  killSession?(tmuxName: string): void;
   log(line: string): void;
   now?: () => number;
   timer?: (fn: () => void, ms: number) => { stop(): void };
@@ -39,9 +51,8 @@ const SAFE_NAME = /^[A-Za-z0-9_.-]+$/;
 const targetOf = (name: string) => `'=${name}:'`;
 
 interface Watch {
-  reply: PaneReply; id: string; tmuxName: string; sizing: boolean;
-  proc: ControlProcess; parser: ControlParser;
-  replies: Array<(r: { ok: boolean; lines: string[] }) => void>;
+  reply: PaneReply; id: string; shell: string; tmuxName: string; sizing: boolean; owned: boolean; lock: boolean;
+  client: ControlClient;
   state: 'capturing' | 'live' | 'closed';
   pane: string | null; cols: number; rows: number;
   /** The grid the watcher asked for. `cols`/`rows` are what the pane last reported. */
@@ -72,25 +83,20 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     return { stop: () => clearTimeout(id) };
   };
   const watches = new Set<Watch>();
-  /** How many sizing watchers a session has. The last one to leave gives the window back to whatever attaches. */
+  /** How many sizing watchers a tmux session has. The last one to leave gives the window back to whatever attaches. */
   const sizing = new Map<string, number>();
-  const of = (reply: PaneReply) => [...watches].find(w => w.reply === reply && w.state !== 'closed');
+  const find = (reply: PaneReply, id: string, shell = '') => [...watches].find(w => w.reply === reply && w.id === id && w.shell === shell && w.state !== 'closed');
 
   const hold = (name: string) => sizing.set(name, (sizing.get(name) ?? 0) + 1);
-  const release = (name: string): boolean => {
+  const releaseSize = (name: string): boolean => {
     const n = (sizing.get(name) ?? 1) - 1;
     if (n <= 0) { sizing.delete(name); return true; }
     sizing.set(name, n);
     return false;
   };
 
-  const command = (w: Watch, line: string): Promise<{ ok: boolean; lines: string[] }> => new Promise(done => {
-    if (w.state === 'closed') return done({ ok: false, lines: [] });
-    w.replies.push(done);
-    w.proc.write(`${line}\n`);
-  });
-
-  const send = (w: Watch, msg: Parameters<PaneReply>[0]) => { if (w.state !== 'closed' || msg.type === 'term.exit') w.reply(msg); };
+  const stamp = (w: Watch, msg: PaneMsg): PaneMsg => (w.shell ? { ...msg, shell: w.shell } : msg);
+  const send = (w: Watch, msg: PaneMsg) => { if (w.state !== 'closed' || msg.type === 'term.exit') w.reply(stamp(w, msg)); };
 
   const end = (w: Watch, why: PaneExitWhy | null) => {
     if (w.state === 'closed') return;
@@ -98,13 +104,13 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     w.timer.stop();
     w.openTimer?.stop();
     watches.delete(w);
-    for (const r of w.replies.splice(0)) r({ ok: false, lines: [] });
-    const restore = w.sizing && release(w.tmuxName);
-    if (restore && SAFE_NAME.test(w.tmuxName)) w.proc.write(`set-option -w -t ${targetOf(w.tmuxName)} window-size latest\n`);
-    // The restore has to leave the process before it is killed; a watcher that never sized has nothing to say.
-    if (restore) later(() => w.proc.kill(), RESTORE_MS); else w.proc.kill();
-    if (why) w.reply({ type: 'term.exit', id: w.id, why });
-    deps.log(`pane ${w.id} ended (${why ?? 'closed'})`);
+    const restore = w.sizing && releaseSize(w.tmuxName);
+    if (w.owned) deps.killSession?.(w.tmuxName);
+    // The restore has to leave the process before it is killed. An owned shell is killed outright: the session goes with it.
+    else if (restore && SAFE_NAME.test(w.tmuxName)) w.client.write(`set-option -w -t ${targetOf(w.tmuxName)} window-size latest\n`);
+    if (restore && !w.owned) later(() => w.client.kill(), RESTORE_MS); else w.client.kill();
+    if (why) w.reply(stamp(w, { type: 'term.exit', id: w.id, why }));
+    deps.log(`pane ${w.id}${w.shell ? ` shell ${w.shell}` : ''} ended (${why ?? 'closed'})`);
   };
 
   const flush = (w: Watch) => {
@@ -130,14 +136,14 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     const target = targetOf(w.tmuxName);
     let sized: { cols: number; rows: number } | null = null;
     if (w.sizing && w.want) {
-      const set = await command(w, `set-option -w -t ${target} window-size manual`);
+      const set = await w.client.command(`set-option -w -t ${target} window-size manual`);
       if ((w.state as Watch['state']) === 'closed') return;
       sized = { ...w.want };
-      if (set.ok) await command(w, `resize-window -x ${sized.cols} -y ${sized.rows} -t ${target}`);
+      if (set.ok) await w.client.command(`resize-window -x ${sized.cols} -y ${sized.rows} -t ${target}`);
       if ((w.state as Watch['state']) === 'closed') return;
     }
-    const info = await command(w, `display-message -p -t ${target} '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y}'`);
-    const cap = await command(w, `capture-pane -p -e -t ${target}`);
+    const info = await w.client.command(`display-message -p -t ${target} '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y}'`);
+    const cap = await w.client.command(`capture-pane -p -e -t ${target}`);
     if ((w.state as Watch['state']) === 'closed') return;
     const m = info.ok ? /^(%\d+) (\d+) (\d+) (\d+) (\d+)$/.exec(info.lines[0] ?? '') : null;
     if (!m || !cap.ok) return end(w, 'failed');
@@ -150,19 +156,19 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     w.openTimer?.stop(); w.openTimer = null;
     send(w, { type: 'term.opened', id: w.id, cols: w.cols, rows: w.rows, screen: text, cursor: { x: Number(m[4]), y: Number(m[5]) } });
     // A resize that arrived while the screen was taken: the capture shows the old grid, so the window follows now.
-    if (w.want && sized && (w.want.cols !== sized.cols || w.want.rows !== sized.rows)) void command(w, `resize-window -x ${w.want.cols} -y ${w.want.rows} -t ${target}`);
+    if (w.want && sized && (w.want.cols !== sized.cols || w.want.rows !== sized.rows)) void w.client.command(`resize-window -x ${w.want.cols} -y ${w.want.rows} -t ${target}`);
     void drain(w);
   };
 
   const typeKeys = async (w: Watch, data: string) => {
-    const lock = deps.typing;
+    const lock = w.lock ? deps.typing : undefined;
     const deadline = now() + 5_000;
     while (lock?.has(w.id) && now() < deadline && w.state !== 'closed') await new Promise(r => setTimeout(r, 20));
     if (w.state !== 'live' || !w.pane || lock?.has(w.id)) return;
     lock?.add(w.id);
     try {
       for (const line of keyCommands(w.pane, data)) {
-        const r = await command(w, line);
+        const r = await w.client.command(line);
         if (!r.ok) { deps.log(`pane ${w.id}: keys refused by tmux`); return; }
       }
     } finally { lock?.delete(w.id); }
@@ -173,9 +179,8 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     for (const data of next) w.typing = w.typing.then(() => typeKeys(w, data)).catch(() => {});
   };
 
-  const onEvent = (w: Watch, e: ControlEvent) => {
+  const onEvent = (w: Watch, e: Exclude<ControlEvent, { kind: 'reply' }>) => {
     switch (e.kind) {
-      case 'reply': { const r = w.replies.shift(); r?.(e); return; }
       case 'output': {
         if (w.state !== 'live' || (w.pane !== null && e.pane !== w.pane)) return;
         w.buffer = w.buffer.length ? Buffer.concat([w.buffer, e.data]) : e.data;
@@ -191,17 +196,24 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     }
   };
 
+  const fail = (reply: PaneReply, session: PaneSession) => {
+    if (session.owned) deps.killSession?.(session.tmuxName);
+    reply({ type: 'term.exit', id: session.id, ...(session.shell ? { shell: session.shell } : {}), why: 'failed' });
+  };
+
   return {
     watch(reply, session, size) {
-      const prev = of(reply);
+      const tag = session.shell ?? '';
+      const prev = find(reply, session.id, tag);
       if (prev) end(prev, null);
-      if (!SAFE_NAME.test(session.tmuxName)) { reply({ type: 'term.exit', id: session.id, why: 'failed' }); return; }
+      if (!SAFE_NAME.test(session.tmuxName)) { fail(reply, session); return; }
       const argv = deps.controlArgs(session.tmuxName);
-      if (!argv || argv.length === 0) { reply({ type: 'term.exit', id: session.id, why: 'failed' }); return; }
-      const proc = spawnIt(argv);
-      const w: Watch = {
-        reply, id: session.id, tmuxName: session.tmuxName, sizing: size !== null, proc, parser: new ControlParser(),
-        replies: [() => {}], state: 'capturing', pane: null, cols: size?.cols ?? 0, rows: size?.rows ?? 0,
+      if (!argv || argv.length === 0) { fail(reply, session); return; }
+      let w!: Watch;
+      const client = openControl(argv, spawnIt, e => { if (w.state === 'closed') return; onEvent(w, e); });
+      w = {
+        reply, id: session.id, shell: tag, tmuxName: session.tmuxName, sizing: size !== null, owned: !!session.owned, lock: !session.owned,
+        client, state: 'capturing', pane: null, cols: size?.cols ?? 0, rows: size?.rows ?? 0,
         want: size ? { ...size } : null,
         buffer: Buffer.alloc(0), since: null, queued: [], typing: Promise.resolve(),
         timer: timer(() => flush(w), TICK_MS), openTimer: null
@@ -209,25 +221,24 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       if (w.sizing) hold(session.tmuxName);
       w.openTimer = later(() => { if (w.state !== 'closed') end(w, 'failed'); }, OPEN_TIMEOUT_MS);
       watches.add(w);
-      proc.onData(chunk => { for (const e of w.parser.push(chunk)) { if (w.state === 'closed') return; onEvent(w, e); } });
-      proc.onExit(() => end(w, 'gone'));
-      deps.log(`pane ${w.id} opened${w.sizing ? '' : ' read-only'}`);
+      deps.log(`pane ${w.id}${w.shell ? ` shell ${w.shell}` : ''} opened${w.sizing ? '' : ' read-only'}`);
       void screen(w);
     },
-    input(reply, id, data) {
-      const w = of(reply);
-      if (!w || w.id !== id || !w.sizing) return;
+    input(reply, id, data, shell) {
+      const w = find(reply, id, shell ?? '');
+      if (!w || !w.sizing) return;
       w.queued.push(data);
       if (w.state === 'live') drain(w);
     },
-    resize(reply, id, cols, rows) {
-      const w = of(reply);
-      if (!w || w.id !== id || !w.want || w.state === 'closed') return;
+    resize(reply, id, cols, rows, shell) {
+      const w = find(reply, id, shell ?? '');
+      if (!w || !w.want || w.state === 'closed') return;
       if (w.want.cols === cols && w.want.rows === rows) return;
       w.want = { cols, rows };
-      if (w.state === 'live') void command(w, `resize-window -x ${cols} -y ${rows} -t ${targetOf(w.tmuxName)}`);
+      if (w.state === 'live') void w.client.command(`resize-window -x ${cols} -y ${rows} -t ${targetOf(w.tmuxName)}`);
     },
-    unwatch(reply) { const w = of(reply); if (w) end(w, null); },
+    unwatch(reply, id, shell) { const w = find(reply, id, shell ?? ''); if (w) end(w, null); },
+    release(reply) { for (const w of [...watches]) if (w.reply === reply) end(w, w.owned ? 'gone' : null); },
     drop(sessionId) { for (const w of [...watches]) if (w.id === sessionId) end(w, 'ended'); },
     stop() { for (const w of [...watches]) end(w, null); }
   };

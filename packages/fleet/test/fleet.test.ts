@@ -56,9 +56,11 @@ describe('multi-machine connections', () => {
   it('qualifies the agent screen, whichever machine streams it', () => {
     const { got, server } = setup();
     server.emit({ type: 'term.output', id: 'same', data: 'aGk=' });
+    server.emit({ type: 'term.output', id: 'same', shell: 's1', data: 'aGk=' });
     server.emit({ type: 'term.exit', id: 'same', why: 'gone' });
     expect(got.filter(m => m.type === 'term.output' || m.type === 'term.exit')).toEqual([
       { type: 'term.output', id: 'server:same', data: 'aGk=' },
+      { type: 'term.output', id: 'server:same', shell: 's1', data: 'aGk=' },
       { type: 'term.exit', id: 'server:same', why: 'gone' }
     ]);
   });

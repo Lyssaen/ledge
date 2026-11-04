@@ -72,6 +72,7 @@ import { MAX_FRAME } from '../transport/frames.js';
 import { createBrowserLive, type BrowserLiveService } from './browser/live.js';
 import { enableLive } from './browser/enable.js';
 import { createPaneHost, type PaneHost } from '../term/pane.js';
+import { bornShell } from '../term/shell.js';
 
 /** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
 function withoutHarness(s: Session): Session {
@@ -440,8 +441,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
   // The desktop's agent screen. Absent when this tmux cannot spawn a control client (the snapshot then omits terminalStream).
+  /** Replies whose socket is still open: a shell that finishes starting after the close kills its session instead of watching it. */
+  const shellReplies = new Set<Reply>();
   const panes: PaneHost | null = opts.tmux.controlArgs ? createPaneHost({
-    controlArgs: n => opts.tmux.controlArgs?.(n) ?? null, typing, log
+    controlArgs: n => opts.tmux.controlArgs?.(n) ?? null, typing,
+    killSession: name => { void opts.tmux.killSession(name).catch(() => log('shell kill failed')); },
+    log
   }) : null;
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
   const closing = new Set<string>();
@@ -1209,9 +1214,24 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         panes.watch(reply, { id: s.id, tmuxName: s.tmuxSession }, msg.readOnly ? null : { cols: msg.cols, rows: msg.rows });
         return;
       }
-      case 'term.input': return panes?.input(reply, msg.id, msg.data);
-      case 'term.resize': return panes?.resize(reply, msg.id, msg.cols, msg.rows);
-      case 'term.unwatch': return panes?.unwatch(reply);
+      case 'term.shell': {
+        if (!panes) return reply({ type: 'term.exit', id: msg.id, shell: msg.shell, why: 'failed' });
+        const s = store.get(msg.id);
+        if (!s) return reply({ type: 'term.exit', id: msg.id, shell: msg.shell, why: 'gone' });
+        void bornShell({
+          session: { id: s.id, cwd: s.cwd, ...(s.workdir ? { workdir: s.workdir } : {}) },
+          tag: msg.shell, cols: msg.cols, rows: msg.rows,
+          env: () => loginShellEnv(), newSession: o => opts.tmux.newSession(o),
+          watch: (session, size) => panes.watch(reply, session, size), reply,
+          alive: () => shellReplies.has(reply), gone: () => store.get(s.id) === undefined,
+          killSession: name => { void opts.tmux.killSession(name).catch(() => log('shell kill failed')); },
+          log
+        });
+        return;
+      }
+      case 'term.input': return panes?.input(reply, msg.id, msg.data, msg.shell);
+      case 'term.resize': return panes?.resize(reply, msg.id, msg.cols, msg.rows, msg.shell);
+      case 'term.unwatch': return panes?.unwatch(reply, msg.id, msg.shell);
       // « Activer le direct… »: the message carries the person's confirmation (`confirmed: true`), never sent on its own.
       case 'browser.enable': return reply(await enableLive(msg.rid, opts.home ?? process.env.HOME ?? ''));
       case 'machines.set': {
@@ -1683,7 +1703,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
     localClients.add(ws); ws.once('close', () => localClients.delete(ws));
     const reply: Reply = m => send(ws, m);
-    ws.once('close', () => { browserLive.unwatchAll(reply); panes?.unwatch(reply); });
+    shellReplies.add(reply);
+    ws.once('close', () => { shellReplies.delete(reply); browserLive.unwatchAll(reply); panes?.release(reply); });
     sendSnapshot(reply);
     ws.on('message', data => {
       let msg: ClientMessage;

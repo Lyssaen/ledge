@@ -1,22 +1,32 @@
 # Desktop agent screen: one emulator, tmux keeps the process
 
-Date: 2026-11-04. Status: in progress. First slice of voie 1 (the harness pane on Desktop).
+Date: 2026-11-04. Status: in progress. Voie 1 for the harness pane, the shells born beside the daemon, and the phone on the same control client.
 
 ## Intent
 
-Cursor and VS Code feel fluid because one emulator draws the terminal. Ledge's agent tab drew the harness twice: a `tmux attach` inside ConPTY (`wsl.exe`), then xterm.js over that. This slice removes ConPTY and `wsl.exe` from the agent screen. The daemon on the session's machine holds a tmux control client, the same way the phone already does, and Desktop's xterm.js is the only emulator.
+Cursor and VS Code feel fluid because one emulator draws the terminal. Ledge's agent tab drew the harness twice: a `tmux attach` inside ConPTY (`wsl.exe`), then xterm.js over that. This removes ConPTY and `wsl.exe` from the agent screen and from a shell whose machine can stream. The daemon on the session's machine holds a tmux control client, and Desktop's xterm.js is the only emulator.
 
-Shells stay on the local pseudo-terminal. Windows Terminal stays the fallback (`ledge attach`). OpenRig seats (`@` in the tmux name) stay on the pseudo-terminal: their server has no control client.
+Windows Terminal stays the fallback (`ledge attach`). OpenRig seats (`@` in the tmux name) stay on the pseudo-terminal: their server has no control client. An older daemon has neither `terminalStream` nor the messages, and Desktop keeps today's attach for both the pane and the shells.
 
 ## Protocol
 
-`daemon.terminalStream` on the snapshot, set when the daemon can spawn `tmux -C`. An older daemon has neither the flag nor the messages, and Desktop keeps today's attach.
+`daemon.terminalStream` on the snapshot, set when the daemon can spawn `tmux -C`.
 
-Client → daemon: `term.watch { id, cols, rows, readOnly? }`, `term.input { id, data }`, `term.resize { id, cols, rows }`, `term.unwatch { id }`.
+Client → daemon: `term.watch { id, cols, rows, readOnly? }`, `term.shell { id, shell, cols, rows }`, `term.input { id, shell?, data }`, `term.resize { id, cols, rows, shell? }`, `term.unwatch { id, shell? }`.
 
-Daemon → client: `term.opened { id, cols, rows, screen, cursor }`, `term.output { id, data }` (base64 of the pane's raw bytes), `term.size`, `term.exit { why: ended | gone | failed }`.
+Daemon → client: `term.opened { id, shell?, cols, rows, screen, cursor }`, `term.output { id, shell?, data }` (base64 of the pane's raw bytes), `term.size`, `term.exit { why: ended | gone | failed }`.
 
-The fleet qualifies `id` both ways, including a session reached through the SSH bridge. `term.*` is not stripped the way `browser.*` is.
+`shell` matches `^[A-Za-z0-9_-]{1,40}$`. Absent, the message is the harness pane. The fleet qualifies `id` both ways and leaves `shell` as it is, including a session reached through the SSH bridge. `term.*` is not stripped the way `browser.*` is.
+
+## Shells
+
+A shell is a short-lived tmux session (`sh-` and 12 hex) on Ledge's socket: a login shell (`loginShellEnv()`, else `$SHELL`, else `/bin/bash -l`) in `workdir ?? cwd`. The same host watches it with `owned`. Closing the tab, or the socket, kills that session instead of restoring `window-size`. The shell does not take the agent's typing lock. One socket may watch the harness pane and several shells; a watch replaces only the same shell of the same session. `term.unwatch` without `shell` closes only the harness pane.
+
+The desktop's wire tag is `s<n>`, never the tab id (`local:a#shell-1` is not safe on the command line). A shell that ends is not started again: a fresh one would hide that the command died. While the machine has not answered, the tab stays idle. When the socket drops, a streamed shell ends. The browser has no pseudo-terminal; once `terminalStream` is set, its shells take this path. A seat, or a daemon without the flag, still opens the local pseudo-terminal.
+
+## Phone
+
+The phone and the desktop share one control client: the parser, the reply queue, the process. The phone keeps its own policy — hold, passkey, sequence numbers, UTF-8 text, the 100 ms relay batch — and still attaches `ignore-size,read-only`. It never resizes. Both may attach.
 
 ## Size
 
@@ -28,4 +38,4 @@ Keys are `send-keys -H` on the pane, behind the same typing lock deliveries alre
 
 ## Out of this slice
 
-A shell born next to the daemon. The browser build's shells. Replacing the phone's own control clients with this host (they keep theirs; both may attach, the phone with `ignore-size`).
+Embedding Ghostty or Windows Terminal. Rewriting tmux. A shell on a machine that cannot spawn `tmux -C` stays on the local pseudo-terminal.
