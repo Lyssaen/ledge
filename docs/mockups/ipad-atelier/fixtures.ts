@@ -25,6 +25,13 @@ export const usual: Session[] = [
   session('rio', { name: 'Rio', project: 'website', cwd: '/w/website', state: 'idle', branch: 'feat/WEB-18-accessibility', topic: 'Accessibilité' })
 ];
 
+/** The usual day, plus two sessions in folders that belong to no project (« Sans projet »). */
+export const unfiled: Session[] = [
+  ...usual,
+  session('sol', { name: 'Sol', project: 'proxy-essais', cwd: '/w/proxy-essais', state: 'waiting_input', topic: 'Tester le proxy' }),
+  session('kai', { name: 'Kai', project: 'notes', cwd: '/w/notes', state: 'idle', topic: 'Relire les notes de réunion' })
+];
+
 /** OMP seats of the dev-omp rig, as Ledge follows them (source rig, tool omp, no backend). */
 export const ompSeats: Session[] = [
   session('ivo', { name: 'Ivo', tool: 'omp' as Session['tool'], source: 'rig', cwd: '/w/ledge', project: 'ledge', state: 'working', tmuxSession: 'dev-agent@dev-omp', rig: { seat: 'dev-agent@dev-omp', name: 'dev-omp', role: 'dev.agent' } }),

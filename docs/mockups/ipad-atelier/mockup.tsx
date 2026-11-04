@@ -15,13 +15,13 @@ import { buttonClass, iconButtonClass } from '../../../apps/mobile/src/ui/Button
 import { Icon } from '../../../apps/mobile/src/ui/icons';
 import { LinkStatus } from '../../../apps/mobile/src/ui/Header';
 import { Notice } from '../../../apps/mobile/src/ui/Notice';
-import { many, projects, manyProjects, quiet, session, usual, ompSeats } from './fixtures';
+import { many, projects, manyProjects, quiet, session, usual, ompSeats, unfiled } from './fixtures';
 
 type Theme = 'dark' | 'light';
 type Orient = 'land' | 'port';
 type View = 'flow' | 'actions' | 'cases' | 'notes';
 type Step = 'tab' | 'session' | 'full' | 'room';
-type Case = 'many' | 'quiet' | 'offline' | 'omp';
+type Case = 'many' | 'quiet' | 'offline' | 'omp' | 'unfiled';
 type Sheet = { kind: 'session'; id: string } | { kind: 'room'; project: string } | null;
 
 const q = new URLSearchParams(location.search);
@@ -146,7 +146,9 @@ function AtelierScreen({ sessions, fresh = true, sheet, onSheet, onChat, orient,
   useIpadFit(box, orient, fit === 'ipad', sessions);
   const live = sessions.filter(s => s.state !== 'exited');
   const waiting = sessions.filter(s => s.state === 'waiting_permission' || s.state === 'waiting_input').length;
-  const rooms = new Set(sessions.map(s => s.rig?.name ?? s.project)).size;
+  // The rooms: a rig's, or a known project's; « Sans projet » is not a room.
+  const known = new Set([...projects.projects, ...manyProjects.projects].map(p => p.id));
+  const rooms = new Set(sessions.filter(s => s.rig || known.has(s.project)).map(s => s.rig?.name ?? s.project)).size;
   return (
     <div className="app mk-app">
       <Rail active="atelier" />
@@ -356,14 +358,15 @@ const CASES: Record<Case, [string, string]> = {
   many: ['Beaucoup de projets', 'Six projets : le zoom ne baisse pas, les pièces s’enchaînent (environ 3 écrans et demi en paysage, 4 en portrait) et on les fait glisser d’un doigt. Pour tout voir d’un coup, on pince : les pièces rapetissent jusqu’à tenir dans l’écran, illisibles mais repérables ; « Ajuster » ramène à la vue lisible.'],
   quiet: ['Aucun agent actif', 'Toutes les sessions sont terminées : les pièces restent, leurs agents en gris (« Terminé ») ; sans aucune session, l’Atelier montre le seul bureau de Ledge.'],
   offline: ['PC hors ligne', 'L’état mobile existant : « Dernier état connu · connexion perdue », le bandeau du PC déconnecté ; les bots figés. Toucher un agent ouvre son fil en lecture, rien n’est envoyé. Le bandeau prend de la hauteur : le zoom reste au plancher lisible (92 %), le bas de la pièce passe sous le bord et se fait défiler.'],
-  omp: ['Siège OMP', 'Ivo et Mia sont des sièges OMP du rig dev-omp, dans la pièce du rig. Un toucher ouvre le panneau « Pas de fil pour ce siège », avec son terminal, comme sur Desktop.']
+  omp: ['Siège OMP', 'Ivo et Mia sont des sièges OMP du rig dev-omp, dans la pièce du rig. Un toucher ouvre le panneau « Pas de fil pour ce siège », avec son terminal, comme sur Desktop.'],
+  unfiled: ['Sans projet', 'Des sessions dans un dossier qu’aucun projet ne couvre : la zone « Sans projet » de Desktop, après la dernière pièce (au bout de la ligne en paysage, sous la dernière pièce en portrait). Chaque carte : bot, nom, tâche, nom du dossier, état. Pas de poignée ni de « Ranger dans… » : on range depuis le PC, et l’aide le dit. Un toucher ouvre le panneau.'],
 };
 
 function CasesView({ orient, theme }: { orient: Orient; theme: Theme }): JSX.Element {
   const [c, setC] = useState<Case>((q.get('case') as Case) ?? 'many');
   const [sheet, setSheet] = useState<Sheet>(null);
   useEffect(() => { setSheet(c === 'omp' ? { kind: 'session', id: 'mia' } : c === 'offline' ? { kind: 'session', id: 'luna' } : null); }, [c]);
-  const sessions = c === 'many' ? many : c === 'quiet' ? quiet : c === 'offline' ? usual : [...usual, ...ompSeats];
+  const sessions = c === 'many' ? many : c === 'quiet' ? quiet : c === 'offline' ? usual : c === 'unfiled' ? unfiled : [...usual, ...ompSeats];
   return (
     <>
       <div className="mk-steps">{(Object.keys(CASES) as Case[]).map(k => <button key={k} aria-checked={c === k} onClick={() => setC(k)}>{CASES[k][0]}</button>)}</div>
@@ -382,6 +385,8 @@ const TEXTS: [string, string, string][] = [
   ['atelier.closePanel', 'Fermer le panneau', 'Close the panel'],
   ['atelier.room(n)', '4 agents', '4 agents'],
   ['atelier.ompNoThread / ompBody / ompTerminal', 'Pas de fil pour ce siège. / Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Son terminal montre son écran. / Ouvrir son terminal', 'No thread for this seat. / Ledge does not read the conversation of an OMP seat launched by OpenRig. Its terminal shows its screen. / Open its terminal'],
+  ['atelier.unassignedHint (iPad)', 'Ledge ne relie ces sessions à aucun projet. On les range depuis le PC.', 'Ledge links these sessions to no project. File them from the PC.'],
+  ['rooms.rigWhere(dossier, projet)', 'rig · ledge · projet Ledge (nom du dossier, pas le chemin) ; sans projet : rig · ledge', 'rig · ledge · project Ledge'],
   ['(repris tels quels)', 'Écrire au groupe · Envoyer · Annuler · Votre accord · Une question · Au travail · Disponible · Terminée · connecté / déconnecté', '']
 ];
 

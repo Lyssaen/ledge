@@ -72,3 +72,5 @@ html, body { background: var(--background) !important; }
 .mk-screen .app > .mk-atelier-col:has(.mk-full) { padding-inline: 28px; }
 .mk-screen .app > .split { margin-right: 0 !important; }
 .mk-screen .split-list { min-height: 0; }
+/* Answers to dev-front (11-04): no keyboard key in Ledge's bubble, no grip nor « Ranger dans… » on « Sans projet » cards. */
+.mk-screen .ledge-bubble kbd, .mk-screen .unassigned-card .drag-grip, .mk-screen .unassigned-card .assign-wrap { display: none !important; }

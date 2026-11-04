@@ -37,6 +37,16 @@ const js = await esbuild({
       return { contents: src.replace(old, "avoid={[...(extraCount > 0 ? ['br'] : []), ...(ends.some(e => e.end === 'left') ? ['ml'] : []), ...(ends.some(e => e.end === 'right') ? ['mr'] : [])] as Spot[]}")
         .replace("import { RUG_SIDE,", "import type { Spot } from './plantSpots';\nimport { RUG_SIDE,"), loader: 'tsx' };
     });
+    // The phone knows a session's folder name (its \`project\` field), never its path: the rig plaque and the « Sans projet »
+    // cards say that name; « Sans projet » cannot be filed from the iPad, its hint says where it is.
+    const swap = (file, pairs) => b.onLoad({ filter: file }, async a => {
+      let src = await readFile(a.path, 'utf8');
+      for (const [from, to] of pairs) { if (!src.includes(from)) throw new Error(`${a.path}: ${from} not found`); src = src.replace(from, to); }
+      return { contents: src, loader: a.path.endsWith('x') ? 'tsx' : 'ts' };
+    });
+    swap(/atelier[\\/]ProjectRoom\.tsx$/, [['t.rooms.rigWhere(tilde(rig.folder), rig.project)', "t.rooms.rigWhere(rig.folder.split('/').pop() ?? '', rig.project)"]]);
+    swap(/atelier[\\/]Unassigned\.tsx$/, [['<code>{machineOf(s)} · {s.cwd}</code>', '<code>{s.project}</code>']]);
+    swap(/i18n[\\/]fr\.ts$/, [['Glissez-les vers une table, ou utilisez « Ranger dans… ».\'', 'On les range depuis le PC.\'']]);
   } }]
 });
 
