@@ -114,6 +114,12 @@ impl AppMode {
 
 const fn ledge_protocol_port() -> u16 { 47831 }
 
+/** The page's Content-Security-Policy lets it reach the daemon on the port in use: tauri.conf.json names the usual one, a
+ *  native daemon on `LEDGE_PORT` (tests on a PC with WSL) takes its place. Nothing else is opened. */
+pub fn csp_for_port(csp: &str, port: u16) -> String {
+    csp.replace(&format!("ws://127.0.0.1:{}", ledge_protocol_port()), &format!("ws://127.0.0.1:{port}"))
+}
+
 /// What a mode starts at launch.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Subsystems { pub keepalive: bool, pub notch: bool, pub media: bool, pub supervisor: bool }
@@ -323,6 +329,11 @@ fn default_autostart(app: &tauri::App) {
 }
 
 fn main() {
+    let mode = AppMode::detect();
+    let mut context = tauri::generate_context!();
+    if mode.port != ledge_protocol_port() {
+        if let Some(tauri::utils::config::Csp::Policy(csp)) = context.config_mut().app.security.csp.as_mut() { *csp = csp_for_port(csp, mode.port); }
+    }
     tauri::Builder::default()
         // First, so a second launch exits before anything else starts; it brings this one forward instead.
         // A second launch from the island carries its target: this window shows it.
@@ -331,7 +342,7 @@ fn main() {
             if let Some(target) = ledge_native::desktop::open_target(args) { deliver_open(app, target); }
         }))
         .manage(PendingOpen::default())
-        .manage(AppMode::detect())
+        .manage(mode)
         .manage(Keeper::default())
         // Visibility is the launch's choice (setup below); decorations come from tauri.conf.json.
         // Restoring old native decorations would bring back Windows' title bar over our own.
@@ -360,7 +371,8 @@ fn main() {
             if run.keepalive { ledge_native::wsl_keepalive::start(); }
             build_tray(app)?;
             // Before the tray-only check: the notch shows even when the login item starts us minimized.
-            if run.notch { notch::setup(app)?; }
+            // The notch's window is declared in tauri.conf.json, so Tauri has made it already: native mode closes it.
+            if run.notch { notch::setup(app)?; } else if let Some(w) = app.get_webview_window(notch::NOTCH) { let _ = w.destroy(); }
             // What plays on the PC, for the closed notch (Windows' media controls).
             if run.media { media::start(app.handle().clone()); }
             // Native mode: Desktop runs the daemon (quitting Desktop leaves it running; the next launch adopts it).
@@ -387,7 +399,7 @@ fn main() {
                 }
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Ledge Desktop")
         .run(|app, event| {
             // Managed state is never dropped on exit: the terminals' processes would be left to the OS to reap.
@@ -397,7 +409,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_target, launched_minimized, on_close, subsystems, tray_shows_window, tray_title, CloseAction, Subsystems};
+    use super::{checked_target, csp_for_port, launched_minimized, on_close, subsystems, tray_shows_window, tray_title, CloseAction, Subsystems};
     use ledge_native::native::Mode;
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
@@ -436,5 +448,12 @@ mod tests {
     fn native_mode_supervises_the_daemon_and_starts_no_wsl_keepalive_nor_island() {
         assert_eq!(subsystems(Mode::Native), Subsystems { keepalive: false, notch: false, media: false, supervisor: true });
         assert_eq!(subsystems(Mode::Wsl), Subsystems { keepalive: true, notch: true, media: true, supervisor: false });
+    }
+
+    #[test]
+    fn the_page_may_reach_the_daemon_on_the_port_in_use_only() {
+        let csp = "default-src 'self'; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831";
+        assert_eq!(csp_for_port(csp, 47831), csp);
+        assert_eq!(csp_for_port(csp, 27832), "default-src 'self'; connect-src ipc: http://ipc.localhost ws://127.0.0.1:27832");
     }
 }

@@ -169,3 +169,48 @@ Verified on the PC (2026-11-03):
 - Windows unit tests failing before this branch still fail the same way (`update-self` clone path, login shell,
   symlinks without Developer Mode, 3 path-separator cases of `update-run`).
 
+
+## Desktop native mode (product phase, step 4)
+
+Plan: `docs/superpowers/plans/2026-11-04-windows-desktop-native.md`.
+
+**Test setup.** The branch's debug build of Ledge Desktop ran on the measurement PC with these environment variables:
+
+- `LEDGE_DESKTOP_MODE=native`: the PC has WSL.
+- `LEDGE_PORT=27832`: mirrored WSL reserves the usual port.
+- `LEDGE_NODE` and `LEDGE_CLI`: the clone's `node.exe` and `dist/cli/index.js`. The installer step bundles these.
+- `LEDGE_HOME` and `CODEX_HOME`: the spike's folders.
+
+The page was driven over WebView2's remote debugging (CDP), typing included. The installed Desktop was quit for the test, then restarted afterwards.
+
+| Check | Result |
+|---|---|
+| 1. Launch | `desktop.log`: `setup` (hooks set, Codex sandbox kept), then `started the daemon`, then the pane host. The page connects (`platform: win32`, Windows launcher). |
+| 2. A session in Desktop | Session launched through the protocol (see below). Its row shows in the sidebar. The agent's screen opens in the embedded terminal (`node cli attach` in a native ConPTY, target « windows »). A prompt typed there got its answer, and the state came back to idle with its context (hooks fire). |
+| 3. Windows Terminal | « Ouvrir dans un terminal externe » opens a `wt` tab titled with the session, running `node cli attach <id>`. |
+| 4. Crash | Daemon killed: `the daemon ended: starting it again in 2 s`, then a new pid. The pane host and the agent survive, and the session is still listed. |
+| 5. Desktop ends | Desktop killed twice: the daemon and the agent keep running. The next launch logs `adopted the running daemon (pid …)`, with no second daemon. |
+| 6. Hidden | No Ledge entry, Atelier, chat icon or notch. Settings has no Notch or Mobile access. The overview is « Sessions » with « Lancer une session ». |
+
+Fixed during this run, each covered by a test or by this check:
+
+- **The notch window still showed.** It is declared in `tauri.conf.json`, so Tauri creates it before `setup`. Native mode now destroys it.
+- **The page could not reach a daemon on `LEDGE_PORT`.** The CSP's `connect-src` names `ws://127.0.0.1:47831` only. At start, the CSP is rewritten for the port in use (`csp_for_port`) and opens nothing else. On the PO's PC the port is 47831 and nothing changes.
+
+Not covered in this run:
+
+- **Quitting from the tray.** The main page has no permission to end the process (only the notch had it), and the tray menu cannot be driven from here. `RunEvent::Exit` does not touch the daemon. A hard kill of Desktop, the harsher case, left the daemon and the agent running.
+
+**Finding for the next plan: Windows paths in projects.** Launching from the « New session » form needs a project, and projects do not take Windows paths yet:
+
+- `PathSchema` (`packages/protocol/src/projects.ts`) requires a leading `/`, so the daemon refuses the project.
+- `normalizePath` and the project matching (`startsWith(path + '/')`) are POSIX-only.
+- The folder picker mangles a typed `C:\…\work` into `C:\Users\guill/AppData`.
+
+Until this is fixed, the PO cannot start a session from Desktop. This needs its own plan, because the protocol is shared with Linux and the phone. Check 2 therefore launched through the protocol (`scripts/windows-spike/launch.ts`), as the spike did.
+
+Cosmetic leftovers in native mode:
+
+- The terminal footer says « tmux · ledge-<id> ».
+- Settings still mention the chat (default agent), the handover (max context) and « Retour à l'atelier ».
+- Cursor Agent and OMP are offered as default agent.
