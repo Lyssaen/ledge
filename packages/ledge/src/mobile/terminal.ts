@@ -100,6 +100,51 @@ export interface ControlProcess {
 }
 export type SpawnControl = (argv: string[]) => ControlProcess;
 
+/** One tmux control process: the reply queue and the parser. The phone and the desktop each batch and policy on top. */
+export interface ControlClient {
+  command(line: string): Promise<{ ok: boolean; lines: string[] }>;
+  write(text: string): void;
+  kill(): void;
+}
+
+export function openControl(argv: string[], spawn: SpawnControl, onEvent: (e: Exclude<ControlEvent, { kind: 'reply' }>) => void): ControlClient {
+  const proc = spawn(argv);
+  const parser = new ControlParser();
+  let closed = false;
+  // The attach command's own reply comes first and belongs to nobody.
+  const replies: Array<(r: { ok: boolean; lines: string[] }) => void> = [() => {}];
+  const fail = () => { for (const r of replies.splice(0)) r({ ok: false, lines: [] }); };
+  proc.onData(chunk => {
+    for (const e of parser.push(chunk)) {
+      if (closed) return;
+      if (e.kind === 'reply') { replies.shift()?.(e); continue; }
+      onEvent(e);
+    }
+  });
+  proc.onExit(() => {
+    if (closed) return;
+    closed = true;
+    fail();
+    onEvent({ kind: 'exit' });
+  });
+  return {
+    command(line) {
+      return new Promise(done => {
+        if (closed) return done({ ok: false, lines: [] });
+        replies.push(done);
+        proc.write(`${line}\n`);
+      });
+    },
+    write(text) { if (!closed) proc.write(text); },
+    kill() {
+      if (closed) return;
+      closed = true;
+      fail();
+      proc.kill();
+    }
+  };
+}
+
 export const spawnControl: SpawnControl = argv => {
   const p = spawn('tmux', argv, { stdio: ['pipe', 'pipe', 'ignore'] });
   let exited = false;
@@ -186,13 +231,9 @@ export interface TerminalDeps {
   now?(): number;
 }
 
-type Reply = { ok: boolean; lines: string[] };
-
 interface Term {
   tid: string; deviceId: string; sessionId: string; tmuxName: string; readOnly: boolean;
-  proc: ControlProcess; parser: ControlParser;
-  /** Replies awaited, oldest first: the attach's own reply comes before any of ours. */
-  replies: Array<(r: Reply) => void>;
+  client: ControlClient;
   /** `capturing`: output is dropped until the screen is taken; `live`: kept and sent. */
   state: 'capturing' | 'live' | 'closed';
   pane: string | null; cols: number; rows: number;
@@ -216,11 +257,7 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
   const mine = (deviceId: string, tid: string) => { const t = terms.get(tid); return t && t.deviceId === deviceId && t.state !== 'closed' ? t : undefined; };
   const send = (t: Term, msg: PhoneServerMessage, key = keyOf(t)) => deps.send(t.deviceId, msg, key);
 
-  const command = (t: Term, line: string): Promise<Reply> => new Promise(done => {
-    if (t.state === 'closed') return done({ ok: false, lines: [] });
-    t.replies.push(done);
-    t.proc.write(`${line}\n`);
-  });
+  const command = (t: Term, line: string) => t.client.command(line);
 
   const setHeld = (t: Term, held: Term['held']) => {
     const was = t.held !== null;
@@ -234,9 +271,8 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
     t.state = 'closed';
     clearInterval(t.timer);
     if (t.openTimer) clearTimeout(t.openTimer);
-    for (const r of t.replies.splice(0)) r({ ok: false, lines: [] });
     terms.delete(t.tid);
-    t.proc.kill();
+    t.client.kill();
     if (why) send(t, { type: 'term.exit', tid: t.tid, why });
     deps.log(`phone terminal ${t.tid} ended (${why ?? 'dropped'})`);
   };
@@ -270,9 +306,8 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
     });
   };
 
-  const onEvent = (t: Term, e: ControlEvent) => {
+  const onEvent = (t: Term, e: Exclude<ControlEvent, { kind: 'reply' }>) => {
     switch (e.kind) {
-      case 'reply': { const r = t.replies.shift(); r?.(e); return; }
       case 'output': {
         if (t.state !== 'live' || (t.pane !== null && e.pane !== t.pane)) return;
         const text = t.decoder.write(e.data);
@@ -328,18 +363,16 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
       const tid = `t_${randomBytes(12).toString('base64url')}`;
       const argv = SAFE_NAME.test(session.tmuxName) ? deps.controlArgs(session.tmuxName) : null;
       if (!argv || argv.length === 0) throw new Error('no control client for this session');
-      const proc = spawnIt(argv);
-      const t: Term = {
-        tid, deviceId, sessionId: session.id, tmuxName: session.tmuxName, readOnly: !!session.readOnly, proc, parser: new ControlParser(),
-        // The attach command's own reply comes first.
-        replies: [() => {}], state: 'capturing', pane: null, cols: 0, rows: 0,
+      let t!: Term;
+      const client = openControl(argv, spawnIt, e => { if (t.state === 'closed') return; onEvent(t, e); });
+      t = {
+        tid, deviceId, sessionId: session.id, tmuxName: session.tmuxName, readOnly: !!session.readOnly, client,
+        state: 'capturing', pane: null, cols: 0, rows: 0,
         decoder: new StringDecoder('utf8'), buffer: '', since: null, seq: 0, nextN: 0, held: null, typing: Promise.resolve(),
         timer: setInterval(() => tick(t), TICK_MS), openTimer: null
       };
       t.openTimer = setTimeout(() => { if (t.openTimer) end(t, 'failed'); }, OPEN_TIMEOUT_MS);
       terms.set(tid, t);
-      proc.onData(chunk => { for (const e of t.parser.push(chunk)) { if (t.state === 'closed') return; onEvent(t, e); } });
-      proc.onExit(() => end(t, deps.exitWhy?.(t.sessionId) ?? 'gone'));
       deps.log(`phone terminal ${tid} opened for device ${deviceId}`);
       void screen(t, op);
       return tid;

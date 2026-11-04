@@ -71,6 +71,8 @@ import { rpOf } from '../mobile/webauthn.js';
 import { MAX_FRAME } from '../transport/frames.js';
 import { createBrowserLive, type BrowserLiveService } from './browser/live.js';
 import { enableLive } from './browser/enable.js';
+import { createPaneHost, type PaneHost } from '../term/pane.js';
+import { bornShell } from '../term/shell.js';
 
 /** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
 function withoutHarness(s: Session): Session {
@@ -438,6 +440,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const holdersMsg = (): ServerMessage => ({ type: 'terminal.holders', holds: [...terminalHolders].map(([id, deviceId]) => ({ id, device: (d => d?.name ?? d?.label)(mobile?.state().devices.find(d => d.id === deviceId)) ?? deviceId })) });
   // One lock for both: a session is never typed into by the relay and the mailbox at once.
   const typing = new Set<string>();
+  // The desktop's agent screen. Absent when this tmux cannot spawn a control client (the snapshot then omits terminalStream).
+  /** Replies whose socket is still open: a shell that finishes starting after the close kills its session instead of watching it. */
+  const shellReplies = new Set<Reply>();
+  const panes: PaneHost | null = opts.tmux.controlArgs ? createPaneHost({
+    controlArgs: n => opts.tmux.controlArgs?.(n) ?? null, typing,
+    killSession: name => { void opts.tmux.killSession(name).catch(() => log('shell kill failed')); },
+    log
+  }) : null;
   /** Sessions being closed: neither the relay nor the mailbox delivers to them, even free; their queues fail once they exit. */
   const closing = new Set<string>();
   // An injected chat (tests) is the only thread there is; otherwise the relay and the close cards work across the PC's and every device's.
@@ -507,7 +517,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       titles.set(c.session.id, c.session.title);
       tmux.setOption(c.session.tmuxSession, '@ledge_title', c.session.title).catch(e => log(`tab title not set for ${c.session.id}: ${(e as Error).message}`));
     }
-    if (c.type === 'removed') { previews.delete(c.id); titles.delete(c.id); labelled.delete(c.id); unlabelled.delete(c.id); lastState.delete(c.id); }
+    if (c.type === 'removed') { panes?.drop(c.id); previews.delete(c.id); titles.delete(c.id); labelled.delete(c.id); unlabelled.delete(c.id); lastState.delete(c.id); }
     if (c.type === 'updated') {
       const was = lastState.get(c.session.id); lastState.set(c.session.id, c.session.state);
       if (c.session.state === 'idle' && was !== undefined && was !== 'idle' && c.session.transcriptPath) void measure(c.session.id).catch(e => log(`context of ${c.session.id} not read: ${(e as Error).message}`));
@@ -517,7 +527,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -1205,6 +1215,31 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'snapshot.request': return sendSnapshot(reply);
       case 'browser.watch': return browserLive.watch(msg.id, reply);
       case 'browser.unwatch': return browserLive.unwatch(msg.id, reply);
+      case 'term.watch': {
+        if (!panes) return reply({ type: 'term.exit', id: msg.id, why: 'failed' });
+        const s = store.get(msg.id);
+        if (!s?.tmuxSession) return reply({ type: 'term.exit', id: msg.id, why: 'gone' });
+        panes.watch(reply, { id: s.id, tmuxName: s.tmuxSession }, msg.readOnly ? null : { cols: msg.cols, rows: msg.rows });
+        return;
+      }
+      case 'term.shell': {
+        if (!panes) return reply({ type: 'term.exit', id: msg.id, shell: msg.shell, why: 'failed' });
+        const s = store.get(msg.id);
+        if (!s) return reply({ type: 'term.exit', id: msg.id, shell: msg.shell, why: 'gone' });
+        void bornShell({
+          session: { id: s.id, cwd: s.cwd, ...(s.workdir ? { workdir: s.workdir } : {}) },
+          tag: msg.shell, cols: msg.cols, rows: msg.rows,
+          env: () => loginShellEnv(), newSession: o => opts.tmux.newSession(o),
+          watch: (session, size) => panes.watch(reply, session, size), reply,
+          alive: () => shellReplies.has(reply), gone: () => store.get(s.id) === undefined,
+          killSession: name => { void opts.tmux.killSession(name).catch(() => log('shell kill failed')); },
+          log
+        });
+        return;
+      }
+      case 'term.input': return panes?.input(reply, msg.id, msg.data, msg.shell);
+      case 'term.resize': return panes?.resize(reply, msg.id, msg.cols, msg.rows, msg.shell);
+      case 'term.unwatch': return panes?.unwatch(reply, msg.id, msg.shell);
       // « Activer le direct… »: the message carries the person's confirmation (`confirmed: true`), never sent on its own.
       case 'browser.enable': return reply(await enableLive(msg.rid, opts.home ?? process.env.HOME ?? ''));
       case 'machines.set': {
@@ -1687,7 +1722,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     }
     localClients.add(ws); ws.once('close', () => localClients.delete(ws));
     const reply: Reply = m => send(ws, m);
-    ws.once('close', () => browserLive.unwatchAll(reply));
+    shellReplies.add(reply);
+    ws.once('close', () => { shellReplies.delete(reply); browserLive.unwatchAll(reply); panes?.release(reply); });
     sendSnapshot(reply);
     ws.on('message', data => {
       let msg: ClientMessage;
@@ -1700,7 +1736,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // Only a session's id: a mobile.* id names a pairing or a device, never a session a front would fail.
         const { type, id } = (raw ?? {}) as { type?: unknown; id?: unknown };
         const named = typeof type === 'string' && type.length <= 64 ? type : undefined;
-        return reply({ type: 'error', message: 'invalid message', ...(named?.startsWith('session.') && typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(named ? { request: named } : {}), code: 'invalid' });
+        return reply({ type: 'error', message: 'invalid message', ...((named?.startsWith('session.') || named?.startsWith('term.')) && typeof id === 'string' && id.length <= 200 ? { id } : {}), ...(named ? { request: named } : {}), code: 'invalid' });
       }
       void dispatch(msg, reply);
     });
@@ -1714,6 +1750,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

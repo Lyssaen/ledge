@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent } from 'react';
+import { useMachines } from '@ledge/fleet';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
 import { ptyBackend } from '../term/backend';
@@ -45,8 +46,9 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
     onRevealCurrent();
   };
   const store = useContext(TermStoreContext);
-  // The same answer as the view's own, so the store attaches in the mode the view shows.
-  const [hasBackend] = useState(() => ptyBackend() !== null);
+  // A pseudo-terminal, or a daemon that streams the pane: either can show the agent's screen. The stream arrives with the snapshot.
+  const machines = useMachines(client);
+  const hasBackend = ptyBackend() !== null || machines.find(m => m.id === (p.session.machineId ?? 'local'))?.daemon?.terminalStream === true;
   const view = prefs.view;
   // The agent's screen is attached while the Terminal view shows it (re-asking in the same mode keeps the attachment), detached once left.
   useEffect(() => {
