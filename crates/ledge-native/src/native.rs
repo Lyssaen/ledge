@@ -99,7 +99,7 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The bundled runtime copied to `<home>\runtime\<version>`, once per version, and run from there: an update may then
+/// The bundled runtime copied to `<base>\runtime\<version>` (Desktop's local app data), once per version, and run from there: an update may then
 /// replace the install folder while the daemon and the pane host still run their copy. A copy is used only once marked
 /// complete: it is made in a temporary folder, marked, then renamed (another Desktop winning the race keeps its own).
 pub fn stage_runtime(bundled: &Path, home: &Path) -> std::io::Result<PathBuf> {

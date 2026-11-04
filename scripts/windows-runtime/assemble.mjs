@@ -5,7 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { layout, NODE, PORTABLE_GIT, verifySha256 } from './pins.mjs';
+import { layout, lockFor, NODE, PORTABLE_GIT, shippedPackage, verifySha256 } from './pins.mjs';
+import { checkRuntime } from './check.mjs';
 
 if (process.platform !== 'win32') { console.error('assemble.mjs runs on Windows (it extracts and runs Windows binaries)'); process.exit(2); }
 const out = resolve(process.argv[2] ?? '');
@@ -49,15 +50,13 @@ mkdirSync(L.ledge, { recursive: true });
 cpSync(join(pkgDir, 'dist'), join(L.ledge, 'dist'), { recursive: true });
 cpSync(join(pkgDir, 'assets'), join(L.ledge, 'assets'), { recursive: true });
 const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
-const { devDependencies: _dev, scripts: _scripts, ...shipped } = pkg;
-writeFileSync(join(L.ledge, 'package.json'), JSON.stringify(shipped, null, 2) + '\n');
-run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--no-package-lock'], { cwd: L.ledge, shell: true });
+writeFileSync(join(L.ledge, 'package.json'), JSON.stringify(shippedPackage(pkg), null, 2) + '\n');
+// Exactly what the committed lockfile names (lock.mjs regenerates it): nothing is resolved at build time.
+const lock = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'package-lock.json'), 'utf8'));
+writeFileSync(join(L.ledge, 'package-lock.json'), JSON.stringify(lockFor(lock, pkg.version), null, 2) + '\n');
+run('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: L.ledge, shell: true });
 writeFileSync(L.version, `${pkg.version}\n`);
 
-// Self-check with what was just assembled: the CLI answers its version, node-pty loads, Git Bash runs.
-const said = execFileSync(L.node, [L.cli, '--version'], { encoding: 'utf8' }).trim();
-if (said !== pkg.version) throw new Error(`ledge --version said ${said}, expected ${pkg.version}`);
-execFileSync(L.node, ['-e', `require(${JSON.stringify(join(L.ledge, 'node_modules', 'node-pty'))})`], { stdio: 'inherit' });
-const ok = execFileSync(L.bash, ['-c', 'echo ok'], { encoding: 'utf8' }).trim();
-if (ok !== 'ok') throw new Error(`Git Bash said ${ok}`);
+// Self-check with what was just assembled (check.mjs): the CLI, a real ConPTY pane, the xterm packages, Git Bash.
+checkRuntime(out);
 console.log(`runtime ready in ${out}: Ledge ${pkg.version}, Node ${NODE.version}, PortableGit ${PORTABLE_GIT.version}`);

@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmod, link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -92,9 +93,26 @@ async function readTokenFile(file: string): Promise<string | undefined> {
   }
 }
 
-/** Mode 0600. The daemon only runs on Linux, so no ACL handling. */
-async function lockTokenFile(file: string): Promise<void> {
+/** The `icacls` call that makes the token the user's alone on Windows: the rights inherited from its folder dropped (a
+ *  corporate profile may pass a helpdesk or domain group down), full control for the user and SYSTEM only. */
+export function tokenAclCommand(file: string, env: NodeJS.ProcessEnv = process.env): { cmd: string; args: string[] } {
+  const user = env.USERDOMAIN ? `${env.USERDOMAIN}\\${env.USERNAME}` : `${env.USERNAME}`;
+  return { cmd: `${env.SystemRoot ?? 'C:\\Windows'}\\System32\\icacls.exe`, args: [file, '/inheritance:r', '/grant:r', `${user}:F`, '*S-1-5-18:F'] };
+}
+
+type AclRunner = (cmd: string, args: string[]) => Promise<{ code: number | null }>;
+const runAcl: AclRunner = (cmd, args) => new Promise(resolve => {
+  execFile(cmd, args, { windowsHide: true }, err => resolve({ code: err ? ((err as { code?: number }).code ?? 1) : 0 }));
+});
+
+/** Mode 0600; on native Windows, where modes mean nothing, the token's ACL (`tokenAclCommand`). An ACL refused is logged:
+ *  the daemon still starts, with the folder's inherited rights. */
+export async function lockTokenFile(file: string, opts: { platform?: NodeJS.Platform; run?: AclRunner; env?: NodeJS.ProcessEnv; log?: (line: string) => void } = {}): Promise<void> {
   await chmod(file, 0o600);
+  if ((opts.platform ?? process.platform) !== 'win32') return;
+  const { cmd, args } = tokenAclCommand(file, opts.env);
+  const { code } = await (opts.run ?? runAcl)(cmd, args);
+  if (code !== 0) (opts.log ?? (l => console.error(l)))(`could not set the token rights (icacls exit ${code}): the folder's inherited rights apply`);
 }
 
 /**

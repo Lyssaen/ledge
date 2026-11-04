@@ -29,6 +29,18 @@ export function layout(out) {
   };
 }
 
+/** The Ledge package as the runtime ships it: no scripts, no dev dependencies (`@ledge/protocol` is bundled into dist). */
+export function shippedPackage(pkg) {
+  const { devDependencies: _dev, scripts: _scripts, ...shipped } = pkg;
+  return shipped;
+}
+
+/** The committed runtime lockfile, given the package's version of this build (a snapshot rewrites it): npm ci then
+ *  installs exactly what the lockfile names. */
+export function lockFor(lock, version) {
+  return { ...lock, version, packages: { ...lock.packages, '': { ...lock.packages[''], version } } };
+}
+
 /** Throws `checksum mismatch for <what>` unless `buf`'s SHA-256 is `expected`. */
 export function verifySha256(buf, expected, what) {
   const got = createHash('sha256').update(buf).digest('hex');

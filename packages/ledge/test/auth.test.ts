@@ -151,3 +151,25 @@ describe('handshake', () => {
     expect(authHeaders()).toEqual({ authorization: `Bearer ${readDaemonToken()}` });
   });
 });
+
+describe('the token on native Windows (spec 2026-11-03 §2: user-only)', () => {
+  it('icacls drops the inherited rights and grants the user and SYSTEM only', async () => {
+    const { tokenAclCommand } = await import('../src/auth.js');
+    expect(tokenAclCommand('C:\\Users\\po\\.ledge\\token', { USERDOMAIN: 'CORP', USERNAME: 'po', SystemRoot: 'C:\\Windows' })).toEqual({
+      cmd: 'C:\\Windows\\System32\\icacls.exe',
+      args: ['C:\\Users\\po\\.ledge\\token', '/inheritance:r', '/grant:r', 'CORP\\po:F', '*S-1-5-18:F'],
+    });
+    expect(tokenAclCommand('t', { USERNAME: 'po' }).args[3]).toBe('po:F');
+  });
+  it('lockTokenFile runs it on Windows only, and a refusal does not stop the daemon', async () => {
+    const { lockTokenFile } = await import('../src/auth.js');
+    const runs: string[][] = [];
+    const run = async (cmd: string, args: string[]) => { runs.push([cmd, ...args]); return { code: 5 }; };
+    const logs: string[] = [];
+    const file = join(mkdtempSync(join(tmpdir(), 'ledge-acl-')), 'token'); writeFileSync(file, 'x');
+    await lockTokenFile(file, { platform: 'win32', run, env: { USERNAME: 'po', SystemRoot: 'C:\\Windows' }, log: l => logs.push(l) });
+    await lockTokenFile(file, { platform: 'linux', run });
+    expect(runs).toHaveLength(1);
+    expect(logs.join('\n')).toMatch(/token rights/);
+  });
+});
