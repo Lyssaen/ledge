@@ -283,7 +283,7 @@ export function createPhoneGateway(deps: {
     ...deps.outbox
   });
 
-  const push = (deviceId: string, msg: PhoneServerMessage, key?: string) => { if (!stopped) outbox.push(deviceId, msg, key); };
+  const push = (deviceId: string, msg: PhoneServerMessage, key?: string, o?: { last?: true }) => { if (!stopped) outbox.push(deviceId, msg, key, o); };
   /** The terminals the phones opened; none without the daemon's terminal. A session no longer live ended, one still live lost its tmux. */
   const terminals: TerminalHost | null = deps.terminal ? createTerminalHost({
     controlArgs: n => deps.terminal!.controlArgs(n), spawn: deps.terminal.spawn, typing: deps.terminal.typing, onHolder: deps.terminal.onHolder,
@@ -1170,7 +1170,8 @@ export function createPhoneGateway(deps: {
     for (const [deviceId, f] of followers) {
       if (!f.subscribed) continue;
       if (listChanged) push(deviceId, { type: 'projects', projects: list }, 'projects');
-      for (const s of moved) push(deviceId, { type: 'session.updated', session: projected(deviceId, s) }, `session.updated:${s.id}`);
+      // Behind the list, even over an update of it already queued ahead: the phone never gets a project it does not know yet.
+      for (const s of moved) push(deviceId, { type: 'session.updated', session: projected(deviceId, s) }, `session.updated:${s.id}`, { last: true });
     }
   };
 

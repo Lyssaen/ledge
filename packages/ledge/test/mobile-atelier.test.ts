@@ -138,3 +138,75 @@ describe('phone Atelier: the projects change', () => {
     expect(g.fm.sent.length).toBe(before);
   });
 });
+
+describe('phone Atelier: the order on a slow link', () => {
+  /**
+   * The phone's view, from its snapshot: no session.updated names a project the phone was not given (the list goes first). A
+   * project removed may still be a session's until that session's own update follows the list: the app shows it « Sans projet ».
+   */
+  const neverUnknown = (ms: PhoneServerMessage[]) => {
+    let known = new Set<string>();
+    const place = new Map<string, string | undefined>();
+    for (const m of ms) {
+      if (m.type === 'snapshot') { known = new Set(m.projects?.map(p => p.id)); for (const s of m.sessions) place.set(s.id, s.projectId); }
+      if (m.type === 'projects') known = new Set(m.projects.map(p => p.id));
+      if (m.type !== 'session.updated') continue;
+      const p = m.session.projectId;
+      if (p !== undefined && !known.has(p)) throw new Error(`${m.session.id} placed in ${p}, not yet given`);
+      place.set(m.session.id, p);
+    }
+    for (const [id, p] of place) if (p !== undefined && !known.has(p)) throw new Error(`${id} left in ${p}, gone`);
+    return place;
+  };
+  /** Holds the phone's sends until `release`: what the gateway pushes meanwhile waits in its outbox. */
+  const held = (g: ReturnType<typeof atelier>) => {
+    const send = g.fm.mobile.send;
+    let open!: () => void;
+    const gate = new Promise<void>(r => { open = r; });
+    g.fm.mobile.send = async (d: string, t: string) => { await gate; return send(d, t); };
+    return () => open();
+  };
+  const NEW = { id: 'new', name: 'Nouveau', color: 'blue' as const, description: '', repos: [] };
+
+  it('an update of a session already queued: the list still goes first, then the session placed in it', async () => {
+    const g = atelier();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const release = held(g);
+    g.gw.forward({ type: 'session.updated', session: g.sessions.get('b')! }); // on its way, held
+    await flush();
+    g.gw.forward({ type: 'session.updated', session: mk('a', { title: 'queued' }) }); // waits in the outbox
+    g.change({ projects: [...PROJECTS.projects, NEW], rules: [...PROJECTS.rules, { machine: 'local', path: '/w/repo', project: 'new' }] });
+    release();
+    await flush();
+    const got = g.got('dev1');
+    const projectsAt = got.findIndex(m => m.type === 'projects');
+    const lastA = got.findLastIndex(m => m.type === 'session.updated' && m.session.id === 'a');
+    expect(projectsAt).toBeGreaterThan(0);
+    expect(lastA).toBeGreaterThan(projectsAt);
+    expect(neverUnknown(got).get('a')).toBe('new');
+  });
+
+  it('several changes while held: coalesced, never a project the phone does not know, the last state at the end', async () => {
+    const g = atelier();
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const release = held(g);
+    g.gw.forward({ type: 'session.updated', session: g.sessions.get('b')! });
+    await flush();
+    for (const id of ['a', 'd', 'r']) g.gw.forward({ type: 'session.updated', session: g.sessions.get(id)! });
+    const step1 = { projects: [...PROJECTS.projects, NEW], rules: [...PROJECTS.rules, { machine: 'local', path: '/srv/seats', project: 'new' }] };
+    g.change(step1);
+    g.gw.forward({ type: 'session.updated', session: { ...g.sessions.get('r')!, title: 'between' } });
+    const step2 = { projects: step1.projects.filter(p => p.id !== 'docs').map(p => (p.id === 'new' ? { ...p, name: 'Renommé' } : p)), rules: step1.rules.filter(r => r.project !== 'docs') };
+    g.change(step2);
+    release();
+    await flush();
+    const got = g.got('dev1');
+    const place = neverUnknown(got);
+    expect(Object.fromEntries(place)).toMatchObject({ a: 'ledge', d: 'ledge', r: 'new', e: undefined });
+    expect(got.filter(m => m.type === 'projects')).toHaveLength(1);
+    expect(got.findLast(m => m.type === 'projects')).toMatchObject({ projects: [{ id: 'ledge' }, { id: 'site' }, { id: 'new', name: 'Renommé' }] });
+    expect(got.findLast(m => m.type === 'session.updated' && m.session.id === 'r')).toMatchObject({ session: { title: 'between', projectId: 'new' } });
+  });
+});
