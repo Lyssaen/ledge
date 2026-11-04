@@ -46,6 +46,8 @@ import { createOpenRig, execRun, type OpenRig } from './openrig.js';
 import { createHumanChannel, type HumanChannelService } from './openrigHuman.js';
 import { createGoals, type GoalsService } from './openrigGoals.js';
 import type { OpenRigState } from '@ledge/protocol';
+import type { AgentStatus, InstallableTool } from '@ledge/protocol';
+import { agentStatus, createAgentInstaller, runAgentCommand, type Installed } from './agents.js';
 import { baseName, isWindowsPath, normalizePath } from '@ledge/protocol';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused } from '../chat/launch.js';
@@ -195,13 +197,20 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; /** What `daemon.stop` does (startDaemon: stop, then exit when run by the CLI). */ onStop?: () => void; /** The daemon's platform (tests): `daemon.stop` is for Windows only. */ platform?: NodeJS.Platform; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; /** What `daemon.stop` does (startDaemon: stop, then exit when run by the CLI). */ onStop?: () => void; /** The daemon's platform (tests): `daemon.stop` is for Windows only. */ platform?: NodeJS.Platform; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore; /** Native Windows: which agents are installed, and their install (tests inject it). */ agents?: { status(): Promise<AgentStatus[]>; install(tool: InstallableTool): Promise<Installed> } }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
   // Under systemd the daemon has the bare system environment (no PATH to the agents, no proxy): a launched agent gets
   // the login shell's on top of it, as a terminal would.
   const agentEnv = opts.agentEnv ?? (async () => overlayEnv(process.env, await userEnv()));
+  // Claude Code and Codex on native Windows: found, and installed on the user's click (spec 2026-11-03 §4.2.6).
+  const installer = createAgentInstaller({ platform: opts.platform ?? process.platform, env: agentEnv });
+  const agents = opts.agents ?? {
+    status: async () => { const env = await agentEnv(); return Promise.all((['claude', 'codex'] as const).map(t => agentStatus(t, env, runAgentCommand))); },
+    install: (tool: InstallableTool) => installer.install(tool)
+  };
+  const offersAgents = (opts.platform ?? process.platform) === 'win32';
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const reducer = new CaptureReducer();
   const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all() });
@@ -508,7 +517,7 @@ export async function startServer(opts: { store: Store; /** What `daemon.stop` d
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, ...(mobile || unavailable ? { mobile: true } : {}), ...(offersAgents ? { agents: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -1129,6 +1138,8 @@ export async function startServer(opts: { store: Store; /** What `daemon.stop` d
       }
       // #58: answered even when the agent cannot be asked, so the form falls back to the agent's default and « Other… ».
       case 'models.list': return reply({ type: 'models.listing', requestId: msg.requestId, tool: msg.tool, ...await models.list(msg.tool) });
+      case 'agents.status': return reply({ type: 'agents.listing', requestId: msg.requestId, agents: offersAgents ? await agents.status() : [] });
+      case 'agents.install': return reply({ type: 'agents.installed', requestId: msg.requestId, ...(offersAgents ? await agents.install(msg.tool) : { tool: msg.tool, ok: false, error: 'not_offered' as const }) });
       // Answered even when the agent cannot be asked: the « / » list says so, and a command typed by hand still goes.
       case 'session.commands': {
         const s = store.get(msg.id);

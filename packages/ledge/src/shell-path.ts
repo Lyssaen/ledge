@@ -1,3 +1,4 @@
+import { win32 } from 'node:path';
 import { execFile } from 'node:child_process';
 import { log } from './log.js';
 
@@ -96,9 +97,17 @@ export async function windowsRegistryEnv(run: (key: string) => Promise<string> =
   const baseKey = Object.keys(base).find(isPath);
   const seen = new Set(joined.split(';').map(d => d.toLowerCase()));
   const own = (baseKey ? base[baseKey] ?? '' : '').split(';').filter(d => d && !seen.has(d.toLowerCase()) && (seen.add(d.toLowerCase()), true));
-  const full = [joined, ...own].filter(Boolean).join(';');
+  // The per-user folders Claude Code's and Codex's installers use: a fresh install is found before the user's Path has it.
+  const agents = windowsAgentDirs({ USERPROFILE: lookup.get('USERPROFILE'), LOCALAPPDATA: lookup.get('LOCALAPPDATA') }).filter(d => !seen.has(d.toLowerCase()) && (seen.add(d.toLowerCase()), true));
+  const full = [joined, ...own, ...agents].filter(Boolean).join(';');
   if (full) env.Path = full;
   return env;
+}
+
+/** Where the official per-user installers put Claude Code (`%USERPROFILE%\\.local\\bin`) and Codex
+ *  (`%LOCALAPPDATA%\\Programs\\OpenAI\\Codex\\bin`). */
+export function windowsAgentDirs(env: { USERPROFILE?: string; LOCALAPPDATA?: string }): string[] {
+  return [env.USERPROFILE && win32.join(env.USERPROFILE, '.local', 'bin'), env.LOCALAPPDATA && win32.join(env.LOCALAPPDATA, 'Programs', 'OpenAI', 'Codex', 'bin')].filter((d): d is string => !!d);
 }
 
 /** `over` on top of `base`. On Windows a variable's name has no case (PATH and Path are one): `base`'s spelling of a name
