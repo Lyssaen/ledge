@@ -68,30 +68,34 @@ describe('chat service', () => {
     expect(seen[1]).toContain('## Ledge');
   });
 
-  it('a question about issues, PR/MR or CI gets the forge files the daemon read (#23); another question runs no forge command', async () => {
+  it('a question about issues, PR/MR or CI reads the forge (#23); another question runs no forge command but gets what was read before', async () => {
     let home = ''; const seen: Array<string | null> = [];
     const spawn = ((file: string, a: string[], o: object) => {
       const f = join(home, 'chat', 'context', 'forge.md'); seen.push(existsSync(f) ? readFileSync(f, 'utf8') : null);
       return nodeSpawn(file, a, o as never);
     }) as unknown as typeof nodeSpawn;
     const projects: Projects = { projects: [{ id: 'ledge', name: 'Ledge', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] };
-    const writes: string[] = [];
-    const forge = { async write(ctx: { dir: string; steps: Map<string, unknown> }, p: Projects) { writes.push(p.projects[0]!.id); writeFileSync(join(ctx.dir, 'forge.md'), '- Ledge: forge-ledge.md'); } };
+    const writes: Array<[string, boolean | undefined]> = [];
+    const forge = { async write(ctx: { dir: string; steps: Map<string, unknown> }, p: Projects, o?: { read?: boolean }) { writes.push([p.projects[0]!.id, o?.read]); writeFileSync(join(ctx.dir, 'forge.md'), '- Ledge: forge-ledge.md'); } };
     const s = setup({ spawn, projects: () => projects, forge }); home = s.home;
     await s.chat.ask('q1', 'où en sont les autres ?', () => {});
     await s.chat.ask('q2', 'quelles issues sont ouvertes ?', () => {});
-    expect(writes).toEqual(['ledge']);
-    expect(seen).toEqual([null, '- Ledge: forge-ledge.md']);
+    expect(writes).toEqual([['ledge', false], ['ledge', true]]);
+    expect(seen).toEqual(['- Ledge: forge-ledge.md', '- Ledge: forge-ledge.md']);
   });
 
-  it('the chat context leaves archived sessions out', async () => {
+  it('the chat context lists archived sessions apart, after the others, without their files', async () => {
     let home = ''; let sessions = '';
     const spawn = ((file: string, a: string[], o: object) => { sessions = readFileSync(join(home, 'chat', 'context', 'sessions.md'), 'utf8'); return nodeSpawn(file, a, o as never); }) as unknown as typeof nodeSpawn;
     const s = setup({ spawn }); home = s.home;
     const mkS = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w', project: 'w', title: `${name} · w`, tmuxSession: null, state: 'working', helpers: [], startedAt: '2026-10-11T08:00:00.000Z', lastActivityAt: '2026-10-11T08:00:00.000Z', source: 'hook_only', ...extra });
     s.store.upsert(mkS('a', 'Visible')); s.store.upsert(mkS('b', 'Hidden', { archivedAt: '2026-10-11T09:00:00.000Z' }));
     await s.chat.ask('q1', 'x', () => {});
-    expect(sessions).toContain('Visible'); expect(sessions).not.toContain('Hidden');
+    expect(sessions).toContain('## Visible (claude)');
+    expect(sessions).not.toContain('## Hidden');
+    expect(sessions).toContain('# Archived sessions');
+    expect(sessions).toContain('- Hidden (claude), id b, folder /w, archived 2026-10-11T09:00:00.000Z');
+    expect(sessions.indexOf('## Visible')).toBeLessThan(sessions.indexOf('# Archived sessions'));
   });
 
   it('reset clears the turns, forgets the day file, and the next question starts a new session (--session-id, not --resume)', async () => {
