@@ -62,6 +62,28 @@ describe('outbox', () => {
     expect(sent.map(([, t]) => t.includes('new') ? 'k' : idOf(t))).toEqual(['first', 'k', 'mid']);
   });
 
+  it('`last` moves a replaced message behind what was queued since, once', async () => {
+    const { outbox, sent } = make({ frames: 1 });
+    outbox.push('d1', removed('first'));
+    await flush();
+    outbox.push('d1', preview('a', 'old'), 'k');
+    outbox.push('d1', removed('mid'));
+    outbox.push('d1', preview('a', 'new'), 'k', { last: true });
+    outbox.push('d1', preview('a', 'newer'), 'k');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(sent.map(([, t]) => t.includes('newer') ? 'k' : t.includes('"old"') || t.includes('"new"') ? 'stale' : idOf(t))).toEqual(['first', 'mid', 'k']);
+  });
+
+  it('`last` with nothing queued under the key just appends', async () => {
+    const { outbox, sent } = make({ frames: 1 });
+    outbox.push('d1', removed('first'));
+    await flush();
+    outbox.push('d1', removed('mid'));
+    outbox.push('d1', preview('a', 'new'), 'k', { last: true });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(sent.map(([, t]) => t.includes('new') ? 'k' : idOf(t))).toEqual(['first', 'mid', 'k']);
+  });
+
   it('serves two devices in turn', async () => {
     const { outbox, sent } = make({ frames: 1 });
     outbox.push('x', removed('x0'));

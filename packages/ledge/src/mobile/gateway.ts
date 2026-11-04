@@ -11,6 +11,7 @@ import { ModelRefusalSchema, type HumanAnswer, type ModelRefusal, type OpenRigAn
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
 import { BROADCAST_SESSIONS_MAX, type DecidedBy, type DeviceKind } from '@ledge/protocol';
 import { PHONE_ROW_SUMMARY_MAX } from '@ledge/protocol';
+import type { Projects } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
@@ -23,6 +24,7 @@ import { createOutbox } from './outbox.js';
 import { createTerminalHost, type SpawnControl, type TerminalHost } from './terminal.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation, type Report } from './operations.js';
 import { capabilities, clip, forPhone, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneThread } from './project.js';
+import { atelierOf, toPhoneProjects } from './project.js';
 import { canSwitch, toPhoneCommands, toPhoneModels } from './project.js';
 import { checklistSummary, toPhoneChecklist } from './project.js';
 import { riskOf } from './risk.js';
@@ -119,6 +121,8 @@ export function createPhoneGateway(deps: {
   chatThrottleMs?: number;
   /** The tasks (ledge home spec §2.4): the phone's « Le point » and « À traiter ». */
   tasks?: () => Task[];
+  /** The user's projects (the daemon's `projects.json`): given, the phone gets the Atelier (`daemon.atelier`); each change comes by `forward`. */
+  projects?: () => Projects;
   /**
    * The daemon's own update and restart, for the phone only (spec 2026-10-28 mobile daemon update): never a `ClientMessage`.
    * Each runs on its own; its progress and refusals are broadcast, and `reply` gets a refusal meant for the asker alone (busy).
@@ -215,7 +219,9 @@ export function createPhoneGateway(deps: {
     if (!c) checklists.set(id, c = computeChecklist(id));
     return c;
   };
-  const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt, checklistOf(s.id).summary);
+  /** The projects the phones were last given (`daemon.atelier`): a change re-places the sessions against them. */
+  let projects: Projects | undefined = deps.projects?.();
+  const projected = (deviceId: string, s: Session) => toPhoneSession(s, followers.get(deviceId)?.reads.get(s.id) ?? startedAt, checklistOf(s.id).summary, projects);
   const pushStatus = (deviceId: string): PushStatus => {
     const key = mobile.relayPushKey();
     if (key === null) return 'unavailable';
@@ -242,7 +248,8 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, rigRows: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
-      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), broadcast: true as const },
+      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}) },
+    ...(projects ? { projects: toPhoneProjects(projects) } : {}),
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
@@ -276,7 +283,7 @@ export function createPhoneGateway(deps: {
     ...deps.outbox
   });
 
-  const push = (deviceId: string, msg: PhoneServerMessage, key?: string) => { if (!stopped) outbox.push(deviceId, msg, key); };
+  const push = (deviceId: string, msg: PhoneServerMessage, key?: string, o?: { last?: true }) => { if (!stopped) outbox.push(deviceId, msg, key, o); };
   /** The terminals the phones opened; none without the daemon's terminal. A session no longer live ended, one still live lost its tmux. */
   const terminals: TerminalHost | null = deps.terminal ? createTerminalHost({
     controlArgs: n => deps.terminal!.controlArgs(n), spawn: deps.terminal.spawn, typing: deps.terminal.typing, onHolder: deps.terminal.onHolder,
@@ -1149,6 +1156,25 @@ export function createPhoneGateway(deps: {
     }
   };
 
+  /**
+   * The user's projects changed (the desktop's `projects.set`): kept for the next snapshot, followed or not; each following phone
+   * gets the list when the phone's part of it changed, then each session the change placed elsewhere.
+   */
+  const reproject = (next: Projects) => {
+    const before = projects!;
+    projects = next;
+    if (followers.size === 0) return;
+    const list = toPhoneProjects(next);
+    const listChanged = JSON.stringify(toPhoneProjects(before)) !== JSON.stringify(list);
+    const moved = deps.sessions().filter(s => !isArchived(s) && atelierOf(s, before).projectId !== atelierOf(s, next).projectId);
+    for (const [deviceId, f] of followers) {
+      if (!f.subscribed) continue;
+      if (listChanged) push(deviceId, { type: 'projects', projects: list }, 'projects');
+      // Behind the list, even over an update of it already queued ahead: the phone never gets a project it does not know yet.
+      for (const s of moved) push(deviceId, { type: 'session.updated', session: projected(deviceId, s) }, `session.updated:${s.id}`, { last: true });
+    }
+  };
+
   const unsubscribeMessage = mobile.onMessage(receive);
   const unsubscribeChange = mobile.onChange(pruneRevoked);
 
@@ -1156,6 +1182,10 @@ export function createPhoneGateway(deps: {
     forward(m) {
       if (!stopped) try { keepModelFailure(m); } catch (e) { log(`phone model failure of ${m.type} failed (${e instanceof Error ? e.name : 'error'})`); }
       if (stopped) return;
+      if (m.type === 'projects') {
+        if (projects) try { reproject(m.projects); } catch (e) { log(`phone projects failed (${e instanceof Error ? e.name : 'error'})`); }
+        return;
+      }
       // A terminal outlives no session, whoever follows the list.
       if (m.type === 'session.removed') terminals?.sessionEnded(m.id);
       if (m.type === 'session.updated' && (isArchived(m.session) || m.session.state === 'exited')) terminals?.sessionEnded(m.session.id);

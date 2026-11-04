@@ -2561,6 +2561,36 @@ describe('mobile access', () => {
     await new Promise(res => setTimeout(res, 100));
     expect(sends).toHaveLength(2); // closing removed the listener
   });
+  it('the phone\'s Atelier: the daemon\'s projects in the snapshot, and a projects.set from the desktop reaches the phone placed', async () => {
+    const messageFns = new Set<(d: string, t: string) => void>();
+    const phone: Array<{ type: string; [k: string]: unknown }> = [];
+    const raw: string[] = [];
+    const state = { enabled: true, relayUrl: 'https://relay.test', account: null, signin: null, signinError: null, link: { state: 'online' }, devices: [{ id: 'dev1', label: 'dev1', approvedAt: T0, online: true }], pairings: [] };
+    const mobile = {
+      state: () => state, onChange: () => () => {}, handle: async () => {}, revoke: async () => {},
+      send: async (_d: string, t: string) => { raw.push(t); phone.push(JSON.parse(t)); return true; },
+      credential: () => null, setCredential: () => {}, pushOf: () => null, setPush: () => {}, relayPushKey: () => 'K1',
+      sendPush: async () => ({ result: 'sent' as const }),
+      onMessage: (fn: (d: string, t: string) => void) => { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
+      stop: async () => {}
+    } as unknown as Parameters<typeof startServer>[0]['mobile'];
+    const store = new Store();
+    store.upsert(mk('s1', { cwd: '/w/ledge/app' }));
+    const s = await startServer({ store, tmux: fakeTmux({}), port: 0, mobile, daemon: { version: '0.2.2', install: 'npm', systemd: true } });
+    for (const fn of messageFns) fn('dev1', JSON.stringify({ type: 'snapshot.request' }));
+    await until(() => phone.some(m => m.type === 'snapshot'));
+    expect(phone.find(m => m.type === 'snapshot')).toMatchObject({ daemon: { atelier: true }, projects: [] });
+    expect((phone.find(m => m.type === 'snapshot')!.sessions as Array<object>)[0]).not.toHaveProperty('projectId');
+    const ws = await open(s.port);
+    ws.send(JSON.stringify({ type: 'projects.set', projects: projectsState }));
+    await until(() => phone.some(m => m.type === 'session.updated'));
+    const after = phone.slice(phone.findIndex(m => m.type === 'snapshot') + 1).filter(m => m.type !== 'tasks');
+    expect(after.map(m => m.type)).toEqual(['projects', 'session.updated']);
+    expect(after[0]).toEqual({ type: 'projects', projects: [{ id: 'ledge', name: 'Ledge', color: 'blue' }] });
+    expect(after[1]).toMatchObject({ session: { id: 's1', projectId: 'ledge' } });
+    for (const t of raw) for (const secret of ['/w/', '/srv/', '"rules"', '"repos"']) expect(t).not.toContain(secret);
+    ws.close(); await s.close();
+  });
   it('without the service, mobile messages are refused as not available', async () => {
     const ws = await open(srv.port); const got = collect(ws);
     await until(() => got.some(x => x.type === 'island'));
