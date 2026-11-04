@@ -1,4 +1,5 @@
-//! The embedded terminal's commands: each `pty_open` runs `wsl.exe` in a pseudo-terminal the page reads and types into.
+//! The embedded terminal's commands: each `pty_open` runs its command in a pseudo-terminal the page reads and types into,
+//! through `wsl.exe` in WSL mode, as is in native mode.
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU32;
@@ -31,18 +32,23 @@ pub async fn pty_open(app: AppHandle, argv: Vec<String>, cols: u16, rows: u16, o
     {
         use std::sync::atomic::Ordering;
         use tauri::Manager;
-        let args = ledge_native::pty::wsl_command(&argv).ok_or("an argument WSL cannot receive as is")?;
+        // Native mode runs argv itself; WSL mode runs it inside WSL.
+        let (program, args) = if app.state::<crate::AppMode>().mode == ledge_native::native::Mode::Native {
+            ledge_native::pty::native_command(&argv).ok_or("an argument Windows cannot receive as is")?
+        } else {
+            ("wsl.exe".to_string(), ledge_native::pty::wsl_command(&argv).ok_or("an argument WSL cannot receive as is")?)
+        };
         tauri::async_runtime::spawn_blocking(move || {
             let state = app.state::<PtyState>();
             let id = state.next.fetch_add(1, Ordering::Relaxed);
             // Held until the entry is in: an exit that comes first waits for it, then removes it.
             let mut ptys = state.ptys.lock().unwrap();
             let exit_app = app.clone();
-            let pty = Pty::spawn("wsl.exe", &args, cols, rows, move |b| { let _ = on_data.send(InvokeResponseBody::Raw(b.to_vec())); }, move |code| {
+            let pty = Pty::spawn(&program, &args, cols, rows, move |b| { let _ = on_data.send(InvokeResponseBody::Raw(b.to_vec())); }, move |code| {
                 let gone = exit_app.state::<PtyState>().ptys.lock().unwrap().remove(&id);
                 drop(gone);
                 let _ = on_exit.send(code);
-            }).map_err(|e| format!("wsl.exe: {e}"))?;
+            }).map_err(|e| format!("{program}: {e}"))?;
             ptys.insert(id, pty);
             Ok(id)
         }).await.map_err(|e| e.to_string())?

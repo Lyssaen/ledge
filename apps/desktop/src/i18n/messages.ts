@@ -1,5 +1,8 @@
 /** Desktop's copy lives one language per file (fr.ts, the source of truth, and en.ts), each in a chunk of its own: the
  *  main bundle carries neither. The entry point loads the chosen language and French before the first render. */
+import { isNative } from '../native/state';
+import { withNativeCopy } from '../native/copy';
+
 export type Messages = typeof import('./fr').fr;
 export type Lang = 'fr' | 'en';
 export const LANGS: readonly Lang[] = ['fr', 'en'];
@@ -32,6 +35,11 @@ export function messagesLoaded(lang: Lang): Messages | undefined {
 const table = (lang: Lang): Messages => {
   const m = loaded[lang] ?? loaded.fr;
   if (!m) throw new Error(`desktop: no strings loaded for « ${lang} » nor French; await loadMessages before rendering`);
-  return m;
+  // Native mode (fixed at boot) shows its own copy where the strings speak of WSL; made once per table.
+  if (!isNative()) return m;
+  let n = nativeTables.get(m);
+  if (!n) nativeTables.set(m, (n = withNativeCopy(m)));
+  return n;
 };
+const nativeTables = new WeakMap<Messages, Messages>();
 export const MESSAGES: Record<Lang, Messages> = { get fr() { return table('fr'); }, get en() { return table('en'); } };

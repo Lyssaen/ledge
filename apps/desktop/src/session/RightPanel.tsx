@@ -11,6 +11,7 @@ import { tildeHome } from '../term/home';
 import { changesTabId, type Tab, type TermStore } from '../term/store';
 import { useTerms } from '../term/useTerms';
 import { Banner } from './AgentView';
+import { useFeatures } from '../native/mode';
 
 export type RightPanelProps = {
   client: DaemonClient; session: Session;
@@ -44,6 +45,8 @@ export function useShellIntro(client: DaemonClient, session: Session): (tab: Tab
 export function RightPanel(p: RightPanelProps): JSX.Element {
   const { session } = p;
   const { t } = useI18n();
+  // Native mode's first round has no login shells: « ± Modifications » alone.
+  const { shells } = useFeatures();
   const tt = t.session.terminal;
   const tp = t.session.panel;
   const sid = session.id;
@@ -117,7 +120,7 @@ export function RightPanel(p: RightPanelProps): JSX.Element {
               <button type="button" className="tab-close" aria-label={tt.closeTab(label(x))} onClick={() => store.close(sid, x.id)}><Icon d={ICONS.close.d} size={11} /></button>
             </div>
           ))}
-          <button type="button" className="term-add" aria-label={tt.addShell} title={tt.addShell} onClick={addShell}><Icon d={ICONS.plus.d} size={13} /></button>
+          {shells && <button type="button" className="term-add" aria-label={tt.addShell} title={tt.addShell} onClick={addShell}><Icon d={ICONS.plus.d} size={13} /></button>}
         </div>
         <span className="spacer" />
         {!changesOn && <span className="term-chip mono">{shell.remote ? tt.remote(host) : tt.local}</span>}

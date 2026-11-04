@@ -10,6 +10,7 @@ import { useI18n } from '../../i18n/lang';
 import type { Wait } from '../../list/time';
 import type { ContextMenuState } from '../../manage/useContextMenu';
 import type { SessionActions } from '../../manage/useSessionActions';
+import { useFeatures } from '../../native/mode';
 import { useMotionPreferences } from '../../motionPreferences';
 import { activeCount } from '../../nav/agents';
 import type { NavAction, NavState } from '../../nav/state';
@@ -59,6 +60,8 @@ export function Sidebar(p: {
   onSeeAsk?(id: string): void;
 }): JSX.Element {
   const { t } = useI18n();
+  // Native mode's first round: no Ledge chat, no Atelier, no tasks between sessions (spec 2026-11-03 §1).
+  const f = useFeatures();
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const keysTip = useId();
@@ -94,8 +97,9 @@ export function Sidebar(p: {
     [groups, prefs.hideDone, p.filing.dragging, base.project]);
   const attn = useMemo(() => attentionOf(p.sessions, p.waits), [p.sessions, p.waits]);
   // Sessions near their context limit, less those put away with « Plus tard » (context handover spec §3.2).
-  const near = useMemo(() => nearLimit(p.sessions, p.tasksApi?.later, p.tasksApi?.near), [p.sessions, p.tasksApi?.later, p.tasksApi?.near]);
-  const decisions = useMemo(() => (p.tasksApi ? openDecisions(p.tasksApi.tasks) : []), [p.tasksApi]);
+  const nearAll = useMemo(() => nearLimit(p.sessions, p.tasksApi?.later, p.tasksApi?.near), [p.sessions, p.tasksApi?.later, p.tasksApi?.near]);
+  const near = f.tasks ? nearAll : [];
+  const decisions = useMemo(() => (p.tasksApi && f.tasks ? openDecisions(p.tasksApi.tasks) : []), [p.tasksApi, f.tasks]);
   const root = useRef<HTMLElement>(null);
   const keys = useRef({ attn, current, dispatch: p.dispatch, quiet: false });
   keys.current = { attn, current, dispatch: p.dispatch, quiet: p.nav.modal !== null || p.nav.chat || p.actions.pending !== null || p.menu.menu !== null };
@@ -151,7 +155,7 @@ export function Sidebar(p: {
     // No webview menu anywhere in the sidebar: a row with a menu opens it, elsewhere a right click does nothing; a text field keeps its own (copy, paste).
     <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}
       onContextMenu={e => { if (!(e.target instanceof Element && e.target.closest('input, textarea, [contenteditable="true"]'))) e.preventDefault(); }}>
-      <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
+      {f.chat && <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
         <button type="button" className="st-ledge-entry" aria-current={homeOn ? 'page' : undefined} aria-label={t.side.ledgeHome} title={t.side.ledgeHome} onClick={() => p.dispatch({ type: 'ledge' })}>
           <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
           <span className="st-ledge-names">
@@ -160,11 +164,11 @@ export function Sidebar(p: {
           </span>
           <Kbd>/</Kbd>
         </button>
-      </div>
+      </div>}
       <nav className="st-views" aria-label={t.side.views}>
-        <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
+        {f.atelier && <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
           <Icon d={SHELL_ICONS.grid} size={13} /><span>{t.side.atelier}</span><span className="st-fill" /><small>{t.side.active(active)}</small>
-        </button>
+        </button>}
         <button type="button" className={place.kind === 'openrig' ? 'on' : undefined} aria-current={place.kind === 'openrig' ? 'page' : undefined} onClick={() => p.dispatch({ type: 'openrig' })}>
           <Icon d={SHELL_ICONS.rig} size={13} /><span>{t.openrig.side}</span>
         </button>
@@ -181,7 +185,7 @@ export function Sidebar(p: {
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
           decisions={decisions} answer={p.tasksApi?.answer}
-          ledgeTasks={p.tasksApi ? closedLedgeTasks(p.tasksApi.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.tasksApi?.seen(id)}
+          ledgeTasks={p.tasksApi && f.tasks ? closedLedgeTasks(p.tasksApi.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.tasksApi?.seen(id)}
           near={near} onHandover={id => { void p.tasksApi?.handover(id); }}
           onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.tasksApi?.putLater(s); }}
           onMenu={(id, e) => {

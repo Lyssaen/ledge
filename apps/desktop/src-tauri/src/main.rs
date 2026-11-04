@@ -4,6 +4,7 @@ mod media;
 mod notch;
 mod pty;
 
+use ledge_native::native::{self, Mode};
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -91,19 +92,119 @@ fn focus_terminal(title: String) -> Result<bool, String> { Ok(ledge_native::term
 #[tauri::command]
 fn foreground_is_terminal() -> bool { ledge_native::terminal::foreground_is_terminal() }
 #[tauri::command]
-fn open_terminal(title: String, command: Vec<String>) -> Result<bool, String> { ledge_native::terminal::open(&title, &command) }
+fn open_terminal(mode: tauri::State<AppMode>, title: String, command: Vec<String>) -> Result<bool, String> {
+    if mode.mode == Mode::Native { ledge_native::terminal::open_native(&title, &command) } else { ledge_native::terminal::open(&title, &command) }
+}
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> { ledge_native::browser::open_url(&url) }
 
-/// The daemon's token, read from WSL: `{ kind: "token", token }`, `{ kind: "absent" }` or `{ kind: "unavailable" }`.
+/// How this Desktop reaches its daemon, chosen once at start (spec 2026-11-03 §4.2.4): native when no WSL distribution is
+/// registered, WSL otherwise. `home` and `port` are the native daemon's.
+pub struct AppMode { pub mode: Mode, pub port: u16, pub home: Option<std::path::PathBuf> }
+
+impl AppMode {
+    fn detect() -> AppMode {
+        let env = |k: &str| std::env::var(k).ok();
+        let mode = if cfg!(windows) { native::choose_mode(env("LEDGE_DESKTOP_MODE").as_deref(), native::wsl_has_distro()) } else { Mode::Wsl };
+        // WSL mode keeps today's port whatever Desktop's environment says.
+        let port = if mode == Mode::Native { native::port(&env) } else { ledge_protocol_port() };
+        AppMode { mode, port, home: native::ledge_home(&env) }
+    }
+}
+
+const fn ledge_protocol_port() -> u16 { 47831 }
+
+/** The page's Content-Security-Policy lets it reach the daemon on the port in use: tauri.conf.json names the usual one, a
+ *  native daemon on `LEDGE_PORT` (tests on a PC with WSL) takes its place. Nothing else is opened. */
+pub fn csp_for_port(csp: &str, port: u16) -> String {
+    csp.replace(&format!("ws://127.0.0.1:{}", ledge_protocol_port()), &format!("ws://127.0.0.1:{port}"))
+}
+
+/// What a mode starts at launch.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Subsystems { pub keepalive: bool, pub notch: bool, pub media: bool, pub supervisor: bool }
+
+/// Native mode runs the daemon itself and has no WSL to keep alive; the island is outside its first round (spec §1).
+pub fn subsystems(mode: Mode) -> Subsystems {
+    let wsl = mode == Mode::Wsl;
+    Subsystems { keepalive: wsl, notch: wsl, media: wsl, supervisor: !wsl }
+}
+
+/// The daemon's keeper, once native mode has started it.
+#[derive(Default)]
+pub struct Keeper(std::sync::Mutex<Option<std::sync::Arc<ledge_native::supervisor::Supervisor>>>);
+
+/// The mode and the port the page connects to: `{ mode: "native" | "wsl", port }`.
 #[tauri::command]
-async fn daemon_token() -> serde_json::Value {
+fn native_info(mode: tauri::State<AppMode>) -> serde_json::Value {
+    serde_json::json!({ "mode": if mode.mode == Mode::Native { "native" } else { "wsl" }, "port": mode.port })
+}
+
+/// Native mode: stops the daemon over the protocol and waits for it to end (15 s at most); it stays stopped until
+/// `daemon_resume`. For the updater (installer step). False when it did not end, or in WSL mode.
+#[tauri::command]
+async fn daemon_stop(keeper: tauri::State<'_, Keeper>) -> Result<bool, String> {
+    let Some(sup) = keeper.0.lock().unwrap().clone() else { return Ok(false) };
+    tauri::async_runtime::spawn_blocking(move || sup.stop_and_wait(std::time::Duration::from_secs(15))).await.map_err(|e| e.to_string())
+}
+
+/// Native mode: lets the keeper start the daemon again after `daemon_stop`.
+#[tauri::command]
+fn daemon_resume(keeper: tauri::State<Keeper>) {
+    if let Some(sup) = keeper.0.lock().unwrap().as_ref() { sup.resume(); }
+}
+
+/// Native mode, at launch, on its own thread: `ledge setup` once (the hooks follow the bundled node and CLI), then the
+/// keeper. Without a runtime nothing starts: the page shows the daemon as unreachable, and the journal says why.
+#[cfg(windows)]
+fn start_native(app: &AppHandle) {
+    use ledge_native::supervisor::{append_log, windows_ops, Supervisor};
+    let mode = app.state::<AppMode>();
+    let (port, home) = (mode.port, mode.home.clone());
+    let port_override = std::env::var("LEDGE_PORT").is_ok();
+    let env = |k: &str| std::env::var(k).ok();
+    let rt = native::runtime(&env, app.path().resource_dir().ok().as_deref(), &|p| p.exists());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let Some(home) = home else { return };
+        let Some(rt) = rt else { append_log(&home, "no Ledge runtime found (LEDGE_NODE + LEDGE_CLI, or the bundled runtime folder): the daemon is not started"); return };
+        run_setup(&rt, &home);
+        let sup = std::sync::Arc::new(Supervisor::start(windows_ops(rt, home, port, port_override)));
+        *app.state::<Keeper>().0.lock().unwrap() = Some(sup);
+    });
+}
+
+/// `node <cli> setup`, its output in the journal; a failure is logged and the daemon starts anyway.
+#[cfg(windows)]
+fn run_setup(rt: &ledge_native::native::Runtime, home: &std::path::Path) {
+    use ledge_native::supervisor::append_log;
+    use std::os::windows::process::CommandExt;
+    let out = std::process::Command::new(&rt.node).arg(&rt.cli).arg("setup").stdin(std::process::Stdio::null()).creation_flags(0x0800_0000).output();
+    match out {
+        Ok(o) => {
+            for line in String::from_utf8_lossy(&o.stdout).lines().chain(String::from_utf8_lossy(&o.stderr).lines()) { append_log(home, &format!("setup: {line}")); }
+            if !o.status.success() { append_log(home, &format!("setup failed ({})", o.status)); }
+        }
+        Err(e) => append_log(home, &format!("setup could not start: {e}")),
+    }
+}
+
+/// The daemon's token: from WSL, or from its file in native mode. `{ kind: "token", token }`, `{ kind: "absent" }` or
+/// `{ kind: "unavailable" }`.
+#[tauri::command]
+async fn daemon_token(mode: tauri::State<'_, AppMode>) -> Result<serde_json::Value, String> {
     use ledge_native::daemon_token::{read, TokenRead};
-    match tauri::async_runtime::spawn_blocking(|| read(std::time::Duration::from_secs(5))).await {
+    let native_file = (mode.mode == Mode::Native).then(|| mode.home.clone().map(|h| h.join("token")));
+    let read = tauri::async_runtime::spawn_blocking(move || match native_file {
+        Some(Some(file)) => native::read_token_file(&file),
+        Some(None) => TokenRead::Unavailable,
+        None => read(std::time::Duration::from_secs(5)),
+    }).await;
+    Ok(match read {
         Ok(TokenRead::Token(token)) => serde_json::json!({ "kind": "token", "token": token }),
         Ok(TokenRead::Absent) => serde_json::json!({ "kind": "absent" }),
         _ => serde_json::json!({ "kind": "unavailable" }),
-    }
+    })
 }
 
 /// The island's target if it is one JSON line, as `--open` would carry it.
@@ -228,6 +329,11 @@ fn default_autostart(app: &tauri::App) {
 }
 
 fn main() {
+    let mode = AppMode::detect();
+    let mut context = tauri::generate_context!();
+    if mode.port != ledge_protocol_port() {
+        if let Some(tauri::utils::config::Csp::Policy(csp)) = context.config_mut().app.security.csp.as_mut() { *csp = csp_for_port(csp, mode.port); }
+    }
     tauri::Builder::default()
         // First, so a second launch exits before anything else starts; it brings this one forward instead.
         // A second launch from the island carries its target: this window shows it.
@@ -236,6 +342,8 @@ fn main() {
             if let Some(target) = ledge_native::desktop::open_target(args) { deliver_open(app, target); }
         }))
         .manage(PendingOpen::default())
+        .manage(mode)
+        .manage(Keeper::default())
         // Visibility is the launch's choice (setup below); decorations come from tauri.conf.json.
         // Restoring old native decorations would bring back Windows' title bar over our own.
         // The notch places itself on the chosen monitor's work area: no saved state for it.
@@ -254,17 +362,22 @@ fn main() {
             focus_terminal, foreground_is_terminal, open_terminal, open_url, daemon_token, get_autostart, set_autostart, set_tray_labels, take_open_target, check_snapshot_update,
             open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
             notch::list_monitors, notch::set_monitor, open_atelier, pty::pty_open, pty::pty_write, pty::pty_resize, pty::pty_close,
-            media::now_playing, media::media_command,
+            media::now_playing, media::media_command, native_info, daemon_stop, daemon_resume,
         ])
         .setup(|app| {
             // WSL stops once no `wsl.exe` holds it: Ledge holds one from login until it quits, so the daemon stays reachable.
             // After the single-instance plugin, so a second launch never starts a second one.
-            ledge_native::wsl_keepalive::start();
+            let run = subsystems(app.state::<AppMode>().mode);
+            if run.keepalive { ledge_native::wsl_keepalive::start(); }
             build_tray(app)?;
             // Before the tray-only check: the notch shows even when the login item starts us minimized.
-            notch::setup(app)?;
+            // The notch's window is declared in tauri.conf.json, so Tauri has made it already: native mode closes it.
+            if run.notch { notch::setup(app)?; } else if let Some(w) = app.get_webview_window(notch::NOTCH) { let _ = w.destroy(); }
             // What plays on the PC, for the closed notch (Windows' media controls).
-            media::start(app.handle().clone());
+            if run.media { media::start(app.handle().clone()); }
+            // Native mode: Desktop runs the daemon (quitting Desktop leaves it running; the next launch adopts it).
+            #[cfg(windows)]
+            if run.supervisor { start_native(app.handle()); }
             default_autostart(app);
             // The window is created hidden and the window-state plugin has already put it back in place: show it now,
             // without a flash at the default size, unless the login item launched us into the tray.
@@ -286,7 +399,7 @@ fn main() {
                 }
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Ledge Desktop")
         .run(|app, event| {
             // Managed state is never dropped on exit: the terminals' processes would be left to the OS to reap.
@@ -296,7 +409,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_target, launched_minimized, on_close, tray_shows_window, tray_title, CloseAction};
+    use super::{checked_target, csp_for_port, launched_minimized, on_close, subsystems, tray_shows_window, tray_title, CloseAction, Subsystems};
+    use ledge_native::native::Mode;
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.5.2", false), "Ledge Desktop 0.5.2");
@@ -328,5 +442,18 @@ mod tests {
     fn open_in_ledge_refuses_an_invalid_target() {
         assert_eq!(checked_target("not json"), Err("invalid target".into()));
         assert_eq!(checked_target(r#"{"kind":"settings"}"#), Ok(r#"{"kind":"settings"}"#));
+    }
+
+    #[test]
+    fn native_mode_supervises_the_daemon_and_starts_no_wsl_keepalive_nor_island() {
+        assert_eq!(subsystems(Mode::Native), Subsystems { keepalive: false, notch: false, media: false, supervisor: true });
+        assert_eq!(subsystems(Mode::Wsl), Subsystems { keepalive: true, notch: true, media: true, supervisor: false });
+    }
+
+    #[test]
+    fn the_page_may_reach_the_daemon_on_the_port_in_use_only() {
+        let csp = "default-src 'self'; connect-src ipc: http://ipc.localhost ws://127.0.0.1:47831";
+        assert_eq!(csp_for_port(csp, 47831), csp);
+        assert_eq!(csp_for_port(csp, 27832), "default-src 'self'; connect-src ipc: http://ipc.localhost ws://127.0.0.1:27832");
     }
 }

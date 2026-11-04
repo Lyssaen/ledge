@@ -10,6 +10,7 @@ import { isArchived, isOmpSeat, isStoppedOmpSeat } from '@ledge/protocol';
 import { SHELL_ICONS } from './icons';
 import { ApprovalBadge, HelperBot, SessionBot, StateBadge } from './SessionBot';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
+import { useFeatures } from '../native/mode';
 
 /** The session menu opens under its button, its right edge on the button's (Menu keeps it inside the window). */
 const MENU_WIDTH = 260;
@@ -33,6 +34,9 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
   onDetach?: () => void;
 }) {
   const { t } = useI18n();
+  const f = useFeatures();
+  // Native mode's overview is its plain session page, not the Atelier.
+  const overviewCrumb = f.atelier ? t.crumb.atelier : t.native.title;
   const { place } = nav;
   const project = (id: string) => projects?.projects.find(p => p.id === id);
   const filterName = (f: ProjectFilter) => (f === 'none' ? t.side.unassigned : project(f)?.name ?? t.side.unassigned);
@@ -48,7 +52,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
     if (place.kind === 'session' && session) {
       const pid = projectIdOf(session) ?? 'none';
       return <>
-        <button className="crumb-link" onClick={() => dispatch({ type: 'home' })} title={t.crumb.escape}>{t.crumb.atelier}</button>
+        <button className="crumb-link" onClick={() => dispatch({ type: 'home' })} title={t.crumb.escape}>{overviewCrumb}</button>
         <span className="muted">/</span>
         <button className="crumb-link" onClick={() => dispatch({ type: 'home', project: pid })} title={filterName(pid)}>{filterName(pid)}</button>
         <span className="muted">/</span>
@@ -77,10 +81,10 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
       <strong>{t.openrig.roles.crumb}</strong>
     </> : <strong>{t.openrig.title}</strong>;
     const filter = place.project;
-    if (filter === 'all') return <strong>{t.crumb.atelier}</strong>;
+    if (filter === 'all') return <strong>{overviewCrumb}</strong>;
     const color = project(filter)?.color;
     return <>
-      <button className="crumb-link" onClick={() => dispatch({ type: 'home' })}>{t.crumb.atelier}</button>
+      <button className="crumb-link" onClick={() => dispatch({ type: 'home' })}>{overviewCrumb}</button>
       <span className="muted">/</span>
       <span className="project-filter">
         <ProjectSwatch project={filter !== 'none' && color ? { color } : null} />
@@ -110,7 +114,7 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
           )}
         </div>
       )}
-      {overview && (
+      {overview && f.atelier && (
         <div className="header-view">
           <Button variant="ghost" size="icon" aria-pressed={nav.helpers} aria-label={nav.helpers ? t.top.helpersHide : t.top.helpersShow} title={nav.helpers ? t.top.helpersHide : t.top.helpersShow} onClick={() => dispatch({ type: 'helpers' })}>
             <Icon d={nav.helpers ? SHELL_ICONS.subagents : SHELL_ICONS.subagentsOff} size={16} />

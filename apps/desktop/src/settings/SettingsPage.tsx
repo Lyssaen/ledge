@@ -23,6 +23,10 @@ import { About } from './About';
 import { shownOf } from './machineDrafts';
 import { usePairingDialogOpen } from './pairingRequest';
 import { EscapeLayersContext, escapeLayers, type EscapeLayers } from './escape';
+import { useFeatures, type Features } from '../native/mode';
+
+/** The sections this mode offers: native mode's first round has no notch and no phone (spec 2026-11-03 §1). */
+export const sectionsFor = (f: Pick<Features, 'island' | 'mobile'>): readonly SectionId[] => SECTIONS.filter(id => (id !== 'island' || f.island) && (id !== 'mobile' || f.mobile));
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
  *  in `lang` when given), the fleet, its client (what a machine says of its folders) and its machines, the projects, the island's settings
@@ -82,8 +86,11 @@ function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContex
  *  machine shows offline (not while it connects), on Mobile access while its link is down (and in the brand colour while a device
  *  asks for access), on About while an update of the app or of the local daemon waits), the section's title, hint and cards
  *  on the right, scrolled back to the top at each change of section. */
-export function SettingsPage({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
+export function SettingsPage({ section: asked, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
+  // A section this mode does not offer (an island target, a stored place) shows General.
+  const sections = sectionsFor(useFeatures());
+  const section = sections.includes(asked) ? asked : 'general';
   const s = t.settings;
   const update = useUpdate();
   const scroller = useRef<HTMLDivElement>(null);
@@ -108,7 +115,7 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
     <div className="settings-page">
       <nav className="settings-nav" aria-label={s.nav}>
         <Button variant="ghost" size="sm" className="settings-back" onClick={back}><Icon d={ICONS.chevronLeft.d} size={14} />{s.back}<Kbd>{t.crumb.escape}</Kbd></Button>
-        {SECTIONS.map(id => {
+        {sections.map(id => {
           const note = alert(id);
           return (
             <button key={id} type="button" className={id === section ? 'settings-tab active' : 'settings-tab'} aria-current={id === section ? 'page' : undefined}

@@ -3,8 +3,9 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { createTokenSource, type TokenRead, type TokenSource } from '@ledge/fleet';
 
 // One source per test, shared by the fleet and the notice like the real module singleton.
-const holder = vi.hoisted(() => ({ source: undefined as TokenSource | undefined }));
-vi.mock('../src/tauri/bridge', async (orig) => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), daemonTokenSource: () => holder.source }));
+const holder = vi.hoisted(() => ({ source: undefined as TokenSource | undefined, native: null as null | { mode: 'native' | 'wsl'; port: number } }));
+vi.mock('../src/tauri/bridge', async (orig) => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), daemonTokenSource: () => holder.source, nativeInfo: async () => holder.native }));
+import { loadNativeInfo } from '../src/native/mode';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
 
@@ -13,13 +14,23 @@ class DeadSocket { static protocols: unknown[] = []; onopen = null; onmessage: u
 
 let answer: TokenRead;
 beforeEach(() => { localStorage.clear(); DeadSocket.protocols = []; holder.source = createTokenSource(async () => answer); });
-afterEach(() => cleanup());
+afterEach(async () => { cleanup(); holder.native = null; await loadNativeInfo(); });
 const NPM = 'npm i -g @paradow/ledge && systemctl --user restart ledge-daemon';
 const GIT = 'cd <your Ledge clone> && git pull && pnpm install && pnpm --filter @paradow/ledge build && systemctl --user restart ledge-daemon';
 const TITLE = 'The Ledge daemon must be updated';
 const mount = () => render(<App client={createDesktopFleet({ WebSocketImpl: DeadSocket })} />);
 
 describe('the daemon-too-old notice', () => {
+  it('native mode: a missing token means the daemon Desktop runs is starting, not an old daemon: no notice, no Linux command', async () => {
+    holder.native = { mode: 'native', port: 47831 };
+    await loadNativeInfo();
+    answer = { kind: 'absent' };
+    mount();
+    await act(async () => { await new Promise(r => setTimeout(r, 300)); });
+    expect(screen.queryByText(TITLE)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/systemctl|npm i -g/);
+  });
+
   it('shows both commands when the token is missing', async () => {
     answer = { kind: 'absent' };
     mount();

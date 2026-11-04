@@ -3,6 +3,7 @@ import type { DaemonClient } from '@ledge/fleet';
 import { contextShare, isArchived, isOmpSeat, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
+import { useFeatures } from '../native/mode';
 import type { Decisions } from '../fleet/decisions';
 import { whenOf, type Wait } from '../list/time';
 import { repoOf } from '../list/model';
@@ -87,6 +88,8 @@ const VIEWS: ReadonlyArray<{ view: SessionView; icon: readonly string[] }> = [{ 
 export function SessionPage(p: SessionPageProps): JSX.Element {
   const { session, helper, items, memory } = p;
   const { t, lang } = useI18n();
+  // Native mode's first round: no documents, no browser captures, no tasks or mail between sessions (spec 2026-11-03 §1).
+  const f = useFeatures();
   const th = t.session.thread;
   const offline = session.offline === true;
   const archived = isArchived(session);
@@ -163,7 +166,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
     setActiveTab(id);
     if (viewNow.current !== 'thread') { returning.current = 'restore'; onView('thread'); }
   }, [onView]);
-  const openDoc = useCallback((path: string) => openTab({ kind: 'doc', path }), [openTab]);
+  const openDoc = useCallback((path: string) => { if (f.documents) openTab({ kind: 'doc', path }); }, [openTab, f.documents]);
   // Arriving with a file to show (« À toi »'s source, docs/mockups/ledge-human-operator-ab-lot1.html): each arrival opens it once.
   const arrivedDoc = p.nav.place.kind === 'session' ? p.nav.place.doc : undefined;
   useEffect(() => { if (arrivedDoc) openDoc(arrivedDoc); }, [p.nav.place, arrivedDoc, openDoc]);
@@ -180,7 +183,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   }, [memory, p.dispatch, t]); // eslint-disable-line react-hooks/exhaustive-deps
 const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', peer }), [openTab]);
   /* The « Navigateur » tab: every image the thread's tool rows hold, opened on one (a thumbnail) or on the latest (null: the head's button). */
-  const captures = useMemo(() => capturesOf(items ?? []), [items]);
+  const captures = useMemo(() => (f.captures ? capturesOf(items ?? []) : []), [items, f.captures]);
   const [captureFocus, setCaptureFocus] = useState<CaptureFocus>({ key: null });
   const openCapture = useCallback((key: string | null) => { setCaptureFocus({ key }); openTab({ kind: 'browser' }); }, [openTab]);
   const onCapture = useCallback((toolId: string, index: number) => openCapture(`${toolId}:${index}`), [openCapture]);
@@ -463,10 +466,10 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
           <Button variant="ghost" size="icon" className="term-icon" onClick={external} aria-label={t.session.terminal.external} title={t.session.terminal.external}><Icon d={ICONS.external.d} size={14} /></Button>
         )}
         {/* Its relief (context handover spec §3.3): under way, done (the relief opens), or the one it relieves. */}
-        {session.handover && (session.handover.state === 'done' && session.handover.to
+        {f.tasks && session.handover && (session.handover.state === 'done' && session.handover.to
           ? <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.handover!.to! })}>{t.handover.relievedBy(session.handover.toName ?? '')}</button>
           : <span className={cls('pane-relief', session.handover.state === 'failed' && 'failed')} role="status">{t.handover.state[session.handover.state]}{session.handover.auto ? ` · ${t.handover.auto}` : ''}{session.handover.reason ? ` : ${session.handover.reason}` : ''}</span>)}
-        {session.relieves && <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.relieves!.id })}>{t.handover.relieves(session.relieves.name)}</button>}
+        {f.tasks && session.relieves && <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.relieves!.id })}>{t.handover.relieves(session.relieves.name)}</button>}
         {(tags || kids.length > 0 || captures.length > 0) && <span className="spacer" />}
         {tags && <Tags tags={tags} />}
         {kids.length > 0 && <><button type="button" className="kids-pill" title={t.session.kidsPillTitle} onClick={p.onShowKids}><Icon d={SHELL_ICONS.subagents} size={13} />{t.session.kidsPill(kids.length)}</button></>}
@@ -493,8 +496,8 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
               {items === undefined ? <p className="thread-note muted">{offline ? th.notLoaded : th.loading}</p>
                 : xs.length === 0 ? <p className="thread-note muted">{th.empty}</p>
                 : <Thread client={p.client} session={session} helper={helper} items={items} xs={shownXs} now={times} unread={unread.current ?? null} since={since} dispatch={p.dispatch}
-                    flash={flash?.id ?? null} onChange={openDiff} onCapture={onCapture} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
-                    convOpen={convOpen} onConversation={helper ? undefined : openConversation} waiting={waiting} onReplyTo={replyTo} />}
+                    flash={flash?.id ?? null} onChange={openDiff} onCapture={f.captures ? onCapture : undefined} onDocument={openDoc} planOpen={planOpen} onPlan={openPlan}
+                    convOpen={convOpen} onConversation={helper || !f.tasks ? undefined : openConversation} waiting={waiting} onReplyTo={replyTo} />}
               </>}
             </div>
             {view === 'terminal' && (
@@ -504,7 +507,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
             {view === 'thread' && seat === null && !atBottom && <button type="button" className="to-latest" onClick={toLatest}><Icon d={SHELL_ICONS.arrowDown} size={13} />{th.latest}</button>}
           </div>
           {/* On Terminal the agent's screen is alone: the pinned task and the reply come back with the thread (one types in the screen). */}
-          {view === 'thread' && !archived && held && (
+          {view === 'thread' && !archived && f.tasks && held && (
             <div className="pinned-task" role="note" aria-label={t.session.heldTask.pinned} data-task={held.id}>
               <span className="kicker mono">{t.session.notice.task}</span>
               <span className="pinned-text">{t.session.heldTask.task(held.id, held.title, held.giverName, t.chat.task.state[held.state])}</span>

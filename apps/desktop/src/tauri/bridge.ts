@@ -13,6 +13,7 @@
  *   take_open_target / event `ledge://open`   what the island asked to open (`--open`), taken once
  *   pty_open { argv, cols, rows, onData, onExit } → id   a pseudo-terminal running argv; bytes stream back on onData, the exit code on onExit
  *   pty_write { id, data } / pty_resize { id, cols, rows } / pty_close { id }   ids start at 0: never test one for truthiness
+ *   native_info → { mode: 'native' | 'wsl', port }   how this Desktop reaches its daemon (native: Windows without WSL)
  *   window minimize / toggleMaximize / close / isMaximized / onResized   the title bar's buttons (decorations are off)
  */
 import { listen } from '@tauri-apps/api/event';
@@ -39,6 +40,17 @@ export function daemonTokenSource(): TokenSource | undefined {
   const fixed = (import.meta.env.DEV ? import.meta.env.VITE_LEDGE_TOKEN : undefined) as string | undefined; // dev only: a release build never inlines a token
   if (fixed) return (tokenSource = createTokenSource(async () => ({ kind: 'token', token: fixed })));
   return undefined;
+}
+
+/** The mode and the daemon's port as the shell chose them at start; null outside Tauri or when the shell cannot say. */
+export async function nativeInfo(): Promise<{ mode: 'native' | 'wsl'; port: number } | null> {
+  if (!isTauri()) return null;
+  try {
+    const r = await invoke<{ mode?: unknown; port?: unknown }>('native_info');
+    const port = Number(r?.port);
+    if ((r?.mode !== 'native' && r?.mode !== 'wsl') || !Number.isInteger(port) || port < 1 || port > 65535) return null;
+    return { mode: r.mode, port };
+  } catch { return null; }
 }
 
 /** Brings the terminal window whose title matches `title` forward; true when one was found (always false in the browser). */

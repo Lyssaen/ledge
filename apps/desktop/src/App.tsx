@@ -66,6 +66,8 @@ import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
+import { isNative, useFeatures } from './native/mode';
+import { NativeOverview } from './native/NativeOverview';
 
 const NO_PROJECTS: readonly Project[] = [];
 
@@ -85,7 +87,8 @@ function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
       return chunk.createSurface({ theme: rootTermTheme(), onThread, openUrl });
     },
     agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
-    shellArgv: id => client.fleet?.shell(id) ?? null,
+    // Native mode's first round has no login shells (its shell command is a POSIX one).
+    shellArgv: id => (isNative() ? null : client.fleet?.shell(id) ?? null),
     // A first shell opens where the session works (its worktree, else its folder), over ssh when its machine is reached that way.
     shellPlace: id => {
       const { sessions, archived } = daemonStore.getState();
@@ -111,6 +114,8 @@ const shellReducer = (s: NavState, a: ShellAction): NavState => (a.type === 'rec
  *  the real fleet, toasts and sounds, and the tray. */
 function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): Promise<'ok' | 'failed'> }) {
   const fleetView = useFleet(client);
+  // What this mode offers: native mode's first round hides what is outside its acceptance bar (spec 2026-11-03 §1).
+  const f = useFeatures();
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   // Ctrl + ² inside an xterm, set below once the place is known (the store's surfaces are made once).
   const termThread = useRef<() => void>(focusThread);
@@ -121,13 +126,15 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const localMachine = machines.find(m => m.id === 'local');
   const asks = useOpenRigAsks(fleetClient, localMachine?.ready && localMachine.daemon?.openrigAsks ? 'local' : null);
   const [askFocus, setAskFocus] = useState<{ id: string; n: number } | null>(null);
-  const island = useIsland(fleetClient);
-  const mobile = useMobile(fleetClient);
+  const islandPrefs = useIsland(fleetClient);
+  const island = f.island ? islandPrefs : undefined;
+  const mobileState = useMobile(fleetClient);
+  const mobile = f.mobile ? mobileState : undefined;
   const mobileError = useMobileError(fleetClient);
   const sidebarOpenRig = useSidebarOpenRig(fleetClient, machines);
   const tokenMissing = useTokenMissing(daemonTokenSource());
   const { t, lang } = useI18n();
-  const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
+  const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview(), isNative() ? 'atelier' : 'home'));
   // The header's Archived pill bumps this; Archives unfolds and scrolls on each change (0 never counts).
   const [revealArchives, setRevealArchives] = useState(0);
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
@@ -141,7 +148,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Toasts and sounds from session changes (spec 2026-10-14 §10); `test()` is the Sounds section's Test.
   // Read at the moment an alert fires, never captured: set below once the place and the prefs are known.
   const watching = useRef<() => string | null>(() => null);
-  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local'), tasks: tasksApi.tasks }, { watching: () => watching.current() });
+  const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local'), tasks: f.tasks ? tasksApi.tasks : [] }, { watching: () => watching.current() });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
@@ -344,28 +351,30 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
           actions={actions} decisions={decisions} waits={waits} menu={sessionMenu} notify={notify}
-          broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
+          broadcast={f.broadcast && canBroadcast(machines)} broadcastSent={broadcastSent}
           openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
           asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         <section className="workspace">
-          {tokenMissing && <DaemonOutdated />}
+          {/* Native mode: Desktop runs the daemon, which writes its token at its first start; a missing token is a start under way. */}
+          {tokenMissing && !isNative() && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
-            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
+            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={f.atelier && canDetach() && !detached ? detach : undefined}
             manage={{ open: sessionMenu.menu?.target.kind === 'session' && sessionMenu.menu.target.id === session?.id, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
-            : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} tasks={tasksApi} decisions={decisions} waits={waits} tab={place.tab} task={place.task} dispatch={dispatch}
+            : place.kind === 'home' && f.chat ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} tasks={tasksApi} decisions={decisions} waits={waits} tab={place.tab} task={place.task} dispatch={dispatch}
                 asks={asks} askFocus={askFocus} machineLabel={localMachine?.label ?? 'local'}
                 paused={nav.paused} focus={nav.chatFocus} projects={projects} onLaunched={chatLaunched} onTerminal={showTerminal} notify={notify} onProposal={openProposal} />
             : place.kind === 'openrig' ? <OpenRigPage client={fleetClient} machines={machines} machine={place.machine} section={place.section ?? 'rigs'} role={place.role} seat={place.seat} open={place.open} projects={projects} sessions={sessions} dispatch={dispatch} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
                 prefs={shownPrefs} setPrefs={setShownPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
+            : isNative() ? <NativeOverview dispatch={dispatch} />
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
-                tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />}
+                tasks={tasksApi.tasks} broadcast={f.broadcast && canBroadcast(machines)} />}
           {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
         </section>
-        {nav.chat && (
+        {nav.chat && f.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
             projects={projects} notify={notify} onProposal={openProposal} />
@@ -390,7 +399,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         <BroadcastDialog to={nav.modal.to} fleet={fleet} onClose={close} onSent={report => { close(); notify(report); setBroadcastSent(n => n + 1); }}
           label={addressees(nav.modal.to)} />
       )}
-      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void tasksApi.handover(s.id); }} />
+      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={f.tasks ? s => { void tasksApi.handover(s.id); } : undefined} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />
