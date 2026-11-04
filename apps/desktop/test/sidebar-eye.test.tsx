@@ -94,7 +94,7 @@ describe('the eye of « Projets »', () => {
     const empty = box.getByRole('status');
     expect(empty).toHaveTextContent('No session yet.A session runs an agent in a folder or a project.Create a session');
     const header = empty.previousElementSibling as HTMLElement;
-    expect(within(header).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([EYE, 'Compact mode (D)', 'Fold all', 'New project']);
+    expect(within(header).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([EYE, 'Group by branch (B)', 'Compact mode (D)', 'Fold all', 'New project']);
     expect(more).toHaveAttribute('tabindex', '0');
     // H from the box releases the eye, as its row would.
     within(empty).getByRole('button', { name: 'Create a session' }).focus();

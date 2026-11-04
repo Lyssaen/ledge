@@ -16,6 +16,21 @@ import type { ProjectGroup } from './model';
 
 const branchIcon = ['M6 3v12', 'M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6', 'M18 9a9 9 0 0 1-9 9'];
 
+/** The branches a repository usually starts on: their tag stays quiet, the others stand out. */
+const DEFAULT_BRANCHES = new Set(['main', 'master', 'trunk']);
+
+/** An agent's branch on its row, when the tree does not group by branch. None when the session knows no branch (no repository). */
+function BranchTag({ session }: { session: Session }): JSX.Element | null {
+  const { t } = useI18n();
+  const b = session.branch?.trim();
+  if (!b) return null;
+  return (
+    <span className={cls('st-btag', DEFAULT_BRANCHES.has(b) && 'default')} title={t.side.branchTag(b)}>
+      <Icon d={branchIcon} size={9} />{b}{session.worktree && <i>wt</i>}
+    </span>
+  );
+}
+
 /** A row the keyboard walks: Left folds it (or goes to its parent), Right unfolds it. `session` is set only for a principal. */
 interface Nav { toggle?: () => void; open?: boolean; parent?: string; session?: Session; target?: MenuTarget }
 
@@ -72,6 +87,8 @@ export function Tree(p: {
   /** Some session is in the projects' tree, shown or not: without any, its box offers one (sidebar tidy, point 3). */
   anySession: boolean;
   dense: boolean;
+  /** Project › branch › agent; false: each project lists its agents, their branch as a tag on the row. */
+  byBranch: boolean;
   filing: Filing;
   revealCurrent: number;
   onHome(project?: string): void;
@@ -89,6 +106,7 @@ export function Tree(p: {
   onTerminal(s: Session): void;
   onToggleHide(): void;
   onToggleDense(): void;
+  onToggleBranches(): void;
   onNewProject(): void;
   paused: boolean;
 }): JSX.Element {
@@ -162,6 +180,7 @@ export function Tree(p: {
     else if (k === 'j' || k === 'k') { /* the atelier walks with these; the tree keeps them */ }
     else if (k === 'h') p.onToggleHide();
     else if (k === 'd') p.onToggleDense();
+    else if (k === 'b') p.onToggleBranches();
     else done = false;
     if (done) { e.preventDefault(); e.stopPropagation(); }
   };
@@ -200,7 +219,7 @@ export function Tree(p: {
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
           onClick={e => { if (!helper && p.onPick && (e.ctrlKey || e.metaKey)) p.onPick(s.id); else if (helper) p.onOpen(s.id, helper.id); else p.onOpen(s.id); }}>
-          <strong>{name}{!helper && <AutoMark session={s} />}{!helper && <RigTag session={s} />}</strong>{task && <span>{task}</span>}
+          <strong>{name}{!helper && <AutoMark session={s} />}{!helper && <RigTag session={s} />}{!helper && !p.byBranch && <BranchTag session={s} />}</strong>{task && <span>{task}</span>}
         </button>
         {subs.length > 0 && !open && <span className="st-kids" title={t.side.kids(subs.length)}>{subs.length}</span>}
         <span className={cls('st-time', waiting && timeClass)}>{s.offline ? t.side.offline : shortWhen(s.lastActivityAt, t.list.when.units, t.list.when.now)}</span>
@@ -265,7 +284,7 @@ export function Tree(p: {
     const open = has && !closed.has(pkey);
     const toggle = has ? () => flip(closed, setClosed, pkey) : undefined;
     const branch = g.branches.length === 1 ? g.branches[0]!.branch : undefined;
-    const sub = g.flatten && branch && g.repo ? `${g.repo} · ${branch}` : (!g.flatten && g.repo ? g.repo : '');
+    const sub = p.byBranch && g.flatten && branch && g.repo ? `${g.repo} · ${branch}` : (g.repo ?? '');
     const project = g.id ? p.projects?.projects.find(x => x.id === g.id) ?? null : null;
     const target: MenuTarget = g.id ? { kind: 'project', id: g.id } : { kind: 'unassigned' };
     nav.current.set(pkey, { toggle, open, target });
@@ -286,7 +305,7 @@ export function Tree(p: {
       </div>
     );
     if (!open) continue;
-    if (g.flatten) rows.push(...sessionRows(sessions, 1, pkey, pkey));
+    if (g.flatten || !p.byBranch) rows.push(...sessionRows(sessions, 1, pkey, pkey));
     else for (const b of g.branches) {
       const bkey = `${pkey}:${b.branch}`;
       const bopen = !closed.has(bkey);
@@ -325,7 +344,7 @@ export function Tree(p: {
   const headKeys = (e: ReactKeyboardEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key.toLowerCase();
-    if (k === 'h') p.onToggleHide(); else if (k === 'd') p.onToggleDense(); else return;
+    if (k === 'h') p.onToggleHide(); else if (k === 'd') p.onToggleDense(); else if (k === 'b') p.onToggleBranches(); else return;
     e.preventDefault(); e.stopPropagation();
   };
   const header = (
@@ -333,6 +352,9 @@ export function Tree(p: {
       <span>{t.side.projects}</span><span className="st-fill" />
       <button type="button" className={cls('st-icon', p.hideDone && 'on')} aria-pressed={p.hideDone} aria-label={t.side.hideDone} title={t.side.hideDone} onClick={p.onToggleHide}>
         <Icon d={SHELL_ICONS.eyeOff} size={14} />
+      </button>
+      <button type="button" className={cls('st-icon', p.byBranch && 'on')} aria-pressed={p.byBranch} aria-label={t.side.byBranch} title={t.side.byBranch} onClick={p.onToggleBranches}>
+        <Icon d={branchIcon} size={14} />
       </button>
       <button type="button" className={cls('st-icon', p.dense && 'on')} aria-pressed={p.dense} aria-label={t.side.dense} title={t.side.dense} onClick={p.onToggleDense}>
         <Icon d={SHELL_ICONS.densityTight} size={14} />

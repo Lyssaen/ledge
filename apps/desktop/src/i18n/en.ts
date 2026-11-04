@@ -53,7 +53,7 @@ export const en: Messages = {
     allow: 'Yes', deny: 'No', reply: 'Reply', see: 'View',
     ofHelper: (parent) => `↳ ${parent}`,
     hideDone: 'Only projects with a live agent (H)', moreProjects: (n) => `+${n} ${pluralEn(n, 'project', 'projects')} with no live agent`,
-    dense: 'Compact mode (D)', foldAll: 'Fold all',
+    dense: 'Compact mode (D)', byBranch: 'Group by branch (B)', branchTag: (b: string) => `Branch ${b}`, foldAll: 'Fold all',
     tree: 'Projects, branches and sessions',
     fold: (name) => `Fold ${name}`, unfold: (name) => `Unfold ${name}`,
     foldKids: (name) => `Hide ${name}’s subagents`,

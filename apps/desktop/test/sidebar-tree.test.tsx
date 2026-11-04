@@ -105,6 +105,41 @@ describe('the sidebar tree', () => {
     expect(screen.getByRole('dialog', { name: 'New project' })).toBeVisible();
   });
 
+  it('released, « Group by branch » lists the agents flat, each with its branch as a tag', async () => {
+    const sessions = [...listSessions(), fakeSession('wren', { name: 'Wren', cwd: '/w/ledge', state: 'working', branch: 'main', topic: 'Ranger la release' })];
+    const { side, user } = await boot({ projects: PROJECTS, sessions });
+    const projects = within(side.getByRole('region', { name: 'Projects' }));
+    const group = projects.getByRole('button', { name: 'Group by branch (B)' });
+    expect(group).toHaveAttribute('aria-pressed', 'true');
+    const tree = within(side.getByRole('tree', { name: 'Projects, branches and sessions' }));
+    expect(tree.getByRole('button', { name: 'desktop' })).toBeVisible();
+    expect(tree.queryByTitle('Branch desktop')).toBeNull();
+
+    await user.click(group);
+    expect(group).toHaveAttribute('aria-pressed', 'false');
+    expect(tree.queryByRole('button', { name: 'desktop' })).toBeNull();
+    expect(tree.queryByRole('button', { name: 'main' })).toBeNull();
+    // Every agent sits on its project (level 2), its branch on its row: the other branches stand out, the default one stays quiet.
+    const otto = tree.getByRole('treeitem', { name: /Otto/ });
+    expect(otto).toHaveAttribute('aria-level', '2');
+    expect(within(otto).getByTitle('Branch desktop')).toHaveClass('st-btag');
+    expect(within(otto).getByTitle('Branch desktop')).not.toHaveClass('default');
+    expect(within(tree.getByRole('treeitem', { name: /Wren/ })).getByTitle('Branch main')).toHaveClass('default');
+    // No branch known (no repository): no tag.
+    expect(within(tree.getByRole('treeitem', { name: /Nova/ })).queryByTitle(/^Branch /)).toBeNull();
+    expect(JSON.parse(localStorage.getItem('desktop.sidebar')!).byBranch).toBe(false);
+  });
+
+  it('B in the tree switches between the agents list and the branches', async () => {
+    const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
+    const tree = within(side.getByRole('tree', { name: 'Projects, branches and sessions' }));
+    tree.getByRole('button', { name: /^Otto/ }).focus();
+    await user.keyboard('b');
+    expect(tree.getByRole('treeitem', { name: /Otto/ })).toHaveAttribute('aria-level', '2');
+    await user.keyboard('b');
+    expect(tree.getByRole('treeitem', { name: /Otto/ })).toHaveAttribute('aria-level', '3');
+  });
+
   it('+N finished shows them with no link to hide them; H hides them again', async () => {
     const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
     await user.click(side.getByRole('button', { name: '+1 finished' }));
