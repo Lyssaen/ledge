@@ -8,6 +8,7 @@ import {
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
 import { actionChecked } from '../model/actionCard';
+import { adoptRuns } from '../model/sessionEnd';
 import { createImages } from './images';
 import { asked, emptyChat, reduceChat, type ChatAction, type ChatState } from './chat';
 import { PC_STALL_MS, pcFailed, pcProgress, pcRunning, pcSnapshot, type PcRun } from './pc';
@@ -315,6 +316,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (o) setOps({ ...state.ops, [id]: f(o) });
   };
 
+  /** A close sent while its session started takes the run that start gave, as soon as the PC tells of it. */
+  const adoptRunsOf = (sessions: PhoneSession[]) => {
+    const ops = adoptRuns(state.ops, sessions);
+    if (ops !== state.ops) setOps(ops);
+  };
+
   const stopTimer = (id: string) => { clearTimeout(timers.get(id)); timers.delete(id); };
   const arm = (id: string) => {
     stopTimer(id);
@@ -392,6 +399,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
         set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, projects: m.projects ?? [], fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {}, commands: {} } : {}) });
         persist();
+        adoptRunsOf(m.sessions);
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
         if (m.device?.chat && !historyAsked && ready()) askHistory();
@@ -439,6 +447,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const sessions = new Map(state.sessions).set(m.session.id, keepBody(state.sessions.get(m.session.id)?.pending, m.session));
         set({ sessions, syncedAt: now, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions) });
         persist();
+        adoptRunsOf([m.session]);
         return;
       }
       case 'session.removed': {
@@ -524,7 +533,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   }
 
   /** Sends an operation and keeps it; `keep` adds what the phone notes of it at the send. */
-  function write(build: (op: string) => OpMessage, keep: Pick<Op, 'startedAt'> = {}): string | null {
+  function write(build: (op: string) => OpMessage, keep: Pick<Op, 'startedAt' | 'starting'> = {}): string | null {
     if (closed || !ready()) return null;
     const parsed = PhoneClientMessageSchema.safeParse(build(newOperationId()));
     // A message the PC would refuse as invalid gets an error, not an operation result: it is never sent.
@@ -750,11 +759,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       return write(op => ({ type: 'session.interrupt', op, id }));
     },
 
-    // Each keeps the session's `startedAt` as the PC gave it: a new one later says the session was started again since.
+    // Each keeps the session's `startedAt` as the PC gave it: a new one later says the session was started again since. A close
+    // sent while the session starts is about the run that start gives: it takes that run's `startedAt` once seen (`adoptRuns`).
     sessionClose(id, assertion) {
       const s = state.sessions.get(id);
       if (!s) return null;
-      return write(op => ({ type: 'session.close', op, id, assertion }), { startedAt: s.startedAt });
+      return write(op => ({ type: 'session.close', op, id, assertion }), { startedAt: s.startedAt, ...(s.state === 'starting' ? { starting: true as const } : {}) });
     },
 
     sessionResume(id, assertion) {

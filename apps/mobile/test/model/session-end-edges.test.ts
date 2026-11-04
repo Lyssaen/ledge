@@ -1,7 +1,7 @@
 // Edge cases of closeHeld / endingOf added by the tester (task tf59002): several closes in a row, reconnections, a resume from the PC.
 // An op keeps the session's `startedAt` (the PC's) at its send; a resume gives the session a new one (t8cba5e).
 import { describe, expect, it } from 'vitest';
-import { closeHeld, closedHere, endingOf, SETTLE_MS } from '../../src/model/sessionEnd';
+import { adoptRuns, closeHeld, closedHere, endingOf, SETTLE_MS } from '../../src/model/sessionEnd';
 import type { Op } from '../../src/state/operations';
 import { session } from './fixtures';
 
@@ -142,13 +142,53 @@ describe('what the startedAt rule does at the edges', () => {
     expect(closedHere(bare as never, book(mk('session.close', 0, 'applied')))).toBe(false);
   });
 
-  // The Fermer button stays on a session that is `starting` (a resume under way). A close sent then keeps the interim startedAt;
-  // the spawn gives the session its new one a moment later: the close reads as over, though it is the one that will end this run.
-  it.fails('D9 — a close sent while the session is still « starting » (resume under way) still owns the end it causes', () => {
-    const c = mk('session.close', 0, 'applied', { how: 'killed', startedAt: S0 });
-    expect(endingOf(nova({ state: 'idle', startedAt: S2 }), book(c), T0 + 5_000).kind).toBe('closing');
+  // The Fermer button stays on a session that is `starting` (a resume or a model change under way). A close sent then keeps the
+  // interim startedAt and the spawn gives the session its new one a moment later: the close used to read as over, though it is
+  // the one that ends this run (D9, #133). It is marked `starting` and takes the first new startedAt the phone sees (`adoptRuns`).
+  it('D9 — a close sent while the session is still « starting » (resume under way) still owns the end it causes', () => {
+    const c = mk('session.close', 0, 'applied', { how: 'killed', startedAt: S0, starting: true });
+    let ops = book(c);
+    expect(endingOf(nova({ state: 'starting', startedAt: S0 }), ops, T0 + 1_000).kind).toBe('closing');
+    const spawned = nova({ state: 'idle', startedAt: S2 });
+    ops = adoptRuns(ops, [spawned], T0 + 3_000);
+    expect(ops[c.op]).toMatchObject({ startedAt: S2 });
+    expect(ops[c.op]!.starting).toBeUndefined();
+    expect(endingOf(spawned, ops, T0 + 5_000).kind).toBe('closing');
     const ended = nova({ state: 'exited', exitedAt: E1, startedAt: S2 });
-    expect(closedHere(ended, book(c))).toBe(true);
-    expect(endingOf(ended, book(c), T0 + 6_000)).toMatchObject({ kind: 'ended', killed: true });
+    expect(closedHere(ended, ops)).toBe(true);
+    expect(endingOf(ended, ops, T0 + 6_000)).toMatchObject({ kind: 'ended', killed: true });
+    // Resumed from the PC afterwards: open, and the next end is not this close's.
+    expect(adoptRuns(ops, [nova({ state: 'idle', startedAt: S1 })], T0 + 210_000)).toBe(ops);
+    expect(endingOf(nova({ state: 'idle', startedAt: S1 }), ops, T0 + 210_000)).toEqual({ kind: 'open', error: null });
+    expect(closedHere(nova({ state: 'exited', exitedAt: E2, startedAt: S1 }), ops)).toBe(false);
+  });
+
+  it('D9 — a start that fails puts the old record back: the close keeps its run, and that end is its own', () => {
+    const c = mk('session.close', 0, 'applied', { how: 'exit', startedAt: S0, starting: true });
+    const back = nova({ state: 'exited', exitedAt: E1, startedAt: S0 });
+    const ops = adoptRuns(book(c), [back], T0 + 2_000);
+    expect(ops[c.op]).toMatchObject({ startedAt: S0 });
+    expect(ops[c.op]!.starting).toBeUndefined();
+    expect(closedHere(back, ops)).toBe(true);
+    // Its run is now fixed: a resume from the PC later is not adopted, it reads as started again.
+    expect(adoptRuns(ops, [nova({ state: 'idle', startedAt: S1 })], T0 + 3_000)).toBe(ops);
+    expect(endingOf(nova({ state: 'idle', startedAt: S1 }), ops, T0 + 3_000).kind).toBe('open');
+  });
+
+  it('D9 — a new run first seen long after the close may be a later one: not adopted, the close reads as over as before', () => {
+    const c = mk('session.close', 0, 'applied', { how: 'exit', startedAt: S0, starting: true });
+    const ops = adoptRuns(book(c), [nova({ state: 'idle', startedAt: S1 })], T0 + SETTLE_MS + 1);
+    expect(ops[c.op]).toMatchObject({ startedAt: S0 });
+    expect(ops[c.op]!.starting).toBeUndefined();
+    expect(endingOf(nova({ state: 'idle', startedAt: S1 }), ops, T0 + SETTLE_MS + 1).kind).toBe('open');
+  });
+
+  it('adoptRuns leaves a close sent on a running session, another session’s close, and a resume alone', () => {
+    const plain = mk('session.close', 0, 'applied', { startedAt: S0 });
+    const r = mk('session.resume', 0, 'applied', { startedAt: S0, starting: true });
+    const other = mk('session.close', 0, 'sending', { startedAt: S0, starting: true });
+    other.message = { ...other.message, id: 'b' } as Op['message'];
+    const ops = book(plain, r, other);
+    expect(adoptRuns(ops, [nova({ state: 'idle', startedAt: S2 })], T0 + 1_000)).toBe(ops);
   });
 });
