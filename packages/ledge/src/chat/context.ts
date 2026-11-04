@@ -65,8 +65,7 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   await writeFile(join(dir, 'folders.md'), ['# Recent folders', '', 'The folders the user started sessions in, most recent first.', '',
     ...(recents.length ? recents.map(r => `- ${r.project}: ${r.cwd} (last used ${r.lastAt})`) : ['- (none yet)']), ''].join('\n'));
   // The projects (build spec §5), only where the daemon holds some; a name or a description is one line, so it forges no heading.
-  if (withProjects) await writeFile(join(dir, 'projects.md'), ['# Projects', '', ...(projects.projects.length ? projects.projects.flatMap(p => [`## ${oneLine(p.name)}`, ...(p.description.trim() ? [oneLine(p.description)] : []), '', ...p.repos.map(r => `- ${r.machine}: ${r.path}`), '']) : ['No projects.', '']),
-    ...(projects.rules.length ? ['## Filed folders', '', ...projects.rules.map(r => `- ${r.machine}: ${r.path} → ${nameOf.get(r.project) ?? r.project}`), ''] : [])].join('\n'));
+  if (withProjects) await writeFile(join(dir, 'projects.md'), projectsMd(projects));
   if (input.tasks) await writeTasksContext(dir, input.tasks, steps, input.now.slice(0, 10));
   if (input.ledge) { await writeLedgeMd(dir, input.ledge); steps.set(LEDGE_MD, { kind: 'repo', name: 'Ledge', path: LEDGE_MD }); }
   if (input.notesDir) await writeNotes(dir, input.notesDir, steps);
@@ -75,6 +74,13 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   const projectRepos = await existing(projects.projects.flatMap(p => p.repos.filter(r => r.machine === 'local').map(r => r.path)));
   const repoPaths = [...new Set([...live.map(s => s.repoPath ?? s.cwd), ...projectRepos].filter(p => p && !coversHome(p)).map(p => resolve(p)))];
   return { dir, steps, repoPaths };
+}
+
+/** `projects.md` (also `ledge brain projects`): each project, its description and repositories per machine, then the filed folders. */
+export function projectsMd(projects: Projects): string {
+  const nameOf = new Map(projects.projects.map(p => [p.id, oneLine(p.name)]));
+  return ['# Projects', '', ...(projects.projects.length ? projects.projects.flatMap(p => [`## ${oneLine(p.name)}`, ...(p.description.trim() ? [oneLine(p.description)] : []), '', ...p.repos.map(r => `- ${r.machine}: ${r.path}`), '']) : ['No projects.', '']),
+    ...(projects.rules.length ? ['## Filed folders', '', ...projects.rules.map(r => `- ${r.machine}: ${r.path} → ${nameOf.get(r.project) ?? r.project}`), ''] : [])].join('\n');
 }
 
 const STATE_FR: Record<Task['state'], string> = { open: 'open (not taken yet)', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped (its owner ended)' };

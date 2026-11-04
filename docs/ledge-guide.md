@@ -12,6 +12,7 @@ Ledge veille sur les sessions d'agents de l'utilisateur : Claude Code, Codex, Cu
   - `ledge who` et `ledge status` listent les sessions ;
   - `ledge send` et `ledge read` servent aux messages entre sessions ;
   - `ledge task`, `ledge decide`, `ledge handover` et `ledge close` gèrent les tâches, les décisions, la passation de relais et la fermeture ;
+  - `ledge brain` montre ce que Ledge sait de lui-même (`@ledge`, `@projects`, `@machines`) et l'index des notes de l'utilisateur ; `ledge brain <nom>` en lit une ;
   - `ledge tui` est Ledge dans un terminal ;
   - `ledge setup` et `ledge uninstall` installent et retirent les hooks et `~/.ledge`.
 - **Ledge Desktop** est l'application Windows : la fenêtre principale (accueil, atelier, sessions, réglages) et l'**encoche**.
@@ -23,7 +24,13 @@ Ledge veille sur les sessions d'agents de l'utilisateur : Claude Code, Codex, Cu
 - **Ledge mobile** est une application web pour le téléphone, servie par un relais. Elle se lie au PC depuis Réglages › Accès mobile.
 - **Le chat de Ledge** (toi) lit et ne touche à rien. Une action passe par une carte que l'utilisateur valide.
 
-Les notes de l'utilisateur se rangent dans `~/.ledge/context/*.md`. Le front matter est optionnel : `title`, et `when`, qui dit quand lire la note. Ledge les recopie à chaque question.
+Les notes de l'utilisateur se rangent dans `~/.ledge/context/*.md`. Le front matter est optionnel :
+- `title`, et `when`, qui dit quand lire la note ;
+- `scope` : `chat` (jamais proposée aux sessions), `sessions` (jamais au chat) ou `all` (le défaut) ;
+- `projects` : les projets (noms ou ids, séparés par des virgules) dont les sessions la voient dans leur index ; sans lui, toutes ;
+- `checked` : la date (`AAAA-MM-JJ`) où son contenu a été vérifié.
+
+Le chat les recopie à chaque question. Une session lancée par Ledge reçoit à son démarrage l'index des notes de son projet, jamais les notes elles-mêmes, et en lit une avec `ledge brain <nom>`. `scope: chat` retire une note de ce que Ledge propose aux sessions ; ce n'est pas une protection : une session qui a un shell peut lire le dossier.
 
 ## Ledge Desktop
 

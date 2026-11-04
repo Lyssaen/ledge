@@ -10,6 +10,7 @@ import { messageNote } from '../daemon/crossSession.js';
 import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { CODEX_ENV_VAR, CODEX_HOOK_VAR } from '../spawn.js';
+import { sessionBrain } from '../brain/index.js';
 import { broadcastLine, parseLedgeCommand, readOnClient, sendOnClient } from './send.js';
 import { taskOnClient } from './task.js';
 import { handoverOnClient } from './handover.js';
@@ -359,6 +360,8 @@ type Identity = Pick<Session, 'name' | 'tool' | 'project' | 'cwd'> & Partial<Pic
   tasks?: Task[];
   /** The session it relieves (§3.3): its brief is one command away. */
   relieves?: Session['relieves'];
+  /** What Ledge knows (brain spec §3.4): how to read it, and the index of the notes offered to its project. */
+  brain?: string;
 };
 
 /** How many of its open tasks a session is told of when it starts. */
@@ -390,7 +393,8 @@ export function identityContext(s: Identity): string {
     'Un long message d\'une autre session t\'arrive en aperçu avec son id : lance `ledge read <id>` pour le lire en entier. Une `<ledge-notice>` vient de Ledge : un de tes messages n\'a pas pu être remis.',
     'Un message sert à prévenir ; pour confier un travail qui ne doit pas se perdre, lance plutôt `ledge task give <nom> "<titre>" "<détail>"` (`ledge task` pour le reste). Une `<ledge-task>` t\'en confie une, ou te dit comment une des tiennes a fini : quand on t\'en confie une, prends-la (`ledge task take <id>`) et termine-la toujours (`ledge task done <id> "<résultat>"`, ou `refuse`). Une décision qui revient à l\'utilisateur se pose avec `ledge task give ledge "<question>" "<options, ta recommandation>"` : sa réponse te réveille, inutile d\'attendre la fin pour la poser.',
     ...(s.relieves ? [`Tu as pris la relève de ${s.relieves.name}, dont le contexte était plein : relis son bilan avec \`ledge handover show\`.`] : []),
-    ...(s.tasks ? [tasksContext(s.tasks) ?? ''].filter(Boolean) : [])
+    ...(s.tasks ? [tasksContext(s.tasks) ?? ''].filter(Boolean) : []),
+    ...(s.brain ? [s.brain] : [])
   ].join('\n');
 }
 
@@ -549,6 +553,8 @@ export async function runHook(eventName: string, stdin: string, opts: { port?: n
   if (relayed) return relayed;
   if (!identify || !mapped) return undefined;
   const found = await identity(agent, mapped.cwd, known, deadline);
-  const who = found ? { ...found, ...(held.length ? { tasks: held } : {}), ...(known?.relieves ? { relieves: known.relieves } : {}) } : undefined;
+  // The brain is read here, on this machine (no daemon needed); a failure leaves it out, never the identity.
+  const brain = found ? await sessionBrain(found.cwd).catch(() => undefined) : undefined;
+  const who = found ? { ...found, ...(held.length ? { tasks: held } : {}), ...(known?.relieves ? { relieves: known.relieves } : {}), ...(brain ? { brain } : {}) } : undefined;
   return who ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: identityContext(who) } }) : undefined;
 }

@@ -9,6 +9,7 @@ ledge status                                                 list sessions
 ledge who                                                    list the live sessions (name, tool, state, project, branch, topic)
 ledge send <nom> "<message>" [--summary <texte>]             write to another Ledge session
 ledge read <id>                                              print a long message whole (the id is in its pointer)
+ledge brain [<nom>]                                          what Ledge knows of itself and of your environment (your notes)
 ledge task <give|list|show|take|done|refuse|pass> …         give another session work, take it, close it (ledge task: details)
 ledge decide [<id> "<réponse>"]                               the decisions sessions wait for from you; answer one
 ledge handover "<bilan>" | show                              the relief brief, when Ledge asks for it; show: read your predecessor's
@@ -51,6 +52,7 @@ async function main(argv: string[]): Promise<number> {
     case 'status': { const { printStatus } = await import('./status.js'); console.log(await printStatus()); return 0; }
     case 'who': { const { printWho } = await import('./who.js'); console.log(await printWho()); return 0; }
     case 'send': { const { sendMessage } = await import('./send.js'); const r = await sendMessage(rest); console.log(r.line); return r.code; }
+    case 'brain': { const { runBrain } = await import('../brain/index.js'); const r = await runBrain(rest); console.log(r.line); return r.code; }
     case 'read': { const { readMessage } = await import('./send.js'); const r = await readMessage(rest); console.log(r.line); return r.code; }
     case 'task': { const { runTask } = await import('./task.js'); const r = await runTask(rest); console.log(r.line); return r.code; }
     case 'decide': { const { runDecide } = await import('./decide.js'); const r = await runDecide(rest); console.log(r.line); return r.code; }

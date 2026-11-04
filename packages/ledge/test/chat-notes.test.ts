@@ -61,6 +61,14 @@ describe('writeNotes', () => {
     expect(index).not.toContain('notes.txt'); expect(index).not.toContain('sub.md'); expect(index).not.toContain('link.md');
   });
 
+  it('a note for the sessions only is not copied; a checked date is said in the index', async () => {
+    const from = notes({ 'a.md': '---\ntitle: A\nchecked: 2026-11-01\n---\nx', 'b.md': '---\nscope: sessions\n---\ny' }); const dir = tmp();
+    await writeNotes(dir, from, new Map());
+    expect(indexLine(dir, 'context-a.md')).toBe(`- context-a.md — « A » — first line: x — modified ${T0} — checked 2026-11-01`);
+    expect(existsSync(join(dir, 'context-b.md'))).toBe(false);
+    expect(readFileSync(join(dir, NOTES_INDEX), 'utf8')).not.toContain('b.md');
+  });
+
   it('a missing folder gives an index that says how to add notes', async () => {
     const dir = tmp();
     await writeNotes(dir, join(tmp(), 'nope'), new Map());

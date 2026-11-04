@@ -550,6 +550,22 @@ describe('session identity (SessionStart additionalContext)', () => {
     expect(identityContext({ name: 'Pim', tool: 'claude', project: 'ledge', cwd: '/w' })).not.toContain('Tes tâches en cours');
   });
 
+  it('a launched session is told how to read the brain, and the index of its notes, never their text (brain spec §3.4)', async () => {
+    process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Otto';
+    try {
+      let out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: join(home, 'shop') }), { port: 1, timeoutMs: 50 }));
+      expect(out.additionalContext).toContain('`ledge brain @ledge`');
+      expect(out.additionalContext).not.toContain('Notes de l\'utilisateur');
+      mkdirSync(join(home, 'context'));
+      writeFileSync(join(home, 'context', 'machines.md'), '---\ntitle: Les machines\nwhen: une machine précise\n---\nLe Pi est en Debian.\n');
+      writeFileSync(join(home, 'context', 'secrets.md'), '---\nscope: chat\n---\nOù sont les tokens.\n');
+      out = context(await runHook('SessionStart', JSON.stringify({ session_id: 'u-1', cwd: join(home, 'shop') }), { port: 1, timeoutMs: 50 }));
+      expect(out.additionalContext).toContain('- machines — « Les machines » — quand : une machine précise');
+      expect(out.additionalContext).not.toContain('Le Pi est en Debian');
+      expect(out.additionalContext).not.toContain('secrets');
+    } finally { delete process.env.LEDGE_NAME; }
+  });
+
   it('without a daemon, the name comes from LEDGE_NAME and the project from the folder', async () => {
     process.env.LEDGE_SESSION = '7f3a'; process.env.LEDGE_NAME = 'Otto';
     try {
