@@ -185,7 +185,8 @@ fn start_native(app: &AppHandle) {
         };
         let Some(rt) = rt else { append_log(&home, "no Ledge runtime found (LEDGE_NODE + LEDGE_CLI, or the bundled runtime folder): the daemon is not started"); return };
         run_setup(&rt, &home);
-        let sup = std::sync::Arc::new(Supervisor::start(windows_ops(rt, home, port, port_override)));
+        let bundled = rt.version.clone();
+        let sup = std::sync::Arc::new(Supervisor::start_with(windows_ops(rt, home, port, port_override), bundled));
         *app.state::<Keeper>().0.lock().unwrap() = Some(sup);
     });
 }
