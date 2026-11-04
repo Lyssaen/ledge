@@ -121,9 +121,16 @@ pub fn stage_runtime(bundled: &Path, home: &Path) -> std::io::Result<PathBuf> {
     }
 }
 
+/// Whether a process runs from the copy in `dir`: everything that loads a copy runs its `node.exe` (the daemon, the pane
+/// host, a hook), and Windows refuses to open a running program for writing. Its folder, though, can still be renamed.
+fn in_use(dir: &Path) -> bool {
+    let node = dir.join("node.exe");
+    node.exists() && std::fs::OpenOptions::new().write(true).open(&node).is_err()
+}
+
 /// Removes every copy under `<home>\runtime` but `keep`, and leftovers of cut copies; returns the versions removed. A copy
-/// is first renamed aside, which Windows refuses while a process runs from it or holds one of its files: that copy is kept
-/// whole, never half deleted under a running pane host.
+/// whose `node.exe` runs is kept; any other is first renamed aside, which Windows refuses while one of its files is held:
+/// a copy is never half deleted under a running pane host.
 pub fn prune_runtimes(home: &Path, keep: &str) -> Vec<String> {
     let root = home.join("runtime");
     let Ok(entries) = std::fs::read_dir(&root) else { return Vec::new() };
@@ -132,6 +139,7 @@ pub fn prune_runtimes(home: &Path, keep: &str) -> Vec<String> {
         let name = entry.file_name().to_string_lossy().to_string();
         if name == keep || !entry.path().is_dir() { continue; }
         if name.contains(".tmp-") || name.contains(".trash-") { let _ = std::fs::remove_dir_all(entry.path()); continue; }
+        if in_use(&entry.path()) { continue; }
         let aside = root.join(format!("{name}.trash-{}", std::process::id()));
         if std::fs::rename(entry.path(), &aside).is_err() { continue; }
         let _ = std::fs::remove_dir_all(&aside);
@@ -270,5 +278,21 @@ mod tests {
         std::fs::write(&f, "nope").unwrap();
         assert_eq!(read_token_file(&f), TokenRead::Unavailable);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test] fn pruning_keeps_a_copy_whose_node_exe_is_running() {
+        // A running program's folder can be renamed on Windows: the check must look at the program itself.
+        let root = tmp("prune-running"); let home = root.join("home");
+        for v in ["0.41.0", "0.42.0"] { let d = home.join("runtime").join(v); bundle(&d, v); std::fs::write(d.join(".complete"), b"").unwrap(); }
+        let old = home.join("runtime").join("0.41.0");
+        std::fs::copy(r"C:\Windows\System32\PING.EXE", old.join("node.exe")).unwrap();
+        let mut running = std::process::Command::new(old.join("node.exe")).args(["-n", "30", "127.0.0.1"]).stdout(std::process::Stdio::null()).spawn().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(prune_runtimes(&home, "0.42.0").is_empty());
+        assert!(old.join("ledge").join("dist").join("cli").join("index.js").exists(), "nothing of a running copy is removed");
+        running.kill().unwrap(); running.wait().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert_eq!(prune_runtimes(&home, "0.42.0"), ["0.41.0"]);
     }
 }

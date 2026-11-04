@@ -264,6 +264,10 @@ mod win {
             use tungstenite::Message;
             let (mut ws, _) = self.snapshot()?;
             ws.send(Message::Text(STOP_MESSAGE.into())).ok()?;
+            // Read on until the daemon closes the connection as it stops (3 s at most): closing first, with its messages
+            // unread, makes Windows reset the connection, and the daemon may never read the stop.
+            let until = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < until { if ws.read().is_err() { break; } }
             let _ = ws.close(None);
             Some(())
         }
