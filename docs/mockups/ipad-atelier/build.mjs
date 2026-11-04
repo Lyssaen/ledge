@@ -21,7 +21,23 @@ const { build: esbuild } = createRequire(mobile.resolve('vite'))('esbuild');
 const js = await esbuild({
   entryPoints: [resolve(here, `${entry}.tsx`)], bundle: true, write: false, format: 'esm', platform: 'browser', jsx: 'automatic', target: 'es2022',
   nodePaths: [resolve(root, 'apps/mobile/node_modules'), resolve(root, 'apps/desktop/node_modules'), resolve(root, 'node_modules')],
-  define: { 'import.meta.env': '{"DEV":false,"PROD":true,"MODE":"production"}', 'process.env.NODE_ENV': '"production"' }, minify: true, loader: { '.css': 'empty' }
+  define: { 'import.meta.env': '{"DEV":false,"PROD":true,"MODE":"production"}', 'process.env.NODE_ENV': '"production"' }, minify: true, loader: { '.css': 'empty' },
+  // The iPad's narrower rug around a table (the room's side margin, RUG_SIDE in atelier/layout.ts): 130 on Desktop, 90 here.
+  plugins: [{ name: 'ipad-rug', setup(b) {
+    b.onLoad({ filter: /atelier[\\/]layout\.ts$/ }, async a => {
+      const src = await readFile(a.path, 'utf8');
+      if (!src.includes('RUG_SIDE = 130')) throw new Error('layout.ts: RUG_SIDE = 130 not found');
+      return { contents: src.replace('RUG_SIDE = 130', 'RUG_SIDE = 90'), loader: 'ts' };
+    });
+    // With the narrower rug, a sub-agent at a table end would sit on the plant of that side: no plant there.
+    b.onLoad({ filter: /atelier[\\/]ProjectTable\.tsx$/ }, async a => {
+      const src = await readFile(a.path, 'utf8');
+      const old = "avoid={extraCount > 0 ? ['br'] : []}";
+      if (!src.includes(old)) throw new Error('ProjectTable.tsx: plant avoid list not found');
+      return { contents: src.replace(old, "avoid={[...(extraCount > 0 ? ['br'] : []), ...(ends.some(e => e.end === 'left') ? ['ml'] : []), ...(ends.some(e => e.end === 'right') ? ['mr'] : [])] as Spot[]}")
+        .replace("import { RUG_SIDE,", "import type { Spot } from './plantSpots';\nimport { RUG_SIDE,"), loader: 'tsx' };
+    });
+  } }]
 });
 
 // The stylesheet: mockup.css through Vite and Tailwind.
