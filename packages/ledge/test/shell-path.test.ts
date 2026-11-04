@@ -65,7 +65,7 @@ describe('the user environment on Windows (registry)', () => {
 
   it('machine then user, the user winning, Path joined, %VAR% expanded, an unknown one kept', async () => {
     const env = await windowsRegistryEnv(run, { USERPROFILE: 'C:\\Users\\u', SystemRoot: 'C:\\WINDOWS' });
-    expect(env.Path).toBe('C:\\WINDOWS\\system32;C:\\Program Files\\Git\\cmd;C:\\Users\\u\\node;C:\\Users\\u\\bin');
+    expect(env.Path).toBe('C:\\WINDOWS\\system32;C:\\Program Files\\Git\\cmd;C:\\Users\\u\\node;C:\\Users\\u\\bin;C:\\Users\\u\\.local\\bin'); // + Claude Code's per-user folder
     expect(env.TEMP).toBe('C:\\Users\\u\\AppData\\Local\\Temp');
     expect(env.JAVA_HOME).toBe('C:\\jdk');
     expect(env.Weird).toBe('%NOPE%\\x');
@@ -73,7 +73,7 @@ describe('the user environment on Windows (registry)', () => {
 
   it('keeps the daemon\'s own Path folders after the registry\'s (what Desktop adds: its Git, the agents it installed)', async () => {
     const env = await windowsRegistryEnv(run, { USERPROFILE: 'C:\\Users\\u', SystemRoot: 'C:\\WINDOWS', Path: 'C:\\Ledge\\git\\cmd;C:\\WINDOWS\\system32;C:\\Ledge\\codex' });
-    expect(env.Path).toBe('C:\\WINDOWS\\system32;C:\\Program Files\\Git\\cmd;C:\\Users\\u\\node;C:\\Users\\u\\bin;C:\\Ledge\\git\\cmd;C:\\Ledge\\codex');
+    expect(env.Path).toBe('C:\\WINDOWS\\system32;C:\\Program Files\\Git\\cmd;C:\\Users\\u\\node;C:\\Users\\u\\bin;C:\\Ledge\\git\\cmd;C:\\Ledge\\codex;C:\\Users\\u\\.local\\bin');
   });
 
   it('takes the logon values (Volatile Environment) over the machine ones: USERNAME is the user, not SYSTEM', async () => {
@@ -88,7 +88,7 @@ describe('the user environment on Windows (registry)', () => {
     const U = ['', 'HKEY_CURRENT_USER\\Environment', '    JAVA_HOME    REG_EXPAND_SZ    %USERPROFILE%\\jdk', '    Path    REG_EXPAND_SZ    %JAVA_HOME%\\bin', ''].join('\r\n');
     const env = await windowsRegistryEnv(async k => (k === 'HKCU\\Environment' ? U : ''), { USERPROFILE: 'C:\\Users\\u' });
     expect(env.JAVA_HOME).toBe('C:\\Users\\u\\jdk');
-    expect(env.Path).toBe('C:\\Users\\u\\jdk\\bin');
+    expect(env.Path).toBe('C:\\Users\\u\\jdk\\bin;C:\\Users\\u\\.local\\bin');
   });
 
   it('asks reg.exe under the UTF-8 code page, whatever the PC\'s OEM one', () => {

@@ -32,6 +32,14 @@ export const en: Messages = {
       not_installed: { title: (machine) => `OpenRig is not installed on ${machine}.`, body: 'Your projects’ sessions still come here.' }
     }
   },
+  agents: {
+    title: 'Agents', hint: 'Claude Code and Codex on this PC, installed for you only, without admin rights.',
+    checking: 'Checking…', found: 'Installed', notInstalled: 'Not installed', install: 'Install', installOne: (n) => `Install ${n}`,
+    installing: 'Installing…', installed: (n) => `${n} is installed. On its first launch, sign in from the session’s terminal.`,
+    failed: (n, code) => `Installing ${n} failed${code !== null ? ` (exit ${code})` : ''}.`, busy: 'An install is already running.',
+    notOffered: 'Installing is offered on Windows without WSL only.', manual: 'To install it yourself, run in PowerShell:',
+    missing: (n) => `${n} is not installed on this PC.`, goInstall: 'Install it',
+  },
   native: { title: 'Sessions', hint: 'Your sessions are in the sidebar. Start a new one here.', launch: 'Launch a session' },
   nativeCopy: {
     daemonOutdated: 'This Ledge Desktop needs a newer daemon: update Ledge Desktop; Ledge reconnects by itself.',

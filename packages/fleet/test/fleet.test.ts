@@ -206,6 +206,20 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'folder.listing').at(-1)).toEqual({ type: 'folder.listing', requestId: 'f2', path: '/x', parent: null, entries: [], error: 'offline' });
     expect(server.sent).toEqual([{ type: 'folder.list', path: '/w', requestId: 'f1' }]);
   });
+  it('an agents.install in flight when the local daemon drops is answered failed, its outcome said unknown; agents.* go to local only', () => {
+    const { client, local, server, got } = setup();
+    client.send({ type: 'agents.install', requestId: 'i1', tool: 'codex' });
+    expect(local.sent).toContainEqual({ type: 'agents.install', requestId: 'i1', tool: 'codex' });
+    expect(server.sent.some(m => m.type === 'agents.install')).toBe(false);
+    server.emit({ type: 'agents.installed', requestId: 'i1', tool: 'codex', ok: true });
+    expect(got.filter(m => m.type === 'agents.installed')).toEqual([]);
+    local.set('unreachable');
+    const answered = got.filter(m => m.type === 'agents.installed');
+    expect(answered).toHaveLength(1);
+    expect(answered[0]).toMatchObject({ type: 'agents.installed', requestId: 'i1', tool: 'codex', ok: false, error: 'failed' });
+    expect((answered[0] as { output: string }).output).toMatch(/unknown/);
+  });
+
   it('a machine refusing folder.list answers the pending request with the daemon error text', () => {
     const { client, server, got } = setup();
     client.send({ type: 'folder.list', path: '/w', machineId: 'server', requestId: 'f1' });
