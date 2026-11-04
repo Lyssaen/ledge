@@ -11,8 +11,9 @@ import type { Tmux } from '../src/tmux.js';
 import { until } from './helpers.js';
 
 const FAKE = [process.execPath, fileURLToPath(new URL('./fake-omp.mjs', import.meta.url))];
-// A tmux that is never asked for anything: an OMP session has no pane.
-const noTmux: Tmux = new Proxy({} as Tmux, { get: (_t, k) => { throw new Error(`OMP must not touch tmux (${String(k)})`); } });
+// A tmux that is never asked for anything: an OMP session has no pane. The daemon may still look, at its start, whether
+// tmux offers a control client (the desktop's terminal stream): this one says no.
+const noTmux: Tmux = new Proxy({} as Tmux, { get: (_t, k) => { if (k === 'controlArgs') return undefined; throw new Error(`OMP must not touch tmux (${String(k)})`); } });
 
 let srv: Awaited<ReturnType<typeof startServer>>; let store: Store; let dir: string; let log: string;
 const cmdTypes = () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map(l => JSON.parse(l) as { argv?: string[]; cmd?: { type: string } }) : []);
