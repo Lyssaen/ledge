@@ -180,7 +180,7 @@ export function Sidebar(p: {
           rigAsks={p.asks ?? []} sessions={p.sessions} {...(p.onSeeAsk ? { onSeeAsk: p.onSeeAsk } : {})}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
-          decisions={decisions} answer={p.tasksApi?.answer}
+          decisions={decisions} answer={p.tasksApi?.answer} answerNote={p.tasksApi?.answerNote}
           ledgeTasks={p.tasksApi ? closedLedgeTasks(p.tasksApi.tasks) : []} onSeeTask={id => p.dispatch({ type: 'ledge', tab: 'tasks', task: id })} onDismissTask={id => p.tasksApi?.seen(id)}
           near={near} onHandover={id => { void p.tasksApi?.handover(id); }}
           onLater={id => { const s = p.sessions.find(x => x.id === id); if (s) p.tasksApi?.putLater(s); }}

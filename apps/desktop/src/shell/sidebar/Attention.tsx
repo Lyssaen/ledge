@@ -9,6 +9,7 @@ import { spanOf } from '../../list/time';
 import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { DecisionAnswer } from '../../tasks/DecisionAnswer';
+import { NoteDecision } from '../../tasks/NoteDecision';
 import type { TasksApi } from '../../tasks/useTasksApi';
 import { RigTag } from '../../openrig/RigTag';
 import { cls } from '../cls';
@@ -37,6 +38,8 @@ export function Attention(p: {
    *  « Répondre », answered in place through `answer` (task.answer). */
   decisions?: readonly Task[];
   answer?: TasksApi['answer'];
+  /** A proposal about the notes is answered with its buttons (NoteDecision). */
+  answerNote?: TasksApi['answerNote'];
   /** The closed tasks Ledge gave, not put away (roles spec §3.7): « ✓ Otto a fini … · tâche de Ledge », with « Voir ». */
   ledgeTasks?: readonly Task[];
   onSeeTask?(id: string): void;
@@ -129,9 +132,10 @@ export function Attention(p: {
             <div className="st-l1"><span className="st-req" title={t.decision.asks(x.giverName)}><strong>{x.giverName}</strong> {x.title}</span></div>
             <div className="st-l2">
               <span className="st-where" title={x.text}>{x.text ?? ''}</span>
-              {answering !== x.id && p.answer && <button type="button" className="st-qa pri" onClick={() => setAnswering(x.id)}>{t.decision.answer}</button>}
+              {answering !== x.id && (x.brain ? p.answerNote : p.answer) && <button type="button" className="st-qa pri" onClick={() => setAnswering(x.id)}>{t.decision.answer}</button>}
             </div>
-            {answering === x.id && p.answer && <DecisionAnswer task={x} api={{ answer: p.answer }} onClose={() => setAnswering(null)} />}
+            {answering === x.id && x.brain && p.answerNote && <NoteDecision task={{ ...x, brain: x.brain }} api={{ answerNote: p.answerNote }} />}
+            {answering === x.id && !x.brain && p.answer && <DecisionAnswer task={x} api={{ answer: p.answer }} onClose={() => setAnswering(null)} />}
           </div>
         </div>
       ))}

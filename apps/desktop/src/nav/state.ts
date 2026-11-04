@@ -4,8 +4,8 @@ import type { Overview } from './overview';
 export type View = 'atelier';
 /** 'all', 'none' (Sans projet) or a project id. */
 export type ProjectFilter = string;
-export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'shortcuts' | 'about';
-export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'shortcuts', 'about'];
+export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'notes' | 'shortcuts' | 'about';
+export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'notes', 'shortcuts', 'about'];
 /** The tabs of Ledge's home view (ledge home spec §2.2). */
 export type HomeTab = 'conversation' | 'tasks' | 'history';
 export const HOME_TABS: readonly HomeTab[] = ['conversation', 'tasks', 'history'];

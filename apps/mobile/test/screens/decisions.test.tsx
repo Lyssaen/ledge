@@ -94,6 +94,33 @@ describe('the decisions a session puts to the user', () => {
   });
 });
 
+describe('a proposal about the notes (docs/mockups/ledge-brain-notes.html, part 2)', () => {
+  const proposal = () => decision({ id: 't1a2b3c', title: 'Note machines : ajouter ce fait ?', text: 'oui — …\nnon — …', brain: { kind: 'add', note: 'machines', fact: 'Le Pi a 906 Mo de RAM', source: 'free -h' } });
+  it('is answered in place: the fact and its source, « Refuser » at once, « Ajouter » with the device\'s check over that exact choice', async () => {
+    const t = withDecision([proposal()]);
+    render(<Chat store={t.store} />);
+    const yours = within(within(screen.getByRole('region', { name: 'Le point' })).getByRole('group', { name: 'À toi' }));
+    expect(yours.getByText('propose d’ajouter à la note machines')).toBeInTheDocument();
+    expect(yours.getByText('Le Pi a 906 Mo de RAM')).toBeInTheDocument();
+    expect(yours.getByText('Source : free -h')).toBeInTheDocument();
+    expect(yours.queryByRole('button', { name: /^Répondre/ })).toBeNull();
+    fireEvent.click(yours.getByRole('button', { name: 'Modifier' }));
+    fireEvent.change(yours.getByLabelText('Le texte ajouté sous « Ajouts »'), { target: { value: 'Le Pi a 906 Mo' } });
+    fireEvent.click(yours.getByRole('button', { name: 'Ajouter ce texte' }));
+    await waitFor(() => expect(t.of('confirm.prepare')).toEqual([expect.objectContaining({ purpose: 'note', task: 't1a2b3c', choice: { yes: true, text: 'Le Pi a 906 Mo' } })]));
+    // Nothing goes before the passkey.
+    expect(t.of('brain.answer')).toEqual([]);
+  });
+  it('« Refuser » goes at once, without a check', async () => {
+    const t = withDecision([proposal()]);
+    render(<Chat store={t.store} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Refuser' }));
+    await waitFor(() => expect(t.of('brain.answer')).toEqual([expect.objectContaining({ task: 't1a2b3c', choice: { yes: false } })]));
+    expect(t.of('brain.answer')[0]).not.toHaveProperty('assertion');
+    expect(t.of('confirm.prepare')).toEqual([]);
+  });
+});
+
 describe('the task.answer card', () => {
   const answer: PhoneChatAction = {
     action: 'task.answer', summary: 'Répondre à la décision « Fusionner feat/roles ? » de **Otto**',

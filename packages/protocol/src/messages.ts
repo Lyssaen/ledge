@@ -22,6 +22,7 @@ import { ThreadItemSchema } from './thread.js';
 import { DecidedBySchema, DecisionSchema, NOTE_MAX } from './decisions.js';
 import { DeviceNameSchema, MobileStateSchema, RelayUrlSchema } from './mobile.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
+import { BrainAddSchema, BrainAnswerSchema, BrainListSchema, BrainNoteSchema, BrainResultSchema } from './brain.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 
 export const PROTOCOL_PORT = 47831;
@@ -200,6 +201,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ContextPrefsMessageSchema,
   HandoverResultSchema,
   TaskUpdatedSchema,
+  BrainResultSchema,
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
@@ -359,7 +361,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   SessionHandoverSchema,
   ContextSetSchema,
   HandoverBriefSchema,
-  HandoverShowSchema
+  HandoverShowSchema,
+  BrainAnswerSchema, BrainListSchema, BrainNoteSchema, BrainAddSchema
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 /** The commands of the mobile access service. */

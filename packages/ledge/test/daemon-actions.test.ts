@@ -33,7 +33,7 @@ const refused = (id: ActionId, args: unknown, c = ctx()): string => {
 
 describe('resolveAction', () => {
   it('covers every generic action of the registry', () => {
-    expect([...GENERIC_ACTIONS].sort()).toEqual(['session.archive', 'session.decide', 'session.interrupt', 'session.model', 'session.restore', 'session.resume',
+    expect([...GENERIC_ACTIONS].sort()).toEqual(['note.add', 'session.archive', 'session.decide', 'session.interrupt', 'session.model', 'session.restore', 'session.resume',
       'task.answer', 'task.cancel', 'task.pass']);
   });
   it('names a session by id or by bot name, and refuses an unknown or ambiguous one', () => {

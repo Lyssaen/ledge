@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { CloseBlockSchema, ProjectBlockSchema, ProposalBlockSchema, RelayBlockSchema, TaskBlockSchema, type BlockKind } from './proposal.js';
 import { EffortSchema, ModelIdSchema } from './models.js';
 import { NOTE_MAX } from './decisions.js';
-import { TASK_TEXT_MAX } from './tasks.js';
+import { BRAIN_FACT_MAX, BRAIN_SOURCE_MAX, NoteNameSchema, TASK_TEXT_MAX } from './tasks.js';
 
 /**
  * What the user loses if the click was a mistake (action registry spec §2): `read` nothing (applied on click),
@@ -20,7 +20,7 @@ export type ActionPhoneCheck = 'launch' | 'close' | 'decide' | 'act';
 export const ACTION_IDS = [
   'session.launch', 'session.relay', 'session.close', 'project.propose', 'task.give',
   'session.model', 'session.interrupt', 'session.archive', 'session.restore', 'session.resume', 'session.decide',
-  'task.cancel', 'task.pass', 'task.answer'
+  'task.cancel', 'task.pass', 'task.answer', 'note.add'
 ] as const;
 export const ActionIdSchema = z.enum(ACTION_IDS);
 export type ActionId = z.infer<typeof ActionIdSchema>;
@@ -131,6 +131,13 @@ export const ACTIONS: readonly ActionDef[] = [
     summary: 'répondre, au nom de l\'utilisateur, à une décision qu\'une session lui a posée (tasks.md : owner Ledge) ; la session reprend avec cette réponse ; irréversible',
     when: 'seulement quand l\'utilisateur donne lui-même sa réponse à une décision ouverte : answer reprend ses mots, ou l\'option qu\'il a choisie parmi celles de la session, sans rien inventer ni choisir à sa place ; si sa réponse manque, cite les options et demande-la',
     example: { task: 't91b0d4', answer: 'Oui, fusionne feat/roles' }
+  }),
+  def({
+    id: 'note.add', card: 'generic', phone: null, risk: 'reversible', max: 1,
+    args: z.object({ note: NoteNameSchema, fact: z.string().trim().min(1).max(BRAIN_FACT_MAX).refine(t => !/[\r\n]/.test(t), 'one line'), source: z.string().trim().min(1).max(BRAIN_SOURCE_MAX).optional() }),
+    summary: 'ajouter un fait durable à une note de l\'utilisateur (context-index.md), daté et signé « dit par l\'utilisateur », sous « Ajouts »',
+    when: 'seulement quand l\'utilisateur dit un fait sur son environnement et demande de le retenir (« retiens que… ») : note est le nom d\'une note de context-index.md (son fichier sans context- ni .md) qui en parle ; aucune ne convient, ou plusieurs : cite-les et demande laquelle ; jamais la valeur d\'un secret',
+    example: { note: 'machines', fact: 'Legion a 64 Go de RAM' }
   })
 ];
 

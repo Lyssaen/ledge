@@ -297,7 +297,7 @@ export const fr = {
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
-  sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
+  sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', notes: 'Notes', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
   settings: {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
@@ -310,6 +310,7 @@ export const fr = {
       machines: 'Cette machine et vos serveurs SSH. Une seule liste pour l’encoche et Ledge Desktop.',
       mobile: 'Piloter vos agents depuis votre téléphone, via le serveur relais. Le contenu est chiffré de bout en bout : le serveur ne peut ni le lire ni le modifier.',
       projects: 'Projets, dépôts et dossiers mémorisés.',
+      notes: 'Ce que Ledge sait de ton environnement : tes notes, pour le chat et les sessions.',
       shortcuts: 'Dans l’application, et partout dans Windows.',
       about: 'Versions et mises à jour.'
     } as Record<SectionId, string>,
@@ -546,6 +547,18 @@ export const fr = {
       title: 'Dans Ledge Desktop',
       note: 'Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.'
     },
+    notes: {
+      title: 'Notes', intro: 'Le chat les lit à chaque question. Une session lancée par Ledge reçoit l’index de celles de son projet et en lit une avec `ledge brain <nom>`.',
+      count: (n: number) => (n === 1 ? '1 note' : `${n} notes`), openFolder: 'Ouvrir le dossier', openFolderHint: 'Un terminal s’ouvre dans le dossier des notes.',
+      loading: 'Lecture des notes…', failed: 'Ledge n’a pas pu lire les notes.', none: 'Aucune note. Ajoute des fichiers Markdown dans ce dossier, avec un en-tête `title` et `when` si tu veux.',
+      when: (w: string) => `Quand la lire : ${w}`, firstLine: (l: string) => `Première ligne : ${l}`,
+      scope: { all: 'Chat et sessions', chat: 'Chat seulement', sessions: 'Sessions seulement' } as Record<'all' | 'chat' | 'sessions', string>,
+      allProjects: 'Tous les projets', projects: (list: string) => `Projets : ${list}`,
+      checked: (d: string) => `vérifiée le ${d}`, modified: (d: string) => `modifiée le ${d}`, old: 'ancienne', additions: (n: number) => (n === 1 ? '1 ajout' : `${n} ajouts`), truncated: 'longue : seul le début est lu',
+      open: 'Ouvrir', close: 'Fermer', checkToday: 'Vérifiée aujourd’hui', flagged: 'À revoir', flagBy: (by: string, d: string) => `${by}, le ${d}`, unflag: 'Effacer le signalement',
+      readFailed: 'Ledge n’a pas pu lire cette note.', footer: '« Chat seulement », les projets et la date se règlent dans l’en-tête de la note (`scope`, `projects`, `checked`). Une note devient « ancienne » après 60 jours sans vérification ni modification.',
+      done: { checked: (name: string) => `${name} : vérifiée aujourd’hui`, unflag: (name: string) => `${name} : signalement effacé` }
+    },
     about: {
       tagline: 'Une nouvelle façon de travailler avec vos agents. L’encoche et Ledge Desktop, une seule application.',
       versions: 'Versions', app: 'Ledge Desktop', daemon: (label: string) => `Daemon · ${label}`,
@@ -695,7 +708,13 @@ export const fr = {
     send: 'Envoyer la réponse', cancel: 'Annuler',
     review: (giver: string) => `Ta réponse à ${giver}, telle qu’elle partira. Une réponse ne se reprend pas.`, confirm: 'Confirmer l’envoi', edit: 'Modifier', sending: 'Envoi…',
     failed: (reason: string) => `Réponse refusée : ${reason}`,
-    silent: 'Ledge n’a pas confirmé la réponse. Regarde la tâche avant de réessayer.'
+    silent: 'Ledge n’a pas confirmé la réponse. Regarde la tâche avant de réessayer.',
+    note: {
+      add: (giver: string, note: string) => `${giver} propose d’ajouter à la note ${note}`, create: (giver: string, note: string) => `${giver} propose une nouvelle note ${note}`,
+      flag: (giver: string, note: string) => `${giver} signale la note ${note} comme fausse ou périmée`, source: (s: string) => `Source : ${s}`,
+      yes: 'Ajouter', edit: 'Modifier', no: 'Refuser', mark: 'Marquer à revoir', ignore: 'Ignorer', createYes: 'Créer la note', editYes: 'Ajouter ce texte', cancel: 'Annuler',
+      field: 'Le texte ajouté sous « Ajouts »', titleField: 'Titre', whenField: 'Quand la lire', sending: 'Envoi…', failed: (reason: string) => `Refusé : ${reason}`
+    }
   },
   handover: {
     nearShort: (name: string, pct: number) => `${name} · contexte ${pct} %`, nearHint: 'limite proche', failedShort: (name: string) => `Relève de ${name} échouée`, retry: 'Réessayer',

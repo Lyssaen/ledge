@@ -229,7 +229,10 @@ export function toPhoneTask(x: Task): PhoneTask {
   return { id: x.id, title: x.title.slice(0, 200), owner: x.owner, ownerName: x.ownerName.slice(0, 80),
     giver: x.giver.slice(0, 100), giverName: x.giverName.slice(0, 80), ...(text ? { text } : {}),
     state: x.state,
-    ...(result ? { result: result.text, ...(result.cut ? { cut: true as const } : {}) } : {}), at: x.at, updatedAt: x.updatedAt, ...(x.seen ? { seen: true as const } : {}) };
+    ...(result ? { result: result.text, ...(result.cut ? { cut: true as const } : {}) } : {}), at: x.at, updatedAt: x.updatedAt, ...(x.seen ? { seen: true as const } : {}),
+    // A proposal about the notes: the phone answers it with its buttons. Its fields are the schema's own, already bounded.
+    ...(x.brain ? { brain: { kind: x.brain.kind, note: x.brain.note, fact: x.brain.fact, ...(x.brain.create ? { create: true } : {}), ...(x.brain.source ? { source: x.brain.source } : {}),
+      ...(x.brain.title ? { title: x.brain.title } : {}), ...(x.brain.when ? { when: x.brain.when } : {}) } } : {}) };
 }
 
 /** Ledge's tasks the phone is sent: the ones Ledge gave or that a session put to the user as a decision. */

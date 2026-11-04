@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useContextNear, useTasks, type DaemonClient } from '@ledge/fleet';
-import { CONTEXT_NEAR, contextNear, contextShare, LEDGE_GIVER, openDecision, taskClosed, type Session, type Task } from '@ledge/protocol';
+import { CONTEXT_NEAR, contextNear, contextShare, LEDGE_GIVER, openDecision, taskClosed, type BrainChoice, type Session, type Task } from '@ledge/protocol';
 
 /** What the fronts do with Ledge's tasks and the sessions near their context limit: every command goes to the daemon, whose
  *  broadcast (`task.updated`, `sessions.updated`) changes what is shown. */
@@ -18,6 +18,9 @@ export interface TasksApi {
   /** The user's answer to a decision a session put to it: the registry's `task.answer`, confirmed (the one way an answer goes,
    *  never a `task.cmd done`). Undefined once done, else why not (ANSWER_SILENT when the daemon does not say in time). */
   answer(task: string, text: string): Promise<string | undefined>;
+  /** The buttons of a proposal about the notes (brain spec, lot 4): `brain.answer`. Undefined once written (or refused as asked),
+   *  else why not (ANSWER_SILENT when the daemon does not say in time). */
+  answerNote(task: string, choice: BrainChoice): Promise<string | undefined>;
 }
 
 let seq = 0;
@@ -46,13 +49,20 @@ export function useTasksApi(client: DaemonClient): TasksApi {
     const timer = setTimeout(() => done(ANSWER_SILENT), ANSWER_TIMEOUT_MS);
     client.send({ type: 'action.run', rid, action: 'task.answer', args: { task, answer: text }, confirmed: true });
   }), [client]);
+  const answerNote = useCallback((task: string, choice: BrainChoice) => new Promise<string | undefined>(resolve => {
+    const rid = `note-${Date.now()}-${++seq}`;
+    const done = (r: string | undefined) => { clearTimeout(timer); off(); resolve(r); };
+    const off = client.onMessage(m => { if (m.type === 'brain.result' && m.rid === rid) done(m.reason); });
+    const timer = setTimeout(() => done(ANSWER_SILENT), ANSWER_TIMEOUT_MS);
+    client.send({ type: 'brain.answer', rid, task, choice });
+  }), [client]);
   const [later, setLater] = useState<ReadonlyMap<string, number>>(new Map());
   const near = useContextNear(client);
   const putLater = useCallback((s: Session) => setLater(m => new Map(m).set(s.id, contextShare(s.context) ?? 1)), []);
   return useMemo(() => ({
-    tasks, handover, later, putLater, near, answer,
+    tasks, handover, later, putLater, near, answer, answerNote,
     seen: task => client.send({ type: 'task.cmd', rid: `seen-${++seq}`, by: LEDGE_GIVER, op: 'seen', task })
-  }), [client, tasks, handover, later, putLater, near, answer]);
+  }), [client, tasks, handover, later, putLater, near, answer, answerNote]);
 }
 
 /**

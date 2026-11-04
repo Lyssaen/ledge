@@ -269,3 +269,12 @@ button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
 .home-task h4 { margin: 10px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); }
 .home-task-text { white-space: pre-wrap; }
 
+
+/* A proposal about the notes in « À toi » (docs/mockups/ledge-brain-notes.html, part 1). */
+.note-decision { display: flex; flex-direction: column; gap: 6px; }
+.note-decision .nd-flag { color: var(--warning, #d97706); font-weight: 700; }
+.note-decision .nd-quote { margin: 0 0 0 14px; padding: 6px 9px; border-radius: var(--radius-sm); background: var(--well); font-size: 12.5px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-decision .nd-source { margin-left: 14px; font-size: 11.5px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.note-decision .nd-field { display: flex; flex-direction: column; gap: 3px; margin-left: 14px; font-size: 11.5px; color: var(--muted-foreground); }
+.note-decision .nd-field input, .note-decision .nd-field textarea { box-sizing: border-box; width: 100%; padding: 5px 8px; border: 1px solid var(--input); border-radius: var(--radius-sm); background: var(--well); color: var(--foreground); font: inherit; font-size: 12.5px; resize: vertical; }
+.note-decision .decision-actions { margin-left: 14px; }

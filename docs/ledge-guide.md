@@ -13,7 +13,7 @@ Ledge veille sur les sessions d'agents de l'utilisateur : Claude Code, Codex, Cu
   - `ledge send` et `ledge read` servent aux messages entre sessions ;
   - `ledge task`, `ledge decide`, `ledge handover` et `ledge close` gèrent les tâches, les décisions, la passation de relais et la fermeture ;
   - `ledge brain` montre ce que Ledge sait de lui-même (`@ledge`, `@projects`, `@machines`) et l'index des notes de l'utilisateur ; `ledge brain <nom>` en lit une ;
-  - une session propose un fait durable pour une note avec `ledge brain propose <nom> "<fait>" "<source>"` (`new:<nom>` : une nouvelle note), ou en signale une fausse avec `ledge brain flag <nom> "<quoi>"`. C'est une décision posée à l'utilisateur, comme `ledge task give ledge` : « oui » écrit le fait daté sous `## Ajouts`, « oui : <texte> » écrit ce texte à la place, toute autre réponse n'écrit rien ;
+  - une session propose un fait durable pour une note avec `ledge brain propose <nom> "<fait>" "<source>"` (`new:<nom>` : une nouvelle note), ou en signale une fausse avec `ledge brain flag <nom> "<quoi>"`. Elle arrive dans « À toi » avec ses boutons, sur le PC et le téléphone : « Ajouter » écrit le fait daté sous `## Ajouts`, « Modifier » écrit ton texte à la place, « Refuser » n'écrit rien (un signalement : « Marquer à revoir », « Ignorer » ; une nouvelle note : son titre et « quand la lire » se corrigent avant « Créer la note »). Sur le téléphone, « Ajouter » demande la vérification de l'appareil. `ledge decide` y répond aussi : « oui », « oui : <texte> » ou « non » ;
   - `ledge tui` est Ledge dans un terminal ;
   - `ledge setup` et `ledge uninstall` installent et retirent les hooks et `~/.ledge`.
 - **Ledge Desktop** est l'application Windows : la fenêtre principale (accueil, atelier, sessions, réglages) et l'**encoche**.
@@ -160,6 +160,10 @@ Activer l'accès mobile, choisir le serveur relais, se connecter avec GitHub, vo
 
 « Nouveau projet », modifier, supprimer ; « Dossiers mémorisés » (« Oublier ») ; « Laisser Ledge organiser » pour que Ledge propose des projets.
 
+#### Notes (`notes`)
+
+Les notes de l'utilisateur (`~/.ledge/context`) : chacune avec son titre, « quand la lire », sa portée (chat et sessions, chat seulement, sessions seulement), ses projets, sa date et le nombre de ses ajouts ; « ancienne » après 60 jours sans vérification ni modification, « À revoir » quand un signalement a été validé. « Ouvrir » affiche la note ; « Vérifiée aujourd'hui » met `checked` à la date du jour ; « Effacer le signalement » retire « À revoir » ; « Ouvrir le dossier » ouvre un terminal dans le dossier. Le texte d'une note se change dans son fichier.
+
 #### Raccourcis clavier (`shortcuts`)
 
 Les raccourcis valables partout dans Windows. Le raccourci de l'encoche se change ici.
@@ -263,4 +267,5 @@ Ces écrans ne sont pas des adresses : l'application les montre d'elle-même, se
 | changer l'agent du chat | Réglages › Général › Agent par défaut |
 | régler l'encoche, les notifications, les sons | Réglages › Encoche, Notifications, Sons |
 | mettre Ledge à jour | Réglages › À propos |
-| donner du contexte durable à Ledge | une note dans `~/.ledge/context/` |
+| donner du contexte durable à Ledge | une note dans `~/.ledge/context/`, ou dire au chat « retiens que… » |
+| voir et vérifier ses notes | Réglages › Notes |

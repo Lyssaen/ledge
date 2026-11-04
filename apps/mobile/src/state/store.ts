@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type DeviceKind, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -70,7 +70,9 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
   | { purpose: 'close' | 'act'; id: string }
   /** Taking the hand on a session's terminal (`term.hold`). */
   | { purpose: 'terminal'; id: string }
-  | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' };
+  | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' }
+  /** A « yes » to a proposal about the notes (`brain.answer`), bound to that exact choice. */
+  | { purpose: 'note'; task: string; choice: BrainChoice };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;
@@ -181,6 +183,8 @@ export interface MobileStore {
   giveTask(qid: string, row: number): Promise<ChatAction>;
   /** Puts away a closed task Ledge gave: it leaves « À toi » and « À traiter ». */
   seeTask(task: string): Promise<ChatAction>;
+  /** Answers a proposal about the notes from « Le point »: a « yes » asks for the device's check over that exact choice. */
+  answerNote(task: string, choice: BrainChoice): Promise<ChatAction>;
   /** Stops listening to the link and every timer. */
   close(): void;
 }
@@ -918,6 +922,17 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       return chatAction(`task:${qid}:${row}`, async () => {
         const op = write(o => ({ type: 'chat.task', op: o, qid, row }));
         return op === null ? { status: 'failed' } : finalOf(op);
+      });
+    },
+
+    answerNote(task, choice) {
+      return chatAction(`note:${task}`, async () => {
+        if (!choice.yes) {
+          const op = write(o => ({ type: 'brain.answer', op: o, task, choice }));
+          return op === null ? { status: 'failed' } : finalOf(op);
+        }
+        if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+        return signedOperation({ purpose: 'note', task, choice }, (w, assertion) => ({ type: 'brain.answer', op: w, task, choice, assertion }));
       });
     },
 

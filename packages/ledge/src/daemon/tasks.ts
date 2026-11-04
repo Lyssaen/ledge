@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { backendOf, givenByLedge, type BrainProposal, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry } from '@ledge/protocol';
+import { backendOf, givenByLedge, type BrainChoice, type BrainProposal, isArchived, LEDGE_GIVER, taskClosed, type ClientMessage, type ServerMessage, type Session, type Task, type TaskLogEntry } from '@ledge/protocol';
 import { proposalTask } from '../brain/write.js';
 import type { Store } from './store.js';
 import type { Mailbox } from './mailbox.js';
@@ -23,7 +23,7 @@ export interface TasksDeps {
   /** How long a session sits idle holding tasks before Ledge reminds it of them; PARKED_MS by default. */
   parkedMs?: number;
   /** Writes the user's notes once a brain proposal is answered (brain spec §3.6): what its proposer is told. */
-  brain?: (p: BrainProposal, answer: string, by: string, at: string) => string;
+  brain?: (p: BrainProposal, answer: string | BrainChoice, by: string, at: string) => string;
 }
 export interface Tasks {
   run(cmd: TaskCmd): TaskResult; all(): Task[];
@@ -202,7 +202,7 @@ export function createTasks(d: TasksDeps): Tasks {
         // OpenRig's closure reason: a giver must learn what came of its task.
         if (!result) return refuse('il faut un résultat : ledge task done <id> "<ce qui est fait, où, tests>"');
         // The user answered a proposal about the notes: written (or not) now, and its proposer is told what came of it.
-        const written = t.brain && d.brain ? d.brain(t.brain, result, t.giverName, now()) : undefined;
+        const written = t.brain && d.brain ? d.brain(t.brain, ledge && cmd.choice ? cmd.choice : result, t.giverName, now()) : undefined;
         const done = put({ ...t, state: 'done', result: written ?? result }, me.name, `terminée : ${result}`, sides('done', ownerOf(t), giverOf(t)));
         tellGiver(done, me.name, `terminée par ${me.name} : ${quote(written ?? result)}`);
         return ok(done);
