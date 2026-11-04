@@ -27,6 +27,8 @@ const key = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toL
 // A Windows folder goes through paths.ts (its parent is its real parent, never « C »); anything else, remotes such as
 // `github.com/paradow/paper` included, keeps the slash rules.
 const win = (...ps: string[]) => ps.some(isWindowsPath);
+/** `/`, a drive root (`C:\\`) or a UNC share: never a project of its own. */
+const isRoot = (path: string) => path === '/' || (win(path) && parentPath(path) === null);
 const at = (machine: string, path: string) => `${machine}\n${win(path) ? pathKey(path) : path}`;
 const under = (path: string, folder: string) => (win(path, folder) ? pathUnder(path, folder) : folder === '/' || path === folder || path.startsWith(`${folder}/`));
 const basename = (path: string) => (win(path) ? baseName(path) : path.slice(path.lastIndexOf('/') + 1));
@@ -156,7 +158,7 @@ export function proposeProjects(input: Input): Proposal[] {
   }
   for (const [parent, g] of byFolderParent) {
     const folders = [...g.folders.values()];
-    const named = unique(folders.map(f => f.path)).length > 1 && parent !== '/' ? parent : folders[0]!.path;
+    const named = unique(folders.map(f => f.path)).length > 1 && !isRoot(parent) ? parent : folders[0]!.path;
     claim({ name: titleCase(basename(named)), repos: folders.map(f => ({ machine: f.machine, path: f.path, why: { kind: 'agent', names: f.names } })), file: g.file });
   }
 
@@ -173,7 +175,7 @@ export function proposeProjects(input: Input): Proposal[] {
 
   // 4. The same parent folder: at least two repositories (a new proposal only: a parent folder is no overlap).
   const byParent = new Map<string, Free[]>();
-  for (const r of left()) { const p = parentOf(r.path); if (p !== '/') byParent.set(p, [...(byParent.get(p) ?? []), r]); }
+  for (const r of left()) { const p = parentOf(r.path); if (!isRoot(p)) byParent.set(p, [...(byParent.get(p) ?? []), r]); }
   for (const [parent, rs] of byParent) {
     if (rs.length < 2) continue;
     claim({ name: titleCase(basename(parent)), repos: rs.map(r => ({ machine: r.machine, path: r.path, why: { kind: 'folder', parent } })), file: [] });

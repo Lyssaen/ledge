@@ -6,7 +6,8 @@
  */
 
 const DRIVE = /^[A-Za-z]:(?:[\\/]|$)/;
-const UNC = /^[\\/]{2}[^\\/]/;
+// `\\server\share` (or `\\server/share`): led by backslashes, so a POSIX `//home/po` stays POSIX.
+const UNC = /^\\[\\/][^\\/]/;
 
 /** A drive path (`C:\…`, `c:/…`, `C:`) or a UNC share (`\\server\share`). */
 export function isWindowsPath(p: string): boolean { const t = p.trim(); return DRIVE.test(t) || UNC.test(t); }
@@ -58,8 +59,10 @@ export function pathUnder(path: string, folder: string): boolean {
 /** The last segment; a root is its own name (`/`, `C:\`, `\\nas\share`). */
 export function baseName(p: string): string {
   const n = normalizePath(p);
+  // Not a Windows path: its last `/` segment, as always (`~/work/paper` and `rel/x` included); `/` is itself.
+  if (!isWindowsPath(n)) return n === '/' ? n : n.slice(n.lastIndexOf('/') + 1);
   if (parentPath(n) === null) return n;
-  return n.slice(n.lastIndexOf(sepOf(n)) + 1);
+  return n.slice(n.lastIndexOf('\\') + 1);
 }
 
 /** The folder holding `p`, or null at a root. */

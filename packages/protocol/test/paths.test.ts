@@ -7,10 +7,11 @@ describe('paths', () => {
   it('normalizePath windows forms', () => {
     for (const raw of ['C:\\Users\\po\\work', 'C:/Users/po/work/', 'c:\\Users\\po\\\\work\\', ' C:\\Users\\po\\work ']) expect(normalizePath(raw)).toBe('C:\\Users\\po\\work');
     expect(normalizePath('c:')).toBe('C:\\'); expect(normalizePath('C:\\')).toBe('C:\\'); expect(normalizePath('c:/')).toBe('C:\\');
-    expect(normalizePath('\\\\nas\\share\\x\\')).toBe('\\\\nas\\share\\x'); expect(normalizePath('//nas/share')).toBe('\\\\nas\\share');
+    expect(normalizePath('\\\\nas\\share\\x\\')).toBe('\\\\nas\\share\\x'); expect(normalizePath('//nas/share')).toBe('/nas/share'); expect(normalizePath('\\\\nas/share/')).toBe('\\\\nas\\share');
   });
   it('normalizePath posix unchanged', () => {
-    for (const [raw, out] of [['/a//b/', '/a/b'], ['/', '/'], [' /x ', '/x'], ['rel/x/', 'rel/x'], ['//', '/']] as const) expect(normalizePath(raw)).toBe(out);
+    for (const [raw, out] of [['/a//b/', '/a/b'], ['/', '/'], [' /x ', '/x'], ['rel/x/', 'rel/x'], ['//', '/'], ['//home/po/work', '/home/po/work']] as const) expect(normalizePath(raw)).toBe(out);
+    expect(isWindowsPath('//home/po')).toBe(false); expect(isWindowsPath('\\\\nas\\share')).toBe(true);
   });
   it('shapes', () => {
     expect(isWindowsPath('C:\\x')).toBe(true); expect(isWindowsPath('c:/x')).toBe(true); expect(isWindowsPath('\\\\nas\\s')).toBe(true);
@@ -46,6 +47,9 @@ describe('paths', () => {
     expect(joinPath('/home', 'po')).toBe('/home/po'); expect(joinPath('/', 'x')).toBe('/x');
     expect(baseName('C:\\Users\\po\\work')).toBe('work'); expect(baseName('C:\\')).toBe('C:\\'); expect(baseName('/w/ledge')).toBe('ledge'); expect(baseName('/w/ledge/')).toBe('ledge'); expect(baseName('/')).toBe('/');
     expect(parentPath('C:\\Users')).toBe('C:\\'); expect(parentPath('C:\\')).toBeNull(); expect(parentPath('/w')).toBe('/'); expect(parentPath('/')).toBeNull(); expect(parentPath('/w/x')).toBe('/w');
+  });
+  it('baseName of what is not a folder path (a model ~/… path, a relative one): its last segment, as before', () => {
+    expect(baseName('~/work/paper')).toBe('paper'); expect(baseName('rel/x/')).toBe('x'); expect(baseName('')).toBe('');
   });
   it('badFolderName per shape', () => {
     for (const n of ['a:b', 'con', 'NUL.txt', 'x.', 'x ', 'a\\b', 'q?', 'Lpt1']) expect(badFolderName(n, 'C:\\w')).toBe(true);
