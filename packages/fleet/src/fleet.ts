@@ -343,6 +343,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.requestId !== undefined) { if (rigAsks.get(m.requestId)?.machine !== machine) return; rigAsks.delete(m.requestId); }
       emit({ ...m, machineId: machine }); return;
     }
+    if (m.type === 'agents.listing' || m.type === 'agents.installed') { if (machine === 'local') emit(m); return; }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'session.commands.listing') { const l = commandLists.get(m.requestId); if (l?.machine === machine) { commandLists.delete(m.requestId); emit({ ...m, id: l.id }); } return; }
     if (m.type === 'chat.routed') {
@@ -591,6 +592,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const { machineId: _m, ...rest } = msg; outgoing = rest;
         if (!available(peers.get(machine))) { emit({ type: 'repos.found', requestId: msg.requestId, repos: [], truncated: false, error: 'offline' }); return; }
         scans.set(msg.requestId, machine);
+      }
+      // Agents on demand are the local daemon's (native Windows): asked of it, answered by it only.
+      if (msg.type === 'agents.status' || msg.type === 'agents.install') {
+        machine = 'local';
+        if (!available(peers.get(machine))) {
+          emit(msg.type === 'agents.status' ? { type: 'agents.listing', requestId: msg.requestId, agents: [] } : { type: 'agents.installed', requestId: msg.requestId, tool: msg.tool, ok: false, code: null, output: 'The local Ledge daemon is not connected.', error: 'failed' });
+          return;
+        }
       }
       if (msg.type === 'models.list') {
         machine = msg.machineId ?? 'local';

@@ -48,6 +48,14 @@ export const fr = {
       not_installed: { title: (machine: string) => `OpenRig n’est pas installé sur ${machine}.`, body: 'Les sessions de tes projets passent toujours par ici.' }
     }
   },
+  agents: {
+    title: 'Agents', hint: 'Claude Code et Codex sur ce PC, installés pour vous seul, sans droits administrateur.',
+    checking: 'Vérification…', found: 'Installé', notInstalled: 'Non installé', install: 'Installer', installOne: (n: string) => `Installer ${n}`,
+    installing: 'Installation…', installed: (n: string) => `${n} est installé. Au premier lancement, connectez-vous dans le terminal de la session.`,
+    failed: (n: string, code: number | null) => `L’installation de ${n} a échoué${code !== null ? ` (code ${code})` : ''}.`, busy: 'Une installation est déjà en cours.',
+    notOffered: 'L’installation n’est proposée que sur Windows sans WSL.', manual: 'Pour l’installer vous-même, lancez dans PowerShell :',
+    missing: (n: string) => `${n} n’est pas installé sur ce PC.`, goInstall: 'L’installer',
+  },
   native: { title: 'Sessions', hint: 'Vos sessions sont dans la barre de gauche. Lancez-en une nouvelle ici.', launch: 'Lancer une session' },
   /** Native mode (Windows without WSL): what replaces the copy that speaks of WSL (native/copy.ts lays it over). */
   nativeCopy: {

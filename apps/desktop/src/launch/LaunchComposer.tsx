@@ -9,6 +9,8 @@ import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
 import { isUp, launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, NO_PICK, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
+import { isNative } from '../native/mode';
+import { useAgents } from '../native/agents';
 import { useRepoInfo } from './useRepoInfo';
 import { useModels } from './useModels';
 import { loadPick, savePick } from './modelPrefs';
@@ -18,7 +20,9 @@ import { cls } from '../shell/cls';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 import { useDefaultTool } from '../settings/tool';
 
-const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
+const ALL_TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
+/** Native Windows' first round runs Claude Code and Codex only (spec 2026-11-03 §2). */
+const NATIVE_TOOLS: readonly Tool[] = ['claude', 'codex'];
 const APPROVALS: readonly OmpApproval[] = ['always-ask', 'write', 'yolo'];
 const folderName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
 
@@ -34,7 +38,7 @@ function emphasized(text: (a: string, b: string) => string, a: string, b: string
 export function LaunchComposer(p: {
   client: DaemonClient; projects: readonly Project[]; machines: readonly MachineState[]; sessions: readonly Session[];
   projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string };
-  onEditProject(id: string): void; onNewProject(): void;
+  onEditProject(id: string): void; onNewProject(): void; /** Opens Settings' Agents card (native Windows). */ onAgents?(): void;
   /** The launch in flight or its outcome (useLaunch): « Launching… » sends nothing more; a refusal or a silence is said here. */
   launch: LaunchState; onLaunch(msg: LaunchMessage, preview: { name: string; project: string; projectId: string }): void; onCancel(): void;
   /** The app's « Freeze animations »: the form's bots hold still. */
@@ -71,6 +75,10 @@ export function LaunchComposer(p: {
   // OMP is launched by the daemon itself, with no fallback to another harness: where it cannot be reached (not installed, a daemon
   // that does not know it, no credentials), the launch is blocked with the reason (spec 2026-10-20 §3.1).
   const unavailable = form.tool === 'omp' && online && models.status === 'ready' && models.error ? models.error : null;
+  // Native Windows: an agent not installed on this PC is said before the launch, with the way to install it.
+  const TOOLS = isNative() ? NATIVE_TOOLS : ALL_TOOLS;
+  const agentsView = useAgents(p.client, form.machine === 'local' && !!chosen?.daemon?.agents);
+  const notInstalled = (form.tool === 'claude' || form.tool === 'codex') && agentsView.agents?.find(a => a.tool === form.tool)?.found === false;
   const memo = loadPick(form.project, form.tool);
   const remembered = !!memo?.remembered && memo.model === form.model && memo.effort === form.effort;
 
@@ -106,7 +114,7 @@ export function LaunchComposer(p: {
   const launching = p.launch.status === 'launching';
   const submit = () => {
     setTried(true);
-    if (missing || launching || !project || unavailable) return;
+    if (missing || launching || !project || unavailable || notInstalled) return;
     if (!outdated) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
     const sent = { ...(outdated ? withPick(form, NO_PICK) : form), approval: approvable ? form.approval : 'always-ask' as const };
     p.onLaunch(launchMessage(sent, name), { name, project: project.name, projectId: project.id });
@@ -180,6 +188,7 @@ export function LaunchComposer(p: {
           {!choosing && form.tool !== defaultTool && (
             <div className="harness-override"><span>{t.launch.onlyThisOne(label(defaultTool))}</span><button type="button" onClick={() => choose(defaultTool)}>{t.launch.backToDefault}</button></div>
           )}
+          {notInstalled && <p className="harness-unavailable" role="alert">{t.agents.missing(label(form.tool))} {p.onAgents && <Button type="button" variant="ghost" size="sm" onClick={p.onAgents}>{t.agents.goInstall}</Button>}</p>}
           {unavailable !== null && <p className="harness-unavailable" role="alert">{unavailable === 'outdated' ? t.launch.ompOutdated : t.launch.ompUnavailable(unavailable)}</p>}
           {online && !unavailable && (outdated ? <small className="models-note">{t.launch.modelsOutdated}</small>
             : <ModelPicker key={`${form.machine}|${form.tool}|${form.project}`} tool={form.tool} state={models} pick={form} remembered={remembered} onPick={pick => setForm(f => withPick(f, pick))} />)}
@@ -272,7 +281,7 @@ export function LaunchComposer(p: {
           : p.launch.status === 'refused' ? <p className="composer-missing" role="alert">{t.launch.refused(p.launch.message)}</p>
           : p.launch.status === 'timeout' ? <p className="composer-missing" role="alert">{t.launch.timeout}</p> : null}
         <Button variant="ghost" type="button" onClick={p.onCancel}>{t.launch.cancel}</Button>
-        <Button variant="primary" type="submit" aria-disabled={!!missing || launching || unavailable !== null}>
+        <Button variant="primary" type="submit" aria-disabled={!!missing || launching || unavailable !== null || notInstalled}>
           <Icon d={ICONS.plus.d} size={14} />{launching ? t.launch.launching : t.launch.launch}<Kbd>Ctrl ↵</Kbd>
         </Button>
       </footer>

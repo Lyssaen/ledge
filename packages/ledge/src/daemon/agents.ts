@@ -2,7 +2,9 @@ import { execFile } from 'node:child_process';
 import { rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentStatus, InstallableTool } from '@ledge/protocol';
+import { CODEX_RELEASE, type AgentStatus, type InstallableTool } from '@ledge/protocol';
+
+export { CODEX_RELEASE };
 import { resolveCommand } from '../panes/resolve.js';
 
 /**
@@ -12,8 +14,6 @@ import { resolveCommand } from '../panes/resolve.js';
  * guide recommends. Nothing is installed without the user's click.
  */
 
-/** The Codex release Ledge installs; a Ledge release moves it. */
-export const CODEX_RELEASE = '0.166.0';
 const CODEX_INSTALLER = 'https://chatgpt.com/codex/install.ps1';
 const CLAUDE_INSTALL = '& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) stable';
 const PS = ['-NoProfile', '-ExecutionPolicy', 'Bypass'];

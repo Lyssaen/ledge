@@ -13,6 +13,7 @@ import { notesBeforeInstall, openWhatsNew } from '../update/whatsNewView';
 import { Card, Row, Segmented, SwitchRow } from './controls';
 import type { SettingsContext } from './SettingsPage';
 import { TOOLS, useDefaultTool } from './tool';
+import { Agents } from './Agents';
 import { useContextNear } from '@ledge/fleet';
 import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN } from '@ledge/protocol';
 
@@ -63,8 +64,11 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
     });
   };
 
+  // Native Windows: Claude Code and Codex installed from here (spec 2026-11-03 §4.2.6), when the local daemon offers it.
+  const offersAgents = !!ctx.machines.find(m => m.id === 'local')?.daemon?.agents;
   return (
     <>
+      {offersAgents && <Agents client={ctx.client} />}
       <Card>
         <Row label={g.lang} hint={g.langHint} error={langFailed ? g.langFailed : null}>
           {describedBy => <Segmented label={g.lang} value={ctx.lang} disabled={switching} describedBy={describedBy} onChange={chooseLang} options={LANGS.map(l => ({ value: l, label: g.langs[l], lang: l }))} />}
