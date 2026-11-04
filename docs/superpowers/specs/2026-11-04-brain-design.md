@@ -184,7 +184,11 @@ only the user does.
   session) and writes on the answer, in the task's close. Dedicated buttons and the Settings list stay for a later lot, with
   their mockup; so does the chat's own `note.add` card (§3.5), which needs each front's copy. Tests: append and create, redaction refusal, scope refusal, caps,
   flag lifecycle, notice to the session.
-- **Lot 3 — freshness**: §3.7 and the Settings list.
+- **Lot 3 — freshness**: §3.7 and the Settings list. The index part is built on `feat/brain-lot3` (2026-11-04): « ancienne
+  (N jours) » in the sessions' index, « OLD » in the chat's. The Settings list moves to lot 4.
+- **Lot 4 — the screens**, after the user approves the mockup (`docs/mockups/ledge-brain-notes.html`): proposal and flag
+  buttons in « À toi » on the desktop and the phone, Réglages › Notes (read-only, « Vérifiée aujourd'hui » and « Effacer le
+  signalement » as the only writes), and the chat's `note.add` card for « retiens que… ».
 
 ## 5. Risks
 

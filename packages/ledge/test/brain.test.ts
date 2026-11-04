@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { forChat, forSession, readNotes } from '../src/brain/notes.js';
-import { brainContext, INDEX_TOLD, runBrain } from '../src/brain/index.js';
+import { forChat, forSession, oldFor, readNotes } from '../src/brain/notes.js';
+import { brainContext, INDEX_TOLD, indexLine, runBrain } from '../src/brain/index.js';
 
 const T0 = '2026-10-11T10:00:00.000Z';
 let home: string; let from: string;
@@ -100,5 +100,17 @@ describe('ledge brain', () => {
     expect(p.line).toContain('## Ledge'); expect(p.line).toContain('- local: /w/ledge');
     const l = await runBrain(['@ledge'], { from });
     expect(l.line).toContain('# Generated from the code of this installation');
+  });
+});
+
+describe('freshness (spec §3.7)', () => {
+  it('a note neither checked nor changed for more than 60 days is old, in the index and in the chat\'s', async () => {
+    const now = '2026-11-04T12:00:00.000Z';
+    expect(oldFor({ modifiedAt: '2026-09-10T12:00:00.000Z' }, now)).toBeNull();
+    expect(oldFor({ modifiedAt: '2026-08-28T12:00:00.000Z' }, now)).toBe(68);
+    expect(oldFor({ modifiedAt: '2026-08-28T12:00:00.000Z', checkedAt: '2026-11-01' }, now)).toBeNull();
+    note('bots.md', '---\ntitle: Bots\n---\nx'); const old = new Date('2026-08-28T12:00:00.000Z'); utimesSync(join(from, 'bots.md'), old, old);
+    const n = (await readNotes(from)).notes[0]!;
+    expect(indexLine(n, now)).toContain('— modifiée le 2026-08-28 — ancienne (68 jours) : vérifie avant de t\'y fier');
   });
 });

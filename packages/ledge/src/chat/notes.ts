@@ -3,7 +3,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatStep } from '@ledge/protocol';
-import { forChat, NOTE_MAX, NOTES_MAX, readNotes } from '../brain/notes.js';
+import { forChat, NOTE_MAX, NOTES_MAX, oldFor, readNotes } from '../brain/notes.js';
 
 export { frontMatter, NOTE_MAX, NOTES_MAX } from '../brain/notes.js';
 export const NOTES_INDEX = 'context-index.md';
@@ -34,7 +34,7 @@ export async function writeNotes(dir: string, from: string, steps: Map<string, C
     await writeFile(join(dir, name), n.truncated ? `${n.text}\n\n[truncated by Ledge: the first ${max} of ${n.size} bytes]\n` : n.text);
     steps.set(name, { kind: 'repo', name: n.file, path: n.path });
     const when = n.when ? `when: ${n.when}` : `first line: ${n.firstLine || '(empty)'}`;
-    lines.push(`- ${name} — « ${n.title} » — ${when} — modified ${n.modifiedAt}${n.checkedAt ? ` — checked ${n.checkedAt}` : ''}${n.truncated ? ` — TRUNCATED: only the first ${max} of ${n.size} bytes are copied` : ''}${n.flag ? ` — TO CHECK (the user agreed it may be wrong): ${n.flag.replace(/\s*[\r\n]+\s*/g, ' ')}` : ''}`);
+    lines.push(`- ${name} — « ${n.title} » — ${when} — modified ${n.modifiedAt}${n.checkedAt ? ` — checked ${n.checkedAt}` : ''}${n.truncated ? ` — TRUNCATED: only the first ${max} of ${n.size} bytes are copied` : ''}${oldFor(n) ? ` — OLD: neither checked nor changed for ${oldFor(n)} days, say so if you rely on it` : ''}${n.flag ? ` — TO CHECK (the user agreed it may be wrong): ${n.flag.replace(/\s*[\r\n]+\s*/g, ' ')}` : ''}`);
   }
   if (more > 0) lines.push(`- (${more} more notes not copied: Ledge copies ${NOTES_MAX} at most)`);
   await writeFile(join(dir, NOTES_INDEX), [...lines, ''].join('\n'));
