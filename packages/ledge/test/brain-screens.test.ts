@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { sessionKey } from '../src/auth.js';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -96,7 +97,7 @@ describe('through the daemon', () => {
     note('machines.md', '# Machines\n');
     c.send({ type: 'session.launch', tool: 'claude', cwd: home, name: 'ann' });
     const ann = (await c.next('session.launched', 5000)).id;
-    c.send({ type: 'task.cmd', rid: 'p', by: ann, op: 'give', to: 'ledge', brain: { kind: 'add', note: 'machines', fact: 'Le Pi a 1 Go' } });
+    c.send({ type: 'task.cmd', rid: 'p', by: ann, key: sessionKey(ann), op: 'give', to: 'ledge', brain: { kind: 'add', note: 'machines', fact: 'Le Pi a 1 Go' } });
     const d = (await c.next('task.result', 3000)).task!;
     expect(await result({ type: 'brain.answer', rid: 'a', task: d.id, choice: { yes: true, text: 'Le Pi a 906 Mo' } })).toEqual({ type: 'brain.result', rid: 'a', result: 'ajouté à la note machines : Le Pi a 906 Mo' });
     expect((await result({ type: 'brain.answer', rid: 'b', task: d.id, choice: { yes: true } })).reason).toContain('déjà close');

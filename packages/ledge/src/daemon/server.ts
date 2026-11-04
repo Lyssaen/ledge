@@ -1040,17 +1040,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * `action.run` (#93): an action of the registry outside the chat, resolved and applied as a generic card's row, so the CLI
    * writes no rule of its own. A destructive one asks again (`confirmed`), and the guard decides who may run it at all.
    */
+  /** Why `key` is not session `by`'s (#93), or undefined when it is. */
+  function notItsKey(by: string, key: string | undefined): string | undefined {
+    // Without a key, the session was most likely launched before Ledge gave one: it is relaunched, not suspected.
+    if (!key) return `la session ${by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`;
+    const want = sessionKey(by, token);
+    if (!want || !tokenEquals(key, want)) return `la clé ne correspond pas à la session ${by} : lance la commande depuis cette session, telle que Ledge l'a lancée`;
+    return undefined;
+  }
+
   async function runAction(msg: Extract<ClientMessage, { type: 'action.run' }>, reply: Reply): Promise<void> {
     const answer = (x: { row?: ChatAction; reason?: string; code?: string }) => reply({ type: 'action.result', rid: msg.rid, action: msg.action, ...x });
     const parsed = actionById(msg.action)!.args.safeParse(msg.args);
     if (!parsed.success) return answer({ reason: `invalid args: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; ')}`, code: 'refused' });
     // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
-    const want = msg.by === undefined ? undefined : sessionKey(msg.by, token);
-    // Without a key, the session was most likely launched before Ledge gave one: it is relaunched, not suspected.
-    if (msg.by !== undefined && !msg.key)
-      return answer({ reason: `la session ${msg.by} n'a pas de clé (lancée avant cette version de Ledge, ou hors de Ledge) : reprends-la depuis Ledge, ou demande à l'utilisateur`, code: 'identity' });
-    if (msg.by !== undefined && (!want || !tokenEquals(msg.key!, want)))
-      return answer({ reason: `la clé ne correspond pas à la session ${msg.by} : lance la commande depuis cette session, telle que Ledge l'a lancée`, code: 'identity' });
+    const wrong = msg.by === undefined ? undefined : notItsKey(msg.by, msg.key);
+    if (wrong) return answer({ reason: wrong, code: 'identity' });
     const r: Resolved = resolveRun(msg.action, parsed.data, { sessions: store.all(), tasks: tasks.all() });
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by);
@@ -1494,6 +1499,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // A client naming itself `ledge` only reads (#142): Ledge acts from its chat's cards (giveFromCard above, actOnCard) and
         // answers a decision through task.answer (the user's, confirmed), both straight to the tasks, never through here.
         if (msg.by === LEDGE_GIVER && !LEDGE_READS.has(msg.op)) return reply({ type: 'task.result', rid: msg.rid, reason: 'seul le chat de Ledge, ou ledge decide, agit sur une tâche au nom de Ledge' });
+        // A session acts on a task in its own name only, as `action.run` (#152): its key says who it is. Reading needs none.
+        if (msg.by !== LEDGE_GIVER && !LEDGE_READS.has(msg.op)) {
+          const wrong = notItsKey(msg.by, msg.key);
+          if (wrong) return reply({ type: 'task.result', rid: msg.rid, reason: wrong });
+        }
         // A proposal about the user's notes (brain spec §3.6) is checked against the notes now, before the user is asked.
         if (msg.brain) {
           const pending = tasks.all().filter(t => t.giver === msg.by && t.brain && !taskClosed(t)).length;

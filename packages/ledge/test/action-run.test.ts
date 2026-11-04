@@ -63,7 +63,7 @@ describe('action.run', () => {
 
   it('a destructive action: asked again without confirmed, refused to a session, done for the user who confirmed', async () => {
     const [ann, bob] = await two();
-    c.send({ type: 'task.cmd', rid: 'give', by: ann, op: 'give', to: store.get(bob)!.name, title: 'Relire' });
+    c.send({ type: 'task.cmd', rid: 'give', by: ann, key: sessionKey(ann), op: 'give', to: store.get(bob)!.name, title: 'Relire' });
     const t = (await c.next('task.result', 3000)).task!;
     expect(await run('task.cancel', { task: t.id })).toMatchObject({ code: 'confirm_required', row: { args: { task: t.id }, risk: 'destructive' } });
     expect(await run('task.cancel', { task: t.id }, { by: ann, confirmed: true })).toMatchObject({ code: 'agent', reason: expect.stringContaining('utilisateur') });
@@ -74,7 +74,7 @@ describe('action.run', () => {
 
   it('task.answer: the user answers a decision a session put to it, confirmed; never a session, not even the one asking', async () => {
     const [ann] = await two();
-    c.send({ type: 'task.cmd', rid: 'ask', by: ann, op: 'give', to: 'ledge', title: 'Fusionner ?', text: 'oui / non' });
+    c.send({ type: 'task.cmd', rid: 'ask', by: ann, key: sessionKey(ann), op: 'give', to: 'ledge', title: 'Fusionner ?', text: 'oui / non' });
     const d = (await c.next('task.result', 3000)).task!;
     expect(await run('task.answer', { task: d.id, answer: 'oui' })).toMatchObject({ code: 'confirm_required', row: { risk: 'destructive', detail: 'oui' } });
     expect(await run('task.answer', { task: d.id, answer: 'oui' }, { by: ann, confirmed: true })).toMatchObject({ code: 'agent' });

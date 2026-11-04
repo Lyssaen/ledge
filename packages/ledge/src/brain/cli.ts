@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { BrainProposalSchema, LEDGE_GIVER, type BrainProposal } from '@ledge/protocol';
 import { connect, type Client } from '../client.js';
 import { CODEX_HOOK_VAR } from '../spawn.js';
+import { SESSION_KEY_VAR } from '../auth.js';
 
 export const BRAIN_WRITE_USAGE = `ledge brain propose <nom|new:<nom>> "<fait>" ["<comment tu le sais>"] [--title "<titre>"] [--when "<quand la lire>"]
                                                                            proposer un fait durable pour une note (l'utilisateur valide ; --title et --when : une nouvelle note)
@@ -28,13 +29,13 @@ export function brainWriteArgs(all: string[]): BrainProposal | string {
   return p.data;
 }
 
-/** Sends the proposal as session `by` on `client`, and says what happens next. */
-export async function brainWriteOnClient(client: Client, args: string[], by: string, ms: number): Promise<{ line: string; code: number }> {
+/** Sends the proposal as session `by` (with its key, #152) on `client`, and says what happens next. */
+export async function brainWriteOnClient(client: Client, args: string[], by: string, ms: number, key?: string): Promise<{ line: string; code: number }> {
   const p = brainWriteArgs(args);
   if (typeof p === 'string') return { line: p, code: 1 };
   if (by === LEDGE_GIVER) return { line: 'refusé : une proposition vient d\'une session', code: 1 };
   try {
-    client.send({ type: 'task.cmd', rid: randomUUID(), by, op: 'give', to: LEDGE_GIVER, brain: p });
+    client.send({ type: 'task.cmd', rid: randomUUID(), by, ...(key ? { key } : {}), op: 'give', to: LEDGE_GIVER, brain: p });
     const r = await client.next('task.result', ms);
     if (r.reason !== undefined) return { line: `refusé : ${r.reason}`, code: 1 };
     return { line: `proposition ${r.task!.id} posée à l'utilisateur : rien n'est écrit avant son « oui », sa réponse t'arrivera comme une tâche terminée`, code: 0 };
@@ -53,6 +54,6 @@ export async function runBrainWrite(args: string[], opts: { port?: number; env?:
   let client;
   try { client = await connect({ port: opts.port, timeoutMs: BRAIN_MS }); }
   catch { return { line: 'daemon not running (start a session with `ledge claude`, or run `ledge daemon`)', code: 1 }; }
-  try { return await brainWriteOnClient(client, args, by, BRAIN_MS); }
+  try { return await brainWriteOnClient(client, args, by, BRAIN_MS, env[SESSION_KEY_VAR]); }
   finally { await client.close(); }
 }
