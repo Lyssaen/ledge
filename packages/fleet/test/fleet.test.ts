@@ -258,6 +258,13 @@ describe('multi-machine connections', () => {
     server.emit({ type: 'folder.listing', path: '/', parent: null, entries: ['w'], error: 'already exists: w' });
     expect(got.filter(m => m.type === 'folder.listing' && m.requestId === 'c2')).toEqual([{ type: 'folder.listing', requestId: 'c2', path: '/', parent: null, entries: ['w'], error: 'already exists: w' }]);
   });
+  it('a created Windows folder is matched to its answer (untagged answer of an older daemon)', () => {
+    const { client, server, got } = setup();
+    client.send({ type: 'folder.create', parent: 'C:\\w', name: 'new', machineId: 'server', requestId: 'cw' });
+    server.emit({ type: 'folder.listing', path: 'C:\\w\\new', parent: 'C:\\w', entries: [] });
+    expect(got.filter(m => m.type === 'folder.listing' && m.requestId === 'cw')).toHaveLength(1);
+  });
+
   it('a folder.list without requestId keeps the old behaviour: the selected machine, relayed only from it', () => {
     const { client, local, server, got } = setup();
     client.send({ type: 'folder.list', path: '/w' });

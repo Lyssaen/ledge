@@ -1,3 +1,4 @@
+import { baseName } from '@ledge/protocol';
 import type { ChatProjectProposal } from '@ledge/protocol';
 import { Button } from '../ui/Button';
 import { useChatCopy } from './copy';
@@ -11,7 +12,8 @@ export interface ProjectCardProps {
 
 const muted: React.CSSProperties = { color: 'var(--muted-foreground)' };
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 11.5, color: 'var(--muted-foreground)' };
-const basename = (path: string) => { const t = path.replace(/\/+$/, ''); return t.slice(t.lastIndexOf('/') + 1) || path; };
+// Both path shapes (paths.ts): `C:\Users\po\work` is « work ».
+const basename = (path: string) => baseName(path);
 
 /** The project the chat proposes (lot 11, task 5): its name (or « Complete X »), how many repositories, and « Review the proposal »,
  *  which opens the editor prefilled. Nothing is created from the card: only the editor's button saves. */

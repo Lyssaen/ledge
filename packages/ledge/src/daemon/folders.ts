@@ -1,7 +1,7 @@
 import { mkdir, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import type { ServerMessage } from '@ledge/protocol';
+import { badFolderName, type ServerMessage } from '@ledge/protocol';
 import { headBranch, inspectRepos } from './repos.js';
 
 type Git = (cwd: string, args: string[]) => Promise<string | null>;
@@ -9,7 +9,8 @@ type Listing = Extract<ServerMessage, { type: 'folder.listing' }>;
 
 /** `raw` taken as given (a folder name may start or end with spaces): `~` expanded, absolute, an existing directory. */
 async function resolveExact(raw: string, home: string): Promise<string> {
-  const expanded = raw === '~' ? home : raw.startsWith('~/') ? resolve(home, raw.slice(2)) : raw;
+  // `~\` too: on Windows a typed home path uses backslashes.
+  const expanded = raw === '~' ? home : raw.startsWith('~/') || raw.startsWith('~\\') ? resolve(home, raw.slice(2)) : raw;
   if (!isAbsolute(expanded)) throw new Error(`not an absolute path: ${raw}`);
   const path = resolve(expanded);
   let s;
@@ -71,7 +72,8 @@ export async function createFolder(parent: string, name: string, home = homedir(
   const at = await listFolder(parent, home, requestId);
   if (at.error) return at;
   const clean = name.trim();
-  if (!clean || clean === '.' || clean === '..' || /[/\0]/.test(clean)) return { ...at, error: `invalid folder name: ${name}` };
+  // On Windows its own rules too (`a:b`, `con`, a trailing dot): paths.ts reads the shape from the parent.
+  if (badFolderName(clean, at.path)) return { ...at, error: `invalid folder name: ${name}` };
   try { await mkdir(join(at.path, clean)); } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     return { ...at, error: code === 'EEXIST' ? `already exists: ${clean}` : `cannot create ${clean}: ${(e as Error).message}` };

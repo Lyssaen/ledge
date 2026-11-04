@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -113,6 +113,18 @@ describe('native mode hides what its first round does not offer', () => {
     cleanup();
     render(<LangProvider lang="en"><DaemonOutdated /></LangProvider>);
     expect(document.body.textContent).not.toMatch(/WSL/);
+  });
+
+  it.each([[true], [false]])('the project editor offers Ledge help (Ask Ledge, Let Ledge do it) only outside native mode (native %s)', async native => {
+    const { side, user } = await boot(native);
+    fireEvent.contextMenu((await side.findAllByRole('button', { name: /^Ledge\b/ }, { timeout: 4000 })).at(-1)!.closest('[role="treeitem"]')!);
+    await user.click(await screen.findByRole('menuitem', { name: /^Edit project/ }));
+    await screen.findByRole('textbox', { name: /Name/ });
+    expect(!!screen.queryByRole('button', { name: 'Ask Ledge' })).toBe(!native);
+    await user.keyboard('{Escape}');
+    await user.click(side.getByRole('button', { name: 'New project' }));
+    await screen.findByRole('textbox', { name: /Name/ });
+    expect(!!screen.queryByRole('button', { name: 'Let Ledge do it' })).toBe(!native);
   });
 
   it('WSL mode is unchanged: chat, Atelier, broadcast and the notch are there', async () => {

@@ -1,15 +1,20 @@
-import type { FileChange, ThreadItem, ToolItem } from '@ledge/protocol';
+import { isWindowsPath, normalizePath, pathUnder, samePath, type FileChange, type ThreadItem, type ToolItem } from '@ledge/protocol';
 import { parseDiff, type ParsedDiff } from './diff';
 
 export type Change = FileChange['change'] | 'rename';
 export interface Touch { tool: ToolItem; turn: number; change: FileChange['change']; from?: string; diff: ParsedDiff | null }
 export interface ChangedFile { path: string; shown: string; from?: string; change: Change; plus: number; minus: number; cut: boolean; touches: Touch[] }
 
-/** The file name: what follows the last slash. */
-export const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+/** The file name: what follows the last separator (`/`, or `\` on Windows). */
+export const nameOf = (path: string): string => path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
 
-/** `path` without the `${cwd}/` prefix when below it; as is otherwise. */
+/** `path` without the `${cwd}/` prefix when below it (`${cwd}\` on Windows, whatever the case); as is otherwise. */
 export function relativeTo(path: string, cwd: string): string {
+  if (isWindowsPath(cwd) && isWindowsPath(path)) {
+    if (!pathUnder(path, cwd) || samePath(path, cwd)) return path;
+    const n = normalizePath(path), c = normalizePath(cwd);
+    return n.slice(c.endsWith('\\') ? c.length : c.length + 1);
+  }
   const base = cwd.endsWith('/') ? cwd : `${cwd}/`;
   return path.startsWith(base) ? path.slice(base.length) : path;
 }

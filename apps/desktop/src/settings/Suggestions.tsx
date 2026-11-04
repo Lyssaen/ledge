@@ -1,3 +1,4 @@
+import { baseName } from '@ledge/protocol';
 import { useEffect, useMemo, useState, type JSX } from 'react';
 import { proposeProjects, type Proposal } from '@ledge/fleet';
 import type { Projects as ProjectsState } from '@ledge/protocol';
@@ -13,7 +14,8 @@ import { useTheme } from '../shell/theme';
 import type { SettingsContext } from './SettingsPage';
 
 const NO_STATE: ProjectsState = { projects: [], rules: [] };
-const basename = (path: string) => path.split('/').filter(Boolean).at(-1) ?? path;
+// Both path shapes (paths.ts).
+const basename = (path: string) => baseName(path);
 /** What an ignored card is remembered by: its target project or its name (the pid changes with the repositories left). */
 const keyOf = (p: Proposal) => p.targetId !== undefined ? `#${p.targetId}` : `=${p.name}`;
 

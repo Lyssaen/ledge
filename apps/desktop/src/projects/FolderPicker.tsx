@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useId, useRef, useState, type JSX } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
-import { normalizePath, type Repo } from '@ledge/protocol';
+import { badFolderName, baseName as baseOf, isAbsolutePath, joinPath, normalizePath, pathCrumbs, type Repo } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -8,22 +8,18 @@ import { isUp } from '../launch/model';
 import { LISTING_TIMEOUT_MS, useFolderListing } from './useFolderListing';
 
 const PARENT_ICON = ['M9 14 4 9l5-5', 'M4 9h11a5 5 0 0 1 0 10h-1'];
-const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path;
-const childOf = (dir: string, name: string) => (dir === '/' ? `/${name}` : `${dir}/${name}`);
-/** `/`, then each folder down to `path` (absolute). */
-function crumbsOf(path: string): string[] {
-  const out = ['/'];
-  for (const part of path.split('/').filter(Boolean)) out.push(childOf(out[out.length - 1]!, part));
-  return out;
-}
+// Both path shapes (paths.ts): a Windows machine lists `C:\Users\po`, a POSIX one `/home/po`.
+const baseName = (path: string) => baseOf(path);
+const childOf = (dir: string, name: string) => joinPath(dir, name);
 let next = 0;
 /** A path with a `.` or `..` segment: normalizePath does not resolve them, so it would match no saved repository. */
-const dotted = (path: string) => path.split('/').some(x => x === '.' || x === '..');
+const dotted = (path: string) => path.split(/[\\/]/).some(x => x === '.' || x === '..');
 /** The daemon's words for a folder that is not there (resolveExact, or the raw fs error of a race): said as « not found ». */
 const MISSING = /^(no such folder|not a folder): |^(ENOENT|ENOTDIR)\b/;
 
-/** A folder name the daemon would refuse (createFolder): a `/`, a NUL, or a `.` / `..` of its own. */
-const badName = (name: string) => name === '.' || name === '..' || /[/\0]/.test(name);
+/** A folder name the daemon would refuse (createFolder): a `/`, a NUL, a `.` / `..` of its own; in a Windows folder also
+ *  what Windows refuses (`a:b`, `con`, a trailing dot). */
+const badName = (name: string, dir: string) => badFolderName(name, dir);
 /** The daemon's words for a name already taken in the folder (createFolder). */
 const EXISTS = /^already exists: /;
 
@@ -122,7 +118,7 @@ export function FolderPicker(p: {
     if (newName === null || creation || machineId === null || listing.status !== 'ready') return;
     const name = newName.trim();
     if (!name) { setNewError(c.nameEmpty); return; }
-    if (badName(name)) { setNewError(c.nameInvalid); return; }
+    if (badName(name, listing.path)) { setNewError(c.nameInvalid); return; }
     setNewError('');
     setCreation({ id: `create-${++next}`, machine: machineId, label, parent: listing.path, name });
   };
@@ -130,7 +126,7 @@ export function FolderPicker(p: {
     if (!typed.trim() || machineId === null || check) return;
     if (!online) { setError(c.offlinePath(label)); return; }
     const path = normalizePath(typed);
-    if (!path.startsWith('/') || dotted(path)) { setError(c.absolute); return; }
+    if (!isAbsolutePath(path) || dotted(path)) { setError(c.absolute); return; }
     if (p.taken(machineId, path)) { setError(c.alreadyListed); return; }
     const other = ownerOf(machineId, path);
     if (other !== null) { setError(c.ownedBy(other)); return; }
@@ -156,10 +152,10 @@ export function FolderPicker(p: {
           {shown !== undefined && (
             <div className="picker-bar">
               <nav className="picker-crumbs mono" aria-label={c.crumbs}>
-                {crumbsOf(shown).map((x, i) => (
+                {pathCrumbs(shown).map(({ label: crumb, path: x }, i) => (
                   <Fragment key={x}>
                     {i > 0 && <span aria-hidden="true">/</span>}
-                    <button type="button" onClick={() => (x === shown ? retry() : go(x))} aria-current={x === shown ? 'location' : undefined}>{x === '/' ? c.root : baseName(x)}</button>
+                    <button type="button" onClick={() => (x === shown ? retry() : go(x))} aria-current={x === shown ? 'location' : undefined}>{x === '/' ? c.root : crumb}</button>
                   </Fragment>
                 ))}
               </nav>

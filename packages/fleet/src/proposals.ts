@@ -1,4 +1,4 @@
-import { normalizePath, PROJECT_COLORS, projectOf, type FoundRepo, type Project, type ProjectColor, type Projects, type Session } from '@ledge/protocol';
+import { baseName, isWindowsPath, normalizePath, parentPath, pathKey, pathUnder, PROJECT_COLORS, projectOf, type FoundRepo, type Project, type ProjectColor, type Projects, type Session } from '@ledge/protocol';
 
 /** One machine's answer to `repos.scan`, as the app gathers them; only `ok` machines are proposed. `label`: the machine's name, for the texts. */
 export interface ScanOf { machine: string; label: string; status: 'ok' | 'offline' | 'outdated'; repos: FoundRepo[]; truncated: boolean }
@@ -24,10 +24,15 @@ interface Group { name: string; targetId?: string; repos: ProposedRepo[]; file: 
 const COLORS = Object.keys(PROJECT_COLORS) as ProjectColor[];
 // Like the editor's name_taken: case and accents aside.
 const key = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLocaleLowerCase();
-const at = (machine: string, path: string) => `${machine}\n${path}`;
-const under = (path: string, folder: string) => folder === '/' || path === folder || path.startsWith(`${folder}/`);
-const basename = (path: string) => path.slice(path.lastIndexOf('/') + 1);
-const parentOf = (path: string) => path.slice(0, Math.max(1, path.lastIndexOf('/')));
+// A Windows folder goes through paths.ts (its parent is its real parent, never « C »); anything else, remotes such as
+// `github.com/paradow/paper` included, keeps the slash rules.
+const win = (...ps: string[]) => ps.some(isWindowsPath);
+/** `/`, a drive root (`C:\\`) or a UNC share: never a project of its own. */
+const isRoot = (path: string) => path === '/' || (win(path) && parentPath(path) === null);
+const at = (machine: string, path: string) => `${machine}\n${win(path) ? pathKey(path) : path}`;
+const under = (path: string, folder: string) => (win(path, folder) ? pathUnder(path, folder) : folder === '/' || path === folder || path.startsWith(`${folder}/`));
+const basename = (path: string) => (win(path) ? baseName(path) : path.slice(path.lastIndexOf('/') + 1));
+const parentOf = (path: string) => (win(path) ? parentPath(path) ?? path : path.slice(0, Math.max(1, path.lastIndexOf('/'))));
 const titleCase = (s: string) => s.replace(/[-_.]+/g, ' ').trim().split(/\s+/).map(w => w.charAt(0).toLocaleUpperCase() + w.slice(1)).join(' ');
 /** « paper-fonts » → `paper`; null without a « - ». */
 const prefixOf = (name: string) => { const i = name.indexOf('-'); return i > 0 ? name.slice(0, i) : null; };
@@ -49,7 +54,9 @@ function hash(s: string): string {
 }
 
 /** A home kept in Git (dotfiles): `/root`, `/home/<user>`, `/Users/<user>`. */
-const HOME = /^\/(?:root|home\/[^/]+|Users\/[^/]+)$/;
+const POSIX_HOME = /^\/(?:root|home\/[^/]+|Users\/[^/]+)$/;
+const WINDOWS_HOME = /^[A-Za-z]:\\Users\\[^\\]+$/i;
+const HOME = { test: (path: string) => POSIX_HOME.test(path) || WINDOWS_HOME.test(path) };
 
 /** What the scans and sessions give: the online machines in their order, the free repositories sorted, who owns the others.
  *  Machine order follows the order of `scans` (the fleet's order); within a machine, repositories are sorted by path. */
@@ -138,7 +145,7 @@ export function proposeProjects(input: Input): Proposal[] {
     const holder = repo ? undefined : chosen.find(c => c.machine === a.machine && under(a.cwd, c.path));
     const path = repo?.path ?? holder?.path ?? a.cwd;
     if (!repo && !holder) {
-      if (path === '/' || s.scanned.some(r => r.machine === a.machine && under(r.path, path))) continue;
+      if (path === '/' || (win(path) && parentPath(path) === null) || s.scanned.some(r => r.machine === a.machine && under(r.path, path))) continue;
       chosen.push({ machine: a.machine, path, parent: parentOf(path) });
     }
     const parent = holder?.parent ?? parentOf(path);
@@ -151,7 +158,7 @@ export function proposeProjects(input: Input): Proposal[] {
   }
   for (const [parent, g] of byFolderParent) {
     const folders = [...g.folders.values()];
-    const named = unique(folders.map(f => f.path)).length > 1 && parent !== '/' ? parent : folders[0]!.path;
+    const named = unique(folders.map(f => f.path)).length > 1 && !isRoot(parent) ? parent : folders[0]!.path;
     claim({ name: titleCase(basename(named)), repos: folders.map(f => ({ machine: f.machine, path: f.path, why: { kind: 'agent', names: f.names } })), file: g.file });
   }
 
@@ -168,7 +175,7 @@ export function proposeProjects(input: Input): Proposal[] {
 
   // 4. The same parent folder: at least two repositories (a new proposal only: a parent folder is no overlap).
   const byParent = new Map<string, Free[]>();
-  for (const r of left()) { const p = parentOf(r.path); if (p !== '/') byParent.set(p, [...(byParent.get(p) ?? []), r]); }
+  for (const r of left()) { const p = parentOf(r.path); if (!isRoot(p)) byParent.set(p, [...(byParent.get(p) ?? []), r]); }
   for (const [parent, rs] of byParent) {
     if (rs.length < 2) continue;
     claim({ name: titleCase(basename(parent)), repos: rs.map(r => ({ machine: r.machine, path: r.path, why: { kind: 'folder', parent } })), file: [] });

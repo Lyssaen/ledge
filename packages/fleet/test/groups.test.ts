@@ -18,4 +18,10 @@ describe('groupSessions', () => {
     expect(groupSessions([a, b])).toHaveLength(1);
     expect(groupSessions([{ ...a, repoId: undefined }, { ...b, cwd: a.cwd, repoId: undefined }])).toHaveLength(2);
   });
+
+  it('two spellings of one Windows folder make one group', () => {
+    const w1 = fakeSession('w1', { project: 'work', cwd: 'C:\\Users\\po\\work' });
+    const w2 = fakeSession('w2', { project: 'work', cwd: 'c:/users/po/work' });
+    expect(groupSessions([w1, w2]).map(g => g.sessions.map(s => s.id))).toEqual([['w1', 'w2']]);
+  });
 });

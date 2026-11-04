@@ -1,6 +1,6 @@
-import { normalizePath, type Project, type Projects, type Repo, type Rule } from '@ledge/protocol';
+import { normalizePath, samePath, type Project, type Projects, type Repo, type Rule } from '@ledge/protocol';
 
-const sameFolder = (a: { machine: string; path: string }, b: { machine: string; path: string }) => a.machine === b.machine && a.path === b.path;
+const sameFolder = (a: { machine: string; path: string }, b: { machine: string; path: string }) => a.machine === b.machine && samePath(a.path, b.path);
 
 export { projectOf } from '@ledge/protocol';
 

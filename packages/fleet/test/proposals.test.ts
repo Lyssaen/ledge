@@ -78,6 +78,20 @@ describe('proposeProjects', () => {
     expect(p.repos.map(x => x.path)).toEqual(['/home/me/Documents', '/home/me/Téléchargements']);
   });
 
+  it('no suggestion is named after a drive root, as none is after /', () => {
+    const scan: ScanOf = { machine: 'local', label: 'PC', status: 'ok', truncated: false, repos: [{ path: 'C:\\ledge', branch: 'main' }, { path: 'C:\\tools', branch: 'main' }] };
+    const r = proposeProjects({ projects: { projects: [], rules: [] }, scans: [scan], sessions: [session('local:w1', 'W1', 'C:\\work'), session('local:w2', 'W2', 'C:\\play')] });
+    expect(r.map(p => p.name)).not.toContain('C:\\');
+  });
+
+  it('proposals group Windows folders by their real parent, not "C"', () => {
+    const r = proposeProjects({ ...input, sessions: [...sessions, session('local:wa', 'Wa', 'C:\\a\\x'), session('local:wb', 'Wb', 'C:\\b\\y')] });
+    const pa = r.find(x => x.file.includes('local:wa'))!, pb = r.find(x => x.file.includes('local:wb'))!;
+    expect(pa).not.toBe(pb);
+    expect(pa.repos.map(x => x.path)).toEqual(['C:\\a\\x']);
+    expect([pa.name, pb.name]).toEqual(['X', 'Y']);
+  });
+
   it("an agents' proposal retargets only on its own folders", () => {
     const taken: Projects = { ...projects, projects: [...projects.projects, { id: 'logs', name: 'log', color: 'red', description: '', repos: [] }] };
     const r = proposeProjects({ ...input, projects: taken });
