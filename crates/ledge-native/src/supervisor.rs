@@ -124,6 +124,16 @@ pub fn log_line(now_secs: u64, line: &str) -> String { format!("{now_secs} {line
 /// The journal is emptied before it grows past this.
 pub const LOG_MAX: u64 = 1024 * 1024;
 
+/// Appends `line` to Desktop's journal of the daemon, `<home>/desktop.log`.
+pub fn append_log(home: &std::path::Path, line: &str) {
+    use std::io::Write;
+    let path = home.join("desktop.log");
+    if std::fs::metadata(&path).map(|m| m.len() > LOG_MAX).unwrap_or(false) { let _ = std::fs::write(&path, b""); }
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let _ = std::fs::create_dir_all(home);
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) { let _ = f.write_all(log_line(secs, line).as_bytes()); }
+}
+
 #[cfg(windows)]
 pub use win::windows_ops;
 
@@ -132,7 +142,6 @@ mod win {
     use super::*;
     use crate::daemon_token::TokenRead;
     use crate::native::{read_token_file, Runtime};
-    use std::io::Write;
     use std::net::{SocketAddr, TcpStream};
     use std::os::windows::process::CommandExt;
     use std::path::PathBuf;
@@ -215,12 +224,7 @@ mod win {
         fn send_stop(&self) -> bool { self.try_stop().is_some() }
         fn sleep(&self, d: Duration) { std::thread::sleep(d) }
         fn now(&self) -> Duration { self.started.elapsed() }
-        fn log(&self, line: &str) {
-            let path = self.home.join("desktop.log");
-            if std::fs::metadata(&path).map(|m| m.len() > LOG_MAX).unwrap_or(false) { let _ = std::fs::write(&path, b""); }
-            let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) { let _ = f.write_all(log_line(secs, line).as_bytes()); }
-        }
+        fn log(&self, line: &str) { append_log(&self.home, line) }
     }
 
     /// The real supervisor's operations: `rt` run in `home`, on `port` (passed to the daemon when `port_override`).
