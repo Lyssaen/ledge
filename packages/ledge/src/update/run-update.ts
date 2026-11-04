@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 import type { DaemonInfo, ServerMessage } from '@ledge/protocol';
 import { runFile } from '../tmux.js';
-import { loginShellEnv } from '../shell-path.js';
+import { overlayEnv, userEnv } from '../shell-path.js';
 import { log } from '../log.js';
 import { tmuxServerAtRisk, SERVICE } from './guard.js';
 
@@ -24,10 +24,16 @@ export interface UpdaterDeps {
   restart: () => Promise<number>;
   save: () => Promise<void>;
   execPath?: string;
+  /** The daemon's platform: on Windows, Ledge Desktop updates Ledge (no npm here, no systemd). */
+  platform?: NodeJS.Platform;
 }
 
 /** Spec 2026-10-12 auto-update §6: every refusal leaves the install untouched; the restart comes only after npm succeeded. */
+/** What the daemon answers on Windows to an update or a restart: Desktop does them. */
+const ON_WINDOWS = 'On Windows, Ledge Desktop updates Ledge';
+
 export function createDaemonUpdater(deps: UpdaterDeps) {
+  const windows = () => (deps.platform ?? process.platform) === 'win32';
   let busy = false; let restarting = false;
   /** Saves the journal, then asks systemd for the restart; when systemctl refuses, this process keeps running and says so. */
   const restartService = async (version: string, send: (m: ServerMessage) => void): Promise<void> => {
@@ -42,6 +48,7 @@ export function createDaemonUpdater(deps: UpdaterDeps) {
     running: () => busy,
     /** `reply` reaches only the asking client: a busy refusal must not fail the flow other overlays are following. */
     async update(version: string, send: (m: ServerMessage) => void, reply: (m: ServerMessage) => void = send): Promise<void> {
+      if (windows()) return send({ type: 'update.failed', version, reason: 'no-systemd', detail: ON_WINDOWS });
       if (busy) return reply({ type: 'update.failed', version, reason: 'busy' });
       const info = deps.info();
       const cmd = npmCommand(deps.execPath ?? process.execPath, version);
@@ -66,6 +73,7 @@ export function createDaemonUpdater(deps: UpdaterDeps) {
     /** The restart alone, for the phone (spec 2026-10-28 mobile daemon update): the update's guards but npm, then the same restart. */
     async restart(send: (m: ServerMessage) => void, reply: (m: ServerMessage) => void = send): Promise<void> {
       const version = deps.info().version;
+      if (windows()) return send({ type: 'update.failed', version, reason: 'no-systemd', detail: ON_WINDOWS });
       if (busy) return reply({ type: 'update.failed', version, reason: 'busy' });
       if (!deps.info().systemd) return send({ type: 'update.failed', version, reason: 'no-systemd', command: RESTART_COMMAND });
       busy = true;
@@ -85,7 +93,7 @@ export function realUpdaterDeps(opts: { info: DaemonInfo; save: () => Promise<vo
     info: () => opts.info,
     atRisk: async () => (opts.ownedLive?.() ?? 0) > 0 || await tmuxServerAtRisk(),
     npm: async cmd => {
-      const env = npmEnv(process.execPath, { ...process.env, ...(await loginShellEnv()) });
+      const env = npmEnv(process.execPath, overlayEnv(process.env, await userEnv()));
       const r = await runFile(cmd.file, cmd.args, env, { timeoutMs: NPM_TIMEOUT_MS });
       const output = `${r.stdout}\n${r.stderr}`;
       return r.code === 124 ? { code: 124, output: `npm timed out after 3 minutes\n${output}` } : { code: r.code, output };

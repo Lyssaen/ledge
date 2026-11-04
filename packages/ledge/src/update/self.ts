@@ -29,5 +29,5 @@ export async function daemonInfo(): Promise<DaemonInfo> {
   const cgroup = await readFile('/proc/self/cgroup', 'utf8').catch(() => '');
   const install = installKind(script);
   const root = install === 'git' ? gitRoot(script) : null;
-  return { version: LEDGE_VERSION, install, systemd: underSystemd(process.env, cgroup), home: homedir(), ...(root ? { manual: manualCommand(root) } : {}) };
+  return { version: LEDGE_VERSION, install, systemd: underSystemd(process.env, cgroup), home: homedir(), platform: process.platform, ...(root ? { manual: manualCommand(root) } : {}) };
 }

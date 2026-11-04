@@ -142,3 +142,30 @@ Verified on the PC (2026-11-03):
   opens Claude's status, Escape closes it, the attach stays (Escape goes to Claude). There is no detach key: closing
   the terminal ends the attach (Desktop's embedded terminal does that).
 
+## The daemon and `ledge setup` on Windows (product phase, steps 2 and 3)
+
+Plan: [2026-11-03-windows-daemon-setup.md](../plans/2026-11-03-windows-daemon-setup.md), branch `feat/windows-daemon-setup`.
+
+- The daemon tells its fronts its platform (`DaemonInfo.platform`); `.gitattributes` keeps LF on Windows checkouts.
+- The agents get the user's environment from the registry (machine then user, `Path` joined, `%NAME%` expanded), then
+  the daemon's own `Path` folders (found on the PC: without them a Codex the daemon was given was not found).
+- `daemon.stop` stops the daemon over its WebSocket (no SIGTERM on Windows); atomic writes retry a file an antivirus
+  holds (`EPERM`/`EBUSY`/`EACCES`); no `/proc`; an update asked of the daemon answers « On Windows, Ledge Desktop
+  updates Ledge ».
+- `ledge setup` on Windows writes absolute hook commands (Claude `"<node>" "<cli>" hook …`, Codex
+  `& '<node>' '<cli>' hook codex …`), sets Codex to its non-admin sandbox (`[windows] sandbox = "unelevated"`) unless
+  one is chosen, writes no script and no service; `ledge uninstall` removes exactly those hooks.
+
+Verified on the PC (2026-11-03):
+
+- `setup` twice: hooks added, then « already present »; a never-configured `CODEX_HOME` gets `sandbox = "unelevated"`,
+  the spike's kept its choice.
+- With the hooks `setup` wrote: Claude 8/8, Codex 1, 2, 3, 6, 7, 8.
+- `daemon.stop`: port closed, pane host (and agents) alive.
+- `uninstall`: 12 Claude and 10 Codex hooks removed, Claude's `settings.json` byte-identical to the backup.
+- Token ACL (`icacls`): under `%TEMP%` it inherits a domain SID besides the user, SYSTEM and Administrators;
+  `%USERPROFILE%` itself grants only the user, SYSTEM, Administrators (and an AppContainer capability, read/execute).
+  The installer step should check `%USERPROFILE%\.ledge\token` there, or set its ACL explicitly.
+- Windows unit tests failing before this branch still fail the same way (`update-self` clone path, login shell,
+  symlinks without Developer Mode, 3 path-separator cases of `update-run`).
+

@@ -37,3 +37,9 @@ describe('daemonInfo', () => {
     expect((await daemonInfo()).home).toBe(homedir());
   });
 });
+
+describe('daemonInfo platform', () => {
+  it('says the platform the daemon runs on, so a front can hide what native Windows does not offer yet', async () => {
+    expect((await daemonInfo()).platform).toBe(process.platform);
+  });
+});

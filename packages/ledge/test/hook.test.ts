@@ -864,3 +864,11 @@ describe('runHook: PostToolUse images', () => {
     expect(seen.map(m => m.type)).toEqual(['session.event']);
   });
 });
+
+describe('underCodexDaemon on Windows', () => {
+  it('reads no /proc there: Codex hooks get LEDGE_CODEX_HOOK_SESSION from the launch', () => {
+    let read = 0;
+    expect(underCodexDaemon(() => { read++; return ''; }, 'win32')).toBe(false);
+    expect(read).toBe(0);
+  });
+});

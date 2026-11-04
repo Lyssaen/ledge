@@ -95,7 +95,9 @@ export function mapClaudeHook(eventName: string, payload: unknown, at: string): 
 }
 
 /** True when an ancestor of this process is a Codex app-server (the shared daemon that runs hooks), as read from /proc. */
-export function underCodexDaemon(read: (path: string) => string = p => readFileSync(p, 'utf8')): boolean {
+export function underCodexDaemon(read: (path: string) => string = p => readFileSync(p, 'utf8'), platform: NodeJS.Platform = process.platform): boolean {
+  // No /proc on Windows; there the launch gives each Codex hook its session (LEDGE_CODEX_HOOK_SESSION).
+  if (platform === 'win32') return false;
   let pid = process.pid;
   for (let depth = 0; depth < 8; depth++) {
     try {

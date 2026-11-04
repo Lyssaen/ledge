@@ -37,7 +37,7 @@ export function bridge(opts: { input?: Readable; output?: Writable; port?: numbe
         let msg: ClientMessage;
         try { msg = parseClientMessage(raw); } catch (e) { return refuse(raw, e); }
         // The machines list and the projects are private to their host (spec §5.2, build spec §5): a front's set never reaches this daemon through the bridge.
-        if (msg.type === 'machines.set' || msg.type === 'projects.set' || msg.type === 'island.set') return;
+        if (msg.type === 'machines.set' || msg.type === 'projects.set' || msg.type === 'island.set' || msg.type === 'daemon.stop') return;
         if (ws.bufferedAmount > MAX_FRAME) throw new Error('Ledge bridge is overloaded');
         ws.send(JSON.stringify(msg));
       }, fail, { onBadLine: (_line, e) => refuse(undefined, e) });

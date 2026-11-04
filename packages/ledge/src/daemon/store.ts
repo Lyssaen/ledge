@@ -1,4 +1,5 @@
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { renameRetry } from '../fs-retry.js';
 import { dirname } from 'node:path';
 import { RecentSchema, SessionSchema, type Recent, type Session, type SessionEvent } from '@ledge/protocol';
 import { reduce } from './state.js';
@@ -157,7 +158,7 @@ export class Store {
     await mkdir(dirname(this.journalPath), { recursive: true });
     const tmp = `${this.journalPath}.tmp`;
     await writeFile(tmp, JSON.stringify({ savedAt: new Date().toISOString(), ...(this.incomplete ? { incomplete: true } : {}), sessions: this.all(), recents: this.recentList }, null, 2));
-    await rename(tmp, this.journalPath);
+    await renameRetry(tmp, this.journalPath);
   }
 
   private emit(c: StoreChange): void {

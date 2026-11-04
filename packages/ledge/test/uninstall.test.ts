@@ -145,3 +145,39 @@ describe('runUninstall', () => {
     expect(r.lines.join('\n')).toContain('"hooks" is not an object, not modified');
   });
 });
+
+describe('ledge uninstall: the Windows hook commands', () => {
+  it('removes Ledge\'s, and only them', async () => {
+    const { mergeClaudeHooks, mergeCodexHooks, windowsHookCommands } = await import('../src/cli/setup.js');
+    const cmds = windowsHookCommands('C:\\Program Files\\nodejs\\node.exe', 'C:\\Users\\a b\\AppData\\Roaming\\npm\\node_modules\\@paradow\\ledge\\dist\\cli\\index.js');
+    const foreign = { hooks: { Stop: [{ hooks: [{ type: 'command', command: '"C:/Program Files/nodejs/node.exe" "C:/tools/other/index.js" hook Stop' }] }] } };
+    const claude = mergeClaudeHooks(foreign, cmds.claude).settings;
+    const r = removeClaudeHooks(claude);
+    expect(r.removed).toBeGreaterThan(5);
+    expect(JSON.stringify(r.settings)).not.toContain('@paradow');
+    expect(JSON.stringify(r.settings)).toContain('C:/tools/other/index.js');
+    const codex = removeClaudeHooks(mergeCodexHooks({}, cmds.codex).settings, 'hooks.json');
+    expect(codex.removed).toBeGreaterThan(5);
+    expect(JSON.stringify(codex.settings)).not.toContain('@paradow');
+  });
+});
+
+describe('ledge uninstall on Windows', () => {
+  it('runs no systemctl (there is no service there) and says so', async () => {
+    const root = (await import('node:fs')).mkdtempSync(join(tmpdir(), 'ledge-unwin-'));
+    process.env.LEDGE_HOME = join(root, '.ledge');
+    const calls: string[] = [];
+    const r = await runUninstall({ platform: 'win32', settingsPath: join(root, 'settings.json'), codexDir: join(root, '.codex'), cursorDir: join(root, '.cursor'), link: join(root, 'bin', 'ledge'), unitDir: join(root, 'systemd'), run: async (cmd: string, args: string[]) => { calls.push(`${cmd} ${args.join(' ')}`); return { code: 0, stdout: '', stderr: '' }; } });
+    expect(calls.filter(c => c.startsWith('systemctl'))).toEqual([]);
+    expect(r.lines.join('\n')).toMatch(/no service on Windows/);
+    expect(r.lines.join('\n')).not.toMatch(/WSL/);
+  });
+});
+
+describe('ledge uninstall: another tool with the same shape of command', () => {
+  it('keeps a hook whose CLI is not Ledge\'s, even laid out as dist/cli/index.js', () => {
+    const settings = { hooks: { Stop: [{ hooks: [{ type: 'command', command: '"C:/n/node.exe" "C:/x/node_modules/claude-notifier/dist/cli/index.js" hook Stop' }] }] } };
+    expect(removeClaudeHooks(settings).removed).toBe(0);
+  });
+});
+

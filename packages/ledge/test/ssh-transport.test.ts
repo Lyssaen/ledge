@@ -111,7 +111,7 @@ describe('SSH application transport', () => {
     wss.on('connection', ws => { ws.send(JSON.stringify({ type: 'snapshot', sessions: [] })); ws.send(JSON.stringify({ type: 'machines', machines: [{ id: 'local', label: 'Local' }] })); ws.send(JSON.stringify({ type: 'projects', projects: { projects: [], rules: [] } })); ws.send(JSON.stringify({ type: 'island', prefs: null })); ws.send(JSON.stringify({ type: 'error', message: 'after' })); ws.on('message', b => got.push(JSON.parse(String(b)))); });
     const done = bridge({ input, output, port });
     await until(() => text.includes('after')); expect(text).not.toContain('machines'); expect(text).not.toContain('projects'); expect(text).not.toContain('island');
-    input.write('{"type":"machines.set","machines":[{"id":"local","label":"Local"}]}\n{"type":"projects.set","projects":{"projects":[],"rules":[]}}\n{"type":"island.set","prefs":' + JSON.stringify(DEFAULT_ISLAND_PREFS) + '}\n{"type":"snapshot.request"}\n');
+    input.write('{"type":"machines.set","machines":[{"id":"local","label":"Local"}]}\n{"type":"projects.set","projects":{"projects":[],"rules":[]}}\n{"type":"island.set","prefs":' + JSON.stringify(DEFAULT_ISLAND_PREFS) + '}\n{"type":"daemon.stop"}\n{"type":"snapshot.request"}\n');
     await until(() => got.length === 1); expect(got).toEqual([{ type: 'snapshot.request' }]);
     input.end(); await done;
   });
@@ -126,6 +126,8 @@ describe('SSH application transport', () => {
     await until(() => got.length >= 1); expect(got[0]).toMatchObject({ type: 'snapshot' });
     ws.send(JSON.stringify({ type: 'machines.set', machines: [{ id: 'local', label: 'Local' }] }));
     ws.send(JSON.stringify({ type: 'projects.set', projects: { projects: [], rules: [] } }));
+    // A front never stops another machine's daemon (systemd would not restart it there).
+    ws.send(JSON.stringify({ type: 'daemon.stop' }));
     ws.send(JSON.stringify({ type: 'snapshot.request' }));
     await until(() => got.some(m => m.type === 'error'));
     expect(got.map(m => m.type)).toEqual(['snapshot', 'error']); expect(got[1]?.message).toBe('snapshot.request');

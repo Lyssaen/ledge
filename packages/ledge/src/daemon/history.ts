@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { renameRetry } from '../fs-retry.js';
 import { join } from 'node:path';
 import { parseRigPrompt, rigCommand, rigCommandResult, rigKey, type RigBlock, type RigCommand, type RigInfo } from '@ledge/protocol';
 import type { AttachmentRef, NoticeItem, ReceivedItem, SentItem, SessionEvent, Task, TaskTransmission, ThreadItem, ToolItem } from '@ledge/protocol';
@@ -424,7 +425,7 @@ export class History {
   private compact(id: string, items: ThreadItem[]): void {
     const file = join(this.dir, `${id}.jsonl`); const tmp = `${file}.tmp`;
     const text = items.map(it => JSON.stringify(it) + '\n').join('');
-    this.writes = this.writes.then(() => writeFile(tmp, text)).then(() => rename(tmp, file)).catch(e => log(`history not compacted for ${id}: ${(e as Error).message}`));
+    this.writes = this.writes.then(() => writeFile(tmp, text)).then(() => renameRetry(tmp, file)).catch(e => log(`history not compacted for ${id}: ${(e as Error).message}`));
   }
 
   private put(id: string, item: ThreadItem): ThreadItem {

@@ -6,7 +6,8 @@ const NPM_INFO: DaemonInfo = { version: '0.2.2', install: 'npm', systemd: true }
 function deps(over: Partial<UpdaterDeps> = {}): UpdaterDeps & { calls: string[] } {
   const calls: string[] = [];
   return {
-    calls, execPath: '/home/u/.local/share/nvm/v26.7.0/bin/node',
+    // The npm and systemd flows these tests describe are Linux's: on Windows Desktop updates (its own test below).
+    calls, execPath: '/home/u/.local/share/nvm/v26.7.0/bin/node', platform: 'linux',
     info: () => NPM_INFO, atRisk: async () => false,
     npm: async cmd => { calls.push(`npm ${cmd.file} ${cmd.args.join(' ')}`); return { code: 0, output: 'added 1 package' }; },
     restart: async () => { calls.push('restart'); return 0; }, save: async () => { calls.push('save'); },
@@ -152,5 +153,15 @@ describe('realUpdaterDeps: OMP processes the daemon owns', () => {
   it('a live OMP session puts the update at risk (a restart would end it), whatever tmux says; none, tmux decides', async () => {
     const live = realUpdaterDeps({ info: NPM_INFO, save: async () => {}, ownedLive: () => 1 });
     expect(await live.atRisk()).toBe(true);
+  });
+});
+
+describe('the updater on Windows', () => {
+  it('runs nothing and says Ledge Desktop updates Ledge', async () => {
+    const d = deps({ platform: 'win32' });
+    const sent: ServerMessage[] = [];
+    await createDaemonUpdater(d).update('0.3.0', m => sent.push(m));
+    expect(sent).toEqual([{ type: 'update.failed', version: '0.3.0', reason: 'no-systemd', detail: 'On Windows, Ledge Desktop updates Ledge' }]);
+    expect(d.calls).toEqual([]);
   });
 });

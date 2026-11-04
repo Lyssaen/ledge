@@ -4,8 +4,16 @@ import { join } from 'node:path';
 import { paths } from '../paths.js';
 import { BIN_MARK, SERVICE, execRunner, stopDetachedDaemon, type Runner } from './setup.js';
 
-/** Every command `ledge setup` ever wired, whatever the event: `ledge hook <Event>`, `ledge hook codex|cursor <event>`. */
-const LEDGE_HOOK = /^ledge hook (?:(?:codex|cursor) )?[A-Za-z]+$/;
+/** Every command `ledge setup` ever wired, whatever the event: `ledge hook <Event>`, `ledge hook codex|cursor <event>`,
+ *  and on Windows the absolute forms, Claude's `"<node>" "<…/cli/index.js>" hook …` and Codex's
+ *  `& '<node>' '<…/cli/index.js>' hook codex …`. Only a CLI path naming Ledge (`…ledge…/cli/index.js`: the npm package,
+ *  a clone, Desktop's copy) counts: another tool's `dist/cli/index.js` is not taken for Ledge's. */
+const EVENT = String.raw`hook (?:(?:codex|cursor) )?[A-Za-z]+`;
+const LEDGE_HOOK = new RegExp([
+  String.raw`^ledge ${EVENT}$`,
+  String.raw`^"[^"]+" "[^"]*[Ll]edge[^"]*/cli/index\.js" ${EVENT}$`,
+  String.raw`^& '(?:[^']|'')+' '(?:[^']|'')*[Ll]edge(?:[^']|'')*/cli/index\.js' ${EVENT}$`,
+].join('|'));
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -106,6 +114,8 @@ export function uninstallArgs(args: string[]): { purge: boolean } | null {
 
 export interface UninstallOptions {
   purge?: boolean;
+  /** On Windows there is no service to remove (Ledge Desktop starts the daemon). */
+  platform?: NodeJS.Platform;
   settingsPath?: string;
   codexDir?: string;
   cursorDir?: string;
@@ -140,7 +150,8 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<{ lines
     });
   }
 
-  if (opts.service ?? true) await step(async () => { lines.push(...await removeService({ unitDir: opts.unitDir, run })); });
+  if ((opts.platform ?? process.platform) === 'win32') lines.push('no service on Windows: Ledge Desktop starts the daemon');
+  else if (opts.service ?? true) await step(async () => { lines.push(...await removeService({ unitDir: opts.unitDir, run })); });
 
   await step(async () => {
     const n = await runningSessions(run, opts.tmuxSocket ?? 'ledge');
@@ -155,6 +166,9 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<{ lines
   const link = opts.link ?? join(homedir(), '.local', 'bin', 'ledge');
   if (script) await step(async () => { if (await removeLink(link, script)) lines.push(`${link} removed`); });
 
-  lines.push(ok ? 'Ledge is uninstalled from WSL. On Windows: Settings > Apps > Installed apps > Ledge > Uninstall.' : 'Uninstall finished with errors, see above.');
+  const done = (opts.platform ?? process.platform) === 'win32'
+    ? "Ledge's hooks are removed. To remove Ledge Desktop: Settings > Apps > Installed apps > Ledge Desktop > Uninstall."
+    : 'Ledge is uninstalled from WSL. On Windows: Settings > Apps > Installed apps > Ledge > Uninstall.';
+  lines.push(ok ? done : 'Uninstall finished with errors, see above.');
   return { lines, ok };
 }

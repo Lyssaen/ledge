@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { writeFile, rename } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
+import { renameRetry } from '../fs-retry.js';
 import { log } from '../log.js';
 
 export interface Journal<T> { load(): T | undefined; save(state: T): void }
@@ -12,7 +13,7 @@ export function jsonJournal<T>(path: string, name: string, read: (raw: unknown) 
     while (pending !== undefined) {
       const state = pending; pending = undefined;
       const tmp = `${path}.tmp`;
-      try { await writeFile(tmp, JSON.stringify(state)); await rename(tmp, path); }
+      try { await writeFile(tmp, JSON.stringify(state)); await renameRetry(tmp, path); }
       catch (e) { log(`${name} journal not written: ${(e as Error).message}`); }
     }
   };

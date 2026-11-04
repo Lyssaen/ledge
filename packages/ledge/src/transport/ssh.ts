@@ -60,7 +60,7 @@ export function serveSsh(ws: WebSocket, alias: string, opts: { spawn?: (args: st
         return;
       }
       // The machines list, the projects and the island settings are private to their host (spec §5.2, build spec §5): never written to the remote daemon; the link stays up.
-      if (msg.type === 'machines.set' || msg.type === 'projects.set' || msg.type === 'island.set') return;
+      if (msg.type === 'machines.set' || msg.type === 'projects.set' || msg.type === 'island.set' || msg.type === 'daemon.stop') return;
       child.stdin.write(`${JSON.stringify(msg)}\n`);
     } catch (e) { stop((e as Error).message); }
   });
