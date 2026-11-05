@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HarnessUsage, UsageStateMessage } from '@ledge/protocol';
 import { until } from './helpers.js';
 import { mockupSessions, startTui } from './tui-fixture.js';
@@ -14,7 +14,7 @@ const claude = (o: Partial<HarnessUsage> = {}): HarnessUsage => ({
   ...o
 });
 const state = (harnesses: HarnessUsage[], alerts: UsageStateMessage['alerts'] = []): UsageStateMessage => ({ type: 'usage.state', harnesses, alerts, prefs: { alert: 0.8 } });
-const ALERTS: UsageStateMessage['alerts'] = [
+const alerts = (): UsageStateMessage['alerts'] => [
   { id: 'a5', harness: 'claude', account: 'a1b2c3d4e5f6', window: { kind: 'five_hour', pct: 84, resetsAt: at(65) }, level: 'threshold', at: at(0) },
   { id: 'aopus', harness: 'claude', account: 'a1b2c3d4e5f6', window: { kind: 'model', model: 'Opus', pct: 100, resetsAt: monday() }, level: 'full', at: at(-12) }
 ];
@@ -24,11 +24,16 @@ const sessions = () => mockupSessions().map(s => (s.id === 'otto' ? { ...s, mode
   : s.name === 'Nova' ? { ...s, context: { used: 176_000, window: 200_000, at: at(0) } } : s));
 
 describe('ledge tui: usage limits', () => {
+  // Midday, whatever the hour the suite runs: a reset 65 minutes away stays today, so it reads `HH:MM` (review of 889e72f3).
+  // Only the date is fixed; the timers stay real, for the daemon, the fleet and the frames.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 5, 12, 0)); });
+  afterEach(() => { vi.useRealTimers(); });
+
   it('a foot line above the keys on every screen, the alerts in « À toi », the card and the thread say model · effort · ctx · duration', async () => {
     const tui = await startTui({ sessions: sessions() });
     try {
       await tui.resize(120, 34);
-      tui.daemon.push(state([claude()], ALERTS));
+      tui.daemon.push(state([claude()], alerts()));
       await until(() => tui.frame().includes('✻'));
       const f = tui.frame();
       shot('tui-overview-120', f);
