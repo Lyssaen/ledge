@@ -20,9 +20,15 @@ const PathSchema = z.string().max(4096).refine(p => p.startsWith('/') && p === n
 export const RepoSchema = z.object({ machine: MachineIdSchema, path: PathSchema });
 export type Repo = z.infer<typeof RepoSchema>;
 
+/** A project's name: trimmed, 1 to 80 characters. */
+export const ProjectNameSchema = z.string().trim().min(1).max(80);
+/** A project name as two names are compared for « already taken » (the editor's and the phone's): case and accents aside.
+ *  projectsProblems ignores case only. */
+export const projectNameKey = (name: string): string => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase();
+
 export const ProjectSchema = z.object({
   id: ProjectIdSchema,
-  name: z.string().trim().min(1).max(80),
+  name: ProjectNameSchema,
   color: ProjectColorSchema,
   description: z.string().max(500).default(''),
   repos: z.array(RepoSchema).max(50)

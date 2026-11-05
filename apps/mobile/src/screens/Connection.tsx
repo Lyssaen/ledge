@@ -14,6 +14,7 @@ import { ProtectRow } from './Enroll';
 import { NotificationsRow } from './Notifications';
 import { PcSection } from './PcSection';
 import { LedgePrefs, ManagedOnPc, MotionRow, NotificationPrefs } from './Settings';
+import { ProjectsSection } from './Projects';
 import { ThisDevice } from './ThisDevice';
 import { olderThan } from '../state/pc';
 
@@ -70,6 +71,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
           </section>
         )}
         <LedgePrefs store={store} />
+        <ProjectsSection store={store} />
         <PcSection store={store} appVersion={build?.version ?? null} />
         <section aria-labelledby="link-title" className="flex flex-col gap-2.5">
           <h2 id="link-title" className="text-body text-muted">{N.section}</h2>
