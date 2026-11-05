@@ -15,7 +15,8 @@ import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } fr
 import { SlashCommandSchema } from './commands.js';
 import { HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema } from './openrig.js';
 import { QitemIdSchema, RigRowSchema } from './rigMessages.js';
-import { ProjectColorSchema, ProjectIdSchema, ProjectNameSchema } from './projects.js';
+import { FolderPathSchema, ProjectColorSchema, ProjectIdSchema, ProjectNameSchema } from './projects.js';
+import { MachineIdSchema } from './machines.js';
 import { BrainChoiceSchema } from './tasks.js';
 import { BrainProposalSchema } from './tasks.js';
 
@@ -88,8 +89,9 @@ export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;
 
 /** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. */
-/** `name_taken`: another project already has that name (case and accents aside). */
-export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'scheduled', 'name_taken', ...ModelRefusalSchema.options]);
+/** `name_taken`: another project already has that name (case and accents aside). `folder_taken`: another project has that folder.
+ *  `not_found`: no such folder on this PC. */
+export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'scheduled', 'name_taken', 'folder_taken', 'not_found', ...ModelRefusalSchema.options]);
 export type OperationReason = z.infer<typeof OperationReasonSchema>;
 
 /** What an adapter knows how to type for a phone, beyond accept, deny and an option number. A phone hides an answer its session's tool cannot give. */
@@ -183,7 +185,8 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 /** `terminal`: taking the hand on a session's terminal (spec 2026-11-02 mobile terminal), bound to the session. */
 /** `rig`: an answer to what OpenRig asks the person (« À toi », lot 3), bound to the row and to that very answer. */
 /** `project`: deleting a project (Réglages › Projets), bound to the project and to where its agents go. */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note', 'project']);
+/** `folder`: adding a folder of this PC to a project, bound to the project and to that folder. */
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note', 'project', 'folder']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -277,6 +280,22 @@ export type PcAction = z.infer<typeof PcActionSchema>;
 export const pcSubject = (action: PcAction, version?: string): string => (action === 'update' ? `update@${version ?? ''}` : 'restart');
 /** The subject a `project` challenge is bound to: the project deleted and where its agents, folders and rules go (none: ''). */
 export const projectSubject = (id: string, moveTo: string | null): string => `${id}>${moveTo ?? ''}`;
+/** The subject a `folder` challenge is bound to: the project and the folder added to it. */
+export const folderSubject = (id: string, path: string): string => `${id}+${path}`;
+
+/**
+ * The folders of this PC as a phone browses them (Réglages › Projets › Ajouter un dossier, `daemon.projectFolders`): the
+ * subfolders of one folder, hidden ones left out, those that are Git repositories with their branch. `error` is a code,
+ * never the PC's own words. `cut`: more subfolders than a listing carries.
+ */
+export const PHONE_FOLDER_ENTRIES_MAX = 500;
+export const PhoneFolderErrorSchema = z.enum(['not_found', 'not_folder', 'unreadable']);
+export type PhoneFolderError = z.infer<typeof PhoneFolderErrorSchema>;
+/** A project's folder as the phone sees it: its machine (`local` is this PC, else the label the PC gives it) and its path. */
+export const PhoneFolderSchema = z.object({ machine: MachineIdSchema, label: z.string().max(80).optional(), path: FolderPathSchema });
+export type PhoneFolder = z.infer<typeof PhoneFolderSchema>;
+/** The folders of this PC its agents worked in lately, newest first. */
+export const PHONE_RECENT_FOLDERS_MAX = 20;
 
 /** A terminal the phone opened, named by the daemon. */
 export const TerminalIdSchema = z.string().regex(/^t_[A-Za-z0-9_-]{8,40}$/);
@@ -334,7 +353,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional(),
     /** A `rig` challenge: the OpenRig row and the exact answer it covers. */ qitem: z.string().min(1).max(200).optional(), answer: HumanAnswerSchema.optional(),
     /** A `note` challenge: the proposal (a task) and the exact choice it covers. */ task: z.string().min(1).max(40).optional(), choice: BrainChoiceSchema.optional(),
-    /** A `project` challenge: the project deleted and where its agents go (null: no project). */ project: ProjectIdSchema.optional(), moveTo: ProjectIdSchema.nullable().optional() }),
+    /** A `project` challenge: the project deleted and where its agents go (null: no project). */ project: ProjectIdSchema.optional(), moveTo: ProjectIdSchema.nullable().optional(),
+    /** A `folder` challenge: the project (`project`) and the folder of this PC added to it. */ path: FolderPathSchema.optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -387,6 +407,15 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('project.order'), op: OperationIdSchema, ids: z.array(ProjectIdSchema).min(1).max(PHONE_PROJECTS_MAX) }).strict(),
   z.object({ type: z.literal('project.create'), op: OperationIdSchema, name: ProjectNameSchema, color: ProjectColorSchema }).strict(),
   z.object({ type: z.literal('project.delete'), op: OperationIdSchema, id: ProjectIdSchema, moveTo: ProjectIdSchema.nullable(), assertion: AssertionSchema.optional() }).strict(),
+  /**
+   * A project's folders (`daemon.projectFolders`): browsing this PC's folders, its recent ones, a project's folders, then adding one
+   * of this PC (with the device's check, purpose `folder`) or removing one. Reads are answered to the asker alone.
+   */
+  z.object({ type: z.literal('folder.list'), path: FolderPathSchema.optional() }).strict(),
+  z.object({ type: z.literal('folder.recents') }).strict(),
+  z.object({ type: z.literal('project.folders'), id: ProjectIdSchema }).strict(),
+  z.object({ type: z.literal('project.folder.add'), op: OperationIdSchema, id: ProjectIdSchema, path: FolderPathSchema, assertion: AssertionSchema.optional() }).strict(),
+  z.object({ type: z.literal('project.folder.remove'), op: OperationIdSchema, id: ProjectIdSchema, machine: MachineIdSchema, path: FolderPathSchema }).strict(),
   /** « Contexte max », the PC's threshold shared by every front (`daemon.settings`): as the desktop's `context.set`. */
   z.object({ type: z.literal('context.set'), op: OperationIdSchema, near: ContextPrefsSchema.shape.near }).strict(),
   /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). `resolved`: its service
@@ -470,6 +499,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
     /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),
     /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional(),
+    /** The daemon answers `folder.list`, `folder.recents` and `project.folders`, and takes `project.folder.add` and `.remove`. */
+    projectFolders: z.literal(true).optional(),
     /** The daemon takes `project.edit`, `project.order`, `project.create` and `project.delete` (Réglages › Projets). */
     projectEdit: z.literal(true).optional(),
     /** The daemon takes `device.prefs` and `context.set` (the phone's Réglages); the device then carries its `prefs`. */
@@ -542,6 +573,12 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('term.released'), tid: TerminalIdSchema, why: TermReleaseWhySchema }),
   z.object({ type: z.literal('term.exit'), tid: TerminalIdSchema, why: TermExitWhySchema }),
   /** Never carries free text. */
+  /** The subfolders of `path` on this PC (home when asked without one); `parent` null at the root. */
+  z.object({ type: z.literal('folder.listing'), path: FolderPathSchema, parent: FolderPathSchema.nullable(), entries: z.array(z.string().min(1).max(255)).max(PHONE_FOLDER_ENTRIES_MAX),
+    repos: z.array(z.object({ name: z.string().min(1).max(255), branch: z.string().max(200) })).max(PHONE_FOLDER_ENTRIES_MAX), cut: z.literal(true).optional(), error: PhoneFolderErrorSchema.optional() }),
+  z.object({ type: z.literal('folder.recents'), paths: z.array(FolderPathSchema).max(PHONE_RECENT_FOLDERS_MAX) }),
+  /** A project's folders, in its order; `gone`: no such project now. */
+  z.object({ type: z.literal('project.folders'), id: z.string(), folders: z.array(PhoneFolderSchema).max(50), gone: z.literal(true).optional() }),
   z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() })
 ]);
 export type PhoneServerMessage = z.infer<typeof PhoneServerMessageSchema>;

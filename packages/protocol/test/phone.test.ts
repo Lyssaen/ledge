@@ -534,3 +534,26 @@ describe('phone projects (Réglages › Projets)', () => {
     ]) expect(() => PhoneClientMessageSchema.parse(m)).toThrow();
   });
 });
+
+describe('phone project folders', () => {
+  it('takes absolute, normalized folders only, and binds a folder check to its project and folder', () => {
+    for (const m of [
+      { type: 'folder.list' },
+      { type: 'folder.list', path: '/home/u/code' },
+      { type: 'folder.recents' },
+      { type: 'project.folders', id: 'ledge' },
+      { type: 'project.folder.add', op: OP, id: 'ledge', path: '/home/u/code' },
+      { type: 'project.folder.remove', op: OP, id: 'ledge', machine: 'srv', path: '/srv/api' },
+      { type: 'confirm.prepare', purpose: 'folder', project: 'ledge', path: '/home/u/code' }
+    ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
+    for (const m of [
+      { type: 'folder.list', path: 'code' },
+      { type: 'folder.list', path: '/home/u/' },
+      { type: 'folder.list', path: '/home//u' },
+      { type: 'folder.list', path: '/home/u', machineId: 'srv' },
+      { type: 'project.folder.add', op: OP, id: 'ledge', path: '~/code' },
+      { type: 'project.folder.add', op: OP, id: 'ledge', path: '/a', machine: 'srv' },
+      { type: 'project.folder.remove', op: OP, id: 'ledge', path: '/srv/api' }
+    ]) expect(() => PhoneClientMessageSchema.parse(m)).toThrow();
+  });
+});

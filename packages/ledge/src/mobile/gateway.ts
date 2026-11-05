@@ -11,7 +11,8 @@ import { ModelRefusalSchema, type HumanAnswer, type ModelRefusal, type OpenRigAn
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
 import { BROADCAST_SESSIONS_MAX, type DecidedBy, type DeviceKind } from '@ledge/protocol';
 import { PHONE_ROW_SUMMARY_MAX } from '@ledge/protocol';
-import { projectNameKey, projectSubject, type BrainChoice, type Projects } from '@ledge/protocol';
+import { folderSubject, normalizePath, FolderPathSchema, PHONE_FOLDER_ENTRIES_MAX, PHONE_RECENT_FOLDERS_MAX, projectNameKey, projectSubject, type BrainChoice, type PhoneFolderError, type PhoneServerMessage as PhoneOut, type Projects } from '@ledge/protocol';
+import { listFolder, resolveFolder } from '../daemon/folders.js';
 import { newProjectId, withoutProject } from '@ledge/fleet/projects';
 import { taskClosed } from '@ledge/protocol';
 import { compareVersions } from '@ledge/ui/semver';
@@ -129,6 +130,11 @@ export function createPhoneGateway(deps: {
   tasks?: () => Task[];
   /** The user's projects (the daemon's `projects.json`): given, the phone gets the Atelier (`daemon.atelier`); each change comes by `forward`. */
   projects?: () => Projects;
+  /**
+   * A project's folders from the phone (`daemon.projectFolders`, with `projects`): this PC's folders as its home (`home`) leads to
+   * them, the folders its agents worked in lately (`recents`, newest first), and what the PC calls its other machines.
+   */
+  folders?: { home: string; recents(): string[]; machineLabel(id: string): string | undefined };
   /**
    * The daemon's own update and restart, for the phone only (spec 2026-10-28 mobile daemon update): never a `ClientMessage`.
    * Each runs on its own; its progress and refusals are broadcast, and `reply` gets a refusal meant for the asker alone (busy).
@@ -257,7 +263,7 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, rigRows: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
-      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}), ...(settings ? { settings: true as const } : {}), ...(projects ? { projectEdit: true as const } : {}) },
+      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}), ...(settings ? { settings: true as const } : {}), ...(projects ? { projectEdit: true as const } : {}), ...(projects && deps.folders ? { projectFolders: true as const } : {}) },
     ...(projects ? { projects: toPhoneProjects(projects) } : {}),
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId), ...(settings ? { prefs: mobile.prefsOf!(deviceId) } : {}) }
     };
@@ -324,7 +330,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'device.prefs' | 'context.set' | 'project.edit' | 'project.order' | 'project.create' | 'project.delete' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' | 'brain.answer' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'device.prefs' | 'context.set' | 'project.edit' | 'project.order' | 'project.create' | 'project.delete' | 'project.folder.add' | 'project.folder.remove' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' | 'brain.answer' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -337,7 +343,7 @@ export function createPhoneGateway(deps: {
     `${id}:${key}${s?.pending?.source === 'rpc' && s.pending.requestId ? `:${s.pending.requestId}` : ''}`;
 
   /** The device check: the challenge is spent first, whatever the verdict, then the signature is verified and the counter kept. */
-  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'pc' | 'terminal' | 'rig' | 'note' | 'project', subject: string | undefined): Outcome | undefined => {
+  const checkAssertion = (deviceId: string, assertion: NonNullable<Extract<PhoneOperation, { type: 'session.decide' }>['assertion']> | undefined, purpose: 'decide' | 'launch' | 'close' | 'act' | 'pc' | 'terminal' | 'rig' | 'note' | 'project' | 'folder', subject: string | undefined): Outcome | undefined => {
     const cred = deps.credential(deviceId);
     const rp = deps.rp();
     if (!cred || !rp || !assertion || subject === undefined) return { status: 'rejected', reason: 'confirm_required' };
@@ -869,6 +875,52 @@ export function createPhoneGateway(deps: {
     return error ? outcomeOf(error.code) : { status: 'applied' };
   };
 
+  /**
+   * A folder added to a project (a folder of this PC that exists, with the device's check over that project and that folder) or
+   * removed from one (any machine's). Written through the daemon's own `projects.set`.
+   */
+  const folderChange = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'project.folder.add' | 'project.folder.remove' }>): Promise<Outcome> => {
+    const folders = deps.folders;
+    if (!deps.projects || !folders) return { status: 'rejected', reason: 'unavailable' };
+    const state = deps.projects();
+    const project = state.projects.find(p => p.id === msg.id);
+    if (!project) return { status: 'rejected', reason: 'stale' };
+    let next: Projects;
+    if (msg.type === 'project.folder.remove') {
+      if (!project.repos.some(r => r.machine === msg.machine && r.path === msg.path)) return { status: 'rejected', reason: 'stale' };
+      next = { ...state, projects: state.projects.map(p => (p.id === msg.id ? { ...p, repos: p.repos.filter(r => !(r.machine === msg.machine && r.path === msg.path)) } : p)) };
+    } else {
+      if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+      const refused = checkAssertion(deviceId, msg.assertion, 'folder', folderSubject(msg.id, msg.path));
+      if (refused) return refused;
+      let path: string;
+      try { path = normalizePath(await resolveFolder(msg.path, folders.home)); } catch { return { status: 'rejected', reason: 'not_found' }; }
+      const owner = state.projects.find(p => p.repos.some(r => r.machine === 'local' && r.path === path));
+      if (owner?.id === msg.id) return { status: 'applied' };
+      if (owner) return { status: 'rejected', reason: 'folder_taken' };
+      if (project.repos.length >= 50) return { status: 'rejected', reason: 'invalid' };
+      next = { ...state, projects: state.projects.map(p => (p.id === msg.id ? { ...p, repos: [...p.repos, { machine: 'local', path }] } : p)) };
+    }
+    let error: { code?: string } | undefined;
+    await deps.dispatch({ type: 'projects.set', projects: next }, m => { if (m.type === 'error') error ??= { code: m.code }; });
+    return error ? outcomeOf(error.code) : { status: 'applied' };
+  };
+
+  /** The subfolders of a folder of this PC as the phone gets them: names it can hold, a code for why not, never the PC's words. */
+  const phoneListing = async (path: string | undefined, home: string): Promise<PhoneOut> => {
+    const l = await listFolder(path, home);
+    const valid = (p: string | null | undefined) => p != null && FolderPathSchema.safeParse(p).success;
+    if (l.error !== undefined || !valid(l.path)) {
+      const code: PhoneFolderError = /^no such folder|^not an absolute/.test(l.error ?? '') ? 'not_found' : /^not a folder/.test(l.error ?? '') ? 'not_folder' : 'unreadable';
+      return { type: 'folder.listing', path: path ?? normalizePath(home), parent: null, entries: [], repos: [], error: code };
+    }
+    const names = l.entries.filter(n => n.length <= 255);
+    const entries = names.slice(0, PHONE_FOLDER_ENTRIES_MAX);
+    const kept = new Set(entries);
+    const repos = (l.repos ?? []).filter(r => kept.has(r.name)).map(r => ({ name: r.name, branch: clip(r.branch, 200).text }));
+    return { type: 'folder.listing', path: l.path, parent: valid(l.parent) ? l.parent : null, entries, repos, ...(names.length > entries.length || names.length < l.entries.length ? { cut: true as const } : {}) };
+  };
+
   const run = async (deviceId: string, msg: PhoneOperation): Promise<Outcome> => {
     if (msg.type === 'daemon.update' || msg.type === 'daemon.restart') return pcOperation(deviceId, msg);
     if (msg.type === 'chat.ignore') return chatIgnore(deviceId, msg);
@@ -886,6 +938,7 @@ export function createPhoneGateway(deps: {
       mobile.rename(deviceId, msg.name);
       return { status: 'applied' };
     }
+    if (msg.type === 'project.folder.add' || msg.type === 'project.folder.remove') return folderChange(deviceId, msg);
     if (msg.type === 'project.edit' || msg.type === 'project.order' || msg.type === 'project.create' || msg.type === 'project.delete') return projectChange(deviceId, msg);
     if (msg.type === 'device.prefs') {
       if (!settings) return { status: 'rejected', reason: 'unavailable' };
@@ -1058,6 +1111,30 @@ export function createPhoneGateway(deps: {
       case 'openrig.row':
         void rowRead(deviceId, msg.qitem).catch((e: unknown) => log(`phone openrig.row failed (${e instanceof Error ? e.name : 'error'})`));
         return;
+      case 'folder.list': {
+        const folders = deps.folders;
+        if (!folders || !deps.projects) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        void phoneListing(msg.path, folders.home).then(m => push(deviceId, m))
+          .catch((e: unknown) => log(`phone folder.list failed (${e instanceof Error ? e.name : 'error'})`));
+        return;
+      }
+      case 'folder.recents': {
+        const folders = deps.folders;
+        if (!folders || !deps.projects) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        const paths = [...new Set(folders.recents().map(normalizePath))].filter(p => FolderPathSchema.safeParse(p).success).slice(0, PHONE_RECENT_FOLDERS_MAX);
+        return push(deviceId, { type: 'folder.recents', paths });
+      }
+      case 'project.folders': {
+        const folders = deps.folders;
+        if (!folders || !deps.projects) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+        const project = deps.projects().projects.find(p => p.id === msg.id);
+        if (!project) return push(deviceId, { type: 'project.folders', id: msg.id, folders: [], gone: true });
+        const list = project.repos.slice(0, 50).map(r => {
+          const label = r.machine === 'local' ? undefined : folders.machineLabel(r.machine);
+          return { machine: r.machine, path: r.path, ...(label ? { label: clip(label, 80).text } : {}) };
+        });
+        return push(deviceId, { type: 'project.folders', id: msg.id, folders: list });
+      }
       case 'snapshot.request':
         follower(deviceId).subscribed = true;
         push(deviceId, snapshot(deviceId), 'snapshot');
@@ -1160,6 +1237,13 @@ export function createPhoneGateway(deps: {
           if (!cred || cred.rpId !== rp.rpId || !msg.project || msg.moveTo === undefined || !has(msg.project) || (msg.moveTo !== null && (msg.moveTo === msg.project || !has(msg.moveTo)))) return invalid();
           const challenge = deps.challenges.issue({ deviceId, purpose: 'project', subject: projectSubject(msg.project, msg.moveTo) });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'project', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
+        if (msg.purpose === 'folder') {
+          // Bound to the project and to the folder: a check for one folder adds no other.
+          const cred = deps.credential(deviceId);
+          if (!deps.folders || !cred || cred.rpId !== rp.rpId || !msg.project || !msg.path || !deps.projects?.().projects.some(p => p.id === msg.project)) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'folder', subject: folderSubject(msg.project, msg.path) });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'folder', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
         if (msg.purpose === 'note') {
           const cred = deps.credential(deviceId);

@@ -2,7 +2,7 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type PhoneFolder, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
   type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
@@ -37,7 +37,7 @@ export interface MobileState {
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true } | null;
   /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
   projects: PhoneProject[];
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
@@ -46,6 +46,12 @@ export interface MobileState {
   commands: Record<string, { commands: PhoneSlashCommand[]; error?: true; at: number }>;
   /** OpenRig's queue rows, by id, as `openrig.rowState` said (a task card's live state); `at` when it came. No `row`: not read. */
   rigRows: Record<string, { row?: PhoneRigRow; error?: string; at: number }>;
+  /** The last folder of this PC the phone browsed (`folder.list`), as the PC answered; null until one is asked. Never cached. */
+  folderListing: Extract<PhoneServerMessage, { type: 'folder.listing' }> | null;
+  /** The folders of this PC its agents worked in lately (`folder.recents`); null until asked. Never cached. */
+  recentFolders: string[] | null;
+  /** Each project's folders as `project.folders` said, by project id (`gone`: the PC no longer has it). Never cached. */
+  projectFolders: Record<string, PhoneFolder[] | 'gone'>;
   /** Why the last model change of a session failed after the PC accepted it, by session id. Kept until a new change is sent or the session's model or effort changes. */
   modelFailures: Record<string, ModelRefusal>;
   /** True from a snapshot until the channel is lost: what is shown is the PC's state now, not the last known one. */
@@ -75,7 +81,9 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
   /** A « yes » to a proposal about the notes (`brain.answer`), bound to that exact choice. */
   | { purpose: 'note'; task: string; choice: BrainChoice }
   /** Deleting a project (`project.delete`), bound to it and to where its agents go. */
-  | { purpose: 'project'; project: string; moveTo: string | null };
+  | { purpose: 'project'; project: string; moveTo: string | null }
+  /** Adding a folder of this PC to a project (`project.folder.add`), bound to both. */
+  | { purpose: 'folder'; project: string; path: string };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;
@@ -144,6 +152,16 @@ export interface MobileStore {
   createProject(name: string, color: ProjectColor): Promise<ChatAction>;
   /** Deletes a project after the device's check; its agents, folders and rules go to `moveTo`, or nowhere (null). */
   deleteProject(id: string, moveTo: string | null): Promise<ChatAction>;
+  /** Asks the PC for the subfolders of `path` (its home without one); the answer lands in `getState().folderListing`. */
+  listFolder(path?: string): void;
+  /** Asks the PC for its recent folders; they land in `getState().recentFolders`. */
+  requestRecentFolders(): void;
+  /** Asks the PC for a project's folders; they land in `getState().projectFolders`. */
+  requestProjectFolders(id: string): void;
+  /** Adds a folder of this PC to a project after the device's check. Resolves when the PC answers. */
+  addFolder(id: string, path: string): Promise<ChatAction>;
+  /** Removes a folder (of any machine) from a project. Resolves when the PC answers. */
+  removeFolder(id: string, machine: string, path: string): Promise<ChatAction>;
   interrupt(id: string): string | null;
   /** Closes the session (`session.close`) with the device's assertion over it. The op's id, or null when nothing was sent (not ready, a close already on its way). */
   sessionClose(id: string, assertion: Assertion): string | null;
@@ -234,6 +252,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     commands: {},
     rigRows: {},
     modelFailures: {},
+    folderListing: null,
+    recentFolders: null,
+    projectFolders: {},
     fresh: false,
     syncedAt: last?.syncedAt ?? null,
     ops: loadOps(storage),
@@ -426,6 +447,15 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         rigAsks.delete(m.qitem);
         set({ rigRows: { ...state.rigRows, [m.qitem]: { ...(m.row ? { row: m.row } : {}), ...(m.error ? { error: m.error } : {}), at: Date.now() } } });
         return;
+      case 'folder.listing':
+        set({ folderListing: m });
+        return;
+      case 'folder.recents':
+        set({ recentFolders: m.paths });
+        return;
+      case 'project.folders':
+        set({ projectFolders: { ...state.projectFolders, [m.id]: m.gone ? 'gone' : m.folders } });
+        return;
       case 'session.commands.listing':
         commandAsks.delete(m.id);
         set({ commands: { ...state.commands, [m.id]: { commands: m.commands, ...(m.error ? { error: true as const } : {}), at: Date.now() } } });
@@ -560,6 +590,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     return message.op;
   }
 
+  /** A read of this PC's folders or of a project's, for a PC that offers them and a link that is ready. */
+  function folderRead(msg: unknown): void {
+    if (closed || !ready() || !state.daemon?.projectFolders) return;
+    const m = PhoneClientMessageSchema.safeParse(msg);
+    if (m.success) send(m.data);
+  }
+
   /** A change of the projects (Réglages › Projets), for a PC that takes them; resolved with its outcome. */
   function projectOp(build: (op: string) => OpMessage): Promise<ChatAction> {
     if (!state.daemon?.projectEdit) return Promise.resolve({ status: 'rejected', reason: 'unavailable' });
@@ -635,7 +672,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {} });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {}, folderListing: null, recentFolders: null, projectFolders: {} });
     modelAsks.clear(); commandAsks.clear(); rigAsks.clear();
     stopPcWatch();
   }
@@ -772,6 +809,30 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
     createProject(name, color) {
       return projectOp(o => ({ type: 'project.create', op: o, name, color }));
+    },
+
+    listFolder(path) {
+      folderRead({ type: 'folder.list', ...(path !== undefined ? { path } : {}) });
+    },
+
+    requestRecentFolders() {
+      folderRead({ type: 'folder.recents' });
+    },
+
+    requestProjectFolders(id) {
+      folderRead({ type: 'project.folders', id });
+    },
+
+    async addFolder(id, path) {
+      if (!state.daemon?.projectFolders) return { status: 'rejected', reason: 'unavailable' };
+      if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+      return signedOperation({ purpose: 'folder', project: id, path }, (o, assertion) => ({ type: 'project.folder.add', op: o, id, path, assertion }));
+    },
+
+    removeFolder(id, machine, path) {
+      if (!state.daemon?.projectFolders) return Promise.resolve({ status: 'rejected', reason: 'unavailable' });
+      const op = write(o => ({ type: 'project.folder.remove', op: o, id, machine, path }));
+      return op === null ? Promise.resolve({ status: 'failed' }) : finalOf(op);
     },
 
     async deleteProject(id, moveTo) {

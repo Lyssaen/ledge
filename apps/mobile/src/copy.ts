@@ -571,7 +571,8 @@ export const copy = {
     projects: {
       title: 'Projets',
       agents: (n: number) => (n === 0 ? 'Aucun agent' : n === 1 ? '1 agent' : `${n} agents`),
-      folders: 'Les dossiers d’un projet et les règles de rangement se règlent sur le PC.',
+      folders_note: 'Les règles de rangement et les dossiers des serveurs se règlent sur le PC.',
+      folders_note_old: 'Les dossiers d’un projet et les règles de rangement se règlent sur le PC.',
       none: 'Aucun projet pour l’instant.',
       add: 'Nouveau projet', edit: 'Modifier', editLabel: (name: string) => `Modifier ${name}`,
       up: (name: string) => `Monter ${name}`, down: (name: string) => `Descendre ${name}`,
@@ -585,15 +586,25 @@ export const copy = {
       deleteWhere: 'Ses agents, ses dossiers et ses règles :', noProject: 'Sans projet', moveTo: 'Vers un autre projet', target: 'Projet de destination',
       passkey: 'La passkey de cet appareil confirme la suppression.', noPasskey: 'Protégez d’abord vos accords, dans la section Connexion.',
       confirmDelete: 'Supprimer',
+      folders: 'Dossiers…', foldersTitle: (name: string) => `Dossiers de ${name}`,
+      foldersNone: 'Aucun dossier : les agents de ce projet y sont rangés à la main.', foldersLoading: 'Lecture des dossiers…',
+      thisPc: 'ce PC', removeFolder: 'Retirer', removeFolderLabel: (path: string) => `Retirer ${path}`,
+      addFolder: 'Ajouter un dossier', addShort: 'Ajouter', close: 'Fermer',
+      pickTitle: 'Ajouter un dossier', recents: 'Récents', browse: 'Parcourir', parent: 'Dossier parent', open: (name: string) => `Ouvrir ${name}`,
+      empty: 'Aucun sous-dossier.', cut: 'Seuls les 500 premiers sous-dossiers sont affichés.', loadingFolder: 'Lecture du dossier…',
+      folderErrors: { not_found: 'Ce dossier n’existe pas sur le PC.', not_folder: 'Ce n’est pas un dossier.', unreadable: 'Le PC ne peut pas lire ce dossier.' } as Record<string, string>,
+      addThis: 'Ajouter ce dossier', addThisLabel: (path: string) => `Ajouter ${path}`, back: 'Retour',
+      folderPasskey: 'La passkey de cet appareil confirme l’ajout.', onlyThisPc: 'Seuls les dossiers de ce PC se parcourent d’ici ; ceux d’un serveur s’ajoutent sur le desktop.',
       errors: {
         name_taken: 'Un autre projet porte déjà ce nom.', stale: 'Les projets ont changé sur le PC. Réessayez.',
-        confirm_required: 'Protégez d’abord vos accords, dans la section Connexion.', cancelled: 'Vérification annulée. Rien n’a été supprimé.',
+        folder_taken: 'Un autre projet a déjà ce dossier.', not_found: 'Ce dossier n’existe plus sur le PC.',
+        confirm_required: 'Protégez d’abord vos accords, dans la section Connexion.', cancelled: 'Vérification annulée. Rien n’a changé.',
         expired: 'La vérification a expiré. Recommencez.', failed: 'Le PC n’a pas pris ce changement. Réessayez.'
       } as Record<string, string>
     },
     managed: 'Réglés sur le PC',
     terminal: 'Taper dans les terminaux', allowed: 'Autorisé', notAllowed: 'Non autorisé',
-    managedBody: 'L’accès mobile, les appareils liés, les machines et les dossiers des projets se règlent sur le PC, dans Ledge › Réglages. Un appareil ne peut pas élargir ses propres droits.'
+    managedBody: 'L’accès mobile, les appareils liés, les machines et les règles de rangement se règlent sur le PC, dans Ledge › Réglages. Un appareil ne peut pas élargir ses propres droits.'
   },
   /** The user left while the PC could not confirm that it removed this phone: shown on the screen they land on. */
   forget: {
