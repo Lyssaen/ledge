@@ -15,6 +15,7 @@ const xt = vi.hoisted(() => {
     dispose = vi.fn();
     loadAddon = vi.fn();
     clearSelection = vi.fn(() => { this.selection = ''; });
+    modes = { mouseTrackingMode: 'none' };
     osc = new Map<number, (d: string) => boolean>();
     csi = new Map<string, (p: (number | number[])[]) => boolean>();
     parser = {
@@ -171,27 +172,32 @@ it('osc52Text refuses an oversized copy', async () => {
   expect(osc52Text(`;${b64('ok')}`)).toBe('ok');
 });
 
-it('read-only: the program\'s mouse is held back so a plain drag selects, and given back when keys come back', () => {
+it('read-only over a program that holds the mouse: a plain press reaches xterm as Shift + press (select); nothing is rewritten', () => {
   const { s, t } = surface();
-  const h = t.csi.get('?h')!, l = t.csi.get('?l')!;
-  // Live: the program's mouse goes through untouched.
-  expect(h([1003, 1006])).toBe(false);
+  const cell = document.createElement('div');
+  s.host.appendChild(cell);
+  const seen: { shift: boolean; trusted: boolean }[] = [];
+  cell.addEventListener('mousedown', e => seen.push({ shift: e.shiftKey, trusted: e.isTrusted }));
+  const press = (o: MouseEventInit = {}) => cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1, ...o }));
+  // Live, or a program without the mouse: the press goes as it is.
+  t.modes.mouseTrackingMode = 'any';
+  press();
   s.setReadOnly(true);
-  expect(t.write).toHaveBeenLastCalledWith('\x1b[?9;1000;1001;1002;1003l');
-  // Our own « off » is not the program's: its 1003 stays remembered.
-  expect(l([9, 1000, 1001, 1002, 1003])).toBe(false);
-  // Read-only, a repaint asking for the mouse: swallowed, the rest (SGR encoding) still applied.
-  t.write.mockClear();
-  expect(h([1002, 1006])).toBe(true);
-  expect(t.write).toHaveBeenCalledWith('\x1b[?1006h');
-  expect(h([25])).toBe(false);
-  // The program drops 1002 while read-only; keys back: only what it still wants comes back.
-  l([1002]);
-  t.write.mockClear();
-  s.setReadOnly(false);
-  expect(t.write).toHaveBeenCalledWith('\x1b[?1003h');
-  // Setting the same mode twice changes nothing.
-  t.write.mockClear();
+  t.modes.mouseTrackingMode = 'none';
+  press();
+  expect(seen.map(x => x.shift)).toEqual([false, false]);
+  // Read-only and the program holds the mouse: one press, with Shift, a new selection.
+  t.modes.mouseTrackingMode = 'any';
+  seen.length = 0;
+  press();
+  expect(seen.map(x => x.shift)).toEqual([true]);
+  expect(t.clearSelection).toHaveBeenCalledTimes(1);
+  // A right button, or Shift already held: untouched.
+  seen.length = 0;
+  press({ button: 2 }); press({ shiftKey: true });
+  expect(seen.map(x => x.shift)).toEqual([false, true]);
+  expect(t.clearSelection).toHaveBeenCalledTimes(1);
+  // Nothing is written to the screen by going read-only and back.
   s.setReadOnly(false);
   expect(t.write).not.toHaveBeenCalled();
 });

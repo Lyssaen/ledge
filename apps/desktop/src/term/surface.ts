@@ -24,8 +24,6 @@ export interface TermSurface {
 const PASTE_BYTE = '\x16';
 /** What xterm answers on its own: a cursor position report, its device attributes. ConPTY waits for the first before it draws. */
 const REPORT = /^\x1b\[(?:\d+;\d+R|[?>][\d;]*c)$/;
-/** The modes by which a program takes the mouse (X10, normal, highlight, button, any). */
-const MOUSE_MODES = [9, 1000, 1001, 1002, 1003];
 /** The most an OSC 52 may put in the clipboard: a program cannot fill memory through it. */
 const CLIP_MAX = 1 << 20;
 
@@ -79,31 +77,25 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     return true;
   });
 
-  // A read-only screen keeps the mouse for selecting: its clicks would reach no one. The modes the program asks for are kept,
-  // and given back when the screen takes keys again.
-  const mouse = new Set<number>();
-  /** Our own « mouse off » on going read-only: not the program's, so the modes it asked for stay remembered. */
-  let ours = 0;
-  const flat = (params: (number | number[])[]): number[] => params.map(p => (Array.isArray(p) ? p[0] ?? 0 : p));
-  term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, params => {
-    const ps = flat(params);
-    const asked = ps.filter(p => MOUSE_MODES.includes(p));
-    for (const p of asked) mouse.add(p);
-    if (!readOnly || !asked.length) return false;
-    const rest = ps.filter(p => !MOUSE_MODES.includes(p));
-    if (rest.length) term.write(`\x1b[?${rest.join(';')}h`);
-    return true;
-  });
-  term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, params => {
-    const ps = flat(params);
-    if (ours > 0 && ps.join(';') === MOUSE_MODES.join(';')) { ours--; return false; }
-    for (const p of ps) mouse.delete(p);
-    return false;
-  });
-  const setMouseFor = (on: boolean) => {
-    if (on) { ours++; term.write(`\x1b[?${MOUSE_MODES.join(';')}l`); }
-    else if (mouse.size) term.write([...mouse].map(m => `\x1b[?${m}h`).join(''));
-  };
+  // A read-only screen keeps the mouse for selecting: its clicks would reach no one. A plain press is handed to xterm as the
+  // Shift + press it already takes as « select over the program's mouse »: the program's mouse modes stay exactly as it set them.
+  const mac = /Mac/.test(navigator.platform);
+  let forwarding = false;
+  host.addEventListener('mousedown', e => {
+    if (!readOnly || forwarding || e.button !== 0 || e.shiftKey || (mac && e.altKey) || term.modes.mouseTrackingMode === 'none') return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    // Shift + press extends a selection: a plain press starts a new one.
+    if (e.detail <= 1) term.clearSelection();
+    forwarding = true;
+    try {
+      e.target?.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, composed: true, view: e.view, detail: e.detail, screenX: e.screenX, screenY: e.screenY,
+        clientX: e.clientX, clientY: e.clientY, ctrlKey: e.ctrlKey, metaKey: e.metaKey, button: e.button, buttons: e.buttons,
+        ...(mac ? { altKey: true } : { shiftKey: true, altKey: e.altKey })
+      }));
+    } finally { forwarding = false; }
+  }, true);
 
   // A read-only screen hides its cursor in the background's colour; the text under a block cursor keeps its own.
   const applyTheme = () => { term.options.theme = readOnly ? { ...theme, cursor: theme.background, cursorAccent: theme.foreground } : theme; };
@@ -141,12 +133,7 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     size: () => ({ cols: term.cols, rows: term.rows }),
     fit: () => fitter.fit(),
     focus: () => term.focus(),
-    setReadOnly: on => {
-      const was = readOnly;
-      readOnly = on;
-      applyTheme();
-      if (on !== was) setMouseFor(on);
-    },
+    setReadOnly: on => { readOnly = on; applyTheme(); },
     setTheme: t => { theme = t; applyTheme(); },
     dispose: () => term.dispose()
   };
