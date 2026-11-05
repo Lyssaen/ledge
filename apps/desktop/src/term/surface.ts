@@ -24,6 +24,23 @@ export interface TermSurface {
 const PASTE_BYTE = '\x16';
 /** What xterm answers on its own: a cursor position report, its device attributes. ConPTY waits for the first before it draws. */
 const REPORT = /^\x1b\[(?:\d+;\d+R|[?>][\d;]*c)$/;
+/** The most an OSC 52 may put in the clipboard: a program cannot fill memory through it. */
+const CLIP_MAX = 1 << 20;
+
+/** What an OSC 52 asks to copy (`c;<base64>`), as text; null for a read (`?`), a malformed or an oversized one. */
+export function osc52Text(data: string): string | null {
+  const at = data.indexOf(';');
+  if (at < 0) return null;
+  const b64 = data.slice(at + 1);
+  if (b64 === '?' || b64.length > (CLIP_MAX * 4) / 3 + 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) return null;
+  try {
+    const bin = atob(b64);
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
 
 export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void }): TermSurface {
   const host = document.createElement('div');
@@ -51,6 +68,34 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
   // Read-only drops the keys, not the replies: disableStdin would drop both, and the screen would wait forever.
   const send = (data: string) => { if (!readOnly || REPORT.test(data)) for (const fn of inputs) fn(data); };
   term.onData(send);
+
+  // A program's own copy (OSC 52: Claude Code's selection, tmux, vim) reaches the clipboard. Writing only: a read (`?`) is
+  // refused, a program never sees what you copied elsewhere.
+  term.parser.registerOscHandler(52, data => {
+    const text = osc52Text(data);
+    if (text) void navigator.clipboard.writeText(text).catch(() => undefined);
+    return true;
+  });
+
+  // A read-only screen keeps the mouse for selecting: its clicks would reach no one. A plain press is handed to xterm as the
+  // Shift + press it already takes as « select over the program's mouse »: the program's mouse modes stay exactly as it set them.
+  const mac = /Mac/.test(navigator.platform);
+  let forwarding = false;
+  host.addEventListener('mousedown', e => {
+    if (!readOnly || forwarding || e.button !== 0 || e.shiftKey || (mac && e.altKey) || term.modes.mouseTrackingMode === 'none') return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    // Shift + press extends a selection: a plain press starts a new one.
+    if (e.detail <= 1) term.clearSelection();
+    forwarding = true;
+    try {
+      e.target?.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, composed: true, view: e.view, detail: e.detail, screenX: e.screenX, screenY: e.screenY,
+        clientX: e.clientX, clientY: e.clientY, ctrlKey: e.ctrlKey, metaKey: e.metaKey, button: e.button, buttons: e.buttons,
+        ...(mac ? { altKey: true } : { shiftKey: true, altKey: e.altKey })
+      }));
+    } finally { forwarding = false; }
+  }, true);
 
   // A read-only screen hides its cursor in the background's colour; the text under a block cursor keeps its own.
   const applyTheme = () => { term.options.theme = readOnly ? { ...theme, cursor: theme.background, cursorAccent: theme.foreground } : theme; };

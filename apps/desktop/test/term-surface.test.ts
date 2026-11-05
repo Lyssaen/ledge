@@ -15,6 +15,13 @@ const xt = vi.hoisted(() => {
     dispose = vi.fn();
     loadAddon = vi.fn();
     clearSelection = vi.fn(() => { this.selection = ''; });
+    modes = { mouseTrackingMode: 'none' };
+    osc = new Map<number, (d: string) => boolean>();
+    csi = new Map<string, (p: (number | number[])[]) => boolean>();
+    parser = {
+      registerOscHandler: (n: number, fn: (d: string) => boolean) => { this.osc.set(n, fn); return { dispose() {} }; },
+      registerCsiHandler: (id: { prefix?: string; final: string }, fn: (p: (number | number[])[]) => boolean) => { this.csi.set(`${id.prefix ?? ''}${id.final}`, fn); return { dispose() {} }; }
+    };
     constructor(o: Record<string, unknown>) { this.options = { ...o }; terms.push(this); }
     attachCustomKeyEventHandler(fn: (e: KeyboardEvent) => boolean) { this.keys = fn; }
     onData(fn: (d: string) => void) { this.data.push(fn); return { dispose() {} }; }
@@ -138,4 +145,59 @@ it('links the terminal prints open in the system browser, not in the webview', (
   (t.options.linkHandler as { activate(e: MouseEvent, uri: string): void; allowNonHttpProtocols: boolean }).activate(click, 'https://example.com/docs');
   expect(openUrl.mock.calls).toEqual([['https://example.com/pr/1'], ['https://example.com/docs']]);
   expect((t.options.linkHandler as { allowNonHttpProtocols: boolean }).allowNonHttpProtocols).toBe(false);
+});
+
+const b64 = (t: string) => btoa(String.fromCharCode(...new TextEncoder().encode(t)));
+
+it('a program\'s OSC 52 copy reaches the clipboard, UTF-8 kept; a read or a malformed one does nothing', async () => {
+  const { t } = surface();
+  const osc = t.osc.get(52)!;
+  expect(osc(`c;${b64('héllo — ✻')}`)).toBe(true);
+  await vi.waitFor(() => expect(clip.writeText).toHaveBeenCalledWith('héllo — ✻'));
+  clip.writeText.mockClear();
+  expect(osc('c;?')).toBe(true);
+  expect(osc('c;!!pas du base64')).toBe(true);
+  expect(osc('sans point-virgule')).toBe(true);
+  expect(osc(`c;${btoa('\xff\xfe')}`)).toBe(true);
+  expect(clip.writeText).not.toHaveBeenCalled();
+  // A read is never answered: nothing goes back to the program.
+  const sent: string[] = [];
+  const s2 = surface(); s2.s.onInput(d => sent.push(d)); s2.t.osc.get(52)!('c;?');
+  expect(sent).toEqual([]);
+});
+
+it('osc52Text refuses an oversized copy', async () => {
+  const { osc52Text } = await import('../src/term/surface');
+  expect(osc52Text(`c;${'A'.repeat(1_500_000)}`)).toBeNull();
+  expect(osc52Text(`;${b64('ok')}`)).toBe('ok');
+});
+
+it('read-only over a program that holds the mouse: a plain press reaches xterm as Shift + press (select); nothing is rewritten', () => {
+  const { s, t } = surface();
+  const cell = document.createElement('div');
+  s.host.appendChild(cell);
+  const seen: { shift: boolean; trusted: boolean }[] = [];
+  cell.addEventListener('mousedown', e => seen.push({ shift: e.shiftKey, trusted: e.isTrusted }));
+  const press = (o: MouseEventInit = {}) => cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1, ...o }));
+  // Live, or a program without the mouse: the press goes as it is.
+  t.modes.mouseTrackingMode = 'any';
+  press();
+  s.setReadOnly(true);
+  t.modes.mouseTrackingMode = 'none';
+  press();
+  expect(seen.map(x => x.shift)).toEqual([false, false]);
+  // Read-only and the program holds the mouse: one press, with Shift, a new selection.
+  t.modes.mouseTrackingMode = 'any';
+  seen.length = 0;
+  press();
+  expect(seen.map(x => x.shift)).toEqual([true]);
+  expect(t.clearSelection).toHaveBeenCalledTimes(1);
+  // A right button, or Shift already held: untouched.
+  seen.length = 0;
+  press({ button: 2 }); press({ shiftKey: true });
+  expect(seen.map(x => x.shift)).toEqual([false, true]);
+  expect(t.clearSelection).toHaveBeenCalledTimes(1);
+  // Nothing is written to the screen by going read-only and back.
+  s.setReadOnly(false);
+  expect(t.write).not.toHaveBeenCalled();
 });
