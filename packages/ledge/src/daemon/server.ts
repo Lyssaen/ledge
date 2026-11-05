@@ -348,17 +348,29 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     store.upsert(rest);
     log(`session ${id}: not seat ${seat}, its tmux session does not carry it (inherited from the server's environment)`);
   };
+  /** The last check asked, by session: an older answer that comes late (a failed read after a conclusive one) is dropped. */
+  const seatChecks = new Map<string, number>();
+  /** `then` gets the latest check's answer, if the session is still the one read (its source and tmux session unchanged). */
+  const checkSeat = (s: Session, seat: string, then: (carried: boolean | null) => void) => {
+    const n = (seatChecks.get(s.id) ?? 0) + 1;
+    seatChecks.set(s.id, n);
+    void seatCarried(s, seat).then(c => {
+      const now = store.get(s.id);
+      if (seatChecks.get(s.id) !== n || !now || now.source !== s.source || now.tmuxSession !== s.tmuxSession) return;
+      then(c);
+    });
+  };
   /** At start, the tags saved before: each session Ledge launched keeps its seat only if it carries it. */
   for (const s of store.all()) {
     if (!s.rig || s.archivedAt) continue;
     const seat = s.rig.seat;
-    void seatCarried(s, seat).then(c => { if (c === false) dropSeat(s.id, seat); });
+    checkSeat(s, seat, c => { if (c === false) dropSeat(s.id, seat); });
   }
   const tagRigSeat = (id: string, seat: string) => {
     const session = store.get(id);
     if (!session) return;
     if (session.source !== 'launcher' || !session.tmuxSession || isSeatSession(session.tmuxSession) || !tmux.sessionEnv) return applySeat(id, seat);
-    void seatCarried(session, seat).then(c => (c === false ? dropSeat(id, seat) : applySeat(id, seat)));
+    checkSeat(session, seat, c => (c === false ? dropSeat(id, seat) : applySeat(id, seat)));
   };
   const applySeat = (id: string, seat: string) => {
     const session = store.get(id), cur = session?.rig;

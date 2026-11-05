@@ -3630,6 +3630,33 @@ describe('server: a seat tag its session does not carry (Atelier empty, 2026-11-
     await until(() => store.get('max')?.rig === undefined);
     c.close();
   });
+  it('two checks answered in reverse order: only the latest counts, a late failed read never tags again', async () => {
+    await srv.close();
+    // Each read waits until the test answers it: the first ends unreadable after the second said « not carried ».
+    const pending: ((v: string | null | undefined) => void)[] = [];
+    tmux = fakeTmux({});
+    tmux.sessionEnv = () => new Promise(r => { pending.push(r); });
+    srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('max', { name: 'Max' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'max', event: event(), agent: 'claude', rigSeat: SEAT });
+    await until(() => pending.length === 1);
+    c.send({ type: 'session.event', id: 'max', event: event(), agent: 'claude', rigSeat: SEAT });
+    await until(() => pending.length === 2);
+    pending[1]!(null);
+    await new Promise(r => setTimeout(r, 50));
+    pending[0]!(undefined);
+    await new Promise(r => setTimeout(r, 100));
+    expect(store.get('max')?.rig).toBeUndefined();
+    // Nor an answer for a session that changed meanwhile (resumed in another tmux session).
+    c.send({ type: 'session.event', id: 'max', event: event(), agent: 'claude', rigSeat: SEAT });
+    await until(() => pending.length === 3);
+    store.upsert({ ...store.get('max')!, tmuxSession: 'ledge-max2' });
+    pending[2]!(SEAT);
+    await new Promise(r => setTimeout(r, 100));
+    expect(store.get('max')?.rig).toBeUndefined();
+    c.close();
+  });
   it('a seat whose session cannot be read, or another source, is taken at its hook\'s word as before', async () => {
     await srv.close();
     tmux = withEnv({});
