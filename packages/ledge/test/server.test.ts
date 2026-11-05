@@ -3584,3 +3584,89 @@ describe('close a session', () => {
     c.close();
   });
 });
+
+describe('server: a seat tag its session does not carry (Atelier empty, 2026-11-05)', () => {
+  const SEAT = 'advisor-lead@kernel';
+  const rig = { seat: SEAT, name: 'kernel', role: 'advisor.lead' };
+  /** Each Ledge tmux session's own OPENRIG_SESSION_NAME: a value, null (not set), or absent (cannot be read). */
+  const withEnv = (own: Record<string, string | null>) => {
+    const t = fakeTmux({});
+    t.sessionEnv = async (name: string, variable: string) => (variable === 'OPENRIG_SESSION_NAME' && name in own ? own[name] : undefined);
+    return t;
+  };
+  const event = () => ({ name: 'SessionStart' as const, at: T0, source: 'hook' as const });
+  it('at start, a saved tag is dropped from an agent whose session only inherited it; real seats and unreadable ones keep theirs', async () => {
+    await srv.close();
+    store.upsert(mk('ec85', { name: 'Max', cwd: '/w/payment', rig }));                     // Desktop's launch, the seat from the server's env
+    store.upsert(mk('8566', { name: 'Advisor-lead@kernel-2', rig }));                       // OpenRig's `ledge claude`: its own session carries it
+    store.upsert(mk('q', { source: 'rig', tmuxSession: 'queue-worker@kernel', rig: { seat: 'queue-worker@kernel', name: 'kernel' } }));
+    store.upsert(mk('gone', { rig }));                                                      // its tmux cannot say
+    tmux = withEnv({ 'ledge-ec85': null, 'ledge-8566': SEAT });
+    srv = await startServer({ store, tmux, port: 0 });
+    await until(() => store.get('ec85')?.rig === undefined);
+    expect(store.get('8566')?.rig).toEqual(rig);
+    expect(store.get('q')?.rig?.seat).toBe('queue-worker@kernel');
+    expect(store.get('gone')?.rig).toEqual(rig);
+    // A front that refreshes reads Max without a seat: back to his project.
+    const c = await connect({ port: srv.port });
+    expect((await c.next('snapshot')).sessions.find(s => s.id === 'ec85')).not.toHaveProperty('rig');
+    c.close();
+  });
+  it('at the next hook: an agent still claiming the seat its process inherited gets no tag; a real seat gets it', async () => {
+    await srv.close();
+    tmux = withEnv({ 'ledge-max': null, 'ledge-lead': SEAT });
+    srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('max', { name: 'Max' }));
+    store.upsert(mk('lead', { name: 'Lead' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'lead', event: event(), agent: 'claude', rigSeat: SEAT });
+    c.send({ type: 'session.event', id: 'max', event: event(), agent: 'claude', rigSeat: SEAT });
+    await until(() => store.get('lead')?.rig?.seat === SEAT);
+    await new Promise(r => setTimeout(r, 200));
+    expect(store.get('max')?.rig).toBeUndefined();
+    // A tag saved by an older daemon goes at its next hook too, not only at start.
+    store.upsert(mk('max', { name: 'Max', rig }));
+    c.send({ type: 'session.event', id: 'max', event: event(), agent: 'claude', rigSeat: SEAT });
+    await until(() => store.get('max')?.rig === undefined);
+    c.close();
+  });
+  it('two checks answered in reverse order: only the latest counts, a late failed read never tags again', async () => {
+    await srv.close();
+    // Each read waits until the test answers it: the first ends unreadable after the second said « not carried ».
+    const pending: ((v: string | null | undefined) => void)[] = [];
+    tmux = fakeTmux({});
+    tmux.sessionEnv = () => new Promise(r => { pending.push(r); });
+    srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('max', { name: 'Max' }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'max', event: event(), agent: 'claude', rigSeat: SEAT });
+    await until(() => pending.length === 1);
+    c.send({ type: 'session.event', id: 'max', event: event(), agent: 'claude', rigSeat: SEAT });
+    await until(() => pending.length === 2);
+    pending[1]!(null);
+    await new Promise(r => setTimeout(r, 50));
+    pending[0]!(undefined);
+    await new Promise(r => setTimeout(r, 100));
+    expect(store.get('max')?.rig).toBeUndefined();
+    // Nor an answer for a session that changed meanwhile (resumed in another tmux session).
+    c.send({ type: 'session.event', id: 'max', event: event(), agent: 'claude', rigSeat: SEAT });
+    await until(() => pending.length === 3);
+    store.upsert({ ...store.get('max')!, tmuxSession: 'ledge-max2' });
+    pending[2]!(SEAT);
+    await new Promise(r => setTimeout(r, 100));
+    expect(store.get('max')?.rig).toBeUndefined();
+    c.close();
+  });
+  it('a seat whose session cannot be read, or another source, is taken at its hook\'s word as before', async () => {
+    await srv.close();
+    tmux = withEnv({});
+    srv = await startServer({ store, tmux, port: 0 });
+    store.upsert(mk('a'));
+    store.upsert(mk('h', { source: 'hook_only', tmuxSession: null }));
+    const c = await connect({ port: srv.port }); await c.next('snapshot');
+    c.send({ type: 'session.event', id: 'a', event: event(), agent: 'claude', rigSeat: SEAT });
+    c.send({ type: 'session.event', id: 'h', event: event(), agent: 'claude', rigSeat: 'dev-back@ledge-dev' });
+    await until(() => store.get('a')?.rig?.seat === SEAT && store.get('h')?.rig?.seat === 'dev-back@ledge-dev');
+    c.close();
+  });
+});

@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSession } from '../src/spawn.js';
+import { spawnSession, unsetFor, SEAT_VARS } from '../src/spawn.js';
 import { parseLaunchArgs, ensureDaemon, attachEnv, agentEnv, launch } from '../src/cli/launch.js';
 import { Store } from '../src/daemon/store.js';
 import { startServer, type ServerHandle } from '../src/daemon/server.js';
@@ -119,6 +119,20 @@ describe('agentEnv', () => {
   it('drops the variables a launching Claude Code session leaves behind, keeps the user\'s Claude settings', () => {
     const env = agentEnv({ PATH: '/usr/bin', CLAUDECODE: '1', CLAUDE_CODE_CHILD_SESSION: '1', CLAUDE_CODE_SESSION_ID: 's', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDE_CODE_MESSAGING_SOCKET: '/s', CLAUDE_PID: '42', CLAUDE_CONFIG_DIR: '/c', CLAUDE_CODE_ENABLE_TELEMETRY: '1' }, { LEDGE_NAME: 'Iris' });
     expect(env).toEqual({ PATH: '/usr/bin', CLAUDE_CONFIG_DIR: '/c', CLAUDE_CODE_ENABLE_TELEMETRY: '1', LEDGE_NAME: 'Iris' });
+  });
+  it('a seat\'s identity is the agent\'s only from the seat\'s own shell, never from inside a Ledge session', () => {
+    const seat = { OPENRIG_SESSION_NAME: 'advisor-lead@kernel', OPENRIG_OCCUPANT_GENERATION: 'g1', OPENRIG_ACTIVITY_HOOK_TOKEN: 't', OPENRIG_SEAT_ENV_KEYS: 'K', OPENRIG_HOME: '/o' };
+    // OpenRig runs `ledge claude` in the seat's pane: that agent is the seat.
+    expect(agentEnv({ PATH: '/usr/bin', ...seat }, { LEDGE_NAME: 'Lead' })).toEqual({ PATH: '/usr/bin', ...seat, LEDGE_NAME: 'Lead' });
+    // The seat's agent launches another (Sink, 2026-11-05): the new one is not the seat; OpenRig's settings pass.
+    expect(agentEnv({ PATH: '/usr/bin', LEDGE_SESSION: 'outer', ...seat }, { LEDGE_SESSION: 'ab89', LEDGE_NAME: 'Sink' })).toEqual({ PATH: '/usr/bin', OPENRIG_HOME: '/o', LEDGE_SESSION: 'ab89', LEDGE_NAME: 'Sink' });
+  });
+  it('the pane drops a seat\'s identity the launch does not give, whatever the server\'s global environment holds', () => {
+    expect(unsetFor({ PATH: '/usr/bin' })).toEqual(expect.arrayContaining(['CLAUDECODE', ...SEAT_VARS]));
+    const given = unsetFor({ PATH: '/usr/bin', OPENRIG_SESSION_NAME: 'dev-back@ledge-dev', OPENRIG_OCCUPANT_GENERATION: 'g' });
+    expect(given).not.toContain('OPENRIG_SESSION_NAME');
+    expect(given).not.toContain('OPENRIG_OCCUPANT_GENERATION');
+    expect(given).toEqual(expect.arrayContaining(['OPENRIG_ACTIVITY_HOOK_TOKEN', 'OPENRIG_SEAT_ENV_KEYS']));
   });
 });
 

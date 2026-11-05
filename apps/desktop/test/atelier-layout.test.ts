@@ -3,7 +3,7 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { projectOf } from '@ledge/fleet';
 import type { Helper, Projects, Session } from '@ledge/protocol';
 import type { BotState } from '@ledge/ui/bots/poseFor';
-import { mainOrder } from '../src/nav/agents';
+import { activeCount, mainOrder } from '../src/nav/agents';
 import { layoutTable, tableLength, roomWidth, roomTileWidth, noteX, tableBranch, sheetState, helperState, sceneOf, walkOrder, type AtelierScene } from '../src/atelier/layout';
 import { widestRow, fitCeiling, clampZoom, stepZoom, wheelZoom, zoomAround, frameZoom, centreOf, centreOn, floorPad } from '../src/atelier/zoom';
 import { plantsFor } from '../src/atelier/plantSpots';
@@ -149,5 +149,41 @@ describe('OpenRig rooms in the atelier', () => {
     // A project filter shows that project's own table only.
     expect(sceneOf(order, projects, idOf, 'ledge').rooms.map(r => r.project.name)).toEqual(['Ledge']);
     expect(scene.unassigned).toEqual([]);
+  });
+});
+
+describe('sceneOf: Projets and Rigs agree once the false seats are back in their projects (Atelier empty, 2026-11-05)', () => {
+  // The daemon now drops a seat an agent only inherited (Max, Otto); the real seats keep theirs, here and over SSH.
+  const projects: Projects = {
+    projects: [{ id: 'payment', name: 'Payment', color: 'pink', description: '', repos: [{ machine: 'local', path: '/w/payment' }] }],
+    rules: []
+  };
+  const seat = (seatName: string, name: string) => ({ seat: seatName, name: seatName.slice(seatName.indexOf('@') + 1) });
+  const sessions = [
+    fakeSession('max', { name: 'Max', cwd: '/w/payment', state: 'waiting_input' }),
+    fakeSession('otto', { name: 'Otto', cwd: '/w/scaler' }),
+    fakeSession('lead', { name: 'Advisor-lead', cwd: '/home/gch', rig: seat('advisor-lead@kernel', 'kernel') }),
+    fakeSession('back', { name: 'Dev-back', cwd: '/w/ledge', rig: seat('dev-back@ledge-dev', 'ledge-dev') }),
+    // A seat on the SSH machine: its own daemon judged it, it reaches Desktop with its tag.
+    fakeSession('ec2', { name: 'Remote', cwd: '/srv/app', machineId: 'ec2-gch', machineName: 'ec2-gch', rig: seat('dev-agent@remote', 'remote') }),
+    fakeSession('ida', { name: 'Ida', cwd: '/w/scaler', state: 'exited' })
+  ];
+  const order = mainOrder(sessions, projects);
+  const idOf = (s: Session) => projectOf(s, projects);
+  const rows = (sc: AtelierScene) => [...sc.rooms.map(r => [r.project.id, r.tables.flatMap(t => t.mains.map(s => s.name))]), ['none', sc.unassigned.map(s => s.name)]];
+  it('Projets: Max at Payment\'s table, Ida and Otto unassigned, no seat anywhere', () => {
+    expect(rows(sceneOf(order, projects, idOf, 'all', false))).toEqual([['payment', ['Max']], ['none', ['Ida', 'Otto']]]);
+  });
+  it('Rigs: each real seat in its rig\'s room (the kernel first, the SSH machine\'s too), Max and Otto not among them', () => {
+    expect(rows(sceneOf(order, projects, idOf, 'all', true))).toEqual([
+      ['rig:kernel', ['Advisor-lead']], ['payment', ['Max']], ['rig:ledge-dev', ['Dev-back']], ['rig:remote', ['Remote']], ['none', ['Ida', 'Otto']]
+    ]);
+  });
+  it('the counter is what the Rigs view seats; Projets seats all but the seats', () => {
+    const active = sessions.filter(s => !s.offline && s.state !== 'exited');
+    expect(activeCount(sessions)).toBe(active.length);
+    const live = (sc: AtelierScene) => walkOrder(sc).filter(s => s.state !== 'exited').map(s => s.id).sort();
+    expect(live(sceneOf(order, projects, idOf, 'all', true))).toEqual(active.map(s => s.id).sort());
+    expect(live(sceneOf(order, projects, idOf, 'all', false))).toEqual(active.filter(s => !s.rig).map(s => s.id).sort());
   });
 });
