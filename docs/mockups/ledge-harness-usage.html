@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledge · Usage par harnais</title>
+<!--
+  Maquette : indicateurs d'usage par harnais (limites du compte, modèle, effort, contexte, durée) sur Desktop, TUI et téléphone.
+  Ligne de queue qitem-20261105123910-6ccc5f2466262813. Base origin/main 535b46be (0.48.0).
+  Paramètres : ?v=side|session|alert|tui|phone  &st=ok|loading|stale|expired|unreachable|codex|machines|over|none  &theme=dark|light  &lang=fr|en
+-->
+<style>
+:root, :root[data-theme="light"] {
+  --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0); --popover: oklch(1 0 0);
+  --primary: oklch(0.505 0.213 27.518); --primary-foreground: oklch(0.971 0.013 17.38);
+  --secondary: oklch(0.967 0.001 286.375);
+  --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0); --input: oklch(0.922 0 0);
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px;
+  --sidebar: oklch(0.985 0 0); --sidebar-primary: oklch(0.577 0.245 27.325); --sidebar-accent: oklch(0.97 0 0); --sidebar-border: oklch(0.922 0 0);
+  --success: #059669; --warning: #b45309; --info: #2563eb; --danger-text: oklch(0.505 0.213 27.518);
+  --status-warning-soft: #fffbeb; --status-danger-soft: #fef2f2; --status-info-soft: #eff6ff;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.25);
+  --page: #f4f4f3; --chrome: #ffffff; --note: #ffffff;
+  --gauge: color-mix(in srgb, var(--foreground) 42%, transparent); --track: color-mix(in srgb, var(--foreground) 9%, transparent);
+  /* TUI, light terminal */
+  --t-bg: #fbfbfa; --t-bar: #ecebe8; --t-fg: #1d1d1f; --t-dim: #5d5d62; --t-faint: #9a9aa0; --t-line: #c9c8c4; --t-sel: #e6e4df;
+  --t-coral: #c2412d; --t-red: #b91c1c; --t-yellow: #9a6700; --t-green: #1a7f37; --t-blue: #0550ae; --t-violet: #6639ba; --t-key: #e2e0db;
+}
+:root[data-theme="dark"] {
+  --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0); --popover: oklch(0.205 0 0);
+  --primary: oklch(0.444 0.177 26.899); --primary-foreground: oklch(0.971 0.013 17.38);
+  --secondary: oklch(0.274 0.006 286.033);
+  --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: #ffffff1a; --input: #ffffff26;
+  --sidebar: oklch(0.205 0 0); --sidebar-primary: oklch(0.637 0.237 25.331); --sidebar-accent: oklch(0.269 0 0); --sidebar-border: #ffffff1a;
+  --success: #34d399; --warning: #fbbf24; --info: #60a5fa; --danger-text: oklch(0.704 0.191 22.216);
+  --status-warning-soft: #422006; --status-danger-soft: #450a0a; --status-info-soft: #172554;
+  --shadow-overlay: 0 20px 40px -12px rgba(0,0,0,0.7);
+  --page: #0b0b0b; --chrome: #141414; --note: #161616;
+  --gauge: color-mix(in srgb, var(--foreground) 48%, transparent); --track: color-mix(in srgb, var(--foreground) 11%, transparent);
+  --t-bg: #0f0f10; --t-bar: #1b1b1d; --t-fg: #e8e8e8; --t-dim: #9a9a9a; --t-faint: #5f5f63; --t-line: #3a3a3d; --t-sel: #26262a;
+  --t-coral: #ff7a63; --t-red: #f87171; --t-yellow: #facc15; --t-green: #4ade80; --t-blue: #7cb3fb; --t-violet: #bc8cff; --t-key: #2c2c30;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--page);color:var(--foreground)}
+body{font:13px/1.45 'Geist','Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.mono,code,kbd{font-family:'Geist Mono','JetBrains Mono',ui-monospace,monospace}
+
+/* ---------- mockup chrome ---------- */
+.bar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 20px;background:var(--chrome);border-bottom:1px solid var(--border)}
+.brand{font-weight:700;font-size:15px;margin-right:4px}.brand span{color:var(--sidebar-primary)}
+.brand small{font-weight:400;color:var(--muted-foreground);font-size:12px;margin-left:6px}
+.grp{display:flex;align-items:center;gap:6px}
+.grp>label{font-size:12px;color:var(--muted-foreground)}
+.seg{display:flex;gap:2px;padding:3px;border:1px solid var(--border);border-radius:var(--radius-md)}
+.seg button{padding:3px 9px;border-radius:6px;font-size:12px;color:var(--muted-foreground);white-space:nowrap}
+.seg button.on{background:var(--accent);color:var(--foreground)}
+.seg button:disabled{opacity:.35;cursor:default}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;padding:20px;align-items:start}
+.cap{font-size:12px;color:var(--muted-foreground);margin:0 0 8px}.cap b{color:var(--sidebar-primary);font-weight:600;letter-spacing:.5px;margin-right:6px}
+.stack{display:flex;flex-direction:column;gap:26px;min-width:0}
+.notes{position:sticky;top:76px;display:flex;flex-direction:column;gap:14px}
+.note{background:var(--note);border:1px solid var(--border);border-radius:var(--radius-xl);padding:16px 18px;font-size:12.5px}
+.note h3{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--sidebar-primary);margin-bottom:4px}
+.note h4{font-size:14px;margin-bottom:8px}
+.note ul,.note ol{padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.note code,.note kbd{font-size:11px;padding:0 4px;border:1px solid var(--border);border-radius:4px;background:var(--muted)}
+.note .rec{color:var(--muted-foreground)}
+
+/* ---------- desktop window ---------- */
+.win{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--background);box-shadow:var(--shadow-overlay);display:flex;flex-direction:column;width:1120px;max-width:100%}
+.titlebar{height:34px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--border);font-size:13px}
+.titlebar b{font-weight:700}.titlebar b i{font-style:normal;color:var(--sidebar-primary)}
+.titlebar .fill{flex:1}.titlebar .dots{display:flex;gap:14px;color:var(--muted-foreground);font-size:12px}
+.body{display:flex;height:var(--wh,660px);min-height:0}
+.st{width:268px;flex:none;background:var(--sidebar);border-right:1px solid var(--sidebar-border);display:flex;flex-direction:column;position:relative}
+.st-top{padding:10px;display:flex;flex-direction:column;gap:8px}
+.st-home{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--sidebar-border);border-radius:var(--radius-lg);background:var(--background)}
+.st-home b{font-size:14px}.st-home small{display:block;color:var(--muted-foreground);font-size:11.5px}
+.bot{width:20px;height:16px;border-radius:5px 5px 4px 4px;background:linear-gradient(#e8836f,#b8503d);position:relative;flex:none}
+.bot::after{content:'';position:absolute;left:4px;right:4px;top:5px;height:4px;border-radius:2px;background:#1c2427}
+.bot.b2{background:linear-gradient(#a8b4ff,#6c63d9)}.bot.b3{background:linear-gradient(#9de0c4,#3c9f7c)}.bot.b4{background:linear-gradient(#f3d38a,#c5973a)}
+.st-nav{display:flex;justify-content:space-between;padding:6px 11px;font-size:12.5px;color:var(--muted-foreground)}
+.st-label{display:flex;align-items:center;gap:6px;padding:8px 12px 4px;font-size:12px;color:var(--muted-foreground)}
+.st-badge{min-width:18px;height:18px;border-radius:9px;background:var(--sidebar-primary);color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
+.st-fill{flex:1}
+.kbd{font:10.5px 'Geist Mono',monospace;padding:1px 5px;border:1px solid var(--border);border-radius:4px;color:var(--muted-foreground)}
+.st-scroll{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.st-card{display:flex;gap:9px;margin:2px 8px;padding:7px 9px;border-radius:var(--radius-md)}
+.st-card.sel{background:var(--sidebar-accent)}
+.st-card-body{flex:1;min-width:0}
+.st-l1,.st-l2{display:flex;align-items:center;gap:6px;min-width:0}
+.st-l1 strong{font-weight:500;font-size:13px;white-space:nowrap}
+.st-l1 .where{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-time{margin-left:auto;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap}
+.st-time.red{color:var(--danger-text)}.st-time.amber{color:var(--warning)}
+.st-req{flex:1;min-width:0;font-size:12px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-qa{padding:1px 8px;border:1px solid var(--border);border-radius:6px;font-size:11.5px;white-space:nowrap}
+.st-qa.pri{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.st-gico{width:20px;height:20px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;flex:none;margin-top:1px}
+.st-gico.amber{color:var(--warning);background:var(--status-warning-soft)}
+.st-gico.red{color:var(--danger-text);background:var(--status-danger-soft)}
+.tree{padding:2px 0}
+.tp{display:flex;align-items:center;gap:7px;padding:5px 12px;font-size:13px;font-weight:600}
+.tp i{width:9px;height:9px;border-radius:3px;background:var(--info)}.tp i.g{background:var(--success)}
+.tp small{margin-left:auto;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);font-weight:400}
+.tb{padding:3px 12px 3px 26px;font:12px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.ts{display:flex;gap:8px;padding:5px 12px 5px 30px;margin:0 6px;border-radius:var(--radius-md)}
+.ts.sel{background:var(--sidebar-accent)}
+.ts .tsb{flex:1;min-width:0}
+.ts .r1{display:flex;align-items:center;gap:6px}
+.ts .r1 b{font-weight:500;font-size:13px}
+.ts .r2{font-size:11.5px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctx-sig{display:inline-flex;align-items:center;gap:3px;font:10.5px 'Geist Mono',monospace;color:var(--warning);padding:0 5px;border-radius:5px;background:var(--status-warning-soft)}
+.ctx-sig.red{color:var(--danger-text);background:var(--status-danger-soft)}
+
+/* the limits, above the foot */
+.lims{border-top:1px solid var(--sidebar-border);padding:8px 10px 6px;display:flex;flex-direction:column;gap:6px;position:relative}
+.lim{display:block;width:100%;text-align:left;padding:5px 6px 6px;border-radius:var(--radius-md)}
+.lim:hover,.lim.open{background:var(--sidebar-accent)}
+.lim-h{display:flex;align-items:center;gap:6px;font-size:11.5px;margin-bottom:4px}
+.lim-h .hn{font-weight:500}
+.lim-h .hm{color:var(--muted-foreground)}
+.lim-h .age{margin-left:auto;font:10.5px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.lim-h .age.warn{color:var(--warning)}
+.lim-row{display:flex;flex-direction:column;gap:3px}
+.g{display:grid;grid-template-columns:54px 1fr 34px 62px;align-items:center;gap:6px;font:10.5px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap}
+.g b{font-weight:500;color:var(--foreground);text-align:right}
+.g .rs{overflow:hidden;text-overflow:ellipsis}
+.g .gbar{margin:0}
+.gbar{height:4px;border-radius:2px;background:var(--track);margin-top:3px;overflow:hidden}
+.gbar i{display:block;height:100%;border-radius:2px;background:var(--gauge)}
+.amber .gbar i,.gbar.amber i{background:var(--warning)}.g.amber b{color:var(--warning)}
+.red .gbar i,.gbar.red i{background:var(--destructive)}.g.red b{color:var(--danger-text)}
+.lim.dim .lim-row{opacity:.45}
+.lim-msg{font-size:11.5px;color:var(--muted-foreground);line-height:1.35}
+.lim-msg.warn{color:var(--warning)}
+.skel{height:4px;border-radius:2px;margin-top:9px;background:linear-gradient(90deg,var(--track) 0%,color-mix(in srgb,var(--foreground) 20%,transparent) 50%,var(--track) 100%)}
+.st-foot{height:42px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground)}
+.st-foot .dot{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;margin-right:5px}
+.st-foot small{margin-left:4px}
+.ico{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--muted-foreground)}
+
+/* popover */
+.pop{position:absolute;left:276px;bottom:46px;z-index:5;width:400px;background:var(--popover);border:1px solid var(--input);border-radius:var(--radius-lg);box-shadow:var(--shadow-overlay);padding:12px 14px}
+.pop h5{font-size:13px;font-weight:600;display:flex;align-items:baseline;gap:6px}
+.pop h5 small{font-weight:400;font-size:11.5px;color:var(--muted-foreground)}
+.pop .sub{font-size:11.5px;color:var(--muted-foreground);margin:2px 0 10px}
+.prow{display:grid;grid-template-columns:190px 1fr 42px;align-items:center;gap:8px;padding:5px 0}
+.prow .pl{font-size:12px}.prow .pl small{display:block;font-size:10.5px;color:var(--muted-foreground)}
+.prow .pp{font:12px 'Geist Mono',monospace;text-align:right}
+.prow.amber .pp{color:var(--warning)}.prow.red .pp{color:var(--danger-text)}
+.prow .gbar{margin:0;height:5px}
+.psep{border-top:1px solid var(--border);margin:6px 0 4px;padding-top:6px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--muted-foreground)}
+.pfoot{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:11.5px;color:var(--muted-foreground)}
+.pfoot a{color:var(--foreground);text-decoration:underline;text-underline-offset:2px}
+
+/* main pane */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+.top{height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--border);font-size:13.5px;white-space:nowrap}
+.top .crumb{color:var(--muted-foreground)}.top b{font-weight:500}
+.top .fill{flex:1}
+.pill-red{padding:3px 9px;border-radius:7px;background:var(--status-danger-soft);color:var(--danger-text);font-size:12.5px}
+.vrow{height:44px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--border);white-space:nowrap}
+.vsw{display:flex;padding:3px;border:1px solid var(--border);border-radius:var(--radius-md);gap:2px;font-size:12.5px}
+.vsw span{padding:3px 10px;border-radius:6px;color:var(--muted-foreground)}.vsw span.on{background:var(--accent);color:var(--foreground)}
+.meta{display:flex;align-items:center;gap:7px;font:11.5px 'Geist Mono',monospace;color:var(--muted-foreground);min-width:0;overflow:hidden}
+.meta .sep{opacity:.6}
+.meta .mdl{color:var(--foreground)}
+.meta .cg{display:inline-flex;align-items:center;gap:5px}
+.meta .cg .gbar{width:34px;margin:0}
+.meta .amber{color:var(--warning)}
+.meta .tip-anchor{border-bottom:1px dotted var(--muted-foreground)}
+.vrow .fill{flex:1}
+.thread{flex:1;padding:18px 26px;display:flex;flex-direction:column;gap:14px;font-size:13px;overflow:hidden}
+.tl{display:flex;gap:12px}
+.tl .tt{flex:1}.tl .tt small{color:var(--muted-foreground);font-size:12px}
+.tl time{font:11.5px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.tl .ic{width:22px;height:22px;border-radius:50%;border:1px solid var(--border);flex:none}
+.tip{position:absolute;z-index:6;background:var(--popover);border:1px solid var(--input);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);padding:9px 11px;font-size:12px;width:300px}
+.tip dl{display:grid;grid-template-columns:84px 1fr;gap:3px 8px}
+.tip dt{color:var(--muted-foreground)}
+.reply{margin:0 22px 16px;border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px;color:var(--muted-foreground);font-size:13px;height:72px}
+
+/* header strips (cases) */
+.cases{display:flex;flex-direction:column;gap:10px;width:1120px;max-width:100%}
+.case{display:grid;grid-template-columns:220px 1fr;align-items:center;gap:12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--background);padding:0 0 0 14px;overflow:hidden}
+.case .cl{font-size:12px;color:var(--muted-foreground)}
+.case .cl b{display:block;color:var(--foreground);font-weight:500;font-size:12.5px}
+.case .vrow{border:0;border-left:1px solid var(--border)}
+
+/* settings */
+.set{flex:1;padding:22px 30px;overflow:hidden}
+.set h2{font-size:18px;font-weight:600;margin-bottom:4px}
+.set .crumbs{font-size:12px;color:var(--muted-foreground);margin-bottom:18px}
+.srow{display:grid;grid-template-columns:200px 1fr;gap:16px;padding:14px 0;border-top:1px solid var(--border)}
+.srow .sl{font-size:13px;font-weight:500}
+.srow .sh{font-size:12px;color:var(--muted-foreground);margin-top:6px;max-width:470px}
+.sel-box{display:inline-flex;align-items:center;gap:20px;padding:5px 10px;border:1px solid var(--input);border-radius:var(--radius-md);font-size:13px}
+.srow.new{position:relative}
+.srow.new::before{content:'';position:absolute;left:-14px;top:14px;bottom:14px;width:3px;border-radius:2px;background:var(--sidebar-primary)}
+
+/* ---------- TUI ---------- */
+.term{background:var(--t-bg);color:var(--t-fg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow-overlay);display:inline-block;max-width:100%;overflow:hidden}
+.term pre{font:12.5px/17px 'Geist Mono','JetBrains Mono',ui-monospace,monospace;white-space:pre;margin:0}
+.term .fg{color:var(--t-fg)}.term .dim{color:var(--t-dim)}.term .faint{color:var(--t-faint)}.term .line{color:var(--t-line)}
+.term .coral{color:var(--t-coral)}.term .red{color:var(--t-red)}.term .yellow{color:var(--t-yellow)}.term .green{color:var(--t-green)}
+.term .blue{color:var(--t-blue)}.term .violet{color:var(--t-violet)}.term .b{font-weight:700}
+.term .w1{display:inline-block;width:1ch;text-align:center;overflow:visible;vertical-align:top}
+.term .barbg{background:var(--t-bar)}.term .selbg{background:var(--t-sel)}.term .key{background:var(--t-key)}
+
+/* ---------- phone ---------- */
+.phones{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+.phone{width:330px;height:690px;border:9px solid #2a2a2a;border-radius:42px;background:var(--background);overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow-overlay)}
+:root[data-theme="light"] .phone{border-color:#d6d6d3}
+.ph-status{height:34px;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font-size:12px;font-weight:600}
+.ph-head{padding:6px 18px 10px}
+.ph-head h2{font-size:22px;font-weight:700;letter-spacing:-.4px}
+.ph-head p{font-size:12px;color:var(--muted-foreground)}
+.ph-head .back{font-size:12px;color:var(--muted-foreground);margin-bottom:4px}
+.ph-body{flex:1;overflow:hidden;padding:0 18px}
+.ph-card{border:1px solid var(--border);border-radius:16px;background:var(--card);padding:12px 14px;margin-bottom:12px}
+.ph-card h3{font-size:15px;display:flex;align-items:baseline;gap:6px;margin-bottom:6px}.ph-card h3 small{font-weight:400;font-size:11.5px;color:var(--muted-foreground)}
+.ph-sec{font-size:11.5px;color:var(--muted-foreground);margin:10px 0 6px;letter-spacing:.3px}
+.ph-line{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 0}
+.ph-line .muted{color:var(--muted-foreground);font-size:12px}
+.ph-btn{padding:2px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px}
+.ph-btn.pri{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+.ph-lim{display:grid;grid-template-columns:58px 1fr 128px;align-items:center;gap:8px;padding:3px 0;font-size:12.5px}
+.ph-lim .pp{font:12px 'Geist Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-lim .pp small{color:var(--muted-foreground);font-size:11px;margin-left:6px}
+.ph-lim .gbar{margin:0;height:5px}
+.ph-lim.amber .pp b{color:var(--warning);font-weight:500}.ph-lim.red .pp b{color:var(--danger-text);font-weight:500}
+.ph-lim .pp b{font-weight:500}
+.ph-hn{font-size:12.5px;font-weight:600;margin:6px 0 2px;display:flex;gap:6px;align-items:baseline}
+.ph-hn small{font-weight:400;color:var(--muted-foreground);font-size:11px}
+.ph-row{display:flex;gap:12px;border-bottom:1px solid var(--border);padding:13px 0}
+.ph-row h4{font-size:14px;font-weight:600}
+.ph-row .m{font-size:12px;color:var(--muted-foreground);margin-top:2px}
+.ph-row .m2{font-size:12px;color:var(--muted-foreground);margin-top:5px}
+.ph-row .m2 .amber{color:var(--warning)}
+.tag{display:inline-block;margin-top:7px;padding:1px 8px;border-radius:6px;font-size:11.5px;background:var(--status-info-soft);color:var(--info)}
+.tag.red{background:var(--status-danger-soft);color:var(--danger-text)}
+.ph-tabs{height:62px;border-top:1px solid var(--border);display:flex;justify-content:space-around;align-items:center;font-size:11px;color:var(--muted-foreground)}
+.ph-tabs .on{color:var(--foreground);font-weight:600}
+.ph-chip{display:inline-flex;gap:6px;align-items:center;padding:3px 9px;border:1px solid var(--border);border-radius:999px;font-size:11.5px;color:var(--muted-foreground)}
+.ph-cap{font-size:11px;color:var(--muted-foreground);margin-top:8px;width:330px}
+.ph-msg{font-size:12.5px;color:var(--muted-foreground);padding:4px 0}
+.ph-msg.warn{color:var(--warning)}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div class="layout"><div class="stack" id="canvas"></div><aside class="notes" id="notes"></aside></div>
+<script>
+const Q = new URLSearchParams(location.search);
+const S = { v: Q.get('v') || 'side', st: Q.get('st') || 'ok', theme: Q.get('theme') || 'dark', lang: Q.get('lang') || 'fr' };
+const THRESHOLD = 80;
+
+const T = {
+  fr: {
+    title: 'Usage par harnais', sub: 'limites · modèle · effort · contexte · durée',
+    screen: 'Écran', state: 'Limites', theme: 'Thème', lang: 'Langue', dark: 'Sombre', light: 'Clair',
+    views: { side: 'Desktop · barre latérale', session: 'Desktop · session', alert: 'Desktop · alerte et réglage', tui: 'TUI', phone: 'Téléphone' },
+    states: { ok: 'À jour', loading: 'Lecture', stale: 'Anciennes', expired: 'Jeton expiré', unreachable: 'Injoignable', codex: 'Codex en donne', machines: 'Deux comptes', over: 'Seuil dépassé', none: 'Aucune' },
+    aim: 'VISÉ',
+    claude: 'Claude Code', codex: 'Codex', cl: 'Claude',
+    h5: '5 h', week: 'Semaine', weekAll: 'Semaine · tous modèles', session5: 'Session · 5 h',
+    weekOf: m => `Semaine · ${m}`,
+    reset: 'remise', resetAt: t => `remise à ${t}`, resetIn: (t, d) => `remise à ${t} · dans ${d}`, resumes: t => `reprend à ${t}`,
+    mon: 'lun. 09:00', monShort: 'lun.',
+    read: a => `lu il y a ${a}`, fresh: 'à jour', reading: 'lecture…', staleAge: '12 min', unreach: 'injoignable', unreachAge: 'lu il y a 25 min',
+    expired: 'Session Claude Code expirée : reconnectez-vous dans Claude Code.', expiredShort: 'reconnectez-vous dans Claude Code',
+    perModel: 'Par modèle', reached: 'atteinte',
+    popTitle: 'Limites', popSub: m => `Compte connecté sur ${m} · lu il y a 40 s`, popSubStale: m => `Compte connecté sur ${m} · dernière lecture il y a 12 min`,
+    popSubUnreach: m => `Compte connecté sur ${m} · api.anthropic.com injoignable · lu il y a 25 min`,
+    alertAt: p => `Alerte à ${p} %`, settings: 'Réglages',
+    local: 'Local', devbox: 'devbox', machinesShort: 'Sessions locales et SSH',
+    home: 'Ledge.', homeSub: n => `${n} à toi`, atelier: 'Atelier', actifs: '8 actifs',
+    yours: 'À toi', projects: 'Projets',
+    now: 'maintenant', min: 'min',
+    approve: 'Oui', deny: 'Non', ok: 'Compris', see: 'Voir',
+    npm: 'npm test', port: 'Quel port ?', answer: 'Répondre',
+    alert5w: 'fenêtre 5 h', alert5b: p => `${p} % · remise 14:30`,
+    alertOpusW: 'semaine Opus', alertOpusB: 'Atteinte · reprend lun.',
+    crumbs: ['Atelier', 'Ledge'], otto: 'Otto', topic: 'Câbler la liste des sessions',
+    fil: 'Fil', terminal: 'Terminal', subagent: '1 sous-agent', accord: 'Votre accord',
+    opus: 'Opus 5.5', high: 'élevé', effort: e => `effort ${e}`, ctx: p => `contexte ${p} %`, dur: '1 h 12',
+    gpt: 'gpt-6.1', medium: 'moyen', fable: 'Fable 5.1',
+    tipModel: 'Modèle', tipEffort: 'Effort', tipCtx: 'Contexte', tipDur: 'Durée',
+    tipModelV: 'Opus 5.5 · choisi au lancement', tipEffortV: 'élevé · choisi au lancement', tipCtxV: '92 k / 200 k jetons · relève à 85 %', tipDurV: 'ouverte à 10:24, il y a 1 h 12',
+    th1: 'Échange de 10:41 · Câble la liste · 4 actions · 1 fichier modifié', th2: 'Vous', th2b: 'Corrige-les', th3: 'Commande npm test',
+    replyPh: 'Répondre à Otto…',
+    cases: [
+      ['Lancée par Ledge', 'Claude Code : modèle et effort connus'],
+      ['Claude lancée hors de Ledge', 'modèle lu dans le transcript, effort inconnu : rien'],
+      ['Codex', 'modèle et effort lus dans le transcript'],
+      ['Proche du seuil', 'contexte au-delà de « Contexte max »'],
+      ['OMP, Cursor', 'ni modèle ni contexte mesurés : la durée seule']
+    ],
+    setTitle: 'Général', setCrumbs: 'Réglages › Général',
+    setLang: 'Langue', setLangV: 'Français', setTheme: 'Thème', setThemeV: 'Auto',
+    setCtx: 'Contexte max', setCtxHint: 'Au-delà, une session est proche de sa limite : « À toi » propose de passer le relais, et Ledge relève de lui-même une session qui travaille sans demander.',
+    setLim: 'Alerte de limite d’usage', setLimHint: 'Au-delà, « À toi » prévient qu’une fenêtre d’usage d’un harnais (5 h, semaine, par modèle) approche de sa limite. Les limites sont celles du compte, lues sur chaque machine.',
+    phPoint: 'Le point', phAgo: 'il y a 1 min', phYours: 'À toi', phLimits: 'Limites', phAgents: 'Agents', phAgentsSub: '4 sessions · 2 projets sur ce PC',
+    phLedge: 'Ledge', phInbox: 'À traiter', phAtelier: 'Atelier', phBack: 'Agents',
+    phNotOnPc: 'Lecture impossible : reconnectez Claude Code sur le PC.', phUnreach: 'Pas de lecture depuis 25 min.', phStale: 'Lu il y a 12 min.',
+    phLoading: 'Lecture en cours…',
+    phTask1: 'Câbler la liste des sessions', phTask2: 'Trier par activité', phTask3: 'Page d’accueil',
+    phWorking: 'au travail', phWaits: 'attend ta réponse', phCaps: ['1 · Le point (onglet Ledge)', '2 · Agents : une ligne d’indicateurs', '3 · Fil : en-tête de la session'],
+    tuiNear: (n, p) => `${n} · ctx ${p} % · H relève`,
+    tuiLimit: '5 h à 84 % · remise 14:30', tuiLimitOpus: 'Opus semaine atteinte · reprend lun. 09:00',
+    tuiSessions: '4 sessions', tuiMachines: n => `${n} machine${n > 1 ? 's' : ''}`, tuiWait: '1 t’attend',
+    tuiYours: n => `À TOI · ${n}`, tuiProjects: 'PROJETS', tuiLimits: 'LIMITES', tuiExchanges: 'ÉCHANGES', tuiTerm: 'TERMINAL · OTTO',
+    tuiWork: 'Au travail', tuiWaitS: 'Attend', tuiIdle: 'Inactive',
+    tuiWrite: 'ÉCRIRE', tuiReplyTo: 'Répondre à Otto…',
+    tuiKeys: [['j k', 'naviguer'], ['↵', 'ouvrir'], ['tab', 'suivante'], ['y n', 'répondre'], ['/', 'demander'], ['+', 'lancer'], [',', 'réglages'], ['?', 'aide']],
+    tuiKeysS: [['esc', 'retour'], ['r', 'écrire'], ['j k', 'défiler'], ['t', 'terminal'], ['m', 'modèle'], ['?', 'aide']],
+    tuiSetCtx: 'Contexte max', tuiSetCtxH: 'au-delà : passer le relais', tuiSetLim: 'Alerte de limite', tuiSetLimH: 'au-delà : À toi prévient',
+    tuiSettings: 'RÉGLAGES', tuiLang: 'Langue', tuiTheme: 'Thème',
+    ago: 'il y a',
+    capOverview: w => `TUI · vue d’ensemble · ${w} colonnes`, capSession: w => `TUI · fil de session · ${w} colonnes`, capSettings: 'TUI · Réglages (,)'
+  },
+  en: {
+    title: 'Usage by harness', sub: 'limits · model · effort · context · duration',
+    screen: 'Screen', state: 'Limits', theme: 'Theme', lang: 'Language', dark: 'Dark', light: 'Light',
+    views: { side: 'Desktop · sidebar', session: 'Desktop · session', alert: 'Desktop · alert and setting', tui: 'TUI', phone: 'Phone' },
+    states: { ok: 'Up to date', loading: 'Reading', stale: 'Old', expired: 'Token expired', unreachable: 'Unreachable', codex: 'Codex gives some', machines: 'Two accounts', over: 'Over threshold', none: 'None' },
+    aim: 'TARGET',
+    claude: 'Claude Code', codex: 'Codex', cl: 'Claude',
+    h5: '5 h', week: 'Week', weekAll: 'Week · all models', session5: 'Session · 5 h',
+    weekOf: m => `Week · ${m}`,
+    reset: 'resets', resetAt: t => `resets at ${t}`, resetIn: (t, d) => `resets at ${t} · in ${d}`, resumes: t => `resumes at ${t}`,
+    mon: 'Mon 09:00', monShort: 'Mon',
+    read: a => `read ${a} ago`, fresh: 'up to date', reading: 'reading…', staleAge: '12 min', unreach: 'unreachable', unreachAge: 'read 25 min ago',
+    expired: 'Claude Code session expired: sign in again in Claude Code.', expiredShort: 'sign in again in Claude Code',
+    perModel: 'By model', reached: 'reached',
+    popTitle: 'Limits', popSub: m => `Account signed in on ${m} · read 40 s ago`, popSubStale: m => `Account signed in on ${m} · last read 12 min ago`,
+    popSubUnreach: m => `Account signed in on ${m} · api.anthropic.com unreachable · read 25 min ago`,
+    alertAt: p => `Alert at ${p} %`, settings: 'Settings',
+    local: 'Local', devbox: 'devbox', machinesShort: 'Local and SSH sessions',
+    home: 'Ledge.', homeSub: n => `${n} for you`, atelier: 'Workshop', actifs: '8 active',
+    yours: 'For you', projects: 'Projects',
+    now: 'now', min: 'min',
+    approve: 'Yes', deny: 'No', ok: 'Got it', see: 'See',
+    npm: 'npm test', port: 'Which port?', answer: 'Answer',
+    alert5w: '5 h window', alert5b: p => `${p} % · resets 14:30`,
+    alertOpusW: 'Opus week', alertOpusB: 'Reached · resumes Mon',
+    crumbs: ['Workshop', 'Ledge'], otto: 'Otto', topic: 'Wire the session list',
+    fil: 'Thread', terminal: 'Terminal', subagent: '1 subagent', accord: 'Your approval',
+    opus: 'Opus 5.5', high: 'high', effort: e => `effort ${e}`, ctx: p => `context ${p} %`, dur: '1 h 12',
+    gpt: 'gpt-6.1', medium: 'medium', fable: 'Fable 5.1',
+    tipModel: 'Model', tipEffort: 'Effort', tipCtx: 'Context', tipDur: 'Duration',
+    tipModelV: 'Opus 5.5 · chosen at launch', tipEffortV: 'high · chosen at launch', tipCtxV: '92 k / 200 k tokens · relief at 85 %', tipDurV: 'opened at 10:24, 1 h 12 ago',
+    th1: 'Exchange at 10:41 · Wires the list · 4 actions · 1 file changed', th2: 'You', th2b: 'Fix them', th3: 'Command npm test',
+    replyPh: 'Reply to Otto…',
+    cases: [
+      ['Launched by Ledge', 'Claude Code: model and effort known'],
+      ['Claude launched outside Ledge', 'model read from the transcript, effort unknown: nothing'],
+      ['Codex', 'model and effort read from the transcript'],
+      ['Near the threshold', 'context past « Max context »'],
+      ['OMP, Cursor', 'neither model nor context measured: duration only']
+    ],
+    setTitle: 'General', setCrumbs: 'Settings › General',
+    setLang: 'Language', setLangV: 'English', setTheme: 'Theme', setThemeV: 'Auto',
+    setCtx: 'Max context', setCtxHint: 'Past it, a session is near its limit: « For you » offers to hand over, and Ledge relieves a session that works without asking on its own.',
+    setLim: 'Usage limit alert', setLimHint: 'Past it, « For you » warns that a harness usage window (5 h, week, per model) is nearing its limit. Limits are the account’s, read on each machine.',
+    phPoint: 'Summary', phAgo: '1 min ago', phYours: 'For you', phLimits: 'Limits', phAgents: 'Agents', phAgentsSub: '4 sessions · 2 projects on this PC',
+    phLedge: 'Ledge', phInbox: 'To handle', phAtelier: 'Workshop', phBack: 'Agents',
+    phNotOnPc: 'Cannot read: sign in to Claude Code again on the PC.', phUnreach: 'Not read for 25 min.', phStale: 'Read 12 min ago.',
+    phLoading: 'Reading…',
+    phTask1: 'Wire the session list', phTask2: 'Sort by activity', phTask3: 'Home page',
+    phWorking: 'working', phWaits: 'waits for you', phCaps: ['1 · Summary (Ledge tab)', '2 · Agents: one line of indicators', '3 · Thread: the session header'],
+    tuiNear: (n, p) => `${n} · ctx ${p} % · H hand over`,
+    tuiLimit: '5 h at 84 % · resets 14:30', tuiLimitOpus: 'Opus week reached · resumes Mon 09:00',
+    tuiSessions: '4 sessions', tuiMachines: n => `${n} machine${n > 1 ? 's' : ''}`, tuiWait: '1 waits for you',
+    tuiYours: n => `FOR YOU · ${n}`, tuiProjects: 'PROJECTS', tuiLimits: 'LIMITS', tuiExchanges: 'EXCHANGES', tuiTerm: 'TERMINAL · OTTO',
+    tuiWork: 'Working', tuiWaitS: 'Waiting', tuiIdle: 'Idle',
+    tuiWrite: 'WRITE', tuiReplyTo: 'Reply to Otto…',
+    tuiKeys: [['j k', 'move'], ['↵', 'open'], ['tab', 'next'], ['y n', 'answer'], ['/', 'ask'], ['+', 'launch'], [',', 'settings'], ['?', 'help']],
+    tuiKeysS: [['esc', 'back'], ['r', 'write'], ['j k', 'scroll'], ['t', 'terminal'], ['m', 'model'], ['?', 'help']],
+    tuiSetCtx: 'Max context', tuiSetCtxH: 'past it: hand over', tuiSetLim: 'Limit alert', tuiSetLimH: 'past it: For you warns',
+    tuiSettings: 'SETTINGS', tuiLang: 'Language', tuiTheme: 'Theme',
+    ago: 'ago',
+    capOverview: w => `TUI · overview · ${w} columns`, capSession: w => `TUI · session thread · ${w} columns`, capSettings: 'TUI · Settings (,)'
+  }
+};
+const t = T[S.lang] || T.fr;
+document.documentElement.dataset.theme = S.theme;
+document.documentElement.lang = S.lang;
+
+/* ---------- the data each state shows ---------- */
+function limits(st) {
+  const claude = { id: 'claude', name: t.claude, short: t.cl, machine: t.local, status: 'ok', age: '40 s',
+    w: [{ k: t.h5, pct: 62, rs: '14:30', in: '2 h 10' }, { k: t.week, pct: 34, rs: t.mon, rsShort: t.monShort, in: '4 j' }],
+    m: [{ k: 'Opus', pct: 71, rs: t.mon }, { k: 'Fable', pct: 12, rs: t.mon }] };
+  const list = [];
+  if (st === 'none') return list;
+  if (st === 'loading') { list.push({ ...claude, status: 'loading' }); return list; }
+  if (st === 'stale') { list.push({ ...claude, status: 'stale' }); return list; }
+  if (st === 'expired') { list.push({ ...claude, status: 'expired' }); return list; }
+  if (st === 'unreachable') { list.push({ ...claude, status: 'unreachable' }); return list; }
+  if (st === 'over') {
+    list.push({ ...claude, w: [{ k: t.h5, pct: 84, rs: '14:30', in: '1 h 05' }, { k: t.week, pct: 58, rs: t.mon, rsShort: t.monShort, in: '4 j' }],
+      m: [{ k: 'Opus', pct: 100, rs: t.mon }, { k: 'Fable', pct: 20, rs: t.mon }] });
+    return list;
+  }
+  list.push(claude);
+  if (st === 'codex') list.push({ id: 'codex', name: t.codex, short: t.codex, machine: t.local, status: 'ok', age: '2 min',
+    w: [{ k: t.h5, pct: 18, rs: '15:10', in: '2 h 50' }, { k: t.week, pct: 41, rs: S.lang === 'fr' ? 'jeu. 11:00' : 'Thu 11:00', rsShort: S.lang === 'fr' ? 'jeu.' : 'Thu', in: '6 j' }], m: [] });
+  if (st === 'machines') list.push({ ...claude, machine: t.devbox, age: '1 min',
+    w: [{ k: t.h5, pct: 9, rs: '16:00', in: '3 h 40' }, { k: t.week, pct: 22, rs: S.lang === 'fr' ? 'mer. 18:00' : 'Wed 18:00', rsShort: S.lang === 'fr' ? 'mer.' : 'Wed', in: '5 j' }],
+    m: [{ k: 'Opus', pct: 15, rs: S.lang === 'fr' ? 'mer. 18:00' : 'Wed 18:00' }] });
+  return list;
+}
+const tone = p => (p >= 100 ? 'red' : p >= THRESHOLD ? 'amber' : '');
+const multi = () => S.st === 'machines';
+
+/* ---------- toolbar ---------- */
+function bar() {
+  const seg = (key, opts, on) => `<div class="seg">${opts.map(([v, l, off]) => `<button ${off ? 'disabled' : ''} class="${on === v ? 'on' : ''}" onclick="go('${key}','${v}')">${l}</button>`).join('')}</div>`;
+  const noStates = S.v === 'session';
+  document.getElementById('bar').innerHTML = `
+    <div class="brand">Ledge<span>.</span><small>${t.title} · ${t.sub}</small></div>
+    <div class="grp"><label>${t.screen}</label>${seg('v', Object.entries(t.views), S.v)}</div>
+    <div class="grp"><label>${t.state}</label>${seg('st', Object.entries(t.states).map(([k, l]) => [k, l, noStates]), S.st)}</div>
+    <div class="grp"><label>${t.theme}</label>${seg('theme', [['dark', t.dark], ['light', t.light]], S.theme)}</div>
+    <div class="grp"><label>${t.lang}</label>${seg('lang', [['fr', 'FR'], ['en', 'EN']], S.lang)}</div>`;
+}
+function go(k, v) { S[k] = v; const q = new URLSearchParams(S); history.replaceState(null, '', '?' + q); render(); }
+
+/* ---------- desktop pieces ---------- */
+const ICON = {
+  gauge: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></svg>',
+  help: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h0"/></svg>',
+  gear: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  clock: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+};
+const gauge = (w) => `<div class="g ${tone(w.pct)}"><span>${w.k}</span><div class="gbar"><i style="width:${Math.min(100, w.pct)}%"></i></div><b>${w.pct} %</b><span class="rs">↺ ${w.pct >= 100 ? (w.rsShort || w.rs) : (w.rsShort || w.rs)}</span></div>`;
+
+function limBlock(h, open) {
+  const head = (age, warn) => `<div class="lim-h"><span class="hn">${h.name}</span>${multi() ? `<span class="hm">· ${h.machine}</span>` : ''}${age ? `<span class="age ${warn ? 'warn' : ''}">${age}</span>` : ''}</div>`;
+  if (h.status === 'loading') return `<div class="lim">${head(t.reading)}<div class="lim-row"><div class="g"><span>${t.h5}</span><div class="skel" style="margin:0"></div><b></b><span></span></div><div class="g"><span>${t.week}</span><div class="skel" style="margin:0"></div><b></b><span></span></div></div></div>`;
+  if (h.status === 'expired') return `<button class="lim">${head('')}<div class="lim-msg warn">${t.expired}</div></button>`;
+  const age = h.status === 'stale' ? `${t.ago === 'ago' ? '' : 'il y a '}${t.staleAge}${t.ago === 'ago' ? ' ago' : ''}` : h.status === 'unreachable' ? t.unreach : '';
+  const dim = h.status === 'stale' || h.status === 'unreachable';
+  // A per-model window past the threshold surfaces under the two gauges; the rest stays in the detail.
+  const hot = h.m.filter(m => m.pct >= THRESHOLD);
+  return `<button class="lim ${dim ? 'dim' : ''} ${open ? 'open' : ''}">${head(age, dim)}<div class="lim-row">${h.w.map(gauge).join('')}</div>${hot.length ? `<div class="lim-row" style="margin-top:3px">${hot.map(m => gauge({ ...m, k: m.k, rsShort: t.monShort })).join('')}</div>` : ''}</button>`;
+}
+function limits_(open) {
+  const L = limits(S.st);
+  if (!L.length) return '';
+  return `<div class="lims">${L.map((h, i) => limBlock(h, open && i === 0)).join('')}</div>`;
+}
+function popover() {
+  const L = limits(S.st);
+  const h = L[0];
+  if (!h || h.status === 'loading' || h.status === 'expired') return '';
+  const row = (label, small, w) => `<div class="prow ${tone(w.pct)}"><div class="pl">${label}${small ? `<small>${small}</small>` : ''}</div><div class="gbar ${tone(w.pct)}"><i style="width:${Math.min(100, w.pct)}%"></i></div><div class="pp">${w.pct} %</div></div>`;
+  const sub = h.status === 'stale' ? t.popSubStale(h.machine) : h.status === 'unreachable' ? t.popSubUnreach(h.machine) : t.popSub(h.machine);
+  return `<div class="pop">
+    <h5>${t.popTitle} · ${h.name}</h5><div class="sub">${sub}</div>
+    ${row(t.session5, h.w[0].pct >= 100 ? t.resumes(h.w[0].rs) : t.resetIn(h.w[0].rs, h.w[0].in), h.w[0])}
+    ${row(t.weekAll, t.resetAt(h.w[1].rs), h.w[1])}
+    ${h.m.length ? `<div class="psep">${t.perModel}</div>` + h.m.map(m => row(t.weekOf(m.k), m.pct >= 100 ? t.resumes(m.rs) : t.resetAt(m.rs), m)).join('') : ''}
+    <div class="pfoot"><span>${t.alertAt(THRESHOLD)}</span><a>${t.settings}</a></div>
+  </div>`;
+}
+
+function sidebar({ open = false, yours = 'normal', rowSignal = false } = {}) {
+  const alerts = yours === 'alert';
+  const over = S.st === 'over' || alerts;
+  const cards = [
+    `<div class="st-card"><span class="bot b4"></span><div class="st-card-body"><div class="st-l1"><strong>Luna</strong><span class="where">Website</span><span class="st-time amber">5 ${t.min}</span></div><div class="st-l2"><span class="st-req">${t.port}</span><button class="st-qa">${t.answer}</button></div></div></div>`,
+    `<div class="st-card ${rowSignal ? '' : 'sel'}"><span class="bot"></span><div class="st-card-body"><div class="st-l1"><strong>Otto</strong><span class="where">Ledge</span><span class="st-time red">5 ${t.min}</span></div><div class="st-l2"><span class="st-req">${t.npm}</span><button class="st-qa pri">${t.approve}</button><button class="st-qa">${t.deny}</button></div></div></div>`
+  ];
+  const limCards = over ? [
+    `<div class="st-card"><span class="st-gico amber">${ICON.gauge}</span><div class="st-card-body"><div class="st-l1"><strong>${t.claude}</strong><span class="where">${t.alert5w}</span><span class="st-time amber">${t.now}</span></div><div class="st-l2"><span class="st-req">${t.alert5b(84)}</span><button class="st-qa">${t.ok}</button></div></div></div>`,
+    `<div class="st-card"><span class="st-gico red">${ICON.gauge}</span><div class="st-card-body"><div class="st-l1"><strong>${t.claude}</strong><span class="where">${t.alertOpusW}</span><span class="st-time red">12 ${t.min}</span></div><div class="st-l2"><span class="st-req">${t.alertOpusB}</span><button class="st-qa">${t.ok}</button></div></div></div>`
+  ] : [];
+  const all = [...limCards, ...cards];
+  const sig = (p) => `<span class="ctx-sig" title="${t.ctx(p)}">${ICON.gauge}${p} %</span>`;
+  return `<aside class="st">
+    <div class="st-top">
+      <div class="st-home"><span class="bot"></span><div><b>${t.home}</b><small>${t.homeSub(all.length)}</small></div><span class="st-fill"></span><span class="kbd">/</span></div>
+      <div class="st-nav"><span>${t.atelier}</span><span class="mono" style="font-size:11px">${t.actifs}</span></div>
+    </div>
+    <div class="st-scroll">
+      <div class="st-label"><span>${t.yours}</span><b class="st-badge">${all.length}</b><span class="st-fill"></span><span class="kbd">Alt ↓</span></div>
+      ${all.join('')}
+      <div class="st-label" style="margin-top:6px"><span>${t.projects}</span></div>
+      <div class="tree">
+        <div class="tp"><i></i>Ledge<small>3</small></div>
+        <div class="tb">fix/session-list</div>
+        <div class="ts ${rowSignal ? 'sel' : ''}"><span class="bot"></span><div class="tsb"><div class="r1"><b>Otto</b><span class="st-fill"></span><span class="st-time red">5 ${t.min}</span></div><div class="r2">${t.topic}</div></div></div>
+        <div class="ts"><span class="bot b2"></span><div class="tsb"><div class="r1"><b>Nova</b>${rowSignal ? sig(88) : ''}<span class="st-fill"></span><span class="st-time">2 ${t.min}</span></div><div class="r2">${t.phTask2}</div></div></div>
+        <div class="ts"><span class="bot b3"></span><div class="tsb"><div class="r1"><b>Pim</b><span class="st-fill"></span><span class="st-time">9 ${t.min}</span></div><div class="r2">${S.lang === 'fr' ? 'Relire la PR #212' : 'Review PR #212'}</div></div></div>
+        <div class="tp" style="margin-top:4px"><i class="g"></i>Website<small>1</small></div>
+        <div class="ts"><span class="bot b4"></span><div class="tsb"><div class="r1"><b>Luna</b><span class="st-fill"></span><span class="st-time amber">5 ${t.min}</span></div><div class="r2">${t.phTask3}</div></div></div>
+      </div>
+    </div>
+    ${limits_(open)}
+    <div class="st-foot"><span><i class="dot"></i>${t.local}<small>4</small></span>${multi() ? `<span><i class="dot"></i>${t.devbox}<small>2</small></span>` : ''}<span class="st-fill"></span><span class="ico">${ICON.help}</span><span class="ico">${ICON.gear}</span></div>
+    ${open ? popover() : ''}
+  </aside>`;
+}
+
+function metaHtml(kind) {
+  const sep = '<span class="sep">·</span>';
+  const ctx = (p, warn) => `<span class="cg ${warn ? 'amber' : ''}"><span class="gbar ${warn ? 'amber' : ''}"><i style="width:${p}%"></i></span>${t.ctx(p)}</span>`;
+  const dur = d => `<span class="cg">${ICON.clock}${d}</span>`;
+  const where = `<span>${t.local}</span>${sep}<span>ledge</span>`;
+  if (kind === 'ledge') return `${where}${sep}<span class="mdl tip-anchor">${t.opus}</span>${sep}<span>${t.effort(t.high)}</span>${sep}${ctx(46)}${sep}${dur(t.dur)}`;
+  if (kind === 'outside') return `${where}${sep}<span class="mdl">${t.opus}</span>${sep}${ctx(31)}${sep}${dur('24 min')}`;
+  if (kind === 'codex') return `${where}${sep}<span class="mdl">${t.gpt}</span>${sep}<span>${t.effort(t.medium)}</span>${sep}${ctx(22)}${sep}${dur('8 min')}`;
+  if (kind === 'near') return `${where}${sep}<span class="mdl">${t.fable}</span>${sep}<span>${t.effort(t.high)}</span>${sep}${ctx(88, true)}${sep}${dur('3 h 40')}`;
+  return `${where}${sep}${dur('46 min')}`;
+}
+function vrow(kind) {
+  return `<div class="vrow"><div class="vsw"><span class="on">≡ ${t.fil}</span><span>&gt;_ ${t.terminal}</span></div><div class="meta">${metaHtml(kind)}</div><span class="fill"></span><span class="meta">${t.subagent}</span></div>`;
+}
+function sessionMain(withTip) {
+  return `<section class="main">
+    <div class="top"><span class="crumb">${t.crumbs[0]}</span><span class="crumb">/</span><span class="crumb">${t.crumbs[1]}</span><span class="crumb">/</span><span class="bot"></span><b>${t.otto}</b><span class="crumb">· ${t.topic}</span><span class="fill"></span><span class="pill-red">${t.accord}</span></div>
+    ${vrow('ledge')}
+    ${withTip ? `<div class="tip" style="left:206px;top:96px"><dl><dt>${t.tipModel}</dt><dd>${t.tipModelV}</dd><dt>${t.tipEffort}</dt><dd>${t.tipEffortV}</dd><dt>${t.tipCtx}</dt><dd>${t.tipCtxV}</dd><dt>${t.tipDur}</dt><dd>${t.tipDurV}</dd></dl></div>` : ''}
+    <div class="thread">
+      <div class="tl"><span class="ic"></span><div class="tt">${t.th1}</div><time>10:41</time></div>
+      <div class="tl"><span class="ic" style="background:var(--foreground)"></span><div class="tt"><small>${t.th2}</small><div><b>${t.th2b}</b></div></div><time>10:45</time></div>
+      <div class="tl"><span class="ic"></span><div class="tt" style="color:var(--info)">&gt;_ ${t.th3}</div><time>5 min 12 s</time></div>
+    </div>
+    <div class="reply">${t.replyPh}</div>
+  </section>`;
+}
+function win(side, main, h) {
+  return `<div class="win" style="--wh:${h || 700}px"><div class="titlebar"><b>Ledge<i>.</i></b><span class="fill"></span><span class="dots"><span>—</span><span>▢</span><span>✕</span></span></div><div class="body">${side}${main}</div></div>`;
+}
+function settingsMain() {
+  return `<section class="main"><div class="set">
+    <h2>${t.setTitle}</h2><div class="crumbs">${t.setCrumbs}</div>
+    <div class="srow"><div class="sl">${t.setLang}</div><div><span class="sel-box">${t.setLangV} <span>▾</span></span></div></div>
+    <div class="srow"><div class="sl">${t.setTheme}</div><div><span class="sel-box">${t.setThemeV} <span>▾</span></span></div></div>
+    <div class="srow"><div class="sl">${t.setCtx}</div><div><span class="sel-box">85 % <span>▾</span></span><div class="sh">${t.setCtxHint}</div></div></div>
+    <div class="srow new"><div class="sl">${t.setLim}</div><div><span class="sel-box">${THRESHOLD} % <span>▾</span></span><div class="sh">${t.setLimHint}</div></div></div>
+  </div></section>`;
+}
+
+/* ---------- TUI ---------- */
+const len = s => [...s].length;
+function padSegs(segs, w) {
+  const out = []; let n = 0;
+  for (const [txt, c] of segs) {
+    if (n >= w) break;
+    let s = txt;
+    if (n + len(s) > w) s = [...s].slice(0, Math.max(0, w - n - 1)).join('') + '…';
+    out.push([s, c]); n += len(s);
+  }
+  if (n < w) out.push([' '.repeat(w - n), '']);
+  return out;
+}
+function box(title, rows, w, color = 'line', tcolor = 'dim') {
+  const inner = w - 4;
+  const top = [['╭─ ', color], [title, tcolor], [' ' + '─'.repeat(Math.max(0, w - 5 - len(title))) + '╮', color]];
+  return [top, ...rows.map(r => [['│ ', color], ...padSegs(r, inner), [' │', color]]), [['╰' + '─'.repeat(w - 2) + '╯', color]]];
+}
+function hcat(a, b) {
+  const n = Math.max(a.length, b.length), wa = a.length ? lenSegs(a[0]) : 0;
+  return Array.from({ length: n }, (_, i) => [...(a[i] || [[' '.repeat(wa), '']]), ...(b[i] || [])]);
+}
+const lenSegs = segs => segs.reduce((x, [s]) => x + len(s), 0);
+function bars(p, n = 10) { const f = Math.round(Math.min(100, p) / 100 * n); return '█'.repeat(f) + '░'.repeat(n - f); }
+const tcol = p => (p >= 100 ? 'red' : p >= THRESHOLD ? 'yellow' : 'dim');
+function renderTerm(lines, w) {
+  return `<div class="term"><pre>${lines.map(segs => padSegs(segs, w).map(([s, c]) => c ? `<span class="${c}">${esc(s)}</span>` : esc(s)).join('')).join('\n')}</pre></div>`;
+}
+const esc = s => [...s].map(ch => ch === '&' ? '&amp;' : ch === '<' ? '&lt;' : ch.codePointAt(0) > 0x2000 ? `<span class="w1">${ch}</span>` : ch).join('');
+
+function tuiStatus(w) {
+  const right = multi() ? `${t.local} ●  ${t.devbox} ●` : `${t.local} ●`;
+  const left = [[' ◖ ledge', 'coral'], [`  ${t.tuiSessions} · ${t.tuiMachines(multi() ? 2 : 1)}`, 'dim'], [` · ${t.tuiWait}`, 'red']];
+  const gap = w - lenSegs(left) - len(right) - 1;
+  return [...left, [' '.repeat(Math.max(1, gap)), ''], [right + ' ', 'dim']].map(([s, c]) => [s, (c ? c + ' ' : '') + 'barbg']);
+}
+function tuiLimitRows(w, compact) {
+  const L = limits(S.st), rows = [];
+  if (!L.length) return rows;
+  for (const h of L) {
+    const name = `${h.short}${multi() ? ' · ' + h.machine : ''}`;
+    if (h.status === 'loading') { rows.push([[name.padEnd(compact ? 12 : 14), 'fg'], [t.reading, 'faint']]); continue; }
+    if (h.status === 'expired') { rows.push([[name.padEnd(compact ? 12 : 14), 'fg'], [t.expiredShort, 'yellow']]); continue; }
+    const dim = h.status === 'stale' || h.status === 'unreachable';
+    const age = h.status === 'stale' ? (S.lang === 'fr' ? `lu il y a ${t.staleAge}` : `read ${t.staleAge} ago`) : h.status === 'unreachable' ? `${t.unreach} · ${t.unreachAge}` : t.read(h.age);
+    if (compact) {
+      // 80 columns: one line per harness, the two windows.
+      const seg = wd => [[`${wd.k} `, 'faint'], [bars(wd.pct, 5), dim ? 'faint' : tcol(wd.pct)], [` ${String(wd.pct).padStart(3)} %`, dim ? 'faint' : (tcol(wd.pct) === 'dim' ? 'fg' : tcol(wd.pct))], [` ↺${wd.rsShort || wd.rs}  `, 'faint']];
+      rows.push([[name.padEnd(12), 'fg'], ...seg(h.w[0]), ...seg(h.w[1]), ...(dim ? [[h.status === 'unreachable' ? t.unreach : t.staleAge, 'yellow']] : [])]);
+      for (const m of h.m.filter(m => m.pct >= THRESHOLD)) rows.push([[''.padEnd(12), ''], [`${m.k} `, 'faint'], [bars(m.pct, 5), tcol(m.pct)], [` ${m.pct} %`, tcol(m.pct)], [` ${m.pct >= 100 ? t.resumes(m.rs) : '↺ ' + m.rs}`, 'faint']]);
+      continue;
+    }
+    rows.push([[name, 'fg'], [' '.repeat(Math.max(1, w - 4 - len(name) - len(age))), ''], [age, dim ? 'yellow' : 'faint']]);
+    const line = (k, p, rs) => [[`  ${k.padEnd(9)}`, 'dim'], [bars(p), dim ? 'faint' : tcol(p)], [` ${String(p).padStart(3)} %`, dim ? 'faint' : (tcol(p) === 'dim' ? 'fg' : tcol(p))], [`  ${p >= 100 ? t.resumes(rs) : '↺ ' + rs}`, 'faint']];
+    rows.push(line(t.h5, h.w[0].pct, h.w[0].rs), line(t.week, h.w[1].pct, h.w[1].rs), ...h.m.map(m => line(m.k, m.pct, m.rs)));
+  }
+  return rows;
+}
+function tuiYours() {
+  const over = S.st === 'over';
+  const rows = [
+    [['! ', 'red'], ['Otto   ', 'fg b'], ['ledge    ', 'dim'], [S.lang === 'fr' ? 'veut lancer npm test' : 'wants to run npm test', 'red'], [' 5 min', 'faint']]
+  ];
+  if (over) rows.push([['◔ ', 'yellow'], [`${t.claude} · ${t.tuiLimit}`, 'fg']], [['◔ ', 'red'], [`${t.claude} · ${t.tuiLimitOpus}`, 'fg']]);
+  rows.push([['◔ ', 'yellow'], [t.tuiNear('Nova', 88), 'fg']]);
+  return rows;
+}
+function tuiTree(w) {
+  // name 7 · topic · context signal 6 · state 10, the topic takes what is left.
+  const topicW = w - 5 - 7 - 6 - 11;
+  const fitT = x => (len(x) > topicW ? [...x].slice(0, topicW - 1).join('') + '…' : x.padEnd(topicW));
+  const row = (mark, mc, name, topic, sig, state, sc, sel) => {
+    const b = sel ? ' selbg' : '';
+    return [[sel ? '▌' : ' ', 'coral' + b], ['  ' + mark + ' ', mc + b], [name.padEnd(7), 'fg b' + b], [fitT(topic) + ' ', 'dim' + b], [(sig || '').padEnd(6), 'yellow' + b], [state.padEnd(10), sc + b]];
+  };
+  return [
+    [['⬢ ', 'blue'], ['Ledge', 'fg b'], [' 3 sessions', 'faint']],
+    [['  ⑂ fix/session-list', 'faint']],
+    row('!', 'red', 'Otto', t.topic, '', t.tuiWaitS, 'red', true),
+    row('●', 'blue', 'Nova', t.phTask2, '◔88%', t.tuiWork, 'blue'),
+    row('○', 'green', 'Pim', S.lang === 'fr' ? 'Relire la PR #212' : 'Review PR #212', '', t.tuiIdle, 'green'),
+    [['⬢ ', 'green'], ['Website', 'fg b'], [' 1 session', 'faint']],
+    row('?', 'yellow', 'Luna', t.phTask3, '', t.tuiWaitS, 'yellow')
+  ];
+}
+function tuiKeys(keys) { return keys.flatMap(([k, a]) => [[` ${k} `, 'key fg'], [` ${a}  `, 'dim']]); }
+function tuiOverview(W) {
+  const lines = [tuiStatus(W)];
+  const yours = tuiYours();
+  if (W >= 120) {
+    const left = 56, right = W - left;
+    const L = [...box(t.tuiYours(yours.length), yours, left, 'red', 'red'), ...box(t.tuiProjects, tuiTree(left - 4), left)];
+    const card = [
+      [['! ', 'red'], [t.tuiWaitS, 'red'], [`  Claude Code · ${t.opus} ${t.high}`, 'dim'], [' · ctx 46 %', 'dim'], [` · ${t.dur}`, 'dim'], [` · ${t.local}`, 'dim']],
+      [['', '']],
+      [[S.lang === 'fr' ? 'veut lancer ' : 'wants to run ', 'red'], ['npm test', 'fg b'], ['  Bash', 'faint']],
+      [[` ${S.lang === 'fr' ? 'Autoriser' : 'Allow'} `, 'fg key'], ['y ', 'dim key'], ['  ', ''], [` ${S.lang === 'fr' ? 'Refuser' : 'Deny'} `, 'fg key'], ['n ', 'dim key']]
+    ];
+    const limRows = tuiLimitRows(right, false);
+    const R = [...box(`Otto · ${t.topic}`, card, right, 'red', 'red'),
+      ...(limRows.length ? box(t.tuiLimits, limRows, right) : []),
+      ...box(t.tuiExchanges, [[['10:41 ', 'faint'], ['Otto ', 'fg'], ['→ ', 'violet'], ['Nova ', 'fg'], [S.lang === 'fr' ? 'le tri est prêt ?' : 'is the sort ready?', 'dim']]], right)];
+    lines.push(...hcat(L, R));
+  } else {
+    const limRows = tuiLimitRows(W, true);
+    lines.push(...box(t.tuiYours(yours.length), yours, W, 'red', 'red'), ...box(t.tuiProjects, tuiTree(W - 4), W));
+    if (limRows.length) lines.push(...box(t.tuiLimits, limRows, W));
+  }
+  lines.push(tuiKeys(W >= 120 ? t.tuiKeys : t.tuiKeys.slice(0, 6)));
+  return renderTerm(lines, W);
+}
+function tuiSession(W) {
+  const title = W >= 120
+    ? `OTTO · ${t.topic.toUpperCase()} · CLAUDE CODE · ${t.opus.toUpperCase()} ${t.high.toUpperCase()} · CTX 46 % · ${t.dur.toUpperCase()}`
+    : `OTTO · CLAUDE CODE · ${t.opus.toUpperCase()} ${t.high.toUpperCase()} · CTX 46 % · ${t.dur.toUpperCase()}`;
+  const lines = [tuiStatus(W)];
+  const body = [
+    [[S.lang === 'fr' ? 'Vous' : 'You', 'coral b'], ['  10:45', 'faint']],
+    [['  ' + t.th2b, 'fg']],
+    [['✓ ', 'green'], ['Edit   ', 'dim'], ['apps/desktop/src/list/SessionList.tsx', 'fg'], ['  +12 -3', 'green']],
+    [['◆ ', 'red'], ['Bash   ', 'dim'], ['npm test', 'fg'], [S.lang === 'fr' ? '   → attend votre accord' : '   → waits for your approval', 'red']]
+  ];
+  lines.push(...box(title, body, W));
+  lines.push(...box(t.tuiWrite, [[['❯ ', 'coral'], [t.tuiReplyTo, 'faint']]], W));
+  lines.push(tuiKeys(t.tuiKeysS));
+  return renderTerm(lines, W);
+}
+function tuiSettings(W) {
+  const lines = [tuiStatus(W)];
+  const rows = [
+    [[t.tuiLang.padEnd(22), 'dim'], [S.lang === 'fr' ? 'Français' : 'English', 'fg']],
+    [[t.tuiTheme.padEnd(22), 'dim'], ['Auto', 'fg']],
+    [[t.tuiSetCtx.padEnd(22), 'dim'], ['‹ 85 % ›', 'fg'], [`  ${t.tuiSetCtxH}`, 'faint']],
+    [['▌', 'coral selbg'], [t.tuiSetLim.padEnd(21), 'fg selbg'], [`‹ ${THRESHOLD} % ›`, 'fg b selbg'], [`  ${t.tuiSetLimH}`, 'faint selbg']]
+  ];
+  lines.push(...box(t.tuiSettings, rows, W));
+  lines.push(tuiKeys([['j k', S.lang === 'fr' ? 'naviguer' : 'move'], ['← →', S.lang === 'fr' ? 'changer' : 'change'], ['esc', S.lang === 'fr' ? 'retour' : 'back']]));
+  return renderTerm(lines, W);
+}
+
+/* ---------- phone ---------- */
+function phLimits() {
+  const L = limits(S.st);
+  if (!L.length) return '';
+  const row = (k, w) => `<div class="ph-lim ${tone(w.pct)}"><span>${k}</span><div class="gbar ${tone(w.pct)}"><i style="width:${Math.min(100, w.pct)}%"></i></div><span class="pp"><b>${w.pct} %</b><small>${w.pct >= 100 ? t.resumes(w.rs) : '↺ ' + w.rs}</small></span></div>`;
+  return `<div class="ph-sec">${t.phLimits.toUpperCase()}</div>` + L.map(h => {
+    const head = `<div class="ph-hn">${h.name}${multi() ? `<small>· ${h.machine}</small>` : ''}</div>`;
+    if (h.status === 'loading') return head + `<div class="ph-msg">${t.phLoading}</div>`;
+    if (h.status === 'expired') return head + `<div class="ph-msg warn">${t.phNotOnPc}</div>`;
+    const note = h.status === 'stale' ? `<div class="ph-msg warn">${t.phStale}</div>` : h.status === 'unreachable' ? `<div class="ph-msg warn">${t.phUnreach}</div>` : '';
+    return head + `<div style="${h.status === 'stale' || h.status === 'unreachable' ? 'opacity:.5' : ''}">${row(t.h5, h.w[0])}${row(t.week, h.w[1])}${h.m.map(m => row(m.k, m)).join('')}</div>` + note;
+  }).join('');
+}
+function phTabs(on) {
+  return `<div class="ph-tabs">${[['inbox', t.phInbox], ['agents', t.phAgents], ['chat', t.phLedge], ['atelier', t.phAtelier]].map(([k, l]) => `<span class="${on === k ? 'on' : ''}">${l}</span>`).join('')}</div>`;
+}
+function phone1() {
+  const over = S.st === 'over';
+  return `<div class="phone"><div class="ph-status"><span>11:32</span><span>●●● 5G ▮</span></div>
+  <div class="ph-head"><h2>${t.phLedge}</h2></div>
+  <div class="ph-body"><div class="ph-card"><h3>${t.phPoint} <small>${t.phAgo}</small></h3>
+    <div class="ph-sec">${t.phYours.toUpperCase()} · ${over ? 4 : 2}</div>
+    <div class="ph-line"><span class="bot"></span><b>Otto</b><span class="muted">${t.npm}</span><span class="st-fill"></span><button class="ph-btn pri">${t.approve}</button><button class="ph-btn">${t.deny}</button></div>
+    ${over ? `<div class="ph-line"><span class="st-gico amber">${ICON.gauge}</span><span>${t.cl} · ${t.h5} <b style="color:var(--warning);font-weight:500">84 %</b></span><span class="muted">↺ 14:30</span></div>
+    <div class="ph-line"><span class="st-gico red">${ICON.gauge}</span><span>${t.cl} · Opus <b style="color:var(--danger-text);font-weight:500">100 %</b></span><span class="muted" style="white-space:nowrap">↺ ${t.monShort}</span></div>` : ''}
+    <div class="ph-line"><span class="bot b2"></span><b>Nova</b><span class="muted" style="color:var(--warning)">${t.ctx(88)}</span></div>
+    ${phLimits()}
+  </div></div>${phTabs('chat')}</div>`;
+}
+function phone2() {
+  const row = (bot, task, who, meta, tag, red) => `<div class="ph-row"><span class="bot ${bot}"></span><div style="flex:1;min-width:0"><h4>${task}</h4><div class="m">${who}</div><div class="m2">${meta}</div><span class="tag ${red ? 'red' : ''}">${tag}</span></div></div>`;
+  return `<div class="phone"><div class="ph-status"><span>11:32</span><span>●●● 5G ▮</span></div>
+  <div class="ph-head"><h2>${t.phAgents}</h2><p>${t.phAgentsSub}</p></div>
+  <div class="ph-body"><div class="ph-sec">ledge</div>
+  ${row('', t.phTask1, 'Otto · <code class="mono">fix/session-list</code>', `${t.opus} · ${t.high} · ${t.ctx(46)} · ${t.dur}`, t.phWaits, true)}
+  ${row('b2', t.phTask2, 'Nova · <code class="mono">feat/sort</code>', `${t.fable} · ${t.high} · <span class="amber">${t.ctx(88)}</span> · 3 h 40`, t.phWorking)}
+  ${row('b3', S.lang === 'fr' ? 'Relire la PR #212' : 'Review PR #212', 'Pim · <code class="mono">main</code>', `${t.opus} · ${t.ctx(31)} · 24 min`, t.phWorking)}
+  </div>${phTabs('agents')}</div>`;
+}
+function phone3() {
+  return `<div class="phone"><div class="ph-status"><span>11:32</span><span>●●● 5G ▮</span></div>
+  <div class="ph-head"><div class="back">‹ ${t.phBack}</div><h2 style="font-size:19px">${t.phTask1}</h2><p>Otto · fix/session-list</p>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"><span class="ph-chip">${t.opus} · ${t.high}</span><span class="ph-chip">${t.ctx(46)}</span><span class="ph-chip">${ICON.clock} ${t.dur}</span></div></div>
+  <div class="ph-body" style="border-top:1px solid var(--border);padding-top:12px;font-size:13px;display:flex;flex-direction:column;gap:12px">
+    <div><small style="color:var(--muted-foreground)">${t.th2} · 10:45</small><div><b>${t.th2b}</b></div></div>
+    <div style="color:var(--info)">&gt;_ ${t.th3}</div>
+    <div class="ph-card" style="border-color:var(--destructive)"><b style="color:var(--danger-text)">${t.accord}</b><div style="margin:6px 0">npm test</div><button class="ph-btn pri">${t.approve}</button> <button class="ph-btn">${t.deny}</button></div>
+  </div></div>`;
+}
+
+/* ---------- notes ---------- */
+const NOTES = {
+  fr: {
+    side: `<div class="note"><h3>Barre latérale</h3><h4>Les limites du compte, au pied, par harnais</h4><ul>
+      <li>Un bloc par harnais qui donne des fenêtres, juste au-dessus de la ligne machine (« Local 4 »). Deux mini-jauges : <b>5 h</b> et <b>Semaine</b>, le % et l’heure de remise à zéro (↺).</li>
+      <li>Jauge neutre sous le seuil, <b style="color:var(--warning)">ambre</b> au-delà (${THRESHOLD} % par défaut), <b style="color:var(--danger-text)">rouge</b> à 100 % (« reprend à … »).</li>
+      <li>Une fenêtre par modèle (Opus, Fable…) n’apparaît sous les deux jauges que si elle dépasse le seuil (état « Seuil dépassé »). Les autres restent dans le détail.</li>
+      <li>Clic sur le bloc : le détail (dessiné ouvert) : session 5 h avec « dans 2 h 10 », semaine tous modèles, puis une ligne par modèle. En pied : le seuil d’alerte et le lien vers Réglages. Ni plan, ni crédits, ni jeton.</li>
+      <li><b>Codex</b> : son plan actuel ne donne aucune fenêtre, donc <b>aucun bloc</b> (pas de « non fourni »). S’il en donne un jour : mêmes jauges (état « Codex en donne »).</li>
+      <li>États : <i>Lecture</i> (première lecture, barres en attente) · <i>Anciennes</i> (plus de 5 min sans lecture réussie : jauges estompées, « il y a 12 min » en ambre) · <i>Injoignable</i> (api.anthropic.com : dernières valeurs estompées, « injoignable ») · <i>Jeton expiré</i> (pas de valeurs : « Session Claude Code expirée : reconnectez-vous dans Claude Code ») · <i>Aucune</i> (harnais absent ou sans fenêtres : pas de bloc, le pied est celui d’aujourd’hui).</li>
+      <li><i>Deux comptes</i> : la machine devbox est connectée à un autre compte Claude. Un bloc par compte, nommé par sa machine (« Claude Code · devbox »). Deux machines sur le même compte : un seul bloc (voir question 1).</li></ul></div>`,
+    session: `<div class="note"><h3>En-tête de session</h3><h4>Modèle · effort · contexte · durée</h4><ul>
+      <li>La ligne d’en-tête (sous le titre, à côté du sélecteur Fil | Terminal) garde « Local · ledge » et la jauge de contexte, et ajoute le <b>modèle</b>, l’<b>effort</b> et la <b>durée</b> (depuis l’ouverture de la session).</li>
+      <li>Ce qui n’est pas connu n’est <b>pas affiché</b> : une session Claude lancée hors de Ledge n’a pas d’effort lisible, l’en-tête n’en montre pas. OMP et Cursor : la durée seule.</li>
+      <li>Contexte au-delà de « Contexte max » : jauge et texte en ambre (comme aujourd’hui « À toi »).</li>
+      <li>Survol de la ligne : infobulle (dessinée sur la fenêtre) avec la provenance : « choisi au lancement », « lu dans le transcript », jetons utilisés / fenêtre, heure d’ouverture.</li>
+      <li><b>Barre latérale</b> : la ligne de session ne prend qu’un signal compact, et seulement quand le contexte dépasse le seuil (Nova, « ◔ 88 % » en ambre). Rien d’autre, pour ne pas l’alourdir.</li></ul></div>`,
+    alert: `<div class="note"><h3>Alerte et réglage</h3><h4>« À toi » prévient, Réglages règle le seuil</h4><ul>
+      <li>Une fenêtre qui passe le seuil ajoute une carte dans « À toi » : icône jauge ambre, « Claude Code » et la fenêtre (« fenêtre 5 h »), « 84 % · remise 14:30 », bouton <b>Compris</b>.</li>
+      <li>À 100 % : carte rouge, « semaine Opus », « Atteinte · reprend lun. ».</li>
+      <li><b>Compris</b> range la carte jusqu’à la remise à zéro de cette fenêtre, ou jusqu’à 100 % si elle était sous 100 % (voir question 3). La jauge du pied reste colorée.</li>
+      <li>Réglages › Général : « <b>Alerte de limite d’usage</b> », juste sous « Contexte max », même liste (50 % à 95 % par 5), ${THRESHOLD} % par défaut. Un seul seuil pour toutes les fenêtres et tous les harnais. Gardé par le daemon local comme « Contexte max », appliqué par tous les fronts (TUI et téléphone compris).</li></ul></div>`,
+    tui: `<div class="note"><h3>TUI</h3><h4>Une boîte LIMITES, l’en-tête de session enrichi</h4><ul>
+      <li><b>120 colonnes</b> : dans la colonne de droite, une boîte <b>LIMITES</b> entre la carte de la session et ÉCHANGES : le harnais et l’âge de la lecture, puis 5 h, semaine et une ligne par modèle, en barres ██░ avec % et ↺.</li>
+      <li><b>80 colonnes</b> : la boîte LIMITES passe sous PROJETS, <b>une ligne par harnais</b> (5 h et semaine). Une fenêtre par modèle n’y ajoute une ligne qu’au-delà du seuil.</li>
+      <li>Couleurs : gris sous le seuil, jaune au-delà, rouge à 100 %. Anciennes ou injoignable : barres en gris foncé et l’âge en jaune. Jeton expiré : « reconnectez-vous dans Claude Code ».</li>
+      <li>Carte de session (120) : « Claude Code · Opus 5.5 élevé · ctx 46 % · 1 h 12 · Local ». Ligne de session : « ◔88% » en jaune seulement au-delà de « Contexte max ».</li>
+      <li>Fil de session : le titre de la boîte porte modèle, effort, contexte et durée. À 80 colonnes, le sujet saute en premier.</li>
+      <li><b>À TOI</b> (état « Seuil dépassé ») : « ◔ Claude Code · 5 h à 84 % · remise 14:30 » en jaune, « Opus semaine atteinte » en rouge. Pas de touche nouvelle.</li>
+      <li>Réglages (,) : « Alerte de limite » sous « Contexte max », ‹ › pour changer.</li></ul></div>`,
+    phone: `<div class="note"><h3>Téléphone</h3><h4>% et remise à zéro, rien d’autre</h4><ul>
+      <li><b>Le point</b> (onglet Ledge) : une section <b>LIMITES</b> sous « À toi » : par harnais, 5 h, semaine et chaque modèle, en barre avec % et ↺. Jamais plan, abonnement ni jeton.</li>
+      <li>Au-delà du seuil : la ligne entre dans « À TOI » (ambre ; rouge à 100 %), comme « contexte 88 % ».</li>
+      <li>Jeton expiré : « Lecture impossible : reconnectez Claude Code sur le PC. » (sans parler de jeton). Anciennes, injoignable : valeurs estompées et l’âge.</li>
+      <li><b>Agents</b> : la ligne qui portait déjà « contexte 46 % » devient « Opus 5.5 · élevé · contexte 46 % · 1 h 12 » (sans effort quand il est inconnu).</li>
+      <li><b>Fil</b> : sous le titre, trois puces : modèle · effort, contexte, durée.</li></ul></div>`,
+    q: `<div class="note"><h3>À trancher par l’utilisateur</h3><ol>
+      <li><b>Plusieurs machines</b> : un bloc par compte (Ledge reconnaît le même compte sur deux machines sans l’afficher) et le nom de la machine seulement quand il y a deux comptes (dessiné) ; ou toujours une ligne par machine ? <span class="rec">Je recommande par compte.</span></li>
+      <li><b>Détail des limites sur Desktop</b> : faut-il aussi les crédits / le dépassement payant (« extra usage ») ? Dessiné : non, % et remise seulement, comme sur le téléphone.</li>
+      <li><b>« Compris »</b> sur l’alerte : la range jusqu’à la remise à zéro de la fenêtre (une seule alerte par fenêtre), ou jusqu’à 100 % puis encore une fois ? <span class="rec">Je recommande : une fois au seuil, une fois à 100 %.</span></li>
+      <li><b>Notification</b> (système / téléphone) en plus de « À toi » : à 100 % seulement, au seuil aussi, ou jamais ? <span class="rec">Je recommande à 100 % seulement.</span></li>
+      <li><b>Un seul seuil</b> pour toutes les fenêtres (dessiné), ou un seuil par fenêtre (5 h / semaine) ?</li>
+      <li><b>Durée</b> d’une session découverte (lancée hors de Ledge) : depuis que Ledge la voit, avec l’infobulle qui le dit (dessiné), ou la masquer ?</li>
+      <li><b>« Anciennes »</b> : au bout de 5 min sans lecture réussie (dessiné) ; et au-delà d’1 h, masquer les valeurs ?</li>
+      <li><b>TUI 80 colonnes</b> : la boîte LIMITES toujours (dessiné, 1 ligne par harnais), ou seulement au-delà du seuil pour garder la place aux projets ?</li></ol></div>`
+  },
+  en: {}
+};
+NOTES.en = NOTES.fr; // notes for the reviewer stay in French; the screens are in both languages
+
+/* ---------- render ---------- */
+function render() {
+  bar();
+  const c = document.getElementById('canvas');
+  const cap = (s) => `<div class="cap"><b>${t.aim}</b>${s}</div>`;
+  let html = '';
+  if (S.v === 'side') {
+    html = cap(`${t.views.side} · ${t.states[S.st]}`) + win(sidebar({ open: true }), sessionMain(false));
+  } else if (S.v === 'session') {
+    html = cap(t.views.session) + win(sidebar({ rowSignal: true }), sessionMain(true), 700)
+      + `<div>${cap(S.lang === 'fr' ? 'La ligne d’en-tête selon la session' : 'The header line by session')}<div class="cases">${['ledge', 'outside', 'codex', 'near', 'omp'].map((k, i) => `<div class="case"><div class="cl"><b>${t.cases[i][0]}</b>${t.cases[i][1]}</div>${vrow(k)}</div>`).join('')}</div></div>`;
+  } else if (S.v === 'alert') {
+    html = cap(t.views.alert) + win(sidebar({ yours: 'alert' }), settingsMain());
+  } else if (S.v === 'tui') {
+    html = `<div>${cap(t.capOverview(120) + ' · ' + t.states[S.st])}${tuiOverview(120)}</div>`
+      + `<div>${cap(t.capOverview(80) + ' · ' + t.states[S.st])}${tuiOverview(80)}</div>`
+      + `<div>${cap(t.capSession(120))}${tuiSession(120)}</div>`
+      + `<div>${cap(t.capSession(80))}${tuiSession(80)}</div>`
+      + `<div>${cap(t.capSettings)}${tuiSettings(80)}</div>`;
+  } else {
+    html = cap(`${t.views.phone} · ${t.states[S.st]}`) + `<div class="phones">${[phone1(), phone2(), phone3()].map((p, i) => `<div>${p}<div class="ph-cap">${t.phCaps[i]}</div></div>`).join('')}</div>`;
+  }
+  c.innerHTML = html;
+  const N = NOTES[S.lang] || NOTES.fr;
+  document.getElementById('notes').innerHTML = N[S.v] + N.q;
+}
+render();
+</script>
+</body>
+</html>
