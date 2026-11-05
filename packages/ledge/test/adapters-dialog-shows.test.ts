@@ -74,3 +74,46 @@ describe('dialogMismatch: the dialog on screen is the request answered', () => {
     expect(dialogMismatch(claudeBash('mkdir zz-ledge-probe'), bash('mkdir zz-ledge-probe'))).toBeNull();
   });
 });
+
+describe('dialogMismatch: Claude Code 2.1.318 draws the command behind a `│ ` gutter (real captures)', () => {
+  // The command of the capture Guillaume could not approve (« the request changed, look again »), its shape kept.
+  const one = `D=/tmp; ls -la $D | head -3; echo ---; python3 -c "import json;print(json.dumps({\\"a\\":1},indent=1))" | head -150`;
+  // A line the TUI wrapped (at 70 columns), then a newline of the command's own.
+  const two = 'printf "%s\\n" "line one is quite a long piece of text to force wrapping at seventy columns"\necho second-line-after-newline; ls -la /tmp | head -2';
+  it('the gutter is not the command: the command read is the one the hook sent, and it is approved', () => {
+    const shown = claudeAdapter.detectPrompt(fx('claude2-318-permission-bash'));
+    expect(shown).toMatchObject({ kind: 'permission', text: one, command: { lines: [one] } });
+    expect(dialogMismatch(shown, bash(one), 120)).toBeNull();
+    const wrapped = claudeAdapter.detectPrompt(fx('claude2-318-permission-bash-wrapped'));
+    expect(wrapped?.command?.lines).toEqual(['printf "%s\\n" "line one is quite a long piece of text to force', 'wrapping at seventy columns"', 'echo second-line-after-newline; ls -la /tmp | head -2']);
+    expect(dialogMismatch(wrapped, bash(two), 70)).toBeNull();
+  });
+  it('the same dialogs without the gutter (the format before 2.1.318) read the same command', () => {
+    const bare = (n: string) => fx(n).replace(/^(\s*)│ /gm, '$1  ');
+    expect(bare('claude2-318-permission-bash-wrapped')).not.toContain('│');
+    expect(dialogMismatch(claudeAdapter.detectPrompt(bare('claude2-318-permission-bash')), bash(one), 120)).toBeNull();
+    const wrapped = claudeAdapter.detectPrompt(bare('claude2-318-permission-bash-wrapped'));
+    expect(wrapped?.command?.lines).toHaveLength(3);
+    expect(dialogMismatch(wrapped, bash(two), 70)).toBeNull();
+    expect(dialogMismatch(wrapped, bash(two.replace('\necho', ' echo')), 70)).toBe(STALE);
+  });
+  it('a command that only looks the same is still refused, a character, a space or a newline apart', () => {
+    const shown = claudeAdapter.detectPrompt(fx('claude2-318-permission-bash'));
+    expect(dialogMismatch(shown, bash(one.replace('"a\\":1', '"a\\":2')), 120)).toBe(STALE);
+    expect(dialogMismatch(shown, bash(one.replace('head -150', 'head  -150')), 120)).toBe(STALE);
+    expect(dialogMismatch(shown, bash(`│ ${one}`), 120)).toBe(STALE);
+    const wrapped = claudeAdapter.detectPrompt(fx('claude2-318-permission-bash-wrapped'));
+    // The command's own newline is not a space; the TUI's wrap is not a newline.
+    expect(dialogMismatch(wrapped, bash(two.replace('\necho', ' echo')), 70)).toBe(STALE);
+    expect(dialogMismatch(wrapped, bash(two.replace('force wrapping', 'force\nwrapping')), 70)).toBe(STALE);
+    // On a wider pane that line had room left for the next word: there the break would be a newline.
+    expect(dialogMismatch(wrapped, bash(two), 120)).toBe(STALE);
+  });
+  it('only a gutter on every line is taken off, once: a `│` of the command itself stays', () => {
+    expect(claudeBash('│ echo │ ok')?.command?.lines).toEqual(['echo │ ok']);
+    expect(claudeBash('│ │ ok')?.command?.lines).toEqual(['│ ok']);
+    expect(claudeBash('│ echo one', 'echo two')?.command?.lines).toEqual(['│ echo one', 'echo two']);
+    expect(dialogMismatch(claudeBash('│ echo one', 'echo two'), bash('echo one\necho two'), 80)).toBe(STALE);
+    expect(dialogMismatch(claudeBash('│ cat > a.txt <<EOF', '│', '│   two', '│ EOF'), bash('cat > a.txt <<EOF\n\n  two\nEOF'), 80)).toBeNull();
+  });
+});

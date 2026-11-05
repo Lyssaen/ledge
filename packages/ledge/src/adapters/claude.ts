@@ -170,11 +170,25 @@ function parseDialog(pane: string): Dialog | null {
   };
 }
 
-/** The pane lines between the dialog's dashed rules (a command, a diff), or none. */
+/**
+ * 2.1.318 draws the command behind a `│ ` gutter, on each line, a wrapped one and one after a newline alike:
+ *
+ *   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ *    │ touch zzprobe; echo a1 b2 c3 d4 e5 f6 g7 h8 i9 j10
+ *    │ k11 l12
+ *   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ */
+const GUTTER_COLUMN = /^(\s*)│(?: |$)/;
+/**
+ * The pane lines between the dialog's dashed rules (a command, a diff), or none. A gutter on every line is not the
+ * command's: it is blanked, so each line keeps its columns (where it ends tells a wrap from a newline).
+ */
 function dashed(header: string[]): string[] {
   const d1 = header.findIndex(l => DASHED.test(l.trim()));
   const d2 = d1 < 0 ? -1 : header.findIndex((l, i) => i > d1 && DASHED.test(l.trim()));
-  return d2 > d1 + 1 ? header.slice(d1 + 1, d2) : [];
+  const body = d2 > d1 + 1 ? header.slice(d1 + 1, d2) : [];
+  const guttered = body.some(l => !isBlank(l)) && body.every(l => isBlank(l) || GUTTER_COLUMN.test(l));
+  return guttered ? body.map(l => l.replace(GUTTER_COLUMN, m => ' '.repeat(m.length))) : body;
 }
 /** The lines between the dialog's dashed rules, trimmed, or ''. */
 const dashedBody = (header: string[]) => dashed(header).map(l => l.trim()).filter(Boolean).join('\n');
@@ -439,7 +453,8 @@ const PLAN_ACCEPT = /\bmanually approve\b/i;
 // Auto mode answers every later prompt by itself: on a permission it is more than "don't ask again for this". On a plan,
 // 2.0.x lists « Yes, clear context and auto-accept edits » before « Yes, auto-accept edits »: clearing the context
 // would wipe the conversation, never part of « always ».
-const ALWAYS = /don't ask again|always allow|accept edits|for this session/i;
+//   2. Yes, allow reading from /tmp from this project                              Bash (2.1.318, a command that reads)
+const ALWAYS = /don't ask again|always allow|\ballow\b.*\bfrom this project\b|accept edits|for this session/i;
 const AUTO_MODE = /auto mode/i;
 const PLAN_ALWAYS = /accept edits|auto mode/i;
 const CLEAR_CONTEXT = /clear context/i;

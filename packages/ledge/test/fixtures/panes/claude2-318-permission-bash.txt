@@ -1,0 +1,27 @@
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Haiku 5.5 · Claude Team
+ ▝▝   ▝▝   /…/4050628c-4619-4200-855a-7e6df9a43453/scratchpad/stale/work
+
+
+❯ Run exactly this one bash command, nothing else, and do not change it: D=/tmp; ls -la $D | head -3; echo ---; python3
+  -c "import json;print(json.dumps({\"a\":1},indent=1))" | head -150
+
+● Bash(D=/tmp; ls -la $D | head -3; echo ---; python3 -c "import json;print(json.dumps({\"a\":1},indent=1))" | head
+      -150)
+  ⎿  Waiting…
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below
+ Run the requested ls and JSON print command
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ D=/tmp; ls -la $D | head -3; echo ---; python3 -c "import json;print(json.dumps({\"a\":1},indent=1))" | head -150
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and switch to auto mode · auto mode handles these prompts for you
+   3. No
+
+ Esc to cancel · Tab to amend

@@ -325,6 +325,17 @@ describe('claude adapter: always and a note (lot 6a)', () => {
     expect(() => claudeAdapter.keysFor('always', perm, pane)).toThrow('no "always" option in this dialog, answer in the terminal');
     expect(() => claudeAdapter.keysFor('always', perm)).toThrow('no "always" option in this dialog, answer in the terminal');
   });
+  it('Claude Code 2.1.318: always is its project option when it has one, never auto mode; the three answers otherwise (real captures)', () => {
+    const read = { ...perm, text: 'printf …' };
+    // 2. Yes, allow reading from /tmp from this project · 3. Yes, and switch to auto mode
+    expect(claudeAdapter.keysFor('always', read, fx('claude2-318-permission-bash-wrapped'))).toEqual([{ text: '2' }]);
+    // Yes · Yes, and switch to auto mode · No: nothing that stops asking but auto mode.
+    expect(() => claudeAdapter.keysFor('always', read, fx('claude2-318-permission-bash'))).toThrow('no "always" option in this dialog, answer in the terminal');
+    for (const pane of [fx('claude2-318-permission-bash'), fx('claude2-318-permission-bash-wrapped')]) {
+      expect(claudeAdapter.keysFor('accept', read, pane)).toEqual([{ text: '1' }]);
+      expect(claudeAdapter.keysFor('deny', read, pane)).toEqual([{ keys: ['Escape'] }]);
+    }
+  });
   it('always on a plan never clears the context (Claude Code 2.0.x lists that variant first; edited capture)', () => {
     const v20 = fx('claude2-plan')
       .replace('❯ 1. Yes, and use auto mode', '❯ 1. Yes, clear context and auto-accept edits (shift+tab)')
