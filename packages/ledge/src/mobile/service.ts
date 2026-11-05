@@ -1,7 +1,7 @@
 // Mobile access: files, relay link, sign-in, pairing and channels put together, as one state and a set of commands
 // for the local fronts. Nothing secret (relay token, device code, keys, nonces, message texts) reaches the state or the log.
 import type WebSocket from 'ws';
-import { DeviceNameSchema, PushSendResultSchema, SealedFrameSchema, deviceKindOfLabel, type DeviceKind, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
+import { DEFAULT_DEVICE_PREFS, DeviceNameSchema, DevicePrefsSchema, PushSendResultSchema, SealedFrameSchema, deviceKindOfLabel, type DeviceKind, type DevicePrefs, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
 import {
   clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations,
   MAX_DEVICE_PEERS, type ApprovedDevice, type RelaySession, type Revocation
@@ -38,6 +38,10 @@ export interface MobileService {
   pushOf(deviceId: string): PushSetting | null;
   /** Stores (or with null removes) the push subscription of an approved device. */
   setPush(deviceId: string, p: PushSetting | null): void;
+  /** The device's own settings (Réglages on the phone): the defaults for one that never set them or is unknown. */
+  prefsOf(deviceId: string): DevicePrefs;
+  /** Stores an approved device's settings, whole (persisted with it); throws for an unknown device. */
+  setPrefs(deviceId: string, prefs: DevicePrefs): void;
   /** The relay's VAPID public key: undefined until read, null when the relay has push off. Read at each `online`. */
   relayPushKey(): string | null | undefined;
   /** Asks the relay to forward an encrypted push (`POST /push/send`, Bearer PC). Never throws. */
@@ -412,6 +416,16 @@ export async function createMobileService(opts: {
         return p ? { ...rest, push: p } : rest;
       }));
       changed();
+    },
+
+    prefsOf(deviceId) {
+      return devices.find((d) => d.id === deviceId)?.prefs ?? DEFAULT_DEVICE_PREFS;
+    },
+
+    setPrefs(deviceId, raw) {
+      const prefs = DevicePrefsSchema.parse(raw);
+      if (!devices.some((d) => d.id === deviceId)) throw new Error('no such device');
+      saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, prefs } : d)));
     },
 
     relayPushKey: () => pushKey,

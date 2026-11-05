@@ -117,3 +117,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .split-detail [data-back="inbox"], .split-detail [data-back="agents"] { display: none; }
   .app:not(:has(.split)) > :not(.tabbar) { width: 100%; max-width: 720px; margin-inline: auto; }
 }
+
+/* « Réduire les animations » in Réglages (src/motion.ts): unlayered and important, it wins over every layer's animation. */
+:root[data-motion='reduced'] *, :root[data-motion='reduced'] *::before, :root[data-motion='reduced'] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}

@@ -2,7 +2,7 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, type Assertion, type DeviceKind, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
   type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
@@ -35,9 +35,9 @@ export interface MobileState {
   capabilities: CapabilitiesByTool | null;
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
-  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string } | null;
+  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true } | null;
   /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
   projects: PhoneProject[];
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
@@ -130,6 +130,10 @@ export interface MobileStore {
   registerCredential(c: Credential): string | null;
   /** Names this device on the PC (`device.rename`); its next snapshot carries the name. The op's id, or null when nothing was sent. */
   renameDevice(name: string): string | null;
+  /** Stores this device's own settings on the PC, whole (`device.prefs`); its next snapshot carries them. Resolves when the PC answers. */
+  setDevicePrefs(prefs: DevicePrefs): Promise<ChatAction>;
+  /** Sets the PC's « Contexte max », shared with every front (`context.set`). Resolves when the PC answers. */
+  setContextNear(near: number): Promise<ChatAction>;
   interrupt(id: string): string | null;
   /** Closes the session (`session.close`) with the device's assertion over it. The op's id, or null when nothing was sent (not ready, a close already on its way). */
   sessionClose(id: string, assertion: Assertion): string | null;
@@ -733,6 +737,18 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
     renameDevice(name) {
       return write(op => ({ type: 'device.rename', op, name }));
+    },
+
+    setDevicePrefs(prefs) {
+      if (!state.daemon?.settings) return Promise.resolve({ status: 'rejected', reason: 'unavailable' });
+      const op = write(o => ({ type: 'device.prefs', op: o, prefs }));
+      return op === null ? Promise.resolve({ status: 'failed' }) : finalOf(op);
+    },
+
+    setContextNear(near) {
+      if (!state.daemon?.settings) return Promise.resolve({ status: 'rejected', reason: 'unavailable' });
+      const op = write(o => ({ type: 'context.set', op: o, near }));
+      return op === null ? Promise.resolve({ status: 'failed' }) : finalOf(op);
     },
 
     registerCredential(c) {

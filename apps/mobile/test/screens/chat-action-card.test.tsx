@@ -75,7 +75,7 @@ describe('the action card', () => {
   it('without a passkey, a checked row cannot be applied and Connexion is pointed to', () => {
     open({ actions: [cancel] }, false);
     expect(within(card()).getByRole('button', { name: 'Abandonner…' })).toBeDisabled();
-    expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '#/connection');
+    expect(screen.getByRole('link', { name: 'Réglages' })).toHaveAttribute('href', '#/connection');
   });
 
   it('« Ignorer » sets the turn aside, and an ignored card folds into a line with « Revoir »', async () => {

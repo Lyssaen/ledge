@@ -25,14 +25,14 @@ describe('Connection: notifications', () => {
     act(() => t.deliver(withPush('on')));
     expect(screen.getByText('Notifications')).toBeInTheDocument();
     expect(screen.getByText('Activées')).toBeInTheDocument();
-    expect(screen.getByRole('switch')).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Notifications' })).toBeChecked();
   });
 
   it('off → « Désactivées » with a switch that is off', () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(withPush('off')));
     expect(screen.getByText('Désactivées')).toBeInTheDocument();
-    expect(screen.getByRole('switch')).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Notifications' })).not.toBeChecked();
   });
 
   it('stale → the message, and « Activer les notifications »', () => {
@@ -46,13 +46,13 @@ describe('Connection: notifications', () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(withPush('unavailable')));
     expect(screen.getByText('Les notifications ne sont pas disponibles sur ce PC.')).toBeInTheDocument();
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Notifications' })).not.toBeInTheDocument();
   });
 
   it('turning the switch off sends push.unsubscribe', async () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(withPush('on')));
-    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Notifications' }));
     await waitFor(() => expect(t.of('push.unsubscribe')).toHaveLength(1));
   });
 
@@ -60,7 +60,7 @@ describe('Connection: notifications', () => {
     Object.defineProperty(globalThis.navigator, 'standalone', { configurable: true, value: false });
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(withPush('off')));
-    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Notifications' }));
     expect(await screen.findByText(/Sur iPhone, ouvrez Ledge depuis son icône/)).toBeInTheDocument();
   });
 
@@ -68,7 +68,7 @@ describe('Connection: notifications', () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(withPush('off')));
     // The app's stubbed fetch answers /push/key with a body that holds no key.
-    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Notifications' }));
     expect(await screen.findByText(/L’activation n’a pas abouti/)).toBeInTheDocument();
     expect(t.of('push.subscribe')).toEqual([]);
   });
