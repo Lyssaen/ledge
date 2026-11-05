@@ -112,8 +112,9 @@ function UsageDetail({ g, threshold, where, now, onSettings }: { g: UsageGroup; 
   const u = t.usage;
   const s = shownWindows(g, threshold);
   const age = g.readAt ? span(now - Date.parse(g.readAt), lang) : null;
-  const read = !age ? u.neverRead : g.status === 'stale' ? u.lastRead(age) : u.read(age);
-  const sub = [u.signedIn(where), ...(g.status === 'unreachable' ? [g.harness === 'claude' ? u.unreachHost('api.anthropic.com') : u.unreachable] : []), read].join(' · ');
+  // Never read: nothing about when (a first failed read says only that it is unreachable).
+  const read = !age ? (g.status === 'unreachable' ? null : u.neverRead) : g.status === 'stale' ? u.lastRead(age) : u.read(age);
+  const sub = [u.signedIn(where), ...(g.status === 'unreachable' ? [g.harness === 'claude' ? u.unreachHost('api.anthropic.com') : u.unreachable] : []), ...(read ? [read] : [])].join(' · ');
   const when = (w: UsageWindow, withIn: boolean) => {
     if (!w.resetsAt) return null;
     const at = resetLong(w.resetsAt, now, lang);
