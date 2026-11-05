@@ -12,11 +12,12 @@ export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 type Json = Record<string, unknown>;
 const obj = (v: unknown): Json | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : undefined);
 
-/** The token Claude Code signed in with: `CLAUDE_CODE_OAUTH_TOKEN`, else `~/.claude/.credentials.json` (`claudeAiOauth`).
- *  `expired`: its `expiresAt` has passed. null: not signed in (or unreadable). The file is only read. */
-export async function readClaudeToken(home: string, env: NodeJS.ProcessEnv, now: number, read: (p: string) => Promise<string> = p => readFile(p, 'utf8')): Promise<{ token: string } | 'expired' | null> {
+/** The token Claude Code signed in with: `CLAUDE_CODE_OAUTH_TOKEN` (`env`), else `~/.claude/.credentials.json` (`file`,
+ *  `claudeAiOauth`). `expired`: its `expiresAt` has passed. null: not signed in (or unreadable). The file is only read.
+ *  Only the file's token goes with the account `~/.claude.json` names: an environment token may be another account's. */
+export async function readClaudeToken(home: string, env: NodeJS.ProcessEnv, now: number, read: (p: string) => Promise<string> = p => readFile(p, 'utf8')): Promise<{ token: string; from: 'env' | 'file' } | 'expired' | null> {
   const fromEnv = env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
-  if (fromEnv) return { token: fromEnv };
+  if (fromEnv) return { token: fromEnv, from: 'env' };
   let raw: string;
   try { raw = await read(join(home, '.claude', '.credentials.json')); } catch { return null; }
   let o: Json | undefined;
@@ -25,7 +26,7 @@ export async function readClaudeToken(home: string, env: NodeJS.ProcessEnv, now:
   if (!token) return null;
   const expiresAt = typeof o?.expiresAt === 'number' ? o.expiresAt : undefined;
   if (expiresAt !== undefined && expiresAt <= now) return 'expired';
-  return { token };
+  return { token, from: 'file' };
 }
 
 /** An opaque id of the account Claude Code is signed in to (`~/.claude.json` `oauthAccount`): 12 hex of a hash, the same on

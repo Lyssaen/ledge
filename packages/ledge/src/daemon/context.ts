@@ -115,9 +115,10 @@ export function codexTurn(lines: readonly string[]): { model?: string; effort?: 
 }
 
 /** Codex's limits as its last `token_count` reports them: the 5 hours (300 minutes) and the week (10 080), each `used_percent`
- *  and `resets_at` (epoch seconds; `resets_in_seconds` from an older CLI). `null`: it reports none (a plan without windows);
- *  undefined: no `token_count` with `rate_limits` in the part read. `at`: when it was reported. */
-export function codexLimits(lines: readonly string[]): { windows: UsageWindow[]; at: string } | null | undefined {
+ *  and `resets_at` (epoch seconds; `resets_in_seconds` from an older CLI). No window: it reports none (a plan without windows).
+ *  undefined: no dated `token_count` with `rate_limits` in the part read. `at`: when it was reported, kept for an empty one too,
+ *  so an older reading never replaces a newer one. */
+export function codexLimits(lines: readonly string[]): { windows: UsageWindow[]; at: string } | undefined {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]!.trim();
     if (!line.includes('rate_limits')) continue;
@@ -127,7 +128,8 @@ export function codexLimits(lines: readonly string[]): { windows: UsageWindow[];
     if (p.type !== 'token_count' || !('rate_limits' in p)) continue;
     const rl = obj(p.rate_limits);
     const at = typeof e.timestamp === 'string' && !Number.isNaN(Date.parse(e.timestamp)) ? new Date(e.timestamp).toISOString() : undefined;
-    if (!rl || !at) return null;
+    if (!at) continue;
+    if (!rl) return { windows: [], at };
     const windows: UsageWindow[] = [];
     for (const key of ['primary', 'secondary'] as const) {
       const w = obj(rl[key]);
@@ -139,14 +141,14 @@ export function codexLimits(lines: readonly string[]): { windows: UsageWindow[];
       windows.push({ kind, pct: Math.max(0, Math.min(1000, Math.round(w.used_percent))), resetsAt: resets && !Number.isNaN(resets.getTime()) ? resets.toISOString() : null });
     }
     windows.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'five_hour' ? -1 : 1));
-    return windows.length ? { windows, at } : null;
+    return { windows, at };
   }
   return undefined;
 }
 
 /** What a turn's end tells about a session, from one read of its transcript's end: its context, the model and effort it runs,
  *  and, for Codex, the account's limits. Each part undefined when it cannot be told. */
-export interface TurnInfo { context?: Context; model?: string; effort?: string; codexLimits?: { windows: UsageWindow[]; at: string } | null }
+export interface TurnInfo { context?: Context; model?: string; effort?: string; codexLimits?: { windows: UsageWindow[]; at: string } }
 export async function readTurn(s: Pick<Session, 'tool' | 'transcriptPath' | 'model'>, at: string): Promise<TurnInfo> {
   if (!s.transcriptPath || (s.tool !== 'claude' && s.tool !== 'codex')) return {};
   let lines: string[];

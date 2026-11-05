@@ -83,6 +83,16 @@ describe('the usage service: Claude Code', () => {
     expect(m.svc.state().harnesses[0]!.status).toBe('ok');
   });
 
+  it('a Retry-After longer than Ledge\'s own 15-minute cap is kept', async () => {
+    const m = machine({ answers: [{ status: 429, headers: { 'retry-after': '3600' } }, { status: 200, body: API }] });
+    await m.svc.tick();
+    m.advance(16 * 60_000); await m.svc.tick();
+    expect(m.calls).toHaveLength(1);
+    m.advance(44 * 60_000); await m.svc.tick();
+    expect(m.calls).toHaveLength(2);
+    expect(m.svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
   it('an expired token is never sent nor refreshed: « expired », no window; a 401 says the same', async () => {
     const expired = machine({ creds: JSON.stringify({ claudeAiOauth: { accessToken: 'old', expiresAt: T0 - 1 } }) });
     await expired.svc.tick();
@@ -103,6 +113,30 @@ describe('the usage service: Claude Code', () => {
     // Paused (the next read is not due): past 5 minutes it is stale.
     m.advance(6 * 60_000);
     expect(m.svc.state().harnesses[0]!.status).toBe('stale');
+  });
+});
+
+describe('the usage service: the account', () => {
+  it('is told only for the token Claude Code keeps in its file; CLAUDE_CODE_OAUTH_TOKEN may be another account\'s: none then', async () => {
+    let t = T0;
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: 'file-tok', expiresAt: T0 + 30 * 24 * 3_600_000 } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: 'acc-A' } });
+      throw new Error('ENOENT');
+    };
+    let env: NodeJS.ProcessEnv = { CLAUDE_CODE_OAUTH_TOKEN: 'env-tok-B' };
+    const headers: string[] = [];
+    const svc = createUsage({ home: '/h', env: async () => env, file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { headers.push(h.Authorization!); return { status: 200, body: JSON.stringify(API), headers: {} }; } });
+    await svc.tick();
+    expect(headers).toEqual(['Bearer env-tok-B']);
+    expect(svc.state().harnesses[0]!.account).toBeNull();
+    // The environment token gone (a later login shell): the file's token, and its account, at once.
+    env = {};
+    t += 11 * 60_000; // past the environment's reread
+    await svc.tick();
+    expect(headers.at(-1)).toBe('Bearer file-tok');
+    expect(svc.state().harnesses[0]!.account).toMatch(/^[0-9a-f]{12}$/);
   });
 });
 
@@ -160,7 +194,16 @@ describe('the usage service: Codex', () => {
     expect(m.svc.state().alerts.map(a => [a.harness, a.window.kind, a.level])).toEqual([['codex', 'seven_day', 'threshold']]);
     m.svc.observeCodex({ windows: [{ ...w[0]!, pct: 1 }], at: '2026-11-05T13:00:00.000Z' });
     expect(m.svc.state().harnesses[0]!.windows[0]!.pct).toBe(30);
-    m.svc.observeCodex(null);
+    // A plan without windows, reported later: Codex goes.
+    m.svc.observeCodex({ windows: [], at: '2026-11-05T14:00:00.000Z' });
     expect(m.svc.state().harnesses).toEqual([]);
+  });
+
+  it('an older reading never replaces a newer one, an empty one included (another session\'s older transcript)', () => {
+    const m = machine({ creds: null });
+    const w = [{ kind: 'five_hour' as const, pct: 30, resetsAt: '2026-11-05T18:00:00.000Z' }];
+    m.svc.observeCodex({ windows: w, at: '2026-11-05T13:59:00.000Z' });
+    m.svc.observeCodex({ windows: [], at: '2026-11-05T12:00:00.000Z' });
+    expect(m.svc.state().harnesses.map(h => h.harness)).toEqual(['codex']);
   });
 });

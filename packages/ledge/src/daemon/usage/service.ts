@@ -1,5 +1,6 @@
 // The daemon's usage service (docs/mockups/ledge-harness-usage.html): each harness's account limits, their state, the alerts
 // past the threshold, and the threshold and the « Compris » it keeps (`~/.ledge/usage.json`).
+import { createHash } from 'node:crypto';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { USAGE_ALERT, UsagePrefsSchema, usageAlertId, type HarnessUsage, type UsageAlert, type UsagePrefs, type UsageStateMessage, type UsageWindow } from '@ledge/protocol';
 import { log } from '../../log.js';
@@ -10,6 +11,8 @@ import { httpsGet, type HttpsGet } from './net.js';
 export const READ_EVERY_MS = 2 * 60_000;
 /** After a 429, the wait doubles up to this. */
 export const BACKOFF_MAX_MS = 15 * 60_000;
+/** The longest Retry-After kept: past it, the answer is taken for a mistake. */
+export const RETRY_AFTER_MAX_MS = 24 * 60 * 60_000;
 /** Past this without a read that succeeded, the values are `stale`; past an hour they are no longer sent. */
 export const STALE_MS = 5 * 60_000;
 export const HIDE_MS = 60 * 60_000;
@@ -26,8 +29,9 @@ export interface UsageService {
   start(): void;
   stop(): void;
   onChange(fn: (s: UsageState) => void): () => void;
-  /** Codex's limits from a transcript a turn just ended in (`codexLimits`): null when its plan gives none. */
-  observeCodex(limits: { windows: UsageWindow[]; at: string } | null): void;
+  /** Codex's limits from a transcript a turn just ended in (`codexLimits`), when they were reported: no window when its plan
+   *  gives none. An older reading than the one kept is ignored, an empty one included. */
+  observeCodex(limits: { windows: UsageWindow[]; at: string }): void;
   setPrefs(prefs: UsagePrefs): void;
   /** « Compris »: false when no such alert is open. */
   ack(id: string): boolean;
@@ -74,7 +78,7 @@ export function createUsage(deps: UsageDeps): UsageService {
   // Claude Code.
   let signedIn = false, expired = false, failed = false, attempted = false;
   let readAt: number | null = null, windows: UsageWindow[] = [], nextAt = 0, backoff = 0;
-  let account: string | null = null, accountAt = -Infinity;
+  let account: string | null = null, accountAt = -Infinity, accountOf = '';
   let ua: string | undefined, uaAt = -Infinity;
   // Codex.
   let codex: { windows: UsageWindow[]; at: number } | null = null;
@@ -146,7 +150,13 @@ export function createUsage(deps: UsageDeps): UsageService {
     const token = await readClaudeToken(home, env, now(), deps.read);
     signedIn = token !== null;
     if (token === null) { expired = false; return; }
-    if (now() - accountAt > REREAD_MS) { account = await readClaudeAccount(home, deps.read); accountAt = now(); }
+    // The account is told only for the token Claude Code keeps in its file, the one `~/.claude.json` goes with; an environment
+    // token may be another account's: none then. A token that changed (another sign-in) has its account read again.
+    const which = token === 'expired' ? 'file:expired' : `${token.from}:${createHash('sha256').update(token.token).digest('hex')}`;
+    if (which !== accountOf || now() - accountAt > REREAD_MS) {
+      account = token !== 'expired' && token.from === 'env' ? null : await readClaudeAccount(home, deps.read);
+      accountAt = now(); accountOf = which;
+    }
     if (token === 'expired') { expired = true; return; }
     if (now() < nextAt) return;
     if (now() - uaAt > REREAD_MS || !ua) { ua = await version(env); uaAt = now(); }
@@ -166,8 +176,10 @@ export function createUsage(deps: UsageDeps): UsageService {
     failed = true;
     if (r.status === 429) {
       backoff++;
+      // Ledge's own doubling stops at 15 minutes; a longer wait the API asks for (Retry-After, in seconds) is kept, up to a day.
       const after = Number(r.headers['retry-after']);
-      const wait = Math.min(BACKOFF_MAX_MS, Math.max(READ_EVERY_MS * 2 ** backoff, Number.isFinite(after) && after > 0 ? after * 1000 : 0));
+      const asked = Number.isFinite(after) && after > 0 ? Math.min(RETRY_AFTER_MAX_MS, after * 1000) : 0;
+      const wait = Math.max(Math.min(BACKOFF_MAX_MS, READ_EVERY_MS * 2 ** backoff), asked);
       nextAt = now() + wait;
       log(`usage: Anthropic rate-limited the read (429), next in ${Math.round(wait / 1000)} s${ua ? '' : ' (no Claude Code version for the User-Agent)'}`);
       return;
@@ -195,11 +207,11 @@ export function createUsage(deps: UsageDeps): UsageService {
     stop() { if (timer) clearInterval(timer); timer = null; },
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     observeCodex(limits) {
-      const at = limits ? Date.parse(limits.at) : NaN;
-      if (limits && Number.isNaN(at)) return;
-      // A later turn of another session may report an older reading: the newest wins.
-      if (limits && codex && at < codex.at) return;
-      codex = limits ? { windows: limits.windows, at } : null;
+      const at = Date.parse(limits.at);
+      if (Number.isNaN(at)) return;
+      // A later turn of another session may report an older reading, with windows or without: the newest wins.
+      if (codex && at < codex.at) return;
+      codex = { windows: limits.windows, at };
       emit();
     },
     setPrefs(prefs) { kept.prefs = { alert: prefs.alert }; save(); emit(); },
