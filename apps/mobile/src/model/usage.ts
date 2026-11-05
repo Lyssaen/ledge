@@ -40,9 +40,24 @@ export function usageTone(pct: number, alert: number | null): '' | 'amber' | 're
   return pct >= 100 ? 'red' : alert !== null && pct >= alert * 100 ? 'amber' : '';
 }
 
-/** Every harness's windows past the threshold, for « À toi », in the windows' order (5 h, week, models), as the mockup lists them. */
-export function overWindows(usage: readonly PhoneHarnessUsage[], alert: number | null): { harness: PhoneHarnessUsage['harness']; window: UsageWindow; tone: 'amber' | 'red' }[] {
-  return usage.flatMap(h => (h.status === 'expired' || h.status === 'loading' ? [] : h.windows.flatMap(window => {
+/** Values read more than an hour ago are never shown (M9). */
+export const USAGE_SHOWN_MS = 60 * 60_000;
+
+/**
+ * The limits as they may be shown now: a link that is not fresh cannot say its values are still true, so « ok » reads as old
+ * (dimmed, with its age); windows read more than an hour ago (or never) are dropped (M9).
+ */
+export function shownUsage(usage: readonly PhoneHarnessUsage[], now: number, fresh = true): PhoneHarnessUsage[] {
+  return usage.map(h => {
+    const old = h.readAt === null || now - Date.parse(h.readAt) > USAGE_SHOWN_MS;
+    return { ...h, status: !fresh && h.status === 'ok' ? 'stale' : h.status, windows: old ? [] : h.windows };
+  });
+}
+
+/** Every harness's windows past the threshold, for « À toi », in the windows' order (5 h, week, models), as the mockup lists
+ *  them; never from values over an hour old. */
+export function overWindows(usage: readonly PhoneHarnessUsage[], alert: number | null, now: number = Date.now()): { harness: PhoneHarnessUsage['harness']; window: UsageWindow; tone: 'amber' | 'red' }[] {
+  return shownUsage(usage, now).flatMap(h => (h.status === 'expired' || h.status === 'loading' ? [] : h.windows.flatMap(window => {
     const tone = usageTone(window.pct, alert);
     return tone ? [{ harness: h.harness, window, tone }] : [];
   })));

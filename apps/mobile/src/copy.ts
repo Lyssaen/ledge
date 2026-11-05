@@ -57,7 +57,7 @@ export const copy = {
       harnessShort: { claude: 'Claude', codex: 'Codex' } as Record<string, string>,
       five: '5 h', week: 'Semaine', model: (m: string) => m,
       resumes: (at: string) => `reprend à ${at}`, loading: 'Lecture en cours…',
-      notOnPc: 'Lecture impossible : reconnectez Claude Code sur le PC.', unreach: (age: string) => `Pas de lecture depuis ${age}.`, stale: (age: string) => `Lu il y a ${age}.`,
+      notOnPc: 'Lecture impossible : reconnectez Claude Code sur le PC.', unreach: (age: string) => `Pas de lecture depuis ${age}.`, unreachNever: 'Lecture impossible pour l’instant.', stale: (age: string) => `Lu il y a ${age}.`,
       reachedLabel: (h: string, w: string) => `${h} · ${w} atteinte`, overLabel: (h: string, w: string, p: number) => `${h} · ${w} à ${p} %`,
       /** A decision a session put to the user: answered in the chat, through the card Ledge proposes. */
       decision: 'Décision', asks: 'te demande', answer: 'Répondre', answerLabel: (title: string) => `Répondre à « ${title} »`,

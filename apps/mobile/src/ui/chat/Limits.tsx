@@ -2,7 +2,7 @@ import type { JSX } from 'react';
 import type { PhoneHarnessUsage, UsageHarness, UsageWindow } from '@ledge/protocol';
 import { harnessShell } from '@ledge/ui/bots/Bot';
 import { copy } from '../../copy';
-import { reached, resetLabel, span, usageTone } from '../../model/usage';
+import { reached, resetLabel, shownUsage, span, usageTone } from '../../model/usage';
 
 /** A harness's logo: its Ledge silhouette (issue #61), filled in the harness's colour, without the eyes (M2). */
 export function HarnessLogo({ harness, size = 14 }: { harness: UsageHarness; size?: number }): JSX.Element {
@@ -42,8 +42,9 @@ function Row({ label, w, now, alert }: { label: string; w: UsageWindow; now: num
 
 /** « LIMITES » in « Le point » (docs/mockups/ledge-harness-usage.html, phone 1): per harness its logo, then each window's
  *  percent and reset; reading, expired, old or unreachable say so. Nothing when the PC gives no limits. */
-export function Limits({ usage, now, alert }: { usage: readonly PhoneHarnessUsage[]; now: number; alert: number | null }): JSX.Element | null {
+export function Limits({ usage: given, now, alert, fresh = true }: { usage: readonly PhoneHarnessUsage[]; now: number; alert: number | null; fresh?: boolean }): JSX.Element | null {
   const P = copy.chat.point;
+  const usage = shownUsage(given, now, fresh);
   if (!usage.length) return null;
   const label = (w: UsageWindow) => (w.kind === 'five_hour' ? P.five : w.kind === 'seven_day' ? P.week : P.model(w.model ?? ''));
   return (
@@ -61,7 +62,7 @@ export function Limits({ usage, now, alert }: { usage: readonly PhoneHarnessUsag
               <div className={dim ? 'opacity-50' : undefined}>{h.windows.map(w => <Row key={`${w.kind}:${w.model ?? ''}`} label={label(w)} w={w} now={now} alert={alert} />)}</div>
             )}
             {h.status === 'stale' && age && <p className="py-1 text-small text-attention">{P.stale(age)}</p>}
-            {h.status === 'unreachable' && age && <p className="py-1 text-small text-attention">{P.unreach(age)}</p>}
+            {h.status === 'unreachable' && <p className="py-1 text-small text-attention">{age ? P.unreach(age) : P.unreachNever}</p>}
           </div>
         );
       })}

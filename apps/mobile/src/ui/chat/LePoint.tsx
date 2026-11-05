@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CONTEXT_NEAR, type PhoneHarnessUsage, type PhoneSession, type PhoneTask } from '@ledge/protocol';
-import { overWindows, resetLabel } from '../../model/usage';
+import { overWindows, resetLabel, shownUsage } from '../../model/usage';
 import { Limits, TONE_TEXT } from './Limits';
 import { copy } from '../../copy';
 import { closedTasks, openDecisions, openTasks } from '../../model/tasks';
@@ -46,8 +46,10 @@ export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = C
   const near = sessions.filter(s => s.state !== 'exited' && !s.handover && s.context && s.context.used / s.context.window >= threshold);
   const open = openTasks(tasks.values()).slice(0, 5);
   const P = copy.chat.point;
-  // A window past the PC's threshold (amber) or reached (red), in « À toi », as the PC's « À toi » says them.
-  const full = overWindows(usage, usageAlert);
+  // A window past the PC's threshold (amber) or reached (red), in « À toi », as the PC's « À toi » says them: only while the
+  // link is fresh, never from values over an hour old (M9).
+  const shown = shownUsage(usage, now, fresh);
+  const full = fresh ? overWindows(shown, usageAlert, now) : [];
   const yours = requests.length + full.length + decisions.length + closed.length + near.length;
   const decide = (sessionId: string, key: string, decision: 'accept' | 'deny') => {
     const item = requests.find(r => r.sessionId === sessionId && r.key === key);
@@ -129,7 +131,7 @@ export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = C
           ))}
         </div>
       )}
-      <Limits usage={usage} now={now} alert={usageAlert} />
+      <Limits usage={shown} now={now} alert={usageAlert} />
       {open.length > 0 && (
         <div role="group" aria-label={P.givenLabel} className="flex flex-col gap-2">
           <h3 className={HEAD}>{P.given}</h3>
