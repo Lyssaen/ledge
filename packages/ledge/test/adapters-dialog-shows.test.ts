@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { Pending } from '@ledge/protocol';
-import { claudeAdapter } from '../src/adapters/claude.js';
+import { claudeAdapter, claudeGutter } from '../src/adapters/claude.js';
 import { codexAdapter } from '../src/adapters/codex.js';
 import { cursorAdapter } from '../src/adapters/cursor.js';
 import { STALE, UNCHECKED, dialogMismatch } from '../src/adapters/types.js';
@@ -72,5 +72,70 @@ describe('dialogMismatch: the dialog on screen is the request answered', () => {
     expect(dialogMismatch(claudeBash('npm run build -- --wat…'), bash('npm run build -- --watch'), 80)).toBe(UNCHECKED);
     expect(dialogMismatch(claudeBash('echo ok #', 'rm -f /tmp/x'), bash('echo ok #\nrm -f /tmp/x'))).toBe(UNCHECKED);
     expect(dialogMismatch(claudeBash('mkdir zz-ledge-probe'), bash('mkdir zz-ledge-probe'))).toBeNull();
+  });
+});
+
+describe('dialogMismatch: Claude Code 2.1.318 draws the command behind a `│ ` gutter (real captures)', () => {
+  // The command of the capture Guillaume could not approve (« the request changed, look again »), its shape kept.
+  const one = `D=/tmp; ls -la $D | head -3; echo ---; python3 -c "import json;print(json.dumps({\\"a\\":1},indent=1))" | head -150`;
+  // A line the TUI wrapped (at 70 columns), then a newline of the command's own.
+  const two = 'printf "%s\\n" "line one is quite a long piece of text to force wrapping at seventy columns"\necho second-line-after-newline; ls -la /tmp | head -2';
+  const GUTTER = true; const NONE = false;
+  it('on 2.1.318 the gutter is not the command: the command read is the one the hook sent, and it is approved', () => {
+    const shown = claudeAdapter.detectPrompt(fx('claude2-318-permission-bash'));
+    expect(shown?.command).toMatchObject({ lines: [`│ ${one}`], ungutter: { lines: [one] } });
+    expect(dialogMismatch(shown, bash(one), 120, GUTTER)).toBeNull();
+    const wrapped = claudeAdapter.detectPrompt(fx('claude2-318-permission-bash-wrapped'));
+    expect(wrapped?.command?.ungutter?.lines).toEqual(['printf "%s\\n" "line one is quite a long piece of text to force', 'wrapping at seventy columns"', 'echo second-line-after-newline; ls -la /tmp | head -2']);
+    expect(dialogMismatch(wrapped, bash(two), 70, GUTTER)).toBeNull();
+  });
+  it('the screen alone cannot tell a gutter from a command starting with `│`: no version, no key; an older one reads it whole', () => {
+    // Review of 814c8d70: on an older Claude Code, `│ echo safe` is another command (`│` is a valid shell name).
+    const shown = claudeBash('│ echo safe');
+    expect(dialogMismatch(shown, bash('echo safe'), 80, NONE)).toBe(STALE);
+    expect(dialogMismatch(shown, bash('echo safe'), 80)).toBe(UNCHECKED);
+    expect(dialogMismatch(shown, bash('│ echo safe'), 80, NONE)).toBeNull();
+    // On 2.1.318 that line is the gutter and `echo safe`; its `│ echo safe` would be drawn `│ │ echo safe`.
+    expect(dialogMismatch(shown, bash('echo safe'), 80, GUTTER)).toBeNull();
+    expect(dialogMismatch(shown, bash('│ echo safe'), 80, GUTTER)).toBe(STALE);
+    expect(dialogMismatch(claudeBash('│ │ echo safe'), bash('│ echo safe'), 80, GUTTER)).toBeNull();
+    // The real 2.1.318 capture, its version not known: not approved either.
+    expect(dialogMismatch(claudeAdapter.detectPrompt(fx('claude2-318-permission-bash')), bash(one), 120)).toBe(UNCHECKED);
+  });
+  it('a command that only looks the same is still refused, a character, a space or a newline apart', () => {
+    const shown = claudeAdapter.detectPrompt(fx('claude2-318-permission-bash'));
+    expect(dialogMismatch(shown, bash(one.replace('"a\\":1', '"a\\":2')), 120, GUTTER)).toBe(STALE);
+    expect(dialogMismatch(shown, bash(one.replace('head -150', 'head  -150')), 120, GUTTER)).toBe(STALE);
+    expect(dialogMismatch(shown, bash(`│ ${one}`), 120, GUTTER)).toBe(STALE);
+    const wrapped = claudeAdapter.detectPrompt(fx('claude2-318-permission-bash-wrapped'));
+    // The command's own newline is not a space; the TUI's wrap is not a newline.
+    expect(dialogMismatch(wrapped, bash(two.replace('\necho', ' echo')), 70, GUTTER)).toBe(STALE);
+    expect(dialogMismatch(wrapped, bash(two.replace('force wrapping', 'force\nwrapping')), 70, GUTTER)).toBe(STALE);
+    // On a wider pane that line had room left for the next word: there the break would be a newline.
+    expect(dialogMismatch(wrapped, bash(two), 120, GUTTER)).toBe(STALE);
+  });
+  it('the same dialogs without the gutter (the format before 2.1.318) read the same command, whatever the version known', () => {
+    const bare = (n: string) => fx(n).replace(/^(\s*)│ /gm, '$1  ');
+    expect(bare('claude2-318-permission-bash-wrapped')).not.toContain('│');
+    for (const gutter of [NONE, GUTTER, undefined]) {
+      expect(dialogMismatch(claudeAdapter.detectPrompt(bare('claude2-318-permission-bash')), bash(one), 120, gutter)).toBeNull();
+      const wrapped = claudeAdapter.detectPrompt(bare('claude2-318-permission-bash-wrapped'));
+      expect(wrapped?.command).not.toHaveProperty('ungutter');
+      expect(dialogMismatch(wrapped, bash(two), 70, gutter)).toBeNull();
+      expect(dialogMismatch(wrapped, bash(two.replace('\necho', ' echo')), 70, gutter)).toBe(STALE);
+    }
+  });
+  it('only a gutter on every line is one, taken off once; a line of the gutter alone is a blank line of the command', () => {
+    expect(claudeBash('│ echo │ ok')?.command?.ungutter?.lines).toEqual(['echo │ ok']);
+    expect(claudeBash('│ │ ok')?.command?.ungutter?.lines).toEqual(['│ ok']);
+    expect(claudeBash('│ echo one', 'echo two')?.command).not.toHaveProperty('ungutter');
+    expect(dialogMismatch(claudeBash('│ echo one', 'echo two'), bash('echo one\necho two'), 80, GUTTER)).toBe(STALE);
+    expect(dialogMismatch(claudeBash('│ cat > a.txt <<EOF', '│', '│   two', '│ EOF'), bash('cat > a.txt <<EOF\n\n  two\nEOF'), 80, GUTTER)).toBeNull();
+    expect(dialogMismatch(claudeBash('│ cat > a.txt <<EOF', '│', '│   two', '│ EOF'), bash('cat > a.txt <<EOF\n\n  two\nEOF'), 80, NONE)).toBe(STALE);
+  });
+  it('the version says whether a gutter is drawn: 2.1.318 on; none read, not known', () => {
+    for (const v of ['2.1.318', '2.1.319', '2.2.0', '3.0.0', '2.1.318-beta']) expect(claudeGutter(v)).toBe(true);
+    for (const v of ['2.1.317', '2.1.316', '2.0.999', '1.9.400']) expect(claudeGutter(v)).toBe(false);
+    for (const v of [undefined, '', 'next', '2.1']) expect(claudeGutter(v)).toBeUndefined();
   });
 });

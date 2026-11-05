@@ -188,11 +188,36 @@ function permissionText(header: string[], question: string): string {
   return dashedBody(header) || titleAndNext || question;
 }
 
+/** The first Claude Code that draws a gutter before a Bash command's lines (seen in 2.1.318; 2.1.316's capture has none). */
+const GUTTER_SINCE = [2, 1, 318] as const;
+/** Whether Claude Code `version` draws that gutter; undefined when the version is not known. */
+export function claudeGutter(version: string | undefined): boolean | undefined {
+  const m = version ? /^(\d+)\.(\d+)\.(\d+)/.exec(version) : null;
+  if (!m) return undefined;
+  const v = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const at = v.findIndex((n, i) => n !== GUTTER_SINCE[i]);
+  return at < 0 || v[at]! > GUTTER_SINCE[at]!;
+}
+const GUTTER_COLUMN = /^(\s*)│(?: |$)/;
 /** The command a « Bash command » dialog shows between its dashed rules, or undefined. */
 function bashCommand(header: string[]): ShownCommand | undefined {
   if (!/^Bash command$/i.test(header.find(l => !isBlank(l))?.trim() ?? '')) return undefined;
-  const command = shownCommand(dashed(header));
-  return command.lines.length ? command : undefined;
+  const body = dashed(header);
+  const command = shownCommand(body);
+  if (!command.lines.length) return undefined;
+  // Every line behind `│ ` may be 2.1.318's gutter, a wrapped line and one after a newline alike:
+  //
+  //   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  //    │ touch zzprobe; echo a1 b2 c3 d4 e5 f6 g7 h8 i9 j10
+  //    │ k11 l12
+  //   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  //
+  // or a command of an older version that starts with `│` (a valid shell name): both readings are kept, the version
+  // chooses. Blanked rather than cut, each line keeps its columns, where it ends telling a wrap from a newline.
+  const guttered = body.every(l => isBlank(l) || GUTTER_COLUMN.test(l));
+  if (!guttered) return command;
+  const ungutter = shownCommand(body.map(l => l.replace(GUTTER_COLUMN, m => ' '.repeat(m.length))));
+  return { ...command, ungutter: { lines: ungutter.lines, ends: ungutter.ends } };
 }
 
 // The workspace trust dialog, shown before anything else in a folder Claude Code has not seen. Its options carry no
@@ -439,7 +464,8 @@ const PLAN_ACCEPT = /\bmanually approve\b/i;
 // Auto mode answers every later prompt by itself: on a permission it is more than "don't ask again for this". On a plan,
 // 2.0.x lists « Yes, clear context and auto-accept edits » before « Yes, auto-accept edits »: clearing the context
 // would wipe the conversation, never part of « always ».
-const ALWAYS = /don't ask again|always allow|accept edits|for this session/i;
+//   2. Yes, allow reading from /tmp from this project                              Bash (2.1.318, a command that reads)
+const ALWAYS = /don't ask again|always allow|\ballow\b.*\bfrom this project\b|accept edits|for this session/i;
 const AUTO_MODE = /auto mode/i;
 const PLAN_ALWAYS = /accept edits|auto mode/i;
 const CLEAR_CONTEXT = /clear context/i;

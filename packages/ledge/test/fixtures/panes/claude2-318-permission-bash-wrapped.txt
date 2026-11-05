@@ -1,0 +1,33 @@
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Haiku 5.5 · Claude Team
+ ▝▝   ▝▝   /…/scratchpad/stale/work
+
+
+❯ Run exactly this one bash command with the Bash tool, nothing else, 
+  and do not change it: printf "%s\n" "line one is quite a long       
+  piece of text to force wrapping at seventy columns"                 
+  echo second-line-after-newline; ls -la /tmp | head -2               
+
+  Listing 1 directory… (ctrl+o to expand)             
+  ⎿  $ printf "%s\n" "line one is quite a long piece of text to force 
+     wrapping at seventy columns"                                     
+     echo second-line-after-newline; ls -la /tmp | head -2
+
+──────────────────────────────────────────────────────────────────────
+ Bash command                                                       
+ Tip: auto mode handles these prompts for you — choose "switch to 
+ auto mode" below                                                     
+ Run the printf, echo, and ls command as given
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ printf "%s\n" "line one is quite a long piece of text to force
+ │ wrapping at seventy columns"                                     
+ │ echo second-line-after-newline; ls -la /tmp | head -2
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, allow reading from /tmp from this project
+   3. Yes, and switch to auto mode · auto mode handles these prompts
+      for you
+   4. No
+
+ Esc to cancel · Tab to amend
