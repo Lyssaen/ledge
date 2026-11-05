@@ -1,0 +1,1114 @@
+<title>Ledge Espace de travail</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: an IDE window — activity bar, explorer, a splittable editor area, a right panel, a status bar.
+   Tokens are Ledge's own (packages/ui tokens.css, dark). Single dark look, as in every Ledge Desktop mockup. */
+:root{
+  color-scheme:dark;
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--primary:oklch(0.444 0.177 26.899);--primary-hover:oklch(0.396 0.141 25.723);
+  --border:#ffffff1a;--input:#ffffff26;--sidebar:oklch(0.205 0 0);
+  --danger-text:oklch(0.704 0.191 22.216);
+  --st-perm:#f87171;--st-ask:#fbbf24;--st-work:#60a5fa;--st-idle:#34d399;--st-off:#71717a;
+  --link1:#a78bfa;--link2:#2dd4bf;
+  --term-bg:#0c0c0d;--term-fg:#e5e5e5;--t-green:#4ade80;--t-yellow:#facc15;--t-red:#f87171;--t-blue:#7cb3fb;--t-dim:#8f8f8f;
+  --shell:#0d0d0d;--side:#141414;--pane:#111112;--mkbar:#0a0a0a;--page:#000;
+  --diff-add:#0f2e1c;--diff-del:#3a1414;
+  --font:'Geist','Segoe UI',system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font);background:var(--page);color:var(--foreground);font-size:13px;line-height:18px}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+button:focus-visible{outline:2px solid var(--link1);outline-offset:1px}
+.mono{font-family:var(--mono)}
+.mut{color:var(--muted-foreground)}
+
+/* Mockup chrome (not part of the product) */
+.mk-bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--mkbar);border-bottom:1px solid var(--border)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:31;background:var(--mkbar)}
+.mk-bar strong{margin-right:10px;font-weight:600;font-size:14px}
+.mk-bar button{border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--muted-foreground)}
+.mk-bar button[aria-pressed=true]{background:var(--muted);color:var(--foreground);border-color:var(--input)}
+.mk-bar .sp{flex:1}
+.mk-note{max-width:1480px;margin:14px auto 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));color:var(--muted-foreground);font-size:13px;line-height:20px}
+.mk-note p{margin:0 0 6px;max-width:110ch}
+.mk-note b{color:var(--foreground);font-weight:500}
+.stage-wrap{overflow-x:auto;padding-block:14px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Window */
+.win{width:1920px;margin:0 auto;height:1080px;border:1px solid var(--border);border-radius:10px;overflow:hidden;display:grid;grid-template-rows:34px 1fr 24px;background:var(--background);position:relative}
+.titlebar{display:flex;align-items:center;gap:14px;padding:0 10px 0 14px;border-bottom:1px solid var(--border);background:var(--shell)}
+.titlebar .brand{font-weight:600}.titlebar .brand i{font-style:normal;color:var(--danger-text)}
+.search{flex:0 1 460px;margin:0 auto;display:flex;align-items:center;gap:8px;height:24px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--side);color:var(--muted-foreground);font-size:12px}
+.search kbd,.kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--input);border-radius:4px;padding:0 4px;color:var(--muted-foreground)}
+.search .sp{flex:1}
+.tb-act{display:flex;gap:2px}
+.tb-act button{width:26px;height:24px;border-radius:5px;color:var(--muted-foreground);display:grid;place-items:center}
+.tb-act button:hover,.tb-act button[aria-pressed=true]{background:var(--muted);color:var(--foreground)}
+
+.body{display:grid;min-height:0}
+.activity{background:var(--shell);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0}
+.activity button{width:34px;height:34px;border-radius:7px;display:grid;place-items:center;color:var(--muted-foreground);position:relative}
+.activity button.on{color:var(--foreground);background:var(--muted)}
+.activity .badge{position:absolute;top:2px;right:1px;min-width:15px;height:15px;border-radius:8px;background:var(--st-perm);color:#1a0505;font-size:10px;font-weight:600;display:grid;place-items:center;padding:0 3px}
+.activity .badge.amber{background:var(--st-ask);color:#1d1400}
+.activity .grow{flex:1}
+
+/* Explorer */
+.explorer{background:var(--side);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;overflow:auto}
+.ex-h{display:flex;align-items:center;justify-content:space-between;padding:9px 12px 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);font-weight:500}
+.tree{padding:0 6px 8px}
+.row{display:flex;align-items:center;gap:7px;height:24px;padding:0 6px;border-radius:5px;white-space:nowrap;cursor:pointer}
+.row:hover{background:#ffffff0d}
+.row.sel{background:#ffffff14}
+.row .chev{width:10px;color:var(--muted-foreground);font-size:10px}
+.row .nm{overflow:hidden;text-overflow:ellipsis}
+.row .meta{margin-left:auto;font-size:11px;color:var(--muted-foreground);font-family:var(--mono)}
+.row.l1{padding-left:18px}.row.l2{padding-left:32px}
+.row .open{width:6px;height:6px;border-radius:50%;margin-left:auto;background:var(--muted-foreground)}
+
+/* State dot */
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--st-off)}
+.dot.perm{background:var(--st-perm);box-shadow:0 0 0 3px #f8717133}
+.dot.ask{background:var(--st-ask);box-shadow:0 0 0 3px #fbbf2433}
+.dot.work{background:var(--st-work)}
+.dot.idle{background:var(--st-idle)}
+@media (prefers-reduced-motion:no-preference){.dot.work{animation:pulse 1.6s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.45}}
+.lk{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.lk.l1{background:var(--link1)}.lk.l2{background:var(--link2)}
+
+/* Editor area */
+.editor{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--background)}
+.spaces{display:flex;align-items:stretch;height:32px;border-bottom:1px solid var(--border);background:var(--shell);padding-left:6px}
+.spaces button{display:flex;align-items:center;gap:7px;padding:0 14px;color:var(--muted-foreground);border-right:1px solid var(--border);font-size:12.5px}
+.spaces button.on{color:var(--foreground);background:var(--background);box-shadow:inset 0 2px 0 var(--link1)}
+.spaces .cnt{font-family:var(--mono);font-size:10.5px;padding:0 5px;border-radius:8px;background:var(--muted)}
+.spaces .cnt.perm{background:var(--st-perm);color:#1a0505}.spaces .cnt.ask{background:var(--st-ask);color:#1d1400}
+.spaces .add{padding:0 12px}
+.spaces .hint{margin-left:auto;align-self:center;padding-right:12px;font-size:11px;color:var(--muted-foreground)}
+
+.split{display:grid;gap:1px;background:var(--border);min-height:0;flex:1}
+.split>*{min-width:0;min-height:0}
+
+/* Pane (one tab group) */
+.pane{display:flex;flex-direction:column;background:var(--pane);min-height:0}
+.tabs{display:flex;align-items:stretch;height:30px;background:var(--shell);border-bottom:1px solid var(--border);overflow:hidden}
+.tab{display:flex;align-items:center;gap:7px;padding:0 10px;font-size:12px;color:var(--muted-foreground);border-right:1px solid var(--border);white-space:nowrap}
+.tab.on{background:var(--pane);color:var(--foreground)}
+.tab .x{opacity:.5;font-size:11px}
+.tab.alert{box-shadow:inset 0 -2px 0 var(--st-perm)}
+.tab.alert-a{box-shadow:inset 0 -2px 0 var(--st-ask)}
+.tabs .tools{margin-left:auto;display:flex;align-items:center;gap:2px;padding-right:6px}
+.tabs .tools button{height:22px;padding:0 7px;border-radius:5px;color:var(--muted-foreground);font-size:11.5px;display:flex;align-items:center;gap:5px}
+.tabs .tools button:hover{background:var(--muted);color:var(--foreground)}
+.ph{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border);font-size:12px;min-height:34px}
+.ph b{font-weight:600;font-size:13px}
+.ph .chip{font-family:var(--mono);font-size:11px;color:var(--muted-foreground);border:1px solid var(--border);border-radius:5px;padding:0 6px;white-space:nowrap}
+.ph .ctx{margin-left:auto;display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted-foreground)}
+.meter{width:46px;height:4px;border-radius:2px;background:var(--muted);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--muted-foreground)}
+.meter i.hi{background:var(--st-ask)}
+.seg{display:flex;gap:2px;padding:6px 12px 0}
+.seg button{font-size:11.5px;padding:2px 9px;border-radius:5px;color:var(--muted-foreground)}
+.seg button.on{background:var(--muted);color:var(--foreground)}
+.pb{flex:1;overflow:auto;padding:10px 12px 12px;min-height:0;display:flex;flex-direction:column;gap:8px}
+
+/* Thread */
+.m-user{align-self:flex-end;max-width:85%;background:var(--muted);border-radius:10px 10px 2px 10px;padding:6px 10px}
+.m-agent{max-width:95%}
+.m-agent p{margin:0}
+.tool{font-family:var(--mono);font-size:11.5px;color:var(--muted-foreground);display:flex;gap:6px;align-items:baseline}
+.tool b{color:var(--foreground);font-weight:500}
+.tool .ok{color:var(--t-green)}.tool .ko{color:var(--t-red)}
+.req{margin-top:auto;border:1px solid #f8717166;background:#2a1212;border-radius:9px;padding:9px 10px;display:flex;flex-direction:column;gap:7px}
+.req.ask{border-color:#fbbf2466;background:#2a2008}
+.req .rh{display:flex;align-items:center;gap:7px;font-weight:500}
+.req code{font-family:var(--mono);font-size:11.5px;background:#00000055;border-radius:5px;padding:4px 7px;display:block;white-space:pre-wrap;word-break:break-all}
+.req .acts{display:flex;gap:6px;flex-wrap:wrap}
+.btn{height:26px;padding:0 10px;border-radius:6px;border:1px solid var(--input);font-size:12px;display:inline-flex;align-items:center;gap:6px}
+.btn.pri{background:var(--primary);border-color:transparent}
+.btn.pri:hover{background:var(--primary-hover)}
+.btn .kbd{font-size:10px}
+.composer{border-top:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:8px;color:var(--muted-foreground);font-size:12px}
+.composer .in{flex:1;height:28px;border:1px solid var(--border);border-radius:7px;display:flex;align-items:center;padding:0 9px}
+
+/* Diff */
+.files{display:flex;flex-direction:column;gap:2px;font-family:var(--mono);font-size:11.5px}
+.files div{display:flex;gap:8px;padding:2px 4px;border-radius:4px}
+.files div.on{background:#ffffff10}
+.files .a{color:var(--t-green)}.files .d{color:var(--t-red)}
+.files .p{margin-left:auto;display:flex;gap:6px}
+.code{font-family:var(--mono);font-size:11.5px;line-height:17px;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.code div{padding:0 8px;white-space:pre}
+.code .add{background:var(--diff-add)}.code .del{background:var(--diff-del)}
+.code .hh{color:var(--muted-foreground);background:#ffffff08}
+
+/* Terminal */
+.term{background:var(--term-bg);color:var(--term-fg);font-family:var(--mono);font-size:11.5px;line-height:17px;padding:8px 10px;flex:1;overflow:auto;white-space:pre}
+.term .g{color:var(--t-green)}.term .y{color:var(--t-yellow)}.term .r{color:var(--t-red)}.term .b{color:var(--t-blue)}.term .d{color:var(--t-dim)}
+
+/* Wall tiles */
+.wall{display:grid;gap:8px;padding:10px;overflow:auto;align-content:start;background:var(--background)}
+.tile{border:1px solid var(--border);border-radius:9px;background:var(--pane);display:flex;flex-direction:column;min-width:0;cursor:pointer;overflow:hidden}
+.tile:hover{border-color:var(--input)}
+.tile.perm{border-color:#f8717188}.tile.ask{border-color:#fbbf2488}
+.tile .th{display:flex;align-items:center;gap:7px;padding:7px 9px 4px}
+.tile .th b{font-weight:600}
+.tile .th .role{font-size:11px;color:var(--muted-foreground)}
+.tile .th .ctx{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--muted-foreground)}
+.tile .last{padding:0 9px 8px;font-size:12px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .last.q{color:var(--st-ask)}
+.tile .lines{padding:2px 9px 8px;display:flex;flex-direction:column;gap:3px;flex:1;overflow:hidden}
+.tile .lines .tool{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .tf{display:flex;gap:6px;padding:6px 9px;border-top:1px solid var(--border);align-items:center}
+.tile .tf .sp{flex:1}
+.tile .tf small{font-size:11px;color:var(--muted-foreground)}
+
+/* Bottom panel */
+.bpanel{display:flex;flex-direction:column;background:var(--pane);min-height:0}
+.bp-tabs{display:flex;align-items:center;gap:2px;height:30px;padding:0 8px;border-bottom:1px solid var(--border);background:var(--shell)}
+.bp-tabs button{padding:3px 9px;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-foreground);border-radius:5px;display:flex;gap:6px;align-items:center}
+.bp-tabs button.on{color:var(--foreground);background:var(--muted)}
+.bp-tabs .sp{flex:1}
+.strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:8px 10px;overflow:auto}
+.strip .tile .role,.strip .tile .tf small,.strip .tile .tf .alt{display:none}
+.strip .tile .th b{white-space:nowrap}
+.wall>div>.tile,.wall>div>.pane{flex:1;min-width:0}
+.ph{flex-wrap:wrap}
+
+/* Right panel */
+.right{background:var(--side);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+.r-sec{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:7px}
+.r-sec h4{margin:0;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);font-weight:500;display:flex;align-items:center;gap:6px}
+.r-sec h4 .sp{flex:1}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px}
+.kv span:nth-child(odd){color:var(--muted-foreground)}
+.kv span:nth-child(even){font-family:var(--mono);font-size:11.5px;text-align:right}
+.chat{flex:1;display:flex;flex-direction:column;min-height:0}
+.chat .msgs{flex:1;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.chat .bubble{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:7px 9px;font-size:12.5px}
+.chat .bubble.me{align-self:flex-end;background:var(--muted);border:0}
+.ask-item{display:flex;gap:7px;align-items:flex-start;font-size:12px;padding:6px 7px;border-radius:7px;background:#ffffff08;cursor:pointer}
+.ask-item div{min-width:0}
+.ask-item small{display:block;color:var(--muted-foreground);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ask-item .dot{margin-top:5px}
+
+/* Topology mini */
+.topo{border:1px solid var(--border);border-radius:9px;background:var(--pane);padding:10px;display:flex;flex-direction:column;gap:8px}
+.topo h5{margin:0;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);font-weight:500}
+.topo svg{width:100%;height:auto}
+.topo svg text{fill:var(--foreground);font-family:var(--font);font-size:11px}
+.topo svg .sub{fill:var(--muted-foreground);font-size:9.5px}
+
+/* Status bar */
+.status{display:flex;align-items:center;gap:14px;padding:0 10px;background:var(--shell);border-top:1px solid var(--border);font-size:11.5px;color:var(--muted-foreground);white-space:nowrap}
+.status .it{display:flex;align-items:center;gap:6px}
+.status .sp{flex:1}
+.status .alert{color:var(--foreground)}
+
+/* Palette */
+.palette{position:absolute;left:50%;top:44px;transform:translateX(-50%);width:600px;background:var(--card);border:1px solid var(--input);border-radius:10px;box-shadow:0 20px 60px #000c;z-index:20;overflow:hidden}
+.palette .pin{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px}
+.palette .pin .caret{width:1px;height:16px;background:var(--foreground)}
+.palette .grp{padding:6px 12px 2px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground)}
+.palette .it{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12.5px}
+.palette .it.sel{background:#ffffff12}
+.palette .it .r{margin-left:auto;color:var(--muted-foreground);font-size:11px}
+.palette .foot{display:flex;gap:14px;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted-foreground)}
+
+.callout{position:absolute;z-index:15;background:#1e1b2e;border:1px solid var(--link1);color:var(--foreground);border-radius:8px;padding:6px 9px;font-size:11.5px;max-width:250px;box-shadow:0 6px 20px #0008;pointer-events:none}
+.callout b{color:var(--link1);font-weight:600}
+.notes-off .callout{display:none}
+.logo{display:inline-grid;place-items:center;flex-shrink:0}
+.sfoot{display:flex;flex-wrap:wrap;align-items:center;gap:5px 14px;padding:0 12px 8px;font-size:11.5px;color:var(--muted-foreground);white-space:nowrap}
+.row .nm{flex-shrink:0}.row .meta{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sfoot .mdl{display:flex;align-items:center;gap:6px;color:var(--foreground);border:1px solid var(--border);border-radius:6px;padding:1px 7px}
+.sfoot .mdl .car{color:var(--muted-foreground);font-size:9px}
+.sfoot .m{display:flex;align-items:center;gap:6px}
+.sfoot .m b{font-weight:500;color:var(--foreground);font-variant-numeric:tabular-nums}
+.sfoot .m b.warn{color:var(--st-ask)}
+.sfoot .sp{flex:1}
+.meter i.warn{background:var(--st-ask)}
+.lim{display:flex;flex-direction:column;gap:6px}
+.lim .acct{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500}
+.lim .acct small{margin-left:auto;font-weight:400;color:var(--muted-foreground);font-size:11px}
+.lim .w{display:grid;grid-template-columns:92px 1fr 34px 70px;align-items:center;gap:8px;font-size:11.5px;color:var(--muted-foreground)}
+.lim .w .meter{width:100%}
+.lim .w b{font-weight:500;color:var(--foreground);text-align:right;font-variant-numeric:tabular-nums}
+.lim .w b.warn{color:var(--st-ask)}
+.lim .w span:last-child{font-size:11px;text-align:right}
+.status .lmt{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;color:var(--muted-foreground);font-size:11.5px;height:20px;padding:0 8px;border-radius:5px}
+.status .lmt:hover,.status .lmt.open{background:var(--muted)}
+.status .lmt .lsep{width:1px;height:12px;background:var(--border);margin:0 4px}
+.limpop{position:absolute;right:150px;bottom:30px;width:380px;z-index:18;background:var(--card);border:1px solid var(--input);border-radius:10px;box-shadow:0 16px 50px #000c;padding:12px;display:flex;flex-direction:column;gap:10px}
+.limpop .lp-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12px}
+.limpop .lp-h .mut{font-size:11px}
+.status .lmt b{font-weight:500;color:var(--foreground)}
+.status .lmt b.warn{color:var(--st-ask)}
+/* Tool pages (OpenRig, Nouvelle session) */
+.page{flex:1;overflow:auto;padding:16px 18px 22px;display:flex;flex-direction:column;gap:16px;min-height:0}
+.page h3{margin:0;font-size:15px;font-weight:600}
+.page .sub{color:var(--muted-foreground);font-size:12px}
+.machs{display:flex;gap:6px}
+.machs button{display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:14px;padding:2px 10px;font-size:12px;color:var(--muted-foreground)}
+.machs button.on{border-color:var(--input);background:var(--muted);color:var(--foreground)}
+.blk{border:1px solid var(--border);border-radius:9px;background:var(--pane)}
+.blk-h{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--border)}
+.blk-h b{font-weight:600}
+.blk-h .sp{flex:1}
+.blk-b{padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+.chk{display:flex;align-items:center;gap:8px;color:var(--muted-foreground)}
+.chk i{width:14px;height:14px;border:1px solid var(--input);border-radius:3px;display:grid;place-items:center;font-style:normal;font-size:10px;color:var(--foreground)}
+.chk i.on{background:var(--primary);border-color:transparent}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font-weight:500;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground);padding:7px 12px;border-bottom:1px solid var(--border)}
+.tbl td{padding:7px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.tbl tr.seat td{background:#ffffff05;font-size:12px}
+.tbl tr.seat td:first-child{padding-left:30px}
+.tbl .cell{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.tbl .acts{display:flex;gap:5px;justify-content:flex-end}
+.step{display:inline-flex;align-items:center;border:1px solid var(--input);border-radius:6px;height:24px}
+.step button{width:24px;height:22px;display:grid;place-items:center;color:var(--muted-foreground)}
+.step span{min-width:22px;text-align:center;font-family:var(--mono);font-size:12px;border-left:1px solid var(--input);border-right:1px solid var(--input);line-height:22px}
+.pill{font-size:11px;border-radius:10px;padding:1px 8px;border:1px solid var(--border);color:var(--muted-foreground);white-space:nowrap}
+.pill.run{color:var(--st-idle);border-color:#34d39955}
+.fld{display:grid;grid-template-columns:150px 1fr;gap:10px 16px;align-items:start;font-size:12.5px}
+.fld>label{color:var(--muted-foreground);padding-top:5px}
+.inp{border:1px solid var(--input);border-radius:7px;padding:5px 9px;display:flex;align-items:center;gap:8px;background:var(--background);min-height:30px}
+.inp .car{margin-left:auto;color:var(--muted-foreground);font-size:10px}
+.radios{display:flex;flex-direction:column;gap:6px}
+.radio{display:flex;align-items:center;gap:8px}
+.radio i{width:14px;height:14px;border-radius:50%;border:1px solid var(--input);display:grid;place-items:center}
+.radio i.on::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--foreground)}
+.agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.agent{border:1px solid var(--border);border-radius:9px;padding:9px 10px;display:flex;flex-direction:column;gap:5px;text-align:left}
+.agent.on{border-color:var(--foreground);background:#ffffff08}
+.agent .an{display:flex;align-items:center;gap:8px;font-weight:600}
+.agent small{color:var(--muted-foreground);font-size:11px}
+.agent small b{font-weight:500;color:var(--foreground)}
+.agent small b.warn{color:var(--st-ask)}
+.segc{display:inline-flex;border:1px solid var(--input);border-radius:7px;overflow:hidden}
+.segc span{padding:4px 10px;font-size:12px;color:var(--muted-foreground);border-right:1px solid var(--input)}
+.segc span:last-child{border-right:0}
+.segc span.on{background:var(--muted);color:var(--foreground)}
+.ta{border:1px solid var(--input);border-radius:7px;padding:8px 10px;min-height:76px;background:var(--background);line-height:19px}
+.go{display:flex;gap:8px;align-items:center}
+.tab.tool-tab{gap:6px}
+.settings{flex:1;display:grid;grid-template-columns:200px 1fr;min-height:0}
+.snav{border-right:1px solid var(--border);padding:12px 8px;display:flex;flex-direction:column;gap:1px;overflow:auto}
+.snav button{text-align:left;padding:6px 10px;border-radius:6px;color:var(--muted-foreground);font-size:12.5px;display:flex;align-items:center;gap:6px}
+.snav button.on{background:var(--muted);color:var(--foreground)}
+.snav .new{margin-left:auto;font-size:10px;color:var(--link1);border:1px solid #a78bfa66;border-radius:8px;padding:0 5px}
+.sbody{max-width:860px}
+.cell2{display:flex;align-items:center;gap:8px}
+.cell2 .mut{font-size:11.5px;margin-right:auto;padding-left:4px}
+.atelier{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--background)}
+.abar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.seg2{display:inline-flex;border:1px solid var(--input);border-radius:7px;overflow:hidden}
+.seg2 span{padding:2px 10px;color:var(--muted-foreground)}.seg2 span.on{background:var(--muted);color:var(--foreground)}
+.floor{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;padding:22px;align-content:start;overflow:auto;background:repeating-linear-gradient(90deg,#ffffff05 0 1px,transparent 1px 28px),repeating-linear-gradient(0deg,#ffffff05 0 1px,transparent 1px 28px)}
+.room{border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:12px;background:#ffffff04}
+.room.rig{border-style:dashed}
+.room .rt{display:flex;align-items:center;gap:8px;font-weight:600}
+.room .rt .mut{font-weight:400;font-size:11.5px;margin-left:auto}
+.table{display:flex;flex-wrap:wrap;gap:8px;padding:14px;border-radius:10px;background:#2a2118;border:1px solid #4a3a2a;min-height:70px;align-items:center}
+.table.one{justify-content:center;gap:10px}
+.abot{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:3px 9px 3px 6px;font-size:12px;position:relative;cursor:pointer}
+.abot.perm{border-color:#f87171aa}.abot.ask{border-color:#fbbf24aa}
+.abot .sub{position:absolute;top:-7px;right:-6px;font-style:normal;font-size:9.5px;background:var(--muted);border-radius:7px;padding:0 4px;color:var(--muted-foreground)}
+.ahint{padding:8px 14px;border-top:1px solid var(--border);font-size:11.5px}
+.tasks{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.btn,.page h3{white-space:nowrap}
+.trow{display:grid;grid-template-columns:10px 76px 1fr auto 84px;white-space:nowrap;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12.5px}
+.trow:last-child{border-bottom:0}
+.trow.on{background:#ffffff0c}
+.trow b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow .pill{justify-self:start}
+.note{border:1px solid var(--border);border-radius:9px;padding:14px 16px;line-height:21px;max-width:70ch;background:var(--pane)}
+.seg{overflow:hidden}.seg button,.tabs .tools button{white-space:nowrap}
+.tabs .tab{flex-shrink:0}.tabs .tools{flex-shrink:0;background:var(--shell)}
+.chip-k{font-family:var(--mono);font-size:10.5px;color:var(--muted-foreground);border:1px solid var(--border);border-radius:5px;padding:0 6px;margin-right:4px}
+.cmenu{position:absolute;z-index:16;width:250px;background:var(--card);border:1px solid var(--input);border-radius:8px;padding:4px;box-shadow:0 12px 40px #000b;font-size:12.5px}
+.cmenu .ci{display:flex;padding:5px 9px;border-radius:5px}
+.cmenu .ci.on{background:#ffffff14}
+.cmenu .ci .r{margin-left:auto;font-size:11px;color:var(--muted-foreground)}
+.cmenu .sep{height:1px;background:var(--border);margin:4px 2px}
+.win.small{width:1480px;height:880px}
+.win2{width:1100px;height:520px;margin:28px 0 0 380px;grid-template-rows:34px 1fr}
+#win2:empty{display:none}
+</style>
+
+<div class="mk-bar" role="toolbar" aria-label="Variantes">
+  <strong>Ledge · IDE v4</strong>
+  <button id="v-travail" data-v="travail" aria-pressed="true">Travail</button>
+  <button id="v-siege" data-v="siege" aria-pressed="false">Siège OpenRig</button>
+  <button id="v-terminaux" data-v="terminaux" aria-pressed="false">Multi-terminal</button>
+  <button id="v-fenetres" data-v="fenetres" aria-pressed="false">Multi-fenêtre</button>
+  <button id="v-openrig" data-v="openrig" aria-pressed="false">Onglet OpenRig</button>
+  <button id="v-lancer" data-v="lancer" aria-pressed="false">Onglet Nouvelle session</button>
+  <button id="v-reglages" data-v="reglages" aria-pressed="false">Onglet Réglages</button>
+  <button id="v-atelier" data-v="atelier" aria-pressed="false">Onglet Atelier</button>
+  <button id="v-taches" data-v="taches" aria-pressed="false">Onglets Tâches et Brain</button>
+  <span class="sp"></span>
+  <button id="t-size" aria-pressed="true">1920 × 1080</button>
+  <button id="t-pal" aria-pressed="false">Palette Ctrl+K</button>
+  <button id="t-notes" aria-pressed="true">Annotations</button>
+</div>
+<div class="mk-note" id="note"></div>
+<div class="stage-wrap"><div class="win" id="win"></div><div id="win2"></div></div>
+
+<script>
+/* ---------- Data: what Ledge sees right now (example) ---------- */
+const S = {
+  pim:  {name:'Pim', prov:'anthropic', model:'Opus 5.5', tok:'620k / 1M', who:'claude · Opus 5.5', branch:'feat/ide-shell', proj:'ledge', st:'perm', ctx:62, link:'l1',
+         req:{kind:'perm', title:'Autoriser une commande', cmd:'pnpm --filter desktop exec playwright test e2e/workspace.spec.ts'}},
+  nova: {name:'Nova', prov:'openai', model:'GPT-6.1', tok:'152k / 400k', who:'codex · GPT-6.1', branch:'fix/term-webgl', proj:'ledge', st:'work', ctx:38, link:'l2'},
+  ida:  {name:'Ida', prov:'anthropic', model:'Opus 5.5', tok:'210k / 1M', who:'claude · Opus 5.5', branch:'docs/ide-workspace-mockup', proj:'ledge', st:'idle', ctx:21},
+};
+const RIG = [
+  {id:'lead', name:'lead', role:'orchestrateur', st:'work', ctx:44, last:'route #224 vers dev-front', lines:['rig send dev-front « #224 : coque IDE »','ledge task give dev-back "layout.ts"']},
+  {id:'ux', name:'ux-ui', role:'maquettes', st:'idle', ctx:18, last:'attend une consigne', lines:['Write docs/mockups/ledge-tabs.html','✓ maquette livrée au lead']},
+  {id:'back', name:'dev-back', role:'implémentation', st:'work', ctx:57, last:'Edit packages/fleet/src/layout.ts', lines:['Read packages/protocol/src/workspace.ts','Edit packages/fleet/src/layout.ts  +84 −12','Bash pnpm --filter fleet test']},
+  {id:'front', name:'dev-front', role:'implémentation', st:'ask', ctx:71, last:'« dockview ou golden-layout pour les splits ? »', lines:['Read apps/desktop/src/App.tsx','WebSearch dockview popout tauri','? dockview ou golden-layout ?'],
+   req:{kind:'ask', title:'dev-front pose une question', q:'Pour les splits et le détachement en fenêtre, je pars sur dockview (popout natif, sérialisation) ou golden-layout ?', opts:['dockview','golden-layout']}},
+  {id:'rev', name:'reviewer', role:'revue · codex', st:'work', ctx:33, last:'relit PR #222 (3/9 fichiers)', lines:['gh pr diff 222','Read apps/desktop/src/term/Term.tsx','note : fuite de contexte WebGL ?']},
+  {id:'op', name:'operator', role:'kernel', st:'idle', ctx:9, last:'attend une consigne', lines:['rig ps --nodes','✓ 2 rigs en marche']},
+];
+RIG.forEach(r=>{ r.prov = r.id==='rev' ? 'openai' : 'anthropic'; });
+/* Limits per account, as the daemon reads them (packages/protocol usage.ts: five_hour, seven_day, model). 80 %: Ledge warns. */
+const USAGE = {
+  anthropic:{label:'Claude Code', acct:'compte Anthropic', w:[['5 h',84,'14:20'],['Semaine',41,'lun. 09:00'],['Opus · semaine',58,'lun. 09:00']]},
+  openai:{label:'Codex', acct:'compte OpenAI', w:[['5 h',22,'16:05'],['Semaine',63,'jeu. 11:30']]},
+  omp:{label:'omp', acct:'', w:null},
+};
+const PROV = {anthropic:'Anthropic', openai:'OpenAI', omp:'omp'};
+const logo = (p, sz=14) => {
+  if (p==='anthropic') return `<span class="logo" title="Anthropic · Claude Code"><svg width="${sz}" height="${sz}" viewBox="0 0 24 24" aria-hidden="true"><g stroke="#d97757" stroke-width="2.6" stroke-linecap="round">${[0,30,60,90,120,150].map(a=>`<line x1="12" y1="3" x2="12" y2="21" transform="rotate(${a} 12 12)"/>`).join('')}</g></svg></span>`;
+  if (p==='openai') return `<span class="logo" title="OpenAI · Codex"><svg width="${sz}" height="${sz}" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="var(--foreground)" stroke-width="1.6">${[0,60,120].map(a=>`<ellipse cx="12" cy="12" rx="9.5" ry="4.4" transform="rotate(${a} 12 12)"/>`).join('')}</g></svg></span>`;
+  return `<span class="logo" title="omp"><svg width="${sz}" height="${sz}" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="#a3e635" stroke-width="2.4" stroke-linecap="round"><path d="M4 7.5c2-1.5 4-1.6 6-1.5h10"/><path d="M9 6.5v12"/><path d="M15.5 6.5v9.5c0 1.6.9 2.5 2.5 2.5"/></g></svg></span>`;
+};
+const meterHtml = (pct, w=46) => `<span class="meter" style="width:${w}px"><i class="${pct>=80?'warn':''}" style="width:${Math.min(pct,100)}%"></i></span>`;
+function sessFoot(x){
+  const u = USAGE[x.prov], five = u.w && u.w[0];
+  return `<div class="sfoot">
+    <span class="mdl" title="Changer de modèle">${logo(x.prov,12)}${x.model}<span class="car">▾</span></span>
+    <span class="m" title="Contexte de la session">Contexte ${meterHtml(x.ctx)}<b>${x.ctx} %</b><span>${x.tok}</span></span>
+  </div>`;
+}
+function limitsBlock(){
+  return `<div class="lim">${['anthropic','openai'].map(p=>{const u=USAGE[p]; return `<div class="acct">${logo(p)}${u.label}<small>${u.acct}</small></div>`+u.w.map(([k,pct,r])=>`<div class="w"><span>${k}</span>${meterHtml(pct,0).replace('width:0px','')}<b class="${pct>=80?'warn':''}">${pct} %</b><span>${r}</span></div>`).join('');}).join('')}
+    <div class="acct">${logo('omp')}omp<small>limite non lue</small></div></div>`;
+}
+let state = {lim:false, big:true, v:'travail', pal:false, notes:true, follow:'front', loupe:['pim','nova'], space:'focus'};
+
+const ST_WORD = {perm:'autorisation à donner', ask:'une question', work:'au travail', idle:'attend une consigne'};
+const ic = {
+  files:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h6l2 2h8v12H4z"/></svg>',
+  rig:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7.5l3 8M16 7.5l-3 8M8.5 6h7"/></svg>',
+  inbox:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 13l3-8h10l3 8v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg>',
+  task:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>',
+  brain:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>',
+  mach:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg>',
+  atelier:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="10" width="18" height="5" rx="1"/><circle cx="7" cy="6" r="2"/><circle cx="17" cy="6" r="2"/><path d="M6 15v4M18 15v4"/></svg>',
+  gear:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>',
+  split:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 4v16"/></svg>',
+  pop:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6"/></svg>',
+  panel:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M15 4v16"/></svg>',
+  bottom:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 14h18"/></svg>',
+};
+
+/* ---------- Building blocks ---------- */
+const dot = st => `<span class="dot ${st}" title="${ST_WORD[st]||''}"></span>`;
+const counts = () => {
+  const all = [...Object.values(S), ...RIG];
+  return {perm: all.filter(x=>x.st==='perm').length, ask: all.filter(x=>x.st==='ask').length};
+};
+
+function titlebar(){
+  return `<div class="titlebar">
+    <span class="brand">Ledge<i>.</i></span>
+    <span class="mut" style="font-size:12px">ledge · WSL</span>
+    <button class="search" id="open-pal"><span>⌕</span><span>Session, commande, tâche, rig…</span><span class="sp"></span><span class="kbd">Ctrl K</span></button>
+    <div class="tb-act">
+      <button aria-pressed="false" title="Panneau du bas (Ctrl+J)">${ic.bottom}</button>
+      <button aria-pressed="${state.v!=='c'}" title="Panneau de droite : Ledge et contexte (Ctrl+/)">${ic.panel}</button>
+      <button title="Détacher le groupe actif dans une fenêtre">${ic.pop}</button>
+    </div>
+  </div>`;
+}
+
+function activity(){
+  const c = counts();
+  return `<nav class="activity" aria-label="Vues">
+    <button class="on" title="Projets">${ic.files}</button>
+    <button title="Rigs OpenRig">${ic.rig}</button>
+    <button title="À toi">${ic.inbox}${c.perm?`<span class="badge">${c.perm}</span>`:''}${!c.perm&&c.ask?`<span class="badge amber">${c.ask}</span>`:''}</button>
+    <button title="Tâches">${ic.task}</button>
+    <button title="Atelier">${ic.atelier}</button>
+    <button title="Brain">${ic.brain}</button>
+    <button title="Machines">${ic.mach}</button>
+    <span class="grow"></span>
+    <button title="Réglages">${ic.gear}</button>
+  </nav>`;
+}
+
+function explorer(selSeat){
+  const s = k => `<div class="row l2 ${k==='pim'&&!selSeat?'sel':''}">${dot(S[k].st)}${logo(S[k].prov,12)}<span class="nm">${S[k].name}</span><span class="meta">${S[k].branch.split('/').pop()}</span></div>`;
+  const seat = r => `<div class="row l2 ${r.id===selSeat?'sel':''}">${dot(r.st)}${logo(r.prov,12)}<span class="nm">${r.name}</span><span class="meta">${r.ctx} %</span></div>`;
+  return `<aside class="explorer">
+    <div class="ex-h"><span>Projets</span><span class="kbd">N</span></div>
+    <div class="tree">
+      <div class="row"><span class="chev">▾</span><b>ledge</b><span class="meta">3</span></div>
+      <div class="row l1"><span class="chev">▾</span><span class="nm mono" style="font-size:12px">main</span></div>
+      ${s('pim')}${s('nova')}${s('ida')}
+      <div class="row"><span class="chev">▾</span><span>synapse</span><span class="meta">1</span></div>
+      <div class="row l2">${dot('idle')}${logo('omp',12)}<span class="nm">Tom</span><span class="meta">main</span></div>
+      <div class="row"><span class="chev">▸</span><span>pilot</span><span class="meta">0</span></div>
+    </div>
+    <div class="ex-h"><span>Rigs</span><span class="mut" style="text-transform:none;letter-spacing:0">OpenRig 0.7</span></div>
+    <div class="tree">
+      <div class="row"><span class="chev">▾</span>${dot('ask')}<b>ledge-dev</b><span class="meta">5 sièges</span></div>
+      <div class="row l1"><span class="chev">▾</span><span class="mut">pod dev</span></div>
+      ${RIG.slice(0,5).map(seat).join('')}
+      <div class="row"><span class="chev">▸</span>${dot('idle')}<span>kernel</span><span class="meta">operator</span></div>
+    </div>
+    <div class="ex-h"><span>Dispositions</span></div>
+    <div class="tree">
+      <div class="row"><span class="lk l1"></span><span>Revue Pim + Nova</span></div>
+      <div class="row"><span class="lk l2"></span><span>ledge-dev · mur</span></div>
+      <div class="row mut"><span>+ Enregistrer la disposition</span></div>
+    </div>
+  </aside>`;
+}
+
+function threadPim(){
+  const p = S.pim;
+  const req = p.req ? `<div class="req">
+      <div class="rh">${dot('perm')}${p.req.title}<span class="mut" style="margin-left:auto;font-size:11px">il y a 40 s</span></div>
+      <code>${p.req.cmd}</code>
+      <div class="acts">
+        <button class="btn pri" data-act="allow">Autoriser <span class="kbd">Y</span></button>
+        <button class="btn" data-act="deny">Refuser <span class="kbd">N</span></button>
+        <button class="btn">Toujours dans ce projet</button>
+      </div></div>` : `<div class="tool"><span class="ok">✓</span><b>Bash</b> playwright test e2e/workspace.spec.ts · 12 passed</div>`;
+  return `<div class="m-user">Monte la coque : barre d'activité, zone à onglets, et les écrans actuels dedans tels quels.</div>
+    <div class="m-agent"><p>Je pose <span class="mono">WorkspaceShell</span> autour de <span class="mono">App.tsx</span> et je migre l'atelier en premier onglet.</p></div>
+    <div class="tool"><span class="ok">✓</span><b>Read</b> apps/desktop/src/App.tsx</div>
+    <div class="tool"><span class="ok">✓</span><b>Write</b> apps/desktop/src/shell/WorkspaceShell.tsx <span>+212</span></div>
+    <div class="tool"><span class="ok">✓</span><b>Edit</b> apps/desktop/src/App.tsx <span>+9 −31</span></div>
+    <div class="tool"><span class="ok">✓</span><b>Bash</b> pnpm --filter desktop typecheck</div>
+    <div class="m-agent"><p>Le typecheck passe. Je lance le scénario Playwright de l'espace de travail.</p></div>
+    ${req}`;
+}
+function threadNova(){
+  return `<div class="m-user">Les terminaux masqués doivent lâcher leur contexte WebGL.</div>
+    <div class="tool"><span class="ok">✓</span><b>Grep</b> WebglAddon apps/desktop/src</div>
+    <div class="tool"><span class="ok">✓</span><b>Edit</b> apps/desktop/src/term/Term.tsx <span>+27 −4</span></div>
+    <div class="m-agent"><p>Un terminal caché passe sur le rendu DOM ; il reprend WebGL quand son onglet redevient visible. Au-delà de 12 terminaux visibles, les plus anciens restent en DOM.</p></div>
+    <div class="tool"><span style="color:var(--st-work)">●</span><b>Bash</b> pnpm --filter desktop test term …</div>`;
+}
+function threadIda(){
+  return `<div class="m-user">Prépare les maquettes de l'espace de travail IDE.</div>
+    <div class="tool"><span class="ok">✓</span><b>Write</b> docs/mockups/ledge-ide-workspace.html</div>
+    <div class="m-agent"><p>Trois dispositions sont prêtes à comparer : Deux étages, Espaces Focus / Rig, Mur et loupe.</p></div>`;
+}
+const threads = {pim:threadPim, nova:threadNova, ida:threadIda};
+
+function sessionPane(k, opts={}){
+  const s = S[k];
+  const view = opts.view || 'Fil';
+  const body = view==='Fil' ? threads[k]() : view==='Modifications' ? diffBody() : '';
+  return `<section class="pane">
+    <div class="tabs">
+      <div class="tab on ${s.st==='perm'?'alert':''}">${s.link?`<span class="lk ${s.link}" title="Groupe lié"></span>`:''}${logo(s.prov)}${s.name}${dot(s.st)}<span class="x">×</span></div>
+      ${opts.extraTab||''}
+      <div class="tools">
+        <button title="Nouvel onglet : session, OpenRig, terminal…">+</button>
+        <button title="Ouvrir le worktree dans Cursor">Cursor ${ic.pop}</button>
+        <button title="Diviser à droite">${ic.split}</button>
+      </div>
+    </div>
+    <div class="ph"><b>${s.name}</b><span class="chip">${s.branch}</span><span class="chip">${s.proj}</span></div>
+    <div class="seg"><button class="${view==='Fil'?'on':''}">Fil</button><button class="${view==='Modifications'?'on':''}">Modifications · 3</button><button>Terminal</button><button>Tâches</button></div>
+    <div class="pb">${body}</div>
+    ${view==='Fil'?`<div class="composer"><span class="in">Répondre à ${s.name}…  <span class="kbd" style="margin-left:auto">R</span></span><button class="btn">Interrompre</button></div>${sessFoot(s)}`:''}
+  </section>`;
+}
+
+function diffBody(){
+  return `<div class="files">
+      <div class="on"><span>shell/WorkspaceShell.tsx</span><span class="p"><span class="a">+212</span></span></div>
+      <div><span>App.tsx</span><span class="p"><span class="a">+9</span><span class="d">−31</span></span></div>
+      <div><span>styles/shell.css</span><span class="p"><span class="a">+64</span><span class="d">−2</span></span></div>
+    </div>
+    <div class="code">
+      <div class="hh">@@ App.tsx  −42,12 +42,9 @@</div>
+      <div class="del">-  return view === 'overview' ? &lt;Atelier /&gt; : view === 'session' ? &lt;Session id={id} /&gt; : …</div>
+      <div class="add">+  return (</div>
+      <div class="add">+    &lt;WorkspaceShell</div>
+      <div class="add">+      layout={layout}</div>
+      <div class="add">+      panes={{ atelier: Atelier, session: Session, openrig: OpenRig }}</div>
+      <div class="add">+    /&gt;</div>
+      <div class="add">+  );</div>
+      <div>   }</div>
+    </div>
+    <div class="mut" style="font-size:11.5px">Lié à Pim : ce panneau suit la session choisie dans le groupe violet.</div>`;
+}
+
+function diffPane(){
+  return `<section class="pane">
+    <div class="tabs"><div class="tab on"><span class="lk l1"></span>Modifications · Pim<span class="x">×</span></div>
+      <div class="tab">Modifications · projet ledge</div>
+      <div class="tools"><button>Ouvrir dans Cursor ${ic.pop}</button></div></div>
+    <div class="pb">${diffBody()}</div>
+  </section>`;
+}
+
+function termPane(k, title){
+  return `<section class="pane">
+    <div class="tabs"><div class="tab on">${S[k]&&S[k].link?`<span class="lk ${S[k].link}"></span>`:''}&gt;_ ${title}<span class="x">×</span></div><div class="tab">&gt;_ shell · fix/term-webgl</div><div class="tab">&gt;_ capture · reviewer</div>
+      <div class="tools"><button title="Nouveau shell">+</button><button title="Diviser">${ic.split}</button></div></div>
+    <div class="term"><span class="d">~/Workspace/ledge-worktrees/nova-term-webgl</span>
+<span class="g">$</span> pnpm --filter desktop test term
+ <span class="g">✓</span> term/Term.test.tsx <span class="d">(6)</span>
+ <span class="g">✓</span> term/webglPool.test.ts <span class="d">(4)</span>
+ <span class="y">↻</span> term/hidden.test.tsx <span class="d">running…</span>
+</div>
+  </section>`;
+}
+
+function tile(r, size){
+  const lines = size==='big' ? `<div class="lines">${r.lines.map(l=>`<div class="tool">${l.startsWith('✓')?'<span class="ok">✓</span>'+l.slice(1):l.startsWith('?')?'<span style="color:var(--st-ask)">?</span>'+l.slice(1):'<b>›</b> '+l}</div>`).join('')}</div>` : '';
+  const ask = r.st==='ask' && size!=='mini' ? `<div class="tf"><button class="btn pri" data-follow="${r.id}">Répondre</button><button class="btn alt">dockview</button><span class="sp"></span><small>il y a 2 min</small></div>` : '';
+  return `<div class="tile ${r.st}" data-seat="${r.id}" title="Clic : ouvrir dans le groupe actif · Maj+clic : à côté">
+    <div class="th">${dot(r.st)}<b>${r.name}</b><span class="role">${r.role}</span><span class="ctx">${r.ctx} %</span></div>
+    <div class="last ${r.st==='ask'?'q':''}">${r.last}</div>${lines}${ask}
+  </div>`;
+}
+
+function rightPanel(){
+  const c = counts();
+  const asks = [];
+  if (S.pim.st==='perm') asks.push(`<div class="ask-item" data-go="pim">${dot('perm')}<div><b>Pim</b> · autoriser une commande<small>playwright test e2e/workspace.spec.ts</small></div></div>`);
+  asks.push(`<div class="ask-item" data-follow="front">${dot('ask')}<div><b>dev-front</b> · ledge-dev<small>dockview ou golden-layout ?</small></div></div>`);
+  return `<aside class="right">
+    <div class="r-sec"><h4>À toi <span class="mut" style="text-transform:none;letter-spacing:0">${c.perm+c.ask}</span><span class="sp"></span><span class="kbd">Y / N</span></h4>${asks.join('')}</div>
+    <div class="r-sec"><h4><span class="lk l1"></span>Session active · Pim</h4>
+      <div class="kv"><span>Fichiers</span><span>3 modifiés</span><span>Tâche</span><span>#224 coque IDE</span><span>Worktree</span><span>…/pim-ide-shell</span></div>
+    </div>
+    <div class="chat">
+      <div class="r-sec" style="border:0;padding-bottom:0"><h4>Ledge</h4></div>
+      <div class="msgs">
+        <div class="bubble me">Où en est ledge-dev ?</div>
+        <div class="bubble">dev-back écrit <span class="mono">layout.ts</span>, le reviewer en est à 3 fichiers sur 9 de la PR #222. <b>dev-front attend ta réponse</b> sur la librairie de panneaux depuis 2 min.</div>
+      </div>
+      <div class="composer"><span class="in">Demander à Ledge… <span class="kbd" style="margin-left:auto">Ctrl /</span></span></div>
+    </div>
+  </aside>`;
+}
+
+function statusbar(){
+  const c = counts();
+  return `<footer class="status">
+    <span class="it">${dot('idle')}WSL · daemon</span>
+    <span class="it">${ic.rig.replace(/18/g,'12')}OpenRig · 2 rigs · 6 sièges</span>
+    <span class="it alert">${c.perm?`${dot('perm')}${c.perm} autorisation`:''} ${c.ask?`${dot('ask')}${c.ask} question`:''}</span>
+    <span class="sp"></span>
+    <button class="lmt ${state.lim?'open':''}" id="t-lim" title="Limites d'usage des comptes">${logo('anthropic',12)}Claude 5 h ${meterHtml(84,34)}<b class="warn">84 %</b><span>réinit. 14:20</span> · sem. <b>41 %</b>
+      <span class="lsep"></span>${logo('openai',12)}Codex 5 h ${meterHtml(22,34)}<b>22 %</b> · sem. <b>63 %</b></button>
+    <span class="it">Disposition : ${VIEWS[state.v].dispo}</span>
+  </footer>`;
+}
+
+function limPop(){
+  return `<div class="limpop" role="dialog" aria-label="Limites d'usage"><div class="lp-h"><b>Limites d'usage</b><span class="mut">alerte à 80 % · Réglages › Espace de travail</span></div>${limitsBlock()}</div>`;
+}
+function palette(){
+  return `<div class="palette" role="dialog" aria-label="Palette">
+    <div class="pin"><span class="mut">›</span><span>ouv</span><span class="caret"></span><span class="mut" style="margin-left:auto;font-size:11px">&gt; commandes · @ sessions · # tâches · : rigs</span></div>
+    <div class="grp">Commandes</div>
+    <div class="it sel">Ouvrir la session dans un nouveau groupe à droite<span class="r kbd">Ctrl \\</span></div>
+    <div class="it">Ouvrir le worktree de Pim dans Cursor<span class="r">feat/ide-shell</span></div>
+    <div class="it">Ouvrir la disposition « ledge-dev · mur »<span class="r">Disposition</span></div>
+    <div class="grp">Sessions et sièges</div>
+    <div class="it">${dot('ask')}dev-front<span class="r">ledge-dev · une question</span></div>
+    <div class="it">${dot('perm')}Pim<span class="r">ledge · autorisation à donner</span></div>
+    <div class="foot"><span>↑↓ choisir</span><span>Entrée ouvrir</span><span>Maj+Entrée ouvrir à côté</span><span>Échap fermer</span></div>
+  </div>`;
+}
+
+function callouts(list){ return list.map(c=>{ const pos = c.pos.replace(/(left|right):(\d+)px/,(m,k,v)=>`${k}:${(v/1480*100).toFixed(2)}%`).replace(/top:(\d+)px/,(m,v)=>`top:${(v/880*100).toFixed(2)}%`); return `<div class="callout" style="${pos}">${c.t}</div>`; }).join(''); }
+
+function topoSvg(){
+  const n = (x,y,r,sub)=>{const s=RIG.find(q=>q.id===r);const col={perm:'var(--st-perm)',ask:'var(--st-ask)',work:'var(--st-work)',idle:'var(--st-idle)'}[s.st];
+    return `<g><rect x="${x-42}" y="${y-15}" width="84" height="30" rx="7" fill="var(--card)" stroke="${col}" stroke-width="1.3"/><circle cx="${x-30}" cy="${y}" r="3.5" fill="${col}"/><text x="${x-22}" y="${y+4}">${s.name}</text></g>`;};
+  return `<svg viewBox="0 0 300 210" role="img" aria-label="Topologie du rig ledge-dev">
+    <g stroke="var(--input)" stroke-width="1.2" fill="none">
+      <path d="M150 40 L60 110"/><path d="M150 40 L150 110"/><path d="M150 40 L240 110"/><path d="M150 125 L150 175"/><path d="M60 125 L150 175"/>
+    </g>
+    <path d="M150 40 L240 110" stroke="var(--link1)" stroke-width="1.6" stroke-dasharray="4 4" fill="none"/>
+    <circle cx="205" cy="83" r="3.5" fill="var(--link1)"/>
+    ${n(150,40,'lead')}${n(60,110,'ux')}${n(150,110,'back')}${n(240,110,'front')}${n(150,180,'rev')}
+    <text class="sub" x="214" y="76">rig send</text>
+  </svg>`;
+}
+
+/* ---------- Views (v2: one IDE, four moments) ---------- */
+const TERMS = {
+  pim:`<span class="d">tmux · ledge-pim · attaché</span>
+<span class="b">●</span> Bash(pnpm --filter desktop exec playwright test
+         e2e/workspace.spec.ts)
+  <span class="y">Autoriser cette commande ?</span>
+  <span class="g">❯ 1. Oui</span>
+    2. Oui, toujours dans ce projet
+    3. Non, et dire à Claude quoi faire`,
+  shell:`<span class="d">~/Workspace/ledge-worktrees/pim-ide-shell</span>
+<span class="g">$</span> git status -s
+ <span class="y">M</span> apps/desktop/src/App.tsx
+ <span class="y">M</span> apps/desktop/src/styles/shell.css
+<span class="r">??</span> apps/desktop/src/shell/WorkspaceShell.tsx
+<span class="g">$</span> <span class="d">▌</span>`,
+  rev:`<span class="d">rig capture reviewer@ledge-dev · lecture seule</span>
+› Relis la PR #222.
+• Lecture de apps/desktop/src/term/Term.tsx
+• <span class="y">Note</span> : le WebglAddon n'est pas libéré
+  quand l'onglet se ferme (ligne 88).
+• Lecture de apps/desktop/src/term/pool.ts …`,
+  rig:`<span class="d">rig ps --nodes --rig ledge-dev</span>
+SEAT        STATE    CTX   ROW
+lead        <span class="b">working</span>  44%   #224
+ux-ui       <span class="g">idle</span>     18%   -
+dev-back    <span class="b">working</span>  57%   #225
+dev-front   <span class="y">asking</span>   71%   #224
+reviewer    <span class="b">working</span>  33%   #222`,
+  nova:`<span class="d">~/Workspace/ledge-worktrees/nova-term-webgl</span>
+<span class="g">$</span> pnpm --filter desktop test term
+ <span class="g">✓</span> term/Term.test.tsx <span class="d">(6)</span>
+ <span class="g">✓</span> term/webglPool.test.ts <span class="d">(4)</span>
+ <span class="y">↻</span> term/hidden.test.tsx <span class="d">running…</span>`,
+};
+const TKIND = {pim:['l1','Pim · tmux','attaché'], shell:['','shell · pim-ide-shell','shell'], rev:['','reviewer · capture','lecture seule'], rig:['','rig ps · ledge-dev','commande'], nova:['l2','Nova · tmux','attaché']};
+function termBox(k, opts={}){
+  const [lk,title,kind] = TKIND[k];
+  return `<section class="pane">
+    <div class="tabs"><div class="tab on">${lk?`<span class="lk ${lk}"></span>`:''}&gt;_ ${title}<span class="x">×</span></div>
+      <div class="tools"><span class="chip-k">${kind}</span>${opts.split?`<button title="Diviser">${ic.split}</button>`:''}</div></div>
+    <div class="term">${TERMS[k]}</div></section>`;
+}
+
+function bottomPanel(active){
+  const tabs = [['term','Terminaux · 3'],['asks','À toi · 2'],['out','Sortie'],['rig','Rig ledge-dev']];
+  return `<section class="bpanel">
+    <div class="bp-tabs">${tabs.map(([k,l])=>`<button class="${k===active?'on':''}">${l}</button>`).join('')}
+      <span class="sp"></span><button title="Nouveau terminal">+ Terminal</button><button title="Agrandir le panneau">${ic.bottom}</button></div>
+    <div class="split" style="grid-template-columns:1fr 1fr 1fr">${termBox('pim')}${termBox('shell')}${termBox('rev')}</div>
+  </section>`;
+}
+
+function seatPane(id){
+  const r = RIG.find(q=>q.id===id);
+  return `<section class="pane">
+    <div class="tabs">
+      <div class="tab on alert-a">${logo(r.prov)}${r.name}<span class="mut" style="font-size:11px">ledge-dev</span>${dot(r.st)}<span class="x">×</span></div>
+      <div class="tab">Topologie · ledge-dev</div>
+      <div class="tools"><button title="Ouvrir le worktree dans Cursor">Cursor ${ic.pop}</button><button title="Diviser à droite">${ic.split}</button></div>
+    </div>
+    <div class="ph"><b>${r.name}</b><span class="chip">ledge-dev · pod dev · ${r.role}</span><span class="chip">feat/ide-shell-224</span></div>
+    <div class="seg"><button class="on">Fil</button><button>Modifications · 2</button><button>Terminal</button><button>role.md</button><button>File #224</button></div>
+    <div class="pb">
+      <div class="m-user"><span class="mut" style="font-size:11px">lead · rig send</span><br>#224 : monte la coque IDE de Ledge Desktop. Maquette : docs/mockups/ledge-ide-workspace.html</div>
+      <div class="tool"><span class="ok">✓</span><b>Read</b> apps/desktop/src/App.tsx</div>
+      <div class="tool"><span class="ok">✓</span><b>Read</b> docs/mockups/ledge-ide-workspace.html</div>
+      <div class="tool"><span class="ok">✓</span><b>WebSearch</b> dockview popout window tauri</div>
+      <div class="m-agent"><p>Les deux librairies gèrent les splits. Seule dockview sait ouvrir un groupe dans une vraie fenêtre et sérialiser la disposition.</p></div>
+      <div class="req ask"><div class="rh">${dot('ask')}${r.req.title}<span class="mut" style="margin-left:auto;font-size:11px">il y a 2 min</span></div>
+        <p style="margin:0">${r.req.q}</p>
+        <div class="acts">${r.req.opts.map((o,i)=>`<button class="btn ${i?'':'pri'}">${o}</button>`).join('')}<button class="btn">Autre réponse…</button></div></div>
+    </div>
+    <div class="composer"><span class="in">Répondre à dev-front (rig send)… <span class="kbd" style="margin-left:auto">R</span></span><button class="btn">Capture</button></div>
+    ${sessFoot({prov:r.prov, model:'Opus 5.5', ctx:r.ctx, tok:'710k / 1M'})}
+  </section>`;
+}
+
+function topoPane(){
+  return `<section class="pane">
+    <div class="tabs"><div class="tab on">Topologie · ledge-dev<span class="x">×</span></div><div class="tab">spec · ledge-dev.yaml</div></div>
+    <div class="pb">
+      <div class="topo" style="border:0;padding:0">${topoSvg()}</div>
+      <div class="mut" style="font-size:11.5px">Un document comme un autre : clic sur un siège pour son fil, clic droit pour ses actions.</div>
+      <div class="topo"><h5>File OpenRig</h5>
+        <div class="tool"><b>#224</b> coque IDE · dev-front · en cours</div>
+        <div class="tool"><b>#225</b> layout.ts · dev-back · en cours</div>
+        <div class="tool"><b>#222</b> revue · reviewer · en cours</div>
+        <div class="tool"><span class="ok">✓</span> #221 terminal de siège · fusionnée</div></div>
+    </div></section>`;
+}
+
+function ctxMenu(){
+  return `<div class="cmenu" style="left:250px;top:405px">
+    <div class="ci on">Ouvrir<span class="r">Entrée</span></div>
+    <div class="ci">Ouvrir à droite<span class="r">Ctrl Entrée</span></div>
+    <div class="ci">Ouvrir dans une nouvelle fenêtre</div>
+    <div class="sep"></div>
+    <div class="ci">Capture dans un terminal</div>
+    <div class="ci">Envoyer un message…</div>
+    <div class="ci">Voir le role.md</div>
+    <div class="sep"></div>
+    <div class="ci">Redémarrer le siège…</div>
+  </div>`;
+}
+
+function viewTravail(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr 300px">
+    ${activity()}${explorer()}
+    <main class="editor">
+      <div class="split" style="grid-template-rows:1fr 230px">
+        <div class="split" style="grid-template-columns:1.15fr .9fr 1fr">
+          ${sessionPane('pim')}${diffPane()}${sessionPane('nova')}
+        </div>
+        ${bottomPanel('term')}
+      </div>
+    </main>
+    ${rightPanel()}
+  </div>`;
+}
+
+function viewSiege(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr 300px">
+    ${activity()}${explorer('front')}
+    <main class="editor">
+      <div class="split" style="grid-template-columns:1fr 1.15fr .85fr">
+        ${sessionPane('pim')}${seatPane('front')}${topoPane()}
+      </div>
+    </main>
+    ${rightPanel()}
+  </div>${state.notes?ctxMenu():''}`;
+}
+
+function viewTerminaux(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr">
+    ${activity()}${explorer()}
+    <main class="editor">
+      <div class="split" style="grid-template-columns:.9fr 1.4fr">
+        ${sessionPane('pim')}
+        <div class="split" style="grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr">
+          ${termBox('pim',{split:1})}${termBox('shell',{split:1})}${termBox('rev',{split:1})}${termBox('rig',{split:1})}
+        </div>
+      </div>
+    </main>
+  </div>`;
+}
+
+function viewFenetres(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr 300px">
+    ${activity()}${explorer()}
+    <main class="editor">
+      <div class="split" style="grid-template-columns:1.15fr 1fr">
+        ${sessionPane('pim')}${diffPane()}
+      </div>
+    </main>
+    ${rightPanel()}
+  </div>`;
+}
+function secondWindow(){
+  return `<div class="win win2">
+    <div class="titlebar"><span class="brand">Ledge<i>.</i></span><span class="mut" style="font-size:12px">Écran 2 · groupe vert d'eau</span><span class="sp" style="flex:1"></span>
+      <div class="tb-act"><button title="Ramener dans la fenêtre principale">${ic.pop}</button></div></div>
+    <div class="split" style="grid-template-columns:1fr 1fr">
+      ${sessionPane('nova')}
+      <div class="split" style="grid-template-rows:1fr 1fr">${termBox('nova')}${termBox('rig')}</div>
+    </div>
+  </div>`;
+}
+
+
+function toolTabs(active){
+  const tt = [['pim',`${logo('anthropic')}Pim${dot(S.pim.st)}`],['openrig',`${ic.rig.replace(/18/g,'13')}OpenRig · WSL`],['lancer',`<span style="font-size:14px;line-height:1">+</span>Nouvelle session`]];
+  return tt.map(([k,h])=>`<div class="tab tool-tab ${k===active?'on':''}">${h}<span class="x">×</span></div>`).join('');
+}
+function orPage(){
+  const seats = [['lead','orchestrateur',1,'anthropic','work',44],['ux-ui','maquettes',1,'anthropic','idle',18],['dev-back, dev-front','implémentation',2,'anthropic','ask',71],['reviewer','revue',1,'openai','work',33]];
+  return `<div class="page">
+    <div style="display:flex;align-items:center;gap:12px"><h3>OpenRig</h3><div class="machs"><button class="on">${dot('idle')}WSL</button><button>${dot('idle')}srv-build</button></div><span class="sp" style="flex:1"></span><button class="btn pri">Lancer un rig…</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="blk"><div class="blk-h">${dot('idle')}<b>Daemon</b><span class="pill run">en marche</span><span class="sp"></span><button class="btn">Redémarrer</button><button class="btn">Arrêter</button></div>
+        <div class="blk-b"><span class="sub">OpenRig 0.7.2 · depuis 09:12</span>
+          <span class="chk"><i class="on">✓</i>Au démarrage, relancer les rigs qui tournaient</span>
+          <span class="chk"><i></i>Sans le kernel</span></div></div>
+      <div class="blk"><div class="blk-h">${dot('idle')}<b>Kernel</b><span class="pill run">en marche</span><span class="sp"></span><button class="btn">Redémarrer</button><button class="btn">Arrêter</button></div>
+        <div class="blk-b"><span class="cell" style="display:flex;gap:7px;align-items:center">${logo('anthropic')}operator · attend une consigne</span>
+          <span class="sub">Ouvrir sa conversation dans un onglet : clic sur son nom.</span></div></div>
+    </div>
+    <div class="blk"><div class="blk-h"><b>Rigs</b><span class="sub">2 rigs · 6 sièges en marche</span><span class="sp"></span><span class="sub">Permissions au lancement</span><span class="segc"><span>Spec</span><span class="on">Auto</span><span>Standard</span><span>Ouvert</span><span>YOLO</span><span>Verrouillé</span></span></div>
+      <table class="tbl"><thead><tr><th>Rig</th><th>État</th><th>Sièges</th><th>Permissions</th><th>Dernier snapshot</th><th></th></tr></thead><tbody>
+        <tr><td><span class="cell"><span class="mut">▾</span>${dot('ask')}<b>ledge-dev</b></span></td><td><span class="pill run">en marche</span></td><td>5</td><td>Auto</td><td class="mono" style="font-size:11.5px">10:42</td><td><div class="acts"><button class="btn">Topologie</button><button class="btn">Arrêter</button></div></td></tr>
+        ${seats.map(([n,role,c,p,st,ctx])=>`<tr class="seat"><td><span class="cell">${dot(st)}${logo(p,12)}${n}</span></td><td class="mut">${role}</td><td><span class="step"><button>−</button><span>${c}</span><button>+</button></span></td><td class="mut">${p==='openai'?'Standard':'Auto'}</td><td class="mono mut" style="font-size:11.5px">contexte ${ctx} %</td><td><div class="acts"><button class="btn">Ouvrir</button></div></td></tr>`).join('')}
+        <tr><td><span class="cell"><span class="mut">▸</span><span class="dot"></span><b>synapse-review</b></span></td><td><span class="pill">arrêté</span></td><td>4</td><td>Standard</td><td class="mono" style="font-size:11.5px">hier 18:03</td><td><div class="acts"><button class="btn">Démarrer</button></div></td></tr>
+      </tbody></table></div>
+  </div>`;
+}
+function launchPage(){
+  const ag = p => { const u=USAGE[p], f=u.w&&u.w[0];
+    return `<div class="agent ${p==='anthropic'?'on':''}"><span class="an">${logo(p,16)}${u.label}</span><small>${PROV[p]}</small>
+      <small>${f?`Limite 5 h <b class="${f[1]>=80?'warn':''}">${f[1]} %</b> · réinit. ${f[2]}`:'Limite non lue'}</small></div>`; };
+  return `<div class="page">
+    <div><h3>Nouvelle session</h3><span class="sub">S'ouvre dans ce groupe une fois lancée. Ctrl+Entrée lance.</span></div>
+    <div class="fld">
+      <label>Projet</label><span class="inp">ledge<span class="mut">· ~/Workspace/ledge · WSL</span><span class="car">▾</span></span>
+      <label>Où travailler</label><div class="radios">
+        <span class="radio"><i class="on"></i>Nouvelle branche dans un worktree <span class="inp mono" style="min-height:24px;padding:1px 8px;font-size:12px">feat/ide-tabs</span></span>
+        <span class="radio"><i></i>Sur <span class="mono">main</span>, dans le dossier du projet</span></div>
+      <label>Agent</label><div class="agents">${ag('anthropic')}${ag('openai')}${ag('omp')}</div>
+      <label>Modèle</label><span class="inp">${logo('anthropic')}Opus 5.5<span class="mut">· contexte 1M</span><span class="car">▾</span></span>
+      <label>Permissions</label><span><span class="segc"><span class="on">Auto</span><span>Standard</span><span>Ouvert</span><span>YOLO</span></span></span>
+      <label>Premier message</label><div class="ta">Ajoute les onglets d'outils à la coque : OpenRig et Nouvelle session s'ouvrent comme des onglets, dans n'importe quel groupe. Maquette : docs/mockups/ledge-ide-workspace.html</div>
+      <label>Ouvrir</label><div class="radios" style="flex-direction:row;gap:16px"><span class="radio"><i class="on"></i>Dans ce groupe</span><span class="radio"><i></i>À droite</span><span class="radio"><i></i>Nouvelle fenêtre</span></div>
+      <span></span><div class="go"><button class="btn pri">Lancer <span class="kbd">Ctrl Entrée</span></button><button class="btn">Annuler</button></div>
+    </div>
+  </div>`;
+}
+function plusMenu(){
+  return `<div class="cmenu" style="left:calc(296px + (100% - 296px) * 0.6 - 280px);top:64px">
+    <div class="ci on">Nouvelle session<span class="r">N</span></div>
+    <div class="ci">Lancer un rig…</div>
+    <div class="ci">OpenRig</div>
+    <div class="ci">Terminal<span class="r">Ctrl ù</span></div>
+    <div class="sep"></div>
+    <div class="ci">Atelier</div>
+    <div class="ci">Tâches</div>
+    <div class="ci">Conversation avec Ledge</div>
+    <div class="ci">Brain</div>
+    <div class="sep"></div>
+    <div class="ci">Réglages<span class="r">Ctrl ,</span></div>
+  </div>`;
+}
+TERMS.out = `<span class="d">10:42 · rig up ledge-dev --existing</span>
+<span class="g">✓</span> lead        ready
+<span class="g">✓</span> ux-ui       ready
+<span class="g">✓</span> dev-back    ready
+<span class="g">✓</span> dev-front   ready
+<span class="g">✓</span> reviewer    ready
+<span class="d">10:42 · rig snapshot ledge-dev</span>
+<span class="g">✓</span> snapshot 2026-11-05T10:42`;
+TKIND.out = ['','Sortie · rig','commande'];
+function viewOpenRig(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr">
+    ${activity()}${explorer()}
+    <main class="editor">
+      <div class="split" style="grid-template-columns:2.1fr 1fr">
+        <section class="pane"><div class="tabs">${toolTabs('openrig')}<div class="tools"><button title="Nouvel onglet">+</button><button title="Diviser à droite">${ic.split}</button></div></div>${orPage()}</section>
+        <div class="split" style="grid-template-rows:1fr 1fr">${topoPane()}${termBox('out')}</div>
+      </div>
+    </main>
+  </div>`;
+}
+function viewLancer(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr">
+    ${activity()}${explorer()}
+    <main class="editor">
+      <div class="split" style="grid-template-columns:1.5fr 1fr">
+        <section class="pane"><div class="tabs">${toolTabs('lancer')}<div class="tools"><button title="Nouvel onglet" style="background:var(--muted);color:var(--foreground)">+</button><button title="Diviser à droite">${ic.split}</button></div></div>${launchPage()}</section>
+        ${sessionPane('nova')}
+      </div>
+    </main>
+  </div>${state.notes?plusMenu():''}`;
+}
+
+function tabsOf(list, active){
+  return list.map(([k,h])=>`<div class="tab tool-tab ${k===active?'on':''}">${h}<span class="x">×</span></div>`).join('');
+}
+const TT = {
+  pim:['pim',()=>`${logo('anthropic')}Pim${dot(S.pim.st)}`],
+  reg:['reg',()=>`${ic.gear.replace(/18/g,'13')}Réglages`],
+  at:['at',()=>`${ic.atelier.replace(/18/g,'13')}Atelier`],
+  tasks:['tasks',()=>`${ic.task.replace(/18/g,'13')}Tâches`],
+  brain:['brain',()=>`${ic.brain.replace(/18/g,'13')}Brain · ledge-proxy`],
+};
+const tabs = (keys, active) => tabsOf(keys.map(k=>[TT[k][0], TT[k][1]()]), active);
+const toolsHtml = `<div class="tools"><button title="Nouvel onglet">+</button><button title="Diviser à droite">${ic.split}</button></div>`;
+
+function settingsPage(){
+  const nav = ['Général','Espace de travail','Apparence','Encoche','Notifications','Sons','Machines','Accès mobile','Projets','Notes','Raccourcis clavier','À propos'];
+  return `<div class="settings">
+    <nav class="snav">${nav.map(n=>`<button class="${n==='Espace de travail'?'on':''}">${n}${n==='Espace de travail'?'<span class="new">nouveau</span>':''}</button>`).join('')}</nav>
+    <div class="page sbody">
+      <div><h3>Espace de travail</h3><span class="sub">Comment l'IDE ouvre les sessions, les outils et les terminaux.</span></div>
+      <div class="fld">
+        <label>Ouvrir une session</label><div class="radios" style="flex-direction:row;gap:16px"><span class="radio"><i class="on"></i>Dans le groupe actif</span><span class="radio"><i></i>À droite</span><span class="radio"><i></i>Nouvelle fenêtre</span></div>
+        <label>Au démarrage</label><span class="inp">Reprendre la dernière disposition<span class="car">▾</span></span>
+        <label>Dispositions</label><div class="radios">
+          <span class="cell2"><span class="lk l1"></span>Revue Pim + Nova<span class="mut">2 fenêtres · 5 onglets</span><button class="btn">Renommer</button><button class="btn">Supprimer</button></span>
+          <span class="cell2"><span class="lk l2"></span>ledge-dev · mur<span class="mut">1 fenêtre · 3 onglets</span><button class="btn">Renommer</button><button class="btn">Supprimer</button></span></div>
+        <label>Panneau de droite</label><div class="radios"><span class="chk"><i class="on">✓</i>« À toi » et le chat Ledge</span><span class="chk"><i class="on">✓</i>Résumé de la session active</span></div>
+        <label>Barre d'état</label><div class="radios"><span class="chk"><i class="on">✓</i>Limites d'usage des comptes</span>
+          <span class="chk" style="gap:10px">Alerte à <span class="step"><button>−</button><span>80</span><button>+</button></span> % d'une fenêtre</span></div>
+        <label>Ouvrir dans…</label><span class="inp">Cursor<span class="mut">· cursor --reuse-window</span><span class="car">▾</span></span>
+        <label>Terminaux</label><div class="radios"><span class="chk" style="gap:10px">Rendu rapide (WebGL) pour <span class="step"><button>−</button><span>12</span><button>+</button></span> terminaux visibles au plus</span>
+          <span class="chk"><i></i>Taper dans un terminal attaché sans confirmation</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function atelierCanvas(){
+  const bot = (n,p,st,sub) => `<div class="abot ${st}" title="${n}">${logo(p,14)}<span>${n}</span>${dot(st)}${sub?`<i class="sub">+${sub}</i>`:''}</div>`;
+  return `<div class="atelier">
+    <div class="abar"><span class="mut">Atelier</span><span class="seg2"><span class="on">Projets</span><span>Rigs</span></span><span style="flex:1"></span><button class="btn">Masquer les sous-agents</button><button class="btn">Figer les animations</button><button class="btn">Détacher</button></div>
+    <div class="floor">
+      <div class="room"><div class="rt">ledge<span class="mut">3 sessions</span></div>
+        <div class="table">${bot('Pim','anthropic','perm',2)}${bot('Nova','openai','work')}${bot('Ida','anthropic','idle')}</div></div>
+      <div class="room"><div class="rt">synapse<span class="mut">1 session</span></div>
+        <div class="table">${bot('Tom','omp','idle')}</div></div>
+      <div class="room rig"><div class="rt">${ic.rig.replace(/18/g,'12')}ledge-dev<span class="mut">rig · 5 sièges</span></div>
+        <div class="table">${RIG.slice(0,5).map(r=>bot(r.name,r.prov,r.st)).join('')}</div></div>
+      <div class="room ledge"><div class="rt">Bureau de Ledge</div><div class="table one"><span class="mut">Parler à Ledge</span><span class="kbd">Ctrl /</span></div></div>
+    </div>
+    <div class="ahint mut">L'atelier validé (open-space en quinconce) s'affiche tel quel dans cet onglet. Clic sur un agent : sa session dans le groupe actif · Ctrl+clic : à droite · glisser sur une table : le ranger.</div>
+  </div>`;
+}
+
+function tasksPage(){
+  const rows = [
+    ['ask','Décision','Librairie de panneaux : dockview ou golden-layout ?','dev-front → toi','il y a 2 min'],
+    ['work','Ouverte','#224 Coque IDE de Ledge Desktop','lead → dev-front','09:40'],
+    ['work','Ouverte','#225 layout.ts : sérialiser les dispositions','lead → dev-back','09:52'],
+    ['work','Ouverte','#222 Revue : terminal de siège','lead → reviewer','10:05'],
+    ['idle','Close','#221 Copier depuis un terminal','dev-front → lead','hier'],
+  ];
+  return `<div class="page">
+    <div style="display:flex;align-items:center;gap:10px"><h3>Tâches</h3><span class="segc"><span>Toutes</span><span class="on">Ouvertes</span><span>Closes</span></span><span class="segc"><span>Décisions · 1</span></span><span style="flex:1"></span><span class="inp" style="min-height:26px">Donneur : tous<span class="car">▾</span></span></div>
+    <div class="tasks">${rows.map(([st,k,ti,who,at],i)=>`<div class="trow ${i===0?'on':''}">${dot(st)}<span class="pill">${k}</span><b>${ti}</b><span class="mut">${who}</span><span class="mut mono" style="font-size:11px">${at}</span></div>`).join('')}</div>
+    <div class="blk"><div class="blk-h">${dot('ask')}<b>Librairie de panneaux : dockview ou golden-layout ?</b><span class="sp"></span><span class="sub">ledge-dev · #224</span></div>
+      <div class="blk-b"><span>dev-front propose dockview : ouverture d'un groupe dans une vraie fenêtre, disposition sérialisée.</span>
+        <div class="go"><button class="btn pri">Répondre</button><button class="btn">dockview</button><button class="btn">golden-layout</button><button class="btn">Voir le fil de dev-front</button></div></div></div>
+  </div>`;
+}
+function brainPage(){
+  return `<div class="page">
+    <div style="display:flex;align-items:center;gap:10px"><h3>rig 503 = proxy</h3><span class="pill">sessions et chat</span><span class="pill">vérifiée le 2026-11-02</span><span style="flex:1"></span><button class="btn">Vérifiée aujourd'hui</button><button class="btn">Ouvrir le dossier</button></div>
+    <span class="sub">Quand la lire : une commande rig répond HTTP 503 ou UNHEALTHY.</span>
+    <div class="note">Un 503 de <span class="mono">rig</span> vient du proxy d'entreprise, pas du daemon OpenRig : la requête vers 127.0.0.1 part par <span class="mono">http_proxy</span>.<br><br>Retirer <span class="mono">http_proxy</span> et <span class="mono">https_proxy</span> pour la commande. <span class="mono">NO_PROXY</span> seul ne suffit pas toujours. Ne pas redémarrer le daemon.</div>
+    <div class="blk"><div class="blk-h"><b>Ajouts</b><span class="sub">1</span></div><div class="blk-b"><span class="mut">2026-11-04 · proposé par dev-back : « rig ps aussi, même cause » · ajouté</span></div></div>
+  </div>`;
+}
+
+function viewReglages(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr">
+    ${activity()}${explorer()}
+    <main class="editor"><div class="split" style="grid-template-columns:1.6fr 1fr">
+      <section class="pane"><div class="tabs">${tabs(['pim','reg','at'],'reg')}${toolsHtml}</div>${settingsPage()}</section>
+      ${sessionPane('pim')}
+    </div></main>
+  </div>`;
+}
+function viewAtelier(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr 300px">
+    ${activity()}${explorer()}
+    <main class="editor"><div class="split" style="grid-template-columns:1.5fr 1fr">
+      <section class="pane"><div class="tabs">${tabs(['at','reg','tasks'],'at')}${toolsHtml}</div>${atelierCanvas()}</section>
+      ${sessionPane('pim')}
+    </div></main>
+    ${rightPanel()}
+  </div>`;
+}
+function viewTaches(){
+  return `<div class="body" style="grid-template-columns:48px 248px 1fr 300px">
+    ${activity()}${explorer()}
+    <main class="editor"><div class="split" style="grid-template-columns:1.25fr 1fr">
+      <section class="pane"><div class="tabs">${tabs(['tasks','at'],'tasks')}${toolsHtml}</div>${tasksPage()}</section>
+      <section class="pane"><div class="tabs">${tabs(['brain'],'brain')}${toolsHtml}</div>${brainPage()}</section>
+    </div></main>
+    ${rightPanel()}
+  </div>`;
+}
+
+const VIEWS = {
+  travail:{label:'Travail', fn:viewTravail, dispo:'Revue Pim + Nova',
+    note:`<p><b>Travail.</b> La base validée, sans le mur. <b>v3</b> : le logo du provider est sur chaque onglet (Anthropic, OpenAI, omp). Le modèle et le contexte passent sous la zone de réponse. Les limites d'usage ne sont qu'en bas de l'IDE, dans la barre d'état ; un clic ouvre le détail par compte. En haut, 2 ou 3 sessions côte à côte : Pim et son diff (groupe lié violet), Nova (vert d'eau). En bas, le panneau <b>Terminaux</b> : le tmux de Pim, un shell dans son worktree, la capture du reviewer. Le rig n'est plus qu'un onglet du bas, « Rig ledge-dev », et une section de l'explorateur.</p>`},
+  siege:{label:'Siège OpenRig', fn:viewSiege, dispo:'Pim + dev-front',
+    note:`<p><b>Siège OpenRig.</b> Un siège s'ouvre en onglet comme une session : fil, modifications, terminal, <b>role.md</b> et sa ligne de file OpenRig. On lui répond par <span class="mono">rig send</span> sans quitter l'IDE. La <b>topologie</b> et la <b>spec</b> du rig sont des documents qu'on place où on veut. Le clic droit sur un siège de l'explorateur donne ses actions.</p>`},
+  terminaux:{label:'Multi-terminal', fn:viewTerminaux, dispo:'Pim + 4 terminaux',
+    note:`<p><b>Multi-terminal.</b> Un terminal est un onglet comme les autres : on le divise, on le déplace, on le détache. Quatre sortes, toujours affichées sur l'onglet : <b>attaché</b> (le tmux d'un agent, on peut y taper), <b>shell</b> (dans un worktree), <b>lecture seule</b> (rig capture d'un siège), <b>commande</b> (une commande relancée, ici <span class="mono">rig ps</span>).</p>`},
+  openrig:{label:'Onglet OpenRig', fn:viewOpenRig, dispo:'OpenRig',
+    note:`<p><b>Onglet OpenRig.</b> La page OpenRig d'aujourd'hui devient un onglet : daemon, kernel, rigs et leurs sièges (avec ± par rôle), permissions au lancement, « Lancer un rig… ». On la met à côté de la topologie et de la sortie des commandes <span class="mono">rig</span>, ou dans sa propre fenêtre.</p>`},
+  lancer:{label:'Onglet Nouvelle session', fn:viewLancer, dispo:'Nouvelle session + Nova',
+    note:`<p><b>Onglet Nouvelle session.</b> Le bouton <b>+</b> d'un groupe ouvre un nouvel onglet : Nouvelle session, Lancer un rig, OpenRig, Terminal, Atelier, Tâches, Conversation avec Ledge, Brain, Réglages. Le choix de l'agent montre la limite 5 h de chaque compte, pour lancer là où il reste de la marge.</p>`},
+  reglages:{label:'Onglet Réglages', fn:viewReglages, dispo:'Réglages + Pim',
+    note:`<p><b>Onglet Réglages.</b> Les réglages d'aujourd'hui s'ouvrent en onglet (Ctrl+,), à côté d'une session. Une section nouvelle, <b>Espace de travail</b>, règle l'IDE : où s'ouvre une session, la disposition au démarrage, les dispositions enregistrées, le panneau de droite, les limites dans la barre d'état et leur seuil d'alerte, l'outil de « Ouvrir dans… » (Cursor), les terminaux.</p>`},
+  atelier:{label:'Onglet Atelier', fn:viewAtelier, dispo:'Atelier + Pim',
+    note:`<p><b>Onglet Atelier.</b> L'atelier devient un onglet. Chaque agent porte le logo de son provider et son état ; un clic ouvre sa session dans le groupe actif, Ctrl+clic à droite. « Projets | Rigs » et « Détacher » restent. Le dessin ici est schématique : c'est l'open-space validé qui s'affiche dans l'onglet.</p>`},
+  taches:{label:'Onglets Tâches et Brain', fn:viewTaches, dispo:'Tâches + Brain',
+    note:`<p><b>Onglets Tâches et Brain.</b> Les tâches entre sessions (avec les décisions à trancher) et une note du brain, côte à côte. Chaque page de l'accueil d'aujourd'hui (Conversation, Tâches, Historique) devient un onglet du même type.</p>`},
+  fenetres:{label:'Multi-fenêtre', fn:viewFenetres, dispo:'Revue Pim + Nova',
+    note:`<p><b>Multi-fenêtre.</b> Tout groupe d'onglets se détache dans sa propre fenêtre, par glisser hors de la fenêtre ou « Ouvrir dans une nouvelle fenêtre ». Ici le groupe vert d'eau (Nova, son terminal, rig ps) est parti sur l'écran 2. Les groupes liés restent liés d'une fenêtre à l'autre. La disposition enregistrée retient les fenêtres et leur écran.</p>`},
+};
+
+function calloutsFor(v){
+  if (v==='travail') return callouts([
+    {pos:'left:640px;top:340px',t:'<b>Groupe lié violet.</b> Choisir une autre session dans un panneau violet met tous les panneaux violets dessus.'},
+    {pos:'left:640px;top:425px',t:'<b>Onglet rouge.</b> Une autorisation à donner. Y / N tranchent la session active, où qu\'elle soit.'},
+    {pos:'left:20px;top:610px',t:'<b>Sous la réponse.</b> Le modèle (à changer) et le contexte de la session.'},
+    {pos:'right:150px;top:770px',t:'<b>Limites d\'usage.</b> En bas de l\'IDE seulement. Clic : le détail par compte.'},
+    {pos:'left:640px;top:510px',t:'<b>Le rig.</b> Un onglet du bas parmi d\'autres. Ses demandes arrivent quand même dans « À toi ».'},
+  ]);
+  if (v==='reglages') return callouts([
+    {pos:'left:560px;top:620px',t:'<b>Espace de travail.</b> La seule section nouvelle ; les autres sont celles d\'aujourd\'hui.'},
+  ]);
+  if (v==='atelier' || v==='taches') return '';
+  if (v==='openrig') return callouts([
+    {pos:'left:330px;top:600px',t:'<b>Une page devient un onglet.</b> Même contenu que la page OpenRig actuelle ; elle se divise et se détache comme les autres.'},
+  ]);
+  if (v==='lancer') return callouts([
+    {pos:'left:990px;top:330px',t:'<b>Le bouton +</b> de chaque groupe ouvre n\'importe quel outil en onglet.'},
+  ]);
+  if (v==='siege') return callouts([
+    {pos:'left:1000px;top:560px',t:'<b>Topologie.</b> Un document : on la met à côté, en bas, ou dans une autre fenêtre.'},
+  ]);
+  if (v==='terminaux') return callouts([
+    {pos:'left:840px;top:300px',t:'<b>Type de terminal.</b> Attaché, shell, lecture seule ou commande : toujours écrit sur l\'onglet.'},
+  ]);
+  return callouts([
+    {pos:'left:330px;top:560px',t:'<b>Détaché.</b> Le groupe vert d\'eau vit maintenant sur l\'écran 2, plus bas.'},
+  ]);
+}
+
+/* ---------- Render ---------- */
+function render(){
+  const w = document.getElementById('win');
+  w.className = 'win' + (state.big?'':' small') + (state.notes?'':' notes-off');
+  document.getElementById('t-size').setAttribute('aria-pressed', state.big);
+  document.getElementById('t-size').textContent = state.big ? '1920 × 1080' : '1480 × 880';
+  const V = VIEWS[state.v];
+  w.innerHTML = titlebar() + V.fn() + statusbar() + (state.pal?palette():'') + (state.lim?limPop():'') + calloutsFor(state.v);
+  document.getElementById('win2').innerHTML = state.v==='fenetres' ? secondWindow() : '';
+  document.querySelectorAll('.pb').forEach(el=>{ if (el.querySelector('.m-user')) el.scrollTop = el.scrollHeight; });
+  document.getElementById('note').innerHTML = V.note;
+  document.querySelectorAll('.mk-bar [data-v]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===state.v));
+  document.getElementById('t-pal').setAttribute('aria-pressed', state.pal);
+  document.getElementById('t-notes').setAttribute('aria-pressed', state.notes);
+}
+
+document.addEventListener('click', e=>{
+  const t = e.target.closest('button,[data-seat],[data-go],[data-follow]');
+  if (!t) { if (state.pal && !e.target.closest('.palette')) { state.pal=false; render(); } return; }
+  if (t.dataset.v){ state.v=t.dataset.v; try{history.replaceState(null,'','#'+state.v)}catch(_){} render(); return; }
+  if (t.id==='t-pal' || t.id==='open-pal'){ state.pal=!state.pal; render(); return; }
+  if (t.id==='t-lim'){ state.lim=!state.lim; render(); return; }
+  if (t.id==='t-size'){ state.big=!state.big; render(); return; }
+  if (t.id==='t-notes'){ state.notes=!state.notes; render(); return; }
+  if (t.dataset.space){ state.space=t.dataset.space; render(); return; }
+  if (t.dataset.act==='allow' || t.dataset.act==='deny'){ S.pim.req=null; S.pim.st='work'; render(); return; }
+  if (t.dataset.follow){ if(state.v==='b'){state.space='focus';} state.follow=t.dataset.follow; render(); return; }
+  if (t.dataset.seat && state.v==='c' && S[t.dataset.seat]){ state.loupe=[...state.loupe, t.dataset.seat].slice(-3); render(); return; }
+});
+document.addEventListener('keydown', e=>{
+  if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); state.pal=!state.pal; render(); }
+  else if (e.key==='Escape' && state.pal){ state.pal=false; render(); }
+  else if (state.v==='c' && e.key==='Escape' && state.loupe.length>1){ state.loupe=state.loupe.slice(1); render(); }
+});
+const h = (location.hash||'').slice(1); if (VIEWS[h]) state.v=h;
+render();
+</script>
