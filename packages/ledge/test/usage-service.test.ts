@@ -188,6 +188,48 @@ describe('the usage service: another account signs in', () => {
     expect(m.svc.state().harnesses[0]!.status).toBe('ok');
   });
 
+  it('a 401 is the account it was for: another account signed in during the wait is loading, not expired', async () => {
+    const m = switching([{ status: 401 }, { status: 200, body: API }]);
+    await m.svc.tick();
+    expect(m.svc.state().harnesses[0]!.status).toBe('expired');
+    m.to('B');
+    m.advance(30_000); await m.svc.tick();
+    expect(m.svc.state().harnesses[0]).toMatchObject({ status: 'loading', windows: [] });
+    expect(m.calls).toEqual(['Bearer tok-A']);
+    m.advance(READ_EVERY_MS); await m.svc.tick();
+    expect(m.calls).toEqual(['Bearer tok-A', 'Bearer tok-B']);
+    expect(m.svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
+  it('the same account refused (401) stays expired until its next read', async () => {
+    const m = switching([{ status: 401 }, { status: 200, body: API }]);
+    await m.svc.tick();
+    m.advance(30_000); await m.svc.tick();
+    expect(m.svc.state().harnesses[0]!.status).toBe('expired');
+    m.advance(READ_EVERY_MS); await m.svc.tick();
+    expect(m.svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
+  it('a token past its time, then a valid one (signed in again), is no longer expired at once, without reading before it is due', async () => {
+    let t = T0, expiresAt = T0 - 1;
+    const calls: string[] = [];
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: `tok-${expiresAt}`, expiresAt } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: 'acc-A' } });
+      throw new Error('ENOENT');
+    };
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { calls.push(h.Authorization!); return { status: 429, body: '', headers: {} }; } });
+    await svc.tick();
+    expect(svc.state().harnesses[0]!.status).toBe('expired');
+    expect(calls).toEqual([]);
+    expiresAt = T0 + 30 * 24 * 3_600_000;
+    t += 30_000; await svc.tick();
+    // Read now (it was never read): the 429 makes it unreachable, not expired.
+    expect(svc.state().harnesses[0]!.status).toBe('unreachable');
+    expect(calls).toHaveLength(1);
+  });
+
   it('a Retry-After past a day is waited a day', async () => {
     const m = switching([{ status: 429, headers: { 'retry-after': String(3 * 24 * 3600) } }]);
     await m.svc.tick();
