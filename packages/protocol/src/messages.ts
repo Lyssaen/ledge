@@ -24,6 +24,7 @@ import { DecidedBySchema, DecisionSchema, NOTE_MAX } from './decisions.js';
 import { DeviceNameSchema, MobileStateSchema, RelayUrlSchema } from './mobile.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
 import { BrainAddSchema, BrainAnswerSchema, BrainListSchema, BrainNoteSchema, BrainResultSchema } from './brain.js';
+import { UsageAckSchema, UsageSetSchema, UsageStateMessageSchema } from './usage.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 
 export const PROTOCOL_PORT = 47831;
@@ -106,7 +107,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Answers `openrig.goal.send`, `openrig.goals` and `openrig.goal.reply`: goals given to Max (lot 2). */ openrigGoals: z.boolean().optional(),
   /** Takes `session.broadcast` (its `ledge bridge` too, on this machine): a client sends it only when this is set. */ broadcast: z.boolean().optional(),
   /** Sends `browser.live` and answers `browser.watch`, `browser.unwatch` and `browser.enable`: the agent's browser, live. */ browserLive: z.boolean().optional(),
-  /** Answers `term.watch` and `term.shell`: the pane and the shells as a tmux control stream, xterm.js the only emulator. */ terminalStream: z.boolean().optional() });
+  /** Answers `term.watch` and `term.shell`: the pane and the shells as a tmux control stream, xterm.js the only emulator. */ terminalStream: z.boolean().optional(),
+  /** Sends `usage.state` (each harness's account limits, the alerts, the threshold) and takes `usage.set` and `usage.ack`. */ usage: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -205,6 +207,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   TaskResultSchema,
   SessionHandoverResultSchema,
   ContextPrefsMessageSchema,
+  UsageStateMessageSchema,
   HandoverResultSchema,
   TaskUpdatedSchema,
   BrainResultSchema,
@@ -371,6 +374,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   TaskCmdSchema,
   SessionHandoverSchema,
   ContextSetSchema,
+  UsageSetSchema,
+  UsageAckSchema,
   HandoverBriefSchema,
   HandoverShowSchema,
   BrainAnswerSchema, BrainListSchema, BrainNoteSchema, BrainAddSchema

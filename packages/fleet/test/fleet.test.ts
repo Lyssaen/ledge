@@ -364,6 +364,21 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'models.listing').at(-1)).toMatchObject({ requestId: 'm2' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('relays each machine\'s usage tagged with it, and sends the threshold and « Compris » to the machine named (local by default)', () => {
+    const { client, local, server, got } = setup();
+    const state = { type: 'usage.state' as const, harnesses: [{ harness: 'claude' as const, account: 'a1b2c3d4e5f6', status: 'ok' as const, readAt: '2026-11-05T14:00:00.000Z', windows: [] }], alerts: [], prefs: { alert: 0.8 } };
+    server.emit(state); local.emit(state);
+    expect(got.filter(m => m.type === 'usage.state').map(m => m.type === 'usage.state' && m.machineId)).toEqual(['server', 'local']);
+    client.send({ type: 'usage.set', prefs: { alert: 0.9 }, machineId: 'server' });
+    client.send({ type: 'usage.ack', id: 'x' });
+    expect(server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }]);
+    expect(local.sent).toEqual([{ type: 'usage.ack', id: 'x' }]);
+    // An offline machine: nothing is sent, nothing answers.
+    server.set('unreachable');
+    client.send({ type: 'usage.ack', id: 'y', machineId: 'server' });
+    expect(server.sent).toHaveLength(1);
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('routes session.commands to the session\'s machine, relays only its listing with the qualified id, answers offline and outdated', () => {
     const { client, local, server, got } = setup();
     const listings = () => got.filter(m => m.type === 'session.commands.listing');

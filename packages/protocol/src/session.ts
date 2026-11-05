@@ -105,9 +105,15 @@ export const SessionSchema =z.object({
   startedAt: z.string().datetime(),
   lastActivityAt: z.string().datetime(),
   lastHookAt: z.string().datetime().optional(),
-  /** The model and effort Ledge launched the agent with (#58); left out, the agent's own default. */
+  /** The model and effort Ledge launched the agent with (#58); left out, the agent's own default. For a session Ledge did not
+   *  launch (or a seat), what its transcript says it runs: Claude Code `message.model`, Codex `turn_context` (`modelFrom` and
+   *  `effortFrom` then say `transcript`). A Claude Code effort is never in its transcript: unknown, left out. */
   model: z.string().optional(),
   effort: z.string().optional(),
+  modelFrom: z.literal('transcript').optional(),
+  effortFrom: z.literal('transcript').optional(),
+  /** `startedAt` is when Ledge first saw the session (its first hook, a seat found), not its launch: « depuis que Ledge la voit ». */
+  startedSeen: z.literal(true).optional(),
   /** OMP: the approval mode it was launched with, kept by a resume; left out, `always-ask`. */
   approval: OmpApprovalSchema.optional(),
   /** Its context as its agent last reported it, after a turn (context handover spec §3.1); left out, not measured. */

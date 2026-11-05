@@ -58,7 +58,7 @@ import { addFromUser, applyProposal, checkProposal, clearFlag, markChecked, note
 import { notesDir } from '../brain/notes.js';
 import { createTasks, type TasksJournal } from './tasks.js';
 import { createHandovers, heldNames } from './handover.js';
-import { readContext } from './context.js';
+import { readTurn } from './context.js';
 import type { createDaemonUpdater } from '../update/run-update.js';
 import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
@@ -74,6 +74,7 @@ import { createBrowserLive, type BrowserLiveService } from './browser/live.js';
 import { enableLive } from './browser/enable.js';
 import { createPaneHost, type PaneHost } from '../term/pane.js';
 import { bornShell } from '../term/shell.js';
+import type { UsageService } from './usage/service.js';
 
 /** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
 function withoutHarness(s: Session): Session {
@@ -200,7 +201,8 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `launcher` is the command that runs this very CLI inside WSL (node + the built script): the overlay appends
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
-export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; browserLive?: BrowserLiveService; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore }): Promise<ServerHandle> {
+export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; browserLive?: BrowserLiveService; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore;
+  /** Each harness's account limits (docs/mockups/ledge-harness-usage.html): the daemon's own, started with it; tests give one or none. */ usage?: UsageService }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -276,7 +278,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       } else {
         const name = pickName([...namesInUse(store.all()), ...heldNames(store.all())]);
         store.upsert({ id, name, tool, cwd, project: basename(cwd) || r.name, title: `${name} · ${n.logicalId}`,
-          tmuxSession: n.session, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'rig', rig });
+          tmuxSession: n.session, state: 'idle', helpers: [], startedAt: at, startedSeen: true, lastActivityAt: at, source: 'rig', rig });
         log(`openrig: seat ${n.session} followed as ${name}`);
       }
       followed.set(n.session, id);
@@ -427,6 +429,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const contextFile = opts.contextFile ?? join(paths().dir, 'context.json');
   let contextPrefs = readContextPrefs(contextFile);
   const contextMsg = (): ServerMessage => ({ type: 'context.prefs', prefs: contextPrefs });
+  // Each harness's account limits and their alerts, told after every snapshot and on each change.
+  const usage = opts.usage;
+  const usageMsg = (): ServerMessage | null => (usage ? { type: 'usage.state', ...usage.state() } : null);
+  const unsubscribeUsage = usage?.onChange(st => broadcast({ type: 'usage.state', ...st }));
   const mobile = opts.mobile;
   /** The mobile service failed to start: fronts see « unavailable » (and its reason), not a daemon too old to know mobile access. */
   const unavailable: MobileState | undefined = !mobile && opts.mobileUnavailable !== undefined
@@ -531,10 +537,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** Reads a session's context after a turn (§3.1). */
   const measure = async (id: string): Promise<void> => {
     const s = store.get(id); if (!s) return;
-    const context = await readContext(s, now());
+    const turn = await readTurn(s, now());
+    if (turn.codexLimits !== undefined) usage?.observeCodex(turn.codexLimits);
     const cur = store.get(id);
-    if (!context || !cur) return;
-    if (cur.context?.used !== context.used || cur.context.window !== context.window) store.upsert({ ...cur, context });
+    if (!cur) return;
+    const next = { ...cur };
+    const { context } = turn;
+    if (context && (cur.context?.used !== context.used || cur.context.window !== context.window)) next.context = context;
+    // The model and effort a session runs, from its transcript, when Ledge did not choose them at launch (a session started
+    // elsewhere, a seat, or a launch with the agent's default): a launch's own choice is never replaced.
+    if (turn.model && (cur.model === undefined || cur.modelFrom === 'transcript') && cur.model !== turn.model) { next.model = turn.model; next.modelFrom = 'transcript'; }
+    if (turn.effort && (cur.effort === undefined || cur.effortFrom === 'transcript') && cur.effort !== turn.effort) { next.effort = turn.effort; next.effortFrom = 'transcript'; }
+    if (next.context !== cur.context || next.model !== cur.model || next.effort !== cur.effort) store.upsert(next);
   };
   /** The last preview per session, replayed after every snapshot so a late client does not wait for the agent to write. */
   const previews = new Map<string, string[]>();
@@ -572,7 +586,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true } : {}), ...(usage ? { usage: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -581,6 +595,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     for (const [id, lines] of previews) if (store.get(id)) reply({ type: 'session.preview', id, lines });
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
+    const u = usageMsg(); if (u) reply(u); // the harnesses' limits
     for (const m of browserLive.states()) reply(m); // last: the agents' browsers that are not `none`
   };
   const preview = (id: string, lines: string[]) => {
@@ -1304,6 +1319,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         projects = msg.projects; // already validated by parseClientMessage
         return broadcast(projectsMsg());
       }
+      case 'usage.set': {
+        if (!usage) return reply({ type: 'error', message: 'usage not available', request: msg.type });
+        usage.setPrefs(msg.prefs);
+        return;
+      }
+      case 'usage.ack': {
+        if (!usage) return reply({ type: 'error', message: 'usage not available', request: msg.type });
+        // « Compris » goes to every machine signed in to the account: one that does not have this alert ignores it.
+        usage.ack(msg.id);
+        return;
+      }
       case 'context.set': {
         writeContextPrefs(msg.prefs, contextFile); // first: a failing write leaves memory unchanged and reaches the sender
         contextPrefs = msg.prefs;
@@ -1397,7 +1423,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (!before) {
           const taken = [...namesInUse(store.all()), ...heldNames(store.all())];
           const cwd = msg.cwd ?? '';
-          const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only' };
+          const base: Session = { id: msg.id, name: pickName(taken), tool: msg.agent ?? 'claude', cwd, project: basename(cwd) || 'unknown', title: 'untracked session', tmuxSession: null, state: 'working', helpers: [], startedAt: msg.event.at, lastActivityAt: msg.event.at, source: 'hook_only',
+            // Its first hook is not its start unless it is SessionStart: its duration counts from when Ledge saw it.
+            ...(msg.event.name === 'SessionStart' ? {} : { startedSeen: true as const }) };
           store.upsert(base);
           store.apply(msg.id, msg.event); // through apply, so the history sees the session's first event too
         } else {
@@ -1709,7 +1737,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     challenges: createChallengeStore(),
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
-    tasks: () => tasks.all(), contextNear: () => contextPrefs.near,
+    tasks: () => tasks.all(), contextNear: () => contextPrefs.near, ...(usage ? { usage: () => usage.state().harnesses } : {}),
     // The Atelier on the phone: the user's projects, the sessions placed in them as on the desktop; a `projects.set` follows by `forward`.
     projects: () => projects,
     // A project's folders from the phone: this machine's, browsed from its home, its recent folders first; the others by their label.
@@ -1809,6 +1837,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); unsubscribeUsage?.(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

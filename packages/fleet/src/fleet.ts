@@ -349,6 +349,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.requestId !== undefined) { if (rigAsks.get(m.requestId)?.machine !== machine) return; rigAsks.delete(m.requestId); }
       emit({ ...m, machineId: machine }); return;
     }
+    // Each machine's harness limits, tagged with it: a front groups machines by account and drops a machine that went away.
+    if (m.type === 'usage.state') { emit({ ...m, machineId: machine }); return; }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'session.commands.listing') { const l = commandLists.get(m.requestId); if (l?.machine === machine) { commandLists.delete(m.requestId); emit({ ...m, id: l.id }); } return; }
     if (m.type === 'chat.routed') {
@@ -562,6 +564,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         coordinator.client.send({ type: 'chat.route', qid: msg.qid, text: msg.text, tool: msg.tool, context }); return;
       }
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
+      // The usage threshold and « Compris » go to the machine named (local by default); a front sends them to each machine it
+      // means. Before the session routing below: an alert's `id` is not a session's. An offline machine: nothing to send.
+      if (msg.type === 'usage.set' || msg.type === 'usage.ack') {
+        const target = peers.get(msg.machineId ?? 'local');
+        if (!available(target)) return;
+        const { machineId: _m, ...rest } = msg;
+        target!.client.send(rest); return;
+      }
       let machine = selected; let outgoing: ClientMessage = msg;
       if (msg.type === 'session.commands') {
         const origin = splitId(msg.id);

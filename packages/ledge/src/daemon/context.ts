@@ -1,5 +1,5 @@
 import { open } from 'node:fs/promises';
-import type { Context, Session } from '@ledge/protocol';
+import type { Context, Session, UsageWindow } from '@ledge/protocol';
 
 /** How much of a transcript's end is read for its last usage: a turn's last lines, never the whole file. */
 const TAIL_BYTES = 512 * 1024;
@@ -79,11 +79,88 @@ export function codexUsage(lines: readonly string[]): Usage | undefined {
   return undefined;
 }
 
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() && v.length <= 80 ? v.trim() : undefined);
+
+/** Claude Code: the model and effort of the last assistant message outside a side chain (`message.model`, `effort`). */
+export function claudeTurn(lines: readonly string[]): { model?: string; effort?: string } {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!.trim();
+    if (!line.includes('"assistant"')) continue;
+    let e: Json;
+    try { e = JSON.parse(line) as Json; } catch { continue; }
+    if (e.type !== 'assistant' || e.isSidechain === true) continue;
+    const model = str(obj(e.message)?.model);
+    // A synthetic message (an error, a local command) names no real model.
+    if (!model || model.startsWith('<')) continue;
+    const effort = str(e.effort);
+    return { model, ...(effort ? { effort } : {}) };
+  }
+  return {};
+}
+
+/** Codex: the model and effort of the last `turn_context`. */
+export function codexTurn(lines: readonly string[]): { model?: string; effort?: string } {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!.trim();
+    if (!line.includes('turn_context')) continue;
+    let e: Json;
+    try { e = JSON.parse(line) as Json; } catch { continue; }
+    if (e.type !== 'turn_context') continue;
+    const p = obj(e.payload) ?? {};
+    const model = str(p.model), effort = str(p.effort);
+    if (!model && !effort) continue;
+    return { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+  }
+  return {};
+}
+
+/** Codex's limits as its last `token_count` reports them: the 5 hours (300 minutes) and the week (10 080), each `used_percent`
+ *  and `resets_at` (epoch seconds; `resets_in_seconds` from an older CLI). `null`: it reports none (a plan without windows);
+ *  undefined: no `token_count` with `rate_limits` in the part read. `at`: when it was reported. */
+export function codexLimits(lines: readonly string[]): { windows: UsageWindow[]; at: string } | null | undefined {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!.trim();
+    if (!line.includes('rate_limits')) continue;
+    let e: Json;
+    try { e = JSON.parse(line) as Json; } catch { continue; }
+    const p = obj(e.payload) ?? e;
+    if (p.type !== 'token_count' || !('rate_limits' in p)) continue;
+    const rl = obj(p.rate_limits);
+    const at = typeof e.timestamp === 'string' && !Number.isNaN(Date.parse(e.timestamp)) ? new Date(e.timestamp).toISOString() : undefined;
+    if (!rl || !at) return null;
+    const windows: UsageWindow[] = [];
+    for (const key of ['primary', 'secondary'] as const) {
+      const w = obj(rl[key]);
+      if (!w || typeof w.used_percent !== 'number' || !Number.isFinite(w.used_percent)) continue;
+      const minutes = num(w.window_minutes);
+      const kind = minutes === 300 ? 'five_hour' : minutes === 10_080 ? 'seven_day' : key === 'primary' ? 'five_hour' : 'seven_day';
+      const resets = typeof w.resets_at === 'number' && w.resets_at > 0 ? new Date(w.resets_at * 1000)
+        : typeof w.resets_in_seconds === 'number' && w.resets_in_seconds >= 0 ? new Date(Date.parse(at) + w.resets_in_seconds * 1000) : null;
+      windows.push({ kind, pct: Math.max(0, Math.min(1000, Math.round(w.used_percent))), resetsAt: resets && !Number.isNaN(resets.getTime()) ? resets.toISOString() : null });
+    }
+    windows.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'five_hour' ? -1 : 1));
+    return windows.length ? { windows, at } : null;
+  }
+  return undefined;
+}
+
+/** What a turn's end tells about a session, from one read of its transcript's end: its context, the model and effort it runs,
+ *  and, for Codex, the account's limits. Each part undefined when it cannot be told. */
+export interface TurnInfo { context?: Context; model?: string; effort?: string; codexLimits?: { windows: UsageWindow[]; at: string } | null }
+export async function readTurn(s: Pick<Session, 'tool' | 'transcriptPath' | 'model'>, at: string): Promise<TurnInfo> {
+  if (!s.transcriptPath || (s.tool !== 'claude' && s.tool !== 'codex')) return {};
+  let lines: string[];
+  try { lines = await tail(s.transcriptPath); } catch { return {}; }
+  if (s.tool === 'claude') {
+    const u = claudeUsage(lines, s.model);
+    return { ...(u ? { context: { ...u, at } } : {}), ...claudeTurn(lines) };
+  }
+  const u = codexUsage(lines);
+  const limits = codexLimits(lines);
+  return { ...(u ? { context: { ...u, at } } : {}), ...codexTurn(lines), ...(limits !== undefined ? { codexLimits: limits } : {}) };
+}
+
 /** A session's context, read from its transcript (context handover spec §3.1); undefined when it cannot be told. */
 export async function readContext(s: Pick<Session, 'tool' | 'transcriptPath' | 'model'>, at: string): Promise<Context | undefined> {
-  if (!s.transcriptPath || (s.tool !== 'claude' && s.tool !== 'codex')) return undefined;
-  let lines: string[];
-  try { lines = await tail(s.transcriptPath); } catch { return undefined; }
-  const u = s.tool === 'claude' ? claudeUsage(lines, s.model) : codexUsage(lines);
-  return u ? { ...u, at } : undefined;
+  return (await readTurn(s, at)).context;
 }
