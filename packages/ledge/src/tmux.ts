@@ -29,6 +29,8 @@ export interface Tmux {
   /** A window option set on the window itself, null when it has none (`show-options -wq`). */
   windowOption?(name: string, option: string): Promise<string | null>;
   setWindowOption?(name: string, option: string, value: string): Promise<void>;
+  /** `resize-window`: the window takes these dimensions (and `window-size manual`, as tmux does). */
+  resizeWindow?(name: string, cols: number, rows: number): Promise<void>;
   /** `readOnly` watches the pane without sending it keys (`attach-session -r`). */
   attachArgs(name: string, opts?: { readOnly?: boolean }): string[];
   /** A control client on the session (`-C`) that only reads and never counts for the window's size: the phone's terminal. */
@@ -134,6 +136,10 @@ export function realTmux(socket: string | null = 'ledge', opts: { scope?: () => 
       const r = await t(['show-options', '-wq', '-t', `=${name}:`, option]);
       return r.code === 0 ? optionValue(r.stdout.split('\n'), option) : null;
     },
+    async resizeWindow(name, cols, rows) {
+      const r = await t(['resize-window', '-x', String(cols), '-y', String(rows), '-t', `=${name}:`]);
+      if (r.code !== 0) throw new Error(`tmux resize-window failed: ${r.stderr.trim()}`);
+    },
     async setWindowOption(name, option, value) {
       const r = await t(['set-option', '-w', '-t', `=${name}:`, option, value]);
       if (r.code !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
@@ -173,6 +179,7 @@ export function routedTmux(own: Tmux, seats: Tmux): Tmux {
     unsetWindowOption: async (n, option) => { const t = of(n); await t.unsetWindowOption?.(n, option); },
     windowOption: async (n, option) => { const t = of(n); return t.windowOption ? t.windowOption(n, option) : null; },
     setWindowOption: async (n, option, value) => { const t = of(n); await t.setWindowOption?.(n, option, value); },
+    resizeWindow: async (n, cols, rows) => { const t = of(n); await t.resizeWindow?.(n, cols, rows); },
     attachArgs: (n, opts) => of(n).attachArgs(n, opts),
     // A control client on the session's own server: a seat's is OpenRig's, so its stream, keys and size go there. The phone
     // still refuses a seat before asking for one (a `rig` session is read-only there).

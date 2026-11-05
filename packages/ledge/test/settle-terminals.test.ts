@@ -10,6 +10,8 @@ function fakeTmux(opts: Record<string, Record<string, string>>) {
     killSession: async (n: string) => { killed.push(n); },
     windowOption: async (n: string, o: string) => opts[n]?.[o] ?? null,
     setWindowOption: async (n: string, o: string, v: string) => { calls.push(`set ${n} ${o} ${v}`); (opts[n] ??= {})[o] = v; },
+    // As tmux does, a resize sets the window to `manual`.
+    resizeWindow: async (n: string, c: number, r: number) => { calls.push(`resize ${n} ${c}x${r}`); (opts[n] ??= {})['window-size'] = 'manual'; },
     unsetWindowOption: async (n: string, o: string) => { calls.push(`unset ${n} ${o}`); delete opts[n]?.[o]; }
   };
 }
@@ -26,7 +28,8 @@ describe('settleTerminals', () => {
 
   it('gives a window Ledge held exactly its own size back, a seat\'s included, and touches no other seat', async () => {
     const tmux = fakeTmux({
-      'dev-build@starter': { 'window-size': 'manual', '@ledge_window_size': 'smallest' },
+      'dev-build@starter': { 'window-size': 'manual', '@ledge_window_size': 'smallest:115x30' },
+      'dev-plan@starter': { 'window-size': 'manual', '@ledge_window_size': 'manual:120x40' },
       'dev-review@starter': { 'window-size': 'manual', '@ledge_window_size': '-' },
       'dev-qa@starter': { 'window-size': 'manual' },
       'ledge-a': { 'window-size': 'manual', '@ledge_window_size': 'largest' },
@@ -35,6 +38,10 @@ describe('settleTerminals', () => {
     const live = new Set(Object.keys(tmux.opts));
     await settleTerminals(tmux, live, [{ tmuxSession: 'ledge-a' }, { tmuxSession: 'dev-build@starter' }]);
     expect(tmux.opts['dev-build@starter']).toEqual({ 'window-size': 'smallest' });
+    // A window that was `manual` of its own gets its dimensions back, then its own `manual`.
+    expect(tmux.opts['dev-plan@starter']).toEqual({ 'window-size': 'manual' });
+    expect(tmux.calls.filter(c => c.includes('dev-plan@starter'))).toEqual(['resize dev-plan@starter 120x40', 'set dev-plan@starter window-size manual', 'unset dev-plan@starter @ledge_window_size']);
+    expect(tmux.calls).toContain('resize dev-build@starter 115x30');
     expect(tmux.opts['dev-review@starter']).toEqual({});
     // Never held by Ledge (no mark): its `manual` is someone else's, it stays.
     expect(tmux.opts['dev-qa@starter']).toEqual({ 'window-size': 'manual' });

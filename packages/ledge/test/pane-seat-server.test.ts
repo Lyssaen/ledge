@@ -65,7 +65,7 @@ describe('an OpenRig seat streamed from its own tmux server', () => {
     host.watch(rb, { id: 'r', tmuxName: name }, { cols: 100, rows: 30 });
     await until(() => a.some(m => m.type === 'term.opened') && b.some(m => m.type === 'term.opened'), 8000);
     expect(await sizeOf(name)).toBe('manual');
-    expect(await markOf(name)).toBe('smallest');
+    expect(await markOf(name)).toMatch(/^smallest:\d+x\d+$/);
     host.unwatch(ra, 'r');
     await new Promise(r => setTimeout(r, 300));
     // The other watch still holds it.
@@ -74,12 +74,38 @@ describe('an OpenRig seat streamed from its own tmux server', () => {
     await until(async () => (await sizeOf(name)) === 'smallest' && (await markOf(name)) === '', 8000);
   }, 30_000);
 
+  it('a seat in manual, its own or the server\'s, gets its dimensions back', async () => {
+    const seatServer = realTmux(seats, opt);
+    const tmux = routedTmux(realTmux(own, opt), seatServer);
+    const host = createPaneHost({ controlArgs: n => tmux.controlArgs?.(n) ?? null, log: () => {} });
+    // Its own `manual` at 115x30, then a server whose global value is `manual` (the window has none of its own).
+    for (const [name, global] of [['dev-plan@starter', false], ['dev-docs@starter', true]] as const) {
+      await seatServer.newSession({ name, cwd: '/tmp', env: {}, command: ['sh', '-c', 'cat'] });
+      if (global) await run(['-L', seats, 'set-option', '-gw', 'window-size', 'manual']);
+      else await run(['-L', seats, 'set-option', '-w', '-t', `=${name}:`, 'window-size', 'manual']);
+      await run(['-L', seats, 'resize-window', '-x', '115', '-y', '30', '-t', `=${name}:`]);
+      if (global) await run(['-L', seats, 'set-option', '-wu', '-t', `=${name}:`, 'window-size']);
+      expect(await dimsOf(name)).toBe('115x30');
+      const sent: ServerMessage[] = [];
+      const reply = (m: ServerMessage) => { sent.push(m); };
+      host.watch(reply, { id: name, tmuxName: name }, { cols: 90, rows: 20 });
+      await until(() => sent.some(m => m.type === 'term.opened'), 8000);
+      expect(await dimsOf(name)).toBe('90x20');
+      host.unwatch(reply, name);
+      await until(async () => (await markOf(name)) === '', 8000);
+      expect(await dimsOf(name)).toBe('115x30');
+      expect(await sizeOf(name)).toBe(global ? '' : 'manual');
+      if (global) await run(['-L', seats, 'set-option', '-gw', 'window-size', 'latest']);
+    }
+  }, 30_000);
+
   it('a daemon that died while a seat was held: the next start gives the window its own size back, and touches no other', async () => {
     const seatServer = realTmux(seats, opt);
     const held = 'dev-qa@starter', other = 'dev-design@starter';
     await seatServer.newSession({ name: held, cwd: '/tmp', env: {}, command: ['sh', '-c', 'cat'] });
     await seatServer.newSession({ name: other, cwd: '/tmp', env: {}, command: ['sh', '-c', 'cat'] });
-    await run(['-L', seats, 'set-option', '-w', '-t', `=${held}:`, 'window-size', 'largest']);
+    await run(['-L', seats, 'set-option', '-w', '-t', `=${held}:`, 'window-size', 'manual']);
+    await run(['-L', seats, 'resize-window', '-x', '115', '-y', '30', '-t', `=${held}:`]);
     // A window Ledge never held keeps whatever it has, even `manual`.
     await run(['-L', seats, 'set-option', '-w', '-t', `=${other}:`, 'window-size', 'manual']);
     const tmux = routedTmux(realTmux(own, opt), seatServer);
@@ -89,7 +115,8 @@ describe('an OpenRig seat streamed from its own tmux server', () => {
     host.watch(reply, { id: 'q', tmuxName: held }, { cols: 90, rows: 20 });
     await until(() => sent.some(m => m.type === 'term.opened'), 8000);
     expect(await sizeOf(held)).toBe('manual');
-    expect(await markOf(held)).toBe('largest');
+    expect(await markOf(held)).toBe('manual:115x30');
+    expect(await dimsOf(held)).toBe('90x20');
     // The daemon dies: its control client is killed outright, nothing is written back (the host's own close finds it dead).
     const pids = (await run(['-L', seats, 'list-clients', '-t', `=${held}`, '-F', '#{client_pid}'])).stdout.trim().split('\n').filter(Boolean);
     expect(pids).toHaveLength(1);
@@ -98,14 +125,17 @@ describe('an OpenRig seat streamed from its own tmux server', () => {
     await new Promise(r => setTimeout(r, 200));
     // Left as the dead daemon had it: held at the desktop's size, the window's own value kept in the mark.
     expect(await sizeOf(held)).toBe('manual');
-    expect(await markOf(held)).toBe('largest');
+    expect(await markOf(held)).toBe('manual:115x30');
+    expect(await dimsOf(held)).toBe('90x20');
     const { settleTerminals } = await import('../src/daemon/index.js');
     await settleTerminals(tmux, new Set(await tmux.listSessions()), [{ tmuxSession: held }, { tmuxSession: other }]);
-    expect(await sizeOf(held)).toBe('largest');
+    expect(await sizeOf(held)).toBe('manual');
+    expect(await dimsOf(held)).toBe('115x30');
     expect(await markOf(held)).toBe('');
     expect(await sizeOf(other)).toBe('manual');
   }, 30_000);
 });
 
 const sizeOf = async (name: string) => (await run(['-L', seats, 'show-options', '-w', '-v', '-t', `=${name}:`, 'window-size'])).stdout.trim();
+const dimsOf = async (name: string) => (await run(['-L', seats, 'display-message', '-p', '-t', `=${name}:`, '#{window_width}x#{window_height}'])).stdout.trim();
 const markOf = async (name: string) => (await run(['-L', seats, 'show-options', '-wq', '-v', '-t', `=${name}:`, '@ledge_window_size'])).stdout.trim();

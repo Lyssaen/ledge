@@ -16,7 +16,7 @@ import { ledgePeer, readPeers } from './peers.js';
 import { createMobileService, type MobileService } from '../mobile/service.js';
 import { fileJournal } from './mailbox.js';
 import { tasksJournal } from './tasks.js';
-import { NO_SIZE, SIZE_MARK, keptSize } from '../term/windowSize.js';
+import { NO_SIZE, SIZE_MARK, keptOf } from '../term/windowSize.js';
 
 /** A shell born beside the daemon (`sh-` and 12 hex): its watch died with the last daemon, nobody can reach it again. */
 export const BORN_SHELL = /^sh-[0-9a-f]{12}$/;
@@ -24,24 +24,26 @@ export const BORN_SHELL = /^sh-[0-9a-f]{12}$/;
 /**
  * What a daemon that stopped without closing its desktop terminals left behind: shells nobody watches, and windows
  * still held at a desktop's size (`window-size manual`). Both are undone before anything watches again.
- * A window Ledge held carries its own size in `@ledge_window_size` (term/windowSize.ts): it gets exactly that back, an OpenRig
+ * A window Ledge held carries its own size and dimensions in `@ledge_window_size` (term/windowSize.ts): it gets exactly those back, an OpenRig
  * seat's included, and only such a window is touched on a seat's server. A Ledge session held by an older daemon (no mark) has
  * its option removed, as before.
  */
-export async function settleTerminals(tmux: Pick<Tmux, 'killSession' | 'unsetWindowOption' | 'windowOption' | 'setWindowOption'>, live: Set<string>, sessions: readonly { tmuxSession?: string | null }[]): Promise<void> {
+export async function settleTerminals(tmux: Pick<Tmux, 'killSession' | 'unsetWindowOption' | 'windowOption' | 'setWindowOption' | 'resizeWindow'>, live: Set<string>, sessions: readonly { tmuxSession?: string | null }[]): Promise<void> {
   for (const name of live) if (BORN_SHELL.test(name)) await tmux.killSession(name).catch(e => log(`stale shell ${name} not killed: ${(e as Error).message}`));
   const given = new Set<string>();
   for (const name of live) {
     if (BORN_SHELL.test(name)) continue;
     const mark = await tmux.windowOption?.(name, SIZE_MARK).catch(() => null);
     if (mark === null || mark === undefined) continue;
-    const own = keptSize(mark);
+    const own = keptOf(mark);
     try {
-      if (own === NO_SIZE) await tmux.unsetWindowOption?.(name, 'window-size');
-      else await tmux.setWindowOption?.(name, 'window-size', own);
+      // Dimensions first: `resize-window` sets `manual` itself, and the window's own value then replaces it.
+      if (own.cols && own.rows) await tmux.resizeWindow?.(name, own.cols, own.rows);
+      if (own.size === NO_SIZE) await tmux.unsetWindowOption?.(name, 'window-size');
+      else await tmux.setWindowOption?.(name, 'window-size', own.size);
       await tmux.unsetWindowOption?.(name, SIZE_MARK);
       given.add(name);
-      log(`window of ${name} given back its own size (${own === NO_SIZE ? 'none' : own})`);
+      log(`window of ${name} given back its own size (${own.size === NO_SIZE ? 'none' : own.size}${own.cols ? `, ${own.cols}x${own.rows}` : ''})`);
     } catch (e) { log(`window of ${name} not given back: ${(e as Error).message}`); }
   }
   for (const s of sessions) {
