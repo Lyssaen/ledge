@@ -20,6 +20,25 @@ describe('names', () => {
     expect(pickName([NAMES[0]!], '')).toBe(NAMES[1]);
     expect(pickName([], '  zed  ')).toBe('Zed');
   });
+  it('keeps the case the user typed after the first letter: PrixMat, ForKJo', () => {
+    expect(pickName([], 'PrixMat')).toBe('PrixMat');
+    expect(pickName([], 'forKJo')).toBe('ForKJo');
+  });
+  it('a name taken in another case is taken', () => {
+    expect(pickName(['Otto'], 'OTTO')).toBe('OTTO-2');
+    expect(pickName(['PrixMat'], 'prixmat')).toBe('Prixmat-2');
+  });
+  it('drops what would break the name as an address (spaces, commas, @, brackets), and keeps it short', () => {
+    expect(pickName([], 'Prix Mat')).toBe('PrixMat');
+    expect(pickName([], '@Pim,Nova')).toBe('PimNova');
+    expect(pickName([], 'Max [ab12]')).toBe('Maxab12');
+    expect(pickName([], 'Élodie_2-b')).toBe('Élodie_2-b');
+    expect(pickName([], 'A'.repeat(40))).toBe('A'.repeat(24));
+    expect(pickName([], ' ,@ ')).toBe(NAMES[0]);
+  });
+  it('never hands out « Ledge », the address of Ledge itself', () => {
+    expect(pickName([], 'ledge')).toBe('Ledge-2');
+  });
   it('suffixes when all 64 are taken', () => {
     expect(pickName(NAMES)).toBe(NAMES[0] + '-2');
   });

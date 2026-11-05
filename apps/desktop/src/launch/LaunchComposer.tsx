@@ -8,7 +8,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
-import { isUp, launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, NO_PICK, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
+import { isUp, launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, NO_PICK, pastNames, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
 import { useRepoInfo } from './useRepoInfo';
 import { useModels } from './useModels';
 import { loadPick, savePick } from './modelPrefs';
@@ -101,6 +101,8 @@ export function LaunchComposer(p: {
 
   const missing = missingOf(form, machines);
   const { name, seat } = previewOf(form, p.sessions, p.projectIdOf);
+  const autoName = previewOf({ ...form, name: '' }, p.sessions, p.projectIdOf).name;
+  const past = pastNames(p.sessions, form.project, p.projectIdOf);
   // Without any project, the repositories are missing because the project is: the alert names the « No project yet » block.
   const alert = !missing ? null : missing === 'repos' && projects.length === 0 ? t.launch.noProjects : t.launch.missing[missing];
   const launching = p.launch.status === 'launching';
@@ -148,6 +150,21 @@ export function LaunchComposer(p: {
             {t.launch.ideas.map(s => <button type="button" key={s} onClick={() => { setForm(f => ({ ...f, prompt: s })); field.current?.focus(); }}>{s}</button>)}
           </div>
         )}
+
+        <div className="composer-name">
+          <label>
+            <span className="composer-label">{t.launch.agentName}</span>
+            <input type="text" value={form.name ?? ''} maxLength={40} spellCheck={false} autoComplete="off" placeholder={t.launch.agentNameAuto(autoName)}
+              aria-describedby="composer-name-hint" onChange={e => { const name = e.target.value; setForm(f => ({ ...f, name })); }} />
+          </label>
+          <small id="composer-name-hint" className="chip-hint">{t.launch.agentNameHint}</small>
+          {past.length > 0 && (
+            <div className="composer-past" role="group" aria-label={t.launch.pastNames}>
+              <span className="composer-label">{t.launch.pastNames}</span>
+              {past.map(n => <button type="button" key={n} className={cls('chip', form.name === n && 'selected')} aria-pressed={form.name === n} onClick={() => setForm(f => ({ ...f, name: f.name === n ? '' : n }))}>{n}</button>)}
+            </div>
+          )}
+        </div>
 
         <section className="integrated-harness" aria-label={t.launch.agent}>
           <div className="harness-field-label"><span className="composer-label">{t.launch.agent}</span><span>{t.launch.agentHint}</span></div>

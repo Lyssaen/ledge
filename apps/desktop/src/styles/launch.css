@@ -8,6 +8,12 @@
 .composer-prompt{display:flex;flex-direction:column}
 .composer-prompt textarea{min-height:104px;padding:12px 14px;font:inherit;font-size:14px;line-height:21px;resize:vertical;border:1px solid var(--input);border-radius:var(--radius-lg);background:var(--background);color:var(--foreground)}
 .composer-prompt textarea:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.composer-name{display:flex;flex-direction:column;gap:6px}
+.composer-name label{display:flex;flex-direction:column}
+.composer-name input{height:36px;max-width:320px;padding:0 12px;font:inherit;font-size:14px;font-weight:500;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)}
+.composer-name input:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.composer-past{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.composer-past .composer-label{width:100%}
 .composer [aria-invalid=true] textarea,.composer textarea[aria-invalid=true]{border-color:var(--destructive)}
 .composer-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:-8px}
 .composer-suggestions button{font-size:11px;padding:4px 10px;border-radius:999px;border:1px solid var(--border);color:var(--muted-foreground)}

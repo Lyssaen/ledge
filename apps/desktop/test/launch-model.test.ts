@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Project, RepoInfo } from '@ledge/protocol';
 import { machine } from './fleet-helpers';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { launchDefaults, launchMessage, missingOf, NO_PICK, previewOf, toggleRepo, withMachine, withPick, withProject, withTool } from '../src/launch/model';
+import { launchDefaults, launchMessage, missingOf, NO_PICK, pastNames, previewOf, toggleRepo, withMachine, withPick, withProject, withTool } from '../src/launch/model';
 import { effective, effortsFor } from '../src/launch/ModelPicker';
 import { loadPick, savePick } from '../src/launch/modelPrefs';
 
@@ -62,6 +62,28 @@ describe('launch model', () => {
     expect(previewOf(f, sessions, idOf)).toEqual({ name: 'Pim', seat: 4 });
     expect(previewOf({ ...f, machine: 'nas' }, sessions, idOf)).toEqual({ name: 'Otto', seat: 4 });
     expect(previewOf({ ...f, project: 'payment' }, sessions, idOf)).toEqual({ name: 'Pim', seat: 2 });
+  });
+  it('the preview takes the name typed in the form, cleaned, its case kept, suffixed while taken', () => {
+    const sessions = [fakeSession('local:otto', { name: 'Otto', cwd: '/w/ledge/app' })];
+    const idOf = () => 'ledge';
+    const f = launchDefaults(projects, machines, { project: 'ledge' }, 'claude');
+    expect(previewOf({ ...f, name: 'prixMat' }, sessions, idOf).name).toBe('PrixMat');
+    expect(previewOf({ ...f, name: 'otto' }, sessions, idOf).name).toBe('Otto-2');
+    expect(previewOf({ ...f, name: '  ' }, sessions, idOf).name).toBe('Pim');
+  });
+  it('the names given in the project before: the user’s own, the latest first, not the ones a live agent holds', () => {
+    const at = (min: number) => new Date(Date.UTC(2026, 10, 4, 10, min)).toISOString();
+    const sessions = [
+      fakeSession('local:a', { name: 'Marketing', cwd: '/w/ledge/app', state: 'exited', startedAt: at(1) }),
+      fakeSession('local:b', { name: 'PrixMat', cwd: '/w/ledge/app', state: 'exited', startedAt: at(5) }),
+      fakeSession('local:c', { name: 'SEO', cwd: '/w/ledge/app', state: 'working', startedAt: at(6) }),
+      fakeSession('local:d', { name: 'Otto', cwd: '/w/ledge/app', state: 'exited', startedAt: at(7) }),
+      fakeSession('local:e', { name: 'Marketing', cwd: '/w/ledge/app', state: 'exited', startedAt: at(8) }),
+      fakeSession('local:f', { name: 'Compta', cwd: '/w/payment/api', state: 'exited', startedAt: at(9) })
+    ];
+    const idOf = (s: { cwd: string }) => (s.cwd.includes('ledge') ? 'ledge' : 'payment');
+    expect(pastNames(sessions, 'ledge', idOf)).toEqual(['Marketing', 'PrixMat']);
+    expect(pastNames(sessions, null, idOf)).toEqual([]);
   });
   it('the message: first repo as cwd, the others as dirs for Claude only, the prompt trimmed', () => {
     expect(launchMessage({ tool: 'claude', prompt: ' Relis ', project: 'ledge', machine: 'local', repos: ['/w/ledge/app', '/w/ledge/docs'], ...NO_PICK, approval: 'always-ask' }, 'Pim'))
