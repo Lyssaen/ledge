@@ -21,7 +21,7 @@ export function useUsageView(client: DaemonClient, machines: readonly MachineSta
     return {
       groups: usageGroups(states, id => byId.get(id)?.status === 'open', now),
       threshold: usageThreshold(states),
-      alerts: usageAlerts(states),
+      alerts: usageAlerts(states, id => byId.get(id)?.status === 'open', now),
       now,
       label: id => byId.get(id)?.label ?? id
     };

@@ -51,10 +51,24 @@ export function usageThreshold(states: ReadonlyMap<string, UsageStateMessage>): 
   return (states.get('local') ?? states.values().next().value)?.prefs.alert ?? USAGE_ALERT;
 }
 
-/** The open alerts, once each (the same account on two machines raises the same one), the newest first. */
-export function usageAlerts(states: ReadonlyMap<string, UsageStateMessage>): UsageAlert[] {
+/**
+ * The open alerts, once each (the same account on two machines raises the same one), the newest first. A machine that is not
+ * connected cannot say its alert still holds: it counts only while its reading of that account is under an hour old (M9), as
+ * its windows do.
+ */
+export function usageAlerts(states: ReadonlyMap<string, UsageStateMessage>, online: (machine: string) => boolean = () => true, now: number = Date.now()): UsageAlert[] {
   const byId = new Map<string, UsageAlert>();
-  for (const s of states.values()) for (const a of s.alerts) if (!byId.has(a.id)) byId.set(a.id, a);
+  for (const [machine, s] of states) {
+    const up = online(machine);
+    for (const a of s.alerts) {
+      if (byId.has(a.id)) continue;
+      if (!up) {
+        const read = s.harnesses.find(h => h.harness === a.harness && h.account === a.account)?.readAt;
+        if (!read || now - Date.parse(read) > USAGE_SHOWN_MS) continue;
+      }
+      byId.set(a.id, a);
+    }
+  }
   return [...byId.values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
 

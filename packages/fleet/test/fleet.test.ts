@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
 import { daemonStore, attachClient } from '../src/store';
+import { usageAlerts } from '../src/usage';
 import type { DaemonClient, DaemonStatus } from '../src/client';
 import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, shellCommand, sshProblem, terminalCommand, type MachineState } from '../src/machines';
 import { fakeSession } from './mockDaemon';
@@ -379,6 +380,32 @@ describe('multi-machine connections', () => {
     expect(local.sent.at(-1)).toEqual({ type: 'usage.ack', id: alert.id });
     expect(server.sent).toHaveLength(1);
     expect(() => client.fleet!.setUsageAlert(0.2)).toThrow();
+  });
+
+  it('a machine away when the threshold or « Compris » was given gets them once it speaks again (review of 39e21fa2)', () => {
+    const { client, local, server, snapshot } = setup();
+    const alert = { id: 'x', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: { kind: 'five_hour' as const, pct: 100, resetsAt: null }, level: 'full' as const, at: new Date().toISOString() };
+    const state = { type: 'usage.state' as const, harnesses: [], alerts: [alert], prefs: { alert: 0.8 } };
+    local.emit(state); server.emit(state);
+    server.set('unreachable');
+    client.fleet!.setUsageAlert(0.9);
+    client.fleet!.ackUsage('x');
+    expect(server.sent).toEqual([]);
+    server.set('open'); server.emit({ ...snapshot, sshAlias: remote.ssh }); server.emit(state);
+    expect(server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }, { type: 'usage.ack', id: 'x' }]);
+    // Once only: the next state sends nothing more.
+    server.emit({ ...state, prefs: { alert: 0.9 }, alerts: [] });
+    expect(server.sent).toHaveLength(2);
+  });
+
+  it('an offline machine\'s alert counts only while its reading is under an hour old, as its windows (review of 39e21fa2)', () => {
+    const old = new Date(Date.now() - 2 * 3600_000).toISOString();
+    const fresh = new Date(Date.now() - 10 * 60_000).toISOString();
+    const w = { kind: 'five_hour' as const, pct: 100, resetsAt: null };
+    const st = (readAt: string) => ({ type: 'usage.state' as const, harnesses: [{ harness: 'claude' as const, account: 'a1b2c3d4e5f6', status: 'ok' as const, readAt, windows: [w] }], alerts: [{ id: 'x', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: w, level: 'full' as const, at: readAt }], prefs: { alert: 0.8 } });
+    expect(usageAlerts(new Map([['server', st(old)]]), () => false)).toEqual([]);
+    expect(usageAlerts(new Map([['server', st(fresh)]]), () => false)).toHaveLength(1);
+    expect(usageAlerts(new Map([['server', st(old)]]), () => true)).toHaveLength(1);
   });
 
   it('relays each machine\'s usage tagged with it, and sends the threshold and « Compris » to the machine named (local by default)', () => {

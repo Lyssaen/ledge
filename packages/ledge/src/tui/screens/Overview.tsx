@@ -134,7 +134,7 @@ export function Overview() {
     ];
   });
   // A harness's usage window past the threshold or reached (docs/mockups/ledge-harness-usage.html): a line each, no key of its own.
-  const usageLines = usageAlerts(usage).map(a => {
+  const usageLines = usageAlerts(usage, id => tui.machines.find(m => m.id === id)?.status === 'open').map(a => {
     const w = a.window;
     const name = w.kind === 'five_hour' ? t.usage.five5 : w.kind === 'seven_day' ? t.usage.weekAll : t.usage.weekOf(w.model ?? '');
     const at = w.resetsAt ? resetLong(w.resetsAt, Date.now(), tui.lang) : null;
