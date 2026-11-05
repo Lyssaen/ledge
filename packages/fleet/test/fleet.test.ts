@@ -398,6 +398,27 @@ describe('multi-machine connections', () => {
     expect(server.sent).toHaveLength(2);
   });
 
+  it('what a machine away missed survives the front\'s restart; a « Compris » follows an alert born there later (review of 975e508b)', () => {
+    const a = (pct: number) => ({ id: 'claude|acc|five_hour|-|threshold|r1', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: { kind: 'five_hour' as const, pct, resetsAt: null }, level: 'threshold' as const, at: new Date().toISOString() });
+    const st = (alerts: ReturnType<typeof a>[], alert = 0.8) => ({ type: 'usage.state' as const, harnesses: [], alerts, prefs: { alert } });
+    const first = setup();
+    first.local.emit(st([a(84)])); first.server.emit(st([]));
+    first.server.set('unreachable');
+    first.client.fleet!.setUsageAlert(0.9);
+    // The alert is raised on Local only; « Compris » there. The server, away, will raise the same one later.
+    first.client.fleet!.ackUsage(a(84).id);
+    expect(first.local.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }, { type: 'usage.ack', id: a(84).id }]);
+    expect(first.server.sent).toEqual([]);
+    // The front quits; a new one starts (same storage), the server comes back with the alert and its old threshold.
+    first.client.close?.();
+    const again = setup();
+    again.server.emit(st([a(84)]));
+    expect(again.server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }, { type: 'usage.ack', id: a(84).id }]);
+    // Once: the server's next state (it has both) sends nothing more.
+    again.server.emit(st([], 0.9));
+    expect(again.server.sent).toHaveLength(2);
+  });
+
   it('an offline machine\'s alert counts only while its reading is under an hour old, as its windows (review of 39e21fa2)', () => {
     const old = new Date(Date.now() - 2 * 3600_000).toISOString();
     const fresh = new Date(Date.now() - 10 * 60_000).toISOString();
