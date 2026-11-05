@@ -24,8 +24,12 @@ export type UsageWindow = z.infer<typeof UsageWindowSchema>;
  * Where a harness's limits stand on this machine:
  * - `ok`: read less than 5 minutes ago;
  * - `loading`: not read yet since the daemon started;
- * - `stale`: no read for more than 5 minutes (the last one did not fail: paused, a 429's backoff);
- * - `unreachable`: the last read failed (network, proxy, the API's error); `readAt` says when it last succeeded;
+ * - `stale`: no read for more than 5 minutes (the last one did not fail: paused);
+ *   reads are 2 minutes apart at least; after a 429 the wait doubles up to 15 minutes, or is the API's Retry-After when longer
+ *   (waited up to a day);
+ * - `unreachable`: the last read failed (network, proxy, the API's error, a 429); `readAt` says when it last succeeded;
+ * - when another Claude Code account signs in on the machine, the previous account's windows are dropped at once: `loading`
+ *   (or `unreachable` during a 429's wait) until the new account is read;
  * - `expired`: Claude Code's session has expired: sign in again in Claude Code (Ledge never refreshes it).
  * Values read more than an hour ago are never sent: `windows` is then empty.
  */

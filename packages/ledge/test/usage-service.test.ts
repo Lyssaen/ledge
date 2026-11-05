@@ -140,6 +140,64 @@ describe('the usage service: the account', () => {
   });
 });
 
+describe('the usage service: another account signs in', () => {
+  /** Claude Code's credentials file and ~/.claude.json, switched to another account mid-test. */
+  function switching(answers: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>) {
+    let t = T0, who = 'A';
+    const calls: string[] = [];
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: `tok-${who}`, expiresAt: T0 + 30 * 24 * 3_600_000 } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: `acc-${who}` } });
+      throw new Error('ENOENT');
+    };
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { calls.push(h.Authorization!); const a = answers.shift() ?? { status: 200, body: API }; return { status: a.status, body: a.body === undefined ? '' : JSON.stringify(a.body), headers: a.headers ?? {} }; } });
+    return { svc, calls, to: (w: string) => { who = w; }, advance: (ms: number) => { t += ms; } };
+  }
+  const A_BODY = { five_hour: { utilization: 91, resets_at: '2026-11-05T18:00:00Z' }, seven_day: { utilization: 10, resets_at: '2026-11-09T09:00:00Z' } };
+
+  it('drops the previous account\'s windows at once, without reading again before it is due; Claude Code refreshing its token keeps them', async () => {
+    const m = switching([{ status: 200, body: A_BODY }, { status: 200, body: API }]);
+    await m.svc.tick();
+    const a = m.svc.state().harnesses[0]!;
+    expect(a.windows[0]!.pct).toBe(91);
+    m.to('B');
+    m.advance(30_000); await m.svc.tick();
+    const b = m.svc.state().harnesses[0]!;
+    expect(b.account).not.toBe(a.account);
+    expect(b).toMatchObject({ status: 'loading', readAt: null, windows: [] });
+    expect(m.svc.state().alerts).toEqual([]);
+    expect(m.calls).toEqual(['Bearer tok-A']);
+    m.advance(READ_EVERY_MS); await m.svc.tick();
+    expect(m.calls).toEqual(['Bearer tok-A', 'Bearer tok-B']);
+    expect(m.svc.state().harnesses[0]).toMatchObject({ account: b.account, status: 'ok' });
+    expect(m.svc.state().harnesses[0]!.windows[0]!.pct).toBe(42);
+  });
+
+  it('during a 429\'s wait, another account: its windows are not the previous ones, the wait still stands', async () => {
+    const m = switching([{ status: 200, body: A_BODY }, { status: 429, headers: { 'retry-after': '1800' } }, { status: 200, body: API }]);
+    await m.svc.tick();
+    m.advance(READ_EVERY_MS); await m.svc.tick(); // the 429
+    expect(m.svc.state().harnesses[0]).toMatchObject({ status: 'unreachable', windows: [expect.objectContaining({ pct: 91 }), expect.objectContaining({ pct: 10 })] });
+    m.to('B');
+    m.advance(60_000); await m.svc.tick();
+    expect(m.svc.state().harnesses[0]).toMatchObject({ status: 'unreachable', readAt: null, windows: [] });
+    expect(m.calls).toHaveLength(2);
+    m.advance(29 * 60_000); await m.svc.tick();
+    expect(m.calls).toEqual(['Bearer tok-A', 'Bearer tok-A', 'Bearer tok-B']);
+    expect(m.svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
+  it('a Retry-After past a day is waited a day', async () => {
+    const m = switching([{ status: 429, headers: { 'retry-after': String(3 * 24 * 3600) } }]);
+    await m.svc.tick();
+    m.advance(23 * 3_600_000); await m.svc.tick();
+    expect(m.calls).toHaveLength(1);
+    m.advance(2 * 3_600_000); await m.svc.tick();
+    expect(m.calls).toHaveLength(2);
+  });
+});
+
 describe('the usage service: alerts and the threshold', () => {
   it('a window past the threshold, then one reached: « Compris » puts each away until it resets, kept on disk with when it was seen', async () => {
     const m = machine();

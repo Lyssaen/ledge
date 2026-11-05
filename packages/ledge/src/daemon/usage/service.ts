@@ -11,7 +11,7 @@ import { httpsGet, type HttpsGet } from './net.js';
 export const READ_EVERY_MS = 2 * 60_000;
 /** After a 429, the wait doubles up to this. */
 export const BACKOFF_MAX_MS = 15 * 60_000;
-/** The longest Retry-After kept: past it, the answer is taken for a mistake. */
+/** The longest Retry-After waited: a longer one is waited this long, then the read is tried again. */
 export const RETRY_AFTER_MAX_MS = 24 * 60 * 60_000;
 /** Past this without a read that succeeded, the values are `stale`; past an hour they are no longer sent. */
 export const STALE_MS = 5 * 60_000;
@@ -78,6 +78,9 @@ export function createUsage(deps: UsageDeps): UsageService {
   // Claude Code.
   let signedIn = false, expired = false, failed = false, attempted = false;
   let readAt: number | null = null, windows: UsageWindow[] = [], nextAt = 0, backoff = 0;
+  /** Whose windows these are: the account they were read for (the token's fingerprint when the account is not known). Another
+   *  account signed in since: they are dropped, never shown under it. */
+  let windowsOf: string | null = null;
   let account: string | null = null, accountAt = -Infinity, accountOf = '';
   let ua: string | undefined, uaAt = -Infinity;
   // Codex.
@@ -158,6 +161,10 @@ export function createUsage(deps: UsageDeps): UsageService {
       accountAt = now(); accountOf = which;
     }
     if (token === 'expired') { expired = true; return; }
+    // The windows belong to the account they were read for: Claude Code refreshing its token keeps them, another account signed
+    // in drops them at once (shown as loading, or unreachable while a 429's wait runs). The next read stays when it was due.
+    const identity = account ?? which;
+    if (windowsOf !== null && windowsOf !== identity) { windows = []; readAt = null; windowsOf = null; }
     if (now() < nextAt) return;
     if (now() - uaAt > REREAD_MS || !ua) { ua = await version(env); uaAt = now(); }
     attempted = true;
@@ -167,7 +174,7 @@ export function createUsage(deps: UsageDeps): UsageService {
       let body: unknown;
       try { body = JSON.parse(r.body); } catch { body = undefined; }
       const w = parseClaudeUsage(body);
-      if (w.length) { windows = w; readAt = now(); failed = false; expired = false; backoff = 0; nextAt = now() + READ_EVERY_MS; return; }
+      if (w.length) { windows = w; windowsOf = identity; readAt = now(); failed = false; expired = false; backoff = 0; nextAt = now() + READ_EVERY_MS; return; }
       failed = true; nextAt = now() + READ_EVERY_MS;
       log('usage: Anthropic answered without any window');
       return;
@@ -176,7 +183,8 @@ export function createUsage(deps: UsageDeps): UsageService {
     failed = true;
     if (r.status === 429) {
       backoff++;
-      // Ledge's own doubling stops at 15 minutes; a longer wait the API asks for (Retry-After, in seconds) is kept, up to a day.
+      // Ledge's own doubling stops at 15 minutes; a longer wait the API asks for (Retry-After, in seconds) is kept as asked, up to
+      // a day: a longer one is waited a day (a guard against a mistaken header leaving the limits unread for good).
       const after = Number(r.headers['retry-after']);
       const asked = Number.isFinite(after) && after > 0 ? Math.min(RETRY_AFTER_MAX_MS, after * 1000) : 0;
       const wait = Math.max(Math.min(BACKOFF_MAX_MS, READ_EVERY_MS * 2 ** backoff), asked);
