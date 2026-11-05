@@ -419,6 +419,25 @@ describe('multi-machine connections', () => {
     expect(again.server.sent).toHaveLength(2);
   });
 
+  it('a machine never heard from this run gets the threshold when it comes; one set elsewhere since keeps its own (review of 05601442)', () => {
+    const st = (alert: number) => ({ type: 'usage.state' as const, harnesses: [], alerts: [], prefs: { alert } });
+    // The server is away from the start: it never sent its usage.
+    const a = setup();
+    a.local.emit(st(0.8));
+    a.server.set('unreachable');
+    a.client.fleet!.setUsageAlert(0.9);
+    a.server.set('open'); a.server.emit({ ...a.snapshot, sshAlias: remote.ssh }); a.server.emit(st(0.8));
+    expect(a.server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }]);
+    localStorage.clear();
+    // Seen at 0.8, then away; set to 0.9 here. Meanwhile another front set it to 0.7 there: on its return 0.7 stays.
+    const b = setup();
+    b.local.emit(st(0.8)); b.server.emit(st(0.8));
+    b.server.set('unreachable');
+    b.client.fleet!.setUsageAlert(0.9);
+    b.server.set('open'); b.server.emit({ ...b.snapshot, sshAlias: remote.ssh }); b.server.emit(st(0.7));
+    expect(b.server.sent).toEqual([]);
+  });
+
   it('an offline machine\'s alert counts only while its reading is under an hour old, as its windows (review of 39e21fa2)', () => {
     const old = new Date(Date.now() - 2 * 3600_000).toISOString();
     const fresh = new Date(Date.now() - 10 * 60_000).toISOString();

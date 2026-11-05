@@ -161,11 +161,18 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   // « Compris » given (an alert's id carries its window's reset, so an id never comes back after it): any machine that shows
   // one of them is told, an absent one when it comes back, one that raises it later when it does.
   const USAGE_KEY = `${prefix}.usage.owed`;
-  const owedPrefs = new Map<string, UsagePrefs>();
+  /** A threshold owed to a machine: the value, when it was set, and what the machine had then (null: never heard from it).
+   *  On its return a machine whose threshold is no longer `was` was set elsewhere since: the newer wins, this one is dropped. */
+  type Owed = { prefs: UsagePrefs; at: number; was: number | null };
+  const OWED_MAX_MS = 24 * 3600_000;
+  const owedPrefs = new Map<string, Owed>();
   const acked: string[] = [];
   try {
-    const saved = JSON.parse(localStorage.getItem(USAGE_KEY) ?? 'null') as { prefs?: Record<string, UsagePrefs>; acked?: string[] } | null;
-    for (const [m, x] of Object.entries(saved?.prefs ?? {})) { const ok = UsagePrefsSchema.safeParse(x); if (ok.success) owedPrefs.set(m, ok.data); }
+    const saved = JSON.parse(localStorage.getItem(USAGE_KEY) ?? 'null') as { prefs?: Record<string, Owed>; acked?: string[] } | null;
+    for (const [m, x] of Object.entries(saved?.prefs ?? {})) {
+      const ok = UsagePrefsSchema.safeParse(x?.prefs);
+      if (ok.success && typeof x.at === 'number') owedPrefs.set(m, { prefs: ok.data, at: x.at, was: typeof x.was === 'number' ? x.was : null });
+    }
     for (const id of saved?.acked ?? []) if (typeof id === 'string') acked.push(id);
   } catch { /* none kept */ }
   const ACKED_MAX = 200;
@@ -371,7 +378,13 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'usage.state') {
       if (available(p)) {
         const owed = owedPrefs.get(machine);
-        if (owed) { owedPrefs.delete(machine); keepOwed(); if (owed.alert !== m.prefs.alert) p.client.send({ type: 'usage.set', prefs: owed }); }
+        if (owed) {
+          owedPrefs.delete(machine); keepOwed();
+          // Set elsewhere since (it no longer has what it had), or owed too long to a machine never heard from: not sent.
+          const changed = owed.was !== null && m.prefs.alert !== owed.was;
+          const tooOld = owed.was === null && Date.now() - owed.at > OWED_MAX_MS;
+          if (!changed && !tooOld && owed.prefs.alert !== m.prefs.alert) p.client.send({ type: 'usage.set', prefs: owed.prefs });
+        }
         for (const a of m.alerts) {
           if (!acked.includes(a.id) || ackSent.has(`${machine}|${a.id}`)) continue;
           ackSent.add(`${machine}|${a.id}`);
@@ -763,9 +776,10 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const prefs = UsagePrefsSchema.parse({ alert });
         // One threshold for every machine (M7): each daemon keeps its own copy, so each is told.
         // A machine away gets it when it comes back.
-        for (const id of usage.keys()) {
-          if (available(peers.get(id))) { peers.get(id)!.client.send({ type: 'usage.set', prefs }); owedPrefs.delete(id); }
-          else owedPrefs.set(id, prefs);
+        // Every machine configured, heard from this run or not: one away gets it when it comes back.
+        for (const [id, peer] of peers) {
+          if (available(peer)) { peer.client.send({ type: 'usage.set', prefs }); owedPrefs.delete(id); }
+          else owedPrefs.set(id, { prefs, at: Date.now(), was: usage.get(id)?.prefs.alert ?? owedPrefs.get(id)?.was ?? null });
         }
         keepOwed();
       },
