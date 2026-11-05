@@ -28,7 +28,10 @@ export function fingerprint(m: PhoneOperation): string {
     // A hold is its terminal: the same id for another terminal is another operation.
     ...(m.type === 'term.hold' ? [m.tid] : []),
     // An OpenRig answer is its row and its answer (never its assertion, which changes): the same id for another is another operation.
-    ...(m.type === 'openrig.answer' ? [m.qitemId, m.answer] : [])]);
+    ...(m.type === 'openrig.answer' ? [m.qitemId, m.answer] : []),
+    // Settings are their values: the same id for other values is another operation.
+    ...(m.type === 'device.prefs' ? [m.prefs] : []),
+    ...(m.type === 'context.set' ? [m.near] : [])]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */

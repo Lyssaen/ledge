@@ -137,8 +137,8 @@ describe('the close sheet', () => {
     const t = opened(nova(), { confirm: false });
     fireEvent.click(closeButton());
     expect(within(dialog()).getByText('Vérification impossible')).toBeInTheDocument();
-    expect(within(dialog()).getByText('Protégez d’abord vos accords depuis Connexion. Vous pouvez aussi fermer Nova sur le PC.')).toBeInTheDocument();
-    expect(within(dialog()).getByRole('link', { name: 'Ouvrir Connexion' })).toHaveAttribute('href', '#/connection');
+    expect(within(dialog()).getByText('Protégez d’abord vos accords depuis Réglages. Vous pouvez aussi fermer Nova sur le PC.')).toBeInTheDocument();
+    expect(within(dialog()).getByRole('link', { name: 'Ouvrir Réglages' })).toHaveAttribute('href', '#/connection');
     expect(t.of('confirm.prepare')).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createECDH, randomBytes } from 'node:crypto';
-import type { MobileState, PushPayload, PushSend, PushSendResult } from '@ledge/protocol';
-import { createNotifier } from '../src/mobile/push/notifier.js';
+import { DEFAULT_DEVICE_PREFS, type DevicePrefs, type MobileState, type PushPayload, type PushSend, type PushSendResult } from '@ledge/protocol';
+import { createNotifier, wanted } from '../src/mobile/push/notifier.js';
 import { chatEndPayload, resolvedFor } from '../src/mobile/push/triggers.js';
 
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/SECRET-ENDPOINT-TOKEN';
@@ -11,7 +11,7 @@ const payload = (kind: PushPayload['kind'] = 'request', over: Partial<PushPayloa
   v: 1, kind, title: 'api attend votre accord', body: TEXT, url: '/#/request/api/k1', badge: 1, tag: 'api', ...over
 });
 
-function setup(o: { enabled?: boolean; result?: PushSendResult | (() => Promise<PushSendResult>) } = {}) {
+function setup(o: { enabled?: boolean; result?: PushSendResult | (() => Promise<PushSendResult>); prefs?: Map<string, DevicePrefs> } = {}) {
   const ecdh = createECDH('prime256v1');
   ecdh.generateKeys();
   const keys = { p256dh: ecdh.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') };
@@ -28,6 +28,7 @@ function setup(o: { enabled?: boolean; result?: PushSendResult | (() => Promise<
       pushOf: id => pushes.get(id) ?? null,
       setPush: (id, p) => { if (p) pushes.set(id, p); else pushes.delete(id); },
       relayPushKey: () => relayKey,
+      ...(o.prefs ? { prefsOf: (id: string) => o.prefs!.get(id) ?? DEFAULT_DEVICE_PREFS } : {}),
       sendPush: async msg => {
         sent.push(msg);
         const r = o.result ?? { result: 'sent' as const };
@@ -239,5 +240,48 @@ describe('push notifier', () => {
     expect(t.sent).toHaveLength(2);
     await t.n.notify(chatEndPayload(undefined, 0), undefined, 'nobody');
     expect(t.sent).toHaveLength(2);
+  });
+});
+
+describe('push notifier: the device\'s own settings (Réglages)', () => {
+  const at = Date.parse('2026-11-05T12:00:00.000Z');
+  const off = (kind: 'finished' | 'chat' | 'decision'): DevicePrefs => ({ ...DEFAULT_DEVICE_PREFS, notify: { ...DEFAULT_DEVICE_PREFS.notify, [kind]: false } });
+
+  it('wanted: each mutable kind follows its switch, requests and questions always go, no settings lets all through', () => {
+    for (const kind of ['finished', 'chat', 'decision'] as const) {
+      expect(wanted({ kind }, off(kind), at)).toBe(false);
+      expect(wanted({ kind }, DEFAULT_DEVICE_PREFS, at)).toBe(true);
+    }
+    const all: DevicePrefs = { ...DEFAULT_DEVICE_PREFS, notify: { finished: false, chat: false, decision: false } };
+    expect(wanted({ kind: 'request' }, all, at)).toBe(true);
+    expect(wanted({ kind: 'question' }, all, at)).toBe(true);
+    expect(wanted({ kind: 'finished' }, undefined, at)).toBe(true);
+  });
+
+  it('wanted: a pause holds every kind until it ends, but never a resolved', () => {
+    const paused: DevicePrefs = { ...DEFAULT_DEVICE_PREFS, quietUntil: '2026-11-05T13:00:00.000Z' };
+    for (const kind of ['request', 'question', 'finished', 'chat', 'decision'] as const) expect(wanted({ kind }, paused, at)).toBe(false);
+    expect(wanted({ kind: 'resolved' }, paused, at)).toBe(true);
+    expect(wanted({ kind: 'request' }, paused, Date.parse('2026-11-05T13:00:00.001Z'))).toBe(true);
+  });
+
+  it('a device that turned « Agent terminé » off gets no finished, and the turn\'s delay does not start', async () => {
+    const prefs = new Map([['dev1', off('finished')]]);
+    const t = setup({ prefs });
+    await t.n.notify(payload('finished', { url: '/#/thread/api' }), 'api');
+    expect(t.sent).toHaveLength(0);
+    prefs.set('dev1', DEFAULT_DEVICE_PREFS);
+    await t.n.notify(payload('finished', { url: '/#/thread/api' }), 'api');
+    expect(t.sent).toHaveLength(1);
+  });
+
+  it('a paused device gets nothing; another one still does', async () => {
+    const t = setup({ prefs: new Map([['dev1', { ...DEFAULT_DEVICE_PREFS, quietUntil: new Date(2_000_000).toISOString() }]]) });
+    t.pushes.set('dev2', { ...t.pushes.get('dev1')!, endpoint: 'https://fcm.googleapis.com/fcm/send/OTHER' });
+    await t.n.notify(payload(), 'api');
+    expect(t.sent.map(s => s.endpoint)).toEqual(['https://fcm.googleapis.com/fcm/send/OTHER']);
+    t.clock.t = 2_000_001;
+    await t.n.notify(payload('request', { tag: 'api2' }), 'api2');
+    expect(t.sent).toHaveLength(3);
   });
 });

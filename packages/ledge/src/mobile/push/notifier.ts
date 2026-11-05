@@ -1,7 +1,7 @@
 // The PC's side of Web Push: for a change `pushFor` found worth telling, every approved device that is hidden gets the
 // payload sealed (RFC 8291) and handed to the relay, which only forwards it. Logs carry a device id and a result, never
 // an endpoint or a text.
-import { PushPayloadSchema, type PushPayload, type PushSend } from '@ledge/protocol';
+import { PushPayloadSchema, type DevicePrefs, type PushPayload, type PushSend } from '@ledge/protocol';
 import type { MobileService } from '../service.js';
 import { encryptPush } from './encrypt.js';
 import { cut } from './triggers.js';
@@ -29,8 +29,19 @@ function fit(p: PushPayload): Uint8Array | null {
   }
 }
 
+/**
+ * Whether the device's own settings let `p` through at `at` (ms): a pause holds every kind but `resolved` (it only replaces a
+ * notification already shown); « Agent terminé », « Réponse de Ledge » and « Décision » can each be turned off; requests and
+ * questions cannot.
+ */
+export function wanted(p: Pick<PushPayload, 'kind'>, prefs: DevicePrefs | undefined, at: number): boolean {
+  if (!prefs || p.kind === 'resolved') return true;
+  if (prefs.quietUntil !== null && Date.parse(prefs.quietUntil) > at) return false;
+  return p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decision' ? prefs.notify[p.kind] : true;
+}
+
 export function createNotifier(deps: {
-  mobile: Pick<MobileService, 'state' | 'pushOf' | 'setPush' | 'relayPushKey' | 'sendPush'>;
+  mobile: Pick<MobileService, 'state' | 'pushOf' | 'setPush' | 'relayPushKey' | 'sendPush'> & Partial<Pick<MobileService, 'prefsOf'>>;
   /** Whether the device's app is in front. */
   presence: (deviceId: string) => boolean;
   now?: () => number;
@@ -61,6 +72,7 @@ export function createNotifier(deps: {
         if (only !== undefined && d.id !== only) return [];
         const sub = mobile.pushOf(d.id);
         if (!sub || (relayKey !== undefined && sub.key !== relayKey) || deps.presence(d.id)) return [];
+        if (!wanted(p, mobile.prefsOf?.(d.id), now())) return [];
         // A `resolved` only replaces a notification the device got, and only on a service worker that shows it.
         if (p.kind === 'resolved' && (!sub.resolved || !told.get(d.id)?.has(p.tag))) return [];
         return [{ id: d.id, online: d.online, sub }];

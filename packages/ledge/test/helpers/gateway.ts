@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir, hostname } from 'node:os';
 import { join } from 'node:path';
-import { pendingKey, type ClientMessage, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type Task, type ThreadItem } from '@ledge/protocol';
+import { DEFAULT_DEVICE_PREFS, pendingKey, type ClientMessage, type DevicePrefs, type MobileState, type Pending, type PhoneServerMessage, type ServerMessage, type Session, type Task, type ThreadItem } from '@ledge/protocol';
 import { AttachmentStore } from '../../src/daemon/attachments.js';
 import { createPhoneGateway } from '../../src/mobile/gateway.js';
 import { createChallengeStore } from '../../src/mobile/challenges.js';
@@ -25,7 +25,7 @@ export const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 });
 
 /** A MobileService stand-in: approved devices, sealed texts sent per device, and a hand on its message and change listeners. */
-export function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
+export function fakeMobile(ids: string[], relayUrl = 'https://relay.test', withPrefs = false) {
   let devices = ids;
   const sent: Array<[string, string]> = [];
   /** How many texts had been sent when each device was revoked: the answer must be among them. */
@@ -36,6 +36,8 @@ export function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
   const pushes = new Map<string, { endpoint: string; p256dh: string; auth: string; key: string; resolved?: true }>();
   /** The names the user gave, by device; a device's label is its id. */
   const names = new Map<string, string>();
+  /** The settings each device chose (`withPrefs`: the service keeps them, as a daemon with the phone's Réglages). */
+  const prefs = new Map<string, DevicePrefs>();
   let relayKey: string | null | undefined = 'K1';
   return {
     sent,
@@ -46,7 +48,12 @@ export function fakeMobile(ids: string[], relayUrl = 'https://relay.test') {
     receive(deviceId: string, text: string) { for (const fn of messageFns) fn(deviceId, text); },
     setDevices(next: string[]) { devices = next; for (const fn of changeFns) fn(); },
     names,
+    prefs,
     mobile: {
+      ...(withPrefs ? {
+        prefsOf: (id: string) => prefs.get(id) ?? DEFAULT_DEVICE_PREFS,
+        setPrefs(id: string, p: DevicePrefs) { if (!devices.includes(id)) throw new Error('no such device'); prefs.set(id, p); }
+      } : {}),
       deviceInfo: (id: string) => (devices.includes(id) ? { label: id, kind: 'phone' as const, ...(names.has(id) ? { name: names.get(id)! } : {}) } : null),
       rename(id: string, name: string) { if (!devices.includes(id)) throw new Error('no such device'); names.set(id, name.trim()); for (const fn of changeFns) fn(); },
       async send(deviceId: string, text: string) { sent.push([deviceId, text]); return devices.includes(deviceId); },
@@ -70,8 +77,8 @@ export const stops: Array<() => void> = [];
 /** Stops every gateway `setup` made: call it from the test file's `afterEach`. */
 export const stopAll = () => { for (const s of stops.splice(0)) s(); };
 
-export function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; actChat?: Parameters<typeof createPhoneGateway>[0]['actChat']; tasks?: () => Task[]; deps?: Partial<Parameters<typeof createPhoneGateway>[0]>; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[]; attachments?: AttachmentStore } = {}) {
-  const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl);
+export function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, reply: (m: ServerMessage) => void) => Promise<void>; relayUrl?: string; chats?: Parameters<typeof createPhoneGateway>[0]['chats']; relay?: Parameters<typeof createPhoneGateway>[0]['relay']; launchChat?: Parameters<typeof createPhoneGateway>[0]['launchChat']; closeChat?: Parameters<typeof createPhoneGateway>[0]['closeChat']; actChat?: Parameters<typeof createPhoneGateway>[0]['actChat']; tasks?: () => Task[]; deps?: Partial<Parameters<typeof createPhoneGateway>[0]>; onChatEnd?: Parameters<typeof createPhoneGateway>[0]['onChatEnd']; devices?: string[]; attachments?: AttachmentStore; settings?: boolean } = {}) {
+  const fm = fakeMobile(opts.devices ?? ['dev1', 'dev2'], opts.relayUrl, opts.settings);
   const clock = { t: 1_000_000 };
   const challenges = createChallengeStore({ now: () => clock.t });
   const creds = new Map<string, DeviceCredential>();
@@ -111,6 +118,7 @@ export function setup(opts: { boot?: string; dispatch?: (msg: ClientMessage, rep
     challenges,
     credential: id => creds.get(id) ?? null,
     setCredential: (id, c) => { stored.push(id); creds.set(id, c); },
+    ...(opts.settings ? { contextNear: () => 0.8 } : {}),
     ...opts.deps
   });
   stops.push(() => gw.stop());

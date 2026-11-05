@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import WebSocket from 'ws';
 import { fingerprint } from '@ledge/seal';
-import type { MobileState } from '@ledge/protocol';
+import { DEFAULT_DEVICE_PREFS, type MobileState } from '@ledge/protocol';
 import { createMobileService, type MobileService } from '../src/mobile/service.js';
 import { readDevices, readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations } from '../src/mobile/files.js';
 import { paths } from '../src/paths.js';
@@ -288,6 +288,28 @@ describe('mobile access service', () => {
     expect(s.state().devices[0]).toMatchObject({ kind: 'tablet' });
     expect(s.deviceInfo('x')).toEqual({ label: 'iPad', kind: 'tablet' });
     expect(s.deviceInfo('nobody')).toBeNull();
+  });
+
+  it('a device\'s own settings: the defaults until set, then persisted with it; an unknown device or a bad value throws', async () => {
+    writeMobileConfig({ enabled: false, relayUrl: 'http://localhost:5173' });
+    writeDevices([{ id: 'x', publicKey: 'k', label: 'iPad', approvedAt: '2026-10-19T00:00:00Z' }]);
+    const s = await service();
+    expect(s.prefsOf('x')).toEqual(DEFAULT_DEVICE_PREFS);
+    const prefs = { notify: { finished: false, chat: true, decision: false }, quietUntil: '2026-11-06T07:00:00.000Z', chatTool: 'omp' as const };
+    s.setPrefs('x', prefs);
+    expect(s.prefsOf('x')).toEqual(prefs);
+    expect(readDevices()[0]!.prefs).toEqual(prefs);
+    expect(() => s.setPrefs('nobody', prefs)).toThrow(/device/);
+    expect(() => s.setPrefs('x', { ...prefs, chatTool: 'bash' } as never)).toThrow();
+    expect(s.prefsOf('nobody')).toEqual(DEFAULT_DEVICE_PREFS);
+  });
+
+  it('a device whose settings this daemon cannot read keeps its place, with the defaults', async () => {
+    writeMobileConfig({ enabled: false, relayUrl: 'http://localhost:5173' });
+    writeFileSync(paths().devices, JSON.stringify([{ id: 'x', publicKey: 'k', label: 'iPad', approvedAt: '2026-10-19T00:00:00Z', prefs: { notify: 'later' } }]));
+    const s = await service();
+    expect(s.state().devices.map(d => d.id)).toEqual(['x']);
+    expect(s.prefsOf('x')).toEqual(DEFAULT_DEVICE_PREFS);
   });
 
   it('revoke: a msg sent by the device afterwards is answered denied', async () => {

@@ -264,7 +264,7 @@ describe('the close card', () => {
 
   it('without a passkey, points to Connexion and disables the buttons', () => {
     open({ closes }, false);
-    expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '#/connection');
+    expect(screen.getByRole('link', { name: 'Réglages' })).toHaveAttribute('href', '#/connection');
     for (const b of within(screen.getByRole('region', { name: copy.chat.closeLabel })).getAllByRole('button')) expect(b).toBeDisabled();
   });
 });
@@ -308,8 +308,8 @@ describe('the launch cards', () => {
 
   it('without a credential, points to Connexion and disables the button', () => {
     open({ proposals: [proposals[0]!] }, false);
-    expect(screen.getByText(/Protégez d'abord vos accords depuis Connexion\./)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Connexion' })).toHaveAttribute('href', '#/connection');
+    expect(screen.getByText(/Protégez d'abord vos accords depuis Réglages\./)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Réglages' })).toHaveAttribute('href', '#/connection');
     expect(screen.getByRole('button', { name: copy.confirm.go })).toBeDisabled();
   });
   it('« Ignorer » sets the turn aside on every device', () => {

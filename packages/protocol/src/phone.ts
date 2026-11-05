@@ -292,6 +292,27 @@ export type TermReleaseWhy = z.infer<typeof TermReleaseWhySchema>;
 export const TermExitWhySchema = z.enum(['ended', 'gone', 'closed', 'superseded', 'failed']);
 export type TermExitWhy = z.infer<typeof TermExitWhySchema>;
 
+/**
+ * A device's own settings, kept by the PC with the device (Réglages on the phone): which notifications it gets, a pause of them
+ * all until a moment, and the agent that runs its chat with Ledge. Requests and questions always notify, outside a pause.
+ * Not strict, so a file written by a later daemon still reads; a phone's `device.prefs` is checked field by field.
+ */
+export const DevicePrefsSchema = z.object({
+  notify: z.object({
+    /** « Agent terminé ». */ finished: z.boolean(),
+    /** « Réponse de Ledge »: the end of a question asked from this device. */ chat: z.boolean(),
+    /** « Décision à prendre »: a session puts a decision to the user. */ decision: z.boolean()
+  }),
+  /** No notification before this moment (a `resolved` still replaces one already shown); null: no pause. */
+  quietUntil: z.string().datetime().nullable(),
+  /** The agent of this device's chat with Ledge; null: the PC's (the one its own chat last used). */
+  chatTool: ToolSchema.nullable()
+});
+export type DevicePrefs = z.infer<typeof DevicePrefsSchema>;
+export const DEFAULT_DEVICE_PREFS: DevicePrefs = { notify: { finished: true, chat: true, decision: true }, quietUntil: null, chatTool: null };
+/** The kinds of notification a device may turn off: the others (requests, questions, `resolved`) are always sent. */
+export type MutableNotification = keyof DevicePrefs['notify'];
+
 /** What the daemon accepts from a phone: this union is the whitelist. */
 export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('snapshot.request') }),
@@ -348,6 +369,12 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('device.forget'), op: OperationIdSchema }),
   /** The device names itself (on the PC and in its next snapshot); applied to the sender only. */
   z.object({ type: z.literal('device.rename'), op: OperationIdSchema, name: DeviceNameSchema }),
+  /** The device's own settings, whole (`daemon.settings`): applied to the sender only, told back in its next snapshot. */
+  z.object({ type: z.literal('device.prefs'), op: OperationIdSchema, prefs: z.object({
+    notify: DevicePrefsSchema.shape.notify.strict(), quietUntil: DevicePrefsSchema.shape.quietUntil, chatTool: DevicePrefsSchema.shape.chatTool
+  }).strict() }).strict(),
+  /** « Contexte max », the PC's threshold shared by every front (`daemon.settings`): as the desktop's `context.set`. */
+  z.object({ type: z.literal('context.set'), op: OperationIdSchema, near: ContextPrefsSchema.shape.near }).strict(),
   /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). `resolved`: its service
    *  worker shows a `resolved` push, which replaces a request's notification once it is answered elsewhere. */
   z.object({ type: z.literal('push.subscribe'), op: OperationIdSchema, subscription: PushSubscriptionSchema, key: B64U.length(87), resolved: z.literal(true).optional() }),
@@ -429,12 +456,16 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
     /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),
     /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional(),
+    /** The daemon takes `device.prefs` and `context.set` (the phone's Réglages); the device then carries its `prefs`. */
+    settings: z.literal(true).optional(),
     /** The Atelier: the snapshot carries `projects`, each session its `projectId` and `rig`, and `projects` follows each change. Absent (an older PC): no Atelier. */
     atelier: z.literal(true).optional() }),
   /** The user's projects (`daemon.atelier`), whole, in their order: absent from an older PC's snapshot. */
   projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX).optional(), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
     /** This device's id (its fingerprint, as decisions name it in `by`), its kind, and the name the user gave it (absent: none given). */
-    id: z.string().optional(), kind: DeviceKindSchema.optional(), name: z.string().optional() }).optional() }),
+    id: z.string().optional(), kind: DeviceKindSchema.optional(), name: z.string().optional(),
+    /** This device's own settings (`daemon.settings`). */
+    prefs: DevicePrefsSchema.optional() }).optional() }),
   /** « À toi » on this PC: the answer to `openrig.asks`, then each change, whole. */
   z.object({ type: z.literal('openrig.asks'), channel: HumanChannelSchema, asks: z.array(HumanAskSchema), partial: z.literal(true).optional(), truncated: z.literal(true).optional() }),
   /** An answer's end, as on the desktop (`openrig.answered`), under the phone's `op`. `rejected`: the device check refused it (`reason`). */

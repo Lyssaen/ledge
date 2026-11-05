@@ -72,7 +72,8 @@ describe('the app', () => {
   it('the connection screen: account, relay, PC and its fingerprint, the app’s version and fingerprint, and sign out', async () => {
     const t = app('ready', { hash: '#/connection', updates: fakeUpdates({ version: '0.9.1', fingerprint: '0123456789abcdef0123456789abcdef' }).watch });
     act(() => t.setPinned(pc));
-    expect(screen.getByText('Connexion')).toBeInTheDocument();
+    expect(screen.getByRole('banner')).toHaveTextContent('Réglages');
+    expect(screen.getByRole('heading', { level: 2, name: 'Connexion' })).toBeInTheDocument();
     expect(await screen.findByText('@paradow')).toBeInTheDocument();
     expect(t.fetchImpl.mock.calls.map(([u]) => String(u))).toContain('/auth/me');
     const rows = Object.fromEntries([...document.querySelectorAll('dl dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
@@ -176,7 +177,7 @@ describe('the app', () => {
   it('the sheet takes the focus, Escape is « Plus tard », and the focus comes back where it was', () => {
     const u = fakeUpdates({ version: '0.5.4', fingerprint: '8e1702af' });
     app('ready', { updates: u.watch });
-    const gear = screen.getByRole('link', { name: /connexion/i });
+    const gear = screen.getByRole('link', { name: /réglages/i });
     gear.focus();
     act(() => u.set({ waiting: { version: '0.6.0', fingerprint: '3f9ac21e' } }));
     const sheet = screen.getByRole('dialog', { name: 'Nouvelle version · 0.6.0' });

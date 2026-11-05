@@ -92,7 +92,7 @@ const ROW_WAIT_MS = 15_000;
 const ROWS_IN_FLIGHT = 8;
 
 export function createPhoneGateway(deps: {
-  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'> & Partial<Pick<MobileService, 'deviceInfo' | 'rename'>>;
+  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'> & Partial<Pick<MobileService, 'deviceInfo' | 'rename' | 'prefsOf' | 'setPrefs'>>;
   /** The relying party of the current relay; none when it is not served over https or from localhost. */
   rp: () => Rp | null;
   challenges: ChallengeStore;
@@ -247,15 +247,18 @@ export function createPhoneGateway(deps: {
     return { kind: 'device', id: deviceId, name: name ? clip(name, 60).text : 'Appareil' };
   };
 
+  /** The phone's Réglages: its own settings kept with it, and the PC's context threshold (`daemon.settings`). */
+  const settings = !!(mobile.prefsOf && mobile.setPrefs && deps.contextNear);
+
   const snapshot = (deviceId: string): PhoneServerMessage => {
     const push = pushStatus(deviceId);
     const f = followers.get(deviceId);
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, rigRows: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
-      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}) },
+      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}), ...(settings ? { settings: true as const } : {}) },
     ...(projects ? { projects: toPhoneProjects(projects) } : {}),
-    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId) }
+    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId), ...(settings ? { prefs: mobile.prefsOf!(deviceId) } : {}) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
     return deps.models ? { ...message, daemon: { ...message.daemon, models: true } } : message;
@@ -320,7 +323,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' | 'brain.answer' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'device.prefs' | 'context.set' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' | 'brain.answer' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -836,6 +839,18 @@ export function createPhoneGateway(deps: {
       mobile.rename(deviceId, msg.name);
       return { status: 'applied' };
     }
+    if (msg.type === 'device.prefs') {
+      if (!settings) return { status: 'rejected', reason: 'unavailable' };
+      mobile.setPrefs!(deviceId, msg.prefs);
+      return { status: 'applied' };
+    }
+    if (msg.type === 'context.set') {
+      // The PC's own `context.set`: written, then told to every front (the phones by a fresh snapshot, `context.prefs`).
+      if (!settings) return { status: 'rejected', reason: 'unavailable' };
+      let error: { code?: string } | undefined;
+      await deps.dispatch({ type: 'context.set', prefs: { near: msg.near } }, m => { if (m.type === 'error') error ??= { code: m.code }; });
+      return error ? outcomeOf(error.code) : { status: 'applied' };
+    }
     if (msg.type === 'push.subscribe') {
       // Already refused by the schema; checked again here because the PC is the one that will send to it.
       if (!pushEndpointAllowed(msg.subscription.endpoint)) return { status: 'rejected', reason: 'invalid' };
@@ -890,7 +905,7 @@ export function createPhoneGateway(deps: {
     registry.finish(msg.op, outcome.status, outcome.reason, outcome.how, outcome.report, outcome.detail);
     result(deviceId, msg.op, outcome.status, outcome.reason, outcome.how, outcome.report);
     // The phone learns it can confirm from the snapshot that follows.
-    if ((msg.type === 'credential.register' || msg.type === 'device.rename') && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
+    if ((msg.type === 'credential.register' || msg.type === 'device.rename' || msg.type === 'device.prefs') && outcome.status === 'applied' && approved(deviceId)) push(deviceId, snapshot(deviceId), 'snapshot');
     if (msg.type === 'device.forget' && outcome.status === 'applied') {
       // Revoking closes the channel and drops what is queued: the answer must be on its way first (bounded: a slow relay must not hold the revoke).
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -918,7 +933,7 @@ export function createPhoneGateway(deps: {
             refs.push(ref);
           }
           if (msg.text === '' && refs.length === 0) return push(deviceId, { type: 'chat.error', qid: msg.qid, code: 'failed' });
-          return await thread.ask(msg.qid, msg.text, emit, await chats.deviceTool(), refs);
+          return await thread.ask(msg.qid, msg.text, emit, (settings ? mobile.prefsOf!(deviceId).chatTool : null) ?? await chats.deviceTool(), refs);
         }
         case 'chat.cancel':
           // Only the device's own turn: another thread's qid is nothing here.

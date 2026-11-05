@@ -62,7 +62,7 @@ export const copy = {
         flag: (note: string) => `signale la note ${note} comme fausse ou périmée`, source: (s: string) => `Source : ${s}`,
         yes: 'Ajouter', edit: 'Modifier', no: 'Refuser', mark: 'Marquer à revoir', ignore: 'Ignorer', createYes: 'Créer la note', editYes: 'Ajouter ce texte', cancel: 'Annuler',
         field: 'Le texte ajouté sous « Ajouts »', titleField: 'Titre', whenField: 'Quand la lire',
-        failed: 'Pas envoyé : réessayez.', confirmRequired: 'Protégez d’abord vos accords depuis Connexion : ajouter demande la passkey de cet appareil.', cancelled: 'Vérification annulée. Rien n’a été écrit.', expired: 'La vérification a expiré. Recommencez.', stale: 'Déjà traitée ailleurs.'
+        failed: 'Pas envoyé : réessayez.', confirmRequired: 'Protégez d’abord vos accords depuis Réglages : ajouter demande la passkey de cet appareil.', cancelled: 'Vérification annulée. Rien n’a été écrit.', expired: 'La vérification a expiré. Recommencez.', stale: 'Déjà traitée ailleurs.'
       }
     },
     task: {
@@ -110,10 +110,10 @@ export const copy = {
       stale: 'Pas envoyé : la carte a été ignorée entre-temps.'
     } as Record<string, string>)[code ?? ''] ?? 'Pas envoyé.',
     review: 'Revoir', ignoredRest: (at: string) => `Le reste ignoré à ${at}`,
-    launchSetup: 'Protégez d\'abord vos accords depuis Connexion.',
+    launchSetup: 'Protégez d\'abord vos accords depuis Réglages.',
     closeLabel: 'Sessions à fermer', closeRow: 'Fermer', closeAll: (n: number) => `Fermer tout (${n})`,
     closing: 'Fermeture…', closed: 'Fermée', killed: 'Fermée de force', ended: 'Terminée',
-    closeFailed: 'Échec de la fermeture', closeSetup: 'Protégez d\'abord vos accords depuis Connexion.',
+    closeFailed: 'Échec de la fermeture', closeSetup: 'Protégez d\'abord vos accords depuis Réglages.',
     /** The generic card (#94, docs/mockups/ledge-action-card.html, « Téléphone »): the rows' lines are the PC's (actionWords),
      *  the sentences that speak to the user say « vous » (ledge-action-card-codes.md). */
     action: {
@@ -190,7 +190,7 @@ export const copy = {
   link: {
     online: 'connecté', offline: 'déconnecté',
     /** The header's way to the connection screen, for screen readers. */
-    openConnection: 'Connexion de cet appareil',
+    openConnection: 'Réglages de cet appareil',
     lostTitle: 'Connexion au PC perdue',
     lostBody: 'Le PC, le réseau ou Tailscale est indisponible. Les demandes ci-dessous peuvent avoir changé.',
     lostDetail: 'Dernier état connu. Reconnectez-vous pour vérifier si cette demande attend toujours une décision.',
@@ -294,9 +294,9 @@ export const copy = {
     offlineResume: (bot: string) => `Reconnectez-vous pour reprendre ${bot}. Rien n’a été envoyé.`,
     reconnect: 'Reconnecter',
     unprotectedTitle: 'Vérification impossible',
-    unprotectedClose: (bot: string) => `Protégez d’abord vos accords depuis Connexion. Vous pouvez aussi fermer ${bot} sur le PC.`,
-    unprotectedResume: (bot: string) => `Protégez d’abord vos accords depuis Connexion. Vous pouvez aussi reprendre ${bot} sur le PC.`,
-    openConnection: 'Ouvrir Connexion',
+    unprotectedClose: (bot: string) => `Protégez d’abord vos accords depuis Réglages. Vous pouvez aussi fermer ${bot} sur le PC.`,
+    unprotectedResume: (bot: string) => `Protégez d’abord vos accords depuis Réglages. Vous pouvez aussi reprendre ${bot} sur le PC.`,
+    openConnection: 'Ouvrir Réglages',
     closing: (bot: string) => `Fermeture de ${bot}…`,
     closingHint: 'L’agent termine ce qu’il tape, puis quitte. Cela peut prendre jusqu’à 30 s.',
     ended: 'Session terminée',
@@ -431,7 +431,7 @@ export const copy = {
       sheetBody: 'Ce que vous tapez part tel quel dans son terminal sur le PC, comme au clavier du PC. Cela vaut aussi pour une demande d’autorisation : elle ne passe alors pas par la vérification de l’appareil.',
       sheetNote: 'La main vous est retirée après 5 minutes sans frappe, au bout de 30 minutes, ou dès que l’appli passe en arrière-plan. Le PC affiche le nom de cet appareil « au clavier » et peut la reprendre.',
       go: 'Vérifier et prendre la main', cancel: 'Annuler',
-      unprotectedTitle: 'Protégez d’abord vos accords depuis Connexion.', unprotectedBody: 'Prendre la main demande la passkey de cet appareil, comme fermer une session.', openConnection: 'Ouvrir Connexion',
+      unprotectedTitle: 'Protégez d’abord vos accords depuis Réglages.', unprotectedBody: 'Prendre la main demande la passkey de cet appareil, comme fermer une session.', openConnection: 'Ouvrir Réglages',
       keys: 'Touches spéciales',
       key: { esc: 'Échap', tab: 'Tab', ctrl: 'Ctrl', alt: 'Alt', left: '←', up: '↑', down: '↓', right: '→', enter: '↵', interrupt: '^C', paste: 'Coller', line: 'Ligne' },
       keyLabel: { esc: 'Échap', tab: 'Tabulation', ctrl: 'Contrôle', alt: 'Alt', left: 'Flèche gauche', up: 'Flèche haut', down: 'Flèche bas', right: 'Flèche droite', enter: 'Entrée', interrupt: 'Contrôle C', paste: 'Coller', line: 'Mode ligne' },
@@ -499,7 +499,7 @@ export const copy = {
       save: 'Enregistrer', cancel: 'Annuler', failed: 'Le PC n’a pas pris le nom. Réessayez.',
       others: 'Les autres appareils liés se gèrent sur le PC, dans Ledge › Réglages › Accès mobile.'
     },
-    title: 'Connexion', back: 'Retour aux demandes', pc: 'PC', status: 'État', unknown: 'Inconnu',
+    title: 'Réglages', section: 'Connexion', back: 'Retour aux demandes', pc: 'PC', status: 'État', unknown: 'Inconnu',
     states: { online: 'Connecté', offline: 'Déconnecté', connecting: 'Connexion en cours…' },
     account: 'Compte', relay: 'Serveur', pcFingerprint: 'Empreinte du PC', version: 'Version de l’app', appFingerprint: 'Empreinte de l’app',
     /** A value not known yet (the build, before the service worker gives it). */
@@ -543,6 +543,34 @@ export const copy = {
       noPasskey: 'Protégez d’abord les accords avec l’appareil, plus haut.',
       confirm: 'Confirmer', cancel: 'Annuler', notDone: 'Pas fait.'
     }
+  },
+  /** Réglages: what this device chooses for itself, the PC's shared threshold, and what stays on the PC. */
+  settings: {
+    appearance: 'Apparence',
+    motion: 'Réduire les animations', motionHint: 'Désactivé, le réglage de l’appareil s’applique.',
+    notifications: 'Notifications sur cet appareil',
+    notify: {
+      finished: 'Agent terminé', finishedHint: 'Quand un agent a fini son tour.',
+      chat: 'Réponse de Ledge', chatHint: 'Quand Ledge a répondu à une question posée d’ici.',
+      decision: 'Décision à prendre', decisionHint: 'Quand une session vous demande de trancher.',
+      always: 'Les demandes d’accord et les questions des agents préviennent toujours, sauf pendant une pause.'
+    },
+    pause: 'Pause', pauseHint: 'Aucune notification sur cet appareil pendant ce temps.',
+    pauseFor: { hour: '1 h', four: '4 h', morning: 'Jusqu’à demain 8 h' },
+    pauseLabel: { hour: 'Pause d’une heure', four: 'Pause de quatre heures', morning: 'Pause jusqu’à demain 8 h' },
+    pausedUntil: (when: string) => `En pause jusqu’à ${when}`,
+    tomorrow: (time: string) => `demain ${time}`,
+    resume: 'Reprendre',
+    ledge: 'Ledge',
+    context: 'Contexte max', contextHint: 'Au-delà, une session est signalée près de sa limite. Partagé avec le PC.',
+    chatTool: 'Agent du chat', chatToolHint: 'Celui qui répond à vos questions posées depuis cet appareil.',
+    tools: { pc: 'PC', claude: 'Claude', codex: 'Codex', cursor: 'Cursor', omp: 'OMP' } as Record<'pc' | 'claude' | 'codex' | 'cursor' | 'omp', string>,
+    toolPcHint: 'PC : le même agent que le chat de Ledge sur le PC.',
+    failed: 'Le PC n’a pas pris ce réglage. Réessayez.',
+    offline: 'Reconnectez-vous au PC pour changer ces réglages.',
+    managed: 'Réglés sur le PC',
+    terminal: 'Taper dans les terminaux', allowed: 'Autorisé', notAllowed: 'Non autorisé',
+    managedBody: 'L’accès mobile, les appareils liés, les machines et les projets se règlent sur le PC, dans Ledge › Réglages. Un appareil ne peut pas élargir ses propres droits.'
   },
   /** The user left while the PC could not confirm that it removed this phone: shown on the screen they land on. */
   forget: {

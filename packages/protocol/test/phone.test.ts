@@ -482,3 +482,30 @@ describe('the Atelier on the phone (iPad lot 1)', () => {
     expect(() => PhoneSessionSchema.parse({ ...session, projectId: '/home/x' })).toThrow();
   });
 });
+
+describe('phone settings (Réglages)', () => {
+  const prefs = { notify: { finished: false, chat: true, decision: true }, quietUntil: '2026-11-06T07:00:00.000Z', chatTool: 'codex' };
+  it('takes a device\'s whole settings, and nothing beside them', () => {
+    expect(PhoneClientMessageSchema.parse({ type: 'device.prefs', op: OP, prefs })).toEqual({ type: 'device.prefs', op: OP, prefs });
+    expect(() => PhoneClientMessageSchema.parse({ type: 'device.prefs', op: OP, prefs: { ...prefs, quietUntil: null, chatTool: null } })).not.toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'device.prefs', op: OP, prefs: { ...prefs, terminalInput: true } })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'device.prefs', op: OP, prefs: { ...prefs, notify: { ...prefs.notify, request: false } } })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'device.prefs', op: OP, prefs: { ...prefs, chatTool: 'bash' } })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'device.prefs', op: OP, prefs: { ...prefs, quietUntil: 'tomorrow' } })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'device.prefs', op: OP, prefs, id: 'other-device' })).toThrow();
+  });
+  it('takes the context threshold within the desktop\'s bounds', () => {
+    expect(PhoneClientMessageSchema.parse({ type: 'context.set', op: OP, near: 0.7 })).toEqual({ type: 'context.set', op: OP, near: 0.7 });
+    expect(() => PhoneClientMessageSchema.parse({ type: 'context.set', op: OP, near: 0.3 })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'context.set', op: OP, near: 1 })).toThrow();
+    expect(() => PhoneClientMessageSchema.parse({ type: 'context.set', op: OP, near: 0.7, prefs: {} })).toThrow();
+  });
+  it('lets a snapshot say the daemon takes them and carry the device\'s settings', () => {
+    const m = PhoneServerMessageSchema.parse({
+      type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: [], capabilities: { claude: { freeTextAnswer: true }, codex: { freeTextAnswer: true }, cursor: { freeTextAnswer: true }, omp: { freeTextAnswer: true } },
+      daemon: { version: '1.0.0', name: 'pc', settings: true }, device: { confirm: false, prefs }
+    });
+    expect(m.type === 'snapshot' && m.daemon.settings).toBe(true);
+    expect(m.type === 'snapshot' && m.device?.prefs).toEqual(prefs);
+  });
+});

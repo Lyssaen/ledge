@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, renameSync, chmodSync, unlinkSync } from 'node:fs';
 import { z } from 'zod';
-import { DEFAULT_RELAY_URL, DeviceKindSchema, DeviceNameSchema, MobileConfigSchema, type MobileConfig } from '@ledge/protocol';
+import { DEFAULT_RELAY_URL, DeviceKindSchema, DeviceNameSchema, DevicePrefsSchema, MobileConfigSchema, type MobileConfig } from '@ledge/protocol';
 import { exportIdentity, generateIdentity, importIdentity, type Identity } from '@ledge/seal';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
@@ -27,7 +27,10 @@ const ApprovedDeviceSchema = z.object({
   /** The name the user gave it; absent means the default name the fronts derive. */
   name: DeviceNameSchema.optional(),
   /** Every relay peer that confirmed a channel for it, newest last (at most MAX_DEVICE_PEERS): all are revoked with it. */
-  peers: z.array(z.string().min(1)).max(MAX_DEVICE_PEERS).optional()
+  peers: z.array(z.string().min(1)).max(MAX_DEVICE_PEERS).optional(),
+  /** The settings the device chose from its Réglages (`device.prefs`); absent: the defaults. A value this daemon cannot read is
+   *  dropped alone (`catch`), never the whole list of devices. */
+  prefs: DevicePrefsSchema.optional().catch(undefined)
 });
 export type ApprovedDevice = z.infer<typeof ApprovedDeviceSchema>;
 
