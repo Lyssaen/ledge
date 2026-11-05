@@ -16,9 +16,10 @@ import type { Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
+import { claudeGutter } from '../adapters/claude.js';
 import { DETECT_LINES } from './poller.js';
 import { answeredBy, pendingTool } from './state.js';
-import { claudeOpenCall, claudeToolAnswered, labelTranscript, resumeLabel } from './transcript.js';
+import { claudeOpenCall, claudeToolAnswered, claudeVersion, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
 import { readPeers, type ClaudePeer } from './peers.js';
 import { spawnSession, type TmuxTool } from '../spawn.js';
@@ -616,7 +617,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         // One taller than the capture is read whole, or gets no key.
         if (decided) {
           const shown = adapter.detectPrompt(before) ?? adapter.detectPrompt(await tmux.capture(s.tmuxSession!, CHECK_LINES) ?? '');
-          const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined);
+          // Claude Code 2.1.318 draws a gutter before a command's lines: its version, from the transcript, says whether `│ ` is one.
+          const gutter = s.tool === 'claude' ? claudeGutter(s.transcriptPath ? claudeVersion(s.transcriptPath) : undefined) : undefined;
+          const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined, gutter);
           // STALE, or a dialog it cannot read whole (UNCHECKED): the closest code is that no prompt it can read is there.
           if (refused) throw new Refusal(refused, refused === STALE ? 'stale' : 'no_prompt');
         }

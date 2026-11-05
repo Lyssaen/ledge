@@ -683,6 +683,13 @@ describe('server', () => {
   describe('Claude Code 2.1.318: the command behind a gutter (« the request changed » on a request still on screen)', () => {
     const one = `D=/tmp; ls -la $D | head -3; echo ---; python3 -c "import json;print(json.dumps({\\"a\\":1},indent=1))" | head -150`;
     const seen = { kind: 'permission' as const, text: one, tool: 'Bash', source: 'hook' as const };
+    /** A transcript its Claude Code wrote last (`version` on each entry), or one with no version. */
+    const transcript = (version?: string) => {
+      const p = join(tmpDir(), 'session.jsonl');
+      writeFileSync(p, `${JSON.stringify({ type: 'user', ...(version ? { version } : {}) })}\n`);
+      return p;
+    };
+    const v318 = transcript('2.1.318');
     const start = async (panes: string[]) => {
       tmux = fakeTmux({ 'ledge-a': panes }); await srv.close();
       srv = await startServer({ store, tmux, port: 0 });
@@ -693,7 +700,7 @@ describe('server', () => {
       const pane = fx('claude2-318-permission-bash');
       for (const [decision, keys] of [['accept', ['text', 'ledge-a', '1']], ['deny', ['keys', 'ledge-a', 'Escape']]] as const) {
         const c = await start([pane, pane, 'Running…']);
-        store.upsert(mk('a', { state: 'waiting_permission', pending: seen }));
+        store.upsert(mk('a', { state: 'waiting_permission', pending: seen, transcriptPath: v318 }));
         c.send({ type: 'session.decide', id: 'a', decision, expect: { kind: 'permission', text: one, key: pendingKey(seen) } });
         await until(() => tmux.sent.length > 0);
         expect(tmux.sent).toEqual([keys]);
@@ -703,18 +710,29 @@ describe('server', () => {
     it('always on a dialog whose only lasting option is auto mode: refused, no key (never « switch to auto mode »)', async () => {
       const pane = fx('claude2-318-permission-bash');
       const c = await start([pane, pane, 'Running…']);
-      store.upsert(mk('a', { state: 'waiting_permission', pending: seen }));
+      store.upsert(mk('a', { state: 'waiting_permission', pending: seen, transcriptPath: v318 }));
       c.send({ type: 'session.decide', id: 'a', decision: 'always', expect: { kind: 'permission', text: one, key: pendingKey(seen) } });
       expect(await c.next('error', 3000)).toMatchObject({ id: 'a', code: 'not_offered', message: 'no "always" option in this dialog, answer in the terminal' });
       expect(tmux.sent).toEqual([]);
       expect(store.get('a')).toMatchObject({ state: 'waiting_permission', pending: { text: one } });
       c.close();
     });
+    it('the version not known, or older than the gutter: the same screen gets no key (`│` may be the command\'s own)', async () => {
+      const pane = fx('claude2-318-permission-bash');
+      for (const [path, code] of [[undefined, 'no_prompt'], [transcript(), 'no_prompt'], [transcript('2.1.317'), 'stale']] as const) {
+        const c = await start([pane, pane, 'Running…']);
+        store.upsert(mk('a', { state: 'waiting_permission', pending: seen, ...(path ? { transcriptPath: path } : {}) }));
+        c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: one, key: pendingKey(seen) } });
+        expect(await c.next('error', 3000)).toMatchObject({ id: 'a', code });
+        expect(tmux.sent).toEqual([]);
+        c.close();
+      }
+    });
     it('the same text but another request (its key differs): refused before any key', async () => {
       const pane = fx('claude2-318-permission-bash');
       const c = await start([pane, pane, 'Running…']);
       // A helper's request for the same command replaced the one the user saw: it looks the same on the card.
-      store.upsert(mk('a', { state: 'waiting_permission', pending: { ...seen, helperId: 'h1' } }));
+      store.upsert(mk('a', { state: 'waiting_permission', pending: { ...seen, helperId: 'h1' }, transcriptPath: v318 }));
       c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: one, key: pendingKey(seen) } });
       expect(await c.next('error', 3000)).toMatchObject({ id: 'a', code: 'stale' });
       expect(tmux.sent).toEqual([]);
@@ -723,11 +741,11 @@ describe('server', () => {
     it('answered in the terminal first, then a new request: Ledge types nothing, the new request is the one held', async () => {
       const next = { ...seen, text: 'rm -rf build' };
       const c = await start([bashPrompt('rm -rf build')]);
-      store.upsert(mk('a', { state: 'waiting_permission', pending: next }));
+      store.upsert(mk('a', { state: 'waiting_permission', pending: next, transcriptPath: v318 }));
       c.send({ type: 'session.decide', id: 'a', decision: 'accept', expect: { kind: 'permission', text: one, key: pendingKey(seen) } });
       expect(await c.next('error', 3000)).toMatchObject({ id: 'a', code: 'stale' });
       // Nor when the client sends no expectation: the dialog on screen is not the request the daemon holds.
-      store.upsert(mk('a', { state: 'waiting_permission', pending: seen }));
+      store.upsert(mk('a', { state: 'waiting_permission', pending: seen, transcriptPath: v318 }));
       c.send({ type: 'session.decide', id: 'a', decision: 'accept' });
       expect(await c.next('error', 3000)).toMatchObject({ id: 'a', code: 'stale' });
       expect(tmux.sent).toEqual([]);

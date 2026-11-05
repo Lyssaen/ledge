@@ -11,7 +11,12 @@ export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: nu
  * A shell command an approval dialog shows as such: its lines on screen (trimmed, without the dialog's own `$` or the
  * folder it runs in) and the pane column each one ends at, which tells a line the TUI wrapped from one the command ends.
  */
-export type ShownCommand = { lines: string[]; ends: number[] };
+/**
+ * `ungutter`: the lines with a gutter taken off, when every one starts with one (Claude Code 2.1.318 draws `│ ` before
+ * each line of the command). The screen alone cannot tell that gutter from a command of an older version that starts
+ * with `│`: which reading holds is the harness version's to say (`dialogMismatch`'s `gutter`).
+ */
+export type ShownCommand = { lines: string[]; ends: number[]; ungutter?: { lines: string[]; ends: number[] } };
 /** `command`: the shell command an approval dialog shows as such, when it shows one (to check the request it answers). */
 export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[]; optionDetails?: string[]; body?: string; command?: ShownCommand };
 
@@ -106,7 +111,10 @@ export function shownCommand(raw: string[]): ShownCommand {
  * where it does not is the TUI's wrap, at a space, or mid-word when the line reaches the edge. A command the screen
  * cuts with `…`, or drawn over several lines with no width to read them at, is not checked.
  */
-function commandMismatch({ lines, ends }: ShownCommand, asked: string, width: number | undefined): string | null {
+function commandMismatch(drawn: ShownCommand, asked: string, width: number | undefined, gutter: boolean | undefined): string | null {
+  // A gutter or the command's own `│`: the version says which, and a version not known is not guessed.
+  if (drawn.ungutter && gutter === undefined) return UNCHECKED;
+  const { lines, ends } = drawn.ungutter && gutter ? drawn.ungutter : drawn;
   if (!lines.length || lines.at(-1)!.endsWith('…') || (lines.length > 1 && !width)) return UNCHECKED;
   const edge = (width ?? 0) - EDGE;
   const a = asked.trim();
@@ -132,13 +140,15 @@ function commandMismatch({ lines, ends }: ShownCommand, asked: string, width: nu
  * from the pane, a question (its long text cut on screen, so one starting as the other is the same) and a shell
  * command, which the dialog must show. A plan or a file approval, whose hook text the dialog does not show, need only
  * a dialog of their kind.
+ *
+ * `gutter`: whether the harness on screen draws a gutter before a command's lines (Claude Code 2.1.318 on), when known.
  */
-export function dialogMismatch(shown: PanePromptMatch | null, pending: Pending, width?: number): string | null {
+export function dialogMismatch(shown: PanePromptMatch | null, pending: Pending, width?: number, gutter?: boolean): string | null {
   if (!shown) return UNCHECKED;
   if (shown.kind !== (pending.kind === 'diff' ? 'permission' : pending.kind)) return STALE;
   if (pending.kind === 'question') return sameQuestion(shown.text, pending.text) ? null : STALE;
   if (pending.source === 'pane') return shown.text === pending.text ? null : STALE;
-  if (pending.tool !== undefined && COMMAND_TOOLS.has(pending.tool)) return shown.command ? commandMismatch(shown.command, pending.text, width) : UNCHECKED;
+  if (pending.tool !== undefined && COMMAND_TOOLS.has(pending.tool)) return shown.command ? commandMismatch(shown.command, pending.text, width, gutter) : UNCHECKED;
   return null;
 }
 /**

@@ -170,25 +170,11 @@ function parseDialog(pane: string): Dialog | null {
   };
 }
 
-/**
- * 2.1.318 draws the command behind a `│ ` gutter, on each line, a wrapped one and one after a newline alike:
- *
- *   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
- *    │ touch zzprobe; echo a1 b2 c3 d4 e5 f6 g7 h8 i9 j10
- *    │ k11 l12
- *   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
- */
-const GUTTER_COLUMN = /^(\s*)│(?: |$)/;
-/**
- * The pane lines between the dialog's dashed rules (a command, a diff), or none. A gutter on every line is not the
- * command's: it is blanked, so each line keeps its columns (where it ends tells a wrap from a newline).
- */
+/** The pane lines between the dialog's dashed rules (a command, a diff), or none. */
 function dashed(header: string[]): string[] {
   const d1 = header.findIndex(l => DASHED.test(l.trim()));
   const d2 = d1 < 0 ? -1 : header.findIndex((l, i) => i > d1 && DASHED.test(l.trim()));
-  const body = d2 > d1 + 1 ? header.slice(d1 + 1, d2) : [];
-  const guttered = body.some(l => !isBlank(l)) && body.every(l => isBlank(l) || GUTTER_COLUMN.test(l));
-  return guttered ? body.map(l => l.replace(GUTTER_COLUMN, m => ' '.repeat(m.length))) : body;
+  return d2 > d1 + 1 ? header.slice(d1 + 1, d2) : [];
 }
 /** The lines between the dialog's dashed rules, trimmed, or ''. */
 const dashedBody = (header: string[]) => dashed(header).map(l => l.trim()).filter(Boolean).join('\n');
@@ -202,11 +188,36 @@ function permissionText(header: string[], question: string): string {
   return dashedBody(header) || titleAndNext || question;
 }
 
+/** The first Claude Code that draws a gutter before a Bash command's lines (seen in 2.1.318; 2.1.316's capture has none). */
+const GUTTER_SINCE = [2, 1, 318] as const;
+/** Whether Claude Code `version` draws that gutter; undefined when the version is not known. */
+export function claudeGutter(version: string | undefined): boolean | undefined {
+  const m = version ? /^(\d+)\.(\d+)\.(\d+)/.exec(version) : null;
+  if (!m) return undefined;
+  const v = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const at = v.findIndex((n, i) => n !== GUTTER_SINCE[i]);
+  return at < 0 || v[at]! > GUTTER_SINCE[at]!;
+}
+const GUTTER_COLUMN = /^(\s*)│(?: |$)/;
 /** The command a « Bash command » dialog shows between its dashed rules, or undefined. */
 function bashCommand(header: string[]): ShownCommand | undefined {
   if (!/^Bash command$/i.test(header.find(l => !isBlank(l))?.trim() ?? '')) return undefined;
-  const command = shownCommand(dashed(header));
-  return command.lines.length ? command : undefined;
+  const body = dashed(header);
+  const command = shownCommand(body);
+  if (!command.lines.length) return undefined;
+  // Every line behind `│ ` may be 2.1.318's gutter, a wrapped line and one after a newline alike:
+  //
+  //   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  //    │ touch zzprobe; echo a1 b2 c3 d4 e5 f6 g7 h8 i9 j10
+  //    │ k11 l12
+  //   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  //
+  // or a command of an older version that starts with `│` (a valid shell name): both readings are kept, the version
+  // chooses. Blanked rather than cut, each line keeps its columns, where it ends telling a wrap from a newline.
+  const guttered = body.every(l => isBlank(l) || GUTTER_COLUMN.test(l));
+  if (!guttered) return command;
+  const ungutter = shownCommand(body.map(l => l.replace(GUTTER_COLUMN, m => ' '.repeat(m.length))));
+  return { ...command, ungutter: { lines: ungutter.lines, ends: ungutter.ends } };
 }
 
 // The workspace trust dialog, shown before anything else in a folder Claude Code has not seen. Its options carry no

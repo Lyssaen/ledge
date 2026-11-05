@@ -24,6 +24,20 @@ export function tailLines(path: string, bytes = TAIL_BYTES): string[] {
   } finally { closeSync(fd); }
 }
 
+/**
+ * The Claude Code version that wrote the transcript last (each entry carries its `version`), or undefined: a session
+ * resumed by a newer Claude Code writes the newer one.
+ */
+export function claudeVersion(path: string, bytes = 64 * 1024): string | undefined {
+  const lines = tailLines(path, bytes);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let v: unknown;
+    try { v = (JSON.parse(lines[i]!) as { version?: unknown }).version; } catch { continue; }
+    if (typeof v === 'string' && /^\d+\.\d+\.\d+/.test(v)) return v;
+  }
+  return undefined;
+}
+
 type Block = { type?: string; text?: string };
 const texts = (blocks: unknown, kind: string): string =>
   (Array.isArray(blocks) ? blocks as Block[] : []).filter(b => b?.type === kind && typeof b.text === 'string').map(b => b.text!.trim()).filter(Boolean).join('\n\n');

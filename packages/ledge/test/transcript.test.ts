@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { agentMessages, claudeOpenCall, claudePlan, claudeToolAnswered, claudeTranscriptPath, codexPlan, labelTranscript, resumeLabel, tailLines, TAIL_BYTES } from '../src/daemon/transcript.js';
+import { agentMessages, claudeOpenCall, claudeVersion, claudePlan, claudeToolAnswered, claudeTranscriptPath, codexPlan, labelTranscript, resumeLabel, tailLines, TAIL_BYTES } from '../src/daemon/transcript.js';
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ledge-')); });
@@ -186,5 +186,20 @@ describe('labelTranscript', () => {
     expect(labelTranscript(p, 'Pim', 'Pim - Sujet')).toBe(true);
     expect(readFileSync(p, 'utf8').split('\n')).toEqual(['{"type":"user"}', JSON.stringify({ type: 'custom-title', customTitle: 'Pim - Sujet', sessionId: uuid, ledge: true }), '']);
     expect(labelTranscript(join(dir, 'missing.jsonl'), 'Pim', 'Pim - Sujet')).toBeInstanceOf(Error);
+  });
+});
+
+describe('claudeVersion', () => {
+  it('is the version of the last entry that has one: a session resumed by a newer Claude Code says the newer', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ledge-version-'));
+    const p = join(dir, 's.jsonl');
+    writeFileSync(p, [{ type: 'user', version: '2.1.316' }, { type: 'assistant', version: '2.1.318' }, { type: 'summary' }].map(e => JSON.stringify(e)).join('\n') + '\n');
+    expect(claudeVersion(p)).toBe('2.1.318');
+    // A tool's input or output naming a version is not the harness's; a line still being written is not read.
+    writeFileSync(p, `${JSON.stringify({ type: 'assistant', version: '2.1.316', message: { content: [{ type: 'tool_use', input: { version: '9.9.9' } }] } })}\n{"version":"9.9`);
+    expect(claudeVersion(p)).toBe('2.1.316');
+    writeFileSync(p, '{"type":"user"}\n');
+    expect(claudeVersion(p)).toBeUndefined();
+    expect(claudeVersion(join(dir, 'missing.jsonl'))).toBeUndefined();
   });
 });
