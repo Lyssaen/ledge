@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { CONTEXT_NEAR, type PhoneSession, type PhoneTask } from '@ledge/protocol';
+import { CONTEXT_NEAR, type PhoneHarnessUsage, type PhoneSession, type PhoneTask } from '@ledge/protocol';
+import { reachedWindows, resetLabel } from '../../model/usage';
+import { Limits } from './Limits';
 import { copy } from '../../copy';
 import { closedTasks, openDecisions, openTasks } from '../../model/tasks';
 import { ageLabel, headline, requestsOf } from '../../model/requests';
@@ -29,7 +31,9 @@ function closedLine(t: PhoneTask): string {
  * the closed tasks Ledge gave), and the tasks Ledge gave that are still open.
  * `onAnswer` puts a decision's answer in the making into the chat's field: the phone never answers by itself.
  */
-export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = CONTEXT_NEAR, onAnswer }: { store: MobileStore; sessions: PhoneSession[]; tasks: Map<string, PhoneTask>; syncedAt: string | null; fresh: boolean; threshold?: number; onAnswer?: (t: PhoneTask) => void }) {
+export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = CONTEXT_NEAR, onAnswer, usage = [] }: { store: MobileStore; sessions: PhoneSession[]; tasks: Map<string, PhoneTask>; syncedAt: string | null; fresh: boolean; threshold?: number; onAnswer?: (t: PhoneTask) => void;
+  /** This PC's harness limits (docs/mockups/ledge-harness-usage.html): « LIMITES », and each window reached in « À toi ». */
+  usage?: readonly PhoneHarnessUsage[] }) {
   const now = useNow();
   const [busy, setBusy] = useState<string | null>(null);
   const byId = new Map(sessions.map(s => [s.id, s]));
@@ -40,7 +44,9 @@ export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = C
   const near = sessions.filter(s => s.state !== 'exited' && !s.handover && s.context && s.context.used / s.context.window >= threshold);
   const open = openTasks(tasks.values()).slice(0, 5);
   const P = copy.chat.point;
-  const yours = requests.length + decisions.length + closed.length + near.length;
+  // A window reached (100 %), in « À toi »: the phone has no threshold, so a window past it but not reached is not said here.
+  const full = reachedWindows(usage);
+  const yours = requests.length + full.length + decisions.length + closed.length + near.length;
   const decide = (sessionId: string, key: string, decision: 'accept' | 'deny') => {
     const item = requests.find(r => r.sessionId === sessionId && r.key === key);
     if (!item) return;
@@ -72,6 +78,18 @@ export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = C
                     <button type="button" className={SMALL} disabled={!fresh || busy === id} onClick={() => decide(r.sessionId, r.key, 'deny')}>{P.no}</button>
                   </>
                 ) : <a href={href({ name: 'request', sessionId: r.sessionId, key: r.key })} className={SMALL}>{P.see}</a>}
+              </div>
+            );
+          })}
+          {full.map(({ harness, window: w }) => {
+            const which = w.kind === 'five_hour' ? P.five : w.kind === 'seven_day' ? P.week : P.model(w.model ?? '');
+            return (
+              <div key={`usage:${harness}:${w.kind}:${w.model ?? ''}`} data-usage-reached={harness} className="flex items-center gap-2" aria-label={P.reachedLabel(P.harnessShort[harness] ?? harness, which)}>
+                <span aria-hidden="true" className="flex size-5 flex-none items-center justify-center rounded-md bg-danger-bg text-approval">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 14l4-4" /><path d="M3.3 19a10 10 0 1 1 17.4 0" /></svg>
+                </span>
+                <span className="min-w-0 flex-1 text-body">{P.harnessShort[harness] ?? harness} · {which} <b className="font-medium text-approval">{w.pct} %</b></span>
+                {w.resetsAt && <span className="flex-none whitespace-nowrap text-small text-muted">↺ {resetLabel(w.resetsAt, now, true)}</span>}
               </div>
             );
           })}
@@ -109,6 +127,7 @@ export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = C
           ))}
         </div>
       )}
+      <Limits usage={usage} now={now} />
       {open.length > 0 && (
         <div role="group" aria-label={P.givenLabel} className="flex flex-col gap-2">
           <h3 className={HEAD}>{P.given}</h3>
