@@ -397,6 +397,11 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .abot.off,.tnode.off{opacity:.45}
 .dot.off{background:var(--st-off)}
 .room.hidden{display:none}
+.modal-bg{position:fixed;inset:0;z-index:50;background:#000a}
+.modal{position:fixed;z-index:51;left:50%;top:50%;transform:translate(-50%,-50%);width:min(780px,calc(100vw - 32px));max-height:calc(100vh - 60px);overflow:auto;background:var(--card);border:1px solid var(--input);border-radius:12px;box-shadow:0 30px 80px #000c;display:flex}
+.modal .page{padding:20px 22px 22px}
+.modal-x{position:absolute;top:10px;right:12px;width:28px;height:28px;border-radius:6px;color:var(--muted-foreground);font-size:18px}
+.modal-x:hover{background:var(--muted);color:var(--foreground)}
 
 </style>
 <div class="mk-bar" role="toolbar" aria-label="Prototype">
@@ -413,7 +418,8 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
     <span>Explorateur : clic ouvre, <kbd>Ctrl</kbd>+clic à droite, clic droit = actions</span>
     <span>Glisser un onglet vers un autre groupe ou à droite</span>
     <span>Carré à gauche des onglets : lier le groupe (violet, vert d'eau)</span>
-    <span><kbd>+</kbd> d'un groupe : Nouvelle session dans ce groupe</span>
+    <span><kbd>+</kbd> d'un groupe ou <kbd>N</kbd> : Nouvelle session (fenêtre modale)</span>
+    <span>Vue Rigs › kernel : operator, advisor, queue worker</span>
     <span>Vue Rigs : clic sur un rig = sa topologie en onglet</span>
     <span>Icône flèche : détacher le groupe dans une fenêtre</span>
     <span><kbd>Y</kbd> / <kbd>N</kbd> sur Pim, répondre à dev-front</span>
@@ -473,8 +479,12 @@ const AG = {
     req:{kind:'ask', q:'Pour les splits et le détachement en fenêtre, je pars sur dockview ou golden-layout ?', opts:['dockview','golden-layout'], done:"Je pars là-dessus et je monte la coque."}},
   rev:{name:'reviewer', kind:'seat', rig:'ledge-dev', role:'revue', prov:'openai', model:'GPT-6.1 Terra', ctx:33, st:'work', branch:'main', files:[],
     msgs:[{t:'user',h:'<span class="mut">lead · rig send</span><br>Relis la PR #222.'},T('Bash','gh pr diff 222'),T('Read','apps/desktop/src/term/Term.tsx'),{t:'agent',h:"Note : le WebglAddon n'est pas libéré quand l'onglet se ferme (ligne 88)."}]},
-  op:{name:'operator', kind:'seat', rig:'kernel', role:'kernel', prov:'anthropic', model:'Opus 5.5', ctx:9, st:'idle', branch:'main', files:[],
-    msgs:[T('Bash','rig ps --nodes'),{t:'agent',h:'2 rigs en marche.'}]},
+  op:{name:'operator', kind:'seat', rig:'kernel', role:'opérateur', prov:'anthropic', model:'Opus 5.5', ctx:9, st:'idle', branch:'main', files:[],
+    msgs:[{t:'user',h:'Quelle équipe pour la refonte IDE de Ledge ?'},T('Bash','rig ps --nodes'),{t:'agent',h:'ledge-dev tourne déjà avec un lead, un UX/UI, deux devs et un reviewer : je te propose de lui confier la refonte plutôt que de lancer une nouvelle équipe.'}]},
+  adv:{name:'advisor', kind:'seat', rig:'kernel', role:'conseiller', prov:'anthropic', model:'Opus 5.5', ctx:6, st:'idle', branch:'main', files:[],
+    msgs:[{t:'user',h:'<span class="mut">operator · rig send</span><br>Relis le plan de découpe de ledge-dev.'},{t:'agent',h:'Le plan tient. Je conseille de livrer la coque seule d\'abord, sans changer les écrans.'}]},
+  qw:{name:'queue-worker', kind:'seat', rig:'kernel', role:'file', prov:'anthropic', model:'Haiku 5.5', ctx:3, st:'work', branch:'main', files:[], quiet:true,
+    msgs:[T('Bash','rig queue route #225 → dev-back'),T('Bash','rig queue route #224 → dev-front')]},
 };
 const OR = {daemon:'run', kernel:'run', perm:'Auto',
   rigs:{'ledge-dev':{state:'run', perm:'Auto', snap:'10:42'}, 'synapse-review':{state:'stop', perm:'Standard', snap:'hier 18:03', n:4}},
@@ -522,7 +532,7 @@ let st = {
   groups:[], focus:null, terms:[], layoutName:'Revue Pim + Nova', layouts:{},
   menu:null, pal:false, lim:false, toast:null, drafts:{}, saving:false, drag:null, confirm:null,
   set:{section:'Espace de travail', openIn:'active', boot:'last', rightAsks:true, rightSummary:true, limits:true, alert:80, webgl:12, typeNoConfirm:false, ext:'Cursor'},
-  launch:{prov:'anthropic', model:'Opus 5.5', where:'active', perm:'Auto', wt:true, branch:'feat/ide-tabs', msg:"Ajoute les onglets d'outils à la coque : OpenRig et Nouvelle session s'ouvrent comme des onglets."},
+  launch:{prov:'anthropic', model:'Opus 5.5', where:'active', perm:'Auto', wt:true, branch:'feat/ide-tabs', msg:"Ajoute l'onglet OpenRig à la coque, dans n'importe quel groupe. Maquette : docs/mockups/ledge-ide-interactive.html"},
   atelier:{mode:'projets', hideSub:false}, taskSel:0, taskFilter:'Ouvertes', brainChecked:'2026-11-02',
   out:['<span class="d">10:42 · rig up ledge-dev --existing</span>','<span class="g">✓</span> 5 sièges prêts','<span class="d">10:42 · rig snapshot ledge-dev</span>','<span class="g">✓</span> snapshot 2026-11-05T10:42'],
   chat:[['me','Où en est ledge-dev ?'],['ledge',"dev-back écrit <code>layout.ts</code>, le reviewer relit la PR #222. <b>dev-front attend ta réponse</b> sur la librairie de panneaux."]],
@@ -586,7 +596,7 @@ function tabLabel(t){
   if (t.type==='diff') return `${logo(AG[t.ref].prov,12)}Modifications · ${AG[t.ref].name}`;
   if (t.type==='term') return `&gt;_ ${TD[t.ref].title}`;
   const I = s => s.replace(/18/g,'13');
-  return ({openrig:`${I(ic.rig)}OpenRig · WSL`, launch:'+ Nouvelle session', settings:`${I(ic.gear)}Réglages`, atelier:`${I(ic.atelier)}Atelier`,
+  return ({openrig:`${I(ic.rig)}OpenRig · WSL`, settings:`${I(ic.gear)}Réglages`, atelier:`${I(ic.atelier)}Atelier`,
     topo:`${I(ic.rig)}Topologie · ${t.ref||'ledge-dev'}`})[t.type] || t.type;
 }
 function findTab(k){ for (const g of st.groups) { const i = g.tabs.findIndex(t => keyOf(t)===k); if (i>=0) return {g,i}; } return null; }
@@ -697,14 +707,14 @@ function sidebar(){
       + (R.state==='run' ? rigSeats(name).map(a=>agentRow(a)).join('') : ''); };
     return `<aside class="explorer"><div class="ex-h"><span>Rigs</span><span class="mut" style="text-transform:none;letter-spacing:0">OpenRig 0.7 · ${OR.daemon==='run'?'en marche':'arrêté'}</span></div><div class="tree">
       ${rigRow('ledge-dev')}${rigRow('synapse-review')}
-      <div class="row" data-act="topo" data-arg="kernel" title="Ouvrir sa topologie"><span class="chev">▾</span>${dot(OR.kernel==='run'?'idle':'off')}<b>kernel</b></div>${agentRow('op')}
+      <div class="ex-h" style="padding-top:14px"><span>Kernel OpenRig</span></div><div class="row" data-act="topo" data-arg="kernel" title="Ouvrir sa topologie"><span class="chev">▾</span>${dot(OR.kernel==='run'?'idle':'off')}<b>kernel</b><span class="meta">${OR.kernel==='run'?'3 sièges':'arrêté'}</span></div>${rigSeats('kernel').map(a=>agentRow(a)).join('')}
       <div class="row mut" data-act="newtab" data-arg="openrig">${ic.mach.replace(/18/g,'12')} Page OpenRig : daemon, kernel, rigs</div>
       <div class="mut" style="font-size:11.5px;padding:8px 8px 0">Clic sur un rig : sa topologie dans un onglet.</div></div></aside>`;
   }
   const projs = {};
   Object.keys(AG).filter(a=>AG[a].kind==='session').forEach(a => (projs[AG[a].proj] = projs[AG[a].proj]||[]).push(a));
   return `<aside class="explorer">
-    <div class="ex-h"><span>Projets</span><button class="kbd" data-act="newtab" data-arg="launch" title="Nouvelle session">+ N</button></div>
+    <div class="ex-h"><span>Projets</span><button class="kbd" data-act="newsession" title="Nouvelle session (N)">+ N</button></div>
     <div class="tree">${Object.keys(projs).map(p=>`<div class="row"><span class="chev">▾</span><b>${p}</b><span class="meta">${projs[p].length}</span></div>${projs[p].map(a=>agentRow(a)).join('')}`).join('')}
       <div class="row"><span class="chev">▸</span><span>pilot</span><span class="meta">0</span></div></div>
     <div class="ex-h"><span>Dispositions</span></div>
@@ -760,7 +770,7 @@ function emptyGroup(g){
   const a = g.from;
   return `<div class="page empty"><h3>Groupe vide</h3><span class="sub">Glisse un onglet ici, ouvre une session depuis l'explorateur, ou :</span>
     <div class="go">${a?`<button class="btn pri" data-act="newtab" data-arg="diff" data-ref="${a}">Modifications · ${AG[a].name}</button><button class="btn" data-act="newtab" data-arg="term" data-ref="${a}">Terminal · ${AG[a].name}</button>`:''}
-      <button class="btn" data-act="newtab" data-arg="launch">Nouvelle session</button><button class="btn" data-act="newtab" data-arg="openrig">OpenRig</button><button class="btn" data-act="newtab" data-arg="settings">Réglages</button><button class="btn" data-act="newtab" data-arg="atelier">Atelier</button><button class="btn" data-act="newtab" data-arg="shell">Terminal</button></div>
+      <button class="btn" data-act="newsession">Nouvelle session</button><button class="btn" data-act="newtab" data-arg="openrig">OpenRig</button><button class="btn" data-act="newtab" data-arg="settings">Réglages</button><button class="btn" data-act="newtab" data-arg="atelier">Atelier</button><button class="btn" data-act="newtab" data-arg="shell">Terminal</button></div>
     ${a?'<span class="sub">Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.</span>':''}</div>`;
 }
 function content(t, g){
@@ -769,7 +779,6 @@ function content(t, g){
     case 'diff': return `<div class="pb">${g.link?`<div class="mut" style="font-size:11.5px">Groupe lié : suit la session choisie dans les groupes de la même couleur.</div>`:''}${diffBody(t.ref)}</div>`;
     case 'term': return `<div class="tabs" style="height:26px;background:var(--pane)"><span class="chip-k" style="margin:auto 8px">${TD[t.ref].kind}</span></div><div class="term">${termBody(t.ref)}</div>`;
     case 'openrig': return orPage();
-    case 'launch': return launchPage();
     case 'settings': return settingsPage();
     case 'atelier': return atelierPage(g);
     case 'topo': return topoPage(t.ref);
@@ -821,7 +830,7 @@ function orPage(){
 }
 function orConfirm(target){ {
     const {action} = st.confirm; const name = target==='daemon'?'le daemon OpenRig':target==='kernel'?'le kernel':target;
-    const busy = target==='daemon' ? Object.keys(AG).filter(a=>AG[a].kind==='seat'&&AG[a].st==='work') : target==='kernel' ? [] : rigSeats(target).filter(a=>AG[a].st==='work');
+    const busy = target==='daemon' ? Object.keys(AG).filter(a=>AG[a].kind==='seat'&&AG[a].st==='work') : rigSeats(target).filter(a=>AG[a].st==='work');
     const cmd = target==='daemon' ? `rig daemon ${action==='stop'?'stop':'restart'}` : target==='kernel' ? `rig ${action==='stop'?'down':'restart'} kernel` : action==='stop' ? `rig down ${target}` : `rig snapshot ${target} && rig down ${target} && rig up ${target} --existing`;
     return `<div class="confirm"><b>${action==='stop'?'Arrêter':'Redémarrer'} ${name} ?</b><span>${busy.length?busy.map(a=>AG[a].name).join(', ')+' travaille'+(busy.length>1?'nt':'')+' en ce moment.':'Aucun siège ne travaille.'}</span><code>${cmd}</code>
       <div class="go"><button class="btn pri" data-act="orok">${action==='stop'?"Confirmer l'arrêt":'Confirmer le redémarrage'}</button><button class="btn" data-act="orno">Annuler</button></div></div>`; }
@@ -837,7 +846,7 @@ function orPageBody(runPill, btns, conf){
           <span class="chk" data-act="tog" data-arg="orRelaunch"><i class="${st.set.orRelaunch!==false?'on':''}">${st.set.orRelaunch!==false?'✓':''}</i>Au démarrage, relancer les rigs qui tournaient</span>
           <span class="chk" data-act="tog" data-arg="orNoKernel"><i class="${st.set.orNoKernel?'on':''}">${st.set.orNoKernel?'✓':''}</i>Sans le kernel</span></div></div>
       <div class="blk"><div class="blk-h">${dot(OR.kernel==='run'?'idle':'off')}<b>Kernel</b>${runPill(OR.kernel)}<span class="sp"></span>${OR.daemon==='run'?btns('kernel', OR.kernel):''}</div>
-        <div class="blk-b">${conf('kernel')}<span class="row" style="padding:0" data-act="open" data-arg="op">${logo('anthropic')}<span>operator · ${OR.kernel==='run'?'attend une consigne':'arrêté'}</span><span class="mut" style="margin-left:8px;font-size:11px">ouvrir</span></span></div></div>
+        <div class="blk-b">${conf('kernel')}${rigSeats('kernel').map(a=>`<span class="row" style="padding:0" data-act="open" data-arg="${a}">${dot(AG[a].st)}${logo(AG[a].prov)}<span>${AG[a].name} · ${AG[a].role}</span><span class="mut" style="margin-left:8px;font-size:11px">ouvrir</span></span>`).join('')}</div></div>
     </div>
     <div class="blk"><div class="blk-h"><b>Rigs</b><span class="sp"></span><span class="sub">Permissions au lancement</span><span class="segc">${['Spec','Auto','Standard','Ouvert','YOLO','Verrouillé'].map(p=>`<span class="${OR.perm===p?'on':''}" data-act="orperm" data-arg="${p}">${p}</span>`).join('')}</span></div>
       ${conf('ledge-dev')}${conf('synapse-review')}
@@ -852,13 +861,17 @@ function orPageBody(runPill, btns, conf){
     <div class="blk"><div class="blk-h"><b>Sortie</b><span class="sub">les commandes rig lancées depuis cet onglet</span></div><div class="term" style="max-height:170px">${st.out.slice(-9).join('\n')}</div></div>
   </div>`;
 }
+function launchModal(){
+  if (!st.launchOpen) return '';
+  return `<div class="modal-bg" data-act="lcancel"></div><div class="modal" role="dialog" aria-label="Nouvelle session"><button class="modal-x" data-act="lcancel" title="Fermer (Échap)">×</button>${launchPage()}</div>`;
+}
 function launchPage(){
   const L = st.launch;
   const ag = p => { const u = USAGE[p], f = u && u.w[0];
     return `<div class="agent ${L.prov===p?'on':''}" data-act="lprov" data-arg="${p}"><span class="an">${logo(p,16)}${HARN[p]}</span><small>${PROV[p]}</small>
       <small>${f?`Limite 5 h <b class="${pctCls(f[1])}">${f[1]} %</b> · réinit. ${f[2]}`:'Limite non lue'}</small></div>`; };
   const radio = (key, val, label) => `<span class="radio" data-act="lset" data-arg="${key}:${val}"><i class="${String(L[key])===String(val)?'on':''}"></i>${label}</span>`;
-  return `<div class="page"><div><h3>Nouvelle session</h3><span class="sub">Ctrl+Entrée lance.</span></div>
+  return `<div class="page"><div><h3>Nouvelle session</h3><span class="sub">S'ouvre ${({active:'dans le groupe actif',right:'dans un groupe à droite',window:'dans une nouvelle fenêtre'})[L.where]}. Ctrl+Entrée lance, Échap ferme.</span></div>
     <div class="fld">
       <label>Projet</label><span class="inp">ledge<span class="mut">· ~/Workspace/ledge · WSL</span><span class="car">▾</span></span>
       <label>Où travailler</label><div class="radios">${radio('wt',true,`Nouvelle branche dans un worktree <input class="cin" data-lbind="branch" value="${esc(L.branch)}" style="height:24px;max-width:220px;font-family:var(--mono);font-size:12px">`)}${radio('wt',false,'Sur <span class="mono">main</span>, dans le dossier du projet')}</div>
@@ -866,7 +879,7 @@ function launchPage(){
       <label>Modèle</label><span class="inp" data-act="lmodel" style="cursor:pointer">${logo(L.prov)}${L.model}<span class="mut">· contexte ${WINDOW[L.prov]}</span><span class="car">▾</span></span>
       <label>Permissions</label><span><span class="segc">${['Auto','Standard','Ouvert','YOLO'].map(p=>`<span class="${L.perm===p?'on':''}" data-act="lset" data-arg="perm:${p}">${p}</span>`).join('')}</span></span>
       <label>Premier message</label><textarea class="ta cin" data-lbind="msg" style="height:80px;padding:8px 10px;resize:vertical">${esc(L.msg)}</textarea>
-      <label>Ouvrir</label><div class="radios" style="flex-direction:row;gap:16px">${radio('where','active','Dans ce groupe')}${radio('where','right','À droite')}${radio('where','window','Nouvelle fenêtre')}</div>
+      <label>Ouvrir</label><div class="radios" style="flex-direction:row;gap:16px">${radio('where','active','Dans le groupe actif')}${radio('where','right','À droite')}${radio('where','window','Nouvelle fenêtre')}</div>
       <span></span><div class="go"><button class="btn pri" data-act="lgo">Lancer <span class="kbd">Ctrl Entrée</span></button><button class="btn" data-act="lcancel">Annuler</button></div>
     </div></div>`;
 }
@@ -910,9 +923,12 @@ function atelierPage(g){
 }
 function topoPage(ref='ledge-dev'){
   const col0 = s => ({perm:'var(--st-perm)',ask:'var(--st-ask)',work:'var(--st-work)',idle:'var(--st-idle)',off:'var(--st-off)'})[s];
-  if (ref==='kernel') return `<div class="page"><h3>kernel</h3><span class="sub">L'opérateur d'OpenRig, le rig qui aide à choisir et lancer les équipes.</span>
-    <div class="topo-box" style="height:120px"><div class="tnode ${AG.op.st==='off'?'off':''}" data-act="open" data-arg="op" style="left:160px;top:60px;border-color:${col0(AG.op.st)}">${dot(AG.op.st)}${logo('anthropic',12)}operator</div></div>
-    <div class="go">${OR.kernel==='run'?`<button class="btn" data-act="or" data-arg="kernel:restart">Redémarrer</button><button class="btn" data-act="or" data-arg="kernel:stop">Arrêter</button>`:`<button class="btn pri" data-act="or" data-arg="kernel:start">Démarrer</button>`}<button class="btn" data-act="newtab" data-arg="openrig">Page OpenRig</button></div>${st.confirm&&st.confirm.target==='kernel'?orConfirm('kernel'):''}</div>`;
+  if (ref==='kernel') { const K = {op:[160,35], adv:[70,130], qw:[250,130]}, kn = a => `<div class="tnode ${AG[a].st==='off'?'off':''}" data-act="open" data-arg="${a}" style="left:${K[a][0]}px;top:${K[a][1]}px;border-color:${col0(AG[a].st)}">${dot(AG[a].st)}${logo(AG[a].prov,12)}${AG[a].name}</div>`;
+    return `<div class="page"><div style="display:flex;align-items:center;gap:10px"><h3>kernel</h3><span class="pill ${OR.kernel==='run'?'run':'stop'}">${OR.kernel==='run'?'en marche':'arrêté'}</span></div>
+    <span class="sub">Le rig d'OpenRig lui-même. L'<b>operator</b> t'aide à choisir et lancer une équipe ; l'<b>advisor</b> relit les plans ; le <b>queue worker</b> route les lignes de queue entre les sièges.</span>
+    <div class="topo-box" style="height:170px"><svg viewBox="0 0 320 170"><g stroke="var(--input)" stroke-width="1.2" fill="none"><path d="M160 35 L70 130"/><path d="M160 35 L250 130"/></g></svg>${kn('op')}${kn('adv')}${kn('qw')}</div>
+    <div class="go"><button class="btn pri" data-act="open" data-arg="op">Parler à l'operator</button>
+    ${OR.kernel==='run'?`<button class="btn" data-act="or" data-arg="kernel:restart">Redémarrer</button><button class="btn" data-act="or" data-arg="kernel:stop">Arrêter</button>`:`<button class="btn pri" data-act="or" data-arg="kernel:start">Démarrer</button>`}<button class="btn" data-act="newtab" data-arg="openrig">Page OpenRig</button></div>${st.confirm&&st.confirm.target==='kernel'?orConfirm('kernel'):''}</div>`; }
   if (ref==='synapse-review') { const R = OR.rigs[ref], s = R.state==='run'?'idle':'off', Q = {lead:[160,30], 'dev-1':[90,110], 'dev-2':[230,110], reviewer:[160,190]};
     return `<div class="page"><div style="display:flex;align-items:center;gap:10px"><h3>synapse-review</h3><span class="pill ${R.state==='run'?'run':'stop'}">${R.state==='run'?'en marche':'arrêté'}</span></div>
     <div class="topo-box"><svg viewBox="0 0 320 220"><g stroke="var(--input)" stroke-width="1.2" fill="none"><path d="M160 30 L90 110"/><path d="M160 30 L230 110"/><path d="M90 110 L160 190"/><path d="M230 110 L160 190"/></g></svg>
@@ -967,7 +983,7 @@ function menuHtml(){
 }
 let palSel = 0;
 function palItems(q){
-  const cmds = [['Nouvelle session',()=>openTab({type:'launch'})],['Ouvrir OpenRig',()=>openTab({type:'openrig'})],['Ouvrir l\'atelier',()=>openTab({type:'atelier'})],
+  const cmds = [['Nouvelle session',()=>{ st.launchOpen = true; render(); }],['Ouvrir OpenRig',()=>openTab({type:'openrig'})],['Ouvrir l\'atelier',()=>openTab({type:'atelier'})],
     ['Ouvrir les réglages',()=>openTab({type:'settings'})],['Nouveau terminal',()=>openTab(newShell())],['Diviser le groupe à droite',()=>doSplit(focusG())],['Afficher ou masquer le panneau du bas',()=>{st.bottom=!st.bottom;render();}],
     ['Enregistrer la disposition',()=>{st.saving=true;st.side='projets';st.sideOpen=true;render();}],
     ...Object.keys(st.layouts).map(n=>[`Disposition : ${n}`,()=>{applyLayout(n);render();}])].map(([l,run])=>({l:'› '+l,run}));
@@ -999,7 +1015,7 @@ function toolTab(kind, ref){
 function orApply(target, action){
   const t = new Date().toTimeString().slice(0,5);
   const log = (c, r) => { st.out.push(`<span class="d">${t} · ${c}</span>`); st.out.push(r); };
-  const seatsOf = r => r==='daemon' ? Object.keys(AG).filter(a=>AG[a].kind==='seat') : r==='kernel' ? ['op'] : rigSeats(r);
+  const seatsOf = r => r==='daemon' ? Object.keys(AG).filter(a=>AG[a].kind==='seat') : r==='kernel' ? rigSeats('kernel') : rigSeats(r);
   const down = r => seatsOf(r).forEach(a => { AG[a]._st = AG[a].st==='off'?AG[a]._st:AG[a].st; AG[a].st='off'; });
   const up = r => seatsOf(r).forEach(a => { AG[a].st = AG[a]._st && AG[a]._st!=='off' ? AG[a]._st : 'idle'; });
   if (target==='daemon') {
@@ -1029,8 +1045,7 @@ function launchGo(){
   const L = st.launch, used = Object.values(AG).map(x=>x.name), name = NAMES.find(n=>!used.includes(n)) || 'Sam';
   const id = name.toLowerCase();
   AG[id] = {name, kind:'session', prov:L.prov, model:L.model, ctx:3, st:'work', branch:L.wt?L.branch:'main', proj:'ledge', files:[], msgs:[{t:'user', h:esc(L.msg)}]};
-  const lt = findTab('launch:'); if (lt && L.where==='active') { lt.g.tabs[lt.i] = S(id); lt.g.active = lt.i; st.focus = lt.g.id; render(); }
-  else { if (lt) closeTab(lt.g, lt.i); openAgent(id, L.where); }
+  st.launchOpen = false; openAgent(id, L.where);
   toast(`Session ${name} lancée · ${HARN[L.prov]} · ${L.model} · ${L.wt?L.branch:'main'}`);
   later(1300, ()=>{ AG[id].msgs.push(T('Read','docs/mockups/ledge-ide-interactive.html')); AG[id].ctx=6; });
   later(3000, ()=>{ AG[id].msgs.push(T('Read','apps/desktop/src/App.tsx')); AG[id].msgs.push({t:'agent', h:'Plan : un registre des types d\'onglets, puis OpenRig et Nouvelle session dedans. Je commence.'}); AG[id].ctx=9; });
@@ -1048,7 +1063,8 @@ document.addEventListener('click', e => {
   switch (act) {
     case 'tab': g.active = +t.dataset.i; st.focus = g.id; afterActivate(g); break;
     case 'close': e.stopPropagation(); closeTab(g, +t.dataset.i); break;
-    case 'plus': { st.focus = g.id; const f = findTab('launch:'); if (f && f.g!==g) { moveTab(f.g, f.i, g); break; } return openTab({type:'launch'}, 'active'); }
+    case 'plus': st.focus = g.id; st.launchOpen = true; st.launch.where = 'active'; break;
+    case 'newsession': st.launchOpen = true; break;
     case 'split': doSplit(g); return;
     case 'detach': g.win = 2; if (!st.groups.some(h=>h.win===1)) newGroup(1); toast('Groupe ouvert dans une nouvelle fenêtre (plus bas sur la page).'); break;
     case 'undock': g.win = 1; break;
@@ -1097,7 +1113,7 @@ document.addEventListener('click', e => {
     case 'lmodel': placeMenu(t, 'lmodel'); break;
     case 'lset': { const [k,...v] = arg.split(':'); const val = v.join(':'); st.launch[k] = k==='wt' ? val==='true' : val; break; }
     case 'lgo': return launchGo();
-    case 'lcancel': { const lt = findTab('launch:'); if (lt) closeTab(lt.g, lt.i); break; }
+    case 'lcancel': st.launchOpen = false; break;
     case 'amode': st.atelier.mode = arg; break;
     case 'asub': st.atelier.hideSub = !st.atelier.hideSub; break;
     case 'toast': toast(arg); break;
@@ -1140,8 +1156,10 @@ document.addEventListener('keydown', e => {
     else if (e.key==='Escape') { st.saving = false; render(); }
     return;
   }
-  if ((e.ctrlKey||e.metaKey) && e.key==='Enter' && findTab('launch:')) { e.preventDefault(); return launchGo(); }
+  if ((e.ctrlKey||e.metaKey) && e.key==='Enter' && st.launchOpen) { e.preventDefault(); return launchGo(); }
+  if (e.key==='Escape' && st.launchOpen) { st.launchOpen = false; return render(); }
   if (typing) return;
+  if ((e.key==='n'||e.key==='N') && !e.ctrlKey && !e.metaKey && !(focusG() && (()=>{ const a = tabAgent(focusG().tabs[focusG().active]); return a && AG[a].req && AG[a].req.kind==='perm'; })())) { st.launchOpen = true; return render(); }
   if (e.key==='Escape') { st.menu=null; st.lim=false; st.confirm=null; return render(); }
   if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='j') { e.preventDefault(); st.bottom=!st.bottom; return render(); }
   if ((e.ctrlKey||e.metaKey) && e.key==='/') { e.preventDefault(); st.right=!st.right; return render(); }
@@ -1174,7 +1192,7 @@ function render(){
     + statusbar() + (st.lim?limPop():'');
   const w2 = st.groups.filter(g=>g.win===2);
   $('#win2').innerHTML = w2.length ? win2(w2) : '';
-  $('#overlay').innerHTML = menuHtml() + (st.toast?`<div class="toast">${st.toast}</div>`:'');
+  $('#overlay').innerHTML = launchModal() + menuHtml() + (st.toast?`<div class="toast">${st.toast}</div>`:'');
   document.querySelectorAll('.pb').forEach(p => p.scrollTop = p.scrollHeight);
   $('#t-size').textContent = st.big ? '1920 × 1080' : '1480 × 880';
   if (st.saving && $('#save-in')) $('#save-in').focus();
