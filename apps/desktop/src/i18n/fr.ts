@@ -305,6 +305,10 @@ export const fr = {
     title: (h: string) => `Limites · ${h}`,
     signedIn: (m: string) => `Compte connecté sur ${m}`, read: (a: string) => `lu il y a ${a}`, lastRead: (a: string) => `dernière lecture il y a ${a}`,
     neverRead: 'pas encore lu', unreachHost: (h: string) => `${h} injoignable`,
+    alertFive: 'fenêtre 5 h', alertWeek: 'semaine', alertModel: (m: string) => `semaine ${m}`,
+    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · remise ${at}` : `${p} %`), alertFull: (at: string | null) => (at ? `Atteinte · reprend ${at}` : 'Atteinte'),
+    notifyTitle: (h: string) => `${h} : limite atteinte`, notifyBody: (w: string, at: string | null) => (at ? `${w} · reprend ${at}` : w),
+    ack: 'Compris',
     and: ' et ', alertAt: (p: number) => `Alerte à ${p} %`, settings: 'Réglages', open: (h: string) => `Limites de ${h} : détail`
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
@@ -338,6 +342,8 @@ export const fr = {
       autostartFailed: 'Windows n’a pas pris ce réglage.', autostartOff: 'Pas de lancement au démarrage',
       tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`,
       context: 'Contexte max', contextHint: 'Au-delà, une session est proche de sa limite : « À toi » propose de passer le relais, et Ledge relève de lui-même une session qui travaille sans demander.',
+      usageAlert: 'Alerte de limite d’usage', usageAlertHint: 'Au-delà, « À toi » prévient qu’une fenêtre d’usage d’un harnais (5 h, semaine, par modèle) approche de sa limite. Les limites sont celles du compte, lues sur chaque machine.',
+      usageAlertSaved: (pct: number) => `Alerte de limite d’usage : ${pct} %`, usageAlertUnknown: 'Aucune machine ne donne encore les limites de ses harnais : mettez à jour Ledge, ou connectez Claude Code.',
       contextSaved: (pct: number) => `Contexte max : ${pct} %`, contextUnknown: 'Mettez à jour le daemon Ledge local pour régler ce seuil.'
     },
     updates: {

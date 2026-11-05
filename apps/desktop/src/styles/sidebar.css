@@ -207,3 +207,12 @@
 .st-btag{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:0 5px 0 4px;border-radius:4px;border:1px solid color-mix(in oklab,var(--info) 45%,transparent);background:color-mix(in oklab,var(--info) 10%,transparent);color:var(--info);font:500 10px/15px 'Geist Mono',monospace;vertical-align:middle;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;flex:none}
 .st-btag.default{border-color:var(--input);background:none;color:var(--muted-foreground)}
 .st-btag i{font-style:normal;opacity:.7;margin-left:2px}
+/* A harness's usage window past the threshold (amber) or reached (red), first in « À toi » (docs/mockups/ledge-harness-usage.html). */
+.st-gico{width:20px;height:20px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;flex:none;margin-top:1px}
+.st-gico.amber{color:var(--warning);background:var(--status-warning-soft, color-mix(in srgb, var(--warning) 12%, transparent))}
+.st-gico.red{color:var(--danger-text);background:var(--status-danger-soft, color-mix(in srgb, var(--destructive) 12%, transparent))}
+.st-usage .st-l1 strong{font-weight:500;font-size:13px;white-space:nowrap}
+.st-usage .st-time.amber{color:var(--warning)}
+.st-usage .st-time.red{color:var(--danger-text)}
+/* A session past « Contexte max », compact on its row (docs/mockups/ledge-harness-usage.html). */
+.st-ctx{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:0 5px;border-radius:5px;font:10.5px 'Geist Mono',monospace;font-weight:400;color:var(--warning);background:var(--status-warning-soft, color-mix(in srgb, var(--warning) 12%, transparent));white-space:nowrap}

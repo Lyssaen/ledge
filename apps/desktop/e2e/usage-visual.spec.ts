@@ -25,10 +25,16 @@ const STATES: Record<string, HarnessUsage[]> = {
   loading: [claude({ status: 'loading', readAt: null, windows: [] })], expired: [claude({ status: 'expired', windows: [] })],
   stale: [claude({ status: 'stale', readAt: at(-12) })], unreachable: [claude({ status: 'unreachable', readAt: at(-25) })]
 };
-const usage = (harnesses: HarnessUsage[]): Omit<UsageStateMessage, 'type' | 'machineId'> => ({ harnesses, alerts: [], prefs: { alert: 0.8 } });
+const ALERTS: UsageStateMessage['alerts'] = [
+  { id: 'claude|a1b2c3d4e5f6|five_hour|-|threshold|x', harness: 'claude', account: 'a1b2c3d4e5f6', window: over.windows[0]!, level: 'threshold', at: at(0) },
+  { id: 'claude|a1b2c3d4e5f6|model|Opus|full|x', harness: 'claude', account: 'a1b2c3d4e5f6', window: over.windows[2]!, level: 'full', at: at(-12) }
+];
+let alerts: UsageStateMessage['alerts'] = [];
+const usage = (harnesses: HarnessUsage[]): Omit<UsageStateMessage, 'type' | 'machineId'> => ({ harnesses, alerts, prefs: { alert: 0.8 } });
 
 // Nova as Ledge launched it, near « Contexte max »' 85 % it is not: 46 %; open 1 h 12 ago.
-const sessions = fleet.map(s => (s.name === 'Nova' ? { ...s, model: 'claude-opus-5-5', effort: 'high', context: { used: 92_000, window: 200_000, at: at(0) }, startedAt: at(-72) } : s));
+const sessions = fleet.map(s => (s.name === 'Nova' ? { ...s, model: 'claude-opus-5-5', effort: 'high', context: { used: 92_000, window: 200_000, at: at(0) }, startedAt: at(-72) }
+  : s.name === 'Pim' ? { ...s, context: { used: 176_000, window: 200_000, at: at(0) } } : s));
 
 async function boot(page: Page, theme: 'dark' | 'light', lang: 'fr' | 'en', harnesses: HarnessUsage[]) {
   await page.addInitScript(([t, l]) => { try { localStorage.setItem('desktop.lang', l!); localStorage.setItem('desktop.theme', t!); } catch { /* ignore */ } }, [theme, lang]);
@@ -79,6 +85,23 @@ for (const theme of ['dark', 'light'] as const) {
     await boot(page, theme, 'fr', STATES.ok!);
     await footer(page).locator('.ugroup').first().waitFor();
     await page.screenshot({ path: info.outputPath(`usage-narrow-${theme}.png`) });
+  });
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`usage alerts and setting, ${theme}`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 1440, height: 860 });
+    alerts = ALERTS;
+    try {
+      await boot(page, theme, 'fr', STATES.over!);
+      await page.locator('.st-usage').first().waitFor();
+      await footer(page).getByRole('button', { name: /Claude Code/ }).click();
+      await page.locator('.usage-pop').getByRole('button', { name: 'Réglages' }).click();
+      await page.getByRole('combobox', { name: 'Alerte de limite d’usage' }).waitFor();
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: info.outputPath(`usage-alert-setting-${theme}.png`) });
+      await page.screenshot({ path: info.outputPath(`usage-zoom-yours-${theme}.png`), clip: { x: 0, y: 200, width: 420, height: 420 } });
+    } finally { alerts = []; }
   });
 }
 

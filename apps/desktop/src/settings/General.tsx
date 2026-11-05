@@ -13,10 +13,12 @@ import { notesBeforeInstall, openWhatsNew } from '../update/whatsNewView';
 import { Card, Row, Segmented, SwitchRow } from './controls';
 import type { SettingsContext } from './SettingsPage';
 import { TOOLS, useDefaultTool } from './tool';
-import { useContextNear } from '@ledge/fleet';
-import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN } from '@ledge/protocol';
+import { useContextNear, useUsage } from '@ledge/fleet';
+import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, USAGE_ALERT_MAX, USAGE_ALERT_MIN } from '@ledge/protocol';
+import { usageThreshold } from '../usage/model';
 
 /** « Contexte max »: 50 % to 95 %, by 5. */
+const ALERTS = Array.from({ length: Math.round((USAGE_ALERT_MAX - USAGE_ALERT_MIN) * 20) + 1 }, (_, i) => Math.round((USAGE_ALERT_MIN + i * 0.05) * 100));
 const NEARS = Array.from({ length: Math.round((CONTEXT_NEAR_MAX - CONTEXT_NEAR_MIN) * 20) + 1 }, (_, i) => Math.round((CONTEXT_NEAR_MIN + i * 0.05) * 100));
 
 /** Settings › General (settings.tsx, `general`): the language, start with Windows, the chat's default agent, then the updates. */
@@ -31,6 +33,15 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const known = ctx.fleet.contextNear() !== undefined;
   const chooseNear = (pct: number) => {
     try { ctx.fleet.setContextNear(pct / 100); ctx.saved(g.contextSaved(pct)); }
+    catch (e) { ctx.notify((e as Error).message); }
+  };
+
+  // The usage alert (docs/mockups/ledge-harness-usage.html): one threshold for every window and harness (M7), kept by each
+  // machine's daemon and sent to all of them; shown as the local one keeps it. Unknown until a machine speaks of usage.
+  const usage = useUsage(ctx.client);
+  const alert = usageThreshold(usage);
+  const chooseAlert = (pct: number) => {
+    try { ctx.fleet.setUsageAlert(pct / 100); ctx.saved(g.usageAlertSaved(pct)); }
     catch (e) { ctx.notify((e as Error).message); }
   };
 
@@ -82,6 +93,13 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
           {describedBy => (
             <select className="set-input" aria-label={g.context} aria-describedby={describedBy} disabled={!known} value={Math.round(near * 100)} onChange={e => chooseNear(Number(e.target.value))}>
               {NEARS.map(p => <option key={p} value={p}>{p} %</option>)}
+            </select>
+          )}
+        </Row>
+        <Row label={g.usageAlert} hint={usage.size ? g.usageAlertHint : g.usageAlertUnknown}>
+          {describedBy => (
+            <select className="set-input" aria-label={g.usageAlert} aria-describedby={describedBy} disabled={!usage.size} value={Math.round(alert * 100)} onChange={e => chooseAlert(Number(e.target.value))}>
+              {ALERTS.map(p => <option key={p} value={p}>{p} %</option>)}
             </select>
           )}
         </Row>

@@ -6,7 +6,7 @@ import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
-import { useAlerts, usePairingAlerts } from './notify/useAlerts';
+import { useAlerts, usePairingAlerts, useUsageNotify } from './notify/useAlerts';
 import { watchedSession } from './notify/watching';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
@@ -27,6 +27,7 @@ import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { UsageFooter } from './usage/UsageFooter';
 import { useUsageView } from './usage/useUsageView';
+import { resetLong } from './usage/model';
 import { LaunchPlace } from './launch/lazy';
 import { ChatPlace, HomePlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
@@ -159,6 +160,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local'), tasks: tasksApi.tasks }, { watching: () => watching.current() });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
+  useUsageNotify(usage.alerts, a => {
+    const u = t.usage;
+    const w = a.window;
+    const window = w.kind === 'five_hour' ? u.alertFive : w.kind === 'seven_day' ? u.alertWeek : u.alertModel(w.model ?? '');
+    return { title: u.notifyTitle(u.harness[a.harness] ?? a.harness), body: u.notifyBody(window, w.resetsAt ? resetLong(w.resetsAt, Date.now(), lang) : null) };
+  });
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
   const pairing = usePairingDialogState(mobile);
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
@@ -361,6 +368,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
           openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
+          usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
           asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}

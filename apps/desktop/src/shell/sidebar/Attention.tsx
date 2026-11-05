@@ -1,5 +1,6 @@
 import { useState, type JSX, type MouseEvent } from 'react';
-import type { HumanAsk, Project, Session, Task } from '@ledge/protocol';
+import type { HumanAsk, Project, Session, Task, UsageAlert } from '@ledge/protocol';
+import { resetLong, resetShort } from '../../usage/model';
 import { Icon } from '@ledge/ui/ui/icons';
 import { sessionOfAsk, whoOf } from '../../asks/model';
 import { SHELL_ICONS } from '../icons';
@@ -17,6 +18,7 @@ import { HelperBot, SessionBot } from '../SessionBot';
 import { quickDecide, type AttnItem } from './model';
 
 const CAP = 4;
+const GAUGE = ['M12 14l4-4', 'M3.3 19a10 10 0 1 1 17.4 0'];
 
 /** « 12 min » / « 1 h » / « 3 d », or the list's « just now ». Same units as the tree. */
 function shortWhen(iso: string, units: { min: string; h: string; d: string }, nowLabel: string): string {
@@ -53,15 +55,20 @@ export function Attention(p: {
   rigAsks?: readonly HumanAsk[];
   sessions?: readonly Session[];
   onSeeAsk?(id: string): void;
+  /** A harness's usage window past the threshold or reached (docs/mockups/ledge-harness-usage.html): first, « Compris » puts it
+   *  away until the window starts again. */
+  usageAlerts?: readonly UsageAlert[];
+  onAckUsage?(id: string): void;
 }): JSX.Element | null {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [all, setAll] = useState(false);
   const [answering, setAnswering] = useState<string | null>(null);
   const tasks = p.ledgeTasks ?? [];
   const near = p.near ?? [];
   const asked = p.decisions ?? [];
   const rigAsks = p.rigAsks ?? [];
-  const count = p.items.length + asked.length + tasks.length + near.length + rigAsks.length;
+  const limits = p.usageAlerts ?? [];
+  const count = limits.length + p.items.length + asked.length + tasks.length + near.length + rigAsks.length;
   if (count === 0) return null;
   const shown = all ? p.items : p.items.slice(0, CAP);
   const units = t.list.when.units;
@@ -73,6 +80,28 @@ export function Attention(p: {
         <span className="st-fill" />
         <Kbd>Alt ↓</Kbd>
       </div>
+      {limits.map(a => {
+        const u = t.usage;
+        const full = a.level === 'full';
+        const w = a.window;
+        const window = w.kind === 'five_hour' ? u.alertFive : w.kind === 'seven_day' ? u.alertWeek : u.alertModel(w.model ?? '');
+        const when = shortWhen(a.at, units, t.list.when.now);
+        const line = full
+          ? u.alertFull(w.resetsAt ? resetShort(w.resetsAt, Date.now(), lang) : null)
+          : u.alertThreshold(w.pct, w.resetsAt ? resetShort(w.resetsAt, Date.now(), lang) : null);
+        return (
+          <div key={`usage:${a.id}`} className="st-card st-task st-usage" data-usage={a.id}>
+            <span className={cls('st-gico', full ? 'red' : 'amber')} aria-hidden="true"><Icon d={GAUGE} size={13} /></span>
+            <div className="st-card-body">
+              <div className="st-l1"><strong>{u.harness[a.harness] ?? a.harness}</strong><span className="st-where" title={window}>{window}</span><span className={cls('st-time', full ? 'red' : 'amber')}>{when}</span></div>
+              <div className="st-l2">
+                <span className="st-req" title={w.resetsAt ? (full ? u.resumes(resetLong(w.resetsAt, Date.now(), lang)) : u.resetAt(resetLong(w.resetsAt, Date.now(), lang))) : undefined}>{line}</span>
+                <button type="button" className="st-qa" onClick={() => p.onAckUsage?.(a.id)}>{u.ack}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
       {rigAsks.map(x => {
         const session = sessionOfAsk(x, p.sessions ?? []);
         const who = whoOf(x, session);
