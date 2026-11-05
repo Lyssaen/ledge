@@ -150,7 +150,7 @@ describe('Réglages › Projets: delete', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Supprimer' }));
     await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
     act(() => t.deliver({ type: 'confirm.challenge', purpose: 'project', challenge: 'Y2hhbGw', rpId: 'relay.example', credentialId: 'AQ', expiresInMs: 60_000 }));
-    expect(await within(sheet).findByText('Vérification annulée. Rien n’a été supprimé.')).toBeInTheDocument();
+    expect(await within(sheet).findByText('Vérification annulée. Rien n’a changé.')).toBeInTheDocument();
     expect(t.of('project.delete')).toEqual([]);
   });
 });

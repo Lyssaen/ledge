@@ -15,6 +15,8 @@ export function normalizePath(raw: string): string {
   return p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p;
 }
 const PathSchema = z.string().max(4096).refine(p => p.startsWith('/') && p === normalizePath(p), 'an absolute, normalized path');
+/** A folder as a project holds it: absolute, normalized (`normalizePath`), at most 4096 characters. */
+export const FolderPathSchema = PathSchema;
 
 /** A folder on one machine: a Git repository or a plain folder (the branch is detected when shown, never stored). */
 export const RepoSchema = z.object({ machine: MachineIdSchema, path: PathSchema });

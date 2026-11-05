@@ -36,7 +36,9 @@ export function fingerprint(m: PhoneOperation): string {
     ...(m.type === 'project.edit' ? [m.id, m.name ?? null, m.color ?? null] : []),
     ...(m.type === 'project.order' ? [m.ids] : []),
     ...(m.type === 'project.create' ? [m.name, m.color] : []),
-    ...(m.type === 'project.delete' ? [m.id, m.moveTo] : [])]);
+    ...(m.type === 'project.delete' ? [m.id, m.moveTo] : []),
+    ...(m.type === 'project.folder.add' ? [m.id, m.path] : []),
+    ...(m.type === 'project.folder.remove' ? [m.id, m.machine, m.path] : [])]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */
