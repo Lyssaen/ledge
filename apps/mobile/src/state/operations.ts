@@ -53,7 +53,7 @@ export const UNCERTAIN_MS = 10_000;
  * made before a reload is not applied after it, on a session that may have moved on. A session's close or resume: an assertion too.
  * A setting: the screen that sent it says how it ended; after a reload the PC's own value shows.
  */
-const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'device.rename' || m.type === 'device.prefs' || m.type === 'context.set' || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.relay.cancel' || m.type === 'chat.launch' || m.type === 'chat.close'
+const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'device.rename' || m.type === 'device.prefs' || m.type === 'context.set' || m.type.startsWith('project.') || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.relay.cancel' || m.type === 'chat.launch' || m.type === 'chat.close'
   || m.type === 'chat.task' || m.type === 'task.seen'
   || m.type === 'daemon.update' || m.type === 'daemon.restart' || m.type === 'session.model' || m.type === 'session.close' || m.type === 'session.resume';
 

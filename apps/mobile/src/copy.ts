@@ -33,7 +33,7 @@ export const copy = {
     label: 'Navigation principale', inbox: 'À traiter', agents: 'Agents', chat: 'Ledge', atelier: 'Atelier',
     /** « Retour », named after the screen it leads to; plain when that screen is not known (after a reload). */
     back: 'Retour',
-    backTo: { inbox: 'Retour aux demandes', agents: 'Retour aux agents', chat: 'Retour à Ledge', atelier: 'Retour à l’Atelier', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour à la connexion' } as Partial<Record<string, string>>
+    backTo: { inbox: 'Retour aux demandes', agents: 'Retour aux agents', chat: 'Retour à Ledge', atelier: 'Retour à l’Atelier', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour aux réglages' } as Partial<Record<string, string>>
   },
   images: {
     attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',
@@ -568,9 +568,32 @@ export const copy = {
     toolPcHint: 'PC : le même agent que le chat de Ledge sur le PC.',
     failed: 'Le PC n’a pas pris ce réglage. Réessayez.',
     offline: 'Reconnectez-vous au PC pour changer ces réglages.',
+    projects: {
+      title: 'Projets',
+      agents: (n: number) => (n === 0 ? 'Aucun agent' : n === 1 ? '1 agent' : `${n} agents`),
+      folders: 'Les dossiers d’un projet et les règles de rangement se règlent sur le PC.',
+      none: 'Aucun projet pour l’instant.',
+      add: 'Nouveau projet', edit: 'Modifier', editLabel: (name: string) => `Modifier ${name}`,
+      up: (name: string) => `Monter ${name}`, down: (name: string) => `Descendre ${name}`,
+      newTitle: 'Nouveau projet', editTitle: 'Modifier le projet', name: 'Nom', color: 'Couleur',
+      colors: { blue: 'Bleu', green: 'Vert', amber: 'Ambre', violet: 'Violet', teal: 'Sarcelle', pink: 'Rose', red: 'Rouge', slate: 'Ardoise' } as Record<'blue' | 'green' | 'amber' | 'violet' | 'teal' | 'pink' | 'red' | 'slate', string>,
+      newBody: 'Un projet vide : ses dossiers s’ajoutent sur le PC.',
+      save: 'Enregistrer', create: 'Créer', cancel: 'Annuler',
+      remove: 'Supprimer le projet…',
+      deleteTitle: (name: string) => `Supprimer ${name} ?`,
+      deleteAgents: (n: number) => (n === 0 ? 'Aucun agent n’y travaille.' : n === 1 ? '1 agent y travaille.' : `${n} agents y travaillent.`),
+      deleteWhere: 'Ses agents, ses dossiers et ses règles :', noProject: 'Sans projet', moveTo: 'Vers un autre projet', target: 'Projet de destination',
+      passkey: 'La passkey de cet appareil confirme la suppression.', noPasskey: 'Protégez d’abord vos accords, dans la section Connexion.',
+      confirmDelete: 'Supprimer',
+      errors: {
+        name_taken: 'Un autre projet porte déjà ce nom.', stale: 'Les projets ont changé sur le PC. Réessayez.',
+        confirm_required: 'Protégez d’abord vos accords, dans la section Connexion.', cancelled: 'Vérification annulée. Rien n’a été supprimé.',
+        expired: 'La vérification a expiré. Recommencez.', failed: 'Le PC n’a pas pris ce changement. Réessayez.'
+      } as Record<string, string>
+    },
     managed: 'Réglés sur le PC',
     terminal: 'Taper dans les terminaux', allowed: 'Autorisé', notAllowed: 'Non autorisé',
-    managedBody: 'L’accès mobile, les appareils liés, les machines et les projets se règlent sur le PC, dans Ledge › Réglages. Un appareil ne peut pas élargir ses propres droits.'
+    managedBody: 'L’accès mobile, les appareils liés, les machines et les dossiers des projets se règlent sur le PC, dans Ledge › Réglages. Un appareil ne peut pas élargir ses propres droits.'
   },
   /** The user left while the PC could not confirm that it removed this phone: shown on the screen they land on. */
   forget: {

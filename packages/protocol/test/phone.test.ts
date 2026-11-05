@@ -509,3 +509,28 @@ describe('phone settings (Réglages)', () => {
     expect(m.type === 'snapshot' && m.device?.prefs).toEqual(prefs);
   });
 });
+
+describe('phone projects (Réglages › Projets)', () => {
+  it('takes a name and colour, an order, an empty project and a deletion, never a folder', () => {
+    for (const m of [
+      { type: 'project.edit', op: OP, id: 'ledge', name: 'Ledge', color: 'blue' },
+      { type: 'project.edit', op: OP, id: 'ledge', color: 'red' },
+      { type: 'project.order', op: OP, ids: ['b', 'a'] },
+      { type: 'project.create', op: OP, name: 'Bots', color: 'green' },
+      { type: 'project.delete', op: OP, id: 'bots', moveTo: null },
+      { type: 'project.delete', op: OP, id: 'bots', moveTo: 'ledge' },
+      { type: 'confirm.prepare', purpose: 'project', project: 'bots', moveTo: null }
+    ]) expect(() => PhoneClientMessageSchema.parse(m)).not.toThrow();
+    for (const m of [
+      { type: 'project.edit', op: OP, id: 'ledge', name: '   ' },
+      { type: 'project.edit', op: OP, id: 'Bad Id', name: 'x' },
+      { type: 'project.edit', op: OP, id: 'ledge', color: 'mauve' },
+      { type: 'project.edit', op: OP, id: 'ledge', repos: [] },
+      { type: 'project.create', op: OP, name: 'x'.repeat(81), color: 'blue' },
+      { type: 'project.create', op: OP, name: 'x', color: 'blue', description: 'y' },
+      { type: 'project.order', op: OP, ids: [] },
+      { type: 'project.delete', op: OP, id: 'bots' },
+      { type: 'project.delete', op: OP, id: 'bots', moveTo: null, rules: [] }
+    ]) expect(() => PhoneClientMessageSchema.parse(m)).toThrow();
+  });
+});

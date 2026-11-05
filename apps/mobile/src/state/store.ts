@@ -2,7 +2,7 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
   type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
@@ -37,7 +37,7 @@ export interface MobileState {
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true } | null;
   /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
   projects: PhoneProject[];
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
@@ -73,7 +73,9 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
   | { purpose: 'terminal'; id: string }
   | { purpose: 'pc'; action: 'update'; version: string } | { purpose: 'pc'; action: 'restart' }
   /** A « yes » to a proposal about the notes (`brain.answer`), bound to that exact choice. */
-  | { purpose: 'note'; task: string; choice: BrainChoice };
+  | { purpose: 'note'; task: string; choice: BrainChoice }
+  /** Deleting a project (`project.delete`), bound to it and to where its agents go. */
+  | { purpose: 'project'; project: string; moveTo: string | null };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;
@@ -134,6 +136,14 @@ export interface MobileStore {
   setDevicePrefs(prefs: DevicePrefs): Promise<ChatAction>;
   /** Sets the PC's « Contexte max », shared with every front (`context.set`). Resolves when the PC answers. */
   setContextNear(near: number): Promise<ChatAction>;
+  /** Renames or recolours a project (`project.edit`); its folders stay as the PC has them. Resolves when the PC answers. */
+  editProject(id: string, change: { name?: string; color?: ProjectColor }): Promise<ChatAction>;
+  /** Puts the projects in this order, every one of them once (`project.order`). Resolves when the PC answers. */
+  orderProjects(ids: string[]): Promise<ChatAction>;
+  /** Creates an empty project, named by the PC (`project.create`). Resolves when the PC answers. */
+  createProject(name: string, color: ProjectColor): Promise<ChatAction>;
+  /** Deletes a project after the device's check; its agents, folders and rules go to `moveTo`, or nowhere (null). */
+  deleteProject(id: string, moveTo: string | null): Promise<ChatAction>;
   interrupt(id: string): string | null;
   /** Closes the session (`session.close`) with the device's assertion over it. The op's id, or null when nothing was sent (not ready, a close already on its way). */
   sessionClose(id: string, assertion: Assertion): string | null;
@@ -550,6 +560,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     return message.op;
   }
 
+  /** A change of the projects (Réglages › Projets), for a PC that takes them; resolved with its outcome. */
+  function projectOp(build: (op: string) => OpMessage): Promise<ChatAction> {
+    if (!state.daemon?.projectEdit) return Promise.resolve({ status: 'rejected', reason: 'unavailable' });
+    const op = write(build);
+    return op === null ? Promise.resolve({ status: 'failed' }) : finalOf(op);
+  }
+
   /** Resolves when the operation is final; an op that was dropped, or stays uncertain for good, is `expired`. */
   function finalOf(op: string): Promise<ChatAction> {
     return new Promise<ChatAction>(resolve => {
@@ -743,6 +760,24 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       if (!state.daemon?.settings) return Promise.resolve({ status: 'rejected', reason: 'unavailable' });
       const op = write(o => ({ type: 'device.prefs', op: o, prefs }));
       return op === null ? Promise.resolve({ status: 'failed' }) : finalOf(op);
+    },
+
+    editProject(id, change) {
+      return projectOp(o => ({ type: 'project.edit', op: o, id, ...change }));
+    },
+
+    orderProjects(ids) {
+      return projectOp(o => ({ type: 'project.order', op: o, ids }));
+    },
+
+    createProject(name, color) {
+      return projectOp(o => ({ type: 'project.create', op: o, name, color }));
+    },
+
+    async deleteProject(id, moveTo) {
+      if (!state.daemon?.projectEdit) return { status: 'rejected', reason: 'unavailable' };
+      if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+      return signedOperation({ purpose: 'project', project: id, moveTo }, (o, assertion) => ({ type: 'project.delete', op: o, id, moveTo, assertion }));
     },
 
     setContextNear(near) {

@@ -248,9 +248,10 @@ S'ouvre depuis la roue dentée en en-tête. Dans l'ordre :
 - **Apparence :** le thème, et « Réduire les animations », propres à cet appareil.
 - **Notifications sur cet appareil :** l'interrupteur principal ; une fois activées, « Agent terminé », « Réponse de Ledge » et « Décision à prendre » se coupent une à une, et « Pause » (1 h, 4 h, jusqu'à demain 8 h) les suspend toutes. Les demandes d'accord et les questions préviennent toujours, sauf pendant une pause.
 - **Ledge :** « Contexte max » (le seuil partagé avec le PC, comme Réglages › Général sur le desktop) et « Agent du chat » (l'agent qui répond aux questions posées depuis cet appareil ; « PC » : le même que le chat du PC).
+- **Projets :** la liste dans son ordre, chaque projet avec sa couleur et ses agents. Monter ou descendre un projet, « Modifier » (nom, couleur), « Nouveau projet » (un projet vide), et « Supprimer le projet… » avec la passkey de l'appareil : ses agents, ses dossiers et ses règles vont sans projet ou vers un autre projet. Les dossiers d'un projet se règlent sur le PC.
 - **Le PC :** met à jour ou redémarre le daemon du PC.
 - **Connexion :** le compte, le serveur, le PC, les empreintes, les versions, et « Protéger les accords ».
-- **Réglés sur le PC :** en lecture seule. L'accès mobile, les appareils liés, « Taper dans les terminaux », les machines et les projets ne se changent que dans Ledge Desktop › Réglages : un appareil ne peut pas élargir ses propres droits.
+- **Réglés sur le PC :** en lecture seule. L'accès mobile, les appareils liés, « Taper dans les terminaux », les machines et les dossiers des projets ne se changent que dans Ledge Desktop › Réglages : un appareil ne peut pas élargir ses propres droits.
 
 On peut aussi s'y déconnecter.
 
@@ -268,7 +269,7 @@ Ces écrans ne sont pas des adresses : l'application les montre d'elle-même, se
 | répondre à un agent, voir ses modifications | Session (desktop), Demande ou Fil (mobile) |
 | voir ce qui l'attend | « À toi » (desktop), À traiter (mobile) |
 | lancer une session lui-même | Nouvelle session (`N`, `Ctrl+Alt+N`) |
-| créer, modifier ou supprimer un projet | Réglages › Projets, ou le menu d'une table |
+| créer, modifier ou supprimer un projet | Réglages › Projets (desktop ou mobile), ou le menu d'une table ; ses dossiers sur le desktop |
 | choisir les notifications d'un téléphone, les mettre en pause | Réglages (mobile) › Notifications sur cet appareil |
 | renommer, archiver, supprimer une session, passer le relais | Session › « Gérer la session » |
 | trancher une décision, suivre une tâche | Accueil › Tâches |

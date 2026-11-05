@@ -15,7 +15,7 @@ import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } fr
 import { SlashCommandSchema } from './commands.js';
 import { HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema } from './openrig.js';
 import { QitemIdSchema, RigRowSchema } from './rigMessages.js';
-import { ProjectColorSchema, ProjectIdSchema } from './projects.js';
+import { ProjectColorSchema, ProjectIdSchema, ProjectNameSchema } from './projects.js';
 import { BrainChoiceSchema } from './tasks.js';
 import { BrainProposalSchema } from './tasks.js';
 
@@ -88,7 +88,8 @@ export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;
 
 /** Why an operation was refused: a refusal code of the local fronts, or one only a phone can meet. */
-export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'scheduled', ...ModelRefusalSchema.options]);
+/** `name_taken`: another project already has that name (case and accents aside). */
+export const OperationReasonSchema = z.enum([...RefusalCodeSchema.options, 'untypable', 'confirm_required', 'conflict', 'assertion_invalid', 'assertion_expired', 'scheduled', 'name_taken', ...ModelRefusalSchema.options]);
 export type OperationReason = z.infer<typeof OperationReasonSchema>;
 
 /** What an adapter knows how to type for a phone, beyond accept, deny and an option number. A phone hides an answer its session's tool cannot give. */
@@ -181,7 +182,8 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 /** `pc`: updating or restarting the PC's daemon (spec 2026-10-28 mobile daemon update). */
 /** `terminal`: taking the hand on a session's terminal (spec 2026-11-02 mobile terminal), bound to the session. */
 /** `rig`: an answer to what OpenRig asks the person (« À toi », lot 3), bound to the row and to that very answer. */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note']);
+/** `project`: deleting a project (Réglages › Projets), bound to the project and to where its agents go. */
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note', 'project']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -273,6 +275,8 @@ export const PcActionSchema = z.enum(['update', 'restart']);
 export type PcAction = z.infer<typeof PcActionSchema>;
 /** The subject a `pc` challenge is bound to: a challenge for one version covers neither another nor a restart. */
 export const pcSubject = (action: PcAction, version?: string): string => (action === 'update' ? `update@${version ?? ''}` : 'restart');
+/** The subject a `project` challenge is bound to: the project deleted and where its agents, folders and rules go (none: ''). */
+export const projectSubject = (id: string, moveTo: string | null): string => `${id}>${moveTo ?? ''}`;
 
 /** A terminal the phone opened, named by the daemon. */
 export const TerminalIdSchema = z.string().regex(/^t_[A-Za-z0-9_-]{8,40}$/);
@@ -329,7 +333,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('confirm.prepare'), purpose: ConfirmPurposeSchema, id: sessionId.optional(), expect: PhoneExpectSchema.optional(), qid: OperationIdSchema.optional(),
     /** A `pc` challenge: what it is for, and for an update the version it covers. */ action: PcActionSchema.optional(), version: z.string().regex(SEMVER).optional(),
     /** A `rig` challenge: the OpenRig row and the exact answer it covers. */ qitem: z.string().min(1).max(200).optional(), answer: HumanAnswerSchema.optional(),
-    /** A `note` challenge: the proposal (a task) and the exact choice it covers. */ task: z.string().min(1).max(40).optional(), choice: BrainChoiceSchema.optional() }),
+    /** A `note` challenge: the proposal (a task) and the exact choice it covers. */ task: z.string().min(1).max(40).optional(), choice: BrainChoiceSchema.optional(),
+    /** A `project` challenge: the project deleted and where its agents go (null: no project). */ project: ProjectIdSchema.optional(), moveTo: ProjectIdSchema.nullable().optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -373,6 +378,15 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('device.prefs'), op: OperationIdSchema, prefs: z.object({
     notify: DevicePrefsSchema.shape.notify.strict(), quietUntil: DevicePrefsSchema.shape.quietUntil, chatTool: DevicePrefsSchema.shape.chatTool
   }).strict() }).strict(),
+  /**
+   * Réglages › Projets (`daemon.projectEdit`): a project's name and colour, the order of the list, an empty project, a deletion.
+   * Never a folder or a rule: the daemon keeps them as they are (a deletion moves them as the desktop's does). The PC names a
+   * new project. A deletion carries the device's check over the project and `moveTo` (purpose `project`).
+   */
+  z.object({ type: z.literal('project.edit'), op: OperationIdSchema, id: ProjectIdSchema, name: ProjectNameSchema.optional(), color: ProjectColorSchema.optional() }).strict(),
+  z.object({ type: z.literal('project.order'), op: OperationIdSchema, ids: z.array(ProjectIdSchema).min(1).max(PHONE_PROJECTS_MAX) }).strict(),
+  z.object({ type: z.literal('project.create'), op: OperationIdSchema, name: ProjectNameSchema, color: ProjectColorSchema }).strict(),
+  z.object({ type: z.literal('project.delete'), op: OperationIdSchema, id: ProjectIdSchema, moveTo: ProjectIdSchema.nullable(), assertion: AssertionSchema.optional() }).strict(),
   /** « Contexte max », the PC's threshold shared by every front (`daemon.settings`): as the desktop's `context.set`. */
   z.object({ type: z.literal('context.set'), op: OperationIdSchema, near: ContextPrefsSchema.shape.near }).strict(),
   /** The phone's push subscription, with the VAPID key it was made with (so a key change is seen). `resolved`: its service
@@ -456,6 +470,8 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
     /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),
     /** The daemon takes `session.broadcast` (« Écrire au groupe »). */ broadcast: z.literal(true).optional(),
+    /** The daemon takes `project.edit`, `project.order`, `project.create` and `project.delete` (Réglages › Projets). */
+    projectEdit: z.literal(true).optional(),
     /** The daemon takes `device.prefs` and `context.set` (the phone's Réglages); the device then carries its `prefs`. */
     settings: z.literal(true).optional(),
     /** The Atelier: the snapshot carries `projects`, each session its `projectId` and `rig`, and `projects` follows each change. Absent (an older PC): no Atelier. */
