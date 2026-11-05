@@ -5,6 +5,7 @@ import { useScreenSize, useTui } from '../context.js';
 import { cells } from '../model/cells.js';
 import { C } from '../theme.js';
 import { fitKeys, KeyBar } from './KeyBar.js';
+import { UsageLine } from './UsageLine.js';
 import { listed, openDecisions } from '../model/overview.js';
 
 /** The smallest terminal the screens are drawn in; below, the frame says so (the screen keeps its state). */
@@ -52,6 +53,7 @@ export function Frame({ crumb, crumbShort, keys, kept, children }: {
       </Box>
       <Box flexGrow={1} flexDirection="column" overflow="hidden">{children}</Box>
       {lastToast ? <Box paddingX={1} height={1}><Text wrap="truncate" color={lastToast.tone === 'error' ? C.red : lastToast.tone === 'ok' ? C.green : lastToast.tone === 'quiet' ? C.dim : C.yellow}>{lastToast.text}</Text></Box> : null}
+      <UsageLine columns={columns} />
       <KeyBar keys={fitKeys(keys, columns, editing ? null : ['?', t.keys.help])} />
     </Box>
   );

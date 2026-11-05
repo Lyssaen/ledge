@@ -2,8 +2,8 @@ import { useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useState } from 'react';
-import { BROADCAST_SILENT, canBroadcast, isPending, useContextNear, useTasks } from '@ledge/fleet';
-import { isOmpSeat, isStoppedOmpSeat, LEDGE_GIVER, projectOf, type Session, type Task } from '@ledge/protocol';
+import { BROADCAST_SILENT, canBroadcast, isPending, resetLong, useContextNear, usageAlerts, useTasks, useUsage } from '@ledge/fleet';
+import { contextNear, contextShare, isOmpSeat, isStoppedOmpSeat, LEDGE_GIVER, projectOf, type Session, type Task } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { closedLedgeTasks, exchanges, helperCount, machineOf, nearContext, nextWaiting, openDecisions, overview, step } from '../model/overview.js';
@@ -38,6 +38,7 @@ export function windowed<T extends { key: string }>(rows: readonly T[], selected
 export function Overview() {
   const tui = useTui();
   const { d, projects, t, g, selected, select, actions, go, attach } = tui;
+  const usage = useUsage(tui.client);
   const { columns, rows: height } = useScreenSize();
   const wide = columns >= WIDE;
   // The left column: wide enough for a topic, never more than half the terminal.
@@ -132,7 +133,15 @@ export function Overview() {
       ...n.branches.flatMap(b => [{ kind: 'branch' as const, key: `${n.key}|${b.branch}`, branch: b.branch, indent: 2 }, ...b.sessions.map(s => ({ kind: 'session' as const, key: s.id, s, indent: 0 }))])
     ];
   });
-  const yoursCount = view.yours.length + decisions.length + closed.length + near.length;
+  // A harness's usage window past the threshold or reached (docs/mockups/ledge-harness-usage.html): a line each, no key of its own.
+  const usageLines = usageAlerts(usage, id => tui.machines.find(m => m.id === id)?.status === 'open').map(a => {
+    const w = a.window;
+    const name = w.kind === 'five_hour' ? t.usage.five5 : w.kind === 'seven_day' ? t.usage.weekAll : t.usage.weekOf(w.model ?? '');
+    const at = w.resetsAt ? resetLong(w.resetsAt, Date.now(), tui.lang) : null;
+    const harness = t.usage.harness[a.harness] ?? a.harness;
+    return { id: a.id, full: a.level === 'full', text: a.level === 'full' ? t.usage.alertFull(harness, name, at) : t.usage.alertThreshold(harness, name, w.pct, at) };
+  });
+  const yoursCount = view.yours.length + decisions.length + closed.length + usageLines.length + near.length;
   const yoursHeight = Math.max(1, Math.min(yoursCount, 6));
   // The status bar, the key bar, the toast, the boxes' borders and titles.
   // The answer's field, or the answer read again whole, across the screen under the boxes.
@@ -167,8 +176,10 @@ export function Overview() {
         <Text key={`decision:${x.id}`} wrap="truncate"><Text color={C.red}>{g.question} </Text><Text color={C.fg}>{t.overview.decision(x.giverName, x.title)}</Text>{x.text ? <Text color={C.dim}> · {oneLine(x.text)}</Text> : null}</Text>
       )), ...closed.slice(0, Math.max(0, yoursHeight - view.yours.length - decisions.length)).map(x => (
         <Text key={x.id} wrap="truncate"><Text color={x.state === 'done' ? C.green : C.yellow}>{x.state === 'done' ? g.ok : g.fail} </Text><Text color={C.fg}>{t.overview.ledgeTask(x.ownerName, x.title, x.state as 'done' | 'refused' | 'dropped')}</Text></Text>
-      )), ...near.slice(0, Math.max(0, yoursHeight - view.yours.length - decisions.length - closed.length)).map(s => (
-        <Text key={`near:${s.id}`} wrap="truncate" backgroundColor={s.id === sel ? C.sel : undefined}><Text color={C.yellow}>{s.handover?.state === 'failed' ? g.fail : '◔'} </Text><Text color={C.fg}>{s.handover?.state === 'failed' ? t.overview.reliefFailed(s.name, s.handover.reason ?? '?') : t.overview.near(s.name, Math.round(((s.context?.used ?? 0) / (s.context?.window ?? 1)) * 100))}</Text></Text>
+      )), ...usageLines.slice(0, Math.max(0, yoursHeight - view.yours.length - decisions.length - closed.length)).map(x => (
+        <Text key={`usage:${x.id}`} wrap="truncate"><Text color={x.full ? C.red : C.yellow}>{g.gauge} </Text><Text color={C.fg}>{x.text}</Text></Text>
+      )), ...near.slice(0, Math.max(0, yoursHeight - view.yours.length - decisions.length - closed.length - usageLines.length)).map(s => (
+        <Text key={`near:${s.id}`} wrap="truncate" backgroundColor={s.id === sel ? C.sel : undefined}><Text color={C.yellow}>{s.handover?.state === 'failed' ? g.fail : g.gauge} </Text><Text color={C.fg}>{s.handover?.state === 'failed' ? t.overview.reliefFailed(s.name, s.handover.reason ?? '?') : t.overview.near(s.name, Math.round(((s.context?.used ?? 0) / (s.context?.window ?? 1)) * 100))}</Text></Text>
       ))]}
     </TitledBox>
   );
@@ -178,7 +189,7 @@ export function Overview() {
         ? <Text key={r.key} wrap="truncate"><Text color={r.color}>{g.project}</Text> <Text color={C.fg} bold>{r.label}</Text> <Text color={C.faint}>{t.overview.sessions(r.count)}</Text></Text>
         : r.kind === 'branch'
           ? <Text key={r.key} wrap="truncate" color={C.faint}>{' '.repeat(r.indent)}{g.branch} {r.branch}</Text>
-          : <SessionRow key={r.key} s={r.s} on={r.s.id === sel} nameW={nameW} topicW={Math.max(6, topicW - r.indent)} stateW={stateW} indent={r.indent} />)}
+          : <SessionRow key={r.key} s={r.s} on={r.s.id === sel} nameW={nameW} topicW={Math.max(6, topicW - r.indent)} stateW={stateW} indent={r.indent} sigW={near.length ? SIG_W : 0} />)}
     </TitledBox>
   );
   const groupBox = (title: string, rows: Row[], rowsHeight: number) => rows.length === 0 ? null : (
@@ -242,8 +253,12 @@ export function Overview() {
   );
 }
 
-function SessionRow({ s, on, nameW, topicW, stateW, indent = 0, group, roleW = 11 }: { s: Session; on: boolean; nameW: number; topicW: number; stateW: number; indent?: number; group?: 'rig' | 'kernel'; roleW?: number }) {
-  const { t, g } = useTui();
+/** The context signal's column in a session row: `◔88%` and a space. */
+const SIG_W = 6;
+
+function SessionRow({ s, on, nameW, topicW, stateW, indent = 0, group, roleW = 11, sigW = 0 }: { s: Session; on: boolean; nameW: number; topicW: number; stateW: number; indent?: number; group?: 'rig' | 'kernel'; roleW?: number; sigW?: number }) {
+  const { t, g, client } = useTui();
+  const near = useContextNear(client);
   const st = botState(s);
   const n = helperCount(s);
   // A stopped OMP seat: all grey, « Arrêté » (docs/mockups/ledge-openrig-omp.html, view 2).
@@ -261,7 +276,10 @@ function SessionRow({ s, on, nameW, topicW, stateW, indent = 0, group, roleW = 1
       {/* In the rigs' and the kernel's boxes the box says the rig: the role (and, for the kernel, the harness) instead. */}
       {group ? <Text color={stopped ? C.faint : C.dim}> {fit(roleTool, topicW - 1)} </Text> : <>
         {s.rig ? <Text color={C.blue}> {rigTag(s)}</Text> : null}
-        <Text color={C.dim}>{fit(seatSecond(s, oneLine(s.topic ?? s.title)), s.rig ? Math.max(0, topicW - rigTag(s).length - 1) : topicW)} </Text>
+        <Text color={C.dim}>{fit(seatSecond(s, oneLine(s.topic ?? s.title)), Math.max(0, (s.rig ? topicW - rigTag(s).length - 1 : topicW) - sigW))} </Text>
+        {/* Its context, compact, only past « Contexte max » (docs/mockups/ledge-harness-usage.html): a column of its own, there
+            while one session of the tree needs it. */}
+        {sigW ? <Text color={C.yellow}>{fit(contextNear(s.context, near) ? `${g.gauge}${Math.round((contextShare(s.context) ?? 0) * 100)}%` : '', sigW)}</Text> : null}
       </>}
       <Text color={s.offline || stopped ? C.faint : STATE_COLOR[st]}>{fit(s.offline ? t.overview.offline : stopped ? t.state.stopped : t.state[st], stateW).trimEnd()}</Text>
       {n > 0 ? <Text color={C.violet}> +{n}</Text> : null}

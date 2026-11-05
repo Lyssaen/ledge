@@ -1,4 +1,4 @@
-import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload, type BrowserLive } from '@ledge/protocol';
+import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, UsagePrefsSchema, type UsagePrefs, type UsageStateMessage, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload, type BrowserLive } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -154,6 +154,31 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let island: IslandPrefs | null | undefined;
   /** The local daemon's context threshold: undefined until it sends it. */
   let contextNear: number | undefined;
+  /** Each machine's last `usage.state` (harness limits, alerts, threshold), by machine id; a machine that goes away takes its own. */
+  let usage: ReadonlyMap<string, UsageStateMessage> = new Map();
+  /** What a machine missed while it was away: the threshold set and the « Compris » given then, sent once it speaks again. */
+  // Kept across the front's restarts (review of 975e508b): a threshold a machine has not received yet, by machine; and every
+  // « Compris » given (an alert's id carries its window's reset, so an id never comes back after it): any machine that shows
+  // one of them is told, an absent one when it comes back, one that raises it later when it does.
+  const USAGE_KEY = `${prefix}.usage.owed`;
+  /** A threshold owed to a machine: the value, when it was set, and what the machine had then (null: never heard from it).
+   *  On its return a machine whose threshold is no longer `was` was set elsewhere since: the newer wins, this one is dropped. */
+  type Owed = { prefs: UsagePrefs; at: number; was: number | null };
+  const OWED_MAX_MS = 24 * 3600_000;
+  const owedPrefs = new Map<string, Owed>();
+  const acked: string[] = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(USAGE_KEY) ?? 'null') as { prefs?: Record<string, Owed>; acked?: string[] } | null;
+    for (const [m, x] of Object.entries(saved?.prefs ?? {})) {
+      const ok = UsagePrefsSchema.safeParse(x?.prefs);
+      if (ok.success && typeof x.at === 'number') owedPrefs.set(m, { prefs: ok.data, at: x.at, was: typeof x.was === 'number' ? x.was : null });
+    }
+    for (const id of saved?.acked ?? []) if (typeof id === 'string') acked.push(id);
+  } catch { /* none kept */ }
+  const ACKED_MAX = 200;
+  const keepOwed = () => { try { localStorage.setItem(USAGE_KEY, JSON.stringify({ prefs: Object.fromEntries(owedPrefs), acked })); } catch { /* memory still holds it */ } };
+  /** The « Compris » already sent to a machine this run, so a state that crosses it is not answered twice. */
+  const ackSent = new Set<string>();
   /** The local daemon's mobile access state: undefined until it sends it. */
   let mobile: MobileState | undefined;
   /** The local daemon's last refused mobile.* command: cleared by the next command and by every mobile broadcast. */
@@ -249,7 +274,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
   function apply(next: MachineConfig[]) {
     configuring = true;
-    for (const [id, p] of peers) if (!next.some(c => !c.disabled && c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); }
+    for (const [id, p] of peers) if (!next.some(c => !c.disabled && c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); if (usage.has(id)) { const next = new Map(usage); next.delete(id); usage = next; } if (owedPrefs.delete(id)) keepOwed(); }
     configs = next;
     for (const c of active()) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
     if (!peers.has(selected)) selected = 'local';
@@ -348,6 +373,27 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       // An answer goes out once, from the machine asked; a state that follows an action goes out from any machine.
       if (m.requestId !== undefined) { if (rigAsks.get(m.requestId)?.machine !== machine) return; rigAsks.delete(m.requestId); }
       emit({ ...m, machineId: machine }); return;
+    }
+    // Each machine's harness limits, tagged with it: a front groups machines by account and drops a machine that went away.
+    if (m.type === 'usage.state') {
+      if (available(p)) {
+        const owed = owedPrefs.get(machine);
+        if (owed) {
+          owedPrefs.delete(machine); keepOwed();
+          // Set elsewhere since (it no longer has what it had), or owed too long to a machine never heard from: not sent.
+          const changed = owed.was !== null && m.prefs.alert !== owed.was;
+          const tooOld = owed.was === null && Date.now() - owed.at > OWED_MAX_MS;
+          if (!changed && !tooOld && owed.prefs.alert !== m.prefs.alert) p.client.send({ type: 'usage.set', prefs: owed.prefs });
+        }
+        for (const a of m.alerts) {
+          if (!acked.includes(a.id) || ackSent.has(`${machine}|${a.id}`)) continue;
+          ackSent.add(`${machine}|${a.id}`);
+          p.client.send({ type: 'usage.ack', id: a.id });
+        }
+      }
+      const tagged = { ...m, machineId: machine };
+      usage = new Map(usage).set(machine, tagged); listeners.forEach(fn => fn());
+      emit(tagged); return;
     }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'session.commands.listing') { const l = commandLists.get(m.requestId); if (l?.machine === machine) { commandLists.delete(m.requestId); emit({ ...m, id: l.id }); } return; }
@@ -562,6 +608,14 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         coordinator.client.send({ type: 'chat.route', qid: msg.qid, text: msg.text, tool: msg.tool, context }); return;
       }
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
+      // The usage threshold and « Compris » go to the machine named (local by default); a front sends them to each machine it
+      // means. Before the session routing below: an alert's `id` is not a session's. An offline machine: nothing to send.
+      if (msg.type === 'usage.set' || msg.type === 'usage.ack') {
+        const target = peers.get(msg.machineId ?? 'local');
+        if (!available(target)) return;
+        const { machineId: _m, ...rest } = msg;
+        target!.client.send(rest); return;
+      }
       let machine = selected; let outgoing: ClientMessage = msg;
       if (msg.type === 'session.commands') {
         const origin = splitId(msg.id);
@@ -717,6 +771,27 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         local.send({ type: 'terminal.release', id: origin.id });
       },
       tasks: () => taskList,
+      usage: () => usage,
+      setUsageAlert(alert) {
+        const prefs = UsagePrefsSchema.parse({ alert });
+        // One threshold for every machine (M7): each daemon keeps its own copy, so each is told.
+        // A machine away gets it when it comes back.
+        // Every machine configured, heard from this run or not: one away gets it when it comes back.
+        for (const [id, peer] of peers) {
+          if (available(peer)) { peer.client.send({ type: 'usage.set', prefs }); owedPrefs.delete(id); }
+          else owedPrefs.set(id, { prefs, at: Date.now(), was: usage.get(id)?.prefs.alert ?? owedPrefs.get(id)?.was ?? null });
+        }
+        keepOwed();
+      },
+      ackUsage(id) {
+        // The same account on two machines: the same alert on both, put away on both.
+        if (!acked.includes(id)) { acked.push(id); if (acked.length > ACKED_MAX) acked.splice(0, acked.length - ACKED_MAX); keepOwed(); }
+        for (const [machine, u] of usage) {
+          if (!u.alerts.some(a => a.id === id) || !available(peers.get(machine))) continue;
+          ackSent.add(`${machine}|${id}`);
+          peers.get(machine)!.client.send({ type: 'usage.ack', id });
+        }
+      },
       contextNear: () => contextNear,
       setContextNear(near) {
         const valid = ContextPrefsSchema.parse({ near });

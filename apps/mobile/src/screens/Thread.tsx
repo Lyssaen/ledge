@@ -1,3 +1,4 @@
+import { CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseReply } from '@ledge/ui/reply/parse';
 import { copy } from '../copy';
@@ -8,6 +9,7 @@ import { loadDraft, markCleared, saveDraft, takeFocus, wasCleared } from '../sta
 import { isLive } from '../state/operations';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
+import { indicators } from '../model/usage';
 import { BackLink, LinkStatus, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
@@ -226,6 +228,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
           <div className="min-w-0 flex-1">
             <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere] phone-side:truncate phone-side:text-base">{omp ? session.name : session.topic ?? session.project}</h1>
             <p className="mt-[3px] text-meta text-muted phone-side:truncate">{session.name} · {copy.tools[session.tool]}<span className="hidden phone-side:inline"> · {where}</span></p>
+            <Chips session={session} threshold={state.device?.contextNear ?? CONTEXT_NEAR} now={now} />
           </div>
           <a href={href({ name: 'terminal', sessionId })} aria-label={copy.thread.terminal(session.name)} className={iconButtonClass({ variant: 'outline' })}>
             <Icon name="terminal" />
@@ -265,5 +268,26 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
       </>}
       {sheet && <EndSheet store={store} session={session} mode={sheet} onClose={() => setSheet(null)} onSent={() => { setSent(true); setSheet(null); }} onReconnect={onReconnect} />}
     </>
+  );
+}
+
+/** The session's indicators under its title (docs/mockups/ledge-harness-usage.html, phone 3): model and effort, context, duration;
+ *  what is not known is not there. Hidden on a phone on its side, where the header is one line. */
+function Chips({ session, threshold, now }: { session: PhoneSession; threshold: number; now: number }) {
+  const i = indicators(session, now, threshold);
+  const chip = 'inline-flex items-center gap-1.5 rounded-full border border-line px-[9px] py-[3px] text-[11.5px] text-muted';
+  const model = [i.model, i.effort].filter(Boolean).join(' · ');
+  if (!model && !i.context && !i.duration) return null;
+  return (
+    <div data-chips="" className="mt-2 flex flex-wrap gap-1.5 phone-side:hidden">
+      {model && <span className={chip}>{model}</span>}
+      {i.context && <span className={`${chip} ${i.context.near ? 'text-attention' : ''}`}>{copy.agents.context(i.context.pct)}</span>}
+      {i.duration && (
+        <span className={chip}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+          {i.duration}
+        </span>
+      )}
+    </div>
   );
 }

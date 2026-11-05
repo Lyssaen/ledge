@@ -295,6 +295,22 @@ export const fr = {
     chat: 'Chat Ledge', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
     panelShow: 'Afficher le panneau : shells et modifications', panelHide: 'Masquer le panneau', panelShowTitle: 'Afficher le panneau : shells et modifications (O)', panelHideTitle: 'Masquer le panneau (O)', terminalGone: 'Siège arrêté : plus de terminal'
   },
+  usage: {
+    harness: { claude: 'Claude Code', codex: 'Codex' } as Record<string, string>,
+    five: '5 h', week: 'Semaine', weekShort: 'Sem.',
+    session5: 'Session · 5 h', weekAll: 'Semaine · tous modèles', weekOf: (m: string) => `Semaine · ${m}`, perModel: 'Par modèle',
+    resetAt: (t: string) => `remise à ${t}`, resetIn: (t: string, d: string) => `remise à ${t} · dans ${d}`, resumes: (t: string) => `reprend à ${t}`,
+    ago: (a: string) => `il y a ${a}`, unreachable: 'injoignable',
+    expired: 'session expirée : reconnectez-vous dans Claude Code', expiredShort: 'reconnectez-vous',
+    title: (h: string) => `Limites · ${h}`,
+    signedIn: (m: string) => `Compte connecté sur ${m}`, read: (a: string) => `lu il y a ${a}`, lastRead: (a: string) => `dernière lecture il y a ${a}`,
+    neverRead: 'pas encore lu', unreachHost: (h: string) => `${h} injoignable`,
+    alertFive: 'fenêtre 5 h', alertWeek: 'semaine', alertModel: (m: string) => `semaine ${m}`,
+    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · remise ${at}` : `${p} %`), alertFull: (at: string | null) => (at ? `Atteinte · reprend ${at}` : 'Atteinte'),
+    notifyTitle: (h: string) => `${h} : limite atteinte`, notifyBody: (w: string, at: string | null) => (at ? `${w} · reprend ${at}` : w),
+    ack: 'Compris',
+    and: ' et ', alertAt: (p: number) => `Alerte à ${p} %`, settings: 'Réglages', open: (h: string) => `Limites de ${h} : détail`
+  },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
   sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', notes: 'Notes', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
@@ -326,6 +342,8 @@ export const fr = {
       autostartFailed: 'Windows n’a pas pris ce réglage.', autostartOff: 'Pas de lancement au démarrage',
       tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`,
       context: 'Contexte max', contextHint: 'Au-delà, une session est proche de sa limite : « À toi » propose de passer le relais, et Ledge relève de lui-même une session qui travaille sans demander.',
+      usageAlert: 'Alerte de limite d’usage', usageAlertHint: 'Au-delà, « À toi » prévient qu’une fenêtre d’usage d’un harnais (5 h, semaine, par modèle) approche de sa limite. Les limites sont celles du compte, lues sur chaque machine.',
+      usageAlertSaved: (pct: number) => `Alerte de limite d’usage : ${pct} %`, usageAlertUnknown: 'Aucune machine ne donne encore les limites de ses harnais : mettez à jour Ledge, ou connectez Claude Code.',
       contextSaved: (pct: number) => `Contexte max : ${pct} %`, contextUnknown: 'Mettez à jour le daemon Ledge local pour régler ce seuil.'
     },
     updates: {
@@ -824,6 +842,12 @@ export const fr = {
   },
   session: {
     meta: 'Machine et dépôts',
+    metaLine: {
+      model: 'Modèle', effort: 'Effort', context: 'Contexte', duration: 'Durée', effortIs: (e: string) => `effort ${e}`,
+      atLaunch: 'choisi au lancement', fromTranscript: 'lu dans le transcript',
+      tokens: (u: string, w: string, near: number) => `${u} / ${w} jetons · relève à ${near} %`,
+      openedAt: (at: string, age: string) => `ouverte à ${at}, il y a ${age}`, seenAt: (at: string, age: string) => `vue par Ledge à ${at}, il y a ${age}`
+    },
     /** An OMP seat of OpenRig: no thread, its Terminal view; stopped, its terminal gone (docs/mockups/ledge-openrig-omp.html). */
     rigTerminalOnly: { title: 'Pas de fil pour ce siège.', body: 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Sa vue Terminal montre son écran : ce que tu y tapes lui est envoyé.' },
     rigStopped: { title: 'Siège arrêté.', body: 'Son terminal n’existe plus : la page OpenRig montre son rig.' }, badgeStopped: 'Arrêté',

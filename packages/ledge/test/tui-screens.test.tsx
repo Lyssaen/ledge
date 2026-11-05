@@ -213,8 +213,8 @@ describe('ledge tui: the session thread (#95 lot A)', () => {
       expect(reply.filter(l => /^│ {3}\S/.test(l)).length).toBe(4);
       const field = reply.findIndex(l => l.includes('REFUSER EN EXPLIQUANT'));
       expect(reply[field + 1]).toContain('❯');
-      // The field one line high, the thread has the rows left.
-      expect(reply.some(l => l.includes('OTTO · CÂBLER'))).toBe(true);
+      // The field one line high, the thread has the rows left (under 120 columns its title drops the topic first).
+      expect(reply.some(l => l.includes('OTTO · CLAUDE CODE'))).toBe(true);
     } finally { await tui.cleanup(); }
   });
 
@@ -380,7 +380,8 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
       await until(() => sent(tui.daemon.received, 'chat.act').length === 1);
       expect(sent(tui.daemon.received, 'chat.act')[0]).toMatchObject({ rows: [0], deny: true });
       await tui.press('o');
-      await until(() => tui.frame().includes('NOVA · RECONNEXION SSH DU FLEET'));
+      // The session's thread; under 120 columns its title drops the topic first (docs/mockups/ledge-harness-usage.html).
+      await until(() => tui.frame().includes('NOVA · CODEX'));
     } finally { await tui.cleanup(); }
   });
 

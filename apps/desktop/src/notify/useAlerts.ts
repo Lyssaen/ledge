@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { DaemonStatus, MachineState, SessionChange } from '@ledge/fleet';
-import { openDecision, type MobileState, type Session, type Task } from '@ledge/protocol';
+import { openDecision, type MobileState, type Session, type Task, type UsageAlert } from '@ledge/protocol';
 import type { Cue } from '@ledge/ui/sounds/cues';
 import { decideSound } from '@ledge/ui/sounds/decide';
 import type { SoundPlayer } from '@ledge/ui/sounds/player';
@@ -143,6 +143,33 @@ export function usePairingAlerts(mobile: MobileState | undefined, deps: Pick<Ale
       seen.current.add(p.id);
       if (l.dnd || (l.deps.focused ?? windowFocused)()) continue;
       (l.deps.toast ?? nativeToast)(l.title, p.label);
+    }
+  }, [key]);
+}
+
+/** An alert born longer ago than this was seen by an earlier Desktop, or while this one was closed: never announced. */
+export const USAGE_NOTIFY_MS = 2 * 60_000;
+
+/**
+ * A harness's usage window reached (docs/mockups/ledge-harness-usage.html, M6): the system notification, only at 100 %, once
+ * per alert (`at` is when the daemon first saw it, kept across restarts: an old one is not announced again), only while
+ * Desktop is behind or in the tray, never in Do not disturb. Past the threshold, « À toi » alone says it.
+ */
+export function useUsageNotify(alerts: readonly UsageAlert[], say: (a: UsageAlert) => { title: string; body: string }, deps: Pick<AlertDeps, 'toast' | 'focused' | 'now'> = {}): void {
+  const [dnd] = useDnd();
+  const live = useRef({ dnd, say, deps });
+  live.current = { dnd, say, deps };
+  const seen = useRef(new Set<string>());
+  const key = alerts.filter(a => a.level === 'full').map(a => a.id).join('\n');
+  useEffect(() => {
+    const l = live.current;
+    const now = (l.deps.now ?? Date.now)();
+    for (const a of alerts) {
+      if (a.level !== 'full' || seen.current.has(a.id)) continue;
+      seen.current.add(a.id);
+      if (now - Date.parse(a.at) > USAGE_NOTIFY_MS || l.dnd || (l.deps.focused ?? windowFocused)()) continue;
+      const { title, body } = l.say(a);
+      (l.deps.toast ?? nativeToast)(title, body);
     }
   }, [key]);
 }

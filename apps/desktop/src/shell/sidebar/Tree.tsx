@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from 'react';
-import type { Helper, Projects, Session } from '@ledge/protocol';
+import { contextShare, type Helper, type Projects, type Session } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import type { Filing } from '../../atelier/filing';
 import { useI18n } from '../../i18n/lang';
@@ -72,8 +72,20 @@ const isEnded = (s: Session): boolean => s.state === 'exited';
 /** Project, then branch when the project has several, then session, then subagents.
  *  One branch folds into the project. The eye (docs/mockups/ledge-projects-eye.html): pressed, the projects with a live agent
  *  (`groups`, the others counted in `hiddenProjects`), their ended sessions behind « +N terminées »; released, every project, all open. */
+const CTX_GAUGE = ['M12 14l4-4', 'M3.3 19a10 10 0 1 1 17.4 0'];
+/** A session past « Contexte max »: the gauge and « 88 % », amber, its context in the title. Nothing below it. */
+function CtxSignal({ session, near }: { session: Session; near: number }) {
+  const { t } = useI18n();
+  const share = contextShare(session.context);
+  if (share === undefined || share < near) return null;
+  const pct = Math.round(share * 100);
+  return <span className="st-ctx" title={t.handover.gauge(pct)}><Icon d={CTX_GAUGE} size={11} />{pct} %</span>;
+}
+
 export function Tree(p: {
   groups: ProjectGroup[];
+  /** « Contexte max »: past it a row says its context, compactly (docs/mockups/ledge-harness-usage.html, « ◔ 88 % »). */
+  near?: number;
   /** What is folded (projects and branches, by `projectKey`): held by the sidebar, so its menus fold too. */
   closed: ReadonlySet<string>;
   onClosed: Dispatch<SetStateAction<Set<string>>>;
@@ -219,7 +231,7 @@ export function Tree(p: {
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
           onClick={e => { if (!helper && p.onPick && (e.ctrlKey || e.metaKey)) p.onPick(s.id); else if (helper) p.onOpen(s.id, helper.id); else p.onOpen(s.id); }}>
-          <strong>{name}{!helper && <AutoMark session={s} />}{!helper && <RigTag session={s} />}{!helper && !p.byBranch && <BranchTag session={s} />}</strong>{task && <span>{task}</span>}
+          <strong>{name}{!helper && <AutoMark session={s} />}{!helper && <RigTag session={s} />}{!helper && !p.byBranch && <BranchTag session={s} />}{!helper && p.near !== undefined && <CtxSignal session={s} near={p.near} />}</strong>{task && <span>{task}</span>}
         </button>
         {subs.length > 0 && !open && <span className="st-kids" title={t.side.kids(subs.length)}>{subs.length}</span>}
         <span className={cls('st-time', waiting && timeClass)}>{s.offline ? t.side.offline : shortWhen(s.lastActivityAt, t.list.when.units, t.list.when.now)}</span>

@@ -6,7 +6,7 @@ import { loadMessages } from './i18n/messages';
 import { useFleet } from './fleet/useFleet';
 import { useDecisions } from './fleet/decisions';
 import { useWaits } from './fleet/waits';
-import { useAlerts, usePairingAlerts } from './notify/useAlerts';
+import { useAlerts, usePairingAlerts, useUsageNotify } from './notify/useAlerts';
 import { watchedSession } from './notify/watching';
 import { getDnd, setDnd, useDnd } from './notify/prefs';
 import { MarkdownLinks } from '@ledge/ui/documents/links';
@@ -25,6 +25,9 @@ import { Sidebar } from './shell/Sidebar';
 import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
+import { UsageFooter } from './usage/UsageFooter';
+import { useUsageView } from './usage/useUsageView';
+import { resetLong } from './usage/model';
 import { LaunchPlace } from './launch/lazy';
 import { ChatPlace, HomePlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
@@ -133,6 +136,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const asks = useOpenRigAsks(fleetClient, localMachine?.ready && localMachine.daemon?.openrigAsks ? 'local' : null);
   const [askFocus, setAskFocus] = useState<{ id: string; n: number } | null>(null);
   const island = useIsland(fleetClient);
+  const usage = useUsageView(fleetClient, machines);
+  const footMachines = useMemo(() => machines.map(m => ({ id: m.id, label: m.label, offline: m.status === 'unreachable', count: sessions.filter(s => (s.machineId ?? 'local') === m.id).length })), [machines, sessions]);
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
   const sidebarOpenRig = useSidebarOpenRig(fleetClient, machines);
@@ -155,6 +160,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const alerts = useAlerts({ sessions, machines, status, daemonUpdating: daemonUpdates.updating.has('local'), tasks: tasksApi.tasks }, { watching: () => watching.current() });
   // A device asking to be linked: the dialog below opens on any screen, the notification only while Desktop is behind.
   usePairingAlerts(mobile);
+  useUsageNotify(usage.alerts, a => {
+    const u = t.usage;
+    const w = a.window;
+    const window = w.kind === 'five_hour' ? u.alertFive : w.kind === 'seven_day' ? u.alertWeek : u.alertModel(w.model ?? '');
+    return { title: u.notifyTitle(u.harness[a.harness] ?? a.harness), body: u.notifyBody(window, w.resetsAt ? resetLong(w.resetsAt, Date.now(), lang) : null) };
+  });
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
   const pairing = usePairingDialogState(mobile);
   // The tray's « Nouvelle session » opens its dialog; « Ne pas déranger » switches without showing the window.
@@ -280,7 +291,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Whom a broadcast dialog writes to, as its title names them: the project's name, or the picked sessions' names.
   const addressees = (to: BroadcastTo) => ('project' in to ? projects?.projects.find(x => x.id === to.project)?.name ?? to.project
     : to.sessions.map(id => sessions.find(s => s.id === id)?.name ?? id).join(', '));
-  const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
   // The New session form starts on the overview's project filter (a project id, not « all » nor « none »).
   const base = place.kind === 'settings' ? place.back : place;
   const filter = base.project !== 'all' && base.project !== 'none' ? base.project : undefined;
@@ -358,6 +368,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
           openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
           ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
+          usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
           asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
@@ -374,7 +385,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
                 tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />}
-          {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
+          <Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines}
+            usage={<UsageFooter groups={usage.groups} threshold={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} />} />
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}

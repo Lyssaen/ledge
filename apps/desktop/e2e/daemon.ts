@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { BrowserLive, HumanAsk, HumanChannel, OpenRigAnswered, OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool } from '@ledge/protocol';
+import type { BrowserLive, HumanAsk, HumanChannel, OpenRigAnswered, OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool, UsageStateMessage } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -39,13 +39,17 @@ export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'o
 export interface FakeRoles { list: RoleSummary[]; details: Record<string, RoleDetail>; files: Record<string, string>; openrigVersion?: string }
 export async function fakeDaemon(page: Page, initial: Session[], extras: { machines?: Machines; launcher?: string[]; recents?: Recent[]; daemon?: DaemonInfo; projects?: Projects; threads?: Record<string, ThreadItem[]>; documents?: Record<string, string>; repoInfo?: Record<string, { exists: boolean; branch: string | null }>; folders?: Record<string, Folder>; home?: string; launches?: 'auto' | 'manual'; chat?: ChatReply; found?: Record<string, Found>; scanDelayMs?: number; island?: IslandPrefs | null | 'unknown'; models?: Partial<Record<Tool, ModelChoice[]>>; /** What `session.commands` answers, for every session. */ commands?: SlashCommand[]; openrig?: OpenRigState; rigSpecs?: RigSpec[]; /** Images the daemon already holds, by id (no preview: a preview get is served the whole image). */ images?: Record<string, { mime: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }>; roles?: FakeRoles; /** « À toi » (docs/vision/ledge-human-channel-contract.md): the channel and what OpenRig asks the person; answers end as `answered`. */ asks?: { channel: HumanChannel; asks: HumanAsk[]; answered?: Partial<OpenRigAnswered> };
   /** The agents' browsers (docs/mockups/ledge-browser-live.html), by session: their state, and the image a `browser.watch` gets (JPEG, base64). */
-  browsers?: Record<string, { live: Omit<BrowserLive, 'type'>; frame?: string }> } = {}) {
+  browsers?: Record<string, { live: Omit<BrowserLive, 'type'>; frame?: string }>;
+  /** The harnesses' limits (`usage.state`, docs/mockups/ledge-harness-usage.html), sent after the island; `usage.set` and
+   *  `usage.ack` change them and send them again. */
+  usage?: Omit<UsageStateMessage, 'type' | 'machineId'> } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
   let machines: Machines = extras.machines ?? [{ id: 'local', label: 'Local' }];
   let projects: Projects | undefined = extras.projects;
   let island: IslandPrefs | null | 'unknown' = extras.island ?? null;
+  let usage = extras.usage;
   let socket: WebSocketRoute | null = null;
   let up = true;
   let launches = 0;
@@ -59,6 +63,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     ws.send(JSON.stringify({ type: 'machines', machines }));
     if (projects) ws.send(JSON.stringify({ type: 'projects', projects }));
     if (island !== 'unknown') ws.send(JSON.stringify({ type: 'island', prefs: island }));
+    if (usage) ws.send(JSON.stringify({ type: 'usage.state', ...usage }));
     for (const b of browsers.values()) if (b.live.state !== 'none') ws.send(JSON.stringify({ type: 'browser.live', ...b.live }));
     ws.onMessage(m => {
       let msg: ClientMessage;
@@ -88,6 +93,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
           ...(msg.launch.plan ? { check: { status: 'planned', errors: [], warnings: Array.from({ length: n }, (_, i) => `dev.s${i}: permission_policy absent; launch_posture=floor`) } } : {}) }));
       }
       if (msg.type === 'openrig.act' && extras.openrig) { ws.send(JSON.stringify({ type: 'openrig.done', requestId: msg.requestId, ok: true, commands: [] })); ws.send(JSON.stringify({ type: 'openrig.state', state: extras.openrig })); }
+      if (msg.type === 'usage.set' && usage) { usage = { ...usage, prefs: msg.prefs }; ws.send(JSON.stringify({ type: 'usage.state', ...usage })); }
+      if (msg.type === 'usage.ack' && usage) { usage = { ...usage, alerts: usage.alerts.filter(a => a.id !== msg.id) }; ws.send(JSON.stringify({ type: 'usage.state', ...usage })); }
       if (msg.type === 'island.set') { island = msg.prefs; ws.send(JSON.stringify({ type: 'island', prefs: island })); }
       if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }
       if (msg.type === 'session.decide') { const s = sessions.get(msg.id); if (s) { const { pending: _p, ...rest } = s; const next = { ...rest, state: 'working' as const }; sessions.set(s.id, next); ws.send(JSON.stringify({ type: 'session.updated', session: next })); } }

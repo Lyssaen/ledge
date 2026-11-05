@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
-import type { DaemonClient } from '@ledge/fleet';
-import { contextShare, isArchived, isOmpSeat, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
+import { useContextNear, type DaemonClient } from '@ledge/fleet';
+import { SessionMeta } from '../usage/SessionMeta';
+import { isArchived, isOmpSeat, type Helper, type Session, type ThreadItem, taskClosed, latestTodos } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import type { Decisions } from '../fleet/decisions';
@@ -448,7 +449,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   const since = whenOf(session, undefined, now, t.list.when).text;
   const waitedFor = whenOf(session, p.waits.get(session.id)?.since, now, t.list.when).text;
   const place = p.nav.place;
-  const share = contextShare(session.context);
+  const near = useContextNear(p.client);
   const kids = helper === null ? session.helpers ?? [] : [];
   const tb = t.session.browser;
   const pill = pillOf(kindOf(browser, isLocal(session)), captures.length);
@@ -466,7 +467,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
             </button>
           ); })}
         </div>
-        <span className="pane-meta mono" title={t.session.meta}>{[machine, repoOf(session), ...(share !== undefined ? [t.handover.gauge(Math.round(share * 100))] : [])].filter(Boolean).join(' · ')}</span>
+        <SessionMeta session={session} place={[machine, repoOf(session)].filter((x): x is string => !!x)} near={near} />
         {/* On Terminal, where the agent's screen runs, and « ouvrir dans un terminal externe ». */}
         {view === 'terminal' && agent.mode.kind !== 'native' && <span className="term-chip mono">{agent.remote ? t.session.terminal.remote(agent.host) : t.session.terminal.local}</span>}
         {view === 'terminal' && agent.mode.kind !== 'browser' && agent.mode.kind !== 'offline' && agent.mode.kind !== 'native' && (

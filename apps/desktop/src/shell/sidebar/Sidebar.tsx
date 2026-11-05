@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import type { MachineState } from '@ledge/fleet';
-import { BROADCAST_SESSIONS_MAX, type HumanAsk, type Project, type Projects, type Session } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX, type HumanAsk, type Project, type Projects, type Session, type UsageAlert } from '@ledge/protocol';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
@@ -57,6 +57,9 @@ export function Sidebar(p: {
   /** « À toi »: what OpenRig's rigs ask the person; « Voir » opens the home on the card. */
   asks?: readonly HumanAsk[];
   onSeeAsk?(id: string): void;
+  /** The harnesses' usage alerts (docs/mockups/ledge-harness-usage.html), first in « À toi »; « Compris » acks one. */
+  usageAlerts?: readonly UsageAlert[];
+  onAckUsage?(id: string): void;
 }): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -156,7 +159,7 @@ export function Sidebar(p: {
           <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
           <span className="st-ledge-names">
             <span className="st-ledge-brand">Ledge<span className="brand-dot">.</span></span>
-            <small className="st-ledge-line">{t.side.ledgeLine(attn.length + decisions.length + (p.ledge?.closedTasks ?? 0) + near.length + (p.asks?.length ?? 0))}</small>
+            <small className="st-ledge-line">{t.side.ledgeLine((p.usageAlerts?.length ?? 0) + attn.length + decisions.length + (p.ledge?.closedTasks ?? 0) + near.length + (p.asks?.length ?? 0))}</small>
           </span>
           <Kbd>/</Kbd>
         </button>
@@ -178,6 +181,7 @@ export function Sidebar(p: {
       <div className="st-scroll">
         <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
           rigAsks={p.asks ?? []} sessions={p.sessions} {...(p.onSeeAsk ? { onSeeAsk: p.onSeeAsk } : {})}
+          usageAlerts={p.usageAlerts ?? []} {...(p.onAckUsage ? { onAckUsage: p.onAckUsage } : {})}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
           decisions={decisions} answer={p.tasksApi?.answer} answerNote={p.tasksApi?.answerNote}
@@ -189,7 +193,7 @@ export function Sidebar(p: {
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host ?? null);
           }} />
         {!byRig && <section aria-label={t.side.projects}>
-          <Tree groups={shownGroups} closed={closed} onClosed={setClosed} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
+          <Tree near={p.tasksApi?.near} groups={shownGroups} closed={closed} onClosed={setClosed} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
             hideDone={prefs.hideDone} hiddenProjects={hiddenProjects} anySession={groups.some(g => g.branches.some(b => b.sessions.length > 0))} dense={prefs.dense} byBranch={prefs.byBranch} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}

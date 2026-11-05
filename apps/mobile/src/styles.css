@@ -124,3 +124,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   transition: none !important;
   scroll-behavior: auto !important;
 }
+
+/* The harnesses' logos and gauges (docs/mockups/ledge-harness-usage.html): Claude Code's coral, Codex's violet, as the desktop. */
+:root { --h-claude: #b8694c; --h-codex: #5b58c2; --u-gauge: color-mix(in srgb, var(--foreground) 42%, transparent); --u-track: color-mix(in srgb, var(--foreground) 9%, transparent); }
+:root[data-theme="dark"] { --h-claude: #d4906f; --h-codex: #8f8cf0; --u-gauge: color-mix(in srgb, var(--foreground) 48%, transparent); --u-track: color-mix(in srgb, var(--foreground) 11%, transparent); }
+.harness-claude { color: var(--h-claude); }
+.harness-codex { color: var(--h-codex); }

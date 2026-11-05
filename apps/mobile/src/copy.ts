@@ -52,6 +52,13 @@ export const copy = {
       state: { open: 'ouverte', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' },
       calm: 'Rien ne t’attend. Demande à Ledge ce que tu veux savoir ou faire.',
       near: (pct: number) => `contexte ${pct} %`, nearHint: 'La relève se lance depuis le PC.',
+      /** The harnesses' limits (docs/mockups/ledge-harness-usage.html, « LIMITES »): percent and reset only. */
+      limits: 'LIMITES', limitsLabel: 'Limites', harness: { claude: 'Claude Code', codex: 'Codex' } as Record<string, string>,
+      harnessShort: { claude: 'Claude', codex: 'Codex' } as Record<string, string>,
+      five: '5 h', week: 'Semaine', model: (m: string) => m,
+      resumes: (at: string) => `reprend à ${at}`, loading: 'Lecture en cours…',
+      notOnPc: 'Lecture impossible : reconnectez Claude Code sur le PC.', unreach: (age: string) => `Pas de lecture depuis ${age}.`, unreachNever: 'Lecture impossible pour l’instant.', stale: (age: string) => `Lu il y a ${age}.`,
+      reachedLabel: (h: string, w: string) => `${h} · ${w} atteinte`, overLabel: (h: string, w: string, p: number) => `${h} · ${w} à ${p} %`,
       /** A decision a session put to the user: answered in the chat, through the card Ledge proposes. */
       decision: 'Décision', asks: 'te demande', answer: 'Répondre', answerLabel: (title: string) => `Répondre à « ${title} »`,
       someone: 'Une session',

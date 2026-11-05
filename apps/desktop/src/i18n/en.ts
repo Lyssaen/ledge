@@ -269,6 +269,22 @@ export const en: Messages = {
     chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     panelShow: 'Show the panel: shells and changes', panelHide: 'Hide the panel', panelShowTitle: 'Show the panel: shells and changes (O)', panelHideTitle: 'Hide the panel (O)', terminalGone: 'Seat stopped: no terminal'
   },
+  usage: {
+    harness: { claude: 'Claude Code', codex: 'Codex' } as Record<string, string>,
+    five: '5 h', week: 'Week', weekShort: 'Wk',
+    session5: 'Session · 5 h', weekAll: 'Week · all models', weekOf: (m: string) => `Week · ${m}`, perModel: 'By model',
+    resetAt: (t: string) => `resets at ${t}`, resetIn: (t: string, d: string) => `resets at ${t} · in ${d}`, resumes: (t: string) => `resumes at ${t}`,
+    ago: (a: string) => `${a} ago`, unreachable: 'unreachable',
+    expired: 'session expired: sign in again in Claude Code', expiredShort: 'sign in again',
+    title: (h: string) => `Limits · ${h}`,
+    signedIn: (m: string) => `Account signed in on ${m}`, read: (a: string) => `read ${a} ago`, lastRead: (a: string) => `last read ${a} ago`,
+    neverRead: 'not read yet', unreachHost: (h: string) => `${h} unreachable`,
+    alertFive: '5 h window', alertWeek: 'week', alertModel: (m: string) => `${m} week`,
+    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · resets ${at}` : `${p} %`), alertFull: (at: string | null) => (at ? `Reached · resumes ${at}` : 'Reached'),
+    notifyTitle: (h: string) => `${h}: limit reached`, notifyBody: (w: string, at: string | null) => (at ? `${w} · resumes ${at}` : w),
+    ack: 'Got it',
+    and: ' and ', alertAt: (p: number) => `Alert at ${p} %`, settings: 'Settings', open: (h: string) => `${h} limits: detail`
+  },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
   sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', notes: 'Notes', shortcuts: 'Keyboard shortcuts', about: 'About' },
@@ -299,6 +315,8 @@ export const en: Messages = {
       autostartFailed: 'Windows did not take this setting.', autostartOff: 'No start with Windows',
       tool: 'Default agent', toolHint: 'For Ledge’s chat and its cards.', toolSaved: (name) => `Default agent: ${name}`,
       context: 'Max context', contextHint: 'Past it, a session is near its limit: « Your turn » offers to hand it over, and Ledge relieves on its own a session that works without asking.',
+      usageAlert: 'Usage limit alert', usageAlertHint: 'Past it, « For you » warns that a harness usage window (5 h, week, per model) is nearing its limit. Limits are the account’s, read on each machine.',
+      usageAlertSaved: (pct) => `Usage limit alert: ${pct} %`, usageAlertUnknown: 'No machine gives its harnesses’ limits yet: update Ledge, or sign in to Claude Code.',
       contextSaved: (pct) => `Max context: ${pct} %`, contextUnknown: 'Update the local Ledge daemon to set this threshold.'
     },
     updates: {
@@ -785,6 +803,12 @@ export const en: Messages = {
   },
   session: {
     meta: 'Machine and repositories',
+    metaLine: {
+      model: 'Model', effort: 'Effort', context: 'Context', duration: 'Duration', effortIs: (e: string) => `effort ${e}`,
+      atLaunch: 'chosen at launch', fromTranscript: 'read from the transcript',
+      tokens: (u: string, w: string, near: number) => `${u} / ${w} tokens · relief at ${near} %`,
+      openedAt: (at: string, age: string) => `opened at ${at}, ${age} ago`, seenAt: (at: string, age: string) => `seen by Ledge at ${at}, ${age} ago`
+    },
     rigTerminalOnly: { title: 'No thread for this seat.', body: 'Ledge does not read the conversation of an OMP seat launched by OpenRig. Its Terminal view shows its screen: what you type there is sent to it.' },
     rigStopped: { title: 'Seat stopped.', body: 'Its terminal is gone: the OpenRig page shows its rig.' }, badgeStopped: 'Stopped',
     subagent: 'Subagent',

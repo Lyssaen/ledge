@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BROADCAST_SESSIONS_MAX, CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
 import { agentsOf, type AgentRow } from '../model/agents';
+import { indicators } from '../model/usage';
 import { closingHere, endedAtLabel } from '../model/sessionEnd';
 import { useNow } from '../useNow';
 import { requestsOf } from '../model/requests';
@@ -16,6 +17,26 @@ import { TabBar } from '../ui/TabBar';
 import { closedTasks } from '../model/tasks';
 import { Icon } from '../ui/icons';
 import { useAtelierTab } from '../ui/layout';
+
+/** A session's line of indicators (docs/mockups/ledge-harness-usage.html, phone 2): model · effort · context · duration, what is
+ *  not known left out; then its relief. The context in amber past « Contexte max ». */
+function Indicators({ session, threshold, now }: { session: PhoneSession; threshold: number; now: number }) {
+  const i = indicators(session, now, threshold);
+  const parts: { text: string; warn?: boolean }[] = [
+    ...(i.model ? [{ text: i.model }] : []),
+    ...(i.effort ? [{ text: i.effort }] : []),
+    ...(i.context ? [{ text: copy.agents.context(i.context.pct), warn: i.context.near }] : []),
+    ...(i.duration ? [{ text: i.duration }] : []),
+    ...(session.handover ? [{ text: session.handover.state === 'done' && session.handover.toName ? copy.agents.relievedBy(session.handover.toName) : copy.agents.relief[session.handover.state] }] : []),
+    ...(session.relieves ? [{ text: copy.agents.relieves(session.relieves.name) }] : [])
+  ];
+  if (!parts.length) return null;
+  return (
+    <p data-indicators="" className="mt-[5px] text-meta text-muted">
+      {parts.map((x, n) => <span key={n} className={x.warn ? 'text-attention' : undefined}>{n > 0 ? ' · ' : ''}{x.text}</span>)}
+    </p>
+  );
+}
 
 /**
  * One session. A close of this phone under way reads « Fermeture… » over the session's own state; an ended one says when. Closing
@@ -37,15 +58,7 @@ function Row({ row, session, offline, threshold, plan, closing, now }: { row: Ag
           {row.botName}{row.branch && <> · <code className={`font-mono text-[.9em] ${row.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{row.branch}</code></>}
         </div>
         {row.last && <p className="mt-[5px] line-clamp-2 text-small [overflow-wrap:anywhere] text-muted">{row.last}</p>}
-        {session && (session.context || session.handover || session.relieves) && (
-          <p className="mt-[5px] text-meta text-muted">
-            {[session.context ? copy.agents.context(Math.round((session.context.used / session.context.window) * 100)) : null,
-              session.handover ? (session.handover.state === 'done' && session.handover.toName ? copy.agents.relievedBy(session.handover.toName) : copy.agents.relief[session.handover.state]) : null,
-              session.relieves ? copy.agents.relieves(session.relieves.name) : null].filter(Boolean).map((x, i) => (
-              <span key={i} className={i === 0 && session.context && session.context.used / session.context.window >= threshold ? 'text-attention' : undefined}>{i > 0 ? ' · ' : ''}{x}</span>
-            ))}
-          </p>
-        )}
+        {session && <Indicators session={session} threshold={threshold} now={now} />}
         <div className="mt-2 flex items-center gap-2.5">
           <Tag {...(closing ? { tone: 'attention' as const, label: copy.chat.closing } : row.status)} />
           {!closing && row.endedAt && <span className="text-meta text-muted">{endedAtLabel(row.endedAt, now)}</span>}

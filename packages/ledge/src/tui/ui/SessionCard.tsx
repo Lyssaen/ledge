@@ -1,10 +1,11 @@
 import { Box, Text } from 'ink';
-import { liveHelpers } from '@ledge/fleet';
+import { liveHelpers, modelName, span } from '@ledge/fleet';
 import { contextNear, offers, type Session } from '@ledge/protocol';
 import { useContextNear } from '@ledge/fleet';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useTui } from '../context.js';
-import { machineLabel, modelLabel, TOOL_NAME } from '../model/labels.js';
+import { machineLabel, TOOL_NAME } from '../model/labels.js';
+import { useNow } from './now.js';
 import { choices } from '../model/pending.js';
 import { oneLine } from '../model/time.js';
 import { C, STATE_COLOR } from '../theme.js';
@@ -20,6 +21,14 @@ export function Button({ label, k, primary, danger, off }: { label: string; k: s
 }
 
 /** What the session is (state, agent, model, machine, branch, helpers) and its request with the keys that answer it. */
+/** How long the session has been open (or seen by Ledge), by the minute; nothing for a date it cannot read. */
+export function SessionAge({ s }: { s: Session }) {
+  const { lang } = useTui();
+  const now = Math.floor(useNow() / 60_000) * 60_000;
+  const at = Date.parse(s.startedAt);
+  return Number.isFinite(at) ? <Text color={C.dim}> · {span(Math.max(0, now - at), lang)}</Text> : null;
+}
+
 export function SessionCard({ s, note }: { s: Session; note?: boolean }) {
   const tui = useTui();
   const { t, g } = tui;
@@ -34,9 +43,11 @@ export function SessionCard({ s, note }: { s: Session; note?: boolean }) {
       <Text wrap="truncate">
         <Text color={STATE_COLOR[state]}>{g[state]} {t.state[state]}</Text>
         {s.rig ? <Text color={C.blue}>  {t.overview.rigSeat(s.rig.name, s.rig.role ?? s.rig.seat)}</Text> : null}
-        <Text color={C.dim}>  {TOOL_NAME[s.tool]} · {modelLabel(s, t.session.defaultModel)}</Text>
+        {/* Model and effort, launched with or read from the transcript (N1): what is not known is not shown. */}
+        <Text color={C.dim}>  {[TOOL_NAME[s.tool], [s.model ? modelName(s.model) : '', s.effort ? t.usage.efforts[s.effort] ?? s.effort : ''].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}</Text>
         {/* Its context, before what is cut first on a narrow terminal (context handover spec §3.2). */}
         {s.context ? <Text color={contextNear(s.context, threshold) ? C.yellow : C.dim}> · {t.overview.context(Math.round((s.context.used / s.context.window) * 100))}</Text> : null}
+        <SessionAge s={s} />
         <Text color={C.dim}> · {machineLabel(s)}{s.branch ? ` · ${g.branch} ${s.branch}` : ''}</Text>
         {s.offline ? <Text color={C.yellow}>  {t.overview.offline}</Text> : s.source === 'hook_only' ? <Text color={C.faint}>  {t.overview.readOnly}</Text> : null}
       </Text>

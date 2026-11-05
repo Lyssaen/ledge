@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
 import { daemonStore, attachClient } from '../src/store';
+import { usageAlerts } from '../src/usage';
 import type { DaemonClient, DaemonStatus } from '../src/client';
 import { LOCAL_MACHINE, canManage, parseMachines, probeMachine, shellCommand, sshProblem, terminalCommand, type MachineState } from '../src/machines';
 import { fakeSession } from './mockDaemon';
@@ -362,6 +363,104 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'models.listing').slice(-2).map(m => m.type === 'models.listing' && [m.requestId, m.error])).toEqual([['m4', 'offline'], ['m5', 'offline']]);
     local.emit({ type: 'models.listing', requestId: 'm2', tool: 'claude', models: [] });
     expect(got.filter(m => m.type === 'models.listing').at(-1)).toMatchObject({ requestId: 'm2' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
+  it('keeps each machine\'s usage; the threshold goes to every machine, « Compris » to those that hold the alert', () => {
+    const { client, local, server } = setup();
+    const alert = { id: 'claude|a1b2c3d4e5f6|five_hour|-|threshold|-', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: { kind: 'five_hour' as const, pct: 84, resetsAt: null }, level: 'threshold' as const, at: '2026-11-05T14:00:00.000Z' };
+    const state = (alerts: typeof alert[]) => ({ type: 'usage.state' as const, harnesses: [], alerts, prefs: { alert: 0.8 } });
+    expect(client.fleet!.usage().size).toBe(0);
+    local.emit(state([alert])); server.emit(state([]));
+    expect([...client.fleet!.usage().keys()]).toEqual(['local', 'server']);
+    expect(client.fleet!.usage().get('local')?.machineId).toBe('local');
+    client.fleet!.setUsageAlert(0.9);
+    expect(local.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }]);
+    expect(server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }]);
+    client.fleet!.ackUsage(alert.id);
+    expect(local.sent.at(-1)).toEqual({ type: 'usage.ack', id: alert.id });
+    expect(server.sent).toHaveLength(1);
+    expect(() => client.fleet!.setUsageAlert(0.2)).toThrow();
+  });
+
+  it('a machine away when the threshold or « Compris » was given gets them once it speaks again (review of 39e21fa2)', () => {
+    const { client, local, server, snapshot } = setup();
+    const alert = { id: 'x', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: { kind: 'five_hour' as const, pct: 100, resetsAt: null }, level: 'full' as const, at: new Date().toISOString() };
+    const state = { type: 'usage.state' as const, harnesses: [], alerts: [alert], prefs: { alert: 0.8 } };
+    local.emit(state); server.emit(state);
+    server.set('unreachable');
+    client.fleet!.setUsageAlert(0.9);
+    client.fleet!.ackUsage('x');
+    expect(server.sent).toEqual([]);
+    server.set('open'); server.emit({ ...snapshot, sshAlias: remote.ssh }); server.emit(state);
+    expect(server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }, { type: 'usage.ack', id: 'x' }]);
+    // Once only: the next state sends nothing more.
+    server.emit({ ...state, prefs: { alert: 0.9 }, alerts: [] });
+    expect(server.sent).toHaveLength(2);
+  });
+
+  it('what a machine away missed survives the front\'s restart; a « Compris » follows an alert born there later (review of 975e508b)', () => {
+    const a = (pct: number) => ({ id: 'claude|acc|five_hour|-|threshold|r1', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: { kind: 'five_hour' as const, pct, resetsAt: null }, level: 'threshold' as const, at: new Date().toISOString() });
+    const st = (alerts: ReturnType<typeof a>[], alert = 0.8) => ({ type: 'usage.state' as const, harnesses: [], alerts, prefs: { alert } });
+    const first = setup();
+    first.local.emit(st([a(84)])); first.server.emit(st([]));
+    first.server.set('unreachable');
+    first.client.fleet!.setUsageAlert(0.9);
+    // The alert is raised on Local only; « Compris » there. The server, away, will raise the same one later.
+    first.client.fleet!.ackUsage(a(84).id);
+    expect(first.local.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }, { type: 'usage.ack', id: a(84).id }]);
+    expect(first.server.sent).toEqual([]);
+    // The front quits; a new one starts (same storage), the server comes back with the alert and its old threshold.
+    first.client.close?.();
+    const again = setup();
+    again.server.emit(st([a(84)]));
+    expect(again.server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }, { type: 'usage.ack', id: a(84).id }]);
+    // Once: the server's next state (it has both) sends nothing more.
+    again.server.emit(st([], 0.9));
+    expect(again.server.sent).toHaveLength(2);
+  });
+
+  it('a machine never heard from this run gets the threshold when it comes; one set elsewhere since keeps its own (review of 05601442)', () => {
+    const st = (alert: number) => ({ type: 'usage.state' as const, harnesses: [], alerts: [], prefs: { alert } });
+    // The server is away from the start: it never sent its usage.
+    const a = setup();
+    a.local.emit(st(0.8));
+    a.server.set('unreachable');
+    a.client.fleet!.setUsageAlert(0.9);
+    a.server.set('open'); a.server.emit({ ...a.snapshot, sshAlias: remote.ssh }); a.server.emit(st(0.8));
+    expect(a.server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }]);
+    localStorage.clear();
+    // Seen at 0.8, then away; set to 0.9 here. Meanwhile another front set it to 0.7 there: on its return 0.7 stays.
+    const b = setup();
+    b.local.emit(st(0.8)); b.server.emit(st(0.8));
+    b.server.set('unreachable');
+    b.client.fleet!.setUsageAlert(0.9);
+    b.server.set('open'); b.server.emit({ ...b.snapshot, sshAlias: remote.ssh }); b.server.emit(st(0.7));
+    expect(b.server.sent).toEqual([]);
+  });
+
+  it('an offline machine\'s alert counts only while its reading is under an hour old, as its windows (review of 39e21fa2)', () => {
+    const old = new Date(Date.now() - 2 * 3600_000).toISOString();
+    const fresh = new Date(Date.now() - 10 * 60_000).toISOString();
+    const w = { kind: 'five_hour' as const, pct: 100, resetsAt: null };
+    const st = (readAt: string) => ({ type: 'usage.state' as const, harnesses: [{ harness: 'claude' as const, account: 'a1b2c3d4e5f6', status: 'ok' as const, readAt, windows: [w] }], alerts: [{ id: 'x', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: w, level: 'full' as const, at: readAt }], prefs: { alert: 0.8 } });
+    expect(usageAlerts(new Map([['server', st(old)]]), () => false)).toEqual([]);
+    expect(usageAlerts(new Map([['server', st(fresh)]]), () => false)).toHaveLength(1);
+    expect(usageAlerts(new Map([['server', st(old)]]), () => true)).toHaveLength(1);
+  });
+
+  it('relays each machine\'s usage tagged with it, and sends the threshold and « Compris » to the machine named (local by default)', () => {
+    const { client, local, server, got } = setup();
+    const state = { type: 'usage.state' as const, harnesses: [{ harness: 'claude' as const, account: 'a1b2c3d4e5f6', status: 'ok' as const, readAt: '2026-11-05T14:00:00.000Z', windows: [] }], alerts: [], prefs: { alert: 0.8 } };
+    server.emit(state); local.emit(state);
+    expect(got.filter(m => m.type === 'usage.state').map(m => m.type === 'usage.state' && m.machineId)).toEqual(['server', 'local']);
+    client.send({ type: 'usage.set', prefs: { alert: 0.9 }, machineId: 'server' });
+    client.send({ type: 'usage.ack', id: 'x' });
+    expect(server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }]);
+    expect(local.sent).toEqual([{ type: 'usage.ack', id: 'x' }]);
+    // An offline machine: nothing is sent, nothing answers.
+    server.set('unreachable');
+    client.send({ type: 'usage.ack', id: 'y', machineId: 'server' });
+    expect(server.sent).toHaveLength(1);
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
   it('routes session.commands to the session\'s machine, relays only its listing with the qualified id, answers offline and outdated', () => {
