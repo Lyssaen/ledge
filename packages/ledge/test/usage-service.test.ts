@@ -230,6 +230,29 @@ describe('the usage service: another account signs in', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('a refusal outlives a local expiry and a token refreshed for the same account: still expired, nothing shown, until a read succeeds', async () => {
+    let t = T0, expiresAt = T0 + 3_600_000, gen = 1;
+    const calls: string[] = [];
+    const answers = [{ status: 200, body: { five_hour: { utilization: 91, resets_at: '2026-11-05T18:00:00Z' } } }, { status: 401 }, { status: 200, body: API }];
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: `tok-${gen}`, expiresAt } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: 'acc-A' } });
+      throw new Error('ENOENT');
+    };
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { calls.push(h.Authorization!); const a = answers.shift()!; return { status: a.status, body: a.body ? JSON.stringify(a.body) : '', headers: {} }; } });
+    await svc.tick(); // 91 %
+    t += READ_EVERY_MS; await svc.tick(); // 401
+    expect(svc.state().harnesses[0]!.status).toBe('expired');
+    expiresAt = t - 1; t += 10_000; await svc.tick(); // the local token expires
+    expiresAt = t + 3_600_000; gen = 2; t += 10_000; await svc.tick(); // Claude Code refreshes it, same account
+    expect(svc.state().harnesses[0]).toMatchObject({ status: 'expired', windows: [] });
+    expect(calls).toHaveLength(2);
+    t += READ_EVERY_MS; await svc.tick(); // the next read, at its time, succeeds
+    expect(calls).toEqual(['Bearer tok-1', 'Bearer tok-1', 'Bearer tok-2']);
+    expect(svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
   it('a Retry-After past a day is waited a day', async () => {
     const m = switching([{ status: 429, headers: { 'retry-after': String(3 * 24 * 3600) } }]);
     await m.svc.tick();

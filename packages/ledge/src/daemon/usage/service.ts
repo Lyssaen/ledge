@@ -76,14 +76,15 @@ export function createUsage(deps: UsageDeps): UsageService {
   const kept = readKept(deps.file);
 
   // Claude Code.
-  let signedIn = false, expired = false, failed = false, attempted = false;
+  let signedIn = false, failed = false, attempted = false;
   let readAt: number | null = null, windows: UsageWindow[] = [], nextAt = 0, backoff = 0;
   /** Who is signed in, as last seen: the account (the token's fingerprint when the account is not known). Another account signed
    *  in since: the previous one's windows and refusal are dropped, never shown under it. */
   let identityOf: string | null = null;
-  /** Why `expired` holds: the token's own time has passed (`local`, read from the file on each tick), or Anthropic refused it
-   *  (`refused`, a 401, for the account then signed in). Neither outlives its cause: a valid token again, or another account. */
-  let expiredBy: 'local' | 'refused' | null = null;
+  /** The two causes of « expired », which can hold together: the token in Claude Code's file is past its time (`localExpired`,
+   *  read again on each tick), and Anthropic refused the token of the account signed in (`refused`, a 401). A refusal ends only
+   *  with a read that succeeds or another account signing in: a token that expires then comes back meanwhile does not end it. */
+  let localExpired = false, refused = false;
   let account: string | null = null, accountAt = -Infinity, accountOf = '';
   let ua: string | undefined, uaAt = -Infinity;
   // Codex.
@@ -99,7 +100,7 @@ export function createUsage(deps: UsageDeps): UsageService {
   };
 
   const statusOf = (): HarnessUsage['status'] => {
-    if (expired) return 'expired';
+    if (localExpired || refused) return 'expired';
     if (!attempted && readAt === null) return 'loading';
     if (failed) return 'unreachable';
     if (readAt === null || now() - readAt > STALE_MS) return readAt === null ? 'loading' : 'stale';
@@ -155,7 +156,7 @@ export function createUsage(deps: UsageDeps): UsageService {
     const home = deps.home;
     const token = await readClaudeToken(home, env, now(), deps.read);
     signedIn = token !== null;
-    if (token === null) { expired = false; expiredBy = null; return; }
+    if (token === null) { localExpired = false; return; }
     // The account is told only for the token Claude Code keeps in its file, the one `~/.claude.json` goes with; an environment
     // token may be another account's: none then. A token that changed (another sign-in) has its account read again.
     const which = token === 'expired' ? 'file:expired' : `${token.from}:${createHash('sha256').update(token.token).digest('hex')}`;
@@ -163,16 +164,16 @@ export function createUsage(deps: UsageDeps): UsageService {
       account = token !== 'expired' && token.from === 'env' ? null : await readClaudeAccount(home, deps.read);
       accountAt = now(); accountOf = which;
     }
-    if (token === 'expired') { expired = true; expiredBy = 'local'; return; }
-    // A valid token again (Claude Code signed in again): its own expiry is over.
-    if (expiredBy === 'local') { expired = false; expiredBy = null; }
+    if (token === 'expired') { localExpired = true; return; }
+    // A valid token again (Claude Code signed in again): its own expiry is over; a refusal of this account still stands.
+    localExpired = false;
     // The windows belong to the account they were read for: Claude Code refreshing its token keeps them, another account signed
     // in drops them at once (shown as loading, or unreachable while a 429's wait runs). The next read stays when it was due.
     const identity = account ?? which;
     if (identityOf !== null && identityOf !== identity) {
       windows = []; readAt = null;
       // Anthropic's refusal was the previous account's: the new one is not expired, it is not read yet.
-      if (expiredBy === 'refused') { expired = false; expiredBy = null; }
+      refused = false;
     }
     identityOf = identity;
     if (now() < nextAt) return;
@@ -184,12 +185,12 @@ export function createUsage(deps: UsageDeps): UsageService {
       let body: unknown;
       try { body = JSON.parse(r.body); } catch { body = undefined; }
       const w = parseClaudeUsage(body);
-      if (w.length) { windows = w; readAt = now(); failed = false; expired = false; expiredBy = null; backoff = 0; nextAt = now() + READ_EVERY_MS; return; }
+      if (w.length) { windows = w; readAt = now(); failed = false; refused = false; backoff = 0; nextAt = now() + READ_EVERY_MS; return; }
       failed = true; nextAt = now() + READ_EVERY_MS;
       log('usage: Anthropic answered without any window');
       return;
     }
-    if (r.status === 401) { expired = true; expiredBy = 'refused'; failed = false; nextAt = now() + READ_EVERY_MS; log('usage: Claude Code session expired (401)'); return; }
+    if (r.status === 401) { refused = true; failed = false; nextAt = now() + READ_EVERY_MS; log('usage: Claude Code session expired (401)'); return; }
     failed = true;
     if (r.status === 429) {
       backoff++;
