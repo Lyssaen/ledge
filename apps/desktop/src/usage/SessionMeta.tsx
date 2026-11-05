@@ -3,18 +3,12 @@ import { contextShare, type Session } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
-import { span } from './model';
+import { modelName, span } from './model';
+export { modelName };
 import { useNow } from './useUsageView';
 
 const CLOCK = ['M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18', 'M12 7v5l3 2'];
 
-/** A model id as people say it: `claude-opus-5-5` → « Opus 5.5 », `fable` → « Fable »; anything else as it is. */
-export function modelName(id: string): string {
-  const m = /^(?:claude-)?(fable|opus|sonnet|haiku)(?:-(\d+)(?:-(\d+))?)?/i.exec(id);
-  if (!m) return id;
-  const family = m[1]!.charAt(0).toUpperCase() + m[1]!.slice(1).toLowerCase();
-  return [family, m[2] ? (m[3] ? `${m[2]}.${m[3]}` : m[2]) : ''].filter(Boolean).join(' ');
-}
 
 /** Under the line, fixed: the heading's containers clip what overflows them. */
 const below = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.bottom + 8 }; };
@@ -37,7 +31,7 @@ export function SessionMeta({ session, place, near }: { session: Session; place:
   const effort = session.effort ? (t.launch.efforts[session.effort] ?? session.effort).toLowerCase() : null;
   const started = Date.parse(session.startedAt);
   const age = Number.isFinite(started) ? span(now - started, lang) : null;
-  const sep = <span className="msep">·</span>;
+  const sep = <span className="msep"> · </span>;
   const rows: [string, string][] = [
     ...(session.model ? [[m.model, `${modelName(session.model)} · ${from(session.modelFrom)}`] as [string, string]] : []),
     ...(effort ? [[m.effort, `${effort} · ${from(session.effortFrom)}`] as [string, string]] : []),

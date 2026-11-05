@@ -761,8 +761,8 @@ details.rig-raw pre,.rig-bad .rawbox{margin:6px 0 0;padding:8px 10px;border:1px 
 .browser-confirm-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 
 /* The heading's line: model · effort · context · duration (docs/mockups/ledge-harness-usage.html, « En-tête de session »). */
-.session-meta{position:relative;display:inline-flex;align-items:center;gap:7px;font-size:11.5px;overflow:visible}
-.session-meta .msep{opacity:.6;margin-right:7px}
+.session-meta{position:relative;display:inline-flex;align-items:center;font-size:11.5px;overflow:visible;white-space:pre}
+.session-meta .msep{opacity:.6}
 .session-meta .mdl{color:var(--foreground)}
 .session-meta .mctx,.session-meta .mdur{display:inline-flex;align-items:center;gap:5px}
 .session-meta .mctx .ugauge{width:34px}

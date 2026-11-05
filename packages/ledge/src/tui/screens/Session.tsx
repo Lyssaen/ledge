@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { isPending, putImage, splitId } from '@ledge/fleet';
-import { offers, type Pending, type Session } from '@ledge/protocol';
+import { isPending, modelName, putImage, span, splitId } from '@ledge/fleet';
+import { contextShare, offers, type Pending, type Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { ChipsLine, useChips, useOpenImage, usePaste } from '../images.js';
@@ -36,8 +36,9 @@ export function SessionScreen() {
 }
 
 function SessionView({ s }: { s: Session }) {
-  const { client, d, t, g, actions, attach, toast, machines, kept, lastToast, tone, select, go } = useTui();
+  const { client, d, t, g, lang, actions, attach, toast, machines, kept, lastToast, tone, select, go } = useTui();
   const { columns, rows } = useScreenSize();
+  const clock = useNow();
   // Opened by key r on an OpenRig message elsewhere: on the composer, its draft already there.
   const [mode, setMode] = useState<Mode>(() => { if (kept.openReply !== s.id) return 'read'; kept.openReply = undefined; return 'reply'; });
   // The draft outlives the field, the screen and ctrl+c: it is kept by the TUI, by session.
@@ -190,7 +191,16 @@ function SessionView({ s }: { s: Session }) {
     return false;
   });
 
-  const title = `${s.name}${s.rig ? ` · ${t.overview.rigSeat(s.rig.name, s.rig.role ?? s.rig.seat)}` : ''} · ${oneLine(s.topic ?? s.title)} · ${TOOL_NAME[s.tool]} · ${modelLabel(s, t.session.defaultModel)}`;
+  // The box's title carries model, effort, context and duration (docs/mockups/ledge-harness-usage.html); under 120 columns the
+  // topic goes first. What is not known is not shown.
+  const share = contextShare(s.context);
+  const started = Date.parse(s.startedAt);
+  const title = [
+    s.name, ...(s.rig ? [t.overview.rigSeat(s.rig.name, s.rig.role ?? s.rig.seat)] : []), ...(columns >= 120 ? [oneLine(s.topic ?? s.title)] : []), TOOL_NAME[s.tool],
+    [s.model ? modelName(s.model) : '', s.effort ? t.usage.efforts[s.effort] ?? s.effort : ''].filter(Boolean).join(' '),
+    ...(share !== undefined ? [t.overview.context(Math.round(share * 100))] : []),
+    ...(Number.isFinite(started) ? [span(Math.max(0, Math.floor(clock / 60_000) * 60_000 - started), lang)] : [])
+  ].filter(Boolean).join(' · ');
   const showsThread = mode !== 'model' && !terminal && !!items && lines.length > 0;
   const above = lines.length - view - up;
   const foot = up > 0 ? t.session.scrolled(above, up) : lines.length > view ? t.session.above(lines.length - view) : undefined;

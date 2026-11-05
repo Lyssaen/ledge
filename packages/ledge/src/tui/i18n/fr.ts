@@ -127,6 +127,18 @@ export const fr = {
     launching: 'Lancement…', launched: (name: string) => `✓ ${name} est lancée`
   },
   settings: { title: 'Réglages', language: 'Langue', theme: 'Thème', themes: { auto: 'Auto', dark: 'Sombre', light: 'Clair' }, themeAuto: (tone: 'dark' | 'light') => `Auto (fond ${tone === 'light' ? 'clair' : 'sombre'})`, context: 'Contexte max', contextHint: 'au-delà : passer le relais', contextUnknown: 'mettez à jour le daemon', contextSaved: (pct: number) => `Contexte max : ${pct} %`, saved: 'Réglage enregistré.', saveFailed: (m: string) => `Réglage appliqué, mais non enregistré : ${m}` },
+  usage: {
+    five: '5 h', week: 'Semaine', weekShort: 'sem', reading: 'lecture…', expired: 'session expirée : reconnectez-vous dans Claude Code', expiredShort: 'reconnectez-vous',
+    ago: (a: string) => `il y a ${a}`, unreachable: 'injoignable', read: (a: string) => `lu il y a ${a}`, never: 'pas encore lu',
+    resumes: (at: string) => `reprend ${at}`,
+    harness: { claude: 'Claude Code', codex: 'Codex' } as Record<string, string>,
+    alertThreshold: (h: string, w: string, p: number, at: string | null) => `${h} · ${w} à ${p} %${at ? ` · remise ${at}` : ''}`,
+    alertFull: (h: string, w: string, at: string | null) => `${h} · ${w} atteinte${at ? ` · reprend ${at}` : ''}`,
+    five5: '5 h', weekOf: (m: string) => `${m} semaine`, weekAll: 'semaine',
+    setting: 'Alerte de limite', settingHint: 'au-delà : À toi prévient', settingUnknown: 'aucune machine ne donne ses limites', settingSaved: (pct: number) => `Alerte de limite : ${pct} %`,
+    efforts: { low: 'bas', medium: 'moyen', high: 'élevé', xhigh: 'très élevé', max: 'max', ultra: 'ultra' } as Record<string, string>,
+    limits: 'LIMITES'
+  },
   help: {
     title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig', rigLaunch: 'Lancer un rig',
     screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
