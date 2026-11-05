@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths } from './paths.js';
 import { log } from './log.js';
+import { optionValue } from './term/windowSize.js';
 
 export interface Tmux {
   /** `unset`: variables the pane must not have, even from the tmux server's global environment (`-e` can only add). */
@@ -25,6 +26,9 @@ export interface Tmux {
   setOption(name: string, option: string, value: string): Promise<void>;
   /** Unsets a window option of the session's window, so the global value applies again. */
   unsetWindowOption?(name: string, option: string): Promise<void>;
+  /** A window option set on the window itself, null when it has none (`show-options -wq`). */
+  windowOption?(name: string, option: string): Promise<string | null>;
+  setWindowOption?(name: string, option: string, value: string): Promise<void>;
   /** `readOnly` watches the pane without sending it keys (`attach-session -r`). */
   attachArgs(name: string, opts?: { readOnly?: boolean }): string[];
   /** A control client on the session (`-C`) that only reads and never counts for the window's size: the phone's terminal. */
@@ -126,6 +130,14 @@ export function realTmux(socket: string | null = 'ledge', opts: { scope?: () => 
       if (r.code !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
     },
     async unsetWindowOption(name, option) { await t(['set-option', '-wu', '-t', `=${name}:`, option]); },
+    async windowOption(name, option) {
+      const r = await t(['show-options', '-wq', '-t', `=${name}:`, option]);
+      return r.code === 0 ? optionValue(r.stdout.split('\n'), option) : null;
+    },
+    async setWindowOption(name, option, value) {
+      const r = await t(['set-option', '-w', '-t', `=${name}:`, option, value]);
+      if (r.code !== 0) throw new Error(`tmux set-option failed: ${r.stderr.trim()}`);
+    },
     async killSession(name) { await t(['kill-session', '-t', `=${name}`]); },
     attachArgs(name, opts) { return [...base(), 'attach-session', ...(opts?.readOnly ? ['-r'] : []), '-t', `=${name}`]; },
     controlArgs(name) { return [...base(), '-C', 'attach-session', '-t', `=${name}`, '-f', 'ignore-size,read-only']; }
@@ -159,6 +171,8 @@ export function routedTmux(own: Tmux, seats: Tmux): Tmux {
     killSession: n => of(n).killSession(n),
     setOption: (n, option, value) => of(n).setOption(n, option, value),
     unsetWindowOption: async (n, option) => { const t = of(n); await t.unsetWindowOption?.(n, option); },
+    windowOption: async (n, option) => { const t = of(n); return t.windowOption ? t.windowOption(n, option) : null; },
+    setWindowOption: async (n, option, value) => { const t = of(n); await t.setWindowOption?.(n, option, value); },
     attachArgs: (n, opts) => of(n).attachArgs(n, opts),
     // A control client on the session's own server: a seat's is OpenRig's, so its stream, keys and size go there. The phone
     // still refuses a seat before asking for one (a `rig` session is read-only there).

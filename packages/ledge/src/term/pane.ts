@@ -2,6 +2,7 @@
 // A shell is its own short session (`owned`): closing it kills that session and never takes the agent's typing lock.
 // The phone uses the same control client and keeps its own batching. Logs carry reasons, never a byte of the pane.
 import { PaneExitWhy, type TermModes, TERM_CHUNK, TERM_CHUNK_B64, TERM_PANE_SCREEN_MAX } from '@ledge/protocol';
+import { NO_SIZE, SIZE_MARK, keptSize, optionValue, restoreCommands } from './windowSize.js';
 import { keyCommands, openControl, spawnControl, type ControlClient, type ControlEvent, type SpawnControl } from '../mobile/terminal.js';
 
 /** A batch leaves at the first of this and `TERM_CHUNK` bytes. Desktop has no relay budget to stay under. */
@@ -99,6 +100,26 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
   const sizing = new Map<string, number>();
   const find = (reply: PaneReply, id: string, shell = '') => [...watches].find(w => w.reply === reply && w.id === id && w.shell === shell && w.state !== 'closed');
 
+  /** The window's own `window-size` before Ledge held it (`NO_SIZE` for none), read once per hold: a second watch waits for the
+   *  first one's read, so it never takes Ledge's `manual` for the window's own value. */
+  const kept = new Map<string, Promise<string>>();
+  const keep = (w: Watch, target: string): Promise<string> => {
+    let k = kept.get(w.tmuxName);
+    if (!k) {
+      k = (async () => {
+        // A mark already there is a hold a dead daemon left: its value is still the window's own, so it stays.
+        const mark = await w.client.command(`show-options -wq -t ${target} ${SIZE_MARK}`);
+        const left = mark.ok ? optionValue(mark.lines, SIZE_MARK) : null;
+        if (left !== null) return keptSize(left);
+        const cur = await w.client.command(`show-options -wq -t ${target} window-size`);
+        const own = keptSize(cur.ok ? optionValue(cur.lines, 'window-size') : null);
+        await w.client.command(`set-option -w -t ${target} ${SIZE_MARK} ${own}`);
+        return own;
+      })();
+      kept.set(w.tmuxName, k);
+    }
+    return k;
+  };
   const hold = (name: string) => sizing.set(name, (sizing.get(name) ?? 0) + 1);
   const releaseSize = (name: string): boolean => {
     const n = (sizing.get(name) ?? 1) - 1;
@@ -117,10 +138,22 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     w.openTimer?.stop();
     watches.delete(w);
     const restore = w.sizing && releaseSize(w.tmuxName);
-    if (w.owned) deps.killSession?.(w.tmuxName);
-    // The restore has to leave the process before it is killed. An owned shell is killed outright: the session goes with it.
-    else if (restore && SAFE_NAME.test(w.tmuxName)) w.client.write(`set-option -wu -t ${targetOf(w.tmuxName)} window-size\n`);
-    if (restore && !w.owned) later(() => w.client.kill(), RESTORE_MS); else w.client.kill();
+    const own = restore ? kept.get(w.tmuxName) : undefined;
+    if (restore) kept.delete(w.tmuxName);
+    if (w.owned) { deps.killSession?.(w.tmuxName); w.client.kill(); }
+    else if (own && SAFE_NAME.test(w.tmuxName)) {
+      // The window gets back the size it had of its own (none, or the person's), then the mark goes. The commands have to leave
+      // the process before it is killed. A window never held (the watch ended before it was sized) has nothing to give back.
+      const target = targetOf(w.tmuxName);
+      void own.catch(() => NO_SIZE).then(k => {
+        for (const line of restoreCommands(target, k)) w.client.write(`${line}\n`);
+        later(() => w.client.kill(), RESTORE_MS);
+      });
+    } else {
+      // A read of the window's own size may still be going through this client, and another watch waits on it: let it finish.
+      const reading = w.sizing && !w.owned ? kept.get(w.tmuxName) : undefined;
+      if (reading) void reading.catch(() => NO_SIZE).then(() => w.client.kill()); else w.client.kill();
+    }
     if (why) w.reply(stamp(w, { type: 'term.exit', id: w.id, why }));
     deps.log(`pane ${w.id}${w.shell ? ` shell ${w.shell}` : ''} ended (${why ?? 'closed'})`);
   };
@@ -148,6 +181,11 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     const target = targetOf(w.tmuxName);
     let sized: { cols: number; rows: number } | null = null;
     if (w.sizing && w.want) {
+      // A shell born here is killed when its watch ends: there is no size of its own to give back.
+      if (!w.owned) {
+        await keep(w, target);
+        if ((w.state as Watch['state']) === 'closed') return;
+      }
       const set = await w.client.command(`set-option -w -t ${target} window-size manual`);
       if ((w.state as Watch['state']) === 'closed') return;
       sized = { ...w.want };

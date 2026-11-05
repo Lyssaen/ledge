@@ -61,6 +61,9 @@ describe('modesOf', () => {
   });
 });
 
+/** Lets the fake control client answer every command the watch sends while it opens (the size kept, set, the screen). */
+const settle = async () => { for (let i = 0; i < 12; i++) await vi.runOnlyPendingTimersAsync(); };
+
 describe('pane host', () => {
   afterEach(() => { vi.useRealTimers(); });
 
@@ -68,12 +71,13 @@ describe('pane host', () => {
     vi.useFakeTimers();
     const { h, sent, reply, tmux } = host();
     h.watch(reply, { id: 'a', tmuxName: 'ledge-a' }, { cols: 100, rows: 30 });
-    await vi.runOnlyPendingTimersAsync();
-    await vi.runOnlyPendingTimersAsync();
-    await vi.runOnlyPendingTimersAsync();
-    await vi.runOnlyPendingTimersAsync();
+    await settle();
     const proc = tmux.procs[0]!;
-    expect(proc.written.filter(l => l.startsWith('set-option') || l.startsWith('resize-window'))).toEqual([
+    // The window's own size is read and kept on it (none here: `-`) before Ledge holds it.
+    expect(proc.written.filter(l => l.startsWith('show-options') || l.startsWith('set-option') || l.startsWith('resize-window'))).toEqual([
+      "show-options -wq -t '=ledge-a:' @ledge_window_size",
+      "show-options -wq -t '=ledge-a:' window-size",
+      "set-option -w -t '=ledge-a:' @ledge_window_size -",
       "set-option -w -t '=ledge-a:' window-size manual",
       "resize-window -x 100 -y 30 -t '=ledge-a:'"
     ]);
@@ -103,12 +107,10 @@ describe('pane host', () => {
 
     const again = host();
     again.h.watch(again.reply, { id: 'b', tmuxName: 'ledge-b' }, { cols: 80, rows: 24 });
-    await vi.runOnlyPendingTimersAsync();
-    await vi.runOnlyPendingTimersAsync();
-    await vi.runOnlyPendingTimersAsync();
-    await vi.runOnlyPendingTimersAsync();
+    await settle();
     again.h.unwatch(again.reply, 'b');
-    expect(again.tmux.procs[0]!.written.at(-1)).toContain('set-option -wu');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(again.tmux.procs[0]!.written.slice(-2)).toEqual(["set-option -wu -t '=ledge-b:' window-size", "set-option -wu -t '=ledge-b:' @ledge_window_size"]);
     expect(again.tmux.procs[0]!.killed).toBe(false);
     await vi.advanceTimersByTimeAsync(20);
     expect(again.tmux.procs[0]!.killed).toBe(true);
@@ -128,10 +130,11 @@ describe('pane host', () => {
     // The seat's server (OpenRig's, the default one) for `@`, Ledge's for the rest: what routedTmux gives the host.
     const { h, sent, reply, tmux } = host({ controlArgs: name => { const a = name.includes('@') ? ['-C', 'attach-session', '-t', `=${name}`] : ['-L', 'ledge', '-C', 'attach-session', '-t', `=${name}`]; argv.push(a); return a; } });
     h.watch(reply, { id: 'rig-dev-build-starter', tmuxName: 'dev-build@starter' }, { cols: 120, rows: 40 });
-    for (let i = 0; i < 4; i++) await vi.runOnlyPendingTimersAsync();
+    await settle();
     expect(argv).toEqual([['-C', 'attach-session', '-t', '=dev-build@starter']]);
     const proc = tmux.procs[0]!;
     expect(proc.written.filter(l => l.startsWith('set-option') || l.startsWith('resize-window'))).toEqual([
+      "set-option -w -t '=dev-build@starter:' @ledge_window_size -",
       "set-option -w -t '=dev-build@starter:' window-size manual",
       "resize-window -x 120 -y 40 -t '=dev-build@starter:'"
     ]);
@@ -140,7 +143,8 @@ describe('pane host', () => {
     await vi.runOnlyPendingTimersAsync();
     expect(proc.written.at(-1)).toBe('send-keys -t %0 -H 79');
     h.unwatch(reply, 'rig-dev-build-starter');
-    expect(proc.written.at(-1)).toBe("set-option -wu -t '=dev-build@starter:' window-size");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(proc.written.slice(-2)).toEqual(["set-option -wu -t '=dev-build@starter:' window-size", "set-option -wu -t '=dev-build@starter:' @ledge_window_size"]);
   });
 
   it('keeps the agent watch beside a shell, and kills the shell session without the typing lock', async () => {
@@ -168,7 +172,8 @@ describe('pane host', () => {
     expect(seen).toEqual([]);
     expect(tmux.procs[1]!.written.at(-1)).toBe('send-keys -t %0 -H 7a');
     h.unwatch(reply, 'a');
-    expect(tmux.procs[0]!.written.at(-1)).toContain('set-option -wu');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(tmux.procs[0]!.written.at(-1)).toBe("set-option -wu -t '=ledge-a:' @ledge_window_size");
     expect(tmux.procs[1]!.killed).toBe(false);
     h.unwatch(reply, 'a', 's1');
     expect(killed).toEqual(['sh-abc']);

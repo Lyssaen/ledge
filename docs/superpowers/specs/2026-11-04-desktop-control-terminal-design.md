@@ -30,7 +30,7 @@ The phone and the desktop share one control client: the parser, the reply queue,
 
 ## Size
 
-The control client attaches with `ignore-size`, so merely watching changes nothing. A watch that may type sets the window to `window-size manual` and `resize-window` to the xterm's grid, so an external Windows Terminal does not fight the column while it is open. The last such watch to close sets `window-size latest` again. A read-only watch (a subagent's parent) never resizes and never types. Desktop does not resize back when something else changes the pane: the next fit of the column does.
+The control client attaches with `ignore-size`, so merely watching changes nothing. A watch that may type sets the window to `window-size manual` and `resize-window` to the xterm's grid, so an external Windows Terminal does not fight the column while it is open. Before that, the window's own `window-size` (none, or one the person or OpenRig set) is kept on the window in `@ledge_window_size` (`-` for none); the last such watch to close puts exactly that back and drops the mark. A daemon that died while holding a window leaves the mark: the next start gives every marked window, a seat's included, its own size back, and touches no window without a mark (2026-11-05). A read-only watch (a subagent's parent) never resizes and never types. Desktop does not resize back when something else changes the pane: the next fit of the column does.
 
 ## Input
 
