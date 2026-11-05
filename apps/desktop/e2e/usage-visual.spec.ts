@@ -27,9 +27,12 @@ const STATES: Record<string, HarnessUsage[]> = {
 };
 const usage = (harnesses: HarnessUsage[]): Omit<UsageStateMessage, 'type' | 'machineId'> => ({ harnesses, alerts: [], prefs: { alert: 0.8 } });
 
+// Nova as Ledge launched it, near « Contexte max »' 85 % it is not: 46 %; open 1 h 12 ago.
+const sessions = fleet.map(s => (s.name === 'Nova' ? { ...s, model: 'claude-opus-5-5', effort: 'high', context: { used: 92_000, window: 200_000, at: at(0) }, startedAt: at(-72) } : s));
+
 async function boot(page: Page, theme: 'dark' | 'light', lang: 'fr' | 'en', harnesses: HarnessUsage[]) {
   await page.addInitScript(([t, l]) => { try { localStorage.setItem('desktop.lang', l!); localStorage.setItem('desktop.theme', t!); } catch { /* ignore */ } }, [theme, lang]);
-  await fakeDaemon(page, fleet, { launcher: ['ledge'], projects: twoProjects, usage: usage(harnesses) });
+  await fakeDaemon(page, sessions, { launcher: ['ledge'], projects: twoProjects, usage: usage(harnesses) });
   await page.goto('/'); await openAtelier(page);
 }
 const footer = (page: Page) => page.locator('.workspace-footer');
@@ -54,6 +57,11 @@ for (const theme of ['dark', 'light'] as const) {
     await page.getByRole('tree').getByRole('button', { name: /^Nova/ }).click();
     await page.locator('.session-page').waitFor({ timeout: 30_000 });
     await page.screenshot({ path: info.outputPath(`usage-session-${theme}.png`) });
+    // The heading's line and its tooltip, zoomed.
+    await page.locator('.session-meta').hover();
+    await page.waitForTimeout(300);
+    const head = (await page.locator('.pane-heading').first().boundingBox())!;
+    await page.screenshot({ path: info.outputPath(`usage-zoom-header-${theme}.png`), clip: { x: head.x, y: head.y, width: 900, height: 200 } });
   });
 
   for (const st of ['over', 'codex', 'loading', 'expired', 'stale', 'unreachable'] as const) {

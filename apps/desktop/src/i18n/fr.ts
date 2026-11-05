@@ -836,6 +836,12 @@ export const fr = {
   },
   session: {
     meta: 'Machine et dépôts',
+    metaLine: {
+      model: 'Modèle', effort: 'Effort', context: 'Contexte', duration: 'Durée', effortIs: (e: string) => `effort ${e}`,
+      atLaunch: 'choisi au lancement', fromTranscript: 'lu dans le transcript',
+      tokens: (u: string, w: string, near: number) => `${u} / ${w} jetons · relève à ${near} %`,
+      openedAt: (at: string, age: string) => `ouverte à ${at}, il y a ${age}`, seenAt: (at: string, age: string) => `vue par Ledge à ${at}, il y a ${age}`
+    },
     /** An OMP seat of OpenRig: no thread, its Terminal view; stopped, its terminal gone (docs/mockups/ledge-openrig-omp.html). */
     rigTerminalOnly: { title: 'Pas de fil pour ce siège.', body: 'Ledge ne lit pas la conversation d’un siège OMP lancé par OpenRig. Sa vue Terminal montre son écran : ce que tu y tapes lui est envoyé.' },
     rigStopped: { title: 'Siège arrêté.', body: 'Son terminal n’existe plus : la page OpenRig montre son rig.' }, badgeStopped: 'Arrêté',

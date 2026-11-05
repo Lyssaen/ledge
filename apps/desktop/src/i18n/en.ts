@@ -797,6 +797,12 @@ export const en: Messages = {
   },
   session: {
     meta: 'Machine and repositories',
+    metaLine: {
+      model: 'Model', effort: 'Effort', context: 'Context', duration: 'Duration', effortIs: (e: string) => `effort ${e}`,
+      atLaunch: 'chosen at launch', fromTranscript: 'read from the transcript',
+      tokens: (u: string, w: string, near: number) => `${u} / ${w} tokens · relief at ${near} %`,
+      openedAt: (at: string, age: string) => `opened at ${at}, ${age} ago`, seenAt: (at: string, age: string) => `seen by Ledge at ${at}, ${age} ago`
+    },
     rigTerminalOnly: { title: 'No thread for this seat.', body: 'Ledge does not read the conversation of an OMP seat launched by OpenRig. Its Terminal view shows its screen: what you type there is sent to it.' },
     rigStopped: { title: 'Seat stopped.', body: 'Its terminal is gone: the OpenRig page shows its rig.' }, badgeStopped: 'Stopped',
     subagent: 'Subagent',

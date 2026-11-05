@@ -759,3 +759,16 @@ details.rig-raw pre,.rig-bad .rawbox{margin:6px 0 0;padding:8px 10px;border:1px 
 .browser-confirm p{margin:0}
 .browser-confirm code{font:11px 'Geist Mono',monospace}
 .browser-confirm-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+
+/* The heading's line: model · effort · context · duration (docs/mockups/ledge-harness-usage.html, « En-tête de session »). */
+.session-meta{position:relative;display:inline-flex;align-items:center;gap:7px;font-size:11.5px;overflow:visible}
+.session-meta .msep{opacity:.6;margin-right:7px}
+.session-meta .mdl{color:var(--foreground)}
+.session-meta .mctx,.session-meta .mdur{display:inline-flex;align-items:center;gap:5px}
+.session-meta .mctx .ugauge{width:34px}
+.session-meta .mctx.amber{color:var(--warning)}
+.session-meta .mctx.amber .ugauge i{background:var(--warning)}
+.session-meta:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:4px}
+.meta-tip{position:fixed;z-index:30;display:grid;grid-template-columns:84px 1fr;gap:3px 8px;width:300px;padding:9px 11px;background:var(--popover);color:var(--foreground);border:1px solid var(--input);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);font:12px 'Geist',system-ui,sans-serif;white-space:normal}
+.meta-tip-row{display:contents}
+.meta-tip .mk{color:var(--muted-foreground)}
