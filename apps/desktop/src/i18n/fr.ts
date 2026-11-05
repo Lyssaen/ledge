@@ -69,7 +69,7 @@ export const fr = {
     allow: 'Oui', deny: 'Non', reply: 'Répondre', see: 'Voir',
     ofHelper: (parent: string) => `↳ ${parent}`,
     hideDone: 'Seulement les projets avec un agent actif (H)', moreProjects: (n: number) => `+${n} ${plural(n, 'projet', 'projets')} sans agent actif`,
-    dense: 'Mode compact (D)', foldAll: 'Tout replier',
+    dense: 'Mode compact (D)', byBranch: 'Grouper par branche (B)', branchTag: (b: string) => `Branche ${b}`, foldAll: 'Tout replier',
     tree: 'Projets, branches et sessions',
     fold: (name: string) => `Replier ${name}`, unfold: (name: string) => `Déplier ${name}`,
     foldKids: (name: string) => `Masquer les sous-agents de ${name}`,
