@@ -11,7 +11,9 @@ import { httpsGet, type HttpsGet } from './net.js';
 export const READ_EVERY_MS = 2 * 60_000;
 /** After a 429, the wait doubles up to this. */
 export const BACKOFF_MAX_MS = 15 * 60_000;
-/** The longest Retry-After waited: a longer one is waited this long, then the read is tried again. */
+/** The longest Retry-After waited: a longer one is waited this long, then the read is tried again. Kept on purpose (decided
+ *  2026-11-05): a technical guard against a mistaken header leaving the limits unreadable for good; one try a day is negligible
+ *  for the API. See docs/superpowers/specs/2026-11-05-harness-usage-design.md. */
 export const RETRY_AFTER_MAX_MS = 24 * 60 * 60_000;
 /** Past this without a read that succeeded, the values are `stale`; past an hour they are no longer sent. */
 export const STALE_MS = 5 * 60_000;
