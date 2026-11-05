@@ -102,7 +102,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         {/* The thread opens on « Le point » (ledge home spec §2.4). */}
         {chat.turns.length === 0 && (
           <div className="flex flex-1 flex-col justify-end gap-3">
-            <LePoint store={store} sessions={sessions} tasks={state.tasks} syncedAt={state.syncedAt} fresh={state.fresh} onAnswer={answer} {...(state.device?.contextNear !== undefined ? { threshold: state.device.contextNear } : {})} usage={state.usage ?? []} />
+            <LePoint store={store} sessions={sessions} tasks={state.tasks} syncedAt={state.syncedAt} fresh={state.fresh} onAnswer={answer} {...(state.device?.contextNear !== undefined ? { threshold: state.device.contextNear } : {})} usage={state.usage ?? []} usageAlert={state.usageAlert} />
             <div className="flex flex-wrap gap-2">
               {suggestionsOf(sessions).map(s => (
                 <button key={s} type="button" onClick={() => setText(s)} className={chipClass()}>{s}</button>

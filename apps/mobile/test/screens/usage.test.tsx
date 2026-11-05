@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { PhoneHarnessUsage } from '@ledge/protocol';
 import { copy } from '../../src/copy';
-import { indicators, modelName, reachedWindows, span } from '../../src/model/usage';
+import { indicators, modelName, overWindows, span, usageTone } from '../../src/model/usage';
 import { Agents } from '../../src/screens/Agents';
 import { Chat } from '../../src/screens/Chat';
 import { session } from '../model/fixtures';
@@ -18,19 +18,23 @@ const claude = (o: Partial<PhoneHarnessUsage> = {}): PhoneHarnessUsage => ({
 });
 const ON = { confirm: true, chat: true as const };
 
-function point(usage: PhoneHarnessUsage[]) {
+function point(usage: PhoneHarnessUsage[], alert = 0.8) {
   const t = setup();
   t.deliver(snapshot([session('a', { name: 'Bix', repo: 'ledge' })], 'Atelier', undefined, ON));
-  t.deliver({ type: 'usage.state', harnesses: usage });
+  t.deliver({ type: 'usage.state', harnesses: usage, prefs: { alert } });
   render(<Chat store={t.store} />);
   return screen.getByRole('region', { name: copy.chat.point.label });
 }
 
 describe('the model', () => {
-  it('names models, spans, and the windows reached (no threshold on the phone: 100 % only)', () => {
+  it('names models, spans; the windows past the PC\'s threshold, in their order; tones', () => {
     expect([modelName('claude-opus-5-5'), modelName('gpt-6.1')]).toEqual(['Opus 5.5', 'gpt-6.1']);
     expect([span(40_000), span(72 * 60_000)]).toEqual(['40 s', '1 h 12']);
-    expect(reachedWindows([claude(), claude({ status: 'expired', windows: [{ kind: 'five_hour', pct: 100, resetsAt: null }] })]).map(r => r.window.model)).toEqual(['Opus']);
+    const over = overWindows([claude(), claude({ status: 'expired', windows: [{ kind: 'five_hour', pct: 100, resetsAt: null }] })], 0.8);
+    expect(over.map(r => [r.window.kind, r.tone])).toEqual([['five_hour', 'amber'], ['model', 'red']]);
+    // The threshold not known yet: a reached window alone.
+    expect(overWindows([claude()], null).map(r => r.tone)).toEqual(['red']);
+    expect([usageTone(79, 0.8), usageTone(80, 0.8), usageTone(100, 0.8), usageTone(90, null)]).toEqual(['', 'amber', 'red', '']);
   });
 
   it('a session\'s indicators: model, effort (N1: read from the transcript too), context, duration; nothing unknown', () => {
@@ -41,7 +45,7 @@ describe('the model', () => {
 });
 
 describe('« Le point »', () => {
-  it('LIMITES: per harness its logo and windows, percent and reset; a reached window also in « À toi »', () => {
+  it('LIMITES: per harness its logo and windows, amber past the threshold, red reached; both also in « À toi »', () => {
     const region = point([claude()]);
     const limits = within(region).getByRole('group', { name: copy.chat.point.limitsLabel });
     expect(limits.textContent).toContain('Claude Code');
@@ -50,8 +54,17 @@ describe('« Le point »', () => {
     expect(limits.querySelector('svg.harness-claude')).not.toBeNull();
     const yours = within(region).getByRole('group', { name: copy.chat.point.yoursLabel });
     expect(within(yours).getByLabelText('Claude · Opus atteinte').textContent).toContain('100 %');
-    // 84 % is past no threshold the phone knows: it is not in « À toi ».
-    expect(yours.textContent).not.toContain('84 %');
+    const five = within(yours).getByLabelText('Claude · 5 h à 84 %');
+    expect(five.querySelector('b')?.className).toContain('text-attention');
+    // In the windows' order, as the mockup: the 5 hours, then Opus.
+    expect([...yours.querySelectorAll('[data-usage-over]')].map(e => e.getAttribute('data-usage-over'))).toEqual(['amber', 'red']);
+    const pcts = [...limits.querySelectorAll('b')].map(b => [b.textContent, b.className.includes('text-attention') ? 'amber' : b.className.includes('text-approval') ? 'red' : '']);
+    expect(pcts).toEqual([['84 %', 'amber'], ['58 %', ''], ['100 %', 'red']]);
+  });
+
+  it('a higher threshold: 84 % stays neutral and out of « À toi »', () => {
+    const yours = within(point([claude()], 0.9)).getByRole('group', { name: copy.chat.point.yoursLabel });
+    expect(yours.querySelectorAll('[data-usage-over]')).toHaveLength(1);
   });
 
   it('says reading, expired, old and unreachable as the mockup does; nothing without limits', () => {

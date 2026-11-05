@@ -67,6 +67,8 @@ export interface MobileState {
   pc: PcRun | null;
   /** This PC's harness limits (`usage.state`, `daemon.usage`): null until it sends them. Never cached. */
   usage: PhoneHarnessUsage[] | null;
+  /** The usage alert threshold the PC keeps (`usage.state`'s `prefs.alert`): past it a window is amber and in « À toi ». */
+  usageAlert: number | null;
 }
 
 /** The request a challenge is asked for, as `session.decide` names it. */
@@ -262,6 +264,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     ops: loadOps(storage),
     tasks: new Map(),
     usage: null,
+    usageAlert: null,
     checklists: new Map(),
     pc: null
   };
@@ -488,7 +491,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         set({ tasks: new Map(m.tasks.map(x => [x.id, x])) });
         return;
       case 'usage.state':
-        set({ usage: m.harnesses });
+        set({ usage: m.harnesses, usageAlert: m.prefs.alert });
         return;
       case 'task.updated':
         set({ tasks: new Map(state.tasks).set(m.task.id, m.task) });
@@ -678,7 +681,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {}, folderListing: null, recentFolders: null, projectFolders: {}, usage: null });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {}, folderListing: null, recentFolders: null, projectFolders: {}, usage: null, usageAlert: null });
     modelAsks.clear(); commandAsks.clear(); rigAsks.clear();
     stopPcWatch();
   }

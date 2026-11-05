@@ -51,6 +51,7 @@ for (const theme of ['dark', 'light'] as const) {
     await expect(limits).toContainText('84 %');
     await expect(limits.locator('svg.harness-claude')).toBeVisible();
     await expect(page.getByLabel('Claude · Opus atteinte')).toContainText('100 %');
+    await expect(page.getByLabel('Claude · 5 h à 84 %')).toContainText('84 %');
     await limits.scrollIntoViewIfNeeded();
     await shot(page, `point-${theme}`);
     // 2 · Agents: one line of indicators.

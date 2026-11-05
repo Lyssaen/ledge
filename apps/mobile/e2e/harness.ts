@@ -82,7 +82,7 @@ export interface FakeDaemon {
   broadcasts: { sessions: string[]; text: string }[];
   /** Each session's thread, as `session.thread` answers it (none: an empty thread). */
   threads: Record<string, ThreadItem[]>;
-  /** Set: the snapshot says `daemon.usage`, and `usage.state` follows it with these limits (docs/mockups/ledge-harness-usage.html). */
+  /** Set: the snapshot says `daemon.usage`, and `usage.state` follows it with these limits and an 80 % threshold (docs/mockups/ledge-harness-usage.html). */
   usage: PhoneHarnessUsage[] | null;
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
@@ -194,7 +194,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
     if (m.type === 'term.release' && held) { held = false; return pc.send({ type: 'term.released', tid: TID, why: 'asked' }); }
   };
   const handle = async (m: PhoneClientMessage) => {
-    if (m.type === 'snapshot.request') { await pc.send(snapshot()); if (d.usage) await pc.send({ type: 'usage.state', harnesses: d.usage }); return; }
+    if (m.type === 'snapshot.request') { await pc.send(snapshot()); if (d.usage) await pc.send({ type: 'usage.state', harnesses: d.usage, prefs: { alert: 0.8 } }); return; }
     if (d.terminal && m.type.startsWith('term.')) return terminalMessage(m);
     if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close')) return chatMessage(m);
     if (m.type === 'session.thread') return pc.send({ type: 'session.thread', id: m.id, items: d.threads[m.id] ?? [], cut: [], more: false });

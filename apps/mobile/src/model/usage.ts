@@ -33,12 +33,19 @@ export function resetLabel(iso: string, now: number, short = false): string {
   return short ? weekday(d) : `${weekday(d)} ${hm(d)}`;
 }
 
-/** The phone has no threshold (the PC keeps it): only a reached window (100 %) is coloured, red. */
 export const reached = (w: Pick<UsageWindow, 'pct'>): boolean => w.pct >= 100;
 
-/** Every harness's windows reached, for « À toi »: the harness, the window, when it starts again. */
-export function reachedWindows(usage: readonly PhoneHarnessUsage[]): { harness: PhoneHarnessUsage['harness']; window: UsageWindow }[] {
-  return usage.flatMap(h => (h.status === 'expired' || h.status === 'loading' ? [] : h.windows.filter(reached).map(window => ({ harness: h.harness, window }))));
+/** Neutral under the PC's threshold (`alert`, 0.5–0.95; null: not known yet), amber past it, red at 100 %. */
+export function usageTone(pct: number, alert: number | null): '' | 'amber' | 'red' {
+  return pct >= 100 ? 'red' : alert !== null && pct >= alert * 100 ? 'amber' : '';
+}
+
+/** Every harness's windows past the threshold, for « À toi », in the windows' order (5 h, week, models), as the mockup lists them. */
+export function overWindows(usage: readonly PhoneHarnessUsage[], alert: number | null): { harness: PhoneHarnessUsage['harness']; window: UsageWindow; tone: 'amber' | 'red' }[] {
+  return usage.flatMap(h => (h.status === 'expired' || h.status === 'loading' ? [] : h.windows.flatMap(window => {
+    const tone = usageTone(window.pct, alert);
+    return tone ? [{ harness: h.harness, window, tone }] : [];
+  })));
 }
 
 /**
