@@ -1737,7 +1737,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     challenges: createChallengeStore(),
     credential: id => mobile.credential(id),
     setCredential: (id, c) => mobile.setCredential(id, c),
-    tasks: () => tasks.all(), contextNear: () => contextPrefs.near, ...(usage ? { usage: () => usage.state().harnesses } : {}),
+    tasks: () => tasks.all(), contextNear: () => contextPrefs.near, ...(usage ? { usage: () => { const st = usage.state(); return { harnesses: st.harnesses, prefs: st.prefs }; } } : {}),
     // The Atelier on the phone: the user's projects, the sessions placed in them as on the desktop; a `projects.set` follows by `forward`.
     projects: () => projects,
     // A project's folders from the phone: this machine's, browsed from its home, its recent folders first; the others by their label.

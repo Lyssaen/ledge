@@ -8,12 +8,12 @@ const NOW = Date.parse('2026-11-05T14:00:00.000Z');
 describe('readClaudeToken', () => {
   it('reads Claude Code\'s token from its credentials, and says expired once its time is past', async () => {
     const creds = (expiresAt?: number) => JSON.stringify({ claudeAiOauth: { accessToken: 'tok-1', refreshToken: 'never-read', ...(expiresAt ? { expiresAt } : {}), subscriptionType: 'max' } });
-    expect(await readClaudeToken('/h', {}, NOW, files({ '/h/.claude/.credentials.json': creds(NOW + 60_000) }))).toEqual({ token: 'tok-1' });
-    expect(await readClaudeToken('/h', {}, NOW, files({ '/h/.claude/.credentials.json': creds() }))).toEqual({ token: 'tok-1' });
+    expect(await readClaudeToken('/h', {}, NOW, files({ '/h/.claude/.credentials.json': creds(NOW + 60_000) }))).toEqual({ token: 'tok-1', from: 'file' });
+    expect(await readClaudeToken('/h', {}, NOW, files({ '/h/.claude/.credentials.json': creds() }))).toEqual({ token: 'tok-1', from: 'file' });
     expect(await readClaudeToken('/h', {}, NOW, files({ '/h/.claude/.credentials.json': creds(NOW - 1) }))).toBe('expired');
   });
   it('takes CLAUDE_CODE_OAUTH_TOKEN first; no file, a broken one or no token is « not signed in »', async () => {
-    expect(await readClaudeToken('/h', { CLAUDE_CODE_OAUTH_TOKEN: ' env-tok ' }, NOW, files({}))).toEqual({ token: 'env-tok' });
+    expect(await readClaudeToken('/h', { CLAUDE_CODE_OAUTH_TOKEN: ' env-tok ' }, NOW, files({}))).toEqual({ token: 'env-tok', from: 'env' });
     expect(await readClaudeToken('/h', {}, NOW, files({}))).toBeNull();
     expect(await readClaudeToken('/h', {}, NOW, files({ '/h/.claude/.credentials.json': '{' }))).toBeNull();
     expect(await readClaudeToken('/h', {}, NOW, files({ '/h/.claude/.credentials.json': '{"claudeAiOauth":{}}' }))).toBeNull();

@@ -83,6 +83,16 @@ describe('the usage service: Claude Code', () => {
     expect(m.svc.state().harnesses[0]!.status).toBe('ok');
   });
 
+  it('a Retry-After longer than Ledge\'s own 15-minute cap is kept', async () => {
+    const m = machine({ answers: [{ status: 429, headers: { 'retry-after': '3600' } }, { status: 200, body: API }] });
+    await m.svc.tick();
+    m.advance(16 * 60_000); await m.svc.tick();
+    expect(m.calls).toHaveLength(1);
+    m.advance(44 * 60_000); await m.svc.tick();
+    expect(m.calls).toHaveLength(2);
+    expect(m.svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
   it('an expired token is never sent nor refreshed: « expired », no window; a 401 says the same', async () => {
     const expired = machine({ creds: JSON.stringify({ claudeAiOauth: { accessToken: 'old', expiresAt: T0 - 1 } }) });
     await expired.svc.tick();
@@ -103,6 +113,153 @@ describe('the usage service: Claude Code', () => {
     // Paused (the next read is not due): past 5 minutes it is stale.
     m.advance(6 * 60_000);
     expect(m.svc.state().harnesses[0]!.status).toBe('stale');
+  });
+});
+
+describe('the usage service: the account', () => {
+  it('is told only for the token Claude Code keeps in its file; CLAUDE_CODE_OAUTH_TOKEN may be another account\'s: none then', async () => {
+    let t = T0;
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: 'file-tok', expiresAt: T0 + 30 * 24 * 3_600_000 } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: 'acc-A' } });
+      throw new Error('ENOENT');
+    };
+    let env: NodeJS.ProcessEnv = { CLAUDE_CODE_OAUTH_TOKEN: 'env-tok-B' };
+    const headers: string[] = [];
+    const svc = createUsage({ home: '/h', env: async () => env, file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { headers.push(h.Authorization!); return { status: 200, body: JSON.stringify(API), headers: {} }; } });
+    await svc.tick();
+    expect(headers).toEqual(['Bearer env-tok-B']);
+    expect(svc.state().harnesses[0]!.account).toBeNull();
+    // The environment token gone (a later login shell): the file's token, and its account, at once.
+    env = {};
+    t += 11 * 60_000; // past the environment's reread
+    await svc.tick();
+    expect(headers.at(-1)).toBe('Bearer file-tok');
+    expect(svc.state().harnesses[0]!.account).toMatch(/^[0-9a-f]{12}$/);
+  });
+});
+
+describe('the usage service: another account signs in', () => {
+  /** Claude Code's credentials file and ~/.claude.json, switched to another account mid-test. */
+  function switching(answers: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>) {
+    let t = T0, who = 'A';
+    const calls: string[] = [];
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: `tok-${who}`, expiresAt: T0 + 30 * 24 * 3_600_000 } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: `acc-${who}` } });
+      throw new Error('ENOENT');
+    };
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { calls.push(h.Authorization!); const a = answers.shift() ?? { status: 200, body: API }; return { status: a.status, body: a.body === undefined ? '' : JSON.stringify(a.body), headers: a.headers ?? {} }; } });
+    return { svc, calls, to: (w: string) => { who = w; }, advance: (ms: number) => { t += ms; } };
+  }
+  const A_BODY = { five_hour: { utilization: 91, resets_at: '2026-11-05T18:00:00Z' }, seven_day: { utilization: 10, resets_at: '2026-11-09T09:00:00Z' } };
+
+  it('drops the previous account\'s windows at once, without reading again before it is due; Claude Code refreshing its token keeps them', async () => {
+    const m = switching([{ status: 200, body: A_BODY }, { status: 200, body: API }]);
+    await m.svc.tick();
+    const a = m.svc.state().harnesses[0]!;
+    expect(a.windows[0]!.pct).toBe(91);
+    m.to('B');
+    m.advance(30_000); await m.svc.tick();
+    const b = m.svc.state().harnesses[0]!;
+    expect(b.account).not.toBe(a.account);
+    expect(b).toMatchObject({ status: 'loading', readAt: null, windows: [] });
+    expect(m.svc.state().alerts).toEqual([]);
+    expect(m.calls).toEqual(['Bearer tok-A']);
+    m.advance(READ_EVERY_MS); await m.svc.tick();
+    expect(m.calls).toEqual(['Bearer tok-A', 'Bearer tok-B']);
+    expect(m.svc.state().harnesses[0]).toMatchObject({ account: b.account, status: 'ok' });
+    expect(m.svc.state().harnesses[0]!.windows[0]!.pct).toBe(42);
+  });
+
+  it('during a 429\'s wait, another account: its windows are not the previous ones, the wait still stands', async () => {
+    const m = switching([{ status: 200, body: A_BODY }, { status: 429, headers: { 'retry-after': '1800' } }, { status: 200, body: API }]);
+    await m.svc.tick();
+    m.advance(READ_EVERY_MS); await m.svc.tick(); // the 429
+    expect(m.svc.state().harnesses[0]).toMatchObject({ status: 'unreachable', windows: [expect.objectContaining({ pct: 91 }), expect.objectContaining({ pct: 10 })] });
+    m.to('B');
+    m.advance(60_000); await m.svc.tick();
+    expect(m.svc.state().harnesses[0]).toMatchObject({ status: 'unreachable', readAt: null, windows: [] });
+    expect(m.calls).toHaveLength(2);
+    m.advance(29 * 60_000); await m.svc.tick();
+    expect(m.calls).toEqual(['Bearer tok-A', 'Bearer tok-A', 'Bearer tok-B']);
+    expect(m.svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
+  it('a 401 is the account it was for: another account signed in during the wait is loading, not expired', async () => {
+    const m = switching([{ status: 401 }, { status: 200, body: API }]);
+    await m.svc.tick();
+    expect(m.svc.state().harnesses[0]!.status).toBe('expired');
+    m.to('B');
+    m.advance(30_000); await m.svc.tick();
+    expect(m.svc.state().harnesses[0]).toMatchObject({ status: 'loading', windows: [] });
+    expect(m.calls).toEqual(['Bearer tok-A']);
+    m.advance(READ_EVERY_MS); await m.svc.tick();
+    expect(m.calls).toEqual(['Bearer tok-A', 'Bearer tok-B']);
+    expect(m.svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
+  it('the same account refused (401) stays expired until its next read', async () => {
+    const m = switching([{ status: 401 }, { status: 200, body: API }]);
+    await m.svc.tick();
+    m.advance(30_000); await m.svc.tick();
+    expect(m.svc.state().harnesses[0]!.status).toBe('expired');
+    m.advance(READ_EVERY_MS); await m.svc.tick();
+    expect(m.svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
+  it('a token past its time, then a valid one (signed in again), is no longer expired at once, without reading before it is due', async () => {
+    let t = T0, expiresAt = T0 - 1;
+    const calls: string[] = [];
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: `tok-${expiresAt}`, expiresAt } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: 'acc-A' } });
+      throw new Error('ENOENT');
+    };
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { calls.push(h.Authorization!); return { status: 429, body: '', headers: {} }; } });
+    await svc.tick();
+    expect(svc.state().harnesses[0]!.status).toBe('expired');
+    expect(calls).toEqual([]);
+    expiresAt = T0 + 30 * 24 * 3_600_000;
+    t += 30_000; await svc.tick();
+    // Read now (it was never read): the 429 makes it unreachable, not expired.
+    expect(svc.state().harnesses[0]!.status).toBe('unreachable');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('a refusal outlives a local expiry and a token refreshed for the same account: still expired, nothing shown, until a read succeeds', async () => {
+    let t = T0, expiresAt = T0 + 3_600_000, gen = 1;
+    const calls: string[] = [];
+    const answers = [{ status: 200, body: { five_hour: { utilization: 91, resets_at: '2026-11-05T18:00:00Z' } } }, { status: 401 }, { status: 200, body: API }];
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: `tok-${gen}`, expiresAt } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: 'acc-A' } });
+      throw new Error('ENOENT');
+    };
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { calls.push(h.Authorization!); const a = answers.shift()!; return { status: a.status, body: a.body ? JSON.stringify(a.body) : '', headers: {} }; } });
+    await svc.tick(); // 91 %
+    t += READ_EVERY_MS; await svc.tick(); // 401
+    expect(svc.state().harnesses[0]!.status).toBe('expired');
+    expiresAt = t - 1; t += 10_000; await svc.tick(); // the local token expires
+    expiresAt = t + 3_600_000; gen = 2; t += 10_000; await svc.tick(); // Claude Code refreshes it, same account
+    expect(svc.state().harnesses[0]).toMatchObject({ status: 'expired', windows: [] });
+    expect(calls).toHaveLength(2);
+    t += READ_EVERY_MS; await svc.tick(); // the next read, at its time, succeeds
+    expect(calls).toEqual(['Bearer tok-1', 'Bearer tok-1', 'Bearer tok-2']);
+    expect(svc.state().harnesses[0]!.status).toBe('ok');
+  });
+
+  it('a Retry-After past a day is waited a day', async () => {
+    const m = switching([{ status: 429, headers: { 'retry-after': String(3 * 24 * 3600) } }]);
+    await m.svc.tick();
+    m.advance(23 * 3_600_000); await m.svc.tick();
+    expect(m.calls).toHaveLength(1);
+    m.advance(2 * 3_600_000); await m.svc.tick();
+    expect(m.calls).toHaveLength(2);
   });
 });
 
@@ -160,7 +317,16 @@ describe('the usage service: Codex', () => {
     expect(m.svc.state().alerts.map(a => [a.harness, a.window.kind, a.level])).toEqual([['codex', 'seven_day', 'threshold']]);
     m.svc.observeCodex({ windows: [{ ...w[0]!, pct: 1 }], at: '2026-11-05T13:00:00.000Z' });
     expect(m.svc.state().harnesses[0]!.windows[0]!.pct).toBe(30);
-    m.svc.observeCodex(null);
+    // A plan without windows, reported later: Codex goes.
+    m.svc.observeCodex({ windows: [], at: '2026-11-05T14:00:00.000Z' });
     expect(m.svc.state().harnesses).toEqual([]);
+  });
+
+  it('an older reading never replaces a newer one, an empty one included (another session\'s older transcript)', () => {
+    const m = machine({ creds: null });
+    const w = [{ kind: 'five_hour' as const, pct: 30, resetsAt: '2026-11-05T18:00:00.000Z' }];
+    m.svc.observeCodex({ windows: w, at: '2026-11-05T13:59:00.000Z' });
+    m.svc.observeCodex({ windows: [], at: '2026-11-05T12:00:00.000Z' });
+    expect(m.svc.state().harnesses.map(h => h.harness)).toEqual(['codex']);
   });
 });

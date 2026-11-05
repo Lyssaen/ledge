@@ -38,9 +38,9 @@ describe('Codex limits from its transcript', () => {
       { kind: 'seven_day', pct: 98, resetsAt: '2026-11-05T14:00:00.000Z' }
     ] });
   });
-  it('a plan that gives none (both null, as on this machine) is null; no rate_limits in the part read is undefined', () => {
-    expect(codexLimits([tokenCount('2026-11-05T13:00:00.000Z', { limit_id: 'premium', primary: null, secondary: null, credits: { has_credits: false }, plan_type: null })])).toBeNull();
-    expect(codexLimits([tokenCount('2026-11-05T13:00:00.000Z', null)])).toBeNull();
+  it('a plan that gives none (both null, as on this machine) has no window, but keeps when it said so; no rate_limits read is undefined', () => {
+    expect(codexLimits([tokenCount('2026-11-05T13:00:00.000Z', { limit_id: 'premium', primary: null, secondary: null, credits: { has_credits: false }, plan_type: null })])).toEqual({ windows: [], at: '2026-11-05T13:00:00.000Z' });
+    expect(codexLimits([tokenCount('2026-11-05T13:00:00.000Z', null)])).toEqual({ windows: [], at: '2026-11-05T13:00:00.000Z' });
     expect(codexLimits([turnContext('gpt-6.1-terra')])).toBeUndefined();
   });
   it('readTurn reads the context, model, effort and limits in one go from the file\'s end', async () => {

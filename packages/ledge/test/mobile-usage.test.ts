@@ -13,18 +13,18 @@ const usages = (g: ReturnType<typeof setup>, id: string) => g.got(id).filter((m)
 describe('phone: usage', () => {
   it('after the snapshot, then on each change: the limits without the account', async () => {
     let current: HarnessUsage[] = [CLAUDE];
-    const g = setup({ deps: { usage: () => current } });
+    const g = setup({ deps: { usage: () => ({ harnesses: current, prefs: { alert: 0.8 } }) } });
     g.send('dev1', { type: 'snapshot.request' });
     await flush();
     const snap = g.got('dev1').find(m => m.type === 'snapshot');
     expect(snap && snap.type === 'snapshot' ? snap.daemon.usage : undefined).toBe(true);
     const [first] = usages(g, 'dev1');
-    expect(PhoneServerMessageSchema.parse(first)).toEqual({ type: 'usage.state', harnesses: [{ harness: 'claude', status: 'ok', readAt: CLAUDE.readAt, windows: CLAUDE.windows }] });
+    expect(PhoneServerMessageSchema.parse(first)).toEqual({ type: 'usage.state', harnesses: [{ harness: 'claude', status: 'ok', readAt: CLAUDE.readAt, windows: CLAUDE.windows }], prefs: { alert: 0.8 } });
     expect(JSON.stringify(first)).not.toContain(CLAUDE.account!);
     current = [{ ...CLAUDE, status: 'expired', windows: [] }];
-    g.gw.forward({ type: 'usage.state', harnesses: current, alerts: [], prefs: { alert: 0.8 } });
+    g.gw.forward({ type: 'usage.state', harnesses: current, alerts: [], prefs: { alert: 0.9 } });
     await flush();
-    expect(usages(g, 'dev1').at(-1)?.harnesses).toEqual([{ harness: 'claude', status: 'expired', readAt: CLAUDE.readAt, windows: [] }]);
+    expect(usages(g, 'dev1').at(-1)).toEqual({ type: 'usage.state', harnesses: [{ harness: 'claude', status: 'expired', readAt: CLAUDE.readAt, windows: [] }], prefs: { alert: 0.9 } });
     // A device that did not ask for the sessions gets nothing.
     expect(usages(g, 'dev2')).toEqual([]);
   });

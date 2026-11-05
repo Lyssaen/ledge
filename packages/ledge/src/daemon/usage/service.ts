@@ -1,5 +1,6 @@
 // The daemon's usage service (docs/mockups/ledge-harness-usage.html): each harness's account limits, their state, the alerts
 // past the threshold, and the threshold and the « Compris » it keeps (`~/.ledge/usage.json`).
+import { createHash } from 'node:crypto';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { USAGE_ALERT, UsagePrefsSchema, usageAlertId, type HarnessUsage, type UsageAlert, type UsagePrefs, type UsageStateMessage, type UsageWindow } from '@ledge/protocol';
 import { log } from '../../log.js';
@@ -10,6 +11,10 @@ import { httpsGet, type HttpsGet } from './net.js';
 export const READ_EVERY_MS = 2 * 60_000;
 /** After a 429, the wait doubles up to this. */
 export const BACKOFF_MAX_MS = 15 * 60_000;
+/** The longest Retry-After waited: a longer one is waited this long, then the read is tried again. Kept on purpose (decided
+ *  2026-11-05): a technical guard against a mistaken header leaving the limits unreadable for good; one try a day is negligible
+ *  for the API. See docs/superpowers/specs/2026-11-05-harness-usage-design.md. */
+export const RETRY_AFTER_MAX_MS = 24 * 60 * 60_000;
 /** Past this without a read that succeeded, the values are `stale`; past an hour they are no longer sent. */
 export const STALE_MS = 5 * 60_000;
 export const HIDE_MS = 60 * 60_000;
@@ -26,8 +31,9 @@ export interface UsageService {
   start(): void;
   stop(): void;
   onChange(fn: (s: UsageState) => void): () => void;
-  /** Codex's limits from a transcript a turn just ended in (`codexLimits`): null when its plan gives none. */
-  observeCodex(limits: { windows: UsageWindow[]; at: string } | null): void;
+  /** Codex's limits from a transcript a turn just ended in (`codexLimits`), when they were reported: no window when its plan
+   *  gives none. An older reading than the one kept is ignored, an empty one included. */
+  observeCodex(limits: { windows: UsageWindow[]; at: string }): void;
   setPrefs(prefs: UsagePrefs): void;
   /** « Compris »: false when no such alert is open. */
   ack(id: string): boolean;
@@ -72,9 +78,16 @@ export function createUsage(deps: UsageDeps): UsageService {
   const kept = readKept(deps.file);
 
   // Claude Code.
-  let signedIn = false, expired = false, failed = false, attempted = false;
+  let signedIn = false, failed = false, attempted = false;
   let readAt: number | null = null, windows: UsageWindow[] = [], nextAt = 0, backoff = 0;
-  let account: string | null = null, accountAt = -Infinity;
+  /** Who is signed in, as last seen: the account (the token's fingerprint when the account is not known). Another account signed
+   *  in since: the previous one's windows and refusal are dropped, never shown under it. */
+  let identityOf: string | null = null;
+  /** The two causes of « expired », which can hold together: the token in Claude Code's file is past its time (`localExpired`,
+   *  read again on each tick), and Anthropic refused the token of the account signed in (`refused`, a 401). A refusal ends only
+   *  with a read that succeeds or another account signing in: a token that expires then comes back meanwhile does not end it. */
+  let localExpired = false, refused = false;
+  let account: string | null = null, accountAt = -Infinity, accountOf = '';
   let ua: string | undefined, uaAt = -Infinity;
   // Codex.
   let codex: { windows: UsageWindow[]; at: number } | null = null;
@@ -89,7 +102,7 @@ export function createUsage(deps: UsageDeps): UsageService {
   };
 
   const statusOf = (): HarnessUsage['status'] => {
-    if (expired) return 'expired';
+    if (localExpired || refused) return 'expired';
     if (!attempted && readAt === null) return 'loading';
     if (failed) return 'unreachable';
     if (readAt === null || now() - readAt > STALE_MS) return readAt === null ? 'loading' : 'stale';
@@ -145,9 +158,26 @@ export function createUsage(deps: UsageDeps): UsageService {
     const home = deps.home;
     const token = await readClaudeToken(home, env, now(), deps.read);
     signedIn = token !== null;
-    if (token === null) { expired = false; return; }
-    if (now() - accountAt > REREAD_MS) { account = await readClaudeAccount(home, deps.read); accountAt = now(); }
-    if (token === 'expired') { expired = true; return; }
+    if (token === null) { localExpired = false; return; }
+    // The account is told only for the token Claude Code keeps in its file, the one `~/.claude.json` goes with; an environment
+    // token may be another account's: none then. A token that changed (another sign-in) has its account read again.
+    const which = token === 'expired' ? 'file:expired' : `${token.from}:${createHash('sha256').update(token.token).digest('hex')}`;
+    if (which !== accountOf || now() - accountAt > REREAD_MS) {
+      account = token !== 'expired' && token.from === 'env' ? null : await readClaudeAccount(home, deps.read);
+      accountAt = now(); accountOf = which;
+    }
+    if (token === 'expired') { localExpired = true; return; }
+    // A valid token again (Claude Code signed in again): its own expiry is over; a refusal of this account still stands.
+    localExpired = false;
+    // The windows belong to the account they were read for: Claude Code refreshing its token keeps them, another account signed
+    // in drops them at once (shown as loading, or unreachable while a 429's wait runs). The next read stays when it was due.
+    const identity = account ?? which;
+    if (identityOf !== null && identityOf !== identity) {
+      windows = []; readAt = null;
+      // Anthropic's refusal was the previous account's: the new one is not expired, it is not read yet.
+      refused = false;
+    }
+    identityOf = identity;
     if (now() < nextAt) return;
     if (now() - uaAt > REREAD_MS || !ua) { ua = await version(env); uaAt = now(); }
     attempted = true;
@@ -157,17 +187,20 @@ export function createUsage(deps: UsageDeps): UsageService {
       let body: unknown;
       try { body = JSON.parse(r.body); } catch { body = undefined; }
       const w = parseClaudeUsage(body);
-      if (w.length) { windows = w; readAt = now(); failed = false; expired = false; backoff = 0; nextAt = now() + READ_EVERY_MS; return; }
+      if (w.length) { windows = w; readAt = now(); failed = false; refused = false; backoff = 0; nextAt = now() + READ_EVERY_MS; return; }
       failed = true; nextAt = now() + READ_EVERY_MS;
       log('usage: Anthropic answered without any window');
       return;
     }
-    if (r.status === 401) { expired = true; failed = false; nextAt = now() + READ_EVERY_MS; log('usage: Claude Code session expired (401)'); return; }
+    if (r.status === 401) { refused = true; failed = false; nextAt = now() + READ_EVERY_MS; log('usage: Claude Code session expired (401)'); return; }
     failed = true;
     if (r.status === 429) {
       backoff++;
+      // Ledge's own doubling stops at 15 minutes; a longer wait the API asks for (Retry-After, in seconds) is kept as asked, up to
+      // a day: a longer one is waited a day (a guard against a mistaken header leaving the limits unread for good).
       const after = Number(r.headers['retry-after']);
-      const wait = Math.min(BACKOFF_MAX_MS, Math.max(READ_EVERY_MS * 2 ** backoff, Number.isFinite(after) && after > 0 ? after * 1000 : 0));
+      const asked = Number.isFinite(after) && after > 0 ? Math.min(RETRY_AFTER_MAX_MS, after * 1000) : 0;
+      const wait = Math.max(Math.min(BACKOFF_MAX_MS, READ_EVERY_MS * 2 ** backoff), asked);
       nextAt = now() + wait;
       log(`usage: Anthropic rate-limited the read (429), next in ${Math.round(wait / 1000)} s${ua ? '' : ' (no Claude Code version for the User-Agent)'}`);
       return;
@@ -195,11 +228,11 @@ export function createUsage(deps: UsageDeps): UsageService {
     stop() { if (timer) clearInterval(timer); timer = null; },
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     observeCodex(limits) {
-      const at = limits ? Date.parse(limits.at) : NaN;
-      if (limits && Number.isNaN(at)) return;
-      // A later turn of another session may report an older reading: the newest wins.
-      if (limits && codex && at < codex.at) return;
-      codex = limits ? { windows: limits.windows, at } : null;
+      const at = Date.parse(limits.at);
+      if (Number.isNaN(at)) return;
+      // A later turn of another session may report an older reading, with windows or without: the newest wins.
+      if (codex && at < codex.at) return;
+      codex = { windows: limits.windows, at };
       emit();
     },
     setPrefs(prefs) { kept.prefs = { alert: prefs.alert }; save(); emit(); },
