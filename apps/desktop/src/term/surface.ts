@@ -24,6 +24,25 @@ export interface TermSurface {
 const PASTE_BYTE = '\x16';
 /** What xterm answers on its own: a cursor position report, its device attributes. ConPTY waits for the first before it draws. */
 const REPORT = /^\x1b\[(?:\d+;\d+R|[?>][\d;]*c)$/;
+/** The modes by which a program takes the mouse (X10, normal, highlight, button, any). */
+const MOUSE_MODES = [9, 1000, 1001, 1002, 1003];
+/** The most an OSC 52 may put in the clipboard: a program cannot fill memory through it. */
+const CLIP_MAX = 1 << 20;
+
+/** What an OSC 52 asks to copy (`c;<base64>`), as text; null for a read (`?`), a malformed or an oversized one. */
+export function osc52Text(data: string): string | null {
+  const at = data.indexOf(';');
+  if (at < 0) return null;
+  const b64 = data.slice(at + 1);
+  if (b64 === '?' || b64.length > (CLIP_MAX * 4) / 3 + 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) return null;
+  try {
+    const bin = atob(b64);
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
 
 export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void }): TermSurface {
   const host = document.createElement('div');
@@ -51,6 +70,40 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
   // Read-only drops the keys, not the replies: disableStdin would drop both, and the screen would wait forever.
   const send = (data: string) => { if (!readOnly || REPORT.test(data)) for (const fn of inputs) fn(data); };
   term.onData(send);
+
+  // A program's own copy (OSC 52: Claude Code's selection, tmux, vim) reaches the clipboard. Writing only: a read (`?`) is
+  // refused, a program never sees what you copied elsewhere.
+  term.parser.registerOscHandler(52, data => {
+    const text = osc52Text(data);
+    if (text) void navigator.clipboard.writeText(text).catch(() => undefined);
+    return true;
+  });
+
+  // A read-only screen keeps the mouse for selecting: its clicks would reach no one. The modes the program asks for are kept,
+  // and given back when the screen takes keys again.
+  const mouse = new Set<number>();
+  /** Our own « mouse off » on going read-only: not the program's, so the modes it asked for stay remembered. */
+  let ours = 0;
+  const flat = (params: (number | number[])[]): number[] => params.map(p => (Array.isArray(p) ? p[0] ?? 0 : p));
+  term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, params => {
+    const ps = flat(params);
+    const asked = ps.filter(p => MOUSE_MODES.includes(p));
+    for (const p of asked) mouse.add(p);
+    if (!readOnly || !asked.length) return false;
+    const rest = ps.filter(p => !MOUSE_MODES.includes(p));
+    if (rest.length) term.write(`\x1b[?${rest.join(';')}h`);
+    return true;
+  });
+  term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, params => {
+    const ps = flat(params);
+    if (ours > 0 && ps.join(';') === MOUSE_MODES.join(';')) { ours--; return false; }
+    for (const p of ps) mouse.delete(p);
+    return false;
+  });
+  const setMouseFor = (on: boolean) => {
+    if (on) { ours++; term.write(`\x1b[?${MOUSE_MODES.join(';')}l`); }
+    else if (mouse.size) term.write([...mouse].map(m => `\x1b[?${m}h`).join(''));
+  };
 
   // A read-only screen hides its cursor in the background's colour; the text under a block cursor keeps its own.
   const applyTheme = () => { term.options.theme = readOnly ? { ...theme, cursor: theme.background, cursorAccent: theme.foreground } : theme; };
@@ -88,7 +141,12 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     size: () => ({ cols: term.cols, rows: term.rows }),
     fit: () => fitter.fit(),
     focus: () => term.focus(),
-    setReadOnly: on => { readOnly = on; applyTheme(); },
+    setReadOnly: on => {
+      const was = readOnly;
+      readOnly = on;
+      applyTheme();
+      if (on !== was) setMouseFor(on);
+    },
     setTheme: t => { theme = t; applyTheme(); },
     dispose: () => term.dispose()
   };

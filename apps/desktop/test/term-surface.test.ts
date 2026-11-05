@@ -15,6 +15,12 @@ const xt = vi.hoisted(() => {
     dispose = vi.fn();
     loadAddon = vi.fn();
     clearSelection = vi.fn(() => { this.selection = ''; });
+    osc = new Map<number, (d: string) => boolean>();
+    csi = new Map<string, (p: (number | number[])[]) => boolean>();
+    parser = {
+      registerOscHandler: (n: number, fn: (d: string) => boolean) => { this.osc.set(n, fn); return { dispose() {} }; },
+      registerCsiHandler: (id: { prefix?: string; final: string }, fn: (p: (number | number[])[]) => boolean) => { this.csi.set(`${id.prefix ?? ''}${id.final}`, fn); return { dispose() {} }; }
+    };
     constructor(o: Record<string, unknown>) { this.options = { ...o }; terms.push(this); }
     attachCustomKeyEventHandler(fn: (e: KeyboardEvent) => boolean) { this.keys = fn; }
     onData(fn: (d: string) => void) { this.data.push(fn); return { dispose() {} }; }
@@ -138,4 +144,54 @@ it('links the terminal prints open in the system browser, not in the webview', (
   (t.options.linkHandler as { activate(e: MouseEvent, uri: string): void; allowNonHttpProtocols: boolean }).activate(click, 'https://example.com/docs');
   expect(openUrl.mock.calls).toEqual([['https://example.com/pr/1'], ['https://example.com/docs']]);
   expect((t.options.linkHandler as { allowNonHttpProtocols: boolean }).allowNonHttpProtocols).toBe(false);
+});
+
+const b64 = (t: string) => btoa(String.fromCharCode(...new TextEncoder().encode(t)));
+
+it('a program\'s OSC 52 copy reaches the clipboard, UTF-8 kept; a read or a malformed one does nothing', async () => {
+  const { t } = surface();
+  const osc = t.osc.get(52)!;
+  expect(osc(`c;${b64('héllo — ✻')}`)).toBe(true);
+  await vi.waitFor(() => expect(clip.writeText).toHaveBeenCalledWith('héllo — ✻'));
+  clip.writeText.mockClear();
+  expect(osc('c;?')).toBe(true);
+  expect(osc('c;!!pas du base64')).toBe(true);
+  expect(osc('sans point-virgule')).toBe(true);
+  expect(osc(`c;${btoa('\xff\xfe')}`)).toBe(true);
+  expect(clip.writeText).not.toHaveBeenCalled();
+  // A read is never answered: nothing goes back to the program.
+  const sent: string[] = [];
+  const s2 = surface(); s2.s.onInput(d => sent.push(d)); s2.t.osc.get(52)!('c;?');
+  expect(sent).toEqual([]);
+});
+
+it('osc52Text refuses an oversized copy', async () => {
+  const { osc52Text } = await import('../src/term/surface');
+  expect(osc52Text(`c;${'A'.repeat(1_500_000)}`)).toBeNull();
+  expect(osc52Text(`;${b64('ok')}`)).toBe('ok');
+});
+
+it('read-only: the program\'s mouse is held back so a plain drag selects, and given back when keys come back', () => {
+  const { s, t } = surface();
+  const h = t.csi.get('?h')!, l = t.csi.get('?l')!;
+  // Live: the program's mouse goes through untouched.
+  expect(h([1003, 1006])).toBe(false);
+  s.setReadOnly(true);
+  expect(t.write).toHaveBeenLastCalledWith('\x1b[?9;1000;1001;1002;1003l');
+  // Our own « off » is not the program's: its 1003 stays remembered.
+  expect(l([9, 1000, 1001, 1002, 1003])).toBe(false);
+  // Read-only, a repaint asking for the mouse: swallowed, the rest (SGR encoding) still applied.
+  t.write.mockClear();
+  expect(h([1002, 1006])).toBe(true);
+  expect(t.write).toHaveBeenCalledWith('\x1b[?1006h');
+  expect(h([25])).toBe(false);
+  // The program drops 1002 while read-only; keys back: only what it still wants comes back.
+  l([1002]);
+  t.write.mockClear();
+  s.setReadOnly(false);
+  expect(t.write).toHaveBeenCalledWith('\x1b[?1003h');
+  // Setting the same mode twice changes nothing.
+  t.write.mockClear();
+  s.setReadOnly(false);
+  expect(t.write).not.toHaveBeenCalled();
 });
