@@ -47,7 +47,8 @@ export interface PaneDeps {
   timer?: (fn: () => void, ms: number) => { stop(): void };
 }
 
-const SAFE_NAME = /^[A-Za-z0-9_.-]+$/;
+/** A Ledge session (`ledge-<id>`, `sh-<hex>`) or an OpenRig seat (`pod-member@rig`); the target is quoted, `@` included. */
+const SAFE_NAME = /^[A-Za-z0-9_.-]+(?:@[A-Za-z0-9_.-]+)?$/;
 /** The pane's place and size, then the modes xterm cannot see once the program set them before the watch. */
 const INFO_FORMAT = '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y} #{alternate_on}#{cursor_flag}#{keypad_cursor_flag}#{keypad_flag}#{mouse_standard_flag}#{mouse_button_flag}#{mouse_any_flag}#{mouse_sgr_flag}#{wrap_flag}#{insert_flag}';
 const INFO = /^(%\d+) (\d+) (\d+) (\d+) (\d+)(?: ([01]{10}))?$/;

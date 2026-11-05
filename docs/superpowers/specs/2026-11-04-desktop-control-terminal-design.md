@@ -6,11 +6,11 @@ Date: 2026-11-04. Status: in progress. Voie 1 for the harness pane, the shells b
 
 Cursor and VS Code feel fluid because one emulator draws the terminal. Ledge's agent tab drew the harness twice: a `tmux attach` inside ConPTY (`wsl.exe`), then xterm.js over that. This removes ConPTY and `wsl.exe` from the agent screen and from a shell whose machine can stream. The daemon on the session's machine holds a tmux control client, and Desktop's xterm.js is the only emulator.
 
-Windows Terminal stays the fallback (`ledge attach`). OpenRig seats (`@` in the tmux name) stay on the pseudo-terminal: their server has no control client. An older daemon has neither `terminalStream` nor the messages, and Desktop keeps today's attach for both the pane and the shells.
+Windows Terminal stays the fallback (`ledge attach`). An OpenRig seat (`@` in the tmux name) streams too, through a control client on the seat's own tmux server (OpenRig's, the user's default one: `routedTmux` routes the seat's `controlArgs` there, as it already did its keys and captures); the daemon says so with `terminalStreamSeats` (2026-11-05). An older daemon has neither `terminalStream` nor the messages, and Desktop keeps today's attach for both the pane and the shells; a daemon without `terminalStreamSeats` keeps a seat, and its shells, on the pseudo-terminal.
 
 ## Protocol
 
-`daemon.terminalStream` on the snapshot, set when the daemon can spawn `tmux -C`.
+`daemon.terminalStream` on the snapshot, set when the daemon can spawn `tmux -C`; `daemon.terminalStreamSeats` beside it when a seat's `term.watch` is streamed too.
 
 Client → daemon: `term.watch { id, cols, rows, readOnly? }`, `term.shell { id, shell, cols, rows }`, `term.input { id, shell?, data }`, `term.resize { id, cols, rows, shell? }`, `term.unwatch { id, shell? }`.
 
@@ -22,11 +22,11 @@ Daemon → client: `term.opened { id, shell?, cols, rows, screen, cursor }`, `te
 
 A shell is a short-lived tmux session (`sh-` and 12 hex) on Ledge's socket: a login shell (`loginShellEnv()`, else `$SHELL`, else `/bin/bash -l`) in `workdir ?? cwd`. The same host watches it with `owned`. Closing the tab, or the socket, kills that session instead of restoring `window-size`. The shell does not take the agent's typing lock. One socket may watch the harness pane and several shells; a watch replaces only the same shell of the same session. `term.unwatch` without `shell` closes only the harness pane.
 
-The desktop's wire tag is `s<n>`, never the tab id (`local:a#shell-1` is not safe on the command line). A shell that ends is not started again: a fresh one would hide that the command died. While the machine has not answered, the tab stays idle. When the socket drops, a streamed shell ends. The browser has no pseudo-terminal; once `terminalStream` is set, its shells take this path. A seat, or a daemon without the flag, still opens the local pseudo-terminal.
+The desktop's wire tag is `s<n>`, never the tab id (`local:a#shell-1` is not safe on the command line). A shell that ends is not started again: a fresh one would hide that the command died. While the machine has not answered, the tab stays idle. When the socket drops, a streamed shell ends. The browser has no pseudo-terminal; once `terminalStream` is set, its shells take this path. A seat's shells follow its screen: born on Ledge's socket in the seat's folder when the daemon streams seats, the local pseudo-terminal otherwise, as with a daemon without the flag.
 
 ## Phone
 
-The phone and the desktop share one control client: the parser, the reply queue, the process. The phone keeps its own policy — hold, passkey, sequence numbers, UTF-8 text, the 100 ms relay batch — and still attaches `ignore-size,read-only`. It never resizes. Both may attach.
+The phone and the desktop share one control client: the parser, the reply queue, the process. The phone still refuses a seat (read-only, `rig`) before asking for a control client. The phone keeps its own policy — hold, passkey, sequence numbers, UTF-8 text, the 100 ms relay batch — and still attaches `ignore-size,read-only`. It never resizes. Both may attach.
 
 ## Size
 

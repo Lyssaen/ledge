@@ -106,7 +106,9 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Answers `openrig.goal.send`, `openrig.goals` and `openrig.goal.reply`: goals given to Max (lot 2). */ openrigGoals: z.boolean().optional(),
   /** Takes `session.broadcast` (its `ledge bridge` too, on this machine): a client sends it only when this is set. */ broadcast: z.boolean().optional(),
   /** Sends `browser.live` and answers `browser.watch`, `browser.unwatch` and `browser.enable`: the agent's browser, live. */ browserLive: z.boolean().optional(),
-  /** Answers `term.watch` and `term.shell`: the pane and the shells as a tmux control stream, xterm.js the only emulator. */ terminalStream: z.boolean().optional() });
+  /** Answers `term.watch` and `term.shell`: the pane and the shells as a tmux control stream, xterm.js the only emulator. */ terminalStream: z.boolean().optional(),
+  /** `term.watch` also streams an OpenRig seat (`@` in its tmux name), through a control client on the seat's own tmux server.
+   *  Without it, a front keeps a seat on the pseudo-terminal: an older daemon answers its watch `failed`. */ terminalStreamSeats: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;

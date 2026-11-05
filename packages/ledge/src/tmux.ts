@@ -160,7 +160,8 @@ export function routedTmux(own: Tmux, seats: Tmux): Tmux {
     setOption: (n, option, value) => of(n).setOption(n, option, value),
     unsetWindowOption: async (n, option) => { const t = of(n); await t.unsetWindowOption?.(n, option); },
     attachArgs: (n, opts) => of(n).attachArgs(n, opts),
-    // Seats are refused a phone terminal (`rig`); only Ledge's own server is offered.
-    controlArgs: n => (isSeatSession(n) ? null : own.controlArgs?.(n) ?? null)
+    // A control client on the session's own server: a seat's is OpenRig's, so its stream, keys and size go there. The phone
+    // still refuses a seat before asking for one (a `rig` session is read-only there).
+    controlArgs: n => of(n).controlArgs?.(n) ?? null
   };
 }

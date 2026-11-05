@@ -5,10 +5,12 @@ import { PANE_INPUT_MAX, type DaemonInfo, type ServerMessage, type Session, type
 /** Where the shown agent's screen attaches. `wait`: the machine has not answered yet, so neither path may start. */
 export type AgentRoute = 'stream' | 'pty' | 'wait';
 
-/** `ready` is the machine's snapshot having arrived. A seat (`@` in its tmux name) has no control client. */
-export function agentRoute(session: Pick<Session, 'tmuxSession'> | undefined, machine: { ready: boolean; daemon?: Pick<DaemonInfo, 'terminalStream'> } | undefined): AgentRoute {
+/** `ready` is the machine's snapshot having arrived. A seat (`@` in its tmux name) streams only from a daemon that says it can
+ *  (`terminalStreamSeats`): an older one has no control client on the seat's server, so it stays on the pseudo-terminal. */
+export function agentRoute(session: Pick<Session, 'tmuxSession'> | undefined, machine: { ready: boolean; daemon?: Pick<DaemonInfo, 'terminalStream' | 'terminalStreamSeats'> } | undefined): AgentRoute {
   if (!session || !machine?.ready) return 'wait';
-  if (!session.tmuxSession || session.tmuxSession.includes('@')) return 'pty';
+  if (!session.tmuxSession) return 'pty';
+  if (session.tmuxSession.includes('@') && !machine.daemon?.terminalStreamSeats) return 'pty';
   return machine.daemon?.terminalStream ? 'stream' : 'pty';
 }
 

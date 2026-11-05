@@ -116,9 +116,31 @@ describe('pane host', () => {
 
   it('refuses a name a command line could misread', () => {
     const { h, sent, reply, tmux } = host();
-    h.watch(reply, { id: 'a', tmuxName: 'ledge a' }, { cols: 80, rows: 24 });
-    expect(sent).toEqual([{ type: 'term.exit', id: 'a', why: 'failed' }]);
+    for (const name of ['ledge a', "a'b", 'a@b@c', '@rig', 'pod@', 'a;b@rig']) h.watch(reply, { id: 'a', tmuxName: name }, { cols: 80, rows: 24 });
+    expect(sent).toHaveLength(6);
+    expect(sent.every(m => m.type === 'term.exit' && m.why === 'failed')).toBe(true);
     expect(tmux.procs).toHaveLength(0);
+  });
+
+  it('streams an OpenRig seat through a control client on its own server: size, screen, keys, then the window given back', async () => {
+    vi.useFakeTimers();
+    const argv: string[][] = [];
+    // The seat's server (OpenRig's, the default one) for `@`, Ledge's for the rest: what routedTmux gives the host.
+    const { h, sent, reply, tmux } = host({ controlArgs: name => { const a = name.includes('@') ? ['-C', 'attach-session', '-t', `=${name}`] : ['-L', 'ledge', '-C', 'attach-session', '-t', `=${name}`]; argv.push(a); return a; } });
+    h.watch(reply, { id: 'rig-dev-build-starter', tmuxName: 'dev-build@starter' }, { cols: 120, rows: 40 });
+    for (let i = 0; i < 4; i++) await vi.runOnlyPendingTimersAsync();
+    expect(argv).toEqual([['-C', 'attach-session', '-t', '=dev-build@starter']]);
+    const proc = tmux.procs[0]!;
+    expect(proc.written.filter(l => l.startsWith('set-option') || l.startsWith('resize-window'))).toEqual([
+      "set-option -w -t '=dev-build@starter:' window-size manual",
+      "resize-window -x 120 -y 40 -t '=dev-build@starter:'"
+    ]);
+    expect(sent[0]).toMatchObject({ type: 'term.opened', id: 'rig-dev-build-starter', screen: 'hello\nthere' });
+    h.input(reply, 'rig-dev-build-starter', 'y');
+    await vi.runOnlyPendingTimersAsync();
+    expect(proc.written.at(-1)).toBe('send-keys -t %0 -H 79');
+    h.unwatch(reply, 'rig-dev-build-starter');
+    expect(proc.written.at(-1)).toBe("set-option -wu -t '=dev-build@starter:' window-size");
   });
 
   it('keeps the agent watch beside a shell, and kills the shell session without the typing lock', async () => {

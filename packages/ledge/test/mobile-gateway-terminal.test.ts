@@ -107,19 +107,21 @@ describe('phone gateway: the agent\'s terminal', () => {
     expect(of(g, 'term.output')).toEqual([{ type: 'term.output', tid: opened!.tid, seq: 0, data: 'hello' }]);
   });
 
-  it('refuses a session started outside Ledge, one with no pane, one ended, and an unknown one', async () => {
+  it('refuses a session started outside Ledge, an OpenRig seat, one with no pane, one ended, and an unknown one', async () => {
     const { g, tmux } = make();
     g.sessions.set('h', mk('h', { source: 'hook_only' }));
+    // A seat now has a control client on its own server for Desktop; the phone still refuses it before asking for one.
+    g.sessions.set('r', mk('r', { source: 'rig', tmuxSession: 'dev-build@starter', rig: { seat: 'dev-build@starter', name: 'starter' } }));
     g.sessions.set('x', mk('x', { state: 'exited', exitedAt: T1 }));
     const reasons: unknown[] = [];
-    for (const id of ['h', 'c', 'x', 'zz']) {
+    for (const id of ['h', 'r', 'c', 'x', 'zz']) {
       const op = randomUUID();
       g.send('dev1', { type: 'term.open', op, id });
       await flush();
       const r = g.results('dev1').find(x => x.type === 'operation.result' && x.op === op && x.status === 'rejected');
       reasons.push(r?.type === 'operation.result' ? r.reason : null);
     }
-    expect(reasons).toEqual(['read_only', 'unavailable', 'unavailable', 'unknown_session']);
+    expect(reasons).toEqual(['read_only', 'read_only', 'unavailable', 'unavailable', 'unknown_session']);
     expect(tmux.procs).toEqual([]);
   });
 
