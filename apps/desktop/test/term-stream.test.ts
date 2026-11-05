@@ -11,9 +11,11 @@ describe('agentRoute', () => {
     expect(agentRoute(session, { ready: true })).toBe('pty');
     expect(agentRoute(session, { ready: true, daemon: { terminalStream: true } })).toBe('stream');
   });
-  it('keeps a seat on the pseudo-terminal', () => {
+  it('streams a seat only from a daemon that streams seats; an older one keeps it on the pseudo-terminal', () => {
     expect(agentRoute({ tmuxSession: 'pod@rig' }, { ready: true, daemon: { terminalStream: true } })).toBe('pty');
-    expect(agentRoute({ tmuxSession: null }, { ready: true, daemon: { terminalStream: true } })).toBe('pty');
+    expect(agentRoute({ tmuxSession: 'pod@rig' }, { ready: true, daemon: { terminalStream: true, terminalStreamSeats: true } })).toBe('stream');
+    expect(agentRoute({ tmuxSession: 'pod@rig' }, { ready: true, daemon: { terminalStreamSeats: true } })).toBe('pty');
+    expect(agentRoute({ tmuxSession: null }, { ready: true, daemon: { terminalStream: true, terminalStreamSeats: true } })).toBe('pty');
   });
 });
 

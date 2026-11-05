@@ -20,12 +20,14 @@ if (import.meta.env.VITE_LEDGE_E2E) (window as unknown as { __ledgeToasts?: stri
 
 // The e2e build only: a stand-in shell that prints a `$ ` prompt and echoes what is typed, and records each write for Playwright.
 if (import.meta.env.VITE_LEDGE_E2E) {
-  const w = window as unknown as { __ledgePtyWrites?: string[]; __ledgeFakePty?: PtyBackend };
+  const w = window as unknown as { __ledgePtyWrites?: string[]; __ledgeFakePty?: PtyBackend; __ledgePtyEmit?: (text: string) => void };
   const writes: string[] = w.__ledgePtyWrites = [];
   const enc = new TextEncoder();
   w.__ledgeFakePty = {
     open: async (_argv, _size, on) => {
       let closed = false;
+      // What the program prints, from Playwright: the last opened screen's.
+      w.__ledgePtyEmit = text => { if (!closed) on.data(enc.encode(text)); };
       queueMicrotask(() => { if (!closed) on.data(enc.encode('$ ')); });
       return {
         write: data => { writes.push(data); if (!closed) on.data(enc.encode(data)); },

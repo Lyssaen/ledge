@@ -162,7 +162,7 @@ describe('routedTmux', () => {
     const fake = (who: string, list: string[] | Error) => ({
       newSession: async () => { calls.push(`${who}:new`); }, sendText: async (n: string) => { calls.push(`${who}:text:${n}`); }, sendKeys: async (n: string) => { calls.push(`${who}:keys:${n}`); },
       capture: async (n: string) => `${who}:${n}`, hasSession: async () => true, killSession: async (n: string) => { calls.push(`${who}:kill:${n}`); },
-      setOption: async () => {}, attachArgs: (n: string) => [who, n],
+      setOption: async () => {}, attachArgs: (n: string) => [who, n], controlArgs: (n: string) => [who, '-C', n],
       listSessions: async () => { if (list instanceof Error) throw list; return list; }
     });
     const t = routedTmux(fake('ledge', ['ledge-a']), fake('default', ['dev-build@starter', 'my-own-shell']));
@@ -170,6 +170,9 @@ describe('routedTmux', () => {
     expect(calls).toEqual(['default:text:dev-build@starter', 'ledge:keys:ledge-a']);
     expect(await t.capture('dev-build@starter', 5)).toBe('default:dev-build@starter');
     expect(t.attachArgs('dev-build@starter')).toEqual(['default', 'dev-build@starter']);
+    // The control client of a seat attaches on the seat's own server, Ledge's sessions on Ledge's.
+    expect(t.controlArgs?.('dev-build@starter')).toEqual(['default', '-C', 'dev-build@starter']);
+    expect(t.controlArgs?.('ledge-a')).toEqual(['ledge', '-C', 'ledge-a']);
     expect(await t.listSessions()).toEqual(['ledge-a', 'dev-build@starter']);
     const down = routedTmux(fake('ledge', ['ledge-a']), fake('default', new Error('no server')));
     expect(await down.listSessions()).toEqual(['ledge-a']);
