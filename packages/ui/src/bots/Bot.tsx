@@ -70,6 +70,12 @@ const SHELLS: Record<Tool, string> = {
   omp: 'M17 22H79Q83 22 83 26V48Q83 52 79 52H71V79Q71 83 67 83H58Q54 83 54 79V52H41V67Q41 71 37 71H28Q24 71 24 67V52H17Q13 52 13 48V26Q13 22 17 22Z'
 };
 
+/** A harness's silhouette alone (issue #61, without the eyes): its head crop and its path, for a logo drawn filled
+ *  (the usage limits' footer, docs/mockups/ledge-harness-usage.html). */
+export function harnessShell(tool: Tool): { viewBox: string; d: string } {
+  return { viewBox: HEAD_VIEWBOX[tool], d: SHELLS[tool] };
+}
+
 /**
  * No visor: each logo carries its eyes on the shell itself, where its body has room for a face.
  * Cursor's look follows the cube's front face.

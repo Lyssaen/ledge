@@ -269,6 +269,18 @@ export const en: Messages = {
     chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
     panelShow: 'Show the panel: shells and changes', panelHide: 'Hide the panel', panelShowTitle: 'Show the panel: shells and changes (O)', panelHideTitle: 'Hide the panel (O)', terminalGone: 'Seat stopped: no terminal'
   },
+  usage: {
+    harness: { claude: 'Claude Code', codex: 'Codex' } as Record<string, string>,
+    five: '5 h', week: 'Week', weekShort: 'Wk',
+    session5: 'Session · 5 h', weekAll: 'Week · all models', weekOf: (m: string) => `Week · ${m}`, perModel: 'By model',
+    resetAt: (t: string) => `resets at ${t}`, resetIn: (t: string, d: string) => `resets at ${t} · in ${d}`, resumes: (t: string) => `resumes at ${t}`,
+    ago: (a: string) => `${a} ago`, unreachable: 'unreachable',
+    expired: 'session expired: sign in again in Claude Code', expiredShort: 'sign in again',
+    title: (h: string) => `Limits · ${h}`,
+    signedIn: (m: string) => `Account signed in on ${m}`, read: (a: string) => `read ${a} ago`, lastRead: (a: string) => `last read ${a} ago`,
+    neverRead: 'not read yet', unreachHost: (h: string) => `${h} unreachable`,
+    and: ' and ', alertAt: (p: number) => `Alert at ${p} %`, settings: 'Settings', open: (h: string) => `${h} limits: detail`
+  },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
   sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', notes: 'Notes', shortcuts: 'Keyboard shortcuts', about: 'About' },

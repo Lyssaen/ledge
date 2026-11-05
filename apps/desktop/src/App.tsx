@@ -25,6 +25,8 @@ import { Sidebar } from './shell/Sidebar';
 import { TitleBar } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
+import { UsageFooter } from './usage/UsageFooter';
+import { useUsageView } from './usage/useUsageView';
 import { LaunchPlace } from './launch/lazy';
 import { ChatPlace, HomePlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
@@ -133,6 +135,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const asks = useOpenRigAsks(fleetClient, localMachine?.ready && localMachine.daemon?.openrigAsks ? 'local' : null);
   const [askFocus, setAskFocus] = useState<{ id: string; n: number } | null>(null);
   const island = useIsland(fleetClient);
+  const usage = useUsageView(fleetClient, machines);
+  const footMachines = useMemo(() => machines.map(m => ({ id: m.id, label: m.label, offline: m.status === 'unreachable', count: sessions.filter(s => (s.machineId ?? 'local') === m.id).length })), [machines, sessions]);
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
   const sidebarOpenRig = useSidebarOpenRig(fleetClient, machines);
@@ -280,7 +284,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Whom a broadcast dialog writes to, as its title names them: the project's name, or the picked sessions' names.
   const addressees = (to: BroadcastTo) => ('project' in to ? projects?.projects.find(x => x.id === to.project)?.name ?? to.project
     : to.sessions.map(id => sessions.find(s => s.id === id)?.name ?? id).join(', '));
-  const onOverview = place.kind === 'overview' || (place.kind === 'session' && !session);
   // The New session form starts on the overview's project filter (a project id, not « all » nor « none »).
   const base = place.kind === 'settings' ? place.back : place;
   const filter = base.project !== 'all' && base.project !== 'none' ? base.project : undefined;
@@ -374,7 +377,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
                 tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />}
-          {(onOverview || place.kind === 'home') && <Footer dispatch={dispatch} localDown={localDown} island={island} />}
+          <Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines}
+            usage={<UsageFooter groups={usage.groups} threshold={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} />} />
         </section>
         {nav.chat && (
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus} onClose={() => dispatch({ type: 'chat', open: false })}

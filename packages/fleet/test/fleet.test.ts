@@ -364,6 +364,23 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'models.listing').at(-1)).toMatchObject({ requestId: 'm2' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('keeps each machine\'s usage; the threshold goes to every machine, « Compris » to those that hold the alert', () => {
+    const { client, local, server } = setup();
+    const alert = { id: 'claude|a1b2c3d4e5f6|five_hour|-|threshold|-', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: { kind: 'five_hour' as const, pct: 84, resetsAt: null }, level: 'threshold' as const, at: '2026-11-05T14:00:00.000Z' };
+    const state = (alerts: typeof alert[]) => ({ type: 'usage.state' as const, harnesses: [], alerts, prefs: { alert: 0.8 } });
+    expect(client.fleet!.usage().size).toBe(0);
+    local.emit(state([alert])); server.emit(state([]));
+    expect([...client.fleet!.usage().keys()]).toEqual(['local', 'server']);
+    expect(client.fleet!.usage().get('local')?.machineId).toBe('local');
+    client.fleet!.setUsageAlert(0.9);
+    expect(local.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }]);
+    expect(server.sent).toEqual([{ type: 'usage.set', prefs: { alert: 0.9 } }]);
+    client.fleet!.ackUsage(alert.id);
+    expect(local.sent.at(-1)).toEqual({ type: 'usage.ack', id: alert.id });
+    expect(server.sent).toHaveLength(1);
+    expect(() => client.fleet!.setUsageAlert(0.2)).toThrow();
+  });
+
   it('relays each machine\'s usage tagged with it, and sends the threshold and « Compris » to the machine named (local by default)', () => {
     const { client, local, server, got } = setup();
     const state = { type: 'usage.state' as const, harnesses: [{ harness: 'claude' as const, account: 'a1b2c3d4e5f6', status: 'ok' as const, readAt: '2026-11-05T14:00:00.000Z', windows: [] }], alerts: [], prefs: { alert: 0.8 } };

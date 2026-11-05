@@ -295,6 +295,18 @@ export const fr = {
     chat: 'Chat Ledge', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
     panelShow: 'Afficher le panneau : shells et modifications', panelHide: 'Masquer le panneau', panelShowTitle: 'Afficher le panneau : shells et modifications (O)', panelHideTitle: 'Masquer le panneau (O)', terminalGone: 'Siège arrêté : plus de terminal'
   },
+  usage: {
+    harness: { claude: 'Claude Code', codex: 'Codex' } as Record<string, string>,
+    five: '5 h', week: 'Semaine', weekShort: 'Sem.',
+    session5: 'Session · 5 h', weekAll: 'Semaine · tous modèles', weekOf: (m: string) => `Semaine · ${m}`, perModel: 'Par modèle',
+    resetAt: (t: string) => `remise à ${t}`, resetIn: (t: string, d: string) => `remise à ${t} · dans ${d}`, resumes: (t: string) => `reprend à ${t}`,
+    ago: (a: string) => `il y a ${a}`, unreachable: 'injoignable',
+    expired: 'session expirée : reconnectez-vous dans Claude Code', expiredShort: 'reconnectez-vous',
+    title: (h: string) => `Limites · ${h}`,
+    signedIn: (m: string) => `Compte connecté sur ${m}`, read: (a: string) => `lu il y a ${a}`, lastRead: (a: string) => `dernière lecture il y a ${a}`,
+    neverRead: 'pas encore lu', unreachHost: (h: string) => `${h} injoignable`,
+    and: ' et ', alertAt: (p: number) => `Alerte à ${p} %`, settings: 'Réglages', open: (h: string) => `Limites de ${h} : détail`
+  },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
   sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', notes: 'Notes', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
