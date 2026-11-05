@@ -5,7 +5,7 @@ import { hostname } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   ATTACHMENT_MAX, OperationIdSchema, PHONE_PROTOCOL, actionById, TOOL_TEXT_MAX, proposalRows, PhoneClientMessageSchema, pushEndpointAllowed, RefusalCodeSchema, UNTYPABLE, backendOf, isArchived, pendingKey,
-  LEDGE_GIVER, SEMVER, pcSubject, PHONE_PROJECTS_MAX, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem, type HarnessUsage } from '@ledge/protocol';
+  LEDGE_GIVER, SEMVER, pcSubject, PHONE_PROJECTS_MAX, type AttachmentRef, type ChatErrorCode, type ChatTurn, type CloseHow, type ClientMessage, type PhoneTask, type Task, type OperationReason, type OperationStatus, type PhoneClientMessage, type PhoneServerMessage, type ServerMessage, type Session, type ThreadItem, type HarnessUsage, type UsagePrefs } from '@ledge/protocol';
 import { ModelRefusalSchema, type HumanAnswer, type ModelRefusal, type OpenRigAnswered, type OpenRigAsksChanged, type Tool } from '@ledge/protocol';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
 import { BROADCAST_SESSIONS_MAX, type DecidedBy, type DeviceKind } from '@ledge/protocol';
@@ -141,8 +141,8 @@ export function createPhoneGateway(deps: {
   pc?: { canUpdate: boolean; canRestart: boolean; update: (version: string, reply: (m: ServerMessage) => void) => void; restart: (reply: (m: ServerMessage) => void) => void };
   /** The context threshold the user chose (context handover spec §3.2). */
   contextNear?: () => number;
-  /** This PC's harness limits (docs/mockups/ledge-harness-usage.html); their changes come through `forward` (`usage.state`). */
-  usage?: () => readonly HarnessUsage[];
+  /** This PC's harness limits and its threshold (docs/mockups/ledge-harness-usage.html); their changes come through `forward` (`usage.state`). */
+  usage?: () => { harnesses: readonly HarnessUsage[]; prefs: UsagePrefs };
   /** The daemon takes `session.model` with coded answers and lists an agent's models (#58): the phone offers the switch. */
   models?: true;
   /**
@@ -259,7 +259,8 @@ export function createPhoneGateway(deps: {
   const settings = !!(mobile.prefsOf && mobile.setPrefs && deps.contextNear);
 
   /** What a phone may know of the limits: no account id (the token, the plan and the subscription never reach the daemon's state). */
-  const usageOf = (hs: readonly HarnessUsage[]): PhoneServerMessage => ({ type: 'usage.state', harnesses: hs.map(({ account: _a, ...h }) => h) });
+  const usageOf = (u: { harnesses: readonly HarnessUsage[]; prefs: UsagePrefs }): PhoneServerMessage =>
+    ({ type: 'usage.state', harnesses: u.harnesses.map(({ account: _a, ...h }) => h), prefs: { alert: u.prefs.alert } });
 
   const snapshot = (deviceId: string): PhoneServerMessage => {
     const push = pushStatus(deviceId);
@@ -1404,7 +1405,7 @@ export function createPhoneGateway(deps: {
           // The harnesses' limits: only their state, percent and resets reach a phone.
           case 'usage.state':
             if (!deps.usage) return;
-            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, usageOf(m.harnesses), 'usage.state');
+            for (const [deviceId, f] of followers) if (f.subscribed) push(deviceId, usageOf(m), 'usage.state');
             return;
           case 'context.prefs':
             // The threshold rides on the snapshot's device: a change sends each following device a fresh one.
