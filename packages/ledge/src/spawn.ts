@@ -4,7 +4,7 @@ import type { Session, Tool } from '@ledge/protocol';
 import { pickName } from '@ledge/protocol';
 import { paths } from './paths.js';
 import { sessionKey, SESSION_KEY_VAR } from './auth.js';
-import type { Tmux } from './tmux.js';
+import { SEAT_VARS, type Tmux } from './tmux.js';
 import { claudeTranscriptPath } from './daemon/transcript.js';
 
 /** The harnesses Ledge drives through a tmux pane: OMP is driven over its own protocol (daemon/omp), never typed into. */
@@ -57,9 +57,18 @@ const PARENT_AGENT = new Set<string>(PARENT_AGENT_VARS);
  */
 export function agentEnv(base: NodeJS.ProcessEnv, extra: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(base)) if (v !== undefined && k !== 'TMUX' && !k.startsWith('TMUX_') && !PARENT_AGENT.has(k)) env[k] = v;
+  // Launched from inside a Ledge session (an agent's own command): the agent is not the seat that session may be.
+  const fromSession = base.LEDGE_SESSION !== undefined;
+  for (const [k, v] of Object.entries(base)) {
+    if (v !== undefined && k !== 'TMUX' && !k.startsWith('TMUX_') && !PARENT_AGENT.has(k) && !(fromSession && SEAT.has(k))) env[k] = v;
+  }
   return { ...env, ...extra };
 }
+
+const SEAT = new Set<string>(SEAT_VARS);
+export { SEAT_VARS };
+/** What the pane must not have from the server's global environment: a launching agent's variables, and a seat's identity the launch does not give. */
+export const unsetFor = (env: Record<string, string>): string[] => [...PARENT_AGENT_VARS, ...SEAT_VARS.filter(v => env[v] === undefined)];
 
 export interface SpawnOptions {
   tool: TmuxTool;
@@ -97,7 +106,8 @@ export async function spawnSession(opts: SpawnOptions): Promise<Session> {
   // the file passed as $0, so the session can die naturally and the code is still readable.
   const command = opts.recordExit ? ['sh', '-c', '"$@"; echo $? > "$0"', exitFile(id), ...agent] : agent;
   const key = sessionKey(id);
-  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: agentEnv(env, { LEDGE_SESSION: id, ...(key ? { [SESSION_KEY_VAR]: key } : {}), LEDGE_NAME: name, ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) }), unset: PARENT_AGENT_VARS, command });
+  const paneEnv = agentEnv(env, { LEDGE_SESSION: id, ...(key ? { [SESSION_KEY_VAR]: key } : {}), LEDGE_NAME: name, ...(opts.tool === 'codex' ? { [CODEX_ENV_VAR]: id } : {}) });
+  await opts.tmux.newSession({ name: tmuxSession, cwd: opts.cwd, env: paneEnv, unset: unsetFor(paneEnv), command });
   const at = now();
   return { id, name, tool: opts.tool, cwd: opts.cwd, project, title: `${name} · ${project}`, tmuxSession, state: 'starting', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', ...(agentSessionId ? { agentSessionId } : {}), ...(transcriptPath ? { transcriptPath } : {}) };
 }

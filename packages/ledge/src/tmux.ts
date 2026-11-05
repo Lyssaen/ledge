@@ -4,6 +4,13 @@ import { join } from 'node:path';
 import { paths } from './paths.js';
 import { log } from './log.js';
 
+/**
+ * OpenRig's identity of the seat a shell belongs to. An agent is that seat only when launched from the seat's own shell
+ * (OpenRig runs `ledge claude` there), never from the tmux server's global environment, frozen by whoever started it: a
+ * seat's `ledge claude` started Ledge's server on 2026-11-05 and every agent launched from Ledge took itself for that seat.
+ */
+export const SEAT_VARS = ['OPENRIG_SESSION_NAME', 'OPENRIG_OCCUPANT_GENERATION', 'OPENRIG_ACTIVITY_HOOK_TOKEN', 'OPENRIG_SEAT_ENV_KEYS'] as const;
+
 export interface Tmux {
   /** `unset`: variables the pane must not have, even from the tmux server's global environment (`-e` can only add). */
   newSession(opts: { name: string; cwd: string; env: Record<string, string>; unset?: readonly string[]; command: string[] }): Promise<void>;
@@ -18,6 +25,9 @@ export interface Tmux {
   /** The pid of the program the pane runs, or null when tmux cannot tell. */
   panePid?(name: string): Promise<number | null>;
   hasSession(name: string): Promise<boolean>;
+  /** `variable` in the session's own environment (what its creation gave, not the server's global one): its value, null
+   *  when the session does not set it, undefined when that cannot be read (no such session, tmux failed). */
+  sessionEnv?(name: string, variable: string): Promise<string | null | undefined>;
   /** Empty when no tmux server runs; throws on any other failure. */
   listSessions(): Promise<string[]>;
   killSession(name: string): Promise<void>;
@@ -68,7 +78,9 @@ export function realTmux(socket: string | null = 'ledge', opts: { scope?: () => 
       const envArgs = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
       if (unset.length) command = ['env', ...unset.flatMap(v => ['-u', v]), ...command];
       // tmux gives a detached session's pane the PATH of the client that created it, over `-e`: the client carries the pane's.
-      const clientEnv = env.PATH === undefined ? undefined : { ...process.env, PATH: env.PATH };
+      // The client that starts the server gives it its global environment: never a seat's identity (SEAT_VARS).
+      const clientEnv = Object.fromEntries(Object.entries({ ...process.env, ...(env.PATH !== undefined ? { PATH: env.PATH } : {}) })
+        .filter(([k]) => !(SEAT_VARS as readonly string[]).includes(k)));
       const args = [...base(), 'new-session', '-d', '-s', name, '-c', cwd, '-x', '200', '-y', '50', ...envArgs, '--', ...command];
       // Only the call that starts the server needs a scope: later sessions are created by that server.
       const serverUp = (await t(['list-sessions'])).code === 0;
@@ -103,6 +115,15 @@ export function realTmux(socket: string | null = 'ledge', opts: { scope?: () => 
     },
     async hasSession(name) {
       return (await t(['has-session', '-t', `=${name}`])).code === 0;
+    },
+    async sessionEnv(name, variable) {
+      const r = await t(['show-environment', '-t', `=${name}`, variable]);
+      if (r.code === 0) {
+        const line = r.stdout.trim();
+        // `-NAME`: the session removes it (from the global environment) for its panes.
+        return line.startsWith(`${variable}=`) ? line.slice(variable.length + 1) : null;
+      }
+      return /unknown variable/i.test(r.stderr) ? null : undefined;
     },
     async paneCwd(name) {
       const r = await t(['display-message', '-p', '-t', `=${name}:`, '#{pane_current_path}']);
@@ -151,6 +172,7 @@ export function routedTmux(own: Tmux, seats: Tmux): Tmux {
     paneCwd: async n => { const t = of(n); return t.paneCwd ? t.paneCwd(n) : null; },
     panePid: async n => { const t = of(n); return t.panePid ? t.panePid(n) : null; },
     hasSession: n => of(n).hasSession(n),
+    sessionEnv: async (n, variable) => { const t = of(n); return t.sessionEnv ? t.sessionEnv(n, variable) : undefined; },
     async listSessions() {
       const mine = await own.listSessions();
       const theirs = await seats.listSessions().catch(() => [] as string[]);

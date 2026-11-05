@@ -12,7 +12,7 @@ import type { History } from './history.js';
 import { AttachmentError, AttachmentStore } from './attachments.js';
 import { CaptureReducer } from './captureReducer.js';
 import { withImages } from '../attachmentText.js';
-import type { Tmux } from '../tmux.js';
+import { isSeatSession, type Tmux } from '../tmux.js';
 import { adapterFor, type KeyPlan } from '../adapters/index.js';
 import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.js';
 import { verifyGone } from '../adapters/verify.js';
@@ -329,8 +329,40 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The seats recognised before and idle since (no hook to bring them): looked for again at start and at each OpenRig read. */
   const adoptSeats = () => { for (const s of store.all()) if (s.rig) adoptSeat(s.id, s.rig.seat); };
   adoptSeats();
+  /**
+   * Whether a session Ledge launched is the seat its hook names: only when its own tmux session carries it (OpenRig's
+   * `ledge claude` passes it at creation). The server's global environment, frozen by whoever started the server, is not
+   * the agent's identity (SEAT_VARS). Null: nothing to check (another source, a seat's pane, a tmux that cannot say) or
+   * not readable now; the hook is taken at its word, as before.
+   */
+  const seatCarried = async (s: Session, seat: string): Promise<boolean | null> => {
+    if (s.source !== 'launcher' || !s.tmuxSession || isSeatSession(s.tmuxSession) || !tmux.sessionEnv) return null;
+    const own = await tmux.sessionEnv(s.tmuxSession, 'OPENRIG_SESSION_NAME').catch(() => undefined);
+    return own === undefined ? null : own === seat;
+  };
+  /** A seat tag its session does not carry: the agent goes back to its project (a tag saved before this check included). */
+  const dropSeat = (id: string, seat: string) => {
+    const s = store.get(id);
+    if (s?.rig?.seat !== seat) return;
+    const { rig: _r, ...rest } = s;
+    store.upsert(rest);
+    log(`session ${id}: not seat ${seat}, its tmux session does not carry it (inherited from the server's environment)`);
+  };
+  /** At start, the tags saved before: each session Ledge launched keeps its seat only if it carries it. */
+  for (const s of store.all()) {
+    if (!s.rig || s.archivedAt) continue;
+    const seat = s.rig.seat;
+    void seatCarried(s, seat).then(c => { if (c === false) dropSeat(s.id, seat); });
+  }
   const tagRigSeat = (id: string, seat: string) => {
+    const session = store.get(id);
+    if (!session) return;
+    if (session.source !== 'launcher' || !session.tmuxSession || isSeatSession(session.tmuxSession) || !tmux.sessionEnv) return applySeat(id, seat);
+    void seatCarried(session, seat).then(c => (c === false ? dropSeat(id, seat) : applySeat(id, seat)));
+  };
+  const applySeat = (id: string, seat: string) => {
     const session = store.get(id), cur = session?.rig;
+    if (!session) return;
     adoptSeat(id, seat);
     if (cur?.seat === seat && cur.role) return;
     const name = seat.slice(seat.lastIndexOf('@') + 1);
