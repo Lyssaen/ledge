@@ -208,6 +208,45 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .srow.new{position:relative}
 .srow.new::before{content:'';position:absolute;left:-14px;top:14px;bottom:14px;width:3px;border-radius:2px;background:var(--sidebar-primary)}
 
+/* ---------- footer (v2) ---------- */
+:root, :root[data-theme="light"] { --h-claude: #b8694c; --h-codex: #5b58c2; }
+:root[data-theme="dark"] { --h-claude: #d4906f; --h-codex: #8f8cf0; }
+.win{position:relative}
+.lg{display:inline-block;flex:none;vertical-align:middle}
+.lg-claude{color:var(--h-claude)}.lg-codex{color:var(--h-codex)}
+.sbar{height:28px;flex:none;display:flex;align-items:center;gap:6px;padding:0 8px;border-top:1px solid var(--border);background:var(--sidebar);font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden}
+.wfoot{height:34px;flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 10px 0 24px;border-top:1px solid var(--border);font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden}
+.wfoot .fl{display:flex;align-items:center;gap:16px}
+.wfoot .fl span{display:flex;align-items:center;gap:6px}
+.wfoot .fl i{width:7px;height:7px;border-radius:50%;background:var(--success)}
+.wfoot .fl .isl{padding:2px 8px;border:1px solid var(--border);border-radius:999px}
+.fr{display:flex;align-items:center;gap:4px;min-width:0}
+.hg{display:inline-flex;align-items:center;gap:8px;padding:3px 8px;border-radius:6px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap}
+.hg:hover,.hg.open{background:var(--accent)}
+.hg .hm{color:var(--foreground)}
+.hg.dim .mg{opacity:.45}
+.hg .age{color:var(--warning)}
+.hg .msg{color:var(--warning);font-family:'Geist',system-ui,sans-serif}
+.mg{display:inline-flex;align-items:center;gap:5px}
+.mg .gbar{width:38px;margin:0;height:4px}
+.mg b{font-weight:500;color:var(--foreground)}
+.mg.amber b{color:var(--warning)}.mg.red b{color:var(--danger-text)}
+.mg .skel{width:38px;margin:0}
+.hsep{width:1px;height:14px;background:var(--border);flex:none}
+.hg.two .mg .gbar{width:26px}
+.narrow .mg .rs,.narrow .mg .lb{display:none}
+.narrow .mg .gbar{width:22px}
+.narrow .hg{gap:6px;padding:3px 6px}
+.pop.pf{left:auto;bottom:auto}
+.vtag{display:inline-flex;align-items:center;gap:8px;margin:0 0 8px;font-size:12px;color:var(--muted-foreground)}
+.vtag b{display:inline-flex;width:20px;height:20px;border-radius:6px;align-items:center;justify-content:center;background:var(--sidebar-primary);color:#fff;font-size:11px}
+.vtag.rec::after{content:attr(data-rec);margin-left:4px;padding:1px 8px;border-radius:999px;background:var(--status-info-soft);color:var(--info);font-size:11px}
+.rail{width:56px;flex:none;background:var(--sidebar);border-right:1px solid var(--sidebar-border);display:flex;flex-direction:column;align-items:center;gap:14px;padding:14px 0}
+.rail .st-badge{margin-top:-8px}
+.rail .fillv{flex:1}
+.logos{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.logos span{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+
 /* ---------- TUI ---------- */
 .term{background:var(--t-bg);color:var(--t-fg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow-overlay);display:inline-block;max-width:100%;overflow:hidden}
 .term pre{font:12.5px/17px 'Geist Mono','JetBrains Mono',ui-monospace,monospace;white-space:pre;margin:0}
@@ -262,16 +301,19 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 <div class="layout"><div class="stack" id="canvas"></div><aside class="notes" id="notes"></aside></div>
 <script>
 const Q = new URLSearchParams(location.search);
-const S = { v: Q.get('v') || 'side', st: Q.get('st') || 'ok', theme: Q.get('theme') || 'dark', lang: Q.get('lang') || 'fr' };
+const S = { v: Q.get('v') || 'footer', st: Q.get('st') || 'ok', theme: Q.get('theme') || 'dark', lang: Q.get('lang') || 'fr' };
 const THRESHOLD = 80;
 
 const T = {
   fr: {
     title: 'Usage par harnais', sub: 'limites · modèle · effort · contexte · durée',
     screen: 'Écran', state: 'Limites', theme: 'Thème', lang: 'Langue', dark: 'Sombre', light: 'Clair',
-    views: { side: 'Desktop · barre latérale', session: 'Desktop · session', alert: 'Desktop · alerte et réglage', tui: 'TUI', phone: 'Téléphone' },
+    views: { footer: 'Desktop · footer', session: 'Desktop · session', alert: 'Desktop · alerte et réglage', tui: 'TUI', phone: 'Téléphone' },
     states: { ok: 'À jour', loading: 'Lecture', stale: 'Anciennes', expired: 'Jeton expiré', unreachable: 'Injoignable', codex: 'Codex en donne', machines: 'Deux comptes', over: 'Seuil dépassé', none: 'Aucune' },
     aim: 'VISÉ',
+    varA: 'Barre d’état sur toute la largeur de la fenêtre', varB: 'Le footer existant, étendu à tous les écrans, limites à droite', varN: 'Fenêtre étroite (rail, moins de 850 px) · variante B', rec: 'recommandée',
+    footerSessions: 'Sessions locales et SSH', islandOn: 'Encoche active', expiredFoot: 'session expirée : reconnectez-vous dans Claude Code', expiredNarrow: 'reconnectez-vous',
+    staleFoot: 'il y a 12 min', unreachFoot: 'injoignable', logosCap: 'Logos des harnais (silhouettes Ledge de l’issue #61, sans les yeux)',
     claude: 'Claude Code', codex: 'Codex', cl: 'Claude',
     h5: '5 h', week: 'Semaine', weekAll: 'Semaine · tous modèles', session5: 'Session · 5 h',
     weekOf: m => `Semaine · ${m}`,
@@ -332,9 +374,12 @@ const T = {
   en: {
     title: 'Usage by harness', sub: 'limits · model · effort · context · duration',
     screen: 'Screen', state: 'Limits', theme: 'Theme', lang: 'Language', dark: 'Dark', light: 'Light',
-    views: { side: 'Desktop · sidebar', session: 'Desktop · session', alert: 'Desktop · alert and setting', tui: 'TUI', phone: 'Phone' },
+    views: { footer: 'Desktop · footer', session: 'Desktop · session', alert: 'Desktop · alert and setting', tui: 'TUI', phone: 'Phone' },
     states: { ok: 'Up to date', loading: 'Reading', stale: 'Old', expired: 'Token expired', unreachable: 'Unreachable', codex: 'Codex gives some', machines: 'Two accounts', over: 'Over threshold', none: 'None' },
     aim: 'TARGET',
+    varA: 'Status bar across the whole window', varB: 'The existing footer, on every screen, limits on the right', varN: 'Narrow window (rail, under 850 px) · variant B', rec: 'recommended',
+    footerSessions: 'Local and SSH sessions', islandOn: 'Island active', expiredFoot: 'session expired: sign in again in Claude Code', expiredNarrow: 'sign in again',
+    staleFoot: '12 min ago', unreachFoot: 'unreachable', logosCap: 'Harness logos (Ledge silhouettes from issue #61, without eyes)',
     claude: 'Claude Code', codex: 'Codex', cl: 'Claude',
     h5: '5 h', week: 'Week', weekAll: 'Week · all models', session5: 'Session · 5 h',
     weekOf: m => `Week · ${m}`,
@@ -508,10 +553,51 @@ function sidebar({ open = false, yours = 'normal', rowSignal = false } = {}) {
         <div class="ts"><span class="bot b4"></span><div class="tsb"><div class="r1"><b>Luna</b><span class="st-fill"></span><span class="st-time amber">5 ${t.min}</span></div><div class="r2">${t.phTask3}</div></div></div>
       </div>
     </div>
-    ${limits_(open)}
     <div class="st-foot"><span><i class="dot"></i>${t.local}<small>4</small></span>${multi() ? `<span><i class="dot"></i>${t.devbox}<small>2</small></span>` : ''}<span class="st-fill"></span><span class="ico">${ICON.help}</span><span class="ico">${ICON.gear}</span></div>
-    ${open ? popover() : ''}
   </aside>`;
+}
+
+/* ---------- footer (v2) ---------- */
+// The harness logos: the approved silhouettes of issue #61 (packages/ui/src/bots/Bot.tsx, SHELLS and HEAD_VIEWBOX), filled, no eyes.
+const SHELL = {
+  claude: { vb: [10, 18, 76, 64], d: 'M24 24H72Q75 24 75 27V43H82Q84 43 84 45V52Q84 54 82 54H75V62Q75 64 73 64H70V75Q70 77 68 77H66Q64 77 64 75V64H59V75Q59 77 57 77H55Q53 77 53 75V64H43V75Q43 77 41 77H39Q37 77 37 75V64H32V75Q32 77 30 77H28Q26 77 26 75V64H23Q21 64 21 62V54H14Q12 54 12 52V45Q12 43 14 43H21V27Q21 24 24 24Z' },
+  codex: { vb: [5, 7, 87, 82], d: 'M30 25C31 13 48 10 57 20C69 14 84 23 81 37C92 46 87 62 76 65C76 80 58 86 48 77C35 85 20 78 21 66C7 61 7 45 18 38C13 28 21 20 30 25Z' }
+};
+function logo(id, size = 15) {
+  const { vb, d } = SHELL[id];
+  return `<svg class="lg lg-${id}" width="${size}" height="${Math.round(size * vb[3] / vb[2])}" viewBox="${vb.join(' ')}" aria-label="${id === 'claude' ? 'Claude Code' : 'Codex'}"><path d="${d}" fill="currentColor"/></svg>`;
+}
+const mini = (w, label) => `<span class="mg ${tone(w.pct)}"><span class="lb">${label}</span><span class="gbar"><i style="width:${Math.min(100, w.pct)}%"></i></span><b>${w.pct} %</b><span class="rs">↺ ${w.rsShort || w.rs}</span></span>`;
+function hgroup(h, { open = false, narrow = false, two = false } = {}) {
+  const who = `${logo(h.id)}${multi() ? `<span class="hm">${h.machine}</span>` : ''}`;
+  if (h.status === 'loading') return `<span class="hg" title="${h.name}">${who}<span class="mg"><span class="lb">${t.h5}</span><span class="skel"></span></span><span class="mg"><span class="lb">${t.week}</span><span class="skel"></span></span></span>`;
+  if (h.status === 'expired') return `<span class="hg" title="${h.name}">${who}<span class="msg">${narrow ? t.expiredNarrow : t.expiredFoot}</span></span>`;
+  const dim = h.status === 'stale' || h.status === 'unreachable';
+  const hot = h.m.filter(m => m.pct >= THRESHOLD);
+  const age = h.status === 'stale' ? t.staleFoot : h.status === 'unreachable' ? t.unreachFoot : '';
+  const wk = two ? mini({ ...h.w[1], rsShort: '' }, S.lang === 'fr' ? 'Sem.' : 'Wk').replace(/<span class="rs">[^<]*<\/span>/, '') : mini(h.w[1], t.week);
+  return `<span class="hg ${dim ? 'dim' : ''} ${open ? 'open' : ''} ${two ? 'two' : ''}" title="${h.name}">${who}${two && multi() ? mini(h.w[0], t.h5).replace(/<span class="rs">[^<]*<\/span>/, '') : mini(h.w[0], t.h5)}${wk}${hot.map(m => mini({ ...m, rsShort: '' }, m.k).replace(/<span class="rs">[^<]*<\/span>/, '')).join('')}${age ? `<span class="age">${age}</span>` : ''}</span>`;
+}
+function hgroups(opts = {}) {
+  const L = limits(S.st);
+  return L.map((h, i) => hgroup(h, { ...opts, two: L.length > 1, open: opts.open && i === 0 })).join('<span class="hsep"></span>');
+}
+function footerB({ open = false, narrow = false } = {}) {
+  const left = narrow ? `<span><i></i>${t.local} 4</span>` : `<span><i></i>${t.footerSessions}</span><span class="isl">${t.islandOn}</span>`;
+  return `<footer class="wfoot ${narrow ? 'narrow' : ''}"><div class="fl">${left}</div><div class="fr">${hgroups({ open, narrow })}</div></footer>`;
+}
+function statusBarA({ open = false } = {}) {
+  return `<div class="sbar">${hgroups({ open })}</div>`;
+}
+function popAt(style) {
+  const html = popover();
+  return html ? html.replace('<div class="pop">', `<div class="pop pf" style="${style}">`) : '';
+}
+function railSide() {
+  return `<aside class="rail"><span class="bot"></span><span class="st-badge">2</span><span class="bot b2"></span><span class="bot b3"></span><span class="bot b4"></span><span class="fillv"></span><span class="ico">${ICON.help}</span><span class="ico">${ICON.gear}</span></aside>`;
+}
+function winA(side, main, h, pop) {
+  return `<div class="win" style="--wh:${h || 640}px"><div class="titlebar"><b>Ledge<i>.</i></b><span class="fill"></span><span class="dots"><span>—</span><span>▢</span><span>✕</span></span></div><div class="body">${side}${main}</div>${statusBarA({ open: !!pop })}${pop ? popAt('left:12px;bottom:34px') : ''}</div>`;
 }
 
 function metaHtml(kind) {
@@ -528,7 +614,7 @@ function metaHtml(kind) {
 function vrow(kind) {
   return `<div class="vrow"><div class="vsw"><span class="on">≡ ${t.fil}</span><span>&gt;_ ${t.terminal}</span></div><div class="meta">${metaHtml(kind)}</div><span class="fill"></span><span class="meta">${t.subagent}</span></div>`;
 }
-function sessionMain(withTip) {
+function sessionMain(withTip, foot) {
   return `<section class="main">
     <div class="top"><span class="crumb">${t.crumbs[0]}</span><span class="crumb">/</span><span class="crumb">${t.crumbs[1]}</span><span class="crumb">/</span><span class="bot"></span><b>${t.otto}</b><span class="crumb">· ${t.topic}</span><span class="fill"></span><span class="pill-red">${t.accord}</span></div>
     ${vrow('ledge')}
@@ -539,10 +625,11 @@ function sessionMain(withTip) {
       <div class="tl"><span class="ic"></span><div class="tt" style="color:var(--info)">&gt;_ ${t.th3}</div><time>5 min 12 s</time></div>
     </div>
     <div class="reply">${t.replyPh}</div>
+    ${foot === undefined ? '' : foot}
   </section>`;
 }
-function win(side, main, h) {
-  return `<div class="win" style="--wh:${h || 700}px"><div class="titlebar"><b>Ledge<i>.</i></b><span class="fill"></span><span class="dots"><span>—</span><span>▢</span><span>✕</span></span></div><div class="body">${side}${main}</div></div>`;
+function win(side, main, h, w) {
+  return `<div class="win" style="--wh:${h || 700}px${w ? `;width:${w}px` : ''}"><div class="titlebar"><b>Ledge<i>.</i></b><span class="fill"></span><span class="dots"><span>—</span><span>▢</span><span>✕</span></span></div><div class="body">${side}${main}</div></div>`;
 }
 function settingsMain() {
   return `<section class="main"><div class="set">
@@ -551,7 +638,7 @@ function settingsMain() {
     <div class="srow"><div class="sl">${t.setTheme}</div><div><span class="sel-box">${t.setThemeV} <span>▾</span></span></div></div>
     <div class="srow"><div class="sl">${t.setCtx}</div><div><span class="sel-box">85 % <span>▾</span></span><div class="sh">${t.setCtxHint}</div></div></div>
     <div class="srow new"><div class="sl">${t.setLim}</div><div><span class="sel-box">${THRESHOLD} % <span>▾</span></span><div class="sh">${t.setLimHint}</div></div></div>
-  </div></section>`;
+  </div>${footerB()}</section>`;
 }
 
 /* ---------- TUI ---------- */
@@ -612,6 +699,35 @@ function tuiLimitRows(w, compact) {
   }
   return rows;
 }
+// The harness marks in a terminal: ✻ (Claude Code's own mark in its welcome screen) and >_ (Codex CLI's banner).
+const TMARK = { claude: ['✻', 'coral'], codex: ['>_', 'violet'] };
+function tuiFoot(W) {
+  const L = limits(S.st);
+  if (!L.length) return null;
+  const wide = W >= 120, segs = [[' ', '']];
+  L.forEach((h, i) => {
+    if (i) segs.push(['  │  ', 'line']);
+    const [g, c] = TMARK[h.id];
+    segs.push([g + ' ', c + ' b']);
+    if (multi()) segs.push([h.machine + ' ', 'fg']);
+    if (h.status === 'loading') { segs.push([t.reading, 'faint']); return; }
+    if (h.status === 'expired') { segs.push([wide ? t.expiredFoot : t.expiredNarrow, 'yellow']); return; }
+    const dim = h.status === 'stale' || h.status === 'unreachable';
+    const one = (k, w, rs) => {
+      const col = dim ? 'faint' : tcol(w.pct);
+      segs.push([k + ' ', 'faint']);
+      if (wide) segs.push([bars(w.pct, 6) + ' ', dim ? 'faint' : tcol(w.pct)]);
+      segs.push([`${w.pct}%`, col === 'dim' ? 'fg' : col]);
+      if (rs) segs.push([` ↺${rs}`, 'faint']);
+      segs.push(['  ', '']);
+    };
+    one(t.h5, h.w[0], h.w[0].rs);
+    one(wide ? t.week : (S.lang === 'fr' ? 'sem' : 'wk'), h.w[1], wide ? (h.w[1].rsShort || h.w[1].rs) : '');
+    h.m.filter(m => m.pct >= THRESHOLD).forEach(m => one(m.k, m, ''));
+    if (dim) segs.push([h.status === 'unreachable' ? t.unreachFoot : t.staleFoot, 'yellow']);
+  });
+  return segs;
+}
 function tuiYours() {
   const over = S.st === 'over';
   const rows = [
@@ -652,16 +768,14 @@ function tuiOverview(W) {
       [[S.lang === 'fr' ? 'veut lancer ' : 'wants to run ', 'red'], ['npm test', 'fg b'], ['  Bash', 'faint']],
       [[` ${S.lang === 'fr' ? 'Autoriser' : 'Allow'} `, 'fg key'], ['y ', 'dim key'], ['  ', ''], [` ${S.lang === 'fr' ? 'Refuser' : 'Deny'} `, 'fg key'], ['n ', 'dim key']]
     ];
-    const limRows = tuiLimitRows(right, false);
     const R = [...box(`Otto · ${t.topic}`, card, right, 'red', 'red'),
-      ...(limRows.length ? box(t.tuiLimits, limRows, right) : []),
       ...box(t.tuiExchanges, [[['10:41 ', 'faint'], ['Otto ', 'fg'], ['→ ', 'violet'], ['Nova ', 'fg'], [S.lang === 'fr' ? 'le tri est prêt ?' : 'is the sort ready?', 'dim']]], right)];
     lines.push(...hcat(L, R));
   } else {
-    const limRows = tuiLimitRows(W, true);
     lines.push(...box(t.tuiYours(yours.length), yours, W, 'red', 'red'), ...box(t.tuiProjects, tuiTree(W - 4), W));
-    if (limRows.length) lines.push(...box(t.tuiLimits, limRows, W));
   }
+  const foot = tuiFoot(W);
+  if (foot) lines.push(foot);
   lines.push(tuiKeys(W >= 120 ? t.tuiKeys : t.tuiKeys.slice(0, 6)));
   return renderTerm(lines, W);
 }
@@ -678,6 +792,8 @@ function tuiSession(W) {
   ];
   lines.push(...box(title, body, W));
   lines.push(...box(t.tuiWrite, [[['❯ ', 'coral'], [t.tuiReplyTo, 'faint']]], W));
+  const foot = tuiFoot(W);
+  if (foot) lines.push(foot);
   lines.push(tuiKeys(t.tuiKeysS));
   return renderTerm(lines, W);
 }
@@ -700,7 +816,7 @@ function phLimits() {
   if (!L.length) return '';
   const row = (k, w) => `<div class="ph-lim ${tone(w.pct)}"><span>${k}</span><div class="gbar ${tone(w.pct)}"><i style="width:${Math.min(100, w.pct)}%"></i></div><span class="pp"><b>${w.pct} %</b><small>${w.pct >= 100 ? t.resumes(w.rs) : '↺ ' + w.rs}</small></span></div>`;
   return `<div class="ph-sec">${t.phLimits.toUpperCase()}</div>` + L.map(h => {
-    const head = `<div class="ph-hn">${h.name}${multi() ? `<small>· ${h.machine}</small>` : ''}</div>`;
+    const head = `<div class="ph-hn">${logo(h.id, 14)} ${h.name}${multi() ? `<small>· ${h.machine}</small>` : ''}</div>`;
     if (h.status === 'loading') return head + `<div class="ph-msg">${t.phLoading}</div>`;
     if (h.status === 'expired') return head + `<div class="ph-msg warn">${t.phNotOnPc}</div>`;
     const note = h.status === 'stale' ? `<div class="ph-msg warn">${t.phStale}</div>` : h.status === 'unreachable' ? `<div class="ph-msg warn">${t.phUnreach}</div>` : '';
@@ -747,6 +863,16 @@ function phone3() {
 /* ---------- notes ---------- */
 const NOTES = {
   fr: {
+    footer: `<div class="note"><h3>Footer · v2</h3><h4>Les limites en bas de la fenêtre, avec le logo du harnais</h4><ul>
+      <li><b>B, recommandée</b> : le footer existe déjà (<code>shell/Footer.tsx</code> : « Sessions locales et SSH », « Encoche active »), mais seulement sur l’Atelier et l’accueil. Il s’affiche alors sur <b>tous les écrans</b> (session, Réglages…), à droite de la barre latérale, à la hauteur de son pied ; ses éléments restent à gauche, les limites vont à droite. Rien de nouveau dans le cadre de la fenêtre, et la barre latérale ne change pas.</li>
+      <li><b>A</b> : une barre d’état neuve, sous la barre latérale et le contenu, sur toute la largeur (28 px). Plus visible, mais une bande de plus sur chaque écran, et le footer existant fait doublon.</li>
+      <li>Par harnais : son <b>logo</b>, puis 5 h et Semaine en mini-jauge, % et ↺ heure de remise à zéro. Neutre sous le seuil, <b style="color:var(--warning)">ambre</b> au-delà (${THRESHOLD} %), <b style="color:var(--danger-text)">rouge</b> à 100 %. Une fenêtre par modèle (Opus…) ne s’ajoute qu’au-delà du seuil, sans heure : le détail la donne.</li>
+      <li>Clic sur un harnais : le <b>détail</b> s’ouvre au-dessus de lui (dessiné ouvert) : session 5 h « dans 1 h 05 », semaine tous modèles, une ligne par modèle, le seuil et le lien Réglages. Ni plan, ni crédits, ni jeton.</li>
+      <li><b>Codex</b> sans fenêtre : rien, pas même son logo. Avec des fenêtres (état « Codex en donne ») : son logo et les mêmes jauges, après un séparateur.</li>
+      <li>États : <i>Lecture</i> (barres en attente) · <i>Anciennes</i> (estompé, « il y a 12 min » en ambre) · <i>Injoignable</i> (estompé, « injoignable ») · <i>Jeton expiré</i> (« session expirée : reconnectez-vous dans Claude Code ») · <i>Deux comptes</i> (logo puis nom de la machine, un groupe par compte ; à deux groupes, « Sem. » sans heure et des barres plus courtes pour tenir ; avec les noms de machine, plus d’heure du tout : le détail au clic les donne) · <i>Aucune</i> (le footer d’aujourd’hui).</li>
+      <li><b>Fenêtre étroite</b> (rail, moins de 850 px) : le footer ne garde que « Local 4 » à gauche ; à droite, logo, petites barres et %, sans libellés ni heures (le détail au clic les donne).</li>
+      <li><b>Logos</b> : les silhouettes de mascotte déjà validées pour Ledge (issue #61, <code>packages/ui/src/bots/Bot.tsx</code>, SHELLS) : le corps en pixels de Clawd pour Claude Code, le nuage pour Codex, pleines, sans les yeux, à la couleur du harnais. Ce sont des dessins de Ledge, déjà dans le dépôt : rien à télécharger, pas de logo officiel ni de licence de marque en jeu.</li>
+      <li><b>TUI</b> : une ligne de pied juste au-dessus de la barre de touches, sur tous les écrans (onglet TUI). <b>Téléphone</b> : pas de footer (la barre d’onglets occupe le bas) : la section LIMITES du Point reste, avec le logo devant chaque harnais.</li></ul></div>`,
     side: `<div class="note"><h3>Barre latérale</h3><h4>Les limites du compte, au pied, par harnais</h4><ul>
       <li>Un bloc par harnais qui donne des fenêtres, juste au-dessus de la ligne machine (« Local 4 »). Deux mini-jauges : <b>5 h</b> et <b>Semaine</b>, le % et l’heure de remise à zéro (↺).</li>
       <li>Jauge neutre sous le seuil, <b style="color:var(--warning)">ambre</b> au-delà (${THRESHOLD} % par défaut), <b style="color:var(--danger-text)">rouge</b> à 100 % (« reprend à … »).</li>
@@ -766,9 +892,10 @@ const NOTES = {
       <li>À 100 % : carte rouge, « semaine Opus », « Atteinte · reprend lun. ».</li>
       <li><b>Compris</b> range la carte jusqu’à la remise à zéro de cette fenêtre, ou jusqu’à 100 % si elle était sous 100 % (voir question 3). La jauge du pied reste colorée.</li>
       <li>Réglages › Général : « <b>Alerte de limite d’usage</b> », juste sous « Contexte max », même liste (50 % à 95 % par 5), ${THRESHOLD} % par défaut. Un seul seuil pour toutes les fenêtres et tous les harnais. Gardé par le daemon local comme « Contexte max », appliqué par tous les fronts (TUI et téléphone compris).</li></ul></div>`,
-    tui: `<div class="note"><h3>TUI</h3><h4>Une boîte LIMITES, l’en-tête de session enrichi</h4><ul>
-      <li><b>120 colonnes</b> : dans la colonne de droite, une boîte <b>LIMITES</b> entre la carte de la session et ÉCHANGES : le harnais et l’âge de la lecture, puis 5 h, semaine et une ligne par modèle, en barres ██░ avec % et ↺.</li>
-      <li><b>80 colonnes</b> : la boîte LIMITES passe sous PROJETS, <b>une ligne par harnais</b> (5 h et semaine). Une fenêtre par modèle n’y ajoute une ligne qu’au-delà du seuil.</li>
+    tui: `<div class="note"><h3>TUI</h3><h4>Le footer devient une ligne de pied</h4><ul>
+      <li>v2 : la boîte LIMITES disparaît. Les limites tiennent sur <b>une ligne de pied</b>, juste au-dessus de la barre de touches, sur tous les écrans (vue d’ensemble, fil de session).</li>
+      <li>Logo en terminal : <b style="color:var(--t-coral)">✻</b> pour Claude Code (sa propre marque dans son écran d’accueil) et <b style="color:var(--t-violet)">&gt;_</b> pour Codex (la bannière de Codex CLI), à la couleur du harnais.</li>
+      <li><b>120 colonnes</b> : « ✻ 5 h ██░ 62% ↺14:30  Semaine █░ 34% ↺lun. ». <b>80 colonnes</b> : sans barres, « ✻ 5 h 62% ↺14:30  sem 34% ». Une fenêtre par modèle s’ajoute au-delà du seuil. Le détail par modèle n’a pas d’écran : voir question 8.</li>
       <li>Couleurs : gris sous le seuil, jaune au-delà, rouge à 100 %. Anciennes ou injoignable : barres en gris foncé et l’âge en jaune. Jeton expiré : « reconnectez-vous dans Claude Code ».</li>
       <li>Carte de session (120) : « Claude Code · Opus 5.5 élevé · ctx 46 % · 1 h 12 · Local ». Ligne de session : « ◔88% » en jaune seulement au-delà de « Contexte max ».</li>
       <li>Fil de session : le titre de la boîte porte modèle, effort, contexte et durée. À 80 colonnes, le sujet saute en premier.</li>
@@ -788,7 +915,9 @@ const NOTES = {
       <li><b>Un seul seuil</b> pour toutes les fenêtres (dessiné), ou un seuil par fenêtre (5 h / semaine) ?</li>
       <li><b>Durée</b> d’une session découverte (lancée hors de Ledge) : depuis que Ledge la voit, avec l’infobulle qui le dit (dessiné), ou la masquer ?</li>
       <li><b>« Anciennes »</b> : au bout de 5 min sans lecture réussie (dessiné) ; et au-delà d’1 h, masquer les valeurs ?</li>
-      <li><b>TUI 80 colonnes</b> : la boîte LIMITES toujours (dessiné, 1 ligne par harnais), ou seulement au-delà du seuil pour garder la place aux projets ?</li></ol></div>`
+      <li><b>TUI</b> : la ligne de pied ne montre les fenêtres par modèle qu’au-delà du seuil. Faut-il un détail complet (toutes les fenêtres) quelque part, par exemple dans Réglages (,) ou l’aide (?) ?</li>
+      <li><b>Variante du footer</b> : B (le footer existant, étendu à tous les écrans, recommandée) ou A (barre d’état sur toute la largeur) ?</li>
+      <li><b>Logo</b> : la silhouette pleine sans les yeux (dessiné), ou la mascotte entière avec ses yeux et son état ? <span class="rec">Je recommande sans les yeux : un footer ne doit pas bouger.</span></li></ol></div>`
   },
   en: {}
 };
@@ -800,10 +929,15 @@ function render() {
   const c = document.getElementById('canvas');
   const cap = (s) => `<div class="cap"><b>${t.aim}</b>${s}</div>`;
   let html = '';
-  if (S.v === 'side') {
-    html = cap(`${t.views.side} · ${t.states[S.st]}`) + win(sidebar({ open: true }), sessionMain(false));
+  if (S.v === 'footer') {
+    const tag = (n, label, rec) => `<div class="vtag ${rec ? 'rec' : ''}" data-rec="${t.rec}"><b>${n}</b>${label}</div>`;
+    html = cap(`${t.views.footer} · ${t.states[S.st]}`)
+      + `<div>${tag('B', t.varB, true)}${win(sidebar(), sessionMain(false, footerB({ open: true })) + popAt('right:16px;bottom:40px'), 640)}</div>`
+      + `<div>${tag('A', t.varA)}${winA(sidebar(), sessionMain(false), 640, true)}</div>`
+      + `<div>${tag('B', t.varN)}<div style="width:800px;max-width:100%">${win(railSide(), sessionMain(false, footerB({ narrow: true })), 520, 800)}</div></div>`
+      + `<div>${cap(t.logosCap)}<div class="logos"><span>${logo('claude', 14)} Claude Code · 14 px</span><span>${logo('claude', 20)} 20 px</span><span>${logo('codex', 14)} Codex · 14 px</span><span>${logo('codex', 20)} 20 px</span></div></div>`;
   } else if (S.v === 'session') {
-    html = cap(t.views.session) + win(sidebar({ rowSignal: true }), sessionMain(true), 700)
+    html = cap(t.views.session) + win(sidebar({ rowSignal: true }), sessionMain(true, footerB()), 700)
       + `<div>${cap(S.lang === 'fr' ? 'La ligne d’en-tête selon la session' : 'The header line by session')}<div class="cases">${['ledge', 'outside', 'codex', 'near', 'omp'].map((k, i) => `<div class="case"><div class="cl"><b>${t.cases[i][0]}</b>${t.cases[i][1]}</div>${vrow(k)}</div>`).join('')}</div></div>`;
   } else if (S.v === 'alert') {
     html = cap(t.views.alert) + win(sidebar({ yours: 'alert' }), settingsMain());
