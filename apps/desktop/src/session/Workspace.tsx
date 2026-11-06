@@ -54,8 +54,8 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   const hasBackend = ptyBackend() !== null || machines.find(m => m.id === (p.session.machineId ?? 'local'))?.daemon?.terminalStream === true;
   const view = prefs.view;
   // In an IDE tab, every tab's page stays mounted: a tab shown on its terminal shows its agent, as its own view (its key), and
-  // two groups show two agents at once. A hidden tab does nothing; a tab that leaves its terminal, or goes, lets its own
-  // session's screen go only if it holds it (R2). Outside the IDE the page is the one view, as ever.
+  // two groups show two agents at once. A tab hidden, leaving its terminal, or gone, lets its own session's screen go, only
+  // if it holds it (R2). Outside the IDE the page is the one view, as ever.
   const tabPlace = useTabPlace();
   const inTab = tabPlace !== null;
   const viewer = tabPlace?.key ?? 'page';
@@ -72,7 +72,9 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   // The agent's screen is attached while the Terminal view shows it (re-asking in the same mode keeps the attachment), detached once left.
   useEffect(() => {
     if (!store) return;
-    if (!shownHere) { asked.current = null; return; }
+    // A hidden tab lets its screen go (it would keep an attachment open for nothing, and leave a shown tab of the same
+    // session on the note): a shown one takes it, and coming back attaches again.
+    if (!shownHere) { asked.current = null; store.hideAgent(sid, viewer); return; }
     if (view === 'terminal') {
       // Outside the IDE the page is the store's default view: asked as before.
       if (asked.current !== sid || holder === null || holder === viewer) { if (inTab) store.showAgent(sid, mode, viewer); else store.showAgent(sid, mode); }

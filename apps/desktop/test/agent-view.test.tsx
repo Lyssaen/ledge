@@ -280,6 +280,10 @@ it('R2: the same session in two tabs: the tab holding its screen draws it, the o
   expect(tab('t2')).toHaveTextContent('Terminal affiché dans l’autre groupe');
   expect(tab('t2').querySelector('.agent-view')).toHaveAttribute('data-typeable', 'false');
   expect(tab('t1')).not.toHaveTextContent('Terminal affiché dans l’autre groupe');
+  // Its footer: the dot and the pane's name, no empty state slot.
+  const foot = tab('t2').querySelector('.terminal-footer')!;
+  expect([...foot.children].map(c => c.className)).toEqual(['term-dot off', 'mono']);
+  expect([...foot.children].every(c => c.textContent !== '')).toBe(true);
   fireEvent.click(within(tab('t2')).getByRole('button', { name: 'Afficher ici' }));
   await tick();
   expect(store.viewerOf('nova')).toBe('t2');

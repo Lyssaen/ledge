@@ -119,12 +119,13 @@ export function AgentView(p: AgentViewProps): JSX.Element {
   })();
 
   const target = session.tmuxSession ? tt.tmuxTarget(session.tmuxSession, remote ? host : undefined) : tt.noTmux;
-  const [state, dot, where] = ((): [string, 'on' | 'wait' | 'off', string | null] => {
+  const [state, dot, where] = ((): [string | null, 'on' | 'wait' | 'off', string | null] => {
     if (mode.kind === 'native') return [tt.noAgentScreen, 'off', null];
     if (mode.kind === 'browser') return [tt.readOnly, 'off', null];
     if (mode.kind === 'offline') return [tt.offline, 'off', host];
     if (mode.kind === 'preview') return [tt.preview, 'off', target];
-    if (elsewhere) return ['', 'off', target];
+    // R2: the banner says it; the footer gives no state of a screen not drawn here, only the pane's name.
+    if (elsewhere) return [null, 'off', target];
     if (!surface) return [tt.readOnly, 'off', target];
     if (link.state === 'reconnecting') return [tt.reconnecting, 'wait', target];
     if (link.state === 'off') return [tt.connecting, 'wait', target];

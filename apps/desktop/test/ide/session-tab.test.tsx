@@ -285,6 +285,49 @@ describe('the session page in an IDE tab', () => {
     expect(screens()).toEqual([true, true]);
   });
 
+  it('a tab hidden in its group lets its agent screen go; brought back, it attaches again', async () => {
+    // Otto's and Nova's tabs in one group, both on their terminal view, Nova in front.
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(open(open(empty(), { kind: 'session', ref: 'local:otto', view: 'terminal' }), { kind: 'session', ref: 'local:nova', view: 'terminal' }))));
+    const { d } = await mount({ stream: true });
+    const watched = () => d.received.filter(m => m.type === 'term.watch').map(m => (m as { id: string }).id);
+    const unwatched = () => d.received.filter(m => m.type === 'term.unwatch').map(m => (m as { id: string }).id);
+    await waitFor(() => expect(holder('nova')).not.toBeNull());
+    expect(holder('otto')).toBeNull();
+    front('Otto');
+    await waitFor(() => expect(holder('otto')).not.toBeNull());
+    expect(holder('nova')).toBeNull();
+    expect(unwatched()).toEqual(['nova']);
+    front('Nova');
+    await waitFor(() => expect(holder('nova')).not.toBeNull());
+    expect(holder('otto')).toBeNull();
+    expect(unwatched()).toEqual(['nova', 'otto']);
+    expect(watched()).toEqual(['nova', 'otto', 'nova']);
+  });
+
+  it('R2: the same session in two groups; the tab holding its screen goes back to its thread, the other takes the screen', async () => {
+    // Otto as a session tab in the first group and as a seat tab in a second, both on the terminal view.
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(open(open(empty(), { kind: 'session', ref: 'local:otto', view: 'terminal' }), { kind: 'seat', ref: 'local:otto', view: 'terminal' }, 'right'))));
+    await mount({ stream: true });
+    const groups = () => [...document.querySelectorAll<HTMLElement>('.ide-dock .dv-groupview')];
+    await waitFor(() => expect(groups()).toHaveLength(2));
+    await waitFor(() => expect(holder('otto')).not.toBeNull());
+    const views = () => [...document.querySelectorAll<HTMLElement>('.ide-dock .agent-view')];
+    await waitFor(() => expect(views()).toHaveLength(2));
+    const held = holder('otto')!;
+    const byKey = (k: string) => views().find(v => (k.startsWith('seat:') ? groups()[1] : groups()[0])!.contains(v))!;
+    const other = held.startsWith('seat:') ? 'session:local:otto' : 'seat:local:otto';
+    await waitFor(() => expect(byKey(held).querySelector('[data-terminal]')).not.toBeNull());
+    expect(byKey(other)).toHaveTextContent('Terminal affiché dans l’autre groupe');
+    // The holder's tab in front of the focused group, then Ctrl+`: back to its thread.
+    const holderTab = within(held.startsWith('seat:') ? groups()[1]! : groups()[0]!).getAllByRole('tab')[0]!;
+    act(() => { holderTab.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })); });
+    await waitFor(() => expect(document.querySelector('.dv-active-group')).toContainElement(holderTab));
+    ctrlBackquote();
+    await waitFor(() => expect(holder('otto')).toBe(other));
+    await waitFor(() => expect(byKey(other).querySelector('[data-terminal]')).not.toBeNull());
+    expect(byKey(other)).not.toHaveTextContent('Terminal affiché dans l’autre groupe');
+  });
+
   it('the tab menu reads the tab as it is now; it goes when its tab goes', async () => {
     const { d, tree, user } = await twoTabs();
     front('Otto');
