@@ -14,6 +14,7 @@ export function tabTitle(t: Tab, ctx: { session(id: string): Session | undefined
     case 'atelier': return ctx.t.side.atelier;
     case 'settings': return ctx.t.side.settings;
     case 'openrig': return ctx.t.ide.openrigTitle(ctx.machine?.(t.ref) ?? t.ref);
+    case 'changes': return ctx.t.ide.changesTitle(ctx.session(t.ref)?.name ?? t.ref);
     case 'atoi': return ctx.t.ide.atoi;
     default: return t.ref;
   }

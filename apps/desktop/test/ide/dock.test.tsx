@@ -18,7 +18,7 @@ function Place({ tab }: { tab: Tab }) {
 }
 function Host({ store }: { store: WorkspaceStore }) {
   const ws = useWorkspace(store);
-  return <LangProvider lang="fr"><DockHost ws={ws} store={store} title={keyOf} body={tab => <Place tab={tab} />} /></LangProvider>;
+  return <LangProvider lang="fr"><DockHost ws={ws} store={store} title={keyOf} label={keyOf} alert={() => null} onTabMenu={() => {}} body={tab => <Place tab={tab} />} /></LangProvider>;
 }
 const read = (ref: string) => JSON.parse(screen.getByTestId(ref).textContent!) as { key: string; group: string; visible: boolean; active: boolean };
 

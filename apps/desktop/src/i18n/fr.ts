@@ -1388,6 +1388,8 @@ export const fr = {
     openrigTab: 'OpenRig (onglet)', atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
     resizeEdge: 'Glisser pour redimensionner · double-clic : largeur par défaut', collapse: '« Réduire', collapseTip: 'Réduire la barre latérale (Ctrl+B)',
     waiting: (n: number) => (n === 1 ? '1 demande' : `${n} demandes`),
+    tabTerminalView: 'Vue terminal', toTerminal: 'Basculer sur le terminal', toThread: 'Revenir au fil', viewKey: 'Ctrl `',
+    closeThisTab: 'Fermer l’onglet', closeOthers: 'Fermer les autres', tabMenu: 'Onglet', changesTitle: (name: string) => `Modifications · ${name}`,
     openrigTitle: (machine: string) => `OpenRig · ${machine}`, closeTab: (name: string) => `Fermer ${name}`, editorLabel: 'Zone d’édition',
     bottomLabel: 'Panneau du bas', terminals: 'Terminaux', output: 'Sortie', outputTip: 'Sortie : les commandes rig lancées par Ledge et leur résultat', hidePanel: 'Masquer le panneau'
   }

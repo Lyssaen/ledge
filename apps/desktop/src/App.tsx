@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { canBroadcast, daemonStore, projectOf, splitId, useDaemon, type BroadcastTo, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
@@ -74,7 +74,10 @@ import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled } from './workspace/prefs';
 import { createWorkspaceStore, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { focused, keyOf, open as openTab, reconcile as reconcileTabs, type Tab } from './workspace/model';
+import { close as closeTab, closeOthers, find as findTab, focused, keyOf, open as openTab, reconcile as reconcileTabs, setView, type Tab } from './workspace/model';
+import { tabAlert, tabView } from './workspace/sessionTab';
+import { SessionTabLabel } from './ide/SessionTabLabel';
+import { TabMenu } from './ide/TabMenu';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeDock, IdePlace } from './ide/lazy';
@@ -177,6 +180,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [revealArchives, setRevealArchives] = useState(0);
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
   const [revealCurrent, setRevealCurrent] = useState(0);
+  // The IDE's tab right-click menu: which tab, and where.
+  const [tabMenu, setTabMenu] = useState<{ tab: Tab; at: { x: number; y: number } } | null>(null);
   // Every machine's daemon follows Desktop on its own, or from Settings › About (#48); while one updates, its restart is expected and silent.
   const update = useUpdate();
   const daemonUpdates = useDaemonUpdates(fleet, machines, daemonTarget(update), update.app);
@@ -439,12 +444,15 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // included, takes neither clicks nor the focus.
   const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null;
 
+  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label });
   // The IDE shell (switch on): the same pieces, in tabs and panels. Its chunk is fetched only then.
   const ideShell = (() => {
     if (!ide) return null;
     const waiting = waitingSessions(sessions, waits);
     const badge = { perm: waiting.filter(s => dotOf(s) === 'approval').length, ask: waiting.filter(s => dotOf(s) === 'question').length };
-    const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label });
+    const label = (tab: Tab): ReactNode => (tab.kind === 'session' || tab.kind === 'seat'
+      ? <SessionTabLabel session={known.find(s => s.id === tab.ref)} tab={tab} title={title(tab)} /> : title(tab));
+    const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {
       const tnav = tabNav(nav, tab);
       if (tab.kind === 'session' || tab.kind === 'seat') {
@@ -479,7 +487,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
             asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         }
-        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} />}
+        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} />}
         chat={
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
@@ -528,6 +536,19 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         )}
       </div>
       </>}
+      {ide && tabMenu && (() => {
+        const key = keyOf(tabMenu.tab);
+        const hit = findTab(ws, key);
+        if (!hit) return null;
+        const session = known.find(x => x.id === tabMenu.tab.ref);
+        const agent = tabMenu.tab.kind === 'session' || tabMenu.tab.kind === 'seat';
+        const view = agent ? tabView(tabMenu.tab, session) : 'thread';
+        // A seat stopped has only its thread (tabView says so): nothing to switch to.
+        const canSwitch = agent && !!session && (view === 'terminal' || tabView({ ...tabMenu.tab, view: 'terminal' }, session) === 'terminal');
+        return <TabMenu at={tabMenu.at} tab={tabMenu.tab} name={title(tabMenu.tab)} terminal={view === 'terminal'} others={hit.group.tabs.length > 1}
+          {...(canSwitch && { onView: () => wsStore.update(w => setView(w, key, view === 'terminal' ? 'thread' : 'terminal')) })}
+          onClose={() => wsStore.update(w => closeTab(w, key))} onCloseOthers={() => wsStore.update(w => closeOthers(w, key))} onDismiss={() => setTabMenu(null)} />;
+      })()}
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
       {nav.modal?.kind === 'launch' && (

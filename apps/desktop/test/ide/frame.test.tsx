@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -258,6 +258,53 @@ describe('the right panel needs room (whole-branch review)', () => {
     expect(toggle()).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
     expect(document.querySelector('.ide-explorer')).not.toBeNull();
+  });
+});
+
+describe('the IDE session tab (lot 2)', () => {
+  const tabOf = (name: string) => tabs().find(t => t.getAttribute('aria-label') === name)!;
+
+  it('a session waiting for a permission has the red alert on its tab, one asking a question the amber one', async () => {
+    const { d, tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(tree.getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Nova'));
+    act(() => { d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission' })); d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'waiting_input' })); });
+    await waitFor(() => expect(tabOf('Otto')).toHaveClass('alert'));
+    await waitFor(() => expect(tabOf('Nova')).toHaveClass('alert-a'));
+    expect(tabOf('Atelier')).not.toHaveClass('alert');
+  });
+
+  it('right click on a tab: the menu switches the view to the terminal and back, closes the others', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(tree.getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(tabs()).toHaveLength(3));
+    fireEvent.contextMenu(tabOf('Otto'));
+    const menu = await screen.findByRole('menu', { name: /Otto/ });
+    expect(within(menu).getByText('Otto')).toBeVisible();
+    expect(within(menu).queryByText(/role\.md|Diviser|Ouvrir dans/)).toBeNull();
+    await user.click(within(menu).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    expect(tabOf('Otto')).toHaveAccessibleName('Otto');
+    fireEvent.contextMenu(tabOf('Otto'));
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ }));
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    fireEvent.contextMenu(tabOf('Otto'));
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Fermer les autres' }));
+    await waitFor(() => expect(tabs()).toHaveLength(1));
+    expect(tabs()[0]).toHaveAccessibleName('Otto');
+  });
+
+  it('a lone tab has no « Fermer les autres »; Escape closes the menu', async () => {
+    await mount();
+    fireEvent.contextMenu(tabOf('Atelier'));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Fermer l’onglet' })).toBeVisible();
+    expect(within(menu).queryByRole('menuitem', { name: 'Fermer les autres' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: /terminal/ })).toBeNull();
+    await userEvent.setup().keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   });
 });
 

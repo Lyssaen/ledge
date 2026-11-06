@@ -106,3 +106,17 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 /* The right panel (mockup `rightPanel()`): the docked chat, 300 px, no × (Ctrl+/ hides it). */
 .ide-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .ide-right > .ledge-chat-panel { position: static; flex: 1; width: auto; min-height: 0; box-shadow: none; z-index: auto; }
+
+/* A session tab (mockup `.tab`, `tabLabel()`): logo, name, >_, rig, state dot; the alert is a 2 px line under it. */
+.ide-tab { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.ide-tab .logo { display: inline-flex; }
+.ide-tab .tab-logo { display: inline-flex; }
+.ide-tab .tab-term { font-family: var(--mono); font-size: 11px; color: var(--muted-foreground); }
+.ide-tab .tab-rig { font-size: 11px; color: var(--muted-foreground); }
+.ide-tab .tab-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--muted-foreground); }
+/* Colours of the notch's dots (settings.css `.preview-notch .d-*`); the other states stay muted. */
+.ide-tab .tab-dot.d-approval { background: var(--sidebar-primary); }
+.ide-tab .tab-dot.d-question { background: var(--warning); }
+.ide-tab .tab-dot.d-working { background: var(--info); }
+.ide-dock .dv-tab.alert { box-shadow: inset 0 -2px 0 var(--destructive); }
+.ide-dock .dv-tab.alert-a { box-shadow: inset 0 -2px 0 var(--warning); }
