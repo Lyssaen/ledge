@@ -1313,6 +1313,8 @@ export const en: Messages = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'IDE interface (preview)',
+    /** R2: the same session's screen is shown in another group; this tab brings it back. */
+    agentElsewhere: 'Terminal shown in the other group', showHere: 'Show here',
     settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
     settingOff: 'IDE interface (preview) off',
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',

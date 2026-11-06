@@ -11,6 +11,7 @@ import { useBackquote } from '../term/keys';
 import { agentMode, type AgentMode } from '../term/mode';
 import { agentTabId, type AgentLink } from '../term/store';
 import { TermStoreContext } from '../term/useTerms';
+import { useTabPlace } from '../workspace/tabPlace';
 
 const OFF: AgentLink = { state: 'off', attempt: 0 };
 const noStore = () => () => {};
@@ -45,10 +46,15 @@ export interface AgentViewProps {
   onOpenShell(): void;
 }
 
+/** The view showing the agent's screen outside the IDE: the one page. */
+const PAGE = 'page';
+
 /** The Terminal view (Fil | Terminal v3): the agent's own screen, alone and full frame under the session's heading. A banner
  *  says why it cannot be typed into (T3, T4), the footer gives the link's state and the key back to the thread. Without a
  *  screen to attach (the browser build, an offline machine, a session with no tmux pane) it shows the daemon's preview of the
- *  last lines, read only; an OMP session, which has no agent screen, offers a shell instead. */
+ *  last lines, read only; an OMP session, which has no agent screen, offers a shell instead. In an IDE tab the view is the
+ *  tab (its key): a session's one xterm sits in the tab that holds it, and another tab of the same session says so and can
+ *  bring it back (R2), showing the preview meanwhile. */
 export function AgentView(p: AgentViewProps): JSX.Element {
   const { session, helper, agent } = p;
   const { mode, link, remote, host } = agent;
@@ -59,10 +65,17 @@ export function AgentView(p: AgentViewProps): JSX.Element {
   const subscribe = useCallback((fn: () => void) => (store ? store.subscribe(fn) : noStore()), [store]);
   // The store makes the agent's xterm when it starts attaching, before the link says anything.
   const surface = useSyncExternalStore(subscribe, () => store?.surface(agentTabId(sid)));
+  const tabPlace = useTabPlace();
+  const viewer = tabPlace?.key ?? PAGE;
+  const holder = useSyncExternalStore(subscribe, () => store?.viewerOf(sid) ?? null);
+  const screenMode = mode.kind === 'live' || mode.kind === 'parent' || mode.kind === 'offline';
+  // Another view holds the screen: the xterm stays there (it can sit in one place only). Outside the IDE the page draws it as
+  // before, even while none holds it; an IDE tab only once it holds it, so a hidden tab never takes it from a shown one.
+  const elsewhere = screenMode && holder !== null && holder !== viewer;
   const lines = useDaemon().previews.get(sid) ?? [];
   const phone = useTerminalHolders(p.client).get(sid);
-  const screen = mode.kind === 'live' || mode.kind === 'parent' || mode.kind === 'offline' ? surface : undefined;
-  const typing = mode.kind === 'live' && link.state === 'attached';
+  const screen = screenMode && (holder === viewer || (holder === null && tabPlace === null)) ? surface : undefined;
+  const typing = mode.kind === 'live' && link.state === 'attached' && !elsewhere;
   // Ctrl + ² hands it the keyboard while it is live and not reconnecting (keys typed while it attaches wait for it).
   const typeable = mode.kind === 'live' && link.state !== 'reconnecting' && screen !== undefined;
 
@@ -86,6 +99,7 @@ export function AgentView(p: AgentViewProps): JSX.Element {
   const onBlur = (e: FocusEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false); };
 
   const banner = ((): ReactNode => {
+    if (elsewhere) return <Banner action={<Button variant="outline" size="sm" onClick={() => store?.showAgent(sid, mode, viewer)}>{t.ide.showHere}</Button>}>{t.ide.agentElsewhere}</Banner>;
     // A phone holds the hand (spec 2026-11-02 mobile terminal, 5a): both keyboards type, and the PC can take it back.
     if (phone !== undefined) {
       const takeBack = () => { try { p.client.fleet?.releaseTerminal(sid); } catch { p.notify(t.offline); } };
@@ -110,6 +124,7 @@ export function AgentView(p: AgentViewProps): JSX.Element {
     if (mode.kind === 'browser') return [tt.readOnly, 'off', null];
     if (mode.kind === 'offline') return [tt.offline, 'off', host];
     if (mode.kind === 'preview') return [tt.preview, 'off', target];
+    if (elsewhere) return ['', 'off', target];
     if (!surface) return [tt.readOnly, 'off', target];
     if (link.state === 'reconnecting') return [tt.reconnecting, 'wait', target];
     if (link.state === 'off') return [tt.connecting, 'wait', target];
@@ -118,7 +133,7 @@ export function AgentView(p: AgentViewProps): JSX.Element {
   })();
 
   return (
-    <section className="agent-view" role="region" aria-label={tt.title} data-typeable={typeable}>
+    <section className="agent-view" role="region" aria-label={tt.title} data-typeable={typeable} data-session={sid} data-elsewhere={elsewhere || undefined}>
       {banner}
       {/* Keyed: leaving the screen drops its div, and the xterm moved into it with it (the store keeps the xterm). */}
       {mode.kind === 'native'

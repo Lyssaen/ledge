@@ -1380,6 +1380,8 @@ export const fr = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'Interface IDE (aperçu)',
+    /** R2: the same session's screen is shown in another group; this tab brings it back. */
+    agentElsewhere: 'Terminal affiché dans l’autre groupe', showHere: 'Afficher ici',
     settingHint: 'Groupes d’onglets, panneaux et barre d’activité, à la manière de VS Code. L’ancienne interface reste disponible tant que l’aperçu dure.',
     settingOff: 'Interface IDE (aperçu) désactivée',
     brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',

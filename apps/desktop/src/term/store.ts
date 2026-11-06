@@ -26,6 +26,12 @@ type Entry = { tabs: readonly Tab[]; active: string; next: number; link: AgentLi
  *  `typed` holds what the xterm sends before the handle is there: ConPTY asks for the cursor as it starts and draws nothing,
  *  reads no key, until that answer comes. */
 type Run = { handle: PtyHandle | null; typed: string[]; stream?: boolean };
+/** A session's agent screen while a view shows it: how, by which view (`viewer`, R2: the one that asked last holds the one
+ *  xterm), its attachment and its own reconnection. `retry` is the pending one; a timer that fires after it was replaced or
+ *  cancelled does nothing. */
+type Shown = { mode: AgentMode; key: string; viewer: string; attachment: Run | null; retry: object | null; drops: number; openedAt: number };
+/** The viewer outside the IDE: the one page, which shows one session at a time. */
+const PAGE = 'page';
 
 /** Sends `data` to the run's process, or keeps it until the process is there. */
 function type(run: Run | null, data: string): void {
@@ -53,13 +59,8 @@ export class TermStore {
   private readonly surfaces = new Map<string, TermSurface>();
   private readonly shells = new Map<string, Run>();
   private readonly listeners = new Set<() => void>();
-  /** The session whose agent tab the pane shows, and how. */
-  private shown: { sid: string; mode: AgentMode; key: string } | null = null;
-  private attachment: Run | null = null;
-  /** The pending reconnection; a timer that fires after it was replaced or cancelled does nothing. */
-  private retry: object | null = null;
-  private drops = 0;
-  private openedAt = 0;
+  /** The sessions whose agent screen a view shows, each with its own attachment: two IDE groups show two agents at once. */
+  private readonly shown = new Map<string, Shown>();
 
   constructor(deps: TermDeps) { this.deps = deps; }
 
@@ -113,9 +114,10 @@ export class TermStore {
     this.emit();
   }
 
-  /** The machine's snapshot arrived, or its flag did: attach by whichever path that now says, and wake a shell that waited. */
+  /** The machine's snapshot arrived, or its flag did: every screen shown attaches by whichever path that now says, and a
+   *  shell that waited wakes. */
   refreshAgent(): void {
-    if (this.shown) this.showAgent(this.shown.sid, this.shown.mode);
+    for (const [sid, s] of [...this.shown]) this.show(sid, s.mode, s.viewer);
     if (!this.deps.agentRoute) return;
     for (const [sid, e] of this.entries) {
       const route = this.deps.agentRoute(sid);
@@ -130,37 +132,35 @@ export class TermStore {
     }
   }
 
-  showAgent(sessionId: string, mode: AgentMode): void {
-    const route = mode.kind === 'live' || mode.kind === 'parent' ? (this.deps.agentRoute?.(sessionId) ?? 'pty') : '';
-    const key = JSON.stringify(mode) + route;
-    // Re-renders call this again and again: the same session in the same mode keeps its attachment.
-    if (this.shown?.sid === sessionId && this.shown.key === key) return;
-    this.leave();
-    this.shown = { sid: sessionId, mode, key };
-    this.drops = 0;
-    const e = this.entry(sessionId);
-    if (mode.kind === 'offline') {
-      e.offlineSince ??= this.now();
-      this.surfaces.get(agentTabId(sessionId))?.setReadOnly(true);
-    } else if (mode.kind === 'live' || mode.kind === 'parent') {
-      e.offlineSince = undefined;
-      this.connect();
+  /** `viewer`: the view that shows it, an IDE tab's key, else the page. A view shows one session: the one it showed before
+   *  is let go. The same session asked by another view moves to it on the same attachment (R2: one xterm per session). */
+  showAgent(sessionId: string, mode: AgentMode, viewer: string = PAGE): void { this.show(sessionId, mode, viewer); }
+
+  /** Without an id, every screen. With one, that session's, and with a `viewer` only if that view holds it: a tab leaving
+   *  must not detach another tab's screen. */
+  hideAgent(sessionId?: string, viewer?: string): void {
+    if (sessionId === undefined) {
+      if (this.shown.size === 0) return;
+      for (const sid of this.shown.keys()) this.leave(sid);
+      this.shown.clear();
+      this.emit();
+      return;
     }
+    const s = this.shown.get(sessionId);
+    if (!s || (viewer !== undefined && s.viewer !== viewer)) return;
+    this.leave(sessionId);
+    this.shown.delete(sessionId);
     this.emit();
   }
 
-  /** With an id, only if that session's screen is the one shown: a tab leaving must not detach another tab's screen. */
-  hideAgent(sessionId?: string): void {
-    if (!this.shown || (sessionId !== undefined && this.shown.sid !== sessionId)) return;
-    this.leave();
-    this.shown = null;
-    this.emit();
-  }
+  /** The view that holds the session's screen, null while none shows it. */
+  viewerOf(sessionId: string): string | null { return this.shown.get(sessionId)?.viewer ?? null; }
 
   retryNow(sessionId: string): void {
-    if (this.shown?.sid !== sessionId || !this.retry) return;
-    this.retry = null;
-    this.connect();
+    const s = this.shown.get(sessionId);
+    if (!s?.retry) return;
+    s.retry = null;
+    this.connect(sessionId);
     this.emit();
   }
 
@@ -176,6 +176,28 @@ export class TermStore {
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => { this.listeners.delete(fn); };
+  }
+
+  /** showAgent's work, also refreshAgent's: a view's request and the store's own re-check are told apart. */
+  private show(sessionId: string, mode: AgentMode, viewer: string): void {
+    const route = mode.kind === 'live' || mode.kind === 'parent' ? (this.deps.agentRoute?.(sessionId) ?? 'pty') : '';
+    const key = JSON.stringify(mode) + route;
+    const cur = this.shown.get(sessionId);
+    // Re-renders call this again and again: the same session in the same mode keeps its attachment.
+    if (cur?.key === key && cur.viewer === viewer) return;
+    for (const [sid, s] of [...this.shown]) if (sid !== sessionId && s.viewer === viewer) { this.leave(sid); this.shown.delete(sid); }
+    if (cur?.key === key) { cur.viewer = viewer; this.emit(); return; }
+    if (cur) this.leave(sessionId);
+    this.shown.set(sessionId, { mode, key, viewer, attachment: null, retry: null, drops: 0, openedAt: 0 });
+    const e = this.entry(sessionId);
+    if (mode.kind === 'offline') {
+      e.offlineSince ??= this.now();
+      this.surfaces.get(agentTabId(sessionId))?.setReadOnly(true);
+    } else if (mode.kind === 'live' || mode.kind === 'parent') {
+      e.offlineSince = undefined;
+      this.connect(sessionId);
+    }
+    this.emit();
   }
 
   private entry(sessionId: string): Entry {
@@ -280,36 +302,42 @@ export class TermStore {
     this.emit();
   }
 
-  /** Detaches the shown session's agent tab and cancels its reconnection; its screen stays as it was. */
-  private leave(): void {
-    this.attachment?.handle?.close();
-    this.attachment = null;
-    this.retry = null;
-    if (this.shown) this.setLink(this.shown.sid, OFF);
+  /** Detaches a shown session's agent tab and cancels its reconnection; its screen stays as it was. */
+  private leave(sid: string): void {
+    const s = this.shown.get(sid);
+    if (!s) return;
+    s.attachment?.handle?.close();
+    s.attachment = null;
+    s.retry = null;
+    this.setLink(sid, OFF);
   }
 
-  private connect(): void {
-    if (!this.shown) return;
-    const { sid, mode } = this.shown;
+  /** The attachment its xterm types into: none once the session is no longer shown. */
+  private attachmentOf(sid: string): Run | null { return this.shown.get(sid)?.attachment ?? null; }
+
+  private connect(sid: string): void {
+    const s = this.shown.get(sid);
+    if (!s) return;
+    const { mode } = s;
     if (mode.kind !== 'live' && mode.kind !== 'parent') return;
     const route = this.deps.agentRoute?.(sid) ?? 'pty';
     // The machine has not answered yet: opening the pseudo-terminal now would only be torn down once the stream is known.
     if (route === 'wait') return;
-    if (route === 'stream' && this.deps.stream) { this.connectStream(); return; }
+    if (route === 'stream' && this.deps.stream) { this.connectStream(sid, s); return; }
     const { backend } = this.deps;
     if (!backend) return;
     const readOnly = mode.kind === 'parent';
     const argv = this.deps.agentArgv(sid, readOnly);
     if (!argv) { this.setLink(sid, OFF); return; }
-    const surface = this.surfaceFor(agentTabId(sid), () => (this.shown?.sid === sid ? this.attachment : null));
+    const surface = this.surfaceFor(agentTabId(sid), () => this.attachmentOf(sid));
     surface.setReadOnly(readOnly);
     const run: Run = { handle: null, typed: [] };
-    const current = () => this.attachment === run;
-    this.attachment = run;
-    this.openedAt = this.now();
+    const current = () => this.attachmentOf(sid) === run;
+    s.attachment = run;
+    s.openedAt = this.now();
     const adopt = (h: PtyHandle | null) => {
       if (!current()) { h?.close(); return; }
-      if (!h) { this.dropped(); return; }
+      if (!h) { this.dropped(sid); return; }
       adoptHandle(run, h);
       syncSize(h, surface);
       this.setLink(sid, { state: 'attached', attempt: 0 });
@@ -317,26 +345,25 @@ export class TermStore {
     };
     backend.open(argv, surface.size(), {
       data: b => { if (current()) surface.write(b); },
-      exit: () => { if (current()) this.dropped(); }
+      exit: () => { if (current()) this.dropped(sid); }
     }).then(adopt, () => adopt(null));
   }
 
   /** The agent's screen over the daemon's control stream: xterm writes the bytes, and nothing nests a second emulator. */
-  private connectStream(): void {
+  private connectStream(sid: string, s: Shown): void {
     const stream = this.deps.stream;
-    if (!this.shown || !stream) return;
-    const { sid, mode } = this.shown;
-    const readOnly = mode.kind === 'parent';
-    const surface = this.surfaceFor(agentTabId(sid), () => (this.shown?.sid === sid ? this.attachment : null));
+    if (!stream) return;
+    const readOnly = s.mode.kind === 'parent';
+    const surface = this.surfaceFor(agentTabId(sid), () => this.attachmentOf(sid));
     surface.setReadOnly(readOnly);
     const run: Run = { handle: null, typed: [] };
-    const current = () => this.attachment === run;
-    this.attachment = run;
-    this.openedAt = this.now();
+    const current = () => this.attachmentOf(sid) === run;
+    s.attachment = run;
+    s.openedAt = this.now();
     const handle = stream.open(sid, readOnly, surface.size(), {
       screen: text => { if (current()) surface.write(text); },
       data: b => { if (current()) surface.write(b); },
-      exit: () => { if (current()) this.dropped(); }
+      exit: () => { if (current()) this.dropped(sid); }
     });
     if (!current()) { handle.close(); return; }
     adoptHandle(run, handle);
@@ -345,22 +372,23 @@ export class TermStore {
     this.emit();
   }
 
-  /** Every end of a live attachment is a lost connection: tmux keeps the agent, and redraws it on the next attach. */
-  private dropped(): void {
-    if (!this.shown) return;
-    const { sid } = this.shown;
-    this.attachment?.handle?.close();
-    this.attachment = null;
-    if (this.now() - this.openedAt >= HELD_MS) this.drops = 0;
-    this.drops += 1;
-    const delay = reconnectDelay(this.drops);
-    this.setLink(sid, { state: 'reconnecting', attempt: this.drops, retryAt: this.now() + delay });
+  /** Every end of a live attachment is a lost connection: tmux keeps the agent, and redraws it on the next attach. Each
+   *  session counts its own drops. */
+  private dropped(sid: string): void {
+    const s = this.shown.get(sid);
+    if (!s) return;
+    s.attachment?.handle?.close();
+    s.attachment = null;
+    if (this.now() - s.openedAt >= HELD_MS) s.drops = 0;
+    s.drops += 1;
+    const delay = reconnectDelay(s.drops);
+    this.setLink(sid, { state: 'reconnecting', attempt: s.drops, retryAt: this.now() + delay });
     const retry = {};
-    this.retry = retry;
+    s.retry = retry;
     (this.deps.setTimeout ?? setTimeout)(() => {
-      if (this.retry !== retry) return;
-      this.retry = null;
-      this.connect();
+      if (s.retry !== retry || this.shown.get(sid) !== s) return;
+      s.retry = null;
+      this.connect(sid);
       this.emit();
     }, delay);
     this.emit();

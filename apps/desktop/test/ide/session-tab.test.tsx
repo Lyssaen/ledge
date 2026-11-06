@@ -15,6 +15,14 @@ import { TermStore } from '../../src/term/store';
 import { PROJECTS } from '../helpers';
 import { empty, open, serialize } from '../../src/workspace/model';
 import { WORKSPACE_KEY } from '../../src/workspace/store';
+import { fakeBackend, fakeSurface } from '../term-fakes';
+import type { PtyBackend } from '../../src/term/backend';
+
+// The agent's xterm: jsdom draws none, the fake stands in where a test streams a pane. The app is the desktop one there (a
+// pseudo-terminal backend), else the browser build, as the other tests expect.
+const env = vi.hoisted(() => ({ backend: null as PtyBackend | null }));
+vi.mock('../../src/term/backend', () => ({ ptyBackend: () => env.backend }));
+vi.mock('../../src/term/surface', () => ({ createSurface: () => fakeSurface() }));
 
 /** Lot 2, task 5: each session tab keeps its own view, scroll and draft; the keys and the agent's screen follow the active tab. */
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
@@ -27,15 +35,18 @@ beforeEach(() => {
   const show = TermStore.prototype.showAgent;
   vi.spyOn(TermStore.prototype, 'showAgent').mockImplementation(function (this: TermStore, ...a: Parameters<TermStore['showAgent']>) { store = this; return show.apply(this, a); });
 });
-afterEach(async () => { cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
-const shownSid = () => (store as unknown as { shown: { sid: string } | null } | null)?.shown?.sid ?? null;
+afterEach(async () => { env.backend = null; cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+/** Which tab holds the session's agent screen (R2), null while none shows it. */
+const holder = (name: string) => store?.viewerOf(`local:${name}`) ?? null;
 
 const PERMISSION = { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } } as const satisfies Partial<Session>;
 
-async function mount({ ide = true }: { ide?: boolean } = {}) {
+/** `stream`: the machine streams the agents' panes (their xterm a fake one), so their screens attach in the test. */
+async function mount({ ide = true, stream = false }: { ide?: boolean; stream?: boolean } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
+  if (stream) { d.extras.daemon = { version: '0.49.0', install: 'npm', systemd: true, terminalStream: true }; env.backend = fakeBackend(); }
   d.machines([{ id: 'local', label: 'Local' }]);
   d.projects(PROJECTS);
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' }));
@@ -136,10 +147,10 @@ describe('the session page in an IDE tab', () => {
     const { user } = await twoTabs();
     await toTerminal(user, 'Otto');
     front('Otto');
-    await waitFor(() => expect(shownSid()).toMatch(/otto/));
+    await waitFor(() => expect(holder('otto')).not.toBeNull());
     await user.click(screen.getByRole('button', { name: 'Fermer Nova' }));
     await waitFor(() => expect(tabs()).toHaveLength(2));
-    expect(shownSid()).toMatch(/otto/);
+    expect(holder('otto')).not.toBeNull();
   });
 
   it('Y on the terminal view (the focus outside the xterm) accepts the waiting permission', async () => {
@@ -249,22 +260,29 @@ describe('the session page in an IDE tab', () => {
     expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
   });
 
-  it('two groups each on a terminal: the screen follows the focused group; a fleet update of the other does not take it', async () => {
-    // Otto's tab in the first group, Nova's in a second (focused), both on their terminal view.
+  it('Review Focus 1, lot 3: two groups each on a terminal keep both screens, whichever is focused; an update of one asks nothing of the other', async () => {
+    // Otto's tab in the first group, Nova's in a second (focused), both on their terminal view, their machine streaming panes.
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(open(open(empty(), { kind: 'session', ref: 'local:otto', view: 'terminal' }), { kind: 'session', ref: 'local:nova', view: 'terminal' }, 'right'))));
-    const { d } = await mount();
+    const { d } = await mount({ stream: true });
     await waitFor(() => expect(document.querySelectorAll('.ide-dock .dv-groupview')).toHaveLength(2));
-    await waitFor(() => expect(shownSid()).toMatch(/nova/));
+    const watched = () => d.received.filter(m => m.type === 'term.watch').map(m => (m as { id: string }).id);
+    const unwatched = () => d.received.filter(m => m.type === 'term.unwatch');
+    await waitFor(() => expect(watched().sort()).toEqual(['nova', 'otto']));
+    const screens = () => [...document.querySelectorAll('.ide-dock .agent-view')].map(v => v.querySelector('[data-terminal]') !== null);
+    await waitFor(() => expect(screens()).toEqual([true, true]));
     front('Otto');
     await waitFor(() => expect(document.querySelector('.dv-active-group')).toContainElement(tabOf('Otto')));
-    await waitFor(() => expect(shownSid()).toMatch(/otto/));
+    front('Nova');
+    await waitFor(() => expect(document.querySelector('.dv-active-group')).toContainElement(tabOf('Nova')));
+    expect(screens()).toEqual([true, true]);
+    expect([holder('otto'), holder('nova')].every(h => h !== null)).toBe(true);
     const shows = vi.mocked(TermStore.prototype.showAgent).mock.calls.length;
     act(() => d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'idle' })));
     await new Promise(r => setTimeout(r, 100));
-    expect(shownSid()).toMatch(/otto/);
-    expect(vi.mocked(TermStore.prototype.showAgent).mock.calls.slice(shows).filter(([sid]) => /nova/.test(sid))).toEqual([]);
-    front('Nova');
-    await waitFor(() => expect(shownSid()).toMatch(/nova/));
+    expect(vi.mocked(TermStore.prototype.showAgent).mock.calls.slice(shows).filter(([sid]) => /otto/.test(sid))).toEqual([]);
+    expect(watched()).toHaveLength(2);
+    expect(unwatched()).toEqual([]);
+    expect(screens()).toEqual([true, true]);
   });
 
   it('the tab menu reads the tab as it is now; it goes when its tab goes', async () => {

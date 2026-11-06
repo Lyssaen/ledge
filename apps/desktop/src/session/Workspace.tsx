@@ -53,23 +53,40 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   const machines = useMachines(client);
   const hasBackend = ptyBackend() !== null || machines.find(m => m.id === (p.session.machineId ?? 'local'))?.daemon?.terminalStream === true;
   const view = prefs.view;
-  // In an IDE tab, every tab's page stays mounted: only a tab shown acts on the one agent screen of the window, and a tab
-  // that leaves detaches its own session's screen only, never another tab's (hideAgent with an id). Outside the IDE, as ever.
+  // In an IDE tab, every tab's page stays mounted: a tab shown on its terminal shows its agent, as its own view (its key), and
+  // two groups show two agents at once. A hidden tab does nothing; a tab that leaves its terminal, or goes, lets its own
+  // session's screen go only if it holds it (R2). Outside the IDE the page is the one view, as ever.
   const tabPlace = useTabPlace();
   const inTab = tabPlace !== null;
+  const viewer = tabPlace?.key ?? 'page';
   const shownHere = tabPlace === null || tabPlace.visible;
-  // Two groups can each show a tab on its terminal: only the focused group's takes the screen, or they would take it in turn
-  // at every fleet update (`p.session` changes). A tab visible in another group neither attaches nor detaches it.
-  const attachHere = tabPlace === null || tabPlace.active;
+  const subscribeHolder = useCallback((fn: () => void) => (store ? store.subscribe(fn) : () => {}), [store]);
+  const holder = useSyncExternalStore(subscribeHolder, () => store?.viewerOf(p.session.id) ?? null);
+  // The session this view last asked for while shown on its terminal. Asking again (a fleet update, a new mode) must not take
+  // the screen back from a tab that took it since (« Afficher ici »): only a fresh show does, or a screen nobody holds.
+  const asked = useRef<string | null>(null);
+  // Asked again only when the way to show it changes, not at each fleet update that rebuilds the session's object.
+  const sid = p.session.id;
+  const mode = agentMode(p.session, helper, hasBackend);
+  const modeKey = JSON.stringify(mode);
   // The agent's screen is attached while the Terminal view shows it (re-asking in the same mode keeps the attachment), detached once left.
   useEffect(() => {
-    if (!shownHere) return;
-    if (view === 'terminal') { if (attachHere) store?.showAgent(p.session.id, agentMode(p.session, helper, hasBackend)); }
-    else store?.hideAgent(inTab ? p.session.id : undefined);
-  }, [store, view, p.session, helper, hasBackend, shownHere, attachHere, inTab]);
-  const leaving = useRef<string | undefined>(undefined);
-  leaving.current = inTab ? p.session.id : undefined;
-  useEffect(() => () => store?.hideAgent(leaving.current), [store]);
+    if (!store) return;
+    if (!shownHere) { asked.current = null; return; }
+    if (view === 'terminal') {
+      // Outside the IDE the page is the store's default view: asked as before.
+      if (asked.current !== sid || holder === null || holder === viewer) { if (inTab) store.showAgent(sid, mode, viewer); else store.showAgent(sid, mode); }
+      asked.current = sid;
+    } else {
+      asked.current = null;
+      if (inTab) store.hideAgent(sid, viewer);
+      else store.hideAgent();
+    }
+    // `mode` is read through its key: the same mode in a new object asks nothing.
+  }, [store, view, sid, modeKey, shownHere, inTab, viewer, holder]); // eslint-disable-line react-hooks/exhaustive-deps
+  const leaving = useRef<{ sid: string; viewer: string } | undefined>(undefined);
+  leaving.current = inTab ? { sid: p.session.id, viewer } : undefined;
+  useEffect(() => () => { const l = leaving.current; if (l) store?.hideAgent(l.sid, l.viewer); else store?.hideAgent(); }, [store]);
   // « Agrandir le panneau » lasts while the panel shows: hiding it forgets it.
   const [maxed, setMaxed] = useState(false);
   if (maxed && !prefs.terminal) setMaxed(false);
