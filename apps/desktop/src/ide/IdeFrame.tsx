@@ -3,7 +3,7 @@ import type { Session } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
-import { RIGHT_WIDTH, rightFits, type IdeLayout, type LayoutAction } from '../workspace/layout';
+import { RIGHT_WIDTH, rightShown, type IdeLayout, type LayoutAction } from '../workspace/layout';
 import type { Tab } from '../workspace/model';
 import { ActivityBar } from './ActivityBar';
 import { IdeExplorer } from './IdeExplorer';
@@ -60,11 +60,11 @@ export function IdeFrame(p: IdeFrameProps): JSX.Element {
   const { t } = useI18n();
   const width = useSyncExternalStore(onResize, windowWidth, windowWidth);
   const { layout, onLayout } = p;
-  const right = layout.right && rightFits(layout, width);
+  const right = rightShown(layout, width);
   const columns = { '--ide-side': layout.sideOpen ? `${layout.sideWidth}px` : '0px', '--ide-right': right ? `${RIGHT_WIDTH}px` : '0px' } as CSSProperties;
   return (
     <div className={`ide${p.dragging ? ' is-dragging' : ''}`} data-readonly={p.readOnly ? 'true' : undefined}>
-      <IdeTitleBar layout={layout} onLayout={onLayout} onSearch={p.onSearch} blocked={p.blocked} />
+      <IdeTitleBar layout={layout} onLayout={onLayout} onSearch={p.onSearch} blocked={p.blocked} rightShown={right} />
       <div className="ide-body" style={columns} inert={p.blocked}>
         <ActivityBar layout={layout} onLayout={onLayout} onTab={p.onTab} activeTab={p.activeTab} badge={p.badge} />
         {layout.sideOpen && <IdeExplorer width={layout.sideWidth} onLayout={onLayout}>{p.explorer}</IdeExplorer>}

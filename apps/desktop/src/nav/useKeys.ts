@@ -27,7 +27,7 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       if (termKey(e, false) === 'thread') { if (!state.modal && toTerminal?.()) e.preventDefault(); return; }
       if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
       // The IDE's panels, VS Code's keys: they act inside a field too (the terminal returned above).
-      if (ide && mod && !e.altKey && (key === 'b' || key === 'j' || e.key === '/')) { e.preventDefault(); ide.toggle(key === 'b' ? 'side' : key === 'j' ? 'bottom' : 'right'); return; }
+      if (ide && !state.modal && mod && !e.altKey && (key === 'b' || key === 'j' || e.key === '/')) { e.preventDefault(); ide.toggle(key === 'b' ? 'side' : key === 'j' ? 'bottom' : 'right'); return; }
       // Ctrl , opens Settings on General; inside Settings it keeps the section open (it only closes the dialog or the chat).
       // Ctrl Z takes back what the toast offers (« Annuler »); in a field it stays the field's own undo.
       if (mod && !e.altKey && !e.shiftKey && key === 'z' && !typing(document.activeElement)) { if (undo()) e.preventDefault(); return; }

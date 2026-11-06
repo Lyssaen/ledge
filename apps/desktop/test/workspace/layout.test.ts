@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { layoutReducer, loadLayout, rightFits, saveLayout, type IdeLayout } from '../../src/workspace/layout';
+import { layoutFor, layoutReducer, loadLayout, rightFits, rightShown, saveLayout, type IdeLayout } from '../../src/workspace/layout';
 
 const KEY = 'ledge.ide.layout';
 const base: IdeLayout = { sideOpen: true, sideWidth: 248, sideView: 'projects', bottom: false, right: true };
@@ -65,5 +65,26 @@ describe('rightFits', () => {
     expect(rightFits(base, 1920)).toBe(true);
     expect(rightFits({ ...base, sideWidth: 440 }, 1000)).toBe(false);
     expect(rightFits({ ...base, sideOpen: false }, 760)).toBe(true);
+  });
+});
+
+describe('layoutFor: the right panel asked for makes its room', () => {
+  const hidden = { ...base, right: false };
+  it('fits: shown as asked, the sidebar left alone', () => {
+    expect(layoutFor(hidden, { type: 'toggle', panel: 'right' }, 1200)).toEqual(base);
+  });
+  it('fits only folded: the sidebar folds (toggle, show, and a toggle while it is asked but off screen)', () => {
+    expect(layoutFor(hidden, { type: 'toggle', panel: 'right' }, 900)).toEqual({ ...base, sideOpen: false });
+    expect(layoutFor(hidden, { type: 'show', panel: 'right', on: true }, 900)).toEqual({ ...base, sideOpen: false });
+    expect(rightShown(base, 900)).toBe(false);
+    expect(layoutFor(base, { type: 'toggle', panel: 'right' }, 900)).toEqual({ ...base, sideOpen: false });
+  });
+  it('a toggle while it shows hides it; with no room even folded, nothing else moves', () => {
+    expect(layoutFor(base, { type: 'toggle', panel: 'right' }, 1200)).toEqual(hidden);
+    expect(layoutFor(hidden, { type: 'toggle', panel: 'right' }, 600)).toEqual(base);
+    expect(rightShown(layoutFor(hidden, { type: 'toggle', panel: 'right' }, 600), 600)).toBe(false);
+  });
+  it('other actions are layoutReducer\'s', () => {
+    expect(layoutFor(base, { type: 'toggle', panel: 'bottom' }, 600)).toEqual(layoutReducer(base, { type: 'toggle', panel: 'bottom' }));
   });
 });

@@ -183,6 +183,84 @@ describe('the IDE tabs follow the fleet (Review Focus 1)', () => {
   });
 });
 
+describe('the IDE tabs carry the place (whole-branch review)', () => {
+  const pointer = (name: string) => act(() => { tabs().find(t => t.getAttribute('aria-label') === name)!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })); });
+
+  it('the Settings tab has no « Retour »; switched off, today\'s Settings page has it', async () => {
+    const { user } = await mount();
+    await user.keyboard('{Control>},{/Control}');
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Réglages'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Général' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Retour à l’atelier/ })).toBeNull();
+    act(() => saveIdeEnabled(false));
+    expect(await screen.findByRole('button', { name: /Retour à l’atelier/ })).toBeVisible();
+  });
+
+  it('N on the Atelier tab after a session tab opens New session (the place is the overview again)', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    pointer('Atelier');
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    await user.keyboard('n');
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+    await user.keyboard('{Escape}');
+    // The activity bar's Atelier does the same.
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    await user.click(screen.getByRole('button', { name: 'Atelier (onglet)' }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    await user.keyboard('n');
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+  });
+
+  it('Settings comes back on the section it was left on, after a session tab; switched off there, today\'s Settings page', async () => {
+    const { tree, user } = await mount();
+    await user.keyboard('{Control>},{/Control}');
+    await user.click(within(await screen.findByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: 'Apparence' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Apparence' })).toBeVisible();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    await user.click(screen.getByRole('button', { name: 'Réglages (onglet)' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Apparence' })).toBeVisible();
+    pointer('Otto');
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    pointer('Réglages');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Apparence' })).toBeVisible();
+    act(() => saveIdeEnabled(false));
+    await waitFor(() => expect(document.querySelector('.ide')).toBeNull());
+    expect(screen.getByRole('heading', { level: 1, name: 'Apparence' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /Retour à l’atelier/ })).toBeVisible();
+  });
+});
+
+describe('the right panel needs room (whole-branch review)', () => {
+  const width = (w: number) => Object.defineProperty(window, 'innerWidth', { value: w, configurable: true, writable: true });
+  afterEach(() => { width(1024); });
+  const toggle = () => screen.getByRole('button', { name: 'Panneau de droite (Ctrl+/)' });
+
+  it('900 px, the sidebar open: the panel does not fit and its toggle is off; / folds the sidebar and shows the chat', async () => {
+    width(900);
+    const { user } = await mount();
+    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
+    expect(toggle()).toHaveAttribute('aria-pressed', 'false');
+    await user.keyboard('/');
+    expect(await screen.findByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+    expect(document.querySelector('.ide-explorer')).toBeNull();
+    expect(toggle()).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('600 px: no room even folded — the toggle stays off and nothing shows', async () => {
+    width(600);
+    const { user } = await mount();
+    expect(toggle()).toHaveAttribute('aria-pressed', 'false');
+    await user.click(toggle());
+    expect(toggle()).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
+    expect(document.querySelector('.ide-explorer')).not.toBeNull();
+  });
+});
+
 describe('the IDE bundle', () => {
   it('the shell loads the IDE in a chunk of its own: App imports neither dockview nor the frame', () => {
     const app = readFileSync(resolve(__dirname, '../../src/App.tsx'), 'utf8');

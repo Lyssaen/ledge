@@ -7,7 +7,7 @@ import '../styles/ide.css';
 
 /** The IDE's window bar (mockup `titlebar()`): the word mark, the palette's field, the three panel toggles, the window buttons.
  *  The bar and its gaps are the drag region, as `TitleBar`'s. */
-export function IdeTitleBar({ layout, onLayout, onSearch, blocked }: { layout: IdeLayout; onLayout(a: LayoutAction): void; onSearch(): void; blocked: boolean }) {
+export function IdeTitleBar({ layout, onLayout, onSearch, blocked, rightShown = layout.right }: { layout: IdeLayout; onLayout(a: LayoutAction): void; onSearch(): void; blocked: boolean; /** Whether the right panel is on screen (it may not fit): its toggle says that. */ rightShown?: boolean }) {
   const { t } = useI18n();
   const drag = { 'data-tauri-drag-region': '' } as const;
   const toggle = (panel: 'side' | 'bottom' | 'right', on: boolean, label: string, d: readonly string[]) => (
@@ -24,7 +24,7 @@ export function IdeTitleBar({ layout, onLayout, onSearch, blocked }: { layout: I
       <div className="ide-toggles">
         {toggle('side', layout.sideOpen, t.ide.sideToggle, SHELL_ICONS.panelLeft)}
         {toggle('bottom', layout.bottom, t.ide.bottomToggle, SHELL_ICONS.panelBottom)}
-        {toggle('right', layout.right, t.ide.rightToggle, SHELL_ICONS.panelRight)}
+        {toggle('right', rightShown, t.ide.rightToggle, SHELL_ICONS.panelRight)}
       </div>
       <WindowCaps />
     </div>

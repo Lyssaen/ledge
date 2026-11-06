@@ -19,6 +19,6 @@ const Page = lazy(() => (loaded
   : loadSettings().then(m => ({ default: m.SettingsPage }))));
 
 /** The Settings place, behind a sober wait (an empty page) the first time its chunk is fetched; a chunk that fails to load leaves a note (ChunkBoundary). */
-export function SettingsPlace(props: { section: SectionId; ctx: SettingsContext }): JSX.Element {
+export function SettingsPlace(props: { section: SectionId; ctx: SettingsContext; noBack?: boolean }): JSX.Element {
   return <ChunkBoundary><Suspense fallback={<div className="settings-page" aria-busy="true" />}><Page {...props} /></Suspense></ChunkBoundary>;
 }

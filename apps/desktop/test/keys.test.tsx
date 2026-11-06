@@ -277,8 +277,9 @@ describe('the terminal and the keyboard', () => {
 });
 
 describe('IDE shortcuts (the ide option)', () => {
-  function Probe(p: { ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void }; dispatch?: (a: unknown) => void }) {
-    useKeys((p.dispatch ?? (() => {})) as never, { state: initialNav({ helpers: [], paused: false } as never), order: [], screen: { current: null }, undo: () => false, ...(p.ide ? { ide: p.ide } : {}) } as never);
+  function Probe(p: { ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void }; dispatch?: (a: unknown) => void; modal?: boolean }) {
+    const base = initialNav({ helpers: [], paused: false } as never);
+    useKeys((p.dispatch ?? (() => {})) as never, { state: p.modal ? { ...base, modal: { kind: 'search' } } : base, order: [], screen: { current: null }, undo: () => false, ...(p.ide ? { ide: p.ide } : {}) } as never);
     return <div><textarea aria-label="champ" /><div data-terminal><button>term</button></div></div>;
   }
   const press = (key: string, el: Element | Window = window) => fireEvent.keyDown(el, { key, ctrlKey: true });
@@ -299,6 +300,13 @@ describe('IDE shortcuts (the ide option)', () => {
     expect(toggle).toHaveBeenCalledWith('side');
     fireEvent.keyDown(field, { key: '/' });
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('while a dialog is open none of the three acts (no panel moves behind it)', () => {
+    const toggle = vi.fn();
+    render(<Probe ide={{ toggle }} modal />);
+    press('b'); press('j'); press('/');
+    expect(toggle).not.toHaveBeenCalled();
   });
 
   it('under [data-terminal] none of the three acts', () => {

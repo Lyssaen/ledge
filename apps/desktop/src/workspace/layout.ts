@@ -58,3 +58,19 @@ export function saveLayout(l: IdeLayout): void {
 export function rightFits(l: IdeLayout, windowWidth: number): boolean {
   return ACTIVITY_BAR + (l.sideOpen ? l.sideWidth : 0) + RIGHT_WIDTH + EDITOR_MIN <= windowWidth;
 }
+
+/** Whether the right panel is on screen: asked for, and room for it. The title bar's toggle says this, not `l.right`. */
+export const rightShown = (l: IdeLayout, windowWidth: number): boolean => l.right && rightFits(l, windowWidth);
+
+/** layoutReducer, plus the room the right panel needs (in the IDE the chat is the only way to Ledge): asking to show it — a
+ *  toggle while it is not on screen, or `show` on — folds the sidebar when that is what makes it fit. A toggle while it shows
+ *  hides it. With no room even folded, nothing else changes, and the panel stays off screen. */
+export function layoutFor(l: IdeLayout, a: LayoutAction, windowWidth: number): IdeLayout {
+  const asksRight = (a.type === 'toggle' && a.panel === 'right') || (a.type === 'show' && a.panel === 'right' && a.on);
+  if (!asksRight) return layoutReducer(l, a);
+  if (a.type === 'toggle' && rightShown(l, windowWidth)) return layoutReducer(l, { type: 'show', panel: 'right', on: false });
+  const on = layoutReducer(l, { type: 'show', panel: 'right', on: true });
+  if (rightFits(on, windowWidth)) return on;
+  const folded = layoutReducer(on, { type: 'show', panel: 'side', on: false });
+  return rightFits(folded, windowWidth) ? folded : on;
+}

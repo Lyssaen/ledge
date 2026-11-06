@@ -16,7 +16,7 @@ import { DaemonOutdated } from './shell/DaemonOutdated';
 import { daemonTokenSource, onOpenTarget, onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
 import { parseTarget, targetAction } from './open/target';
 import { useAppearance } from './shell/theme';
-import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
+import { initialNav, navReducer, reconcile, type NavAction, type NavState, type SectionId } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { dotOf, mainOrder } from './nav/agents';
@@ -73,7 +73,7 @@ import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled } from './workspace/prefs';
 import { createWorkspaceStore, useWorkspace } from './workspace/store';
-import { layoutReducer, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
+import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { focused, keyOf, open as openTab, reconcile as reconcileTabs, type Tab } from './workspace/model';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
@@ -156,7 +156,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [wsStore] = useState(() => createWorkspaceStore());
   const ws = useWorkspace(wsStore);
   const [layout, setLayout] = useStored(loadLayout, saveLayout);
-  const onLayout = useCallback((a: LayoutAction) => setLayout(l => layoutReducer(l, a)), [setLayout]);
+  // Asking for the right panel folds the sidebar when that is what gives it room (layoutFor).
+  const onLayout = useCallback((a: LayoutAction) => setLayout(l => layoutFor(l, a, window.innerWidth)), [setLayout]);
   const ideNow = useRef({ ide, nav });
   ideNow.current = { ide, nav };
   // What every child dispatches. Switch off: the navigation reducer, as ever. On: the action routed (routeNav) to the
@@ -268,14 +269,32 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const r = a && routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: false });
     if (r?.ws) wsStore.update(r.ws);
   }, [ide]);
-  // The tab in front, when it is an agent's, is the NavState's place: the shell's session state (its view, Ctrl + ², the sounds) follows it.
+  // The tab in front is the NavState's place, so what reads the place (the shell's session state, N, Alt + ←/→, the sidebar's
+  // highlight, the interface the switch falls back to) follows the tab: a session's page, the atelier (the overview, its filter
+  // kept), Settings and the OpenRig page on the section and sub-place they were last left on.
   const front: Tab | undefined = focused(ws).tabs[focused(ws).active];
   const frontKey = front ? keyOf(front) : null;
+  const lastSettings = useRef<SectionId>('general');
+  const lastOpenRig = useRef(new Map<string, { section?: 'rigs' | 'roles'; role?: string; seat?: string }>());
+  if (place.kind === 'settings') lastSettings.current = place.section;
+  if (place.kind === 'openrig') lastOpenRig.current.set(place.machine ?? 'local', { ...(place.section ? { section: place.section } : {}), ...(place.role !== undefined ? { role: place.role } : {}), ...(place.seat !== undefined ? { seat: place.seat } : {}) });
+  /** The NavAction that shows a non-agent tab where it was left. */
+  const tabAction = useCallback((tab: Tab): NavAction | null => tab.kind === 'atelier' ? { type: 'home' }
+    : tab.kind === 'settings' ? { type: 'settings', section: lastSettings.current }
+    : tab.kind === 'openrig' ? { type: 'openrig', machine: tab.ref, section: 'rigs', ...lastOpenRig.current.get(tab.ref) } : null, []);
   useEffect(() => {
-    if (!ide || !front || (front.kind !== 'session' && front.kind !== 'seat') || !known.some(s => s.id === front.ref)) return;
+    if (!ide || !front) return;
     const p = ideNow.current.nav.place;
-    if (p.kind !== 'session' || p.id !== front.ref) navDispatch({ type: 'open', id: front.ref });
-  }, [ide, frontKey, known]);
+    if (front.kind === 'session' || front.kind === 'seat') {
+      if (known.some(s => s.id === front.ref) && (p.kind !== 'session' || p.id !== front.ref)) navDispatch({ type: 'open', id: front.ref });
+    } else if (front.kind === 'atelier') {
+      if (p.kind !== 'overview') navDispatch({ type: 'home', project: (p.kind === 'settings' ? p.back : p).project });
+    } else if (front.kind === 'settings') {
+      if (p.kind !== 'settings') navDispatch(tabAction(front)!);
+    } else if (front.kind === 'openrig') {
+      if (p.kind !== 'openrig' || (p.machine ?? 'local') !== front.ref) navDispatch(tabAction(front)!);
+    }
+  }, [ide, frontKey, known, place, tabAction]);
 
   const projectIdOf = useCallback((s: Session) => (projects ? projectOf(s, projects) : null), [projects]);
   const projectName = useCallback((s: Session) => {
@@ -438,7 +457,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           : <Atelier nav={tnav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
               tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />;
       }
-      if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} /> : null;
+      if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} noBack /> : null;
       if (tab.kind === 'openrig') {
         const o = place.kind === 'openrig' && (place.machine ?? 'local') === tab.ref ? place : null;
         return <OpenRigPage client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'rigs'} role={o?.role} seat={o?.seat} open={o?.open} projects={projects} sessions={sessions} dispatch={dispatch} />;
@@ -448,7 +467,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     return (
       <IdePlace layout={layout} onLayout={onLayout} blocked={blocked} readOnly={localDown} dragging={!!filing.dragging}
         onSearch={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}
-        onTab={tab => wsStore.update(w => openTab(w, tab))} activeTab={front ?? null} badge={badge}
+        onTab={tab => { const a = tabAction(tab); if (a) dispatch(a); else wsStore.update(w => openTab(w, tab)); }} activeTab={front ?? null} badge={badge}
         waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
         notice={tokenMissing && <DaemonOutdated />}
         explorer={
