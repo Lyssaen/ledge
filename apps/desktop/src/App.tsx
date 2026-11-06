@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { canBroadcast, daemonStore, projectOf, useDaemon, type BroadcastTo, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { canBroadcast, daemonStore, projectOf, splitId, useDaemon, type BroadcastTo, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -166,6 +166,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     if (!ideNow.current.ide) { navDispatch(a); return; }
     const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null });
     if (r.nav) navDispatch(r.nav);
+    // The right panel is `layout.right`, never `nav.chat`: asking for the chat only bumps `chatFocus` (its field takes the
+    // focus), and `nav.chat` goes straight back to false, or the single keys, Alt + 1…9 and the screen's Escape would stay off.
+    if (r.nav?.type === 'chat' && r.nav.open !== false) navDispatch({ type: 'chat', open: false });
     if (r.ws) wsStore.update(r.ws);
     if (r.layout) onLayout(r.layout);
   }, [wsStore, onLayout]);
@@ -241,17 +244,24 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // An archived session keeps its page (it reads, read-only): only a session the daemon no longer lists at all takes the place away.
   const known = useMemo(() => [...sessions, ...fleetView.archived], [sessions, fleetView.archived]);
   knownNow.current = known;
-  // The IDE's tabs follow (Review Focus 1): a session tab goes with its session, an archived one stays. Not before every machine
-  // has said what it holds, or a tab kept from the last run would close while its machine connects.
-  const settled = machines.length > 0 && machines.every(m => m.ready);
+  // The IDE's tabs follow (Review Focus 1): a session tab goes with its session, an archived one stays. Only a machine that has
+  // said what it holds (`ready`) can close one: a tab kept from the last run stays while its machine connects, or while it is offline.
+  const readyMachines = machines.filter(m => m.ready).map(m => m.id).join('\n');
   useEffect(() => {
     if (reconcile(nav, known, projects) !== nav) navDispatch({ type: 'reconcile', sessions: known, projects });
-    if (ide && settled) wsStore.update(w => reconcileTabs(w, tab => (tab.kind !== 'session' && tab.kind !== 'seat') || known.some(s => s.id === tab.ref)));
-  }, [known, projects, ide, settled]);
+    if (!ide) return;
+    const ready = new Set(readyMachines.split('\n'));
+    wsStore.update(w => reconcileTabs(w, tab => {
+      if (tab.kind !== 'session' && tab.kind !== 'seat') return true;
+      const machine = splitId(tab.ref)?.machine;
+      return !machine || !ready.has(machine) || known.some(s => s.id === tab.ref);
+    }));
+  }, [known, projects, ide, readyMachines]);
   // Turning the IDE on from a session page opens that session's tab (Review Focus 3); from Settings (where its switch is) or
   // the OpenRig page, theirs.
   useEffect(() => {
     if (!ide) return;
+    if (ideNow.current.nav.chat) navDispatch({ type: 'chat', open: false });
     const a: NavAction | null = place.kind === 'session' ? { type: 'open', id: place.id }
       : place.kind === 'settings' ? { type: 'settings', section: place.section }
       : place.kind === 'openrig' ? { type: 'openrig', ...(place.machine !== undefined ? { machine: place.machine } : {}) } : null;

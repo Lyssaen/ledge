@@ -12,7 +12,10 @@ import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
+import type { Machines } from '@ledge/protocol';
 import { PROJECTS } from '../helpers';
+import { empty, open, serialize } from '../../src/workspace/model';
+import { ATELIER_TAB, WORKSPACE_KEY } from '../../src/workspace/store';
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
@@ -20,11 +23,11 @@ const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
 
-async function mount({ ide = true } = {}) {
+async function mount({ ide = true, machines = [{ id: 'local', label: 'Local' }] }: { ide?: boolean; machines?: Machines } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
-  d.machines([{ id: 'local', label: 'Local' }]);
+  d.machines(machines);
   d.projects(PROJECTS);
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' }));
   d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'working' }));
@@ -118,6 +121,65 @@ describe('the IDE shell (switch on)', () => {
     expect(document.querySelector('.ide')).toBeNull();
     // Turning it off closes no tab.
     expect(JSON.parse(JSON.parse(localStorage.getItem('ledge.ide.workspace')!)).groups[0].tabs.map((t: { ref: string }) => t.ref)).toEqual(['main', 'local:otto']);
+  });
+});
+
+describe('the IDE keyboard: the chat never holds the single keys', () => {
+  it('/ focuses the chat; Escape leaves it; then Alt+1 opens the first agent\'s tab and ? the shortcuts', async () => {
+    const { user } = await mount();
+    await user.keyboard('/');
+    const chat = await screen.findByRole('complementary', { name: 'Chat Ledge' });
+    await waitFor(() => expect(chat.contains(document.activeElement)).toBe(true));
+    await user.keyboard('{Escape}');
+    expect(chat.contains(document.activeElement)).toBe(false);
+    expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();   // the panel stays: Ctrl+/ hides it
+    await user.keyboard('{Alt>}1{/Alt}');
+    await waitFor(() => expect(['Otto', 'Nova']).toContain(activeTab()?.getAttribute('aria-label')));
+    expect(tabs()).toHaveLength(2);
+    await user.keyboard('/');
+    await user.keyboard('{Escape}');
+    await user.keyboard('?');
+    expect(await screen.findByRole('dialog', { name: /Raccourcis clavier/ })).toBeVisible();
+  });
+
+  it('a chat left open by the current interface does not hold the keys once the IDE is on', async () => {
+    const { user } = await mount({ ide: false });
+    await user.keyboard('{Control>}/{/Control}');   // the current interface: the docked chat opens (nav.chat)
+    await screen.findByRole('complementary', { name: 'Chat Ledge' });
+    act(() => saveIdeEnabled(true));
+    await waitFor(() => expect(document.querySelector('.ide')).not.toBeNull());
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.keyboard('?');
+    expect(await screen.findByRole('dialog', { name: /Raccourcis clavier/ })).toBeVisible();
+  });
+});
+
+describe('the IDE tabs follow the fleet (Review Focus 1)', () => {
+  const stored = () => JSON.parse(JSON.parse(localStorage.getItem('ledge.ide.workspace')!)).groups[0].tabs.map((t: { ref: string }) => t.ref) as string[];
+
+  it('a session deleted while open closes its tab; an archived one keeps it, and it reads', async () => {
+    const { d, tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(tree.getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(tabs()).toHaveLength(3));
+    act(() => d.remove('nova'));
+    await waitFor(() => expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Atelier', 'Otto']));
+    expect(stored()).toEqual(['main', 'local:otto']);
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'exited', archivedAt: '2026-11-01T10:00:00.000Z' })));
+    await waitFor(() => expect(tree.queryByRole('button', { name: /^Otto/ })).toBeNull());   // archived: out of the projects' tree
+    expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Atelier', 'Otto']);
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    expect(document.querySelector('.ide-pane .conversation-workspace')).not.toBeNull();
+  });
+
+  it('a tab of an offline machine stays, while a ready machine\'s deleted session closes its own', async () => {
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(open(open(empty(), ATELIER_TAB), { kind: 'session', ref: 'nas:ghost' }))));
+    const { d, tree, user } = await mount({ machines: [{ id: 'local', label: 'Local' }, { id: 'nas', label: 'NAS', ssh: 'nas' }] });
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(stored()).toEqual(['main', 'nas:ghost', 'local:otto']));
+    act(() => d.remove('otto'));
+    await waitFor(() => expect(stored()).toEqual(['main', 'nas:ghost']));
+    expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Atelier', 'nas:ghost']);
   });
 });
 

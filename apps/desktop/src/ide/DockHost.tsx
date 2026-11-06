@@ -43,11 +43,15 @@ export function DockHost({ ws, store, title, body }: DockHostProps): JSX.Element
     syncing.current = true;
     try {
       for (const p of [...api.panels]) if (!tabs.has(p.id)) api.removePanel(p);
+      let i = 0;
       for (const [id, tab] of tabs) {
         const name = title(tab);
         const p = api.getPanel(id);
-        if (!p) api.addPanel({ id, component: 'tab', title: name, inactive: true });
+        // At the model's index: a panel added inactive would otherwise go before the front one.
+        const into = api.groups[0];
+        if (!p) api.addPanel({ id, component: 'tab', title: name, inactive: true, ...(into ? { position: { referenceGroup: into, index: i } } : {}) });
         else if (p.title !== name) p.api.setTitle(name);
+        i++;
       }
       const front = group.tabs[group.active];
       const p = front ? api.getPanel(keyOf(front)) : undefined;

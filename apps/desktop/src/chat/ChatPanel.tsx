@@ -23,7 +23,7 @@ export interface ChatPanelProps {
   paused: boolean;
   /** Changes each time the chat is asked for (/, an open button), even already open: the field takes the focus again. */
   focus?: number;
-  /** Without it (the IDE's right panel, hidden by Ctrl+/), no × and Escape closes nothing. */
+  /** Without it (the IDE's right panel, hidden by Ctrl+/), no ×, and Escape only leaves its field. */
   onClose?(): void; onOpenSession(id: string): void; onLaunched(id: string): void;
   /** A launch card's « Terminal »: the session's page with its terminal pane (the app's `showTerminal`). */
   onTerminal(id: string): void;
@@ -83,7 +83,9 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
     // the chat and nothing else: the window's Escape (leave the page, clear the filter, leave full screen) does not hear it.
     <aside className="ledge-chat-panel" aria-label={t.side.chat} onKeyDownCapture={e => {
       if (e.key !== 'Escape' || e.nativeEvent.isComposing) return;
-      e.preventDefault(); e.stopPropagation(); onClose?.();
+      e.preventDefault(); e.stopPropagation();
+      // The IDE's right panel stays (Ctrl+/ hides it): Escape leaves its field, the window's single keys work again.
+      if (onClose) onClose(); else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     }}>
       <div className="chat-drawer-content">
         <ChatCopyProvider value={copy}>
