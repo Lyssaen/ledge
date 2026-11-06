@@ -199,3 +199,9 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 /* An IDE « Modifications » tab: the Changes view fills it. */
 .ide-changes { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .ide-changes > .changes-view { flex: 1; min-height: 0; }
+
+/* An agent's terminal tab (mockup content() `term`): a 26 px row with the terminal's kind (`.chip-k`), then the screen. */
+.ide-term { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.ide-term-kind { flex: none; height: 26px; display: flex; align-items: center; background: var(--ide-pane, var(--card)); border-bottom: 1px solid var(--border); }
+.ide-term-kind .chip-k { margin: 0 8px; font-family: var(--font-mono, monospace); font-size: 10.5px; line-height: 16px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; }
+.ide-term > .agent-view { flex: 1; min-height: 0; }

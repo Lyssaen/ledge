@@ -22,7 +22,7 @@ export function SessionTabLabel({ session, tab, title }: { session: Session | un
   );
 }
 
-/** A « Modifications » tab (mockup `tabLabel()`, type diff): its session's provider logo at 12 px, aria-hidden, then its title. */
+/** A « Modifications » tab (mockup `tabLabel()`, type diff), or an agent's terminal tab (type term, title `>_ name · tmux`): its session's provider logo at 12 px, aria-hidden, then its title. */
 export function ChangesTabLabel({ session, title }: { session: Session | undefined; title: string }): JSX.Element {
   return (
     <>

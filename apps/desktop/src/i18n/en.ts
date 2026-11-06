@@ -1315,6 +1315,8 @@ export const en: Messages = {
     setting: 'IDE interface (preview)',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal shown in the other group', showHere: 'Show here',
+    /** An agent's terminal tab: its title (mockup termFor()) and its kind chip (R3: a seat's is a read-only capture). */
+    terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attached', termReadOnly: 'read only',
     settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
     settingOff: 'IDE interface (preview) off',
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',

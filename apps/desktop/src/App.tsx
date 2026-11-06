@@ -57,7 +57,7 @@ import { useContextMenu } from './manage/useContextMenu';
 import { SessionMenuHost } from './manage/SessionMenu';
 import { ConfirmDialog } from './manage/ConfirmDialog';
 import { BroadcastDialog } from './broadcast/BroadcastDialog';
-import { ChangesPlace, loadedWorkspace, SessionPlace } from './session/lazy';
+import { AgentTerminalPlace, ChangesPlace, loadedWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs, viewShown, type SessionPrefs, type SessionView } from './session/prefs';
 import { subagentOf } from './session/exchanges';
@@ -75,7 +75,7 @@ import { useIdeEnabled } from './workspace/prefs';
 import { useOpenSession } from './workspace/openPrefs';
 import { createWorkspaceStore, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { beside, changesBeside, close as closeTab, closeOthers, find as findTab, focused, keyOf, open as openTab, reconcile as reconcileTabs, setView, type Tab } from './workspace/model';
+import { beside, changesBeside, close as closeTab, closeOthers, find as findTab, focused, keyOf, open as openTab, sessionOf, reconcile as reconcileTabs, setView, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
@@ -268,10 +268,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     if (!ide) return;
     const ready = new Set(readyMachines.split('\n'));
     wsStore.update(w => reconcileTabs(w, tab => {
-      // A session's tab and its Changes go with it.
-      if (tab.kind !== 'session' && tab.kind !== 'seat' && tab.kind !== 'changes') return true;
-      const machine = splitId(tab.ref)?.machine;
-      return !machine || !ready.has(machine) || known.some(s => s.id === tab.ref);
+      // A session's tab, its Changes and its Terminal go with it.
+      const sid = sessionOf(tab);
+      if (sid === null) return true;
+      const machine = splitId(sid)?.machine;
+      return !machine || !ready.has(machine) || known.some(s => s.id === sid);
     }));
   }, [known, projects, ide, readyMachines]);
   // Turning the IDE on from a session page opens that session's tab (Review Focus 3); from Settings (where its switch is) or
@@ -514,7 +515,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const badge = { perm: waiting.filter(s => dotOf(s) === 'approval').length, ask: waiting.filter(s => dotOf(s) === 'question').length };
     const label = (tab: Tab): ReactNode => (tab.kind === 'session' || tab.kind === 'seat'
       ? <SessionTabLabel session={known.find(s => s.id === tab.ref)} tab={tab} title={title(tab)} />
-      : tab.kind === 'changes' ? <ChangesTabLabel session={known.find(s => s.id === tab.ref)} title={title(tab)} /> : title(tab));
+      : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} /> : title(tab));
     const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {
       const tnav = tabNav(nav, tab);
@@ -531,6 +532,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       if (tab.kind === 'changes') {
         const s = known.find(x => x.id === tab.ref);
         return s ? <ChangesPlace client={fleetClient} session={s} notify={notify} onTouch={() => dispatch({ type: 'open', id: s.id })} /> : null;
+      }
+      // An agent's terminal in a tab of its own; a seat's is a read-only capture (R3).
+      if (tab.kind === 'terminal') {
+        const s = known.find(x => x.id === sessionOf(tab));
+        return s ? <AgentTerminalPlace client={fleetClient} session={s} notify={notify} readOnly={s.rig != null} onOpenSession={() => dispatch({ type: 'open', id: s.id })} /> : null;
       }
       if (tab.kind === 'atelier') {
         return detached ? <AtelierAway onShow={detach} onAttach={attach} />

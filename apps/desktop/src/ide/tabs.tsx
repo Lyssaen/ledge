@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Session } from '@ledge/protocol';
 import type { Messages } from '../i18n/messages';
-import type { Tab } from '../workspace/model';
+import { sessionOf, type Tab } from '../workspace/model';
 
 /** What a tab's content is: given by Shell (SessionPlace with tabNav, Atelier, SettingsPlace, OpenRigPage). */
 export type TabBody = (tab: Tab) => ReactNode;
@@ -15,6 +15,10 @@ export function tabTitle(t: Tab, ctx: { session(id: string): Session | undefined
     case 'settings': return ctx.t.side.settings;
     case 'openrig': return ctx.t.ide.openrigTitle(ctx.machine?.(t.ref) ?? t.ref);
     case 'changes': return ctx.t.ide.changesTitle(ctx.session(t.ref)?.name ?? t.ref);
+    case 'terminal': {
+      const sid = sessionOf(t);
+      return sid === null ? t.ref : ctx.t.ide.terminalTitle(ctx.session(sid)?.name ?? sid);
+    }
     case 'atoi': return ctx.t.ide.atoi;
     default: return t.ref;
   }

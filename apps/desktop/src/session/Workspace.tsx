@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent } from 'react';
 import { useMachines } from '@ledge/fleet';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
@@ -14,12 +14,14 @@ import { openShell, RightPanel, useShellIntro } from './RightPanel';
 import { SessionPage, type PageApi, type SessionPageProps } from './SessionPage';
 import { subagentOf } from './exchanges';
 import { useThread } from './useThread';
-import { useTabPlace } from '../workspace/tabPlace';
+import { useAgentScreen } from './useAgentScreen';
 
 /** The terminal's xterm comes with this chunk, never in the first bundle: App's terminal store makes them through it. */
 export { createSurface } from '../term/surface';
 /** An IDE « Modifications » tab: its diffs come with this chunk too (ChangesPlace). */
 export { ChangesTab } from './ChangesTab';
+/** An IDE terminal tab of an agent. */
+export { AgentTerminalTab } from './AgentTerminalTab';
 
 /** ← / → on the panel's handle move it this much. */
 const TERM_STEP = 0.02;
@@ -53,42 +55,10 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   const machines = useMachines(client);
   const hasBackend = ptyBackend() !== null || machines.find(m => m.id === (p.session.machineId ?? 'local'))?.daemon?.terminalStream === true;
   const view = prefs.view;
-  // In an IDE tab, every tab's page stays mounted: a tab shown on its terminal shows its agent, as its own view (its key), and
-  // two groups show two agents at once. A tab hidden, leaving its terminal, or gone, lets its own session's screen go, only
-  // if it holds it (R2). Outside the IDE the page is the one view, as ever.
-  const tabPlace = useTabPlace();
-  const inTab = tabPlace !== null;
-  const viewer = tabPlace?.key ?? 'page';
-  const shownHere = tabPlace === null || tabPlace.visible;
-  const subscribeHolder = useCallback((fn: () => void) => (store ? store.subscribe(fn) : () => {}), [store]);
-  const holder = useSyncExternalStore(subscribeHolder, () => store?.viewerOf(p.session.id) ?? null);
-  // The session this view last asked for while shown on its terminal. Asking again (a fleet update, a new mode) must not take
-  // the screen back from a tab that took it since (« Afficher ici »): only a fresh show does, or a screen nobody holds.
-  const asked = useRef<string | null>(null);
-  // Asked again only when the way to show it changes, not at each fleet update that rebuilds the session's object.
+  // The agent's screen is attached while the Terminal view shows it (in an IDE tab: its own view, R2), detached once left.
   const sid = p.session.id;
   const mode = agentMode(p.session, helper, hasBackend);
-  const modeKey = JSON.stringify(mode);
-  // The agent's screen is attached while the Terminal view shows it (re-asking in the same mode keeps the attachment), detached once left.
-  useEffect(() => {
-    if (!store) return;
-    // A hidden tab lets its screen go (it would keep an attachment open for nothing, and leave a shown tab of the same
-    // session on the note): a shown one takes it, and coming back attaches again.
-    if (!shownHere) { asked.current = null; store.hideAgent(sid, viewer); return; }
-    if (view === 'terminal') {
-      // Outside the IDE the page is the store's default view: asked as before.
-      if (asked.current !== sid || holder === null || holder === viewer) { if (inTab) store.showAgent(sid, mode, viewer); else store.showAgent(sid, mode); }
-      asked.current = sid;
-    } else {
-      asked.current = null;
-      if (inTab) store.hideAgent(sid, viewer);
-      else store.hideAgent();
-    }
-    // `mode` is read through its key: the same mode in a new object asks nothing.
-  }, [store, view, sid, modeKey, shownHere, inTab, viewer, holder]); // eslint-disable-line react-hooks/exhaustive-deps
-  const leaving = useRef<{ sid: string; viewer: string } | undefined>(undefined);
-  leaving.current = inTab ? { sid: p.session.id, viewer } : undefined;
-  useEffect(() => () => { const l = leaving.current; if (l) store?.hideAgent(l.sid, l.viewer); else store?.hideAgent(); }, [store]);
+  useAgentScreen(sid, mode, view === 'terminal');
   // « Agrandir le panneau » lasts while the panel shows: hiding it forgets it.
   const [maxed, setMaxed] = useState(false);
   if (maxed && !prefs.terminal) setMaxed(false);

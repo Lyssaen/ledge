@@ -27,13 +27,15 @@ export interface Agent {
 
 /** The agent's screen as the session page knows it: how it can be shown (agentMode), its link, where it runs. On a subagent's
  *  page `session` is its parent. Without a terminal store (a page rendered alone) the link is off. */
-export function useAgent(session: Session, helper: { id: string } | null): Agent {
+export function useAgent(session: Session, helper: { id: string } | null, readOnly = false): Agent {
   const { t } = useI18n();
   const store = useContext(TermStoreContext);
   const [hasBackend] = useState(() => ptyBackend() !== null);
   const subscribe = useCallback((fn: () => void) => (store ? store.subscribe(fn) : noStore()), [store]);
   const link = useSyncExternalStore(subscribe, () => store?.link(session.id) ?? OFF);
-  const mode = agentMode(session, helper, hasBackend);
+  const base = agentMode(session, helper, hasBackend);
+  // A capture (R3) is a live screen the store opens read-only: the mode the store reads that way is the subagent's.
+  const mode: AgentMode = readOnly && base.kind === 'live' ? { kind: 'parent', parentId: session.id } : base;
   const remote = !!session.machineId && session.machineId !== 'local';
   const dot: AgentDot = mode.kind !== 'live' ? 'off' : link.state === 'reconnecting' ? 'wait' : 'on';
   return { mode, link, remote, host: remote ? machineOf(session) : t.session.terminal.local, dot };
