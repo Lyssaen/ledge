@@ -1,0 +1,28 @@
+/* The IDE shell (docs/mockups/ledge-ide-interactive.html), behind « Interface IDE (aperçu) »: loaded with its lazy chunk. */
+.ide { height: 100vh; display: grid; grid-template-rows: 34px 1fr 24px; background: var(--background); color: var(--foreground); overflow: hidden; }
+.ide-body { display: grid; grid-template-columns: 48px var(--ide-side, 248px) 1fr var(--ide-right, 300px); min-height: 0; }
+
+.ide-titlebar { display: flex; align-items: center; gap: 14px; padding: 0 0 0 14px; border-bottom: 1px solid var(--sidebar-border); background: var(--sidebar); user-select: none; }
+.ide-titlebar .titlebar-caps { align-self: stretch; margin-left: 0; }
+.ide-brand { font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.ide-search { flex: 0 1 460px; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--background); color: var(--muted-foreground); font-size: 12px; text-align: left; }
+.ide-search:hover { border-color: var(--input); }
+.ide-search-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ide-kbd { font-family: 'Geist Mono', monospace; font-size: 10.5px; border: 1px solid var(--input); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); }
+.ide-toggles { display: flex; gap: 2px; margin-right: 4px; }
+.ide-toggles button { width: 26px; height: 24px; display: grid; place-items: center; border-radius: 5px; color: var(--muted-foreground); }
+.ide-toggles button:hover, .ide-toggles button[aria-pressed=true] { background: var(--accent); color: var(--foreground); }
+
+.ide-activity { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); }
+.ide-activity button { position: relative; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 7px; color: var(--muted-foreground); }
+.ide-activity button:hover { color: var(--foreground); }
+.ide-activity button.on { color: var(--foreground); background: var(--accent); }
+.ide-activity .grow { flex: 1; }
+.ide-badge { position: absolute; top: 2px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px; display: grid; place-items: center; border-radius: 8px; background: var(--destructive); color: #fff; font-size: 10px; font-weight: 600; }
+.ide-badge.amber { background: var(--warning); color: #1d1400; }
+
+.ide-status { display: flex; align-items: center; gap: 14px; padding: 0 10px; background: var(--sidebar); border-top: 1px solid var(--sidebar-border); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; }
+.ide-status .workspace-footer { flex: 1; height: 100%; padding: 0; border-top: 0; font-size: inherit; }
+.ide-status-sp { flex: 1; }
+.ide-status-wait { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: 5px; color: var(--foreground); }
+.ide-status-wait:hover { background: var(--accent); }

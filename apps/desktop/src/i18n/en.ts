@@ -1314,6 +1314,11 @@ export const en: Messages = {
   ide: {
     setting: 'IDE interface (preview)',
     settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
-    settingOff: 'IDE interface (preview) off'
+    settingOff: 'IDE interface (preview) off',
+    brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
+    sideToggle: 'Sidebar (Ctrl+B)', bottomToggle: 'Bottom panel (Ctrl+J)', rightToggle: 'Right panel (Ctrl+/)',
+    activityLabel: 'Activity bar', projects: 'Projects', rigs: 'OpenRig rigs', atoi: 'For you',
+    openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
+    waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`)
   }
 };

@@ -1381,6 +1381,11 @@ export const fr = {
   ide: {
     setting: 'Interface IDE (aperçu)',
     settingHint: 'Groupes d’onglets, panneaux et barre d’activité, à la manière de VS Code. L’ancienne interface reste disponible tant que l’aperçu dure.',
-    settingOff: 'Interface IDE (aperçu) désactivée'
+    settingOff: 'Interface IDE (aperçu) désactivée',
+    brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',
+    sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
+    activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
+    openrigTab: 'OpenRig (onglet)', atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
+    waiting: (n: number) => (n === 1 ? '1 demande' : `${n} demandes`)
   }
 };
