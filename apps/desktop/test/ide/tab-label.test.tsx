@@ -30,9 +30,29 @@ describe('SessionTabLabel', () => {
     expect(screen.getByText('ledge-dev')).toBeInTheDocument();
     expect(screen.getByTitle('omp')).toBeInTheDocument();
   });
-  it('Cursor Agent has no logo', () => {
-    const { container } = draw(<SessionTabLabel session={fakeSession('otto', { name: 'Otto', tool: 'cursor' })} tab={tab} title="Otto" />);
-    expect(container.querySelector('.logo')).toBeNull();
+  it('each tool its provider\'s real logo: Claude\'s spark in its orange, OpenAI\'s and Cursor\'s marks in currentColor, omp\'s π', () => {
+    const logo = (tool: 'claude' | 'codex' | 'cursor' | 'omp', title: string) => {
+      draw(<SessionTabLabel session={fakeSession('otto', { name: 'Otto', tool })} tab={tab} title="Otto" />);
+      const el = screen.getByTitle(title);
+      const path = el.querySelector('svg path')!;
+      cleanup();
+      return path;
+    };
+    expect(logo('claude', 'Anthropic')).toHaveAttribute('fill', '#D97757');
+    expect(logo('codex', 'OpenAI').closest('svg')).toHaveAttribute('fill', 'currentColor');
+    expect(logo('cursor', 'Cursor').closest('svg')).toHaveAttribute('fill', 'currentColor');
+    expect(logo('omp', 'omp').getAttribute('fill')).toMatch(/^url\(#.+\)$/);
+  });
+  it('two omp logos on screen each point at their own gradient', () => {
+    const { container } = draw(<>
+      <SessionTabLabel session={fakeSession('a', { name: 'A', tool: 'omp' })} tab={tab} title="A" />
+      <ChangesTabLabel session={fakeSession('b', { name: 'B', tool: 'omp' })} title="B" />
+    </>);
+    const ids = [...container.querySelectorAll('linearGradient')].map(g => g.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    const fills = [...container.querySelectorAll('path[fill^="url("]')].map(p => p.getAttribute('fill'));
+    expect(fills).toEqual(ids.map(id => `url(#${id})`));
   });
   it('an unknown session: the title alone, no dot', () => {
     const { container } = draw(<SessionTabLabel session={undefined} tab={tab} title="otto" />);
@@ -53,8 +73,8 @@ describe('ChangesTabLabel', () => {
     expect(logo.querySelector('svg')).toHaveAttribute('width', '12');
     expect(container).toHaveTextContent('Modifications · Otto');
   });
-  it('no logo for Cursor Agent, nor for a session not known', () => {
-    expect(draw(<ChangesTabLabel session={fakeSession('otto', { tool: 'cursor' })} title="x" />).container.querySelector('.logo')).toBeNull();
+  it('Cursor Agent has its logo; a session not known has none', () => {
+    expect(draw(<ChangesTabLabel session={fakeSession('otto', { tool: 'cursor' })} title="x" />).container.querySelector('.logo')).toHaveAttribute('title', 'Cursor');
     expect(draw(<ChangesTabLabel session={undefined} title="y" />).container.querySelector('.logo')).toBeNull();
   });
 });

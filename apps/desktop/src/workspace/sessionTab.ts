@@ -7,15 +7,15 @@ import type { Tab } from './model';
 
 /** The pure rules of a session tab (docs/mockups/ledge-ide-interactive.html): what it shows and says, without React.
  *  Types only from changedFiles, so the first bundle does not pull the session chunk. */
-export type Provider = 'anthropic' | 'openai' | 'omp';
+export type Provider = 'anthropic' | 'openai' | 'cursor' | 'omp';
 
-/** The logo family of a tool; Cursor Agent has none in the mockup (docs/ide-lot-2-questions.md). */
-export function providerOf(tool: Session['tool']): Provider | null {
+/** The provider whose logo a tool wears. */
+export function providerOf(tool: Session['tool']): Provider {
   switch (tool) {
     case 'claude': return 'anthropic';
     case 'codex': return 'openai';
+    case 'cursor': return 'cursor';
     case 'omp': return 'omp';
-    default: return null;
   }
 }
 

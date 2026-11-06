@@ -11,10 +11,9 @@ import { ProviderLogo } from './ProviderLogo';
 export function SessionTabLabel({ session, tab, title }: { session: Session | undefined; tab: Tab; title: string }): JSX.Element {
   const { t } = useI18n();
   if (!session) return <span className="tab-name">{title}</span>;
-  const provider = providerOf(session.tool);
   return (
     <>
-      {provider && <span aria-hidden="true" className="tab-logo"><ProviderLogo provider={provider} /></span>}
+      <span aria-hidden="true" className="tab-logo"><ProviderLogo provider={providerOf(session.tool)} /></span>
       <span className="tab-name">{title}</span>
       {tabView(tab, session) === 'terminal' && <span aria-hidden="true" className="tab-term" title={t.ide.tabTerminalView}>&gt;_</span>}
       {session.rig && <span aria-hidden="true" className="tab-rig">{session.rig.name}</span>}
@@ -25,10 +24,9 @@ export function SessionTabLabel({ session, tab, title }: { session: Session | un
 
 /** A « Modifications » tab (mockup `tabLabel()`, type diff): its session's provider logo at 12 px, aria-hidden, then its title. */
 export function ChangesTabLabel({ session, title }: { session: Session | undefined; title: string }): JSX.Element {
-  const provider = session ? providerOf(session.tool) : null;
   return (
     <>
-      {provider && <span aria-hidden="true" className="tab-logo"><ProviderLogo provider={provider} size={12} /></span>}
+      {session && <span aria-hidden="true" className="tab-logo"><ProviderLogo provider={providerOf(session.tool)} size={12} /></span>}
       <span className="tab-name">{title}</span>
     </>
   );

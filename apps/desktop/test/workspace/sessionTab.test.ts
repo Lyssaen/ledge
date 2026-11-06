@@ -11,7 +11,7 @@ describe('providerOf', () => {
     expect(providerOf('claude')).toBe('anthropic');
     expect(providerOf('codex')).toBe('openai');
     expect(providerOf('omp')).toBe('omp');
-    expect(providerOf('cursor')).toBeNull();
+    expect(providerOf('cursor')).toBe('cursor');
   });
 });
 
