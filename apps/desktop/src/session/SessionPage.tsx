@@ -133,12 +133,17 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   // Back on the thread: where the reader left it, or (from « tour 2 ») the action, which the flash brings into view.
   const returning = useRef<'restore' | 'aim' | null>(null);
   // In an IDE tab, the page stays mounted while hidden (dockview detaches its DOM, which loses its scroll): shown again,
-  // the thread comes back where it was left (R6). Outside the IDE, always shown.
+  // the thread comes back where it was left (R6). So does a thread view set from outside the page (the tab's menu), which
+  // never goes through switchView; a restore asked while on Terminal waits for the thread. Outside the IDE, always shown,
+  // and only switchView asks.
   const tabPlace = useTabPlace();
   const visible = tabPlace?.visible ?? true;
   const wasVisible = useRef(visible);
-  if (visible && !wasVisible.current && returning.current === null) returning.current = 'restore';
+  const prevView = useRef(view);
+  if (tabPlace !== null && returning.current === null
+    && ((visible && !wasVisible.current) || (view === 'thread' && prevView.current !== 'thread'))) returning.current = 'restore';
   wasVisible.current = visible;
+  prevView.current = view;
   const viewNow = useRef(view);
   viewNow.current = view;
   const seatNow = useRef(seat !== null);
@@ -446,7 +451,8 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   });
   function termDecides(e: globalThis.KeyboardEvent): boolean {
     const k = e.key.toLowerCase();
-    if ((k !== 'y' && k !== 'n') || helper || !shown || sortOf(shown) !== 'approval' || session.source === 'hook_only') return false;
+    // As Reply, which the thread view mounts: none on a subagent's page, archived, on an OMP seat, offline or read only.
+    if ((k !== 'y' && k !== 'n') || helper || archived || seat !== null || !shown || sortOf(shown) !== 'approval' || session.source === 'hook_only') return false;
     if (!e.repeat) p.decisions.decide(session, k === 'y' ? 'accept' : 'deny');
     return true;
   }

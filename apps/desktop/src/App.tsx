@@ -348,8 +348,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }, [setSessionPrefs]);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
   // An IDE session tab's prefs (R6): its own view, from the model (a change goes there, never to desktop.session), no right
-  // panel, the rest shared. Kept per tab key, the same objects while nothing they hold changes: a page renders only for what it shows.
+  // panel, the rest shared. Kept per tab key, the same objects while nothing they hold changes, so what depends on their
+  // identity (the Workspace's callbacks and effects on setPrefs) does not start over at each render. The page itself still
+  // renders with the Shell (no memo boundary). A closed tab's entry goes with it.
   const tabPrefs = useRef(new Map<string, { base: SessionPrefs; prefs: SessionPrefs; set(fn: (p: SessionPrefs) => SessionPrefs): void }>());
+  useEffect(() => {
+    const open = new Set(ws.groups.flatMap(g => g.tabs.map(keyOf)));
+    for (const k of tabPrefs.current.keys()) if (!open.has(k)) tabPrefs.current.delete(k);
+  }, [ws]);
   const prefsOfTab = (tab: Tab, s: Session) => {
     const key = keyOf(tab);
     const view = tabView(tab, s);

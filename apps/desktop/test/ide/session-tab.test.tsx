@@ -38,6 +38,8 @@ async function mount({ ide = true }: { ide?: boolean } = {}) {
   d.projects(PROJECTS);
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' }));
   d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'working' }));
+  // Their threads (empty) arrive: the page's scrolling waits for one.
+  d.thread('otto', []); d.thread('nova', []);
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
   const tree = within(await side.findByRole('tree', { name: 'Projets, branches et sessions' }));
@@ -146,6 +148,60 @@ describe('the session page in an IDE tab', () => {
     (document.activeElement as HTMLElement | null)?.blur();
     await user.keyboard('y');
     await waitFor(() => expect(decided(d)).toEqual([expect.objectContaining({ id: 'otto', decision: 'accept' })]));
+  });
+
+  it('Y on the terminal view of an archived session decides nothing (its thread offers no decision)', async () => {
+    const { d, user } = await twoTabs();
+    await toTerminal(user, 'Otto');
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', ...PERMISSION, archivedAt: '2026-11-01T10:00:00.000Z' })));
+    front('Otto');
+    await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
+    await waitFor(() => expect(page()!.querySelector('.session-thread')).toHaveAttribute('hidden'));
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.keyboard('y');
+    await new Promise(r => setTimeout(r, 50));
+    expect(decided(d)).toEqual([]);
+  });
+
+  describe('R6: the thread comes back where it was left', () => {
+    /** jsdom lays nothing out: the scroller gets a height and a scroll position of its own (1000 px of thread, 100 shown). */
+    const sized = () => {
+      const el = page()!.querySelector<HTMLElement>('.session-thread')!;
+      let top = 0;
+      Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => 1000 });
+      Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => 100 });
+      Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => top, set: (v: number) => { top = v; } });
+      el.scrollTop = 300;
+      fireEvent.scroll(el);
+      return el;
+    };
+
+    it('after a view set from the tab\'s menu (Terminal, then back to the thread)', async () => {
+      const { user } = await twoTabs();
+      front('Otto');
+      await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
+      const el = sized();
+      await toTerminal(user, 'Otto');
+      await waitFor(() => expect(el).toHaveAttribute('hidden'));
+      el.scrollTop = 0;   // what Chromium does to a scroller it stops laying out
+      fireEvent.contextMenu(tabOf('Otto'));
+      await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ }));
+      await waitFor(() => expect(el).not.toHaveAttribute('hidden'));
+      expect(el.scrollTop).toBe(300);
+    });
+
+    it('after another tab was in front', async () => {
+      await twoTabs();
+      front('Otto');
+      await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
+      const el = sized();
+      front('Nova');
+      await waitFor(() => expect(page()?.dataset.session).toMatch(/nova/));
+      el.scrollTop = 0;   // dockview detached it: its position is lost
+      front('Otto');
+      await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
+      await waitFor(() => expect(el.scrollTop).toBe(300));
+    });
   });
 
   it('O opens no right panel in the IDE', async () => {
