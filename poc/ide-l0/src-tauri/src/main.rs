@@ -82,11 +82,14 @@ fn main() {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("Ledge · POC lot 0 · fenêtre 1")
                 .inner_size(1600.0, 1000.0)
+                .disable_drag_drop_handler()
                 // window.open → a real window in the opener's WebView2 environment, so the opener can script it.
                 .on_new_window(move |_url, features| {
                     let n = count.fetch_add(1, Ordering::Relaxed);
                     let built = WebviewWindowBuilder::new(&handle, format!("pop-{n}"), WebviewUrl::External("about:blank".parse().unwrap()))
                         .window_features(features)
+                        // Tauri's file-drop handler takes the drags: tabs could not move between windows.
+                        .disable_drag_drop_handler()
                         .title(format!("Ledge · POC lot 0 · fenêtre {}", n + 2))
                         .build();
                     match built {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react';
+import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewHeaderActionsProps, type IDockviewPanelProps } from 'dockview-react';
 import { Thread } from './Thread';
 import { allTerms, getTerm, hidden, mount, startFloods, stats, budget } from './terms';
 import { inTauri, type Kind } from './pty';
@@ -26,6 +26,16 @@ function ThreadPanel(props: IDockviewPanelProps<{ seed: number }>): JSX.Element 
 }
 
 const components = { terms: TermsPanel, thread: ThreadPanel };
+
+/** Right of each group's tabs: « Détacher » sends the group to a new window, « Ramener » brings a popout back. */
+function GroupActions(props: IDockviewHeaderActionsProps): JSX.Element {
+  const popout = props.api.location.type === 'popout';
+  const act = () => {
+    if (popout) props.api.moveTo({ position: 'right' });
+    else void props.containerApi.addPopoutGroup(props.group, { popoutUrl: '/popout.html', position: { left: 120, top: 120, width: 1000, height: 650 } });
+  };
+  return <button className="grp-act" onClick={act} title={popout ? 'Ramener ce groupe dans la fenêtre principale' : 'Ouvrir ce groupe dans une nouvelle fenêtre'}>{popout ? '⇤ Ramener' : '⧉ Détacher'}</button>;
+}
 const T = (id: string, kind: Kind): TermSpec => ({ id, kind });
 
 export interface PopoutNote { opened: boolean; reason?: string; scriptable?: boolean; tauriInPopout?: boolean; label?: string | null; sameThread?: boolean }
@@ -129,7 +139,7 @@ export function App(): JSX.Element {
         <button onClick={() => void bench()}>Lancer la mesure (≈ 1 min)</button>
         <span className="mut">WebGL actifs : {stats.webglActive}</span>
       </header>
-      <main className="dock"><DockviewReact className="dockview-theme-abyss" components={components} onReady={onReady} /></main>
+      <main className="dock"><DockviewReact className="dockview-theme-abyss" components={components} rightHeaderActionsComponent={GroupActions} onReady={onReady} /></main>
       <footer>
         <div className="log">{log.map((l, i) => <div key={i}>{l}</div>)}</div>
         {result && <pre className="result">{result}</pre>}

@@ -18,3 +18,5 @@ footer { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 6px 1
 .term-label { font: 10.5px Consolas, monospace; color: #8f8f8f; padding: 2px 8px; }
 .term-box { flex: 1; min-height: 0; }
 .term-host { height: 100%; width: 100%; }
+.grp-act { height: 100%; padding: 0 10px; border: 0; background: none; color: #a3a3a3; font-size: 12px; cursor: pointer; }
+.grp-act:hover { color: #fff; background: #ffffff14; }
