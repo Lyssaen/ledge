@@ -1376,5 +1376,11 @@ export const fr = {
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
   botNotLive: 'Figé',
-  resident: { name: 'Ledge', offline: 'Ledge · connexion perdue' }
+  resident: { name: 'Ledge', offline: 'Ledge · connexion perdue' },
+  /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
+  ide: {
+    setting: 'Interface IDE (aperçu)',
+    settingHint: 'Groupes d’onglets, panneaux et barre d’activité, à la manière de VS Code. L’ancienne interface reste disponible tant que l’aperçu dure.',
+    settingOff: 'Interface IDE (aperçu) désactivée'
+  }
 };

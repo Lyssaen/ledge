@@ -16,6 +16,7 @@ import { TOOLS, useDefaultTool } from './tool';
 import { useContextNear, useUsage } from '@ledge/fleet';
 import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, USAGE_ALERT_MAX, USAGE_ALERT_MIN } from '@ledge/protocol';
 import { usageThreshold } from '../usage/model';
+import { useIdeEnabled } from '../workspace/prefs';
 
 /** « Contexte max »: 50 % to 95 %, by 5. */
 const ALERTS = Array.from({ length: Math.round((USAGE_ALERT_MAX - USAGE_ALERT_MIN) * 20) + 1 }, (_, i) => Math.round((USAGE_ALERT_MIN + i * 0.05) * 100));
@@ -58,6 +59,8 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
     });
   };
 
+  const [ide, setIde] = useIdeEnabled();
+
   // Start with Windows (DisplayPanel's pattern on origin/feat/desktop): undefined while Windows is asked, null when it is not
   // offered here (browser, dev build). Nothing optimistic: the switch shows what Windows reports, and is held while it answers.
   const [autostart, setAuto] = useState<boolean | null | undefined>(undefined);
@@ -80,6 +83,7 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
         <Row label={g.lang} hint={g.langHint} error={langFailed ? g.langFailed : null}>
           {describedBy => <Segmented label={g.lang} value={ctx.lang} disabled={switching} describedBy={describedBy} onChange={chooseLang} options={LANGS.map(l => ({ value: l, label: g.langs[l], lang: l }))} />}
         </Row>
+        <SwitchRow label={t.ide.setting} hint={t.ide.settingHint} checked={ide} onChange={on => { setIde(on); ctx.saved(on ? t.ide.setting : t.ide.settingOff); }} />
         <SwitchRow label={g.autostart} hint={autostart === null ? g.autostartMissing : g.autostartHint} error={autostartFailed ? g.autostartFailed : null}
           checked={autostart === true} disabled={autostart == null || writing} onChange={chooseAutostart} />
         <Row label={g.tool} hint={g.toolHint} stack>

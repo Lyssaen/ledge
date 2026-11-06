@@ -1309,5 +1309,11 @@ export const en: Messages = {
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
   botReadOnly: 'Read-only',
   botNotLive: 'Not live',
-  resident: { name: 'Ledge', offline: 'Ledge · connection lost' }
+  resident: { name: 'Ledge', offline: 'Ledge · connection lost' },
+  /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
+  ide: {
+    setting: 'IDE interface (preview)',
+    settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
+    settingOff: 'IDE interface (preview) off'
+  }
 };
