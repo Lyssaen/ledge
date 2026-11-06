@@ -127,7 +127,9 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-right > .ledge-chat-panel { position: static; flex: 1; width: auto; min-height: 0; box-shadow: none; z-index: auto; }
 
 /* A session tab (mockup `.tab`, `tabLabel()`): logo, name, >_, rig, state dot; the alert is a 2 px line under it. */
-.ide-tab { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+/* Its content fills the tab's height and centres on it (mockup `.tab`: align-items center): dockview's part is a block. */
+.ide-dock .dv-tab > .dv-react-part { height: 100%; display: flex; align-items: center; }
+.ide-tab { display: inline-flex; align-items: center; gap: 7px; min-width: 0; height: 100%; }
 .ide-tab .logo { display: inline-flex; }
 .ide-tab .tab-logo { display: inline-flex; }
 .ide-tab .tab-name { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -276,3 +276,20 @@ test('light theme: the same relation of surfaces, and the links\' darker violet'
   expect(await token(page, '--ide-link-violet')).toBe('rgb(109, 40, 217)');
   await page.screenshot({ path: 'e2e/.results/ide-mockup-gaps-light.png' });
 });
+
+test('the tab\'s label sits in the middle of its 30 px, in Geist 12 px, as in the mockup', async ({ page }) => {
+  await boot(page);
+  await open(page, 'Nova');
+  const t = tabOf(page, 'Nova');
+  const mid = (b: { y: number; height: number }) => b.y + b.height / 2;
+  const tb = await box(t);
+  for (const part of ['.tab-name', '.tab-logo svg', '.tab-dot']) {
+    const b = await box(t.locator(part));
+    expect(Math.abs(mid(b) - mid(tb)), `${part}: ${mid(b)} vs ${mid(tb)}`).toBeLessThanOrEqual(1);
+  }
+  expect(await page.evaluate(() => document.fonts.check('12px Geist'))).toBe(true);
+  const font = await t.locator('.tab-name').evaluate(el => { const s = getComputedStyle(el); return { family: s.fontFamily, size: s.fontSize }; });
+  expect(font.family).toMatch(/^"?Geist"?(,|$)/);
+  expect(font.size).toBe('12px');
+  await page.locator('.ide-dockview .dv-tabs-and-actions-container').first().screenshot({ path: 'e2e/.results/ide-session-tab-centred.png' });
+});
