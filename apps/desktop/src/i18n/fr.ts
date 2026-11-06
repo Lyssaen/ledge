@@ -1386,6 +1386,7 @@ export const fr = {
     sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
     activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
     openrigTab: 'OpenRig (onglet)', atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
+    resizeEdge: 'Glisser pour redimensionner · double-clic : largeur par défaut', collapse: '« Réduire', collapseTip: 'Réduire la barre latérale (Ctrl+B)',
     waiting: (n: number) => (n === 1 ? '1 demande' : `${n} demandes`)
   }
 };

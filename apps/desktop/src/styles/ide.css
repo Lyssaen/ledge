@@ -26,3 +26,14 @@
 .ide-status-sp { flex: 1; }
 .ide-status-wait { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: 5px; color: var(--foreground); }
 .ide-status-wait:hover { background: var(--accent); }
+
+/* The explorer: the sidebar's content, its drag edge and its foot. */
+.ide-explorer { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); }
+.ide-explorer-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ide-explorer-body > .sidebar { width: auto; flex: 1; min-height: 0; border-right: 0; }
+.ide-explorer-foot { flex: none; display: flex; padding: 4px 8px; border-top: 1px solid var(--sidebar-border); }
+.ide-explorer-foot button { height: 24px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 12px; color: var(--muted-foreground); }
+.ide-explorer-foot button:hover { background: var(--accent); color: var(--foreground); }
+.ide-resize { position: absolute; top: 0; right: -3px; bottom: 0; width: 5px; cursor: col-resize; z-index: 5; }
+.ide-resize:hover, body.ide-resizing .ide-resize { background: var(--ring); opacity: .5; }
+body.ide-resizing { cursor: col-resize; user-select: none; }

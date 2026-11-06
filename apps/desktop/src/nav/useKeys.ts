@@ -11,7 +11,7 @@ const typing = (el: Element | null): boolean => {
 
 /** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Ctrl/⌘ Z too, outside a field) (Escape after the dialog and the chat, offered to the screen before navigation),
  *  except in the terminal, which keeps every key for its shell; Ctrl + the key left of 1 takes the keyboard there. The single keys stay out of the way of dialogs, fields and the chat. */
-export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean }): void {
+export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean; /** The IDE shell (flag on): Ctrl B / Ctrl J / Ctrl / show or hide its panels, even in a field (never in the terminal). */ ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void } }): void {
   const latest = useRef({ dispatch, ctx });
   latest.current = { dispatch, ctx };
   useEffect(() => {
@@ -19,13 +19,15 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       if (e.isComposing) return;
       // In the terminal every key is the shell's (its Ctrl + ² is handled and stopped by the xterm): Ledge neither acts nor takes the focus back.
       if (document.activeElement?.closest('[data-terminal]')) return;
-      const { dispatch, ctx: { state, order, screen, undo, confirming, toTerminal } } = latest.current;
+      const { dispatch, ctx: { state, order, screen, undo, confirming, toTerminal, ide } } = latest.current;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       if (confirming) { if (e.key === 'Escape') { e.preventDefault(); confirming.cancel(); } return; }
       // The same physical key as inside the terminal (`code`, so ² on AZERTY); a dialog keeps the focus.
       if (termKey(e, false) === 'thread') { if (!state.modal && toTerminal?.()) e.preventDefault(); return; }
       if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
+      // The IDE's panels, VS Code's keys: they act inside a field too (the terminal returned above).
+      if (ide && mod && !e.altKey && (key === 'b' || key === 'j' || e.key === '/')) { e.preventDefault(); ide.toggle(key === 'b' ? 'side' : key === 'j' ? 'bottom' : 'right'); return; }
       // Ctrl , opens Settings on General; inside Settings it keeps the section open (it only closes the dialog or the chat).
       // Ctrl Z takes back what the toast offers (« Annuler »); in a field it stays the field's own undo.
       if (mod && !e.altKey && !e.shiftKey && key === 'z' && !typing(document.activeElement)) { if (undo()) e.preventDefault(); return; }
