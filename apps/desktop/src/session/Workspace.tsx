@@ -14,6 +14,7 @@ import { openShell, RightPanel, useShellIntro } from './RightPanel';
 import { SessionPage, type PageApi, type SessionPageProps } from './SessionPage';
 import { subagentOf } from './exchanges';
 import { useThread } from './useThread';
+import { useTabPlace } from '../workspace/tabPlace';
 
 /** The terminal's xterm comes with this chunk, never in the first bundle: App's terminal store makes them through it. */
 export { createSurface } from '../term/surface';
@@ -50,15 +51,25 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   const machines = useMachines(client);
   const hasBackend = ptyBackend() !== null || machines.find(m => m.id === (p.session.machineId ?? 'local'))?.daemon?.terminalStream === true;
   const view = prefs.view;
+  // In an IDE tab, every tab's page stays mounted: only a tab shown acts on the one agent screen of the window, and a tab
+  // that leaves detaches its own session's screen only, never another tab's (hideAgent with an id). Outside the IDE, as ever.
+  const tabPlace = useTabPlace();
+  const inTab = tabPlace !== null;
+  const shownHere = tabPlace === null || tabPlace.visible;
   // The agent's screen is attached while the Terminal view shows it (re-asking in the same mode keeps the attachment), detached once left.
   useEffect(() => {
+    if (!shownHere) return;
     if (view === 'terminal') store?.showAgent(p.session.id, agentMode(p.session, helper, hasBackend));
-    else store?.hideAgent();
-  }, [store, view, p.session, helper, hasBackend]);
-  useEffect(() => () => store?.hideAgent(), [store]);
+    else store?.hideAgent(inTab ? p.session.id : undefined);
+  }, [store, view, p.session, helper, hasBackend, shownHere, inTab]);
+  const leaving = useRef<string | undefined>(undefined);
+  leaving.current = inTab ? p.session.id : undefined;
+  useEffect(() => () => store?.hideAgent(leaving.current), [store]);
   // « Agrandir le panneau » lasts while the panel shows: hiding it forgets it.
   const [maxed, setMaxed] = useState(false);
   if (maxed && !prefs.terminal) setMaxed(false);
+  // No right panel in an IDE tab (R4): the changes go by « +N −N », the shells by the bottom panel.
+  const panel = prefs.terminal && !p.ide;
   const togglePanel = () => setPrefs(x => ({ ...x, terminal: !x.terminal }));
   const onView = useCallback((v: SessionView) => setPrefs(x => (x.view === v ? x : { ...x, view: v })), [setPrefs]);
 
@@ -73,7 +84,7 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   const current = (own.file === null ? undefined : findFile(files, own.file, p.session.cwd)) ?? files[0];
   const subscribe = useCallback((fn: () => void) => (store ? store.subscribe(fn) : () => {}), [store]);
   const panelTab = useSyncExternalStore(subscribe, () => store?.active(p.session.id) ?? null);
-  const changesShown = prefs.terminal && loaded && panelTab === changesTabId(p.session.id);
+  const changesShown = panel && loaded && panelTab === changesTabId(p.session.id);
   const stepFile = (d: 1 | -1) => {
     if (!current) return;
     setOwn({ file: files[(files.indexOf(current) + d + files.length) % files.length]!.path });
@@ -99,14 +110,14 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
     : <Changes files={files} current={current?.path ?? null} onFile={f => setOwn({ file: f })} onTouch={tool => api.current?.showInThread(tool)}
         listOpen={own.listOpen} onListOpen={o => setOwn({ listOpen: o })} session={p.session} name={helper?.kind ?? p.session.name} notify={p.notify} />;
   return (
-    <div className={cls('conversation-workspace', prefs.terminal && 'with-terminal', prefs.terminal && maxed && 'term-maxed')} style={{ '--term-width': prefs.termWidth } as CSSProperties}>
+    <div className={cls('conversation-workspace', panel && 'with-terminal', panel && maxed && 'term-maxed')} style={{ '--term-width': prefs.termWidth } as CSSProperties}>
       {/* Only the page starts over for each agent (its key): the panel stays. */}
       <SessionPage key={key} {...p} items={items} helper={helper} onShowKids={showKids} onPanel={togglePanel}
         client={client} split={prefs.split} onSplit={v => setPrefs(x => ({ ...x, split: v }))} view={view} onView={onView} files={files}
         changes={{ shown: changesShown, listOpen: own.listOpen, closeList: () => setOwn({ listOpen: false }), step: stepFile }}
         onAllChanges={onAllChanges} api={api} onOpenShell={onOpenShell} />
-      {prefs.terminal && !maxed && <TermHandle label={t.session.panel.resize} width={prefs.termWidth} onWidth={v => setPrefs(x => ({ ...x, termWidth: v }))} />}
-      {prefs.terminal && (
+      {panel && !maxed && <TermHandle label={t.session.panel.resize} width={prefs.termWidth} onWidth={v => setPrefs(x => ({ ...x, termWidth: v }))} />}
+      {panel && (
         <RightPanel client={client} session={p.session} changes={changes} count={loaded ? files.length : null}
           maxed={maxed} onMax={() => setMaxed(m => !m)} onClose={() => setPrefs(x => ({ ...x, terminal: false }))} />
       )}

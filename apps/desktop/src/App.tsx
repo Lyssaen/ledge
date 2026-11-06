@@ -347,6 +347,29 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     if ((Object.keys(rest) as (keyof typeof rest)[]).some(k => rest[k] !== prefs[k])) setSessionPrefs(x => ({ ...x, ...rest }));
   }, [setSessionPrefs]);
   const toggleTerminal = useCallback(() => setSessionPrefs(p => ({ ...p, terminal: !p.terminal })), [setSessionPrefs]);
+  // An IDE session tab's prefs (R6): its own view, from the model (a change goes there, never to desktop.session), no right
+  // panel, the rest shared. Kept per tab key, the same objects while nothing they hold changes: a page renders only for what it shows.
+  const tabPrefs = useRef(new Map<string, { base: SessionPrefs; prefs: SessionPrefs; set(fn: (p: SessionPrefs) => SessionPrefs): void }>());
+  const prefsOfTab = (tab: Tab, s: Session) => {
+    const key = keyOf(tab);
+    const view = tabView(tab, s);
+    let e = tabPrefs.current.get(key);
+    if (!e) {
+      const set = (fn: (p: SessionPrefs) => SessionPrefs) => {
+        const cur = tabPrefs.current.get(key)?.prefs;
+        if (!cur) return;
+        const { view: v, terminal: _, ...rest } = fn(cur);
+        if (v !== cur.view) wsStore.update(w => setView(w, key, v));
+        if ((Object.keys(rest) as (keyof typeof rest)[]).some(k => rest[k] !== cur[k])) setSessionPrefs(x => ({ ...x, ...rest }));
+      };
+      e = { base: sessionPrefs, prefs: { ...sessionPrefs, view, terminal: false }, set };
+      tabPrefs.current.set(key, e);
+    } else if (e.base !== sessionPrefs || e.prefs.view !== view) {
+      e.base = sessionPrefs;
+      e.prefs = { ...sessionPrefs, view, terminal: false };
+    }
+    return e;
+  };
   // Ctrl + ² from outside a terminal (the thread, the reply, the panel's Modifications): the Terminal view, and the keyboard
   // into the agent's screen (or its banner's button when it cannot be typed into). A view just asked for draws its xterm in
   // the renders this key starts, so the focus waits for the next frame.
@@ -457,8 +480,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       const tnav = tabNav(nav, tab);
       if (tab.kind === 'session' || tab.kind === 'seat') {
         const s = known.find(x => x.id === tab.ref);
-        return s ? <SessionPlace client={fleetClient} session={s} nav={tnav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
-          prefs={shownPrefs} setPrefs={setShownPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} /> : null;
+        if (!s) return null;
+        const tp = prefsOfTab(tab, s);
+        return <SessionPlace client={fleetClient} session={s} nav={tnav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
+          prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide />;
       }
       if (tab.kind === 'atelier') {
         return detached ? <AtelierAway onShow={detach} onAttach={attach} />

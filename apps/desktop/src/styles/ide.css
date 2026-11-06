@@ -51,6 +51,10 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-dockview { position: absolute; inset: 0; }
 .ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--background); }
 .ide-pane > * { flex: 1; min-height: 0; }
+/* A session tab's page (R4, R5): the tab names it and says its view, so what is left of its heading is a thin line, and the
+   page has no right panel to border. */
+.ide-pane .session-page { border-right: 0; }
+.ide-pane .session-page > .pane-heading { height: 32px; }
 
 /* dockview, on Ledge's tokens (mockup `.tabs`, `.tab`): 30 px tabs on the shell's colour, the one in front on the page's. */
 .ide-dock {
