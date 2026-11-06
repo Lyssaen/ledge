@@ -1336,6 +1336,7 @@ export const en: Messages = {
     replyPlaceholderSeat: (name) => `Reply to ${name} (rig send)…  Enter sends, Shift+Enter adds a line`,
     newSession: 'New session (N)',
     split: 'Split right', splitTip: 'Split right (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Link this group (violet, teal, none)',
+    dropNew: ['Drop here:', 'new group'],
     empty: {
       title: 'Empty group', body: 'Drag a tab here, open a session from the explorer, or:', terminal: (name) => `Terminal · ${name}`,
       newSession: 'New session', openrig: 'OpenRig', settings: 'Settings', atelier: 'Atelier',

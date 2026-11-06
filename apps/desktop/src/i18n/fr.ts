@@ -1403,6 +1403,8 @@ export const fr = {
     newSession: 'Nouvelle session (N)',
     // Lot 3: split (Ctrl+\), the empty group (mockup emptyGroup()), the link square (mockup .lkbtn).
     split: 'Diviser à droite', splitTip: 'Diviser à droite (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Lier ce groupe (violet, vert d’eau, aucun)',
+    /** The zone at the right end of the editing area while a tab is dragged (mockup `.dropnew`), on two lines. */
+    dropNew: ['Déposer ici :', 'nouveau groupe'],
     empty: {
       title: 'Groupe vide', body: 'Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :', terminal: (name: string) => `Terminal · ${name}`,
       newSession: 'Nouvelle session', openrig: 'OpenRig', settings: 'Réglages', atelier: 'Atelier',

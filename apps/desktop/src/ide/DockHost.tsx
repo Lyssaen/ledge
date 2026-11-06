@@ -1,10 +1,10 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
-import { DockviewReact, type DockviewApi, type DockviewGroupPanel, type DockviewReadyEvent, type DockviewTheme, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps, type IWatermarkPanelProps } from 'dockview-react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type JSX, type ReactNode } from 'react';
+import { DockviewReact, type DockviewApi, type DockviewGroupDropLocation, type DockviewGroupPanel, type DockviewReadyEvent, type DockviewTheme, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps, type IWatermarkPanelProps, type PanelTransfer, type Position } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
-import { activate, close, cycleLink, find, focusGroup, keyOf, MAIN, split, type Group, type Tab, type Workspace } from '../workspace/model';
+import { activate, close, cycleLink, find, focusGroup, keyOf, MAIN, moveTo, split, type Group, type Tab, type Workspace } from '../workspace/model';
 import type { WorkspaceStore } from '../workspace/store';
 import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
 import type { TabBody } from './tabs';
@@ -122,15 +122,59 @@ const COMPONENTS = { tab: Pane };
 // Ledge's tokens, set on `.ide-dock` in ide.css.
 const THEME: DockviewTheme = { name: 'ledge', className: 'ide-dock' };
 
+/** Notes the scroll positions inside a panel's content and gives back what puts them back: a move re-attaches its DOM,
+ *  which Chromium then shows from the top. A hidden panel's DOM is detached (all at 0): its page restores itself on show. */
+function keepScroll(root: HTMLElement): () => void {
+  const kept: [Element, number, number][] = [];
+  for (const el of [root, ...root.querySelectorAll('*')]) if (el.scrollTop || el.scrollLeft) kept.push([el, el.scrollTop, el.scrollLeft]);
+  return () => { for (const [el, top, left] of kept) { el.scrollTop = top; el.scrollLeft = left; } };
+}
+
+/** Where a tab dropped over dockview goes in the model. */
+type Arrival = { key: string; to: { group: string; index?: number } | { rightOf: string } };
+/** What dockview says of a drop, or of the overlay it is about to show for one (which has no `index`). */
+interface DropSpot {
+  kind: DockviewGroupDropLocation; position: Position; group?: DockviewGroupPanel; index?: number; edge?: boolean;
+  getData(): PanelTransfer | undefined;
+}
+/** A drop's arrival, or null when it is refused: anything but one of this dock's tabs (a group, a file from outside), a
+ *  floating group, the top, bottom and left edges (lot 3 stacks no groups). A group's centre or strip end takes the tab at
+ *  its end, a tab of the strip at that tab's place, its right edge opens a new group right of it. A drop that would change
+ *  nothing (a group's only tab on its own centre or right edge) is refused, so no overlay promises it. */
+export function arrivalOf(e: DropSpot, viewId: string, modelOf: (dg: DockviewGroupPanel) => Group | undefined): Arrival | null {
+  const data = e.getData();
+  if (!data || data.viewId !== viewId || !data.panelId || e.edge) return null;
+  const dg = e.group;
+  if (!dg || dg.api.location.type !== 'grid') return null;
+  const g = modelOf(dg);
+  if (!g) return null;
+  const key = data.panelId;
+  const own = g.tabs.some(t => keyOf(t) === key);
+  switch (e.kind) {
+    case 'tab': return { key, to: { group: g.id, index: e.index } };
+    case 'header_space': return { key, to: own ? { group: g.id, index: g.tabs.length - 1 } : { group: g.id } };
+    case 'content':
+      if (e.position === 'center') return own ? null : { key, to: { group: g.id } };
+      if (e.position === 'right') return own && g.tabs.length === 1 ? null : { key, to: { rightOf: g.id } };
+      return null;
+    default: return null;
+  }
+}
+
 /** The editing area: dockview drawing the main window's groups side by side, kept in step both ways. Model → dockview:
  *  one dockview group per model group (window MAIN, left to right), panels added, removed, retitled and activated to
  *  follow `ws`, the focused group made dockview's active one. Dockview → model: a tab chosen or a group clicked is
  *  `activate`d (which focuses its group), a tab closed is `close`d, an empty group clicked is focused. A model group without
  *  tabs is drawn as an empty dockview group showing its proposals. Each group keeps GROUP_MIN_WIDTH: the dock is as wide as
- *  its groups need and scrolls sideways in the editing area. No drag and drop, no floating groups (lot 3). */
+ *  its groups need and scrolls sideways in the editing area. A tab dragged goes through the model too: dockview's own move
+ *  is cancelled, the model moves the tab (`moveTo`), and the sync moves its panel, whose content stays mounted. While a tab
+ *  is dragged, a zone at the right end opens a new group. No floating groups, no stacked groups (lot 3). */
 export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNewSession, emptyGroup }: DockHostProps): JSX.Element {
   const { t } = useI18n();
   const [api, setApi] = useState<DockviewApi | null>(null);
+  // The panel (tab key) being dragged, from dockview's drag start to its drop or end; `dragging` shows the drop zone.
+  const dragged = useRef<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   // Set while the model is being written into dockview: the events that writing raises are not the user's.
   const syncing = useRef(false);
   // Model group id → the dockview group drawing it.
@@ -142,8 +186,42 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   for (const g of groups) for (const tab of g.tabs) tabs.set(keyOf(tab), { tab, group: g });
   // Read when a part renders, after the sync below has drawn (and so mapped) its group.
   const modelOf = (dg: unknown) => { for (const [id, d] of drawn.current) if (d === dg) return groups.find(g => g.id === id); return undefined; };
+  // The listeners below outlive renders: they read the latest groups.
+  const latestModelOf = useRef(modelOf);
+  latestModelOf.current = modelOf;
   const content = { tabOf: (id: string) => tabs.get(id)?.tab, body, title, label, alert, onTabMenu, onNewSession, groupOf: (id: string) => tabs.get(id)?.group.id, focus: ws.focus,
     modelOf, emptyGroup, split: (id: string) => store.update(w => split(w, id)), cycleLink: (id: string) => store.update(w => cycleLink(w, id)) };
+
+  /** Draws each model group, left to right: its dockview group (made where it belongs if it has none) and its panels at
+   *  their places. A panel sitting elsewhere is moved there, never remade, so its content keeps its state; what puts its
+   *  scroll back goes in `scrolls`, run once it is on show. */
+  const draw = (api: DockviewApi, table: Map<string, DockviewGroupPanel>, scrolls: (() => void)[]) => {
+    const live = new Set(api.groups);
+    for (const [id, dg] of table) if (!live.has(dg) || !groups.some(g => g.id === id)) table.delete(id);
+    let left: DockviewGroupPanel | undefined;
+    groups.forEach((g, gi) => {
+      let dg = table.get(g.id);
+      // A group not drawn yet: right of its left neighbour, else left of the next one drawn, else of the first.
+      if (!dg) {
+        const next = groups.slice(gi + 1).map(n => table.get(n.id)).find(Boolean) ?? api.groups[0];
+        dg = left ? api.addGroup({ referenceGroup: left, direction: 'right' }) : next ? api.addGroup({ referenceGroup: next, direction: 'left' }) : api.addGroup();
+        table.set(g.id, dg);
+      }
+      const into = dg;
+      g.tabs.forEach((tab, i) => {
+        const id = keyOf(tab);
+        const name = title(tab);
+        const p = api.getPanel(id);
+        if (!p) { api.addPanel({ id, component: 'tab', title: name, inactive: true, position: { referenceGroup: into, index: i } }); return; }
+        if (p.title !== name) p.api.setTitle(name);
+        if (p.group === into && into.panels.indexOf(p) === i) return;
+        scrolls.push(keepScroll(p.view.content.element));
+        p.api.moveTo({ group: into, position: 'center', index: i, skipSetActive: true });
+      });
+      if (dg.minimumWidth !== GROUP_MIN_WIDTH) dg.api.setConstraints({ minimumWidth: GROUP_MIN_WIDTH });
+      left = dg;
+    });
+  };
 
   // Every render: a title may have changed (a session renamed) as well as the tabs.
   useLayoutEffect(() => {
@@ -151,44 +229,18 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
     syncing.current = true;
     try {
       const table = drawn.current;
-      const live = new Set(api.groups);
-      for (const [id, dg] of table) if (!live.has(dg) || !groups.some(g => g.id === id)) table.delete(id);
-      // A model group not in the table yet takes the dockview group its panels already sit in, if no other has it.
-      for (const g of groups) {
-        if (table.has(g.id)) continue;
-        const dg = g.tabs.map(tab => api.getPanel(keyOf(tab))?.group).find(Boolean);
-        if (dg && ![...table.values()].includes(dg)) table.set(g.id, dg);
+      const scrolls: (() => void)[] = [];
+      // Panels gone from the model go; the groups they leave stay while they draw a model group (an empty one shows its
+      // proposals).
+      for (const p of [...api.panels]) if (!tabs.has(p.id)) api.removePanel(p, { removeEmptyGroup: false });
+      // dockview drops a group whose last panel is moved out: one still in the model (kept empty) is drawn again.
+      for (let pass = 0; pass < 2; pass++) {
+        draw(api, table, scrolls);
+        if (groups.every(g => { const dg = table.get(g.id); return dg && api.groups.includes(dg); })) break;
       }
-      // Panels gone from the model, or sitting in another group than their model group's, go (re-added below); the groups
-      // they leave stay while they draw a model group (an empty one shows its proposals), the others go.
-      for (const p of [...api.panels]) { const hit = tabs.get(p.id); if (!hit || table.get(hit.group.id) !== p.group) api.removePanel(p, { removeEmptyGroup: false }); }
+      // The groups left over (their model group gone, their panels moved out) go.
       const kept = new Set(table.values());
       for (const dg of [...api.groups]) if (!kept.has(dg)) api.removeGroup(dg);
-      let left: DockviewGroupPanel | undefined;
-      for (const g of groups) {
-        let dg = table.get(g.id);
-        // An empty group not drawn yet: a dockview group without panels, placed as a new group's first panel would be.
-        if (!dg && g.tabs.length === 0) {
-          const first = api.groups[0];
-          dg = left ? api.addGroup({ referenceGroup: left, direction: 'right' }) : first ? api.addGroup({ referenceGroup: first, direction: 'left' }) : api.addGroup();
-          table.set(g.id, dg);
-        }
-        g.tabs.forEach((tab, i) => {
-          const id = keyOf(tab);
-          const name = title(tab);
-          const p = api.getPanel(id);
-          if (p) { if (p.title !== name) p.api.setTitle(name); return; }
-          // At the model's index in its group (a panel added inactive would otherwise go before the front one); a group
-          // not drawn yet opens right of its left neighbour, or left of the first group when it has none.
-          const first = api.groups[0];
-          const position = dg ? { referenceGroup: dg, index: i } : left ? { referenceGroup: left, direction: 'right' as const }
-            : first ? { referenceGroup: first, direction: 'left' as const } : undefined;
-          const added = api.addPanel({ id, component: 'tab', title: name, inactive: true, ...(position ? { position } : {}) });
-          if (!dg) { dg = added.group; table.set(g.id, dg); }
-        });
-        if (dg && dg.minimumWidth !== GROUP_MIN_WIDTH) dg.api.setConstraints({ minimumWidth: GROUP_MIN_WIDTH });
-        left = dg;
-      }
       // Each group's front tab, then the focused group last: activating a panel also makes its group dockview's active one.
       for (const g of groups) {
         const front = g.tabs[g.active];
@@ -197,6 +249,8 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
       }
       const focus = table.get(ws.focus);
       if (focus && api.activeGroup !== focus) focus.api.setActive();
+      // A moved panel's DOM is back in the page now that the front tabs are shown.
+      for (const back of scrolls) back();
     } finally { syncing.current = false; }
   });
 
@@ -204,6 +258,9 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   // children's, so the listeners go before DockviewReact takes its panels down.
   useLayoutEffect(() => {
     if (!api) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arrival = (e: DropSpot) => arrivalOf(e, api.id, dg => latestModelOf.current(dg));
+    const endDrag = () => { clearTimeout(timer); dragged.current = null; setDragging(false); };
     const subs = [
       api.onDidActivePanelChange(ev => {
         const id = ev.panel?.id;
@@ -218,23 +275,52 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
         const empty = [...drawn.current].find(([, d]) => d === dg)?.[0];
         if (empty) latest.current.update(w => focusGroup(w, empty));
       }),
-      api.onDidRemovePanel(p => { if (!syncing.current) latest.current.update(w => close(w, p.id)); })
+      api.onDidRemovePanel(p => { if (!syncing.current) latest.current.update(w => close(w, p.id)); }),
+      // A tab picked up: the drop zone shows once the browser has its drag image (a layout change in dragstart cancels it).
+      api.onWillDragPanel(e => { dragged.current = e.panel.id; clearTimeout(timer); timer = setTimeout(() => { if (dragged.current) setDragging(true); }, 0); }),
+      // No overlay where a drop would be refused.
+      api.onWillShowOverlay(e => { if (!arrival(e)) e.preventDefault(); }),
+      // Every drop is the model's: dockview moves nothing itself.
+      api.onWillDrop(e => {
+        e.preventDefault();
+        const hit = arrival(e);
+        endDrag();
+        if (hit) latest.current.update(w => moveTo(w, hit.key, hit.to));
+      })
     ];
-    return () => { for (const s of subs) s.dispose(); };
+    // Also when the tab is let go elsewhere (or Esc): the source tab, still in place, sends dragend up.
+    window.addEventListener('dragend', endDrag, true);
+    return () => { clearTimeout(timer); window.removeEventListener('dragend', endDrag, true); for (const s of subs) s.dispose(); };
   }, [api]);
   const onReady = (e: DockviewReadyEvent) => setApi(e.api);
+  // The drop zone: only this dock's tab (a file dragged in finds nothing to drop on), into a new group at the right end.
+  const onZoneOver = (e: DragEvent) => { if (!dragged.current) return; e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; };
+  const onZoneDrop = (e: DragEvent) => {
+    const key = dragged.current;
+    if (!key) return;
+    e.preventDefault();
+    dragged.current = null;
+    setDragging(false);
+    store.update(w => {
+      const last = w.groups.filter(g => g.window === MAIN).at(-1);
+      // The last group's only tab is already there.
+      if (!last || (last.tabs.length === 1 && keyOf(last.tabs[0]!) === key)) return w;
+      return moveTo(w, key, { rightOf: last.id });
+    });
+  };
   const messages = useMemo(() => ({ closeTab: (name: string) => t.ide.closeTab(name) }), [t]);
 
   return (
     <Content.Provider value={content}>
       {/* R6: the box is as wide as its groups need; dockview's element fills it (and lays out on its resize), the scroller
           lets it overflow the editing area. */}
-      <div className="ide-dock-scroll">
+      <div className={`ide-dock-scroll${dragging ? ' tab-dragging' : ''}`}>
         <div className="ide-dock-sized" style={{ minWidth: `${groups.length * GROUP_MIN_WIDTH}px` }}>
           <DockviewReact className="ide-dockview" components={COMPONENTS} defaultTabComponent={PanelTab} watermarkComponent={GroupWatermark}
             leftHeaderActionsComponent={LinkSquare} rightHeaderActionsComponent={StripTools} onReady={onReady} theme={THEME}
-            disableDnd disableFloatingGroups messages={messages} />
+            dndEdges={false} disableFloatingGroups messages={messages} />
         </div>
+        <div className="ide-dropnew" onDragOver={onZoneOver} onDrop={onZoneDrop}><span>{t.ide.dropNew[0]}<br />{t.ide.dropNew[1]}</span></div>
       </div>
     </Content.Provider>
   );

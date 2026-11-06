@@ -58,8 +58,14 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-dock-area { flex: 1; min-height: 0; position: relative; }
 /* R6: each group keeps 300 px (DockHost's GROUP_MIN_WIDTH); past the area's width the dock overflows and the area scrolls
    sideways (mockup `.grow-row{overflow-x:auto}`). dockview's element fills the sized box and lays out on its resize. */
-.ide-dock-scroll { position: absolute; inset: 0; overflow-x: auto; overflow-y: hidden; }
-.ide-dock-sized { position: relative; height: 100%; }
+.ide-dock-scroll { position: absolute; inset: 0; display: flex; overflow-x: auto; overflow-y: hidden; }
+.ide-dock-sized { position: relative; flex: 1 1 0; height: 100%; }
+/* While a tab is dragged, the zone at the right end that opens a new group (mockup `.dropnew`, `.dragging .dropnew`). */
+.ide-dropnew { display: none; }
+.ide-dock-scroll.tab-dragging .ide-dropnew {
+  display: grid; place-items: center; flex: 0 0 140px; padding: 10px; font-size: 12px; text-align: center;
+  background: color-mix(in srgb, var(--ide-link-violet) 8%, transparent); border: 1px dashed var(--ide-link-violet); color: var(--ide-link-violet);
+}
 .ide-dockview { position: absolute; inset: 0; }
 .ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--ide-pane); }
 .ide-pane > * { flex: 1; min-height: 0; }
@@ -84,9 +90,10 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
   --dv-spacing-padding: 0px;
   --dv-sash-color: transparent;
   --dv-active-sash-color: var(--ring);
+  /* Where a dragged tab would land: a dashed violet line round it (mockup `.dragging .pane.drop-on`). */
   --dv-drag-over-background-color: transparent;
-  --dv-drag-over-border-color: transparent;
-  --dv-drag-over-border: none;
+  --dv-drag-over-border-color: var(--ide-link-violet);
+  --dv-drag-over-border: 1px dashed var(--ide-link-violet);
   --dv-overlay-z-index: 999;
   --dv-tabs-container-scrollbar-color: var(--input);
   --dv-icon-hover-background-color: var(--accent);
