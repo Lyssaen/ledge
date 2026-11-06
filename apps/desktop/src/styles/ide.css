@@ -86,7 +86,10 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
   color: var(--foreground);
 }
 .ide-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }
-.ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; }
+.ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
+/* The focused group marks its tab in front with a 2 px line on top (mockup `.grp.focus .tab.on::before`); --ring until
+   the links' violet arrives (lot 3). */
+.ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ring); }
 .ide-dock .dv-default-tab-action { opacity: .55; }
 .ide-dock .dv-default-tab-action:hover { opacity: 1; }
 
