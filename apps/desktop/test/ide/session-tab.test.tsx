@@ -13,6 +13,8 @@ import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { TermStore } from '../../src/term/store';
 import { PROJECTS } from '../helpers';
+import { empty, open, serialize } from '../../src/workspace/model';
+import { WORKSPACE_KEY } from '../../src/workspace/store';
 
 /** Lot 2, task 5: each session tab keeps its own view, scroll and draft; the keys and the agent's screen follow the active tab. */
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
@@ -245,6 +247,45 @@ describe('the session page in an IDE tab', () => {
     (document.activeElement as HTMLElement | null)?.blur();
     await user.keyboard('n');
     expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+  });
+
+  it('two groups each on a terminal: the screen follows the focused group; a fleet update of the other does not take it', async () => {
+    // Otto's tab in the first group, Nova's in a second (focused), both on their terminal view.
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(open(open(empty(), { kind: 'session', ref: 'local:otto', view: 'terminal' }), { kind: 'session', ref: 'local:nova', view: 'terminal' }, 'right'))));
+    const { d } = await mount();
+    await waitFor(() => expect(document.querySelectorAll('.ide-dock .dv-groupview')).toHaveLength(2));
+    await waitFor(() => expect(shownSid()).toMatch(/nova/));
+    front('Otto');
+    await waitFor(() => expect(document.querySelector('.dv-active-group')).toContainElement(tabOf('Otto')));
+    await waitFor(() => expect(shownSid()).toMatch(/otto/));
+    const shows = vi.mocked(TermStore.prototype.showAgent).mock.calls.length;
+    act(() => d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'idle' })));
+    await new Promise(r => setTimeout(r, 100));
+    expect(shownSid()).toMatch(/otto/);
+    expect(vi.mocked(TermStore.prototype.showAgent).mock.calls.slice(shows).filter(([sid]) => /nova/.test(sid))).toEqual([]);
+    front('Nova');
+    await waitFor(() => expect(shownSid()).toMatch(/nova/));
+  });
+
+  it('the tab menu reads the tab as it is now; it goes when its tab goes', async () => {
+    const { d, tree, user } = await twoTabs();
+    front('Otto');
+    await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
+    fireEvent.contextMenu(tabOf('Otto'));
+    const menu = await screen.findByRole('menu', { name: /Otto/ });
+    expect(within(menu).getByRole('menuitem', { name: /Basculer sur le terminal/ })).toBeInTheDocument();
+    // The view changes while the menu is open (Ctrl + ` on the front tab): the menu follows.
+    ctrlBackquote();
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(within(screen.getByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ })).toBeInTheDocument());
+    // Its tab gone (the session deleted), the menu goes and stays gone when a tab of that name comes back.
+    act(() => d.remove('otto'));
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' })));
+    await user.click(await tree.findByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    await new Promise(r => setTimeout(r, 50));
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('Y typed in the reply is written, and decides nothing', async () => {

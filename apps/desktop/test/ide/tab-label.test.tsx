@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { JSX } from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { LangProvider } from '../../src/i18n/lang';
-import { SessionTabLabel } from '../../src/ide/SessionTabLabel';
+import { ChangesTabLabel, SessionTabLabel } from '../../src/ide/SessionTabLabel';
 import type { Tab } from '../../src/workspace/model';
 
 afterEach(cleanup);
@@ -40,5 +42,31 @@ describe('SessionTabLabel', () => {
   it('the extras are aria-hidden: the accessible text is the title', () => {
     const { container } = draw(<SessionTabLabel session={fakeSession('otto', { name: 'Otto', tool: 'claude', rig: { seat: 's', name: 'ledge-dev' } })} tab={{ ...tab, view: 'terminal' }} title="Otto" />);
     for (const el of container.querySelectorAll('.logo, .tab-term, .tab-rig, .tab-dot')) expect(el.closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+});
+
+describe('ChangesTabLabel', () => {
+  it('the session\'s provider logo at 12 px, aria-hidden, then « Modifications · name »', () => {
+    const { container } = draw(<ChangesTabLabel session={fakeSession('otto', { name: 'Otto', tool: 'codex' })} title="Modifications · Otto" />);
+    const logo = screen.getByTitle('OpenAI');
+    expect(logo.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(logo.querySelector('svg')).toHaveAttribute('width', '12');
+    expect(container).toHaveTextContent('Modifications · Otto');
+  });
+  it('no logo for Cursor Agent, nor for a session not known', () => {
+    expect(draw(<ChangesTabLabel session={fakeSession('otto', { tool: 'cursor' })} title="x" />).container.querySelector('.logo')).toBeNull();
+    expect(draw(<ChangesTabLabel session={undefined} title="y" />).container.querySelector('.logo')).toBeNull();
+  });
+});
+
+describe('the tab name', () => {
+  it('a long name ends in an ellipsis instead of widening the tab without limit (ide.css)', () => {
+    const css = readFileSync(resolve(__dirname, '../../src/styles/ide.css'), 'utf8');
+    const rule = /\.ide-tab \.tab-name\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/min-width:\s*0/);
+    expect(rule).toMatch(/max-width:\s*220px/);
+    expect(rule).toMatch(/overflow:\s*hidden/);
+    expect(rule).toMatch(/text-overflow:\s*ellipsis/);
+    expect(rule).toMatch(/white-space:\s*nowrap/);
   });
 });

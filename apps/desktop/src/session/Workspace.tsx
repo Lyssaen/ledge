@@ -58,12 +58,15 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   const tabPlace = useTabPlace();
   const inTab = tabPlace !== null;
   const shownHere = tabPlace === null || tabPlace.visible;
+  // Two groups can each show a tab on its terminal: only the focused group's takes the screen, or they would take it in turn
+  // at every fleet update (`p.session` changes). A tab visible in another group neither attaches nor detaches it.
+  const attachHere = tabPlace === null || tabPlace.active;
   // The agent's screen is attached while the Terminal view shows it (re-asking in the same mode keeps the attachment), detached once left.
   useEffect(() => {
     if (!shownHere) return;
-    if (view === 'terminal') store?.showAgent(p.session.id, agentMode(p.session, helper, hasBackend));
+    if (view === 'terminal') { if (attachHere) store?.showAgent(p.session.id, agentMode(p.session, helper, hasBackend)); }
     else store?.hideAgent(inTab ? p.session.id : undefined);
-  }, [store, view, p.session, helper, hasBackend, shownHere, inTab]);
+  }, [store, view, p.session, helper, hasBackend, shownHere, attachHere, inTab]);
   const leaving = useRef<string | undefined>(undefined);
   leaving.current = inTab ? p.session.id : undefined;
   useEffect(() => () => store?.hideAgent(leaving.current), [store]);

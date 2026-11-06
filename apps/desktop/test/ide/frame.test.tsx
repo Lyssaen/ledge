@@ -331,6 +331,30 @@ describe('the IDE session tab (lot 2)', () => {
     expect(document.querySelector('.action-row.flash')).toBeNull();
   });
 
+  it('the session menu\'s « Terminal » opens the tab on its terminal view; the stored preference is left alone', async () => {
+    const { tree, user } = await mount();
+    const stored = localStorage.getItem('desktop.session');
+    fireEvent.contextMenu(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Terminal' }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector('.ide-pane .session-page[data-session$="otto"] .agent-view')).not.toBeNull());
+    expect(localStorage.getItem('desktop.session')).toBe(stored);
+  });
+
+  it('the « Modifications » tab draws its session\'s provider logo, aria-hidden, before its name', async () => {
+    const { d, tree, user } = await mount();
+    d.thread('otto', [{ kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 1, tool: 'Write', label: '/w/ledge/notes.md', status: 'success', files: [{ path: '/w/ledge/notes.md', change: 'write', diff: '+ Bonjour' }] }]);
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const page = await waitFor(() => { const el = document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]'); expect(el).not.toBeNull(); return el!; });
+    await user.click(await within(page).findByRole('button', { name: /\+1/ }));
+    await waitFor(() => expect(tabs().map(t => t.getAttribute('aria-label'))).toContain('Modifications · Otto'));
+    const logo = within(tabOf('Modifications · Otto')).getByTitle('Anthropic');
+    expect(logo.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(logo.querySelector('svg')).toHaveAttribute('width', '12');
+    expect(tabOf('Modifications · Otto')).toHaveAccessibleName('Modifications · Otto');
+  });
+
   it('a session deleted on a ready machine takes its « Modifications » tab with it', async () => {
     const { d, tree, user } = await mount();
     d.thread('otto', [{ kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 1, tool: 'Write', label: '/w/ledge/notes.md', status: 'success', files: [{ path: '/w/ledge/notes.md', change: 'write', diff: '+ Bonjour' }] }]);

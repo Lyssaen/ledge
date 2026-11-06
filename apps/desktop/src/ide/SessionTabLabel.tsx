@@ -22,3 +22,14 @@ export function SessionTabLabel({ session, tab, title }: { session: Session | un
     </>
   );
 }
+
+/** A « Modifications » tab (mockup `tabLabel()`, type diff): its session's provider logo at 12 px, aria-hidden, then its title. */
+export function ChangesTabLabel({ session, title }: { session: Session | undefined; title: string }): JSX.Element {
+  const provider = session ? providerOf(session.tool) : null;
+  return (
+    <>
+      {provider && <span aria-hidden="true" className="tab-logo"><ProviderLogo provider={provider} size={12} /></span>}
+      <span className="tab-name">{title}</span>
+    </>
+  );
+}
