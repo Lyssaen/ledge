@@ -1,4 +1,12 @@
 /* The IDE shell (docs/mockups/ledge-ide-interactive.html), behind « Interface IDE (aperçu) »: loaded with its lazy chunk. */
+
+/* The IDE's own tokens. The links' colours (mockup --link1, --link2): the mockup's on dark, darker ones that read on white.
+   The surfaces (mockup --shell under --pane): the tab strip and the session bar on --well, the darkest surface in both
+   themes (dark 0.145, under the title and activity bars' 0.205; light 0.97, under their 0.985); the editor, and the tab in
+   front, on --sidebar, the session page's own background, so the tab in front is lighter than the strip and opens onto it. */
+:root, :root[data-theme="light"] { --ide-link-violet: #6d28d9; --ide-link-teal: #0f766e; }
+:root[data-theme="dark"] { --ide-link-violet: #a78bfa; --ide-link-teal: #2dd4bf; }
+.ide { --ide-strip: var(--well); --ide-pane: var(--sidebar); }
 .ide { height: 100vh; display: grid; grid-template-rows: 34px 1fr 24px; background: var(--background); color: var(--foreground); overflow: hidden; }
 .ide-body { display: grid; grid-template-columns: 48px var(--ide-side, 248px) 1fr var(--ide-right, 300px); min-height: 0; }
 
@@ -49,14 +57,14 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-editor { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--background); }
 .ide-dock-area { flex: 1; min-height: 0; position: relative; }
 .ide-dockview { position: absolute; inset: 0; }
-.ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--background); }
+.ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--ide-pane); }
 .ide-pane > * { flex: 1; min-height: 0; }
 /* A session tab's page (R4, R5): the tab names it and says its view, so what is left of its heading is a thin line, and the
    page has no right panel to border. */
 .ide-pane .session-page { border-right: 0; }
 .ide-pane .session-page > .pane-heading { height: 32px; }
 
-/* dockview, on Ledge's tokens (mockup `.tabs`, `.tab`): 30 px tabs on the shell's colour, the one in front on the page's. */
+/* dockview, on Ledge's tokens (mockup `.tabs`, `.tab`): 30 px tabs on the strip's colour, the one in front on the page's. */
 .ide-dock {
   --dv-tabs-and-actions-container-font-size: 12px;
   --dv-tabs-and-actions-container-height: 30px;
@@ -74,12 +82,12 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
   --dv-overlay-z-index: 999;
   --dv-tabs-container-scrollbar-color: var(--input);
   --dv-icon-hover-background-color: var(--accent);
-  --dv-group-view-background-color: var(--background);
-  --dv-tabs-and-actions-container-background-color: var(--sidebar);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--background);
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--sidebar);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--sidebar);
+  --dv-group-view-background-color: var(--ide-pane);
+  --dv-tabs-and-actions-container-background-color: var(--ide-strip);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--ide-pane);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--ide-strip);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--ide-pane);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--ide-strip);
   --dv-tab-divider-color: var(--border);
   --dv-activegroup-visiblepanel-tab-color: var(--foreground);
   --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
@@ -91,9 +99,8 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 }
 .ide-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }
 .ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
-/* The focused group marks its tab in front with a 2 px line on top (mockup `.grp.focus .tab.on::before`); --ring until
-   the links' violet arrives (lot 3). */
-.ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ring); }
+/* The focused group marks its tab in front with a 2 px line on top, in the links' violet (mockup `.grp.focus .tab.on::before`). */
+.ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ide-link-violet); }
 .ide-dock .dv-default-tab-action { opacity: .55; }
 .ide-dock .dv-default-tab-action:hover { opacity: 1; }
 
@@ -118,21 +125,29 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-tab .tab-name { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ide-tab .tab-term { font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 11px; color: var(--muted-foreground); }
 .ide-tab .tab-rig { font-size: 11px; color: var(--muted-foreground); }
-.ide-tab .tab-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--muted-foreground); }
-/* Colours of the notch's dots (settings.css `.preview-notch .d-*`); the other states stay muted. */
-.ide-tab .tab-dot.d-approval { background: var(--sidebar-primary); }
-.ide-tab .tab-dot.d-question { background: var(--warning); }
+/* The state dot (mockup `.dot`): 8 px, a halo round a request, a slow pulse while it works (unless motion is reduced).
+   Colours of the notch's dots (settings.css `.preview-notch .d-*`); the other states stay muted. */
+.ide-tab .tab-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted-foreground); }
+.ide-tab .tab-dot.d-approval { background: var(--sidebar-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sidebar-primary) 20%, transparent); }
+.ide-tab .tab-dot.d-question { background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent); }
 .ide-tab .tab-dot.d-working { background: var(--info); }
+@media (prefers-reduced-motion: no-preference) { .ide-tab .tab-dot.d-working { animation: ide-pulse 1.6s ease-in-out infinite; } }
+@keyframes ide-pulse { 50% { opacity: .45; } }
 .ide-dock .dv-tab.alert { box-shadow: inset 0 -2px 0 var(--destructive); }
 .ide-dock .dv-tab.alert-a { box-shadow: inset 0 -2px 0 var(--warning); }
 
 /* An IDE session tab's bottom bar (mockup agentView() `.sfoot.cbar.pfoot`, `.dchip`): 28 px, a rule on top, the shell's
    colour; model, context, branch, project, then « Interrompre » and « +N −N » on the right. It narrows with its group. */
 .ide-pane { container-type: inline-size; }
-.ide-bar { flex: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; min-width: 0; overflow: hidden; border-top: 1px solid var(--border); background: var(--sidebar); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+.ide-bar { flex: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; min-width: 0; overflow: hidden; border-top: 1px solid var(--border); background: var(--ide-strip); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
 .ide-bar-model { flex: none; display: flex; align-items: center; min-width: 0; color: var(--foreground); }
-.ide-bar .model-chip { height: 22px; max-width: 220px; padding: 0 4px 0 0; gap: 5px; border: 0; background: none; font-size: 11.5px; }
+.ide-bar .model-chip { height: 22px; max-width: 220px; padding: 0 4px 0 0; gap: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; font-size: 11.5px; }
 .ide-bar .model-chip:hover { color: var(--foreground); }
+.ide-bar .model-chip-text { font-weight: 400; }
+/* Model: the provider's logo at 12 px, the name, a ▾ at 9 px where it can be switched (mockup `.sfoot.pfoot .mdl`). */
+.ide-bar-mdl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ide-bar .logo { display: inline-grid; place-items: center; flex: none; }
+.ide-bar .model-chip .car { color: var(--muted-foreground); font-size: 9px; }
 .ide-bar-ctx { flex: none; display: flex; align-items: center; gap: 6px; }
 .ide-bar-ctx .ugauge { width: 34px; }
 .ide-bar-ctx b { font-weight: 500; color: var(--foreground); font-variant-numeric: tabular-nums; }
@@ -149,12 +164,12 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-bar .dchip:hover, .ide-bar .dchip.on { background: var(--muted); color: var(--foreground); }
 .ide-bar .dchip .a { color: var(--success); }
 .ide-bar .dchip .d { color: var(--danger-text); }
-/* The links' colours (mockup --link1, --link2) until lot 3 gives them tokens. */
+/* The link's colour of the group showing the Changes. */
 .ide-bar .lk { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.ide-bar .lk-violet { background: #a78bfa; }
-.ide-bar .lk-teal { background: #2dd4bf; }
+.ide-bar .lk-violet { background: var(--ide-link-violet); }
+.ide-bar .lk-teal { background: var(--ide-link-teal); }
 @container (max-width: 560px) { .ide-bar-chip.pj { display: none; } }
-@container (max-width: 470px) { .ide-bar-ctx b, .ide-bar .model-chip > svg:last-child { display: none; } }
+@container (max-width: 470px) { .ide-bar-ctx b, .ide-bar .model-chip .car { display: none; } }
 @container (max-width: 400px) { .ide-bar-chip.br, .ide-bar-sep { display: none; } }
 
 /* The reply in an IDE tab (mockup `.cbox`): a field 72 to 240 px high that grows with its text. */
