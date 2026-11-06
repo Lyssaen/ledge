@@ -30,6 +30,12 @@ export function tabView(tab: Tab, s: Session | undefined): SessionView {
   return viewShown(seat, 'thread', null);
 }
 
+/** Whether a tab has a terminal view to switch to: an agent tab whose session is known and not a stopped or archived OMP seat
+ *  (tabView would answer « thread » whatever the tab says). The tab menu and Ctrl + ` share the rule. */
+export function hasTerminal(tab: Tab, s: Session | undefined): boolean {
+  return (tab.kind === 'session' || tab.kind === 'seat') && !!s && tabView({ ...tab, view: 'terminal' }, s) === 'terminal';
+}
+
 /** The alert a tab carries: the state dot's approval or question; an offline session raises none. */
 export function tabAlert(s: Session | undefined): 'perm' | 'ask' | null {
   if (!s) return null;

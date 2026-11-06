@@ -75,7 +75,7 @@ import { useIdeEnabled } from './workspace/prefs';
 import { createWorkspaceStore, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { beside, changesBeside, close as closeTab, closeOthers, find as findTab, focused, keyOf, open as openTab, reconcile as reconcileTabs, setView, type Tab } from './workspace/model';
-import { projectLabel, tabAlert, tabView } from './workspace/sessionTab';
+import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
 import { routeNav, tabNav } from './workspace/route';
@@ -381,6 +381,16 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // into the agent's screen (or its banner's button when it cannot be typed into). A view just asked for draws its xterm in
   // the renders this key starts, so the focus waits for the next frame.
   const toTerminal = () => {
+    if (ide) {
+      // The IDE: the tab in front of the focused group, if it has a terminal view (else the key is not taken).
+      const s = front && known.find(x => x.id === front.ref);
+      if (!front || !s || !hasTerminal(front, s)) return false;
+      // A flip, as the tab menu's: on the terminal already (the focus is outside it), back to the thread.
+      const toThread = tabView(front, s) === 'terminal';
+      wsStore.update(w => setView(w, keyOf(front), toThread ? 'thread' : 'terminal'));
+      requestAnimationFrame(() => (toThread ? focusThread() : focusAgentView(termStore, s.id)));
+      return true;
+    }
     if (place.kind !== 'session' || !session) return false;
     if (sessionView !== 'terminal') setShownPrefs(p => ({ ...p, view: 'terminal' }));
     requestAnimationFrame(() => focusAgentView(termStore, session.id));
@@ -390,6 +400,16 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // panel: the keyboard goes back to the left view, which does not change.
   termThread.current = () => {
     const fromAgent = document.activeElement?.closest('.agent-view') !== null;
+    if (ide && front && (front.kind === 'session' || front.kind === 'seat')) {
+      // The IDE: the view is the front tab's own; from the agent's screen it goes back to the thread, else the focus returns to the left view.
+      const s = known.find(x => x.id === front.ref);
+      if (fromAgent && s && tabView(front, s) === 'terminal') {
+        wsStore.update(w => setView(w, keyOf(front), 'thread'));
+        requestAnimationFrame(focusThread);
+      } else if (s && tabView(front, s) === 'terminal') focusAgentView(termStore, s.id);
+      else focusThread();
+      return;
+    }
     if (fromAgent && sessionView === 'terminal') {
       setShownPrefs(p => ({ ...p, view: 'thread' }));
       requestAnimationFrame(focusThread);
@@ -397,7 +417,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     else focusThread();
   };
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
-  const ideKeys = useMemo(() => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }) }), [onLayout]);
+  const ideKeys = useMemo(() => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }), newSessionAnywhere: true as const }), [onLayout]);
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null, toTerminal, ...(ide ? { ide: ideKeys } : {}) });
   const close = () => dispatch({ type: 'modal', modal: null });
   // Bumped by each broadcast that reached someone: the sidebar's selection, kept until then, is emptied.
@@ -583,7 +603,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         const agent = tabMenu.tab.kind === 'session' || tabMenu.tab.kind === 'seat';
         const view = agent ? tabView(tabMenu.tab, session) : 'thread';
         // A seat stopped has only its thread (tabView says so): nothing to switch to.
-        const canSwitch = agent && !!session && (view === 'terminal' || tabView({ ...tabMenu.tab, view: 'terminal' }, session) === 'terminal');
+        const canSwitch = hasTerminal(tabMenu.tab, session);
         return <TabMenu at={tabMenu.at} tab={tabMenu.tab} name={title(tabMenu.tab)} terminal={view === 'terminal'} others={hit.group.tabs.length > 1}
           {...(canSwitch && { onView: () => wsStore.update(w => setView(w, key, view === 'terminal' ? 'thread' : 'terminal')) })}
           onClose={() => wsStore.update(w => closeTab(w, key))} onCloseOthers={() => wsStore.update(w => closeOthers(w, key))} onDismiss={() => setTabMenu(null)} />;

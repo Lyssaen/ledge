@@ -326,3 +326,42 @@ describe('IDE shortcuts (the ide option)', () => {
     expect(dispatch).toHaveBeenCalledWith({ type: 'chat', open: true });
   });
 });
+
+describe('N on a session page (the ide option, lot 2)', () => {
+  function Session({ ide, dispatch, toTerminal }: { ide?: boolean; dispatch: (a: unknown) => void; toTerminal?: () => boolean }) {
+    const base = initialNav({ helpers: [], paused: false } as never);
+    useKeys(dispatch as never, { state: { ...base, place: { kind: 'session', id: 'otto', view: 'atelier', project: 'all' } }, order: [], screen: { current: null }, undo: () => false, ...(toTerminal ? { toTerminal } : {}), ...(ide ? { ide: { toggle: () => {}, newSessionAnywhere: true as const } } : {}) } as never);
+    return <div><textarea aria-label="champ" /><div data-terminal><button>term</button></div></div>;
+  }
+
+  it('with ide, N opens the launch dialog on a session place; without, nothing', () => {
+    const dispatch = vi.fn();
+    const { unmount } = render(<Session ide dispatch={dispatch} />);
+    fireEvent.keyDown(window, { key: 'n' });
+    expect(dispatch).toHaveBeenCalledWith({ type: 'modal', modal: { kind: 'launch' } });
+    unmount();
+    const off = vi.fn();
+    render(<Session dispatch={off} />);
+    fireEvent.keyDown(window, { key: 'n' });
+    expect(off).not.toHaveBeenCalled();
+  });
+
+  it('with ide, N typed in a textarea does nothing', () => {
+    const dispatch = vi.fn();
+    render(<Session ide dispatch={dispatch} />);
+    const field = screen.getByLabelText('champ'); field.focus();
+    fireEvent.keyDown(field, { key: 'n' });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('Review Focus 3: under [data-terminal], N, Y and Ctrl+` neither dispatch nor reach toTerminal', () => {
+    const dispatch = vi.fn(), toTerminal = vi.fn(() => true);
+    render(<Session ide dispatch={dispatch} toTerminal={toTerminal} />);
+    const b = screen.getByText('term'); b.focus();
+    fireEvent.keyDown(b, { key: 'n', code: 'KeyN' });
+    fireEvent.keyDown(b, { key: 'y', code: 'KeyY' });
+    fireEvent.keyDown(b, { key: '`', code: 'Backquote', ctrlKey: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(toTerminal).not.toHaveBeenCalled();
+  });
+});

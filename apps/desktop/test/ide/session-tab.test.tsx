@@ -52,6 +52,7 @@ const activeTab = () => tabs().find(t => t.getAttribute('aria-selected') === 'tr
 const tabOf = (name: string) => tabs().find(t => t.getAttribute('aria-label') === name)!;
 const front = (name: string) => act(() => { tabOf(name).dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })); });
 const page = () => document.querySelector<HTMLElement>('.ide-pane .session-page');
+const ctrlBackquote = () => fireEvent.keyDown(document.body, { key: '`', code: 'Backquote', ctrlKey: true });
 const decided = (d: Daemon) => d.received.filter(m => m.type === 'session.decide') as Array<{ id: string; decision: string }>;
 
 /** Otto and Nova open in tabs, Nova in front. */
@@ -211,4 +212,49 @@ describe('the session page in an IDE tab', () => {
     await new Promise(r => setTimeout(r, 50));
     expect(document.querySelector('.conversation-workspace.with-terminal')).toBeNull();
   });
+  it('Ctrl+` flips the front session tab between thread and terminal; on the Atelier it changes no tab', async () => {
+    const { user } = await twoTabs();
+    front('Otto');
+    await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
+    (document.activeElement as HTMLElement | null)?.blur();
+    ctrlBackquote();
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    expect(within(tabOf('Nova')).queryByTitle('Vue terminal')).toBeNull();
+    (document.activeElement as HTMLElement | null)?.blur();
+    ctrlBackquote();
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    // The Atelier in front: no tab changes.
+    act(() => { tabOf('Atelier').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })); });
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    (document.activeElement as HTMLElement | null)?.blur();
+    ctrlBackquote();
+    await new Promise(r => setTimeout(r, 50));
+    expect(tabs().some(t => within(t).queryByTitle('Vue terminal'))).toBe(false);
+  });
+
+  it('N denies the front session\'s waiting permission without opening the launch dialog; without one, N opens it', async () => {
+    const { d, user } = await twoTabs();
+    act(() => d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', ...PERMISSION })));
+    await waitFor(() => expect(tabOf('Nova')).toHaveClass('alert'));
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.keyboard('n');
+    await waitFor(() => expect(decided(d)).toEqual([expect.objectContaining({ id: 'nova', decision: 'deny' })]));
+    expect(screen.queryByRole('dialog', { name: 'Nouvelle session' })).toBeNull();
+    front('Otto');
+    await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.keyboard('n');
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+  });
+
+  it('Y typed in the reply is written, and decides nothing', async () => {
+    const { d, user } = await twoTabs();
+    act(() => d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', ...PERMISSION })));
+    await waitFor(() => expect(tabOf('Nova')).toHaveClass('alert'));
+    const box = within(page()!).getByRole('textbox', { name: 'Répondre à l’agent' });
+    await user.type(box, 'yn');
+    expect(box).toHaveValue('yn');
+    expect(decided(d)).toEqual([]);
+  });
+
 });
