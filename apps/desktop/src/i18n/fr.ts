@@ -1391,6 +1391,9 @@ export const fr = {
     tabTerminalView: 'Vue terminal', toTerminal: 'Basculer sur le terminal', toThread: 'Revenir au fil', viewKey: 'Ctrl `',
     closeThisTab: 'Fermer l’onglet', closeOthers: 'Fermer les autres', tabMenu: 'Onglet', changesTitle: (name: string) => `Modifications · ${name}`,
     openrigTitle: (machine: string) => `OpenRig · ${machine}`, closeTab: (name: string) => `Fermer ${name}`, editorLabel: 'Zone d’édition',
-    bottomLabel: 'Panneau du bas', terminals: 'Terminaux', output: 'Sortie', outputTip: 'Sortie : les commandes rig lancées par Ledge et leur résultat', hidePanel: 'Masquer le panneau'
+    bottomLabel: 'Panneau du bas', terminals: 'Terminaux', output: 'Sortie', outputTip: 'Sortie : les commandes rig lancées par Ledge et leur résultat', hidePanel: 'Masquer le panneau',
+    changeModel: 'Changer de modèle', context: (used: string, window: string) => `Contexte : ${used} / ${window}`, branch: (b: string) => `Branche ${b}`,
+    interrupt: 'Interrompre', interruptRefused: (name: string, why: string) => `Interruption de ${name} refusée : ${why}`,
+    changesChip: (n: number) => `Modifications : ${n} fichier${n > 1 ? 's' : ''} · à côté, dans un groupe lié`
   }
 };

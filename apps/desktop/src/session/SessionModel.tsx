@@ -10,6 +10,12 @@ import { effective, effortsFor, menuModels, withEffort, withModel } from '../lau
 import { useModels } from '../launch/useModels';
 import { cls } from '../shell/cls';
 
+/** Whether the session's model can be changed from here: its machine's daemon takes `session.model`, Ledge launched it, it runs. */
+export function useCanSwitchModel(client: DaemonClient, session: Session): boolean {
+  const daemon = useMachines(client).find(m => m.id === (session.machineId ?? 'local'))?.daemon;
+  return !!daemon?.modelSwitch && session.source === 'launcher' && session.state !== 'exited';
+}
+
 /**
  * A live session's model and effort (#58 lot 2, mockup ledge-model-picker v2): a chip in the reply bar, which opens the
  * agent's models and its effort. Apply restarts the agent on the same conversation with them; while it works the change
@@ -20,8 +26,7 @@ export function SessionModel(p: { client: DaemonClient; session: Session; notify
   const tl = t.launch; const tm = t.session.model;
   const { session } = p;
   const machine = session.machineId ?? 'local';
-  const daemon = useMachines(p.client).find(m => m.id === machine)?.daemon;
-  const able = !!daemon?.modelSwitch && session.source === 'launcher' && session.state !== 'exited';
+  const able = useCanSwitchModel(p.client, session);
   const state = useModels(p.client, able ? machine : null, session.tool);
   const chip = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);

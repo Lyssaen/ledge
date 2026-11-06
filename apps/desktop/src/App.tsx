@@ -57,7 +57,7 @@ import { useContextMenu } from './manage/useContextMenu';
 import { SessionMenuHost } from './manage/SessionMenu';
 import { ConfirmDialog } from './manage/ConfirmDialog';
 import { BroadcastDialog } from './broadcast/BroadcastDialog';
-import { loadedWorkspace, SessionPlace } from './session/lazy';
+import { ChangesPlace, loadedWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs, viewShown, type SessionPrefs, type SessionView } from './session/prefs';
 import { subagentOf } from './session/exchanges';
@@ -74,8 +74,8 @@ import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled } from './workspace/prefs';
 import { createWorkspaceStore, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { close as closeTab, closeOthers, find as findTab, focused, keyOf, open as openTab, reconcile as reconcileTabs, setView, type Tab } from './workspace/model';
-import { tabAlert, tabView } from './workspace/sessionTab';
+import { beside, changesBeside, close as closeTab, closeOthers, find as findTab, focused, keyOf, open as openTab, reconcile as reconcileTabs, setView, type Tab } from './workspace/model';
+import { projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
 import { routeNav, tabNav } from './workspace/route';
@@ -489,7 +489,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         if (!s) return null;
         const tp = prefsOfTab(tab, s);
         return <SessionPlace client={fleetClient} session={s} nav={tnav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
-          prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide />;
+          prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide
+          project={projectLabel(s, projectName)} besideLink={changesBeside(ws, keyOf(tab))}
+          onChanges={() => wsStore.update(w => { const hit = findTab(w, keyOf(tab)); return hit ? beside(w, hit.group.id, 'changes', s.id) : w; })} />;
+      }
+      // « +N −N »'s tab: an action clicked there brings the session's tab forward (R10).
+      if (tab.kind === 'changes') {
+        const s = known.find(x => x.id === tab.ref);
+        return s ? <ChangesPlace client={fleetClient} session={s} notify={notify} onTouch={() => dispatch({ type: 'open', id: s.id })} /> : null;
       }
       if (tab.kind === 'atelier') {
         return detached ? <AtelierAway onShow={detach} onAttach={attach} />

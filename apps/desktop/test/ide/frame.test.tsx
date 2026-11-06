@@ -12,7 +12,7 @@ import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
-import type { Machines } from '@ledge/protocol';
+import type { DaemonInfo, Machines } from '@ledge/protocol';
 import { PROJECTS } from '../helpers';
 import { empty, open, serialize } from '../../src/workspace/model';
 import { ATELIER_TAB, WORKSPACE_KEY } from '../../src/workspace/store';
@@ -23,11 +23,12 @@ const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
 
-async function mount({ ide = true, machines = [{ id: 'local', label: 'Local' }] }: { ide?: boolean; machines?: Machines } = {}) {
+async function mount({ ide = true, machines = [{ id: 'local', label: 'Local' }], daemon }: { ide?: boolean; machines?: Machines; daemon?: DaemonInfo } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);
+  if (daemon) d.extras.daemon = daemon;
   d.projects(PROJECTS);
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' }));
   d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'working' }));
@@ -294,6 +295,30 @@ describe('the IDE session tab (lot 2)', () => {
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Fermer les autres' }));
     await waitFor(() => expect(tabs()).toHaveLength(1));
     expect(tabs()[0]).toHaveAccessibleName('Otto');
+  });
+
+  it('the bottom bar: Otto\'s +1 opens « Modifications · Otto » in a second group and lights; the model chip is in the bar, not the reply', async () => {
+    const { d, tree, user } = await mount({ daemon: { version: '1', install: 'npm', systemd: true, models: true, modelSwitch: true } });
+    d.thread('otto', [{ kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 1, tool: 'Write', label: '/w/ledge/notes.md', status: 'success', files: [{ path: '/w/ledge/notes.md', change: 'write', diff: '+ Bonjour' }] }]);
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    const page = () => document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]')!;
+    await waitFor(() => expect(page().querySelector('.ide-bar .model-chip')).not.toBeNull());
+    expect(page().querySelector('.session-reply .model-chip')).toBeNull();
+    const chip = await within(page()).findByRole('button', { name: /\+1/ });
+    expect(document.querySelectorAll('.ide-dock .dv-groupview')).toHaveLength(1);
+    await user.click(chip);
+    await waitFor(() => expect(tabs().map(t => t.getAttribute('aria-label'))).toContain('Modifications · Otto'));
+    expect(document.querySelectorAll('.ide-dock .dv-groupview')).toHaveLength(2);
+    await waitFor(() => expect(within(page()).getByRole('button', { name: /\+1/ })).toHaveClass('on'));
+    expect(activeTab()).toHaveAccessibleName('Otto');
+    // R10: an action clicked in the Changes tab brings Otto's tab forward (its group focused) and lights nothing.
+    const changes = await waitFor(() => { const el = document.querySelector<HTMLElement>('.ide-changes .file-touches'); expect(el).not.toBeNull(); return el!; });
+    await user.click(tabOf('Modifications · Otto'));
+    await waitFor(() => expect(document.querySelector('.dv-active-group')).toContainElement(tabOf('Modifications · Otto')));
+    await user.click(within(changes).getByRole('button', { name: /^Write · tour 1/ }));
+    await waitFor(() => expect(document.querySelector('.dv-active-group')).toContainElement(tabOf('Otto')));
+    expect(document.querySelector('.action-row.flash')).toBeNull();
   });
 
   it('a lone tab has no « Fermer les autres »; Escape closes the menu', async () => {

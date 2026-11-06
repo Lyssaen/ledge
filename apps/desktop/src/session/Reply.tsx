@@ -39,11 +39,13 @@ export interface ReplyProps {
   onReadPlan(): void;
   /** For the model chip (#58 lot 2); left out, no chip. */
   client?: DaemonClient;
+  /** The model chip in the field (default); an IDE tab says the model in its bottom bar instead. */
+  modelChip?: boolean;
 }
 
 /** The reply area under the thread (session.tsx `replyArea`): the pinned request, then the field, or a note saying why
  *  there is none (offline, read only, a subagent's page). The draft lives in the shell's memory, written at each keystroke. */
-export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan, client }: ReplyProps): JSX.Element {
+export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan, client, modelChip = true }: ReplyProps): JSX.Element {
   const { t } = useI18n();
   const tp = t.session.pending;
   const tr = t.session.reply;
@@ -278,7 +280,7 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
             {...(slashTool ? { 'aria-autocomplete': 'list' as const, 'aria-expanded': listShown, ...(listShown ? { 'aria-controls': listId } : {}), ...(listShown && selected >= 0 ? { 'aria-activedescendant': slashOptionId(listId, selected) } : {}) } : {})} />
           {ghost && !withImages && <div className="slash-ghost" aria-hidden="true"><span className="slash-ghost-typed">{draft}</span><span className="slash-ghost-hint">{ghost}</span></div>}
           {images.error && <span className="reply-hint reply-images-error" role="alert">{images.error}</span>}
-          {client && <SessionModel client={client} session={session} notify={notify} />}
+          {client && modelChip && <SessionModel client={client} session={session} notify={notify} />}
           <span className="reply-hint">{hint}</span>
           {stoppable && client && !text && !askCard
             ? <Button variant="primary" size="icon" type="button" className="reply-stop" onClick={stop} disabled={stopping} aria-label={stopping ? tr.stopping : tr.stop(session.name)} title={tr.stopTitle}

@@ -124,3 +124,41 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-tab .tab-dot.d-working { background: var(--info); }
 .ide-dock .dv-tab.alert { box-shadow: inset 0 -2px 0 var(--destructive); }
 .ide-dock .dv-tab.alert-a { box-shadow: inset 0 -2px 0 var(--warning); }
+
+/* An IDE session tab's bottom bar (mockup agentView() `.sfoot.cbar.pfoot`, `.dchip`): 28 px, a rule on top, the shell's
+   colour; model, context, branch, project, then « Interrompre » and « +N −N » on the right. It narrows with its group. */
+.ide-pane { container-type: inline-size; }
+.ide-bar { flex: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; min-width: 0; overflow: hidden; border-top: 1px solid var(--border); background: var(--sidebar); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+.ide-bar-model { flex: none; display: flex; align-items: center; min-width: 0; color: var(--foreground); }
+.ide-bar .model-chip { height: 22px; max-width: 220px; padding: 0 4px 0 0; gap: 5px; border: 0; background: none; font-size: 11.5px; }
+.ide-bar .model-chip:hover { color: var(--foreground); }
+.ide-bar-ctx { flex: none; display: flex; align-items: center; gap: 6px; }
+.ide-bar-ctx .ugauge { width: 34px; }
+.ide-bar-ctx b { font-weight: 500; color: var(--foreground); font-variant-numeric: tabular-nums; }
+.ide-bar-ctx.amber b { color: var(--warning); }
+.ide-bar-sep { flex: none; width: 1px; height: 12px; background: var(--border); }
+.ide-bar-chip { font-family: 'Geist Mono', monospace; font-size: 11px; padding: 0 2px; }
+.ide-bar-chip.br { min-width: 40px; max-width: 150px; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.ide-bar-chip.pj { min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.ide-bar-side { margin-left: auto; flex: none; display: flex; align-items: center; gap: 4px; }
+.ide-bar-stop { min-width: 26px; height: 22px; padding: 0 6px; display: grid; place-items: center; border: 1px solid var(--input); border-radius: 6px; color: var(--muted-foreground); }
+.ide-bar-stop:hover { color: var(--foreground); }
+.ide-bar-stop i { display: block; width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
+.ide-bar .dchip { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px; border-radius: 5px; font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.ide-bar .dchip:hover, .ide-bar .dchip.on { background: var(--muted); color: var(--foreground); }
+.ide-bar .dchip .a { color: var(--success); }
+.ide-bar .dchip .d { color: var(--danger-text); }
+/* The links' colours (mockup --link1, --link2) until lot 3 gives them tokens. */
+.ide-bar .lk { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.ide-bar .lk-violet { background: #a78bfa; }
+.ide-bar .lk-teal { background: #2dd4bf; }
+@container (max-width: 560px) { .ide-bar-chip.pj { display: none; } }
+@container (max-width: 470px) { .ide-bar-ctx b, .ide-bar .model-chip > svg:last-child { display: none; } }
+@container (max-width: 400px) { .ide-bar-chip.br, .ide-bar-sep { display: none; } }
+
+/* The reply in an IDE tab (mockup `.cbox`): a field 72 to 240 px high that grows with its text. */
+.ide-pane .session-reply textarea { min-height: 72px; max-height: 240px; field-sizing: content; overflow: auto; }
+
+/* An IDE « Modifications » tab: the Changes view fills it. */
+.ide-changes { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.ide-changes > .changes-view { flex: 1; min-height: 0; }

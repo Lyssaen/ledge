@@ -18,6 +18,8 @@ import { useTabPlace } from '../workspace/tabPlace';
 
 /** The terminal's xterm comes with this chunk, never in the first bundle: App's terminal store makes them through it. */
 export { createSurface } from '../term/surface';
+/** An IDE « Modifications » tab: its diffs come with this chunk too (ChangesPlace). */
+export { ChangesTab } from './ChangesTab';
 
 /** ← / → on the panel's handle move it this much. */
 const TERM_STEP = 0.02;

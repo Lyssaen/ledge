@@ -27,6 +27,8 @@ import { clampSplit, type SessionView } from './prefs';
 import { ArchivedBanner } from '../manage/ArchivedBanner';
 import type { SessionActions } from '../manage/useSessionActions';
 import { Reply } from './Reply';
+import { SessionBar } from './SessionBar';
+import type { Link } from '../workspace/model';
 import type { CaptureFocus } from './BrowserTab';
 import { capturesOf } from './captures';
 import { isLocal, kindOf, pillOf, useBrowser } from './browserLive';
@@ -73,6 +75,9 @@ export interface SessionPageProps {
   client: DaemonClient;
   /** In an IDE tab (R4): no Fil | Terminal switch nor meta in the heading (the tab says them), no right panel (O is not taken). */
   ide?: boolean;
+  /** Read only with `ide`, for the bottom bar: the project line (projectLabel), the colour of the linked group showing this
+   *  session's Changes (null: none), and « +N −N », which opens them beside. */
+  project?: string; besideLink?: Link | null; onChanges?(): void;
 }
 
 /** After the last scroll, the reading position is written down this late (and when the page closes). */
@@ -83,6 +88,8 @@ const MARKER_OFFSET = 120;
 const FLASH_MS = 1800;
 
 export interface PageApi { showInThread(toolId: string): void }
+
+const noop = () => {};
 
 const VIEWS: ReadonlyArray<{ view: SessionView; icon: readonly string[] }> = [{ view: 'thread', icon: SHELL_ICONS.thread }, { view: 'terminal', icon: SHELL_ICONS.terminal }];
 
@@ -555,7 +562,9 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
             </div>
           )}
           {view === 'thread' && !archived && seat === null && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
-            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} />}
+            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} modelChip={!p.ide} />}
+          {/* In an IDE tab, on the thread as on the terminal: the model, the context, where it works, and its changes. */}
+          {p.ide && <SessionBar client={p.client} session={session} project={p.project ?? ''} files={files} besideLink={p.besideLink ?? null} notify={p.notify} onChanges={p.onChanges ?? noop} />}
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}
