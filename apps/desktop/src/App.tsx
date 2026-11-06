@@ -72,6 +72,7 @@ import { TermStoreContext } from './term/useTerms';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled } from './workspace/prefs';
+import { useOpenSession } from './workspace/openPrefs';
 import { createWorkspaceStore, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { beside, changesBeside, close as closeTab, closeOthers, find as findTab, focused, keyOf, open as openTab, reconcile as reconcileTabs, setView, type Tab } from './workspace/model';
@@ -161,14 +162,15 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [layout, setLayout] = useStored(loadLayout, saveLayout);
   // Asking for the right panel folds the sidebar when that is what gives it room (layoutFor).
   const onLayout = useCallback((a: LayoutAction) => setLayout(l => layoutFor(l, a, window.innerWidth)), [setLayout]);
-  const ideNow = useRef({ ide, nav });
-  ideNow.current = { ide, nav };
+  const [openSession] = useOpenSession();
+  const ideNow = useRef({ ide, nav, openSession });
+  ideNow.current = { ide, nav, openSession };
   // What every child dispatches. Switch off: the navigation reducer, as ever. On: the action routed (routeNav) to the
   // navigation, the tabs and the panels; the NavState stays up to date, so turning the IDE off lands on the same place.
   // Stable, as the reducer's own dispatch: effects that keep it from their first render see the switch as it is now.
   const dispatch = useCallback((a: NavAction) => {
     if (!ideNow.current.ide) { navDispatch(a); return; }
-    const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null });
+    const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null, openSession: ideNow.current.openSession });
     if (r.nav) navDispatch(r.nav);
     // The right panel is `layout.right`, never `nav.chat`: asking for the chat only bumps `chatFocus` (its field takes the
     // focus), and `nav.chat` goes straight back to false, or the single keys, Alt + 1…9 and the screen's Escape would stay off.
@@ -280,7 +282,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const a: NavAction | null = place.kind === 'session' ? { type: 'open', id: place.id }
       : place.kind === 'settings' ? { type: 'settings', section: place.section }
       : place.kind === 'openrig' ? { type: 'openrig', ...(place.machine !== undefined ? { machine: place.machine } : {}) } : null;
-    const r = a && routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: false });
+    const r = a && routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: false, openSession: ideNow.current.openSession });
     if (r?.ws) wsStore.update(r.ws);
   }, [ide]);
   // The tab in front is the NavState's place, so what reads the place (the shell's session state, N, Alt + ←/→, the sidebar's

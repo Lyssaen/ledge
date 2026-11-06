@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeOthers, cycleLink, deserialize, empty, find, focused, keyOf, MAIN, move, open, reconcile, serialize, setView, split, type Tab, type Workspace } from '../../src/workspace/model';
+import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeOthers, cycleLink, deserialize, emptyProposals, empty, find, focused, keyOf, MAIN, move, moveTo, open, reconcile, serialize, setView, split, type Tab, type Workspace } from '../../src/workspace/model';
 
 const S = (id: string): Tab => ({ kind: 'session', ref: id });
 const keys = (w: Workspace, groupId: string) => w.groups.find(g => g.id === groupId)!.tabs.map(keyOf);
@@ -229,5 +229,60 @@ describe('changesBeside', () => {
     const peer = w.groups.find(g => g.id !== 'g1')!;
     w = open(activate(w, peer.id, 0), S('other'));
     expect(changesBeside(w, 'session:a')).toBeNull();
+  });
+});
+
+describe('moveTo', () => {
+  const two = () => { const w = open(open(empty(), S('a')), S('b')); return move(w, 'session:b', { rightOf: 'g1' }); };
+  it('to index 0 of another group: first and active, the group focused', () => {
+    const w = moveTo(two(), 'session:a', { group: 'g2', index: 0 });
+    expect(keys(w, 'g2')).toEqual(['session:a', 'session:b']);
+    expect(keys(w, 'g2')[0]).toBe('session:a');
+    expect(front(w, 'g2')).toBe('session:a');
+    expect(w.focus).toBe('g2');
+  });
+  it('without index: at the end; index is clamped', () => {
+    const w = moveTo(two(), 'session:a', { group: 'g2' });
+    expect(keys(w, 'g2')).toEqual(['session:b', 'session:a']);
+    const v = moveTo(open(two(), S('c')), 'session:c', { group: 'g2', index: 99 });
+    expect(keys(v, 'g2')).toEqual(['session:b', 'session:c']);
+  });
+  it('the emptied source disappears, except MAIN\'s last', () => {
+    const w = moveTo(two(), 'session:a', { group: 'g2' });
+    expect(w.groups.map(g => g.id)).toEqual(['g2']);
+    const one = open(empty(), S('a'));
+    expect(moveTo(one, 'session:a', { group: 'g1' })).toBe(one);
+  });
+  it('{rightOf}: a new group just right', () => {
+    const w = moveTo(open(two(), S('c')), 'session:c', { rightOf: 'g1' });
+    expect(w.groups.map(g => g.id)).toEqual(['g1', 'g3', 'g2']);
+    expect(keys(w, 'g3')).toEqual(['session:c']);
+    expect(w.focus).toBe('g3');
+  });
+});
+
+describe('emptyProposals', () => {
+  it('from a session: terminalOf is its id', () => {
+    const w = split(open(empty(), S('pim')), 'g1');
+    expect(emptyProposals(w, 'g2')).toEqual({ terminalOf: 'pim' });
+  });
+  it('from the atelier, or a group with tabs or unknown: null', () => {
+    const w = split(open(empty(), { kind: 'atelier', ref: '' }), 'g1');
+    expect(emptyProposals(w, 'g2')).toEqual({ terminalOf: null });
+    expect(emptyProposals(open(split(open(empty(), S('pim')), 'g1'), S('x')), 'g2')).toEqual({ terminalOf: null });
+    expect(emptyProposals(w, 'nope')).toEqual({ terminalOf: null });
+  });
+});
+
+describe('a linked Changes group follows until the link is cycled off', () => {
+  it('follows, then stops after cycleLink goes to null', () => {
+    let w = open(open(empty(), S('a')), S('b'));
+    w = beside(w, 'g1', 'changes', 'a');
+    const peer = w.groups.find(g => g.id !== 'g1')!.id;
+    w = activate(w, 'g1', 1);
+    expect(front(w, peer)).toBe('changes:b');
+    while (w.groups.find(g => g.id === peer)!.link !== null) w = cycleLink(w, peer);
+    w = activate(w, 'g1', 0);
+    expect(front(w, peer)).toBe('changes:b');
   });
 });

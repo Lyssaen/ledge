@@ -48,7 +48,7 @@ export type NavAction =
   | { type: 'ledge'; tab?: HomeTab; task?: string }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
   | { type: 'filter'; project: ProjectFilter }
-  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string; /** A file to open in its side pane on arrival (« À toi »'s source). */ doc?: string }
+  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string; /** A file to open in its side pane on arrival (« À toi »'s source). */ doc?: string; /** IDE only: where the tab opens, over the setting « Ouvrir une session »; the reducer ignores it. */ where?: 'active' | 'right' }
   | { type: 'settings'; section?: SectionId }
   /** The OpenRig page, on a machine (the one shown before, else local), on its rigs or its roles (the section shown before,
    *  else the rigs). `role`: open that role, seen from `seat` (`rig/logicalId`) or from its spec. */

@@ -162,6 +162,25 @@ export function move(w: Workspace, key: string, to: { group: string } | { rightO
   return activate(replaceGroup(out, { ...g, tabs }), g.id, tabs.length - 1);
 }
 
+/** `move` with the arrival position: inserted at `index` (clamped) in a group, else at the end. The tab becomes active
+ *  and its group focused. */
+export function moveTo(w: Workspace, key: string, to: { group: string; index?: number } | { rightOf: string }): Workspace {
+  const moved = move(w, key, to);
+  if (moved === w || !('group' in to) || to.index === undefined) return moved;
+  const hit = find(moved, key);
+  if (!hit) return moved;
+  const tabs = hit.group.tabs.filter((_, i) => i !== hit.index);
+  tabs.splice(Math.max(0, Math.min(to.index, tabs.length)), 0, hit.group.tabs[hit.index]!);
+  return activate(replaceGroup(moved, { ...hit.group, tabs }), hit.group.id, tabs.indexOf(hit.group.tabs[hit.index]!));
+}
+
+/** What an empty group offers: the Terminal of the session it was split from (the UI checks that session still exists).
+ *  Split from the atelier or any non-session tab, nothing is proposed. */
+export function emptyProposals(w: Workspace, groupId: string): { terminalOf: string | null } {
+  const g = groupById(w, groupId);
+  return { terminalOf: g && g.tabs.length === 0 ? (g.from ?? null) : null };
+}
+
 /** Ctrl+\: an empty group right of `groupId`, remembering the session left (its Changes and Terminal are offered). */
 export function split(w: Workspace, groupId: string): Workspace {
   const g = groupById(w, groupId);

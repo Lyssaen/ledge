@@ -2,11 +2,32 @@ import { describe, expect, it } from 'vitest';
 import { routeNav, tabNav } from '../../src/workspace/route';
 import { ATELIER_TAB, SETTINGS_TAB, openrigTab } from '../../src/workspace/store';
 import { empty, focused, keyOf, open, type Workspace } from '../../src/workspace/model';
+import type { OpenSession } from '../../src/workspace/openPrefs';
 import type { NavAction, NavState } from '../../src/nav/state';
 
-const ctx = (o: Partial<{ seat: boolean; modalOpen: boolean }> = {}) => ({ isSeat: () => o.seat ?? false, modalOpen: o.modalOpen ?? false });
+const ctx = (o: Partial<{ seat: boolean; modalOpen: boolean; openSession: OpenSession }> = {}) => ({ isSeat: () => o.seat ?? false, modalOpen: o.modalOpen ?? false, openSession: o.openSession ?? 'active' as OpenSession });
 const active = (w: Workspace) => { const g = focused(w); return g.tabs[g.active]; };
 const applied = (a: NavAction, c = ctx()) => { const r = routeNav(a, c); return { r, tab: r.ws ? active(r.ws(empty())) : undefined }; };
+
+describe('routeNav, the « Ouvrir une session » setting', () => {
+  const base = open(empty(), { kind: 'session', ref: 'a' });
+  it("'right' without where: a new group on the right holds the tab, active", () => {
+    const w = routeNav({ type: 'open', id: 'b' }, ctx({ openSession: 'right' })).ws!(base);
+    expect(w.groups).toHaveLength(2);
+    expect(focused(w).id).toBe('g2');
+    expect(focused(w).tabs.map(keyOf)).toEqual(['session:b']);
+  });
+  it("where 'active' wins over the setting", () => {
+    const w = routeNav({ type: 'open', id: 'b', where: 'active' }, ctx({ openSession: 'right' })).ws!(base);
+    expect(w.groups).toHaveLength(1);
+    expect(focused(w).tabs.map(keyOf)).toEqual(['session:a', 'session:b']);
+  });
+  it('a tab already open is brought forward, never duplicated', () => {
+    const w = routeNav({ type: 'open', id: 'a' }, ctx({ openSession: 'right' })).ws!(base);
+    expect(w.groups).toHaveLength(1);
+    expect(focused(w).tabs).toHaveLength(1);
+  });
+});
 
 describe('routeNav', () => {
   it('open: a session tab, the action kept', () => {
