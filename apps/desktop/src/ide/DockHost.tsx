@@ -1,22 +1,33 @@
-import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type DockviewTheme, type IDockviewPanelProps } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import { useI18n } from '../i18n/lang';
 import { activate, close, find, focused, keyOf, type Tab, type Workspace } from '../workspace/model';
 import type { WorkspaceStore } from '../workspace/store';
+import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
 import type { TabBody } from './tabs';
 import '../styles/ide.css';
 
 export interface DockHostProps { ws: Workspace; store: WorkspaceStore; title(t: Tab): string; body: TabBody }
 
 /** What a panel reads to draw its tab's content: the latest of Shell's, each render. */
-const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody } | null>(null);
+const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; groupOf(id: string): string | undefined; focus: string } | null>(null);
 
 /** One panel = one tab of the model (`id = keyOf(tab)`). dockview draws only the visible one (`onlyWhenVisible`, its default). */
 function Pane({ api }: IDockviewPanelProps): JSX.Element | null {
   const c = useContext(Content);
   const tab = c?.tabOf(api.id);
-  return tab ? <div className="ide-pane">{c!.body(tab)}</div> : null;
+  // Hidden panels stay mounted: the content must know whether it is the one on show.
+  const [visible, setVisible] = useState(api.isVisible);
+  useEffect(() => {
+    setVisible(api.isVisible);
+    const sub = api.onDidVisibilityChange(e => setVisible(e.isVisible));
+    return () => sub.dispose();
+  }, [api]);
+  if (!tab) return null;
+  const group = c!.groupOf(api.id) ?? '';
+  const place: TabPlace = { key: api.id, group, visible, active: visible && group === c!.focus };
+  return <TabPlaceContext.Provider value={place}><div className="ide-pane">{c!.body(tab)}</div></TabPlaceContext.Provider>;
 }
 const COMPONENTS = { tab: Pane };
 const Empty = () => null;
@@ -35,7 +46,7 @@ export function DockHost({ ws, store, title, body }: DockHostProps): JSX.Element
   latest.current = store;
   const group = focused(ws);
   const tabs = new Map(group.tabs.map(tab => [keyOf(tab), tab]));
-  const content = { tabOf: (id: string) => tabs.get(id), body };
+  const content = { tabOf: (id: string) => tabs.get(id), body, groupOf: (id: string) => find(ws, id)?.group.id, focus: ws.focus };
 
   // Every render: a title may have changed (a session renamed) as well as the tabs.
   useLayoutEffect(() => {

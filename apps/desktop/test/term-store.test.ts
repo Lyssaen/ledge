@@ -197,6 +197,20 @@ describe('TermStore tabs and shells', () => {
     expect(shellOf(st, 'local:a', shell!.id).status).toBe('unavailable');
   });
 
+  it('hideAgent(id) detaches only that session\'s screen; without an id it detaches whichever is shown', async () => {
+    const st = store();
+    st.showAgent('local:a', { kind: 'live' }); await tick();
+    const agent = backend.opens[0]!;
+    st.hideAgent('local:b');
+    expect(agent.closed).toBe(false);
+    st.hideAgent('local:a');
+    expect(agent.closed).toBe(true);
+    st.showAgent('local:a', { kind: 'live' }); await tick();
+    const again = backend.opens.at(-1)!;
+    st.hideAgent();
+    expect(again.closed).toBe(true);
+  });
+
   it('the session ends: its shells stay open until their tab closes', async () => {
     const st = store(); const shell = plus(st, 'local:a');
     st.showAgent('local:a', { kind: 'live' }); await tick();

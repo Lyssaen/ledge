@@ -149,8 +149,9 @@ export class TermStore {
     this.emit();
   }
 
-  hideAgent(): void {
-    if (!this.shown) return;
+  /** With an id, only if that session's screen is the one shown: a tab leaving must not detach another tab's screen. */
+  hideAgent(sessionId?: string): void {
+    if (!this.shown || (sessionId !== undefined && this.shown.sid !== sessionId)) return;
     this.leave();
     this.shown = null;
     this.emit();
