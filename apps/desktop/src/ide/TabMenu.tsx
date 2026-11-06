@@ -7,8 +7,8 @@ import { SHELL_ICONS } from '../shell/icons';
 import type { Tab } from '../workspace/model';
 
 /** A tab's right-click menu (mockup `tabctx`). A session or seat names itself and offers the view toggle (`onView` absent
- *  when it has no terminal to switch to); every tab offers « Fermer l'onglet », and « Fermer les autres » when others share its group. */
-export function TabMenu(p: { at: { x: number; y: number }; tab: Tab; name: string; terminal: boolean; others: boolean; onView?: () => void; onClose(): void; onCloseOthers(): void; onDismiss(): void }): JSX.Element {
+ *  when it has no terminal to switch to); every tab offers « Diviser à droite » (Ctrl \), « Fermer l'onglet », and « Fermer les autres » when others share its group. */
+export function TabMenu(p: { at: { x: number; y: number }; tab: Tab; name: string; terminal: boolean; others: boolean; onView?: () => void; onSplit(): void; onClose(): void; onCloseOthers(): void; onDismiss(): void }): JSX.Element {
   const { t } = useI18n();
   const agent = p.tab.kind === 'session' || p.tab.kind === 'seat';
   return (
@@ -21,6 +21,10 @@ export function TabMenu(p: { at: { x: number; y: number }; tab: Tab; name: strin
         </MenuItem>
       )}
       {agent && p.onView && <hr />}
+      <MenuItem onSelect={p.onSplit}>
+        <span><Icon d={SHELL_ICONS.split} size={14} />{t.ide.split}</span>
+        <small aria-hidden="true"><Kbd>{t.ide.splitKey}</Kbd></small>
+      </MenuItem>
       <MenuItem onSelect={p.onClose}><span>{t.ide.closeThisTab}</span></MenuItem>
       {p.others && <MenuItem onSelect={p.onCloseOthers}><span>{t.ide.closeOthers}</span></MenuItem>}
     </Menu>

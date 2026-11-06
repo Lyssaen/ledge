@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeOthers, cycleLink, deserialize, emptyProposals, empty, find, focused, keyOf, MAIN, move, moveTo, open, reconcile, serialize, setView, split, type Tab, type Workspace } from '../../src/workspace/model';
+import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeOthers, cycleLink, deserialize, emptyProposals, empty, find, focusGroup, focused, keyOf, MAIN, move, moveTo, open, reconcile, serialize, setView, split, type Tab, type Workspace } from '../../src/workspace/model';
 
 const S = (id: string): Tab => ({ kind: 'session', ref: id });
 const keys = (w: Workspace, groupId: string) => w.groups.find(g => g.id === groupId)!.tabs.map(keyOf);
@@ -282,6 +282,21 @@ describe('emptyProposals', () => {
     expect(emptyProposals(w, 'g2')).toEqual({ terminalOf: null });
     expect(emptyProposals(open(split(open(empty(), S('pim')), 'g1'), S('x')), 'g2')).toEqual({ terminalOf: null });
     expect(emptyProposals(w, 'nope')).toEqual({ terminalOf: null });
+  });
+});
+
+describe('focusGroup', () => {
+  it('focuses a group, empty ones included, so a tab opened « active » lands in it', () => {
+    const w = activate(split(open(empty(), S('pim')), 'g1'), 'g1', 0);
+    expect(w.focus).toBe('g1');
+    const f = focusGroup(w, 'g2');
+    expect(f.focus).toBe('g2');
+    expect(keys(open(f, agentTerminalTab('pim')), 'g2')).toEqual(['terminal:agent:pim']);
+  });
+  it('the group already focused, or an unknown one: the same object', () => {
+    const w = split(open(empty(), S('pim')), 'g1');
+    expect(focusGroup(w, 'g2')).toBe(w);
+    expect(focusGroup(w, 'nope')).toBe(w);
   });
 });
 

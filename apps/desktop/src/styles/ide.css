@@ -56,6 +56,10 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 /* The editing area (mockup `editor()`): dockview's group, then the bottom panel. */
 .ide-editor { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--background); }
 .ide-dock-area { flex: 1; min-height: 0; position: relative; }
+/* R6: each group keeps 300 px (DockHost's GROUP_MIN_WIDTH); past the area's width the dock overflows and the area scrolls
+   sideways (mockup `.grow-row{overflow-x:auto}`). dockview's element fills the sized box and lays out on its resize. */
+.ide-dock-scroll { position: absolute; inset: 0; overflow-x: auto; overflow-y: hidden; }
+.ide-dock-sized { position: relative; height: 100%; }
 .ide-dockview { position: absolute; inset: 0; }
 .ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--ide-pane); }
 .ide-pane > * { flex: 1; min-height: 0; }
@@ -105,10 +109,22 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
 /* The focused group marks its tab in front with a 2 px line on top, in the links' violet (mockup `.grp.focus .tab.on::before`). */
 .ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ide-link-violet); }
-/* The strip's tools (mockup `.tabs .tools`): « + » at its right end. */
+/* The strip's tools (mockup `.tabs .tools`): « + » and the split, at its right end. */
 .ide-strip-tools { height: 100%; display: flex; align-items: center; gap: 2px; padding-right: 6px; }
 .ide-strip-tools button { height: 22px; padding: 0 7px; display: flex; align-items: center; border-radius: 5px; color: var(--muted-foreground); font-size: 11.5px; }
 .ide-strip-tools button:hover { background: var(--muted); color: var(--foreground); }
+/* The link square, left of the tabs (mockup `.lkbtn`, `.lk`): a 9 px swatch in the group's colour, dashed when unlinked. */
+.ide-lkbtn { width: 24px; height: 100%; display: grid; place-items: center; }
+.ide-lk { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+.ide-lk.violet { background: var(--ide-link-violet); }
+.ide-lk.teal { background: var(--ide-link-teal); }
+.ide-lk.none { border: 1px dashed var(--muted-foreground); }
+/* A group without tabs (mockup emptyGroup(), `.page.empty`): its title, what to do, the proposals wrapping in a narrow group. */
+.ide-empty { flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 22px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.ide-empty h3 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.ide-empty .sub { color: var(--muted-foreground); font-size: 12px; }
+.ide-empty .go { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ide-empty .go .ledge-btn { white-space: nowrap; }
 .ide-dock .dv-default-tab-action { opacity: .55; }
 .ide-dock .dv-default-tab-action:hover { opacity: 1; }
 

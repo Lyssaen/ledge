@@ -1400,6 +1400,13 @@ export const fr = {
     changesChip: (n: number) => `Modifications : ${n} fichier${n > 1 ? 's' : ''} · à côté, dans un groupe lié`,
     replyPlaceholder: (name: string) => `Répondre à ${name}…  Entrée envoie, Maj+Entrée passe à la ligne`,
     replyPlaceholderSeat: (name: string) => `Répondre à ${name} (rig send)…  Entrée envoie, Maj+Entrée passe à la ligne`,
-    newSession: 'Nouvelle session (N)'
+    newSession: 'Nouvelle session (N)',
+    // Lot 3: split (Ctrl+\), the empty group (mockup emptyGroup()), the link square (mockup .lkbtn).
+    split: 'Diviser à droite', splitTip: 'Diviser à droite (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Lier ce groupe (violet, vert d’eau, aucun)',
+    empty: {
+      title: 'Groupe vide', body: 'Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :', terminal: (name: string) => `Terminal · ${name}`,
+      newSession: 'Nouvelle session', openrig: 'OpenRig', settings: 'Réglages', atelier: 'Atelier',
+      tip: 'Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.'
+    }
   }
 };

@@ -193,6 +193,11 @@ export function emptyProposals(w: Workspace, groupId: string): { terminalOf: str
   return { terminalOf: g && g.tabs.length === 0 ? (g.from ?? null) : null };
 }
 
+/** Focuses a group, an empty one included (clicked, or one of its proposals chosen): a tab then opened « active » lands in it. */
+export function focusGroup(w: Workspace, groupId: string): Workspace {
+  return w.focus === groupId || !groupById(w, groupId) ? w : { ...w, focus: groupId };
+}
+
 /** Ctrl+\: an empty group right of `groupId`, remembering the session left (its Changes and Terminal are offered). */
 export function split(w: Workspace, groupId: string): Workspace {
   const g = groupById(w, groupId);

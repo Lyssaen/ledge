@@ -1334,6 +1334,12 @@ export const en: Messages = {
     changesChip: (n) => `Changes: ${n} file${n > 1 ? 's' : ''} · beside, in a linked group`,
     replyPlaceholder: (name) => `Reply to ${name}…  Enter sends, Shift+Enter adds a line`,
     replyPlaceholderSeat: (name) => `Reply to ${name} (rig send)…  Enter sends, Shift+Enter adds a line`,
-    newSession: 'New session (N)'
+    newSession: 'New session (N)',
+    split: 'Split right', splitTip: 'Split right (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Link this group (violet, teal, none)',
+    empty: {
+      title: 'Empty group', body: 'Drag a tab here, open a session from the explorer, or:', terminal: (name) => `Terminal · ${name}`,
+      newSession: 'New session', openrig: 'OpenRig', settings: 'Settings', atelier: 'Atelier',
+      tip: 'Tip: link this group (the square left of the tabs) with the session’s: it will follow the chosen session.'
+    }
   }
 };

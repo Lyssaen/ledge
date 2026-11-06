@@ -297,7 +297,9 @@ describe('the IDE session tab (lot 2)', () => {
     fireEvent.contextMenu(tabOf('Otto'));
     const menu = await screen.findByRole('menu', { name: /Otto/ });
     expect(within(menu).getByText('Otto')).toBeVisible();
-    expect(within(menu).queryByText(/role\.md|Diviser|Ouvrir dans/)).toBeNull();
+    expect(within(menu).queryByText(/role\.md|Ouvrir dans/)).toBeNull();
+    // « Diviser à droite », Ctrl \ on its right (lot 3).
+    expect(within(menu).getByRole('menuitem', { name: /Diviser à droite/ })).toHaveTextContent('Ctrl \\');
     await user.click(within(menu).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
     await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
     expect(tabOf('Otto')).toHaveAccessibleName('Otto');
@@ -442,5 +444,67 @@ describe('the IDE bundle', () => {
     expect(app).not.toMatch(/from '\.\/ide\/(IdeFrame|DockHost)'/);
     expect(readFileSync(resolve(__dirname, '../../src/ide/lazy.tsx'), 'utf8')).toMatch(/import\('\.\/IdeFrame'\)/);
     expect(readFileSync(resolve(__dirname, '../../src/ide/DockHost.tsx'), 'utf8')).toMatch(/dockview-react\/dist\/styles\/dockview\.css/);
+  });
+});
+
+describe('split and the empty group (lot 3)', () => {
+  const groupviews = () => [...document.querySelectorAll<HTMLElement>('.dv-groupview')];
+  const splitKey = () => fireEvent.keyDown(window, { key: '\\', ctrlKey: true });
+
+  it('Ctrl+\\ on Otto: a second group, empty and focused, offering « Terminal · Otto » first; its click opens Otto\'s terminal there', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    splitKey();
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    await waitFor(() => expect(groupviews()[1]).toHaveClass('dv-active-group'));
+    const second = within(groupviews()[1]!);
+    expect(second.getByRole('heading', { name: 'Groupe vide' })).toBeVisible();
+    expect(second.getByText('Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :')).toBeVisible();
+    const buttons = second.getAllByRole('button').filter(b => b.closest('.ide-empty'));
+    expect(buttons.map(b => b.textContent)).toEqual(['Terminal · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier']);
+    expect(buttons[0]).toHaveClass('pri');
+    expect(second.getByText(/^Astuce : lie ce groupe/)).toHaveTextContent('Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.');
+    await user.click(buttons[0]!);
+    await waitFor(() => expect(within(groupviews()[1]!).getByRole('tab', { name: '>_ Otto · tmux' })).toBeInTheDocument());
+    expect(groupviews()).toHaveLength(2);
+    expect(within(groupviews()[0]!).queryByRole('tab', { name: '>_ Otto · tmux' })).toBeNull();
+  });
+
+  it('split from the atelier: no « Terminal · … » and no tip; « Nouvelle session » opens the launch dialog, « Réglages » opens its tab in this group', async () => {
+    const { user } = await mount();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    splitKey();
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    const second = () => within(groupviews()[1]!);
+    expect(second().queryByRole('button', { name: /^Terminal/ })).toBeNull();
+    expect(second().queryByText(/^Astuce/)).toBeNull();
+    await user.click(second().getByRole('button', { name: 'Nouvelle session' }));
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nouvelle session' })).toBeNull());
+    await user.click(second().getByRole('button', { name: 'Réglages' }));
+    await waitFor(() => expect(second().getByRole('tab', { name: 'Réglages' })).toBeInTheDocument());
+    expect(groupviews()).toHaveLength(2);
+  });
+
+  it('« Terminal · X » only while X is a known session', async () => {
+    const { d, tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    splitKey();
+    await waitFor(() => expect(within(groupviews()[1]!).getByRole('button', { name: 'Terminal · Otto' })).toBeVisible());
+    act(() => d.remove('otto'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Terminal · Otto' })).toBeNull());
+  });
+
+  it('the tab menu\'s « Diviser à droite » splits the tab\'s group', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    fireEvent.contextMenu(tabs().find(t => t.getAttribute('aria-label') === 'Otto')!);
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Diviser à droite/ }));
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    expect(within(groupviews()[1]!).getByRole('button', { name: 'Terminal · Otto' })).toBeVisible();
   });
 });

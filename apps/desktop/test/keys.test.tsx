@@ -277,7 +277,7 @@ describe('the terminal and the keyboard', () => {
 });
 
 describe('IDE shortcuts (the ide option)', () => {
-  function Probe(p: { ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void }; dispatch?: (a: unknown) => void; modal?: boolean }) {
+  function Probe(p: { ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void; split?(): void }; dispatch?: (a: unknown) => void; modal?: boolean }) {
     const base = initialNav({ helpers: [], paused: false } as never);
     useKeys((p.dispatch ?? (() => {})) as never, { state: p.modal ? { ...base, modal: { kind: 'search' } } : base, order: [], screen: { current: null }, undo: () => false, ...(p.ide ? { ide: p.ide } : {}) } as never);
     return <div><textarea aria-label="champ" /><div data-terminal><button>term</button></div></div>;
@@ -315,6 +315,25 @@ describe('IDE shortcuts (the ide option)', () => {
     const b = screen.getByText('term'); b.focus();
     press('b'); press('j'); press('/');
     expect(toggle).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+\\ splits, in a textarea too (as VS Code); not under [data-terminal], nor behind a dialog', () => {
+    const toggle = vi.fn(), split = vi.fn(), dispatch = vi.fn();
+    const { unmount } = render(<Probe ide={{ toggle, split }} dispatch={dispatch} />);
+    press('\\');
+    expect(split).toHaveBeenCalledTimes(1);
+    const field = screen.getByLabelText('champ'); field.focus();
+    press('\\', field);
+    expect(split).toHaveBeenCalledTimes(2);
+    screen.getByText('term').focus();
+    press('\\');
+    expect(split).toHaveBeenCalledTimes(2);
+    expect(toggle).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+    unmount();
+    render(<Probe ide={{ toggle, split }} modal />);
+    press('\\');
+    expect(split).toHaveBeenCalledTimes(2);
   });
 
   it('without ide, Ctrl+B does nothing and Ctrl+/ opens the chat', () => {

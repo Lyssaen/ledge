@@ -73,12 +73,13 @@ import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled } from './workspace/prefs';
 import { useOpenSession } from './workspace/openPrefs';
-import { createWorkspaceStore, useWorkspace } from './workspace/store';
+import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { beside, changesBeside, close as closeTab, closeOthers, find as findTab, focused, keyOf, open as openTab, sessionOf, reconcile as reconcileTabs, setView, type Tab } from './workspace/model';
+import { agentTerminalTab, beside, changesBeside, close as closeTab, closeOthers, emptyProposals, find as findTab, focusGroup, focused, keyOf, open as openTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
+import { EmptyGroup, type EmptyPick } from './ide/EmptyGroup';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeDock, IdePlace } from './ide/lazy';
@@ -430,7 +431,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     else focusThread();
   };
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
-  const ideKeys = useMemo(() => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }), newSessionAnywhere: true as const }), [onLayout]);
+  const ideKeys = useMemo(() => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }), split: () => wsStore.update(w => splitGroup(w, w.focus)), newSessionAnywhere: true as const }), [onLayout, wsStore]);
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null, toTerminal, ...(ide ? { ide: ideKeys } : {}) });
   const close = () => dispatch({ type: 'modal', modal: null });
   // Bumped by each broadcast that reached someone: the sidebar's selection, kept until then, is emptied.
@@ -550,6 +551,19 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       }
       return null;
     };
+    // An empty group's proposals open in it: it is focused first, then the tab opened « active » (or brought forward where it
+    // already is: a tab is never duplicated). « Terminal · X » only while X is still a known session.
+    const emptyGroup = (gid: string): ReactNode => {
+      const from = emptyProposals(ws, gid).terminalOf;
+      const s = from === null ? undefined : known.find(x => x.id === from);
+      const pick = (p: EmptyPick) => {
+        wsStore.update(w => focusGroup(w, gid));
+        if (p === 'terminal') { if (s) wsStore.update(w => openTab(w, agentTerminalTab(s.id), 'active')); return; }
+        if (p === 'launch') { dispatch({ type: 'modal', modal: { kind: 'launch' } }); return; }
+        dispatch(tabAction(p === 'atelier' ? ATELIER_TAB : p === 'settings' ? SETTINGS_TAB : openrigTab())!);
+      };
+      return <EmptyGroup terminal={s ? title({ kind: 'session', ref: s.id }) : null} onPick={pick} />;
+    };
     return (
       <IdePlace layout={layout} onLayout={onLayout} blocked={blocked} readOnly={localDown} dragging={!!filing.dragging}
         onSearch={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}
@@ -565,7 +579,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
             asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         }
-        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={() => dispatch({ type: 'modal', modal: { kind: 'launch' } })} />}
+        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={() => dispatch({ type: 'modal', modal: { kind: 'launch' } })} emptyGroup={emptyGroup} />}
         chat={
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
@@ -627,6 +641,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         const canSwitch = hasTerminal(tab, session);
         return <TabMenu at={tabMenu.at} tab={tab} name={title(tab)} terminal={view === 'terminal'} others={hit.group.tabs.length > 1}
           {...(canSwitch && { onView: () => wsStore.update(w => setView(w, key, view === 'terminal' ? 'thread' : 'terminal')) })}
+          onSplit={() => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; })}
           onClose={() => wsStore.update(w => closeTab(w, key))} onCloseOthers={() => wsStore.update(w => closeOthers(w, key))} onDismiss={() => setTabMenu(null)} />;
       })()}
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}

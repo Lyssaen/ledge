@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
-import { DockviewReact, type DockviewApi, type DockviewGroupPanel, type DockviewReadyEvent, type DockviewTheme, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps } from 'dockview-react';
+import { DockviewReact, type DockviewApi, type DockviewGroupPanel, type DockviewReadyEvent, type DockviewTheme, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps, type IWatermarkPanelProps } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
+import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { activate, close, find, keyOf, MAIN, type Group, type Tab, type Workspace } from '../workspace/model';
+import { SHELL_ICONS } from '../shell/icons';
+import { activate, close, cycleLink, find, focusGroup, keyOf, MAIN, split, type Group, type Tab, type Workspace } from '../workspace/model';
 import type { WorkspaceStore } from '../workspace/store';
 import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
 import type { TabBody } from './tabs';
@@ -17,10 +19,16 @@ export interface DockHostProps {
   onTabMenu(t: Tab, at: { x: number; y: number }): void;
   /** The « + » at the right of each tab strip: the launch dialog. */
   onNewSession(): void;
+  /** What a group without tabs shows (EmptyGroup): its proposals. */
+  emptyGroup(groupId: string): ReactNode;
 }
 
+/** R6: a group is never narrower than this (mockup `.grow-row>.pane{min-width:300px}`); past it the editing area scrolls. */
+export const GROUP_MIN_WIDTH = 300;
+
 /** What a panel reads to draw its tab's content: the latest of Shell's, each render. */
-const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; title(t: Tab): string; label(t: Tab): ReactNode; alert(t: Tab): 'perm' | 'ask' | null; onTabMenu(t: Tab, at: { x: number; y: number }): void; onNewSession(): void; groupOf(id: string): string | undefined; focus: string } | null>(null);
+const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; title(t: Tab): string; label(t: Tab): ReactNode; alert(t: Tab): 'perm' | 'ask' | null; onTabMenu(t: Tab, at: { x: number; y: number }): void; onNewSession(): void; groupOf(id: string): string | undefined; focus: string;
+  /** The model group a dockview group draws. */ modelOf(dg: unknown): Group | undefined; emptyGroup(groupId: string): ReactNode; split(groupId: string): void; cycleLink(groupId: string): void } | null>(null);
 
 /** One panel = one tab of the model (`id = keyOf(tab)`). dockview draws only the visible one (`onlyWhenVisible`, its default). */
 function Pane({ api }: IDockviewPanelProps): JSX.Element | null {
@@ -75,30 +83,52 @@ function PanelTab({ api }: IDockviewPanelHeaderProps): JSX.Element | null {
     </span>
   );
 }
-/** The tools at the right of a group's tab strip (mockup groupHtml() `.tabs .tools`): « + », a new session. The split and
- *  the link square come with lot 3. */
-function StripTools(_: IDockviewHeaderActionsProps): JSX.Element {
+/** The tools at the right of a group's tab strip (mockup groupHtml() `.tabs .tools`): « + », a new session, then the split. */
+function StripTools({ group }: IDockviewHeaderActionsProps): JSX.Element {
   const c = useContext(Content);
   const { t } = useI18n();
+  const g = c?.modelOf(group);
   return (
     <div className="ide-strip-tools">
       <button type="button" title={t.ide.newSession} aria-label={t.ide.newSession} onClick={() => c?.onNewSession()}>
         +
       </button>
+      <button type="button" title={t.ide.splitTip} aria-label={t.ide.splitTip} onClick={() => { if (g) c!.split(g.id); }}>
+        <Icon d={SHELL_ICONS.split} size={14} />
+      </button>
     </div>
   );
 }
+/** The link square left of the tabs (mockup `.lkbtn`): the group's colour, dashed when it has none; a click cycles it. */
+function LinkSquare({ group }: IDockviewHeaderActionsProps): JSX.Element {
+  const c = useContext(Content);
+  const { t } = useI18n();
+  const g = c?.modelOf(group);
+  return (
+    <button type="button" className="ide-lkbtn" title={t.ide.linkTip} aria-label={t.ide.linkTip} onClick={() => { if (g) c!.cycleLink(g.id); }}>
+      <span className={`ide-lk ${g?.link ?? 'none'}`} aria-hidden="true" />
+    </button>
+  );
+}
+/** dockview's watermark, shown by a group without a panel: a model group without tabs gets its proposals (EmptyGroup).
+ *  A pointer on it makes the group dockview's active one (dockview's own listener), which focuses the model group. */
+function GroupWatermark({ group }: IWatermarkPanelProps): JSX.Element | null {
+  const c = useContext(Content);
+  const g = group ? c?.modelOf(group) : undefined;
+  if (!g || g.tabs.length > 0) return null;
+  return <div className="ide-pane">{c!.emptyGroup(g.id)}</div>;
+}
 const COMPONENTS = { tab: Pane };
-const Empty = () => null;
 // Ledge's tokens, set on `.ide-dock` in ide.css.
 const THEME: DockviewTheme = { name: 'ledge', className: 'ide-dock' };
 
 /** The editing area: dockview drawing the main window's groups side by side, kept in step both ways. Model → dockview:
  *  one dockview group per model group (window MAIN, left to right), panels added, removed, retitled and activated to
  *  follow `ws`, the focused group made dockview's active one. Dockview → model: a tab chosen or a group clicked is
- *  `activate`d (which focuses its group), a tab closed is `close`d. A model group without tabs is not drawn: a dockview
- *  group lives only while it holds a panel. No drag and drop, no floating groups (lot 3). */
-export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNewSession }: DockHostProps): JSX.Element {
+ *  `activate`d (which focuses its group), a tab closed is `close`d, an empty group clicked is focused. A model group without
+ *  tabs is drawn as an empty dockview group showing its proposals. Each group keeps GROUP_MIN_WIDTH: the dock is as wide as
+ *  its groups need and scrolls sideways in the editing area. No drag and drop, no floating groups (lot 3). */
+export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNewSession, emptyGroup }: DockHostProps): JSX.Element {
   const { t } = useI18n();
   const [api, setApi] = useState<DockviewApi | null>(null);
   // Set while the model is being written into dockview: the events that writing raises are not the user's.
@@ -107,10 +137,13 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   const drawn = useRef(new Map<string, DockviewGroupPanel>());
   const latest = useRef(store);
   latest.current = store;
-  const groups = ws.groups.filter(g => g.window === MAIN && g.tabs.length > 0);
+  const groups = ws.groups.filter(g => g.window === MAIN);
   const tabs = new Map<string, { tab: Tab; group: Group }>();
   for (const g of groups) for (const tab of g.tabs) tabs.set(keyOf(tab), { tab, group: g });
-  const content = { tabOf: (id: string) => tabs.get(id)?.tab, body, title, label, alert, onTabMenu, onNewSession, groupOf: (id: string) => tabs.get(id)?.group.id, focus: ws.focus };
+  // Read when a part renders, after the sync below has drawn (and so mapped) its group.
+  const modelOf = (dg: unknown) => { for (const [id, d] of drawn.current) if (d === dg) return groups.find(g => g.id === id); return undefined; };
+  const content = { tabOf: (id: string) => tabs.get(id)?.tab, body, title, label, alert, onTabMenu, onNewSession, groupOf: (id: string) => tabs.get(id)?.group.id, focus: ws.focus,
+    modelOf, emptyGroup, split: (id: string) => store.update(w => split(w, id)), cycleLink: (id: string) => store.update(w => cycleLink(w, id)) };
 
   // Every render: a title may have changed (a session renamed) as well as the tabs.
   useLayoutEffect(() => {
@@ -118,20 +151,28 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
     syncing.current = true;
     try {
       const table = drawn.current;
-      const prune = () => { const live = new Set(api.groups); for (const [id, dg] of table) if (!live.has(dg) || !groups.some(g => g.id === id)) table.delete(id); };
-      prune();
+      const live = new Set(api.groups);
+      for (const [id, dg] of table) if (!live.has(dg) || !groups.some(g => g.id === id)) table.delete(id);
       // A model group not in the table yet takes the dockview group its panels already sit in, if no other has it.
       for (const g of groups) {
         if (table.has(g.id)) continue;
         const dg = g.tabs.map(tab => api.getPanel(keyOf(tab))?.group).find(Boolean);
         if (dg && ![...table.values()].includes(dg)) table.set(g.id, dg);
       }
-      // Panels gone from the model, or sitting in another group than their model group's, go (re-added below).
-      for (const p of [...api.panels]) { const hit = tabs.get(p.id); if (!hit || table.get(hit.group.id) !== p.group) api.removePanel(p); }
-      prune();   // a dockview group emptied above went with its last panel
+      // Panels gone from the model, or sitting in another group than their model group's, go (re-added below); the groups
+      // they leave stay while they draw a model group (an empty one shows its proposals), the others go.
+      for (const p of [...api.panels]) { const hit = tabs.get(p.id); if (!hit || table.get(hit.group.id) !== p.group) api.removePanel(p, { removeEmptyGroup: false }); }
+      const kept = new Set(table.values());
+      for (const dg of [...api.groups]) if (!kept.has(dg)) api.removeGroup(dg);
       let left: DockviewGroupPanel | undefined;
       for (const g of groups) {
         let dg = table.get(g.id);
+        // An empty group not drawn yet: a dockview group without panels, placed as a new group's first panel would be.
+        if (!dg && g.tabs.length === 0) {
+          const first = api.groups[0];
+          dg = left ? api.addGroup({ referenceGroup: left, direction: 'right' }) : first ? api.addGroup({ referenceGroup: first, direction: 'left' }) : api.addGroup();
+          table.set(g.id, dg);
+        }
         g.tabs.forEach((tab, i) => {
           const id = keyOf(tab);
           const name = title(tab);
@@ -145,6 +186,7 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
           const added = api.addPanel({ id, component: 'tab', title: name, inactive: true, ...(position ? { position } : {}) });
           if (!dg) { dg = added.group; table.set(g.id, dg); }
         });
+        if (dg && dg.minimumWidth !== GROUP_MIN_WIDTH) dg.api.setConstraints({ minimumWidth: GROUP_MIN_WIDTH });
         left = dg;
       }
       // Each group's front tab, then the focused group last: activating a panel also makes its group dockview's active one.
@@ -168,11 +210,13 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
         if (syncing.current || !id) return;
         latest.current.update(w => { const hit = find(w, id); return hit ? activate(w, hit.group.id, hit.index) : w; });
       }),
-      // A click in a group's content: the group is focused, on its front tab.
+      // A click in a group's content: the group is focused, on its front tab; an empty group, on its proposals.
       api.onDidActiveGroupChange(dg => {
-        const id = dg?.activePanel?.id;
-        if (syncing.current || !id) return;
-        latest.current.update(w => { const hit = find(w, id); return hit ? activate(w, hit.group.id, hit.index) : w; });
+        if (syncing.current || !dg) return;
+        const id = dg.activePanel?.id;
+        if (id) { latest.current.update(w => { const hit = find(w, id); return hit ? activate(w, hit.group.id, hit.index) : w; }); return; }
+        const empty = [...drawn.current].find(([, d]) => d === dg)?.[0];
+        if (empty) latest.current.update(w => focusGroup(w, empty));
       }),
       api.onDidRemovePanel(p => { if (!syncing.current) latest.current.update(w => close(w, p.id)); })
     ];
@@ -183,8 +227,15 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
 
   return (
     <Content.Provider value={content}>
-      <DockviewReact className="ide-dockview" components={COMPONENTS} defaultTabComponent={PanelTab} watermarkComponent={Empty} rightHeaderActionsComponent={StripTools} onReady={onReady} theme={THEME}
-        disableDnd disableFloatingGroups messages={messages} />
+      {/* R6: the box is as wide as its groups need; dockview's element fills it (and lays out on its resize), the scroller
+          lets it overflow the editing area. */}
+      <div className="ide-dock-scroll">
+        <div className="ide-dock-sized" style={{ minWidth: `${groups.length * GROUP_MIN_WIDTH}px` }}>
+          <DockviewReact className="ide-dockview" components={COMPONENTS} defaultTabComponent={PanelTab} watermarkComponent={GroupWatermark}
+            leftHeaderActionsComponent={LinkSquare} rightHeaderActionsComponent={StripTools} onReady={onReady} theme={THEME}
+            disableDnd disableFloatingGroups messages={messages} />
+        </div>
+      </div>
     </Content.Provider>
   );
 }

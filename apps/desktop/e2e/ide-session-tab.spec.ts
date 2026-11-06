@@ -258,10 +258,13 @@ test('the mockup\'s look: 8 px dots with a halo on a request, the tab in front o
   expect(Math.abs(rail.width - (inner - 24))).toBeLessThanOrEqual(1);
   await page.locator('.ide-dockview .dv-groupview').first().screenshot({ path: 'e2e/.results/ide-mockup-gaps-group.png' });
   await page.screenshot({ path: 'e2e/.results/ide-mockup-gaps-full.png' });
-  // « + » at the right end of the strip opens the launch dialog.
+  // « + » then the split (lot 3) at the right end of the strip; « + » opens the launch dialog.
   const plus = strip.getByRole('button', { name: 'New session (N)' });
-  const sb = await box(strip), pb = await box(plus);
-  expect(sb.x + sb.width - (pb.x + pb.width)).toBeLessThanOrEqual(8);
+  const split = strip.getByRole('button', { name: 'Split right (Ctrl+\\)' });
+  const sb = await box(strip), pb = await box(plus), xb = await box(split);
+  expect(sb.x + sb.width - (xb.x + xb.width)).toBeLessThanOrEqual(8);
+  expect(xb.x - (pb.x + pb.width)).toBeGreaterThanOrEqual(0);
+  expect(xb.x - (pb.x + pb.width)).toBeLessThanOrEqual(4);
   await plus.click();
   await expect(page.getByRole('dialog', { name: 'New session' })).toBeVisible();
 });
