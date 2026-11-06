@@ -9,19 +9,27 @@ import { EffortStepper, ModelMenu, MODEL_ICONS } from '../launch/ModelMenu';
 import { effective, effortsFor, menuModels, withEffort, withModel } from '../launch/ModelPicker';
 import { useModels } from '../launch/useModels';
 import { cls } from '../shell/cls';
+import { ProviderLogo } from '../ide/ProviderLogo';
+import { modelProvider, providerOf } from '../workspace/sessionTab';
+
+/** Whether the session's model can be changed from here: its machine's daemon takes `session.model`, Ledge launched it, it runs. */
+export function useCanSwitchModel(client: DaemonClient, session: Session): boolean {
+  const daemon = useMachines(client).find(m => m.id === (session.machineId ?? 'local'))?.daemon;
+  return !!daemon?.modelSwitch && session.source === 'launcher' && session.state !== 'exited';
+}
 
 /**
  * A live session's model and effort (#58 lot 2, mockup ledge-model-picker v2): a chip in the reply bar, which opens the
  * agent's models and its effort. Apply restarts the agent on the same conversation with them; while it works the change
- * is scheduled and the chip says « next turn ». Only where the machine's daemon takes `session.model`.
+ * is scheduled and the chip says « next turn ». Only where the machine's daemon takes `session.model`. The `bar` variant is
+ * the IDE session bar's (mockup agentView() `.mdl`): the provider's logo, the model's name and a ▾, no border, no effort.
  */
-export function SessionModel(p: { client: DaemonClient; session: Session; notify(text: string): void }): JSX.Element | null {
+export function SessionModel(p: { client: DaemonClient; session: Session; notify(text: string): void; variant?: 'chip' | 'bar' }): JSX.Element | null {
   const { t } = useI18n();
   const tl = t.launch; const tm = t.session.model;
   const { session } = p;
   const machine = session.machineId ?? 'local';
-  const daemon = useMachines(p.client).find(m => m.id === machine)?.daemon;
-  const able = !!daemon?.modelSwitch && session.source === 'launcher' && session.state !== 'exited';
+  const able = useCanSwitchModel(p.client, session);
   const state = useModels(p.client, able ? machine : null, session.tool);
   const chip = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -51,14 +59,15 @@ export function SessionModel(p: { client: DaemonClient; session: Session; notify
     setOpen(false); chip.current?.focus();
   };
 
+  const bar = p.variant === 'bar';
   return (
     <>
-      <button ref={chip} type="button" className={cls('model-chip', open && 'open', next && 'scheduled')} aria-haspopup="dialog" aria-expanded={open}
+      <button ref={chip} type="button" className={cls('model-chip', bar && 'bar', open && 'open', next && 'scheduled')} aria-haspopup="dialog" aria-expanded={open}
         aria-label={`${tm.label} : ${text(shown)}${next ? ` (${tm.nextTurn})` : ''}`} title={tm.label} onClick={toggle}>
-        <Icon d={MODEL_ICONS.chip} size={14} />
-        <span className="model-chip-text">{text(shown)}</span>
+        {bar ? <ProviderLogo provider={modelProvider(shown.model ?? rows[0]?.id ?? undefined) ?? providerOf(session.tool)} size={12} /> : <Icon d={MODEL_ICONS.chip} size={14} />}
+        <span className="model-chip-text">{bar ? nameOf(shown) : text(shown)}</span>
         {next && <span className="model-chip-next">{tm.nextTurn}</span>}
-        <Icon d={MODEL_ICONS.down} size={14} />
+        {bar ? <span className="car" aria-hidden="true">▾</span> : <Icon d={MODEL_ICONS.down} size={14} />}
       </button>
       {open && chip.current && (
         <ModelMenu anchor={chip.current} up label={tm.label} models={rows} selected={draft.model ?? rows[0]!.id} current={runs.model ?? rows[0]!.id}

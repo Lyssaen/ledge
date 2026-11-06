@@ -1321,7 +1321,15 @@ export const en: Messages = {
     openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
     resizeEdge: 'Drag to resize · double-click: default width', collapse: '« Collapse', collapseTip: 'Collapse the sidebar (Ctrl+B)',
     waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`),
+    tabTerminalView: 'Terminal view', toTerminal: 'Switch to the terminal', toThread: 'Back to the thread', viewKey: 'Ctrl `',
+    closeThisTab: 'Close tab', closeOthers: 'Close others', tabMenu: 'Tab', changesTitle: (name: string) => `Changes · ${name}`,
     openrigTitle: (machine: string) => `OpenRig · ${machine}`, closeTab: (name: string) => `Close ${name}`, editorLabel: 'Editor',
-    bottomLabel: 'Bottom panel', terminals: 'Terminals', output: 'Output', outputTip: 'Output: the rig commands Ledge ran and their result', hidePanel: 'Hide the panel'
+    bottomLabel: 'Bottom panel', terminals: 'Terminals', output: 'Output', outputTip: 'Output: the rig commands Ledge ran and their result', hidePanel: 'Hide the panel',
+    changeModel: 'Change model', context: (used, window) => `Context: ${used} / ${window}`, branch: (b) => `Branch ${b}`,
+    interrupt: 'Interrupt', interruptRefused: (name, why) => `Interrupting ${name} refused: ${why}`,
+    changesChip: (n) => `Changes: ${n} file${n > 1 ? 's' : ''} · beside, in a linked group`,
+    replyPlaceholder: (name) => `Reply to ${name}…  Enter sends, Shift+Enter adds a line`,
+    replyPlaceholderSeat: (name) => `Reply to ${name} (rig send)…  Enter sends, Shift+Enter adds a line`,
+    newSession: 'New session (N)'
   }
 };

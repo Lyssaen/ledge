@@ -1,4 +1,12 @@
 /* The IDE shell (docs/mockups/ledge-ide-interactive.html), behind « Interface IDE (aperçu) »: loaded with its lazy chunk. */
+
+/* The IDE's own tokens. The links' colours (mockup --link1, --link2): the mockup's on dark, darker ones that read on white.
+   The surfaces (mockup --shell under --pane): the tab strip and the session bar on --well, the darkest surface in both
+   themes (dark 0.145, under the title and activity bars' 0.205; light 0.97, under their 0.985); the editor, and the tab in
+   front, on --sidebar, the session page's own background, so the tab in front is lighter than the strip and opens onto it. */
+:root, :root[data-theme="light"] { --ide-link-violet: #6d28d9; --ide-link-teal: #0f766e; }
+:root[data-theme="dark"] { --ide-link-violet: #a78bfa; --ide-link-teal: #2dd4bf; }
+.ide { --ide-strip: var(--well); --ide-pane: var(--sidebar); }
 .ide { height: 100vh; display: grid; grid-template-rows: 34px 1fr 24px; background: var(--background); color: var(--foreground); overflow: hidden; }
 .ide-body { display: grid; grid-template-columns: 48px var(--ide-side, 248px) 1fr var(--ide-right, 300px); min-height: 0; }
 
@@ -49,10 +57,18 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-editor { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--background); }
 .ide-dock-area { flex: 1; min-height: 0; position: relative; }
 .ide-dockview { position: absolute; inset: 0; }
-.ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--background); }
+.ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--ide-pane); }
 .ide-pane > * { flex: 1; min-height: 0; }
+/* A session tab's page (R4, R5): the tab names it and says its view, so what is left of its heading is a thin line, and the
+   page has no right panel to border. */
+.ide-pane .session-page { border-right: 0; }
+.ide-pane .session-page > .pane-heading { height: 32px; }
+/* In a tab the thread and what it pins take the group's width, 12 px in from its sides (mockup `.pb`), not the centred
+   760 px column of the classic page. The messages themselves are drawn as everywhere else. */
+.ide-pane .session-thread { --col: 100%; padding-inline: 12px; }
+.ide-pane .session-thread .rail { max-width: none; }
 
-/* dockview, on Ledge's tokens (mockup `.tabs`, `.tab`): 30 px tabs on the shell's colour, the one in front on the page's. */
+/* dockview, on Ledge's tokens (mockup `.tabs`, `.tab`): 30 px tabs on the strip's colour, the one in front on the page's. */
 .ide-dock {
   --dv-tabs-and-actions-container-font-size: 12px;
   --dv-tabs-and-actions-container-height: 30px;
@@ -70,12 +86,12 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
   --dv-overlay-z-index: 999;
   --dv-tabs-container-scrollbar-color: var(--input);
   --dv-icon-hover-background-color: var(--accent);
-  --dv-group-view-background-color: var(--background);
-  --dv-tabs-and-actions-container-background-color: var(--sidebar);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--background);
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--sidebar);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--sidebar);
+  --dv-group-view-background-color: var(--ide-pane);
+  --dv-tabs-and-actions-container-background-color: var(--ide-strip);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--ide-pane);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--ide-strip);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--ide-pane);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--ide-strip);
   --dv-tab-divider-color: var(--border);
   --dv-activegroup-visiblepanel-tab-color: var(--foreground);
   --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
@@ -86,7 +102,13 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
   color: var(--foreground);
 }
 .ide-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }
-.ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; }
+.ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
+/* The focused group marks its tab in front with a 2 px line on top, in the links' violet (mockup `.grp.focus .tab.on::before`). */
+.ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ide-link-violet); }
+/* The strip's tools (mockup `.tabs .tools`): « + » at its right end. */
+.ide-strip-tools { height: 100%; display: flex; align-items: center; gap: 2px; padding-right: 6px; }
+.ide-strip-tools button { height: 22px; padding: 0 7px; display: flex; align-items: center; border-radius: 5px; color: var(--muted-foreground); font-size: 11.5px; }
+.ide-strip-tools button:hover { background: var(--muted); color: var(--foreground); }
 .ide-dock .dv-default-tab-action { opacity: .55; }
 .ide-dock .dv-default-tab-action:hover { opacity: 1; }
 
@@ -103,3 +125,77 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 /* The right panel (mockup `rightPanel()`): the docked chat, 300 px, no × (Ctrl+/ hides it). */
 .ide-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .ide-right > .ledge-chat-panel { position: static; flex: 1; width: auto; min-height: 0; box-shadow: none; z-index: auto; }
+
+/* A session tab (mockup `.tab`, `tabLabel()`): logo, name, >_, rig, state dot; the alert is a 2 px line under it. */
+/* Its content fills the tab's height and centres on it (mockup `.tab`: align-items center): dockview's part is a block. */
+.ide-dock .dv-tab > .dv-react-part { height: 100%; display: flex; align-items: center; }
+.ide-tab { display: inline-flex; align-items: center; gap: 7px; min-width: 0; height: 100%; }
+.ide-tab .logo { display: inline-flex; }
+.ide-tab .tab-logo { display: inline-flex; }
+.ide-tab .tab-name { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ide-tab .tab-term { font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 11px; color: var(--muted-foreground); }
+.ide-tab .tab-rig { font-size: 11px; color: var(--muted-foreground); }
+/* The state dot (mockup `.dot`): 8 px, a halo round a request, a slow pulse while it works (unless motion is reduced).
+   Colours of the notch's dots (settings.css `.preview-notch .d-*`); the other states stay muted. */
+.ide-tab .tab-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted-foreground); }
+.ide-tab .tab-dot.d-approval { background: var(--sidebar-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sidebar-primary) 20%, transparent); }
+.ide-tab .tab-dot.d-question { background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent); }
+.ide-tab .tab-dot.d-working { background: var(--info); }
+@media (prefers-reduced-motion: no-preference) { .ide-tab .tab-dot.d-working { animation: ide-pulse 1.6s ease-in-out infinite; } }
+@keyframes ide-pulse { 50% { opacity: .45; } }
+.ide-dock .dv-tab.alert { box-shadow: inset 0 -2px 0 var(--destructive); }
+.ide-dock .dv-tab.alert-a { box-shadow: inset 0 -2px 0 var(--warning); }
+
+/* An IDE session tab's bottom bar (mockup agentView() `.sfoot.cbar.pfoot`, `.dchip`): 28 px, a rule on top, the shell's
+   colour; model, context, branch, project, then « Interrompre » and « +N −N » on the right. It narrows with its group. */
+.ide-pane { container-type: inline-size; }
+.ide-bar { flex: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; min-width: 0; overflow: hidden; border-top: 1px solid var(--border); background: var(--ide-strip); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+.ide-bar-model { flex: none; display: flex; align-items: center; min-width: 0; color: var(--foreground); }
+.ide-bar .model-chip { height: 22px; max-width: 220px; padding: 0 4px 0 0; gap: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; font-size: 11.5px; }
+.ide-bar .model-chip:hover { color: var(--foreground); }
+.ide-bar .model-chip-text { font-weight: 400; }
+/* Model: the provider's logo at 12 px, the name, a ▾ at 9 px where it can be switched (mockup `.sfoot.pfoot .mdl`). */
+.ide-bar-mdl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ide-bar .logo { display: inline-grid; place-items: center; flex: none; }
+.ide-bar .model-chip .car { color: var(--muted-foreground); font-size: 9px; }
+.ide-bar-ctx { flex: none; display: flex; align-items: center; gap: 6px; }
+.ide-bar-ctx .ugauge { width: 34px; }
+.ide-bar-ctx b { font-weight: 500; color: var(--foreground); font-variant-numeric: tabular-nums; }
+.ide-bar-ctx.amber b { color: var(--warning); }
+.ide-bar-sep { flex: none; width: 1px; height: 12px; background: var(--border); }
+.ide-bar-chip { font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 11px; padding: 0 2px; }
+.ide-bar-chip.br { min-width: 40px; max-width: 150px; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.ide-bar-chip.pj { min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.ide-bar-side { margin-left: auto; flex: none; display: flex; align-items: center; gap: 4px; }
+.ide-bar-stop { min-width: 26px; height: 22px; padding: 0 6px; display: grid; place-items: center; border: 1px solid var(--input); border-radius: 6px; color: var(--muted-foreground); }
+.ide-bar-stop:hover { color: var(--foreground); }
+.ide-bar-stop i { display: block; width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
+.ide-bar .dchip { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px; border-radius: 5px; font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.ide-bar .dchip:hover, .ide-bar .dchip.on { background: var(--muted); color: var(--foreground); }
+.ide-bar .dchip .a { color: var(--success); }
+.ide-bar .dchip .d { color: var(--danger-text); }
+/* The link's colour of the group showing the Changes. */
+.ide-bar .lk { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.ide-bar .lk-violet { background: var(--ide-link-violet); }
+.ide-bar .lk-teal { background: var(--ide-link-teal); }
+@container (max-width: 560px) { .ide-bar-chip.pj { display: none; } }
+@container (max-width: 470px) { .ide-bar-ctx b, .ide-bar .model-chip .car { display: none; } }
+@container (max-width: 400px) { .ide-bar-chip.br, .ide-bar-sep { display: none; } }
+
+/* The reply in an IDE tab (mockup `.cbox`): a box across the group, 12 px in from its sides, the field alone inside, 72 to
+   240 px high as it grows with its text. What the mockup does not draw but the app needs (the pending card, OMP's queue
+   and « Arrêter », images, a hint giving a reason) keeps its place, in the same width. */
+.ide-reply.session-reply { gap: 0; padding: 0; }
+.ide-reply.session-reply > * { width: auto; max-width: none; margin: 6px 12px 0; }
+.ide-reply.session-reply > .reply-queue { margin: 6px 22px -7px; }
+.ide-reply.session-reply > form { margin: 6px 12px 8px; padding: 0; gap: 0 8px; border: 1px solid var(--input); border-radius: 10px; background: var(--background); }
+.ide-reply.session-reply > form:focus-within { border-color: var(--muted-foreground); }
+.ide-reply.session-reply > form > :not(textarea, .slash-menu, .slash-ghost) { margin-bottom: 6px; }
+.ide-reply.session-reply > form > .reply-hint { margin-left: 12px; }
+.ide-reply.session-reply > form > .reply-stop { margin-left: auto; margin-right: 6px; }
+.ide-reply.session-reply textarea { min-height: 72px; max-height: 240px; padding: 10px 12px 6px; font-size: 13px; line-height: 20px; field-sizing: content; overflow: auto; }
+.ide-reply.session-reply .slash-ghost { top: 10px; }
+
+/* An IDE « Modifications » tab: the Changes view fills it. */
+.ide-changes { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.ide-changes > .changes-view { flex: 1; min-height: 0; }

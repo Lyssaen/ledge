@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -12,7 +12,7 @@ import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
-import type { Machines } from '@ledge/protocol';
+import type { DaemonInfo, Machines } from '@ledge/protocol';
 import { PROJECTS } from '../helpers';
 import { empty, open, serialize } from '../../src/workspace/model';
 import { ATELIER_TAB, WORKSPACE_KEY } from '../../src/workspace/store';
@@ -23,11 +23,12 @@ const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
 
-async function mount({ ide = true, machines = [{ id: 'local', label: 'Local' }] }: { ide?: boolean; machines?: Machines } = {}) {
+async function mount({ ide = true, machines = [{ id: 'local', label: 'Local' }], daemon }: { ide?: boolean; machines?: Machines; daemon?: DaemonInfo } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);
+  if (daemon) d.extras.daemon = daemon;
   d.projects(PROJECTS);
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' }));
   d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'working' }));
@@ -261,7 +262,167 @@ describe('the right panel needs room (whole-branch review)', () => {
   });
 });
 
+describe('the IDE session tab (lot 2)', () => {
+  const tabOf = (name: string) => tabs().find(t => t.getAttribute('aria-label') === name)!;
+
+  it('a session waiting for a permission has the red alert on its tab, one asking a question the amber one', async () => {
+    const { d, tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(tree.getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Nova'));
+    act(() => { d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission' })); d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'waiting_input' })); });
+    await waitFor(() => expect(tabOf('Otto')).toHaveClass('alert'));
+    await waitFor(() => expect(tabOf('Nova')).toHaveClass('alert-a'));
+    expect(tabOf('Atelier')).not.toHaveClass('alert');
+  });
+
+  it('right click on a tab: the menu switches the view to the terminal and back, closes the others', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(tree.getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(tabs()).toHaveLength(3));
+    fireEvent.contextMenu(tabOf('Otto'));
+    const menu = await screen.findByRole('menu', { name: /Otto/ });
+    expect(within(menu).getByText('Otto')).toBeVisible();
+    expect(within(menu).queryByText(/role\.md|Diviser|Ouvrir dans/)).toBeNull();
+    await user.click(within(menu).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    expect(tabOf('Otto')).toHaveAccessibleName('Otto');
+    fireEvent.contextMenu(tabOf('Otto'));
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ }));
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    fireEvent.contextMenu(tabOf('Otto'));
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Fermer les autres' }));
+    await waitFor(() => expect(tabs()).toHaveLength(1));
+    expect(tabs()[0]).toHaveAccessibleName('Otto');
+  });
+
+  it('the bottom bar: Otto\'s +1 opens « Modifications · Otto » in a second group and lights; the model chip is in the bar, not the reply', async () => {
+    const { d, tree, user } = await mount({ daemon: { version: '1', install: 'npm', systemd: true, models: true, modelSwitch: true } });
+    d.thread('otto', [{ kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 1, tool: 'Write', label: '/w/ledge/notes.md', status: 'success', files: [{ path: '/w/ledge/notes.md', change: 'write', diff: '+ Bonjour' }] }]);
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    const page = () => document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]')!;
+    await waitFor(() => expect(page().querySelector('.ide-bar .model-chip')).not.toBeNull());
+    expect(page().querySelector('.session-reply .model-chip')).toBeNull();
+    const chip = await within(page()).findByRole('button', { name: /\+1/ });
+    expect(document.querySelectorAll('.ide-dock .dv-groupview')).toHaveLength(1);
+    await user.click(chip);
+    await waitFor(() => expect(tabs().map(t => t.getAttribute('aria-label'))).toContain('Modifications · Otto'));
+    expect(document.querySelectorAll('.ide-dock .dv-groupview')).toHaveLength(2);
+    await waitFor(() => expect(within(page()).getByRole('button', { name: /\+1/ })).toHaveClass('on'));
+    expect(activeTab()).toHaveAccessibleName('Otto');
+    // On the terminal view, the bar stays.
+    fireEvent.contextMenu(tabOf('Otto'));
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    expect(page().querySelector('.session-reply')).toBeNull();
+    expect(page().querySelector('.ide-bar .model-chip')).not.toBeNull();
+    expect(within(page()).getByRole('button', { name: /\+1/ })).toHaveClass('on');
+    fireEvent.contextMenu(tabOf('Otto'));
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ }));
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    // R10: an action clicked in the Changes tab brings Otto's tab forward (its group focused) and lights nothing.
+    const changes = await waitFor(() => { const el = document.querySelector<HTMLElement>('.ide-changes .file-touches'); expect(el).not.toBeNull(); return el!; });
+    await user.click(tabOf('Modifications · Otto'));
+    await waitFor(() => expect(document.querySelector('.dv-active-group')).toContainElement(tabOf('Modifications · Otto')));
+    await user.click(within(changes).getByRole('button', { name: /^Write · tour 1/ }));
+    await waitFor(() => expect(document.querySelector('.dv-active-group')).toContainElement(tabOf('Otto')));
+    expect(document.querySelector('.action-row.flash')).toBeNull();
+  });
+
+  it('the session menu\'s « Terminal » opens the tab on its terminal view; the stored preference is left alone', async () => {
+    const { tree, user } = await mount();
+    const stored = localStorage.getItem('desktop.session');
+    fireEvent.contextMenu(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Terminal' }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector('.ide-pane .session-page[data-session$="otto"] .agent-view')).not.toBeNull());
+    expect(localStorage.getItem('desktop.session')).toBe(stored);
+  });
+
+  it('the « Modifications » tab draws its session\'s provider logo, aria-hidden, before its name', async () => {
+    const { d, tree, user } = await mount();
+    d.thread('otto', [{ kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 1, tool: 'Write', label: '/w/ledge/notes.md', status: 'success', files: [{ path: '/w/ledge/notes.md', change: 'write', diff: '+ Bonjour' }] }]);
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const page = await waitFor(() => { const el = document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]'); expect(el).not.toBeNull(); return el!; });
+    await user.click(await within(page).findByRole('button', { name: /\+1/ }));
+    await waitFor(() => expect(tabs().map(t => t.getAttribute('aria-label'))).toContain('Modifications · Otto'));
+    const logo = within(tabOf('Modifications · Otto')).getByTitle('Anthropic');
+    expect(logo.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(logo.querySelector('svg')).toHaveAttribute('width', '12');
+    expect(tabOf('Modifications · Otto')).toHaveAccessibleName('Modifications · Otto');
+  });
+
+  it('a session deleted on a ready machine takes its « Modifications » tab with it', async () => {
+    const { d, tree, user } = await mount();
+    d.thread('otto', [{ kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 1, tool: 'Write', label: '/w/ledge/notes.md', status: 'success', files: [{ path: '/w/ledge/notes.md', change: 'write', diff: '+ Bonjour' }] }]);
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const page = await waitFor(() => { const el = document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]'); expect(el).not.toBeNull(); return el!; });
+    await user.click(await within(page).findByRole('button', { name: /\+1/ }));
+    await waitFor(() => expect(tabs().map(t => t.getAttribute('aria-label'))).toContain('Modifications · Otto'));
+    act(() => d.remove('otto'));
+    await waitFor(() => expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Atelier']));
+  });
+
+  it('a lone tab has no « Fermer les autres »; Escape closes the menu', async () => {
+    await mount();
+    fireEvent.contextMenu(tabOf('Atelier'));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Fermer l’onglet' })).toBeVisible();
+    expect(within(menu).queryByRole('menuitem', { name: 'Fermer les autres' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: /terminal/ })).toBeNull();
+    await userEvent.setup().keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+});
+
 describe('the IDE bundle', () => {
+  it('the reply as the mockup\'s box: its placeholder, no hint row, no send button (Enter sends); a seat says « rig send »', async () => {
+    const { d, tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const page = () => document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]')!;
+    const box = await waitFor(() => { const el = page()?.querySelector<HTMLTextAreaElement>('.session-reply textarea'); expect(el).toBeTruthy(); return el!; });
+    expect(box).toHaveAttribute('placeholder', 'Répondre à Otto…  Entrée envoie, Maj+Entrée passe à la ligne');
+    expect(page().querySelector('.reply-hint')).toBeNull();
+    expect(within(page()).queryByRole('button', { name: 'Envoyer' })).toBeNull();
+    await user.type(box, 'Bonjour{Enter}');
+    await waitFor(() => expect(d.received.filter(m => m.type === 'session.reply')).toEqual([expect.objectContaining({ text: 'Bonjour' })]));
+    // A seat (session.rig) is answered through « rig send ».
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', rig: { seat: 'dev@r', name: 'ledge-dev' } })));
+    await waitFor(() => expect(page().querySelector('.session-reply textarea')).toHaveAttribute('placeholder', 'Répondre à Otto (rig send)…  Entrée envoie, Maj+Entrée passe à la ligne'));
+  });
+
+  it('in the IDE, once a note is typed during an approval, the hint says Enter denies with it', async () => {
+    const { d, tree, user } = await mount();
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } })));
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const page = () => document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]')!;
+    const box = await waitFor(() => { const el = page()?.querySelector<HTMLTextAreaElement>('.session-reply textarea'); expect(el).toBeTruthy(); return el!; });
+    expect(page().querySelector('.reply-hint')).toBeNull();
+    await user.type(box, 'plutôt pnpm');
+    await waitFor(() => expect(page().querySelector('.reply-hint')).toHaveTextContent('Entrée refuse avec ce message'));
+  });
+
+  it('in the IDE a hint that says why the field is shut stays', async () => {
+    const { d, tree, user } = await mount();
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', tool: 'codex', state: 'waiting_input', pending: { kind: 'question', text: 'Quel port ?', options: ['8080', '3000'], source: 'hook' } })));
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const hint = await waitFor(() => { const el = document.querySelector('.ide-pane .session-page[data-session$="otto"] .reply-hint'); expect(el).not.toBeNull(); return el!; });
+    expect(hint).toHaveTextContent('Choisissez une des réponses proposées (1–9).');
+  });
+
+  it('« + » at the right of each tab strip opens the launch dialog', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    const plus = screen.getByRole('button', { name: 'Nouvelle session (N)' });
+    expect(plus.closest('.dv-right-actions-container')).not.toBeNull();
+    await user.click(plus);
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+  });
+
   it('the shell loads the IDE in a chunk of its own: App imports neither dockview nor the frame', () => {
     const app = readFileSync(resolve(__dirname, '../../src/App.tsx'), 'utf8');
     expect(app).not.toMatch(/from 'dockview/);

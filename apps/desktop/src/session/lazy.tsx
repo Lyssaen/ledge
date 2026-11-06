@@ -1,6 +1,7 @@
 import { lazy, Suspense, type JSX } from 'react';
 import { ChunkBoundary } from '../shell/ChunkBoundary';
 import type { WorkspaceProps } from './Workspace';
+import type { ChangesTabProps } from './ChangesTab';
 
 type WorkspaceModule = typeof import('./Workspace');
 type Loaded = { default: WorkspaceModule['Workspace'] };
@@ -23,4 +24,14 @@ const Page = lazy(() => (loaded
 /** The session place, behind a sober wait (an empty workspace) the first time its chunk is fetched; a chunk that fails to load leaves a note (ChunkBoundary). */
 export function SessionPlace(props: WorkspaceProps): JSX.Element {
   return <ChunkBoundary><Suspense fallback={<div className="conversation-workspace" aria-busy="true" />}><Page {...props} /></Suspense></ChunkBoundary>;
+}
+
+type ChangesLoaded = { default: WorkspaceModule['ChangesTab'] };
+const ChangesPage = lazy(() => (loaded
+  ? { then: (ok: (m: ChangesLoaded) => void) => ok({ default: loaded!.ChangesTab }) } as PromiseLike<ChangesLoaded> as Promise<ChangesLoaded>
+  : loadWorkspace().then(m => ({ default: m.ChangesTab }))));
+
+/** An IDE « Modifications · <name> » tab, from the session page's chunk (its diffs), behind the same sober wait. */
+export function ChangesPlace(props: ChangesTabProps): JSX.Element {
+  return <ChunkBoundary><Suspense fallback={<div className="ide-changes" aria-busy="true" />}><ChangesPage {...props} /></Suspense></ChunkBoundary>;
 }

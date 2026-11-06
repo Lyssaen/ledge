@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { initialNav, type NavAction, type NavState } from '../src/nav/state';
 import { useKeys } from '../src/nav/useKeys';
 import { ScreenKeysContext, useScreenKeys, type ScreenKeys } from '../src/nav/screenKeys';
+import { TabPlaceContext } from '../src/workspace/tabPlace';
 
 const base = initialNav({ view: 'atelier', helpers: true, paused: false });
 function Harness({ state, keys, dispatch }: { state: NavState; keys: ScreenKeys; dispatch: (a: NavAction) => void }) {
@@ -93,5 +94,42 @@ describe('screen keys', () => {
     expect(keys.current!(new KeyboardEvent('keydown', { key: 'x' }))).toBe(true);
     unmount();
     expect(keys.current).toBeNull();
+  });
+});
+
+describe('screen keys inside IDE tabs', () => {
+  const place = (key: string, active: boolean) => ({ key, group: 'g1', visible: active, active });
+  function Screen({ handler }: { handler: () => boolean }) { useScreenKeys(handler); return null; }
+  function Two({ keys, a, b, ha, hb }: { keys: ScreenKeys; a: boolean; b: boolean; ha: () => boolean; hb: () => boolean }) {
+    return (
+      <ScreenKeysContext.Provider value={keys}>
+        <TabPlaceContext.Provider value={place('a', a)}><Screen handler={ha} /></TabPlaceContext.Provider>
+        <TabPlaceContext.Provider value={place('b', b)}><Screen handler={hb} /></TabPlaceContext.Provider>
+      </ScreenKeysContext.Provider>
+    );
+  }
+  const call = (keys: ScreenKeys) => keys.current?.(new KeyboardEvent('keydown', { key: 'j' }));
+
+  it('only the active tab\'s screen is registered, and the registration follows the active tab', () => {
+    const keys: ScreenKeys = { current: null };
+    const ha = vi.fn(() => true), hb = vi.fn(() => true);
+    const { rerender } = render(<Two keys={keys} a b={false} ha={ha} hb={hb} />);
+    call(keys);
+    expect([ha.mock.calls.length, hb.mock.calls.length]).toEqual([1, 0]);
+    rerender(<Two keys={keys} a={false} b ha={ha} hb={hb} />);
+    call(keys);
+    expect([ha.mock.calls.length, hb.mock.calls.length]).toEqual([1, 1]);
+    rerender(<Two keys={keys} a b={false} ha={ha} hb={hb} />);
+    call(keys);
+    expect([ha.mock.calls.length, hb.mock.calls.length]).toEqual([2, 1]);
+    rerender(<Two keys={keys} a={false} b={false} ha={ha} hb={hb} />);
+    expect(keys.current).toBeNull();
+  });
+  it('without a place the last mounted screen wins, as ever', () => {
+    const keys: ScreenKeys = { current: null };
+    const ha = vi.fn(() => true), hb = vi.fn(() => true);
+    render(<ScreenKeysContext.Provider value={keys}><Screen handler={ha} /><Screen handler={hb} /></ScreenKeysContext.Provider>);
+    call(keys);
+    expect([ha.mock.calls.length, hb.mock.calls.length]).toEqual([0, 1]);
   });
 });

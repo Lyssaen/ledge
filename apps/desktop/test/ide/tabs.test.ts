@@ -22,4 +22,8 @@ describe('tabTitle', () => {
     expect(tabTitle({ kind: 'openrig', ref: 'srv-build' }, ctx)).toBe('OpenRig · srv-build');
     expect(tabTitle({ kind: 'openrig', ref: 'local' }, { ...ctx, machine: id => (id === 'local' ? 'WSL' : undefined) })).toBe('OpenRig · WSL');
   });
+  it('the Changes of a session: « Modifications · name »', () => {
+    const a = fakeSession('a', { name: 'Otto' });
+    expect(tabTitle({ kind: 'changes', ref: 'a' }, { ...ctx, session: id => (id === 'a' ? a : undefined) })).toBe('Modifications · Otto');
+  });
 });

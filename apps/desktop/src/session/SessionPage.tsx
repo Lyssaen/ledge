@@ -10,6 +10,8 @@ import { repoOf } from '../list/model';
 import { machineOf } from '../nav/agents';
 import type { NavAction, NavState } from '../nav/state';
 import { useScreenKeys, type ScreenKeyHandler } from '../nav/screenKeys';
+import { useTabPlace } from '../workspace/tabPlace';
+import { sortOf } from './PendingCard';
 import { cls } from '../shell/cls';
 import { SHELL_ICONS } from '../shell/icons';
 import { findFile, type ChangedFile } from './changedFiles';
@@ -25,6 +27,8 @@ import { clampSplit, type SessionView } from './prefs';
 import { ArchivedBanner } from '../manage/ArchivedBanner';
 import type { SessionActions } from '../manage/useSessionActions';
 import { Reply } from './Reply';
+import { SessionBar } from './SessionBar';
+import type { Link } from '../workspace/model';
 import type { CaptureFocus } from './BrowserTab';
 import { capturesOf } from './captures';
 import { isLocal, kindOf, pillOf, useBrowser } from './browserLive';
@@ -69,6 +73,11 @@ export interface SessionPageProps {
   split: number; onSplit(v: number): void;
   /** The documents beside the thread are read through it. */
   client: DaemonClient;
+  /** In an IDE tab (R4): no Fil | Terminal switch nor meta in the heading (the tab says them), no right panel (O is not taken). */
+  ide?: boolean;
+  /** Read only with `ide`, for the bottom bar: the project line (projectLabel), the colour of the linked group showing this
+   *  session's Changes (null: none), and « +N −N », which opens them beside. */
+  project?: string; besideLink?: Link | null; onChanges?(): void;
 }
 
 /** After the last scroll, the reading position is written down this late (and when the page closes). */
@@ -79,6 +88,8 @@ const MARKER_OFFSET = 120;
 const FLASH_MS = 1800;
 
 export interface PageApi { showInThread(toolId: string): void }
+
+const noop = () => {};
 
 const VIEWS: ReadonlyArray<{ view: SessionView; icon: readonly string[] }> = [{ view: 'thread', icon: SHELL_ICONS.thread }, { view: 'terminal', icon: SHELL_ICONS.terminal }];
 
@@ -128,6 +139,18 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   const [flash, setFlash] = useState<{ id: string } | null>(null);
   // Back on the thread: where the reader left it, or (from « tour 2 ») the action, which the flash brings into view.
   const returning = useRef<'restore' | 'aim' | null>(null);
+  // In an IDE tab, the page stays mounted while hidden (dockview detaches its DOM, which loses its scroll): shown again,
+  // the thread comes back where it was left (R6). So does a thread view set from outside the page (the tab's menu), which
+  // never goes through switchView; a restore asked while on Terminal waits for the thread. Outside the IDE, always shown,
+  // and only switchView asks.
+  const tabPlace = useTabPlace();
+  const visible = tabPlace?.visible ?? true;
+  const wasVisible = useRef(visible);
+  const prevView = useRef(view);
+  if (tabPlace !== null && returning.current === null
+    && ((visible && !wasVisible.current) || (view === 'thread' && prevView.current !== 'thread'))) returning.current = 'restore';
+  wasVisible.current = visible;
+  prevView.current = view;
   const viewNow = useRef(view);
   viewNow.current = view;
   const seatNow = useRef(seat !== null);
@@ -314,7 +337,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   // Hidden under the Changes view, the thread is left where it is; back on it, the reader finds it there again.
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (!el || !loaded || view !== 'thread') return;
+    if (!el || !loaded || view !== 'thread' || !visible) return;
     const back = returning.current;
     returning.current = null;
     if (!opened.current) {
@@ -329,7 +352,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
     follow.current = atEnd(el);
     pos.current = follow.current ? null : el.scrollTop;
     setAtBottom(follow.current);
-  }, [items, loaded, memo.scroll, view]);
+  }, [items, loaded, memo.scroll, view, visible]);
   // The column or what is in it changed size without a scroll (a new item, the pinned card, the pane narrowing the column):
   // a reader at the end keeps the end in view (lot 6a's rule); higher up, the view never moves and the end, now below it,
   // is said by « Aller au plus récent ».
@@ -385,7 +408,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   };
   const onScroll = () => {
     const el = scroller.current;
-    if (!el || view !== 'thread') return;
+    if (!el || view !== 'thread' || !visible) return;
     follow.current = atEnd(el);
     pos.current = follow.current ? null : el.scrollTop;
     setAtBottom(follow.current);
@@ -421,7 +444,9 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
     if (e.key === 'Escape' && todoShown) { setTodoOpen(false); return true; }
     if (e.key === 'Escape' && paneShown) { closeTab(activeTab!); return true; }
     if (replyKeys.current?.(e)) return true;
-    if (e.key === 'o' || e.key === 'O') { p.onPanel(); return true; }
+    // In an IDE tab on Terminal, the reply is not there: Y / N still answer a permission the page's own agent waits on.
+    if (p.ide && view === 'terminal' && termDecides(e)) return true;
+    if (!p.ide && (e.key === 'o' || e.key === 'O')) { p.onPanel(); return true; }
     const k = e.key.toLowerCase();
     if (k !== 'j' && k !== 'k') return false;
     // The panel's Modifications first, else the side pane's change beside the thread.
@@ -431,6 +456,13 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
     (p.changes.shown ? p.changes.step : stepPane)(k === 'j' ? 1 : -1);
     return true;
   });
+  function termDecides(e: globalThis.KeyboardEvent): boolean {
+    const k = e.key.toLowerCase();
+    // As Reply, which the thread view mounts: none on a subagent's page, archived, on an OMP seat, offline or read only.
+    if ((k !== 'y' && k !== 'n') || helper || archived || seat !== null || !shown || sortOf(shown) !== 'approval' || session.source === 'hook_only') return false;
+    if (!e.repeat) p.decisions.decide(session, k === 'y' ? 'accept' : 'deny');
+    return true;
+  }
   // ← / → on a tab: the other view, and the focus to its tab.
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     // Alt ← / → is the previous / next session (useKeys), not this switch.
@@ -453,10 +485,14 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   const kids = helper === null ? session.helpers ?? [] : [];
   const tb = t.session.browser;
   const pill = pillOf(kindOf(browser, isLocal(session)), captures.length);
+  const termChip = view === 'terminal' && agent.mode.kind !== 'native';
+  const termExternal = view === 'terminal' && agent.mode.kind !== 'browser' && agent.mode.kind !== 'offline' && agent.mode.kind !== 'native';
+  // In an IDE tab the heading holds only what the tab does not say (R5), and is not drawn when that is nothing.
+  const heading = !p.ide || termChip || termExternal || !!session.handover || !!session.relieves || !!tags || kids.length > 0 || pill !== null;
   return (
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
-      <div className="pane-heading">
-        <div className="view-switch" role="tablist" aria-label={t.session.views.label}>
+      {heading && <div className="pane-heading">
+        {!p.ide && <div className="view-switch" role="tablist" aria-label={t.session.views.label}>
           {VIEWS.map(({ view: v, icon }) => { const gone = v === 'terminal' && seat === 'stopped'; return (
             <button key={v} type="button" role="tab" id={`session-tab-${v}`} aria-selected={view === v} tabIndex={view === v ? 0 : -1}
               {...(gone ? { 'aria-disabled': true, title: t.top.terminalGone } : {})} onClick={() => { if (!gone) switchView(v, true); }} onKeyDown={onTabKey}>
@@ -466,11 +502,11 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
               {v === 'terminal' && <span className={cls('view-dot', agent.dot)} aria-hidden="true" />}
             </button>
           ); })}
-        </div>
-        <SessionMeta session={session} place={[machine, repoOf(session)].filter((x): x is string => !!x)} near={near} />
+        </div>}
+        {!p.ide && <SessionMeta session={session} place={[machine, repoOf(session)].filter((x): x is string => !!x)} near={near} />}
         {/* On Terminal, where the agent's screen runs, and « ouvrir dans un terminal externe ». */}
-        {view === 'terminal' && agent.mode.kind !== 'native' && <span className="term-chip mono">{agent.remote ? t.session.terminal.remote(agent.host) : t.session.terminal.local}</span>}
-        {view === 'terminal' && agent.mode.kind !== 'browser' && agent.mode.kind !== 'offline' && agent.mode.kind !== 'native' && (
+        {termChip && <span className="term-chip mono">{agent.remote ? t.session.terminal.remote(agent.host) : t.session.terminal.local}</span>}
+        {termExternal && (
           <Button variant="ghost" size="icon" className="term-icon" onClick={external} aria-label={t.session.terminal.external} title={t.session.terminal.external}><Icon d={ICONS.external.d} size={14} /></Button>
         )}
         {/* Its relief (context handover spec §3.3): under way, done (the relief opens), or the one it relieves. */}
@@ -489,12 +525,12 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
             {captures.length > 0 && <span className="tab-count mono">{captures.length}</span>}
           </button>
         )}
-      </div>
+      </div>}
       {archived && <ArchivedBanner session={session} actions={p.actions} now={now} />}
       <div className={cls('session-split', paneShown && 'has-pane')} style={{ '--split': `${p.split * 100}%`, '--reply-h': `${replyH}px` } as CSSProperties}>
         <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
-          <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : { 'aria-labelledby': 'session-tab-terminal' })}>
+          <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : p.ide ? { 'aria-label': t.session.views.terminal } : { 'aria-labelledby': 'session-tab-terminal' })}>
             <div className="messages session-thread" ref={scroller} data-thread-focus tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
               {seat !== null ? <SeatNote stopped={seat === 'stopped'} onOpenRig={() => p.dispatch({ type: 'openrig', section: 'rigs', machine: session.machineId ?? 'local' })} /> : <>
               {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
@@ -526,7 +562,9 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
             </div>
           )}
           {view === 'thread' && !archived && seat === null && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
-            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} />}
+            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} modelChip={!p.ide} ide={p.ide} />}
+          {/* In an IDE tab, on the thread as on the terminal: the model, the context, where it works, and its changes. */}
+          {p.ide && <SessionBar client={p.client} session={session} project={p.project ?? ''} files={files} besideLink={p.besideLink ?? null} notify={p.notify} onChanges={p.onChanges ?? noop} />}
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}

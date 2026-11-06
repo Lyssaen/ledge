@@ -11,7 +11,7 @@ const typing = (el: Element | null): boolean => {
 
 /** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Ctrl/⌘ Z too, outside a field) (Escape after the dialog and the chat, offered to the screen before navigation),
  *  except in the terminal, which keeps every key for its shell; Ctrl + the key left of 1 takes the keyboard there. The single keys stay out of the way of dialogs, fields and the chat. */
-export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean; /** The IDE shell (flag on): Ctrl B / Ctrl J / Ctrl / show or hide its panels, even in a field (never in the terminal). */ ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void } }): void {
+export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean; /** The IDE shell (flag on): Ctrl B / Ctrl J / Ctrl / show or hide its panels, even in a field (never in the terminal). */ ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void; /** N opens the launch dialog from any tab, not only the overview (the screen's keys run first: on an approval N denies). */ newSessionAnywhere?: true } }): void {
   const latest = useRef({ dispatch, ctx });
   latest.current = { dispatch, ctx };
   useEffect(() => {
@@ -65,7 +65,7 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       if (mod || e.altKey) return;
       if (screen.current?.(e)) { e.preventDefault(); return; }
       if (e.key === '?') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'shortcuts' } }); }
-      else if (key === 'n' && !e.shiftKey && place.kind === 'overview') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'launch' } }); }
+      else if (key === 'n' && !e.shiftKey && (place.kind === 'overview' || ide?.newSessionAnywhere)) { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'launch' } }); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
