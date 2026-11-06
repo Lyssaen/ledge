@@ -218,3 +218,61 @@ test('the bar\'s branch and « +N −N » are in the mono face, as in the mockup
   for (const l of [bar(page, 'Nova').locator('.ide-bar-chip.br'), bar(page, 'Nova').locator('.dchip')])
     expect(await l.evaluate(el => getComputedStyle(el).fontFamily)).toMatch(/Mono|monospace/);
 });
+
+/** A colour token resolved by the browser, as an element's computed colour. */
+const token = (page: Page, v: string) => page.evaluate(name => {
+  const p = document.createElement('i'); p.style.color = `var(${name})`; document.querySelector('.ide-dock')!.append(p);
+  const c = getComputedStyle(p).color; p.remove(); return c;
+}, v);
+const bg = (l: Locator) => l.evaluate(el => getComputedStyle(el).backgroundColor);
+
+test('the mockup\'s look: 8 px dots with a halo on a request, the tab in front on the page\'s colour above a darker strip, the violet focus stripe, the reply box and thread across the group, « + »', async ({ page }) => {
+  await boot(page);
+  await open(page, 'Otto');
+  await open(page, 'Nova');
+  // The dot: 8 px; Otto waits for an approval, a 3 px halo of its colour.
+  const dot = tabOf(page, 'Otto').locator('.tab-dot');
+  expect((await box(dot)).width).toBe(8);
+  expect(await dot.evaluate(el => getComputedStyle(el).boxShadow)).toMatch(/0px 0px 0px 3px/);
+  expect(await tabOf(page, 'Nova').locator('.tab-dot').evaluate(el => getComputedStyle(el).boxShadow)).toBe('none');
+  // Surfaces: the tab in front is the editor's colour, the strip and the session bar another, the same.
+  const strip = page.locator('.ide-dockview .dv-tabs-and-actions-container').first();
+  const front = tabOf(page, 'Nova'), behind = tabOf(page, 'Otto');
+  const editor = pane(page, 'Nova').locator('.session-page');
+  expect(await bg(front)).toBe(await bg(editor));
+  expect(await bg(strip)).not.toBe(await bg(front));
+  expect(await bg(behind)).toBe(await bg(strip));
+  expect(await bg(bar(page, 'Nova'))).toBe(await bg(strip));
+  // The focused group's stripe: 2 px in the links' violet.
+  const stripe = await front.evaluate(el => { const s = getComputedStyle(el, '::before'); return { h: s.height, c: s.backgroundColor }; });
+  expect(stripe).toEqual({ h: '2px', c: await token(page, '--ide-link-violet') });
+  // The reply box and the thread span the group, 12 px in from each side.
+  const group = await box(page.locator('.ide-dockview .dv-groupview').first());
+  const form = await box(pane(page, 'Nova').locator('.session-reply form'));
+  expect(Math.abs(form.width - (group.width - 24))).toBeLessThanOrEqual(1);
+  expect(Math.abs(form.x - (group.x + 12))).toBeLessThanOrEqual(1);
+  expect((await box(pane(page, 'Nova').locator('.session-reply textarea'))).height).toBeGreaterThanOrEqual(72);
+  const rail = await box(thread(page, 'Nova').locator('.rail'));
+  expect(Math.abs(rail.width - (group.width - 24))).toBeLessThanOrEqual(16); // the thread's scrollbar, if any
+  await page.locator('.ide-dockview .dv-groupview').first().screenshot({ path: 'e2e/.results/ide-mockup-gaps-group.png' });
+  await page.screenshot({ path: 'e2e/.results/ide-mockup-gaps-full.png' });
+  // « + » at the right end of the strip opens the launch dialog.
+  const plus = strip.getByRole('button', { name: 'New session (N)' });
+  const sb = await box(strip), pb = await box(plus);
+  expect(sb.x + sb.width - (pb.x + pb.width)).toBeLessThanOrEqual(8);
+  await plus.click();
+  await expect(page.getByRole('dialog', { name: 'New session' })).toBeVisible();
+});
+
+test('light theme: the same relation of surfaces, and the links\' darker violet', async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('desktop.theme', 'light'); } catch { /* ignore */ } });
+  await boot(page);
+  await open(page, 'Nova');
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+  const strip = page.locator('.ide-dockview .dv-tabs-and-actions-container').first();
+  const front = tabOf(page, 'Nova');
+  expect(await bg(front)).toBe(await bg(pane(page, 'Nova').locator('.session-page')));
+  expect(await bg(strip)).not.toBe(await bg(front));
+  expect(await token(page, '--ide-link-violet')).toBe('rgb(109, 40, 217)');
+  await page.screenshot({ path: 'e2e/.results/ide-mockup-gaps-light.png' });
+});

@@ -63,6 +63,10 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
    page has no right panel to border. */
 .ide-pane .session-page { border-right: 0; }
 .ide-pane .session-page > .pane-heading { height: 32px; }
+/* In a tab the thread and what it pins take the group's width, 12 px in from its sides (mockup `.pb`), not the centred
+   760 px column of the classic page. The messages themselves are drawn as everywhere else. */
+.ide-pane .session-thread { --col: 100%; padding-inline: 12px; }
+.ide-pane .session-thread .rail { max-width: none; }
 
 /* dockview, on Ledge's tokens (mockup `.tabs`, `.tab`): 30 px tabs on the strip's colour, the one in front on the page's. */
 .ide-dock {
@@ -101,6 +105,10 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
 /* The focused group marks its tab in front with a 2 px line on top, in the links' violet (mockup `.grp.focus .tab.on::before`). */
 .ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ide-link-violet); }
+/* The strip's tools (mockup `.tabs .tools`): « + » at its right end. */
+.ide-strip-tools { height: 100%; display: flex; align-items: center; gap: 2px; padding-right: 6px; }
+.ide-strip-tools button { height: 22px; padding: 0 7px; display: flex; align-items: center; border-radius: 5px; color: var(--muted-foreground); font-size: 11.5px; }
+.ide-strip-tools button:hover { background: var(--muted); color: var(--foreground); }
 .ide-dock .dv-default-tab-action { opacity: .55; }
 .ide-dock .dv-default-tab-action:hover { opacity: 1; }
 
@@ -172,8 +180,19 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 @container (max-width: 470px) { .ide-bar-ctx b, .ide-bar .model-chip .car { display: none; } }
 @container (max-width: 400px) { .ide-bar-chip.br, .ide-bar-sep { display: none; } }
 
-/* The reply in an IDE tab (mockup `.cbox`): a field 72 to 240 px high that grows with its text. */
-.ide-pane .session-reply textarea { min-height: 72px; max-height: 240px; field-sizing: content; overflow: auto; }
+/* The reply in an IDE tab (mockup `.cbox`): a box across the group, 12 px in from its sides, the field alone inside, 72 to
+   240 px high as it grows with its text. What the mockup does not draw but the app needs (the pending card, OMP's queue
+   and « Arrêter », images, a hint giving a reason) keeps its place, in the same width. */
+.ide-reply.session-reply { gap: 0; padding: 0; }
+.ide-reply.session-reply > * { width: auto; max-width: none; margin: 6px 12px 0; }
+.ide-reply.session-reply > .reply-queue { margin: 6px 22px -7px; }
+.ide-reply.session-reply > form { margin: 6px 12px 8px; padding: 0; gap: 0 8px; border: 1px solid var(--input); border-radius: 10px; background: var(--background); }
+.ide-reply.session-reply > form:focus-within { border-color: var(--muted-foreground); }
+.ide-reply.session-reply > form > :not(textarea, .slash-menu, .slash-ghost) { margin-bottom: 6px; }
+.ide-reply.session-reply > form > .reply-hint { margin-left: 12px; }
+.ide-reply.session-reply > form > .reply-stop { margin-left: auto; margin-right: 6px; }
+.ide-reply.session-reply textarea { min-height: 72px; max-height: 240px; padding: 10px 12px 6px; font-size: 13px; line-height: 20px; field-sizing: content; overflow: auto; }
+.ide-reply.session-reply .slash-ghost { top: 10px; }
 
 /* An IDE « Modifications » tab: the Changes view fills it. */
 .ide-changes { height: 100%; display: flex; flex-direction: column; min-height: 0; }

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
-import { DockviewReact, type DockviewApi, type DockviewGroupPanel, type DockviewReadyEvent, type DockviewTheme, type IDockviewPanelHeaderProps, type IDockviewPanelProps } from 'dockview-react';
+import { DockviewReact, type DockviewApi, type DockviewGroupPanel, type DockviewReadyEvent, type DockviewTheme, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import { useI18n } from '../i18n/lang';
 import { activate, close, find, keyOf, MAIN, type Group, type Tab, type Workspace } from '../workspace/model';
@@ -15,10 +15,12 @@ export interface DockHostProps {
   /** The alert a tab carries: a red or amber line under it. */
   alert(t: Tab): 'perm' | 'ask' | null;
   onTabMenu(t: Tab, at: { x: number; y: number }): void;
+  /** The « + » at the right of each tab strip: the launch dialog. */
+  onNewSession(): void;
 }
 
 /** What a panel reads to draw its tab's content: the latest of Shell's, each render. */
-const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; title(t: Tab): string; label(t: Tab): ReactNode; alert(t: Tab): 'perm' | 'ask' | null; onTabMenu(t: Tab, at: { x: number; y: number }): void; groupOf(id: string): string | undefined; focus: string } | null>(null);
+const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; title(t: Tab): string; label(t: Tab): ReactNode; alert(t: Tab): 'perm' | 'ask' | null; onTabMenu(t: Tab, at: { x: number; y: number }): void; onNewSession(): void; groupOf(id: string): string | undefined; focus: string } | null>(null);
 
 /** One panel = one tab of the model (`id = keyOf(tab)`). dockview draws only the visible one (`onlyWhenVisible`, its default). */
 function Pane({ api }: IDockviewPanelProps): JSX.Element | null {
@@ -73,6 +75,19 @@ function PanelTab({ api }: IDockviewPanelHeaderProps): JSX.Element | null {
     </span>
   );
 }
+/** The tools at the right of a group's tab strip (mockup groupHtml() `.tabs .tools`): « + », a new session. The split and
+ *  the link square come with lot 3. */
+function StripTools(_: IDockviewHeaderActionsProps): JSX.Element {
+  const c = useContext(Content);
+  const { t } = useI18n();
+  return (
+    <div className="ide-strip-tools">
+      <button type="button" title={t.ide.newSession} aria-label={t.ide.newSession} onClick={() => c?.onNewSession()}>
+        +
+      </button>
+    </div>
+  );
+}
 const COMPONENTS = { tab: Pane };
 const Empty = () => null;
 // Ledge's tokens, set on `.ide-dock` in ide.css.
@@ -83,7 +98,7 @@ const THEME: DockviewTheme = { name: 'ledge', className: 'ide-dock' };
  *  follow `ws`, the focused group made dockview's active one. Dockview → model: a tab chosen or a group clicked is
  *  `activate`d (which focuses its group), a tab closed is `close`d. A model group without tabs is not drawn: a dockview
  *  group lives only while it holds a panel. No drag and drop, no floating groups (lot 3). */
-export function DockHost({ ws, store, title, body, label, alert, onTabMenu }: DockHostProps): JSX.Element {
+export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNewSession }: DockHostProps): JSX.Element {
   const { t } = useI18n();
   const [api, setApi] = useState<DockviewApi | null>(null);
   // Set while the model is being written into dockview: the events that writing raises are not the user's.
@@ -95,7 +110,7 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu }: Do
   const groups = ws.groups.filter(g => g.window === MAIN && g.tabs.length > 0);
   const tabs = new Map<string, { tab: Tab; group: Group }>();
   for (const g of groups) for (const tab of g.tabs) tabs.set(keyOf(tab), { tab, group: g });
-  const content = { tabOf: (id: string) => tabs.get(id)?.tab, body, title, label, alert, onTabMenu, groupOf: (id: string) => tabs.get(id)?.group.id, focus: ws.focus };
+  const content = { tabOf: (id: string) => tabs.get(id)?.tab, body, title, label, alert, onTabMenu, onNewSession, groupOf: (id: string) => tabs.get(id)?.group.id, focus: ws.focus };
 
   // Every render: a title may have changed (a session renamed) as well as the tabs.
   useLayoutEffect(() => {
@@ -168,7 +183,7 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu }: Do
 
   return (
     <Content.Provider value={content}>
-      <DockviewReact className="ide-dockview" components={COMPONENTS} defaultTabComponent={PanelTab} watermarkComponent={Empty} onReady={onReady} theme={THEME}
+      <DockviewReact className="ide-dockview" components={COMPONENTS} defaultTabComponent={PanelTab} watermarkComponent={Empty} rightHeaderActionsComponent={StripTools} onReady={onReady} theme={THEME}
         disableDnd disableFloatingGroups messages={messages} />
     </Content.Provider>
   );
