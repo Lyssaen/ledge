@@ -1,0 +1,29 @@
+{
+  "name": "poc-ide-l0",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Lot 0 of the IDE rework: a throwaway proof (popout windows of one document in Tauri, dockview, xterm fluidity). Not shipped.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.2",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/addon-webgl": "0.18.0",
+    "@xterm/xterm": "5.5.0",
+    "dockview-react": "8.6.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "4.7.0",
+    "typescript": "5.9.3",
+    "vite": "6.4.4"
+  }
+}

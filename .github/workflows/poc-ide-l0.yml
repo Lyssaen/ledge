@@ -1,0 +1,34 @@
+# Lot 0 of the IDE rework (docs/ide-workspace-plan.md): builds the throwaway proof in poc/ide-l0 for Windows, where
+# WebView2 decides whether a popout window can be scripted by the main page. Runs on this branch only; the .exe is an
+# artifact of the run. To be deleted with the proof.
+name: POC IDE lot 0
+
+on:
+  push:
+    branches: [poc/ide-l0]
+    paths: ['poc/ide-l0/**', 'crates/ledge-native/**', '.github/workflows/poc-ide-l0.yml']
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: poc/ide-l0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: poc/ide-l0/src-tauri
+      - run: npm ci
+      - run: npx tauri build --no-bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: poc-ide-l0-windows
+          path: poc/ide-l0/src-tauri/target/release/poc-ide-l0.exe
+          retention-days: 14

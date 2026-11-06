@@ -1,0 +1,16 @@
+[package]
+name = "poc-ide-l0"
+version = "0.0.0"
+edition = "2021"
+description = "Lot 0 of the IDE rework: a throwaway proof, never shipped"
+publish = false
+
+# Its own workspace: the repository's (apps/desktop, crates/ledge-native) does not list this proof.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+ledge-native = { path = "../../../crates/ledge-native" }
