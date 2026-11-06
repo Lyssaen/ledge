@@ -210,9 +210,8 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   await b.screenshot({ path: test.info().outputPath('ide-session-bar-400.png') });
 });
 
-// Bug found by this spec: ide.css sets `font-family: var(--mono)` on the bar's branch and project, « +N −N » and the tab's
-// `>_`, but no stylesheet defines --mono, so they fall back to Geist; the mockup draws them in Geist Mono (`.mono`).
-test.fixme('the bar\'s branch and « +N −N » are in the mono face, as in the mockup', async ({ page }) => {
+// The mono texts (branch, project, « +N −N », >_) use the font-mono token, as the mockup's `.mono`.
+test('the bar\'s branch and « +N −N » are in the mono face, as in the mockup', async ({ page }) => {
   await boot(page);
   await open(page, 'Nova');
   for (const l of [bar(page, 'Nova').locator('.ide-bar-chip.br'), bar(page, 'Nova').locator('.dchip')])

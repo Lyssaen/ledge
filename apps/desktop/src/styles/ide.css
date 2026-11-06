@@ -115,7 +115,7 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-tab { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
 .ide-tab .logo { display: inline-flex; }
 .ide-tab .tab-logo { display: inline-flex; }
-.ide-tab .tab-term { font-family: var(--mono); font-size: 11px; color: var(--muted-foreground); }
+.ide-tab .tab-term { font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 11px; color: var(--muted-foreground); }
 .ide-tab .tab-rig { font-size: 11px; color: var(--muted-foreground); }
 .ide-tab .tab-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--muted-foreground); }
 /* Colours of the notch's dots (settings.css `.preview-notch .d-*`); the other states stay muted. */
@@ -137,14 +137,14 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-bar-ctx b { font-weight: 500; color: var(--foreground); font-variant-numeric: tabular-nums; }
 .ide-bar-ctx.amber b { color: var(--warning); }
 .ide-bar-sep { flex: none; width: 1px; height: 12px; background: var(--border); }
-.ide-bar-chip { font-family: var(--mono); font-size: 11px; padding: 0 2px; }
+.ide-bar-chip { font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 11px; padding: 0 2px; }
 .ide-bar-chip.br { min-width: 40px; max-width: 150px; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
 .ide-bar-chip.pj { min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
 .ide-bar-side { margin-left: auto; flex: none; display: flex; align-items: center; gap: 4px; }
 .ide-bar-stop { min-width: 26px; height: 22px; padding: 0 6px; display: grid; place-items: center; border: 1px solid var(--input); border-radius: 6px; color: var(--muted-foreground); }
 .ide-bar-stop:hover { color: var(--foreground); }
 .ide-bar-stop i { display: block; width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
-.ide-bar .dchip { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px; border-radius: 5px; font-family: var(--mono); font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.ide-bar .dchip { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px; border-radius: 5px; font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .ide-bar .dchip:hover, .ide-bar .dchip.on { background: var(--muted); color: var(--foreground); }
 .ide-bar .dchip .a { color: var(--success); }
 .ide-bar .dchip .d { color: var(--danger-text); }
