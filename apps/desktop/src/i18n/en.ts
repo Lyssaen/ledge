@@ -1327,6 +1327,9 @@ export const en: Messages = {
     bottomLabel: 'Bottom panel', terminals: 'Terminals', output: 'Output', outputTip: 'Output: the rig commands Ledge ran and their result', hidePanel: 'Hide the panel',
     changeModel: 'Change model', context: (used, window) => `Context: ${used} / ${window}`, branch: (b) => `Branch ${b}`,
     interrupt: 'Interrupt', interruptRefused: (name, why) => `Interrupting ${name} refused: ${why}`,
-    changesChip: (n) => `Changes: ${n} file${n > 1 ? 's' : ''} · beside, in a linked group`
+    changesChip: (n) => `Changes: ${n} file${n > 1 ? 's' : ''} · beside, in a linked group`,
+    replyPlaceholder: (name) => `Reply to ${name}…  Enter sends, Shift+Enter adds a line`,
+    replyPlaceholderSeat: (name) => `Reply to ${name} (rig send)…  Enter sends, Shift+Enter adds a line`,
+    newSession: 'New session (N)'
   }
 };

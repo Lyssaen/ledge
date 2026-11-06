@@ -562,7 +562,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
             </div>
           )}
           {view === 'thread' && !archived && seat === null && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
-            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} modelChip={!p.ide} />}
+            notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} modelChip={!p.ide} ide={p.ide} />}
           {/* In an IDE tab, on the thread as on the terminal: the model, the context, where it works, and its changes. */}
           {p.ide && <SessionBar client={p.client} session={session} project={p.project ?? ''} files={files} besideLink={p.besideLink ?? null} notify={p.notify} onChanges={p.onChanges ?? noop} />}
         </div>

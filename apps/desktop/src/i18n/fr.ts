@@ -1394,6 +1394,9 @@ export const fr = {
     bottomLabel: 'Panneau du bas', terminals: 'Terminaux', output: 'Sortie', outputTip: 'Sortie : les commandes rig lancées par Ledge et leur résultat', hidePanel: 'Masquer le panneau',
     changeModel: 'Changer de modèle', context: (used: string, window: string) => `Contexte : ${used} / ${window}`, branch: (b: string) => `Branche ${b}`,
     interrupt: 'Interrompre', interruptRefused: (name: string, why: string) => `Interruption de ${name} refusée : ${why}`,
-    changesChip: (n: number) => `Modifications : ${n} fichier${n > 1 ? 's' : ''} · à côté, dans un groupe lié`
+    changesChip: (n: number) => `Modifications : ${n} fichier${n > 1 ? 's' : ''} · à côté, dans un groupe lié`,
+    replyPlaceholder: (name: string) => `Répondre à ${name}…  Entrée envoie, Maj+Entrée passe à la ligne`,
+    replyPlaceholderSeat: (name: string) => `Répondre à ${name} (rig send)…  Entrée envoie, Maj+Entrée passe à la ligne`,
+    newSession: 'Nouvelle session (N)'
   }
 };

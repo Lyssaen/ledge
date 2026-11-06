@@ -41,11 +41,14 @@ export interface ReplyProps {
   client?: DaemonClient;
   /** The model chip in the field (default); an IDE tab says the model in its bottom bar instead. */
   modelChip?: boolean;
+  /** In an IDE tab (mockup agentView() `.cbox`): the field alone in its box, the mockup's placeholder, no send button (Enter
+   *  sends) and no hint row but for one that says why the field is shut or what Enter will not do. */
+  ide?: boolean;
 }
 
 /** The reply area under the thread (session.tsx `replyArea`): the pinned request, then the field, or a note saying why
  *  there is none (offline, read only, a subagent's page). The draft lives in the shell's memory, written at each keystroke. */
-export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan, client, modelChip = true }: ReplyProps): JSX.Element {
+export function Reply({ session, helper, asker, since, decisions, memory, memoKey: key, notify, dispatch, focusOnArrival, keys, onReadPlan, client, modelChip = true, ide = false }: ReplyProps): JSX.Element {
   const { t } = useI18n();
   const tp = t.session.pending;
   const tr = t.session.reply;
@@ -228,7 +231,10 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
 
   const name = session.name;
   const placeholder = working ? tr.placeholder.queued(name) : sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
-    : session.state === 'exited' || (session.state === 'idle' && !isBusy(session)) ? tr.placeholder.done(name) : tr.placeholder.idle(name);
+    : session.state === 'exited' || (session.state === 'idle' && !isBusy(session)) ? tr.placeholder.done(name)
+    : ide ? (session.rig ? t.ide.replyPlaceholderSeat(name) : t.ide.replyPlaceholder(name)) : tr.placeholder.idle(name);
+  // In the IDE only the hints that give a reason: why the field is shut, why Enter will not send, what is under way.
+  const reason = stopping || (chosen?.blocked && !pending) || bare || (withImages && pending) || askCard || optionsOnly || noteless || tooLong;
   const hint = stopping ? tr.stopping
     : chosen?.blocked && !pending ? <span className="slash-warn">{t.session.slash.blocked[chosen.blocked]}</span>
     : bare ? <span className="slash-warn">{t.session.slash.bare(chosen!.name)}</span>
@@ -240,7 +246,7 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
     : sort === 'approval' && text ? tr.denyHint : sort === 'plan' && text ? tr.planHint : <><Kbd>R</Kbd> {tr.write}</>;
 
   return (
-    <div className="reply-area session-reply">
+    <div className={cls('reply-area session-reply', ide && 'ide-reply')}>
       {pending && <PendingCard pending={pending} asker={asker} since={since} actions={actions} relay={helper ? session.name : null} onReadPlan={onReadPlan} />}
       {offline ? (
         <div className="reply-note offline">
@@ -281,11 +287,11 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
           {ghost && !withImages && <div className="slash-ghost" aria-hidden="true"><span className="slash-ghost-typed">{draft}</span><span className="slash-ghost-hint">{ghost}</span></div>}
           {images.error && <span className="reply-hint reply-images-error" role="alert">{images.error}</span>}
           {client && modelChip && <SessionModel client={client} session={session} notify={notify} />}
-          <span className="reply-hint">{hint}</span>
+          {(!ide || reason) && <span className="reply-hint">{hint}</span>}
           {stoppable && client && !text && !askCard
             ? <Button variant="primary" size="icon" type="button" className="reply-stop" onClick={stop} disabled={stopping} aria-label={stopping ? tr.stopping : tr.stop(session.name)} title={tr.stopTitle}
                 style={{ width: 32, height: 32 }}>{stopping ? <span className="reply-stop-spin" aria-hidden="true" /> : <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" /></svg>}</Button>
-            : <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : working ? tr.queue : tr.send}
+            : !ide && <Button variant="primary" size="icon" type="submit" aria-label={sort === 'approval' ? tr.denyWith : working ? tr.queue : tr.send}
                 disabled={(!text && !withImages) || shut || tooLong || busy || !imagesOk} style={{ width: 32, height: 32 }}><Icon d={ICONS.send.d} /></Button>}
         </form>
         </>

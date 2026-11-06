@@ -379,6 +379,39 @@ describe('the IDE session tab (lot 2)', () => {
 });
 
 describe('the IDE bundle', () => {
+  it('the reply as the mockup\'s box: its placeholder, no hint row, no send button (Enter sends); a seat says « rig send »', async () => {
+    const { d, tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const page = () => document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]')!;
+    const box = await waitFor(() => { const el = page()?.querySelector<HTMLTextAreaElement>('.session-reply textarea'); expect(el).toBeTruthy(); return el!; });
+    expect(box).toHaveAttribute('placeholder', 'Répondre à Otto…  Entrée envoie, Maj+Entrée passe à la ligne');
+    expect(page().querySelector('.reply-hint')).toBeNull();
+    expect(within(page()).queryByRole('button', { name: 'Envoyer' })).toBeNull();
+    await user.type(box, 'Bonjour{Enter}');
+    await waitFor(() => expect(d.received.filter(m => m.type === 'session.reply')).toEqual([expect.objectContaining({ text: 'Bonjour' })]));
+    // A seat (session.rig) is answered through « rig send ».
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', rig: { seat: 'dev@r', name: 'ledge-dev' } })));
+    await waitFor(() => expect(page().querySelector('.session-reply textarea')).toHaveAttribute('placeholder', 'Répondre à Otto (rig send)…  Entrée envoie, Maj+Entrée passe à la ligne'));
+  });
+
+  it('in the IDE a hint that says why the field is shut stays', async () => {
+    const { d, tree, user } = await mount();
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', tool: 'codex', state: 'waiting_input', pending: { kind: 'question', text: 'Quel port ?', options: ['8080', '3000'], source: 'hook' } })));
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const hint = await waitFor(() => { const el = document.querySelector('.ide-pane .session-page[data-session$="otto"] .reply-hint'); expect(el).not.toBeNull(); return el!; });
+    expect(hint).toHaveTextContent('Choisissez une des réponses proposées (1–9).');
+  });
+
+  it('« + » at the right of each tab strip opens the launch dialog', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    const plus = screen.getByRole('button', { name: 'Nouvelle session (N)' });
+    expect(plus.closest('.dv-right-actions-container')).not.toBeNull();
+    await user.click(plus);
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+  });
+
   it('the shell loads the IDE in a chunk of its own: App imports neither dockview nor the frame', () => {
     const app = readFileSync(resolve(__dirname, '../../src/App.tsx'), 'utf8');
     expect(app).not.toMatch(/from 'dockview/);
