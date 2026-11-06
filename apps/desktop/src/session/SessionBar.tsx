@@ -10,6 +10,7 @@ import { changeTotals } from '../workspace/sessionTab';
 import type { Link } from '../workspace/model';
 import type { ChangedFile } from './changedFiles';
 import { SessionModel, useCanSwitchModel } from './SessionModel';
+import { isNative } from '../term/mode';
 
 export interface SessionBarProps {
   client: DaemonClient; session: Session;
@@ -41,8 +42,9 @@ export function SessionBar({ client, session, project, files, besideLink, notify
   const share = contextShare(session.context);
   const warn = share !== undefined && share >= near;
   const pct = share === undefined ? 0 : Math.round(share * 100);
-  // R8: only what can be interrupted from here: working, live, reachable, not a read-only hook session.
-  const interruptible = session.state === 'working' && !isArchived(session) && session.offline !== true && session.source !== 'hook_only';
+  // R8: only what can be interrupted from here: working, live, reachable, not a read-only hook session. A native OMP session
+  // has its own stop in the reply (« Arrêter », which gives its queue back): no second stop with another meaning here.
+  const interruptible = session.state === 'working' && !isArchived(session) && session.offline !== true && session.source !== 'hook_only' && !isNative(session);
   const { files: count, plus, minus } = changeTotals(files);
   // A refusal of this session's interrupt comes back as an error naming it.
   useEffect(() => client.onMessage(m => {
@@ -50,7 +52,7 @@ export function SessionBar({ client, session, project, files, besideLink, notify
   }), [client, session.id, session.name, notify, ti]);
   return (
     <div className="ide-bar">
-      <span className="ide-bar-model" title={ti.changeModel}>
+      <span className="ide-bar-model" {...(switchable && { title: ti.changeModel })}>
         {switchable ? <SessionModel client={client} session={session} notify={notify} /> : session.model && <span className="ide-bar-mdl">{modelName(session.model)}</span>}
       </span>
       {session.context && (

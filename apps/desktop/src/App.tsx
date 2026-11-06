@@ -258,7 +258,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     if (!ide) return;
     const ready = new Set(readyMachines.split('\n'));
     wsStore.update(w => reconcileTabs(w, tab => {
-      if (tab.kind !== 'session' && tab.kind !== 'seat') return true;
+      // A session's tab and its Changes go with it.
+      if (tab.kind !== 'session' && tab.kind !== 'seat' && tab.kind !== 'changes') return true;
       const machine = splitId(tab.ref)?.machine;
       return !machine || !ready.has(machine) || known.some(s => s.id === tab.ref);
     }));

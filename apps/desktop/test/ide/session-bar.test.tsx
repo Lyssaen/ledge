@@ -39,7 +39,9 @@ describe('the IDE session tab\'s bottom bar (lot 2, task 6)', () => {
   it('model, context, branch, project and « Interrompre », which sends session.interrupt for its id', async () => {
     const { sent, user } = shown();
     expect(bar()).toHaveTextContent('Sonnet 5.5');
-    expect(screen.getByTitle('Changer de modèle')).toHaveTextContent('Sonnet 5.5');
+    // The machine cannot switch it: the name alone, no caret, no « Changer de modèle ».
+    expect(screen.queryByTitle('Changer de modèle')).toBeNull();
+    expect(bar().querySelector('.model-chip')).toBeNull();
     expect(screen.getByText('42 %')).toBeVisible();
     expect(screen.getByTitle('Contexte : 84k / 200k')).toBeInTheDocument();
     expect(screen.getByTitle('Branche feat/x')).toHaveTextContent('feat/x');
@@ -56,7 +58,7 @@ describe('the IDE session tab\'s bottom bar (lot 2, task 6)', () => {
     expect(bar().querySelector('.ide-bar-ctx')).toBeNull();
   });
 
-  it('no « Interrompre » when idle, archived, or read only (hook_only)', () => {
+  it('no « Interrompre » when idle, archived, read only (hook_only), offline, or a native OMP session', () => {
     shown({ state: 'idle' });
     expect(screen.queryByRole('button', { name: 'Interrompre' })).toBeNull();
     cleanup();
@@ -67,6 +69,10 @@ describe('the IDE session tab\'s bottom bar (lot 2, task 6)', () => {
     expect(screen.queryByRole('button', { name: 'Interrompre' })).toBeNull();
     cleanup();
     shown({ offline: true });
+    expect(screen.queryByRole('button', { name: 'Interrompre' })).toBeNull();
+    cleanup();
+    // A native OMP session's stop is the reply's « Arrêter » (it gives the queue back): none in the bar.
+    shown({ tool: 'omp', backend: 'omp-rpc' } as Partial<Session>);
     expect(screen.queryByRole('button', { name: 'Interrompre' })).toBeNull();
   });
 
