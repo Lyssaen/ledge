@@ -37,3 +37,69 @@
 .ide-resize { position: absolute; top: 0; right: -3px; bottom: 0; width: 5px; cursor: col-resize; z-index: 5; }
 .ide-resize:hover, body.ide-resizing .ide-resize { background: var(--ring); opacity: .5; }
 body.ide-resizing { cursor: col-resize; user-select: none; }
+
+/* The body's columns: each element keeps its own, whichever panels are shown (the folded ones take 0). */
+.ide-body > .ide-activity { grid-column: 1; }
+.ide-body > .ide-explorer { grid-column: 2; }
+.ide-body > .ide-editor { grid-column: 3; }
+.ide-body > .ide-right { grid-column: 4; }
+.ide-status-row { display: contents; }
+
+/* The editing area (mockup `editor()`): dockview's group, then the bottom panel. */
+.ide-editor { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--background); }
+.ide-dock-area { flex: 1; min-height: 0; position: relative; }
+.ide-dockview { position: absolute; inset: 0; }
+.ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--background); }
+.ide-pane > * { flex: 1; min-height: 0; }
+
+/* dockview, on Ledge's tokens (mockup `.tabs`, `.tab`): 30 px tabs on the shell's colour, the one in front on the page's. */
+.ide-dock {
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-height: 30px;
+  --dv-tab-font-size: 12px;
+  --dv-tab-margin: 0;
+  --dv-tab-close-icon-size: 9px;
+  --dv-border-radius: 0px;
+  --dv-tab-border-radius: 0px;
+  --dv-spacing-padding: 0px;
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--ring);
+  --dv-drag-over-background-color: transparent;
+  --dv-drag-over-border-color: transparent;
+  --dv-drag-over-border: none;
+  --dv-overlay-z-index: 999;
+  --dv-tabs-container-scrollbar-color: var(--input);
+  --dv-icon-hover-background-color: var(--accent);
+  --dv-group-view-background-color: var(--background);
+  --dv-tabs-and-actions-container-background-color: var(--sidebar);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--background);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--sidebar);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--sidebar);
+  --dv-tab-divider-color: var(--border);
+  --dv-activegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-separator-border: var(--border);
+  --dv-paneview-header-border-color: var(--border);
+  color: var(--foreground);
+}
+.ide-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }
+.ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; }
+.ide-dock .dv-default-tab-action { opacity: .55; }
+.ide-dock .dv-default-tab-action:hover { opacity: 1; }
+
+/* The bottom panel (mockup `.bpanel`, `.bp-tabs`): 240 px under the editing area. */
+.ide-bottom { flex: 0 0 240px; height: 240px; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--border); background: var(--background); }
+.ide-bp-tabs { flex: none; display: flex; align-items: center; gap: 2px; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--sidebar); }
+.ide-bp-tabs [role=tablist] { display: flex; gap: 2px; }
+.ide-bp-tabs button { height: 22px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border-radius: 5px; font-size: 12px; color: var(--muted-foreground); }
+.ide-bp-tabs button:hover { color: var(--foreground); }
+.ide-bp-tabs button.on { color: var(--foreground); background: var(--muted); }
+.ide-bp-sp { flex: 1; }
+.ide-bp-body { flex: 1; min-height: 0; overflow: auto; }
+
+/* The right panel (mockup `rightPanel()`): the docked chat, 300 px, no × (Ctrl+/ hides it). */
+.ide-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ide-right > .ledge-chat-panel { position: static; flex: 1; width: auto; min-height: 0; box-shadow: none; z-index: auto; }

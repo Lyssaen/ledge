@@ -19,10 +19,10 @@ import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
-import { mainOrder } from './nav/agents';
+import { dotOf, mainOrder } from './nav/agents';
 import { focusThread, useKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
-import { TitleBar } from './shell/TitleBar';
+import { TitleBar, waitingSessions } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { UsageFooter } from './usage/UsageFooter';
@@ -71,6 +71,13 @@ import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
+import { useIdeEnabled } from './workspace/prefs';
+import { createWorkspaceStore, useWorkspace } from './workspace/store';
+import { layoutReducer, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
+import { focused, keyOf, open as openTab, reconcile as reconcileTabs, type Tab } from './workspace/model';
+import { routeNav, tabNav } from './workspace/route';
+import { tabTitle, type TabBody } from './ide/tabs';
+import { IdeDock, IdePlace } from './ide/lazy';
 
 const NO_PROJECTS: readonly Project[] = [];
 
@@ -143,7 +150,25 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const sidebarOpenRig = useSidebarOpenRig(fleetClient, machines);
   const tokenMissing = useTokenMissing(daemonTokenSource());
   const { t, lang } = useI18n();
-  const [nav, dispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
+  const [nav, navDispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
+  // « Interface IDE (aperçu) » (Settings › General): its tabs (`ledge.ide.workspace`) and panels (`ledge.ide.layout`).
+  const [ide] = useIdeEnabled();
+  const [wsStore] = useState(() => createWorkspaceStore());
+  const ws = useWorkspace(wsStore);
+  const [layout, setLayout] = useStored(loadLayout, saveLayout);
+  const onLayout = useCallback((a: LayoutAction) => setLayout(l => layoutReducer(l, a)), [setLayout]);
+  const ideNow = useRef({ ide, nav });
+  ideNow.current = { ide, nav };
+  // What every child dispatches. Switch off: the navigation reducer, as ever. On: the action routed (routeNav) to the
+  // navigation, the tabs and the panels; the NavState stays up to date, so turning the IDE off lands on the same place.
+  // Stable, as the reducer's own dispatch: effects that keep it from their first render see the switch as it is now.
+  const dispatch = useCallback((a: NavAction) => {
+    if (!ideNow.current.ide) { navDispatch(a); return; }
+    const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null });
+    if (r.nav) navDispatch(r.nav);
+    if (r.ws) wsStore.update(r.ws);
+    if (r.layout) onLayout(r.layout);
+  }, [wsStore, onLayout]);
   // The header's Archived pill bumps this; Archives unfolds and scrolls on each change (0 never counts).
   const [revealArchives, setRevealArchives] = useState(0);
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
@@ -216,7 +241,31 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // An archived session keeps its page (it reads, read-only): only a session the daemon no longer lists at all takes the place away.
   const known = useMemo(() => [...sessions, ...fleetView.archived], [sessions, fleetView.archived]);
   knownNow.current = known;
-  useEffect(() => { if (reconcile(nav, known, projects) !== nav) dispatch({ type: 'reconcile', sessions: known, projects }); }, [known, projects]);
+  // The IDE's tabs follow (Review Focus 1): a session tab goes with its session, an archived one stays. Not before every machine
+  // has said what it holds, or a tab kept from the last run would close while its machine connects.
+  const settled = machines.length > 0 && machines.every(m => m.ready);
+  useEffect(() => {
+    if (reconcile(nav, known, projects) !== nav) navDispatch({ type: 'reconcile', sessions: known, projects });
+    if (ide && settled) wsStore.update(w => reconcileTabs(w, tab => (tab.kind !== 'session' && tab.kind !== 'seat') || known.some(s => s.id === tab.ref)));
+  }, [known, projects, ide, settled]);
+  // Turning the IDE on from a session page opens that session's tab (Review Focus 3); from Settings (where its switch is) or
+  // the OpenRig page, theirs.
+  useEffect(() => {
+    if (!ide) return;
+    const a: NavAction | null = place.kind === 'session' ? { type: 'open', id: place.id }
+      : place.kind === 'settings' ? { type: 'settings', section: place.section }
+      : place.kind === 'openrig' ? { type: 'openrig', ...(place.machine !== undefined ? { machine: place.machine } : {}) } : null;
+    const r = a && routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: false });
+    if (r?.ws) wsStore.update(r.ws);
+  }, [ide]);
+  // The tab in front, when it is an agent's, is the NavState's place: the shell's session state (its view, Ctrl + ², the sounds) follows it.
+  const front: Tab | undefined = focused(ws).tabs[focused(ws).active];
+  const frontKey = front ? keyOf(front) : null;
+  useEffect(() => {
+    if (!ide || !front || (front.kind !== 'session' && front.kind !== 'seat') || !known.some(s => s.id === front.ref)) return;
+    const p = ideNow.current.nav.place;
+    if (p.kind !== 'session' || p.id !== front.ref) navDispatch({ type: 'open', id: front.ref });
+  }, [ide, frontKey, known]);
 
   const projectIdOf = useCallback((s: Session) => (projects ? projectOf(s, projects) : null), [projects]);
   const projectName = useCallback((s: Session) => {
@@ -284,7 +333,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     else focusThread();
   };
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
-  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null, toTerminal });
+  const ideKeys = useMemo(() => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }) }), [onLayout]);
+  useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null, toTerminal, ...(ide ? { ide: ideKeys } : {}) });
   const close = () => dispatch({ type: 'modal', modal: null });
   // Bumped by each broadcast that reached someone: the sidebar's selection, kept until then, is emptied.
   const [broadcastSent, setBroadcastSent] = useState(0);
@@ -359,8 +409,62 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // A dialog over the application (a modal, a confirmation, the rename dialog): what lies behind it, the title bar's controls
   // included, takes neither clicks nor the focus.
   const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null;
+
+  // The IDE shell (switch on): the same pieces, in tabs and panels. Its chunk is fetched only then.
+  const ideShell = (() => {
+    if (!ide) return null;
+    const waiting = waitingSessions(sessions, waits);
+    const badge = { perm: waiting.filter(s => dotOf(s) === 'approval').length, ask: waiting.filter(s => dotOf(s) === 'question').length };
+    const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label });
+    const body: TabBody = tab => {
+      const tnav = tabNav(nav, tab);
+      if (tab.kind === 'session' || tab.kind === 'seat') {
+        const s = known.find(x => x.id === tab.ref);
+        return s ? <SessionPlace client={fleetClient} session={s} nav={tnav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
+          prefs={shownPrefs} setPrefs={setShownPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} /> : null;
+      }
+      if (tab.kind === 'atelier') {
+        return detached ? <AtelierAway onShow={detach} onAttach={attach} />
+          : <Atelier nav={tnav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+              tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />;
+      }
+      if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} /> : null;
+      if (tab.kind === 'openrig') {
+        const o = place.kind === 'openrig' && (place.machine ?? 'local') === tab.ref ? place : null;
+        return <OpenRigPage client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'rigs'} role={o?.role} seat={o?.seat} open={o?.open} projects={projects} sessions={sessions} dispatch={dispatch} />;
+      }
+      return null;
+    };
+    return (
+      <IdePlace layout={layout} onLayout={onLayout} blocked={blocked} readOnly={localDown} dragging={!!filing.dragging}
+        onSearch={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}
+        onTab={tab => wsStore.update(w => openTab(w, tab))} activeTab={front ?? null} badge={badge}
+        waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
+        notice={tokenMissing && <DaemonOutdated />}
+        explorer={
+          <Sidebar section={layout.sideView} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+            actions={actions} decisions={decisions} waits={waits} menu={sessionMenu} notify={notify}
+            broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
+            openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
+            ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
+            usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
+            asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
+        }
+        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} />}
+        chat={
+          <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus}
+            onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
+            projects={projects} notify={notify} onProposal={openProposal} />
+        }
+        footer={
+          <Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines}
+            usage={<UsageFooter groups={usage.groups} threshold={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} />} />
+        } />
+    );
+  })();
   return (
     <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}>
+      {ideShell ?? <>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
         <Sidebar nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
@@ -394,6 +498,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             projects={projects} notify={notify} onProposal={openProposal} />
         )}
       </div>
+      </>}
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
       {nav.modal?.kind === 'launch' && (

@@ -1320,6 +1320,8 @@ export const en: Messages = {
     activityLabel: 'Activity bar', projects: 'Projects', rigs: 'OpenRig rigs', atoi: 'For you',
     openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
     resizeEdge: 'Drag to resize · double-click: default width', collapse: '« Collapse', collapseTip: 'Collapse the sidebar (Ctrl+B)',
-    waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`)
+    waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`),
+    openrigTitle: (machine: string) => `OpenRig · ${machine}`, closeTab: (name: string) => `Close ${name}`, editorLabel: 'Editor',
+    bottomLabel: 'Bottom panel', terminals: 'Terminals', output: 'Output', outputTip: 'Output: the rig commands Ledge ran and their result', hidePanel: 'Hide the panel'
   }
 };

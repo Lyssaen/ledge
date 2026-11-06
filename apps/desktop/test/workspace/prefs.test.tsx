@@ -40,10 +40,14 @@ describe('Settings › General: the IDE interface switch', () => {
     expect(sw).toHaveAccessibleDescription(expect.stringContaining('Tab groups, panels and an activity bar'));
     await env.user.click(sw);
     expect(loadIdeEnabled()).toBe(true);
-    expect(sw).toHaveAttribute('aria-checked', 'true');
+    // The shell swaps to the IDE at once, on its Settings tab: the switch is drawn again there.
+    const on = await screen.findByRole('switch', { name: 'IDE interface (preview)' });
+    expect(on).toHaveAttribute('aria-checked', 'true');
+    expect(on.closest('.ide')).not.toBeNull();
     expect(savedNotices(log)).toEqual(['Setting saved · IDE interface (preview)']);
-    await env.user.click(sw);
+    await env.user.click(on);
     expect(loadIdeEnabled()).toBe(false);
+    expect(await screen.findByRole('switch', { name: 'IDE interface (preview)' })).toHaveAttribute('aria-checked', 'false');
     expect(savedNotices(log).at(-1)).toBe('Setting saved · IDE interface (preview) off');
   });
 });
