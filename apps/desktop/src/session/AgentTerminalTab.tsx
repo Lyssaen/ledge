@@ -1,11 +1,9 @@
 import { useContext, type JSX } from 'react';
-import { useMachines, type DaemonClient } from '@ledge/fleet';
+import type { DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
-import { ptyBackend } from '../term/backend';
-import { agentMode, type AgentMode } from '../term/mode';
 import { TermStoreContext } from '../term/useTerms';
-import { AgentView, useAgent } from './AgentView';
+import { AgentView, useAgent, useHasBackend } from './AgentView';
 import { useAgentScreen } from './useAgentScreen';
 
 export interface AgentTerminalTabProps {
@@ -21,17 +19,13 @@ export interface AgentTerminalTabProps {
 export function AgentTerminalTab({ client, session, notify, readOnly, onOpenSession }: AgentTerminalTabProps): JSX.Element {
   const { t } = useI18n();
   const store = useContext(TermStoreContext);
-  const agent = useAgent(session, null, readOnly);
-  // The way to attach is the session page's: a pseudo-terminal, or a daemon that streams the pane.
-  const machines = useMachines(client);
-  const hasBackend = ptyBackend() !== null || machines.find(m => m.id === (session.machineId ?? 'local'))?.daemon?.terminalStream === true;
-  const base = agentMode(session, null, hasBackend);
-  const mode: AgentMode = readOnly && base.kind === 'live' ? { kind: 'parent', parentId: session.id } : base;
-  useAgentScreen(session.id, mode, store !== null);
+  // The one place the capture's read-only mode is made: useAgent (live becomes the store's read-only mode).
+  const agent = useAgent(session, null, readOnly, useHasBackend(client, session));
+  useAgentScreen(session.id, agent.mode, store !== null);
   return (
     <div className="ide-term">
       <div className="ide-term-kind"><span className="chip-k">{readOnly ? t.ide.termReadOnly : t.ide.termAttached}</span></div>
-      <AgentView client={client} session={session} helper={null} agent={agent} notify={notify} onGoParent={onOpenSession} onOpenShell={onOpenSession} />
+      <AgentView client={client} session={session} helper={null} agent={agent} notify={notify} onGoParent={onOpenSession} onOpenShell={undefined} />
     </div>
   );
 }

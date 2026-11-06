@@ -17,7 +17,7 @@ import { SHELL_ICONS } from '../shell/icons';
 import { findFile, type ChangedFile } from './changedFiles';
 import { focusThread } from '../nav/useKeys';
 import { TermStoreContext } from '../term/useTerms';
-import { AgentView, useAgent } from './AgentView';
+import { AgentView, useAgent, useHasBackend } from './AgentView';
 import { focusAgentView } from './agentFocus';
 import { openSessionTerminal } from './terminal';
 import { Button } from '@ledge/ui/ui/Button';
@@ -134,7 +134,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   /* Fil | Terminal. The thread stays mounted under the Terminal view (hidden), its folds and its place as the reader left them. */
   const { view, onView, files } = p;
   const store = useContext(TermStoreContext);
-  const agent = useAgent(session, helper);
+  const agent = useAgent(session, helper, false, useHasBackend(p.client, session));
   // A new object each time: the same row lit again (« dans le fil » twice) comes into view again.
   const [flash, setFlash] = useState<{ id: string } | null>(null);
   // Back on the thread: where the reader left it, or (from « tour 2 ») the action, which the flash brings into view.

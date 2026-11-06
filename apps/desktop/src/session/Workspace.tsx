@@ -1,8 +1,6 @@
 import { useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent } from 'react';
-import { useMachines } from '@ledge/fleet';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
-import { ptyBackend } from '../term/backend';
 import { agentMode } from '../term/mode';
 import { changesTabId } from '../term/store';
 import { TermStoreContext } from '../term/useTerms';
@@ -14,6 +12,7 @@ import { openShell, RightPanel, useShellIntro } from './RightPanel';
 import { SessionPage, type PageApi, type SessionPageProps } from './SessionPage';
 import { subagentOf } from './exchanges';
 import { useThread } from './useThread';
+import { useHasBackend } from './AgentView';
 import { useAgentScreen } from './useAgentScreen';
 
 /** The terminal's xterm comes with this chunk, never in the first bundle: App's terminal store makes them through it. */
@@ -52,8 +51,7 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   };
   const store = useContext(TermStoreContext);
   // A pseudo-terminal, or a daemon that streams the pane: either can show the agent's screen. The stream arrives with the snapshot.
-  const machines = useMachines(client);
-  const hasBackend = ptyBackend() !== null || machines.find(m => m.id === (p.session.machineId ?? 'local'))?.daemon?.terminalStream === true;
+  const hasBackend = useHasBackend(client, p.session);
   const view = prefs.view;
   // The agent's screen is attached while the Terminal view shows it (in an IDE tab: its own view, R2), detached once left.
   const sid = p.session.id;

@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FocusEvent, type JSX, type ReactNode } from 'react';
-import { useDaemon, useTerminalHolders, type DaemonClient } from '@ledge/fleet';
+import { useDaemon, useMachines, useTerminalHolders, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -25,12 +25,20 @@ export interface Agent {
   dot: AgentDot;
 }
 
+/** A pseudo-terminal, or a daemon that streams the pane: either can show the agent's screen (the store attaches by the same rule). */
+export function useHasBackend(client: DaemonClient, session: Pick<Session, 'machineId'>): boolean {
+  const machines = useMachines(client);
+  return ptyBackend() !== null || machines.find(m => m.id === (session.machineId ?? 'local'))?.daemon?.terminalStream === true;
+}
+
 /** The agent's screen as the session page knows it: how it can be shown (agentMode), its link, where it runs. On a subagent's
  *  page `session` is its parent. Without a terminal store (a page rendered alone) the link is off. */
-export function useAgent(session: Session, helper: { id: string } | null, readOnly = false): Agent {
+export function useAgent(session: Session, helper: { id: string } | null, readOnly = false, streams?: boolean): Agent {
   const { t } = useI18n();
   const store = useContext(TermStoreContext);
-  const [hasBackend] = useState(() => ptyBackend() !== null);
+  // `streams`: the caller knows the machine streams panes (useHasBackend); absent, only a pseudo-terminal counts.
+  const [pty] = useState(() => ptyBackend() !== null);
+  const hasBackend = streams ?? pty;
   const subscribe = useCallback((fn: () => void) => (store ? store.subscribe(fn) : noStore()), [store]);
   const link = useSyncExternalStore(subscribe, () => store?.link(session.id) ?? OFF);
   const base = agentMode(session, helper, hasBackend);
@@ -45,7 +53,7 @@ export interface AgentViewProps {
   client: DaemonClient; session: Session; helper: { id: string; name: string } | null; agent: Agent; notify(text: string): void;
   onGoParent(): void;
   /** OMP's « Ouvrir un shell »: a shell in the right panel. */
-  onOpenShell(): void;
+  onOpenShell?(): void;
 }
 
 /** The view showing the agent's screen outside the IDE: the one page. */
@@ -144,8 +152,8 @@ export function AgentView(p: AgentViewProps): JSX.Element {
           <div key="native" className="agent-native">
             <div>
               <strong>{tt.nativeTitle(session.name)}</strong>
-              <span>{tt.nativeBody}</span>
-              <Button variant="outline" size="sm" onClick={p.onOpenShell}><Icon d={ICONS.plus.d} size={13} />{tt.openShell}</Button>
+              {p.onOpenShell && <span>{tt.nativeBody}</span>}
+              {p.onOpenShell && <Button variant="outline" size="sm" onClick={p.onOpenShell}><Icon d={ICONS.plus.d} size={13} />{tt.openShell}</Button>}
             </div>
           </div>
         )
