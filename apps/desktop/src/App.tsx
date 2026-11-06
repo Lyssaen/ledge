@@ -279,7 +279,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useEffect(() => {
     if (!ide) return;
     if (ideNow.current.nav.chat) navDispatch({ type: 'chat', open: false });
-    const a: NavAction | null = place.kind === 'session' ? { type: 'open', id: place.id }
+    const a: NavAction | null = place.kind === 'session' ? { type: 'open', id: place.id, where: 'active' }
       : place.kind === 'settings' ? { type: 'settings', section: place.section }
       : place.kind === 'openrig' ? { type: 'openrig', ...(place.machine !== undefined ? { machine: place.machine } : {}) } : null;
     const r = a && routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: false, openSession: ideNow.current.openSession });

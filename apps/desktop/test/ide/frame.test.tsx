@@ -12,6 +12,7 @@ import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
+import { saveOpenSession } from '../../src/workspace/openPrefs';
 import type { DaemonInfo, Machines } from '@ledge/protocol';
 import { PROJECTS } from '../helpers';
 import { empty, open, serialize } from '../../src/workspace/model';
@@ -108,6 +109,18 @@ describe('the IDE shell (switch on)', () => {
     expect(bottom.getByRole('tab', { name: /^Sortie/ })).toBeVisible();
     await user.click(bottom.getByRole('button', { name: 'Masquer le panneau' }));
     expect(screen.queryByRole('region', { name: 'Panneau du bas' })).toBeNull();
+  });
+
+  it("the place sync is not a user open: with « Ouvrir une session » on 'right', switching the IDE on keeps one group", async () => {
+    saveOpenSession('right');
+    try {
+      const { side, user } = await mount({ ide: false });
+      await user.click(side.getByRole('button', { name: /^Otto/ }));
+      await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible());
+      act(() => saveIdeEnabled(true));
+      await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+      expect(JSON.parse(JSON.parse(localStorage.getItem('ledge.ide.workspace')!)).groups).toHaveLength(1);
+    } finally { saveOpenSession('active'); }
   });
 
   it('Review Focus 3: a session open with the IDE off is its active tab once on; off again, its page as today', async () => {

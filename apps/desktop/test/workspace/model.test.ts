@@ -253,6 +253,17 @@ describe('moveTo', () => {
     const one = open(empty(), S('a'));
     expect(moveTo(one, 'session:a', { group: 'g1' })).toBe(one);
   });
+  it('the same group with an index reorders: clamped, active, group focused', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('c'));
+    const r = moveTo(w, 'session:c', { group: 'g1', index: 0 });
+    expect(keys(r, 'g1')).toEqual(['session:c', 'session:a', 'session:b']);
+    expect(front(r, 'g1')).toBe('session:c');
+    const e = moveTo(w, 'session:a', { group: 'g1', index: 99 });
+    expect(keys(e, 'g1')).toEqual(['session:b', 'session:c', 'session:a']);
+    expect(front(e, 'g1')).toBe('session:a');
+    expect(e.focus).toBe('g1');
+    expect(moveTo(w, 'session:a', { group: 'g1' })).toBe(w);
+  });
   it('{rightOf}: a new group just right', () => {
     const w = moveTo(open(two(), S('c')), 'session:c', { rightOf: 'g1' });
     expect(w.groups.map(g => g.id)).toEqual(['g1', 'g3', 'g2']);

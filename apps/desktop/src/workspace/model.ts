@@ -163,8 +163,20 @@ export function move(w: Workspace, key: string, to: { group: string } | { rightO
 }
 
 /** `move` with the arrival position: inserted at `index` (clamped) in a group, else at the end. The tab becomes active
- *  and its group focused. */
+ *  and its group focused. Within its own group it is a reorder. */
 export function moveTo(w: Workspace, key: string, to: { group: string; index?: number } | { rightOf: string }): Workspace {
+  if ('group' in to) {
+    // Same group: a reorder, which `move` leaves alone.
+    const here = find(w, key);
+    if (here && here.group.id === to.group) {
+      if (to.index === undefined) return w;
+      const tab = here.group.tabs[here.index]!;
+      const tabs = here.group.tabs.filter((_, i) => i !== here.index);
+      const at = Math.max(0, Math.min(to.index, tabs.length));
+      tabs.splice(at, 0, tab);
+      return activate(replaceGroup(w, { ...here.group, tabs }), here.group.id, at);
+    }
+  }
   const moved = move(w, key, to);
   if (moved === w || !('group' in to) || to.index === undefined) return moved;
   const hit = find(moved, key);
