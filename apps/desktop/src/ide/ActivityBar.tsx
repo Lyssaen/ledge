@@ -29,9 +29,9 @@ export function ActivityBar({ layout, onLayout, onTab, activeTab, badge }: {
       {view('projects', SHELL_ICONS.files, t.ide.projects)}
       {view('rigs', SHELL_ICONS.rig, t.ide.rigs)}
       {view('atoi', SHELL_ICONS.inbox, t.ide.atoi, mark)}
-      <span className="grow" />
       {tab(openrigTab(), SHELL_ICONS.machine, t.ide.openrigTab)}
       {tab(ATELIER_TAB, SHELL_ICONS.grid, t.ide.atelierTab)}
+      <span className="grow" />
       {tab(SETTINGS_TAB, SHELL_ICONS.gear, t.ide.settingsTab)}
     </nav>
   );

@@ -74,6 +74,13 @@ describe('the IDE chrome', () => {
     expect(document.querySelector('.ide-badge')).toBeNull();
   });
 
+  it('activity order: views, OpenRig and Atelier, the grow zone, then Réglages alone', () => {
+    activity();
+    const nav = screen.getByRole('navigation');
+    const names = Array.from(nav.children).map(e => e.classList.contains('grow') ? 'grow' : e.getAttribute('aria-label'));
+    expect(names).toEqual(['Projets', 'Rigs OpenRig', 'À toi', 'OpenRig (onglet)', 'Atelier (onglet)', 'grow', 'Réglages (onglet)']);
+  });
+
   it('no MR et PR yet', () => {
     activity();
     expect(screen.queryByRole('button', { name: /MR/ })).toBeNull();
