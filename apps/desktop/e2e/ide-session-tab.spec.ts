@@ -252,8 +252,10 @@ test('the mockup\'s look: 8 px dots with a halo on a request, the tab in front o
   expect(Math.abs(form.width - (group.width - 24))).toBeLessThanOrEqual(1);
   expect(Math.abs(form.x - (group.x + 12))).toBeLessThanOrEqual(1);
   expect((await box(pane(page, 'Nova').locator('.session-reply textarea'))).height).toBeGreaterThanOrEqual(72);
+  // The rail fills the thread's content box (its clientWidth leaves the scrollbar out) less the 12 px paddings.
   const rail = await box(thread(page, 'Nova').locator('.rail'));
-  expect(Math.abs(rail.width - (group.width - 24))).toBeLessThanOrEqual(16); // the thread's scrollbar, if any
+  const inner = await thread(page, 'Nova').evaluate(el => el.clientWidth);
+  expect(Math.abs(rail.width - (inner - 24))).toBeLessThanOrEqual(1);
   await page.locator('.ide-dockview .dv-groupview').first().screenshot({ path: 'e2e/.results/ide-mockup-gaps-group.png' });
   await page.screenshot({ path: 'e2e/.results/ide-mockup-gaps-full.png' });
   // « + » at the right end of the strip opens the launch dialog.
@@ -268,7 +270,8 @@ test('light theme: the same relation of surfaces, and the links\' darker violet'
   await page.addInitScript(() => { try { localStorage.setItem('desktop.theme', 'light'); } catch { /* ignore */ } });
   await boot(page);
   await open(page, 'Nova');
-  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+  // The app's own theme setting (shell/theme.ts, desktop.theme) put the root in light.
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   const strip = page.locator('.ide-dockview .dv-tabs-and-actions-container').first();
   const front = tabOf(page, 'Nova');
   expect(await bg(front)).toBe(await bg(pane(page, 'Nova').locator('.session-page')));

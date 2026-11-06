@@ -13,6 +13,7 @@ const OMP = 'M10 14h44v9H43v33h-9V23h-9v22h-9V23H10z';
  *  the text colour (they follow the theme), omp's π in its gradient. The gradient's id is this instance's own: two logos
  *  on screen sharing one would point at whichever came first, and lose it when that one goes. */
 export function ProviderLogo({ provider, size = 14 }: { provider: Provider; size?: number }): JSX.Element {
+  // React 19's ids are « «r0» »-like, older ones « :r0: »: the colons are dropped so the id reads cleanly in url(#…).
   const grad = `omp-pi-${useId().replace(/:/g, '')}`;
   return (
     <span className="logo" title={TITLES[provider]}>

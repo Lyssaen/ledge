@@ -233,8 +233,10 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
   const placeholder = working ? tr.placeholder.queued(name) : sort === 'plan' ? tr.placeholder.plan : sort === 'approval' ? tr.placeholder.approval : sort === 'question' ? tr.placeholder.question(name)
     : session.state === 'exited' || (session.state === 'idle' && !isBusy(session)) ? tr.placeholder.done(name)
     : ide ? (session.rig ? t.ide.replyPlaceholderSeat(name) : t.ide.replyPlaceholder(name)) : tr.placeholder.idle(name);
-  // In the IDE only the hints that give a reason: why the field is shut, why Enter will not send, what is under way.
-  const reason = stopping || (chosen?.blocked && !pending) || bare || (withImages && pending) || askCard || optionsOnly || noteless || tooLong;
+  // In the IDE only the hints that give a reason (why the field is shut, why Enter will not send, what is under way) or say
+  // what Enter does when it does not plainly send: a refusal's note, a plan's revision, a queued turn, a slash command.
+  const reason = !!(stopping || (chosen && !pending) || bare || (withImages && pending) || askCard || optionsOnly || noteless || tooLong
+    || (isNote && text) || (working && text));
   const hint = stopping ? tr.stopping
     : chosen?.blocked && !pending ? <span className="slash-warn">{t.session.slash.blocked[chosen.blocked]}</span>
     : bare ? <span className="slash-warn">{t.session.slash.bare(chosen!.name)}</span>

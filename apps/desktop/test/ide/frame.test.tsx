@@ -394,6 +394,17 @@ describe('the IDE bundle', () => {
     await waitFor(() => expect(page().querySelector('.session-reply textarea')).toHaveAttribute('placeholder', 'Répondre à Otto (rig send)…  Entrée envoie, Maj+Entrée passe à la ligne'));
   });
 
+  it('in the IDE, once a note is typed during an approval, the hint says Enter denies with it', async () => {
+    const { d, tree, user } = await mount();
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } })));
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    const page = () => document.querySelector<HTMLElement>('.ide-pane .session-page[data-session$="otto"]')!;
+    const box = await waitFor(() => { const el = page()?.querySelector<HTMLTextAreaElement>('.session-reply textarea'); expect(el).toBeTruthy(); return el!; });
+    expect(page().querySelector('.reply-hint')).toBeNull();
+    await user.type(box, 'plutôt pnpm');
+    await waitFor(() => expect(page().querySelector('.reply-hint')).toHaveTextContent('Entrée refuse avec ce message'));
+  });
+
   it('in the IDE a hint that says why the field is shut stays', async () => {
     const { d, tree, user } = await mount();
     act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', tool: 'codex', state: 'waiting_input', pending: { kind: 'question', text: 'Quel port ?', options: ['8080', '3000'], source: 'hook' } })));
