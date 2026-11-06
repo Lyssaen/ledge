@@ -275,3 +275,54 @@ describe('the terminal and the keyboard', () => {
     expect(screen.queryByText('Ctrl `')).toBeNull();
   });
 });
+
+describe('IDE shortcuts (the ide option)', () => {
+  function Probe(p: { ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void }; dispatch?: (a: unknown) => void; modal?: boolean }) {
+    const base = initialNav({ helpers: [], paused: false } as never);
+    useKeys((p.dispatch ?? (() => {})) as never, { state: p.modal ? { ...base, modal: { kind: 'search' } } : base, order: [], screen: { current: null }, undo: () => false, ...(p.ide ? { ide: p.ide } : {}) } as never);
+    return <div><textarea aria-label="champ" /><div data-terminal><button>term</button></div></div>;
+  }
+  const press = (key: string, el: Element | Window = window) => fireEvent.keyDown(el, { key, ctrlKey: true });
+
+  it('Ctrl+B, Ctrl+J and Ctrl+/ toggle the panels', () => {
+    const toggle = vi.fn(), dispatch = vi.fn();
+    render(<Probe ide={{ toggle }} dispatch={dispatch} />);
+    press('b'); press('J'); press('/');
+    expect(toggle.mock.calls).toEqual([['side'], ['bottom'], ['right']]);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('in a textarea Ctrl+B still toggles, but a bare / is typed', () => {
+    const toggle = vi.fn(), dispatch = vi.fn();
+    render(<Probe ide={{ toggle }} dispatch={dispatch} />);
+    const field = screen.getByLabelText('champ'); field.focus();
+    press('b');
+    expect(toggle).toHaveBeenCalledWith('side');
+    fireEvent.keyDown(field, { key: '/' });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('while a dialog is open none of the three acts (no panel moves behind it)', () => {
+    const toggle = vi.fn();
+    render(<Probe ide={{ toggle }} modal />);
+    press('b'); press('j'); press('/');
+    expect(toggle).not.toHaveBeenCalled();
+  });
+
+  it('under [data-terminal] none of the three acts', () => {
+    const toggle = vi.fn();
+    render(<Probe ide={{ toggle }} />);
+    const b = screen.getByText('term'); b.focus();
+    press('b'); press('j'); press('/');
+    expect(toggle).not.toHaveBeenCalled();
+  });
+
+  it('without ide, Ctrl+B does nothing and Ctrl+/ opens the chat', () => {
+    const dispatch = vi.fn();
+    render(<Probe dispatch={dispatch} />);
+    press('b');
+    expect(dispatch).not.toHaveBeenCalled();
+    press('/');
+    expect(dispatch).toHaveBeenCalledWith({ type: 'chat', open: true });
+  });
+});

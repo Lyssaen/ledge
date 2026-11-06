@@ -1376,5 +1376,19 @@ export const fr = {
   botLabel: { starting: 'Démarrage', working: 'Au travail', approval: 'Attend votre accord', question: 'A une question', idle: 'Disponible', error: 'Erreur', done: 'Terminée', readonly: 'Lecture seule' } as Record<BotState, string>,
   botReadOnly: 'Lecture seule',
   botNotLive: 'Figé',
-  resident: { name: 'Ledge', offline: 'Ledge · connexion perdue' }
+  resident: { name: 'Ledge', offline: 'Ledge · connexion perdue' },
+  /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
+  ide: {
+    setting: 'Interface IDE (aperçu)',
+    settingHint: 'Groupes d’onglets, panneaux et barre d’activité, à la manière de VS Code. L’ancienne interface reste disponible tant que l’aperçu dure.',
+    settingOff: 'Interface IDE (aperçu) désactivée',
+    brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',
+    sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
+    activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
+    openrigTab: 'OpenRig (onglet)', atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
+    resizeEdge: 'Glisser pour redimensionner · double-clic : largeur par défaut', collapse: '« Réduire', collapseTip: 'Réduire la barre latérale (Ctrl+B)',
+    waiting: (n: number) => (n === 1 ? '1 demande' : `${n} demandes`),
+    openrigTitle: (machine: string) => `OpenRig · ${machine}`, closeTab: (name: string) => `Fermer ${name}`, editorLabel: 'Zone d’édition',
+    bottomLabel: 'Panneau du bas', terminals: 'Terminaux', output: 'Sortie', outputTip: 'Sortie : les commandes rig lancées par Ledge et leur résultat', hidePanel: 'Masquer le panneau'
+  }
 };

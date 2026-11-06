@@ -27,7 +27,7 @@ export interface ChatViewProps {
   /** Null when questions may be sent; otherwise why not (offline). */
   offline: string | null;
   /** `withImages`: the question comes from the field, so the chips under it go with it (then the text may be empty); suggestions and choices send text alone. */
-  onAsk: (text: string, withImages?: boolean) => void; onCancel: (qid: string) => void; onReset: () => void; onBack?: () => void; onClose: () => void; onOpenSession: (id: string) => void;
+  onAsk: (text: string, withImages?: boolean) => void; onCancel: (qid: string) => void; onReset: () => void; onBack?: () => void; /** Without it, no × in the header (the IDE's right panel: Ctrl+/ hides it). */ onClose?: () => void; onOpenSession: (id: string) => void;
   /** The sober island has no session list to return to. */
   showBack?: boolean;
   /** Extra controls in the header, before close. The sober island puts its menu here. */
@@ -162,7 +162,7 @@ export function ChatView(p: ChatViewProps) {
         {/* A new conversation forgets the day's turns and Claude session; offered between questions, once there is something to forget. */}
         <Button variant="ghost" size="icon" aria-label={t.chat.reset} title={t.chat.reset} disabled={busy || !!p.offline || turns.length === 0} onClick={p.onReset}><Icon {...ICONS.plus} /></Button>
         {p.headerExtra}
-        <Button variant="ghost" size="icon" aria-label={t.chat.close} title={t.chat.close} onClick={p.onClose}><Icon {...ICONS.close} /></Button>
+        {p.onClose && <Button variant="ghost" size="icon" aria-label={t.chat.close} title={t.chat.close} onClick={p.onClose}><Icon {...ICONS.close} /></Button>}
       </div>}
       <div ref={thread} data-scroll className="ledge-scroll"
         onMouseOver={hover ? e => hover(agentOf(e.target)) : undefined}

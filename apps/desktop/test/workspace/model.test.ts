@@ -1,0 +1,198 @@
+import { describe, expect, it } from 'vitest';
+import { activate, agentTerminalTab, beside, changesTab, close, cycleLink, deserialize, empty, find, focused, keyOf, MAIN, move, open, reconcile, serialize, setView, split, type Tab, type Workspace } from '../../src/workspace/model';
+
+const S = (id: string): Tab => ({ kind: 'session', ref: id });
+const keys = (w: Workspace, groupId: string) => w.groups.find(g => g.id === groupId)!.tabs.map(keyOf);
+const front = (w: Workspace, groupId: string) => { const g = w.groups.find(x => x.id === groupId)!; const t = g.tabs[g.active]; return t ? keyOf(t) : null; };
+
+describe('open', () => {
+  it('adds to the active group and focuses the tab', () => {
+    const w = open(open(empty(), S('pim')), S('nova'));
+    expect(keys(w, 'g1')).toEqual(['session:pim', 'session:nova']);
+    expect(front(w, 'g1')).toBe('session:nova');
+  });
+
+  it('never duplicates a tab: an open one is brought forward, in whichever window', () => {
+    let w = open(empty(), S('pim'));
+    w = open(w, S('nova'), 'window');
+    const nova = find(w, 'session:nova')!.group.id;
+    w = activate(w, 'g1', 0);
+    w = open(w, S('nova'));
+    expect(w.groups.flatMap(g => g.tabs).filter(t => t.ref === 'nova')).toHaveLength(1);
+    expect(w.focus).toBe(nova);
+  });
+
+  it('« à droite » opens a new group right of the focused one', () => {
+    const w = open(open(empty(), S('pim')), S('nova'), 'right');
+    expect(w.groups.map(g => g.id)).toEqual(['g1', 'g2']);
+    expect(keys(w, 'g2')).toEqual(['session:nova']);
+    expect(w.focus).toBe('g2');
+  });
+
+  it('« nouvelle fenêtre » opens a new window with its own group', () => {
+    const w = open(open(empty(), S('pim')), S('nova'), 'window');
+    expect(w.windows).toHaveLength(2);
+    expect(find(w, 'session:nova')!.group.window).not.toBe(MAIN);
+  });
+});
+
+describe('close', () => {
+  it('a group emptied disappears', () => {
+    let w = open(open(empty(), S('pim')), S('nova'), 'right');
+    w = close(w, 'session:nova');
+    expect(w.groups.map(g => g.id)).toEqual(['g1']);
+    expect(w.focus).toBe('g1');
+  });
+
+  it('except the last group of the main window', () => {
+    const w = close(open(empty(), S('pim')), 'session:pim');
+    expect(w.groups).toHaveLength(1);
+    expect(w.groups[0]!.tabs).toEqual([]);
+  });
+
+  it('a secondary window left without groups closes', () => {
+    let w = open(open(empty(), S('pim')), S('nova'), 'window');
+    w = close(w, 'session:nova');
+    expect(w.windows).toEqual([MAIN]);
+  });
+
+  it('an empty group made by a split stays when another tab closes', () => {
+    let w = open(open(empty(), S('pim')), S('nova'));
+    w = split(w, 'g1');
+    w = close(w, 'session:nova');
+    expect(w.groups.map(g => g.id)).toEqual(['g1', 'g2']);
+  });
+
+  it('keeps the active tab when an earlier one closes', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('c'));
+    w = close(w, 'session:a');
+    expect(front(w, 'g1')).toBe('session:c');
+  });
+});
+
+describe('move', () => {
+  it('to another group, the source emptied disappears', () => {
+    let w = open(open(empty(), S('pim')), S('nova'), 'right');
+    w = move(w, 'session:nova', { group: 'g1' });
+    expect(w.groups.map(g => g.id)).toEqual(['g1']);
+    expect(keys(w, 'g1')).toEqual(['session:pim', 'session:nova']);
+  });
+
+  it('torn out of the window: a new window', () => {
+    let w = open(open(empty(), S('pim')), S('nova'));
+    w = move(w, 'session:nova', { window: 'new' });
+    expect(w.windows).toHaveLength(2);
+    expect(find(w, 'session:nova')!.group.window).not.toBe(MAIN);
+    // Dragged back into a group: the secondary window closes.
+    w = move(w, 'session:nova', { group: 'g1' });
+    expect(w.windows).toEqual([MAIN]);
+  });
+
+  it('to a new group right of one', () => {
+    let w = open(open(empty(), S('pim')), S('nova'));
+    w = move(w, 'session:nova', { rightOf: 'g1' });
+    expect(w.groups.map(g => keys(w, g.id))).toEqual([['session:pim'], ['session:nova']]);
+  });
+});
+
+describe('split', () => {
+  it('an empty group right of it, remembering the session left', () => {
+    const w = split(open(empty(), S('pim')), 'g1');
+    expect(w.groups[1]!).toMatchObject({ tabs: [], from: 'pim' });
+    expect(w.focus).toBe(w.groups[1]!.id);
+  });
+});
+
+describe('linked groups', () => {
+  /** Pim and Nova in g1, Pim's changes in g2, both violet. */
+  function linked(): Workspace {
+    let w = open(open(empty(), S('pim')), S('nova'));
+    w = activate(w, 'g1', 0);
+    w = beside(w, 'g1', 'changes', 'pim');
+    return w;
+  }
+
+  it('« +N −N » links the group and opens the changes beside it, in the same colour', () => {
+    const w = linked();
+    expect(w.groups.map(g => g.link)).toEqual(['violet', 'violet']);
+    expect(keys(w, 'g2')).toEqual(['changes:pim']);
+    expect(w.focus).toBe('g1');
+  });
+
+  it('choosing another session switches the changes of the linked group', () => {
+    const w = activate(linked(), 'g1', 1);
+    expect(keys(w, 'g2')).toEqual(['changes:nova']);
+  });
+
+  it('follows across windows', () => {
+    let w = linked();
+    w = move(w, 'changes:pim', { window: 'new' });
+    const pop = find(w, 'changes:pim')!.group.id;
+    w = cycleLink(w, pop); // none → violet
+    w = activate(w, 'g1', 1);
+    expect(front(w, pop)).toBe('changes:nova');
+  });
+
+  it('a group of another colour does not follow', () => {
+    let w = linked();
+    w = cycleLink(w, 'g2'); // violet → teal
+    w = activate(w, 'g1', 1);
+    expect(keys(w, 'g2')).toEqual(['changes:pim']);
+  });
+
+  it('a terminal of the session follows too; a plain shell does not', () => {
+    let w = open(open(empty(), S('pim')), S('nova'));
+    w = activate(w, 'g1', 0);
+    w = beside(w, 'g1', 'terminal', 'pim');
+    w = activate(w, 'g1', 1);
+    expect(keys(w, 'g2')).toEqual([keyOf(agentTerminalTab('nova'))]);
+    w = open(w, { kind: 'terminal', ref: 'shell:1' });
+    expect(keys(w, 'g1')).toContain('terminal:shell:1');
+  });
+
+  it('the link square cycles none → violet → teal → none', () => {
+    let w = open(empty(), S('pim'));
+    const seen = [w.groups[0]!.link];
+    for (let i = 0; i < 3; i++) { w = cycleLink(w, 'g1'); seen.push(w.groups[0]!.link); }
+    expect(seen).toEqual([null, 'violet', 'teal', null]);
+  });
+
+  it('« +N −N » again focuses the existing changes, never a second copy', () => {
+    let w = linked();
+    w = beside(w, 'g1', 'changes', 'pim');
+    expect(w.groups.flatMap(g => g.tabs).filter(t => keyOf(t) === keyOf(changesTab('pim')))).toHaveLength(1);
+  });
+});
+
+describe('views, reconcile, layouts', () => {
+  it('Ctrl+` switches a session tab between thread and terminal', () => {
+    const w = setView(open(empty(), S('pim')), 'session:pim', 'terminal');
+    expect(w.groups[0]!.tabs[0]!.view).toBe('terminal');
+  });
+
+  it('drops tabs whose session is gone', () => {
+    let w = open(open(empty(), S('pim')), S('gone'), 'right');
+    w = reconcile(w, t => t.ref !== 'gone');
+    expect(w.groups.flatMap(g => g.tabs).map(keyOf)).toEqual(['session:pim']);
+    expect(w.groups).toHaveLength(1);
+  });
+
+  it('a layout survives serialisation', () => {
+    let w = open(open(empty(), S('pim')), S('nova'), 'window');
+    w = beside(w, 'g1', 'changes', 'pim');
+    expect(deserialize(serialize(w))).toEqual(w);
+  });
+
+  it('a malformed layout is refused', () => {
+    expect(deserialize('{')).toBeNull();
+    expect(deserialize(JSON.stringify({ ...empty(), version: 2 }))).toBeNull();
+    expect(deserialize(JSON.stringify({ ...empty(), groups: [{ id: 'g1', window: 'nowhere', tabs: [], active: 0, link: null }] }))).toBeNull();
+    expect(deserialize(JSON.stringify({ ...empty(), groups: [{ id: 'g1', window: MAIN, tabs: [{ kind: 'wall', ref: 'x' }], active: 0, link: null }] }))).toBeNull();
+  });
+
+  it('a layout without a main-window group gets one', () => {
+    const w = deserialize(JSON.stringify({ version: 1, windows: [MAIN], groups: [], focus: 'g9', next: 3 }))!;
+    expect(w.groups).toHaveLength(1);
+    expect(focused(w).window).toBe(MAIN);
+  });
+});

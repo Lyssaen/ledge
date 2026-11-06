@@ -1,0 +1,105 @@
+/* The IDE shell (docs/mockups/ledge-ide-interactive.html), behind « Interface IDE (aperçu) »: loaded with its lazy chunk. */
+.ide { height: 100vh; display: grid; grid-template-rows: 34px 1fr 24px; background: var(--background); color: var(--foreground); overflow: hidden; }
+.ide-body { display: grid; grid-template-columns: 48px var(--ide-side, 248px) 1fr var(--ide-right, 300px); min-height: 0; }
+
+.ide-titlebar { display: flex; align-items: center; gap: 14px; padding: 0 0 0 14px; border-bottom: 1px solid var(--sidebar-border); background: var(--sidebar); user-select: none; }
+.ide-titlebar .titlebar-caps { align-self: stretch; margin-left: 0; }
+.ide-brand { font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.ide-search { flex: 0 1 460px; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--background); color: var(--muted-foreground); font-size: 12px; text-align: left; }
+.ide-search:hover { border-color: var(--input); }
+.ide-search-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ide-kbd { font-family: 'Geist Mono', monospace; font-size: 10.5px; border: 1px solid var(--input); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); }
+.ide-toggles { display: flex; gap: 2px; margin-right: 4px; }
+.ide-toggles button { width: 26px; height: 24px; display: grid; place-items: center; border-radius: 5px; color: var(--muted-foreground); }
+.ide-toggles button:hover, .ide-toggles button[aria-pressed=true] { background: var(--accent); color: var(--foreground); }
+
+.ide-activity { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); }
+.ide-activity button { position: relative; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 7px; color: var(--muted-foreground); }
+.ide-activity button:hover { color: var(--foreground); }
+.ide-activity button.on { color: var(--foreground); background: var(--accent); }
+.ide-activity .grow { flex: 1; }
+.ide-badge { position: absolute; top: 2px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px; display: grid; place-items: center; border-radius: 8px; background: var(--destructive); color: #fff; font-size: 10px; font-weight: 600; }
+.ide-badge.amber { background: var(--warning); color: #1d1400; }
+
+.ide-status { display: flex; align-items: center; gap: 14px; padding: 0 10px; background: var(--sidebar); border-top: 1px solid var(--sidebar-border); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; }
+.ide-status .workspace-footer { flex: 1; height: 100%; padding: 0; border-top: 0; font-size: inherit; }
+.ide-status-sp { flex: 1; }
+.ide-status-wait { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: 5px; color: var(--foreground); }
+.ide-status-wait:hover { background: var(--accent); }
+
+/* The explorer: the sidebar's content, its drag edge and its foot. */
+.ide-explorer { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); }
+.ide-explorer-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ide-explorer-body > .sidebar { width: auto; flex: 1; min-height: 0; border-right: 0; }
+.ide-explorer-foot { flex: none; display: flex; padding: 4px 8px; border-top: 1px solid var(--sidebar-border); }
+.ide-explorer-foot button { height: 24px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 12px; color: var(--muted-foreground); }
+.ide-explorer-foot button:hover { background: var(--accent); color: var(--foreground); }
+.ide-resize { position: absolute; top: 0; right: -3px; bottom: 0; width: 5px; cursor: col-resize; z-index: 5; }
+.ide-resize:hover, body.ide-resizing .ide-resize { background: var(--ring); opacity: .5; }
+body.ide-resizing { cursor: col-resize; user-select: none; }
+
+/* The body's columns: each element keeps its own, whichever panels are shown (the folded ones take 0). */
+.ide-body > .ide-activity { grid-column: 1; }
+.ide-body > .ide-explorer { grid-column: 2; }
+.ide-body > .ide-editor { grid-column: 3; }
+.ide-body > .ide-right { grid-column: 4; }
+.ide-status-row { display: contents; }
+
+/* The editing area (mockup `editor()`): dockview's group, then the bottom panel. */
+.ide-editor { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--background); }
+.ide-dock-area { flex: 1; min-height: 0; position: relative; }
+.ide-dockview { position: absolute; inset: 0; }
+.ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--background); }
+.ide-pane > * { flex: 1; min-height: 0; }
+
+/* dockview, on Ledge's tokens (mockup `.tabs`, `.tab`): 30 px tabs on the shell's colour, the one in front on the page's. */
+.ide-dock {
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-height: 30px;
+  --dv-tab-font-size: 12px;
+  --dv-tab-margin: 0;
+  --dv-tab-close-icon-size: 9px;
+  --dv-border-radius: 0px;
+  --dv-tab-border-radius: 0px;
+  --dv-spacing-padding: 0px;
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--ring);
+  --dv-drag-over-background-color: transparent;
+  --dv-drag-over-border-color: transparent;
+  --dv-drag-over-border: none;
+  --dv-overlay-z-index: 999;
+  --dv-tabs-container-scrollbar-color: var(--input);
+  --dv-icon-hover-background-color: var(--accent);
+  --dv-group-view-background-color: var(--background);
+  --dv-tabs-and-actions-container-background-color: var(--sidebar);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--background);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--sidebar);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--sidebar);
+  --dv-tab-divider-color: var(--border);
+  --dv-activegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-separator-border: var(--border);
+  --dv-paneview-header-border-color: var(--border);
+  color: var(--foreground);
+}
+.ide-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }
+.ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; }
+.ide-dock .dv-default-tab-action { opacity: .55; }
+.ide-dock .dv-default-tab-action:hover { opacity: 1; }
+
+/* The bottom panel (mockup `.bpanel`, `.bp-tabs`): 240 px under the editing area. */
+.ide-bottom { flex: 0 0 240px; height: 240px; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--border); background: var(--background); }
+.ide-bp-tabs { flex: none; display: flex; align-items: center; gap: 2px; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--sidebar); }
+.ide-bp-tabs [role=tablist] { display: flex; gap: 2px; }
+.ide-bp-tabs button { height: 22px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border-radius: 5px; font-size: 12px; color: var(--muted-foreground); }
+.ide-bp-tabs button:hover { color: var(--foreground); }
+.ide-bp-tabs button.on { color: var(--foreground); background: var(--muted); }
+.ide-bp-sp { flex: 1; }
+.ide-bp-body { flex: 1; min-height: 0; overflow: auto; }
+
+/* The right panel (mockup `rightPanel()`): the docked chat, 300 px, no × (Ctrl+/ hides it). */
+.ide-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ide-right > .ledge-chat-panel { position: static; flex: 1; width: auto; min-height: 0; box-shadow: none; z-index: auto; }

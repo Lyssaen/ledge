@@ -1309,5 +1309,19 @@ export const en: Messages = {
   botLabel: { starting: 'Starting', working: 'Working', approval: 'Needs your approval', question: 'Has a question', idle: 'Available', error: 'Error', done: 'Finished', readonly: 'Read-only' },
   botReadOnly: 'Read-only',
   botNotLive: 'Not live',
-  resident: { name: 'Ledge', offline: 'Ledge · connection lost' }
+  resident: { name: 'Ledge', offline: 'Ledge · connection lost' },
+  /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
+  ide: {
+    setting: 'IDE interface (preview)',
+    settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
+    settingOff: 'IDE interface (preview) off',
+    brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
+    sideToggle: 'Sidebar (Ctrl+B)', bottomToggle: 'Bottom panel (Ctrl+J)', rightToggle: 'Right panel (Ctrl+/)',
+    activityLabel: 'Activity bar', projects: 'Projects', rigs: 'OpenRig rigs', atoi: 'For you',
+    openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
+    resizeEdge: 'Drag to resize · double-click: default width', collapse: '« Collapse', collapseTip: 'Collapse the sidebar (Ctrl+B)',
+    waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`),
+    openrigTitle: (machine: string) => `OpenRig · ${machine}`, closeTab: (name: string) => `Close ${name}`, editorLabel: 'Editor',
+    bottomLabel: 'Bottom panel', terminals: 'Terminals', output: 'Output', outputTip: 'Output: the rig commands Ledge ran and their result', hidePanel: 'Hide the panel'
+  }
 };

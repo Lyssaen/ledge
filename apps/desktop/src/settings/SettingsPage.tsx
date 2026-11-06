@@ -85,7 +85,7 @@ function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContex
  *  machine shows offline (not while it connects), on Mobile access while its link is down (and in the brand colour while a device
  *  asks for access), on About while an update of the app or of the local daemon waits), the section's title, hint and cards
  *  on the right, scrolled back to the top at each change of section. */
-export function SettingsPage({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
+export function SettingsPage({ section, ctx, noBack = false }: { section: SectionId; ctx: SettingsContext; /** The IDE's Settings tab: no « Retour », the tab is closed or left instead. */ noBack?: boolean }): JSX.Element {
   const { t } = useI18n();
   const s = t.settings;
   const update = useUpdate();
@@ -110,7 +110,7 @@ export function SettingsPage({ section, ctx }: { section: SectionId; ctx: Settin
   return (
     <div className="settings-page">
       <nav className="settings-nav" aria-label={s.nav}>
-        <Button variant="ghost" size="sm" className="settings-back" onClick={back}><Icon d={ICONS.chevronLeft.d} size={14} />{s.back}<Kbd>{t.crumb.escape}</Kbd></Button>
+        {!noBack && <Button variant="ghost" size="sm" className="settings-back" onClick={back}><Icon d={ICONS.chevronLeft.d} size={14} />{s.back}<Kbd>{t.crumb.escape}</Kbd></Button>}
         {SECTIONS.map(id => {
           const note = alert(id);
           return (

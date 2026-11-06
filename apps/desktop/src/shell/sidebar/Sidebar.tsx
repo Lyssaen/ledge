@@ -4,6 +4,7 @@ import { BROADCAST_SESSIONS_MAX, type HumanAsk, type Project, type Projects, typ
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
+import type { SideView } from '../../workspace/layout';
 import type { Filing } from '../../atelier/filing';
 import type { Decisions } from '../../fleet/decisions';
 import { useI18n } from '../../i18n/lang';
@@ -60,6 +61,8 @@ export function Sidebar(p: {
   /** The harnesses' usage alerts (docs/mockups/ledge-harness-usage.html), first in « À toi »; « Compris » acks one. */
   usageAlerts?: readonly UsageAlert[];
   onAckUsage?(id: string): void;
+  /** The IDE's sidebar: only this view's content, without Ledge's entry, the views, the grouping or the foot. */
+  section?: SideView;
 }): JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -89,7 +92,8 @@ export function Sidebar(p: {
   // The toggle shows once OpenRig is installed on a followed machine, even without a seat (its empty states live in « Rigs »).
   const offerRigs = hasRigs || p.openrig?.installed === true;
   // « Projets » or « Rigs »: one or the other (while OpenRig is nowhere, the projects).
-  const byRig = offerRigs && grouping === 'rigs';
+  const section = p.section;
+  const byRig = section ? section === 'rigs' : offerRigs && grouping === 'rigs';
   // An OpenRig seat is never in the projects' tree: the « Rigs » view shows it (« À toi » too, when it waits).
   const groups = useMemo(() => treeModel(p.sessions.filter(s => !s.rig), p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
   // The eye (docs/mockups/ledge-projects-eye.html): pressed, the projects with a live agent; released, every project.
@@ -154,7 +158,7 @@ export function Sidebar(p: {
     // No webview menu anywhere in the sidebar: a row with a menu opens it, elsewhere a right click does nothing; a text field keeps its own (copy, paste).
     <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}
       onContextMenu={e => { if (!(e.target instanceof Element && e.target.closest('input, textarea, [contenteditable="true"]'))) e.preventDefault(); }}>
-      <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
+      {!section && <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
         <button type="button" className="st-ledge-entry" aria-current={homeOn ? 'page' : undefined} aria-label={t.side.ledgeHome} title={t.side.ledgeHome} onClick={() => p.dispatch({ type: 'ledge' })}>
           <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
           <span className="st-ledge-names">
@@ -163,23 +167,23 @@ export function Sidebar(p: {
           </span>
           <Kbd>/</Kbd>
         </button>
-      </div>
-      <nav className="st-views" aria-label={t.side.views}>
+      </div>}
+      {!section && <nav className="st-views" aria-label={t.side.views}>
         <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
           <Icon d={SHELL_ICONS.grid} size={13} /><span>{t.side.atelier}</span><span className="st-fill" /><small>{t.side.active(active)}</small>
         </button>
         <button type="button" className={place.kind === 'openrig' ? 'on' : undefined} aria-current={place.kind === 'openrig' ? 'page' : undefined} onClick={() => p.dispatch({ type: 'openrig' })}>
           <Icon d={SHELL_ICONS.rig} size={13} /><span>{t.openrig.side}</span>
         </button>
-      </nav>
+      </nav>}
       {/* Out of the scrolling list, so it keeps the views' width (docs/mockups/ledge-sidebar-tidy.html, point 4). */}
-      {offerRigs && (
+      {!section && offerRigs && (
         <div className="st-grouping" role="radiogroup" aria-label={t.top.grouping}>
           {(['projects', 'rigs'] as const).map(g => <button key={g} type="button" role="radio" aria-checked={grouping === g} title={t.top.groupingHint[g]} onClick={() => setGrouping(g)}>{t.top.groupingBy[g]}</button>)}
         </div>
       )}
       <div className="st-scroll">
-        <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
+        {(!section || section === 'atoi') && <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
           rigAsks={p.asks ?? []} sessions={p.sessions} {...(p.onSeeAsk ? { onSeeAsk: p.onSeeAsk } : {})}
           usageAlerts={p.usageAlerts ?? []} {...(p.onAckUsage ? { onAckUsage: p.onAckUsage } : {})}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
@@ -191,8 +195,8 @@ export function Sidebar(p: {
           onMenu={(id, e) => {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host ?? null);
-          }} />
-        {!byRig && <section aria-label={t.side.projects}>
+          }} />}
+        {(!section || section === 'projects') && !byRig && <section aria-label={t.side.projects}>
           <Tree near={p.tasksApi?.near} groups={shownGroups} closed={closed} onClosed={setClosed} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
             hideDone={prefs.hideDone} hiddenProjects={hiddenProjects} anySession={groups.some(g => g.branches.some(b => b.sessions.length > 0))} dense={prefs.dense} byBranch={prefs.byBranch} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
@@ -207,14 +211,14 @@ export function Sidebar(p: {
             onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>}
-        {byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
+        {(!section || section === 'rigs') && byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
           dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []}
           onMenu={(id, at, opener) => p.menu.open(id, at, opener)} />}
-        <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
+        {(!section || section === 'projects') && <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
           project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
           onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
           onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused}
-          onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)} />
+          onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)} />}
       </div>
       <SidebarMenuHost state={p.menu} projects={p.projects} groups={groups} archived={p.archived} actions={p.actions} dispatch={p.dispatch}
         broadcast={!!p.broadcast} closed={closed} onClosed={setClosed} archivesOpen={archivesOpen} onArchivesOpen={setArchivesOpen} notify={p.notify} />
@@ -227,7 +231,7 @@ export function Sidebar(p: {
           <button type="button" className="st-picked-cancel" onClick={() => setPicked(new Set())}>{t.broadcast.cancel}</button>
         </div>
       )}
-      <div className="st-foot">
+      {!section && <div className="st-foot">
         {p.machines.map(m => {
           // A daemon restarting for its update (#48) is said as such, not offline.
           const updating = p.updating?.has(m.id) === true;
@@ -254,7 +258,7 @@ export function Sidebar(p: {
           onClick={() => p.dispatch({ type: 'settings' })}>
           <Icon d={SHELL_ICONS.gear} size={15} />
         </button>
-      </div>
+      </div>}
     </aside>
   );
 }
