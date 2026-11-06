@@ -54,7 +54,7 @@ import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
 import { useSessionActions } from './manage/useSessionActions';
 import { useContextMenu } from './manage/useContextMenu';
-import { SessionMenuHost } from './manage/SessionMenu';
+import { SessionMenuHost, type SessionMenuIde } from './manage/SessionMenu';
 import { ConfirmDialog } from './manage/ConfirmDialog';
 import { BroadcastDialog } from './broadcast/BroadcastDialog';
 import { AgentTerminalPlace, ChangesPlace, loadedWorkspace, SessionPlace } from './session/lazy';
@@ -508,6 +508,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // included, takes neither clicks nor the focus.
   const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null;
 
+  // The explorer's session menu in the IDE: open to the right, the agent's terminal tab beside the focused group (linked, R3 for
+  // a seat), a seat's message (its tab, the reply focused, R4).
+  const ideSessionMenu: SessionMenuIde = {
+    openRight: s => dispatch({ type: 'open', id: s.id, where: 'right' }),
+    terminal: s => wsStore.update(w => beside(w, w.focus, 'terminal', s.id)),
+    hasTerminal: s => hasTerminal({ kind: s.rig != null ? 'seat' : 'session', ref: s.id }, s),
+    message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' })
+  };
   const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label });
   // The IDE shell (switch on): the same pieces, in tabs and panels. Its chunk is fetched only then.
   const ideShell = (() => {
@@ -663,7 +671,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         <BroadcastDialog to={nav.modal.to} fleet={fleet} onClose={close} onSent={report => { close(); notify(report); setBroadcastSent(n => n + 1); }}
           label={addressees(nav.modal.to)} />
       )}
-      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void tasksApi.handover(s.id); }} />
+      <SessionMenuHost state={sessionMenu} actions={actions} filing={filing} projects={projects?.projects ?? NO_PROJECTS} currentOf={projectIdOf} onOpen={s => dispatch({ type: 'open', id: s.id })} onHandover={s => { void tasksApi.handover(s.id); }}
+        {...(ide ? { ide: ideSessionMenu } : {})} />
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />

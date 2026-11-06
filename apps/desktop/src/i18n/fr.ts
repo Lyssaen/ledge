@@ -313,12 +313,13 @@ export const fr = {
   },
   foot: { sessions: 'Sessions locales et SSH', islandOn: 'Encoche active', islandOff: 'Encoche masquée', islandTitle: 'Réglages de l’encoche' },
   daemonOutdated: { title: 'Le démon Ledge doit être mis à jour', body: 'Ce Ledge Desktop a besoin d’un démon plus récent dans WSL. Lancez une de ces commandes dans WSL ; Ledge se reconnecte tout seul.', npm: 'Installé avec npm', git: 'Installé depuis un clone git' },
-  sections: { general: 'Général', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', notes: 'Notes', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
+  sections: { general: 'Général', workspace: 'Espace de travail', appearance: 'Apparence', island: 'Encoche', notifications: 'Notifications', sounds: 'Sons', machines: 'Machines', mobile: 'Accès mobile', projects: 'Projets', notes: 'Notes', shortcuts: 'Raccourcis clavier', about: 'À propos' } as Record<SectionId, string>,
   settings: {
     nav: 'Sections des réglages', back: 'Retour à l’atelier',
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
       general: 'Langue, démarrage, agent par défaut, contexte max et mises à jour.',
+      workspace: 'Les groupes d’onglets de l’interface IDE : où s’ouvre une session.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
@@ -332,6 +333,10 @@ export const fr = {
     } as Record<SectionId, string>,
     machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible',
     mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès",
+    workspace: {
+      openSession: 'Ouvrir une session',
+      active: 'Dans le groupe actif', right: 'À droite', saved: (where: string) => `Ouvrir une session : ${where}`
+    },
     general: {
       lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.',
       langs: { fr: 'Français', en: 'English' } as Record<'fr' | 'en', string>,
@@ -1405,6 +1410,11 @@ export const fr = {
     split: 'Diviser à droite', splitTip: 'Diviser à droite (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Lier ce groupe (violet, vert d’eau, aucun)',
     /** The zone at the right end of the editing area while a tab is dragged (mockup `.dropnew`), on two lines. */
     dropNew: ['Déposer ici :', 'nouveau groupe'],
+    /** The explorer's session menu, IDE only (mockup menuHtml() `ctx`): where to open, and the agent's terminal tab. */
+    menu: {
+      open: 'Ouvrir', openKey: 'Entrée', openRight: 'Ouvrir à droite', openRightKey: 'Ctrl clic',
+      terminal: 'Son terminal', capture: 'Capture dans un terminal', message: 'Envoyer un message…'
+    },
     empty: {
       title: 'Groupe vide', body: 'Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :', terminal: (name: string) => `Terminal · ${name}`,
       newSession: 'Nouvelle session', openrig: 'OpenRig', settings: 'Réglages', atelier: 'Atelier',

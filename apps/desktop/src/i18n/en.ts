@@ -287,12 +287,13 @@ export const en: Messages = {
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
-  sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', notes: 'Notes', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  sections: { general: 'General', workspace: 'Workspace', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', notes: 'Notes', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent, max context and updates.',
+      workspace: 'The IDE interface’s tab groups: where a session opens.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
@@ -306,6 +307,10 @@ export const en: Messages = {
     },
     machineOffline: 'A machine is offline', updateWaiting: 'An update is available',
     mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access',
+    workspace: {
+      openSession: 'Open a session',
+      active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`
+    },
     general: {
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.',
       langs: { fr: 'Français', en: 'English' },
@@ -1337,6 +1342,10 @@ export const en: Messages = {
     newSession: 'New session (N)',
     split: 'Split right', splitTip: 'Split right (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Link this group (violet, teal, none)',
     dropNew: ['Drop here:', 'new group'],
+    menu: {
+      open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',
+      terminal: 'Its terminal', capture: 'Capture in a terminal', message: 'Send a message…'
+    },
     empty: {
       title: 'Empty group', body: 'Drag a tab here, open a session from the explorer, or:', terminal: (name) => `Terminal · ${name}`,
       newSession: 'New session', openrig: 'OpenRig', settings: 'Settings', atelier: 'Atelier',

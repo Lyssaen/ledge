@@ -21,6 +21,17 @@ export const canHandOver = (s: Session): boolean => isStoppable(s) && s.source =
  *  OpenRig seat (`rig`) is stopped by OpenRig. */
 export const isStoppable = (s: Session): boolean => isLiveSession(s) && s.source === 'launcher';
 
+/** The IDE's head of the menu (mockup menuHtml() `ctx`): where to open the session, its terminal tab, a seat's message. */
+export interface SessionMenuIde {
+  openRight(s: Session): void;
+  /** The agent's terminal tab beside the focused group (a seat's: its read-only capture, R3). */
+  terminal(s: Session): void;
+  /** Whether the session has an agent screen to show (a stopped OMP seat has none). */
+  hasTerminal(s: Session): boolean;
+  /** A seat: its tab, the reply focused (R4). */
+  message(s: Session): void;
+}
+
 export interface SessionMenuProps {
   session: Session;
   /** Where the pointer was (a right click), or under the seat's « … »: the menu is fixed there. */
@@ -37,11 +48,13 @@ export interface SessionMenuProps {
   onHandover?(s: Session): void;
   /** The menu closed (a choice, Escape, a click outside): the caller gives the focus back where it came from. */
   onClose(): void;
+  /** The IDE switched on: its entries replace « Ouvrir la session » at the head; switched off, the menu is today's. */
+  ide?: SessionMenuIde;
 }
 
 /** The menu of one session (manage.tsx's `SessionMenu`), opened from a seat or a card of the atelier: open, terminal, rename, file, end or resume,
  *  archive, delete. A machine whose daemon cannot archive keeps Archiver, Supprimer and Reprendre disabled, with the reason. */
-export function SessionMenu({ session: s, at, actions, filing, projects, current, onOpen, onTerminal, onRename, onHandover, onClose }: SessionMenuProps): JSX.Element {
+export function SessionMenu({ session: s, at, actions, filing, projects, current, onOpen, onTerminal, onRename, onHandover, onClose, ide }: SessionMenuProps): JSX.Element {
   const { t } = useI18n();
   const m = t.manage.menu;
   const [filingOpen, setFilingOpen] = useState(false);
@@ -58,7 +71,13 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
   return (
     <Menu open onOpenChange={o => { if (!o) onClose(); }} label={m.label(s.name)} className="session-menu-wrap" menuClassName="session-menu" at={at} trigger={() => null}>
       <div className="session-menu-head"><strong>{s.name}</strong><small>{s.topic ?? s.title}</small></div>
-      {item(m.open, ICONS.external.d, () => onOpen(s), { hint: '↵' })}
+      {ide ? (<>
+        {item(t.ide.menu.open, ICONS.external.d, () => onOpen(s), { hint: t.ide.menu.openKey, key: 'Enter' })}
+        {item(t.ide.menu.openRight, SHELL_ICONS.split, () => ide.openRight(s), { hint: t.ide.menu.openRightKey })}
+        <hr />
+        {ide.hasTerminal(s) && item(s.rig ? t.ide.menu.capture : t.ide.menu.terminal, SHELL_ICONS.terminal, () => ide.terminal(s))}
+        {s.rig && item(t.ide.menu.message, SHELL_ICONS.mail, () => ide.message(s))}
+      </>) : item(m.open, ICONS.external.d, () => onOpen(s), { hint: '↵' })}
       {item(m.terminal, SHELL_ICONS.terminal, () => onTerminal(s), { hint: 'T', key: 't' })}
       {item(m.rename, SHELL_ICONS.pencil, () => onRename(s), { hint: 'F2', key: 'F2', disabled: exited || s.offline || undefined })}
       <button type="button" role="menuitem" aria-label={t.filing.moveTo} aria-haspopup="menu" aria-expanded={filingOpen} onClick={() => setFilingOpen(o => !o)}>
@@ -104,14 +123,15 @@ export function RenameDialog({ session: s, onRename, onClose }: { session: Sessi
 }
 
 /** The session menu and the rename dialog of a `useContextMenu`, once for the page that owns it: only for a session target. */
-export function SessionMenuHost({ state, actions, filing, projects, currentOf, onOpen, onHandover }: {
+export function SessionMenuHost({ state, actions, filing, projects, currentOf, onOpen, onHandover, ide }: {
   state: ContextMenuState; actions: SessionActions; filing: Filing; projects: readonly Project[]; currentOf(s: Session): string | null; onOpen(s: Session): void; onHandover?(s: Session): void;
+  ide?: SessionMenuIde;
 }): JSX.Element {
   const { menu, session, renaming } = state;
   return (<>
     {menu && session && (
       <SessionMenu session={session} at={menu.at} actions={actions} filing={filing} projects={projects} current={currentOf(session)}
-        onOpen={onOpen} onTerminal={state.terminal} onRename={state.rename} {...(onHandover ? { onHandover } : {})} onClose={state.close} />
+        onOpen={onOpen} onTerminal={state.terminal} onRename={state.rename} {...(onHandover ? { onHandover } : {})} {...(ide ? { ide } : {})} onClose={state.close} />
     )}
     {renaming && <RenameDialog session={renaming} onRename={state.sendRename} onClose={state.closeRename} />}
   </>);

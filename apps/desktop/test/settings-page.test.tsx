@@ -26,6 +26,13 @@ describe('the Settings page', () => {
     ]);
   });
 
+  it('the IDE switched off: no Workspace section, and none named in the nav', async () => {
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    await user.keyboard('{Control>},{/Control}');
+    await screen.findByRole('heading', { level: 1, name: 'General' });
+    expect(nav().queryByRole('button', { name: 'Workspace' })).toBeNull();
+  });
+
   it('a tab changes the section: its title, aria-current, the crumb, and the scroll back at the top', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('{Control>},{/Control}');

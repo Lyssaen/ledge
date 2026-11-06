@@ -2,7 +2,7 @@ import { useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { PROJECT_COLORS, type Project, type Session } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import type { NavAction } from '../nav/state';
+import { openClick, type NavAction } from '../nav/state';
 import { Menu, MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
@@ -74,7 +74,7 @@ function RigPlaque({ rig, sessions, dispatch }: { rig: RigRoomInfo; sessions: re
       <span className="plaque-where" title={rig.folder}>{rig.kind === 'kernel' ? t.rooms.kernelWhere : t.rooms.rigWhere(tilde(rig.folder), rig.project)}</span>
       {waiting > 0 && <span className="plaque-waiting"><i className="approval-dot" />{t.rooms.waiting(waiting)}</span>}
       {working > 0 && <span className="plaque-working"><i className="live-dot" />{t.rooms.working(working)}</span>}
-      {operator && <button type="button" className="plaque-btn" onClick={() => dispatch({ type: 'open', id: operator.id })}>{t.openrig.talkToOperator}</button>}
+      {operator && <button type="button" className="plaque-btn" onClick={e => dispatch(openClick(operator.id, e))}>{t.openrig.talkToOperator}</button>}
       <button type="button" className="plaque-btn" onClick={() => dispatch({ type: 'openrig', ...(mine[0]?.machineId ? { machine: mine[0].machineId } : {}) })}>{t.rooms.manageRig}</button>
     </div>
   );

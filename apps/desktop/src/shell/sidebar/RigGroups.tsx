@@ -3,7 +3,7 @@ import { isStoppedOmpSeat, type HumanAsk, type Session } from '@ledge/protocol';
 import { isAskSeat, markOf } from '../../asks/model';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
-import type { NavAction } from '../../nav/state';
+import { openClick, type NavAction } from '../../nav/state';
 import type { SidebarOpenRig } from '../../openrig/sidebarState';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
@@ -56,7 +56,7 @@ export function RigGroups({ sessions, current, paused, dispatch, openrig, dense,
       onContextMenu={onMenu ? e => { e.preventDefault(); onMenu(s.id, menuPoint(e, e.currentTarget), e.currentTarget.querySelector<HTMLElement>('.st-main')); } : undefined}>
       <span className="st-gap" />
       <span className="st-bot"><SessionBot session={s} size={18} paused={paused} /></span>
-      <button type="button" className="st-main" onClick={() => dispatch({ type: 'open', id: s.id })}>
+      <button type="button" className="st-main" onClick={e => dispatch(openClick(s.id, e))}>
         <strong>{s.name}</strong><span className="mono">{[s.rig!.role?.replace(/\.agent$|\.lead$|\.worker$/, '') ?? s.rig!.seat, s.tool].join(' · ')}</span>
       </button>
       {(() => { const a = askOf(s); return a && !s.offline

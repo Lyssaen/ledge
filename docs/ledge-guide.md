@@ -126,6 +126,12 @@ On y vient par `Ctrl+,` ou par « Réglages » dans la barre latérale.
 - **Contexte max :** le seuil de passation de relais.
 - Vérification des mises à jour.
 
+#### Espace de travail (`workspace`)
+
+Visible seulement quand l'interface IDE (aperçu) est activée dans Général.
+
+- **Ouvrir une session :** dans le groupe actif, ou à droite (un nouveau groupe). Vaut pour un clic dans l'explorateur, l'atelier, la palette et l'encoche. `Ctrl`+clic (ou `⌘`+clic) ouvre toujours à droite.
+
 #### Apparence (`appearance`)
 
 Photo de profil, thème (Galet clair, Signal sombre), couleur d'accent, échelle de l'interface, mouvements réduits, agents autour d'une table.

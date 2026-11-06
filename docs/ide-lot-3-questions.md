@@ -29,3 +29,12 @@ Aujourd'hui, le pointillé violet entoure la partie du groupe où l'onglet arriv
 Questions :
 1. La moitié droite en pointillé dit-elle assez « nouveau groupe » ? Faut-il plutôt un texte, comme la zone « Déposer ici : nouveau groupe » ?
 2. Dans la barre d'onglets, un trait vertical à l'endroit d'arrivée plutôt que l'onglet entouré ?
+
+## Q3. Le menu de l'explorateur et Réglages › Espace de travail (tâche 6)
+
+La maquette dessine le menu (`menuHtml()`, `ctx`) et la section (`settingsPage()`), pas ces points :
+- **« Terminal » et « Son terminal ».** Le menu de session garde son entrée « Terminal » (R5 : la vue terminal de l'onglet de la session, comportement du lot 2), après les entrées de la maquette. Le menu a donc « Son terminal » (un onglet à part, dans le groupe lié) et « Terminal » (l'onglet de la session basculé sur son terminal). Faut-il retirer « Terminal » dans l'IDE ?
+- **Un siège OMP arrêté** n'a pas d'écran : « Capture dans un terminal » n'est pas proposé.
+- **`Ctrl`+clic dans l'arbre** sert aujourd'hui à choisir plusieurs sessions pour leur écrire ensemble (diffusion). Dans l'IDE, il ouvre à droite, comme le dit la maquette : la sélection multiple n'y est plus accessible. Faut-il un autre geste (`Maj`+clic) ?
+- **La phrase sous le titre** de la section : la maquette dit « Chaque option agit tout de suite sur cette page : essaie-les » (une phrase de maquette). L'app dit « Les groupes d’onglets de l’interface IDE : où s’ouvre une session. »
+- **Les icônes du menu** : les entrées de la maquette n'en ont pas ; l'app garde celles du menu de session actuel (ouvrir, diviser, terminal, enveloppe).
