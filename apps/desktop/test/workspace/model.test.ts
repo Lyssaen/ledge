@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activate, agentTerminalTab, beside, changesTab, close, cycleLink, deserialize, empty, find, focused, keyOf, MAIN, move, open, reconcile, serialize, setView, split, type Tab, type Workspace } from '../../src/workspace/model';
+import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeOthers, cycleLink, deserialize, empty, find, focused, keyOf, MAIN, move, open, reconcile, serialize, setView, split, type Tab, type Workspace } from '../../src/workspace/model';
 
 const S = (id: string): Tab => ({ kind: 'session', ref: id });
 const keys = (w: Workspace, groupId: string) => w.groups.find(g => g.id === groupId)!.tabs.map(keyOf);
@@ -194,5 +194,40 @@ describe('views, reconcile, layouts', () => {
     const w = deserialize(JSON.stringify({ version: 1, windows: [MAIN], groups: [], focus: 'g9', next: 3 }))!;
     expect(w.groups).toHaveLength(1);
     expect(focused(w).window).toBe(MAIN);
+  });
+});
+
+describe('closeOthers', () => {
+  it('keeps only the tab, active, in its group; other groups stay', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('c'));
+    w = open(w, S('z'), 'right');
+    const out = closeOthers(w, 'session:b');
+    expect(keys(out, 'g1')).toEqual(['session:b']);
+    expect(front(out, 'g1')).toBe('session:b');
+    expect(keys(out, 'g2')).toEqual(['session:z']);
+  });
+  it('an unknown key gives the same object', () => {
+    const w = open(empty(), S('a'));
+    expect(closeOthers(w, 'session:nope')).toBe(w);
+  });
+});
+
+describe('changesBeside', () => {
+  it('gives the colour of the linked group fronting the session changes', () => {
+    let w = open(empty(), S('a'));
+    w = beside(w, 'g1', 'changes', 'a');
+    const link = w.groups.find(g => g.id === 'g1')!.link;
+    expect(link).not.toBeNull();
+    expect(changesBeside(w, 'session:a')).toBe(link);
+  });
+  it('is null without a linked group', () => {
+    expect(changesBeside(open(empty(), S('a')), 'session:a')).toBeNull();
+  });
+  it('is null when the linked group fronts another tab', () => {
+    let w = open(empty(), S('a'));
+    w = beside(w, 'g1', 'changes', 'a');
+    const peer = w.groups.find(g => g.id !== 'g1')!;
+    w = open(activate(w, peer.id, 0), S('other'));
+    expect(changesBeside(w, 'session:a')).toBeNull();
   });
 });

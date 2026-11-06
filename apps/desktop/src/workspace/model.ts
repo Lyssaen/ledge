@@ -125,6 +125,26 @@ export function close(w: Workspace, key: string): Workspace {
   return dropIfEmpty(replaceGroup(w, { ...g, tabs, active }), g.id);
 }
 
+/** « Fermer les autres »: the other tabs of `key`'s group close, it stays, alone and active; the group itself stays. */
+export function closeOthers(w: Workspace, key: string): Workspace {
+  const hit = find(w, key);
+  if (!hit) return w;
+  const tab = hit.group.tabs[hit.index]!;
+  if (hit.group.tabs.length === 1) return w;
+  return replaceGroup(w, { ...hit.group, tabs: [tab], active: 0 });
+}
+
+/** The colour of the linked group whose front tab is the Changes of the session `key` names, null when there is none:
+ *  what lights the « +N −N » of a session tab. */
+export function changesBeside(w: Workspace, key: string): Link | null {
+  const hit = find(w, key);
+  const session = sessionOf(hit?.group.tabs[hit.index]);
+  if (!session) return null;
+  const want = keyOf(changesTab(session));
+  const peer = w.groups.find(g => g.link && g.tabs[g.active] && keyOf(g.tabs[g.active]!) === want);
+  return peer?.link ?? null;
+}
+
 /** Moves tab `key` to a group, to a new group right of one, or to a new window (a tab torn out of the window). */
 export function move(w: Workspace, key: string, to: { group: string } | { rightOf: string } | { window: 'new' }): Workspace {
   const hit = find(w, key);
