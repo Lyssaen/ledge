@@ -155,11 +155,12 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   // Glued to the right: the bar's 10 px padding and nothing else.
   const barBox = await box(b), chipBox = await box(chip);
   expect(barBox.x + barBox.width - (chipBox.x + chipBox.width)).toBeLessThanOrEqual(11);
-  // The caret of the model chip: the element the 470 px step hides.
-  const caret = b.locator('.model-chip > svg:last-child');
+  // The model as the mockup's `.mdl`: the provider's logo, the name without the effort, a ▾ (the element the 470 px step hides).
+  await expect(model.locator('.model-chip')).toHaveText('Opus 5.5▾');
+  await expect(model.locator('.model-chip .logo')).toHaveAttribute('title', 'Anthropic');
+  const caret = b.locator('.model-chip .car');
   await expect(caret).toBeVisible();
-  // It is the caret (MODEL_ICONS.down, the chip's last child), not the chip's own icon.
-  expect(await caret.evaluate(el => el === el.parentElement!.lastElementChild && [...el.querySelectorAll('path')].map(x => x.getAttribute('d')).join('|'))).toBe('m6 9 6 6 6-6');
+  expect(await caret.evaluate(el => el === el.parentElement!.lastElementChild && el.textContent)).toBe('▾');
   await b.screenshot({ path: test.info().outputPath('ide-session-bar.png') });
   await b.screenshot({ path: 'e2e/.results/ide-session-bar.png' });
   // The whole group (tabs, thread, reply, bar), to set beside the mockup's.

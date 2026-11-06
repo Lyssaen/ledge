@@ -19,6 +19,18 @@ export function providerOf(tool: Session['tool']): Provider {
   }
 }
 
+/** The provider of a model, by its id (each segment of « provider/model » tried): Claude's, OpenAI's or Cursor's own; null
+ *  for one with no logo in our set (Gemini…) or none known, where the caller shows the tool's provider. The session bar
+ *  says the model's provider (a Cursor Agent running Claude wears the Claude mark); a tab says the harness's. */
+export function modelProvider(model: string | undefined): Provider | null {
+  for (const part of (model ?? '').toLowerCase().split('/')) {
+    if (/^(claude|anthropic)/.test(part)) return 'anthropic';
+    if (/^(gpt|codex|openai)/.test(part) || /^o[134](\b|-)/.test(part)) return 'openai';
+    if (/^(composer|cursor)/.test(part) || part === 'auto') return 'cursor';
+  }
+  return null;
+}
+
 /** The view a tab shows: an OMP seat stopped or archived has no terminal left, so its thread, whatever the tab says;
  *  otherwise the tab's choice (role.md comes in lot 7, the thread meanwhile); with none, the session's default. */
 export function tabView(tab: Tab, s: Session | undefined): SessionView {

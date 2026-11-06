@@ -88,4 +88,27 @@ describe('a live session\'s model (#58 lot 2)', () => {
     await shown(codex({ state: 'exited' }));
     expect(screen.queryByRole('button', { name: /Model and effort/ })).toBeNull();
   });
+
+  it('the IDE bar\'s variant: the provider logo, the model\'s name and a ▾, no effort, no chip icon; the same menu', async () => {
+    const env = fakeClient();
+    render(<SessionModel client={env.client} session={codex()} notify={vi.fn()} variant="bar" />);
+    const ask = env.sent.find((m): m is Extract<ClientMessage, { type: 'models.list' }> => m.type === 'models.list')!;
+    await env.emit({ type: 'models.listing', requestId: ask.requestId, tool: ask.tool, models: CODEX });
+    const b = chip();
+    expect(b).toHaveTextContent(/^GPT-6.1-Sol▾$/);
+    expect(b.querySelector('.logo')).toHaveAttribute('title', 'OpenAI');
+    expect(b.querySelector('.logo svg')).toHaveAttribute('width', '12');
+    expect(b.querySelector('.car')).toHaveAttribute('aria-hidden', 'true');
+    expect(b.querySelectorAll(':scope > svg')).toHaveLength(0);
+    await userEvent.setup().click(b);
+    expect(menu().getByRole('group', { name: 'Effort' })).toBeVisible();
+  });
+
+  it('the bar\'s logo is the running model\'s provider: a Cursor Agent on Claude wears the Claude mark', async () => {
+    const env = fakeClient();
+    render(<SessionModel client={env.client} session={fakeSession('cu', { name: 'Cy', tool: 'cursor', state: 'idle', model: 'claude-opus-5-5' })} notify={vi.fn()} variant="bar" />);
+    const ask = env.sent.find((m): m is Extract<ClientMessage, { type: 'models.list' }> => m.type === 'models.list')!;
+    await env.emit({ type: 'models.listing', requestId: ask.requestId, tool: ask.tool, models: [{ id: 'claude-opus-5-5', label: 'Opus 5.5', description: '', efforts: [], isDefault: true }] });
+    expect(chip().querySelector('.logo')).toHaveAttribute('title', 'Anthropic');
+  });
 });

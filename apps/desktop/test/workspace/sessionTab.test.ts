@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Session } from '@ledge/protocol';
 import type { ChangedFile } from '../../src/session/changedFiles';
-import { changeTotals, projectLabel, providerOf, tabAlert, tabView } from '../../src/workspace/sessionTab';
+import { changeTotals, modelProvider, projectLabel, providerOf, tabAlert, tabView } from '../../src/workspace/sessionTab';
 
 const S = (o: Partial<Session> = {}): Session => ({ id: 'a', tool: 'claude', source: 'launcher', state: 'working', ...o }) as Session;
 const omp = (o: Partial<Session> = {}): Session => S({ tool: 'omp', source: 'rig', ...o });
@@ -12,6 +12,29 @@ describe('providerOf', () => {
     expect(providerOf('codex')).toBe('openai');
     expect(providerOf('omp')).toBe('omp');
     expect(providerOf('cursor')).toBe('cursor');
+  });
+});
+
+describe('modelProvider', () => {
+  it('the provider of the model, whatever the harness runs it', () => {
+    expect(modelProvider('claude-opus-5-5')).toBe('anthropic');
+    expect(modelProvider('anthropic/claude-sonnet-5-5')).toBe('anthropic');
+    expect(modelProvider('gpt-6.1-sol')).toBe('openai');
+    expect(modelProvider('o3')).toBe('openai');
+    expect(modelProvider('o4-mini')).toBe('openai');
+    expect(modelProvider('codex-mini-latest')).toBe('openai');
+    expect(modelProvider('openai/gpt-6')).toBe('openai');
+    expect(modelProvider('composer-1')).toBe('cursor');
+    expect(modelProvider('cursor-small')).toBe('cursor');
+    expect(modelProvider('auto')).toBe('cursor');
+    expect(modelProvider('Claude-Opus-5-5')).toBe('anthropic');
+  });
+  it('a model with no logo in our set, or none at all: null (the caller falls back to the tool\'s provider)', () => {
+    expect(modelProvider('gemini-3-pro')).toBeNull();
+    expect(modelProvider('autopilot-x')).toBeNull();
+    expect(modelProvider('o30-thing')).toBeNull();
+    expect(modelProvider('')).toBeNull();
+    expect(modelProvider(undefined)).toBeNull();
   });
 });
 

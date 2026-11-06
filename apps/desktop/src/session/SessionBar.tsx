@@ -1,12 +1,11 @@
 import { useEffect, type JSX } from 'react';
 import { useContextNear, type DaemonClient } from '@ledge/fleet';
 import { contextShare, isArchived, type Session } from '@ledge/protocol';
-import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
-import { SHELL_ICONS } from '../shell/icons';
 import { modelName } from '../usage/model';
-import { changeTotals } from '../workspace/sessionTab';
+import { changeTotals, modelProvider, providerOf } from '../workspace/sessionTab';
+import { ProviderLogo } from '../ide/ProviderLogo';
 import type { Link } from '../workspace/model';
 import type { ChangedFile } from './changedFiles';
 import { SessionModel, useCanSwitchModel } from './SessionModel';
@@ -25,12 +24,19 @@ export interface SessionBarProps {
   onChanges(): void;
 }
 
+/** The mockup's `ic.diff` at 13 px: a plus, a minus and the slash between them. */
+const DiffGlyph = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+    <path d="M8 3v8M4 7h8" /><path d="M12 17h8" /><path d="M18 4 6 20" strokeWidth="1.4" opacity=".6" />
+  </svg>
+);
+
 /** Thousands, rounded, glued to `k` (the mockup's « 84k / 200k »). */
 const k = (n: number) => `${Math.round(n / 1000)}k`;
 
 /**
  * An IDE session tab's bottom bar (docs/mockups/ledge-ide-interactive.html, agentView() `.sfoot.cbar.pfoot`): the model
- * (its chip where the machine can switch it, else its name), the context gauge, the branch and the project; on the right
+ * (logo and name, with a ▾ that opens the models where the machine can switch it), the context gauge, the branch and the project; on the right
  * « Interrompre » while the agent works, and « +N −N », which opens the Changes beside. Never a usage limit: the status
  * bar says those. It narrows with its group (ide.css @container).
  */
@@ -53,7 +59,8 @@ export function SessionBar({ client, session, project, files, besideLink, notify
   return (
     <div className="ide-bar">
       <span className="ide-bar-model" {...(switchable && { title: ti.changeModel })}>
-        {switchable ? <SessionModel client={client} session={session} notify={notify} /> : session.model && <span className="ide-bar-mdl">{modelName(session.model)}</span>}
+        {switchable ? <SessionModel client={client} session={session} notify={notify} variant="bar" />
+          : session.model && <span className="ide-bar-mdl"><ProviderLogo provider={modelProvider(session.model) ?? providerOf(session.tool)} size={12} />{modelName(session.model)}</span>}
       </span>
       {session.context && (
         <span className={cls('ide-bar-ctx', warn && 'amber')} title={ti.context(k(session.context.used), k(session.context.window))}>
@@ -72,7 +79,7 @@ export function SessionBar({ client, session, project, files, besideLink, notify
         {plus + minus > 0 && (
           <button type="button" className={cls('dchip', besideLink && 'on')} title={ti.changesChip(count)} onClick={onChanges}>
             {besideLink && <span className={`lk lk-${besideLink}`} aria-hidden="true" />}
-            <Icon d={SHELL_ICONS.diff} size={13} />
+            <DiffGlyph />
             {plus > 0 && <span className="a">+{plus}</span>}
             {minus > 0 && <span className="d">−{minus}</span>}
           </button>
