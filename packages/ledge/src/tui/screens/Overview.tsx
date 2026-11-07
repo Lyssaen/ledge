@@ -6,6 +6,7 @@ import { BROADCAST_SILENT, canBroadcast, isPending, resetIsDate, resetLong, rese
 import { contextNear, contextShare, isOmpSeat, isStoppedOmpSeat, LEDGE_GIVER, projectOf, type Session, type Task } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
+import { cursorLabel } from '../ui/UsageLine.js';
 import { closedLedgeTasks, exchanges, helperCount, machineOf, nearContext, nextWaiting, openDecisions, overview, step } from '../model/overview.js';
 import { wrap } from '../model/thread.js';
 import { fit, machineLabel, paneName } from '../model/labels.js';
@@ -137,7 +138,7 @@ export function Overview() {
   const usageLines = usageAlerts(usage, id => tui.machines.find(m => m.id === id)?.status === 'open').map(a => {
     const w = a.window;
     const cursor = a.harness === 'cursor';
-    const name = cursor ? t.usage.cursorAlert[w.kind === 'pool' ? w.pool ?? '' : w.kind === 'month' ? 'month' : 'week'] ?? ''
+    const name = cursor ? cursorLabel(t.usage.cursorAlert, w)
       : w.kind === 'five_hour' ? t.usage.five5 : w.kind === 'seven_day' ? t.usage.weekAll : t.usage.weekOf(w.model ?? '');
     const date = !!w.resetsAt && resetIsDate(w.resetsAt, Date.now());
     // A date reads without its hour (« 1 déc. », as in the mockup).

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Box, Text } from 'ink';
 import { resetLong, span, useContextNear, useUsage, type UsageGroup } from '@ledge/fleet';
 import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, USAGE_ALERT_MAX, USAGE_ALERT_MIN, type UsageWindow } from '@ledge/protocol';
-import { bars, useUsageGroups } from '../ui/UsageLine.js';
+import { bars, cursorLabel, useUsageGroups } from '../ui/UsageLine.js';
 import { useScreenKeys, useTui } from '../context.js';
 import { LANGS } from '../i18n/lang.js';
 import { C, THEMES } from '../theme.js';
@@ -87,7 +87,7 @@ function UsageDetail({ x, o }: { x: UsageGroup; o: { threshold: number; now: num
     <Box flexDirection="column">
       <Text wrap="truncate"><Text color={C.fg}>{name}</Text><Text color={dim || x.status === 'expired' ? C.yellow : C.faint}>{`   ${age}`}</Text></Text>
       {(cursor ? [...x.windows].sort((a, b) => Number(a.kind === 'pool') - Number(b.kind === 'pool') || Number(a.pool === 'other') - Number(b.pool === 'other')) : x.windows).map(w => line(
-        cursor ? u.cursorDetail[w.kind === 'pool' ? w.pool ?? '' : w.kind === 'month' ? 'month' : 'week'] ?? ''
+        cursor ? cursorLabel(u.cursorDetail, w)
           : w.kind === 'five_hour' ? u.five : w.kind === 'seven_day' ? u.week : w.model ?? '', w))}
     </Box>
   );

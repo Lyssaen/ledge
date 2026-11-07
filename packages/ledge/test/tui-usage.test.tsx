@@ -154,5 +154,19 @@ describe('ledge tui: usage limits', () => {
         expect(s).toMatch(/Autres +█+ +100 %/);
       } finally { await tui.cleanup(); }
     });
+
+    it('in English: Month, ↺1 Dec, Others on the foot line and « resumes on 1 Dec » in « For you »', async () => {
+      const tui = await startTui({ sessions: sessions(), lang: 'en' });
+      try {
+        await tui.resize(200, 34);
+        tui.daemon.push(state([cursor()], [
+          { id: 'co', harness: 'cursor', account: 'c1d2e3f4a5b6', window: { kind: 'pool', pool: 'other', pct: 100, resetsAt: DEC1() }, level: 'full', at: at(-12) }
+        ]));
+        await until(() => tui.frame().includes('◇'));
+        const f = tui.frame();
+        expect(f).toMatch(/◇ Month █+░* 81% ↺1 Dec +Others █+ 100%/);
+        expect(f).toContain('Cursor Agent · Other models reached · resumes on 1 Dec');
+      } finally { await tui.cleanup(); }
+    });
   });
 });

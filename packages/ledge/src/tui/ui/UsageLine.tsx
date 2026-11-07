@@ -7,6 +7,11 @@ import { useNow } from './now.js';
 
 type Seg = readonly [string, string, boolean?];
 
+/** Cursor's window key in the i18n tables: its pool, else `month` or `week`. */
+export const cursorKey = (w: UsageWindow): string => (w.kind === 'pool' ? w.pool ?? '' : w.kind === 'month' ? 'month' : 'week');
+/** A Cursor window's label from one of the tables, the raw key when the table does not know it (never empty). */
+export const cursorLabel = (table: Record<string, string>, w: UsageWindow): string => table[cursorKey(w)] ?? cursorKey(w);
+
 /** A gauge of `n` cells. */
 export const bars = (pct: number, n: number, full: string, empty: string): string => {
   const f = Math.round((Math.min(100, pct) / 100) * n);
@@ -48,7 +53,7 @@ export function usageSegments(groups: readonly UsageGroup[], o: { wide: boolean;
       // Its total (month, or week on weekly plans) with its reset, then the pools past the threshold.
       const total = s.month ?? s.week;
       if (total) one(s.month ? (o.wide ? u.month : u.monthShort) : (o.wide ? u.week : u.weekShort), total, o.wide ? at(total) : '');
-      for (const w of s.hot) one(u.cursorPool[w.pool ?? ''] ?? '', w, '');
+      for (const w of s.hot) one(cursorLabel(u.cursorPool, w), w, '');
     } else {
       if (s.five) one(u.five, s.five, at(s.five));
       if (s.week) one(o.wide ? u.week : u.weekShort, s.week, o.wide ? at(s.week) : '');
