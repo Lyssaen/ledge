@@ -212,7 +212,7 @@ test('split from a session: the empty group, « Terminal · Otto » first, then 
   await expect(groups(page).nth(1)).toHaveClass(/dv-active-group/);
   await expect(empty.getByRole('heading', { name: 'Empty group' })).toBeVisible();
   await expect(empty).toContainText('Drag a tab here, open a session from the explorer, or:');
-  expect(await empty.getByRole('button').allTextContents()).toEqual(['Terminal · Otto', 'New session', 'OpenRig', 'Settings', 'Atelier']);
+  expect(await empty.getByRole('button').allTextContents()).toEqual(['Terminal · Otto', 'New session', 'OpenRig', 'Settings', 'Atelier', 'Terminal']);
   await expect(empty).toContainText('Tip: link this group');
   // The mockup's `.btn`: 26 px high, 12 px type, 6 px corners.
   for (const b of await empty.getByRole('button').all()) {
@@ -302,7 +302,7 @@ test('Review Focus 3: split from the Atelier, the empty group offers no « Termi
   await split(page, 0);
   const empty = groups(page).nth(1).locator('.ide-empty');
   await expect(empty).toBeVisible();
-  expect(await empty.getByRole('button').allTextContents()).toEqual(['New session', 'OpenRig', 'Settings', 'Atelier']);
+  expect(await empty.getByRole('button').allTextContents()).toEqual(['New session', 'OpenRig', 'Settings', 'Atelier', 'Terminal']);
   await expect(empty).not.toContainText('Tip:');
   // « Settings » opens in the empty group.
   await empty.getByRole('button', { name: 'Settings' }).click();
