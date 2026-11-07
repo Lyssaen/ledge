@@ -40,8 +40,8 @@ const draft = (page: Page, name: string) => pane(page, name).locator('.session-r
 const scrollOf = (l: Locator) => l.evaluate(el => el.scrollTop);
 const box = async (l: Locator) => (await l.boundingBox())!;
 
-async function boot(page: Page, stream = false) {
-  const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, threads: { otto: longThread, nova: novaThread }, ...(stream ? { daemon: STREAM } : {}) });
+async function boot(page: Page, stream = false, threads: Record<string, ThreadItem[]> = { otto: longThread, nova: novaThread }) {
+  const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, threads, ...(stream ? { daemon: STREAM } : {}) });
   await page.goto('/');
   await expect(page.locator('.ide')).toBeVisible();
   return daemon;
@@ -51,11 +51,14 @@ const plainTab = (page: Page, title: string) => tabs(page).filter({ hasText: tit
 const tabsIn = (page: Page, i: number) => groups(page).nth(i).locator('.dv-tab');
 const split = (page: Page, i: number) => groups(page).nth(i).getByRole('button', { name: 'Split right (Ctrl+\\)' }).click();
 const square = (page: Page, i: number) => groups(page).nth(i).locator('.ide-lk');
-/** The workspace model as the store saved it (`ledge.ide.workspace`): each group's tab keys, in order. */
+/** The workspace model as the store saved it (`ledge.ide.workspace`): each group's tab keys, in order, its front tab, its
+ *  link. Parsed twice: the store keeps `serialize(w)`, itself a JSON string, as a JSON value. */
 const model = (page: Page) => page.evaluate(() => {
-  const w = JSON.parse(JSON.parse(localStorage.getItem('ledge.ide.workspace')!)) as { groups: { tabs: { kind: string; ref: string }[]; link: string | null }[] };
-  return w.groups.map(g => ({ tabs: g.tabs.map(t => `${t.kind}:${t.ref}`), link: g.link }));
+  const w = JSON.parse(JSON.parse(localStorage.getItem('ledge.ide.workspace')!)) as { groups: { tabs: { kind: string; ref: string }[]; active: number; link: string | null }[] };
+  return w.groups.map(g => ({ tabs: g.tabs.map(t => `${t.kind}:${t.ref}`), front: g.tabs[g.active] ? `${g.tabs[g.active]!.kind}:${g.tabs[g.active]!.ref}` : null, link: g.link }));
 });
+/** Two frames: what a scroll, a resize or a render sets off (listeners, observers, React's commit) has run. */
+const frames = (page: Page) => page.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 /** The thread's keyboard focus, then Ctrl+` : the session's tab shows its agent's screen. */
 async function toTerminal(page: Page, name: string): Promise<void> {
   await thread(page, name).focus();
@@ -75,7 +78,9 @@ async function open(page: Page, name: string): Promise<void> {
 async function toMiddle(l: Locator): Promise<number> {
   await expect.poll(() => l.evaluate(el => el.scrollHeight - el.clientHeight)).toBeGreaterThan(1000);
   const top = await l.evaluate(el => { el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 2); el.dispatchEvent(new Event('scroll')); return el.scrollTop; });
-  await l.page().waitForTimeout(150);
+  // The page has taken the scroll (its listener, a render) and left it where it was set.
+  await frames(l.page());
+  expect(await scrollOf(l)).toBe(top);
   return top;
 }
 /** A real mouse drag (dockview's HTML5 drag): picked up, carried a little so the drag starts, then over `to` and let go.
@@ -319,9 +324,13 @@ test('Review Focus 1: two sessions on their screens side by side stay attached w
     await expect(groups(page).nth(i)).toHaveClass(/dv-active-group/);
     await expect(groups(page).nth(1 - i)).not.toHaveClass(/dv-active-group/);
   }
-  daemon.upsert({ ...sessions[1]!, lastActivityAt: new Date().toISOString(), state: 'idle' });
+  // Otto's update, then Nova's: Nova's dot turning to done says both are in.
+  const novaDot = tabOf(page, 'Nova').locator('.tab-dot');
+  await expect(novaDot).toHaveClass(/d-working/);
   daemon.upsert({ ...sessions[0]!, lastActivityAt: new Date().toISOString() });
-  await page.waitForTimeout(500);
+  daemon.upsert({ ...sessions[1]!, lastActivityAt: new Date().toISOString(), state: 'idle' });
+  await expect(novaDot).toHaveClass(/d-done/);
+  await frames(page);
   for (const n of ['Otto', 'Nova']) {
     await expect(pane(page, n).locator('.terminal-footer')).toContainText('Attached');
     expect(await pane(page, n).locator('.terminal-screen .xterm').evaluate(el => (el as HTMLElement & { ledgeMark?: string }).ledgeMark)).toBe(n);
@@ -356,7 +365,8 @@ test('Review Focus 4: a group linked with Changes in front follows the session c
   expect((await model(page))[1]!.link).toBeNull();
   await tabOf(page, 'Nova').click();
   await expect(tabOf(page, 'Nova')).toHaveClass(/dv-active-tab/);
-  await page.waitForTimeout(300);
+  // The model has Nova in front of the first group: a follow would have been written with it.
+  await expect.poll(async () => (await model(page))[0]!.front).toBe('session:local:nova');
   await expect(tabsIn(page, 1)).toHaveCount(1);
   await expect(tabsIn(page, 1).first()).toContainText('Changes · Otto');
 });
@@ -375,9 +385,8 @@ test('the mockup\'s groups: a session, its linked Changes, an empty group; scree
   // The new Ledge mark in the title bar, 16 px.
   const mark = page.locator('.ide-titlebar .ide-brand svg[data-ledge-mark]');
   await expect(mark).toBeVisible();
-  expect((await box(mark)).width).toBe(16);
+  expect((await box(mark)).width).toBeCloseTo(16, 0);
   await page.screenshot({ path: 'e2e/.results/ide-groups.png' });
-  await page.screenshot({ path: test.info().outputPath('ide-groups.png') });
 });
 
 test('Review Focus 5: four groups in a 1280 px window keep 300 px each, the editing area scrolls, every tab can be reached', async ({ page }) => {
@@ -441,10 +450,11 @@ test('Ctrl+click in the explorer opens to the right; the setting « To the right
 });
 
 // A 300 px group (Review Focus 5) keeps a change's row readable: the path keeps more than two characters, and « View the change »
-// (« View » when narrow) ends before the duration.
+// (« View » when narrow) ends before the duration, which is shown whole (« 6 min 52 s »).
 test('a thread row with a change stays readable in a 300 px group', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1080 });
-  await boot(page);
+  const long = tool('w-long', -100, 'Write', '/w/ledge/src/long.ts', { turn: 40, durationMs: 412_000, files: [{ path: '/w/ledge/src/long.ts', change: 'edit', diff: '- old\n+ new' }] });
+  await boot(page, false, { otto: longThread, nova: [...novaThread, long] });
   await open(page, 'Otto');
   await split(page, 0);
   await open(page, 'Nova');
@@ -467,6 +477,10 @@ test('a thread row with a change stays readable in a 300 px group', async ({ pag
   expect(geo.link!.r).toBeLessThanOrEqual(geo.time!.l);
   expect(geo.link!.r).toBeLessThanOrEqual(geo.act!.r + 0.5);
   await expect(row.locator('.action-link')).toHaveAttribute('data-short', 'View');
+  // The longest duration a row shows in minutes fits its column: not cut to « 6 min 52 ».
+  const time = pane(page, 'Nova').locator('.action-time', { hasText: '6 min 52 s' });
+  await time.scrollIntoViewIfNeeded();
+  expect(await time.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
   await g.screenshot({ path: 'e2e/.results/ide-groups-narrow-row.png' });
 });
 

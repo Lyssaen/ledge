@@ -56,12 +56,15 @@ async function open(page: Page, name: string, view: 'Projects' | 'OpenRig rigs' 
   // The session page's chunk loads on the first visit: under load it can take a while.
   await expect(pane(page, name).locator('.session-page')).toBeVisible({ timeout: 20_000 });
 }
+/** Two frames: what a scroll, a resize or a render sets off (listeners, observers, React's commit) has run. */
+const frames = (page: Page) => page.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 /** Scrolls a thread to the middle of its height and gives back where it stopped. */
 async function toMiddle(l: Locator): Promise<number> {
   await expect.poll(() => l.evaluate(el => el.scrollHeight - el.clientHeight)).toBeGreaterThan(1000);
   const top = await l.evaluate(el => { el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 2); el.dispatchEvent(new Event('scroll')); return el.scrollTop; });
-  // Let the page record the position (scroll listeners, rAF).
-  await l.page().waitForTimeout(150);
+  // The page has taken the scroll (its listener, a render) and left it where it was set.
+  await frames(l.page());
+  expect(await l.evaluate(el => el.scrollTop)).toBe(top);
   return top;
 }
 async function tabMenu(page: Page, name: string, item: string): Promise<void> {
@@ -90,8 +93,6 @@ test('a session tab shows its logo, dot and name; approval is underlined red; a 
   await expect(tabOf(page, 'Nova')).not.toHaveClass(/\balert/);
   await expect(tabOf(page, 'Ivo').locator('.tab-rig')).toHaveText('ledge-dev');
   await expect(tabOf(page, 'Nova').locator('.tab-rig')).toHaveCount(0);
-  await page.locator('.ide-dockview .dv-tabs-and-actions-container').first().screenshot({ path: test.info().outputPath('ide-session-tab.png') });
-  await page.screenshot({ path: test.info().outputPath('ide-session-tab-full.png') });
   await page.locator('.ide-dockview .dv-tabs-and-actions-container').first().screenshot({ path: 'e2e/.results/ide-session-tab.png' });
   await page.screenshot({ path: 'e2e/.results/ide-session-tab-full.png' });
 });
@@ -112,7 +113,8 @@ test('R6: a tab keeps its scroll when another tab is shown and when its view goe
 
   // (b) A's view to the terminal by the tab menu, then « Back to the thread ».
   const up = await thread(page, 'Nova').evaluate(el => { el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 3); el.dispatchEvent(new Event('scroll')); return el.scrollTop; });
-  await page.waitForTimeout(150);
+  await frames(page);
+  expect(await scrollOf(thread(page, 'Nova'))).toBe(up);
   await tabMenu(page, 'Nova', 'Switch to the terminal');
   await expect(pane(page, 'Nova').locator('.agent-view')).toBeVisible();
   await tabMenu(page, 'Nova', 'Back to the thread');
@@ -161,7 +163,6 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   const caret = b.locator('.model-chip .car');
   await expect(caret).toBeVisible();
   expect(await caret.evaluate(el => el === el.parentElement!.lastElementChild && el.textContent)).toBe('▾');
-  await b.screenshot({ path: test.info().outputPath('ide-session-bar.png') });
   await b.screenshot({ path: 'e2e/.results/ide-session-bar.png' });
   // The whole group (tabs, thread, reply, bar), to set beside the mockup's.
   await page.locator('.ide-dockview .dv-groupview').first().screenshot({ path: 'e2e/.results/ide-session-group.png' });
@@ -186,7 +187,6 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   // The focused group's front tab carries the 2 px line on top.
   const stripe = (t: Locator) => t.evaluate(el => getComputedStyle(el, '::before').height);
   expect(await stripe(changes)).toBe('2px');
-  await page.screenshot({ path: test.info().outputPath('ide-session-beside.png') });
   await page.screenshot({ path: 'e2e/.results/ide-session-beside.png' });
 
   // Review Focus 5: narrower and narrower, the first group goes under 560, 470, 400 px; project, then %, then branch go,
@@ -195,7 +195,7 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   const seen = { 560: false, 470: false, 400: false };
   for (let w = 1920; w >= 900; w -= 20) {
     await page.setViewportSize({ width: w, height: 1080 });
-    await page.waitForTimeout(30);
+    await frames(page);
     const pw = await paneWidth();
     const overflow = await b.evaluate(el => el.scrollWidth - el.clientWidth);
     expect(overflow, `bar overflow at a ${pw}px group`).toBeLessThanOrEqual(0);
