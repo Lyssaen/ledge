@@ -1,6 +1,7 @@
 //! A pseudo-terminal the desktop app runs `wsl.exe` in, so a terminal tab lives inside its window instead of Windows Terminal.
 
 use std::io::{self, Read, Write};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
@@ -31,12 +32,13 @@ pub struct Pty {
 }
 
 impl Pty {
-    /// Starts `program` in a `cols`×`rows` terminal: its output goes to `on_data`, then its exit code to `on_exit`
+    /// Starts `program` (in `cwd` when given) in a `cols`×`rows` terminal: its output goes to `on_data`, then its exit code to `on_exit`
     /// (`None` once killed through `kill`).
-    pub fn spawn(program: &str, args: &[String], cols: u16, rows: u16, mut on_data: impl FnMut(&[u8]) + Send + 'static, on_exit: impl FnOnce(Option<u32>) + Send + 'static) -> io::Result<Pty> {
+    pub fn spawn(program: &str, args: &[String], cwd: Option<&Path>, cols: u16, rows: u16, mut on_data: impl FnMut(&[u8]) + Send + 'static, on_exit: impl FnOnce(Option<u32>) + Send + 'static) -> io::Result<Pty> {
         let pair = native_pty_system().openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(other)?;
         let mut cmd = CommandBuilder::new(program);
         cmd.args(args);
+        if let Some(dir) = cwd { cmd.cwd(dir); }
         let mut child = pair.slave.spawn_command(cmd).map_err(other)?;
         // Our copy of the slave closed, the reader sees the end once the child's side closes.
         drop(pair.slave);
@@ -101,7 +103,7 @@ mod tests {
         let out = Arc::new(Mutex::new(Vec::new()));
         let sink = out.clone();
         let (tx, rx) = mpsc::channel();
-        let pty = Pty::spawn(program, &s(args), 80, 24, move |b| sink.lock().unwrap().extend_from_slice(b), move |code| { let _ = tx.send(code); }).unwrap();
+        let pty = Pty::spawn(program, &s(args), None, 80, 24, move |b| sink.lock().unwrap().extend_from_slice(b), move |code| { let _ = tx.send(code); }).unwrap();
         // ConPTY asks where the cursor is (ESC [6n) and starts the child only once answered, as xterm.js does in the app.
         if cfg!(windows) { pty.write(b"\x1b[1;1R").unwrap(); }
         (pty, out, rx)
