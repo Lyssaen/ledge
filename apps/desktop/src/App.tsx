@@ -170,6 +170,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [openSession] = useOpenSession();
   const ideNow = useRef({ ide, nav, openSession });
   ideNow.current = { ide, nav, openSession };
+  // The IDE's right panel is there from the start: its field takes the focus only once asked (/, Ctrl+/, an open button), never by
+  // itself when the app starts or the IDE is turned on (a single key such as N would land in it). `chatFocus` counted from there.
+  const ideChatFrom = useRef<number | null>(null);
+  if (!ide) ideChatFrom.current = null;
+  else if (ideChatFrom.current === null) ideChatFrom.current = nav.chatFocus;
   // What every child dispatches. Switch off: the navigation reducer, as ever. On: the action routed (routeNav) to the
   // navigation, the tabs and the panels; the NavState stays up to date, so turning the IDE off lands on the same place.
   // Stable, as the reducer's own dispatch: effects that keep it from their first render see the switch as it is now.
@@ -474,7 +479,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const own = ownId ? projects?.projects.find(p => p.id === ownId) : undefined;
     const table = own ? { id: own.id, name: own.name } : s ? { id: 'none', name: null } : preview ? { id: preview.projectId, name: preview.project } : null;
     dispatch({ type: 'modal', modal: null });
-    // In the IDE the session opens where the modal's « Ouvrir » said, and the overview's filter stays.
+    // In the IDE the session opens where the modal's « Ouvrir » said, and the overview's filter stays. No `where` in the preview
+    // (`?? openSession`): a launch sent from the old form, answered after the IDE switch was turned on.
     if (ideNow.current.ide) dispatch({ type: 'open', id, where: preview?.where ?? ideNow.current.openSession });
     // Only the overview's filter follows; a session page (the sidebar's « New session in … ») stays where it is.
     else if (place.kind === 'overview' && place.project !== 'all' && place.project !== table?.id) dispatch({ type: 'home', project: 'all' });
@@ -616,7 +622,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         }
         editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={gid => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); }} emptyGroup={emptyGroup} />}
         chat={
-          <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus}
+          <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus - (ideChatFrom.current ?? 0)} askedOnly
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
             projects={projects} notify={notify} onProposal={openProposal} />
         }

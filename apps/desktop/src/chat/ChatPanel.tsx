@@ -23,6 +23,8 @@ export interface ChatPanelProps {
   paused: boolean;
   /** Changes each time the chat is asked for (/, an open button), even already open: the field takes the focus again. */
   focus?: number;
+  /** The IDE's right panel, there from the start: `focus` 0 is « not asked yet », and the field does not take the focus on its own. */
+  askedOnly?: boolean;
   /** Without it (the IDE's right panel, hidden by Ctrl+/), no ×, and Escape only leaves its field. */
   onClose?(): void; onOpenSession(id: string): void; onLaunched(id: string): void;
   /** A launch card's « Terminal »: the session's page with its terminal pane (the app's `showTerminal`). */
@@ -39,7 +41,7 @@ export interface ChatPanelProps {
  *  the real fleet. Questions go to the daemon with the default agent (Settings › General); nothing is sent while the local daemon is offline. A name hovered or
  *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island; a project card's « Review the proposal »
  *  opens the project editor prefilled (nothing is created before its button). */
-export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal }: ChatPanelProps): JSX.Element {
   const { t } = useI18n();
   const copy = useMemo(() => chatCopy(t), [t]);
   const theme = useTheme();
@@ -60,9 +62,9 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
   // Every way in (/, the sidebar, the top bar, the footer, Ledge's desk) mounts the panel: the field takes the focus; asked for
-  // again while open (/ from the page, the top bar, the footer), it takes it back.
+  // again while open (/ from the page, the top bar, the footer), it takes it back. The IDE's panel (`askedOnly`) waits to be asked.
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { inputRef.current?.focus({ preventScroll: true }); }, [focus]);
+  useEffect(() => { if (!askedOnly || focus) inputRef.current?.focus({ preventScroll: true }); }, [focus, askedOnly]);
 
   // Images pasted or dropped on the field travel inline with the field's question only (not a suggestion's or « Résumer »).
   const images = useAttachments(client, { inline: true });
@@ -89,7 +91,7 @@ export function ChatPanel({ client, view, paused, focus, onClose, onOpenSession,
     }}>
       <div className="chat-drawer-content">
         <ChatCopyProvider value={copy}>
-          <ChatView docked visible turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
+          <ChatView docked quietStart={askedOnly} visible turnImages={turn => <TurnThumbs client={client} turn={turn} />} turns={chat} live={chatLive} sessions={view.sessions} offline={offline}
             onAsk={ask} onCancel={qid => send({ type: 'chat.cancel', qid })} onReset={() => send({ type: 'chat.reset' })} onBack={onClose} onClose={onClose}
             onOpenSession={open} onTerminal={terminal} turnAvailable={turnReady}
             launchingQid={cards.launchingQid} launchingRows={cards.launchingRows} onLaunchProposal={cards.launch}

@@ -88,6 +88,8 @@ export function navReducer(s: NavState, a: NavAction): NavState {
       if (baseOf(place).project === a.project) return s;
       return { ...s, place: place.kind === 'settings' ? { ...place, back: { ...place.back, project: a.project } } : { ...place, project: a.project } };
     }
+    // 'open', and the other navigations that clear `modal` ('ledge', 'settings', 'openrig'), do not close a dialog in the IDE:
+    // App.tsx's front-tab sync re-sends the open modal right after the navigation it dispatches.
     case 'open': {
       const b = baseOf(place);
       return { ...s, place: { kind: 'session', id: a.id, ...(a.helper !== undefined && { helper: a.helper }), ...(a.focus !== undefined && { focus: a.focus }), ...(a.item !== undefined && { item: a.item }), ...(a.doc !== undefined && { doc: a.doc }), view: b.view, project: b.project }, modal: null, chat: false };

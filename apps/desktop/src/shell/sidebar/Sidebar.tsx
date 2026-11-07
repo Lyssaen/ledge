@@ -185,7 +185,7 @@ export function Sidebar(p: {
       {section === 'projects' && (
         <div className="ide-ex-h">
           <span>{t.side.projects}</span>
-          <button type="button" className="ide-ex-kbd" title={t.ide.newSession} aria-label={t.ide.newSession} onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'launch' } })}>+ N</button>
+          <button type="button" className="ide-ex-kbd" title={t.ide.newSession} aria-label={t.ide.newSession} aria-keyshortcuts="N" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'launch' } })}>+ N</button>
         </div>
       )}
       <div className="st-scroll">

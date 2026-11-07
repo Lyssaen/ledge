@@ -158,6 +158,7 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .palette-results button{display:flex;align-items:center;width:100%;padding:12px 10px;gap:12px;border-radius:var(--radius-md)}
 .palette-results button[aria-selected=true]{background:var(--sidebar-accent);outline:1px solid var(--input)}
 .palette-results button>span:not([data-badge]){flex:1;min-width:0}
+.palette-results button>span.palette-new-icon{flex:none;display:grid;place-items:center;width:32px;height:32px;color:var(--muted-foreground)}
 .palette-results strong{font-size:13px;font-weight:500}
 .palette-results small{display:block;font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .palette-results strong small{display:inline}

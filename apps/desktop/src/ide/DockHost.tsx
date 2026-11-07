@@ -98,7 +98,7 @@ function StripTools({ group }: IDockviewHeaderActionsProps): JSX.Element {
   const g = c?.modelOf(group);
   return (
     <div className="ide-strip-tools">
-      <button type="button" title={t.ide.newSession} aria-label={t.ide.newSession} onClick={() => { if (g) c!.onNewSession(g.id); }}>
+      <button type="button" title={t.ide.newSession} aria-label={t.ide.newSession} aria-keyshortcuts="N" onClick={() => { if (g) c!.onNewSession(g.id); }}>
         +
       </button>
       <button type="button" title={t.ide.splitTip} aria-label={t.ide.splitTip} onClick={() => { if (g) c!.split(g.id); }}>

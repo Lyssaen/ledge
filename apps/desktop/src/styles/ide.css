@@ -296,6 +296,7 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .launch-modal-agent small { color: var(--muted-foreground); font-size: 11px; }
 .launch-modal-agent small b { font-weight: 500; color: var(--foreground); }
 .launch-modal-agent small b.amber { color: var(--warning); }
+.launch-modal-agent small b.red { color: var(--danger-text, var(--destructive)); }
 /* The model picker's own legend repeats the row's « Modèle »: kept for screen readers only. */
 .launch-modal-model .composer-models > legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .launch-modal-model .composer-models { margin: 0; padding: 0; border: 0; min-width: 0; }
@@ -320,6 +321,8 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 /* The mockup's .btn (as .ide-empty .go): the Button's own inline size is overridden. */
 .launch-modal-go .ledge-btn { white-space: nowrap; height: 26px !important; padding: 0 10px !important; font-size: 12px !important; border-radius: 6px !important; gap: 6px !important; }
 .launch-modal-go .ledge-btn kbd { font-size: 10px !important; height: 16px !important; }
+/* « Lancer » while a field is missing, a launch is in flight or OMP cannot run (the old composer's .composer-footer [aria-disabled=true]). */
+.launch-modal-go .ledge-btn[aria-disabled=true] { opacity: .55; cursor: not-allowed; }
 .launch-modal-alert { margin: 6px 0 0; color: var(--danger-text, var(--destructive)); font-size: 12px; }
 .launch-modal-go .launch-modal-alert { margin: 0; }
 @media (max-width: 640px) {
@@ -332,4 +335,3 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-ex-h { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px 6px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
 .ide-ex-kbd { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0; text-transform: none; border: 1px solid var(--input); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); }
 .ide-ex-kbd:hover { color: var(--foreground); background: var(--muted); }
-.palette-new-icon { flex: none !important; display: grid; place-items: center; width: 32px; height: 32px; color: var(--muted-foreground); }
