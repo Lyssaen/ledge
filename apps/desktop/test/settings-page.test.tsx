@@ -142,6 +142,12 @@ describe('the Settings page', () => {
     expect(tab('Notch')).toHaveAttribute('aria-current', 'page');
   });
 
+  it('a radio row answers the pointer: its circle takes the ring colour, its text the foreground', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/settings.css'), 'utf8');
+    expect(css).toContain('.set-radios label:hover{color:var(--foreground)}');
+    expect(css).toContain('.set-radios label:hover input{border-color:var(--ring)}');
+  });
+
   it('the sidebar’s footer is styled once, by sidebar.css: the Settings sheet does not repeat it', () => {
     const sheet = (name: string) => readFileSync(resolve(__dirname, '../src/styles', name), 'utf8');
     expect(sheet('sidebar.css')).toContain('.side-footer{');
