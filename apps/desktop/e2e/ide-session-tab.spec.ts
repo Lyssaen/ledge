@@ -299,3 +299,15 @@ test('the tab\'s label sits in the middle of its 30 px, in Geist 12 px, as in th
   expect(font.size).toBe('12px');
   await page.locator('.ide-dockview .dv-tabs-and-actions-container').first().screenshot({ path: 'e2e/.results/ide-session-tab-centred.png' });
 });
+
+// A 300 px group is a normal width (lot 3): the narrow page's rules apply there, but the IDE reply keeps its reason hints.
+test('in a 300 px group, Otto waiting for an approval: typed text shows « Enter denies with this message »', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1080 });
+  await boot(page);
+  await open(page, 'Otto');
+  for (let i = 0; i < 3; i++) await page.locator('.ide-dockview .dv-groupview').nth(i).getByRole('button', { name: 'Split right (Ctrl+\\)' }).click();
+  await expect(page.locator('.ide-dockview .dv-groupview')).toHaveCount(4);
+  expect((await box(pane(page, 'Otto').locator('.session-page'))).width).toBeLessThan(600);
+  await pane(page, 'Otto').locator('.session-reply textarea').fill('Pas ce fichier');
+  await expect(pane(page, 'Otto').locator('.reply-hint', { hasText: 'Enter denies with this message' })).toBeVisible();
+});

@@ -232,7 +232,9 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-term > .agent-view { flex: 1; min-height: 0; }
 
 /* A thread in a narrow IDE group (lot 3: 300 px is a normal width): session.css's narrow rules apply; the time column takes
-   what its duration needs (« 6 min 52 s »), 44 px at least. */
+   what its duration needs (« 6 min 52 s »), 44 px at least. The IDE reply shows a hint only when it has a reason to (what
+   Enter does with a note, why the field is shut, the queue): the narrow page's hiding does not apply to it. */
 @container session (max-width: 600px) {
   .ide-pane .r { grid-template-columns: 32px minmax(0, 1fr) minmax(44px, max-content); }
+  .ide-pane .reply-hint { display: inline-flex; }
 }
