@@ -18,6 +18,7 @@ Plan rédigé le 2026-11-06 (v2, sur la maquette qui a évolué), à valider par
 | Dispositions | Vue Projets, palette, réglages | **Menu de la barre d'état** (appliquer, enregistrer, gérer), palette, réglages. |
 | Réglages › Espace de travail | Avec « Panneau de droite » | Sans les options du panneau de droite. |
 | Page OpenRig | — | Choix de la machine (WSL, srv-build). Permissions au lancement : Spec, Auto, Standard, Ouvert, YOLO, Verrouillé. |
+| **Rigs et OpenRig** (2026-11-07, [`ledge-ide-rigs.html`](mockups/ledge-ide-rigs.html)) | Deux boutons : la vue Rigs, et la page OpenRig en onglet | **Un seul bouton Rigs.** Dans la vue : la machine dans un menu de l'en-tête, Kernel en haut, les Rigs, et OpenRig (le daemon) collé en bas. Démarrer, redémarrer et arrêter sur chaque ligne, dans la même colonne. La **topologie devient la vue Rig**, où l'on gère le rig (permissions, ± par rôle, snapshot, file). « + Lancer » ouvre une **fenêtre modale « Lancer un rig »**. La **page OpenRig** passe en sections (Vue d'ensemble, Rigs, Rôles, Machines, Daemon, Sortie) et s'ouvre par un clic sur le daemon. |
 
 Les **Modifications** d'une session avaient été retirées volontairement. Elles reviennent sous une forme compacte dans la barre du bas de l'onglet (voir 4.1).
 
@@ -85,6 +86,7 @@ Le modèle d'espace de travail est un magasin hors de React (`useSyncExternalSto
 | D3 | **L'Accueil disparaît et devient la page « À toi ».** L'**Historique** revient sous forme d'archives, comme aujourd'hui (`shell/sidebar/Archives.tsx`). Les deux passent par un complément de maquette (4.1). |
 | D4 | Une PR par lot vers `main`, relue par `review-qa`, fusionnée sur accord de l'utilisateur. |
 | D5 | Le queue worker du kernel reste visible. |
+| D6 | (2026-11-07) Les rigs et OpenRig suivent [`docs/mockups/ledge-ide-rigs.html`](mockups/ledge-ide-rigs.html), validée par l'utilisateur, qui remplace la version 26 sur ce sujet. Le bouton OpenRig de la barre d'activité disparaît. Le lot 7 est réécrit en conséquence. |
 
 ### 4.1 Complément de maquette, à faire par `design-ux` et à faire valider par l'utilisateur
 
@@ -129,9 +131,36 @@ En parallèle, `workspace/model.ts` en logique pure, couvert par des tests vites
 
 **Lot 6 — Réglages et atelier en onglets · dev-front.** Les Réglages s'ouvrent en onglet (`Ctrl+,`) avec la section Espace de travail. L'atelier passe en onglet **sans modification** : seuls ses gestes changent. On signale à `design-ux` sa lisibilité dans un groupe étroit.
 
-**Lot 7 — OpenRig · 7a dev-back, 7b dev-front.**
-- 7a : on relève sur une vraie installation ce que liste `rig ps --nodes --rig kernel`, et les liens entre sièges que la flotte peut fournir pour la topologie.
-- 7b : la vue Rigs avec le kernel, la **topologie** en onglet (seul écran entièrement nouveau), la page OpenRig en onglet avec le choix de la machine et les six niveaux de permissions, et les confirmations qui montrent la commande `rig` exacte.
+**Lot 7 — Rigs et OpenRig · 7a dev-back, 7b à 7d dev-front.** On suit [`docs/mockups/ledge-ide-rigs.html`](mockups/ledge-ide-rigs.html) (D6) et la section « OpenRig » de [`docs/ide-workspace.md`](ide-workspace.md).
+- **7a, relevé et protocole.** On relève sur une vraie installation :
+  - ce que liste `rig ps --nodes --rig kernel` ;
+  - les liens entre sièges, pour la topologie ;
+  - les specs enregistrées et leurs rôles, lisibles même quand le rig est arrêté ;
+  - les permissions propres à chaque rig ;
+  - la commande de snapshot à la demande ;
+  - les fichiers de consignes des rôles (lire, ouvrir, dupliquer) ;
+  - la reprise d'un snapshot au lancement ;
+  - la façon de confier une demande à l'operator.
+
+  On les expose dans le protocole, machine par machine (les machines viennent déjà du daemon). Tout ce qu'OpenRig ne fournit pas est listé à l'utilisateur avant 7b : l'écran le grise ou le retire.
+- **7b, vue Rigs.**
+  - Le bouton OpenRig de la barre d'activité disparaît (vue `rigs` seule, plus d'`openrigTab` dans `ActivityBar`).
+  - La vue, de haut en bas : l'en-tête avec le menu des machines et « + Lancer », Kernel, Rigs, puis OpenRig collé en bas (la ligne du daemon, dont le clic ouvre la page).
+  - Démarrer, redémarrer et arrêter dans une colonne fixe à droite de chaque ligne. La confirmation s'ouvre sous la ligne cliquée, avec la commande `rig` exacte.
+  - L'état « daemon arrêté » et le « ! » sur le bouton Rigs.
+  - On reprend `openrig/model.ts`, `grouping.ts` et `sidebarState.ts`.
+- **7c, vue Rig.** L'onglet « Rig · nom » remplace la topologie et est le seul écran entièrement nouveau.
+  - L'en-tête avec ses boutons.
+  - La topologie, aux sièges grisés quand le rig est arrêté.
+  - Les réglages : spec, permissions du rig, ± par rôle (on reprend `SeatsDialog` et `SeatSettings`), snapshot.
+  - La file OpenRig.
+  - La vue du kernel avec « Parler à l'operator ».
+  - La disposition étroite.
+- **7d, lancement et page OpenRig.**
+  - « Lancer un rig » en fenêtre modale (`shell/Modal.tsx`, comme Nouvelle session au lot 4), à partir de `RigLaunchForm`. Elle propose : spec, rig vide ou operator ; la machine ; le ± par rôle ; les permissions ; la reprise du snapshot ; la commande en direct ; `Ctrl+Entrée` et Échap.
+  - La page OpenRig en sections : Vue d'ensemble, Rigs en cartes, Rôles (on reprend `openrig/roles/*`), Machines, Daemon, Sortie. La Sortie reprend le journal `openrig/rigOutput.ts` du lot 5.
+  - La colonne de gauche devient une rangée d'onglets dans un groupe étroit.
+  - Elle remplace `OpenRigPage.tsx` dans l'IDE.
 
 **Lot 8 — MR et PR · 8a dev-back, 8b dev-front.** C'est le plus gros ajout de la maquette.
 - 8a : le relevé `gh` / `glab` côté daemon (3.4), le protocole, et les actions relancer, fusionner, commenter, répondre, résoudre, ouvrir dans le navigateur.
@@ -140,11 +169,11 @@ En parallèle, `workspace/model.ts` en logique pure, couvert par des tests vites
 
 **Lot 9 — Plusieurs fenêtres · dev-front (+ dev-back pour Tauri).** On arrache un onglet ou un terminal pour ouvrir une nouvelle fenêtre, et on le glisse dans un groupe pour le ramener. Les liens de couleur fonctionnent d'une fenêtre à l'autre. On mémorise l'écran et la taille. L'atelier détaché passe sur le même mécanisme, ce qui supprime `atelier/detach.ts` et ses événements.
 
-**Lot 10 — Dispositions et palette · dev-front.** Le menu des dispositions dans la barre d'état (appliquer, enregistrer, gérer), le choix « Au démarrage », et la palette (`@` pour les sessions et les sièges, `>` pour les commandes, y compris MR et PR et les dispositions).
+**Lot 10 — Dispositions et palette · dev-front.** Le menu des dispositions dans la barre d'état (appliquer, enregistrer, gérer), le choix « Au démarrage », et la palette (`@` pour les sessions et les sièges, `>` pour les commandes, y compris MR et PR et les dispositions). Côté rigs, la palette propose « Lancer un rig… », « Ouvrir la vue Rig de… » (rigs et kernel), les sections de la page OpenRig et le changement de machine.
 
 **Lot 11 — « Ouvrir dans… » · dev-back.** Cursor, VS Code ou Zed. Desktop tourne sous Windows et les worktrees dans WSL : on passe `--folder-uri vscode-remote://wsl+<distro>/<chemin>`, ou `ssh-remote+<hôte>` pour une machine distante. Zed n'a pas d'équivalent WSL fiable : on le signale.
 
-**Lot 12 — Bascule finale · dev-front.** L'IDE devient la seule interface. On retire l'interrupteur, `nav/state.ts`, `shell/sidebar/*`, `TopBar`, la vue Accueil (selon D3), le CSS mort et `atelier/detach.ts`. On met à jour `docs/ledge-guide.md` (`PLACE_KIND` / `MODAL_KIND`), les textes en et fr et `ledge brain @ledge`, et on réécrit les e2e qui visent l'ancienne navigation.
+**Lot 12 — Bascule finale · dev-front.** L'IDE devient la seule interface. On retire l'interrupteur, `nav/state.ts`, `shell/sidebar/*`, `TopBar`, la vue Accueil (selon D3), l'ancienne `OpenRigPage` et la place OpenRig de l'ancienne navigation, le CSS mort et `atelier/detach.ts`. On met à jour `docs/ledge-guide.md` (`PLACE_KIND` / `MODAL_KIND`), les textes en et fr et `ledge brain @ledge`, et on réécrit les e2e qui visent l'ancienne navigation.
 
 ## 6. Ordre et parallélisme
 
@@ -153,7 +182,7 @@ L0 ──► L1 ──► L2 ──┬──► L3 ──┬──► L9 ──�
                    ├──► L4   │                  │
                    ├──► L5 ──┘                  ├──► L12
                    ├──► L6                      │
-                   ├──► L7a ► L7b ──────────────┤
+                   ├──► L7a ► L7b ► L7c ► L7d ──┤
                    ├──► L8a ► L8b ──────────────┤
                    └──► L11 ────────────────────┘
 ```

@@ -3,6 +3,7 @@
 Design validé par l'utilisateur le 2026-11-05, puis dans sa version 26 le 2026-11-06. La fenêtre principale de Ledge Desktop devient un espace de travail à la manière de VS Code ou de Cursor. Il est centré sur les agents, avec des panneaux divisés, plusieurs fenêtres et plusieurs terminaux. OpenRig, l'atelier, et les MR et PR y sont intégrés.
 
 - **Référence pour coder :** [`docs/mockups/ledge-ide-interactive.html`](mockups/ledge-ide-interactive.html), version 26, publiée sur https://claude.ai/artifact/GFWW4nhGxs2DLSxFW5R62B. C'est un prototype interactif en 1920×1080, où chaque bouton et chaque option agissent. En cas de doute, c'est lui qui fait foi.
+- **Rigs et OpenRig :** [`docs/mockups/ledge-ide-rigs.html`](mockups/ledge-ide-rigs.html), validée par l'utilisateur le 2026-11-07. Elle part de la version 26 et la remplace pour tout ce qui touche aux rigs : la vue Rigs, la vue Rig d'un rig, la fenêtre « Lancer un rig » et la page OpenRig.
 - **Vues statiques d'origine :** [`docs/mockups/ledge-ide-workspace.html`](mockups/ledge-ide-workspace.html). Elles sont dépassées par le prototype.
 - **Plan d'implémentation :** [`docs/ide-workspace-plan.md`](ide-workspace-plan.md).
 - **Périmètre :** Ledge Desktop seulement. Le TUI suivra plus tard. Le téléphone et l'encoche ne changent pas.
@@ -28,8 +29,8 @@ Ledge n'édite pas de code. « Ouvrir dans… » envoie le worktree d'une sessio
 | Zone | Contenu |
 |---|---|
 | Barre de titre | Le champ de recherche qui ouvre la palette (`Ctrl+K`), et les boutons pour afficher ou masquer la barre latérale, le panneau du bas et le panneau de droite. |
-| Barre d'activité (à gauche) | **Projets**, **Rigs**, **À toi** (badge rouge ou ambre), **MR et PR** (badge : pipelines échoués), **OpenRig** (page en onglet), **Atelier** (onglet), **Réglages** (onglet). Un second clic sur la vue active replie la barre latérale. |
-| Barre latérale | Selon la vue : **Projets** (sessions par projet, puis **Archives**), **Rigs** (rigs, leurs sièges, le kernel), **À toi** (demandes, tranchables sur place, et le bouton « Page »), **MR et PR**. Elle se redimensionne en glissant son bord : sous 150 px elle se replie, un double-clic lui rend sa largeur par défaut. « Réduire » ou `Ctrl+B` la replie. |
+| Barre d'activité (à gauche) | **Projets**, **Rigs**, **À toi** (badge rouge ou ambre), **MR et PR** (badge : pipelines échoués), **Atelier** (onglet), **Réglages** (onglet). Un second clic sur la vue active replie la barre latérale. |
+| Barre latérale | Selon la vue : **Projets** (sessions par projet, puis **Archives**), **Rigs** (le kernel, les rigs et leurs sièges, OpenRig en bas ; voir « OpenRig »), **À toi** (demandes, tranchables sur place, et le bouton « Page »), **MR et PR**. Elle se redimensionne en glissant son bord : sous 150 px elle se replie, un double-clic lui rend sa largeur par défaut. « Réduire » ou `Ctrl+B` la replie. |
 | Zone d'édition | Des groupes d'onglets côte à côte. Voir « Onglets et groupes ». |
 | Panneau du bas (`Ctrl+J`) | Deux onglets en icônes : les terminaux (avec leur nombre) et la sortie (les commandes `rig` lancées par Ledge, avec leur nombre). |
 | Panneau de droite (`Ctrl+/`) | **Le chat de Ledge, et rien d'autre.** |
@@ -39,7 +40,7 @@ Les rigs ne figurent pas dans la vue Projets. Ils sont réservés à la vue Rigs
 
 ## Onglets et groupes
 
-Types d'onglets : **session**, **siège OpenRig**, **modifications** d'une session, **terminal**, **MR ou PR**, **topologie** d'un rig, **page OpenRig**, **page À toi**, **atelier**, **réglages**.
+Types d'onglets : **session**, **siège OpenRig**, **modifications** d'une session, **terminal**, **MR ou PR**, **vue Rig** (la topologie et les réglages d'un rig ou du kernel), **page OpenRig**, **page À toi**, **atelier**, **réglages**.
 
 - **Ouvrir.** Un clic dans l'explorateur ouvre selon le réglage « Ouvrir une session » : dans le groupe actif, à droite, ou dans une nouvelle fenêtre. `Ctrl`+clic ouvre à droite. Le clic droit propose : ouvrir, ouvrir à droite, ouvrir dans une nouvelle fenêtre, son terminal (ou sa capture pour un siège), envoyer un message et redémarrer le siège (pour un siège), ouvrir dans l'éditeur. Un onglet déjà ouvert est mis au premier plan, jamais dupliqué.
 - **Le bouton + d'un groupe** ouvre directement « Nouvelle session » (voir plus bas), et rien d'autre.
@@ -102,22 +103,53 @@ Ledge suit les MR GitLab et les PR GitHub des branches des sessions et des sièg
 
 ## OpenRig
 
-- **Vue Rigs.** Chaque rig affiche son état et ses sièges. Le **kernel** a sa propre section avec ses trois sièges :
-  - l'**operator**, qui aide à choisir et lancer une équipe ;
-  - l'**advisor**, qui relit les plans ;
-  - le **queue worker**, qui route les lignes de queue. Il reste visible.
+Tout OpenRig passe par **un seul bouton** de la barre d'activité, **Rigs**. Il n'y a plus de bouton OpenRig à part. Maquette : [`docs/mockups/ledge-ide-rigs.html`](mockups/ledge-ide-rigs.html).
 
-  Un clic sur un siège ouvre son fil.
-- **Un clic sur un rig** (ou sur le kernel) ouvre sa **topologie** dans un onglet. On y trouve les sièges et leurs liens. Un clic sur un siège ouvre son fil. La topologie d'un rig a aussi Démarrer, Arrêter, Redémarrer, sa file OpenRig et un lien vers la page OpenRig. Celle du kernel a « Parler à l'operator ». Un rig arrêté montre ses sièges grisés.
-- **Page OpenRig** (en onglet) :
-  - la machine (WSL, serveurs) ;
-  - le daemon, avec « relancer les rigs qui tournaient » et « sans le kernel » ;
-  - le kernel et ses trois sièges ;
-  - les rigs, leurs sièges et un ± par rôle ;
-  - les permissions au lancement (Spec, Auto, Standard, Ouvert, YOLO, Verrouillé) ;
-  - « Lancer un rig… » ;
-  - la sortie des commandes.
-- **Confirmations.** Tout arrêt ou redémarrage (daemon, kernel, rig) demande confirmation, nomme les sièges qui travaillent et montre la commande `rig` exacte. Le résultat arrive dans la sortie (panneau du bas et page OpenRig). L'état des sièges change partout : explorateur, atelier, topologie, onglets.
+- **Vue Rigs**, de haut en bas :
+  - **En-tête :** le titre, la **machine affichée** et « + Lancer ». La machine est un petit bouton (`● WSL ▾`) qui ouvre un menu. Il liste chaque machine avec son type (locale, SSH), le nombre de rigs en marche, et une coche sur celle affichée. Il propose aussi « Gérer les machines… », qui ouvre la page OpenRig sur Machines, et « Ajouter une machine ». Tout ce qui suit concerne la machine affichée.
+  - **Kernel**, en premier, avec ses trois sièges :
+    - l'**operator**, qui aide à composer et lancer une équipe ;
+    - l'**advisor**, qui relit les plans ;
+    - le **queue worker**, qui route les lignes de queue. Il reste visible.
+  - **Rigs :** chaque rig se replie, avec sa pastille d'état, son nom, son nombre de sièges, puis ses sièges. Un clic sur un siège ouvre son fil.
+  - **OpenRig**, collé **en bas** de la barre latérale, au-dessus de « Réduire ». Il ne contient que la ligne du daemon (pastille, version). Un clic sur « Daemon » ouvre la page OpenRig. La ligne est surlignée tant que la page est l'onglet actif.
+
+  Kernel et Rigs défilent, et OpenRig reste en place. Chaque section se replie. Quand le daemon est arrêté, la section Rigs propose seulement « Démarrer OpenRig », et le bouton Rigs de la barre d'activité porte un « ! » ambre.
+- **Démarrer, redémarrer, arrêter.** Le kernel, chaque rig et le daemon ont leurs boutons sur leur ligne, dans **la même colonne à droite** : redémarrer puis arrêter quand ils tournent, démarrer sinon. Arrêter devient rouge au survol. On retrouve les mêmes boutons, avec leur texte, dans l'en-tête de la vue Rig et dans la page OpenRig.
+- **Vue Rig** (un onglet « Rig · nom »). Elle remplace la topologie. Un clic sur un rig, ou sur le kernel, l'ouvre. On y **gère le rig** :
+  - **En-tête :** l'état, le nombre de sièges, la machine, et Redémarrer et Arrêter (ou Démarrer) à droite. La confirmation s'affiche juste en dessous.
+  - **Topologie :** les sièges et leurs liens. Un clic sur un siège ouvre son fil. Un rig arrêté montre ses sièges grisés, d'après sa spec.
+  - **Réglages :** le fichier de spec, les **permissions du rig** (les six niveaux), les **sièges par rôle** avec un ± (seulement quand le rig tourne), et le **dernier snapshot** avec « Snapshot maintenant ».
+  - **File OpenRig :** les lignes de queue du rig.
+
+  Le kernel garde une vue Rig sans réglages : sa topologie, le rôle de chaque siège et « Parler à l'operator ». Dans un groupe étroit, la topologie et les réglages passent l'un sous l'autre.
+- **Lancer un rig** (fenêtre modale, comme Nouvelle session). On l'ouvre par « + Lancer » de la vue Rigs, depuis la page OpenRig ou depuis la palette. `Ctrl+Entrée` lance, Échap ferme.
+  - **Partir de :** une spec enregistrée, un rig vide, ou « Composer avec l'operator ». Un rig qui tourne déjà est grisé. L'operator est grisé quand le kernel est arrêté.
+  - **Avec une spec ou un rig vide :**
+    - le nom (modifiable pour un rig vide) ;
+    - la machine ;
+    - les sièges par rôle, avec un ± ;
+    - les permissions ;
+    - « Reprendre le dernier snapshot » ;
+    - la **commande `rig` exacte**, mise à jour en direct. Elle commence par le démarrage du daemon s'il est arrêté.
+
+    « Lancer » ouvre ensuite la vue Rig du rig.
+  - **Avec l'operator :** un champ « Ce que tu veux ». L'operator propose une équipe dans son fil, et rien ne démarre avant que l'utilisateur valide.
+- **Page OpenRig** (en onglet « OpenRig · machine »). À gauche, une colonne donne l'état du daemon avec Redémarrer et Arrêter, et ses sections. « Lancer un rig… » est en bas de cette colonne. Les sections :
+  - **Vue d'ensemble :** quatre tuiles (daemon, kernel, rigs en marche, sièges actifs dont ceux qui attendent), qui mènent à leur section. Suivent les sièges qui attendent l'utilisateur, puis les dernières commandes.
+  - **Rigs :** une carte par rig, kernel compris (marqué « système »). Chaque carte montre l'équipe en puces de rôles avec leur nombre, les boutons de démarrage et d'arrêt, les permissions, le snapshot et « Ouvrir la vue Rig → ». Une dernière carte en pointillés lance un rig.
+  - **Rôles :** la liste à gauche, en deux groupes (Kernel ; Équipes), avec le nombre de sièges qui tiennent chaque rôle. À droite, la fiche du rôle choisi :
+    - sa description ;
+    - son modèle par défaut ;
+    - les rigs qui l'utilisent, cliquables ;
+    - un aperçu de son fichier de consignes, avec « Modifier » ;
+    - « Dupliquer ».
+  - **Machines :** chaque machine avec son hôte, sa version d'OpenRig, ses rigs et sa latence, avec « Afficher » et « Ajouter une machine ».
+  - **Daemon :** relancer les rigs qui tournaient ; démarrer sans le kernel ; les permissions proposées au lancement (Spec, Auto, Standard, Ouvert, YOLO, Verrouillé), chaque rig gardant les siennes ; avant un arrêt, prendre un snapshot et demander confirmation si un siège travaille.
+  - **Sortie :** les commandes `rig` lancées depuis Ledge, la même liste que la Sortie du panneau du bas.
+
+  Dans un groupe étroit, la colonne de gauche devient une rangée d'onglets au-dessus du contenu.
+- **Confirmations.** Tout arrêt ou redémarrage (daemon, kernel, rig) demande confirmation. Elle nomme les sièges qui travaillent et montre la commande `rig` exacte. Elle s'ouvre **là où on a cliqué** : sous la ligne dans la vue Rigs, sous l'en-tête dans la vue Rig ou dans la page OpenRig. Le résultat arrive dans la Sortie. L'état des sièges change partout : explorateur, atelier, vue Rig, onglets.
 
 ## Terminaux
 
@@ -168,12 +200,20 @@ Les réglages s'ouvrent en onglet (`Ctrl+,`). Les sections actuelles ne changent
 | `Ctrl+J` | Afficher ou masquer le panneau du bas. |
 | `Ctrl+/` | Afficher ou masquer le panneau de droite. |
 | `Ctrl+,` | Réglages. |
-| `Ctrl+Entrée` | Lancer la nouvelle session. |
+| `Ctrl+Entrée` | Lancer la nouvelle session, ou le rig dans « Lancer un rig ». |
 | Échap | Fermer une fenêtre modale, un menu, une confirmation. |
 
 ## Points ouverts
 
 - **Multi-fenêtres et librairie de panneaux.** On vise des fenêtres popout d'un même document avec dockview, à prouver au lot 0 du plan, fluidité comprise.
 - **Composition du kernel.** Il faut vérifier sur une installation réelle quels sièges `rig ps --nodes --rig kernel` liste.
+- **Ce qu'OpenRig fournit pour la vue Rig, le lancement et les rôles** (lot 7a) :
+  - les specs enregistrées et leurs rôles, y compris pour un rig arrêté ;
+  - les permissions propres à chaque rig ;
+  - un snapshot à la demande ;
+  - les fichiers de consignes des rôles ;
+  - « Composer avec l'operator ».
+
+  Ce qui manque est grisé ou retiré, après accord de l'utilisateur.
 - **Atelier dans un onglet étroit.** Il est gardé tel quel. Il faut vérifier sa lisibilité quand le groupe est étroit, sans le modifier.
 - **États à dessiner :** `gh` ou `glab` absent ou non authentifié, daemon coupé dans l'IDE, fenêtre de moins de 1280 px.
