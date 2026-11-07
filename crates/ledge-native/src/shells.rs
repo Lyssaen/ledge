@@ -19,13 +19,13 @@ pub fn locate(shell: NativeShell, env: &dyn Fn(&str) -> Option<String>, exists: 
     let home = env("USERPROFILE").filter(|h| !h.is_empty()).map(PathBuf::from);
     match shell {
         NativeShell::PowerShell => {
-            let pwsh = env("PATH").unwrap_or_default().split(';').filter(|d| !d.is_empty()).map(|d| join(d, "pwsh.exe")).find(|p| exists(p));
+            let pwsh = env("PATH").unwrap_or_default().split(';').map(|d| d.trim().trim_matches('"')).filter(|d| !d.is_empty()).map(|d| join(d, "pwsh.exe")).find(|p| exists(p));
             let program = pwsh.or_else(|| env("SystemRoot").map(|r| join(&r, "System32\\WindowsPowerShell\\v1.0\\powershell.exe")).filter(|p| exists(p)))?;
             Some((program, vec!["-NoLogo".into()], home))
         }
         NativeShell::Cmd => {
-            let program = PathBuf::from(env("ComSpec").filter(|c| !c.is_empty())?);
-            if !exists(&program) { return None; }
+            let comspec = env("ComSpec").filter(|c| !c.is_empty()).map(PathBuf::from).filter(|p| exists(p));
+            let program = comspec.or_else(|| env("SystemRoot").map(|r| join(&r, "System32\\cmd.exe")).filter(|p| exists(p)))?;
             Some((program, vec![], home))
         }
         NativeShell::GitBash => {
@@ -37,9 +37,15 @@ pub fn locate(shell: NativeShell, env: &dyn Fn(&str) -> Option<String>, exists: 
     }
 }
 
-/// The WSL distribution's name (`Some("")` when it answers without one), `None` when WSL does not run; hidden window, 3 s at most.
+/// The WSL distribution's name; `Some("")` (the page shows plain « WSL ») when it answers without one or does not answer
+/// (slow, failed, non-zero exit), since `None` means "no WSL" to the page. Hidden window, 3 s at most.
 #[cfg(windows)]
 pub fn wsl_distro() -> Option<String> {
+    Some(wsl_distro_name().unwrap_or_default())
+}
+
+#[cfg(windows)]
+fn wsl_distro_name() -> Option<String> {
     use std::io::Read;
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
@@ -108,5 +114,31 @@ mod tests {
         assert_eq!(NativeShell::parse("cmd"), Some(NativeShell::Cmd));
         assert_eq!(NativeShell::parse("gitbash"), Some(NativeShell::GitBash));
         assert_eq!(NativeShell::parse("bash"), None);
+    }
+
+    #[test] fn quoted_and_empty_path_entries_are_cleaned() {
+        let env = env_of(&[("PATH", r#";"C:\Program Files\PowerShell\7";"#)]);
+        let got = locate(NativeShell::PowerShell, &env, &files(&[r"C:\Program Files\PowerShell\7\pwsh.exe"])).unwrap();
+        assert_eq!(got.0, PathBuf::from(r"C:\Program Files\PowerShell\7\pwsh.exe"));
+    }
+    #[test] fn no_userprofile_means_no_folder() {
+        let env = env_of(&[("ComSpec", r"C:\Windows\System32\cmd.exe")]);
+        assert_eq!(locate(NativeShell::Cmd, &env, &files(&[r"C:\Windows\System32\cmd.exe"])).unwrap().2, None);
+    }
+    #[test] fn git_bash_under_local_app_data_only() {
+        let env = env_of(&[("ProgramFiles", r"C:\Program Files"), ("LocalAppData", r"C:\Users\me\AppData\Local")]);
+        let got = locate(NativeShell::GitBash, &env, &files(&[r"C:\Users\me\AppData\Local\Programs\Git\bin\bash.exe"])).unwrap();
+        assert_eq!(got.0, PathBuf::from(r"C:\Users\me\AppData\Local\Programs\Git\bin\bash.exe"));
+    }
+    #[test] fn git_bash_prefers_program_files() {
+        let env = env_of(&[("ProgramFiles", r"C:\Program Files"), ("ProgramFiles(x86)", r"C:\Program Files (x86)")]);
+        let got = locate(NativeShell::GitBash, &env, &files(&[r"C:\Program Files (x86)\Git\bin\bash.exe", r"C:\Program Files\Git\bin\bash.exe"])).unwrap();
+        assert_eq!(got.0, PathBuf::from(r"C:\Program Files\Git\bin\bash.exe"));
+    }
+    #[test] fn an_empty_comspec_falls_back_to_system32_cmd() {
+        let env = env_of(&[("ComSpec", ""), ("SystemRoot", SYS)]);
+        let got = locate(NativeShell::Cmd, &env, &files(&[r"C:\Windows\System32\cmd.exe"])).unwrap();
+        assert_eq!(got.0, PathBuf::from(r"C:\Windows\System32\cmd.exe"));
+        assert_eq!(locate(NativeShell::Cmd, &env, &files(&[])), None);
     }
 }

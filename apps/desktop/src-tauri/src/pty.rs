@@ -39,7 +39,8 @@ pub async fn shells_available() -> ShellsAvailable {
             let exists = |p: &std::path::Path| p.is_file();
             let found = |s| locate(s, &env, &exists).is_some();
             ShellsAvailable { wsl: ledge_native::shells::wsl_distro(), powershell: found(NativeShell::PowerShell), cmd: found(NativeShell::Cmd), git_bash: found(NativeShell::GitBash) }
-        }).await.unwrap_or(ShellsAvailable { wsl: None, powershell: false, cmd: false, git_bash: false })
+        // A panicked probe: the page still offers WSL (as unnamed) and no Windows shell, the safe minimum.
+        }).await.unwrap_or(ShellsAvailable { wsl: Some(String::new()), powershell: false, cmd: false, git_bash: false })
     }
 }
 
@@ -53,17 +54,17 @@ pub async fn pty_open(app: AppHandle, argv: Vec<String>, native: Option<String>,
     {
         use std::sync::atomic::Ordering;
         use tauri::Manager;
-        // The page names a shell, never a path: the program comes from `locate`.
-        let (program, args, cwd) = match native {
-            Some(name) => {
-                use ledge_native::shells::{locate, NativeShell};
-                let shell = NativeShell::parse(&name).ok_or("unknown shell")?;
-                let (p, a, c) = locate(shell, &|k| std::env::var(k).ok(), &|p| p.is_file()).ok_or("shell not installed")?;
-                (p.to_string_lossy().into_owned(), a, c)
-            }
-            None => ("wsl.exe".to_string(), ledge_native::pty::wsl_command(&argv).ok_or("an argument WSL cannot receive as is")?, None),
-        };
         tauri::async_runtime::spawn_blocking(move || {
+            // The page names a shell, never a path: the program comes from `locate`.
+            let (program, args, cwd) = match native {
+                Some(name) => {
+                    use ledge_native::shells::{locate, NativeShell};
+                    let shell = NativeShell::parse(&name).ok_or("unknown shell")?;
+                    let (p, a, c) = locate(shell, &|k| std::env::var(k).ok(), &|p| p.is_file()).ok_or("shell not installed")?;
+                    (p.to_string_lossy().into_owned(), a, c)
+                }
+                None => ("wsl.exe".to_string(), ledge_native::pty::wsl_command(&argv).ok_or("an argument WSL cannot receive as is")?, None),
+            };
             let state = app.state::<PtyState>();
             let id = state.next.fetch_add(1, Ordering::Relaxed);
             // Held until the entry is in: an exit that comes first waits for it, then removes it.
