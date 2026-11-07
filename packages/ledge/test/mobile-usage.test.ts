@@ -29,6 +29,17 @@ describe('phone: usage', () => {
     expect(usages(g, 'dev2')).toEqual([]);
   });
 
+  it('Cursor Agent is relayed, month and pools, without its account', async () => {
+    const CURSOR: HarnessUsage = { harness: 'cursor', account: 'f00dfeedbabe', status: 'ok', readAt: '2026-11-05T14:00:00.000Z',
+      windows: [{ kind: 'month', pct: 81, resetsAt: '2026-12-01T00:00:00.000Z' }, { kind: 'pool', pool: 'cursor', pct: 41, resetsAt: '2026-12-01T00:00:00.000Z' }, { kind: 'pool', pool: 'other', pct: 100, resetsAt: '2026-12-01T00:00:00.000Z' }] };
+    const g = setup({ deps: { usage: () => ({ harnesses: [CURSOR], prefs: { alert: 0.8 } }) } });
+    g.send('dev1', { type: 'snapshot.request' });
+    await flush();
+    const [first] = usages(g, 'dev1');
+    expect(PhoneServerMessageSchema.parse(first)).toEqual({ type: 'usage.state', harnesses: [{ harness: 'cursor', status: 'ok', readAt: CURSOR.readAt, windows: CURSOR.windows }], prefs: { alert: 0.8 } });
+    expect(JSON.stringify(first)).not.toContain(CURSOR.account!);
+  });
+
   it('a PC without usage says nothing and sends nothing', async () => {
     const g = setup();
     g.send('dev1', { type: 'snapshot.request' });

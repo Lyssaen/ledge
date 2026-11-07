@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CONTEXT_NEAR, type PhoneHarnessUsage, type PhoneSession, type PhoneTask } from '@ledge/protocol';
 import { overWindows, resetLabel, shownUsage } from '../../model/usage';
-import { Limits, TONE_TEXT } from './Limits';
+import { Limits, TONE_TEXT, windowLabel } from './Limits';
 import { copy } from '../../copy';
 import { closedTasks, openDecisions, openTasks } from '../../model/tasks';
 import { ageLabel, headline, requestsOf } from '../../model/requests';
@@ -86,9 +86,9 @@ export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = C
             );
           })}
           {full.map(({ harness, window: w, tone }) => {
-            const which = w.kind === 'five_hour' ? P.five : w.kind === 'seven_day' ? P.week : P.model(w.model ?? '');
+            const which = windowLabel(w);
             return (
-              <div key={`usage:${harness}:${w.kind}:${w.model ?? ''}`} data-usage-over={tone} className="flex items-center gap-2" aria-label={tone === 'red' ? P.reachedLabel(P.harnessShort[harness] ?? harness, which) : P.overLabel(P.harnessShort[harness] ?? harness, which, w.pct)}>
+              <div key={`usage:${harness}:${w.kind}:${w.model ?? w.pool ?? ''}`} data-usage-over={tone} className="flex items-center gap-2" aria-label={tone === 'red' ? P.reachedLabel(P.harnessShort[harness] ?? harness, which) : P.overLabel(P.harnessShort[harness] ?? harness, which, w.pct)}>
                 <span aria-hidden="true" className={`flex size-5 flex-none items-center justify-center rounded-md ${tone === 'red' ? 'bg-danger-bg text-approval' : 'text-attention'}`} style={tone === 'red' ? undefined : { background: 'var(--status-warning-soft)' }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 14l4-4" /><path d="M3.3 19a10 10 0 1 1 17.4 0" /></svg>
                 </span>

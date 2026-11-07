@@ -1,14 +1,25 @@
 import type { JSX } from 'react';
 import type { PhoneHarnessUsage, UsageHarness, UsageWindow } from '@ledge/protocol';
-import { harnessShell } from '@ledge/ui/bots/Bot';
+import { HARNESS_PROVIDER, PROVIDER_MARKS } from '@ledge/ui/logos/providers';
 import { copy } from '../../copy';
 import { reached, resetLabel, shownUsage, span, usageTone } from '../../model/usage';
 
-/** A harness's logo: its Ledge silhouette (issue #61), filled in the harness's colour, without the eyes (M2). */
+/** A harness's logo: its provider's own mark (Claude's spark in its orange; OpenAI's and Cursor's follow the text colour). */
 export function HarnessLogo({ harness, size = 14 }: { harness: UsageHarness; size?: number }): JSX.Element {
-  const { viewBox, d } = harnessShell(harness);
-  const [, , w, h] = viewBox.split(' ').map(Number) as [number, number, number, number];
-  return <svg className={`harness-${harness} inline-block flex-none`} width={size} height={Math.round((size * h) / w)} viewBox={viewBox} aria-hidden="true"><path d={d} fill="currentColor" /></svg>;
+  const { d, fill, rule } = PROVIDER_MARKS[HARNESS_PROVIDER[harness]];
+  return <svg className={`harness-${harness} inline-block flex-none`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path d={d} fill={fill} fillRule={rule} /></svg>;
+}
+
+/** A window's label: « 5 h », « Semaine », « Mois », a model, or one of Cursor's pools (« Cursor », « Autres »). */
+export function windowLabel(w: UsageWindow): string {
+  const P = copy.chat.point;
+  switch (w.kind) {
+    case 'five_hour': return P.five;
+    case 'seven_day': return P.week;
+    case 'month': return P.month;
+    case 'pool': return w.pool === 'other' ? P.poolOther : P.poolCursor;
+    default: return P.model(w.model ?? '');
+  }
 }
 
 const TONE_BG = { '': '', amber: 'bg-attention', red: 'bg-approval' } as const;
@@ -46,20 +57,22 @@ export function Limits({ usage: given, now, alert, fresh = true }: { usage: read
   const P = copy.chat.point;
   const usage = shownUsage(given, now, fresh);
   if (!usage.length) return null;
-  const label = (w: UsageWindow) => (w.kind === 'five_hour' ? P.five : w.kind === 'seven_day' ? P.week : P.model(w.model ?? ''));
+  // « Non lue »: Cursor answered without the limit (status ok, no window); the values' age is judged on the given reading.
+  const unread = (i: number) => given[i]!.harness === 'cursor' && given[i]!.status === 'ok' && given[i]!.windows.length === 0 && given[i]!.readAt !== null;
   return (
     <div role="group" aria-label={P.limitsLabel} className="flex flex-col">
       <h3 className="mt-1 text-meta tracking-[.4px] text-muted">{P.limits}</h3>
-      {usage.map(h => {
+      {usage.map((h, i) => {
         const age = h.readAt ? span(now - Date.parse(h.readAt)) : null;
         const dim = h.status === 'stale' || h.status === 'unreachable';
         return (
           <div key={h.harness} data-harness={h.harness} className="flex flex-col">
             <div className="mt-1.5 mb-0.5 flex items-baseline gap-1.5 text-small font-semibold"><HarnessLogo harness={h.harness} />{P.harness[h.harness] ?? h.harness}</div>
             {h.status === 'loading' && <p className="py-1 text-small text-muted">{P.loading}</p>}
-            {h.status === 'expired' && <p className="py-1 text-small text-attention">{P.notOnPc}</p>}
+            {h.status === 'expired' && <p className="py-1 text-small text-attention">{h.harness === 'cursor' ? P.notOnPcCursor : P.notOnPc}</p>}
+            {h.status === 'ok' && unread(i) && <p className="py-1 text-small text-muted">{P.unread}</p>}
             {h.status !== 'loading' && h.status !== 'expired' && h.windows.length > 0 && (
-              <div className={dim ? 'opacity-50' : undefined}>{h.windows.map(w => <Row key={`${w.kind}:${w.model ?? ''}`} label={label(w)} w={w} now={now} alert={alert} />)}</div>
+              <div className={dim ? 'opacity-50' : undefined}>{h.windows.map(w => <Row key={`${w.kind}:${w.model ?? w.pool ?? ''}`} label={windowLabel(w)} w={w} now={now} alert={alert} />)}</div>
             )}
             {h.status === 'stale' && age && <p className="py-1 text-small text-attention">{P.stale(age)}</p>}
             {h.status === 'unreachable' && <p className="py-1 text-small text-attention">{age ? P.unreach(age) : P.unreachNever}</p>}

@@ -26,9 +26,16 @@ const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.g
 const hm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const weekday = (d: Date) => d.toLocaleDateString('fr-FR', { weekday: 'short' });
 
-/** When a window starts again: `14:30` today, `lun. 09:00` another day; `short`: `lun.` alone. */
+const WEEK_MS = 7 * 24 * 3_600_000;
+
+/** When a window starts again: `14:30` today, `lun. 09:00` another day; `short`: `lun.` alone. A week or more away it is a
+ *  date: `1 déc.` (`1 déc. 13:43` unless `short`). */
 export function resetLabel(iso: string, now: number, short = false): string {
   const d = new Date(iso);
+  if (d.getTime() - now >= WEEK_MS) {
+    const date = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    return short ? date : `${date} ${hm(d)}`;
+  }
   if (sameDay(d, new Date(now))) return hm(d);
   return short ? weekday(d) : `${weekday(d)} ${hm(d)}`;
 }
