@@ -161,6 +161,30 @@ describe('an agent\'s terminal tab', () => {
     expect(attaches()).toBe(before);
   });
 
+  it('in a tile, a state no banner says (connecting) shows on a row of its own, without the kind chip; attached, the row goes', async () => {
+    const hadPointer = 'PointerEvent' in globalThis;
+    if (!hadPointer) (globalThis as { PointerEvent?: unknown }).PointerEvent = class extends MouseEvent {};
+    onTestFinished(() => { if (!hadPointer) delete (globalThis as { PointerEvent?: unknown }).PointerEvent; });
+    await mount([agentTerminalTab('local:otto'), { kind: 'settings', ref: '' } as Tab], false, true, false, false);
+    const backend = env.backend as ReturnType<typeof fakeBackend>;
+    backend.hold(true);   // Otto's attachment and the shell stay opening
+    await waitFor(() => expect(tabs()).toHaveLength(2));
+    act(() => { fireEvent.keyDown(window, { key: 'j', ctrlKey: true }); });
+    const panel = await screen.findByRole('region', { name: 'Panneau du bas' });
+    await waitFor(() => expect(panel.querySelectorAll('.ide-btile')).toHaveLength(1));
+    const tab = tabs().find(t => /tmux$/.test(t.getAttribute('aria-label') ?? ''))!;
+    fireEvent.dragStart(tab.closest('.dv-tab') ?? tab);
+    fireEvent.dragOver(panel);
+    fireEvent.drop(panel);
+    await waitFor(() => expect(panel.querySelectorAll('.ide-btile')).toHaveLength(2));
+    const tile = panel.querySelectorAll<HTMLElement>('.ide-btile')[1]!;
+    await waitFor(() => expect(tile.querySelector('.ide-term-kind .ide-term-state')).toHaveTextContent('Connexion…'));
+    expect(tile.querySelector('.ide-term-kind .chip-k')).toBeNull();
+    act(() => { for (const o of backend.opens) o.resolve(true); });
+    await waitFor(() => expect(tile.querySelector('.ide-term-kind')).toBeNull());
+    expect(within(tile).getAllByText('attaché')).toHaveLength(1);
+  });
+
   it('a hidden terminal tab releases its screen; brought back, it attaches again', async () => {
     await mount([agentTerminalTab('local:otto'), { kind: 'settings', ref: '' } as Tab], false, true, false);
     const held = () => store?.viewerOf('local:otto') ?? null;

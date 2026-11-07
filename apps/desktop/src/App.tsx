@@ -81,7 +81,7 @@ import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, place as placeTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
+import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
@@ -91,6 +91,7 @@ import { EmptyGroup, type EmptyPick } from './ide/EmptyGroup';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeBottom, IdeDock, IdeOutput, IdePlace } from './ide/lazy';
+import { tileToDock } from './ide/termDrag';
 import { addTerm, createPanelStore, isTerminalRef, panelViewer, removeTerm, usePanel } from './workspace/panel';
 
 const NO_PROJECTS: readonly Project[] = [];
@@ -549,11 +550,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // A tile dragged into the dock: its terminal tab where it was dropped, the same shell or agent screen (its view moves the
   // xterm, nothing is relaunched). The panel emptied so hides, without « Dernier terminal fermé » (nothing was closed).
   const panelToDock = useCallback((ref: string, to: { group: string; index?: number } | { rightOf: string }) => {
-    // An agent's screen passes to its tab as it is: the tile goes before the tab mounts, which would otherwise reconnect.
-    if (ref.startsWith('agent:')) termStore.handOver(ref.slice('agent:'.length), panelViewer(ref), `terminal:${ref}`);
-    panelStore.update(p => removeTerm(p, ref));
-    wsStore.update(w => placeTab(w, { kind: 'terminal', ref }, to));
-    if (panelStore.get().terms.length === 0) onLayout({ type: 'show', panel: 'bottom', on: false });
+    const r = tileToDock({ ws: wsStore, panel: panelStore, terms: termStore }, ref, to);
+    if (r.moved && r.empty) onLayout({ type: 'show', panel: 'bottom', on: false });
   }, [termStore, panelStore, wsStore, onLayout]);
   // A dock tab dropped on the panel: a terminal leaves the model by `update`, not the store's `close` (no kill, R9; not
   // remembered for Ctrl+Shift+T), and comes back as a tile (BottomPanel refuses any other tab).

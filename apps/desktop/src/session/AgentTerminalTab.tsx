@@ -13,7 +13,8 @@ export interface AgentTerminalTabProps {
   readOnly: boolean;
   /** « Ouvrir la session »: a subagent-less page has no parent to go to, so this brings the session's own tab forward. */
   onOpenSession(): void;
-  /** In a bottom-panel tile: the tile's bar already says the kind, so no row of its own. */
+  /** In a bottom-panel tile: the tile's bar already says the kind, so no kind chip; the state shows only while no banner of
+   *  AgentView says it (connecting, a preview, read only…: reconnecting, offline and elsewhere have their banner). */
   bare?: boolean;
 }
 
@@ -28,7 +29,11 @@ export function AgentTerminalTab({ client, session, notify, readOnly, onOpenSess
   const kind = readOnly ? t.ide.termReadOnly : t.ide.termAttached;
   const { state, where } = useAgentStatus(session, agent, useTabPlace()?.key ?? 'page');
   const view = <AgentView client={client} session={session} helper={null} agent={agent} notify={notify} onGoParent={onOpenSession} onOpenShell={undefined} />;
-  if (bare) return <div className="ide-term">{view}</div>;
+  if (bare) {
+    const tt = t.session.terminal;
+    const said = state === null || state === tt.reconnecting || state === tt.offline || state.toLocaleLowerCase() === kind.toLocaleLowerCase();
+    return <div className="ide-term">{!said && <div className="ide-term-kind"><span className="ide-term-state">{state}</span></div>}{view}</div>;
+  }
   return (
     <div className="ide-term">
       <div className="ide-term-kind">

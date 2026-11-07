@@ -25,6 +25,8 @@ export interface BottomPanelProps {
 }
 
 const SECTIONS = ['local', 'ledge', 'machines'] as const;
+/** Strictly inside: a dragleave out of the window reports (0, 0) or the edge itself. */
+const inside = (r: DOMRect, x: number, y: number) => x > r.left && x < r.right && y > r.top && y < r.bottom;
 
 /** The IDE's bottom panel (mockup `bottomPanel()`): Terminaux, its count, and Sortie, its count; « + ▾ » (the shells) and « × »
  *  (hide). Terminaux are tiles side by side, each with its one tab (`>_ title`), its kind and its « × », then its screen. */
@@ -42,7 +44,12 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     setOver(true);
   };
-  const onDragLeave = (e: DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); };
+  // Left for a child of its own: still over. `relatedTarget` is null in some webviews: the pointer's place then decides.
+  const onDragLeave = (e: DragEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (to ? e.currentTarget.contains(to) : inside(e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY)) return;
+    setOver(false);
+  };
   const onDrop = (e: DragEvent) => {
     const d = termDrag.get();
     if (d?.from !== 'dock') return;

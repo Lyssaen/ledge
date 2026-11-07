@@ -5,11 +5,11 @@ import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { LangProvider } from '../../src/i18n/lang';
 import { DockHost } from '../../src/ide/DockHost';
 import { BottomPanel } from '../../src/ide/BottomPanel';
-import { termDrag } from '../../src/ide/termDrag';
+import { termDrag, tileToDock } from '../../src/ide/termDrag';
 import { empty, keyOf, open, split as splitGroup, type Tab } from '../../src/workspace/model';
 import { createWorkspaceStore, useWorkspace, type WorkspaceStore } from '../../src/workspace/store';
 import { useTabPlace } from '../../src/workspace/tabPlace';
-import type { Panel } from '../../src/workspace/panel';
+import { createPanelStore, type Panel } from '../../src/workspace/panel';
 import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
@@ -138,6 +138,28 @@ describe('a panel tile dragged over the dock', () => {
     expect(onPanelDrop).not.toHaveBeenCalled();
   });
 
+  it('a tile let go out of the dock (dragend: Esc, or dropped elsewhere) ends the drag: a later drag over the dock is not taken', async () => {
+    const { onPanelDrop } = await mount();
+    render(<LangProvider lang="fr"><BottomPanel panel={{ terms: ['shell:1'], tab: 'term' }} onTab={() => {}} outputCount={0} output={null} menu={[]} onNewShell={() => {}}
+      tile={() => null} tileTitle={r => `>_ ${r}`} tileKind={() => 'shell'} onClose={() => {}} onHide={() => {}} onDockDrop={() => {}} onRefused={() => {}} /></LangProvider>);
+    const tile = screen.getByText('>_ shell:1');
+    // Esc: the tile's own dragend.
+    fireEvent.dragStart(tile);
+    expect(termDrag.get()).toEqual({ from: 'panel', ref: 'shell:1' });
+    fireEvent.dragEnd(tile);
+    expect(termDrag.get()).toBeNull();
+    expect(over(content(groupviews()[0]!))).toBe(false);
+    at('dragLeave', content(groupviews()[0]!), 150, 150);
+    // Dropped elsewhere with no dragend reaching the tile: the drop ends it once its handlers have run.
+    fireEvent.dragStart(tile);
+    fireEvent(window, new Event('drop'));
+    await waitFor(() => expect(termDrag.get()).toBeNull());
+    expect(over(content(groupviews()[0]!))).toBe(false);
+    at('drop', content(groupviews()[0]!), 150, 150);
+    expect(onPanelDrop).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.querySelector('.ide-dock-scroll')).not.toHaveClass('tab-dragging'));
+  });
+
   it('« nouveau groupe » shows while a tile is dragged and takes it: right of the last group; the drag then ends', async () => {
     const { onPanelDrop } = await mount();
     const root = document.querySelector('.ide-dock-scroll')!;
@@ -175,6 +197,32 @@ function mountPanel(panel: Panel) {
   return { p, region: screen.getByRole('region', { name: 'Panneau du bas' }) };
 }
 
+describe('tileToDock: the tile leaves the panel only once its tab is placed', () => {
+  const stores = (terms: string[]) => {
+    let w = open(empty(), A);
+    w = open(splitGroup(w, w.focus), B);   // g1: a, g2: b
+    return { ws: createWorkspaceStore(w), panel: createPanelStore({ terms, tab: 'term' }), terms: { handOver: vi.fn() } };
+  };
+  it('placed: the tab where asked, the tile gone, an agent\'s screen handed over; the panel left empty says so', () => {
+    const d = stores(['agent:local:a']);
+    expect(tileToDock(d, 'agent:local:a', { group: 'g2', index: 0 })).toEqual({ moved: true, empty: true });
+    expect(d.ws.get().groups.map(g => g.tabs.map(keyOf))).toEqual([['session:local:a'], ['terminal:agent:local:a', 'session:local:b']]);
+    expect(d.panel.get().terms).toEqual([]);
+    expect(d.terms.handOver).toHaveBeenCalledWith('local:a', 'panel:agent:local:a', 'terminal:agent:local:a');
+  });
+  it('a group gone meanwhile: nothing moves, the tile stays (its shell alive), no handover', () => {
+    const d = stores(['shell:1', 'agent:local:a']);
+    const before = d.ws.get();
+    const closeFree = vi.fn();
+    expect(tileToDock(d, 'shell:1', { group: 'g9' })).toEqual({ moved: false, empty: false });
+    expect(tileToDock(d, 'agent:local:a', { rightOf: 'g9' })).toEqual({ moved: false, empty: false });
+    expect(d.ws.get()).toBe(before);
+    expect(d.panel.get().terms).toEqual(['shell:1', 'agent:local:a']);
+    expect(d.terms.handOver).not.toHaveBeenCalled();
+    expect(closeFree).not.toHaveBeenCalled();
+  });
+});
+
 describe('the bottom panel and the drag', () => {
   it('a tile picked up says so (from: panel, its ref) with the Ledge drag type, and forgets it at dragend', () => {
     mountPanel({ terms: ['shell:1'], tab: 'term' });
@@ -195,6 +243,29 @@ describe('the bottom panel and the drag', () => {
     fireEvent.drop(region);
     expect(p.onDockDrop).toHaveBeenCalledWith('terminal:shell:1');
     expect(p.onRefused).not.toHaveBeenCalled();
+    expect(region).not.toHaveClass('drop-on');
+  });
+
+  it('the outline stays while the drag moves over its own children, also when a webview gives no relatedTarget; out, it goes', () => {
+    const { region } = mountPanel({ terms: ['shell:2'], tab: 'term' });
+    region.getBoundingClientRect = () => ({ left: 0, top: 400, right: 800, bottom: 640, width: 800, height: 240, x: 0, y: 400, toJSON: () => ({}) });
+    termDrag.set({ from: 'dock', key: 'terminal:shell:1' });
+    fireEvent.dragOver(region);
+    expect(region).toHaveClass('drop-on');
+    // jsdom's DragEvent stand-in drops these: set by hand.
+    const leave = (props: { relatedTarget?: Element | null; clientX?: number; clientY?: number }) => {
+      const ev = createEvent.dragLeave(region);
+      Object.defineProperties(ev, Object.fromEntries(Object.entries({ relatedTarget: null, clientX: 0, clientY: 0, ...props }).map(([k, v]) => [k, { value: v }])));
+      fireEvent(region, ev);
+    };
+    leave({ relatedTarget: region.querySelector('.ide-btile') });
+    expect(region).toHaveClass('drop-on');
+    leave({ clientX: 300, clientY: 500 });   // no relatedTarget, the pointer inside
+    expect(region).toHaveClass('drop-on');
+    leave({ clientX: 300, clientY: 200 });   // no relatedTarget, the pointer above
+    expect(region).not.toHaveClass('drop-on');
+    fireEvent.dragOver(region);
+    leave({ relatedTarget: document.body });
     expect(region).not.toHaveClass('drop-on');
   });
 

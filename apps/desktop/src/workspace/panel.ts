@@ -17,10 +17,10 @@ export function removeTerm(p: Panel, ref: string): Panel {
   return p.terms.includes(ref) ? { ...p, terms: p.terms.filter(x => x !== ref) } : p;
 }
 
-/** A terminal tab's key: a bottom-panel shell's (`terminal:shell:<n>`) or an agent's (`terminal:agent:<id>`). */
 /** The view key of a tile (its TabPlace): the agent's one screen (R2) is held by a tile as by a tab (`terminal:<ref>`). */
 export const panelViewer = (ref: string): string => `panel:${ref}`;
 
+/** A terminal tab's key: a bottom-panel shell's (`terminal:shell:<n>`) or an agent's (`terminal:agent:<id>`). */
 export const isTerminalRef = (key: string): boolean => key.startsWith('terminal:shell:') || key.startsWith('terminal:agent:');
 
 export interface PanelStore { get(): Panel; update(fn: (p: Panel) => Panel): void; subscribe(cb: () => void): () => void }
