@@ -1448,11 +1448,19 @@ export const fr = {
       open: 'Ouvrir', openKey: 'Entrée', openRight: 'Ouvrir à droite', openRightKey: 'Ctrl clic',
       terminal: 'Son terminal', capture: 'Capture dans un terminal', message: 'Envoyer un message…'
     },
-    empty: {
-      title: 'Groupe vide', body: 'Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :', terminal: (name: string) => `Terminal · ${name}`,
+    /** A group without tabs (mockup docs/mockups/accueil-vide): the welcome, in the window's only group as in a split. */
+    welcome: {
+      brand: 'Ledge', start: 'Démarrer', recent: 'Récentes', terminal: (name: string) => `Terminal · ${name}`,
       /** A seat's: its terminal is a read-only capture (R3). */ capture: (name: string) => `Capture · ${name}`,
-      newSession: 'Nouvelle session', openrig: 'OpenRig', settings: 'Réglages', atelier: 'Atelier', shell: 'Terminal',
-      tip: 'Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.'
-    }
+      newSession: 'Nouvelle session', search: 'Aller à une session', askLedge: 'Demander à Ledge', nextAsk: 'Prochaine demande',
+      openrig: 'OpenRig', atelier: 'Atelier', shell: 'Terminal', settings: 'Réglages', allSessions: 'Toutes les sessions…',
+      tip: 'Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.',
+      reopenTip: 'Glisse une session de l’explorateur ici, ou rouvre le dernier onglet fermé :'
+    },
+    /** Settings › General: the sessions whose tab was open, ended by the stop, resumed at start. */
+    resumeSetting: 'Au démarrage, reprendre les sessions ouvertes',
+    resumeHint: 'Les sessions qui avaient un onglet ouvert à la fermeture de Ledge reprennent dans leur onglet. Une session que tu as terminée ne repart pas.',
+    resumeOff: 'Reprise des sessions au démarrage désactivée',
+    resumed: (n: number) => plural(n, `${n} session reprise`, `${n} sessions reprises`)
   }
 };

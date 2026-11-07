@@ -1377,10 +1377,16 @@ export const en: Messages = {
       open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',
       terminal: 'Its terminal', capture: 'Capture in a terminal', message: 'Send a message…'
     },
-    empty: {
-      title: 'Empty group', body: 'Drag a tab here, open a session from the explorer, or:', terminal: (name) => `Terminal · ${name}`, capture: (name) => `Capture · ${name}`,
-      newSession: 'New session', openrig: 'OpenRig', settings: 'Settings', atelier: 'Atelier', shell: 'Terminal',
-      tip: 'Tip: link this group (the square left of the tabs) with the session’s: it will follow the chosen session.'
-    }
+    welcome: {
+      brand: 'Ledge', start: 'Start', recent: 'Recent', terminal: (name) => `Terminal · ${name}`, capture: (name) => `Capture · ${name}`,
+      newSession: 'New session', search: 'Go to a session', askLedge: 'Ask Ledge', nextAsk: 'Next request',
+      openrig: 'OpenRig', atelier: 'Atelier', shell: 'Terminal', settings: 'Settings', allSessions: 'All sessions…',
+      tip: 'Tip: link this group (the square left of the tabs) with the session’s: it will follow the chosen session.',
+      reopenTip: 'Drag a session here from the explorer, or reopen the last closed tab:'
+    },
+    resumeSetting: 'On start, resume the open sessions',
+    resumeHint: 'The sessions whose tab was open when Ledge closed resume in their tab. A session you ended does not start again.',
+    resumeOff: 'Resuming sessions on start turned off',
+    resumed: (n) => `${n} ${pluralEn(n, 'session', 'sessions')} resumed`
   }
 };

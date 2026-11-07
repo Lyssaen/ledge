@@ -14,7 +14,7 @@ import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { saveOpenSession } from '../../src/workspace/openPrefs';
 import type { DaemonInfo, Machines } from '@ledge/protocol';
-import { PROJECTS } from '../helpers';
+import { PROJECTS, seedAtelier } from '../helpers';
 import { empty, open, serialize, type Workspace } from '../../src/workspace/model';
 import { ATELIER_TAB, WORKSPACE_KEY } from '../../src/workspace/store';
 
@@ -26,6 +26,7 @@ afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.cl
 
 async function mount({ ide = true, machines = [{ id: 'local', label: 'Local' }], daemon }: { ide?: boolean; machines?: Machines; daemon?: DaemonInfo } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+  seedAtelier();
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);
@@ -58,7 +59,7 @@ describe('the IDE shell (switch on)', () => {
     expect(document.querySelector('.application')).toBeNull();
   });
 
-  it('first run: the active tab is the Atelier', async () => {
+  it('with the atelier saved, it is the active tab', async () => {
     await mount();
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
     expect(tabs()).toHaveLength(1);
@@ -453,8 +454,10 @@ describe('the IDE bundle', () => {
 describe('split and the empty group (lot 3)', () => {
   const groupviews = () => [...document.querySelectorAll<HTMLElement>('.dv-groupview')];
   const splitKey = () => fireEvent.keyDown(window, { key: '\\', ctrlKey: true });
+  /** The labels of a welcome's « Démarrer » rows, in order (their keys are aria-hidden). */
+  const startRows = (g: HTMLElement) => within(within(g).getByRole('region', { name: 'Démarrer' })).getAllByRole('button').map(b => b.querySelector('.ide-wl-label')?.textContent);
 
-  it('Ctrl+\\ on Otto: a second group, empty and focused, offering « Terminal · Otto » first; its click opens Otto\'s terminal there', async () => {
+  it('Ctrl+\\ on Otto: a second group, empty and focused, shows the welcome with « Terminal · Otto » first; its click opens Otto\'s terminal there', async () => {
     const { tree, user } = await mount();
     await user.click(tree.getByRole('button', { name: /^Otto/ }));
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
@@ -462,13 +465,12 @@ describe('split and the empty group (lot 3)', () => {
     await waitFor(() => expect(groupviews()).toHaveLength(2));
     await waitFor(() => expect(groupviews()[1]).toHaveClass('dv-active-group'));
     const second = within(groupviews()[1]!);
-    expect(second.getByRole('heading', { name: 'Groupe vide' })).toBeVisible();
-    expect(second.getByText('Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :')).toBeVisible();
-    const buttons = second.getAllByRole('button').filter(b => b.closest('.ide-empty'));
-    expect(buttons.map(b => b.textContent)).toEqual(['Terminal · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier', 'Terminal']);
-    expect(buttons[0]).toHaveClass('pri');
+    expect(groupviews()[1]!.querySelector('.ide-welcome [data-ledge-mark]')).not.toBeNull();
+    expect(startRows(groupviews()[1]!)).toEqual(['Terminal · Otto', 'Nouvelle session', 'Aller à une session', 'Demander à Ledge', 'OpenRig', 'Atelier', 'Terminal', 'Réglages']);
+    const terminal = second.getByRole('button', { name: 'Terminal · Otto' });
+    expect(terminal).toHaveClass('pri');
     expect(second.getByText(/^Astuce : lie ce groupe/)).toHaveTextContent('Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.');
-    await user.click(buttons[0]!);
+    await user.click(terminal);
     await waitFor(() => expect(within(groupviews()[1]!).getByRole('tab', { name: '>_ Otto · tmux' })).toBeInTheDocument());
     expect(groupviews()).toHaveLength(2);
     expect(within(groupviews()[0]!).queryByRole('tab', { name: '>_ Otto · tmux' })).toBeNull();
@@ -500,8 +502,7 @@ describe('split and the empty group (lot 3)', () => {
     const { d, user } = await mount();
     act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', rig: { seat: 'dev@r', name: 'ledge-dev' } })));
     const second = () => within(groupviews()[1]!);
-    await waitFor(() => expect(second().getAllByRole('button').filter(b => b.closest('.ide-empty')).map(b => b.textContent))
-      .toEqual(['Capture · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier', 'Terminal']));
+    await waitFor(() => expect(startRows(groupviews()[1]!)[0]).toBe('Capture · Otto'));
     expect(second().queryByRole('button', { name: 'Terminal · Otto' })).toBeNull();
     await user.click(second().getByRole('button', { name: 'Capture · Otto' }));
     await waitFor(() => expect(second().getByRole('tab', { name: '>_ Otto · tmux' })).toBeInTheDocument());
