@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LangProvider } from '../../src/i18n/lang';
 import { DockHost } from '../../src/ide/DockHost';
-import { activate, beside, deserialize, empty, keyOf, moveTo, open, serialize, split as splitGroup, type Tab } from '../../src/workspace/model';
+import { activate, agentTerminalTab, beside, deserialize, empty, keyOf, moveTo, open, serialize, sessionOf, split as splitGroup, type Tab, type Workspace } from '../../src/workspace/model';
 import { createWorkspaceStore, useWorkspace, type WorkspaceStore } from '../../src/workspace/store';
 import { useTabPlace } from '../../src/workspace/tabPlace';
+import { useAgentScreen } from '../../src/session/useAgentScreen';
+import { agentTabId, TermStore } from '../../src/term/store';
+import { TermStoreContext } from '../../src/term/useTerms';
+import type { AgentMode } from '../../src/term/mode';
+import { fakeBackend, fakeSurface } from '../term-fakes';
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
@@ -313,5 +318,125 @@ describe('dragging a tab: every arrival goes through the model, the panel is mov
     fireEvent.dragOver(zone);
     fireEvent.drop(zone);
     expect(store.get()).toBe(before);
+  });
+});
+
+/** An agent's screen in a tab (as AgentTerminalTab and the session page on Terminal ask for it): the real TermStore over a
+ *  backend that counts what it opens and closes, so a move that let the screen go and took it again shows as a reconnect. */
+function Screen({ tab, sid }: { tab: Tab; sid: string }) {
+  useAgentScreen(sid, LIVE, tab.kind === 'terminal' || tab.view === 'terminal');
+  const terms = useContext(TermStoreContext)!;
+  const holder = useSyncExternalStore(fn => terms.subscribe(fn), () => terms.viewerOf(sid));
+  const host = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const s = terms.surface(agentTabId(sid));
+    if (holder === keyOf(tab) && s && host.current && s.host.parentElement !== host.current) host.current.appendChild(s.host);
+  });
+  return <div ref={host} data-testid={`screen-${keyOf(tab)}`} />;
+}
+function ScreenHost({ store, terms }: { store: WorkspaceStore; terms: TermStore }) {
+  const ws = useWorkspace(store);
+  return <LangProvider lang="fr"><TermStoreContext.Provider value={terms}>
+    <DockHost ws={ws} store={store} title={keyOf} label={keyOf} alert={() => null} onTabMenu={() => {}} onNewSession={() => {}}
+      body={tab => (sessionOf(tab) ? <Screen tab={tab} sid={sessionOf(tab)!} /> : <Place tab={tab} />)} emptyGroup={id => <p data-testid={`empty-${id}`}>vide</p>} />
+  </TermStoreContext.Provider></LangProvider>;
+}
+const LIVE: AgentMode = { kind: 'live' };
+/** A TermStore over a backend that records what it opens (`argv[1]` is the session) and counts the attachments closed. */
+function counted() {
+  const backend = fakeBackend();
+  const closed: string[] = [];
+  const opening = backend.open;
+  backend.open = (argv, size, on) => opening(argv, size, on).then(h => (h ? { ...h, close: () => { closed.push(argv[1]!); } } : h));
+  const terms = new TermStore({ backend, surface: fakeSurface, agentArgv: id => ['attach', id], shellArgv: () => null, shellPlace: () => ({ dir: '/', remote: false }) });
+  return { terms, closed, opened: (sid: string) => backend.opens.filter(o => o.argv[1] === sid).length };
+}
+
+describe('a moved tab keeps its agent screen: no reconnect, the same xterm, still attached', () => {
+  const T = agentTerminalTab('local:a');
+  /** `first` alone in g1 (holding a's screen), B in g2. */
+  async function mountTwo(first: Tab) {
+    let ws = open(empty(), first);
+    ws = splitGroup(ws, ws.focus);
+    const store = createWorkspaceStore(open(ws, B));
+    const { terms, closed, opened } = counted();
+    render(<ScreenHost store={store} terms={terms} />);
+    const key = keyOf(first);
+    await waitFor(() => expect(terms.viewerOf('local:a')).toBe(key));
+    await waitFor(() => expect(terms.link('local:a').state).toBe('attached'));
+    const xterm = terms.surface(agentTabId('local:a'))!.host;
+    await waitFor(() => expect(screen.getByTestId(`screen-${key}`)).toContainElement(xterm));
+    expect(opened('local:a')).toBe(1);
+    return { store, terms, closed, opened, key, xterm };
+  }
+  /** Still the one attachment (none closed, none opened), the same xterm in the same tab's content. */
+  async function kept({ terms, closed, opened, key, xterm }: Awaited<ReturnType<typeof mountTwo>>) {
+    // Let any effect a move set off run: a hide and a show again would close the attachment and open another.
+    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(terms.viewerOf('local:a')).toBe(key);
+    expect(terms.link('local:a').state).toBe('attached');
+    expect(opened('local:a')).toBe(1);
+    expect(closed).toEqual([]);
+    expect(terms.surface(agentTabId('local:a'))!.host).toBe(xterm);
+    expect(screen.getByTestId(`screen-${key}`)).toContainElement(xterm);
+  }
+
+  for (const [name, first] of [['the terminal tab', T], ['a session tab on its terminal', { ...A, view: 'terminal' } as Tab]] as const) {
+    it(`${name} moved to group B`, async () => {
+      const t = await mountTwo(first);
+      act(() => t.store.update(w => moveTo(w, t.key, { group: 'g2' })));
+      await waitFor(() => expect(groupviews()).toHaveLength(1));
+      await kept(t);
+    });
+
+    it(`${name} moved to a new group right of the last`, async () => {
+      const t = await mountTwo(first);
+      act(() => t.store.update(w => moveTo(w, t.key, { rightOf: 'g2' })));
+      await waitFor(() => expect(t.store.get().groups.map(g => g.tabs.map(keyOf))).toEqual([[keyOf(B)], [t.key]]));
+      await waitFor(() => expect(tabIn(groupviews()[1] ?? document.body, t.key)).toBeDefined());
+      await kept(t);
+    });
+  }
+
+  it('beside() re-homing the terminal tab into a group of another colour', async () => {
+    // a's session tab in g2 (teal), the terminal tab in g1 (violet): « Son terminal » from g2 moves it into a teal group.
+    const t = await mountTwo(T);
+    act(() => t.store.update(w => ({ ...w, groups: w.groups.map(g => ({ ...g, link: g.id === 'g1' ? 'violet' : 'teal' })) })));
+    act(() => t.store.update(w => beside(w, 'g2', 'terminal', 'local:a')));
+    await waitFor(() => expect(t.store.get().groups.find(g => g.tabs.some(x => keyOf(x) === t.key))!.link).toBe('teal'));
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    await kept(t);
+  });
+});
+
+describe('a tab mounted by follow does not take a screen a visible view holds', () => {
+  const X: Tab = { kind: 'session', ref: 'local:x' };
+  it('x chosen in a linked group, on its terminal: the peer\'s terminal follows to x, and x\'s own tab keeps its screen', async () => {
+    // g1 (violet): a in front, x behind on its terminal view; g2 (violet): a's terminal, holding a's screen.
+    const ws: Workspace = { version: 1, windows: ['main'], focus: 'g1', next: 3, groups: [
+      { id: 'g1', window: 'main', tabs: [A, { ...X, view: 'terminal' }], active: 0, link: 'violet' },
+      { id: 'g2', window: 'main', tabs: [agentTerminalTab('local:a')], active: 0, link: 'violet' }
+    ] };
+    const store = createWorkspaceStore(ws);
+    const { terms, opened } = counted();
+    render(<ScreenHost store={store} terms={terms} />);
+    await waitFor(() => expect(terms.viewerOf('local:a')).toBe('terminal:agent:local:a'));
+    // x brought forward in g1: x's tab, shown in the focused group, takes x's screen; g2 follows, its front now x's
+    // terminal, mounted at the same time, visible but in a group not focused: it leaves the screen to x's tab (R2 note).
+    act(() => store.update(w => activate(w, 'g1', 1)));
+    await waitFor(() => expect(store.get().groups[1]!.tabs.map(keyOf)).toEqual(['terminal:agent:local:x']));
+    await waitFor(() => expect(screen.getByTestId('screen-terminal:agent:local:x')).toBeInTheDocument());
+    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(terms.viewerOf('local:x')).toBe('session:local:x');
+    expect(opened('local:x')).toBe(1);
+  });
+
+  it('a terminal tab opened in the focused group takes the screen, as an asked-for view does', async () => {
+    const store = createWorkspaceStore(open(empty(), { ...X, view: 'terminal' }));
+    const { terms } = counted();
+    render(<ScreenHost store={store} terms={terms} />);
+    await waitFor(() => expect(terms.viewerOf('local:x')).toBe('session:local:x'));
+    act(() => store.update(w => open(w, agentTerminalTab('local:x'), 'right')));
+    await waitFor(() => expect(terms.viewerOf('local:x')).toBe('terminal:agent:local:x'));
   });
 });

@@ -24,15 +24,21 @@ export function useAgentScreen(sid: string, mode: AgentMode, want: boolean): voi
     // session on the note): a shown one takes it, and coming back attaches again.
     if (!shownHere) { asked.current = null; store.hideAgent(sid, viewer); return; }
     if (want) {
+      // A tab shown outside the focused group (a linked group following a session, a terminal opened beside) was not asked
+      // for: it leaves the screen to the view holding it (a shown one: a hidden view holds none) and shows the R2 note.
+      // The holder now, not as rendered: a view mounted in the same commit may have just taken it.
+      const held = store.viewerOf(sid);
+      const unasked = tabPlace !== null && !tabPlace.active && held !== null && held !== viewer;
       // Outside the IDE the page is the store's default view: asked as before.
-      if (asked.current !== sid || holder === null || holder === viewer) { if (inTab) store.showAgent(sid, mode, viewer); else store.showAgent(sid, mode); }
+      if (!unasked && (asked.current !== sid || held === null || held === viewer)) { if (inTab) store.showAgent(sid, mode, viewer); else store.showAgent(sid, mode); }
       asked.current = sid;
     } else {
       asked.current = null;
       if (inTab) store.hideAgent(sid, viewer);
       else store.hideAgent();
     }
-    // `mode` is read through its key: the same mode in a new object asks nothing.
+    // `mode` is read through its key: the same mode in a new object asks nothing. `tabPlace.active` is not a cause: focusing a
+    // group does not take the screen (« Afficher ici » does).
   }, [store, want, sid, modeKey, shownHere, inTab, viewer, holder]); // eslint-disable-line react-hooks/exhaustive-deps
   const leaving = useRef<{ sid: string; viewer: string } | undefined>(undefined);
   leaving.current = inTab ? { sid, viewer } : undefined;

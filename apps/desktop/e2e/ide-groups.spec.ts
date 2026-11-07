@@ -219,6 +219,64 @@ test('split from a session: the empty group, « Terminal · Otto » first, then 
   await expect(pane(page, 'Otto').locator('.term-banner')).toContainText('Terminal shown in the other group');
 });
 
+/** The agent's screen in a tab's content: its xterm, marked so a remade one shows. */
+const xtermOf = (page: Page, name: string) => pane(page, name).locator('.agent-view .terminal-screen .xterm');
+/** The drop zone's centre once a drag shows it, or a group's content centre. */
+const centre = (l: Locator) => async () => { const r = await box(l); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+/** Still the one connection (one term.watch, no term.unwatch), the same xterm (its mark), attached, in `name`'s pane. */
+async function keptScreen(page: Page, received: { type: string }[], name: string, mark: string): Promise<void> {
+  await expect(xtermOf(page, name)).toBeVisible();
+  await expect(pane(page, name).locator('.terminal-footer')).toContainText('Attached');
+  expect(await xtermOf(page, name).evaluate(el => (el as HTMLElement & { ledgeMark?: string }).ledgeMark)).toBe(mark);
+  expect(watches(received, 'otto')).toBe(1);
+  expect(unwatches(received)).toBe(0);
+}
+
+test('a session tab on its screen, dragged to another group then to « nouveau groupe », keeps its connection and its xterm', async ({ page }) => {
+  const daemon = await boot(page, true);
+  await open(page, 'Otto');
+  await toTerminal(page, 'Otto');
+  await split(page, 0);
+  await open(page, 'Nova');
+  await expect(tabsIn(page, 1)).toHaveCount(1);
+  await expect(pane(page, 'Otto').locator('.terminal-footer')).toContainText('Attached');
+  await expect.poll(() => watches(daemon.received, 'otto')).toBe(1);
+  await xtermOf(page, 'Otto').evaluate(el => { (el as HTMLElement & { ledgeMark?: string }).ledgeMark = 'otto'; });
+
+  await drag(page, tabOf(page, 'Otto'), centre(groups(page).nth(1).locator('.dv-content-container')));
+  await expect.poll(async () => (await model(page)).map(g => g.tabs)).toEqual([['atelier:main'], ['session:local:nova', 'session:local:otto']]);
+  await expect(tabOf(page, 'Otto')).toHaveClass(/dv-active-tab/);
+  await keptScreen(page, daemon.received, 'Otto', 'otto');
+
+  await drag(page, tabOf(page, 'Otto'), centre(page.locator('.ide-dropnew')));
+  await expect.poll(async () => (await model(page)).map(g => g.tabs)).toEqual([['atelier:main'], ['session:local:nova'], ['session:local:otto']]);
+  await expect(tabOf(page, 'Otto')).toHaveClass(/dv-active-tab/);
+  await keptScreen(page, daemon.received, 'Otto', 'otto');
+});
+
+test('« >_ Otto · tmux », dragged to another group then to « nouveau groupe », keeps its connection and its xterm', async ({ page }) => {
+  const daemon = await boot(page, true);
+  await open(page, 'Otto');
+  await page.keyboard.press('Control+\\');
+  await groups(page).nth(1).locator('.ide-empty').getByRole('button', { name: 'Terminal · Otto' }).click();
+  const term = plainTab(page, '>_ Otto · tmux');
+  await expect(term).toHaveClass(/dv-active-tab/);
+  await expect(pane(page, '>_ Otto').locator('.terminal-footer')).toContainText('Attached');
+  await expect.poll(() => watches(daemon.received, 'otto')).toBe(1);
+  await xtermOf(page, '>_ Otto').evaluate(el => { (el as HTMLElement & { ledgeMark?: string }).ledgeMark = 'tmux'; });
+
+  // Into the first group (the Atelier, Otto's thread): the second, emptied, goes.
+  await drag(page, term, centre(groups(page).nth(0).locator('.dv-content-container')));
+  await expect.poll(async () => (await model(page)).map(g => g.tabs)).toEqual([['atelier:main', 'session:local:otto', 'terminal:agent:local:otto']]);
+  await expect(term).toHaveClass(/dv-active-tab/);
+  await keptScreen(page, daemon.received, '>_ Otto', 'tmux');
+
+  await drag(page, term, centre(page.locator('.ide-dropnew')));
+  await expect.poll(async () => (await model(page)).map(g => g.tabs)).toEqual([['atelier:main', 'session:local:otto'], ['terminal:agent:local:otto']]);
+  await expect(term).toHaveClass(/dv-active-tab/);
+  await keptScreen(page, daemon.received, '>_ Otto', 'tmux');
+});
+
 test('Review Focus 3: split from the Atelier, the empty group offers no « Terminal · … »', async ({ page }) => {
   await boot(page);
   await expect(tabs(page)).toHaveCount(1);   // the Atelier

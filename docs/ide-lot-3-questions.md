@@ -13,10 +13,13 @@ L'autre onglet affiche aujourd'hui :
 
 Quand l'onglet qui tient l'écran le lâche (retour au fil, onglet fermé), l'autre onglet visible le reprend tout seul.
 
+Un onglet qui apparaît hors du groupe actif ne prend pas l'écran qu'un autre onglet affiche : il montre la note. C'est le cas d'un groupe lié qui suit la session choisie (son onglet Terminal passe à cette session) et du terminal que « Son terminal » ouvre à côté quand l'écran est déjà affiché ailleurs. Ouvert dans le groupe actif, l'onglet prend l'écran.
+
 Questions :
 1. Ce bandeau et ce texte vous conviennent-ils ? Faut-il nommer le groupe ou l'onglet qui tient l'écran ?
 2. Sous le bandeau, l'aperçu des dernières lignes, ou une zone vide ?
 3. Le focus sur ce groupe (clic, Ctrl + ²) doit-il ramener l'écran tout seul, sans passer par « Afficher ici » ?
+4. Un groupe lié qui suit une session, ou « Son terminal » ouvert à côté : doit-il prendre l'écran à l'onglet qui l'affiche, ou montrer la note comme aujourd'hui ?
 
 ## Q2. Ce que montre un groupe sous l'onglet glissé
 
