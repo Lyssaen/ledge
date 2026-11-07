@@ -51,8 +51,11 @@ const plainTab = (page: Page, title: string) => tabs(page).filter({ hasText: tit
 /** The agent's screen in `name`'s tab is attached. An IDE tab has no footer (lot 3, option A): a session tab's `>_` says it in
  *  its title, a terminal tab (« >_ name ») on its top row. */
 async function attached(page: Page, name: string): Promise<void> {
-  if (name.startsWith('>_')) await expect(pane(page, name).locator('.ide-term-kind .ide-term-state')).toHaveText('Attached');
-  else await expect(tabOf(page, name).locator('.tab-term')).toHaveAttribute('title', /^Terminal view · attached · tmux · /);
+  // Attached, the row's chip says it alone (no state beside it: not connecting, reconnecting nor elsewhere), then its pane.
+  if (name.startsWith('>_')) {
+    await expect(pane(page, name).locator('.ide-term-kind .ide-term-where')).toContainText('tmux · ');
+    await expect(pane(page, name).locator('.ide-term-kind .ide-term-state')).toHaveCount(0);
+  } else await expect(tabOf(page, name).locator('.tab-term')).toHaveAttribute('title', /^Terminal view · attached · tmux · /);
   await expect(pane(page, name).locator('.terminal-footer')).toHaveCount(0);
 }
 const tabsIn = (page: Page, i: number) => groups(page).nth(i).locator('.dv-tab');

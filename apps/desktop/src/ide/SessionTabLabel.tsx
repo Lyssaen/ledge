@@ -10,8 +10,9 @@ import { ProviderLogo } from './ProviderLogo';
 
 /** What a session or seat tab says (mockup `tabLabel()`): logo, name, `>_` in the terminal view, the rig of a seat, the state
  *  dot. The extras are aria-hidden so the tab's accessible name stays the title alone. A session not known keeps its title.
- *  With `client`, the `>_`'s title also says what the agent screen's footer said outside the IDE: its state and its tmux pane. */
-export function SessionTabLabel({ session, tab, title, client }: { session: Session | undefined; tab: Tab; title: string; client?: DaemonClient }): JSX.Element {
+ *  With `client`, the `>_`'s title also says what the agent screen's footer said outside the IDE: its state and its tmux pane;
+ *  `helper`, the subagent whose page the tab shows (its parent's screen, read only). */
+export function SessionTabLabel({ session, tab, title, client, helper = null }: { session: Session | undefined; tab: Tab; title: string; client?: DaemonClient; helper?: { id: string } | null }): JSX.Element {
   const { t } = useI18n();
   if (!session) return <span className="tab-name">{title}</span>;
   return (
@@ -19,7 +20,7 @@ export function SessionTabLabel({ session, tab, title, client }: { session: Sess
       <span aria-hidden="true" className="tab-logo"><ProviderLogo provider={providerOf(session.tool)} /></span>
       <span className="tab-name">{title}</span>
       {tabView(tab, session) === 'terminal' && (client
-        ? <TermMark client={client} session={session} viewer={keyOf(tab)} />
+        ? <TermMark client={client} session={session} helper={helper} viewer={keyOf(tab)} />
         : <span aria-hidden="true" className="tab-term" title={t.ide.tabTerminalView}>&gt;_</span>)}
       {session.rig && <span aria-hidden="true" className="tab-rig">{session.rig.name}</span>}
       <span aria-hidden="true" className={`tab-dot d-${dotOf(session)}`} />
@@ -28,9 +29,9 @@ export function SessionTabLabel({ session, tab, title, client }: { session: Sess
 }
 
 /** The `>_` of a session tab on Terminal, titled « Vue terminal · attaché · tmux · ledge-otto » as the tab's screen stands. */
-function TermMark({ client, session, viewer }: { client: DaemonClient; session: Session; viewer: string }): JSX.Element {
+function TermMark({ client, session, helper, viewer }: { client: DaemonClient; session: Session; helper: { id: string } | null; viewer: string }): JSX.Element {
   const { t } = useI18n();
-  const agent = useAgent(session, null, false, useHasBackend(client, session));
+  const agent = useAgent(session, helper, false, useHasBackend(client, session));
   const status = useAgentStatus(session, agent, viewer);
   return <span aria-hidden="true" className="tab-term" title={terminalViewTitle(t.ide.tabTerminalView, status)}>&gt;_</span>;
 }

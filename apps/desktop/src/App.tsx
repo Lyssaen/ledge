@@ -540,7 +540,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const waiting = waitingSessions(sessions, waits);
     const badge = { perm: waiting.filter(s => dotOf(s) === 'approval').length, ask: waiting.filter(s => dotOf(s) === 'question').length };
     const label = (tab: Tab): ReactNode => (tab.kind === 'session' || tab.kind === 'seat'
-      ? <SessionTabLabel session={known.find(s => s.id === tab.ref)} tab={tab} title={title(tab)} client={fleetClient} />
+      ? <SessionTabLabel session={known.find(s => s.id === tab.ref)} tab={tab} title={title(tab)} client={fleetClient}
+        helper={nav.place.kind === 'session' && nav.place.id === tab.ref && nav.place.helper ? { id: nav.place.helper } : null} />
       : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} /> : title(tab));
     const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {

@@ -9,8 +9,7 @@ import { cls } from '../shell/cls';
 import type { Tab } from '../workspace/model';
 import { tagLabel, type SynapseTags } from '../session/markers';
 import { reliefDone, reliefText } from '../session/relief';
-
-const cap = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1);
+import { useBackquote } from '../term/keys';
 
 export interface TabMenuProps {
   at: { x: number; y: number }; tab: Tab; name: string; terminal: boolean; others: boolean;
@@ -32,6 +31,8 @@ export interface TabMenuProps {
  *  and the Story / Objectif as lines under the name, the external terminal and the relief's sessions as entries. */
 export function TabMenu(p: TabMenuProps): JSX.Element {
   const { t } = useI18n();
+  // The focus key as the layout prints it (² on AZERTY), as the agent screen's footer and the shortcuts help say it.
+  const backquote = useBackquote();
   const agent = p.tab.kind === 'session' || p.tab.kind === 'seat';
   const th = t.session.thread;
   const h = agent ? p.session?.handover : undefined;
@@ -52,12 +53,12 @@ export function TabMenu(p: TabMenuProps): JSX.Element {
       {agent && p.onView && (
         <MenuItem onSelect={p.onView}>
           <span><Icon d={SHELL_ICONS.terminal} size={14} />{p.terminal ? t.ide.toThread : t.ide.toTerminal}</span>
-          <small aria-hidden="true"><Kbd>{t.ide.viewKey}</Kbd></small>
+          <small aria-hidden="true"><Kbd>{t.ide.viewKey(backquote)}</Kbd></small>
         </MenuItem>
       )}
       {agent && p.onExternal && <MenuItem onSelect={p.onExternal}><span><Icon d={ICONS.external.d} size={14} />{t.session.terminal.external}</span></MenuItem>}
-      {agent && h && reliefDone(h) && <MenuItem onSelect={open(h.to)}><span>{cap(t.handover.relievedBy(h.toName ?? ''))}</span></MenuItem>}
-      {agent && relieves && <MenuItem onSelect={open(relieves.id)}><span>{cap(t.handover.relieves(relieves.name))}</span></MenuItem>}
+      {agent && h && reliefDone(h) && <MenuItem onSelect={open(h.to)}><span>{t.ide.relievedByEntry(h.toName ?? '')}</span></MenuItem>}
+      {agent && relieves && <MenuItem onSelect={open(relieves.id)}><span>{t.ide.relievesEntry(relieves.name)}</span></MenuItem>}
       {agent && (p.onView || entries) && <hr />}
       <MenuItem onSelect={p.onSplit}>
         <span><Icon d={SHELL_ICONS.split} size={14} />{t.ide.split}</span>

@@ -5,6 +5,8 @@ import type { JSX } from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { DaemonClient } from '@ledge/fleet';
+import type { TermStore } from '../../src/term/store';
+import { TermStoreContext } from '../../src/term/useTerms';
 import { LangProvider } from '../../src/i18n/lang';
 import { ChangesTabLabel, SessionTabLabel } from '../../src/ide/SessionTabLabel';
 import type { Tab } from '../../src/workspace/model';
@@ -32,6 +34,22 @@ describe('SessionTabLabel', () => {
     // No pseudo-terminal nor stream here (jsdom): the screen cannot be shown, read only.
     draw(<SessionTabLabel client={client} session={fakeSession('otto', { name: 'Otto', tool: 'claude' })} tab={{ ...tab, view: 'terminal' }} title="Otto" />);
     expect(screen.getByText('>_')).toHaveAttribute('title', 'Vue terminal · lecture seule');
+  });
+  it('on a subagent\'s page the screen is its parent\'s, read only: the >_ says so, not « attaché »', () => {
+    // A machine that streams panes, and a store whose screen of Otto is made and attached.
+    const streams = [{ id: 'local', daemon: { version: '1', install: 'npm', systemd: true, terminalStream: true } }];
+    const client = { send: () => {}, onMessage: () => () => {}, fleet: { machines: () => streams, subscribe: () => () => {} } } as unknown as DaemonClient;
+    const link = { state: 'attached', attempt: 0 }, surface = {};
+    const store = { subscribe: () => () => {}, link: () => link, surface: () => surface, viewerOf: () => null } as unknown as TermStore;
+    const otto = fakeSession('otto', { name: 'Otto', tool: 'claude' });
+    const label = (helper?: { id: string }) => draw(<TermStoreContext.Provider value={store}>
+      <SessionTabLabel client={client} session={otto} {...(helper && { helper })} tab={{ ...tab, view: 'terminal' }} title="Otto" />
+    </TermStoreContext.Provider>);
+    label();
+    expect(screen.getByText('>_')).toHaveAttribute('title', 'Vue terminal · attaché · tmux · ledge-otto');
+    cleanup();
+    label({ id: 'h1' });
+    expect(screen.getByText('>_')).toHaveAttribute('title', 'Vue terminal · lecture seule · tmux · ledge-otto');
   });
   it('a seat names its rig', () => {
     draw(<SessionTabLabel session={fakeSession('otto', { name: 'Otto', tool: 'omp', rig: { seat: 's', name: 'ledge-dev' } })} tab={{ kind: 'seat', ref: 'otto' }} title="Otto" />);

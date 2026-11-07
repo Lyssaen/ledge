@@ -55,6 +55,9 @@ export function SessionBar({ client, session, project, files, besideLink, notify
   const { t } = useI18n();
   const tb = t.session.browser;
   const relief = session.handover && !reliefDone(session.handover) ? session.handover : null;
+  // Its name in every state (its icon and count alone under 560 px are not one): the heading pill's title.
+  const browserName = browser === null ? '' : browser.pill === 'captures' && browser.captures > 0 ? tb.pill(browser.captures)
+    : tb.pillTitle(session.name, browser.pill === 'captures' ? null : browser.pill, browser.captures);
   const ti = t.ide;
   const near = useContextNear(client);
   const switchable = useCanSwitchModel(client, session);
@@ -73,7 +76,7 @@ export function SessionBar({ client, session, project, files, besideLink, notify
     <div className="ide-bar">
       <span className="ide-bar-model" {...(switchable && { title: ti.changeModel })}>
         {switchable ? <SessionModel client={client} session={session} notify={notify} variant="bar" />
-          : session.model && <span className="ide-bar-mdl"><ProviderLogo provider={modelProvider(session.model) ?? providerOf(session.tool)} size={12} /><span className="model-chip-text">{modelName(session.model)}</span></span>}
+          : session.model && <span className="ide-bar-mdl"><ProviderLogo provider={modelProvider(session.model) ?? providerOf(session.tool)} size={12} /><span className="model-chip-text" title={modelName(session.model)}>{modelName(session.model)}</span></span>}
       </span>
       {session.context && (
         <span className={cls('ide-bar-ctx', warn && 'amber')} title={ti.context(k(session.context.used), k(session.context.window))}>
@@ -94,7 +97,7 @@ export function SessionBar({ client, session, project, files, besideLink, notify
         )}
         {browser && (
           <button type="button" className={cls('ide-bar-pill ide-bar-browser', browser.pill !== 'captures' && `ide-bar-browser-${browser.pill}`)} onClick={onBrowser}
-            {...(browser.pill === 'captures' && browser.captures > 0 ? { 'aria-label': tb.pill(browser.captures), title: tb.pill(browser.captures) } : { title: tb.pillTitle(session.name, browser.pill === 'captures' ? null : browser.pill, browser.captures) })}>
+            title={browserName} aria-label={browserName}>
             {browser.pill === 'live' ? <i className="live-dot" aria-hidden="true" /> : <Icon d={SHELL_ICONS.browser} size={13} />}
             {/* Live, its dot says so; closed, the word. */}
             <span className="lbl">{tb.tab}{browser.pill === 'closed' && ` · ${tb.pillState.closed}`}</span>

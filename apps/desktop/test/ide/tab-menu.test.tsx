@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { Session } from '@ledge/protocol';
@@ -67,5 +67,14 @@ describe('the session tab\'s menu carries what its heading said', () => {
     shown({ tab: { kind: 'changes', ref: 'local:otto' }, onExternal: vi.fn(), tags: { story: 'ST7-1' } });
     expect(screen.queryByRole('menuitem', { name: 'Ouvrir dans un terminal externe' })).toBeNull();
     expect(lines()).toEqual([]);
+  });
+
+  it('review: the view entry names the focus key as the keyboard prints it (² on AZERTY)', async () => {
+    const kb = { getLayoutMap: async () => new Map([['Backquote', '²']]) };
+    Object.defineProperty(navigator, 'keyboard', { configurable: true, value: kb });
+    try {
+      const { menu } = shown();
+      await waitFor(() => expect(within(menu).getByRole('menuitem', { name: /Revenir au fil/ })).toHaveTextContent('Ctrl ²'));
+    } finally { delete (navigator as { keyboard?: unknown }).keyboard; }
   });
 });

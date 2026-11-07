@@ -218,4 +218,17 @@ describe('the bar carries what the IDE tab\'s heading said', () => {
     expect(bar().querySelector('.ide-bar-kids .n')).toHaveTextContent('2');
     expect(bar().querySelector('.ide-bar-browser .lbl')).toHaveTextContent(/Navigateur/);
   });
+
+  it('review: the model\'s name, which ellipsizes under 400 px, can be read in its title', () => {
+    shown();
+    expect(bar().querySelector('.ide-bar-mdl .model-chip-text')).toHaveAttribute('title', 'Sonnet 5.5');
+  });
+
+  it('review: the browser chip is named in every state, its count alone under 560 px is not its name', () => {
+    shown({}, [], null, { browser: { pill: 'live', captures: 2 }, onBrowser: vi.fn() });
+    expect(screen.getByRole('button', { name: 'Navigateur d’Otto, en direct · 2 captures' })).toHaveClass('ide-bar-browser');
+    cleanup();
+    shown({}, [], null, { browser: { pill: 'closed', captures: 0 }, onBrowser: vi.fn() });
+    expect(screen.getByRole('button', { name: 'Navigateur d’Otto, fermé' })).toHaveClass('ide-bar-browser');
+  });
 });

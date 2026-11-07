@@ -59,8 +59,9 @@ describe('an agent\'s terminal tab', () => {
     expect(view()!.querySelector('.ide-term-kind')).toBeTruthy();
     // No footer (lot 3 follow-up): its state and tmux target sit on the kind's row, on its right, muted.
     expect(view()!.querySelector('.terminal-footer')).toBeNull();
-    await waitFor(() => expect(view()!.querySelector('.ide-term-kind .ide-term-state')).toHaveTextContent('Attaché'));
-    expect(view()!.querySelector('.ide-term-kind .ide-term-where')).toHaveTextContent('tmux · ledge-otto');
+    await waitFor(() => expect(view()!.querySelector('.ide-term-kind .ide-term-where')).toHaveTextContent('tmux · ledge-otto'));
+    // Attached, the chip says it: the state is not said twice (review).
+    expect(view()!.querySelector('.ide-term-kind .ide-term-state')).toBeNull();
     expect(store?.viewerOf('local:otto')).toMatch(/^terminal:agent:/);
     expect(env.readOnly).not.toContain(true);
   });

@@ -23,12 +23,14 @@ export function AgentTerminalTab({ client, session, notify, readOnly, onOpenSess
   // The one place the capture's read-only mode is made: useAgent (live becomes the store's read-only mode).
   const agent = useAgent(session, null, readOnly, useHasBackend(client, session));
   useAgentScreen(session.id, agent.mode, store !== null);
+  const kind = readOnly ? t.ide.termReadOnly : t.ide.termAttached;
   const { state, where } = useAgentStatus(session, agent, useTabPlace()?.key ?? 'page');
   return (
     <div className="ide-term">
       <div className="ide-term-kind">
-        <span className="chip-k">{readOnly ? t.ide.termReadOnly : t.ide.termAttached}</span>
-        {state && <span className="ide-term-state">{state}</span>}
+        <span className="chip-k">{kind}</span>
+        {/* The state only when the chip does not already say it (connecting, reconnecting, elsewhere, offline…). */}
+        {state && state.toLocaleLowerCase() !== kind.toLocaleLowerCase() && <span className="ide-term-state">{state}</span>}
         {where && <span className="ide-term-where mono">{where}</span>}
       </div>
       <AgentView client={client} session={session} helper={null} agent={agent} notify={notify} onGoParent={onOpenSession} onOpenShell={undefined} />
