@@ -132,4 +132,43 @@ describe('TermStore free shells', () => {
     st.openFree('wsl', '/w');
     expect(n).toBeGreaterThan(0);
   });
+
+  it('a surface that cannot be made leaves the shell unavailable, and the id is still returned', () => {
+    const { st } = make({ surface: () => { throw new Error('no xterm'); } });
+    let n = 0;
+    st.subscribe(() => { n += 1; });
+    const id = st.openFree('wsl', '/w');
+    expect(id).toBe('shell:1');
+    expect(st.free(id)?.status).toBe('unavailable');
+    expect(n).toBeGreaterThan(0);
+  });
+
+  it('a launch that throws leaves the shell unavailable', () => {
+    const { st } = make({ freeLaunch: () => { throw new Error('boom'); } });
+    expect(st.free(st.openFree('wsl', '/w'))?.status).toBe('unavailable');
+  });
+
+  it('close during a pending open: the late handle is closed', async () => {
+    const { st, backend } = make();
+    backend.hold(true);
+    const a = st.openFree('wsl', '/w');
+    st.closeFree(a);
+    backend.opens[0]!.on.data(new Uint8Array([1]));
+    backend.opens[0]!.resolve();
+    await tick();
+    expect(backend.opens[0]!.closed).toBe(true);
+    expect(backend.opens[0]!.writes).toEqual([]);
+    expect(st.free(a)).toBeUndefined();
+  });
+
+  it('exit before the handle resolves: ended, and the late handle is closed', async () => {
+    const { st, backend } = make();
+    backend.hold(true);
+    const a = st.openFree('wsl', '/w');
+    backend.opens[0]!.on.exit(2);
+    backend.opens[0]!.resolve();
+    await tick();
+    expect(st.free(a)).toMatchObject({ status: 'ended', end: { code: 2, lost: false } });
+    expect(backend.opens[0]!.closed).toBe(true);
+  });
 });

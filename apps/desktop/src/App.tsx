@@ -110,7 +110,10 @@ function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
     freeTitle: (kind, n) => {
       const { avail: a, t: msgs } = titling.current;
       const row = a ? shellMenu(a, client.fleet?.machines() ?? [], kind, msgs).find(r => r.kind === kind) : undefined;
-      const label = row?.label ?? (kind === 'wsl' ? msgs.ide.panel.shells.wsl : kind.startsWith('ssh:') ? `${msgs.ide.panel.shells.ssh} · ${kind.slice(4)}` : kind);
+      const sh = msgs.ide.panel.shells;
+      const machine = kind.startsWith('ssh:') ? client.fleet?.machines().find(m => `ssh:${m.id}` === kind) : undefined;
+      const fallback = { wsl: sh.wsl, powershell: sh.powershell, cmd: sh.cmd, gitbash: sh.gitBash, ledge: sh.ledge }[kind as 'wsl'] ?? `${sh.ssh} · ${machine?.label ?? kind.slice(4)}`;
+      const label = row?.label ?? fallback;
       return `${label} ${n}`;
     },
     // xterm comes with the session page's chunk (out of the first bundle): only its pane and Workspace make the store draw, so

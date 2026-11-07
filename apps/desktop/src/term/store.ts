@@ -311,6 +311,11 @@ export class TermStore {
   private startFree(id: string): void {
     const f = this.frees.get(id);
     if (!f) return;
+    // A launch or an xterm that cannot be made must not leave a « running » shell with nothing behind it.
+    try { this.runFree(id, f); } catch { f.run = null; this.setFree(id, { status: 'unavailable', end: undefined }); }
+  }
+
+  private runFree(id: string, f: { shell: FreeShell; run: Run | null }): void {
     const { backend } = this.deps;
     const launch = backend ? this.deps.freeLaunch?.(f.shell.kind, f.shell.dir) ?? null : null;
     if (!backend || !launch) { f.run = null; this.setFree(id, { status: 'unavailable', end: undefined }); return; }
