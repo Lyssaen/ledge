@@ -4,6 +4,8 @@ import type { UsageAlert, UsageWindow } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
 import { HarnessLogo, UsageFooter } from '../src/usage/UsageFooter';
 import type { UsageGroup } from '../src/usage/model';
+import { fr as fr0 } from '../src/i18n/fr';
+import { alertWindowName } from '../src/usage/alertName';
 import { Attention } from '../src/shell/sidebar/Attention';
 
 const openUrl = vi.hoisted(() => vi.fn());
@@ -77,11 +79,14 @@ describe('Cursor Agent in the footer', () => {
     expect(chip()).not.toHaveTextContent('↺');
   });
 
-  it('three groups: no chip has a reset date, each is a button for its detail', () => {
-    draw([claude(), codex(), cursor()]);
+  it('three groups: Claude keeps its 5 h reset, Codex and Cursor show none; each is a button for its detail', () => {
+    const at = new Date(NOW + 3 * 3_600_000).toISOString();
+    draw([claude({ windows: [{ kind: 'five_hour', pct: 40, resetsAt: at }, { kind: 'seven_day', pct: 20, resetsAt: at }] }), codex(), cursor()]);
     const chips = screen.getAllByRole('button');
     expect(chips).toHaveLength(3);
-    for (const b of chips) expect(b).not.toHaveTextContent('↺');
+    expect(chips[0]).toHaveTextContent('↺');
+    expect(chips[1]).not.toHaveTextContent('↺');
+    expect(chips[2]).not.toHaveTextContent('↺');
   });
 
   it('limit not read: underlined message in the chip; the detail says why and links the dashboard', () => {
@@ -141,5 +146,16 @@ describe('« À toi »', () => {
     expect(card(alert({ kind: 'month', pct: 81, resetsAt: DEC1 }, 'threshold'))).toHaveTextContent('total du mois');
     cleanup();
     expect(card(alert({ kind: 'seven_day', pct: 81, resetsAt: null }, 'threshold'))).toHaveTextContent('total de la semaine');
+  });
+});
+
+describe('notification text', () => {
+  it('a date reset reads « reprend le », an hour does not', async () => {
+    const fr = fr0;
+    expect(fr.usage.notifyBody('total du mois', '1 déc. 13:43', true)).toBe('total du mois · reprend le 1 déc. 13:43');
+    expect(fr.usage.notifyBody('semaine', '14:30')).toBe('semaine · reprend 14:30');
+  });
+  it('an unknown pool is named as it came', () => {
+    expect(alertWindowName(fr0.usage, 'cursor', { kind: 'pool', pool: 'zeta' as never, pct: 100, resetsAt: null })).toBe('zeta');
   });
 });

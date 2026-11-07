@@ -6,7 +6,7 @@ import type { Messages } from '../i18n/messages';
 export function alertWindowName(u: Messages['usage'], harness: UsageHarness, w: UsageWindow): string {
   if (w.kind === 'five_hour') return u.alertFive;
   if (w.kind === 'month') return u.alertMonth;
-  if (w.kind === 'pool') return (w.pool && u.pool[w.pool]) || u.alertModel(w.pool ?? '');
+  if (w.kind === 'pool') return (w.pool && u.pool[w.pool]) || w.pool || '';
   if (w.kind === 'seven_day') return harness === 'cursor' ? u.alertWeekTotal : u.alertWeek;
   return u.alertModel(w.model ?? '');
 }

@@ -287,8 +287,9 @@ export const en: Messages = {
     signedIn: (m: string) => `Account signed in on ${m}`, read: (a: string) => `read ${a} ago`, lastRead: (a: string) => `last read ${a} ago`,
     neverRead: 'not read yet', unreachHost: (h: string) => `${h} unreachable`,
     alertFive: '5 h window', alertWeek: 'week', alertMonth: 'month total', alertWeekTotal: 'week total', alertModel: (m: string) => `${m} week`,
-    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · resets ${at}` : `${p} %`), alertFull: (at: string | null, _date = false) => (at ? `Reached · resumes ${at}` : 'Reached'),
-    notifyTitle: (h: string) => `${h}: limit reached`, notifyBody: (w: string, at: string | null) => (at ? `${w} · resumes ${at}` : w),
+    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · resets ${at}` : `${p} %`), // The mockup's English copy has no « on » here (« Reached · resumes 1 Dec »), so `_date` is ignored.
+    alertFull: (at: string | null, _date = false) => (at ? `Reached · resumes ${at}` : 'Reached'),
+    notifyTitle: (h: string) => `${h}: limit reached`, notifyBody: (w: string, at: string | null, _date = false) => (at ? `${w} · resumes ${at}` : w),
     ack: 'Got it',
     and: ' and ', alertAt: (p: number) => `Alert at ${p} %`, settings: 'Settings', open: (h: string) => `${h} limits: detail`
   },

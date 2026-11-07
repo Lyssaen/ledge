@@ -24,9 +24,9 @@ export function ProviderLogo({ provider, size = 14 }: { provider: Provider; size
           <path fill={`url(#${grad})`} d={OMP} />
         </svg>
       ) : provider === 'anthropic' ? (
-        <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path fill={PROVIDER_MARKS.anthropic.fill} fillRule="nonzero" d={PROVIDER_MARKS.anthropic.d} /></svg>
+        <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path fill={PROVIDER_MARKS.anthropic.fill} fillRule={PROVIDER_MARKS.anthropic.rule} d={PROVIDER_MARKS.anthropic.d} /></svg>
       ) : (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd" aria-hidden="true"><path d={PROVIDER_MARKS[provider].d} /></svg>
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" fillRule={PROVIDER_MARKS[provider].rule} aria-hidden="true"><path d={PROVIDER_MARKS[provider].d} /></svg>
       )}
     </span>
   );

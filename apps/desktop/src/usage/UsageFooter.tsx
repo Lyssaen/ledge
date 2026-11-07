@@ -10,7 +10,7 @@ import { isUnread, resetIsDate, resetLong, resetShort, shownWindows, span, usage
 export function HarnessLogo({ harness, size = 15 }: { harness: UsageHarness; size?: number }): JSX.Element {
   const mark = PROVIDER_MARKS[HARNESS_PROVIDER[harness]];
   return (
-    <svg className="harness-logo" width={size} height={size} viewBox="0 0 24 24" fill={mark.fill} fillRule="evenodd" aria-hidden="true">
+    <svg className="harness-logo" width={size} height={size} viewBox="0 0 24 24" fill={mark.fill} fillRule={mark.rule} aria-hidden="true">
       <path d={mark.d} fill={mark.fill} />
     </svg>
   );

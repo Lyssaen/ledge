@@ -314,7 +314,7 @@ export const fr = {
     neverRead: 'pas encore lu', unreachHost: (h: string) => `${h} injoignable`,
     alertFive: 'fenêtre 5 h', alertWeek: 'semaine', alertMonth: 'total du mois', alertWeekTotal: 'total de la semaine', alertModel: (m: string) => `semaine ${m}`,
     alertThreshold: (p: number, at: string | null) => (at ? `${p} % · remise ${at}` : `${p} %`), alertFull: (at: string | null, date = false) => (at ? `Atteinte · reprend ${date ? 'le ' : ''}${at}` : 'Atteinte'),
-    notifyTitle: (h: string) => `${h} : limite atteinte`, notifyBody: (w: string, at: string | null) => (at ? `${w} · reprend ${at}` : w),
+    notifyTitle: (h: string) => `${h} : limite atteinte`, notifyBody: (w: string, at: string | null, date = false) => (at ? `${w} · reprend ${date ? 'le ' : ''}${at}` : w),
     ack: 'Compris',
     and: ' et ', alertAt: (p: number) => `Alerte à ${p} %`, settings: 'Réglages', open: (h: string) => `Limites de ${h} : détail`
   },
