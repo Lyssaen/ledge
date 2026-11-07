@@ -85,10 +85,11 @@ it('shows Cursor\'s month, its pools, and the pools past the threshold; weekly p
 });
 
 it('isUnread: ok, read, and nothing to show', () => {
-  expect(isUnread({ status: 'ok', readAt: ago(1), windows: [] })).toBe(true);
-  expect(isUnread({ status: 'stale', readAt: ago(1), windows: [] })).toBe(false);
-  expect(isUnread({ status: 'loading', readAt: null, windows: [] })).toBe(false);
-  expect(isUnread({ status: 'ok', readAt: ago(1), windows: [{ kind: 'month', pct: 1, resetsAt: null }] })).toBe(false);
+  expect(isUnread({ status: 'ok', readAt: ago(1), windows: [] }, NOW)).toBe(true);
+  expect(isUnread({ status: 'stale', readAt: ago(1), windows: [] }, NOW)).toBe(false);
+  expect(isUnread({ status: 'loading', readAt: null, windows: [] }, NOW)).toBe(false);
+  expect(isUnread({ status: 'ok', readAt: ago(1), windows: [{ kind: 'month', pct: 1, resetsAt: null }] }, NOW)).toBe(false);
+  expect(isUnread({ status: 'ok', readAt: ago(61), windows: [] }, NOW)).toBe(false);
 });
 
 it('a reset a week or more away is a date; closer, a weekday; a past date keeps the old rules', () => {

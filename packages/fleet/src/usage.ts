@@ -92,9 +92,9 @@ export function shownWindows(g: UsageGroup, threshold: number): {
   };
 }
 
-/** ok, read, and nothing to show: « limite non lue ». */
-export function isUnread(g: Pick<UsageGroup, 'status' | 'windows' | 'readAt'>): boolean {
-  return g.status === 'ok' && g.readAt !== null && g.windows.length === 0;
+/** ok, freshly read (under an hour), and nothing to show: « limite non lue ». */
+export function isUnread(g: Pick<UsageGroup, 'status' | 'windows' | 'readAt'>, now: number): boolean {
+  return g.status === 'ok' && g.readAt !== null && now - Date.parse(g.readAt) <= USAGE_SHOWN_MS && g.windows.length === 0;
 }
 
 /** Neutral under the threshold, amber past it, red at 100 %. */
