@@ -11,6 +11,10 @@ describe('usage windows', () => {
     expect(UsageWindowSchema.safeParse({ kind: 'pool', pool: 'other', pct: 56, resetsAt: R }).success).toBe(true);
     expect(UsageWindowSchema.safeParse({ kind: 'pool', pool: 'x', pct: 56, resetsAt: R }).success).toBe(false);
   });
+  it('requires pool on a pool window and refuses it elsewhere', () => {
+    expect(UsageWindowSchema.safeParse({ kind: 'pool', pct: 5, resetsAt: R }).success).toBe(false);
+    expect(UsageWindowSchema.safeParse({ kind: 'month', pool: 'other', pct: 5, resetsAt: R }).success).toBe(false);
+  });
   it('builds alert ids, unchanged for models', () => {
     expect(usageAlertId('cursor', 'a1b2c3d4e5f6', { kind: 'pool', pool: 'other', resetsAt: R }, 'full')).toBe('cursor|a1b2c3d4e5f6|pool|other|full|' + R);
     expect(usageAlertId('claude', 'a1b2c3d4e5f6', { kind: 'model', model: 'Opus', resetsAt: R }, 'threshold')).toBe('claude|a1b2c3d4e5f6|model|Opus|threshold|' + R);
@@ -33,6 +37,18 @@ describe('usage.state tolerance', () => {
     expect(m.harnesses).toHaveLength(1);
     expect(m.harnesses[0]!.harness).toBe('claude');
     expect(m.harnesses[0]!.windows.map((w) => w.kind)).toEqual(['five_hour']);
+  });
+  it('drops a window whose pool does not match its kind, keeps the message', () => {
+    const bad = [{ kind: 'pool', pct: 5, resetsAt: R }, { kind: 'month', pool: 'other', pct: 5, resetsAt: R }, { kind: 'month', pct: 5, resetsAt: R }];
+    const alert = (id: string, window: unknown) => ({ id, harness: 'cursor', account: null, window, level: 'threshold', at: R });
+    const m = parseServerMessage({
+      type: 'usage.state', prefs,
+      harnesses: [{ harness: 'cursor', account: null, status: 'ok', readAt: R, windows: bad }],
+      alerts: [alert('a', bad[0]), alert('b', bad[2])]
+    });
+    if (m.type !== 'usage.state') throw new Error('type');
+    expect(m.harnesses[0]!.windows).toEqual([bad[2]]);
+    expect(m.alerts.map((a) => a.id)).toEqual(['b']);
   });
   it('drops an alert of an unknown harness or window kind', () => {
     const ok = { id: 'x', harness: 'cursor', account: null, window: { kind: 'month', pct: 90, resetsAt: R }, level: 'threshold', at: R };

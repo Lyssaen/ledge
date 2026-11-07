@@ -15,6 +15,8 @@ const USAGE_WINDOW_KINDS = ['five_hour', 'seven_day', 'model', 'month', 'pool'] 
  * One window of an account's limits: the 5 hours, the week, one model's own week (`model`, as the harness names it), the
  * month (`month`: Cursor's monthly cycle total) or one pool of the included usage (`pool`).
  */
+const poolMatchesKind = (w: { kind?: unknown; pool?: unknown }): boolean => (w.kind === 'pool') === (w.pool !== undefined);
+
 export const UsageWindowSchema = z.object({
   kind: z.enum(USAGE_WINDOW_KINDS),
   model: z.string().min(1).max(80).optional(),
@@ -24,7 +26,7 @@ export const UsageWindowSchema = z.object({
   pct: z.number().int().min(0).max(1000),
   /** When it starts again from zero; null when the harness does not say. */
   resetsAt: z.string().datetime().nullable()
-});
+}).refine(poolMatchesKind, { message: 'a pool window names its pool, and only a pool window does', path: ['pool'] });
 export type UsageWindow = z.infer<typeof UsageWindowSchema>;
 
 /**
@@ -98,13 +100,13 @@ export const dropUnknownHarnesses = (raw: unknown): unknown =>
   Array.isArray(raw)
     ? raw
         .filter((h) => isRecord(h) && knownHarness(h.harness))
-        .map((h) => (Array.isArray(h.windows) ? { ...h, windows: h.windows.filter((w: unknown) => !isRecord(w) || knownKind(w.kind)) } : h))
+        .map((h) => (Array.isArray(h.windows) ? { ...h, windows: h.windows.filter((w: unknown) => !isRecord(w) || (knownKind(w.kind) && poolMatchesKind(w))) } : h))
     : raw;
 
 /** The same rule for alerts: one whose harness or window kind is unknown is dropped. */
 export const dropUnknownAlerts = (raw: unknown): unknown =>
   Array.isArray(raw)
-    ? raw.filter((a) => isRecord(a) && knownHarness(a.harness) && (!isRecord(a.window) || knownKind(a.window.kind)))
+    ? raw.filter((a) => isRecord(a) && knownHarness(a.harness) && (!isRecord(a.window) || (knownKind(a.window.kind) && poolMatchesKind(a.window))))
     : raw;
 
 /** The daemon's usage, after every snapshot and on each change: the harnesses, the open alerts, the threshold it keeps. */
