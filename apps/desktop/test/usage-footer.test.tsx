@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { UsageAlert, UsageWindow } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
@@ -131,6 +131,9 @@ describe('the providers\' logos', () => {
 });
 
 describe('« À toi »', () => {
+  // Attention reads the real clock: pin the date so « reprend le 1 déc. » (a reset 7+ days away) holds whatever day the suite runs.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW); });
+  afterEach(() => { vi.useRealTimers(); });
   const alert = (w: UsageWindow, level: 'full' | 'threshold' = 'full'): UsageAlert => ({ id: `a-${w.kind}-${w.pool ?? ''}`, harness: 'cursor', account: 'x', window: w, level, at: min(1) });
   const card = (a: UsageAlert, lang: 'fr' | 'en' = 'fr') => render(
     <LangProvider lang={lang}><Attention items={[]} current={null} projectOf={() => null} onOpen={() => {}} onDecide={() => {}} onMenu={() => {}} paused usageAlerts={[a]} /></LangProvider>
