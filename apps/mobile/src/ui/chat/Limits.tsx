@@ -2,7 +2,7 @@ import type { JSX } from 'react';
 import type { PhoneHarnessUsage, UsageHarness, UsageWindow } from '@ledge/protocol';
 import { HARNESS_PROVIDER, PROVIDER_MARKS } from '@ledge/ui/logos/providers';
 import { copy } from '../../copy';
-import { reached, resetLabel, shownUsage, span, usageTone } from '../../model/usage';
+import { reached, resetIsDate, resetLabel, shownUsage, span, usageTone } from '../../model/usage';
 
 /** A harness's logo: its provider's own mark (Claude's spark in its orange; OpenAI's and Cursor's follow the text colour). */
 export function HarnessLogo({ harness, size = 14 }: { harness: UsageHarness; size?: number }): JSX.Element {
@@ -45,7 +45,7 @@ function Row({ label, w, now, alert }: { label: string; w: UsageWindow; now: num
       <UsageGauge pct={w.pct} alert={alert} />
       <span className="truncate font-mono text-[12px]">
         <b className={`font-medium ${TONE_TEXT[tone]}`}>{w.pct} %</b>
-        {at && <small className="ml-1.5 text-[11px] text-muted">{reached(w) ? P.resumes(at) : `↺ ${at}`}</small>}
+        {at && <small className="ml-1.5 text-[11px] text-muted">{reached(w) ? (w.resetsAt && resetIsDate(w.resetsAt, now) ? P.resumesOn(at) : P.resumes(at)) : `↺ ${at}`}</small>}
       </span>
     </div>
   );

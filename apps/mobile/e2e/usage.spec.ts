@@ -72,9 +72,11 @@ test('Cursor limits on the phone: month, Cursor and others', async ({ page }) =>
   await nav(page).getByRole('link', { name: 'Ledge' }).click();
   const limits = page.getByRole('group', { name: copy.chat.point.limitsLabel });
   await expect(limits).toContainText('Mois');
-  await expect(limits).toContainText('Cursor');
+  await expect(limits).toContainText('Cursor Agent');
   await expect(limits).toContainText('Autres');
   await expect(limits).toContainText('81 %');
+  await expect(limits).toContainText('reprend le ');
+  await expect(page.getByRole('group', { name: copy.chat.point.yoursLabel })).toContainText('Cursor · Autres 100 %');
   await limits.scrollIntoViewIfNeeded();
   await shot(page, 'point-cursor-over');
 });

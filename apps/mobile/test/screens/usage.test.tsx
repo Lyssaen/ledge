@@ -123,7 +123,8 @@ describe('Cursor Agent in « Le point »', () => {
     expect(c.textContent).toContain('81 %');
     expect(c.textContent).toContain('Cursor41 %');
     expect(c.textContent).toContain('Autres');
-    expect(c.textContent).toContain(copy.chat.point.resumes(resetLabel(reset, NOW)));
+    expect(c.textContent).toContain(copy.chat.point.resumesOn(date));
+    expect(c.textContent).toContain(`reprend le ${date}`);
     const yours = within(region).getByRole('group', { name: copy.chat.point.yoursLabel });
     const lines = [...yours.querySelectorAll('[data-usage-over]')].map(e => e.textContent);
     expect(lines).toHaveLength(2);
