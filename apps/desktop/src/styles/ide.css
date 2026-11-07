@@ -231,14 +231,8 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-term-kind .chip-k { margin: 0 8px; font-family: var(--font-mono, monospace); font-size: 10.5px; line-height: 16px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; }
 .ide-term > .agent-view { flex: 1; min-height: 0; }
 
-/* A thread in a narrow IDE group (lot 3: 300 px is a normal width). session.css's own `@container session (max-width:600px)`
-   rules lose to its later base rules of the same specificity (`.r`, `.vb`, `.lnk`), so a change's row kept 86 px for a hidden
-   verb and the whole « View the change »: the path went to nothing and the link ran over the duration. Scoped to the IDE pane,
-   so the interface without the switch is unchanged. */
+/* A thread in a narrow IDE group (lot 3: 300 px is a normal width): session.css's narrow rules apply; the time column takes
+   what its duration needs (« 6 min 52 s »), 44 px at least. */
 @container session (max-width: 600px) {
-  .ide-pane .r { grid-template-columns: 32px minmax(0, 1fr) 44px; column-gap: 10px; }
-  .ide-pane .vb { width: auto; }
-  .ide-pane .action-link { font-size: 0; }
-  .ide-pane .action-link::after { content: attr(data-short); font-size: 11px; }
-  .ide-pane .rail::before { left: 15.5px; }
+  .ide-pane .r { grid-template-columns: 32px minmax(0, 1fr) minmax(44px, max-content); }
 }

@@ -81,7 +81,6 @@
 /* Session page content */
 .session-page{position:relative;min-width:0;container-type:inline-size;container-name:session}
 .session-page .kids-pill{white-space:nowrap}
-@container session (max-width:600px){.session-page .pane-meta{display:none}.reply-hint{display:none}.action-verb{display:none}.vb{width:auto}.action-link{font-size:0}.action-link:after{content:attr(data-short);font-size:11px}.session-thread{padding:16px 16px 24px}.r{grid-template-columns:32px minmax(0,1fr) 44px;column-gap:10px}.rail:before{left:15.5px}.doc{max-width:none}.message-card,.message-card.sent{max-width:100%}.pane-heading .tags{display:none}}
 .session-page .pane-heading{gap:10px;padding:0 14px 0 12px}
 .session-page .pane-meta{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .view-switch{display:flex;gap:2px;padding:2px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--muted);flex-shrink:0}
@@ -774,3 +773,7 @@ details.rig-raw pre,.rig-bad .rawbox{margin:6px 0 0;padding:8px 10px;border:1px 
 .meta-tip{position:fixed;z-index:30;display:grid;grid-template-columns:84px 1fr;gap:3px 8px;width:300px;padding:9px 11px;background:var(--popover);color:var(--foreground);border:1px solid var(--input);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);font:12px 'Geist',system-ui,sans-serif;white-space:normal}
 .meta-tip-row{display:contents}
 .meta-tip .mk{color:var(--muted-foreground)}
+
+/* The page under 600 px. Last in the sheet: these rules override base rules of the same specificity (.r, .vb, .lnk,
+   .session-thread, .message-card…), which would win were they to come after. */
+@container session (max-width:600px){.session-page .pane-meta{display:none}.reply-hint{display:none}.action-verb{display:none}.vb{width:auto}.action-link{font-size:0}.action-link:after{content:attr(data-short);font-size:11px}.session-thread{padding:16px 16px 24px}.r{grid-template-columns:32px minmax(0,1fr) 44px;column-gap:10px}.rail:before{left:15.5px}.doc{max-width:none}.message-card,.message-card.sent{max-width:100%}.pane-heading .tags{display:none}}
