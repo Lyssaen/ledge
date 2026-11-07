@@ -48,7 +48,7 @@ export interface SessionMenuProps {
   onHandover?(s: Session): void;
   /** The menu closed (a choice, Escape, a click outside): the caller gives the focus back where it came from. */
   onClose(): void;
-  /** The IDE switched on: its entries replace « Ouvrir la session » at the head; switched off, the menu is today's. */
+  /** The IDE switched on: its entries replace « Ouvrir la session » and « Terminal »; switched off, the menu is today's. */
   ide?: SessionMenuIde;
 }
 
@@ -72,13 +72,14 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
     <Menu open onOpenChange={o => { if (!o) onClose(); }} label={m.label(s.name)} className="session-menu-wrap" menuClassName="session-menu" at={at} trigger={() => null}>
       <div className="session-menu-head"><strong>{s.name}</strong><small>{s.topic ?? s.title}</small></div>
       {ide ? (<>
-        {item(t.ide.menu.open, ICONS.external.d, () => onOpen(s), { hint: t.ide.menu.openKey, key: 'Enter' })}
+        {item(t.ide.menu.open, ICONS.external.d, () => onOpen(s), { hint: t.ide.menu.openKey })}
         {item(t.ide.menu.openRight, SHELL_ICONS.split, () => ide.openRight(s), { hint: t.ide.menu.openRightKey })}
         <hr />
         {ide.hasTerminal(s) && item(s.rig ? t.ide.menu.capture : t.ide.menu.terminal, SHELL_ICONS.terminal, () => ide.terminal(s))}
         {s.rig && item(t.ide.menu.message, SHELL_ICONS.mail, () => ide.message(s))}
       </>) : item(m.open, ICONS.external.d, () => onOpen(s), { hint: '↵' })}
-      {item(m.terminal, SHELL_ICONS.terminal, () => onTerminal(s), { hint: 'T', key: 't' })}
+      {/* The IDE has one terminal entry, as in the mockup: « Son terminal » above stands for lot 2's « Terminal ». */}
+      {!ide && item(m.terminal, SHELL_ICONS.terminal, () => onTerminal(s), { hint: 'T', key: 't' })}
       {item(m.rename, SHELL_ICONS.pencil, () => onRename(s), { hint: 'F2', key: 'F2', disabled: exited || s.offline || undefined })}
       <button type="button" role="menuitem" aria-label={t.filing.moveTo} aria-haspopup="menu" aria-expanded={filingOpen} onClick={() => setFilingOpen(o => !o)}>
         <span><Icon d={ICONS.folder.d} size={14} />{m.moveTo}</span><Icon d={ICONS.chevronRight.d} size={12} />

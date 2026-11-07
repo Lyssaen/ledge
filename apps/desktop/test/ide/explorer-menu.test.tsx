@@ -20,11 +20,12 @@ beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'f
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); saveOpenSession('active'); localStorage.clear(); });
 
 /** `seat`: Pim, a seat of the rig ledge-dev (the rigs view lists it, not the tree). */
-async function mount({ ide = true, seat = false }: { ide?: boolean; seat?: boolean } = {}) {
+async function mount({ ide = true, seat = false, broadcast = false }: { ide?: boolean; seat?: boolean; broadcast?: boolean } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }]);
+  if (broadcast) d.extras.daemon = { version: '0.35.0', install: 'npm', systemd: true, broadcast: true };
   d.projects(PROJECTS);
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' }));
   d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'working' }));
@@ -55,10 +56,13 @@ describe('the explorer\'s session menu in the IDE', () => {
     expect(items).toContain('Renommer…');
     expect(items).toContain('Supprimer…');
     expect(items).not.toContain('Ouvrir la session');
+    // One terminal entry, as in the mockup: « Son terminal » replaces lot 2's « Terminal ».
+    expect(items).not.toContain('Terminal');
     expect(items).not.toContain('Capture dans un terminal');
     expect(items).not.toContain('Envoyer un message…');
     expect(items.join(' ')).not.toMatch(/nouvelle fenêtre|éditeur|Redémarrer/i);
     expect(menu().getByRole('menuitem', { name: 'Ouvrir' })).toHaveTextContent('Entrée');
+    expect(menu().getByRole('menuitem', { name: 'Ouvrir' })).not.toHaveAttribute('aria-keyshortcuts');
     expect(menu().getByRole('menuitem', { name: 'Ouvrir à droite' })).toHaveTextContent('Ctrl clic');
   });
 
@@ -68,6 +72,7 @@ describe('the explorer\'s session menu in the IDE', () => {
     const items = labels();
     expect(items.slice(0, 4)).toEqual(['Ouvrir', 'Ouvrir à droite', 'Capture dans un terminal', 'Envoyer un message…']);
     expect(items).not.toContain('Son terminal');
+    expect(items).not.toContain('Terminal');
     expect(items.join(' ')).not.toMatch(/nouvelle fenêtre|éditeur|Redémarrer/i);
   });
 
@@ -88,6 +93,32 @@ describe('the explorer\'s session menu in the IDE', () => {
     const w = stored();
     expect(w.groups[0]!.link).not.toBeNull();
     expect(w.groups[1]!.link).toBe(w.groups[0]!.link);
+  });
+
+  it('« Son terminal » anchors on the group holding the session\'s tab, not on the focused one', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    fireEvent.click(tree.getByRole('button', { name: /^Nova/ }), { ctrlKey: true });
+    await waitFor(() => expect(refs(stored())).toEqual([['atelier:main', 'session:otto'], ['session:nova']]));
+    expect(stored().focus).toBe(stored().groups[1]!.id);
+    fireEvent.contextMenu(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(menu().getByRole('menuitem', { name: 'Son terminal' }));
+    await waitFor(() => expect(refs(stored()).flat()).toContain('terminal:agent:otto'));
+    const w = stored();
+    const otto = w.groups.find(g => g.tabs.some(t => t.kind === 'session'))!;
+    const term = w.groups.find(g => g.tabs.some(t => t.kind === 'terminal'))!;
+    const nova = w.groups.find(g => g.tabs.some(t => t.ref.endsWith('nova')))!;
+    expect(otto.link).not.toBeNull();
+    expect(term.link).toBe(otto.link);
+    expect(nova.link).toBeNull();
+  });
+
+  it('« Son terminal » on a session not open opens it first, then its terminal beside it', async () => {
+    const { tree, user } = await mount();
+    fireEvent.contextMenu(tree.getByRole('button', { name: /^Otto/ }));
+    await user.click(menu().getByRole('menuitem', { name: 'Son terminal' }));
+    await waitFor(() => expect(refs(stored())).toEqual([['atelier:main', 'session:otto'], ['terminal:agent:otto']]));
+    expect(stored().groups[1]!.link).toBe(stored().groups[0]!.link);
   });
 
   it('« Envoyer un message… » opens the seat, its reply focused', async () => {
@@ -115,6 +146,20 @@ describe('Ctrl+click and « Ouvrir une session »', () => {
     const { tree } = await mount();
     fireEvent.click(tree.getByRole('button', { name: /^Nova/ }), { ctrlKey: true });
     await waitFor(() => expect(refs(stored())).toEqual([['atelier:main'], ['session:nova']]));
+  });
+
+  it('Shift+click in the IDE tree picks sessions for a group message; Ctrl+click does not pick there', async () => {
+    const { tree } = await mount({ broadcast: true });
+    const row = (name: RegExp) => tree.getByRole('button', { name }).closest('[role=treeitem]')!;
+    // The daemon takes a broadcast once its info arrives: the project's ✉ says so.
+    await screen.findAllByTitle('Écrire à tout le projet…');
+    fireEvent.click(tree.getByRole('button', { name: /^Otto/ }), { shiftKey: true });
+    expect(row(/^Otto/)).toHaveClass('picked');
+    // Picking opens nothing: the workspace is still the first run's, never written.
+    expect(localStorage.getItem('ledge.ide.workspace')).toBeNull();
+    fireEvent.click(tree.getByRole('button', { name: /^Nova/ }), { ctrlKey: true });
+    await waitFor(() => expect(refs(stored())).toEqual([['atelier:main'], ['session:nova']]));
+    expect(row(/^Nova/)).not.toHaveClass('picked');
   });
 
   it('⌘+click on a seat of the rigs view opens it on the right', async () => {

@@ -508,11 +508,15 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // included, takes neither clicks nor the focus.
   const blocked = nav.modal !== null || actions.pending !== null || sessionMenu.renaming !== null || whatsNew || pairing !== null;
 
-  // The explorer's session menu in the IDE: open to the right, the agent's terminal tab beside the focused group (linked, R3 for
-  // a seat), a seat's message (its tab, the reply focused, R4).
+  // The explorer's session menu in the IDE: open to the right, the agent's terminal tab beside the group that holds the session's
+  // tab (linked; R3 for a seat; the session opened first where the setting says if it is not), a seat's message (the reply focused, R4).
   const ideSessionMenu: SessionMenuIde = {
     openRight: s => dispatch({ type: 'open', id: s.id, where: 'right' }),
-    terminal: s => wsStore.update(w => beside(w, w.focus, 'terminal', s.id)),
+    terminal: s => {
+      const key = keyOf({ kind: s.rig != null ? 'seat' : 'session', ref: s.id });
+      if (!findTab(wsStore.get(), key)) dispatch({ type: 'open', id: s.id });
+      wsStore.update(w => { const hit = findTab(w, key); return hit ? beside(w, hit.group.id, 'terminal', s.id) : w; });
+    },
     hasTerminal: s => hasTerminal({ kind: s.rig != null ? 'seat' : 'session', ref: s.id }, s),
     message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' })
   };

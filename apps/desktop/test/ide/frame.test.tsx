@@ -346,11 +346,11 @@ describe('the IDE session tab (lot 2)', () => {
     expect(document.querySelector('.action-row.flash')).toBeNull();
   });
 
-  it('the session menu\'s « Terminal » opens the tab on its terminal view; the stored preference is left alone', async () => {
+  // The IDE menu's one terminal entry is « Son terminal » (lot 3); lot 2's « Terminal » stays on the row's button, the chat and the island.
+  it('the row\'s « Terminal » opens the tab on its terminal view; the stored preference is left alone', async () => {
     const { tree, user } = await mount();
     const stored = localStorage.getItem('desktop.session');
-    fireEvent.contextMenu(tree.getByRole('button', { name: /^Otto/ }));
-    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Terminal' }));
+    await user.click(tree.getByRole('button', { name: 'Ouvrir le terminal de Otto' }));
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
     await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
     await waitFor(() => expect(document.querySelector('.ide-pane .session-page[data-session$="otto"] .agent-view')).not.toBeNull());

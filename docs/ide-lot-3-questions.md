@@ -33,8 +33,8 @@ Questions :
 ## Q3. Le menu de l'explorateur et Réglages › Espace de travail (tâche 6)
 
 La maquette dessine le menu (`menuHtml()`, `ctx`) et la section (`settingsPage()`), pas ces points :
-- **« Terminal » et « Son terminal ».** Le menu de session garde son entrée « Terminal » (R5 : la vue terminal de l'onglet de la session, comportement du lot 2), après les entrées de la maquette. Le menu a donc « Son terminal » (un onglet à part, dans le groupe lié) et « Terminal » (l'onglet de la session basculé sur son terminal). Faut-il retirer « Terminal » dans l'IDE ?
 - **Un siège OMP arrêté** n'a pas d'écran : « Capture dans un terminal » n'est pas proposé.
-- **`Ctrl`+clic dans l'arbre** sert aujourd'hui à choisir plusieurs sessions pour leur écrire ensemble (diffusion). Dans l'IDE, il ouvre à droite, comme le dit la maquette : la sélection multiple n'y est plus accessible. Faut-il un autre geste (`Maj`+clic) ?
+- **`Ctrl`+clic dans l'arbre** ouvre à droite, comme le dit la maquette. La sélection de plusieurs sessions pour leur écrire ensemble (diffusion), qui prenait `Ctrl`+clic, passe à `Maj`+clic dans l'IDE ; interrupteur coupé, rien ne change. design-ux peut confirmer ce geste.
 - **La phrase sous le titre** de la section : la maquette dit « Chaque option agit tout de suite sur cette page : essaie-les » (une phrase de maquette). L'app dit « Les groupes d’onglets de l’interface IDE : où s’ouvre une session. »
 - **Les icônes du menu** : les entrées de la maquette n'en ont pas ; l'app garde celles du menu de session actuel (ouvrir, diviser, terminal, enveloppe).
+- **Le menu de l'atelier** (son « … » et son clic droit) partage le même menu de session : interrupteur allumé, il a aussi les entrées de l'IDE (« Ouvrir », « Ouvrir à droite », « Son terminal »…). La fenêtre détachée de l'atelier garde le menu d'aujourd'hui.
