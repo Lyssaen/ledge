@@ -69,7 +69,7 @@ export function Limits({ usage: given, now, alert, fresh = true }: { usage: read
           <div key={h.harness} data-harness={h.harness} className="flex flex-col">
             <div className="mt-1.5 mb-0.5 flex items-baseline gap-1.5 text-small font-semibold"><HarnessLogo harness={h.harness} />{P.harness[h.harness] ?? h.harness}</div>
             {h.status === 'loading' && <p className="py-1 text-small text-muted">{P.loading}</p>}
-            {h.status === 'expired' && <p className="py-1 text-small text-attention">{h.harness === 'cursor' ? P.notOnPcCursor : P.notOnPc}</p>}
+            {h.status === 'expired' && <p className="py-1 text-small text-attention">{P.notOnPc(P.harness[h.harness] ?? h.harness)}</p>}
             {h.status === 'ok' && unread(i) && <p className="py-1 text-small text-muted">{P.unread}</p>}
             {h.status !== 'loading' && h.status !== 'expired' && h.windows.length > 0 && (
               <div className={dim ? 'opacity-50' : undefined}>{h.windows.map(w => <Row key={`${w.kind}:${w.model ?? w.pool ?? ''}`} label={windowLabel(w)} w={w} now={now} alert={alert} />)}</div>

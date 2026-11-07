@@ -72,7 +72,7 @@ describe('« Le point »', () => {
   });
 
   it.each([
-    ['expired', copy.chat.point.notOnPc],
+    ['expired', 'Lecture impossible : reconnectez Claude Code sur le PC.'],
     ['stale', copy.chat.point.stale('12 min')],
     ['unreachable', copy.chat.point.unreach('25 min')]
   ] as const)('%s', (status, text) => {
@@ -107,7 +107,10 @@ describe('Cursor Agent in « Le point »', () => {
   it('a reset a week or more away is a date', () => {
     expect(date).toMatch(/^\d{1,2} \S+\.?( \d{2}:\d{2})?$/);
     expect(resetLabel(reset, NOW, true)).toMatch(/^\d{1,2} [^\d:]+$/);
-    expect(resetLabel(new Date(NOW + 6 * 86_400_000).toISOString(), NOW, true)).not.toMatch(/\d{1,2} \S+\.$/);
+    const six = new Date(NOW + 6 * 86_400_000);
+    const wd = six.toLocaleDateString('fr-FR', { weekday: 'short' });
+    expect(resetLabel(six.toISOString(), NOW, true)).toBe(wd);
+    expect(resetLabel(six.toISOString(), NOW)).toBe(`${wd} ${String(six.getHours()).padStart(2, '0')}:${String(six.getMinutes()).padStart(2, '0')}`);
   });
 
   it('LIMITES: Mois, Cursor, Autres with their % and « reprend »; two lines in « À toi »', () => {
@@ -136,6 +139,10 @@ describe('Cursor Agent in « Le point »', () => {
 
   it('unread says so', () => {
     expect(within(point([cursor({ windows: [] })])).getByText(copy.chat.point.unread)).toBeTruthy();
+  });
+
+  it('expired says Codex', () => {
+    expect(within(point([claude({ harness: 'codex', status: 'expired', windows: [] })])).getByText('Lecture impossible : reconnectez Codex sur le PC.')).toBeTruthy();
   });
 
   it('expired says Cursor Agent', () => {
