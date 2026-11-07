@@ -583,6 +583,35 @@ describe('TermStore: one agent screen per session (IDE groups)', () => {
     expect(st.viewerOf('local:b')).toBe('t2');
   });
 
+  it('refreshAgent reopens a shown session only where its route changed, each on its own path', async () => {
+    const routes = new Map<string, AgentRoute>([['local:a', 'pty'], ['local:b', 'pty']]);
+    const streamed: string[] = [];
+    const stream: AgentStream = { open: id => { streamed.push(id); return { write: () => {}, resize: () => {}, close: () => {} }; } };
+    const st = store({ agentRoute: id => routes.get(id) ?? 'pty', stream });
+    st.showAgent('local:a', { kind: 'live' }, 't1');
+    st.showAgent('local:b', { kind: 'live' }, 't2');
+    await tick();
+    expect(backend.opens.map(o => o.argv.at(-1))).toEqual(['local:a', 'local:b']);
+    // Nothing changed: no attachment closed, none opened.
+    st.refreshAgent(); await tick();
+    expect(backend.opens).toHaveLength(2);
+    expect(backend.opens.map(o => o.closed)).toEqual([false, false]);
+    expect(streamed).toEqual([]);
+    // a's machine now streams: a goes over the stream, its pseudo-terminal closed; b, unchanged, stays as it is.
+    routes.set('local:a', 'stream');
+    st.refreshAgent(); await tick();
+    expect(streamed).toEqual(['local:a']);
+    expect(backend.opens).toHaveLength(2);
+    expect(backend.opens.map(o => o.closed)).toEqual([true, false]);
+    // Both change: b over the stream too, a not opened again.
+    routes.set('local:b', 'stream');
+    st.refreshAgent(); await tick();
+    expect(streamed).toEqual(['local:a', 'local:b']);
+    expect(backend.opens).toHaveLength(2);
+    expect(backend.opens.map(o => o.closed)).toEqual([true, true]);
+    expect([st.viewerOf('local:a'), st.viewerOf('local:b')]).toEqual(['t1', 't2']);
+  });
+
   it('the same session asked by another tab moves to it, on the same attachment; the old tab cannot hide it', async () => {
     const st = store();
     expect(st.viewerOf('local:a')).toBeNull();

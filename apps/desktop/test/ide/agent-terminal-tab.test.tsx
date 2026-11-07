@@ -34,12 +34,12 @@ beforeEach(() => {
 });
 afterEach(async () => { env.backend = null; cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
 
-async function mount(tabs: Tab[], rig = false, pty = true, side = true) {
+async function mount(tabs: Tab[], rig = false, pty = true, side = true, terminalStream = true) {
   localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(tabs.reduce((w, t, i) => open(w, t, i && side ? 'right' : undefined), empty()))));
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
-  d.extras.daemon = { version: '0.49.0', install: 'npm', systemd: true, terminalStream: true }; env.backend = pty ? fakeBackend() : null;
+  d.extras.daemon = { version: '0.49.0', install: 'npm', systemd: true, terminalStream }; d.extras.launcher = ['ledge']; env.backend = pty ? fakeBackend() : null;
   d.machines([{ id: 'local', label: 'Local' }]);
   d.projects(PROJECTS);
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', ...(rig ? { rig: { seat: 'dev@r', name: 'ledge-dev' } } : {}) }));
@@ -68,6 +68,25 @@ describe('an agent\'s terminal tab', () => {
     expect(within(view()!).queryByText('attaché')).toBeNull();
     expect(env.readOnly).toContain(true);
     expect(view()!.querySelector('.agent-view')).toHaveAttribute('data-typeable', 'false');
+  });
+
+  it('a capture over the pseudo-terminal attaches read-only: `attach --read-only`, the screen set read-only, nothing streamed', async () => {
+    const d = await mount([agentTerminalTab('local:otto')], true, true, true, false);
+    const backend = env.backend as ReturnType<typeof fakeBackend>;
+    await waitFor(() => expect(backend.opens).toHaveLength(1));
+    expect(backend.opens[0]!.argv.slice(-3)).toEqual(['attach', '--read-only', 'otto']);
+    expect(env.readOnly).toContain(true);
+    expect(env.readOnly).not.toContain(false);
+    expect(d.received.filter(m => m.type === 'term.watch')).toEqual([]);
+  });
+
+  it('a capture over the daemon\'s stream attaches read-only: term.watch says readOnly, the screen set read-only, no pseudo-terminal', async () => {
+    const d = await mount([agentTerminalTab('local:otto')], true);
+    await waitFor(() => expect(d.received.filter(m => m.type === 'term.watch')).toHaveLength(1));
+    expect(d.received.find(m => m.type === 'term.watch')).toMatchObject({ id: 'otto', readOnly: true });
+    expect(env.readOnly).toContain(true);
+    expect(env.readOnly).not.toContain(false);
+    expect((env.backend as ReturnType<typeof fakeBackend>).opens).toEqual([]);
   });
 
   it('Otto removed: its terminal tab closes', async () => {
