@@ -1341,6 +1341,7 @@ export const en: Messages = {
     replyPlaceholderSeat: (name) => `Reply to ${name} (rig send)…  Enter sends, Shift+Enter adds a line`,
     newSession: 'New session (N)',
     split: 'Split right', splitTip: 'Split right (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Link this group (violet, teal, none)',
+    closeGroupTip: 'Close group (Ctrl+W)',
     dropNew: ['Drop here:', 'new group'],
     menu: {
       open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',

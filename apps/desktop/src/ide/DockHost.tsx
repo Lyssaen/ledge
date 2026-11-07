@@ -4,7 +4,7 @@ import 'dockview-react/dist/styles/dockview.css';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
-import { activate, close, cycleLink, find, focusGroup, keyOf, MAIN, moveTo, split, type Group, type Tab, type Workspace } from '../workspace/model';
+import { activate, closeGroup, cycleLink, find, focusGroup, keyOf, MAIN, moveTo, split, type Group, type Tab, type Workspace } from '../workspace/model';
 import type { WorkspaceStore } from '../workspace/store';
 import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
 import type { TabBody } from './tabs';
@@ -28,7 +28,8 @@ export const GROUP_MIN_WIDTH = 300;
 
 /** What a panel reads to draw its tab's content: the latest of Shell's, each render. */
 const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; title(t: Tab): string; label(t: Tab): ReactNode; alert(t: Tab): 'perm' | 'ask' | null; onTabMenu(t: Tab, at: { x: number; y: number }): void; onNewSession(): void; groupOf(id: string): string | undefined; focus: string;
-  /** The model group a dockview group draws. */ modelOf(dg: unknown): Group | undefined; emptyGroup(groupId: string): ReactNode; split(groupId: string): void; cycleLink(groupId: string): void } | null>(null);
+  /** The model group a dockview group draws. */ modelOf(dg: unknown): Group | undefined; emptyGroup(groupId: string): ReactNode; split(groupId: string): void; cycleLink(groupId: string): void;
+  /** « Fermer le groupe »: an empty group goes; `lone` when it is the window's only group (it stays, without the button). */ closeGroup(groupId: string): void; lone: boolean } | null>(null);
 
 /** One panel = one tab of the model (`id = keyOf(tab)`). dockview draws only the visible one (`onlyWhenVisible`, its default). */
 function Pane({ api }: IDockviewPanelProps): JSX.Element | null {
@@ -83,7 +84,8 @@ function PanelTab({ api }: IDockviewPanelHeaderProps): JSX.Element | null {
     </span>
   );
 }
-/** The tools at the right of a group's tab strip (mockup groupHtml() `.tabs .tools`): « + », a new session, then the split. */
+/** The tools at the right of a group's tab strip (mockup groupHtml() `.tabs .tools`): « + », a new session, then the split;
+ *  an empty group, unless it is the window's only one, ends with « × », which closes it (Ctrl+W too). */
 function StripTools({ group }: IDockviewHeaderActionsProps): JSX.Element {
   const c = useContext(Content);
   const { t } = useI18n();
@@ -96,6 +98,11 @@ function StripTools({ group }: IDockviewHeaderActionsProps): JSX.Element {
       <button type="button" title={t.ide.splitTip} aria-label={t.ide.splitTip} onClick={() => { if (g) c!.split(g.id); }}>
         <Icon d={SHELL_ICONS.split} size={14} />
       </button>
+      {g && g.tabs.length === 0 && !c!.lone && (
+        <button type="button" title={t.ide.closeGroupTip} aria-label={t.ide.closeGroupTip} onClick={() => c!.closeGroup(g.id)}>
+          <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" /></svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -168,7 +175,7 @@ export function arrivalOf(e: DropSpot, viewId: string, modelOf: (dg: DockviewGro
 /** The editing area: dockview drawing the main window's groups side by side, kept in step both ways. Model → dockview:
  *  one dockview group per model group (window MAIN, left to right), panels added, removed, retitled and activated to
  *  follow `ws`, the focused group made dockview's active one. Dockview → model: a tab chosen or a group clicked is
- *  `activate`d (which focuses its group), a tab closed is `close`d, an empty group clicked is focused. A model group without
+ *  `activate`d (which focuses its group), a tab closed is the store's `close` (remembered), an empty group clicked is focused. A model group without
  *  tabs is drawn as an empty dockview group showing its proposals. Each group keeps GROUP_MIN_WIDTH: the dock is as wide as
  *  its groups need and scrolls sideways in the editing area. A tab dragged goes through the model too: dockview's own move
  *  is cancelled, the model moves the tab (`moveTo`), and the sync moves its panel, whose content stays mounted. While a tab
@@ -194,7 +201,8 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   const latestModelOf = useRef(modelOf);
   latestModelOf.current = modelOf;
   const content = { tabOf: (id: string) => tabs.get(id)?.tab, body, title, label, alert, onTabMenu, onNewSession, groupOf: (id: string) => tabs.get(id)?.group.id, focus: ws.focus,
-    modelOf, emptyGroup, split: (id: string) => store.update(w => split(w, id)), cycleLink: (id: string) => store.update(w => cycleLink(w, id)) };
+    modelOf, emptyGroup, split: (id: string) => store.update(w => split(w, id)), cycleLink: (id: string) => store.update(w => cycleLink(w, id)),
+    closeGroup: (id: string) => store.update(w => closeGroup(w, id)), lone: groups.length === 1 };
 
   /** Draws each model group, left to right: its dockview group (made where it belongs if it has none) and its panels at
    *  their places. A panel sitting elsewhere is moved there, never remade, so its content keeps its state; what puts its
@@ -279,7 +287,8 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
         const empty = [...drawn.current].find(([, d]) => d === dg)?.[0];
         if (empty) latest.current.update(w => focusGroup(w, empty));
       }),
-      api.onDidRemovePanel(p => { if (!syncing.current) latest.current.update(w => close(w, p.id)); }),
+      // The user's close (×, middle click): remembered for Ctrl+Shift+T.
+      api.onDidRemovePanel(p => { if (!syncing.current) latest.current.close(p.id); }),
       // A tab picked up: the drop zone shows once the browser has its drag image (a layout change in dragstart cancels it).
       api.onWillDragPanel(e => { dragged.current = e.panel.id; clearTimeout(timer); timer = setTimeout(() => { if (dragged.current) setDragging(true); }, 0); }),
       // No overlay where a drop would be refused.

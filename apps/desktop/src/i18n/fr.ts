@@ -1408,6 +1408,7 @@ export const fr = {
     newSession: 'Nouvelle session (N)',
     // Lot 3: split (Ctrl+\), the empty group (mockup emptyGroup()), the link square (mockup .lkbtn).
     split: 'Diviser à droite', splitTip: 'Diviser à droite (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Lier ce groupe (violet, vert d’eau, aucun)',
+    closeGroupTip: 'Fermer le groupe (Ctrl+W)',
     /** The zone at the right end of the editing area while a tab is dragged (mockup `.dropnew`), on two lines. */
     dropNew: ['Déposer ici :', 'nouveau groupe'],
     /** The explorer's session menu, IDE only (mockup menuHtml() `ctx`): where to open, and the agent's terminal tab. */

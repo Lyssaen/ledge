@@ -113,6 +113,34 @@ describe('split, the empty group, the link square, many groups', () => {
     expect(within(groupviews()[1] as HTMLElement).getByTestId(`empty-${g2}`)).toBeInTheDocument();
   });
 
+  it('an empty group\'s strip ends with « Fermer le groupe (Ctrl+W) », which closes it; none on a group with tabs, nor on the last group', async () => {
+    const store = createWorkspaceStore(splitGroup(open(empty(), A), 'g1'));
+    render(<Host store={store} />);
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    const titles = (g: Element) => [...g.querySelectorAll('.ide-strip-tools button')].map(b => b.getAttribute('title'));
+    expect(titles(groupviews()[0]!)).toEqual(['Nouvelle session (N)', 'Diviser à droite (Ctrl+\\)']);
+    expect(titles(groupviews()[1]!)).toEqual(['Nouvelle session (N)', 'Diviser à droite (Ctrl+\\)', 'Fermer le groupe (Ctrl+W)']);
+    await userEvent.setup().click(within(groupviews()[1] as HTMLElement).getByRole('button', { name: 'Fermer le groupe (Ctrl+W)' }));
+    await waitFor(() => expect(groupviews()).toHaveLength(1));
+    expect(store.get().groups.map(g => g.id)).toEqual(['g1']);
+    expect(store.get().focus).toBe('g1');
+    // The window's last group, emptied: it stays, without the button.
+    act(() => store.update(w => ({ ...w, groups: w.groups.map(g => ({ ...g, tabs: [] })) })));
+    await waitFor(() => expect(screen.getByTestId('empty-g1')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Fermer le groupe/ })).toBeNull();
+  });
+
+  it('a tab closed by its × is remembered: the store\'s reopen brings it back', async () => {
+    const store = createWorkspaceStore(open(open(empty(), A), B));
+    render(<Host store={store} />);
+    await waitFor(() => expect(tabIn(groupviews()[0]!, 'session:local:b')).toBeDefined());
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Fermer session:local:b' }));
+    await waitFor(() => expect(tabIn(groupviews()[0]!, 'session:local:b')).toBeUndefined());
+    act(() => store.reopen());
+    await waitFor(() => expect(tabIn(groupviews()[0]!, 'session:local:b')).toBeDefined());
+    expect(store.get().groups[0]!.tabs).toEqual([A, B]);
+  });
+
   it('a layout read back with an empty group draws it; a pointer in it focuses it; a tab opened there fills it', async () => {
     const ws = activate(splitGroup(open(empty(), A), 'g1'), 'g1', 0);
     const store = createWorkspaceStore(deserialize(serialize(ws))!);
