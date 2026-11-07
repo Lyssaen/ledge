@@ -143,11 +143,38 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-bottom { flex: 0 0 240px; height: 240px; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--border); background: var(--background); }
 .ide-bp-tabs { flex: none; display: flex; align-items: center; gap: 2px; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--sidebar); }
 .ide-bp-tabs [role=tablist] { display: flex; gap: 2px; }
-.ide-bp-tabs button { height: 22px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border-radius: 5px; font-size: 12px; color: var(--muted-foreground); }
-.ide-bp-tabs button:hover { color: var(--foreground); }
-.ide-bp-tabs button.on { color: var(--foreground); background: var(--muted); }
+/* The bar's own buttons, not the « + ▾ » menu's items. */
+.ide-bottom .ide-bp-tabs > button, .ide-bottom .ide-bp-tabs > [role=tablist] > button, .ide-bottom .ide-bp-tabs > .ide-shell-menu-wrap > button { height: 22px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border-radius: 5px; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
+.ide-bottom .ide-bp-tabs > button:hover, .ide-bottom .ide-bp-tabs > [role=tablist] > button:hover, .ide-bottom .ide-bp-tabs > .ide-shell-menu-wrap > button:hover { color: var(--foreground); }
+.ide-bottom .ide-bp-tabs [role=tablist] > button.on { color: var(--foreground); background: var(--muted); }
+.ide-bp-count { font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 11px; font-variant-numeric: tabular-nums; }
+.ide-bp-caret { font-size: 9px; margin-left: -3px; }
 .ide-bp-sp { flex: 1; }
-.ide-bp-body { flex: 1; min-height: 0; overflow: auto; }
+.ide-bp-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+/* « + ▾ »'s menu (mockup `.menu`, kind `term`): 250 px, under its button, or above it near the window's bottom (flip). */
+.ide-shell-menu-wrap { position: relative; display: flex; }
+.ide-bottom .ide-shell-menu { position: absolute; z-index: 40; top: calc(100% + 4px); right: 0; width: 250px; min-width: 0; }
+.ide-bottom .ide-shell-menu.up { top: auto; bottom: calc(100% + 4px); }
+.ide-shell-menu-title, .ide-shell-menu-h { padding: 4px 9px 2px; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.ide-shell-menu-h { padding-top: 2px; font-size: 10px; letter-spacing: .04em; opacity: .8; }
+.ide-bottom .ide-shell-menu [role=menuitem] { height: 30px; font-size: 12.5px; }
+.ide-shell-menu [role=menuitem] .r { margin-left: auto; font-size: 11px; color: var(--muted-foreground); }
+/* Terminaux (mockup `.bterms`): tiles side by side, 1 px apart on the border's colour. */
+.ide-bterms { flex: 1; min-height: 0; display: flex; gap: 1px; background: var(--border); }
+.ide-bterms-none { flex: 1; padding: 14px 16px; font-size: 12px; color: var(--muted-foreground); background: var(--ide-pane); }
+.ide-btile { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: var(--ide-pane); }
+.ide-btile-bar { flex: none; display: flex; align-items: stretch; height: 30px; background: var(--ide-strip); border-bottom: 1px solid var(--border); overflow: hidden; }
+.ide-btile-tab { display: flex; align-items: center; min-width: 0; padding: 0 10px; font-size: 12px; color: var(--foreground); background: var(--ide-pane); border-right: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; }
+.ide-btile-tools { margin-left: auto; flex: none; display: flex; align-items: center; gap: 2px; padding-right: 6px; }
+.ide-btile-tools .chip-k { font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 10.5px; line-height: 16px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; margin-right: 4px; }
+.ide-btile-tools button { height: 22px; padding: 0 7px; border-radius: 5px; font-size: 11.5px; color: var(--muted-foreground); }
+.ide-btile-tools button:hover { background: var(--muted); color: var(--foreground); }
+.ide-btile-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ide-btile-body > * { flex: 1; min-height: 0; }
+/* A free shell (FreeShellView): its banner when it ended, then its xterm. */
+.ide-free-shell { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--term-bg); }
+.ide-free-shell > .terminal-screen { flex: 1; min-height: 0; }
+.ide-term > .ide-free-shell { flex: 1; height: auto; }
 
 /* The right panel (mockup `rightPanel()`): the docked chat, 300 px, no × (Ctrl+/ hides it). */
 .ide-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }

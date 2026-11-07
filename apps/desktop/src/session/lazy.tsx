@@ -42,6 +42,16 @@ export function AgentTerminalPlace(props: AgentTerminalTabProps): JSX.Element {
   return <ChunkBoundary><Suspense fallback={<div className="ide-term" aria-busy="true" />}><TermTabPage {...props} /></Suspense></ChunkBoundary>;
 }
 
+type FreeShellLoaded = { default: WorkspaceModule['FreeShellView'] };
+const FreeShellPage = lazy(() => (loaded
+  ? { then: (ok: (m: FreeShellLoaded) => void) => ok({ default: loaded!.FreeShellView }) } as PromiseLike<FreeShellLoaded> as Promise<FreeShellLoaded>
+  : loadWorkspace().then(m => ({ default: m.FreeShellView }))));
+
+/** A bottom-panel shell (a panel tile or a dock tab), from the session page's chunk (its xterm), behind the same sober wait. */
+export function FreeShellPlace(props: { id: string }): JSX.Element {
+  return <ChunkBoundary><Suspense fallback={<div className="ide-free-shell" aria-busy="true" />}><FreeShellPage {...props} /></Suspense></ChunkBoundary>;
+}
+
 /** An IDE « Modifications · <name> » tab, from the session page's chunk (its diffs), behind the same sober wait. */
 export function ChangesPlace(props: ChangesTabProps): JSX.Element {
   return <ChunkBoundary><Suspense fallback={<div className="ide-changes" aria-busy="true" />}><ChangesPage {...props} /></Suspense></ChunkBoundary>;

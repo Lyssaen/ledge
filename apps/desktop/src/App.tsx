@@ -45,7 +45,7 @@ import { closedLedgeTasks, useTasksApi } from './tasks/useTasksApi';
 import { Atelier } from './atelier/Atelier';
 import { OpenRigPage } from './openrig/OpenRigPage';
 import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
-import { createRigOutput } from './openrig/rigOutput';
+import { createRigOutput, useRigOutput } from './openrig/rigOutput';
 import { useSidebarOpenRig } from './openrig/sidebarState';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
@@ -61,7 +61,7 @@ import { useContextMenu } from './manage/useContextMenu';
 import { SessionMenuHost, type SessionMenuIde } from './manage/SessionMenu';
 import { ConfirmDialog } from './manage/ConfirmDialog';
 import { BroadcastDialog } from './broadcast/BroadcastDialog';
-import { AgentTerminalPlace, ChangesPlace, loadedWorkspace, SessionPlace } from './session/lazy';
+import { AgentTerminalPlace, ChangesPlace, FreeShellPlace, loadedWorkspace, loadWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs, viewShown, type SessionPrefs, type SessionView } from './session/prefs';
 import { subagentOf } from './session/exchanges';
@@ -73,7 +73,7 @@ import { agentRoute, createAgentStream, createShellStream } from './term/stream'
 import { focusAgentView } from './session/agentFocus';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
-import { shellLaunch, shellMenu, type ShellsAvailable } from './term/shells';
+import { defaultShell, loadLastShell, saveLastShell, shellLaunch, shellMenu, type ShellKind, type ShellsAvailable } from './term/shells';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled } from './workspace/prefs';
@@ -90,9 +90,11 @@ import { openSessionTerminal } from './session/terminal';
 import { EmptyGroup, type EmptyPick } from './ide/EmptyGroup';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeDock, IdePlace } from './ide/lazy';
+import { IdeBottom, IdeDock, IdeOutput, IdePlace } from './ide/lazy';
+import { addTerm, createPanelStore, removeTerm, usePanel } from './workspace/panel';
 
 const NO_PROJECTS: readonly Project[] = [];
+const NO_SHELLS: ShellsAvailable = { wsl: null, powershell: false, cmd: false, gitBash: false };
 
 /** Ledge's terminal colours as the root's tokens give them now. */
 const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
@@ -106,10 +108,8 @@ function useRigOutputLog(client: DaemonClient) {
 
 /** The app's one terminal store: its shells and the agent's screen live as long as the window, whatever the place. Its xterms
  *  follow the theme once the root has taken it (`data-theme`, set by useAppearance after this component's own effects). */
-function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
+function useTermStore(client: DaemonClient, onThread: () => void, avail: ShellsAvailable | null): TermStore {
   const { t } = useI18n();
-  const [avail, setAvail] = useState<ShellsAvailable | null>(null);
-  useEffect(() => { void shellsAvailable().then(setAvail, () => {}); }, []);
   // The store is made once: it reads the menu's inputs as they are when a shell opens.
   const titling = useRef({ avail, t });
   titling.current = { avail, t };
@@ -174,10 +174,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const { sessions, machines, status, localDown, fleet, client: fleetClient, errors } = fleetView;
   // Ctrl + ² inside an xterm, set below once the place is known (the store's surfaces are made once).
   const termThread = useRef<() => void>(focusThread);
-  const termStore = useTermStore(fleetClient, () => termThread.current());
-  // Ready for the bottom panel's Output (IDE lot 5, next task).
+  // The shells this computer has (the bottom panel's « + ▾ », its shells' titles), asked once.
+  const [avail, setAvail] = useState<ShellsAvailable | null>(null);
+  useEffect(() => { void shellsAvailable().then(setAvail, () => {}); }, []);
+  const termStore = useTermStore(fleetClient, () => termThread.current(), avail);
+  // The bottom panel's Sortie: the rig commands this Desktop ran.
   const rigOutput = useRigOutputLog(fleetClient);
-  void rigOutput;
+  const rigEntries = useRigOutput(rigOutput);
   const projects = useProjects(fleetClient);
   const tasksApi = useTasksApi(fleetClient);
   // « À toi »: what OpenRig's rigs ask the person, on this computer (lot 1: one machine), once its daemon reads them.
@@ -195,7 +198,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [nav, navDispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
   // « Interface IDE (aperçu) » (Settings › General): its tabs (`ledge.ide.workspace`) and panels (`ledge.ide.layout`).
   const [ide] = useIdeEnabled();
-  const [wsStore] = useState(() => createWorkspaceStore());
+  // A bottom-panel shell's tab closed by the user (its ×, middle click, Ctrl+W, the menu) kills the shell (R9); a tab the model
+  // drops by itself (reconcile, a move) does not.
+  const [wsStore] = useState(() => createWorkspaceStore(undefined, { closed: key => { if (key.startsWith('terminal:shell:')) termStore.closeFree(key.slice('terminal:'.length)); } }));
   const ws = useWorkspace(wsStore);
   const [layout, setLayout] = useStored(loadLayout, saveLayout);
   // Asking for the right panel folds the sidebar when that is what gives it room (layoutFor).
@@ -221,6 +226,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     if (r.ws) wsStore.update(r.ws);
     if (r.layout) onLayout(r.layout);
   }, [wsStore, onLayout]);
+  // The bottom panel: its terminals and its tab, for this run only (R15).
+  const [panelStore] = useState(() => createPanelStore());
+  const panel = usePanel(panelStore);
+  // « par défaut » (R7): the shell last chosen in « + ▾ », while the menu still offers it.
+  const [lastShell, setLastShell] = useState(loadLastShell);
+  const shellRows = useMemo(() => shellMenu(avail ?? NO_SHELLS, machines, lastShell, t), [avail, machines, lastShell, t]);
   // The header's Archived pill bumps this; Archives unfolds and scrolls on each change (0 never counts).
   const [revealArchives, setRevealArchives] = useState(0);
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
@@ -311,11 +322,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const readyMachines = machines.filter(m => m.ready).map(m => m.id).join('\n');
   // Whether a tab may stay (or come back with Ctrl+Shift+T): a session's tab, its Changes and its Terminal go with it.
   const keepTab = useCallback((tab: Tab): boolean => {
+    // A bottom-panel shell's tab: while its shell is there (none survives a restart).
+    if (tab.kind === 'terminal' && tab.ref.startsWith('shell:')) return termStore.free(tab.ref) !== undefined;
     const sid = sessionOf(tab);
     if (sid === null) return true;
     const machine = splitId(sid)?.machine;
     return !machine || !readyMachines.split('\n').includes(machine) || known.some(s => s.id === sid);
-  }, [known, readyMachines]);
+  }, [known, readyMachines, termStore]);
   const keepTabNow = useRef(keepTab);
   keepTabNow.current = keepTab;
   useEffect(() => {
@@ -481,6 +494,43 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     } else if (sessionView === 'terminal' && session) focusAgentView(termStore, session.id);
     else focusThread();
   };
+  // A bottom-panel shell (IDE lot 5). A WSL one starts where the session of the focused group's front tab works (R6), else at home.
+  // Its xterm comes with the session page's chunk: the shell opens once the chunk is there.
+  const shellsNow = useRef({ rows: shellRows, notify });
+  shellsNow.current = { rows: shellRows, notify };
+  const opening = useRef(0);
+  const openShell = useCallback((kind: ShellKind, then: (id: string) => void) => {
+    const run = () => {
+      const g = focused(wsStore.get());
+      const sid = sessionOf(g.tabs[g.active]);
+      const s = sid === null ? undefined : knownNow.current.find(x => x.id === sid);
+      then(termStore.openFree(kind, s ? s.workdir ?? s.cwd : ''));
+    };
+    if (loadedWorkspace()) { run(); return; }
+    opening.current += 1;
+    void loadWorkspace().then(run).finally(() => { opening.current -= 1; });
+  }, [termStore, wsStore]);
+  /** A shell into the panel, on Terminaux, the panel shown. */
+  const panelShell = useCallback((kind: ShellKind) => openShell(kind, id => {
+    panelStore.update(p => addTerm(p, id));
+    onLayout({ type: 'show', panel: 'bottom', on: true });
+  }), [openShell, panelStore, onLayout]);
+  // The panel shown with no terminal (Ctrl+J, its button, a restart with it shown) opens the default shell (R7): once per showing.
+  const bottomWas = useRef(false);
+  const bottomOn = ide && layout.bottom;
+  useEffect(() => {
+    const was = bottomWas.current;
+    bottomWas.current = bottomOn;
+    if (!bottomOn || was || panelStore.get().terms.length > 0 || opening.current > 0) return;
+    panelShell(defaultShell(shellsNow.current.rows, loadLastShell()));
+  }, [bottomOn, panelStore, panelShell]);
+  const panelClose = useCallback((ref: string) => {
+    if (ref.startsWith('shell:')) termStore.closeFree(ref);
+    panelStore.update(p => removeTerm(p, ref));
+    if (panelStore.get().terms.length > 0) return;
+    onLayout({ type: 'show', panel: 'bottom', on: false });
+    shellsNow.current.notify(t.ide.panel.lastClosed);
+  }, [termStore, panelStore, onLayout, t]);
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
   // The tab keys (VS Code's): Ctrl W closes the focused group's active tab (remembered for Ctrl Shift T), or the group when empty.
   const ideKeys = useMemo((): IdeKeys => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }), split: () => wsStore.update(w => splitGroup(w, w.focus)), newSessionAnywhere: true as const,
@@ -581,7 +631,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     hasTerminal: s => hasTerminal({ kind: s.rig != null ? 'seat' : 'session', ref: s.id }, s),
     message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' })
   };
-  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label });
+  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title });
   // The IDE shell (switch on): the same pieces, in tabs and panels. Its chunk is fetched only then.
   const ideShell = (() => {
     if (!ide) return null;
@@ -607,6 +657,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       if (tab.kind === 'changes') {
         const s = known.find(x => x.id === tab.ref);
         return s ? <ChangesPlace client={fleetClient} session={s} notify={notify} onTouch={() => dispatch({ type: 'open', id: s.id })} /> : null;
+      }
+      // A bottom-panel shell in a tab: the kind row (`shell`), then its xterm; closing the tab kills it (R9, wsStore's `closed`).
+      if (tab.kind === 'terminal' && tab.ref.startsWith('shell:')) {
+        return termStore.free(tab.ref) ? (
+          <div className="ide-term"><div className="ide-term-kind"><span className="chip-k">{t.ide.panel.shellKind}</span></div><FreeShellPlace id={tab.ref} /></div>
+        ) : null;
       }
       // An agent's terminal in a tab of its own; a seat's is a read-only capture (R3).
       if (tab.kind === 'terminal') {
@@ -634,6 +690,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         wsStore.update(w => focusGroup(w, gid));
         if (p === 'terminal') { if (s) wsStore.update(w => openTab(w, agentTerminalTab(s.id), 'active')); return; }
         if (p === 'launch') { dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); return; }
+        // « Terminal »: the default shell (R7), in a tab of this group.
+        if (p === 'shell') { openShell(defaultShell(shellRows, loadLastShell()), id => wsStore.update(w => openTab(focusGroup(w, gid), { kind: 'terminal', ref: id }, 'active'))); return; }
         dispatch(tabAction(p === 'atelier' ? ATELIER_TAB : p === 'settings' ? SETTINGS_TAB : openrigTab())!);
       };
       return <EmptyGroup terminal={s ? title({ kind: 'session', ref: s.id }) : null} seat={s?.rig != null} onPick={pick} />;
@@ -652,6 +710,19 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
             usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
             asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
+        }
+        bottom={
+          <IdeBottom panel={panel} onTab={tab => panelStore.update(p => (p.tab === tab ? p : { ...p, tab }))}
+            outputCount={rigEntries.length} output={<IdeOutput entries={rigEntries} />}
+            menu={shellRows} onNewShell={k => { saveLastShell(k); setLastShell(k); panelShell(k); }}
+            tile={ref => {
+              if (ref.startsWith('shell:')) return <FreeShellPlace id={ref} />;
+              const s = known.find(x => x.id === sessionOf({ kind: 'terminal', ref }));
+              return s ? <AgentTerminalPlace client={fleetClient} session={s} notify={notify} readOnly={s.rig != null} onOpenSession={() => dispatch({ type: 'open', id: s.id })} /> : null;
+            }}
+            tileTitle={ref => title({ kind: 'terminal', ref })}
+            tileKind={ref => (ref.startsWith('shell:') ? t.ide.panel.shellKind : known.find(x => x.id === sessionOf({ kind: 'terminal', ref }))?.rig != null ? t.ide.termReadOnly : t.ide.termAttached)}
+            onClose={panelClose} onHide={() => onLayout({ type: 'show', panel: 'bottom', on: false })} />
         }
         editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={gid => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); }} emptyGroup={emptyGroup} />}
         chat={

@@ -21,6 +21,8 @@ export { createSurface } from '../term/surface';
 export { ChangesTab } from './ChangesTab';
 /** An IDE terminal tab of an agent. */
 export { AgentTerminalTab } from './AgentTerminalTab';
+// A bottom-panel shell (IDE lot 5): its xterm comes with this chunk.
+export { FreeShellView } from './FreeShellView';
 
 /** ← / → on the panel's handle move it this much. */
 const TERM_STEP = 0.02;

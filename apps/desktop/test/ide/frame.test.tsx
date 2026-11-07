@@ -465,7 +465,7 @@ describe('split and the empty group (lot 3)', () => {
     expect(second.getByRole('heading', { name: 'Groupe vide' })).toBeVisible();
     expect(second.getByText('Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :')).toBeVisible();
     const buttons = second.getAllByRole('button').filter(b => b.closest('.ide-empty'));
-    expect(buttons.map(b => b.textContent)).toEqual(['Terminal · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier']);
+    expect(buttons.map(b => b.textContent)).toEqual(['Terminal · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier', 'Terminal']);
     expect(buttons[0]).toHaveClass('pri');
     expect(second.getByText(/^Astuce : lie ce groupe/)).toHaveTextContent('Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.');
     await user.click(buttons[0]!);
@@ -480,7 +480,7 @@ describe('split and the empty group (lot 3)', () => {
     splitKey();
     await waitFor(() => expect(groupviews()).toHaveLength(2));
     const second = () => within(groupviews()[1]!);
-    expect(second().queryByRole('button', { name: /^Terminal/ })).toBeNull();
+    expect(second().queryByRole('button', { name: /^Terminal ·/ })).toBeNull();
     expect(second().queryByText(/^Astuce/)).toBeNull();
     await user.click(second().getByRole('button', { name: 'Nouvelle session' }));
     expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
@@ -501,7 +501,7 @@ describe('split and the empty group (lot 3)', () => {
     act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', rig: { seat: 'dev@r', name: 'ledge-dev' } })));
     const second = () => within(groupviews()[1]!);
     await waitFor(() => expect(second().getAllByRole('button').filter(b => b.closest('.ide-empty')).map(b => b.textContent))
-      .toEqual(['Capture · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier']));
+      .toEqual(['Capture · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier', 'Terminal']));
     expect(second().queryByRole('button', { name: 'Terminal · Otto' })).toBeNull();
     await user.click(second().getByRole('button', { name: 'Capture · Otto' }));
     await waitFor(() => expect(second().getByRole('tab', { name: '>_ Otto · tmux' })).toBeInTheDocument());

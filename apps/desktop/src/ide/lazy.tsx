@@ -1,7 +1,9 @@
 import { lazy, Suspense, type JSX } from 'react';
 import { ChunkBoundary } from '../shell/ChunkBoundary';
 import type { DockHostProps } from './DockHost';
+import type { BottomPanelProps } from './BottomPanel';
 import type { IdeFrameProps } from './IdeFrame';
+import type { RigOutputEntry } from '../openrig/rigOutput';
 
 type IdeModule = typeof import('./IdeFrame');
 let loaded: IdeModule | undefined;
@@ -12,7 +14,7 @@ export function loadIde(): Promise<IdeModule> {
 }
 
 // A chunk already loaded is handed over synchronously: React.lazy then resolves within the same render, without suspending.
-function fromChunk<K extends 'IdeFrame' | 'DockHost'>(key: K) {
+function fromChunk<K extends 'IdeFrame' | 'DockHost' | 'BottomPanel' | 'OutputView'>(key: K) {
   type Loaded = { default: IdeModule[K] };
   return lazy(() => (loaded
     ? { then: (ok: (m: Loaded) => void) => ok({ default: loaded![key] }) } as PromiseLike<Loaded> as Promise<Loaded>
@@ -20,6 +22,8 @@ function fromChunk<K extends 'IdeFrame' | 'DockHost'>(key: K) {
 }
 const Frame = fromChunk('IdeFrame');
 const Dock = fromChunk('DockHost');
+const Bottom = fromChunk('BottomPanel');
+const Output = fromChunk('OutputView');
 
 /** The IDE shell, behind a sober wait (an empty window) the first time its chunk is fetched; a chunk that fails to load leaves a note (ChunkBoundary). */
 export function IdePlace(props: IdeFrameProps): JSX.Element {
@@ -29,4 +33,14 @@ export function IdePlace(props: IdeFrameProps): JSX.Element {
 /** The editing area, for IdePlace's `editor`: it renders inside the frame, so its chunk is already there. */
 export function IdeDock(props: DockHostProps): JSX.Element {
   return <Dock {...props} />;
+}
+
+/** The bottom panel, for IdePlace's `bottom`: it renders inside the frame, so its chunk is already there. */
+export function IdeBottom(props: BottomPanelProps): JSX.Element {
+  return <Bottom {...props} />;
+}
+
+/** The bottom panel's Sortie, for IdeBottom's `output`. */
+export function IdeOutput(props: { entries: readonly RigOutputEntry[] }): JSX.Element {
+  return <Output {...props} />;
 }

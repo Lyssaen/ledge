@@ -19,7 +19,9 @@ export interface WorkspaceStore {
   reopen(keep?: (t: Tab) => boolean): void;
 }
 
-export function createWorkspaceStore(initial: Workspace = loadWorkspace()): WorkspaceStore {
+/** `closed`: told of each tab the USER closes (`close`, `closeOthers`), after it left the model; never of a tab `update` drops
+ *  (reconcile, a move): a bottom-panel shell's tab closed kills its shell (R9), a tab moved keeps it. */
+export function createWorkspaceStore(initial: Workspace = loadWorkspace(), opts: { closed?(key: string): void } = {}): WorkspaceStore {
   let state = initial;
   // The tabs closed by the user, the last on top (CLOSED_MAX); this run only, never saved.
   let closed: readonly Closed[] = [];
@@ -35,12 +37,19 @@ export function createWorkspaceStore(initial: Workspace = loadWorkspace()): Work
     get: () => state,
     update,
     subscribe(cb) { subs.add(cb); return () => { subs.delete(cb); }; },
-    close(key) { closed = remember(closed, state, key); update(w => close(w, key)); },
+    close(key) {
+      if (!find(state, key)) return;
+      closed = remember(closed, state, key);
+      update(w => close(w, key));
+      opts.closed?.(key);
+    },
     closeOthers(key) {
       const hit = find(state, key);
       if (!hit) return;
-      for (const t of hit.group.tabs) if (keyOf(t) !== key) closed = remember(closed, state, keyOf(t));
+      const others = hit.group.tabs.map(keyOf).filter(k => k !== key);
+      for (const k of others) closed = remember(closed, state, k);
       update(w => closeOthers(w, key));
+      for (const k of others) opts.closed?.(k);
     },
     reopen(keep) { const r = reopenLast(state, closed, keep); closed = r.stack; update(() => r.w); },
   };

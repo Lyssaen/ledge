@@ -1414,7 +1414,13 @@ export const fr = {
     settingOff: 'Interface IDE (aperçu) désactivée',
     brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',
     /** The bottom panel's « + ▾ » menu (IDE lot 5). */
-    panel: { shells: { title: 'Nouveau terminal', local: 'Locaux', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Invite de commandes', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'par défaut' } },
+    panel: {
+      shells: { title: 'Nouveau terminal', local: 'Locaux', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Invite de commandes', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'par défaut' },
+      newTerminal: 'Nouveau terminal', newTerminalTip: 'Nouveau terminal : choisir le shell',
+      /** A tile's tab: « , ou hors de la fenêtre » comes with the windows (lot 9). */ drag: 'Glisser vers un groupe', close: 'Fermer',
+      shellKind: 'shell', shellTitle: (title: string) => `>_ ${title}`, noTerms: 'Aucun terminal. « + » en ouvre un.',
+      lastClosed: 'Dernier terminal fermé : le panneau du bas se masque. Ctrl+J le rouvre avec un shell.'
+    },
     sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
     activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
     openrigTab: 'OpenRig (onglet)', atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
@@ -1443,7 +1449,7 @@ export const fr = {
     empty: {
       title: 'Groupe vide', body: 'Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :', terminal: (name: string) => `Terminal · ${name}`,
       /** A seat's: its terminal is a read-only capture (R3). */ capture: (name: string) => `Capture · ${name}`,
-      newSession: 'Nouvelle session', openrig: 'OpenRig', settings: 'Réglages', atelier: 'Atelier',
+      newSession: 'Nouvelle session', openrig: 'OpenRig', settings: 'Réglages', atelier: 'Atelier', shell: 'Terminal',
       tip: 'Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.'
     }
   }

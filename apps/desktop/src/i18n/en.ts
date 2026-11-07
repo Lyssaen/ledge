@@ -1347,7 +1347,13 @@ export const en: Messages = {
     settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
     settingOff: 'IDE interface (preview) off',
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
-    panel: { shells: { title: 'New terminal', local: 'Local', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Command Prompt', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'default' } },
+    panel: {
+      shells: { title: 'New terminal', local: 'Local', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Command Prompt', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'default' },
+      newTerminal: 'New terminal', newTerminalTip: 'New terminal: choose the shell',
+      drag: 'Drag to a group', close: 'Close',
+      shellKind: 'shell', shellTitle: (title) => `>_ ${title}`, noTerms: 'No terminal. “+” opens one.',
+      lastClosed: 'Last terminal closed: the bottom panel hides. Ctrl+J opens it again with a shell.'
+    },
     sideToggle: 'Sidebar (Ctrl+B)', bottomToggle: 'Bottom panel (Ctrl+J)', rightToggle: 'Right panel (Ctrl+/)',
     activityLabel: 'Activity bar', projects: 'Projects', rigs: 'OpenRig rigs', atoi: 'For you',
     openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
@@ -1372,7 +1378,7 @@ export const en: Messages = {
     },
     empty: {
       title: 'Empty group', body: 'Drag a tab here, open a session from the explorer, or:', terminal: (name) => `Terminal · ${name}`, capture: (name) => `Capture · ${name}`,
-      newSession: 'New session', openrig: 'OpenRig', settings: 'Settings', atelier: 'Atelier',
+      newSession: 'New session', openrig: 'OpenRig', settings: 'Settings', atelier: 'Atelier', shell: 'Terminal',
       tip: 'Tip: link this group (the square left of the tabs) with the session’s: it will follow the chosen session.'
     }
   }
