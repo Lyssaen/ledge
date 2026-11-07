@@ -48,4 +48,28 @@ describe('workspace store', () => {
     s.update(w => open(w, ATELIER_TAB));
     expect(cb).toHaveBeenCalledTimes(1);
   });
+
+  it('close remembers the tab, reopen brings it back where it was; reconcile closes without remembering; nothing persisted', () => {
+    const S = (id: string) => ({ kind: 'session' as const, ref: id });
+    const s = createWorkspaceStore(open(open(open(empty(), S('a')), S('b')), S('c')));
+    s.close('session:b');
+    expect(focused(s.get()).tabs.map(keyOf)).toEqual(['session:a', 'session:c']);
+    s.update(w => reconcile(w, t => t.ref !== 'c'));
+    expect(focused(s.get()).tabs.map(keyOf)).toEqual(['session:a']);
+    expect(localStorage.getItem(KEY)).not.toMatch(/closed/);
+    s.reopen();
+    expect(focused(s.get()).tabs.map(keyOf)).toEqual(['session:a', 'session:b']);
+    expect(active(s.get())).toEqual(S('b'));
+    const before = s.get();
+    s.reopen();                                                       // c went with reconcile: not on the stack
+    expect(s.get()).toBe(before);
+  });
+  it('closeOthers remembers each tab it closes', () => {
+    const S = (id: string) => ({ kind: 'session' as const, ref: id });
+    const s = createWorkspaceStore(open(open(open(empty(), S('a')), S('b')), S('c')));
+    s.closeOthers('session:b');
+    expect(focused(s.get()).tabs.map(keyOf)).toEqual(['session:b']);
+    s.reopen(); s.reopen();
+    expect(focused(s.get()).tabs.map(keyOf)).toEqual(['session:a', 'session:b', 'session:c']);
+  });
 });
