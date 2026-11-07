@@ -27,6 +27,10 @@ async function openOtto(o: { offline?: boolean; withThread?: boolean; folded?: b
 
 describe('the session page', () => {
   it('the page replaces the pending place: one exchange per prompt, the last three open, an older one folded to a row that unfolds', async () => {
+    // « Exchange at hh:mm » is today's wording: the clock at midday, so the thread's minutes ago never fall on yesterday.
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    const noon = new Date(); noon.setHours(12, 0, 0, 0);
+    vi.setSystemTime(noon);
     const { user } = await openOtto({ folded: true });
     expect(screen.queryByText('This screen is coming soon.')).toBeNull();
     // The exchange before the last three is one row: its prompt, what it did; the last three are open.
