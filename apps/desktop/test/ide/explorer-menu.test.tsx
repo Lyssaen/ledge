@@ -13,6 +13,7 @@ import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { loadOpenSession, saveOpenSession } from '../../src/workspace/openPrefs';
 import { PROJECTS } from '../helpers';
 import type { Workspace } from '../../src/workspace/model';
+import type { Session } from '@ledge/protocol';
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
@@ -20,7 +21,7 @@ beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'f
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); saveOpenSession('active'); localStorage.clear(); });
 
 /** `seat`: Pim, a seat of the rig ledge-dev (the rigs view lists it, not the tree). */
-async function mount({ ide = true, seat = false, broadcast = false }: { ide?: boolean; seat?: boolean; broadcast?: boolean } = {}) {
+async function mount({ ide = true, seat = false, broadcast = false, extra = [] }: { ide?: boolean; seat?: boolean; broadcast?: boolean; extra?: Session[] } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
@@ -29,6 +30,7 @@ async function mount({ ide = true, seat = false, broadcast = false }: { ide?: bo
   d.projects(PROJECTS);
   d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' }));
   d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'working' }));
+  for (const x of extra) d.upsert(x);
   if (seat) d.upsert(fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working', rig: { seat: 'dev@r', name: 'ledge-dev' } }));
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
@@ -173,6 +175,20 @@ describe('Ctrl+click and « Ouvrir une session »', () => {
     const seat = await screen.findByRole('button', { name: /^Otto,/ });
     fireEvent.click(seat, { ctrlKey: true });
     await waitFor(() => expect(refs(stored())).toEqual([['atelier:main'], ['session:otto']]));
+  });
+
+  it('Ctrl+click on a card of « Sans projet » in the atelier opens it on the right', async () => {
+    await mount({ extra: [fakeSession('zed', { name: 'Zed', cwd: '/tmp/ailleurs', state: 'working' })] });
+    const card = await screen.findByRole('button', { name: /^Zed,/ });
+    expect(card).toHaveClass('unassigned-open');
+    fireEvent.click(card, { ctrlKey: true });
+    await waitFor(() => expect(refs(stored())).toEqual([['atelier:main'], ['session:zed']]));
+  });
+
+  it('Ctrl+click on the kernel\'s « Parler à l’opérateur » opens the operator on the right', async () => {
+    await mount({ extra: [fakeSession('lu', { name: 'Lu', cwd: '/w/rigdev', state: 'idle', rig: { seat: 'operator-agent@kernel', name: 'kernel', role: 'operator.agent' } })] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Parler à l’opérateur' }), { ctrlKey: true });
+    await waitFor(() => expect(refs(stored())).toEqual([['atelier:main'], ['seat:lu']]));
   });
 
   it('Settings › Espace de travail: « À droite » makes a plain click open on the right, and is read again after a reload', async () => {
