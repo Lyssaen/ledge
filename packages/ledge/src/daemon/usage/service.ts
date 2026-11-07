@@ -5,11 +5,15 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { USAGE_ALERT, UsagePrefsSchema, usageAlertId, type HarnessUsage, type UsageAlert, type UsagePrefs, type UsageStateMessage, type UsageWindow } from '@ledge/protocol';
 import { log } from '../../log.js';
 import { USAGE_URL, claudeVersion, parseClaudeUsage, readClaudeAccount, readClaudeToken } from './claude.js';
-import { httpsGet, type HttpsGet } from './net.js';
+import { CURSOR_USAGE_URL, parseCursorUsage, readCursorToken } from './cursor.js';
+import { httpsGet, httpsPost, type HttpsGet, type HttpsPost } from './net.js';
 
 /** At most one read of Anthropic's API per this long (another reader, Claude Code's own, shares the account's quota). */
 export const READ_EVERY_MS = 2 * 60_000;
 /** After a 429, the wait doubles up to this. */
+/** Cursor's dashboard RPC is read at most this often, and its values are `stale` past `CURSOR_STALE_MS` without a read. */
+export const CURSOR_READ_EVERY_MS = 5 * 60_000;
+export const CURSOR_STALE_MS = 15 * 60_000;
 export const BACKOFF_MAX_MS = 15 * 60_000;
 /** The longest Retry-After waited: a longer one is waited this long, then the read is tried again. Kept on purpose (decided
  *  2026-11-05): a technical guard against a mistaken header leaving the limits unreadable for good; one try a day is negligible
@@ -45,6 +49,7 @@ export interface UsageDeps {
   file: string;
   now?: () => number;
   get?: HttpsGet;
+  post?: HttpsPost;
   read?: (p: string) => Promise<string>;
   version?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
 }
@@ -73,6 +78,7 @@ const resetOfId = (id: string): number => { const t = Date.parse(id.slice(id.las
 export function createUsage(deps: UsageDeps): UsageService {
   const now = deps.now ?? Date.now;
   const get = deps.get ?? httpsGet;
+  const post = deps.post ?? httpsPost;
   const version = deps.version ?? claudeVersion;
   const listeners = new Set<(s: UsageState) => void>();
   const kept = readKept(deps.file);
@@ -89,6 +95,9 @@ export function createUsage(deps: UsageDeps): UsageService {
   let localExpired = false, refused = false;
   let account: string | null = null, accountAt = -Infinity, accountOf = '';
   let ua: string | undefined, uaAt = -Infinity;
+  // Cursor Agent: the same shape, its own state. Its token is read, never refreshed.
+  const cur = { listed: false, failed: false, attempted: false, readAt: null as number | null, windows: [] as UsageWindow[], nextAt: 0, backoff: 0,
+    refused: false, localExpired: false, account: null as string | null, identity: null as string | null };
   // Codex.
   let codex: { windows: UsageWindow[]; at: number } | null = null;
   let last = '';
@@ -101,11 +110,11 @@ export function createUsage(deps: UsageDeps): UsageService {
     return envCache.env;
   };
 
-  const statusOf = (): HarnessUsage['status'] => {
-    if (localExpired || refused) return 'expired';
-    if (!attempted && readAt === null) return 'loading';
-    if (failed) return 'unreachable';
-    if (readAt === null || now() - readAt > STALE_MS) return readAt === null ? 'loading' : 'stale';
+  const statusOf = (s: { localExpired: boolean; refused: boolean; attempted: boolean; failed: boolean; readAt: number | null } = { localExpired, refused, attempted, failed, readAt }, staleMs = STALE_MS): HarnessUsage['status'] => {
+    if (s.localExpired || s.refused) return 'expired';
+    if (!s.attempted && s.readAt === null) return 'loading';
+    if (s.failed) return 'unreachable';
+    if (s.readAt === null || now() - s.readAt > staleMs) return s.readAt === null ? 'loading' : 'stale';
     return 'ok';
   };
   const shown = (w: UsageWindow[], at: number | null): UsageWindow[] => (at === null || now() - at > HIDE_MS ? [] : w);
@@ -120,6 +129,11 @@ export function createUsage(deps: UsageDeps): UsageService {
     if (codex && codex.windows.length) {
       const w = shown(codex.windows, codex.at);
       if (w.length) out.push({ harness: 'codex', account: null, status: now() - codex.at > STALE_MS ? 'stale' : 'ok', readAt: new Date(codex.at).toISOString(), windows: w });
+    }
+    if (cur.listed) {
+      const status = statusOf(cur, CURSOR_STALE_MS);
+      out.push({ harness: 'cursor', account: cur.account, status, readAt: cur.readAt === null ? null : new Date(cur.readAt).toISOString(),
+        windows: status === 'expired' || status === 'loading' ? [] : shown(cur.windows, cur.readAt) });
     }
     return out;
   }
@@ -210,8 +224,52 @@ export function createUsage(deps: UsageDeps): UsageService {
     log(`usage: Anthropic not read (${r.status ? `HTTP ${r.status}` : r.error ?? 'no answer'})`);
   }
 
+  async function readCursor(): Promise<void> {
+    const env = await envOf();
+    const token = await readCursorToken(deps.home, env, now(), deps.read);
+    cur.listed = token !== null;
+    if (token === null) { cur.localExpired = false; return; }
+    if (token === 'expired') { cur.localExpired = true; return; }
+    cur.localExpired = false;
+    // Another account signed in: the previous one's windows and refusal are dropped, never shown under it.
+    const identity = token.account ?? `token:${createHash('sha256').update(token.token).digest('hex')}`;
+    cur.account = token.account;
+    if (cur.identity !== null && cur.identity !== identity) { cur.windows = []; cur.readAt = null; cur.refused = false; }
+    cur.identity = identity;
+    if (now() < cur.nextAt) return;
+    cur.attempted = true;
+    const r = await post(CURSOR_USAGE_URL, { Authorization: `Bearer ${token.token}`, 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, '{}', env, HTTP_MS);
+    cur.nextAt = now() + CURSOR_READ_EVERY_MS;
+    if (r.status === 200) {
+      let body: unknown;
+      try { body = JSON.parse(r.body); } catch { body = undefined; }
+      const w = parseCursorUsage(body);
+      if (w) { cur.windows = w; cur.readAt = now(); cur.failed = false; cur.refused = false; cur.backoff = 0; return; }
+      cur.failed = true;
+      log('usage: Cursor not read (unreadable answer)');
+      return;
+    }
+    if (r.status === 401) { cur.refused = true; cur.failed = false; log('usage: Cursor Agent session expired (401)'); return; }
+    cur.failed = true;
+    if (r.status === 429) {
+      cur.backoff++;
+      const after = Number(r.headers['retry-after']);
+      const asked = Number.isFinite(after) && after > 0 ? Math.min(RETRY_AFTER_MAX_MS, after * 1000) : 0;
+      const wait = Math.max(Math.min(BACKOFF_MAX_MS, CURSOR_READ_EVERY_MS * 2 ** cur.backoff), asked);
+      cur.nextAt = now() + wait;
+      log(`usage: Cursor rate-limited the read (429), next in ${Math.round(wait / 1000)} s`);
+      return;
+    }
+    // Never the token, never the body: the status or the reason only.
+    log(`usage: Cursor not read (${r.status ? `HTTP ${r.status}` : r.error ?? 'no answer'})`);
+  }
+
   async function tick(): Promise<void> {
-    if (!reading) reading = readClaude().catch(e => { failed = true; log(`usage: read failed: ${(e as Error).message}`); }).finally(() => { reading = null; });
+    // Each source is read on its own: one throwing never stops the other.
+    if (!reading) reading = Promise.all([
+      readClaude().catch(e => { failed = true; log(`usage: read failed: ${(e as Error).message}`); }),
+      readCursor().catch(e => { cur.failed = true; log(`usage: Cursor read failed: ${(e as Error).message}`); })
+    ]).then(() => undefined).finally(() => { reading = null; });
     await reading;
     // Acks of windows that started again are no longer needed.
     const before = kept.acks.length;
