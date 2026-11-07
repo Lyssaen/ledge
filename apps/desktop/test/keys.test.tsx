@@ -336,6 +336,15 @@ describe('IDE shortcuts (the ide option)', () => {
     expect(split).toHaveBeenCalledTimes(2);
   });
 
+  it('Ctrl+Alt+\\ does not split (a QWERTY chord of its own); AltGr+\\, which Windows reports as Ctrl+Alt, does', () => {
+    const split = vi.fn();
+    render(<Probe ide={{ toggle: vi.fn(), split }} />);
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true, altKey: true });
+    expect(split).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true, altKey: true, modifierAltGraph: true });
+    expect(split).toHaveBeenCalledTimes(1);
+  });
+
   it('without ide, Ctrl+B does nothing and Ctrl+/ opens the chat', () => {
     const dispatch = vi.fn();
     render(<Probe dispatch={dispatch} />);

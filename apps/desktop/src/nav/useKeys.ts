@@ -28,8 +28,9 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
       // The IDE's panels, VS Code's keys: they act inside a field too (the terminal returned above).
       if (ide && !state.modal && mod && !e.altKey && (key === 'b' || key === 'j' || e.key === '/')) { e.preventDefault(); ide.toggle(key === 'b' ? 'side' : key === 'j' ? 'bottom' : 'right'); return; }
-      // Ctrl \ splits the focused group, as VS Code, in a field too. The key, not its place: AltGr reports Ctrl + Alt on Windows.
-      if (ide?.split && !state.modal && mod && e.key === '\\') { e.preventDefault(); ide.split(); return; }
+      // Ctrl \ splits the focused group, as VS Code, in a field too. The key, not its place: AltGr (\ on AZERTY) reports Ctrl + Alt
+      // on Windows, so Alt is allowed only as AltGr; a QWERTY Ctrl + Alt + \ is another chord.
+      if (ide?.split && !state.modal && mod && e.key === '\\' && (!e.altKey || e.getModifierState('AltGraph'))) { e.preventDefault(); ide.split(); return; }
       // Ctrl , opens Settings on General; inside Settings it keeps the section open (it only closes the dialog or the chat).
       // Ctrl Z takes back what the toast offers (« Annuler »); in a field it stays the field's own undo.
       if (mod && !e.altKey && !e.shiftKey && key === 'z' && !typing(document.activeElement)) { if (undo()) e.preventDefault(); return; }
