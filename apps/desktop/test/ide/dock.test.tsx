@@ -3,7 +3,7 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExtern
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LangProvider } from '../../src/i18n/lang';
-import { DockHost } from '../../src/ide/DockHost';
+import { DockHost, keepScroll } from '../../src/ide/DockHost';
 import { activate, agentTerminalTab, beside, deserialize, empty, keyOf, moveTo, open, serialize, sessionOf, split as splitGroup, type Tab, type Workspace } from '../../src/workspace/model';
 import { createWorkspaceStore, useWorkspace, type WorkspaceStore } from '../../src/workspace/store';
 import { useTabPlace } from '../../src/workspace/tabPlace';
@@ -438,5 +438,18 @@ describe('a tab mounted by follow does not take a screen a visible view holds', 
     await waitFor(() => expect(terms.viewerOf('local:x')).toBe('session:local:x'));
     act(() => store.update(w => open(w, agentTerminalTab('local:x'), 'right')));
     await waitFor(() => expect(terms.viewerOf('local:x')).toBe('terminal:agent:local:x'));
+  });
+});
+
+describe('keepScroll puts back the scroll of the known scrollers only', () => {
+  it('a [data-keep-scroll] element gets its scroll back; any other is left alone (a move need not walk the whole page)', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<div class="kept" data-keep-scroll></div><div class="other"><div class="deep" data-keep-scroll></div></div>';
+    const [kept, other, deep] = ['.kept', '.other', '.deep'].map(q => root.querySelector<HTMLElement>(q)!);
+    kept!.scrollTop = 120; deep!.scrollLeft = 30; other!.scrollTop = 40;
+    const back = keepScroll(root);
+    for (const el of [kept!, other!, deep!]) { el.scrollTop = 0; el.scrollLeft = 0; }
+    back();
+    expect([kept!.scrollTop, deep!.scrollLeft, other!.scrollTop]).toEqual([120, 30, 0]);
   });
 });

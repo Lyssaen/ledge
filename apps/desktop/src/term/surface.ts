@@ -55,6 +55,8 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
   term.loadAddon(fitter);
   term.loadAddon(new WebLinksAddon((_, uri) => opts.openUrl(uri)));
   term.open(host);
+  // A tab moved to another IDE group puts this scroll back (DockHost's keepScroll).
+  host.querySelector('.xterm-viewport')?.setAttribute('data-keep-scroll', '');
   try {
     const webgl = new WebglAddon();
     // Without the addon xterm draws with the DOM renderer: slower, but it draws.

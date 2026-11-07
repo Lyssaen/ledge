@@ -122,11 +122,12 @@ const COMPONENTS = { tab: Pane };
 // Ledge's tokens, set on `.ide-dock` in ide.css.
 const THEME: DockviewTheme = { name: 'ledge', className: 'ide-dock' };
 
-/** Notes the scroll positions inside a panel's content and gives back what puts them back: a move re-attaches its DOM,
- *  which Chromium then shows from the top. A hidden panel's DOM is detached (all at 0): its page restores itself on show. */
-function keepScroll(root: HTMLElement): () => void {
+/** Notes the scroll positions of a panel's known scrollers (`[data-keep-scroll]`: the thread, the reply, the changes' list
+ *  and diff, the agent's screen) and gives back what puts them back: a move re-attaches its DOM, which Chromium then shows
+ *  from the top. A hidden panel's DOM is detached (all at 0): its page restores itself on show. */
+export function keepScroll(root: HTMLElement): () => void {
   const kept: [Element, number, number][] = [];
-  for (const el of [root, ...root.querySelectorAll('*')]) if (el.scrollTop || el.scrollLeft) kept.push([el, el.scrollTop, el.scrollLeft]);
+  for (const el of root.querySelectorAll('[data-keep-scroll]')) if (el.scrollTop || el.scrollLeft) kept.push([el, el.scrollTop, el.scrollLeft]);
   return () => { for (const [el, top, left] of kept) { el.scrollTop = top; el.scrollLeft = left; } };
 }
 

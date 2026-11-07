@@ -531,7 +531,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
         <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
           <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : p.ide ? { 'aria-label': t.session.views.terminal } : { 'aria-labelledby': 'session-tab-terminal' })}>
-            <div className="messages session-thread" ref={scroller} data-thread-focus tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
+            <div className="messages session-thread" ref={scroller} data-thread-focus data-keep-scroll tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
               {seat !== null ? <SeatNote stopped={seat === 'stopped'} onOpenRig={() => p.dispatch({ type: 'openrig', section: 'rigs', machine: session.machineId ?? 'local' })} /> : <>
               {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
               {offline && (

@@ -283,7 +283,7 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
           onDrop={client && !shut ? e => { if (e.dataTransfer.files.length === 0) return; e.preventDefault(); images.add([...e.dataTransfer.files]); } : undefined}>
           {slashOpen && <SlashMenu id={listId} state={slash} query={query!} matches={matches} selected={selected} tool={toolName(session.tool)} name={name} onPick={pick} onHover={setSelected} />}
           {withImages && <div className="reply-chips"><AttachmentChips items={images.items} onRemove={images.remove} size={{ w: 72, h: 54 }} removeLabel={t.images.remove} lang={t.time.locale.startsWith('fr') ? 'fr' : 'en'} /></div>}
-          <textarea ref={input} rows={1} aria-label={tr.label} placeholder={placeholder} value={draft} disabled={shut}
+          <textarea ref={input} rows={1} data-keep-scroll aria-label={tr.label} placeholder={placeholder} value={draft} disabled={shut}
             maxLength={isNote ? NOTE_MAX : undefined} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} onPaste={onPaste}
             {...(slashTool ? { 'aria-autocomplete': 'list' as const, 'aria-expanded': listShown, ...(listShown ? { 'aria-controls': listId } : {}), ...(listShown && selected >= 0 ? { 'aria-activedescendant': slashOptionId(listId, selected) } : {}) } : {})} />
           {ghost && !withImages && <div className="slash-ghost" aria-hidden="true"><span className="slash-ghost-typed">{draft}</span><span className="slash-ghost-hint">{ghost}</span></div>}
