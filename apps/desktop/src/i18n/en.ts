@@ -1356,7 +1356,7 @@ export const en: Messages = {
     tabTerminalView: 'Terminal view', tagLine: (label, value) => `${label}: ${value}`, toTerminal: 'Switch to the terminal', toThread: 'Back to the thread', viewKey: (key) => `Ctrl ${key}`, relievedByEntry: (name) => `Relieved by ${name}`, relievesEntry: (name) => `Relieves ${name}`,
     closeThisTab: 'Close tab', closeOthers: 'Close others', tabMenu: 'Tab', changesTitle: (name: string) => `Changes · ${name}`,
     openrigTitle: (machine: string) => `OpenRig · ${machine}`, closeTab: (name: string) => `Close ${name}`, editorLabel: 'Editor',
-    bottomLabel: 'Bottom panel', terminals: 'Terminals', output: 'Output', outputTip: 'Output: the rig commands Ledge ran and their result', hidePanel: 'Hide the panel',
+    bottomLabel: 'Bottom panel', terminals: 'Terminals', output: 'Output', outputEmpty: 'No rig command run since Ledge opened.', outputTip: 'Output: the rig commands Ledge ran and their result', hidePanel: 'Hide the panel',
     changeModel: 'Change model', context: (used, window) => `Context: ${used} / ${window}`, branch: (b) => `Branch ${b}`,
     interrupt: 'Interrupt', interruptRefused: (name, why) => `Interrupting ${name} refused: ${why}`,
     changesChip: (n) => `Changes: ${n} file${n > 1 ? 's' : ''} · beside, in a linked group`,

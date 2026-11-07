@@ -45,6 +45,7 @@ import { closedLedgeTasks, useTasksApi } from './tasks/useTasksApi';
 import { Atelier } from './atelier/Atelier';
 import { OpenRigPage } from './openrig/OpenRigPage';
 import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
+import { createRigOutput } from './openrig/rigOutput';
 import { useSidebarOpenRig } from './openrig/sidebarState';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
@@ -95,6 +96,18 @@ const NO_PROJECTS: readonly Project[] = [];
 
 /** Ledge's terminal colours as the root's tokens give them now. */
 const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
+
+/** One log of the `rig` commands this Desktop ran per client, made once and disposed on unmount (the bottom panel's Output reads it). */
+function useRigOutputLog(client: DaemonClient | undefined) {
+  const [log, setLog] = useState<ReturnType<typeof createRigOutput> | null>(null);
+  useEffect(() => {
+    if (!client) { setLog(null); return; }
+    const made = createRigOutput(client);
+    setLog(made);
+    return () => { made.dispose(); };
+  }, [client]);
+  return log;
+}
 
 /** The app's one terminal store: its shells and the agent's screen live as long as the window, whatever the place. Its xterms
  *  follow the theme once the root has taken it (`data-theme`, set by useAppearance after this component's own effects). */
@@ -167,6 +180,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Ctrl + ² inside an xterm, set below once the place is known (the store's surfaces are made once).
   const termThread = useRef<() => void>(focusThread);
   const termStore = useTermStore(fleetClient, () => termThread.current());
+  // Ready for the bottom panel's Output (IDE lot 5, next task).
+  const rigOutput = useRigOutputLog(fleetClient);
+  void rigOutput;
   const projects = useProjects(fleetClient);
   const tasksApi = useTasksApi(fleetClient);
   // « À toi »: what OpenRig's rigs ask the person, on this computer (lot 1: one machine), once its daemon reads them.

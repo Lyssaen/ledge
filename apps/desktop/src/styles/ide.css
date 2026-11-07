@@ -347,3 +347,9 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-ex-h { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px 6px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
 .ide-ex-kbd { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0; text-transform: none; border: 1px solid var(--input); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); }
 .ide-ex-kbd:hover { color: var(--foreground); background: var(--muted); }
+
+/* The bottom panel's Output (mockup .term): the app's terminal colours, the dim of a secondary text. */
+.ide-output { flex: 1; min-height: 0; margin: 0; overflow: auto; background: var(--term-bg); color: var(--term-fg); font: 11.5px/17px 'Geist Mono', monospace; padding: 8px 10px; white-space: pre; }
+.ide-output .ide-output-dim { color: var(--muted-foreground); }
+.ide-output .ide-output-ok { color: var(--success); }
+.ide-output .ide-output-err { color: var(--danger-text); }
