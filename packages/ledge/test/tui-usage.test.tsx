@@ -144,7 +144,7 @@ describe('ledge tui: usage limits', () => {
         ]));
         await until(() => tui.frame().includes('◇'));
         const f = tui.frame();
-        expect(f).toContain('Cursor Agent · total du mois à 81 % · remise le 1 déc.');
+        expect(f).toContain('Cursor Agent · total du mois à 81 % · remise 1 déc.');
         expect(f).toContain('Cursor Agent · Autres modèles atteinte · reprend le 1 déc.');
         await tui.press('5');
         await until(() => tui.frame().includes('LIMITES'));

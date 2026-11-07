@@ -137,7 +137,7 @@ export const fr = {
     cursorAlert: { month: 'total du mois', week: 'total de la semaine', cursor: 'Modèles Cursor', other: 'Autres modèles' } as Record<string, string>,
     cursorDetail: { month: 'Total · mois', week: 'Total · semaine', cursor: 'Cursor', other: 'Autres' } as Record<string, string>,
     cursorPool: { cursor: 'Cursor', other: 'Autres' } as Record<string, string>,
-    alertThreshold: (h: string, w: string, p: number, at: string | null, date = false) => `${h} · ${w} à ${p} %${at ? ` · remise ${date ? 'le ' : ''}${at}` : ''}`,
+    alertThreshold: (h: string, w: string, p: number, at: string | null, _date = false) => `${h} · ${w} à ${p} %${at ? ` · remise ${at}` : ''}`,
     alertFull: (h: string, w: string, at: string | null, date = false) => `${h} · ${w} atteinte${at ? ` · reprend ${date ? 'le ' : ''}${at}` : ''}`,
     five5: '5 h', weekOf: (m: string) => `${m} semaine`, weekAll: 'semaine',
     setting: 'Alerte de limite', settingHint: 'au-delà : À toi prévient', settingUnknown: 'aucune machine ne donne ses limites', settingSaved: (pct: number) => `Alerte de limite : ${pct} %`,
