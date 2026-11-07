@@ -7,6 +7,8 @@ import type { Overview } from '../src/nav/overview';
 import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ConfirmDialog } from '../src/manage/ConfirmDialog';
 import { ShortcutsHelp } from '../src/shell/ShortcutsHelp';
+import { Shortcuts } from '../src/settings/Shortcuts';
+import { saveIdeEnabled } from '../src/workspace/prefs';
 import { LangProvider } from '../src/i18n/lang';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -352,6 +354,34 @@ describe('IDE shortcuts (the ide option)', () => {
     expect(dispatch).not.toHaveBeenCalled();
     press('/');
     expect(dispatch).toHaveBeenCalledWith({ type: 'chat', open: true });
+  });
+});
+
+describe('the shortcuts help names the tab keys when the IDE is on (lot 3 follow-up)', () => {
+  afterEach(() => saveIdeEnabled(false));
+  const FR = [['Ctrl W', 'Fermer l’onglet, ou le groupe vide'], ['Ctrl ⇧ T', 'Rouvrir le dernier onglet fermé'], ['Ctrl Tab / Ctrl ⇧ Tab', 'Onglet suivant / précédent du groupe'],
+    ['Ctrl Pg↓ / Pg↑', 'Onglet suivant / précédent du groupe'], ['Ctrl 1…9', 'Aller au groupe N'], ['Ctrl Alt ← / →', 'Déplacer l’onglet vers le groupe de gauche / de droite'], ['Ctrl \\', 'Diviser à droite']];
+  it('? : an « Onglets et groupes » block after the others, only with the IDE on', () => {
+    const { unmount } = render(<LangProvider lang="fr"><ShortcutsHelp onClose={() => {}} /></LangProvider>);
+    expect(screen.queryByRole('heading', { name: 'Onglets et groupes' })).toBeNull();
+    unmount();
+    saveIdeEnabled(true);
+    render(<LangProvider lang="fr"><ShortcutsHelp onClose={() => {}} /></LangProvider>);
+    const head = screen.getByRole('heading', { name: 'Onglets et groupes' });
+    const rows: string[][] = [];
+    for (let el = head.nextElementSibling; el && el.tagName === 'DIV'; el = el.nextElementSibling) rows.push([el.querySelector('kbd')!.textContent!, el.querySelector('span')!.textContent!]);
+    expect(rows).toEqual(FR);
+  });
+  it('Settings › Keyboard shortcuts: a « Tabs and groups » card, only with the IDE on', () => {
+    const ctx = { island: null, dispatch: () => {} } as never;
+    const { unmount } = render(<LangProvider lang="en"><Shortcuts ctx={ctx} /></LangProvider>);
+    expect(screen.queryByRole('region', { name: 'Tabs and groups' })).toBeNull();
+    unmount();
+    saveIdeEnabled(true);
+    render(<LangProvider lang="en"><Shortcuts ctx={ctx} /></LangProvider>);
+    const rows = [...screen.getByRole('region', { name: 'Tabs and groups' }).querySelectorAll('.set-row')].map(r => [r.querySelector('kbd')!.textContent, r.querySelector('.set-label')!.textContent]);
+    expect(rows).toEqual([['Ctrl W', 'Close the tab, or the empty group'], ['Ctrl ⇧ T', 'Reopen the last closed tab'], ['Ctrl Tab / Ctrl ⇧ Tab', 'Next / previous tab of the group'],
+      ['Ctrl PgDn / PgUp', 'Next / previous tab of the group'], ['Ctrl 1…9', 'Go to group N'], ['Ctrl Alt ← / →', 'Move the tab to the group on the left / right'], ['Ctrl \\', 'Split right']]);
   });
 });
 
