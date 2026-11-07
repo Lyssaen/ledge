@@ -495,3 +495,34 @@ test('the link square sits left of the tabs, as the mockup\'s .lkbtn', async ({ 
   expect(Math.abs(sq.x - strip.x)).toBeLessThanOrEqual(1);
   expect(sq.x + sq.width).toBeLessThanOrEqual(first.x + 1);
 });
+
+test('lot 3 follow-up: an empty group closes from its « Close group (Ctrl+W) »; Ctrl+W closes the tab, not the page; Ctrl+Tab cycles', async ({ page }) => {
+  await boot(page);
+  await open(page, 'Otto');
+  await split(page, 0);
+  await expect(groups(page)).toHaveCount(2);
+  await expect(groups(page).nth(0).getByRole('button', { name: 'Close group (Ctrl+W)' })).toHaveCount(0);
+  await groups(page).nth(1).getByRole('button', { name: 'Close group (Ctrl+W)' }).click();
+  await expect(groups(page)).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Close group (Ctrl+W)' })).toHaveCount(0);
+
+  // Split again, then Ctrl+W on the focused empty group: it goes too.
+  await split(page, 0);
+  await expect(groups(page)).toHaveCount(2);
+  await page.keyboard.press('Control+w');
+  await expect(groups(page)).toHaveCount(1);
+
+  await open(page, 'Nova');
+  expect((await model(page))[0]!.tabs).toEqual(['atelier:main', 'session:local:otto', 'session:local:nova']);
+  await page.keyboard.press('Control+Tab');
+  await expect.poll(async () => (await model(page))[0]!.front).toBe('atelier:main');
+  await page.keyboard.press('Control+Shift+Tab');
+  await expect.poll(async () => (await model(page))[0]!.front).toBe('session:local:nova');
+
+  await page.keyboard.press('Control+w');
+  await expect(tabOf(page, 'Nova')).toHaveCount(0);
+  expect(page.isClosed()).toBe(false);
+  await expect(page.locator('.ide')).toBeVisible();
+  await page.keyboard.press('Control+Shift+T');
+  await expect(tabOf(page, 'Nova')).toHaveClass(/dv-active-tab/);
+});
