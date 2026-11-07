@@ -72,15 +72,29 @@ export function usageAlerts(states: ReadonlyMap<string, UsageStateMessage>, onli
   return [...byId.values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
 
-/** The 5 hours, the week, and the per-model windows past the threshold (the rest stays in the detail). */
-export function shownWindows(g: UsageGroup, threshold: number): { five?: UsageWindow; week?: UsageWindow; hot: UsageWindow[]; models: UsageWindow[] } {
+/** The 5 hours, the week or month, the pools, and the models and pools past the threshold (the rest stays in the detail). */
+export function shownWindows(g: UsageGroup, threshold: number): {
+  five?: UsageWindow; week?: UsageWindow; month?: UsageWindow;
+  /** The pools (kind 'pool'), Cursor's first. */ pools: UsageWindow[];
+  /** Models and pools past the threshold. */ hot: UsageWindow[];
+  models: UsageWindow[];
+} {
   const models = g.windows.filter(w => w.kind === 'model');
+  const pools = g.windows.filter(w => w.kind === 'pool').sort((a, b) => Number(a.pool === 'other') - Number(b.pool === 'other'));
+  const past = (w: UsageWindow) => w.pct >= threshold * 100;
   return {
     five: g.windows.find(w => w.kind === 'five_hour'),
     week: g.windows.find(w => w.kind === 'seven_day'),
-    hot: models.filter(w => w.pct >= threshold * 100),
+    month: g.windows.find(w => w.kind === 'month'),
+    pools,
+    hot: [...models.filter(past), ...pools.filter(past)],
     models
   };
+}
+
+/** ok, read, and nothing to show: « limite non lue ». */
+export function isUnread(g: Pick<UsageGroup, 'status' | 'windows' | 'readAt'>): boolean {
+  return g.status === 'ok' && g.readAt !== null && g.windows.length === 0;
 }
 
 /** Neutral under the threshold, amber past it, red at 100 %. */
@@ -93,15 +107,24 @@ const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.g
 const hm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const weekday = (d: Date, lang: string) => d.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'short' });
 
-/** When a window starts again, short (the footer): `14:30` today, `lun.` another day. */
+const dateOf = (d: Date, lang: string) => d.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'short' });
+
+/** A reset a week or more away reads as a date, not a weekday. */
+export function resetIsDate(iso: string, now: number): boolean {
+  return Date.parse(iso) - now >= 7 * 86_400_000;
+}
+
+/** When a window starts again, short (the footer): `14:30` today, `lun.` another day, `1 déc.` a week or more away. */
 export function resetShort(iso: string, now: number, lang: string): string {
   const d = new Date(iso);
+  if (resetIsDate(iso, now)) return dateOf(d, lang);
   return sameDay(d, new Date(now)) ? hm(d) : weekday(d, lang);
 }
 
-/** When a window starts again, long (the detail): `14:30` today, `lun. 09:00` another day. */
+/** When a window starts again, long (the detail): `14:30` today, `lun. 09:00` another day, `1 déc. 13:43` a week or more away. */
 export function resetLong(iso: string, now: number, lang: string): string {
   const d = new Date(iso);
+  if (resetIsDate(iso, now)) return `${dateOf(d, lang)} ${hm(d)}`;
   return sameDay(d, new Date(now)) ? hm(d) : `${weekday(d, lang)} ${hm(d)}`;
 }
 
