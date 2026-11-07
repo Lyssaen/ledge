@@ -40,6 +40,9 @@ export function proxyFor(target: URL, env: NodeJS.ProcessEnv): URL | null {
   } catch { return null; }
 }
 
+/** A POST, the same way: `Content-Length` and the body are written, the answer is as bounded as the GET's. */
+export type HttpsPost = (url: string, headers: Record<string, string>, body: string, env: NodeJS.ProcessEnv, timeoutMs: number) => Promise<GetResult & { error?: string }>;
+
 /** The certificate authorities: Node's, plus the file `NODE_EXTRA_CA_CERTS` names in the given environment (a proxy that
  *  inspects TLS signs with its own). Undefined: Node's default. */
 function authorities(env: NodeJS.ProcessEnv): string[] | undefined {
@@ -48,7 +51,7 @@ function authorities(env: NodeJS.ProcessEnv): string[] | undefined {
   try { return [...rootCertificates, readFileSync(file, 'utf8')]; } catch { return undefined; }
 }
 
-export const httpsGet: HttpsGet = (url, headers, env, timeoutMs) => new Promise(resolve => {
+const exchange = (method: 'GET' | 'POST', url: string, headers: Record<string, string>, body: string | undefined, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<GetResult & { error?: string }> => new Promise(resolve => {
   let done = false;
   /** What is open: closed once the answer is in, or on a failure, so nothing keeps the daemon's event loop busy. */
   const open: Array<{ destroy(): void }> = [];
@@ -68,7 +71,7 @@ export const httpsGet: HttpsGet = (url, headers, env, timeoutMs) => new Promise(
   // secured would leave it waiting for a `secureConnect` that has passed.
   const send = (tunnelled?: Socket) => {
     const req = httpsRequest({
-      host: target.hostname, port, path: `${target.pathname}${target.search}`, method: 'GET', headers,
+      host: target.hostname, port, path: `${target.pathname}${target.search}`, method, headers: body === undefined ? headers : { ...headers, 'Content-Length': String(Buffer.byteLength(body)) },
       // Node takes `createConnection` only without an agent (`agent: false` makes a fresh one, which would connect directly).
       ...(ca ? { ca } : {}), ...(tunnelled ? { createConnection: () => tlsConnect({ socket: tunnelled, servername: target.hostname, ...(ca ? { ca } : {}) }) } : { agent: false })
     }, res => {
@@ -80,7 +83,7 @@ export const httpsGet: HttpsGet = (url, headers, env, timeoutMs) => new Promise(
     });
     open.push(req);
     req.on('error', e => fail(e.message));
-    req.end();
+    if (body === undefined) req.end(); else req.end(body);
   };
   const proxy = proxyFor(target, env);
   if (!proxy) { send(); return; }
@@ -95,3 +98,6 @@ export const httpsGet: HttpsGet = (url, headers, env, timeoutMs) => new Promise(
   tunnel.on('error', e => fail(`proxy: ${e.message}`));
   tunnel.end();
 });
+
+export const httpsGet: HttpsGet = (url, headers, env, timeoutMs) => exchange('GET', url, headers, undefined, env, timeoutMs);
+export const httpsPost: HttpsPost = (url, headers, body, env, timeoutMs) => exchange('POST', url, headers, body, env, timeoutMs);
