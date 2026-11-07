@@ -7,7 +7,8 @@ import { taskOf } from '../../nav/agents';
 import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
-import { SessionBot } from '../SessionBot';
+import { ProviderLogo } from '../../ide/ProviderLogo';
+import { providerOf } from '../../workspace/sessionTab';
 import type { MenuTarget } from '../../manage/useContextMenu';
 import { isMenuKey, menuPoint } from './menuPoint';
 import { filterArchived } from './model';
@@ -101,7 +102,7 @@ export function Archives(p: {
             return (
               <div key={s.id} role="listitem" className={cls('st-row st-agent st-arch', selected && 'sel')} style={{ '--d': 0 } as CSSProperties}
                 onContextMenu={e => { e.preventDefault(); const main = e.currentTarget.querySelector<HTMLElement>('.st-main'); p.onMenu({ kind: 'archive', id: s.id }, menuPoint(e, e.currentTarget), main); }}>
-                <span className="st-bot"><SessionBot session={{ ...s, state: 'exited' }} size={16} paused={p.paused} mark="logo" /></span>
+                <span className="st-bot"><ProviderLogo provider={providerOf(s.tool)} size={14} /></span>
                 <button type="button" className="st-main" data-arch-key={s.id} aria-current={selected ? 'page' : undefined}
                   aria-label={t.side.read(s.name, name, task, when)} onClick={() => p.onRead(s.id)}
                   onKeyDown={e => { if (isMenuKey(e)) { e.preventDefault(); p.onMenu({ kind: 'archive', id: s.id }, menuPoint(e, e.currentTarget), e.currentTarget); } }}>

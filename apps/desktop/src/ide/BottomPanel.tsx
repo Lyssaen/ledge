@@ -137,8 +137,8 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
             {terms.length === 0 ? <span className="ide-bterms-none">{pt.noTerms}</span> : stacksOf(p.panel).map(stack => {
               const active = stack.refs[stack.active] ?? stack.refs[0]!;
               const title = p.tileTitle(active);
-              // Its own place (R2): the agent's one screen and the shown terminals' budget follow the tab in front.
-              const place: TabPlace = { key: panelViewer(active), group: '', visible: true, active: false };
+              // The column keeps its screens mounted (hidden tabs included): switching or stacking a tab does not
+              // detach the one on show, which is what flashed the sessions' terminal views.
               const onColumn = (e: DragEvent, drop: boolean) => {
                 if (!carried()) return;
                 const beside = e.clientX > e.currentTarget.getBoundingClientRect().right - 28;
@@ -149,7 +149,7 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
                 else setSpot({ ref: active, beside });
               };
               return (
-                <section key={stack.refs.join('\0')} className={`ide-btile${spot?.ref === active && spot.beside ? ' drop-beside' : ''}`} role="group" aria-label={title}
+                <section key={stack.id ?? stack.refs[0]} className={`ide-btile${spot?.ref === active && spot.beside ? ' drop-beside' : ''}`} role="group" aria-label={title}
                   onDragOver={e => onColumn(e, false)} onDrop={e => onColumn(e, true)}>
                   <div className="ide-btile-bar">
                     <div className="ide-btile-tabs" role="tablist">
@@ -177,7 +177,17 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
                       <span className="chip-k">{p.tileKind(active)}</span>
                     </div>
                   </div>
-                  <div className="ide-btile-body"><TabPlaceContext.Provider value={place}>{p.tile(active)}</TabPlaceContext.Provider></div>
+                  <div className="ide-btile-body">
+                    {stack.refs.map(ref => {
+                      const on = ref === active;
+                      const place: TabPlace = { key: panelViewer(ref), group: stack.id ?? '', visible: on, active: false };
+                      return (
+                        <div key={ref} className="ide-btile-screen" hidden={!on}>
+                          <TabPlaceContext.Provider value={place}>{p.tile(ref)}</TabPlaceContext.Provider>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </section>
               );
             })}

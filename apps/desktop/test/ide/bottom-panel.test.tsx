@@ -139,7 +139,7 @@ describe('the bottom panel in the IDE (App)', () => {
     expect(await screen.findByText('Dernier terminal fermé : le panneau du bas se masque. Ctrl+J le rouvre avec un shell.')).toBeVisible();
   });
 
-  it('« + ▾ » adds the shell picked beside the first and makes it the default', async () => {
+  it('« + ▾ » stacks the shell picked in the existing group, shows it, and makes it the default', async () => {
     (window as unknown as { __ledgeShells?: ShellsAvailable }).__ledgeShells = { wsl: 'Ubuntu', powershell: true, cmd: false, gitBash: false };
     try {
       const { user } = await mountApp();
@@ -147,8 +147,11 @@ describe('the bottom panel in the IDE (App)', () => {
       await waitFor(() => expect(tiles()).toHaveLength(1));
       await user.click(screen.getByRole('button', { name: 'Nouveau terminal' }));
       await user.click(within(screen.getByRole('menu', { name: 'Nouveau terminal' })).getByRole('menuitem', { name: /PowerShell/ }));
-      await waitFor(() => expect(tiles()).toHaveLength(2));
-      expect(tiles()[1]!.querySelector('.ide-btile-tab')).toHaveTextContent(/>_\s*PowerShell 2/);
+      await waitFor(() => expect(tiles()).toHaveLength(1));
+      const tabs = [...tiles()[0]!.querySelectorAll('.ide-btile-tab')];
+      expect(tabs).toHaveLength(2);
+      expect(tabs[1]).toHaveTextContent(/>_\s*PowerShell 2/);
+      expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
       expect(localStorage.getItem('ledge.ide.lastShell')).toBe('powershell');
       await user.click(screen.getByRole('button', { name: 'Nouveau terminal' }));
       expect(within(screen.getByRole('menu', { name: 'Nouveau terminal' })).getByRole('menuitem', { name: /PowerShell/ })).toHaveTextContent('par défaut');

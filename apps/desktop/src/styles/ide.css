@@ -184,7 +184,9 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
 .ide-btile-tools { margin-left: auto; flex: none; display: flex; align-items: center; gap: 2px; padding-right: 6px; background: var(--ide-strip); }
 .ide-btile-tools .chip-k { font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-size: 10.5px; line-height: 16px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; }
 .ide-btile-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.ide-btile-body > * { flex: 1; min-height: 0; }
+.ide-btile-screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ide-btile-screen[hidden] { display: none; }
+.ide-btile-screen > * { flex: 1; min-height: 0; }
 /* A free shell (FreeShellView): its banner when it ended, then its xterm. */
 .ide-free-shell { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--term-bg); }
 .ide-free-shell > .terminal-screen { flex: 1; min-height: 0; }

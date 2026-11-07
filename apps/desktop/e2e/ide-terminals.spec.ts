@@ -28,6 +28,7 @@ const groups = (page: Page) => page.locator('.ide-dockview .dv-groupview');
 const dockTab = (page: Page, title: string) => page.locator('.ide-dockview .dv-tab').filter({ hasText: title });
 const writes = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyWrites: string[] }).__ledgePtyWrites.join(''));
 const termText = (page: Page, nth: number) => tiles(page).nth(nth).locator('[data-terminal]').evaluate(el => (el as unknown as { __ledgeTermText?: string }).__ledgeTermText ?? '');
+const shownText = (page: Page) => tiles(page).locator('.ide-btile-screen:not([hidden]) [data-terminal]').evaluate(el => (el as unknown as { __ledgeTermText?: string }).__ledgeTermText ?? '');
 const ptyOpens = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyOpens: unknown[] }).__ledgePtyOpens.length);
 const emit = (page: Page, text: string) => page.evaluate(t => (window as unknown as { __ledgePtyEmit: (s: string) => void }).__ledgePtyEmit(t), text);
 const box = async (l: Locator) => (await l.boundingBox())!;
@@ -65,28 +66,27 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await expect(panel(page).getByRole('tab', { name: 'Terminals' }).locator('.ide-bp-count')).toHaveText('1');
   expect((await box(panel(page))).height).toBe(240);
 
-  // « + ▾ »: the menu, PowerShell picked: two tiles side by side; « default » now sits on PowerShell.
+  // « + ▾ »: PowerShell stacks as a tab of the existing group and takes the focus; « default » now sits on PowerShell.
   await openMenu(page);
   await expect(page.getByRole('menuitem', { name: /WSL/ })).toContainText('default');
   await page.getByRole('menuitem', { name: /PowerShell/ }).click();
+  await expect(tiles(page)).toHaveCount(1);
   await expect(tilesTitles(page)).toHaveText(tileText(['WSL · Ubuntu 1', 'PowerShell 2']));
+  await expect(tilesTitles(page).nth(1)).toHaveAttribute('aria-selected', 'true');
   await expect(panel(page).getByRole('tab', { name: 'Terminals' }).locator('.ide-bp-count')).toHaveText('2');
-  const [a, b] = [await box(tiles(page).nth(0)), await box(tiles(page).nth(1))];
-  expect(Math.abs(a.y - b.y)).toBeLessThan(1);
-  expect(b.x).toBeGreaterThan(a.x + a.width - 2);
   await openMenu(page);
   await expect(page.getByRole('menuitem', { name: /PowerShell/ })).toContainText('default');
   await expect(page.getByRole('menuitem', { name: /WSL/ })).not.toContainText('default');
   await page.keyboard.press('Escape');
 
-  // Typing in the 2nd tile reaches its PTY (PowerShell opened natively).
-  await tiles(page).nth(1).locator('.xterm').click();
+  // Typing in the focused tab reaches its PTY (PowerShell opened natively).
+  await tiles(page).locator('.ide-btile-screen:not([hidden]) .xterm').click();
   await page.keyboard.type('echo hi');
   await expect.poll(() => writes(page)).toContain('echo hi');
   const opens = await page.evaluate(() => (window as unknown as { __ledgePtyOpens: { argv: string[]; native?: string }[] }).__ledgePtyOpens);
   expect(opens.map(o => o.native ?? 'wsl')).toEqual(['wsl', expect.stringMatching(/powershell/i)]);
   // The screen is a canvas: the buffer (not a pixel clip that can match blank-to-blank) says the line is « $ echo hi ».
-  await expect.poll(() => termText(page, 1)).toContain('$ echo hi');
+  await expect.poll(() => shownText(page)).toContain('$ echo hi');
 
   // Ctrl+J while that terminal has the keyboard hides the panel; again shows the same two shells, none new.
   const opensBefore = await ptyOpens(page);
@@ -95,7 +95,7 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await page.keyboard.press('Control+j');
   await expect(tilesTitles(page)).toHaveText(tileText(['WSL · Ubuntu 1', 'PowerShell 2']));
   expect(await ptyOpens(page)).toBe(opensBefore);
-  await expect.poll(() => termText(page, 1)).toContain('$ echo hi');
+  await expect.poll(() => shownText(page)).toContain('$ echo hi');
 
   // The 2nd tile dragged onto the editing group: a tab « >_ PowerShell 2 » with « shell »; the panel keeps one tile.
   const group = groups(page).first();
@@ -135,7 +135,8 @@ for (const theme of ['light', 'dark'] as const) {
     await page.keyboard.press('Control+j');
     await openMenu(page);
     await page.getByRole('menuitem', { name: /PowerShell/ }).click();
-    await expect(tiles(page)).toHaveCount(2);
+    await expect(tiles(page)).toHaveCount(1);
+    await expect(tilesTitles(page)).toHaveCount(2);
     await emit(page, 'Get-ChildItem\r\n');
     const settle = () => page.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
     const zoom = async (n: string) => { await settle(); await panel(page).screenshot({ path: info.outputPath(`ide-panel-${n}-${theme}.png`) }); };

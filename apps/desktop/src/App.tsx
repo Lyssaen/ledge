@@ -92,7 +92,7 @@ import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeBottom, IdeDock, IdeOutput, IdePlace } from './ide/lazy';
 import { tileToDock } from './ide/termDrag';
-import { addTerm, besideTerm, createPanelStore, isTerminalRef, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
+import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
 const NO_PROJECTS: readonly Project[] = [];
 const NO_SHELLS: ShellsAvailable = { wsl: null, powershell: false, cmd: false, gitBash: false };
@@ -527,7 +527,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   /** A shell into the panel, on Terminaux, the panel shown. The default shell of a panel shown empty (`auto`) does not show it
    *  again if it was hidden while the shell opened. */
   const panelShell = useCallback((kind: ShellKind, auto = false) => openShell(kind, shellDir(), id => {
-    panelStore.update(p => addTerm(p, id));
+    panelStore.update(p => openTerm(p, id));
     if (!auto || layoutNow.current.bottom) onLayout({ type: 'show', panel: 'bottom', on: true });
   }), [openShell, shellDir, panelStore, onLayout]);
   // The panel shown with no terminal (Ctrl+J, its button, a restart with it shown) opens the default shell (R7): once per showing,

@@ -15,7 +15,8 @@ import { NoteDecision } from '../../tasks/NoteDecision';
 import type { TasksApi } from '../../tasks/useTasksApi';
 import { RigTag } from '../../openrig/RigTag';
 import { cls } from '../cls';
-import { HelperBot, SessionBot } from '../SessionBot';
+import { ProviderLogo } from '../../ide/ProviderLogo';
+import { providerOf } from '../../workspace/sessionTab';
 import { quickDecide, type AttnItem } from './model';
 
 const CAP = 4;
@@ -109,7 +110,7 @@ export function Attention(p: {
         const who = whoOf(x, session);
         return (
           <div key={x.id} className="st-card st-task st-decision st-rig-ask" data-ask={x.id}>
-            <span className="st-bot">{session ? <SessionBot session={session} size={18} paused={p.paused} /> : <span className="st-rig-hex" aria-hidden="true"><Icon d={SHELL_ICONS.rig} size={13} /></span>}</span>
+            <span className="st-bot">{session ? <ProviderLogo provider={providerOf(session.tool)} size={14} /> : <span className="st-rig-hex" aria-hidden="true"><Icon d={SHELL_ICONS.rig} size={13} /></span>}</span>
             <div className="st-card-body">
               <div className="st-l1">
                 <span className="st-req"><strong>{who.name}</strong>{x.from.rig ? ` · ${x.from.rig}` : ''}</span>
@@ -132,9 +133,7 @@ export function Attention(p: {
         return (
           <div key={item.session.id} className={cls('st-card', p.current === item.session.id && 'sel')}
             onContextMenu={e => { e.preventDefault(); p.onMenu(item.session.id, e); }}>
-            <span className="st-bot">{item.helper
-              ? <HelperBot helper={item.helper} parent={item.session} size={18} paused={p.paused} mark="logo" />
-              : <SessionBot session={item.session} size={18} paused={p.paused} mark="logo" />}</span>
+            <span className="st-bot"><ProviderLogo provider={providerOf(item.session.tool)} size={14} /></span>
             <div className="st-card-body">
               <div className="st-l1">
                 <button type="button" className="st-name" onClick={() => p.onOpen(item.session.id, item.helper?.id)}

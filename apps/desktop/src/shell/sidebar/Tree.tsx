@@ -9,7 +9,9 @@ import { ProjectSwatch } from '../../projects/ProjectSwatch';
 import { RigTag } from '../../openrig/RigTag';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
-import { AutoMark, HelperBot, SessionBot } from '../SessionBot';
+import { ProviderLogo } from '../../ide/ProviderLogo';
+import { providerOf } from '../../workspace/sessionTab';
+import { AutoMark } from '../SessionBot';
 import type { MenuTarget } from '../../manage/useContextMenu';
 import { isMenuKey, menuPoint } from './menuPoint';
 import type { ProjectGroup } from './model';
@@ -227,9 +229,7 @@ export function Tree(p: {
         style={{ '--d': depth } as CSSProperties}
         onContextMenu={helper ? undefined : e => menuOn({ kind: 'session', id: s.id }, e)}>
         {toggle ? <Chevron open={open} label={open ? t.side.foldKids(name) : t.side.unfoldKids(name)} onClick={toggle} /> : <span className="st-gap" />}
-        <span className="st-bot">{helper
-          ? <HelperBot helper={helper} parent={s} size={16} paused={p.paused} mark="logo" />
-          : <SessionBot session={s} size={18} paused={p.paused} mark="logo" />}</span>
+        <span className="st-bot"><ProviderLogo provider={providerOf(s.tool)} size={14} /></span>
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
           onClick={e => { const mod = e.ctrlKey || e.metaKey; if (!helper && p.onOpenRight && mod) p.onOpenRight(s.id); else if (!helper && p.onPick && (p.onOpenRight ? e.shiftKey : mod)) p.onPick(s.id); else if (helper) p.onOpen(s.id, helper.id); else p.onOpen(s.id); }}>
