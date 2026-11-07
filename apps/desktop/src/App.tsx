@@ -79,6 +79,8 @@ import { agentTerminalTab, beside, changesBeside, closeGroup, cycleTab, emptyPro
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
+import { createTabExtras, TabExtrasContext, useTabExtras } from './ide/tabExtras';
+import { openSessionTerminal } from './session/terminal';
 import { EmptyGroup, type EmptyPick } from './ide/EmptyGroup';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
@@ -187,6 +189,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [tabMenu, setTabMenu] = useState<{ tab: Tab; at: { x: number; y: number } } | null>(null);
   // Its tab gone (closed, its session deleted), the menu goes, and does not come back with a new tab of the same key.
   useEffect(() => { if (tabMenu && !findTab(ws, keyOf(tabMenu.tab))) setTabMenu(null); }, [ws, tabMenu]);
+  // What a session tab's page publishes for its menu (it has no heading row): the external terminal, the Story / Objectif.
+  const [tabExtras] = useState(createTabExtras);
+  const menuExtras = useTabExtras(tabExtras, tabMenu ? keyOf(tabMenu.tab) : null);
   // Every machine's daemon follows Desktop on its own, or from Settings › About (#48); while one updates, its restart is expected and silent.
   const update = useUpdate();
   const daemonUpdates = useDaemonUpdates(fleet, machines, daemonTarget(update), update.app);
@@ -612,7 +617,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     );
   })();
   return (
-    <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}>
+    <ScreenKeysContext.Provider value={screenKeys}><TermStoreContext.Provider value={termStore}><TabExtrasContext.Provider value={tabExtras}>
       {ideShell ?? <>
       {!nav.fullscreen && <TitleBar dispatch={dispatch} sessions={sessions} waits={waits} blocked={blocked} />}
       <div className={`application ${nav.fullscreen ? 'immersive' : ''} ${filing.dragging ? 'is-dragging' : ''}`} data-readonly={localDown ? 'true' : undefined} inert={blocked}>
@@ -659,7 +664,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         const view = agent ? tabView(tab, session) : 'thread';
         // A seat stopped has only its thread (tabView says so): nothing to switch to.
         const canSwitch = hasTerminal(tab, session);
+        // Only the page's own view counts: published on Terminal, the external terminal is offered while it still shows it.
+        const external = session && menuExtras?.external && view === 'terminal'
+          ? () => { void openSessionTerminal(fleetClient, session).then(ok => { if (!ok) notify(t.session.terminal.openFailed(session.name)); }); }
+          : undefined;
         return <TabMenu at={tabMenu.at} tab={tab} name={title(tab)} terminal={view === 'terminal'} others={hit.group.tabs.length > 1}
+          {...(session && { session })} tags={menuExtras?.tags ?? null} {...(external && { onExternal: external })} onOpenSession={id => dispatch({ type: 'open', id })}
           {...(canSwitch && { onView: () => wsStore.update(w => setView(w, key, view === 'terminal' ? 'thread' : 'terminal')) })}
           onSplit={() => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; })}
           onClose={() => wsStore.close(key)} onCloseOthers={() => wsStore.closeOthers(key)} onDismiss={() => setTabMenu(null)} />;
@@ -689,7 +699,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />
       <Toast notice={notice} action={noticeAction} onAction={undo} />
-    </TermStoreContext.Provider></ScreenKeysContext.Provider>
+    </TabExtrasContext.Provider></TermStoreContext.Provider></ScreenKeysContext.Provider>
   );
 }
 

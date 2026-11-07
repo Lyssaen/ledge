@@ -85,6 +85,34 @@ async function toTerminal(user: ReturnType<typeof userEvent.setup>, name: string
 }
 
 describe('the session page in an IDE tab', () => {
+  it('lot 3 follow-up (option A): no heading row even with subagents, a relief, tags or on Terminal; the bar and the tab menu say them', async () => {
+    const T = '2026-11-06T10:00:00.000Z';
+    const { d, tree, user } = await mount({ stream: true });
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', branch: 'feat/x', helpers: [{ id: 'h1', kind: 'Explore', task: 'Lire', state: 'working' }],
+      handover: { state: 'briefing', at: T }, relieves: { id: 'local:mara', name: 'Mara', at: T } })));
+    act(() => d.thread('otto', [{ kind: 'prompt', id: 'p', at: T, turn: 1, text: '[synapse-obs] story=ST7-123 objectif=analyse\nRegarde' }]));
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
+    await waitFor(() => expect(page()!.querySelector('.ide-bar-kids')).not.toBeNull());
+    expect(page()!.querySelector('.pane-heading')).toBeNull();
+    const bar = page()!.querySelector<HTMLElement>('.ide-bar')!;
+    expect(bar.querySelector('.ide-bar-relief')).toHaveTextContent('relève : bilan demandé');
+    // On the thread, no terminal chip.
+    expect(bar.querySelector('.ide-bar-chip.tm')).toBeNull();
+    await toTerminal(user, 'Otto');
+    await waitFor(() => expect(page()!.querySelector('.ide-bar-chip.tm')).toHaveTextContent('wsl'));
+    expect(page()!.querySelector('.pane-heading')).toBeNull();
+    // The agent's screen has no footer: the tab's >_ says its state and its pane.
+    await waitFor(() => expect(page()!.querySelector('.agent-view')).not.toBeNull());
+    expect(page()!.querySelector('.terminal-footer')).toBeNull();
+    await waitFor(() => expect(within(tabOf('Otto')).getByText('>_')).toHaveAttribute('title', 'Vue terminal · attaché · tmux · ledge-otto'));
+    fireEvent.contextMenu(tabOf('Otto'));
+    const menu = await screen.findByRole('menu', { name: /Otto/ });
+    expect(within(menu).getByRole('menuitem', { name: 'Ouvrir dans un terminal externe' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: 'Relève de Mara' })).toBeInTheDocument();
+    expect([...document.querySelectorAll('.session-menu-head small')].map(x => x.textContent)).toEqual(['relève : bilan demandé', 'Story : ST7-123', 'Objectif : Analyse']);
+  });
+
   it('has no « Vue de la session » switch nor the heading\'s meta; switched off, today\'s page has the switch', async () => {
     const { tree, user } = await mount();
     await user.click(tree.getByRole('button', { name: /^Otto/ }));
