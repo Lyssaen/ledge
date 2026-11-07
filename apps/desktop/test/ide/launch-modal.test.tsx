@@ -243,4 +243,37 @@ describe('LaunchModal', () => {
     await user.click(screen.getByRole('button', { name: 'Nouveau projet' }));
     expect(p.onNewProject).toHaveBeenCalled();
   });
+  describe('the model field wears its provider\'s logo (mockup launchPage() .inp)', () => {
+    type ModelsList = Extract<ClientMessage, { type: 'models.list' }>;
+    const answer = async (f: ReturnType<typeof fakeClient>, models: unknown[]) => {
+      const ask = f.sent.filter((m): m is ModelsList => m.type === 'models.list').at(-1)!;
+      await act(async () => { f.emit({ type: 'models.listing', requestId: ask.requestId, tool: ask.tool, models } as ServerMessage); });
+    };
+    const trigger = () => document.querySelector('.launch-modal .model-trigger')!;
+
+    it('Claude: the trigger shows the Anthropic logo, not the chip; Codex: OpenAI\'s', async () => {
+      const user = userEvent.setup();
+      const f = fakeClient();
+      render(ui(props({ client: f.client })));
+      await answer(f, [{ id: 'opus', label: 'Opus', efforts: ['low', 'high'], isDefault: true }]);
+      expect(trigger().querySelector('.logo')).toHaveAttribute('title', 'Anthropic');
+      expect(trigger().querySelector('.logo svg')).toHaveAttribute('width', '14');
+      expect(trigger().querySelectorAll(':scope > svg')).toHaveLength(1); // the caret alone, no chip
+      await user.click(screen.getByRole('button', { name: /^Codex/ }));
+      await answer(f, [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', isDefault: true }]);
+      expect(trigger().querySelector('.logo')).toHaveAttribute('title', 'OpenAI');
+    });
+
+    it('every row of the list wears its model\'s provider; Cursor\'s « Par défaut » wears Cursor\'s', async () => {
+      const user = userEvent.setup();
+      const f = fakeClient();
+      render(ui(props({ client: f.client })));
+      await user.click(screen.getByRole('button', { name: /^Cursor/ }));
+      await answer(f, [{ id: 'claude-4.5-sonnet', label: 'Sonnet 4.5' }, { id: 'gpt-5', label: 'GPT-5' }, { id: 'gemini-3-pro', label: 'Gemini 3 Pro' }]);
+      expect(trigger().querySelector('.logo')).toHaveAttribute('title', 'Cursor');
+      await user.click(trigger());
+      const rows = screen.getAllByRole('option');
+      expect(rows.map(r => r.querySelector('.logo')?.getAttribute('title'))).toEqual(['Cursor', 'Anthropic', 'OpenAI', 'Cursor']);
+    });
+  });
 });

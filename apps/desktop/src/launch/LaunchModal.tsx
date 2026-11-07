@@ -166,7 +166,7 @@ export function LaunchModal(p: {
         <span className="launch-modal-lbl">{m.model}</span>
         <div className="launch-modal-model">
           {online && !unavailable && (outdated ? <small className="models-note">{t.launch.modelsOutdated}</small>
-            : <ModelPicker key={`${form.machine}|${form.tool}|${form.project}`} tool={form.tool} state={models} pick={form} remembered={remembered} onPick={pick => setForm(f => withPick(f, pick))} />)}
+            : <ModelPicker key={`${form.machine}|${form.tool}|${form.project}`} tool={form.tool} state={models} pick={form} remembered={remembered} logos onPick={pick => setForm(f => withPick(f, pick))} />)}
         </div>
 
         {form.tool === 'omp' && !unavailable && <>

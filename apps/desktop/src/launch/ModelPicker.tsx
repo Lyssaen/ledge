@@ -3,6 +3,8 @@ import type { ModelChoice } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
+import { ProviderLogo } from '../ide/ProviderLogo';
+import { modelProvider, providerOf } from '../workspace/sessionTab';
 import type { ModelPick, Tool } from './model';
 import { EffortStepper, ModelMenu, MODEL_ICONS, type MenuModel } from './ModelMenu';
 import type { ModelsState } from './useModels';
@@ -46,14 +48,17 @@ export function withEffort(models: readonly ModelChoice[], pick: ModelPick, effo
 }
 
 /** The New session form's « Model » block (#58, mockup ledge-model-picker v2): one field naming the model, which opens the
- *  searchable list, and the effort's stepper beside it where the agent has one. */
-export function ModelPicker(p: { tool: Tool; state: ModelsState; pick: ModelPick; remembered: boolean; onPick(pick: ModelPick): void }): JSX.Element {
+ *  searchable list, and the effort's stepper beside it where the agent has one. `logos` (the IDE's modal, mockup launchPage()
+ *  .inp): the field and each row wear their model's provider logo, the agent's own where the id names none, as the session bar. */
+export function ModelPicker(p: { tool: Tool; state: ModelsState; pick: ModelPick; remembered: boolean; logos?: boolean; onPick(pick: ModelPick): void }): JSX.Element {
   const { t } = useI18n();
   const tl = t.launch;
   const { models } = p.state;
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const rows = menuModels(models, p.tool, t);
+  const logo = (id: string | null) => <ProviderLogo provider={modelProvider(id ?? undefined) ?? providerOf(p.tool)} size={14} />;
+  const plain = menuModels(models, p.tool, t);
+  const rows = p.logos ? plain.map(m => ({ ...m, logo: logo(m.id) })) : plain;
   const selected = p.pick.model ?? rows[0]!.id;
   const shown = rows.find(m => m.id === selected) ?? { id: selected, label: selected ?? tl.byDefault, description: tl.exactId };
   const efforts = effortsFor(models, p.pick);
@@ -66,7 +71,7 @@ export function ModelPicker(p: { tool: Tool; state: ModelsState; pick: ModelPick
       <div className="model-row">
         <button ref={trigger} type="button" className={cls('model-trigger', open && 'open')} aria-haspopup="dialog" aria-expanded={open}
           aria-label={`${legend} : ${shown.label}`} onClick={() => setOpen(o => !o)}>
-          <Icon d={MODEL_ICONS.chip} size={15} />
+          {p.logos ? logo(shown.id) : <Icon d={MODEL_ICONS.chip} size={15} />}
           <strong>{shown.label}</strong>
           {shown.isDefault && <span className="model-badge">{tl.defaultBadge}</span>}
           <span className="model-desc">{shown.description}</span>

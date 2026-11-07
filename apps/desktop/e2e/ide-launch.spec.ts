@@ -15,6 +15,8 @@ test.beforeEach(async ({ page }) => {
 type Launch = Extract<ClientMessage, { type: 'session.launch' }>;
 const launchesOf = (received: ClientMessage[]) => received.filter((m): m is Launch => m.type === 'session.launch');
 const box = async (l: Locator) => (await l.boundingBox())!;
+/** A clip around a box, with room under it for a list it opens. */
+const d0 = (b: { x: number; y: number; width: number; height: number }) => ({ x: b.x, y: b.y, width: b.width, height: b.height + 160 });
 const tabs = (page: Page) => page.locator('.ide-dockview .dv-tab');
 const at = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
 /** Claude's account over the 80 % threshold (amber), Codex under it; Cursor and OMP not read. */
@@ -23,18 +25,18 @@ const harnesses: HarnessUsage[] = [
   { harness: 'codex', account: null, status: 'ok', readAt: at(-2), windows: [{ kind: 'five_hour', pct: 18, resetsAt: at(170) }] }
 ];
 
-async function boot(page: Page, o: { lang?: 'fr' | 'en'; theme?: 'dark' | 'light'; projects?: Projects } = {}) {
+async function boot(page: Page, o: { lang?: 'fr' | 'en'; theme?: 'dark' | 'light'; projects?: Projects; models?: NonNullable<Parameters<typeof fakeDaemon>[2]>['models'] } = {}) {
   await page.addInitScript(([l, t]) => {
     try { if (l) localStorage.setItem('desktop.lang', l); if (t) localStorage.setItem('desktop.theme', t); } catch { /* ignore */ }
   }, [o.lang ?? '', o.theme ?? '']);
-  const daemon = await fakeDaemon(page, eight, { projects: o.projects ?? twoProjects, usage: { harnesses, alerts: [], prefs: { alert: 0.8 } } });
+  const daemon = await fakeDaemon(page, eight, { projects: o.projects ?? twoProjects, usage: { harnesses, alerts: [], prefs: { alert: 0.8 } }, ...(o.models ? { models: o.models } : {}) });
   await page.goto('/');
   await expect(page.locator('.ide')).toBeVisible();
   return daemon;
 }
 
 for (const theme of ['dark', 'light'] as const) test(`a group's + opens the modal: the mockup's grid, the tiles in a row, the 5 h limits, the buttons under the fields; ${theme}`, async ({ page }, info) => {
-  await boot(page, { lang: 'fr', theme });
+  await boot(page, { lang: 'fr', theme, models: { claude: [{ id: 'claude-opus-5-5', label: 'Opus 5.5', description: 'contexte 1 M', efforts: ['low', 'medium', 'high', 'max'], defaultEffort: 'high', isDefault: true }] } });
   await page.locator('.ide-dock').getByRole('button', { name: 'Nouvelle session (N)' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
   const form = dialog.locator('.launch-modal');
@@ -65,6 +67,13 @@ for (const theme of ['dark', 'light'] as const) test(`a group's + opens the moda
   expect(await border(form.locator('.model-trigger'))).toBe('1px');
   expect(Math.round((await box(form.locator('.launch-modal-inp'))).height)).toBe(30);
   expect(Math.round((await box(form.locator('.model-trigger'))).height)).toBe(30);
+  // The model wears its provider's logo (the mockup's logo(L.prov)); the effort beside it is exactly as tall, its top aligned.
+  await expect(form.locator('.model-trigger .logo')).toHaveAttribute('title', 'Anthropic');
+  const trig = await box(form.locator('.model-trigger')), effort = await box(form.locator('.effort-stepper'));
+  expect(Math.abs(effort.height - trig.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(effort.y - trig.y)).toBeLessThanOrEqual(1);
+  const look = (l: Locator) => l.evaluate(e => { const c = getComputedStyle(e); return [c.borderTopLeftRadius, c.borderTopColor, c.backgroundColor]; });
+  expect(await look(form.locator('.effort-stepper'))).toEqual(await look(form.locator('.model-trigger')));
   // The buttons: at the left of the fields' column, Lancer first.
   const go = form.locator('.launch-modal-go');
   expect(Math.round((await box(go)).x)).toBe(Math.round(fieldsX));
@@ -75,6 +84,12 @@ for (const theme of ['dark', 'light'] as const) test(`a group's + opens the moda
   await expect(dialog).toBeVisible();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
   await dialog.screenshot({ path: info.outputPath(`ide-launch-${theme}.png`), animations: 'disabled' });
+  // The model list: each row wears its provider's logo.
+  await form.locator('.model-trigger').click();
+  await expect(page.locator('.model-menu .model-option .logo')).toHaveCount(1);
+  await page.screenshot({ path: info.outputPath(`ide-launch-models-${theme}.png`), clip: { ...d0(await box(dialog)) }, animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.model-menu')).toBeHidden();
   // The Project menu opens whole, not cut by the modal.
   await form.locator('.launch-modal-inp').click();
   const rows = page.locator('.launch-modal-rows');
