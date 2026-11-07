@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type { UsageHarness, UsageWindow } from '@ledge/protocol';
-import { harnessShell } from '@ledge/ui/bots/Bot';
+import { HARNESS_PROVIDER, PROVIDER_MARKS } from '@ledge/ui/logos/providers';
+import { openUrl } from '../tauri/bridge';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
-import { resetLong, resetShort, shownWindows, span, usageTone, type UsageGroup } from './model';
+import { isUnread, resetIsDate, resetLong, resetShort, shownWindows, span, usageTone, type UsageGroup } from './model';
 
-/** A harness's logo: its Ledge silhouette (issue #61), filled in the harness's colour, without the eyes (M2). */
+/** A harness's logo: its provider's own mark (Claude's spark in its orange, OpenAI's, Cursor's cube in the text colour). */
 export function HarnessLogo({ harness, size = 15 }: { harness: UsageHarness; size?: number }): JSX.Element {
-  const { viewBox, d } = harnessShell(harness);
-  const [, , w, h] = viewBox.split(' ').map(Number) as [number, number, number, number];
+  const mark = PROVIDER_MARKS[HARNESS_PROVIDER[harness]];
   return (
-    <svg className={`harness-logo harness-${harness}`} width={size} height={Math.round((size * h) / w)} viewBox={viewBox} aria-hidden="true">
-      <path d={d} fill="currentColor" />
+    <svg className="harness-logo" width={size} height={size} viewBox="0 0 24 24" fill={mark.fill} fillRule="evenodd" aria-hidden="true">
+      <path d={mark.d} fill={mark.fill} />
     </svg>
   );
 }
+
+/** What a hot window is called in the chip: a model's name, or for a Cursor pool its short name. */
+const hotLabel = (w: UsageWindow, poolShort: Record<string, string>) => (w.kind === 'pool' ? (w.pool && poolShort[w.pool]) || '' : w.model ?? '');
 
 const Gauge = ({ pct, tone }: { pct: number; tone: string }) => (
   <span className={cls('ugauge', tone)}><i style={{ width: `${Math.min(100, pct)}%` }} /></span>
@@ -71,6 +74,9 @@ export function UsageFooter(p: UsageFooterProps): JSX.Element | null {
   const group = (g: UsageGroup) => {
     const name = u.harness[g.harness] ?? g.harness;
     const who = <><HarnessLogo harness={g.harness} />{multi(g) && <span className="uhm">{where(g)}</span>}</>;
+    if (g.status === 'loading' && g.harness === 'cursor') {
+      return <span className="ugroup" title={name}>{who}<span className="umini"><span className="ulb">{u.month}</span><span className="uskel" /></span></span>;
+    }
     if (g.status === 'loading') {
       return (
         <span className="ugroup" title={name}>{who}
@@ -80,18 +86,21 @@ export function UsageFooter(p: UsageFooterProps): JSX.Element | null {
       );
     }
     if (g.status === 'expired') {
-      return <span className="ugroup" title={name}>{who}<span className="umsg"><span className="wide">{u.expired}</span><span className="narrow">{u.expiredShort}</span></span></span>;
+      return <span className="ugroup" title={name}>{who}<span className="umsg"><span className="wide">{u.expired(name)}</span><span className="narrow">{u.expiredShort(name)}</span></span></span>;
     }
     const s = shownWindows(g, p.threshold);
+    const total = s.month ?? (g.harness === 'cursor' ? s.week : undefined);
     const dim = g.status === 'stale' || g.status === 'unreachable';
     const age = g.status === 'unreachable' ? u.unreachable : g.status === 'stale' && g.readAt ? u.ago(span(p.now - Date.parse(g.readAt), lang)) : null;
     return (
       <button type="button" className={cls('ugroup', dim && 'dim', open === g.key && 'open', two && 'two')} title={name} aria-label={u.open(name)}
         aria-expanded={open === g.key} onClick={() => setOpen(o => (o === g.key ? null : g.key))}>
         {who}
-        {s.five && <Mini label={u.five} w={s.five} threshold={p.threshold} reset={!(two && multi(g))} now={p.now} />}
-        {s.week && <Mini label={two ? u.weekShort : u.week} w={s.week} threshold={p.threshold} reset={!two} now={p.now} />}
-        {s.hot.map(w => <Mini key={w.model} label={w.model ?? ''} w={w} threshold={p.threshold} reset={false} now={p.now} />)}
+        {g.harness === 'cursor' && isUnread(g, p.now) && <span className="unr">{u.unread}</span>}
+        {g.harness === 'cursor' && total && <Mini label={s.month ? u.month : u.week} w={total} threshold={p.threshold} reset={!two} now={p.now} />}
+        {g.harness !== 'cursor' && s.five && <Mini label={u.five} w={s.five} threshold={p.threshold} reset={!(two && multi(g))} now={p.now} />}
+        {g.harness !== 'cursor' && s.week && <Mini label={two ? u.weekShort : u.week} w={s.week} threshold={p.threshold} reset={!two} now={p.now} />}
+        {s.hot.map(w => <Mini key={`${w.kind}:${w.pool ?? w.model}`} label={hotLabel(w, u.poolShort)} w={w} threshold={p.threshold} reset={false} now={p.now} />)}
         {age && <span className="uage">{age}</span>}
       </button>
     );
@@ -106,6 +115,9 @@ export function UsageFooter(p: UsageFooterProps): JSX.Element | null {
   );
 }
 
+/** The API each harness's limits are read from, named when it does not answer. */
+const HOSTS: Partial<Record<UsageHarness, string>> = { claude: 'api.anthropic.com', cursor: 'api2.cursor.sh' };
+
 /** The detail of one account's limits: the 5 hours, the week, then each model (no credits, no plan: M4). */
 function UsageDetail({ g, threshold, where, now, onSettings }: { g: UsageGroup; threshold: number; where: string; now: number; onSettings(): void }) {
   const { t, lang } = useI18n();
@@ -114,13 +126,24 @@ function UsageDetail({ g, threshold, where, now, onSettings }: { g: UsageGroup; 
   const age = g.readAt ? span(now - Date.parse(g.readAt), lang) : null;
   // Never read: nothing about when (a first failed read says only that it is unreachable).
   const read = !age ? (g.status === 'unreachable' ? null : u.neverRead) : g.status === 'stale' ? u.lastRead(age) : u.read(age);
-  const sub = [u.signedIn(where), ...(g.status === 'unreachable' ? [g.harness === 'claude' ? u.unreachHost('api.anthropic.com') : u.unreachable] : []), ...(read ? [read] : [])].join(' · ');
+  const sub = [u.signedIn(where), ...(g.status === 'unreachable' ? [HOSTS[g.harness] ? u.unreachHost(HOSTS[g.harness]!) : u.unreachable] : []), ...(read ? [read] : [])].join(' · ');
   const when = (w: UsageWindow, withIn: boolean) => {
     if (!w.resetsAt) return null;
+    const date = resetIsDate(w.resetsAt, now);
     const at = resetLong(w.resetsAt, now, lang);
-    if (w.pct >= 100) return u.resumes(at);
-    return withIn ? u.resetIn(at, span(Date.parse(w.resetsAt) - now, lang)) : u.resetAt(at);
+    if (w.pct >= 100) return u.resumes(at, date);
+    return withIn ? u.resetIn(at, span(Date.parse(w.resetsAt) - now, lang), date) : u.resetAt(at, date);
   };
+  // A Cursor pool: what it holds, then when it starts again (short), or that it is reached.
+  const poolWhen = (w: UsageWindow) => {
+    const hint = (w.pool && u.poolHint[w.pool]) || '';
+    if (!w.resetsAt) return hint || null;
+    const date = resetIsDate(w.resetsAt, now);
+    const at = resetShort(w.resetsAt, now, lang);
+    return [hint, w.pct >= 100 ? u.resumesOn(at, date) : u.resetAt(at, date)].filter(Boolean).join(' · ');
+  };
+  const cursor = g.harness === 'cursor';
+  const unread = cursor && isUnread(g, now);
   const row = (label: string, small: string | null, w: UsageWindow) => {
     const tone = usageTone(w.pct, threshold);
     return (
@@ -135,11 +158,21 @@ function UsageDetail({ g, threshold, where, now, onSettings }: { g: UsageGroup; 
     <div className="usage-pop" role="dialog" aria-label={u.title(u.harness[g.harness] ?? g.harness)}>
       <h5>{u.title(u.harness[g.harness] ?? g.harness)}</h5>
       <div className="usub">{sub}</div>
+      {unread && <div className="umsg2">{u.unreadMsg}</div>}
       {s.five && row(u.session5, when(s.five, true), s.five)}
-      {s.week && row(u.weekAll, when(s.week, false), s.week)}
+      {s.month && row(u.monthTotal, when(s.month, true), s.month)}
+      {s.week && (cursor ? row(u.weekCursor, when(s.week, true), s.week) : row(u.weekAll, when(s.week, false), s.week))}
       {s.models.length > 0 && <div className="usep-row">{u.perModel}</div>}
       {s.models.map(w => row(u.weekOf(w.model ?? ''), when(w, false), w))}
-      <div className="ufoot"><span>{u.alertAt(Math.round(threshold * 100))}</span><button type="button" className="ulink" onClick={onSettings}>{u.settings}</button></div>
+      {s.pools.length > 0 && <div className="usep-row">{u.perPool}</div>}
+      {s.pools.map(w => row((w.pool && u.pool[w.pool]) || '', poolWhen(w), w))}
+      <div className="ufoot">
+        <span>{unread ? '' : u.alertAt(Math.round(threshold * 100))}</span>
+        <span className="ulinks">
+          {unread && <button type="button" className="ulink" onClick={() => openUrl('https://cursor.com/dashboard?tab=usage')}>{u.dashboard}</button>}
+          <button type="button" className="ulink" onClick={onSettings}>{u.settings}</button>
+        </span>
+      </div>
     </div>
   );
 }
