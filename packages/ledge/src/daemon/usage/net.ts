@@ -71,7 +71,7 @@ const exchange = (method: 'GET' | 'POST', url: string, headers: Record<string, s
   // secured would leave it waiting for a `secureConnect` that has passed.
   const send = (tunnelled?: Socket) => {
     const req = httpsRequest({
-      host: target.hostname, port, path: `${target.pathname}${target.search}`, method, headers: body === undefined ? headers : { ...headers, 'Content-Length': String(Buffer.byteLength(body)) },
+      host: target.hostname, port, path: `${target.pathname}${target.search}`, method, headers: body === undefined ? headers : { ...Object.fromEntries(Object.entries(headers).filter(([k]) => k.toLowerCase() !== 'content-length')), 'Content-Length': String(Buffer.byteLength(body)) },
       // Node takes `createConnection` only without an agent (`agent: false` makes a fresh one, which would connect directly).
       ...(ca ? { ca } : {}), ...(tunnelled ? { createConnection: () => tlsConnect({ socket: tunnelled, servername: target.hostname, ...(ca ? { ca } : {}) }) } : { agent: false })
     }, res => {

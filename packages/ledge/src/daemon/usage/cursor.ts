@@ -48,7 +48,7 @@ export function parseCursorUsage(body: unknown): UsageWindow[] | null {
   if (!plan || total === undefined) return [];
   const start = msOf(o.billingCycleStart), end = msOf(o.billingCycleEnd);
   const resetsAt = end === undefined ? null : new Date(end).toISOString();
-  const week = start !== undefined && end !== undefined && end - start < 10 * 86_400_000;
+  const week = start !== undefined && end !== undefined && end > start && end - start < 10 * 86_400_000;
   const windows: UsageWindow[] = [{ kind: week ? 'seven_day' : 'month', pct: total, resetsAt }];
   const auto = pctOf(plan.autoPercentUsed), api = pctOf(plan.apiPercentUsed);
   if (auto !== undefined) windows.push({ kind: 'pool', pool: 'cursor', pct: auto, resetsAt });

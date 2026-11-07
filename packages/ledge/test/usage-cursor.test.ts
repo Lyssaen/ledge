@@ -64,6 +64,10 @@ describe('parseCursorUsage', () => {
     expect(parseCursorUsage(week)).toEqual([{ kind: 'seven_day', pct: 42, resetsAt: '2026-11-10T00:00:00.000Z' }]);
     expect(parseCursorUsage({ ...week, billingCycleStart: undefined })).toEqual([{ kind: 'month', pct: 42, resetsAt: '2026-11-10T00:00:00.000Z' }]);
   });
+  it('reads a cycle that ends before it starts as a month, not a week', () => {
+    const odd = { billingCycleStart: ms('2026-11-10T00:00:00.000Z'), billingCycleEnd: ms('2026-11-03T00:00:00.000Z'), planUsage: { totalPercentUsed: 10 } };
+    expect(parseCursorUsage(odd)).toEqual([{ kind: 'month', pct: 10, resetsAt: '2026-11-03T00:00:00.000Z' }]);
+  });
   it('accepts numeric dates; an unreadable end is a null resetsAt', () => {
     expect(parseCursorUsage({ ...study, billingCycleEnd: Date.parse(end), billingCycleStart: Date.parse('2026-11-01T12:43:00.000Z') })?.[0]).toEqual({ kind: 'month', pct: 12, resetsAt: end });
     expect(parseCursorUsage({ ...study, billingCycleEnd: 'soon' })?.[0]).toEqual({ kind: 'month', pct: 12, resetsAt: null });

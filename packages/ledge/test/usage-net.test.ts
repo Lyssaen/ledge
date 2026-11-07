@@ -24,7 +24,7 @@ beforeAll(async () => {
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem'), '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], { stdio: 'ignore' });
   tls = createHttpsServer({ key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(join(dir, 'cert.pem')) }, (req, res) => {
     res.setHeader('content-type', 'application/json');
-        const chunks: Buffer[] = [];
+    const chunks: Buffer[] = [];
     req.on('data', c => chunks.push(c));
     req.on('end', () => res.end(JSON.stringify({ path: req.url, auth: req.headers.authorization ?? null, ua: req.headers['user-agent'] ?? null, method: req.method, body: Buffer.concat(chunks).toString('utf8'), length: req.headers['content-length'] ?? null, ct: req.headers['content-type'] ?? null })));
   });
@@ -76,6 +76,12 @@ describe.skipIf(!openssl)('httpsPost', () => {
     expect(r.error).toBeUndefined();
     expect(r.status).toBe(200);
     expect(JSON.parse(r.body)).toMatchObject({ path: '/rpc', method: 'POST', body: '{}', length: '2', auth: 'Bearer t', ct: 'application/json' });
+  });
+
+  it('computes its own Content-Length, whatever case the caller gave one in', async () => {
+    const r = await httpsPost(`https://localhost:${tlsPort}/rpc`, { ...headers, 'content-length': '999' }, '{}', { NODE_EXTRA_CA_CERTS: join(dir, 'cert.pem') }, 5000);
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.body)).toMatchObject({ body: '{}', length: '2' });
   });
 
   it('goes through the proxy\'s CONNECT tunnel as the GET does', async () => {
