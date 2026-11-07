@@ -291,9 +291,14 @@ export function createUsage(deps: UsageDeps): UsageService {
     const seenBefore = Object.keys(kept.seen).length;
     for (const id of Object.keys(kept.seen)) if (resetOfId(id) <= now()) delete kept.seen[id];
     // An id without a reset never ends by itself: it is dropped once its alert is no longer open.
-    const open = openIds(harnesses());
-    kept.acks = kept.acks.filter(id => resetOfId(id) !== Infinity || open.has(id));
-    for (const id of Object.keys(kept.seen)) if (resetOfId(id) === Infinity && !open.has(id)) delete kept.seen[id];
+    // Only judged while its harness is read (`ok`): an expired, loading or hidden harness shows no windows, so nothing is open
+    // then, and the ack must outlive it (a renewed token must not bring a put-away alert back).
+    const hs = harnesses();
+    const open = openIds(hs);
+    const judged = new Set(hs.filter(h => h.status === 'ok').map(h => h.harness));
+    const lapsed = (id: string): boolean => resetOfId(id) === Infinity && judged.has(id.split('|')[0] as never) && !open.has(id);
+    kept.acks = kept.acks.filter(id => !lapsed(id));
+    for (const id of Object.keys(kept.seen)) if (lapsed(id)) delete kept.seen[id];
     if (kept.acks.length !== before || Object.keys(kept.seen).length !== seenBefore) save();
     emit();
   }

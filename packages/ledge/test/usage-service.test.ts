@@ -512,6 +512,27 @@ describe('the usage service: Cursor Agent', () => {
     expect(m.svc.state().alerts).toHaveLength(1); // a new alert, not the one put away
   });
 
+  it('an acked alert without a reset survives an expired session and comes back silent after the token is renewed', async () => {
+    const noEnd = { planUsage: { totalPercentUsed: 90 } };
+    let auth = JSON.stringify({ accessToken: jwt({ sub: 'A', exp: Math.floor(T0 / 1000) + 99999 }) });
+    let t = T0, status = 200;
+    const file = join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json');
+    const svc = createUsage({ home: '/h', env: async () => ({}), file, now: () => t,
+      read: async p => { if (p.endsWith('auth.json')) return auth; throw new Error('ENOENT'); },
+      post: async () => ({ status, body: status === 200 ? JSON.stringify(noEnd) : '', headers: {} }) });
+    await svc.tick();
+    const id = svc.state().alerts[0]!.id;
+    expect(svc.ack(id)).toBe(true);
+    status = 401; t += CURSOR_READ_EVERY_MS; await svc.tick();
+    expect(svc.state().harnesses[0]).toMatchObject({ status: 'expired', windows: [] });
+    expect(JSON.parse(readFileSync(file, 'utf8')).acks).toEqual([id]);
+    status = 200; auth = JSON.stringify({ accessToken: jwt({ sub: 'A', exp: Math.floor(T0 / 1000) + 199999 }) });
+    t += 1000; await svc.tick();
+    t += CURSOR_READ_EVERY_MS; await svc.tick();
+    expect(svc.state().harnesses[0]).toMatchObject({ status: 'ok' });
+    expect(svc.state().alerts).toEqual([]);
+  });
+
   it('another account\'s expired token drops the previous account\'s windows', async () => {
     let auth = JSON.stringify({ accessToken: jwt({ sub: 'A', exp: Math.floor(T0 / 1000) + 99999 }) });
     const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => T0,

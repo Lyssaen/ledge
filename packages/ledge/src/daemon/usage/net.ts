@@ -70,20 +70,23 @@ const exchange = (method: 'GET' | 'POST', url: string, headers: Record<string, s
   // Through the proxy, the request's TLS is opened on the tunnel's socket by the request itself: a socket handed over already
   // secured would leave it waiting for a `secureConnect` that has passed.
   const send = (tunnelled?: Socket) => {
-    const req = httpsRequest({
-      host: target.hostname, port, path: `${target.pathname}${target.search}`, method, headers: body === undefined ? headers : { ...Object.fromEntries(Object.entries(headers).filter(([k]) => k.toLowerCase() !== 'content-length')), 'Content-Length': String(Buffer.byteLength(body)) },
-      // Node takes `createConnection` only without an agent (`agent: false` makes a fresh one, which would connect directly).
-      ...(ca ? { ca } : {}), ...(tunnelled ? { createConnection: () => tlsConnect({ socket: tunnelled, servername: target.hostname, ...(ca ? { ca } : {}) }) } : { agent: false })
-    }, res => {
-      const chunks: Buffer[] = [];
-      let size = 0;
-      res.on('data', (c: Buffer) => { size += c.length; if (size <= 1_000_000) chunks.push(c); });
-      res.on('end', () => finish({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8'), headers: res.headers }));
-      res.on('error', e => fail(e.message));
-    });
-    open.push(req);
-    req.on('error', e => fail(e.message));
-    if (body === undefined) req.end(); else req.end(body);
+    // Through a proxy this runs in the tunnel's 'connect' listener: a throw (a header value Node refuses) must not escape it.
+    try {
+      const req = httpsRequest({
+        host: target.hostname, port, path: `${target.pathname}${target.search}`, method, headers: body === undefined ? headers : { ...Object.fromEntries(Object.entries(headers).filter(([k]) => k.toLowerCase() !== 'content-length')), 'Content-Length': String(Buffer.byteLength(body)) },
+        // Node takes `createConnection` only without an agent (`agent: false` makes a fresh one, which would connect directly).
+        ...(ca ? { ca } : {}), ...(tunnelled ? { createConnection: () => tlsConnect({ socket: tunnelled, servername: target.hostname, ...(ca ? { ca } : {}) }) } : { agent: false })
+      }, res => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on('data', (c: Buffer) => { size += c.length; if (size <= 1_000_000) chunks.push(c); });
+        res.on('end', () => finish({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8'), headers: res.headers }));
+        res.on('error', e => fail(e.message));
+      });
+      open.push(req);
+      req.on('error', e => fail(e.message));
+      if (body === undefined) req.end(); else req.end(body);
+    } catch (e) { fail((e as Error).message); }
   };
   const proxy = proxyFor(target, env);
   if (!proxy) { send(); return; }

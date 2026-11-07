@@ -69,6 +69,18 @@ describe.skipIf(!openssl)('httpsGet', () => {
   });
 });
 
+describe.skipIf(!openssl)('a header the request refuses', () => {
+  it('through the proxy it is a failed read that says why, never a throw out of the tunnel', async () => {
+    const env = { https_proxy: `http://127.0.0.1:${proxyPort}`, NODE_EXTRA_CA_CERTS: join(dir, 'cert.pem') };
+    const r = await httpsPost(`https://localhost:${tlsPort}/rpc`, { Authorization: 'Bearer a\nb' }, '{}', env, 5000);
+    expect(r.status).toBe(0);
+    expect(r.error).toBeTruthy();
+    const g = await httpsGet(`https://localhost:${tlsPort}/rpc`, { Authorization: 'Bearer a\nb' }, env, 5000);
+    expect(g.status).toBe(0);
+    expect(g.error).toBeTruthy();
+  });
+});
+
 describe.skipIf(!openssl)('httpsPost', () => {
   const headers = { Authorization: 'Bearer t', 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' };
   it('sends the method, the body and its length, and the headers, directly', async () => {
