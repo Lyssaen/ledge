@@ -71,7 +71,9 @@ for (const theme of ['dark', 'light'] as const) test(`a group's + opens the moda
   await expect(go.getByRole('button').first()).toHaveText(/^Lancer/);
   // Nothing wider than the form.
   expect(await form.evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
-  await page.waitForTimeout(200);
+  // The capture waits for what it shows: the dialog laid out and its fonts loaded.
+  await expect(dialog).toBeVisible();
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
   await dialog.screenshot({ path: info.outputPath(`ide-launch-${theme}.png`), animations: 'disabled' });
   // The Project menu opens whole, not cut by the modal.
   await form.locator('.launch-modal-inp').click();
@@ -127,9 +129,9 @@ test('a message, Ctrl+Enter: one launch, the modal closes, the new session\'s ta
 test('N opens the modal; Escape closes it and gives the focus back', async ({ page }) => {
   await boot(page);
   const plus = page.locator('.ide-dock').getByRole('button', { name: 'New session (N)' }).first();
-  // The right panel's « Ask Ledge » field takes the focus once loaded (N is then a letter in it): the focus goes to the Atelier tab first.
-  await expect(page.getByRole('textbox', { name: 'Ask Ledge' })).toBeFocused();
-  await tabs(page).first().click();
+  // The right panel's « Ask Ledge » field does not take the focus by itself: N, straight after the IDE shows, is the shortcut.
+  await expect(page.getByRole('textbox', { name: 'Ask Ledge' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Ask Ledge' })).not.toBeFocused();
   await page.keyboard.press('n');
   const dialog = page.getByRole('dialog', { name: 'New session' });
   await expect(dialog).toBeVisible();

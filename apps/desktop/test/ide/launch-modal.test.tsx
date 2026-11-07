@@ -7,11 +7,12 @@ import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { LangProvider } from '../../src/i18n/lang';
 import { LaunchModal } from '../../src/launch/LaunchModal';
 import { LaunchModalPlace, loadComposer } from '../../src/launch/lazy';
+import { forgetModels } from '../../src/launch/useModels';
 import type { UsageGroup } from '../../src/usage/model';
 import { machine } from '../fleet-helpers';
 import { LAUNCH_PROJECTS } from '../helpers';
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => { localStorage.clear(); forgetModels(); });
 
 function fakeClient() {
   const sent: ClientMessage[] = [];
@@ -61,9 +62,56 @@ describe('LaunchModal', () => {
     expect(screen.getByRole('button', { name: /^Cursor/ })).toHaveTextContent('Cursor');
   });
 
-  it('under the threshold the percent is not amber', () => {
-    render(ui(props({ usage: { groups, threshold: 0.9 } })));
+  it('under the threshold the percent has no tone; at 100 % it is red, as in the usage footer', () => {
+    const view = render(ui(props({ usage: { groups, threshold: 0.9 } })));
     expect(within(screen.getByRole('button', { name: /^Claude Code/ })).getByText('84 %')).not.toHaveClass('amber');
+    const full: UsageGroup[] = [{ ...groups[0]!, windows: [{ kind: 'five_hour', pct: 100, resetsAt: null }] }];
+    view.rerender(ui(props({ usage: { groups: full, threshold: 0.8 } })));
+    const claude = screen.getByRole('button', { name: /^Claude Code/ });
+    expect(claude).toHaveTextContent(/Limite 5 h 100 %$/);
+    expect(within(claude).getByText('100 %')).toHaveClass('red');
+    expect(within(claude).getByText('100 %')).not.toHaveClass('amber');
+  });
+
+  it('the English line puts the percent where its sentence says, bold', () => {
+    render(<LangProvider lang="en"><LaunchModal {...props()} /></LangProvider>);
+    const claude = within(screen.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Claude Code/ });
+    expect(claude).toHaveTextContent(/5 h limit 84 % · resets \S/);
+    expect(within(claude).getByText('84 %').tagName).toBe('B');
+  });
+
+  it('a machine no account lists: « Limite non lue », not another machine\'s limit', async () => {
+    const user = userEvent.setup();
+    render(ui(props({ machines: [machine('local'), machine('nas')] })));
+    await user.click(projectButton());
+    await user.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /\/srv\/ledge/ }));
+    expect(screen.getByRole('button', { name: /^Claude Code/ })).toHaveTextContent('Limite non lue');
+  });
+
+  it('« Lancer » looks disabled while a field is missing (the empty message at opening), then not', async () => {
+    const user = userEvent.setup();
+    render(ui(props()));
+    const go = screen.getByRole('button', { name: /Lancer/ });
+    expect(go).toHaveAttribute('aria-disabled', 'true');
+    await user.keyboard('Go');
+    expect(go).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  it('OMP unavailable on the machine blocks sending: the reason shows, Ctrl+Entrée sends nothing', async () => {
+    const user = userEvent.setup();
+    const { client, sent, emit } = fakeClient();
+    const p = props({ client });
+    render(ui(p));
+    await user.click(screen.getByRole('button', { name: /^OMP/ }));
+    const ask = sent.filter((m): m is Extract<ClientMessage, { type: 'models.list' }> => m.type === 'models.list').at(-1)!;
+    expect(ask).toMatchObject({ tool: 'omp', machineId: 'local' });
+    await act(async () => { emit({ type: 'models.listing', requestId: ask.requestId, tool: ask.tool, models: [], error: 'not installed' } as ServerMessage); });
+    expect(screen.getByRole('alert')).toHaveTextContent('OMP ne peut pas être lancé sur cette machine (not installed)');
+    expect(screen.getByRole('button', { name: /Lancer/ })).toHaveAttribute('aria-disabled', 'true');
+    await user.click(screen.getByRole('textbox', { name: 'Premier message' }));
+    await user.keyboard('Go' + ctrlEnter);
+    expect(p.onLaunch).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /^OMP/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('« Ouvrir » starts from `where`, its choice changes the help line; « Nouvelle fenêtre » is not offered', async () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -107,6 +107,50 @@ describe('the IDE’s New session', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(dialog()).toBeNull());
     expect(launches(d)).toHaveLength(0);
+  });
+
+  it('the right panel\'s chat field does not take the focus by itself, at start or when the IDE is turned on: N opens the modal', async () => {
+    const { user } = await mount({ ide: false, layout: open(empty(), { kind: 'session', ref: 'local:otto' }) });
+    // The current interface, the machine online: turning the IDE on mounts its right panel with a live field.
+    act(() => saveIdeEnabled(true));
+    const chat = await screen.findByRole('complementary', { name: 'Chat Ledge' });
+    const field = await within(chat).findByRole('textbox');
+    await waitFor(() => expect(field).toBeEnabled());
+    await waitFor(() => expect(groups()).toHaveLength(1));
+    expect(chat.contains(document.activeElement)).toBe(false);
+    await user.keyboard('n');
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+    expect(field).toHaveValue('');
+  });
+
+  it('at start, the IDE on: the chat field is not focused, N opens the modal', async () => {
+    const { user } = await mount({ layout: open(empty(), { kind: 'session', ref: 'local:otto' }) });
+    const chat = await screen.findByRole('complementary', { name: 'Chat Ledge' });
+    const field = await within(chat).findByRole('textbox');
+    await waitFor(() => expect(field).toBeEnabled());
+    expect(chat.contains(document.activeElement)).toBe(false);
+    await user.keyboard('n');
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+    expect(field).toHaveValue('');
+  });
+
+  it('another dialog stays open when the front tab changes under it; Enter on a session closes it and opens that tab', async () => {
+    const { d, user } = await mount({ layout: twoGroups() });
+    d.upsert(fakeSession('mila', { name: 'Mila', cwd: '/w/ledge', state: 'working' })); d.thread('mila', []);
+    await waitFor(() => expect(groups()).toHaveLength(2));
+    await waitFor(() => expect(groups()[0]).toHaveClass('dv-active-group'));
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.keyboard('{Control>}k{/Control}');
+    const palette = await screen.findByRole('dialog', { name: 'Aller à une session' });
+    // Otto, the front tab, goes: its tab closes and Nova's group comes to the front.
+    d.remove('otto');
+    await waitFor(() => expect(allTabs()).not.toContain('Otto'));
+    await waitFor(() => expect(document.querySelector('.ide-dock .dv-active-group [role="tab"].dv-active-tab')).toHaveAttribute('aria-label', 'Nova'));
+    expect(screen.getByRole('dialog', { name: 'Aller à une session' })).toBe(palette);
+    await user.keyboard('Mila');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Aller à une session' })).toBeNull());
+    await waitFor(() => expect(allTabs()).toContain('Mila'));
   });
 
   it('switch off: N on the overview still opens the old form (« Consigne », no « Premier message »)', async () => {
