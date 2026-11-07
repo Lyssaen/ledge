@@ -321,3 +321,10 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .note-flag strong{color:var(--warning)}
 .note-flag>span{flex:1;min-width:0;overflow-wrap:anywhere}
 .note-text{grid-column:1/-1;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--well);max-height:420px;overflow:auto;font-size:13px}
+
+/* A stepper (mockup .step): « − N + » in a bordered pill. */
+.set-step-line{display:inline-flex;align-items:center;gap:10px;font-size:12px;color:var(--muted-foreground)}
+.set-step{display:inline-flex;align-items:center;border:1px solid var(--input);border-radius:6px;height:24px}
+.set-step button{width:24px;height:22px;display:grid;place-items:center;color:var(--muted-foreground);cursor:pointer}
+.set-step button:disabled{opacity:.4;cursor:default}
+.set-step output{min-width:22px;text-align:center;font-family:'Geist Mono',monospace;font-size:12px;color:var(--foreground);border-left:1px solid var(--input);border-right:1px solid var(--input);line-height:22px}

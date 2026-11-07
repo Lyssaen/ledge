@@ -4,6 +4,7 @@ import type { TermTheme } from './theme';
 import { reconnectDelay, type AgentMode } from './mode';
 import type { AgentRoute, AgentStream, ShellStream } from './stream';
 import type { ShellKind } from './shells';
+import { WEBGL_DEFAULT, webglPick } from './webgl';
 
 /** A shell of the right panel (Fil | Terminal v3): the agent's screen is no tab, it is the session's Terminal view. */
 export type Tab = { kind: 'shell'; id: string; n: number; dir: string; remote: boolean; status: 'idle' | 'running' | 'ended' | 'unavailable'; end?: { code: number | null; lost: boolean } };
@@ -65,6 +66,11 @@ export class TermStore {
   private readonly frees = new Map<string, { shell: FreeShell; run: Run | null }>();
   private freeNext = 1;
   private readonly listeners = new Set<() => void>();
+  /** The surfaces a view shows, the latest last: the WebGL budget goes to the last `webglMax` of them. */
+  private shownSurfaces: string[] = [];
+  /** Shown surfaces whose WebGL context was lost: they stay on the DOM renderer until shown again. */
+  private readonly webglLost = new Set<string>();
+  private webglMax = WEBGL_DEFAULT;
   /** The sessions whose agent screen a view shows, each with its own attachment: two IDE groups show two agents at once. */
   private readonly shown = new Map<string, Shown>();
 
@@ -209,6 +215,23 @@ export class TermStore {
 
   surface(tabId: string): TermSurface | undefined { return this.surfaces.get(tabId); }
 
+  /** A view shows (or stops showing) the surface's xterm: the shown ones, the latest first-served, share the WebGL budget. */
+  setShown(surfaceId: string, shown: boolean): void {
+    const was = this.shownSurfaces.includes(surfaceId);
+    if (shown === was) return;
+    this.shownSurfaces = shown ? [...this.shownSurfaces, surfaceId] : this.shownSurfaces.filter(x => x !== surfaceId);
+    // Shown again, it may try WebGL again.
+    this.webglLost.delete(surfaceId);
+    if (!shown) this.surfaces.get(surfaceId)?.setWebgl(false);
+    this.applyWebgl();
+  }
+
+  setWebglMax(n: number): void {
+    if (n === this.webglMax) return;
+    this.webglMax = n;
+    this.applyWebgl();
+  }
+
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => { this.listeners.delete(fn); };
@@ -258,6 +281,11 @@ export class TermStore {
 
   private setLink(sessionId: string, link: AgentLink): void { this.entry(sessionId).link = link; }
 
+  private applyWebgl(): void {
+    const pick = webglPick(this.shownSurfaces.filter(id => !this.webglLost.has(id)), this.webglMax);
+    for (const id of this.shownSurfaces) this.surfaces.get(id)?.setWebgl(pick.has(id));
+  }
+
   /** The xterm a tab draws in, made once; its keys and size go to whatever the tab runs now. */
   private surfaceFor(tabId: string, run: () => Run | null): TermSurface {
     let s = this.surfaces.get(tabId);
@@ -266,6 +294,13 @@ export class TermStore {
       s.onInput(d => type(run(), d));
       s.onResize((c, r) => run()?.handle?.resize(c, r));
       this.surfaces.set(tabId, s);
+      s.onWebglLost(() => {
+        // The addon freed itself and the DOM renderer drew on: the next shown terminal takes its slot.
+        if (this.surfaces.get(tabId) !== s) return;
+        this.webglLost.add(tabId);
+        this.applyWebgl();
+      });
+      if (this.shownSurfaces.includes(tabId)) this.applyWebgl();
     }
     return s;
   }

@@ -27,7 +27,7 @@ export function fakeSurface(): FakeSurface {
     host, written: [], fits: 0, focuses: 0, disposed: false,
     write: b => { s.written.push(b); }, onInput: () => {}, onResize: () => {},
     size: () => ({ cols: 80, rows: 24 }), fit: () => { s.fits += 1; }, focus: () => { s.focuses += 1; },
-    setReadOnly: () => {}, setTheme: () => {}, dispose: () => { s.disposed = true; }
+    setReadOnly: () => {}, setTheme: () => {}, setWebgl: () => {}, onWebglLost: () => {}, dispose: () => { s.disposed = true; }
   };
   return s;
 }

@@ -28,7 +28,7 @@ function fakeSurface(): FakeSurface {
     host: document.createElement('div'), disposed: false,
     write: () => {}, onInput: fn => { inputs.push(fn); }, onResize: () => {},
     size: () => ({ cols: 80, rows: 24 }), fit: () => {}, focus: () => {},
-    setReadOnly: () => {}, setTheme: () => {}, dispose: () => { s.disposed = true; },
+    setReadOnly: () => {}, setTheme: () => {}, setWebgl: () => {}, onWebglLost: () => {}, dispose: () => { s.disposed = true; },
     type: d => { for (const fn of inputs) fn(d); }
   };
   surfaces.push(s);

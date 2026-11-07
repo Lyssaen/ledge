@@ -32,7 +32,7 @@ function fakeSurface(): FakeSurface {
     host: document.createElement('div'), written: [], readOnly: false, disposed: false,
     write: b => { s.written.push(b); }, onInput: fn => { inputs.push(fn); }, onResize: fn => { resizes.push(fn); },
     size: () => ({ cols: 80, rows: 24 }), fit: () => {}, focus: () => {},
-    setReadOnly: on => { s.readOnly = on; }, setTheme: () => {}, dispose: () => { s.disposed = true; },
+    setReadOnly: on => { s.readOnly = on; }, setTheme: () => {}, setWebgl: () => {}, onWebglLost: () => {}, dispose: () => { s.disposed = true; },
     type: d => { for (const fn of inputs) fn(d); }, resized: (c, r) => { for (const fn of resizes) fn(c, r); }
   };
   return s;

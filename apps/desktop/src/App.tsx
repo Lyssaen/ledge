@@ -77,6 +77,7 @@ import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled } from './workspace/prefs';
 import { useOpenSession } from './workspace/openPrefs';
+import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { agentTerminalTab, beside, changesBeside, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
@@ -148,6 +149,9 @@ function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
     return () => mo.disconnect();
   }, [store]);
   useEffect(() => client.fleet?.subscribe(() => store.refreshAgent()), [client, store]);
+  // The WebGL budget: the setting (Settings › Workspace), app-wide.
+  const [webglMax] = useWebglMax();
+  useEffect(() => { store.setWebglMax(webglMax); }, [store, webglMax]);
   return store;
 }
 

@@ -318,7 +318,9 @@ export const en: Messages = {
     mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access',
     workspace: {
       openSession: 'Open a session',
-      active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`
+      active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`,
+      terminals: 'Terminals', webglBefore: 'Fast rendering (WebGL) for', webglAfter: 'visible terminals at most',
+      webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`
     },
     general: {
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.',

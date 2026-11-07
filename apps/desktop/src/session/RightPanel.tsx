@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useSyncExternalStore, type JSX, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { useMachines, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
@@ -11,6 +11,7 @@ import { tildeHome } from '../term/home';
 import { changesTabId, type Tab, type TermStore } from '../term/store';
 import { useTerms } from '../term/useTerms';
 import { Banner } from './AgentView';
+import { useTabPlace } from '../workspace/tabPlace';
 
 export type RightPanelProps = {
   client: DaemonClient; session: Session;
@@ -75,6 +76,14 @@ export function RightPanel(p: RightPanelProps): JSX.Element {
     ro.observe(el);
     return () => ro.disconnect();
   }, [surface]);
+  // Shown = its xterm is in a visible place: the WebGL budget goes to the terminals shown last.
+  const visible = useTabPlace()?.visible !== false;
+  const shownId = surface ? shell?.id : undefined;
+  useEffect(() => {
+    if (!shownId || !visible) return;
+    store.setShown(shownId, true);
+    return () => store.setShown(shownId, false);
+  }, [store, shownId, visible]);
   // Asked in a render that did not change the screen: not for the next screen to come in.
   useLayoutEffect(() => { take.current = false; });
 

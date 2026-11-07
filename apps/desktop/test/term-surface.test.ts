@@ -127,14 +127,27 @@ it('read-only still answers the terminal\'s own queries: ConPTY waits for the cu
   expect(input.mock.calls).toEqual([['\x1b[12;1R'], ['\x1b[?1;2c'], ['\x1b[>0;276;0c']]);
 });
 
-it('WebGL falls back to the DOM renderer when it throws or loses its context', () => {
-  xt.webglThrows = true;
+it('is born on the DOM renderer; WebGL loads on demand, falls back when it throws, and a lost context is reported', () => {
   expect(() => surface()).not.toThrow();
+  expect(xt.webgl).toHaveLength(0);
+  xt.webglThrows = true;
+  expect(() => surface().s.setWebgl(true)).not.toThrow();
   xt.webglThrows = false;
-  surface();
+  const { s } = surface();
+  const lost = vi.fn();
+  s.onWebglLost(lost);
+  s.setWebgl(true);
+  s.setWebgl(true);
   expect(xt.webgl).toHaveLength(1);
   xt.contextLost[0]!();
   expect(xt.webgl[0]!.dispose).toHaveBeenCalled();
+  expect(lost).toHaveBeenCalledTimes(1);
+  // Freed by the loss: it can ask for WebGL again, and freeing is idempotent.
+  s.setWebgl(true);
+  expect(xt.webgl).toHaveLength(2);
+  s.setWebgl(false);
+  s.setWebgl(false);
+  expect(xt.webgl[1]!.dispose).toHaveBeenCalledTimes(1);
 });
 
 it('links the terminal prints open in the system browser, not in the webview', () => {

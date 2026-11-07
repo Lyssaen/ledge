@@ -147,6 +147,14 @@ export function AgentView(p: AgentViewProps): JSX.Element {
     ro.observe(el);
     return () => ro.disconnect();
   }, [screen]);
+  // Shown = its xterm is in a visible place: the WebGL budget goes to the terminals shown last.
+  const visible = tabPlace?.visible !== false;
+  useEffect(() => {
+    if (!store || !screen || !visible) return;
+    const id = agentTabId(sid);
+    store.setShown(id, true);
+    return () => store.setShown(id, false);
+  }, [store, screen, visible, sid]);
   const onBlur = (e: FocusEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false); };
 
   const banner = ((): ReactNode => {

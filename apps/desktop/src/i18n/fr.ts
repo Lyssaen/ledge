@@ -342,7 +342,9 @@ export const fr = {
     mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès",
     workspace: {
       openSession: 'Ouvrir une session',
-      active: 'Dans le groupe actif', right: 'À droite', saved: (where: string) => `Ouvrir une session : ${where}`
+      active: 'Dans le groupe actif', right: 'À droite', saved: (where: string) => `Ouvrir une session : ${where}`,
+      terminals: 'Terminaux', webglBefore: 'Rendu rapide (WebGL) pour', webglAfter: 'terminaux visibles au plus',
+      webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`
     },
     general: {
       lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.',

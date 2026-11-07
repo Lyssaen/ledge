@@ -17,6 +17,10 @@ export interface TermSurface {
   focus(): void;
   setReadOnly(on: boolean): void;
   setTheme(t: TermTheme): void;
+  /** Loads or frees the WebGL addon (the store's budget decides); without it xterm draws with the DOM renderer. A lost context
+   *  frees it by itself and is reported through `onWebglLost`: the budget gives it back only at the next `setWebgl(true)`. */
+  setWebgl(on: boolean): void;
+  onWebglLost(fn: () => void): void;
   dispose(): void;
 }
 
@@ -57,12 +61,25 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
   term.open(host);
   // A tab moved to another IDE group puts this scroll back (DockHost's keepScroll).
   host.querySelector('.xterm-viewport')?.setAttribute('data-keep-scroll', '');
-  try {
-    const webgl = new WebglAddon();
-    // Without the addon xterm draws with the DOM renderer: slower, but it draws.
-    webgl.onContextLoss(() => webgl.dispose());
-    term.loadAddon(webgl);
-  } catch { /* no WebGL here: the DOM renderer */ }
+  // Born without WebGL: the store gives it to the terminals shown most recently (term/webgl.ts), the others stay on the DOM renderer.
+  let webgl: WebglAddon | null = null;
+  const lost: (() => void)[] = [];
+  const setWebgl = (on: boolean) => {
+    if (on === (webgl !== null)) return;
+    if (!on) { webgl?.dispose(); webgl = null; return; }
+    try {
+      const addon = new WebglAddon();
+      // Without the addon xterm draws with the DOM renderer: slower, but it draws.
+      addon.onContextLoss(() => {
+        if (webgl !== addon) return;
+        addon.dispose();
+        webgl = null;
+        for (const fn of lost) fn();
+      });
+      term.loadAddon(addon);
+      webgl = addon;
+    } catch { /* no WebGL here: the DOM renderer */ }
+  };
 
   let theme = opts.theme;
   let readOnly = false;
@@ -137,6 +154,8 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     focus: () => term.focus(),
     setReadOnly: on => { readOnly = on; applyTheme(); },
     setTheme: t => { theme = t; applyTheme(); },
+    setWebgl,
+    onWebglLost: fn => { lost.push(fn); },
     dispose: () => term.dispose()
   };
 }
