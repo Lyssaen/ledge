@@ -4,9 +4,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { boot, closeDaemons, TWO_PROJECTS } from './helpers';
 import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
+import { act } from 'react';
+import { saveIdeEnabled } from '../src/workspace/prefs';
+import { loadIde } from '../src/ide/lazy';
 
 beforeEach(() => localStorage.clear());
-afterEach(async () => { cleanup(); await closeDaemons(); });
+afterEach(async () => { cleanup(); saveIdeEnabled(false); await closeDaemons(); });
 
 const banner = () => within(screen.getByRole('banner'));
 const nav = () => within(screen.getByRole('navigation', { name: 'Settings sections' }));
@@ -31,6 +34,20 @@ describe('the Settings page', () => {
     await user.keyboard('{Control>},{/Control}');
     await screen.findByRole('heading', { level: 1, name: 'General' });
     expect(nav().queryByRole('button', { name: 'Workspace' })).toBeNull();
+  });
+
+  it('the IDE switched off on Workspace: General shows, its tab current, not a section the nav no longer has', async () => {
+    await loadIde();
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    act(() => saveIdeEnabled(true));
+    await user.keyboard('{Control>},{/Control}');
+    await user.click(await waitFor(() => tab('Workspace')));
+    expect(title()).toHaveTextContent('Workspace');
+    act(() => saveIdeEnabled(false));
+    await waitFor(() => expect(title()).toHaveTextContent('General'));
+    expect(tab('General')).toHaveAttribute('aria-current', 'page');
+    expect(nav().queryByRole('button', { name: 'Workspace' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'General' })).toBeInTheDocument();
   });
 
   it('a tab changes the section: its title, aria-current, the crumb, and the scroll back at the top', async () => {

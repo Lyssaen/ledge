@@ -89,12 +89,15 @@ function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContex
  *  machine shows offline (not while it connects), on Mobile access while its link is down (and in the brand colour while a device
  *  asks for access), on About while an update of the app or of the local daemon waits), the section's title, hint and cards
  *  on the right, scrolled back to the top at each change of section. */
-export function SettingsPage({ section, ctx, noBack = false }: { section: SectionId; ctx: SettingsContext; /** The IDE's Settings tab: no « Retour », the tab is closed or left instead. */ noBack?: boolean }): JSX.Element {
+export function SettingsPage({ section: asked, ctx, noBack = false }: { section: SectionId; ctx: SettingsContext; /** The IDE's Settings tab: no « Retour », the tab is closed or left instead. */ noBack?: boolean }): JSX.Element {
   const { t } = useI18n();
   const s = t.settings;
   const update = useUpdate();
   const scroller = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Espace de travail is the IDE's: switched off, the nav is today's, and a page left on it (the switch turned off there) shows General.
+  const [ide] = useIdeEnabled();
+  const section: SectionId = !ide && asked === 'workspace' ? 'general' : asked;
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = 0; }, [section]);
   const { dispatch } = ctx;
   // As the sidebar's gear inside Settings: the chat closes, then Escape takes the place back.
@@ -104,8 +107,6 @@ export function SettingsPage({ section, ctx, noBack = false }: { section: Sectio
   const layers = useRef<EscapeLayers>({ list: [] }).current;
   useScreenKeys(e => e.key === 'Escape' && (e.repeat || escapeLayers(layers)));
   const pairingOpen = usePairingDialogOpen();
-  // Espace de travail is the IDE's: switched off, the nav is today's.
-  const [ide] = useIdeEnabled();
   const alert = (id: SectionId): string | null =>
     // A machine whose daemon restarts for its update is not « offline » (#48).
     id === 'machines' && ctx.machines.some(m => shownOf(m) === 'offline' && !ctx.daemonUpdates.updating.has(m.id)) ? s.machineOffline
