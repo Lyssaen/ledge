@@ -58,7 +58,11 @@ describe('the bottom panel', () => {
     expect(region.getByRole('tab', { name: /^Terminaux/ })).toHaveTextContent('2');
     const tiles = document.querySelectorAll('.ide-bterms > .ide-btile');
     expect(tiles).toHaveLength(2);
-    expect(within(tiles[0] as HTMLElement).getByText('>_ shell:1')).toHaveAttribute('title', 'Glisser vers un groupe');
+    const tab = (tiles[0] as HTMLElement).querySelector('.ide-btile-tab') as HTMLElement;
+    expect(tab).toHaveAttribute('title', 'Glisser vers un groupe');
+    expect(tab.querySelector('.tab-term')).toHaveTextContent('>_');
+    expect(tab.querySelector('.tab-name')).toHaveTextContent('shell:1');
+    expect(tab.querySelector('.ide-tab-x')).not.toBeNull();
     expect(within(tiles[1] as HTMLElement).getByText('écran shell:2')).toBeVisible();
     expect(within(tiles[1] as HTMLElement).getByText('shell')).toHaveClass('chip-k');
   });
@@ -122,7 +126,7 @@ describe('the bottom panel in the IDE (App)', () => {
     act(() => { ctrlJ(); });
     const bottom = within(await screen.findByRole('region', { name: 'Panneau du bas' }));
     await waitFor(() => expect(tiles()).toHaveLength(1));
-    expect(within(tiles()[0]!).getByText('>_ WSL 1')).toBeVisible();
+    expect(tiles()[0]!.querySelector('.ide-btile-tab')).toHaveTextContent(/>_\s*WSL 1/);
     expect(bottom.getByRole('tab', { name: 'Terminaux' })).toHaveTextContent('1');
     act(() => { ctrlJ(); ctrlJ(); });
     await screen.findByRole('region', { name: 'Panneau du bas' });
@@ -144,7 +148,7 @@ describe('the bottom panel in the IDE (App)', () => {
       await user.click(screen.getByRole('button', { name: 'Nouveau terminal' }));
       await user.click(within(screen.getByRole('menu', { name: 'Nouveau terminal' })).getByRole('menuitem', { name: /PowerShell/ }));
       await waitFor(() => expect(tiles()).toHaveLength(2));
-      expect(within(tiles()[1]!).getByText('>_ PowerShell 2')).toBeVisible();
+      expect(tiles()[1]!.querySelector('.ide-btile-tab')).toHaveTextContent(/>_\s*PowerShell 2/);
       expect(localStorage.getItem('ledge.ide.lastShell')).toBe('powershell');
       await user.click(screen.getByRole('button', { name: 'Nouveau terminal' }));
       expect(within(screen.getByRole('menu', { name: 'Nouveau terminal' })).getByRole('menuitem', { name: /PowerShell/ })).toHaveTextContent('par défaut');
@@ -188,7 +192,7 @@ describe('the bottom panel in the IDE (App)', () => {
     await waitFor(() => expect(tiles()).toHaveLength(1));
     expect(openFree).toHaveBeenCalledTimes(1);
     expect(openFree).toHaveBeenCalledWith('powershell', '');
-    expect(within(tiles()[0]!).getByText('>_ PowerShell 1')).toBeVisible();
+    expect(tiles()[0]!.querySelector('.ide-btile-tab')).toHaveTextContent(/>_\s*PowerShell 1/);
   });
 
   it('the chunk still loading: toggles in separate acts open one shell only', async () => {

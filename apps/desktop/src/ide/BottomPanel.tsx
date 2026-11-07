@@ -1,10 +1,10 @@
-import { Fragment, useEffect, useState, type DragEvent, type JSX, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type DragEvent, type JSX, type ReactNode } from 'react';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { Menu, MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import type { ShellKind, ShellRow } from '../term/shells';
-import { isTerminalRef, panelViewer, type Panel } from '../workspace/panel';
+import { activateTerm, besideTerm, isTerminalRef, panelViewer, stackTerm, stacksOf, type Panel } from '../workspace/panel';
 import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
 import { TERM_DRAG_TYPE, termDrag } from './termDrag';
 
@@ -18,8 +18,11 @@ export interface BottomPanelProps {
   tile(ref: string): ReactNode; tileTitle(ref: string): string; tileKind(ref: string): string;
   /** A tile's « × »; « Masquer le panneau ». */
   onClose(ref: string): void; onHide(): void;
-  /** A terminal tab of the dock (its key, `terminal:…`) dropped on the panel: it comes back as a tile. */
-  onDockDrop(key: string): void;
+  /** A terminal tab of the dock (its key, `terminal:…`) dropped on the panel: it comes back as its own column.
+   *  Dropped on a column's tab (`onto`), it stacks there; on that column's right edge (`beside`), it opens its own column after it. */
+  onDockDrop(key: string, onto?: string, where?: 'beside'): void;
+  /** A terminal tab dropped on another, or on a column's right edge, or chosen: the panel, rearranged. */
+  onArrange?(next: Panel): void;
   /** Any other dock tab dropped on the panel: refused (only terminals go there), said by the host. */
   onRefused(): void;
 }
@@ -37,7 +40,10 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
   const { tab, terms } = p.panel;
   // A dock tab carried over the panel: its frame outlined (mockup `.drop-on`) until it leaves, drops, or the drag ends.
   const [over, setOver] = useState(false);
-  useEffect(() => termDrag.subscribe(() => { if (termDrag.get()?.from !== 'dock') setOver(false); }), []);
+  // The column a terminal tab is carried over: its tab (stack) or its right edge (its own column).
+  const [spot, setSpot] = useState<{ ref: string; beside: boolean } | null>(null);
+  const dragged = useRef(false);
+  useEffect(() => termDrag.subscribe(() => { if (termDrag.get()?.from !== 'dock') setOver(false); if (!termDrag.get()) setSpot(null); }), []);
   const onDragOver = (e: DragEvent) => {
     if (termDrag.get()?.from !== 'dock') return;
     e.preventDefault();
@@ -61,9 +67,35 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
   // A tile picked up: the dock reads which one (the browser hides drag data until the drop).
   const onTileDragStart = (ref: string) => (e: DragEvent) => {
     if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData(TERM_DRAG_TYPE, ref); } catch { /* a webview may refuse it */ } }
+    dragged.current = true;
     termDrag.set({ from: 'panel', ref });
   };
-  const onTileDragEnd = () => { if (termDrag.get()?.from === 'panel') termDrag.set(null); };
+  const onTileDragEnd = () => {
+    if (termDrag.get()?.from === 'panel') termDrag.set(null);
+    // The click that follows a drag must not also activate the tab (it would undo the drop).
+    setTimeout(() => { dragged.current = false; }, 0);
+  };
+  /** A panel tile, or a dock terminal tab: what can land on a column. A dock tab's ref, or null when it is not a terminal. */
+  const carried = (): { panel?: string; dock?: string } | null => {
+    const d = termDrag.get();
+    if (d?.from === 'panel') return { panel: d.ref };
+    if (d?.from === 'dock' && isTerminalRef(d.key)) return { dock: d.key.slice('terminal:'.length) };
+    return null;
+  };
+  const land = (onto: string, beside: boolean) => {
+    const c = carried();
+    if (!c) return;
+    setSpot(null);
+    termDrag.set(null);
+    if (c.dock !== undefined) {
+      if (beside) p.onDockDrop(`terminal:${c.dock}`, onto, 'beside');
+      else p.onDockDrop(`terminal:${c.dock}`, onto);
+      return;
+    }
+    const ref = c.panel!;
+    const next = beside ? besideTerm(p.panel, ref, onto) : stackTerm(p.panel, ref, onto);
+    if (next !== p.panel) p.onArrange?.(next);
+  };
   const item = (k: 'term' | 'out', d: readonly string[], label: string, tip: string, count: number) => (
     <button type="button" role="tab" aria-selected={tab === k} aria-label={label} title={tip} className={tab === k ? 'on' : undefined} onClick={() => p.onTab(k)}>
       <Icon d={d} size={15} /><span className="ide-bp-count">{count}</span>
@@ -102,20 +134,50 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
       <div className="ide-bp-body" role="tabpanel" aria-label={tab === 'term' ? t.ide.terminals : t.ide.output}>
         {tab === 'out' ? p.output : (
           <div className="ide-bterms">
-            {terms.length === 0 ? <span className="ide-bterms-none">{pt.noTerms}</span> : terms.map(ref => {
-              const title = p.tileTitle(ref);
-              // Its own place (R2): the agent's one screen and the shown terminals' budget follow tiles as they follow tabs.
-              const place: TabPlace = { key: panelViewer(ref), group: '', visible: true, active: false };
+            {terms.length === 0 ? <span className="ide-bterms-none">{pt.noTerms}</span> : stacksOf(p.panel).map(stack => {
+              const active = stack.refs[stack.active] ?? stack.refs[0]!;
+              const title = p.tileTitle(active);
+              // Its own place (R2): the agent's one screen and the shown terminals' budget follow the tab in front.
+              const place: TabPlace = { key: panelViewer(active), group: '', visible: true, active: false };
+              const onColumn = (e: DragEvent, drop: boolean) => {
+                if (!carried()) return;
+                const beside = e.clientX > e.currentTarget.getBoundingClientRect().right - 28;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                if (drop) land(active, beside);
+                else setSpot({ ref: active, beside });
+              };
               return (
-                <section key={ref} className="ide-btile" role="group" aria-label={title}>
+                <section key={stack.refs.join('\0')} className={`ide-btile${spot?.ref === active && spot.beside ? ' drop-beside' : ''}`} role="group" aria-label={title}
+                  onDragOver={e => onColumn(e, false)} onDrop={e => onColumn(e, true)}>
                   <div className="ide-btile-bar">
-                    <div className="ide-btile-tab" draggable title={pt.drag} onDragStart={onTileDragStart(ref)} onDragEnd={onTileDragEnd}>{title}</div>
+                    <div className="ide-btile-tabs" role="tablist">
+                      {stack.refs.map(ref => {
+                        const on = ref === active;
+                        const name = p.tileTitle(ref).replace(/^>_\s*/, '');
+                        return (
+                          <div key={ref} className={`ide-btile-tab${on ? ' on' : ''}${spot?.ref === ref && !spot.beside ? ' drop-on' : ''}`} role="tab" aria-selected={on} draggable title={pt.drag}
+                            onDragStart={onTileDragStart(ref)} onDragEnd={onTileDragEnd}
+                            onDragOver={e => { const c = carried(); if (!c || c.panel === ref) return; e.preventDefault(); e.stopPropagation(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; setSpot({ ref, beside: false }); }}
+                            onDrop={e => { e.preventDefault(); e.stopPropagation(); land(ref, false); }}
+                            onClick={() => { if (dragged.current) { dragged.current = false; return; } const next = activateTerm(p.panel, ref); if (next !== p.panel) p.onArrange?.(next); }}>
+                            <span className="ide-tab">
+                              <span className="tab-term" aria-hidden="true">&gt;_</span>
+                              <span className="tab-name">{name}</span>
+                            </span>
+                            <button type="button" className="ide-tab-x" aria-label={pt.close} title={pt.close} onPointerDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); p.onClose(ref); }}>
+                              <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" /></svg>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                     <div className="ide-btile-tools">
-                      <span className="chip-k">{p.tileKind(ref)}</span>
-                      <button type="button" aria-label={pt.close} title={pt.close} onClick={() => p.onClose(ref)}>×</button>
+                      <span className="chip-k">{p.tileKind(active)}</span>
                     </div>
                   </div>
-                  <div className="ide-btile-body"><TabPlaceContext.Provider value={place}>{p.tile(ref)}</TabPlaceContext.Provider></div>
+                  <div className="ide-btile-body"><TabPlaceContext.Provider value={place}>{p.tile(active)}</TabPlaceContext.Provider></div>
                 </section>
               );
             })}

@@ -22,7 +22,8 @@ export function useAgentScreen(sid: string, mode: AgentMode, want: boolean): voi
     if (!store) return;
     // A hidden tab lets its screen go (it would keep an attachment open for nothing, and leave a shown tab of the same
     // session on the note): a shown one takes it, and coming back attaches again.
-    if (!shownHere) { asked.current = null; store.hideAgent(sid, viewer); return; }
+    // Hidden for a moment while a tab is moved: the detach waits a tick, and the view that shows it again cancels it.
+    if (!shownHere) { asked.current = null; if (inTab) store.scheduleRelease(sid, viewer); else store.hideAgent(sid, viewer); return; }
     if (want) {
       // A tab shown outside the focused group (a linked group following a session, a terminal opened beside) was not asked
       // for: it leaves the screen to the view holding it (a shown one: a hidden view holds none) and shows the R2 note.
@@ -34,6 +35,7 @@ export function useAgentScreen(sid: string, mode: AgentMode, want: boolean): voi
       asked.current = sid;
     } else {
       asked.current = null;
+      store.cancelRelease(sid);
       if (inTab) store.hideAgent(sid, viewer);
       else store.hideAgent();
     }
@@ -42,5 +44,5 @@ export function useAgentScreen(sid: string, mode: AgentMode, want: boolean): voi
   }, [store, want, sid, modeKey, shownHere, inTab, viewer, holder]); // eslint-disable-line react-hooks/exhaustive-deps
   const leaving = useRef<{ sid: string; viewer: string } | undefined>(undefined);
   leaving.current = inTab ? { sid, viewer } : undefined;
-  useEffect(() => () => { const l = leaving.current; if (l) store?.hideAgent(l.sid, l.viewer); else store?.hideAgent(); }, [store]);
+  useEffect(() => () => { const l = leaving.current; if (l) store?.scheduleRelease(l.sid, l.viewer); else store?.hideAgent(); }, [store]);
 }

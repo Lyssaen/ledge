@@ -2,9 +2,10 @@ import { isRecord, readJson, writeJson } from '../state/storage';
 
 /** The IDE shell's panel layout: pure state, plus its persisted form (`ledge.ide.layout`). */
 export type SideView = 'projects' | 'rigs' | 'atoi';
-export interface IdeLayout { sideOpen: boolean; sideWidth: number; sideView: SideView; bottom: boolean; right: boolean }
+export interface IdeLayout { sideOpen: boolean; sideWidth: number; sideView: SideView; bottom: boolean; bottomHeight: number; right: boolean }
 
 export const SIDE_DEFAULT = 248, SIDE_MIN = 120, SIDE_MAX = 440, SIDE_FOLD = 150, RIGHT_WIDTH = 300, EDITOR_MIN = 360;
+export const BOTTOM_DEFAULT = 240, BOTTOM_MIN = 120, BOTTOM_MAX = 640;
 const ACTIVITY_BAR = 48;
 export const LAYOUT_KEY = 'ledge.ide.layout';
 const VIEWS: readonly SideView[] = ['projects', 'rigs', 'atoi'];
@@ -15,10 +16,13 @@ export type LayoutAction =
   | { type: 'view'; view: SideView }
   | { type: 'drag'; width: number }
   | { type: 'drop'; width: number }
-  | { type: 'resetWidth' };
+  | { type: 'resetWidth' }
+  | { type: 'dragBottom'; height: number }
+  | { type: 'resetBottom' };
 
 const FIELD = { side: 'sideOpen', bottom: 'bottom', right: 'right' } as const;
 const clamp = (w: number) => Math.min(SIDE_MAX, Math.max(SIDE_MIN, w));
+const clampBottom = (h: number) => Math.min(BOTTOM_MAX, Math.max(BOTTOM_MIN, Math.round(h)));
 
 /** Returns the same object when the action changes nothing. */
 function patch(s: IdeLayout, p: Partial<IdeLayout>): IdeLayout {
@@ -34,6 +38,8 @@ export function layoutReducer(s: IdeLayout, a: LayoutAction): IdeLayout {
     case 'drag': return patch(s, { sideWidth: clamp(a.width) });
     case 'drop': return a.width < SIDE_FOLD ? patch(s, { sideOpen: false, sideWidth: SIDE_DEFAULT }) : patch(s, { sideOpen: true, sideWidth: clamp(a.width) });
     case 'resetWidth': return patch(s, { sideWidth: SIDE_DEFAULT });
+    case 'dragBottom': return patch(s, { bottomHeight: clampBottom(a.height) });
+    case 'resetBottom': return patch(s, { bottomHeight: BOTTOM_DEFAULT });
   }
 }
 
@@ -41,9 +47,11 @@ export function loadLayout(): IdeLayout {
   const raw = readJson(LAYOUT_KEY);
   const r = isRecord(raw) ? raw : {};
   const w = r.sideWidth;
+  const h = r.bottomHeight;
   return {
     sideOpen: typeof r.sideOpen === 'boolean' ? r.sideOpen : true,
     sideWidth: typeof w === 'number' && Number.isFinite(w) ? clamp(w) : SIDE_DEFAULT,
+    bottomHeight: typeof h === 'number' && Number.isFinite(h) ? clampBottom(h) : BOTTOM_DEFAULT,
     sideView: VIEWS.find(v => v === r.sideView) ?? 'projects',
     bottom: typeof r.bottom === 'boolean' ? r.bottom : false,
     right: typeof r.right === 'boolean' ? r.right : true,

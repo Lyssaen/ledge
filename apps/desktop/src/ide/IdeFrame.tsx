@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/lang';
 import { RIGHT_WIDTH, rightShown, type IdeLayout, type LayoutAction } from '../workspace/layout';
 import type { Tab } from '../workspace/model';
 import { ActivityBar } from './ActivityBar';
+import { BottomEdge } from './BottomEdge';
 import { IdeExplorer } from './IdeExplorer';
 import { IdeStatusBar } from './IdeStatusBar';
 import { IdeTitleBar } from './IdeTitleBar';
@@ -43,7 +44,11 @@ export function IdeFrame(p: IdeFrameProps): JSX.Element {
   const width = useSyncExternalStore(onResize, windowWidth, windowWidth);
   const { layout, onLayout } = p;
   const right = rightShown(layout, width);
-  const columns = { '--ide-side': layout.sideOpen ? `${layout.sideWidth}px` : '0px', '--ide-right': right ? `${RIGHT_WIDTH}px` : '0px' } as CSSProperties;
+  const columns = {
+    '--ide-side': layout.sideOpen ? `${layout.sideWidth}px` : '0px',
+    '--ide-right': right ? `${RIGHT_WIDTH}px` : '0px',
+    '--ide-bottom': `${layout.bottomHeight}px`
+  } as CSSProperties;
   return (
     <div className={`ide${p.dragging ? ' is-dragging' : ''}`} data-readonly={p.readOnly ? 'true' : undefined}>
       <IdeTitleBar layout={layout} onLayout={onLayout} onSearch={p.onSearch} blocked={p.blocked} rightShown={right} />
@@ -53,7 +58,7 @@ export function IdeFrame(p: IdeFrameProps): JSX.Element {
         <section className="ide-editor" aria-label={t.ide.editorLabel}>
           {p.notice}
           <div className="ide-dock-area">{p.editor}</div>
-          {layout.bottom && p.bottom}
+          {layout.bottom && <div className="ide-bottom-host"><BottomEdge onLayout={onLayout} />{p.bottom}</div>}
         </section>
         {right && <div className="ide-right">{p.chat}</div>}
       </div>

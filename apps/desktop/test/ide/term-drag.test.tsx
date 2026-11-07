@@ -142,7 +142,7 @@ describe('a panel tile dragged over the dock', () => {
     const { onPanelDrop } = await mount();
     render(<LangProvider lang="fr"><BottomPanel panel={{ terms: ['shell:1'], tab: 'term' }} onTab={() => {}} outputCount={0} output={null} menu={[]} onNewShell={() => {}}
       tile={() => null} tileTitle={r => `>_ ${r}`} tileKind={() => 'shell'} onClose={() => {}} onHide={() => {}} onDockDrop={() => {}} onRefused={() => {}} /></LangProvider>);
-    const tile = screen.getByText('>_ shell:1');
+    const tile = document.querySelector('.ide-btile-tab') as HTMLElement;
     // Esc: the tile's own dragend.
     fireEvent.dragStart(tile);
     expect(termDrag.get()).toEqual({ from: 'panel', ref: 'shell:1' });
@@ -191,7 +191,7 @@ function mountPanel(panel: Panel) {
   const p = {
     panel, onTab: vi.fn(), outputCount: 0, output: null, menu: [], onNewShell: vi.fn(),
     tile: (ref: string) => <TilePlace id={ref} />, tileTitle: (ref: string) => `>_ ${ref}`, tileKind: () => 'shell',
-    onClose: vi.fn(), onHide: vi.fn(), onDockDrop: vi.fn(), onRefused: vi.fn()
+    onClose: vi.fn(), onHide: vi.fn(), onDockDrop: vi.fn(), onArrange: vi.fn(), onRefused: vi.fn()
   };
   render(<LangProvider lang="fr"><BottomPanel {...p} /></LangProvider>);
   return { p, region: screen.getByRole('region', { name: 'Panneau du bas' }) };
@@ -226,7 +226,7 @@ describe('tileToDock: the tile leaves the panel only once its tab is placed', ()
 describe('the bottom panel and the drag', () => {
   it('a tile picked up says so (from: panel, its ref) with the Ledge drag type, and forgets it at dragend', () => {
     mountPanel({ terms: ['shell:1'], tab: 'term' });
-    const tab = screen.getByText('>_ shell:1');
+    const tab = document.querySelector('.ide-btile-tab') as HTMLElement;
     const data = new Map<string, string>();
     fireEvent.dragStart(tab, { dataTransfer: { setData: (k: string, v: string) => data.set(k, v), effectAllowed: '' } });
     expect(termDrag.get()).toEqual({ from: 'panel', ref: 'shell:1' });
@@ -289,6 +289,15 @@ describe('the bottom panel and the drag', () => {
     expect(p.onRefused).not.toHaveBeenCalled();
   });
 
+  it('a terminal tab dropped on another stacks the two in one column; the right edge opens its own', () => {
+    const panel: Panel = { terms: ['shell:1', 'shell:2'], tab: 'term' };
+    const { p } = mountPanel(panel);
+    const tabs = () => [...document.querySelectorAll('.ide-btile-tab')];
+    fireEvent.dragStart(tabs()[0]!);
+    fireEvent.drop(tabs()[1]!);
+    expect(p.onArrange.mock.calls[0]![0]).toMatchObject({ stacks: [{ refs: ['shell:1', 'shell:2'], active: 0 }] });
+  });
+
   it('each tile is a place of its own (panel:<ref>), shown, never the focused group\'s', () => {
     mountPanel({ terms: ['shell:1', 'agent:local:a'], tab: 'term' });
     expect(JSON.parse(screen.getByTestId('place-shell:1').textContent!)).toEqual({ key: 'panel:shell:1', group: '', visible: true, active: false });
@@ -328,7 +337,7 @@ describe('a shell dragged between the panel and the dock (App)', () => {
     await waitFor(() => expect(pty.opens).toHaveLength(1));
 
     // Tile → « nouveau groupe »: the panel, emptied, hides without the « last terminal closed » note.
-    const tab = within(tiles()[0]!).getByText('>_ WSL 1');
+    const tab = tiles()[0]!.querySelector('.ide-btile-tab') as HTMLElement;
     fireEvent.dragStart(tab);
     const zone = document.querySelector<HTMLElement>('.ide-dropnew')!;
     fireEvent.dragOver(zone);
@@ -348,7 +357,7 @@ describe('a shell dragged between the panel and the dock (App)', () => {
     fireEvent.dragOver(bottom()!);
     fireEvent.drop(bottom()!);
     await waitFor(() => expect(tiles()).toHaveLength(2));
-    expect(within(tiles()[1]!).getByText('>_ WSL 1')).toBeVisible();   // at the end, beside the default shell
+    expect(tiles()[1]!.querySelector('.ide-btile-tab')).toHaveTextContent(/>_\s*WSL 1/);   // at the end, beside the default shell
     expect(await screen.findByText('Terminal ramené dans le panneau du bas.')).toBeVisible();
     await waitFor(() => expect(groups()).toHaveLength(1));
     await waitFor(() => expect(tiles()[1]!.querySelector('.ide-free-shell .terminal-screen')?.firstElementChild).toBe(xterm));

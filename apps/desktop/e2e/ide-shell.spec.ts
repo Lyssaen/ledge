@@ -49,6 +49,16 @@ test('Ctrl+J shows the bottom panel, 240 px high', async ({ page }) => {
   await page.keyboard.press('Control+j');
   await expect(bottom).toBeVisible();
   expect((await box(bottom)).height).toBe(240);
+  // The top edge sets the height; a double click gives 240 back.
+  const edge = page.getByTitle('Drag to resize · double-click: default height');
+  const eb = await box(edge);
+  await page.mouse.move(eb.x + 20, eb.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(eb.x + 20, eb.y - 80, { steps: 6 });
+  await page.mouse.up();
+  expect((await box(bottom)).height).toBeGreaterThan(300);
+  await edge.dblclick();
+  expect((await box(bottom)).height).toBe(240);
   // A new shell takes the keyboard; Ctrl+J still hides the panel (the terminal forwards it while the IDE is on).
   await page.keyboard.press('Control+j');
   await expect(bottom).toHaveCount(0);

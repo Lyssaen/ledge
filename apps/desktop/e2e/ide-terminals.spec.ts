@@ -23,6 +23,7 @@ const sessions = [fleet.find(s => s.id === 'otto')!, session('nova', { name: 'No
 const panel = (page: Page) => page.getByRole('region', { name: 'Bottom panel' });
 const tiles = (page: Page) => panel(page).locator('.ide-btile');
 const tilesTitles = (page: Page) => panel(page).locator('.ide-btile-tab');
+const tileText = (names: string[]) => names.map(n => new RegExp(`^>_\\s*${n}$`));
 const groups = (page: Page) => page.locator('.ide-dockview .dv-groupview');
 const dockTab = (page: Page, title: string) => page.locator('.ide-dockview .dv-tab').filter({ hasText: title });
 const writes = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyWrites: string[] }).__ledgePtyWrites.join(''));
@@ -60,7 +61,7 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await expect(panel(page)).toHaveCount(0);
   await page.keyboard.press('Control+j');
   await expect(panel(page)).toBeVisible();
-  await expect(tilesTitles(page)).toHaveText(['>_ WSL · Ubuntu 1']);
+  await expect(tilesTitles(page)).toHaveText(tileText(['WSL · Ubuntu 1']));
   await expect(panel(page).getByRole('tab', { name: 'Terminals' }).locator('.ide-bp-count')).toHaveText('1');
   expect((await box(panel(page))).height).toBe(240);
 
@@ -68,7 +69,7 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await openMenu(page);
   await expect(page.getByRole('menuitem', { name: /WSL/ })).toContainText('default');
   await page.getByRole('menuitem', { name: /PowerShell/ }).click();
-  await expect(tilesTitles(page)).toHaveText(['>_ WSL · Ubuntu 1', '>_ PowerShell 2']);
+  await expect(tilesTitles(page)).toHaveText(tileText(['WSL · Ubuntu 1', 'PowerShell 2']));
   await expect(panel(page).getByRole('tab', { name: 'Terminals' }).locator('.ide-bp-count')).toHaveText('2');
   const [a, b] = [await box(tiles(page).nth(0)), await box(tiles(page).nth(1))];
   expect(Math.abs(a.y - b.y)).toBeLessThan(1);
@@ -92,7 +93,7 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await page.keyboard.press('Control+j');
   await expect(panel(page)).toHaveCount(0);
   await page.keyboard.press('Control+j');
-  await expect(tilesTitles(page)).toHaveText(['>_ WSL · Ubuntu 1', '>_ PowerShell 2']);
+  await expect(tilesTitles(page)).toHaveText(tileText(['WSL · Ubuntu 1', 'PowerShell 2']));
   expect(await ptyOpens(page)).toBe(opensBefore);
   await expect.poll(() => termText(page, 1)).toContain('$ echo hi');
 
@@ -100,13 +101,13 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   const group = groups(page).first();
   await drag(page, tilesTitles(page).nth(1), async () => { const r = await box(group.locator('.dv-content-container')); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
   await expect(dockTab(page, '>_ PowerShell 2')).toHaveCount(1);
-  await expect(tilesTitles(page)).toHaveText(['>_ WSL · Ubuntu 1']);
+  await expect(tilesTitles(page)).toHaveText(tileText(['WSL · Ubuntu 1']));
   await expect(page.getByRole('tabpanel', { name: /^>_ PowerShell 2/ }).locator('.chip-k')).toHaveText('shell');
   await expect(panel(page).getByRole('tab', { name: 'Terminals' }).locator('.ide-bp-count')).toHaveText('1');
 
   // And back: the tab dragged onto the panel: two tiles again, the typed text still shown.
   await drag(page, dockTab(page, '>_ PowerShell 2'), async () => { const r = await box(panel(page).locator('.ide-bp-body')); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-  await expect(tilesTitles(page)).toHaveText(['>_ WSL · Ubuntu 1', '>_ PowerShell 2']);
+  await expect(tilesTitles(page)).toHaveText(tileText(['WSL · Ubuntu 1', 'PowerShell 2']));
   await expect(dockTab(page, '>_ PowerShell 2')).toHaveCount(0);
   await expect.poll(() => termText(page, 1), { message: 'the tile shows what was typed, as before' }).toContain('$ echo hi');
   expect(await ptyOpens(page)).toBe(2);
@@ -125,7 +126,7 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await expect(panel(page)).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __ledgeToasts: string[] }).__ledgeToasts)).toContain('Last terminal closed: the bottom panel hides. Ctrl+J opens it again with a shell.');
   await page.keyboard.press('Control+j');
-  await expect(tilesTitles(page)).toHaveText(['>_ PowerShell 3']);
+  await expect(tilesTitles(page)).toHaveText(tileText(['PowerShell 3']));
 });
 
 for (const theme of ['light', 'dark'] as const) {

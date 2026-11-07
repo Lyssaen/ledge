@@ -149,7 +149,8 @@ describe('an agent\'s terminal tab', () => {
     expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Réglages']);
 
     // And back into a new group: its tab holds the same screen, still without a reconnect.
-    const tileTab = within(tile).getByText('>_ Otto · tmux');
+    const tileTab = tile.querySelector('.ide-btile-tab') as HTMLElement;
+    expect(tileTab).toHaveTextContent(/>_\s*Otto · tmux/);
     fireEvent.dragStart(tileTab);
     const zone = document.querySelector<HTMLElement>('.ide-dropnew')!;
     fireEvent.dragOver(zone);

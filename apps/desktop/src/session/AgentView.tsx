@@ -153,7 +153,7 @@ export function AgentView(p: AgentViewProps): JSX.Element {
     if (!store || !screen || !visible) return;
     const id = agentTabId(sid);
     store.setShown(id, true);
-    return () => store.setShown(id, false);
+    return () => store.releaseShown(id);
   }, [store, screen, visible, sid]);
   const onBlur = (e: FocusEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false); };
 

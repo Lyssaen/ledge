@@ -43,7 +43,7 @@ export function FreeShellView({ id, claimFocus }: FreeShellViewProps): JSX.Eleme
   useEffect(() => {
     if (!shown) return;
     store.setShown(id, true);
-    return () => store.setShown(id, false);
+    return () => store.releaseShown(id);
   }, [store, id, shown]);
 
   const reopen = () => { store.reopenFree(id); store.surface(id)?.focus(); };

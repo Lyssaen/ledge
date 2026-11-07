@@ -9,7 +9,7 @@ import type { IdeLayout } from '../../src/workspace/layout';
 import { keyOf } from '../../src/workspace/model';
 
 afterEach(cleanup);
-const L: IdeLayout = { sideOpen: true, sideWidth: 248, sideView: 'projects', bottom: false, right: true };
+const L: IdeLayout = { sideOpen: true, sideWidth: 248, sideView: 'projects', bottom: false, bottomHeight: 240, right: true };
 const fr = (ui: React.ReactElement) => render(<LangProvider lang="fr">{ui}</LangProvider>);
 const none = { perm: 0, ask: 0 };
 const activity = (layout = L, badge = none, extra: Partial<Parameters<typeof ActivityBar>[0]> = {}) =>

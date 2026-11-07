@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { layoutFor, layoutReducer, loadLayout, rightFits, rightShown, saveLayout, type IdeLayout } from '../../src/workspace/layout';
 
 const KEY = 'ledge.ide.layout';
-const base: IdeLayout = { sideOpen: true, sideWidth: 248, sideView: 'projects', bottom: false, right: true };
+const base: IdeLayout = { sideOpen: true, sideWidth: 248, sideView: 'projects', bottom: false, bottomHeight: 240, right: true };
 
 beforeEach(() => localStorage.clear());
 
@@ -19,7 +19,7 @@ describe('loadLayout', () => {
     expect(loadLayout()).toEqual(base);
   });
   it('round-trips through saveLayout', () => {
-    const l: IdeLayout = { sideOpen: false, sideWidth: 300, sideView: 'rigs', bottom: true, right: false };
+    const l: IdeLayout = { sideOpen: false, sideWidth: 300, sideView: 'rigs', bottom: true, bottomHeight: 320, right: false };
     saveLayout(l);
     expect(loadLayout()).toEqual(l);
   });
@@ -57,6 +57,15 @@ describe('layoutReducer', () => {
     expect(layoutReducer(base, { type: 'resetWidth' })).toBe(base);
     expect(layoutReducer(base, { type: 'drag', width: 248 })).toBe(base);
     expect(layoutReducer(base, { type: 'drop', width: 248 })).toBe(base);
+    expect(layoutReducer(base, { type: 'resetBottom' })).toBe(base);
+    expect(layoutReducer(base, { type: 'dragBottom', height: 240 })).toBe(base);
+  });
+  it('the bottom panel\'s height stays between 120 and 640, and a double click restores 240', () => {
+    expect(layoutReducer(base, { type: 'dragBottom', height: 40 }).bottomHeight).toBe(120);
+    expect(layoutReducer(base, { type: 'dragBottom', height: 900 }).bottomHeight).toBe(640);
+    expect(layoutReducer({ ...base, bottomHeight: 400 }, { type: 'dragBottom', height: 360 }).bottomHeight).toBe(360);
+    expect(layoutReducer({ ...base, bottomHeight: 400 }, { type: 'resetBottom' }).bottomHeight).toBe(240);
+    expect(layoutReducer({ ...base, bottomHeight: 400 }, { type: 'toggle', panel: 'bottom' }).bottomHeight).toBe(400);
   });
 });
 

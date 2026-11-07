@@ -628,6 +628,21 @@ describe('TermStore: one agent screen per session (IDE groups)', () => {
     expect(st.viewerOf('local:a')).toBeNull();
   });
 
+  it('a view that leaves and is shown again in the same turn keeps its attachment', async () => {
+    const st = store();
+    st.showAgent('local:a', { kind: 'live' }, 't1'); await tick();
+    st.scheduleRelease('local:a', 't1');
+    st.showAgent('local:a', { kind: 'live' }, 't2');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(backend.opens).toHaveLength(1);
+    expect(backend.opens[0]!.closed).toBe(false);
+    expect(st.viewerOf('local:a')).toBe('t2');
+    st.scheduleRelease('local:a', 't2');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(backend.opens[0]!.closed).toBe(true);
+    expect(st.viewerOf('local:a')).toBeNull();
+  });
+
   it('a tab shows one session: asking another lets the first go; outside the IDE the page is that tab', async () => {
     const st = store();
     st.showAgent('local:a', { kind: 'live' }, 't1'); await tick();

@@ -75,6 +75,11 @@ export class TermStore {
   private webglMax = WEBGL_DEFAULT;
   /** The sessions whose agent screen a view shows, each with its own attachment: two IDE groups show two agents at once. */
   private readonly shown = new Map<string, Shown>();
+  /** A view that left, not yet detached: the view that shows it in the same turn cancels this, so a move does not reconnect. */
+  private readonly releasing = new Map<string, ReturnType<typeof setTimeout>>();
+  /** `setShown(id, false)` waiting a tick: a view that shows the xterm again before then keeps its WebGL. */
+  private readonly unshowing = new Map<string, number>();
+  private unshowTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(deps: TermDeps) { this.deps = deps; }
 
@@ -155,6 +160,7 @@ export class TermStore {
    *  must not detach another tab's screen. */
   hideAgent(sessionId?: string, viewer?: string): void {
     if (sessionId === undefined) {
+      for (const id of [...this.releasing.keys()]) this.cancelRelease(id);
       if (this.shown.size === 0) return;
       for (const sid of this.shown.keys()) this.leave(sid);
       this.shown.clear();
@@ -173,8 +179,27 @@ export class TermStore {
   handOver(sessionId: string, from: string, to: string): void {
     const s = this.shown.get(sessionId);
     if (!s || s.viewer !== from || from === to) return;
+    this.cancelRelease(sessionId);
     s.viewer = to;
     this.emit();
+  }
+
+  /** The view `viewer` stopped showing `sessionId` (it unmounted, or dockview hid it for a moment while a tab moved).
+   *  The detach waits a tick: `showAgent` for that session in the same turn cancels it, so the attachment stays. */
+  scheduleRelease(sessionId: string, viewer: string): void {
+    this.cancelRelease(sessionId);
+    const wait = this.deps.setTimeout ?? setTimeout;
+    this.releasing.set(sessionId, wait(() => {
+      this.releasing.delete(sessionId);
+      this.hideAgent(sessionId, viewer);
+    }, 0));
+  }
+
+  cancelRelease(sessionId: string): void {
+    const t = this.releasing.get(sessionId);
+    if (t === undefined) return;
+    clearTimeout(t);
+    this.releasing.delete(sessionId);
   }
 
   /** The view that holds the session's screen, null while none shows it. */
@@ -230,9 +255,29 @@ export class TermStore {
 
   /** A view shows (or stops showing) the surface's xterm: the shown ones, the latest first-served, share the WebGL budget.
    *  Two views showing one id need two `false` to hide it. */
+  /** The view stopped showing the xterm. A tick later it really leaves the budget, unless another view showed it again first
+   *  (a tab moved): that one keeps the WebGL context instead of dropping it and building it again. */
+  releaseShown(surfaceId: string): void {
+    this.unshowing.set(surfaceId, (this.unshowing.get(surfaceId) ?? 0) + 1);
+    if (this.unshowTimer !== undefined) return;
+    const wait = this.deps.setTimeout ?? setTimeout;
+    this.unshowTimer = wait(() => {
+      this.unshowTimer = undefined;
+      const pending = [...this.unshowing];
+      this.unshowing.clear();
+      for (const [id, n] of pending) for (let i = 0; i < n; i++) this.setShown(id, false);
+    }, 0);
+  }
+
   setShown(surfaceId: string, shown: boolean): void {
     const count = this.shownSurfaces.get(surfaceId) ?? 0;
     if (shown) {
+      const waiting = this.unshowing.get(surfaceId) ?? 0;
+      if (waiting > 0) {
+        if (waiting === 1) this.unshowing.delete(surfaceId);
+        else this.unshowing.set(surfaceId, waiting - 1);
+        return;
+      }
       // Shown (again): it goes last, and may try WebGL again.
       this.shownSurfaces.delete(surfaceId);
       this.shownSurfaces.set(surfaceId, count + 1);
@@ -260,6 +305,7 @@ export class TermStore {
 
   /** showAgent's work, also refreshAgent's: a view's request and the store's own re-check are told apart. */
   private show(sessionId: string, mode: AgentMode, viewer: string): void {
+    this.cancelRelease(sessionId);
     const route = mode.kind === 'live' || mode.kind === 'parent' ? (this.deps.agentRoute?.(sessionId) ?? 'pty') : '';
     const key = JSON.stringify(mode) + route;
     const cur = this.shown.get(sessionId);

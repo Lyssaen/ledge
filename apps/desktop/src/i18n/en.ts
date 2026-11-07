@@ -1358,7 +1358,7 @@ export const en: Messages = {
     sideToggle: 'Sidebar (Ctrl+B)', bottomToggle: 'Bottom panel (Ctrl+J)', rightToggle: 'Right panel (Ctrl+/)',
     activityLabel: 'Activity bar', projects: 'Projects', rigs: 'OpenRig rigs', atoi: 'For you',
     openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
-    resizeEdge: 'Drag to resize · double-click: default width', collapse: '« Collapse', collapseTip: 'Collapse the sidebar (Ctrl+B)',
+    resizeEdge: 'Drag to resize · double-click: default width', resizeBottom: 'Drag to resize · double-click: default height', collapse: '« Collapse', collapseTip: 'Collapse the sidebar (Ctrl+B)',
     waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`),
     tabTerminalView: 'Terminal view', tagLine: (label, value) => `${label}: ${value}`, toTerminal: 'Switch to the terminal', toThread: 'Back to the thread', viewKey: (key) => `Ctrl ${key}`, relievedByEntry: (name) => `Relieved by ${name}`, relievesEntry: (name) => `Relieves ${name}`,
     closeThisTab: 'Close tab', closeOthers: 'Close others', tabMenu: 'Tab', changesTitle: (name: string) => `Changes · ${name}`,
