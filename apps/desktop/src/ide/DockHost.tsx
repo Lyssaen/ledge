@@ -119,8 +119,9 @@ function GroupWatermark({ group }: IWatermarkPanelProps): JSX.Element | null {
   return <div className="ide-pane">{c!.emptyGroup(g.id)}</div>;
 }
 const COMPONENTS = { tab: Pane };
-// Ledge's tokens, set on `.ide-dock` in ide.css.
-const THEME: DockviewTheme = { name: 'ledge', className: 'ide-dock' };
+// Ledge's tokens, set on `.ide-dock` in ide.css. `tabAnimation` pinned to 'default' (no tab sliding, no smooth reorder):
+// left unset, dockview takes a cross-group drag over a strip through its animation state, a path arrivalOf need not know.
+const THEME: DockviewTheme = { name: 'ledge', className: 'ide-dock', tabAnimation: 'default' };
 
 /** Notes the scroll positions of a panel's known scrollers (`[data-keep-scroll]`: the thread, the reply, the changes' list
  *  and diff, the agent's screen) and gives back what puts them back: a move re-attaches its DOM, which Chromium then shows
@@ -152,6 +153,8 @@ export function arrivalOf(e: DropSpot, viewId: string, modelOf: (dg: DockviewGro
   const key = data.panelId;
   const own = g.tabs.some(t => keyOf(t) === key);
   switch (e.kind) {
+    // dockview's index is where the tab lands in the strip once taken out of it: the tab dropped on, or the one after it
+    // past its middle, less one when the dragged tab sat before it in the same strip (tabAnimation 'default').
     case 'tab': return { key, to: { group: g.id, index: e.index } };
     case 'header_space': return { key, to: own ? { group: g.id, index: g.tabs.length - 1 } : { group: g.id } };
     case 'content':
@@ -289,9 +292,20 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
         if (hit) latest.current.update(w => moveTo(w, hit.key, hit.to));
       })
     ];
-    // Also when the tab is let go elsewhere (or Esc): the source tab, still in place, sends dragend up.
+    // Also when the tab is let go elsewhere (or Esc): the source tab, still in place, sends dragend up. A drag can also end
+    // with no dragend (its source re-rendered away, a webview that drops it): a drop anywhere, or a pointer let go while
+    // dragging, ends it too, once the drop's own handlers (the zone's) have read what was dragged.
+    let late: ReturnType<typeof setTimeout> | undefined;
+    const lateEnd = () => { if (dragged.current) { clearTimeout(late); late = setTimeout(endDrag, 0); } };
+    const ends = ['drop', 'pointerup', 'mouseup'] as const;
     window.addEventListener('dragend', endDrag, true);
-    return () => { clearTimeout(timer); window.removeEventListener('dragend', endDrag, true); for (const s of subs) s.dispose(); };
+    for (const type of ends) window.addEventListener(type, lateEnd, true);
+    return () => {
+      clearTimeout(timer); clearTimeout(late);
+      window.removeEventListener('dragend', endDrag, true);
+      for (const type of ends) window.removeEventListener(type, lateEnd, true);
+      for (const s of subs) s.dispose();
+    };
   }, [api]);
   const onReady = (e: DockviewReadyEvent) => setApi(e.api);
   // The drop zone: only this dock's tab (a file dragged in finds nothing to drop on), into a new group at the right end.

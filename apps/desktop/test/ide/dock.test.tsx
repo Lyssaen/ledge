@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LangProvider } from '../../src/i18n/lang';
-import { DockHost, keepScroll } from '../../src/ide/DockHost';
+import { DockviewComponent } from 'dockview-react';
+import { DockHost, GROUP_MIN_WIDTH, keepScroll } from '../../src/ide/DockHost';
 import { activate, agentTerminalTab, beside, deserialize, empty, keyOf, moveTo, open, serialize, sessionOf, split as splitGroup, type Tab, type Workspace } from '../../src/workspace/model';
 import { createWorkspaceStore, useWorkspace, type WorkspaceStore } from '../../src/workspace/store';
 import { useTabPlace } from '../../src/workspace/tabPlace';
@@ -154,16 +155,24 @@ describe('split, the empty group, the link square, many groups', () => {
     ws = splitGroup(ws, ws.focus);
     ws = splitGroup(ws, ws.focus);
     ws = splitGroup(ws, ws.focus);
+    // The dockview the host draws in, caught as it adds a group: each group's constraint is read there.
+    let dock: DockviewComponent | null = null;
+    const addGroup = DockviewComponent.prototype.addGroup;
+    const spy = vi.spyOn(DockviewComponent.prototype, 'addGroup').mockImplementation(function (this: DockviewComponent, ...a: Parameters<DockviewComponent['addGroup']>) { dock = this; return addGroup.apply(this, a); });
+    onTestFinished(() => spy.mockRestore());
     const store = createWorkspaceStore(ws);
     render(<Host store={store} />);
     await waitFor(() => expect(groupviews()).toHaveLength(4));
+    expect(GROUP_MIN_WIDTH).toBe(300);
+    expect(dock!.groups.map(g => g.minimumWidth)).toEqual([300, 300, 300, 300]);
     // dockview's own element (.ide-dockview) fills the sized box, which its scroller lets overflow the editing area.
-    const dock = document.querySelector<HTMLElement>('.ide-dock-sized')!;
-    expect(dock.style.minWidth).toBe('1200px');
-    expect(dock.parentElement).toHaveClass('ide-dock-scroll');
-    expect(dock.querySelector('.ide-dockview')).not.toBeNull();
+    const sized = document.querySelector<HTMLElement>('.ide-dock-sized')!;
+    expect(sized.style.minWidth).toBe('1200px');
+    expect(sized.parentElement).toHaveClass('ide-dock-scroll');
+    expect(sized.querySelector('.ide-dockview')).not.toBeNull();
     act(() => store.update(w => splitGroup(w, w.focus)));
-    await waitFor(() => expect(dock.style.minWidth).toBe('1500px'));
+    await waitFor(() => expect(sized.style.minWidth).toBe('1500px'));
+    expect(dock!.groups.map(g => g.minimumWidth)).toEqual([300, 300, 300, 300, 300]);
   });
 });
 
@@ -182,6 +191,8 @@ function CountedHost({ store }: { store: WorkspaceStore }) {
 }
 
 describe('dragging a tab: every arrival goes through the model, the panel is moved, never remade', () => {
+  // These stand-ins (sizes, PointerEvent, DragEvent's place) target dockview-react 8.6.1 (dockview-core 8.8.3 under it): its
+  // drop targets measure offsetWidth/offsetHeight and read clientX/clientY. Another version may need others.
   // jsdom lays nothing out: dockview's drop targets measure 300 × 300 boxes at the origin, so (150,150) is a centre and
   // (290,150) a right edge.
   const size = (el: HTMLElement) => (el.classList.contains('dv-tab') ? 80 : 300);
@@ -289,6 +300,9 @@ describe('dragging a tab: every arrival goes through the model, the panel is mov
     await new Promise(r => setTimeout(r, 20));
     expect(store.get()).toBe(before);
     expect(groupviews()).toHaveLength(2);
+    expect(tabIn(groupviews()[0]!, 'session:local:a')).toBeDefined();
+    expect(tabIn(groupviews()[1]!, 'session:local:a')).toBeUndefined();
+    expect(store.get().groups.map(g => g.tabs.map(keyOf))).toEqual([['session:local:a'], ['session:local:b']]);
   });
 
   it('« Déposer ici : nouveau groupe » shows only while a tab is dragged; a drop there opens a group at the right end', async () => {
@@ -308,6 +322,20 @@ describe('dragging a tab: every arrival goes through the model, the panel is mov
     await waitFor(() => expect(root).not.toHaveClass('tab-dragging'));
     await waitFor(() => expect(tabIn(groupviews()[1] ?? document.body, 'session:local:a')).toBeDefined());
     expect(mounts.get('session:local:a')).toBe(1);
+  });
+
+  it('the drop zone also goes when the drag ends without a dragend: a drop anywhere, a pointer or mouse let go', async () => {
+    const store = createWorkspaceStore(two());
+    await mounted(store);
+    const root = document.querySelector('.ide-dock-scroll')!;
+    const tab = tabIn(groupviews()[0]!, 'session:local:a')!;
+    for (const end of [() => fireEvent(window, new Event('drop')), () => fireEvent.pointerUp(window), () => fireEvent.mouseUp(window)]) {
+      fireEvent.dragStart(tab);
+      await waitFor(() => expect(root).toHaveClass('tab-dragging'));
+      end();
+      await waitFor(() => expect(root).not.toHaveClass('tab-dragging'));
+    }
+    expect(store.get().groups.map(g => g.tabs.map(keyOf))).toEqual([['session:local:a'], ['session:local:b']]);
   });
 
   it('a drop on the zone that is not a tab of the dock (a file, say) does nothing', async () => {
