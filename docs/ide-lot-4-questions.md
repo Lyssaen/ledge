@@ -92,3 +92,8 @@ La maquette dessine trois tuiles ; la modale en a quatre (R4).
 
 - Texte utilisé : `launch.modal.limitUnread` (« Limite non lue ») quand la machine choisie n'a aucune lecture du compte de cet agent, même si une autre machine en a une. Sans machine choisie, la tuile montre le premier compte lu de l'agent.
 - Question : faut-il plutôt montrer la limite lue sur une autre machine, avec son nom ?
+
+## 15. Limite de Cursor sur sa tuile
+
+- Texte utilisé en attendant : la tuile Cursor montre « Limite du mois 42 % · réinit. 1 déc. » (la fenêtre du mois), ou « Limite de la semaine 9 % · réinit. … » à défaut ; « Limite non lue » quand le plan ne donne aucun total.
+- Question : est-ce la bonne formulation, et la tuile doit-elle plutôt montrer le pool (Cursor / autres modèles) ?

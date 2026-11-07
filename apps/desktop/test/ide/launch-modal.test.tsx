@@ -26,7 +26,7 @@ const groups: UsageGroup[] = [{ key: 'c', harness: 'claude', machines: ['local']
 type Props = ComponentProps<typeof LaunchModal>;
 const props = (over: Partial<Props> = {}): Props => ({
   client: fakeClient().client, projects: LAUNCH_PROJECTS.projects, machines: [machine('local'), down(machine('nas'))], sessions: [], projectIdOf: () => null,
-  wanted: {}, usage: { groups, threshold: 0.8 }, where: 'active', launch: { status: 'idle' }, onLaunch: vi.fn(), onNewProject: vi.fn(), onCancel: vi.fn(), ...over
+  wanted: {}, usage: { groups, threshold: 0.8, now: Date.now() }, where: 'active', launch: { status: 'idle' }, onLaunch: vi.fn(), onNewProject: vi.fn(), onCancel: vi.fn(), ...over
 });
 const ui = (p: Props) => <LangProvider lang="fr"><LaunchModal {...p} /></LangProvider>;
 const labels = () => [...document.querySelectorAll('.launch-modal-fld > .launch-modal-lbl')].map(l => l.textContent);
@@ -62,11 +62,21 @@ describe('LaunchModal', () => {
     expect(screen.getByRole('button', { name: /^Cursor/ })).toHaveTextContent('Cursor');
   });
 
+  it('the Cursor tile shows its monthly limit, its weekly one without a month', () => {
+    const cursor: UsageGroup = { key: 'k', harness: 'cursor', machines: ['local'], status: 'ok', readAt: null, windows: [{ kind: 'month', pct: 42, resetsAt: soon }] };
+    const view = render(ui(props({ usage: { groups: [cursor], threshold: 0.8, now: Date.now() } })));
+    const tile = screen.getByRole('button', { name: /^Cursor/ });
+    expect(tile).toHaveTextContent(/Limite du mois 42 % · réinit\. \S/);
+    expect(within(tile).getByText('42 %').tagName).toBe('B');
+    view.rerender(ui(props({ usage: { groups: [{ ...cursor, windows: [{ kind: 'seven_day', pct: 9, resetsAt: null }] }], threshold: 0.8, now: Date.now() } })));
+    expect(screen.getByRole('button', { name: /^Cursor/ })).toHaveTextContent(/Limite de la semaine 9 %$/);
+  });
+
   it('under the threshold the percent has no tone; at 100 % it is red, as in the usage footer', () => {
-    const view = render(ui(props({ usage: { groups, threshold: 0.9 } })));
+    const view = render(ui(props({ usage: { groups, threshold: 0.9, now: Date.now() } })));
     expect(within(screen.getByRole('button', { name: /^Claude Code/ })).getByText('84 %')).not.toHaveClass('amber');
     const full: UsageGroup[] = [{ ...groups[0]!, windows: [{ kind: 'five_hour', pct: 100, resetsAt: null }] }];
-    view.rerender(ui(props({ usage: { groups: full, threshold: 0.8 } })));
+    view.rerender(ui(props({ usage: { groups: full, threshold: 0.8, now: Date.now() } })));
     const claude = screen.getByRole('button', { name: /^Claude Code/ });
     expect(claude).toHaveTextContent(/Limite 5 h 100 %$/);
     expect(within(claude).getByText('100 %')).toHaveClass('red');

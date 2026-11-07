@@ -699,7 +699,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         <Modal title={t.modalTitles.launch} onClose={close}>
           <LaunchModalPlace client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
             wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
-            usage={{ groups: usage.groups, threshold: usage.threshold }} where={openWhere(openSession, nav.modal.from === 'plus' ? 'plus' : 'other')}
+            usage={{ groups: usage.groups, threshold: usage.threshold, now: usage.now }} where={openWhere(openSession, nav.modal.from === 'plus' ? 'plus' : 'other')}
             onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
             launch={launcher.state} onLaunch={(msg, preview, where) => { launched.current = { ...preview, where }; launcher.launch(msg); }} onCancel={close} />
         </Modal>

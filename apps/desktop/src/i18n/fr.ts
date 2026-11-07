@@ -1233,7 +1233,8 @@ export const fr = {
       project: 'Projet', where: 'Où travailler', onBranch: (b: string) => `Sur ${b}, dans le dossier du projet`, inFolder: 'Dans le dossier du projet',
       agent: 'Agent', model: 'Modèle', permissions: 'Permissions', message: 'Premier message',
       open: 'Ouvrir', openActive: 'Dans le groupe actif', openRight: 'À droite',
-      limit: (pct: string, reset: string | null) => `Limite 5 h ${pct}${reset ? ` · réinit. ${reset}` : ''}`, limitUnread: 'Limite non lue',
+      limit: (pct: string, reset: string | null) => `Limite 5 h ${pct}${reset ? ` · réinit. ${reset}` : ''}`, limitMonth: (pct: string, reset: string | null) => `Limite du mois ${pct}${reset ? ` · réinit. ${reset}` : ''}`,
+      limitWeek: (pct: string, reset: string | null) => `Limite de la semaine ${pct}${reset ? ` · réinit. ${reset}` : ''}`, limitUnread: 'Limite non lue',
       offline: 'hors ligne', launch: 'Lancer', launchKeys: 'Ctrl Entrée', cancel: 'Annuler'
     }
   },

@@ -35,12 +35,12 @@ function takeRow(f: LaunchForm, projects: readonly Project[], r: ProjectRow): La
 /** The row to stand on when the current one is gone or offline: one online in the same project, else one online anywhere. */
 const onlineRow = (rows: readonly ProjectRow[], project: string | null) => rows.find(r => r.project === project && r.up) ?? rows.find(r => r.up);
 
-/** An agent's 5 h line: « Limite 5 h <b>84 %</b> · réinit. 14:20 », the percent amber past the threshold and red at 100 % (the usage
+/** An agent's limit line (5 h; Cursor: the month, else the week): « Limite 5 h <b>84 %</b> · réinit. 14:20 », the percent amber past the threshold and red at 100 % (the usage
  *  footer's tones); none read, « Limite non lue ». */
-function LimitLine({ limit, lang, m }: { limit: ReturnType<typeof agentLimit>; lang: string; m: Messages['launch']['modal'] }): JSX.Element {
+function LimitLine({ limit, lang, now, m }: { limit: ReturnType<typeof agentLimit>; lang: string; now: number; m: Messages['launch']['modal'] }): JSX.Element {
   if (!limit) return <small>{m.limitUnread}</small>;
-  const reset = limit.resetsAt ? resetShort(limit.resetsAt, Date.now(), lang) : null;
-  return <small>{withPart(x => m.limit(x, reset), <b className={limit.tone || undefined}>{`${limit.pct} %`}</b>)}</small>;
+  const reset = limit.resetsAt ? resetShort(limit.resetsAt, now, lang) : null;
+  return <small>{withPart(x => (limit.kind === 'month' ? m.limitMonth : limit.kind === 'seven_day' ? m.limitWeek : m.limit)(x, reset), <b className={limit.tone || undefined}>{`${limit.pct} %`}</b>)}</small>;
 }
 
 /** A sentence with one strong part (the branch, a limit's percent), wherever the language puts it. */
@@ -55,7 +55,7 @@ function withPart(text: (x: string) => string, part: ReactNode): ReactNode {
 export function LaunchModal(p: {
   client: DaemonClient; projects: readonly Project[]; machines: readonly MachineState[]; sessions: readonly Session[];
   projectIdOf(s: Session): string | null; wanted: { project?: string; filter?: string };
-  usage: { groups: readonly UsageGroup[]; threshold: number };
+  usage: { groups: readonly UsageGroup[]; threshold: number; now: number };
   /** Where « Ouvrir » starts (openWhere); changed here for this session only. */
   where: LaunchWhere;
   launch: LaunchState;
@@ -156,7 +156,7 @@ export function LaunchModal(p: {
                 onClick={() => { if (tool !== form.tool) setForm(f => withTool(f, tool, loadPick(f.project, tool))); }}>
                 <span className="an"><span aria-hidden="true"><ProviderLogo provider={providerOf(tool)} size={16} /></span>{t.launch.tools[tool][0]}</span>
                 <small>{PROVIDER_TITLES[providerOf(tool)]}</small>
-                <LimitLine limit={agentLimit(p.usage.groups, tool, form.machine, p.usage.threshold)} lang={lang} m={m} />
+                <LimitLine limit={agentLimit(p.usage.groups, tool, form.machine, p.usage.threshold, p.usage.now)} lang={lang} now={p.usage.now} m={m} />
               </button>
             ))}
           </div>
