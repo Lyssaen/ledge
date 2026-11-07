@@ -81,6 +81,13 @@ describe('the daemon token source', () => {
 });
 
 describe('the pseudo-terminal', () => {
+  it('passes the native shell to pty_open, null when absent', async () => {
+    inTauri(); core.invoke.mockResolvedValue(0);
+    await openPty([], { cols: 80, rows: 24 }, { data: vi.fn(), exit: vi.fn() }, 'cmd');
+    expect(core.invoke).toHaveBeenCalledWith('pty_open', expect.objectContaining({ native: 'cmd' }));
+    await openPty(['sh'], { cols: 80, rows: 24 }, { data: vi.fn(), exit: vi.fn() });
+    expect(core.invoke).toHaveBeenLastCalledWith('pty_open', expect.objectContaining({ native: null }));
+  });
   it('opens a pty with the Rust argument names and streams raw bytes', async () => {
     inTauri(); core.invoke.mockResolvedValueOnce(0);
     const data = vi.fn(), exit = vi.fn();

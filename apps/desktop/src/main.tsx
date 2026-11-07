@@ -10,6 +10,7 @@ import { loadMessages } from './i18n/messages';
 import { bootLanguages, BOOT_FAILURE } from './i18n/boot';
 import { recordToastsForTests } from './shell/Toast';
 import type { PtyBackend } from './term/backend';
+import type { ShellsAvailable } from './term/shells';
 import { isAtelierWindow } from './atelier/detach';
 
 purgeObsolete();
@@ -20,11 +21,14 @@ if (import.meta.env.VITE_LEDGE_E2E) (window as unknown as { __ledgeToasts?: stri
 
 // The e2e build only: a stand-in shell that prints a `$ ` prompt and echoes what is typed, and records each write for Playwright.
 if (import.meta.env.VITE_LEDGE_E2E) {
-  const w = window as unknown as { __ledgePtyWrites?: string[]; __ledgeFakePty?: PtyBackend; __ledgePtyEmit?: (text: string) => void };
+  const w = window as unknown as { __ledgePtyWrites?: string[]; __ledgePtyOpens?: { argv: string[]; native?: string }[]; __ledgeFakePty?: PtyBackend; __ledgePtyEmit?: (text: string) => void; __ledgeShells?: ShellsAvailable };
   const writes: string[] = w.__ledgePtyWrites = [];
+  const opens: { argv: string[]; native?: string }[] = w.__ledgePtyOpens = [];
+  w.__ledgeShells ??= { wsl: 'Ubuntu', powershell: false, cmd: false, gitBash: false };
   const enc = new TextEncoder();
   w.__ledgeFakePty = {
-    open: async (_argv, _size, on) => {
+    open: async (argv, _size, on, native) => {
+      opens.push({ argv, native });
       let closed = false;
       // What the program prints, from Playwright: the last opened screen's.
       w.__ledgePtyEmit = text => { if (!closed) on.data(enc.encode(text)); };

@@ -1345,6 +1345,7 @@ export const en: Messages = {
     settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
     settingOff: 'IDE interface (preview) off',
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
+    panel: { shells: { title: 'New terminal', local: 'Local', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Command Prompt', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'default' } },
     sideToggle: 'Sidebar (Ctrl+B)', bottomToggle: 'Bottom panel (Ctrl+J)', rightToggle: 'Right panel (Ctrl+/)',
     activityLabel: 'Activity bar', projects: 'Projects', rigs: 'OpenRig rigs', atoi: 'For you',
     openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',

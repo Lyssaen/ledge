@@ -1411,6 +1411,8 @@ export const fr = {
     settingHint: 'Groupes d’onglets, panneaux et barre d’activité, à la manière de VS Code. L’ancienne interface reste disponible tant que l’aperçu dure.',
     settingOff: 'Interface IDE (aperçu) désactivée',
     brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',
+    /** The bottom panel's « + ▾ » menu (IDE lot 5). */
+    panel: { shells: { title: 'Nouveau terminal', local: 'Locaux', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Invite de commandes', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'par défaut' } },
     sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
     activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
     openrigTab: 'OpenRig (onglet)', atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',

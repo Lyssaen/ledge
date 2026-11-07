@@ -16,7 +16,8 @@
  *   window minimize / toggleMaximize / close / isMaximized / onResized   the title bar's buttons (decorations are off)
  */
 import { listen } from '@tauri-apps/api/event';
-import type { PtyEvents, PtyHandle } from '../term/backend';
+import type { NativeShell, PtyEvents, PtyHandle } from '../term/backend';
+import type { ShellsAvailable } from '../term/shells';
 import { createTokenSource, type TokenRead, type TokenSource } from '@ledge/fleet';
 
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -121,7 +122,7 @@ export function onOpenTarget(fn: (raw: string) => void): () => void {
 
 /** A pseudo-terminal running `argv` in the shell, or null when it refuses to start or outside Tauri. After `close()` no
  *  more output reaches `on.data`. */
-export async function openPty(argv: string[], size: { cols: number; rows: number }, on: PtyEvents): Promise<PtyHandle | null> {
+export async function openPty(argv: string[], size: { cols: number; rows: number }, on: PtyEvents, native?: NativeShell): Promise<PtyHandle | null> {
   if (!isTauri()) return null;
   try {
     core ??= import('@tauri-apps/api/core');
@@ -130,7 +131,7 @@ export async function openPty(argv: string[], size: { cols: number; rows: number
     const onData = new Channel<ArrayBuffer>(); const onExit = new Channel<number | null>();
     onData.onmessage = buf => { if (!disposed) on.data(new Uint8Array(buf)); };
     onExit.onmessage = code => { if (!disposed) on.exit(code); };
-    const id = await call<number>('pty_open', { argv, cols: size.cols, rows: size.rows, onData, onExit });
+    const id = await call<number>('pty_open', { argv, cols: size.cols, rows: size.rows, onData, onExit, native: native ?? null });
     const quiet = (cmd: string, args: Record<string, unknown>) => { void call(cmd, args).catch(() => {}); };
     return {
       write: data => quiet('pty_write', { id, data }),
@@ -138,6 +139,17 @@ export async function openPty(argv: string[], size: { cols: number; rows: number
       close: () => { if (disposed) return; disposed = true; quiet('pty_close', { id }); },
     };
   } catch { return null; }
+}
+
+/** What the machine can open in the bottom panel: WSL's default distro ("" when wsl.exe did not answer), and the native
+ *  shells found. Outside Tauri: nothing, or the e2e build's `window.__ledgeShells`. */
+export async function shellsAvailable(): Promise<ShellsAvailable> {
+  const none: ShellsAvailable = { wsl: null, powershell: false, cmd: false, gitBash: false };
+  if (!isTauri()) return (window as unknown as { __ledgeShells?: ShellsAvailable }).__ledgeShells ?? none;
+  try {
+    core ??= import('@tauri-apps/api/core');
+    return { ...none, ...await (await core).invoke<ShellsAvailable>('shells_available') };
+  } catch { return none; }
 }
 
 /** The title bar's window buttons (the native bar is off: `decorations: false`). Without Tauri they do nothing. */
