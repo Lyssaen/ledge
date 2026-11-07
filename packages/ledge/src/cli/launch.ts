@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import type { Session, Tool } from '@ledge/protocol';
-import { PROTOCOL_PORT, namesInUse } from '@ledge/protocol';
+import { PROTOCOL_PORT, namesInUse, openName } from '@ledge/protocol';
 import { connect, DaemonRefusedError, type Client } from '../client.js';
 import { realTmux, type Tmux } from '../tmux.js';
 import { ensureLedgeDir } from '../paths.js';
@@ -95,7 +95,7 @@ export async function createSession(opts: { tool: TmuxTool; args: string[]; comm
     names.push(...namesInUse(snap.sessions));
     for (const s of snap.sessions) ids.push(s.id);
   }
-  const session = await spawnSession({ ...opts, taken: { names, ids } });
+  const session = await spawnSession({ ...opts, name: openName(names, opts.name), taken: { names, ids } });
   // The agent already runs: a lost register only means an untracked session, never a failed launch.
   try { opts.client?.send({ type: 'session.register', session }); }
   catch (e) { log(`register failed for ${session.id}: ${(e as Error).message}`); }

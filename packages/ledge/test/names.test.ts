@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NAMES, ledgeTitleRest, pickName } from '../src/names.js';
+import { NAMES, ledgeTitleRest, openName, pickName } from '../src/names.js';
 
 describe('names', () => {
   it('has 64 unique short names', () => {
@@ -41,6 +41,12 @@ describe('names', () => {
   });
   it('suffixes when all 64 are taken', () => {
     expect(pickName(NAMES)).toBe(NAMES[0] + '-2');
+  });
+  it('a numbered session holds the base name, so the next automatic name is the next free one', () => {
+    expect(pickName(['Otto-2', 'Otto-3'])).toBe('Pim');
+    expect(pickName(['otto-2'], 'Otto')).toBe('Otto');
+    expect(openName(['Otto-2'], 'Otto')).toBeUndefined();
+    expect(openName(['Otto'], 'otto')).toBe('otto');
   });
 });
 

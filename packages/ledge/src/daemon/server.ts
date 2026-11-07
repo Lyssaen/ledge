@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { namesInUse, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, taskClosed, type BrainChoice, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
+import { nameTaken, namesInUse, openName, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, taskClosed, type BrainChoice, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type DecidedBy, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -1164,9 +1164,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const cwd = req.cwd;
     const dirs = req.dirs?.length ? await Promise.all(req.dirs.map(d => resolveFolder(d, opts.home))) : undefined;
     const live = store.all();
+    const names = [...namesInUse(live), ...heldNames(live)];
     const env = await agentEnv();
-    const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs }), name: req.name, cwd, tmux, now, env,
-      taken: { names: [...live.filter(s => s.state !== 'exited').map(s => s.name), ...heldNames(live)], ids: live.map(s => s.id) } });
+    const spawned = await spawnSession({ tool: req.tool, args: launchArgs({ ...req, dirs }), name: openName(names, req.name), cwd, tmux, now, env,
+      taken: { names, ids: live.map(s => s.id) } });
     const session: Session = { ...spawned, ...(req.model ? { model: req.model } : {}), ...(req.effort ? { effort: req.effort } : {}) };
     store.upsert(session);
     store.touchRecent(session.cwd, session.project, session.startedAt);
@@ -1345,9 +1346,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         const existing = store.get(incoming.id);
         // Two launchers can pick the same name from the same snapshot: the first to register keeps it.
         const others = store.all().filter(o => o.id !== incoming.id);
-        if (others.some(o => o.state !== 'exited' && o.name === incoming.name)) {
+        const held = [...namesInUse(others), ...heldNames(store.all())];
+        if (nameTaken(held, incoming.name)) {
           const old = incoming.name;
-          const name = pickName([...namesInUse(others), ...heldNames(store.all())]);
+          const name = pickName(held);
           const title = incoming.title.startsWith(`${old} ·`) ? `${name}${incoming.title.slice(old.length)}` : incoming.title;
           incoming = { ...incoming, name, title };
         }

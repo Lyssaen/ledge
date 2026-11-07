@@ -22,7 +22,30 @@ export function cleanName(raw: string): string {
 /** `ledge` addresses Ledge itself (`ledge task give ledge`): no session takes it. */
 const RESERVED = ['ledge'];
 
-/** The first free name, or the preferred one (cleaned, suffixed `-2`, `-3`… while taken). A name is taken whatever its case. */
+/** True when `name` is taken, whatever the case, or a numbered session (`Otto-2`) already holds that base name. */
+export function nameTaken(taken: Iterable<string>, name: string): boolean {
+  const used = new Set([...taken].map(n => n.toLowerCase()));
+  const key = name.toLowerCase();
+  if (used.has(key)) return true;
+  const prefix = `${key}-`;
+  for (const u of used) if (u.startsWith(prefix) && /^\d+$/.test(u.slice(prefix.length))) return true;
+  return false;
+}
+
+/** What a fresh launch should ask for. A suggestion of a base a numbered session already holds (`Otto` while `Otto-2`
+ *  is live) is dropped, so the next list name is chosen. An exact clash is kept and suffixed (`Otto` → `Otto-2`). */
+export function openName(taken: Iterable<string>, preferred?: string): string | undefined {
+  const wanted = cleanName(preferred ?? '');
+  if (!wanted) return undefined;
+  const used = new Set([...taken].map(n => n.toLowerCase()));
+  if (used.has(wanted.toLowerCase())) return preferred;
+  if (nameTaken(taken, wanted)) return undefined;
+  return preferred;
+}
+
+/** The first free name, or the preferred one (cleaned, suffixed `-2`, `-3`… while that exact name is taken). A name is
+ *  taken whatever its case. With no preference, a numbered session holds its base name: `Otto-2` leaves `Otto` for the
+ *  session that has it and the next launch takes `Pim`. */
 export function pickName(taken: Iterable<string>, preferred?: string): string {
   const used = new Set([...taken].map(n => n.toLowerCase()));
   for (const r of RESERVED) used.add(r);
@@ -33,7 +56,7 @@ export function pickName(taken: Iterable<string>, preferred?: string): string {
     if (free(wanted)) return wanted;
     for (let i = 2; ; i++) if (free(`${wanted}-${i}`)) return `${wanted}-${i}`;
   }
-  const first = NAMES.find(free);
+  const first = NAMES.find(n => !nameTaken(taken, n));
   if (first) return first;
   for (let i = 2; ; i++) if (free(`${NAMES[0]}-${i}`)) return `${NAMES[0]}-${i}`;
 }

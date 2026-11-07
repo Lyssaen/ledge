@@ -2003,6 +2003,16 @@ describe('server', () => {
       expect(tmux.created[1]!.env.LEDGE_CODEX_SESSION).toBeUndefined();
       c.close();
     });
+    it('skips a base name a numbered session holds, and reuses a name once that session is archived', async () => {
+      mkdirSync(join(home(), 'q'));
+      store.upsert(mk('a', { name: 'Otto-2' }));
+      store.upsert(mk('old', { name: 'Pim', state: 'idle', archivedAt: T0 }));
+      const c = await connect({ port: srv.port }); await c.next('snapshot');
+      c.send({ type: 'session.launch', tool: 'cursor', cwd: join(home(), 'q'), name: 'Otto' });
+      const launched = await c.next('session.launched');
+      expect(store.get(launched.id)!.name).toBe('Pim');
+      c.close();
+    });
     it('expands ~ and refuses a missing folder or a file with an error for the requester', async () => {
       mkdirSync(join(home(), 'tilde')); writeFileSync(join(home(), 'file.txt'), 'x');
       const srv2 = await startServer({ store, tmux, port: 0, home: home() });

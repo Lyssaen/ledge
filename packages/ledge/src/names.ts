@@ -1,6 +1,6 @@
 /** The names live in the protocol package (the overlay offers one before launching); the daemon keeps this import path. */
 import { NAMES } from '@ledge/protocol';
-export { NAMES, pickName } from '@ledge/protocol';
+export { NAMES, nameTaken, openName, pickName } from '@ledge/protocol';
 
 /** Whether Ledge could have named a session `n`: `own`, a NAMES entry, or one suffixed `-<digits>` as pickName does. */
 const ledgeShaped = (n: string, own: string): boolean => n === own || NAMES.includes(n.replace(/-\d+$/, ''));
