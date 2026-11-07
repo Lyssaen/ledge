@@ -16,6 +16,8 @@ import { loadComposer } from '../src/launch/lazy';
 import { loadEditor } from '../src/projects/lazy';
 import { loadHome } from '../src/chat/lazy';
 import { loadSettings } from '../src/settings/lazy';
+import { empty, open, serialize } from '../src/workspace/model';
+import { ATELIER_TAB, WORKSPACE_KEY } from '../src/workspace/store';
 
 /** jsdom loads no stylesheet: the declarations of the top-level rules naming `selector` in one of the app's sheets (@media and @container blocks removed). */
 /** The Atelier's sheets live in @ledge/ui (shared with the mobile app's Atelier, iPad lot 1). */
@@ -193,3 +195,9 @@ export async function openProjectEditor(user: UserEvent): Promise<void> {
 export { recordToastsForTests as recordToasts } from '../src/shell/Toast';
 /** The « Setting saved » notices said since `recordToasts()`, in either language (the DOM shows only the last one). */
 export const savedNotices = (all: readonly string[]): string[] => all.filter(x => /^(Setting saved|Réglage enregistré)/.test(x));
+
+/** The IDE workspace these tests start from: the atelier alone, as a first run had it before the welcome. A workspace the
+ *  test saved itself is kept. */
+export function seedAtelier(): void {
+  if (localStorage.getItem(WORKSPACE_KEY) === null) localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(open(empty(), ATELIER_TAB))));
+}

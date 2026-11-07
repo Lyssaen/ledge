@@ -18,7 +18,7 @@ import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { TermStore } from '../../src/term/store';
-import { PROJECTS } from '../helpers';
+import { PROJECTS, seedAtelier } from '../helpers';
 
 /** The App test's pseudo-terminals and xterms: what each shell opened, what was typed into it, each xterm's typing. */
 const pty = vi.hoisted(() => ({ opens: [] as string[][], typed: [] as string[], inputs: new Map<Element, (d: string) => void>() }));
@@ -313,6 +313,7 @@ describe('a shell dragged between the panel and the dock (App)', () => {
 
   async function mountApp() {
     await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+    seedAtelier();
     saveIdeEnabled(true);
     const d = await createMockDaemon(); daemons.push(d);
     d.machines([{ id: 'local', label: 'Local' }]);

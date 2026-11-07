@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { readJson, writeJson } from '../state/storage';
-import { close, closeOthers, deserialize, empty, find, keyOf, open, remember, reopenLast, serialize, type Closed, type Tab, type Workspace } from './model';
+import { close, closeOthers, deserialize, empty, find, keyOf, remember, reopenLast, serialize, type Closed, type Tab, type Workspace } from './model';
 
 /** The IDE workspace, outside React: tabs survive a reload (`ledge.ide.workspace`). */
 export const WORKSPACE_KEY = 'ledge.ide.workspace';
@@ -55,10 +55,10 @@ export function createWorkspaceStore(initial: Workspace = loadWorkspace(), opts:
   };
 }
 
-/** The saved workspace, or the atelier alone when nothing usable is stored. */
+/** The saved workspace, or one group without tabs (the welcome) when nothing usable is stored. */
 export function loadWorkspace(): Workspace {
   const raw = readJson(WORKSPACE_KEY);
-  return (typeof raw === 'string' ? deserialize(raw) : null) ?? open(empty(), ATELIER_TAB);
+  return (typeof raw === 'string' ? deserialize(raw) : null) ?? empty();
 }
 
 export function useWorkspace(store: WorkspaceStore): Workspace {

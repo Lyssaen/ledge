@@ -56,7 +56,7 @@ import { useWindowFullscreen } from './shell/useWindowFullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
-import { useSessionActions } from './manage/useSessionActions';
+import { useSessionActions, type SessionActions } from './manage/useSessionActions';
 import { useContextMenu } from './manage/useContextMenu';
 import { SessionMenuHost, type SessionMenuIde } from './manage/SessionMenu';
 import { ConfirmDialog } from './manage/ConfirmDialog';
@@ -76,7 +76,8 @@ import { TermStoreContext } from './term/useTerms';
 import { defaultShell, loadLastShell, saveLastShell, shellLaunch, shellMenu, type ShellKind, type ShellsAvailable } from './term/shells';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
-import { useIdeEnabled } from './workspace/prefs';
+import { useIdeEnabled, useResumeOnStart } from './workspace/prefs';
+import { liveTabs, loadLiveTabs, machineOf, nextMemo, saveLiveTabs, toResume } from './workspace/resume';
 import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
@@ -87,7 +88,7 @@ import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
 import { createTabExtras, TabExtrasContext, useTabExtras } from './ide/tabExtras';
 import { openSessionTerminal } from './session/terminal';
-import { EmptyGroup, type EmptyPick } from './ide/EmptyGroup';
+import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeBottom, IdeDock, IdeOutput, IdePlace } from './ide/lazy';
@@ -343,6 +344,29 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     if (!ide) return;
     wsStore.update(w => reconcileTabs(w, keepTab));
   }, [known, projects, ide, keepTab]);
+  // The sessions whose tab was open, alive (ledge.ide.liveTabs): the memo follows the run; the one read at start says what a stop
+  // killed. Once a session's machine is ready, each one now ended is resumed in its tab, once per run (the setting can turn it off).
+  const [resumeOnStart] = useResumeOnStart();
+  const bootMemo = useRef<readonly string[] | null>(null);
+  if (bootMemo.current === null) bootMemo.current = loadLiveTabs();
+  const resumeSeen = useRef(new Set<string>());
+  const resumeNow = useRef({ actions: null as SessionActions | null, notify: (_: string) => {} });
+  useEffect(() => {
+    if (!ide) return;
+    const ready = new Set(readyMachines ? readyMachines.split('\n') : []);
+    const before = loadLiveTabs();
+    const memo = nextMemo(before, liveTabs(ws, known), ready);
+    if (memo.join('\n') !== before.join('\n')) saveLiveTabs(memo);
+    const { actions: acts, notify: say } = resumeNow.current;
+    if (!acts) return;
+    const due = bootMemo.current!.filter(id => ready.has(machineOf(id)) && !resumeSeen.current.has(id));
+    const go = resumeOnStart ? toResume(due, known, acts.allowed) : [];
+    // An ended session its machine cannot resume yet (its daemon's info not in) waits for it; every other one is settled.
+    const later = resumeOnStart ? toResume(due, known, () => true).filter(id => !go.includes(id)) : [];
+    for (const id of due) if (!later.includes(id)) resumeSeen.current.add(id);
+    for (const id of go) acts.resume(id);
+    if (go.length > 0) say(t.ide.resumed(go.length));
+  }, [ide, ws, known, machines, readyMachines, resumeOnStart, t]);
   // Turning the IDE on from a session page opens that session's tab (Review Focus 3); from Settings (where its switch is) or
   // the OpenRig page, theirs.
   useEffect(() => {
@@ -398,6 +422,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Allow / Deny from the session (and the sidebar): one send per request; a refusal or a silence is said in the toast.
   // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier and the session page hand it their menus.
   const actions = useSessionActions({ client: fleetClient, sessions, archived: fleetView.archived, machines, errors, notify });
+  resumeNow.current = { actions, notify };
   // The session menu, from the atelier's seats and the session page's header « … » (one at a time).
   const sessionMenu = useContextMenu({ client: fleetClient, sessions, archived: fleetView.archived, projects: projects?.projects ?? NO_PROJECTS, onShowTerminal: showTerminal });
   const decisions = useDecisions({ client: fleetClient, sessions, errors, notify });
@@ -718,8 +743,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       }
       return null;
     };
-    // An empty group's proposals open in it: it is focused first, then the tab opened « active » (or brought forward where it
-    // already is: a tab is never duplicated). « Terminal · X » (« Capture · X » for a seat) only while X is still a known session.
+    // An empty group shows the welcome; what it opens lands in that group: it is focused first, then the tab opened « active »
+    // (or brought forward where it already is: a tab is never duplicated). « Terminal · X » (« Capture · X » for a seat) only
+    // while X is still a known session.
     const emptyGroup = (gid: string): ReactNode => {
       const from = emptyProposals(ws, gid).terminalOf;
       const s = from === null ? undefined : known.find(x => x.id === from);
@@ -727,11 +753,16 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         wsStore.update(w => focusGroup(w, gid));
         if (p === 'terminal') { if (s) wsStore.update(w => openTab(w, agentTerminalTab(s.id), 'active')); return; }
         if (p === 'launch') { dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); return; }
+        if (p === 'search') { dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
+        if (p === 'ledge') { dispatch({ type: 'ledge' }); return; }
+        if (p === 'next') { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id, where: 'active' }); return; }
         // « Terminal »: the default shell (R7), in a tab of this group, in the folder of the session it was split from.
         if (p === 'shell') { openShell(pickDefault(), shellDir(from), id => wsStore.update(w => openTab(focusGroup(w, gid), { kind: 'terminal', ref: id }, 'active'))); return; }
         dispatch(tabAction(p === 'atelier' ? ATELIER_TAB : p === 'settings' ? SETTINGS_TAB : openrigTab())!);
       };
-      return <EmptyGroup terminal={s ? title({ kind: 'session', ref: s.id }) : null} seat={s?.rig != null} onPick={pick} />;
+      const where = (x: Session) => (x.rig ? projectLabel(x, projectName) : [projectName(x), x.branch].filter(Boolean).join(' · '));
+      return <IdeWelcome terminal={s ? title({ kind: 'session', ref: s.id }) : null} seat={s?.rig != null} recent={recentSessions(sessions)} waiting={waiting.length > 0}
+        where={where} onPick={pick} onOpen={id => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'open', id, where: 'active' }); }} />;
     };
     return (
       <IdePlace layout={layout} onLayout={onLayout} blocked={blocked} readOnly={localDown} dragging={!!filing.dragging}

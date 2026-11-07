@@ -12,7 +12,7 @@ import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { TermStore } from '../../src/term/store';
-import { PROJECTS } from '../helpers';
+import { PROJECTS, seedAtelier } from '../helpers';
 import { empty, open, serialize } from '../../src/workspace/model';
 import { WORKSPACE_KEY } from '../../src/workspace/store';
 import { fakeBackend, fakeSurface } from '../term-fakes';
@@ -44,6 +44,7 @@ const PERMISSION = { state: 'waiting_permission', pending: { kind: 'permission',
 /** `stream`: the machine streams the agents' panes (their xterm a fake one), so their screens attach in the test. */
 async function mount({ ide = true, stream = false }: { ide?: boolean; stream?: boolean } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+  seedAtelier();
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   if (stream) { d.extras.daemon = { version: '0.49.0', install: 'npm', systemd: true, terminalStream: true }; env.backend = fakeBackend(); }

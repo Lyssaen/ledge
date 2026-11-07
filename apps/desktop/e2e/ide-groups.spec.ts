@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import type { Session, ThreadItem } from '@ledge/protocol';
-import { test, expect } from './fixtures';
+import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, session, twoProjects } from './daemon';
 import { at, fleet, tool } from './thread';
 
@@ -9,8 +9,12 @@ import { at, fleet, tool } from './thread';
 // agent screens side by side, the link square, four groups in a narrow window, where a session opens, the Ledge mark.
 test.use({ viewport: { width: 1920, height: 1080 } });
 test.setTimeout(90_000);
+/** The labels of a welcome's « Start » rows, in order (their keys are aria-hidden). */
+const startRows = (welcome: Locator) => welcome.getByRole('region', { name: 'Start' }).locator('.ide-wl-label').allTextContents();
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
 });
 
 /** A long thread (forty turns), long enough to scroll. */
@@ -201,22 +205,22 @@ test('a tab dragged before another in its own strip changes the model\'s order, 
   await expect(draft(page, 'Nova')).toHaveValue('pas perdu');
 });
 
-test('split from a session: the empty group, « Terminal · Otto » first, then its attached screen; the R2 note when the session\'s tab takes it', async ({ page }) => {
+test('split from a session: the welcome, « Terminal · Otto » first, then its attached screen; the R2 note when the session\'s tab takes it', async ({ page }) => {
   await boot(page, true);
   await open(page, 'Otto');
   await page.keyboard.press('Control+\\');
   await expect(groups(page)).toHaveCount(2);
-  const empty = groups(page).nth(1).locator('.ide-empty');
+  const empty = groups(page).nth(1).locator('.ide-welcome');
   await expect(empty).toBeVisible();
   await expect(tabsIn(page, 1)).toHaveCount(0);
   await expect(groups(page).nth(1)).toHaveClass(/dv-active-group/);
-  await expect(empty.getByRole('heading', { name: 'Empty group' })).toBeVisible();
-  await expect(empty).toContainText('Drag a tab here, open a session from the explorer, or:');
-  expect(await empty.getByRole('button').allTextContents()).toEqual(['Terminal · Otto', 'New session', 'OpenRig', 'Settings', 'Atelier', 'Terminal']);
+  await expect(empty.locator('[data-ledge-mark]')).toBeVisible();
+  expect(await startRows(empty)).toEqual(['Terminal · Otto', 'New session', 'Go to a session', 'Ask Ledge', 'Next request', 'OpenRig', 'Atelier', 'Terminal', 'Settings']);
+  await expect(empty.getByRole('region', { name: 'Recent' })).toContainText('Otto');
   await expect(empty).toContainText('Tip: link this group');
-  // The mockup's `.btn`: 26 px high, 12 px type, 6 px corners.
-  for (const b of await empty.getByRole('button').all()) {
-    expect(await b.evaluate(el => { const c = getComputedStyle(el); return [c.height, c.fontSize, c.borderRadius, c.paddingLeft]; })).toEqual(['26px', '12px', '6px', '10px']);
+  // The mockup's rows (docs/mockups/accueil-vide): 28 px high, 12.5 px type, 6 px corners.
+  for (const b of await empty.getByRole('region', { name: 'Start' }).getByRole('button').all()) {
+    expect(await b.evaluate(el => { const c = getComputedStyle(el); return [c.height, c.fontSize, c.borderRadius]; })).toEqual(['28px', '12.5px', '6px']);
   }
   await groups(page).nth(1).screenshot({ path: 'e2e/.results/ide-empty-group.png' });
   await page.screenshot({ path: 'e2e/.results/ide-empty-group-full.png' });
@@ -277,7 +281,7 @@ test('« >_ Otto · tmux », dragged to another group then to « nouveau groupe 
   const daemon = await boot(page, true);
   await open(page, 'Otto');
   await page.keyboard.press('Control+\\');
-  await groups(page).nth(1).locator('.ide-empty').getByRole('button', { name: 'Terminal · Otto' }).click();
+  await groups(page).nth(1).locator('.ide-welcome').getByRole('button', { name: 'Terminal · Otto' }).click();
   const term = plainTab(page, '>_ Otto · tmux');
   await expect(term).toHaveClass(/dv-active-tab/);
   await attached(page, '>_ Otto');
@@ -296,13 +300,13 @@ test('« >_ Otto · tmux », dragged to another group then to « nouveau groupe 
   await keptScreen(page, daemon.received, '>_ Otto', 'tmux');
 });
 
-test('Review Focus 3: split from the Atelier, the empty group offers no « Terminal · … »', async ({ page }) => {
+test('Review Focus 3: split from the Atelier, the welcome offers no « Terminal · … »', async ({ page }) => {
   await boot(page);
   await expect(tabs(page)).toHaveCount(1);   // the Atelier
   await split(page, 0);
-  const empty = groups(page).nth(1).locator('.ide-empty');
+  const empty = groups(page).nth(1).locator('.ide-welcome');
   await expect(empty).toBeVisible();
-  expect(await empty.getByRole('button').allTextContents()).toEqual(['New session', 'OpenRig', 'Settings', 'Atelier', 'Terminal']);
+  expect(await startRows(empty)).toEqual(['New session', 'Go to a session', 'Ask Ledge', 'Next request', 'OpenRig', 'Atelier', 'Terminal', 'Settings']);
   await expect(empty).not.toContainText('Tip:');
   // « Settings » opens in the empty group.
   await empty.getByRole('button', { name: 'Settings' }).click();
@@ -390,7 +394,7 @@ test('the mockup\'s groups: a session, its linked Changes, an empty group; scree
   await expect(plainTab(page, 'Changes · Nova')).toBeVisible();
   await split(page, 1);
   await expect(groups(page)).toHaveCount(3);
-  await expect(groups(page).nth(2).locator('.ide-empty')).toBeVisible();
+  await expect(groups(page).nth(2).locator('.ide-welcome')).toBeVisible();
   await groups(page).nth(0).locator('.session-thread').click({ position: { x: 20, y: 20 } });
   await expect(groups(page).nth(0)).toHaveClass(/dv-active-group/);
   // The new Ledge mark in the title bar, 16 px.
@@ -429,7 +433,7 @@ test('Review Focus 5: four groups in a 1280 px window keep 300 px each, the edit
   }
   // The last group's empty page, at the far right, too.
   await scroller.evaluate(el => { el.scrollLeft = el.scrollWidth; });
-  const last = await box(groups(page).nth(3).locator('.ide-empty'));
+  const last = await box(groups(page).nth(3).locator('.ide-welcome'));
   expect(last.x + last.width).toBeLessThanOrEqual(area.x + area.width + 1);
   await page.screenshot({ path: 'e2e/.results/ide-groups-narrow.png' });
   await groups(page).nth(1).screenshot({ path: 'e2e/.results/ide-groups-narrow-nova.png' });
@@ -537,4 +541,24 @@ test('lot 3 follow-up: an empty group closes from its « Close group (Ctrl+W) »
   await expect(page.locator('.ide')).toBeVisible();
   await page.keyboard.press('Control+Shift+T');
   await expect(tabOf(page, 'Nova')).toHaveClass(/dv-active-tab/);
+});
+
+test('first run: no tab, the welcome in the editor; in a 300 px group it stacks; screenshots', async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.removeItem('ledge.ide.workspace'); } catch { /* ignore */ } });
+  await boot(page);
+  const welcome = groups(page).nth(0).locator('.ide-welcome');
+  await expect(welcome).toBeVisible();
+  await expect(tabs(page)).toHaveCount(0);
+  await expect(welcome.getByRole('region', { name: 'Recent' })).toContainText('Otto');
+  await page.screenshot({ path: 'e2e/.results/ide-welcome.png' });
+  await welcome.getByRole('region', { name: 'Recent' }).getByRole('button', { name: /^Otto/ }).click();
+  await expect(tabs(page)).toHaveCount(1);
+  await page.keyboard.press('Control+\\');
+  await expect(groups(page)).toHaveCount(2);
+  const narrow = groups(page).nth(1).locator('.ide-welcome');
+  await expect(narrow).toBeVisible();
+  const cols = await narrow.locator('.ide-wl-cols').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+  const width = await groups(page).nth(1).evaluate(el => el.getBoundingClientRect().width);
+  if (width < 620) expect(cols).toBe(1);
+  await groups(page).nth(1).screenshot({ path: 'e2e/.results/ide-empty-group.png' });
 });

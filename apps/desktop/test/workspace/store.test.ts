@@ -13,13 +13,13 @@ describe('workspace store', () => {
     const w = deserialize(JSON.parse(localStorage.getItem(KEY)!));
     expect(w && keyOf(active(w)!)).toBe('settings:main');
   });
-  it('first run opens the atelier', () => {
-    expect(active(loadWorkspace())).toEqual(ATELIER_TAB);
+  it('first run opens one group without tabs: the welcome', () => {
+    expect(loadWorkspace()).toEqual(empty());
   });
   it('unreadable layout falls back, without exception', () => {
     for (const raw of ['{"version":2}', 'not json', '42', '{"version":1}', JSON.stringify({ version: 1 })]) {
       localStorage.setItem(KEY, raw);
-      expect(active(loadWorkspace())).toEqual(ATELIER_TAB);
+      expect(loadWorkspace()).toEqual(empty());
     }
   });
   it('round trip through the store', () => {

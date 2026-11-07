@@ -27,3 +27,10 @@ export const test = base.extend<{ errors: string[] }>({
   }, { auto: true }]
 });
 export { expect };
+
+/** The IDE workspace these specs start from: the atelier alone, as a first run had it before the welcome. Kept across reloads:
+ *  only an empty storage gets it. */
+export async function seedAtelier(page: Page): Promise<void> {
+  const atelier = JSON.stringify(JSON.stringify({ version: 1, windows: ['main'], groups: [{ id: 'g1', window: 'main', tabs: [{ kind: 'atelier', ref: 'main' }], active: 0, link: null }], focus: 'g1', next: 2 }));
+  await page.addInitScript(w => { try { if (localStorage.getItem('ledge.ide.workspace') === null) localStorage.setItem('ledge.ide.workspace', w); } catch { /* ignore */ } }, atelier);
+}

@@ -11,7 +11,7 @@ import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { loadOpenSession, saveOpenSession } from '../../src/workspace/openPrefs';
-import { PROJECTS } from '../helpers';
+import { PROJECTS, seedAtelier } from '../helpers';
 import type { Workspace } from '../../src/workspace/model';
 import type { Session } from '@ledge/protocol';
 
@@ -23,6 +23,7 @@ afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.cl
 /** `seat`: Pim, a seat of the rig ledge-dev (the rigs view lists it, not the tree). */
 async function mount({ ide = true, seat = false, broadcast = false, extra = [] }: { ide?: boolean; seat?: boolean; broadcast?: boolean; extra?: Session[] } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+  seedAtelier();
   if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }]);
@@ -157,8 +158,8 @@ describe('Ctrl+click and « Ouvrir une session »', () => {
     await screen.findAllByTitle('Écrire à tout le projet…');
     fireEvent.click(tree.getByRole('button', { name: /^Otto/ }), { shiftKey: true });
     expect(row(/^Otto/)).toHaveClass('picked');
-    // Picking opens nothing: the workspace is still the first run's, never written.
-    expect(localStorage.getItem('ledge.ide.workspace')).toBeNull();
+    // Picking opens nothing: the workspace is still the atelier alone.
+    expect(refs(stored())).toEqual([['atelier:main']]);
     fireEvent.click(tree.getByRole('button', { name: /^Nova/ }), { ctrlKey: true });
     await waitFor(() => expect(refs(stored())).toEqual([['atelier:main'], ['session:nova']]));
     expect(row(/^Nova/)).not.toHaveClass('picked');

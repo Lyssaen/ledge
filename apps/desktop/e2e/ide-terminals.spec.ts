@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect } from './fixtures';
+import { test, expect, seedAtelier } from './fixtures';
 import type { OpenRigState } from '@ledge/protocol';
 import { fakeDaemon, session, twoProjects } from './daemon';
 import { fleet } from './thread';
@@ -34,6 +34,7 @@ const emit = (page: Page, text: string) => page.evaluate(t => (window as unknown
 const box = async (l: Locator) => (await l.boundingBox())!;
 
 async function boot(page: Page, theme: 'light' | 'dark' = 'light') {
+  await seedAtelier(page);
   await page.addInitScript(t => {
     try { localStorage.setItem('ledge.ide.enabled', 'true'); localStorage.setItem('desktop.lang', 'en'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ }
     (window as unknown as { __ledgeShells: unknown }).__ledgeShells = { wsl: 'Ubuntu', powershell: true, cmd: false, gitBash: false };

@@ -129,13 +129,37 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-lk.violet { background: var(--ide-link-violet); }
 .ide-lk.teal { background: var(--ide-link-teal); }
 .ide-lk.none { border: 1px dashed var(--muted-foreground); }
-/* A group without tabs (mockup emptyGroup(), `.page.empty`): its title, what to do, the proposals wrapping in a narrow group. */
-.ide-empty { flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 22px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
-.ide-empty h3 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
-.ide-empty .sub { color: var(--muted-foreground); font-size: 12px; }
-.ide-empty .go { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-/* The mockup's `.btn`: 26 px, 12 px type, 6 px corners (Button's own inline sizes are the dialogs'). */
-.ide-empty .go .ledge-btn { white-space: nowrap; height: 26px !important; padding: 0 10px !important; font-size: 12px !important; border-radius: 6px !important; }
+/* A group without tabs (mockup docs/mockups/accueil-vide, `.welcome`): Ledge's mark, « Démarrer » and « Récentes » side by side,
+   centred; a group narrower than 620 px (down to GROUP_MIN_WIDTH) stacks them, top aligned, its mark smaller. */
+.ide-welcome { flex: 1; min-height: 0; overflow: auto; container-type: inline-size; display: flex; }
+.ide-wl-in { margin: auto; padding: 32px 24px; display: flex; flex-direction: column; align-items: center; gap: 28px; }
+.ide-wl-mark { display: flex; align-items: center; gap: 14px; }
+.ide-wl-word { font-size: 34px; font-weight: 600; letter-spacing: -.03em; }
+.ide-wl-cols { display: grid; grid-template-columns: minmax(220px, 260px) minmax(260px, 320px); gap: 40px; align-items: start; }
+.ide-wl-cols section { display: flex; flex-direction: column; min-width: 0; }
+.ide-wl-cols h4 { margin: 0 0 6px; padding: 0 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 500; }
+.ide-wl-row, .ide-wl-rec, .ide-wl-more { width: 100%; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 6px; text-align: left; font-size: 12.5px; }
+.ide-wl-row:hover, .ide-wl-rec:hover, .ide-wl-more:hover { background: var(--muted); }
+.ide-wl-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ide-link-violet); }
+.ide-wl-row.pri .ide-wl-label { color: var(--foreground); font-weight: 600; }
+.ide-wl-row.pri { box-shadow: inset 2px 0 0 var(--primary); }
+.ide-wl-keys { display: inline-flex; gap: 3px; }
+.ide-wl-rec .tab-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted-foreground); }
+.ide-wl-rec .tab-dot.d-approval { background: var(--sidebar-primary); }
+.ide-wl-rec .tab-dot.d-question { background: var(--warning); }
+.ide-wl-rec .tab-dot.d-working { background: var(--info); }
+.ide-wl-rec b { font-weight: 500; white-space: nowrap; }
+.ide-wl-where { flex: 1; min-width: 0; color: var(--muted-foreground); font-family: 'Geist Mono', monospace; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ide-wl-more { color: var(--muted-foreground); font-size: 12px; }
+.ide-wl-none p { margin: 0 8px 4px; color: var(--muted-foreground); font-size: 12px; }
+.ide-wl-tip { margin: 0; color: var(--muted-foreground); font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; text-align: center; max-width: 560px; }
+@container (max-width: 620px) {
+  .ide-wl-in { margin: 0 auto; padding: 20px 16px; gap: 18px; align-items: stretch; width: 100%; max-width: 360px; }
+  .ide-wl-mark { justify-content: center; }
+  .ide-wl-mark [data-ledge-mark] { width: 40px; height: 40px; }
+  .ide-wl-word { font-size: 24px; }
+  .ide-wl-cols { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+}
 .ide-dock .dv-default-tab-action { opacity: .55; }
 .ide-dock .dv-default-tab-action:hover { opacity: 1; }
 
@@ -373,7 +397,7 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
 .launch-modal-radio input:checked::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--foreground); }
 .launch-modal-radio input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .launch-modal-go { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-/* The mockup's .btn (as .ide-empty .go): the Button's own inline size is overridden. */
+/* The mockup's .btn: the Button's own inline size is overridden. */
 .launch-modal-go .ledge-btn { white-space: nowrap; height: 26px !important; padding: 0 10px !important; font-size: 12px !important; border-radius: 6px !important; gap: 6px !important; }
 .launch-modal-go .ledge-btn kbd { font-size: 10px !important; height: 16px !important; }
 /* « Lancer » while a field is missing, a launch is in flight or OMP cannot run (the old composer's .composer-footer [aria-disabled=true]). */
