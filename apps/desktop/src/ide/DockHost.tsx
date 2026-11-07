@@ -317,7 +317,7 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
       <div className={`ide-dock-scroll${dragging ? ' tab-dragging' : ''}`}>
         <div className="ide-dock-sized" style={{ minWidth: `${groups.length * GROUP_MIN_WIDTH}px` }}>
           <DockviewReact className="ide-dockview" components={COMPONENTS} defaultTabComponent={PanelTab} watermarkComponent={GroupWatermark}
-            leftHeaderActionsComponent={LinkSquare} rightHeaderActionsComponent={StripTools} onReady={onReady} theme={THEME}
+            prefixHeaderActionsComponent={LinkSquare} rightHeaderActionsComponent={StripTools} onReady={onReady} theme={THEME}
             dndEdges={false} disableFloatingGroups messages={messages} />
         </div>
         <div className="ide-dropnew" onDragOver={onZoneOver} onDrop={onZoneDrop}><span>{t.ide.dropNew[0]}<br />{t.ide.dropNew[1]}</span></div>

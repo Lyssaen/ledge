@@ -378,10 +378,39 @@ test('Ctrl+click in the explorer opens to the right; the setting « To the right
   await expect(tabOf(page, 'Otto')).toHaveClass(/dv-active-tab/);
 });
 
-// BUG (Task 4): the link square is dockview's `leftHeaderActionsComponent`, which dockview draws AFTER the tabs (`.dv-left-actions-container`
-// follows `.dv-scrollable`); the mockup's `.lkbtn` and the empty group's tip (« the square left of the tabs ») put it before them.
-// dockview's `prefixHeaderActionsComponent` (`.dv-pre-actions-container`) is the slot left of the tabs.
-test.fixme('the link square sits left of the tabs, as the mockup\'s .lkbtn', async ({ page }) => {
+// A 300 px group (Review Focus 5) keeps a change's row readable: the path keeps more than two characters, and « View the change »
+// (« View » when narrow) ends before the duration.
+test('a thread row with a change stays readable in a 300 px group', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1080 });
+  await boot(page);
+  await open(page, 'Otto');
+  await split(page, 0);
+  await open(page, 'Nova');
+  await split(page, 1);
+  await split(page, 2);
+  await expect(groups(page)).toHaveCount(4);
+  const g = groups(page).nth(1);
+  await g.scrollIntoViewIfNeeded();
+  expect(Math.round((await box(g)).width)).toBeLessThanOrEqual(301);
+  const row = pane(page, 'Nova').locator('.action-row.is-change').last();
+  await row.scrollIntoViewIfNeeded();
+  const geo = await row.evaluate(r => {
+    const b = (s: string) => { const e = r.querySelector(s); if (!e) return null; const x = e.getBoundingClientRect(); return { l: x.left, r: x.right, w: x.width }; };
+    const tg = r.querySelector('.action-target') as HTMLElement;
+    const probe = document.createElement('span'); probe.style.font = getComputedStyle(tg).font; probe.textContent = 'xx'; document.body.append(probe);
+    const two = probe.getBoundingClientRect().width; probe.remove();
+    return { target: b('.action-target'), link: b('.action-link'), time: b('.action-time'), act: b('.act'), two };
+  });
+  expect(geo.target!.w).toBeGreaterThan(geo.two);
+  expect(geo.link!.r).toBeLessThanOrEqual(geo.time!.l);
+  expect(geo.link!.r).toBeLessThanOrEqual(geo.act!.r + 0.5);
+  await expect(row.locator('.action-link')).toHaveAttribute('data-short', 'View');
+  await g.screenshot({ path: 'e2e/.results/ide-groups-narrow-row.png' });
+});
+
+// The link square is dockview's prefix header action (`.dv-pre-actions-container`), before the tabs, as the mockup's `.lkbtn`
+// and the empty group's tip (« the square left of the tabs »); the left header actions would draw it after them.
+test('the link square sits left of the tabs, as the mockup\'s .lkbtn', async ({ page }) => {
   await boot(page);
   await open(page, 'Otto');
   const sq = await box(groups(page).nth(0).locator('.ide-lkbtn'));

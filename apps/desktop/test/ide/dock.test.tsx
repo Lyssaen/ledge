@@ -128,7 +128,10 @@ describe('split, the empty group, the link square, many groups', () => {
     render(<Host store={store} />);
     await waitFor(() => expect(groupviews()).toHaveLength(1));
     const square = () => screen.getByRole('button', { name: 'Lier ce groupe (violet, vert d’eau, aucun)' });
-    expect(square().closest('.dv-left-actions-container')).not.toBeNull();
+    // dockview's prefix slot comes before the tabs (its left actions would come after them).
+    const pre = square().closest('.dv-pre-actions-container');
+    expect(pre).not.toBeNull();
+    expect(pre!.nextElementSibling).toHaveClass('dv-scrollable');
     const swatch = () => square().querySelector('.ide-lk')!;
     expect(swatch()).toHaveClass('none');
     const user = userEvent.setup();

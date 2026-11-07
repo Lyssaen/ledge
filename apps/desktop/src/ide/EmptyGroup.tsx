@@ -4,8 +4,8 @@ import { useI18n } from '../i18n/lang';
 
 export type EmptyPick = 'terminal' | 'launch' | 'openrig' | 'settings' | 'atelier';
 
-// The mockup's `.btn`: 26 px, 12 px type (Button's own sizes are the dialogs').
-const SMALL = { height: 26, padding: '0 10px', fontSize: 12 };
+// The mockup's `.btn`: 26 px, 12 px type, 6 px corners (Button's own sizes are the dialogs').
+const SMALL = { height: 26, padding: '0 10px', fontSize: 12, borderRadius: 6 };
 
 /** A group without tabs (mockup emptyGroup()): what to put in it. `terminal` names the session it was split from, when that
  *  session still exists: its Terminal comes first, set forward, with the tip on linking. The shell's own Terminal is lot 5. */
