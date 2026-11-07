@@ -4,7 +4,7 @@
 
 2. **Un `rig up --plan` dans la Sortie ?** Une vérification seule (`openrig.launched` avec `plan: true`) est journalisée comme un vrai lancement. La garder telle quelle, la marquer (« plan »), ou la masquer ?
 
-3. **Le menu « + ▾ » sans aucun shell (navigateur, ou rien de détecté) : quoi montrer ?** La maquette suppose toujours des shells. Provisoire : le titre « Nouveau terminal » seul, sans ligne ; `Ctrl+J`, le panneau affiché vide et le « Terminal » du groupe vide ouvrent quand même WSL, qui s'affiche « indisponible » (question 6).
+3. **Le menu « + ▾ » sans aucun shell (navigateur, ou rien de détecté) : quoi montrer ?** La maquette suppose toujours des shells. Provisoire : le titre « Nouveau terminal » seul, sans ligne. Le shell « par défaut » est le dernier choisi tant que le menu le propose, sinon WSL (sinon la première ligne) ; le panneau affiché vide attend que Ledge sache quels shells existent avant d'en ouvrir un. Sans aucun shell, `Ctrl+J` et le « Terminal » du groupe vide ouvrent quand même WSL (ou le dernier choisi), qui s'affiche « indisponible » (question 6).
 
 4. **Le `title` de l'onglet d'une tuile : « Glisser vers un groupe » seul ?** La maquette dit « Glisser vers un groupe, ou hors de la fenêtre » ; les fenêtres séparées sont le lot 9, donc provisoirement « Glisser vers un groupe » (anglais « Drag to a group »). À compléter au lot 9.
 

@@ -7,7 +7,13 @@ import { Banner } from './AgentView';
 
 /** A bottom-panel shell (`shell:<n>`), in a panel tile or a dock tab: its xterm, moved in, never re-made (its screen and
  *  scrollback stay); ended, the right panel's banner and « Rouvrir »; unavailable, its banner. */
-export function FreeShellView({ id }: { id: string }): JSX.Element {
+export interface FreeShellViewProps {
+  id: string;
+  /** True once for a shell just opened: its xterm takes the keyboard as soon as it is in. */
+  claimFocus?(id: string): boolean;
+}
+
+export function FreeShellView({ id, claimFocus }: FreeShellViewProps): JSX.Element {
   const { t } = useI18n();
   const tt = t.session.terminal;
   const store = useContext(TermStoreContext);
@@ -16,6 +22,8 @@ export function FreeShellView({ id }: { id: string }): JSX.Element {
   const subscribe = useCallback((fn: () => void) => store.subscribe(fn), [store]);
   const surface = useSyncExternalStore(subscribe, () => store.surface(id));
   const body = useRef<HTMLDivElement>(null);
+  const claim = useRef(claimFocus);
+  claim.current = claimFocus;
 
   useLayoutEffect(() => {
     const el = body.current;
@@ -23,11 +31,12 @@ export function FreeShellView({ id }: { id: string }): JSX.Element {
     for (const c of [...el.children]) if (c !== surface.host) c.remove();
     if (surface.host.parentElement !== el) el.appendChild(surface.host);
     surface.fit();
+    if (claim.current?.(id)) surface.focus();
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => surface.fit());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [surface]);
+  }, [surface, id]);
   // Shown = its xterm is in a visible place: the WebGL budget goes to the terminals shown last.
   const visible = useTabPlace()?.visible !== false;
   const shown = !!surface && visible;

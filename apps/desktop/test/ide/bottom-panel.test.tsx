@@ -19,6 +19,23 @@ import { BottomPanel } from '../../src/ide/BottomPanel';
 import type { ShellRow, ShellsAvailable } from '../../src/term/shells';
 import type { Panel } from '../../src/workspace/panel';
 
+/** A deferred promise: what the tests below hold back (the shells' answer, the session page's chunk). */
+function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
+const env = vi.hoisted(() => ({ shells: null as Promise<unknown> | null, chunk: null as Promise<void> | null }));
+vi.mock('../../src/tauri/bridge', async importActual => {
+  const actual = await importActual<typeof import('../../src/tauri/bridge')>();
+  return { ...actual, shellsAvailable: () => (env.shells ?? actual.shellsAvailable()) };
+});
+// The session page's chunk « not loaded yet » while `env.chunk` is pending.
+vi.mock('../../src/session/lazy', async importActual => {
+  const actual = await importActual<typeof import('../../src/session/lazy')>();
+  return {
+    ...actual,
+    loadedWorkspace: () => (env.chunk ? undefined : actual.loadedWorkspace()),
+    loadWorkspace: () => (env.chunk ? env.chunk.then(() => actual.loadWorkspace()) : actual.loadWorkspace())
+  };
+});
+
 const ROWS: ShellRow[] = [
   { kind: 'wsl', label: 'WSL · Ubuntu', hint: 'par défaut', isDefault: true, section: 'local' },
   { kind: 'powershell', label: 'PowerShell', hint: '', isDefault: false, section: 'local' },
@@ -82,7 +99,7 @@ describe('the bottom panel in the IDE (App)', () => {
   type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
   const daemons: Daemon[] = [];
   beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-  afterEach(async () => { cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+  afterEach(async () => { env.shells = null; env.chunk = null; cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
 
   async function mountApp() {
     await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
@@ -152,5 +169,72 @@ describe('the bottom panel in the IDE (App)', () => {
     expect(within(groups()[1]!).getByText('shell')).toHaveClass('chip-k');
     await user.click(screen.getByRole('button', { name: 'Fermer >_ WSL 1' }));
     await waitFor(() => expect(closeFree).toHaveBeenCalledWith('shell:1'));
+  });
+
+  it('shown before the shells are known: no shell yet; once they are, exactly one, of the kind last chosen', async () => {
+    const openFree = vi.spyOn(TermStore.prototype, 'openFree');
+    localStorage.setItem('ledge.ide.lastShell', 'powershell');
+    const shells = deferred<ShellsAvailable>();
+    env.shells = shells.promise;
+    await mountApp();
+    act(() => { ctrlJ(); });
+    await screen.findByRole('region', { name: 'Panneau du bas' });
+    act(() => { ctrlJ(); });
+    act(() => { ctrlJ(); });
+    await screen.findByRole('region', { name: 'Panneau du bas' });
+    expect(openFree).not.toHaveBeenCalled();
+    expect(tiles()).toHaveLength(0);
+    await act(async () => { shells.resolve({ wsl: 'Ubuntu', powershell: true, cmd: false, gitBash: false }); });
+    await waitFor(() => expect(tiles()).toHaveLength(1));
+    expect(openFree).toHaveBeenCalledTimes(1);
+    expect(openFree).toHaveBeenCalledWith('powershell', '');
+    expect(within(tiles()[0]!).getByText('>_ PowerShell 1')).toBeVisible();
+  });
+
+  it('the chunk still loading: toggles in separate acts open one shell only', async () => {
+    const openFree = vi.spyOn(TermStore.prototype, 'openFree');
+    await mountApp();
+    const chunk = deferred<void>();
+    env.chunk = chunk.promise;
+    act(() => { ctrlJ(); });
+    await screen.findByRole('region', { name: 'Panneau du bas' });
+    act(() => { ctrlJ(); });
+    act(() => { ctrlJ(); });
+    await screen.findByRole('region', { name: 'Panneau du bas' });
+    expect(tiles()).toHaveLength(0);
+    env.chunk = null;
+    await act(async () => { chunk.resolve(); await chunk.promise; });
+    await waitFor(() => expect(tiles()).toHaveLength(1));
+    expect(openFree).toHaveBeenCalledTimes(1);
+  });
+
+  it('hidden while its default shell opened: the panel stays hidden, and shows that shell when asked again', async () => {
+    const openFree = vi.spyOn(TermStore.prototype, 'openFree');
+    await mountApp();
+    const chunk = deferred<void>();
+    env.chunk = chunk.promise;
+    act(() => { ctrlJ(); });
+    await screen.findByRole('region', { name: 'Panneau du bas' });
+    act(() => { ctrlJ(); });
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Panneau du bas' })).toBeNull());
+    env.chunk = null;
+    await act(async () => { chunk.resolve(); await chunk.promise; });
+    await waitFor(() => expect(openFree).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('region', { name: 'Panneau du bas' })).toBeNull();
+    act(() => { ctrlJ(); });
+    await waitFor(() => expect(tiles()).toHaveLength(1));
+    expect(openFree).toHaveBeenCalledTimes(1);
+  });
+
+  it('the empty group\'s « Terminal » opens in the folder of the session it was split from', async () => {
+    const openFree = vi.spyOn(TermStore.prototype, 'openFree');
+    const { user } = await mountApp();
+    const side = within(screen.getByRole('complementary', { name: 'Barre latérale' }));
+    await user.click(side.getByRole('button', { name: /^Otto/ }));
+    const groups = () => [...document.querySelectorAll<HTMLElement>('.dv-groupview')];
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true });
+    await waitFor(() => expect(groups()).toHaveLength(2));
+    await user.click(within(groups()[1]!).getByRole('button', { name: 'Terminal' }));
+    await waitFor(() => expect(openFree).toHaveBeenCalledWith('wsl', '/w/ledge'));
   });
 });

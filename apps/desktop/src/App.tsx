@@ -176,11 +176,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const termThread = useRef<() => void>(focusThread);
   // The shells this computer has (the bottom panel's « + ▾ », its shells' titles), asked once.
   const [avail, setAvail] = useState<ShellsAvailable | null>(null);
-  useEffect(() => { void shellsAvailable().then(setAvail, () => {}); }, []);
+  useEffect(() => { void shellsAvailable().then(setAvail, () => setAvail(NO_SHELLS)); }, []);
   const termStore = useTermStore(fleetClient, () => termThread.current(), avail);
   // The bottom panel's Sortie: the rig commands this Desktop ran.
   const rigOutput = useRigOutputLog(fleetClient);
-  const rigEntries = useRigOutput(rigOutput);
   const projects = useProjects(fleetClient);
   const tasksApi = useTasksApi(fleetClient);
   // « À toi »: what OpenRig's rigs ask the person, on this computer (lot 1: one machine), once its daemon reads them.
@@ -198,6 +197,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [nav, navDispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
   // « Interface IDE (aperçu) » (Settings › General): its tabs (`ledge.ide.workspace`) and panels (`ledge.ide.layout`).
   const [ide] = useIdeEnabled();
+  // Read (and re-rendered on) only while the IDE shows the panel's Sortie.
+  const rigEntries = useRigOutput(rigOutput, ide);
   // A bottom-panel shell's tab closed by the user (its ×, middle click, Ctrl+W, the menu) kills the shell (R9); a tab the model
   // drops by itself (reconcile, a move) does not.
   const [wsStore] = useState(() => createWorkspaceStore(undefined, { closed: key => { if (key.startsWith('terminal:shell:')) termStore.closeFree(key.slice('terminal:'.length)); } }));
@@ -494,36 +495,50 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     } else if (sessionView === 'terminal' && session) focusAgentView(termStore, session.id);
     else focusThread();
   };
-  // A bottom-panel shell (IDE lot 5). A WSL one starts where the session of the focused group's front tab works (R6), else at home.
-  // Its xterm comes with the session page's chunk: the shell opens once the chunk is there.
-  const shellsNow = useRef({ rows: shellRows, notify });
-  shellsNow.current = { rows: shellRows, notify };
+  // A bottom-panel shell (IDE lot 5), in `dir` (R6: see shellDir). Its xterm comes with the session page's chunk: the shell opens
+  // once the chunk is there. The shell opened takes the keyboard once its view is in (`focusShell`, claimed by FreeShellView).
+  const shellsNow = useRef({ rows: shellRows, avail, notify });
+  shellsNow.current = { rows: shellRows, avail, notify };
   const opening = useRef(0);
-  const openShell = useCallback((kind: ShellKind, then: (id: string) => void) => {
-    const run = () => {
-      const g = focused(wsStore.get());
-      const sid = sessionOf(g.tabs[g.active]);
-      const s = sid === null ? undefined : knownNow.current.find(x => x.id === sid);
-      then(termStore.openFree(kind, s ? s.workdir ?? s.cwd : ''));
-    };
+  const layoutNow = useRef(layout);
+  layoutNow.current = layout;
+  const focusShell = useRef<string | null>(null);
+  const claimFocus = useCallback((id: string) => { if (focusShell.current !== id) return false; focusShell.current = null; return true; }, []);
+  /** R6: a WSL shell starts where the session of the focused group's front tab works, else at home. */
+  const shellDir = useCallback((sid: string | null = sessionOf(focused(wsStore.get()).tabs[focused(wsStore.get()).active])) => {
+    const s = sid === null ? undefined : knownNow.current.find(x => x.id === sid);
+    return s ? s.workdir ?? s.cwd : '';
+  }, [wsStore]);
+  const openShell = useCallback((kind: ShellKind, dir: string, then: (id: string) => void) => {
+    const run = () => { const id = termStore.openFree(kind, dir); focusShell.current = id; then(id); };
     if (loadedWorkspace()) { run(); return; }
     opening.current += 1;
-    void loadWorkspace().then(run).finally(() => { opening.current -= 1; });
-  }, [termStore, wsStore]);
-  /** A shell into the panel, on Terminaux, the panel shown. */
-  const panelShell = useCallback((kind: ShellKind) => openShell(kind, id => {
+    // A chunk that fails to load: no shell (the places that need the chunk say so themselves, ChunkBoundary).
+    void loadWorkspace().then(run).catch(() => {}).finally(() => { opening.current -= 1; });
+  }, [termStore]);
+  /** « par défaut » (R7): the shell last chosen while the menu offers it, else WSL; before the shells are known, the last chosen. */
+  const pickDefault = useCallback((): ShellKind => (shellsNow.current.avail === null ? loadLastShell() : defaultShell(shellsNow.current.rows, loadLastShell())), []);
+  /** A shell into the panel, on Terminaux, the panel shown. The default shell of a panel shown empty (`auto`) does not show it
+   *  again if it was hidden while the shell opened. */
+  const panelShell = useCallback((kind: ShellKind, auto = false) => openShell(kind, shellDir(), id => {
     panelStore.update(p => addTerm(p, id));
-    onLayout({ type: 'show', panel: 'bottom', on: true });
-  }), [openShell, panelStore, onLayout]);
-  // The panel shown with no terminal (Ctrl+J, its button, a restart with it shown) opens the default shell (R7): once per showing.
+    if (!auto || layoutNow.current.bottom) onLayout({ type: 'show', panel: 'bottom', on: true });
+  }), [openShell, shellDir, panelStore, onLayout]);
+  // The panel shown with no terminal (Ctrl+J, its button, a restart with it shown) opens the default shell (R7): once per showing,
+  // and only once the shells are known (before, the default could not be told).
   const bottomWas = useRef(false);
+  const wantDefault = useRef(false);
   const bottomOn = ide && layout.bottom;
   useEffect(() => {
     const was = bottomWas.current;
     bottomWas.current = bottomOn;
-    if (!bottomOn || was || panelStore.get().terms.length > 0 || opening.current > 0) return;
-    panelShell(defaultShell(shellsNow.current.rows, loadLastShell()));
-  }, [bottomOn, panelStore, panelShell]);
+    if (!bottomOn) { wantDefault.current = false; return; }
+    if (!was) wantDefault.current = true;
+    if (!wantDefault.current || avail === null) return;
+    wantDefault.current = false;
+    if (panelStore.get().terms.length > 0 || opening.current > 0) return;
+    panelShell(pickDefault(), true);
+  }, [bottomOn, avail, panelStore, panelShell, pickDefault]);
   const panelClose = useCallback((ref: string) => {
     if (ref.startsWith('shell:')) termStore.closeFree(ref);
     panelStore.update(p => removeTerm(p, ref));
@@ -661,7 +676,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       // A bottom-panel shell in a tab: the kind row (`shell`), then its xterm; closing the tab kills it (R9, wsStore's `closed`).
       if (tab.kind === 'terminal' && tab.ref.startsWith('shell:')) {
         return termStore.free(tab.ref) ? (
-          <div className="ide-term"><div className="ide-term-kind"><span className="chip-k">{t.ide.panel.shellKind}</span></div><FreeShellPlace id={tab.ref} /></div>
+          <div className="ide-term"><div className="ide-term-kind"><span className="chip-k">{t.ide.panel.shellKind}</span></div><FreeShellPlace id={tab.ref} claimFocus={claimFocus} /></div>
         ) : null;
       }
       // An agent's terminal in a tab of its own; a seat's is a read-only capture (R3).
@@ -690,8 +705,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         wsStore.update(w => focusGroup(w, gid));
         if (p === 'terminal') { if (s) wsStore.update(w => openTab(w, agentTerminalTab(s.id), 'active')); return; }
         if (p === 'launch') { dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); return; }
-        // « Terminal »: the default shell (R7), in a tab of this group.
-        if (p === 'shell') { openShell(defaultShell(shellRows, loadLastShell()), id => wsStore.update(w => openTab(focusGroup(w, gid), { kind: 'terminal', ref: id }, 'active'))); return; }
+        // « Terminal »: the default shell (R7), in a tab of this group, in the folder of the session it was split from.
+        if (p === 'shell') { openShell(pickDefault(), shellDir(from), id => wsStore.update(w => openTab(focusGroup(w, gid), { kind: 'terminal', ref: id }, 'active'))); return; }
         dispatch(tabAction(p === 'atelier' ? ATELIER_TAB : p === 'settings' ? SETTINGS_TAB : openrigTab())!);
       };
       return <EmptyGroup terminal={s ? title({ kind: 'session', ref: s.id }) : null} seat={s?.rig != null} onPick={pick} />;
@@ -716,7 +731,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             outputCount={rigEntries.length} output={<IdeOutput entries={rigEntries} />}
             menu={shellRows} onNewShell={k => { saveLastShell(k); setLastShell(k); panelShell(k); }}
             tile={ref => {
-              if (ref.startsWith('shell:')) return <FreeShellPlace id={ref} />;
+              if (ref.startsWith('shell:')) return <FreeShellPlace id={ref} claimFocus={claimFocus} />;
               const s = known.find(x => x.id === sessionOf({ kind: 'terminal', ref }));
               return s ? <AgentTerminalPlace client={fleetClient} session={s} notify={notify} readOnly={s.rig != null} onOpenSession={() => dispatch({ type: 'open', id: s.id })} /> : null;
             }}

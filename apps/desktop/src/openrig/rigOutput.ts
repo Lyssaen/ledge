@@ -32,6 +32,10 @@ export function createRigOutput(client: Pick<DaemonClient, 'onMessage'>, now: ()
 }
 export type RigOutput = ReturnType<typeof createRigOutput>;
 
-export function useRigOutput(log: RigOutput): readonly RigOutputEntry[] {
-  return useSyncExternalStore(log.subscribe, log.entries);
+const NONE: readonly RigOutputEntry[] = [];
+const quiet = () => () => {};
+const none = () => NONE;
+/** `on` false (the IDE switch off: nothing shows the log): no entries, and no re-render when one comes. */
+export function useRigOutput(log: RigOutput, on = true): readonly RigOutputEntry[] {
+  return useSyncExternalStore(on ? log.subscribe : quiet, on ? log.entries : none);
 }

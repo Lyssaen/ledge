@@ -3,6 +3,7 @@ import { ChunkBoundary } from '../shell/ChunkBoundary';
 import type { WorkspaceProps } from './Workspace';
 import type { ChangesTabProps } from './ChangesTab';
 import type { AgentTerminalTabProps } from './AgentTerminalTab';
+import type { FreeShellViewProps } from './FreeShellView';
 
 type WorkspaceModule = typeof import('./Workspace');
 type Loaded = { default: WorkspaceModule['Workspace'] };
@@ -48,7 +49,7 @@ const FreeShellPage = lazy(() => (loaded
   : loadWorkspace().then(m => ({ default: m.FreeShellView }))));
 
 /** A bottom-panel shell (a panel tile or a dock tab), from the session page's chunk (its xterm), behind the same sober wait. */
-export function FreeShellPlace(props: { id: string }): JSX.Element {
+export function FreeShellPlace(props: FreeShellViewProps): JSX.Element {
   return <ChunkBoundary><Suspense fallback={<div className="ide-free-shell" aria-busy="true" />}><FreeShellPage {...props} /></Suspense></ChunkBoundary>;
 }
 
