@@ -6,13 +6,20 @@ import { z } from 'zod';
  * rewritten), Codex from its transcripts (`token_count.rate_limits`). Never the token, the plan nor the subscription.
  */
 
-export const UsageHarnessSchema = z.enum(['claude', 'codex']);
+export const UsageHarnessSchema = z.enum(['claude', 'codex', 'cursor']);
 export type UsageHarness = z.infer<typeof UsageHarnessSchema>;
 
-/** One window of an account's limits: the 5 hours, the week, or one model's own week (`model`, as the harness names it). */
+const USAGE_WINDOW_KINDS = ['five_hour', 'seven_day', 'model', 'month', 'pool'] as const;
+
+/**
+ * One window of an account's limits: the 5 hours, the week, one model's own week (`model`, as the harness names it), the
+ * month (`month`: Cursor's monthly cycle total) or one pool of the included usage (`pool`).
+ */
 export const UsageWindowSchema = z.object({
-  kind: z.enum(['five_hour', 'seven_day', 'model']),
+  kind: z.enum(USAGE_WINDOW_KINDS),
   model: z.string().min(1).max(80).optional(),
+  /** A pool of the included usage (`kind: 'pool'`): Cursor's own models (`cursor`) or the others at API prices (`other`). */
+  pool: z.enum(['cursor', 'other']).optional(),
   /** How much of it is used, in percent (rounded); 100 or more: reached. */
   pct: z.number().int().min(0).max(1000),
   /** When it starts again from zero; null when the harness does not say. */
@@ -32,6 +39,8 @@ export type UsageWindow = z.infer<typeof UsageWindowSchema>;
  *   (or `unreachable` during a 429's wait) until the new account is read;
  * - `expired`: Claude Code's session has expired: sign in again in Claude Code (Ledge never refreshes it).
  * Values read more than an hour ago are never sent: `windows` is then empty.
+ * Cursor Agent is read every 5 minutes (its token from `auth.json`, never refreshed) and is `stale` after 15 minutes; it is
+ * listed only when `auth.json` exists; `ok` with no window means « limit not read » (the plan gives no total percent).
  */
 export const UsageStatusSchema = z.enum(['ok', 'loading', 'stale', 'unreachable', 'expired']);
 export type UsageStatus = z.infer<typeof UsageStatusSchema>;
@@ -46,7 +55,8 @@ export type UsagePrefs = z.infer<typeof UsagePrefsSchema>;
 /**
  * A harness's limits on a machine. `account`: an opaque id of the account (12 hex), the same on two machines signed in to the
  * same account, so a front shows one group for both; null when it cannot be told (Codex). Codex is listed only when its
- * transcripts carry windows (a plan that gives none: nothing at all, not even the logo); Claude Code only when it is signed in.
+ * transcripts carry windows (a plan that gives none: nothing at all, not even the logo); Claude Code only when it is signed in;
+ * Cursor Agent only when its `auth.json` exists (`ok` with no window: « limit not read »).
  */
 export const HarnessUsageSchema = z.object({
   harness: UsageHarnessSchema,
@@ -76,11 +86,32 @@ export const UsageAlertSchema = z.object({
 });
 export type UsageAlert = z.infer<typeof UsageAlertSchema>;
 
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+const knownHarness = (h: unknown): boolean => UsageHarnessSchema.safeParse(h).success;
+const knownKind = (k: unknown): boolean => (USAGE_WINDOW_KINDS as readonly unknown[]).includes(k);
+
+/**
+ * Tolerance for a front older than its daemon: at parse time a harness it does not know is dropped, and a harness keeps only
+ * the windows whose kind it knows, so one new harness or window never discards the whole message.
+ */
+export const dropUnknownHarnesses = (raw: unknown): unknown =>
+  Array.isArray(raw)
+    ? raw
+        .filter((h) => isRecord(h) && knownHarness(h.harness))
+        .map((h) => (Array.isArray(h.windows) ? { ...h, windows: h.windows.filter((w: unknown) => !isRecord(w) || knownKind(w.kind)) } : h))
+    : raw;
+
+/** The same rule for alerts: one whose harness or window kind is unknown is dropped. */
+export const dropUnknownAlerts = (raw: unknown): unknown =>
+  Array.isArray(raw)
+    ? raw.filter((a) => isRecord(a) && knownHarness(a.harness) && (!isRecord(a.window) || knownKind(a.window.kind)))
+    : raw;
+
 /** The daemon's usage, after every snapshot and on each change: the harnesses, the open alerts, the threshold it keeps. */
 export const UsageStateMessageSchema = z.object({
   type: z.literal('usage.state'), machineId: z.string().optional(),
-  harnesses: z.array(HarnessUsageSchema).max(4),
-  alerts: z.array(UsageAlertSchema).max(40),
+  harnesses: z.preprocess(dropUnknownHarnesses, z.array(HarnessUsageSchema).max(4)),
+  alerts: z.preprocess(dropUnknownAlerts, z.array(UsageAlertSchema).max(40)),
   prefs: UsagePrefsSchema
 });
 export type UsageStateMessage = z.infer<typeof UsageStateMessageSchema>;
@@ -93,5 +124,5 @@ export type UsageSet = z.infer<typeof UsageSetSchema>;
 export type UsageAck = z.infer<typeof UsageAckSchema>;
 
 /** The stable id of an alert: harness, account, window (and model), level and reset. */
-export const usageAlertId = (harness: UsageHarness, account: string | null, w: Pick<UsageWindow, 'kind' | 'model' | 'resetsAt'>, level: 'threshold' | 'full'): string =>
-  [harness, account ?? '-', w.kind, w.model ?? '-', level, w.resetsAt ?? '-'].join('|').slice(0, 200);
+export const usageAlertId = (harness: UsageHarness, account: string | null, w: Pick<UsageWindow, 'kind' | 'model' | 'pool' | 'resetsAt'>, level: 'threshold' | 'full'): string =>
+  [harness, account ?? '-', w.kind, w.pool ?? w.model ?? '-', level, w.resetsAt ?? '-'].join('|').slice(0, 200);

@@ -18,7 +18,7 @@ export interface UsageGroup {
 
 /** Values read more than an hour ago are never shown (M9). */
 export const USAGE_SHOWN_MS = 60 * 60_000;
-const HARNESS_ORDER: Record<UsageHarness, number> = { claude: 0, codex: 1 };
+const HARNESS_ORDER: Record<UsageHarness, number> = { claude: 0, codex: 1, cursor: 2 };
 
 const newer = (a: string | null, b: string | null) => (a ?? '') > (b ?? '');
 
