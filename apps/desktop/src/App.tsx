@@ -564,7 +564,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       return null;
     };
     // An empty group's proposals open in it: it is focused first, then the tab opened « active » (or brought forward where it
-    // already is: a tab is never duplicated). « Terminal · X » only while X is still a known session.
+    // already is: a tab is never duplicated). « Terminal · X » (« Capture · X » for a seat) only while X is still a known session.
     const emptyGroup = (gid: string): ReactNode => {
       const from = emptyProposals(ws, gid).terminalOf;
       const s = from === null ? undefined : known.find(x => x.id === from);
@@ -574,7 +574,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         if (p === 'launch') { dispatch({ type: 'modal', modal: { kind: 'launch' } }); return; }
         dispatch(tabAction(p === 'atelier' ? ATELIER_TAB : p === 'settings' ? SETTINGS_TAB : openrigTab())!);
       };
-      return <EmptyGroup terminal={s ? title({ kind: 'session', ref: s.id }) : null} onPick={pick} />;
+      return <EmptyGroup terminal={s ? title({ kind: 'session', ref: s.id }) : null} seat={s?.rig != null} onPick={pick} />;
     };
     return (
       <IdePlace layout={layout} onLayout={onLayout} blocked={blocked} readOnly={localDown} dragging={!!filing.dragging}

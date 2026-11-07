@@ -1347,7 +1347,7 @@ export const en: Messages = {
       terminal: 'Its terminal', capture: 'Capture in a terminal', message: 'Send a message…'
     },
     empty: {
-      title: 'Empty group', body: 'Drag a tab here, open a session from the explorer, or:', terminal: (name) => `Terminal · ${name}`,
+      title: 'Empty group', body: 'Drag a tab here, open a session from the explorer, or:', terminal: (name) => `Terminal · ${name}`, capture: (name) => `Capture · ${name}`,
       newSession: 'New session', openrig: 'OpenRig', settings: 'Settings', atelier: 'Atelier',
       tip: 'Tip: link this group (the square left of the tabs) with the session’s: it will follow the chosen session.'
     }

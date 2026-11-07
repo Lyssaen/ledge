@@ -199,6 +199,10 @@ test('split from a session: the empty group, « Terminal · Otto » first, then 
   await expect(empty).toContainText('Drag a tab here, open a session from the explorer, or:');
   expect(await empty.getByRole('button').allTextContents()).toEqual(['Terminal · Otto', 'New session', 'OpenRig', 'Settings', 'Atelier']);
   await expect(empty).toContainText('Tip: link this group');
+  // The mockup's `.btn`: 26 px high, 12 px type, 6 px corners.
+  for (const b of await empty.getByRole('button').all()) {
+    expect(await b.evaluate(el => { const c = getComputedStyle(el); return [c.height, c.fontSize, c.borderRadius, c.paddingLeft]; })).toEqual(['26px', '12px', '6px', '10px']);
+  }
   await groups(page).nth(1).screenshot({ path: 'e2e/.results/ide-empty-group.png' });
   await page.screenshot({ path: 'e2e/.results/ide-empty-group-full.png' });
 

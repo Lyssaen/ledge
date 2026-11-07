@@ -15,7 +15,7 @@ import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { saveOpenSession } from '../../src/workspace/openPrefs';
 import type { DaemonInfo, Machines } from '@ledge/protocol';
 import { PROJECTS } from '../helpers';
-import { empty, open, serialize } from '../../src/workspace/model';
+import { empty, open, serialize, type Workspace } from '../../src/workspace/model';
 import { ATELIER_TAB, WORKSPACE_KEY } from '../../src/workspace/store';
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
@@ -488,6 +488,23 @@ describe('split and the empty group (lot 3)', () => {
     await user.click(second().getByRole('button', { name: 'Réglages' }));
     await waitFor(() => expect(second().getByRole('tab', { name: 'Réglages' })).toBeInTheDocument());
     expect(groupviews()).toHaveLength(2);
+  });
+
+  it('split from a seat: « Capture · Otto » first, which opens its read-only capture in the empty group', async () => {
+    const ws: Workspace = { version: 1, windows: ['main'], focus: 'g2', next: 3, groups: [
+      { id: 'g1', window: 'main', tabs: [{ kind: 'seat', ref: 'local:otto' }], active: 0, link: null },
+      { id: 'g2', window: 'main', tabs: [], active: 0, link: null, from: 'local:otto' }
+    ] };
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(ws)));
+    const { d, user } = await mount();
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', rig: { seat: 'dev@r', name: 'ledge-dev' } })));
+    const second = () => within(groupviews()[1]!);
+    await waitFor(() => expect(second().getAllByRole('button').filter(b => b.closest('.ide-empty')).map(b => b.textContent))
+      .toEqual(['Capture · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier']));
+    expect(second().queryByRole('button', { name: 'Terminal · Otto' })).toBeNull();
+    await user.click(second().getByRole('button', { name: 'Capture · Otto' }));
+    await waitFor(() => expect(second().getByRole('tab', { name: '>_ Otto · tmux' })).toBeInTheDocument());
+    await waitFor(() => expect(groupviews()[1]!.querySelector('.ide-term .chip-k')).toHaveTextContent('lecture seule'));
   });
 
   it('« Terminal · X » only while X is a known session', async () => {

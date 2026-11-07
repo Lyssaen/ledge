@@ -1417,6 +1417,7 @@ export const fr = {
     },
     empty: {
       title: 'Groupe vide', body: 'Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :', terminal: (name: string) => `Terminal · ${name}`,
+      /** A seat's: its terminal is a read-only capture (R3). */ capture: (name: string) => `Capture · ${name}`,
       newSession: 'Nouvelle session', openrig: 'OpenRig', settings: 'Réglages', atelier: 'Atelier',
       tip: 'Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.'
     }
