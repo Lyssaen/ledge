@@ -1,11 +1,12 @@
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
+import { LedgeMark } from '../shell/LedgeMark';
 import { WindowCaps } from '../shell/WindowCaps';
 import type { IdeLayout, LayoutAction } from '../workspace/layout';
 import '../styles/ide.css';
 
-/** The IDE's window bar (mockup `titlebar()`): the word mark, the palette's field, the three panel toggles, the window buttons.
+/** The IDE's window bar (mockup `titlebar()`): the Ledge mark and word (`.brand`), the palette's field, the three panel toggles, the window buttons.
  *  The bar and its gaps are the drag region, as `TitleBar`'s. */
 export function IdeTitleBar({ layout, onLayout, onSearch, blocked, rightShown = layout.right }: { layout: IdeLayout; onLayout(a: LayoutAction): void; onSearch(): void; blocked: boolean; /** Whether the right panel is on screen (it may not fit): its toggle says that. */ rightShown?: boolean }) {
   const { t } = useI18n();
@@ -15,7 +16,7 @@ export function IdeTitleBar({ layout, onLayout, onSearch, blocked, rightShown = 
   );
   return (
     <div className="ide-titlebar" role="group" aria-label={t.titlebar.label} {...drag}>
-      <span className="ide-brand" data-brand {...drag}>{t.ide.brand}<span className="brand-dot">.</span></span>
+      <span className="ide-brand" data-brand {...drag}><LedgeMark size={16} />{t.ide.brand}</span>
       <button className="ide-search" disabled={blocked} onClick={onSearch}>
         <Icon d={SHELL_ICONS.search} size={13} />
         <span className="ide-search-text">{t.ide.searchPlaceholder}</span>

@@ -50,6 +50,8 @@ describe('the IDE shell (switch on)', () => {
     expect(bars).toHaveLength(1);
     expect(bars[0]).toHaveClass('ide-titlebar');
     expect(within(bars[0]!).getByText('Ledge')).toBeVisible();
+    expect(bars[0]!.querySelector('[data-brand] svg[data-ledge-mark]')).toHaveAttribute('viewBox', '0 0 16 16');
+    expect(bars[0]!.querySelector('.brand-dot')).toBeNull();
     expect(screen.getByRole('navigation', { name: 'Barre d’activité' })).toBeVisible();
     expect(document.querySelector('.ide-status')).not.toBeNull();
     expect(document.querySelector('.titlebar')).toBeNull();

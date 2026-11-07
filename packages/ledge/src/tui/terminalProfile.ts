@@ -11,7 +11,7 @@ import { ledgeDir } from '../paths.js';
  */
 export const PROFILE = 'Ledge';
 
-/** The mascot, next to the package root: `dist/cli/index.js` and `src/tui/` both sit two levels down. */
+/** The Ledge mark (made by `pnpm --filter desktop icons`), next to the package root: `dist/cli/index.js` and `src/tui/` both sit two levels down. */
 const ICON = fileURLToPath(new URL('../../assets/ledge.ico', import.meta.url));
 
 /** Where Windows Terminal keeps its settings, store, preview and unpackaged builds, under %LOCALAPPDATA%. */
@@ -54,7 +54,7 @@ export function launcherScript(node: string, script: string, ledgeHome?: string)
   return `#!/bin/sh\n# Written by \`ledge tui\`: the Ledge profile of Windows Terminal runs it.\n${home}exec ${shQuote(node)} ${shQuote(script)} tui --here\n`;
 }
 
-/** The fragment file: one profile, the mascot as its icon (a Windows path, the fragment is read by Windows). */
+/** The fragment file: one profile, the Ledge mark as its icon (a Windows path, the fragment is read by Windows). */
 export function fragment(commandline: string, iconWin: string): string {
   return `${JSON.stringify({ profiles: [{ name: PROFILE, commandline, icon: iconWin }] }, null, 2)}\n`;
 }

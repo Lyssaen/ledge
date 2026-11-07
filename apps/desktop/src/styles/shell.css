@@ -31,7 +31,9 @@
 .titlebar-right { gap: 2px; padding-left: 8px; }
 .titlebar-tools { display: flex; align-items: center; gap: 2px; }
 .titlebar-mid { flex: 1; min-width: 16px; }
-.titlebar-mark { font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.titlebar-mark { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+/* The mark lets a press through to the word mark, the drag region (Tauri drags only from the element that carries it). */
+.titlebar-mark [data-ledge-mark] { flex-shrink: 0; pointer-events: none; }
 .brand-dot { color: var(--sidebar-primary); }
 .titlebar-place { margin-left: 10px; padding-left: 10px; border-left: 1px solid var(--sidebar-border); font-size: 12px; font-weight: 600; color: var(--muted-foreground); white-space: nowrap; }
 .titlebar-text { height: 24px; padding: 0 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; color: var(--muted-foreground); white-space: nowrap; }
