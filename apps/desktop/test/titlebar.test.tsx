@@ -23,9 +23,10 @@ describe('the « Commande » title bar', () => {
     const { side } = await boot({ projects: TWO_PROJECTS });
     const el = screen.getByRole('group', { name: 'Window bar' });
     expect(el).toHaveAttribute('data-tauri-drag-region');
-    expect(el.querySelector('[data-brand]')).toHaveTextContent('Ledge.');
-    expect(el.querySelector('.brand-dot')).toHaveTextContent('.');
-    expect(declarations('shell.css', '.brand-dot')).toContain('color:var(--sidebar-primary)');
+    // The word mark is the Ledge mark at 16 px before « Ledge » (mockup `.brand`): the mark carries the dot, the word loses it.
+    expect(el.querySelector('[data-brand]')).toHaveTextContent(/^Ledge$/);
+    expect(el.querySelector('[data-brand] svg[data-ledge-mark]')).toHaveAttribute('viewBox', '0 0 16 16');
+    expect(el.querySelector('.brand-dot')).toBeNull();
     expect(bar().queryByRole('button', { name: /Go to a session|Search/ })).toBeNull();
     expect(el.querySelector('.titlebar-mid')).toHaveAttribute('data-tauri-drag-region');
     for (const n of ['Minimize', 'Maximize', 'Close']) expect(bar().getByRole('button', { name: n })).toBeVisible();

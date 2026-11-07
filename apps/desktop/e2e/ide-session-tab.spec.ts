@@ -42,8 +42,8 @@ const thread = (page: Page, name: string) => pane(page, name).locator('.session-
 const bar = (page: Page, name: string) => pane(page, name).locator('.ide-bar');
 const scrollOf = (l: Locator) => l.evaluate(el => el.scrollTop);
 
-async function boot(page: Page): Promise<void> {
-  await fakeDaemon(page, sessions, { projects: twoProjects, daemon: CAN, models: { claude }, threads: { otto: ottoThread, nova: novaThread } });
+async function boot(page: Page, extra: Partial<Parameters<typeof fakeDaemon>[2]> = {}, list = sessions): Promise<void> {
+  await fakeDaemon(page, list, { projects: twoProjects, daemon: CAN, models: { claude }, threads: { otto: ottoThread, nova: novaThread }, ...extra });
   await page.goto('/');
   await expect(page.locator('.ide')).toBeVisible();
 }
@@ -56,12 +56,15 @@ async function open(page: Page, name: string, view: 'Projects' | 'OpenRig rigs' 
   // The session page's chunk loads on the first visit: under load it can take a while.
   await expect(pane(page, name).locator('.session-page')).toBeVisible({ timeout: 20_000 });
 }
+/** Two frames: what a scroll, a resize or a render sets off (listeners, observers, React's commit) has run. */
+const frames = (page: Page) => page.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 /** Scrolls a thread to the middle of its height and gives back where it stopped. */
 async function toMiddle(l: Locator): Promise<number> {
   await expect.poll(() => l.evaluate(el => el.scrollHeight - el.clientHeight)).toBeGreaterThan(1000);
   const top = await l.evaluate(el => { el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 2); el.dispatchEvent(new Event('scroll')); return el.scrollTop; });
-  // Let the page record the position (scroll listeners, rAF).
-  await l.page().waitForTimeout(150);
+  // The page has taken the scroll (its listener, a render) and left it where it was set.
+  await frames(l.page());
+  expect(await l.evaluate(el => el.scrollTop)).toBe(top);
   return top;
 }
 async function tabMenu(page: Page, name: string, item: string): Promise<void> {
@@ -90,8 +93,6 @@ test('a session tab shows its logo, dot and name; approval is underlined red; a 
   await expect(tabOf(page, 'Nova')).not.toHaveClass(/\balert/);
   await expect(tabOf(page, 'Ivo').locator('.tab-rig')).toHaveText('ledge-dev');
   await expect(tabOf(page, 'Nova').locator('.tab-rig')).toHaveCount(0);
-  await page.locator('.ide-dockview .dv-tabs-and-actions-container').first().screenshot({ path: test.info().outputPath('ide-session-tab.png') });
-  await page.screenshot({ path: test.info().outputPath('ide-session-tab-full.png') });
   await page.locator('.ide-dockview .dv-tabs-and-actions-container').first().screenshot({ path: 'e2e/.results/ide-session-tab.png' });
   await page.screenshot({ path: 'e2e/.results/ide-session-tab-full.png' });
 });
@@ -112,7 +113,8 @@ test('R6: a tab keeps its scroll when another tab is shown and when its view goe
 
   // (b) A's view to the terminal by the tab menu, then « Back to the thread ».
   const up = await thread(page, 'Nova').evaluate(el => { el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 3); el.dispatchEvent(new Event('scroll')); return el.scrollTop; });
-  await page.waitForTimeout(150);
+  await frames(page);
+  expect(await scrollOf(thread(page, 'Nova'))).toBe(up);
   await tabMenu(page, 'Nova', 'Switch to the terminal');
   await expect(pane(page, 'Nova').locator('.agent-view')).toBeVisible();
   await tabMenu(page, 'Nova', 'Back to the thread');
@@ -130,7 +132,8 @@ test('Ctrl+` puts the agent\'s screen in place of the thread and >_ on the tab; 
   await expect(pane(page, 'Nova').locator('.agent-view')).toBeVisible();
   await expect(thread(page, 'Nova')).toBeHidden();
   await expect(tabOf(page, 'Nova').locator('.tab-term')).toHaveText('>_');
-  await expect(tabOf(page, 'Nova').locator('.tab-term')).toHaveAttribute('title', 'Terminal view');
+  // What the agent screen's footer said outside the IDE (lot 3, option A): its state and its pane.
+  await expect(tabOf(page, 'Nova').locator('.tab-term')).toHaveAttribute('title', /^Terminal view · [a-z].* · tmux · /);
   await tabMenu(page, 'Nova', 'Back to the thread');
   await expect(thread(page, 'Nova')).toBeVisible();
   await expect(pane(page, 'Nova').locator('.agent-view')).toBeHidden();
@@ -161,7 +164,6 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   const caret = b.locator('.model-chip .car');
   await expect(caret).toBeVisible();
   expect(await caret.evaluate(el => el === el.parentElement!.lastElementChild && el.textContent)).toBe('▾');
-  await b.screenshot({ path: test.info().outputPath('ide-session-bar.png') });
   await b.screenshot({ path: 'e2e/.results/ide-session-bar.png' });
   // The whole group (tabs, thread, reply, bar), to set beside the mockup's.
   await page.locator('.ide-dockview .dv-groupview').first().screenshot({ path: 'e2e/.results/ide-session-group.png' });
@@ -186,7 +188,6 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   // The focused group's front tab carries the 2 px line on top.
   const stripe = (t: Locator) => t.evaluate(el => getComputedStyle(el, '::before').height);
   expect(await stripe(changes)).toBe('2px');
-  await page.screenshot({ path: test.info().outputPath('ide-session-beside.png') });
   await page.screenshot({ path: 'e2e/.results/ide-session-beside.png' });
 
   // Review Focus 5: narrower and narrower, the first group goes under 560, 470, 400 px; project, then %, then branch go,
@@ -195,7 +196,7 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   const seen = { 560: false, 470: false, 400: false };
   for (let w = 1920; w >= 900; w -= 20) {
     await page.setViewportSize({ width: w, height: 1080 });
-    await page.waitForTimeout(30);
+    await frames(page);
     const pw = await paneWidth();
     const overflow = await b.evaluate(el => el.scrollWidth - el.clientWidth);
     expect(overflow, `bar overflow at a ${pw}px group`).toBeLessThanOrEqual(0);
@@ -209,6 +210,59 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   }
   expect(seen).toEqual({ 560: true, 470: true, 400: true });
   await b.screenshot({ path: test.info().outputPath('ide-session-bar-400.png') });
+});
+
+// Lot 3 follow-up (option A, the user's choice): the session tab has no heading row nor agent footer; the bar carries where the
+// screen runs, the subagents, the browser and a relief under way, and never overflows, down to a 300 px group.
+test('no heading row nor agent footer on Terminal; the bar\'s terminal chip, subagents, browser and relief chips; no overflow down to 300 px', async ({ page }) => {
+  const nova = { ...sessions[1]!, helpers: [{ id: 'h1', kind: 'Explore', task: 'Read the code', state: 'working' as const }, { id: 'h2', kind: 'Plan', task: 'Plan', state: 'working' as const }],
+    handover: { state: 'failed' as const, at: at(-30), reason: 'no brief' } };
+  await boot(page, { browsers: { nova: { live: { id: 'nova', state: 'live', tabs: 1, url: 'http://localhost:5173/', title: 'Ledge', since: at(-60) } } } }, [sessions[0]!, nova, sessions[2]!]);
+  await open(page, 'Nova');
+  const p = pane(page, 'Nova'), b = bar(page, 'Nova');
+  await expect(p.locator('.pane-heading')).toHaveCount(0);
+  const kids = b.locator('.ide-bar-kids'), browser = b.locator('.ide-bar-browser'), relief = b.locator('.ide-bar-relief'), tm = b.locator('.ide-bar-chip.tm');
+  await expect(kids).toHaveText(/2 subagents/);
+  await expect(browser.locator('.live-dot')).toBeVisible();
+  await expect(relief).toContainText('relief failed');
+  await expect(tm).toHaveCount(0);
+  await thread(page, 'Nova').focus();
+  await page.keyboard.press('Control+Backquote');
+  await expect(p.locator('.agent-view')).toBeVisible();
+  await expect(p.locator('.pane-heading')).toHaveCount(0);
+  await expect(p.locator('.terminal-footer')).toHaveCount(0);
+  await expect(tm).toHaveText('wsl');
+  await expect(tabOf(page, 'Nova').locator('.tab-term')).toHaveAttribute('title', /^Terminal view · /);
+  // Its menu: the external terminal, the relief's state under the name.
+  await tabOf(page, 'Nova').click({ button: 'right' });
+  await expect(page.getByRole('menuitem', { name: 'Open in an external terminal' })).toBeVisible();
+  await expect(page.locator('.session-menu-head small.failed')).toContainText('relief failed');
+  await page.keyboard.press('Escape');
+  await b.screenshot({ path: 'e2e/.results/ide-session-bar-chips.png' });
+
+  // The Changes beside, then narrower and narrower: under 560 px the chips keep their icon and count, the terminal chip goes
+  // with the branch at 400 px, and the bar never overflows, down to the group's 300 px.
+  await b.locator('.dchip').click();
+  await expect(page.locator('.ide-dockview .dv-groupview')).toHaveCount(2);
+  const paneWidth = () => b.evaluate(el => el.closest('.ide-pane')!.getBoundingClientRect().width);
+  const seen = { 560: false, 470: false, 400: false, 300: false };
+  for (let w = 1920; w >= 700; w -= 20) {
+    await page.setViewportSize({ width: w, height: 1080 });
+    await frames(page);
+    const pw = await paneWidth();
+    expect(await b.evaluate(el => el.scrollWidth - el.clientWidth), `bar overflow at a ${pw}px group`).toBeLessThanOrEqual(0);
+    // Every chip of the bar's right side lies inside the bar.
+    const right = await b.evaluate(el => el.getBoundingClientRect().right);
+    for (const l of [kids, browser, relief]) if (await l.isVisible()) expect((await box(l)).x + (await box(l)).width, `chip past the bar at ${pw}px`).toBeLessThanOrEqual(right + 0.5);
+    expect(await kids.locator('.lbl').isVisible(), `subagents label at ${pw}px`).toBe(pw > 560);
+    expect(await kids.locator('.n').isVisible(), `subagents count at ${pw}px`).toBe(pw <= 560);
+    expect(await browser.locator('.lbl').isVisible(), `browser label at ${pw}px`).toBe(pw > 560);
+    expect(await tm.isVisible(), `terminal chip at ${pw}px`).toBe(pw > 400);
+    for (const k of [560, 470, 400, 300] as const) if (pw <= k) seen[k] = true;
+    if (pw <= 300) break;
+  }
+  expect(seen).toEqual({ 560: true, 470: true, 400: true, 300: true });
+  await b.screenshot({ path: 'e2e/.results/ide-session-bar-chips-300.png' });
 });
 
 // The mono texts (branch, project, « +N −N », >_) use the font-mono token, as the mockup's `.mono`.
@@ -258,10 +312,13 @@ test('the mockup\'s look: 8 px dots with a halo on a request, the tab in front o
   expect(Math.abs(rail.width - (inner - 24))).toBeLessThanOrEqual(1);
   await page.locator('.ide-dockview .dv-groupview').first().screenshot({ path: 'e2e/.results/ide-mockup-gaps-group.png' });
   await page.screenshot({ path: 'e2e/.results/ide-mockup-gaps-full.png' });
-  // « + » at the right end of the strip opens the launch dialog.
+  // « + » then the split (lot 3) at the right end of the strip; « + » opens the launch dialog.
   const plus = strip.getByRole('button', { name: 'New session (N)' });
-  const sb = await box(strip), pb = await box(plus);
-  expect(sb.x + sb.width - (pb.x + pb.width)).toBeLessThanOrEqual(8);
+  const split = strip.getByRole('button', { name: 'Split right (Ctrl+\\)' });
+  const sb = await box(strip), pb = await box(plus), xb = await box(split);
+  expect(sb.x + sb.width - (xb.x + xb.width)).toBeLessThanOrEqual(8);
+  expect(xb.x - (pb.x + pb.width)).toBeGreaterThanOrEqual(0);
+  expect(xb.x - (pb.x + pb.width)).toBeLessThanOrEqual(4);
   await plus.click();
   await expect(page.getByRole('dialog', { name: 'New session' })).toBeVisible();
 });
@@ -295,4 +352,16 @@ test('the tab\'s label sits in the middle of its 30 px, in Geist 12 px, as in th
   expect(font.family).toMatch(/^"?Geist"?(,|$)/);
   expect(font.size).toBe('12px');
   await page.locator('.ide-dockview .dv-tabs-and-actions-container').first().screenshot({ path: 'e2e/.results/ide-session-tab-centred.png' });
+});
+
+// A 300 px group is a normal width (lot 3): the narrow page's rules apply there, but the IDE reply keeps its reason hints.
+test('in a 300 px group, Otto waiting for an approval: typed text shows « Enter denies with this message »', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1080 });
+  await boot(page);
+  await open(page, 'Otto');
+  for (let i = 0; i < 3; i++) await page.locator('.ide-dockview .dv-groupview').nth(i).getByRole('button', { name: 'Split right (Ctrl+\\)' }).click();
+  await expect(page.locator('.ide-dockview .dv-groupview')).toHaveCount(4);
+  expect((await box(pane(page, 'Otto').locator('.session-page'))).width).toBeLessThan(600);
+  await pane(page, 'Otto').locator('.session-reply textarea').fill('Pas ce fichier');
+  await expect(pane(page, 'Otto').locator('.reply-hint', { hasText: 'Enter denies with this message' })).toBeVisible();
 });

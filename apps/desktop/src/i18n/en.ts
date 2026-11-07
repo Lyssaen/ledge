@@ -287,12 +287,13 @@ export const en: Messages = {
   },
   foot: { sessions: 'Local and SSH sessions', islandOn: 'Notch active', islandOff: 'Notch hidden', islandTitle: 'Notch settings' },
   daemonOutdated: { title: 'The Ledge daemon must be updated', body: 'This Ledge Desktop needs a newer daemon in WSL. Run one of these commands in WSL; Ledge reconnects by itself.', npm: 'Installed with npm', git: 'Installed from a git clone' },
-  sections: { general: 'General', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', notes: 'Notes', shortcuts: 'Keyboard shortcuts', about: 'About' },
+  sections: { general: 'General', workspace: 'Workspace', appearance: 'Appearance', island: 'Notch', notifications: 'Notifications', sounds: 'Sounds', machines: 'Machines', mobile: 'Mobile access', projects: 'Projects', notes: 'Notes', shortcuts: 'Keyboard shortcuts', about: 'About' },
   settings: {
     nav: 'Settings sections', back: 'Back to the atelier',
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent, max context and updates.',
+      workspace: 'The IDE interface’s tab groups: where a session opens.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
@@ -306,6 +307,10 @@ export const en: Messages = {
     },
     machineOffline: 'A machine is offline', updateWaiting: 'An update is available',
     mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access',
+    workspace: {
+      openSession: 'Open a session',
+      active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`
+    },
     general: {
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.',
       langs: { fr: 'Français', en: 'English' },
@@ -592,7 +597,8 @@ export const en: Messages = {
     title: 'Keyboard shortcuts',
     intro: 'Active while the window has focus. Navigation keys stay available for typing and the terminal when they have focus.',
     outro: 'Ctrl / ⌘ K opens the search from any view. Y and N only act on the pinned request of the open session, never while typing.',
-    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes tab)'],['O','Show or hide the panel: shells and changes'],['Ctrl `','Switch between the thread and the agent’s screen, the keyboard follows'],['Shift + drag, then Ctrl C','Copy from a terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']]
+    rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes tab)'],['O','Show or hide the panel: shells and changes'],['Ctrl `','Switch between the thread and the agent’s screen, the keyboard follows'],['Shift + drag, then Ctrl C','Copy from a terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']],
+    ide: { title: 'Tabs and groups', rows: [['Ctrl W','Close the tab, or the empty group'],['Ctrl ⇧ T','Reopen the last closed tab'],['Ctrl Tab / Ctrl ⇧ Tab','Next / previous tab of the group'],['Ctrl PgDn / PgUp','Next / previous tab of the group'],['Ctrl 1…9','Go to group N'],['Ctrl Alt ← / →','Move the tab to the group on the left / right'],['Ctrl \\','Split right']] }
   },
   tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
   notify: {
@@ -1313,6 +1319,10 @@ export const en: Messages = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'IDE interface (preview)',
+    /** R2: the same session's screen is shown in another group; this tab brings it back. */
+    agentElsewhere: 'Terminal shown in the other group', showHere: 'Show here',
+    /** An agent's terminal tab: its title (mockup termFor()) and its kind chip (R3: a seat's is a read-only capture). */
+    terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attached', termReadOnly: 'read only',
     settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
     settingOff: 'IDE interface (preview) off',
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
@@ -1321,7 +1331,7 @@ export const en: Messages = {
     openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
     resizeEdge: 'Drag to resize · double-click: default width', collapse: '« Collapse', collapseTip: 'Collapse the sidebar (Ctrl+B)',
     waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`),
-    tabTerminalView: 'Terminal view', toTerminal: 'Switch to the terminal', toThread: 'Back to the thread', viewKey: 'Ctrl `',
+    tabTerminalView: 'Terminal view', tagLine: (label, value) => `${label}: ${value}`, toTerminal: 'Switch to the terminal', toThread: 'Back to the thread', viewKey: (key) => `Ctrl ${key}`, relievedByEntry: (name) => `Relieved by ${name}`, relievesEntry: (name) => `Relieves ${name}`,
     closeThisTab: 'Close tab', closeOthers: 'Close others', tabMenu: 'Tab', changesTitle: (name: string) => `Changes · ${name}`,
     openrigTitle: (machine: string) => `OpenRig · ${machine}`, closeTab: (name: string) => `Close ${name}`, editorLabel: 'Editor',
     bottomLabel: 'Bottom panel', terminals: 'Terminals', output: 'Output', outputTip: 'Output: the rig commands Ledge ran and their result', hidePanel: 'Hide the panel',
@@ -1330,6 +1340,18 @@ export const en: Messages = {
     changesChip: (n) => `Changes: ${n} file${n > 1 ? 's' : ''} · beside, in a linked group`,
     replyPlaceholder: (name) => `Reply to ${name}…  Enter sends, Shift+Enter adds a line`,
     replyPlaceholderSeat: (name) => `Reply to ${name} (rig send)…  Enter sends, Shift+Enter adds a line`,
-    newSession: 'New session (N)'
+    newSession: 'New session (N)',
+    split: 'Split right', splitTip: 'Split right (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Link this group (violet, teal, none)',
+    closeGroupTip: 'Close group (Ctrl+W)',
+    dropNew: ['Drop here:', 'new group'],
+    menu: {
+      open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',
+      terminal: 'Its terminal', capture: 'Capture in a terminal', message: 'Send a message…'
+    },
+    empty: {
+      title: 'Empty group', body: 'Drag a tab here, open a session from the explorer, or:', terminal: (name) => `Terminal · ${name}`, capture: (name) => `Capture · ${name}`,
+      newSession: 'New session', openrig: 'OpenRig', settings: 'Settings', atelier: 'Atelier',
+      tip: 'Tip: link this group (the square left of the tabs) with the session’s: it will follow the chosen session.'
+    }
   }
 };

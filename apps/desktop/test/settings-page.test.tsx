@@ -4,9 +4,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { boot, closeDaemons, TWO_PROJECTS } from './helpers';
 import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
+import { act } from 'react';
+import { saveIdeEnabled } from '../src/workspace/prefs';
+import { loadIde } from '../src/ide/lazy';
 
 beforeEach(() => localStorage.clear());
-afterEach(async () => { cleanup(); await closeDaemons(); });
+afterEach(async () => { cleanup(); saveIdeEnabled(false); await closeDaemons(); });
 
 const banner = () => within(screen.getByRole('banner'));
 const nav = () => within(screen.getByRole('navigation', { name: 'Settings sections' }));
@@ -24,6 +27,27 @@ describe('the Settings page', () => {
     expect(nav().getAllByRole('button').map(b => b.textContent)).toEqual([
       'Back to the atelierEsc', 'General', 'Appearance', 'Notch', 'Notifications', 'Sounds', 'Machines', 'Mobile access', 'Projects', 'Notes', 'Keyboard shortcuts', 'About'
     ]);
+  });
+
+  it('the IDE switched off: no Workspace section, and none named in the nav', async () => {
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    await user.keyboard('{Control>},{/Control}');
+    await screen.findByRole('heading', { level: 1, name: 'General' });
+    expect(nav().queryByRole('button', { name: 'Workspace' })).toBeNull();
+  });
+
+  it('the IDE switched off on Workspace: General shows, its tab current, not a section the nav no longer has', async () => {
+    await loadIde();
+    const { user } = await boot({ projects: TWO_PROJECTS });
+    act(() => saveIdeEnabled(true));
+    await user.keyboard('{Control>},{/Control}');
+    await user.click(await waitFor(() => tab('Workspace')));
+    expect(title()).toHaveTextContent('Workspace');
+    act(() => saveIdeEnabled(false));
+    await waitFor(() => expect(title()).toHaveTextContent('General'));
+    expect(tab('General')).toHaveAttribute('aria-current', 'page');
+    expect(nav().queryByRole('button', { name: 'Workspace' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'General' })).toBeInTheDocument();
   });
 
   it('a tab changes the section: its title, aria-current, the crumb, and the scroll back at the top', async () => {
@@ -116,6 +140,12 @@ describe('the Settings page', () => {
     await user.click(screen.getByRole('button', { name: 'Edit the notch’s shortcut' }));
     expect(title()).toHaveTextContent('Notch');
     expect(tab('Notch')).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('a radio row answers the pointer: its circle takes the ring colour, its text the foreground', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/settings.css'), 'utf8');
+    expect(css).toContain('.set-radios label:hover{color:var(--foreground)}');
+    expect(css).toContain('.set-radios label:hover input{border-color:var(--ring)}');
   });
 
   it('the sidebar’s footer is styled once, by sidebar.css: the Settings sheet does not repeat it', () => {

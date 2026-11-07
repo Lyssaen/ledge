@@ -162,6 +162,107 @@ export function move(w: Workspace, key: string, to: { group: string } | { rightO
   return activate(replaceGroup(out, { ...g, tabs }), g.id, tabs.length - 1);
 }
 
+/** `move` with the arrival position: inserted at `index` (clamped) in a group, else at the end. The tab becomes active
+ *  and its group focused. Within its own group it is a reorder. */
+export function moveTo(w: Workspace, key: string, to: { group: string; index?: number } | { rightOf: string }): Workspace {
+  if ('group' in to) {
+    // Same group: a reorder, which `move` leaves alone.
+    const here = find(w, key);
+    if (here && here.group.id === to.group) {
+      if (to.index === undefined) return w;
+      const tab = here.group.tabs[here.index]!;
+      const tabs = here.group.tabs.filter((_, i) => i !== here.index);
+      const at = Math.max(0, Math.min(to.index, tabs.length));
+      tabs.splice(at, 0, tab);
+      return activate(replaceGroup(w, { ...here.group, tabs }), here.group.id, at);
+    }
+  }
+  const moved = move(w, key, to);
+  if (moved === w || !('group' in to) || to.index === undefined) return moved;
+  const hit = find(moved, key);
+  if (!hit) return moved;
+  const tabs = hit.group.tabs.filter((_, i) => i !== hit.index);
+  tabs.splice(Math.max(0, Math.min(to.index, tabs.length)), 0, hit.group.tabs[hit.index]!);
+  return activate(replaceGroup(moved, { ...hit.group, tabs }), hit.group.id, tabs.indexOf(hit.group.tabs[hit.index]!));
+}
+
+/** What an empty group offers: the Terminal of the session it was split from (the UI checks that session still exists).
+ *  Split from the atelier or any non-session tab, nothing is proposed. */
+export function emptyProposals(w: Workspace, groupId: string): { terminalOf: string | null } {
+  const g = groupById(w, groupId);
+  return { terminalOf: g && g.tabs.length === 0 ? (g.from ?? null) : null };
+}
+
+/** Focuses a group, an empty one included (clicked, or one of its proposals chosen): a tab then opened « active » lands in it. */
+export function focusGroup(w: Workspace, groupId: string): Workspace {
+  return w.focus === groupId || !groupById(w, groupId) ? w : { ...w, focus: groupId };
+}
+
+/** « Fermer le groupe » (×, Ctrl+W on an empty group): an EMPTY group goes, unless it is the main window's last. Focused,
+ *  the focus goes to its left neighbour in its window, else its right one, else (a secondary window closing) the main
+ *  window's first group. */
+export function closeGroup(w: Workspace, groupId: string): Workspace {
+  const g = groupById(w, groupId);
+  if (!g || g.tabs.length > 0) return w;
+  const siblings = w.groups.filter(x => x.window === g.window);
+  if (g.window === MAIN && siblings.length === 1) return w;
+  const at = siblings.indexOf(g);
+  const groups = w.groups.filter(x => x.id !== groupId);
+  const windows = w.windows.filter(win => win === MAIN || groups.some(x => x.window === win));
+  const focus = w.focus !== groupId ? w.focus : (siblings[at - 1] ?? siblings[at + 1] ?? groups.find(x => x.window === MAIN)!).id;
+  return { ...w, groups, windows, focus };
+}
+
+/** Ctrl+Tab / Ctrl+Shift+Tab (Ctrl+PageDown / PageUp): the next or previous tab of the group, wrapping. */
+export function cycleTab(w: Workspace, groupId: string, step: 1 | -1): Workspace {
+  const g = groupById(w, groupId);
+  if (!g || g.tabs.length < 2) return w;
+  return activate(w, groupId, (g.active + step + g.tabs.length) % g.tabs.length);
+}
+
+/** Ctrl+1…9: the Nth group (from 1) of the main window, left to right, focused if there is one. */
+export function focusNth(w: Workspace, n: number): Workspace {
+  const g = w.groups.filter(x => x.window === MAIN)[n - 1];
+  return g ? focusGroup(w, g.id) : w;
+}
+
+/** Ctrl+Alt+→ / ←: the focused group's active tab into the group on its right / left (same window). No group on the
+ *  right: a new one (unless the tab is its group's only one: nothing would change); none on the left: nothing. */
+export function moveActive(w: Workspace, step: 1 | -1): Workspace {
+  const g = focused(w);
+  const tab = g.tabs[g.active];
+  if (!tab) return w;
+  const siblings = w.groups.filter(x => x.window === g.window);
+  const next = siblings[siblings.indexOf(g) + step];
+  if (next) return moveTo(w, keyOf(tab), { group: next.id });
+  if (step === -1 || g.tabs.length === 1) return w;
+  return moveTo(w, keyOf(tab), { rightOf: g.id });
+}
+
+/** A tab closed by the user, where it was: what Ctrl+Shift+T brings back. */
+export interface Closed { tab: Tab; group: string; index: number }
+export const CLOSED_MAX = 20;
+/** Notes tab `key` (still open in `w`) on top of the closed tabs, keeping the CLOSED_MAX last. Unknown: the same stack. */
+export function remember(stack: readonly Closed[], w: Workspace, key: string): readonly Closed[] {
+  const hit = find(w, key);
+  if (!hit) return stack;
+  return [...stack, { tab: hit.group.tabs[hit.index]!, group: hit.group.id, index: hit.index }].slice(-CLOSED_MAX);
+}
+/** Ctrl+Shift+T: the last closed tab back where it was (its group if it still exists, at its place; else the focused
+ *  group), active and focused. Entries open again since, or that `keep` refuses (their session gone), are discarded. */
+export function reopenLast(w: Workspace, stack: readonly Closed[], keep: (t: Tab) => boolean = () => true): { w: Workspace; stack: readonly Closed[] } {
+  const rest = [...stack];
+  for (let c = rest.pop(); c; c = rest.pop()) {
+    if (find(w, keyOf(c.tab)) || !keep(c.tab)) continue;
+    const g = groupById(w, c.group) ?? focused(w);
+    const tabs = [...g.tabs];
+    const at = g.id === c.group ? Math.min(c.index, tabs.length) : tabs.length;
+    tabs.splice(at, 0, c.tab);
+    return { w: activate(replaceGroup(w, { ...g, tabs }), g.id, at), stack: rest };
+  }
+  return { w, stack: rest };
+}
+
 /** Ctrl+\: an empty group right of `groupId`, remembering the session left (its Changes and Terminal are offered). */
 export function split(w: Workspace, groupId: string): Workspace {
   const g = groupById(w, groupId);

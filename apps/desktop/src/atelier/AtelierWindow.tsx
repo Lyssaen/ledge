@@ -8,6 +8,7 @@ import '@ledge/ui/documents/markdown.css';
 import { LangProvider, loadLang, useI18n, type Lang } from '../i18n/lang';
 import { useFleet } from '../fleet/useFleet';
 import { openUrl } from '../tauri/bridge';
+import { LedgeMark } from '../shell/LedgeMark';
 import { useAppearance } from '../shell/theme';
 import { initialNav, navReducer, type NavAction } from '../nav/state';
 import { loadOverview } from '../nav/overview';
@@ -40,7 +41,7 @@ function AtelierBar({ blocked, dispatch }: { blocked: boolean; dispatch: (a: Nav
   return (
     <div className="titlebar" role="group" aria-label={t.titlebar.label} {...drag}>
       <div className="titlebar-left" {...drag}>
-        <span className="titlebar-mark" data-brand {...drag}>Ledge<span className="brand-dot">.</span></span>
+        <span className="titlebar-mark" data-brand {...drag}><LedgeMark size={16} />Ledge</span>
         <span className="titlebar-place" {...drag}>{t.side.atelier}</span>
       </div>
       <div className="titlebar-mid" {...drag} />

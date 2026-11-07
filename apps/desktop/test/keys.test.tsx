@@ -4,9 +4,11 @@ import { useToast } from '../src/shell/Toast';
 import { focusThread, useKeys } from '../src/nav/useKeys';
 import { initialNav } from '../src/nav/state';
 import type { Overview } from '../src/nav/overview';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ConfirmDialog } from '../src/manage/ConfirmDialog';
 import { ShortcutsHelp } from '../src/shell/ShortcutsHelp';
+import { Shortcuts } from '../src/settings/Shortcuts';
+import { saveIdeEnabled } from '../src/workspace/prefs';
 import { LangProvider } from '../src/i18n/lang';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
@@ -277,7 +279,7 @@ describe('the terminal and the keyboard', () => {
 });
 
 describe('IDE shortcuts (the ide option)', () => {
-  function Probe(p: { ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void }; dispatch?: (a: unknown) => void; modal?: boolean }) {
+  function Probe(p: { ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void; split?(): void }; dispatch?: (a: unknown) => void; modal?: boolean }) {
     const base = initialNav({ helpers: [], paused: false } as never);
     useKeys((p.dispatch ?? (() => {})) as never, { state: p.modal ? { ...base, modal: { kind: 'search' } } : base, order: [], screen: { current: null }, undo: () => false, ...(p.ide ? { ide: p.ide } : {}) } as never);
     return <div><textarea aria-label="champ" /><div data-terminal><button>term</button></div></div>;
@@ -317,6 +319,34 @@ describe('IDE shortcuts (the ide option)', () => {
     expect(toggle).not.toHaveBeenCalled();
   });
 
+  it('Ctrl+\\ splits, in a textarea too (as VS Code); not under [data-terminal], nor behind a dialog', () => {
+    const toggle = vi.fn(), split = vi.fn(), dispatch = vi.fn();
+    const { unmount } = render(<Probe ide={{ toggle, split }} dispatch={dispatch} />);
+    press('\\');
+    expect(split).toHaveBeenCalledTimes(1);
+    const field = screen.getByLabelText('champ'); field.focus();
+    press('\\', field);
+    expect(split).toHaveBeenCalledTimes(2);
+    screen.getByText('term').focus();
+    press('\\');
+    expect(split).toHaveBeenCalledTimes(2);
+    expect(toggle).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+    unmount();
+    render(<Probe ide={{ toggle, split }} modal />);
+    press('\\');
+    expect(split).toHaveBeenCalledTimes(2);
+  });
+
+  it('Ctrl+Alt+\\ does not split (a QWERTY chord of its own); AltGr+\\, which Windows reports as Ctrl+Alt, does', () => {
+    const split = vi.fn();
+    render(<Probe ide={{ toggle: vi.fn(), split }} />);
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true, altKey: true });
+    expect(split).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true, altKey: true, modifierAltGraph: true });
+    expect(split).toHaveBeenCalledTimes(1);
+  });
+
   it('without ide, Ctrl+B does nothing and Ctrl+/ opens the chat', () => {
     const dispatch = vi.fn();
     render(<Probe dispatch={dispatch} />);
@@ -324,6 +354,148 @@ describe('IDE shortcuts (the ide option)', () => {
     expect(dispatch).not.toHaveBeenCalled();
     press('/');
     expect(dispatch).toHaveBeenCalledWith({ type: 'chat', open: true });
+  });
+});
+
+describe('the shortcuts help names the tab keys when the IDE is on (lot 3 follow-up)', () => {
+  afterEach(() => saveIdeEnabled(false));
+  const FR = [['Ctrl W', 'Fermer l’onglet, ou le groupe vide'], ['Ctrl ⇧ T', 'Rouvrir le dernier onglet fermé'], ['Ctrl Tab / Ctrl ⇧ Tab', 'Onglet suivant / précédent du groupe'],
+    ['Ctrl Pg↓ / Pg↑', 'Onglet suivant / précédent du groupe'], ['Ctrl 1…9', 'Aller au groupe N'], ['Ctrl Alt ← / →', 'Déplacer l’onglet vers le groupe de gauche / de droite'], ['Ctrl \\', 'Diviser à droite']];
+  it('? : an « Onglets et groupes » block after the others, only with the IDE on', () => {
+    const { unmount } = render(<LangProvider lang="fr"><ShortcutsHelp onClose={() => {}} /></LangProvider>);
+    expect(screen.queryByRole('heading', { name: 'Onglets et groupes' })).toBeNull();
+    unmount();
+    saveIdeEnabled(true);
+    render(<LangProvider lang="fr"><ShortcutsHelp onClose={() => {}} /></LangProvider>);
+    const head = screen.getByRole('heading', { name: 'Onglets et groupes' });
+    const rows: string[][] = [];
+    for (let el = head.nextElementSibling; el && el.tagName === 'DIV'; el = el.nextElementSibling) rows.push([el.querySelector('kbd')!.textContent!, el.querySelector('span')!.textContent!]);
+    expect(rows).toEqual(FR);
+  });
+  it('Settings › Keyboard shortcuts: a « Tabs and groups » card, only with the IDE on', () => {
+    const ctx = { island: null, dispatch: () => {} } as never;
+    const { unmount } = render(<LangProvider lang="en"><Shortcuts ctx={ctx} /></LangProvider>);
+    expect(screen.queryByRole('region', { name: 'Tabs and groups' })).toBeNull();
+    unmount();
+    saveIdeEnabled(true);
+    render(<LangProvider lang="en"><Shortcuts ctx={ctx} /></LangProvider>);
+    const rows = [...screen.getByRole('region', { name: 'Tabs and groups' }).querySelectorAll('.set-row')].map(r => [r.querySelector('kbd')!.textContent, r.querySelector('.set-label')!.textContent]);
+    expect(rows).toEqual([['Ctrl W', 'Close the tab, or the empty group'], ['Ctrl ⇧ T', 'Reopen the last closed tab'], ['Ctrl Tab / Ctrl ⇧ Tab', 'Next / previous tab of the group'],
+      ['Ctrl PgDn / PgUp', 'Next / previous tab of the group'], ['Ctrl 1…9', 'Go to group N'], ['Ctrl Alt ← / →', 'Move the tab to the group on the left / right'], ['Ctrl \\', 'Split right']]);
+  });
+});
+
+describe('IDE tab shortcuts (lot 3 follow-up)', () => {
+  type Tabs = { toggle(panel: 'side' | 'bottom' | 'right'): void; closeTab?(): void; reopenTab?(): void; cycleTab?(step: 1 | -1): void; focusGroup?(n: number): void; moveTab?(step: 1 | -1): void };
+  function Probe(p: { ide?: Tabs; dispatch?: (a: unknown) => void; modal?: boolean }) {
+    const base = initialNav({ helpers: [], paused: false } as never);
+    useKeys((p.dispatch ?? (() => {})) as never, { state: p.modal ? { ...base, modal: { kind: 'search' } } : base, order: [], screen: { current: null }, undo: () => false, ...(p.ide ? { ide: p.ide } : {}) } as never);
+    return <div><textarea aria-label="champ" /><div data-terminal><button>term</button></div></div>;
+  }
+  const make = () => ({ toggle: vi.fn(), closeTab: vi.fn(), reopenTab: vi.fn(), cycleTab: vi.fn(), focusGroup: vi.fn(), moveTab: vi.fn() });
+  const key = (init: KeyboardEventInit, el: Element | Window = window) => fireEvent.keyDown(el, init);
+  /** Every chord of the block, in order. */
+  const all = (el: Element | Window = window) => {
+    key({ key: 'w', ctrlKey: true }, el);
+    key({ key: 'T', ctrlKey: true, shiftKey: true }, el);
+    key({ key: 'Tab', ctrlKey: true }, el);
+    key({ key: 'Tab', ctrlKey: true, shiftKey: true }, el);
+    key({ key: 'PageDown', ctrlKey: true }, el);
+    key({ key: 'PageUp', ctrlKey: true }, el);
+    key({ key: '&', code: 'Digit1', ctrlKey: true }, el);
+    key({ key: 'é', code: 'Digit2', ctrlKey: true }, el);
+    key({ key: 'ArrowRight', ctrlKey: true, altKey: true }, el);
+    key({ key: 'ArrowLeft', ctrlKey: true, altKey: true }, el);
+  };
+
+  it('each chord calls its callback (Ctrl or ⌘; Ctrl+digit by its place, so AZERTY too); Ctrl+W is always prevented', () => {
+    const ide = make();
+    render(<Probe ide={ide} />);
+    all();
+    expect(ide.closeTab).toHaveBeenCalledTimes(1);
+    expect(ide.reopenTab).toHaveBeenCalledTimes(1);
+    expect(ide.cycleTab.mock.calls).toEqual([[1], [-1], [1], [-1]]);
+    expect(ide.focusGroup.mock.calls).toEqual([[1], [2]]);
+    expect(ide.moveTab.mock.calls).toEqual([[1], [-1]]);
+    key({ key: 'w', metaKey: true });
+    expect(ide.closeTab).toHaveBeenCalledTimes(2);
+    const ev = createEvent.keyDown(window, { key: 'w', ctrlKey: true });
+    fireEvent(window, ev);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it('they act in the reply\'s textarea too, as VS Code', () => {
+    const ide = make();
+    render(<Probe ide={ide} />);
+    const field = screen.getByLabelText('champ'); field.focus();
+    all(field);
+    expect(ide.closeTab).toHaveBeenCalledTimes(1);
+    expect(ide.cycleTab).toHaveBeenCalledTimes(4);
+    expect(ide.moveTab).toHaveBeenCalledTimes(2);
+  });
+
+  it('inside [data-terminal] none acts, and Ctrl+W is left to the shell', () => {
+    const ide = make();
+    render(<Probe ide={ide} />);
+    const b = screen.getByText('term'); b.focus();
+    all(b);
+    const ev = createEvent.keyDown(b, { key: 'w', ctrlKey: true });
+    fireEvent(b, ev);
+    expect(ev.defaultPrevented).toBe(false);
+    for (const f of [ide.closeTab, ide.reopenTab, ide.cycleTab, ide.focusGroup, ide.moveTab]) expect(f).not.toHaveBeenCalled();
+  });
+
+  it('with a dialog open none acts (Ctrl+W still prevented: the window must not close)', () => {
+    const ide = make();
+    render(<Probe ide={ide} modal />);
+    all();
+    for (const f of [ide.closeTab, ide.reopenTab, ide.cycleTab, ide.focusGroup, ide.moveTab]) expect(f).not.toHaveBeenCalled();
+    const ev = createEvent.keyDown(window, { key: 'w', ctrlKey: true });
+    fireEvent(window, ev);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it('with a dialog open only Ctrl+W is prevented: the other chords reach the dialog', () => {
+    const ide = make();
+    render(<Probe ide={ide} modal />);
+    for (const init of [{ key: 'Tab', ctrlKey: true }, { key: 'T', ctrlKey: true, shiftKey: true }, { key: 'PageDown', ctrlKey: true }, { key: '&', code: 'Digit1', ctrlKey: true }, { key: 'ArrowRight', ctrlKey: true, altKey: true }]) {
+      const ev = createEvent.keyDown(window, init);
+      fireEvent(window, ev);
+      expect(ev.defaultPrevented, init.key).toBe(false);
+    }
+  });
+
+  it('Ctrl+Shift+W is prevented (Chromium closes the window on it) and acts on nothing', () => {
+    const ide = make();
+    render(<Probe ide={ide} />);
+    const ev = createEvent.keyDown(window, { key: 'W', ctrlKey: true, shiftKey: true });
+    fireEvent(window, ev);
+    expect(ev.defaultPrevented).toBe(true);
+    for (const f of [ide.closeTab, ide.reopenTab, ide.cycleTab, ide.focusGroup, ide.moveTab]) expect(f).not.toHaveBeenCalled();
+  });
+
+  it('without ide: nothing called, Ctrl+W and Ctrl+Tab not prevented', () => {
+    const dispatch = vi.fn();
+    render(<Probe dispatch={dispatch} />);
+    for (const init of [{ key: 'w', ctrlKey: true }, { key: 'Tab', ctrlKey: true }]) {
+      const ev = createEvent.keyDown(window, init);
+      fireEvent(window, ev);
+      expect(ev.defaultPrevented).toBe(false);
+    }
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Alt+→ through AltGr does nothing; Shift+Tab alone is not taken; Alt+1 still opens agent 1', () => {
+    const ide = make(), dispatch = vi.fn();
+    render(<Probe ide={ide} dispatch={dispatch} />);
+    key({ key: 'ArrowRight', ctrlKey: true, altKey: true, modifierAltGraph: true });
+    expect(ide.moveTab).not.toHaveBeenCalled();
+    const ev = createEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    fireEvent(window, ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(ide.cycleTab).not.toHaveBeenCalled();
+    key({ key: '1', code: 'Digit1', altKey: true });
+    expect(ide.focusGroup).not.toHaveBeenCalled();
   });
 });
 

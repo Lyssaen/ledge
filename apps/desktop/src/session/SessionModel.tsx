@@ -65,7 +65,7 @@ export function SessionModel(p: { client: DaemonClient; session: Session; notify
       <button ref={chip} type="button" className={cls('model-chip', bar && 'bar', open && 'open', next && 'scheduled')} aria-haspopup="dialog" aria-expanded={open}
         aria-label={`${tm.label} : ${text(shown)}${next ? ` (${tm.nextTurn})` : ''}`} title={tm.label} onClick={toggle}>
         {bar ? <ProviderLogo provider={modelProvider(shown.model ?? rows[0]?.id ?? undefined) ?? providerOf(session.tool)} size={12} /> : <Icon d={MODEL_ICONS.chip} size={14} />}
-        <span className="model-chip-text">{bar ? nameOf(shown) : text(shown)}</span>
+        <span className="model-chip-text" {...(bar && { title: nameOf(shown) })}>{bar ? nameOf(shown) : text(shown)}</span>
         {next && <span className="model-chip-next">{tm.nextTurn}</span>}
         {bar ? <span className="car" aria-hidden="true">▾</span> : <Icon d={MODEL_ICONS.down} size={14} />}
       </button>

@@ -12,9 +12,10 @@ import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
+import { saveOpenSession } from '../../src/workspace/openPrefs';
 import type { DaemonInfo, Machines } from '@ledge/protocol';
 import { PROJECTS } from '../helpers';
-import { empty, open, serialize } from '../../src/workspace/model';
+import { empty, open, serialize, type Workspace } from '../../src/workspace/model';
 import { ATELIER_TAB, WORKSPACE_KEY } from '../../src/workspace/store';
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
@@ -49,6 +50,8 @@ describe('the IDE shell (switch on)', () => {
     expect(bars).toHaveLength(1);
     expect(bars[0]).toHaveClass('ide-titlebar');
     expect(within(bars[0]!).getByText('Ledge')).toBeVisible();
+    expect(bars[0]!.querySelector('[data-brand] svg[data-ledge-mark]')).toHaveAttribute('viewBox', '0 0 16 16');
+    expect(bars[0]!.querySelector('.brand-dot')).toBeNull();
     expect(screen.getByRole('navigation', { name: 'Barre d’activité' })).toBeVisible();
     expect(document.querySelector('.ide-status')).not.toBeNull();
     expect(document.querySelector('.titlebar')).toBeNull();
@@ -108,6 +111,18 @@ describe('the IDE shell (switch on)', () => {
     expect(bottom.getByRole('tab', { name: /^Sortie/ })).toBeVisible();
     await user.click(bottom.getByRole('button', { name: 'Masquer le panneau' }));
     expect(screen.queryByRole('region', { name: 'Panneau du bas' })).toBeNull();
+  });
+
+  it("the place sync is not a user open: with « Ouvrir une session » on 'right', switching the IDE on keeps one group", async () => {
+    saveOpenSession('right');
+    try {
+      const { side, user } = await mount({ ide: false });
+      await user.click(side.getByRole('button', { name: /^Otto/ }));
+      await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible());
+      act(() => saveIdeEnabled(true));
+      await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+      expect(JSON.parse(JSON.parse(localStorage.getItem('ledge.ide.workspace')!)).groups).toHaveLength(1);
+    } finally { saveOpenSession('active'); }
   });
 
   it('Review Focus 3: a session open with the IDE off is its active tab once on; off again, its page as today', async () => {
@@ -284,13 +299,15 @@ describe('the IDE session tab (lot 2)', () => {
     fireEvent.contextMenu(tabOf('Otto'));
     const menu = await screen.findByRole('menu', { name: /Otto/ });
     expect(within(menu).getByText('Otto')).toBeVisible();
-    expect(within(menu).queryByText(/role\.md|Diviser|Ouvrir dans/)).toBeNull();
+    expect(within(menu).queryByText(/role\.md|Ouvrir dans/)).toBeNull();
+    // « Diviser à droite », Ctrl \ on its right (lot 3).
+    expect(within(menu).getByRole('menuitem', { name: /Diviser à droite/ })).toHaveTextContent('Ctrl \\');
     await user.click(within(menu).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
-    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle(/^Vue terminal/)).toBeInTheDocument());
     expect(tabOf('Otto')).toHaveAccessibleName('Otto');
     fireEvent.contextMenu(tabOf('Otto'));
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ }));
-    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle(/^Vue terminal/)).toBeNull());
     fireEvent.contextMenu(tabOf('Otto'));
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Fermer les autres' }));
     await waitFor(() => expect(tabs()).toHaveLength(1));
@@ -315,13 +332,13 @@ describe('the IDE session tab (lot 2)', () => {
     // On the terminal view, the bar stays.
     fireEvent.contextMenu(tabOf('Otto'));
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
-    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle(/^Vue terminal/)).toBeInTheDocument());
     expect(page().querySelector('.session-reply')).toBeNull();
     expect(page().querySelector('.ide-bar .model-chip')).not.toBeNull();
     expect(within(page()).getByRole('button', { name: /\+1/ })).toHaveClass('on');
     fireEvent.contextMenu(tabOf('Otto'));
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ }));
-    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle(/^Vue terminal/)).toBeNull());
     // R10: an action clicked in the Changes tab brings Otto's tab forward (its group focused) and lights nothing.
     const changes = await waitFor(() => { const el = document.querySelector<HTMLElement>('.ide-changes .file-touches'); expect(el).not.toBeNull(); return el!; });
     await user.click(tabOf('Modifications · Otto'));
@@ -331,13 +348,13 @@ describe('the IDE session tab (lot 2)', () => {
     expect(document.querySelector('.action-row.flash')).toBeNull();
   });
 
-  it('the session menu\'s « Terminal » opens the tab on its terminal view; the stored preference is left alone', async () => {
+  // The IDE menu's one terminal entry is « Son terminal » (lot 3); lot 2's « Terminal » stays on the row's button, the chat and the island.
+  it('the row\'s « Terminal » opens the tab on its terminal view; the stored preference is left alone', async () => {
     const { tree, user } = await mount();
     const stored = localStorage.getItem('desktop.session');
-    fireEvent.contextMenu(tree.getByRole('button', { name: /^Otto/ }));
-    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Terminal' }));
+    await user.click(tree.getByRole('button', { name: 'Ouvrir le terminal de Otto' }));
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
-    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle(/^Vue terminal/)).toBeInTheDocument());
     await waitFor(() => expect(document.querySelector('.ide-pane .session-page[data-session$="otto"] .agent-view')).not.toBeNull());
     expect(localStorage.getItem('desktop.session')).toBe(stored);
   });
@@ -429,5 +446,164 @@ describe('the IDE bundle', () => {
     expect(app).not.toMatch(/from '\.\/ide\/(IdeFrame|DockHost)'/);
     expect(readFileSync(resolve(__dirname, '../../src/ide/lazy.tsx'), 'utf8')).toMatch(/import\('\.\/IdeFrame'\)/);
     expect(readFileSync(resolve(__dirname, '../../src/ide/DockHost.tsx'), 'utf8')).toMatch(/dockview-react\/dist\/styles\/dockview\.css/);
+  });
+});
+
+describe('split and the empty group (lot 3)', () => {
+  const groupviews = () => [...document.querySelectorAll<HTMLElement>('.dv-groupview')];
+  const splitKey = () => fireEvent.keyDown(window, { key: '\\', ctrlKey: true });
+
+  it('Ctrl+\\ on Otto: a second group, empty and focused, offering « Terminal · Otto » first; its click opens Otto\'s terminal there', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    splitKey();
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    await waitFor(() => expect(groupviews()[1]).toHaveClass('dv-active-group'));
+    const second = within(groupviews()[1]!);
+    expect(second.getByRole('heading', { name: 'Groupe vide' })).toBeVisible();
+    expect(second.getByText('Glisse un onglet ici, ouvre une session depuis l’explorateur, ou :')).toBeVisible();
+    const buttons = second.getAllByRole('button').filter(b => b.closest('.ide-empty'));
+    expect(buttons.map(b => b.textContent)).toEqual(['Terminal · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier']);
+    expect(buttons[0]).toHaveClass('pri');
+    expect(second.getByText(/^Astuce : lie ce groupe/)).toHaveTextContent('Astuce : lie ce groupe (carré à gauche des onglets) avec celui de la session : il suivra la session choisie.');
+    await user.click(buttons[0]!);
+    await waitFor(() => expect(within(groupviews()[1]!).getByRole('tab', { name: '>_ Otto · tmux' })).toBeInTheDocument());
+    expect(groupviews()).toHaveLength(2);
+    expect(within(groupviews()[0]!).queryByRole('tab', { name: '>_ Otto · tmux' })).toBeNull();
+  });
+
+  it('split from the atelier: no « Terminal · … » and no tip; « Nouvelle session » opens the launch dialog, « Réglages » opens its tab in this group', async () => {
+    const { user } = await mount();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    splitKey();
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    const second = () => within(groupviews()[1]!);
+    expect(second().queryByRole('button', { name: /^Terminal/ })).toBeNull();
+    expect(second().queryByText(/^Astuce/)).toBeNull();
+    await user.click(second().getByRole('button', { name: 'Nouvelle session' }));
+    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nouvelle session' })).toBeNull());
+    await user.click(second().getByRole('button', { name: 'Réglages' }));
+    await waitFor(() => expect(second().getByRole('tab', { name: 'Réglages' })).toBeInTheDocument());
+    expect(groupviews()).toHaveLength(2);
+  });
+
+  it('split from a seat: « Capture · Otto » first, which opens its read-only capture in the empty group', async () => {
+    const ws: Workspace = { version: 1, windows: ['main'], focus: 'g2', next: 3, groups: [
+      { id: 'g1', window: 'main', tabs: [{ kind: 'seat', ref: 'local:otto' }], active: 0, link: null },
+      { id: 'g2', window: 'main', tabs: [], active: 0, link: null, from: 'local:otto' }
+    ] };
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(ws)));
+    const { d, user } = await mount();
+    act(() => d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', rig: { seat: 'dev@r', name: 'ledge-dev' } })));
+    const second = () => within(groupviews()[1]!);
+    await waitFor(() => expect(second().getAllByRole('button').filter(b => b.closest('.ide-empty')).map(b => b.textContent))
+      .toEqual(['Capture · Otto', 'Nouvelle session', 'OpenRig', 'Réglages', 'Atelier']));
+    expect(second().queryByRole('button', { name: 'Terminal · Otto' })).toBeNull();
+    await user.click(second().getByRole('button', { name: 'Capture · Otto' }));
+    await waitFor(() => expect(second().getByRole('tab', { name: '>_ Otto · tmux' })).toBeInTheDocument());
+    await waitFor(() => expect(groupviews()[1]!.querySelector('.ide-term .chip-k')).toHaveTextContent('lecture seule'));
+  });
+
+  it('« Terminal · X » only while X is a known session', async () => {
+    const { d, tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    splitKey();
+    await waitFor(() => expect(within(groupviews()[1]!).getByRole('button', { name: 'Terminal · Otto' })).toBeVisible());
+    act(() => d.remove('otto'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Terminal · Otto' })).toBeNull());
+  });
+
+  it('the tab menu\'s « Diviser à droite » splits the tab\'s group', async () => {
+    const { tree, user } = await mount();
+    await user.click(tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    fireEvent.contextMenu(tabs().find(t => t.getAttribute('aria-label') === 'Otto')!);
+    await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Diviser à droite/ }));
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    expect(within(groupviews()[1]!).getByRole('button', { name: 'Terminal · Otto' })).toBeVisible();
+  });
+});
+
+describe('tab shortcuts and closing an empty group (lot 3 follow-up)', () => {
+  const groupviews = () => [...document.querySelectorAll<HTMLElement>('.dv-groupview')];
+  const ctrl = (key: string, more: KeyboardEventInit = {}) => fireEvent.keyDown(window, { key, ctrlKey: true, ...more });
+  const names = (g: HTMLElement) => within(g).queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).map(t => t.getAttribute('aria-label'));
+  async function withOtto() {
+    const m = await mount();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    await m.user.click(m.tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    return m;
+  }
+
+  it('split, then Ctrl+W on the empty group: back to one group', async () => {
+    await mount();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    ctrl('\\');
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    ctrl('w');
+    await waitFor(() => expect(groupviews()).toHaveLength(1));
+    expect(names(groupviews()[0]!)).toEqual(['Atelier']);
+  });
+
+  it('the empty group\'s « Fermer le groupe » closes it; the last group has none', async () => {
+    const { user } = await mount();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    ctrl('\\');
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    expect(within(groupviews()[0]!).queryByRole('button', { name: /Fermer le groupe/ })).toBeNull();
+    await user.click(within(groupviews()[1]!).getByRole('button', { name: 'Fermer le groupe (Ctrl+W)' }));
+    await waitFor(() => expect(groupviews()).toHaveLength(1));
+    expect(screen.queryByRole('button', { name: /Fermer le groupe/ })).toBeNull();
+  });
+
+  it('Ctrl+W closes the active tab, Ctrl+Shift+T brings it back where it was', async () => {
+    await withOtto();
+    ctrl('w');
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier']));
+    ctrl('T', { shiftKey: true });
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier', 'Otto']));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+  });
+
+  it('Ctrl+Shift+T does not bring back the tab of a session deleted since: the tab closed before it comes back', async () => {
+    const { d, tree, user } = await withOtto();
+    await user.click(tree.getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Nova'));
+    ctrl('w');                                                        // Nova
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier', 'Otto']));
+    ctrl('w');                                                        // Otto
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier']));
+    act(() => d.remove('otto'));
+    await waitFor(() => expect(tree.queryByRole('button', { name: /^Otto/ })).toBeNull());
+    ctrl('T', { shiftKey: true });
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier', 'Nova']));
+  });
+
+  it('Ctrl+Tab cycles the focused group\'s tabs, Ctrl+Shift+Tab back', async () => {
+    await withOtto();
+    ctrl('Tab');
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    ctrl('Tab');
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    ctrl('Tab', { shiftKey: true });
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+  });
+
+  it('Ctrl+Alt+→ moves the active tab into a new group on the right; Ctrl+1 and Ctrl+2 focus the groups', async () => {
+    await withOtto();
+    ctrl('ArrowRight', { altKey: true });
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    expect(names(groupviews()[0]!)).toEqual(['Atelier']);
+    expect(names(groupviews()[1]!)).toEqual(['Otto']);
+    await waitFor(() => expect(groupviews()[1]).toHaveClass('dv-active-group'));
+    fireEvent.keyDown(window, { key: '&', code: 'Digit1', ctrlKey: true });
+    await waitFor(() => expect(groupviews()[0]).toHaveClass('dv-active-group'));
+    fireEvent.keyDown(window, { key: 'é', code: 'Digit2', ctrlKey: true });
+    await waitFor(() => expect(groupviews()[1]).toHaveClass('dv-active-group'));
   });
 });

@@ -188,7 +188,9 @@ describe('the detached Atelier’s window (#21)', () => {
       const el = screen.getByRole('group', { name: 'Window bar' });
       expect(el).toHaveClass('titlebar');
       expect(el).toHaveAttribute('data-tauri-drag-region');
-      expect(el.querySelector('[data-brand]')).toHaveTextContent('Ledge.');
+      expect(el.querySelector('[data-brand]')).toHaveTextContent(/^Ledge$/);
+      expect(el.querySelector('[data-brand] svg[data-ledge-mark]')).toHaveAttribute('viewBox', '0 0 16 16');
+      expect(el.querySelector('.brand-dot')).toBeNull();
       const bar = within(el);
       expect(bar.getByText('Atelier')).toBeVisible();
       expect(bar.getByRole('button', { name: 'Bring it back here' })).toBeVisible();

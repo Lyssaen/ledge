@@ -50,7 +50,7 @@ export function Changes({ files, current, onFile, onTouch, listOpen, onListOpen,
   return (
     <div className="changes-view">
       <div className="changes-layout">
-        <nav className={cls('file-list', listOpen && 'open')} aria-label={tc.files}>
+        <nav className={cls('file-list', listOpen && 'open')} aria-label={tc.files} data-keep-scroll>
           <div className="file-list-head"><span>{tc.count(files.length)}</span><Delta {...totals} /></div>
           {byFolder(files).map(({ dir, files: fs }) => (
             <div key={dir} className="file-dir">

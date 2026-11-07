@@ -1,8 +1,6 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent } from 'react';
-import { useMachines } from '@ledge/fleet';
+import { useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type JSX, type KeyboardEvent, type PointerEvent } from 'react';
 import { useI18n } from '../i18n/lang';
 import { cls } from '../shell/cls';
-import { ptyBackend } from '../term/backend';
 import { agentMode } from '../term/mode';
 import { changesTabId } from '../term/store';
 import { TermStoreContext } from '../term/useTerms';
@@ -14,12 +12,15 @@ import { openShell, RightPanel, useShellIntro } from './RightPanel';
 import { SessionPage, type PageApi, type SessionPageProps } from './SessionPage';
 import { subagentOf } from './exchanges';
 import { useThread } from './useThread';
-import { useTabPlace } from '../workspace/tabPlace';
+import { useHasBackend } from './AgentView';
+import { useAgentScreen } from './useAgentScreen';
 
 /** The terminal's xterm comes with this chunk, never in the first bundle: App's terminal store makes them through it. */
 export { createSurface } from '../term/surface';
 /** An IDE « Modifications » tab: its diffs come with this chunk too (ChangesPlace). */
 export { ChangesTab } from './ChangesTab';
+/** An IDE terminal tab of an agent. */
+export { AgentTerminalTab } from './AgentTerminalTab';
 
 /** ← / → on the panel's handle move it this much. */
 const TERM_STEP = 0.02;
@@ -50,26 +51,12 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   };
   const store = useContext(TermStoreContext);
   // A pseudo-terminal, or a daemon that streams the pane: either can show the agent's screen. The stream arrives with the snapshot.
-  const machines = useMachines(client);
-  const hasBackend = ptyBackend() !== null || machines.find(m => m.id === (p.session.machineId ?? 'local'))?.daemon?.terminalStream === true;
+  const hasBackend = useHasBackend(client, p.session);
   const view = prefs.view;
-  // In an IDE tab, every tab's page stays mounted: only a tab shown acts on the one agent screen of the window, and a tab
-  // that leaves detaches its own session's screen only, never another tab's (hideAgent with an id). Outside the IDE, as ever.
-  const tabPlace = useTabPlace();
-  const inTab = tabPlace !== null;
-  const shownHere = tabPlace === null || tabPlace.visible;
-  // Two groups can each show a tab on its terminal: only the focused group's takes the screen, or they would take it in turn
-  // at every fleet update (`p.session` changes). A tab visible in another group neither attaches nor detaches it.
-  const attachHere = tabPlace === null || tabPlace.active;
-  // The agent's screen is attached while the Terminal view shows it (re-asking in the same mode keeps the attachment), detached once left.
-  useEffect(() => {
-    if (!shownHere) return;
-    if (view === 'terminal') { if (attachHere) store?.showAgent(p.session.id, agentMode(p.session, helper, hasBackend)); }
-    else store?.hideAgent(inTab ? p.session.id : undefined);
-  }, [store, view, p.session, helper, hasBackend, shownHere, attachHere, inTab]);
-  const leaving = useRef<string | undefined>(undefined);
-  leaving.current = inTab ? p.session.id : undefined;
-  useEffect(() => () => store?.hideAgent(leaving.current), [store]);
+  // The agent's screen is attached while the Terminal view shows it (in an IDE tab: its own view, R2), detached once left.
+  const sid = p.session.id;
+  const mode = agentMode(p.session, helper, hasBackend);
+  useAgentScreen(sid, mode, view === 'terminal');
   // « Agrandir le panneau » lasts while the panel shows: hiding it forgets it.
   const [maxed, setMaxed] = useState(false);
   if (maxed && !prefs.terminal) setMaxed(false);

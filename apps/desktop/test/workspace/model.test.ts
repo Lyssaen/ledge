@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeOthers, cycleLink, deserialize, empty, find, focused, keyOf, MAIN, move, open, reconcile, serialize, setView, split, type Tab, type Workspace } from '../../src/workspace/model';
+import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeGroup, closeOthers, CLOSED_MAX, cycleLink, cycleTab, deserialize, emptyProposals, empty, find, focusGroup, focusNth, focused, keyOf, MAIN, move, moveActive, moveTo, open, reconcile, remember, reopenLast, serialize, setView, split, type Closed, type Tab, type Workspace } from '../../src/workspace/model';
 
 const S = (id: string): Tab => ({ kind: 'session', ref: id });
 const keys = (w: Workspace, groupId: string) => w.groups.find(g => g.id === groupId)!.tabs.map(keyOf);
@@ -229,5 +229,238 @@ describe('changesBeside', () => {
     const peer = w.groups.find(g => g.id !== 'g1')!;
     w = open(activate(w, peer.id, 0), S('other'));
     expect(changesBeside(w, 'session:a')).toBeNull();
+  });
+});
+
+describe('moveTo', () => {
+  const two = () => { const w = open(open(empty(), S('a')), S('b')); return move(w, 'session:b', { rightOf: 'g1' }); };
+  it('to index 0 of another group: first and active, the group focused', () => {
+    const w = moveTo(two(), 'session:a', { group: 'g2', index: 0 });
+    expect(keys(w, 'g2')).toEqual(['session:a', 'session:b']);
+    expect(keys(w, 'g2')[0]).toBe('session:a');
+    expect(front(w, 'g2')).toBe('session:a');
+    expect(w.focus).toBe('g2');
+  });
+  it('without index: at the end; index is clamped', () => {
+    const w = moveTo(two(), 'session:a', { group: 'g2' });
+    expect(keys(w, 'g2')).toEqual(['session:b', 'session:a']);
+    const v = moveTo(open(two(), S('c')), 'session:c', { group: 'g2', index: 99 });
+    expect(keys(v, 'g2')).toEqual(['session:b', 'session:c']);
+  });
+  it('the emptied source disappears, except MAIN\'s last', () => {
+    const w = moveTo(two(), 'session:a', { group: 'g2' });
+    expect(w.groups.map(g => g.id)).toEqual(['g2']);
+    const one = open(empty(), S('a'));
+    expect(moveTo(one, 'session:a', { group: 'g1' })).toBe(one);
+  });
+  it('the same group with an index reorders: clamped, active, group focused', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('c'));
+    const r = moveTo(w, 'session:c', { group: 'g1', index: 0 });
+    expect(keys(r, 'g1')).toEqual(['session:c', 'session:a', 'session:b']);
+    expect(front(r, 'g1')).toBe('session:c');
+    const e = moveTo(w, 'session:a', { group: 'g1', index: 99 });
+    expect(keys(e, 'g1')).toEqual(['session:b', 'session:c', 'session:a']);
+    expect(front(e, 'g1')).toBe('session:a');
+    expect(e.focus).toBe('g1');
+    expect(moveTo(w, 'session:a', { group: 'g1' })).toBe(w);
+  });
+  it('{rightOf}: a new group just right', () => {
+    const w = moveTo(open(two(), S('c')), 'session:c', { rightOf: 'g1' });
+    expect(w.groups.map(g => g.id)).toEqual(['g1', 'g3', 'g2']);
+    expect(keys(w, 'g3')).toEqual(['session:c']);
+    expect(w.focus).toBe('g3');
+  });
+});
+
+describe('emptyProposals', () => {
+  it('from a session: terminalOf is its id', () => {
+    const w = split(open(empty(), S('pim')), 'g1');
+    expect(emptyProposals(w, 'g2')).toEqual({ terminalOf: 'pim' });
+  });
+  it('from the atelier, or a group with tabs or unknown: null', () => {
+    const w = split(open(empty(), { kind: 'atelier', ref: '' }), 'g1');
+    expect(emptyProposals(w, 'g2')).toEqual({ terminalOf: null });
+    expect(emptyProposals(open(split(open(empty(), S('pim')), 'g1'), S('x')), 'g2')).toEqual({ terminalOf: null });
+    expect(emptyProposals(w, 'nope')).toEqual({ terminalOf: null });
+  });
+});
+
+describe('focusGroup', () => {
+  it('focuses a group, empty ones included, so a tab opened « active » lands in it', () => {
+    const w = activate(split(open(empty(), S('pim')), 'g1'), 'g1', 0);
+    expect(w.focus).toBe('g1');
+    const f = focusGroup(w, 'g2');
+    expect(f.focus).toBe('g2');
+    expect(keys(open(f, agentTerminalTab('pim')), 'g2')).toEqual(['terminal:agent:pim']);
+  });
+  it('the group already focused, or an unknown one: the same object', () => {
+    const w = split(open(empty(), S('pim')), 'g1');
+    expect(focusGroup(w, 'g2')).toBe(w);
+    expect(focusGroup(w, 'nope')).toBe(w);
+  });
+});
+
+describe('a linked Changes group follows until the link is cycled off', () => {
+  it('follows, then stops after cycleLink goes to null', () => {
+    let w = open(open(empty(), S('a')), S('b'));
+    w = beside(w, 'g1', 'changes', 'a');
+    const peer = w.groups.find(g => g.id !== 'g1')!.id;
+    w = activate(w, 'g1', 1);
+    expect(front(w, peer)).toBe('changes:b');
+    while (w.groups.find(g => g.id === peer)!.link !== null) w = cycleLink(w, peer);
+    w = activate(w, 'g1', 0);
+    expect(front(w, peer)).toBe('changes:b');
+  });
+});
+
+describe('closeGroup (lot 3 follow-up)', () => {
+  it('removes an empty group; the focus goes to its left neighbour', () => {
+    let w = split(open(empty(), S('pim')), 'g1');
+    expect(w.focus).toBe('g2');
+    w = closeGroup(w, 'g2');
+    expect(w.groups.map(g => g.id)).toEqual(['g1']);
+    expect(w.focus).toBe('g1');
+  });
+  it('the leftmost group: the focus goes to its right neighbour', () => {
+    const left: Workspace = { version: 1, windows: [MAIN], next: 3, focus: 'g1', groups: [
+      { id: 'g1', window: MAIN, tabs: [], active: 0, link: null },
+      { id: 'g2', window: MAIN, tabs: [S('pim')], active: 0, link: null }
+    ] };
+    const out = closeGroup(left, 'g1');
+    expect(out.groups.map(g => g.id)).toEqual(['g2']);
+    expect(out.focus).toBe('g2');
+  });
+  it('a group with tabs, the main window\'s last group, an unknown group: the same object', () => {
+    const w = split(open(empty(), S('pim')), 'g1');
+    expect(closeGroup(w, 'g1')).toBe(w);
+    expect(closeGroup(w, 'nope')).toBe(w);
+    const alone = empty();
+    expect(closeGroup(alone, 'g1')).toBe(alone);
+  });
+  it('another group focused keeps the focus', () => {
+    const w = activate(split(open(empty(), S('pim')), 'g1'), 'g1', 0);
+    const out = closeGroup(w, 'g2');
+    expect(out.groups.map(g => g.id)).toEqual(['g1']);
+    expect(out.focus).toBe('g1');
+  });
+});
+
+describe('cycleTab', () => {
+  it('next and previous tab in the group, wrapping; focuses the group', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('c'));
+    expect(front(w, 'g1')).toBe('session:c');
+    w = cycleTab(w, 'g1', 1);
+    expect(front(w, 'g1')).toBe('session:a');
+    w = cycleTab(w, 'g1', 1);
+    expect(front(w, 'g1')).toBe('session:b');
+    w = cycleTab(w, 'g1', -1);
+    w = cycleTab(w, 'g1', -1);
+    expect(front(w, 'g1')).toBe('session:c');
+  });
+  it('one tab or none, or an unknown group: the same object', () => {
+    const one = open(empty(), S('a'));
+    expect(cycleTab(one, 'g1', 1)).toBe(one);
+    const none = empty();
+    expect(cycleTab(none, 'g1', -1)).toBe(none);
+    expect(cycleTab(one, 'nope', 1)).toBe(one);
+  });
+});
+
+describe('focusNth', () => {
+  it('focuses the Nth group of the main window, left to right; none there: the same object', () => {
+    let w = open(open(open(empty(), S('a')), S('b'), 'right'), S('c'), 'right');
+    expect(w.groups.map(g => g.id)).toEqual(['g1', 'g2', 'g3']);
+    w = focusNth(w, 1);
+    expect(w.focus).toBe('g1');
+    w = focusNth(w, 2);
+    expect(w.focus).toBe('g2');
+    expect(focusNth(w, 4)).toBe(w);
+    // A secondary window's group does not count.
+    const v = open(w, S('d'), 'window');
+    expect(focusNth(v, 4)).toBe(v);
+  });
+});
+
+describe('moveActive (Ctrl+Alt+← / →)', () => {
+  it('→ moves the focused group\'s active tab into the group on its right', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('c'), 'right');
+    w = activate(w, 'g1', 1);
+    w = moveActive(w, 1);
+    expect(keys(w, 'g1')).toEqual(['session:a']);
+    expect(keys(w, 'g2')).toEqual(['session:c', 'session:b']);
+    expect(w.focus).toBe('g2');
+  });
+  it('→ with no group on the right opens one; ← with none on the left does nothing', () => {
+    const w = open(open(empty(), S('a')), S('b'));
+    const right = moveActive(w, 1);
+    expect(right.groups.map(g => right.groups.find(x => x.id === g.id)!.tabs.map(keyOf))).toEqual([['session:a'], ['session:b']]);
+    expect(moveActive(w, -1)).toBe(w);
+  });
+  it('← moves into the left group; the emptied group goes', () => {
+    let w = open(open(empty(), S('a')), S('b'), 'right');
+    w = moveActive(w, -1);
+    expect(w.groups.map(g => g.id)).toEqual(['g1']);
+    expect(keys(w, 'g1')).toEqual(['session:a', 'session:b']);
+  });
+  it('a group\'s only tab with no group on the right, or an empty group: the same object', () => {
+    const one = open(empty(), S('a'));
+    expect(moveActive(one, 1)).toBe(one);
+    const e = split(one, 'g1');
+    expect(moveActive(e, 1)).toBe(e);
+    expect(moveActive(e, -1)).toBe(e);
+  });
+});
+
+describe('closed tabs (Ctrl+Shift+T)', () => {
+  it('remember notes the tab, its group and place; reopenLast puts it back there and pops it', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('c'));
+    const stack = remember([], w, 'session:b');
+    expect(stack).toEqual([{ tab: S('b'), group: 'g1', index: 1 }]);
+    w = close(w, 'session:b');
+    const r = reopenLast(w, stack);
+    expect(keys(r.w, 'g1')).toEqual(['session:a', 'session:b', 'session:c']);
+    expect(front(r.w, 'g1')).toBe('session:b');
+    expect(r.stack).toEqual([]);
+  });
+  it('its group gone: into the focused group', () => {
+    let w = open(open(empty(), S('a')), S('b'), 'right');
+    const stack = remember([], w, 'session:b');
+    w = close(w, 'session:b');
+    expect(w.groups.map(g => g.id)).toEqual(['g1']);
+    const r = reopenLast(w, stack);
+    expect(keys(r.w, 'g1')).toEqual(['session:a', 'session:b']);
+  });
+  it('the last closed first; a tab already open again is skipped; an empty stack changes nothing', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('c'));
+    let stack = remember([], w, 'session:b');
+    w = close(w, 'session:b');
+    stack = remember(stack, w, 'session:c');
+    w = close(w, 'session:c');
+    w = open(w, S('c'));
+    const r = reopenLast(w, stack);
+    expect(keys(r.w, 'g1')).toEqual(['session:a', 'session:b', 'session:c']);
+    expect(r.stack).toEqual([]);
+    const none = reopenLast(r.w, []);
+    expect(none.w).toBe(r.w);
+  });
+  it('an entry whose session is gone is discarded, the next one reopens', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('gone'));
+    let stack = remember([], w, 'session:b');
+    w = close(w, 'session:b');
+    stack = remember(stack, w, 'session:gone');
+    w = close(w, 'session:gone');
+    const r = reopenLast(w, stack, t => t.ref !== 'gone');
+    expect(keys(r.w, 'g1')).toEqual(['session:a', 'session:b']);
+    expect(r.stack).toEqual([]);
+  });
+  it('keeps the 20 last; an unknown key is not noted', () => {
+    let stack: readonly Closed[] = [];
+    let w = empty();
+    for (let i = 0; i < 25; i++) { w = open(w, S(`s${i}`)); stack = remember(stack, w, `session:s${i}`); }
+    expect(stack).toHaveLength(CLOSED_MAX);
+    expect(CLOSED_MAX).toBe(20);
+    expect(stack.at(-1)!.tab).toEqual(S('s24'));
+    expect(stack[0]!.tab).toEqual(S('s5'));
+    expect(remember(stack, w, 'session:nope')).toBe(stack);
   });
 });

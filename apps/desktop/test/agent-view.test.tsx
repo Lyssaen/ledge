@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { useLayoutEffect, type JSX } from 'react';
 import { daemonStore, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
@@ -9,9 +9,10 @@ import type { PtyBackend } from '../src/term/backend';
 import { TermStore, agentTabId, type TermDeps } from '../src/term/store';
 import { TermStoreContext } from '../src/term/useTerms';
 import { agentMode } from '../src/term/mode';
-import { AgentView, useAgent } from '../src/session/AgentView';
+import { AgentView, agentStatus, terminalViewTitle, useAgent, useAgentStatus } from '../src/session/AgentView';
 import { focusAgentView } from '../src/session/agentFocus';
 import { fakeBackend, fakeSurface, type FakeSurface } from './term-fakes';
+import { TabPlaceContext } from '../src/workspace/tabPlace';
 
 const env = vi.hoisted(() => ({ backend: null as PtyBackend | null }));
 vi.mock('../src/term/backend', () => ({ ptyBackend: () => env.backend }));
@@ -253,4 +254,102 @@ it('says when a phone types into the agent\'s terminal, and takes the hand back'
   expect(screen.getByText('iPhone · Safari au clavier : il tape dans le terminal de Nova.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Reprendre la main' }));
   expect(release).toHaveBeenCalledWith(nova.id);
+});
+
+/** Two IDE tabs of the same session (R2): their views, each in its tab place, with nothing shown until the test says. */
+function TwoTabs({ session, other = session }: { session: Session; other?: Session }): JSX.Element {
+  const client = { send: () => {}, fleet: { retry, machines: () => [], subscribe: () => () => {}, terminalHolders: () => NO_HOLDERS, releaseTerminal: () => {} } } as unknown as DaemonClient;
+  const Tab = ({ k, s }: { k: string; s: Session }) => {
+    const agent = useAgent(s, null);
+    return (
+      <TabPlaceContext.Provider value={{ key: k, group: `g-${k}`, visible: true, active: k === 't1' }}>
+        <div data-tab={k}><AgentView client={client} session={s} helper={null} agent={agent} notify={() => {}} onGoParent={() => {}} onOpenShell={() => {}} /></div>
+      </TabPlaceContext.Provider>
+    );
+  };
+  return <LangProvider lang="fr"><TermStoreContext.Provider value={store}><Tab k="t1" s={session} /><Tab k="t2" s={other} /></TermStoreContext.Provider></LangProvider>;
+}
+
+it('R2: the same session in two tabs: the tab holding its screen draws it, the other says where it is and brings it back', async () => {
+  render(<TwoTabs session={nova} />);
+  act(() => { store.showAgent('nova', { kind: 'live' }, 't1'); });
+  await tick();
+  const s = surfaceOf(agentTabId('nova'))!;
+  const tab = (k: string) => document.querySelector<HTMLElement>(`[data-tab="${k}"]`)!;
+  expect(tab('t1')).toContainElement(s.host);
+  expect(tab('t2')).toHaveTextContent('Terminal affiché dans l’autre groupe');
+  expect(tab('t2').querySelector('.agent-view')).toHaveAttribute('data-typeable', 'false');
+  expect(tab('t1')).not.toHaveTextContent('Terminal affiché dans l’autre groupe');
+  // In an IDE tab there is no footer (lot 3 follow-up, option A): the tab's `>_` says its state, here none, and the pane's name.
+  expect(tab('t2').querySelector('.terminal-footer')).toBeNull();
+  fireEvent.click(within(tab('t2')).getByRole('button', { name: 'Afficher ici' }));
+  await tick();
+  expect(store.viewerOf('nova')).toBe('t2');
+  expect(tab('t2')).toContainElement(s.host);
+  expect(tab('t1')).toHaveTextContent('Terminal affiché dans l’autre groupe');
+  expect(backend.opens).toHaveLength(1);
+});
+
+it('the keyboard goes to the asked session\'s screen when two are drawn, and to the tab holding it when one session is drawn twice', async () => {
+  const pay = fakeSession('pay', { name: 'Pay', cwd: '/w/pay' });
+  const { unmount } = render(<TwoTabs session={nova} other={pay} />);
+  act(() => { store.showAgent('nova', { kind: 'live' }, 't1'); store.showAgent('pay', { kind: 'live' }, 't2'); });
+  await tick();
+  focusAgentView(store, 'pay');
+  expect(surfaceOf(agentTabId('pay'))!.focuses).toBe(1);
+  expect(surfaceOf(agentTabId('nova'))!.focuses).toBe(0);
+  unmount();
+  render(<TwoTabs session={nova} />);
+  act(() => { store.showAgent('nova', { kind: 'live' }, 't2'); });
+  await tick();
+  // Neither tab in a dockview group here: the one that holds the screen takes the keyboard.
+  focusAgentView(store, 'nova');
+  expect(surfaceOf(agentTabId('nova'))!.focuses).toBe(1);
+});
+
+/** Lot 3 follow-up (option A): the footer's state and tmux target, one source for the footer and the IDE tab's `>_`. */
+it('agentStatus: what the footer says, by mode and link', () => {
+  const tt = { attached: 'Attaché', attachedSsh: 'Attaché par SSH', reconnecting: 'Reconnexion…', readOnly: 'Lecture seule', offline: 'Hors ligne', preview: 'Aperçu · lecture seule', connecting: 'Connexion…',
+    noAgentScreen: 'Pas d’écran d’agent', noTmux: 'aucune session tmux', tmuxTarget: (s: string, h?: string) => (h ? `ssh ${h} · tmux · ${s}` : `tmux · ${s}`) };
+  const live = { mode: { kind: 'live' }, link: { state: 'attached', attempt: 0 }, remote: false, host: 'wsl' };
+  const at = (a: Record<string, unknown>, screen = { elsewhere: false, surface: true }, tmux: string | null = 'ledge-otto') => agentStatus({ ...live, ...a } as never, tmux, screen, tt as never);
+  expect(at({})).toEqual({ state: 'Attaché', dot: 'on', where: 'tmux · ledge-otto' });
+  expect(at({ remote: true, host: 'build-01' })).toEqual({ state: 'Attaché par SSH', dot: 'on', where: 'ssh build-01 · tmux · ledge-otto' });
+  expect(at({ link: { state: 'reconnecting', attempt: 1 } })).toEqual({ state: 'Reconnexion…', dot: 'wait', where: 'tmux · ledge-otto' });
+  expect(at({}, { elsewhere: true, surface: true })).toEqual({ state: null, dot: 'off', where: 'tmux · ledge-otto' });
+  expect(at({}, { elsewhere: false, surface: false })).toEqual({ state: 'Lecture seule', dot: 'off', where: 'tmux · ledge-otto' });
+  expect(at({ mode: { kind: 'browser' } })).toEqual({ state: 'Lecture seule', dot: 'off', where: null });
+  expect(at({ mode: { kind: 'native' } })).toEqual({ state: 'Pas d’écran d’agent', dot: 'off', where: null });
+  expect(at({ mode: { kind: 'preview', why: 'ended' } }, undefined, null)).toEqual({ state: 'Aperçu · lecture seule', dot: 'off', where: 'aucune session tmux' });
+  expect(at({ mode: { kind: 'offline' }, host: 'build-01' })).toEqual({ state: 'Hors ligne', dot: 'off', where: 'build-01' });
+});
+
+it('terminalViewTitle: « Vue terminal · attaché · tmux · ledge-otto », what is unknown left out', () => {
+  expect(terminalViewTitle('Vue terminal', { state: 'Attaché', dot: 'on', where: 'tmux · ledge-otto' })).toBe('Vue terminal · attaché · tmux · ledge-otto');
+  expect(terminalViewTitle('Vue terminal', { state: null, dot: 'off', where: 'tmux · ledge-otto' })).toBe('Vue terminal · tmux · ledge-otto');
+  expect(terminalViewTitle('Vue terminal', { state: 'Lecture seule', dot: 'off', where: null })).toBe('Vue terminal · lecture seule');
+});
+
+it('in an IDE tab the agent screen has no footer, outside it keeps it; useAgentStatus gives each tab what its footer said', async () => {
+  const client = { send: () => {}, fleet: { retry, machines: () => [], subscribe: () => () => {}, terminalHolders: () => NO_HOLDERS, releaseTerminal: () => {} } } as unknown as DaemonClient;
+  const Probe = ({ k }: { k: string }) => {
+    const agent = useAgent(nova, null);
+    const st = useAgentStatus(nova, agent, k);
+    return <span data-probe={k}>{`${st.state ?? '-'}|${st.where ?? '-'}`}</span>;
+  };
+  const Tab = ({ k }: { k: string }) => {
+    const agent = useAgent(nova, null);
+    return (
+      <TabPlaceContext.Provider value={{ key: k, group: `g-${k}`, visible: true, active: k === 't1' }}>
+        <div data-tab={k}><AgentView client={client} session={nova} helper={null} agent={agent} notify={() => {}} onGoParent={() => {}} onOpenShell={() => {}} /></div>
+      </TabPlaceContext.Provider>
+    );
+  };
+  render(<LangProvider lang="fr"><TermStoreContext.Provider value={store}><Tab k="t1" /><Tab k="t2" /><Probe k="t1" /><Probe k="t2" /></TermStoreContext.Provider></LangProvider>);
+  act(() => { store.showAgent('nova', { kind: 'live' }, 't1'); });
+  await tick();
+  expect(document.querySelector('.terminal-footer')).toBeNull();
+  expect(document.querySelector('[data-probe="t1"]')).toHaveTextContent(`Attaché|tmux · ${nova.tmuxSession}`);
+  // The other tab: the screen is elsewhere, no state, the pane's name.
+  expect(document.querySelector('[data-probe="t2"]')).toHaveTextContent(`-|tmux · ${nova.tmuxSession}`);
 });

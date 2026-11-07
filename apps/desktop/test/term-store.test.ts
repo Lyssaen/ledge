@@ -533,3 +533,112 @@ describe('TermStore input while opening', () => {
     expect(backend.opens[1]!.writes).toEqual([]);
   });
 });
+
+describe('TermStore: one agent screen per session (IDE groups)', () => {
+  it('a then b shown by two tabs: two attachments, none closed; hiding a closes a only', async () => {
+    const st = store();
+    st.showAgent('local:a', { kind: 'live' }, 't1'); await tick();
+    st.showAgent('local:b', { kind: 'live' }, 't2'); await tick();
+    expect(backend.opens.map(o => o.argv.at(-1))).toEqual(['local:a', 'local:b']);
+    expect(backend.opens.map(o => o.closed)).toEqual([false, false]);
+    expect(st.link('local:a').state).toBe('attached');
+    expect(st.link('local:b').state).toBe('attached');
+    expect(st.surface(agentTabId('local:a'))).not.toBe(st.surface(agentTabId('local:b')));
+    st.hideAgent('local:a', 't1');
+    expect(backend.opens.map(o => o.closed)).toEqual([true, false]);
+    expect(st.link('local:a').state).toBe('off');
+    expect(st.link('local:b').state).toBe('attached');
+  });
+
+  it('a dropping reconnects a alone, with its own backoff', async () => {
+    const st = store();
+    st.showAgent('local:a', { kind: 'live' }, 't1'); await tick();
+    st.showAgent('local:b', { kind: 'live' }, 't2'); await tick();
+    backend.opens[0]!.on.exit(255);
+    expect(st.link('local:a')).toEqual({ state: 'reconnecting', attempt: 1, retryAt: Date.now() + 1000 });
+    expect(st.link('local:b').state).toBe('attached');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(backend.opens.map(o => o.argv.at(-1))).toEqual(['local:a', 'local:b', 'local:a']);
+    backend.opens[2]!.on.exit(255);
+    expect(st.link('local:a')).toMatchObject({ state: 'reconnecting', attempt: 2 });
+    backend.opens[1]!.on.exit(255);
+    expect(st.link('local:b')).toMatchObject({ state: 'reconnecting', attempt: 1 });
+    st.retryNow('local:b'); await tick();
+    expect(st.link('local:b').state).toBe('attached');
+    expect(st.link('local:a').state).toBe('reconnecting');
+  });
+
+  it('refreshAgent takes up every session shown', () => {
+    let route: AgentRoute = 'wait';
+    const seen: string[] = [];
+    const stream: AgentStream = { open: id => { seen.push(id); return { write: () => {}, resize: () => {}, close: () => {} }; } };
+    const st = store({ agentRoute: () => route, stream });
+    st.showAgent('local:a', { kind: 'live' }, 't1');
+    st.showAgent('local:b', { kind: 'live' }, 't2');
+    expect(seen).toEqual([]);
+    route = 'stream';
+    st.refreshAgent();
+    expect(seen).toEqual(['local:a', 'local:b']);
+    expect(st.viewerOf('local:a')).toBe('t1');
+    expect(st.viewerOf('local:b')).toBe('t2');
+  });
+
+  it('refreshAgent reopens a shown session only where its route changed, each on its own path', async () => {
+    const routes = new Map<string, AgentRoute>([['local:a', 'pty'], ['local:b', 'pty']]);
+    const streamed: string[] = [];
+    const stream: AgentStream = { open: id => { streamed.push(id); return { write: () => {}, resize: () => {}, close: () => {} }; } };
+    const st = store({ agentRoute: id => routes.get(id) ?? 'pty', stream });
+    st.showAgent('local:a', { kind: 'live' }, 't1');
+    st.showAgent('local:b', { kind: 'live' }, 't2');
+    await tick();
+    expect(backend.opens.map(o => o.argv.at(-1))).toEqual(['local:a', 'local:b']);
+    // Nothing changed: no attachment closed, none opened.
+    st.refreshAgent(); await tick();
+    expect(backend.opens).toHaveLength(2);
+    expect(backend.opens.map(o => o.closed)).toEqual([false, false]);
+    expect(streamed).toEqual([]);
+    // a's machine now streams: a goes over the stream, its pseudo-terminal closed; b, unchanged, stays as it is.
+    routes.set('local:a', 'stream');
+    st.refreshAgent(); await tick();
+    expect(streamed).toEqual(['local:a']);
+    expect(backend.opens).toHaveLength(2);
+    expect(backend.opens.map(o => o.closed)).toEqual([true, false]);
+    // Both change: b over the stream too, a not opened again.
+    routes.set('local:b', 'stream');
+    st.refreshAgent(); await tick();
+    expect(streamed).toEqual(['local:a', 'local:b']);
+    expect(backend.opens).toHaveLength(2);
+    expect(backend.opens.map(o => o.closed)).toEqual([true, true]);
+    expect([st.viewerOf('local:a'), st.viewerOf('local:b')]).toEqual(['t1', 't2']);
+  });
+
+  it('the same session asked by another tab moves to it, on the same attachment; the old tab cannot hide it', async () => {
+    const st = store();
+    expect(st.viewerOf('local:a')).toBeNull();
+    st.showAgent('local:a', { kind: 'live' }, 't1'); await tick();
+    expect(st.viewerOf('local:a')).toBe('t1');
+    st.showAgent('local:a', { kind: 'live' }, 't2'); await tick();
+    expect(st.viewerOf('local:a')).toBe('t2');
+    expect(backend.opens).toHaveLength(1);
+    st.hideAgent('local:a', 't1');
+    expect(backend.opens[0]!.closed).toBe(false);
+    expect(st.viewerOf('local:a')).toBe('t2');
+    st.hideAgent('local:a', 't2');
+    expect(backend.opens[0]!.closed).toBe(true);
+    expect(st.viewerOf('local:a')).toBeNull();
+  });
+
+  it('a tab shows one session: asking another lets the first go; outside the IDE the page is that tab', async () => {
+    const st = store();
+    st.showAgent('local:a', { kind: 'live' }, 't1'); await tick();
+    st.showAgent('local:b', { kind: 'live' }, 't1'); await tick();
+    expect(backend.opens[0]!.closed).toBe(true);
+    expect(st.viewerOf('local:a')).toBeNull();
+    st.showAgent('local:c', { kind: 'live' }); await tick();
+    expect(st.viewerOf('local:c')).toBe('page');
+    expect(st.viewerOf('local:b')).toBe('t1');
+    st.hideAgent();
+    expect(st.viewerOf('local:b')).toBeNull();
+    expect(st.viewerOf('local:c')).toBeNull();
+  });
+});

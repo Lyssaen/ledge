@@ -60,6 +60,14 @@
 .set-row.stack .set-seg{display:flex;width:100%;max-width:560px}
 .set-seg .ledge-bot,.set-seg svg{flex-shrink:0}
 .set-row.stack .set-seg label{height:34px}
+/* Radios as the IDE mockup draws them (.radios, .radio): a round mark, the choice beside it, in a row. */
+.set-radios{display:flex;flex-wrap:wrap;gap:8px 16px}
+.set-radios label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--foreground);cursor:pointer}
+.set-radios input{appearance:none;width:14px;height:14px;margin:0;border-radius:50%;border:1px solid var(--input);display:grid;place-items:center;cursor:pointer}
+.set-radios input:checked::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--foreground)}
+.set-radios input:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.set-radios label:hover{color:var(--foreground)}
+.set-radios label:hover input{border-color:var(--ring)}
 
 .set-input{height:32px;padding:0 10px;font-size:13px;background:var(--well)!important}
 .set-input.hex{width:96px}

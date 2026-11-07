@@ -4,7 +4,7 @@ import { botState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { machineOf, taskOf } from '../nav/agents';
-import type { NavAction } from '../nav/state';
+import { openClick, type NavAction } from '../nav/state';
 import { RigTag, seatLine } from '../openrig/RigTag';
 import { cls } from '../shell/cls';
 import type { SessionActions } from '../manage/useSessionActions';
@@ -168,7 +168,7 @@ export function ProjectTable({ project, mains, order, helpers, seats: maxSeats, 
           const state = botState(s);
           return (
             <Fragment key={s.id}>
-            <button style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))} onClick={() => dispatch({ type: 'open', id: s.id })} onContextMenu={e => onMenu(s, e)}
+            <button style={{ left: at(x - 56) }} data-agent={s.id} aria-label={t.atelier.seat(s.name, taskOf(s), machineOf(s))} onClick={e => dispatch(openClick(s.id, e))} onContextMenu={e => onMenu(s, e)}
               {...seatDrag?.(s)}
               className={cls('agent-seat', `place-${side}`, seated === s.id && 'just-seated', focusedId === s.id && 'keyboard-selected', s.offline ? 'seat-offline' : state === 'working' && 'seat-working')}>
               {bot(s, 64)}

@@ -4,8 +4,9 @@ import type { Overview } from './overview';
 export type View = 'atelier';
 /** 'all', 'none' (Sans projet) or a project id. */
 export type ProjectFilter = string;
-export type SectionId = 'general' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'notes' | 'shortcuts' | 'about';
-export const SECTIONS: readonly SectionId[] = ['general', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'notes', 'shortcuts', 'about'];
+export type SectionId = 'general' | 'workspace' | 'appearance' | 'island' | 'notifications' | 'sounds' | 'machines' | 'mobile' | 'projects' | 'notes' | 'shortcuts' | 'about';
+/** `workspace` is the IDE's own: the Settings nav shows it only while « Interface IDE (aperçu) » is on. */
+export const SECTIONS: readonly SectionId[] = ['general', 'workspace', 'appearance', 'island', 'notifications', 'sounds', 'machines', 'mobile', 'projects', 'notes', 'shortcuts', 'about'];
 /** The tabs of Ledge's home view (ledge home spec §2.2). */
 export type HomeTab = 'conversation' | 'tasks' | 'history';
 export const HOME_TABS: readonly HomeTab[] = ['conversation', 'tasks', 'history'];
@@ -48,7 +49,7 @@ export type NavAction =
   | { type: 'ledge'; tab?: HomeTab; task?: string }
   /** Sets the current place's project filter without going anywhere (a session page stays open; in Settings, the place behind). */
   | { type: 'filter'; project: ProjectFilter }
-  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string; /** A file to open in its side pane on arrival (« À toi »'s source). */ doc?: string }
+  | { type: 'open'; id: string; helper?: string; focus?: 'reply'; item?: string; /** A file to open in its side pane on arrival (« À toi »'s source). */ doc?: string; /** IDE only: where the tab opens, over the setting « Ouvrir une session »; the reducer ignores it. */ where?: 'active' | 'right' }
   | { type: 'settings'; section?: SectionId }
   /** The OpenRig page, on a machine (the one shown before, else local), on its rigs or its roles (the section shown before,
    *  else the rigs). `role`: open that role, seen from `seat` (`rig/logicalId`) or from its spec. */
@@ -58,6 +59,9 @@ export type NavAction =
   | { type: 'fullscreen'; on: boolean }
   | { type: 'helpers' } | { type: 'paused' }
   | { type: 'escape' };
+
+/** A click that opens a session: Ctrl/⌘ held, to the right (the IDE; the reducer ignores `where`), else where the setting says. */
+export const openClick = (id: string, e: { ctrlKey: boolean; metaKey: boolean }): NavAction => ({ type: 'open', id, ...((e.ctrlKey || e.metaKey) && { where: 'right' as const }) });
 
 /** Where the app opens: Ledge's home view (ledge home spec §2.1); the detached Atelier's window opens on the atelier. */
 export function initialNav(overview: Overview, start: 'home' | 'atelier' = 'home'): NavState {

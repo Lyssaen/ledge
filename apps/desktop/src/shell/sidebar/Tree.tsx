@@ -111,6 +111,8 @@ export function Tree(p: {
   /** The sessions picked with Ctrl/⌘ + click, to write to them together; a plain click still opens. No `onPick`, no picking. */
   picked: ReadonlySet<string>;
   onPick?(id: string): void;
+  /** The IDE: Ctrl/⌘ + click opens the session in a group on the right; picking moves to Shift + click. */
+  onOpenRight?(id: string): void;
   /** A row's menu (right click, its « … », the menu key): what it is on, where, and the control the focus goes back to. */
   onMenu(target: MenuTarget, at: { x: number; y: number }, opener: HTMLElement | null): void;
   onArchive(ids: string[]): void;
@@ -230,7 +232,7 @@ export function Tree(p: {
           : <SessionBot session={s} size={18} paused={p.paused} />}</span>
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
-          onClick={e => { if (!helper && p.onPick && (e.ctrlKey || e.metaKey)) p.onPick(s.id); else if (helper) p.onOpen(s.id, helper.id); else p.onOpen(s.id); }}>
+          onClick={e => { const mod = e.ctrlKey || e.metaKey; if (!helper && p.onOpenRight && mod) p.onOpenRight(s.id); else if (!helper && p.onPick && (p.onOpenRight ? e.shiftKey : mod)) p.onPick(s.id); else if (helper) p.onOpen(s.id, helper.id); else p.onOpen(s.id); }}>
           <strong>{name}{!helper && <AutoMark session={s} />}{!helper && <RigTag session={s} />}{!helper && !p.byBranch && <BranchTag session={s} />}{!helper && p.near !== undefined && <CtxSignal session={s} near={p.near} />}</strong>{task && <span>{task}</span>}
         </button>
         {subs.length > 0 && !open && <span className="st-kids" title={t.side.kids(subs.length)}>{subs.length}</span>}

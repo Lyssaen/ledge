@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { DaemonClient } from '@ledge/fleet';
 import type { ClientMessage, ServerMessage, Session } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { SessionBar } from '../../src/session/SessionBar';
+import { SessionBar, type SessionBarProps } from '../../src/session/SessionBar';
 import type { ChangedFile } from '../../src/session/changedFiles';
 import type { Link } from '../../src/workspace/model';
 
@@ -23,11 +25,11 @@ function fakeClient() {
 const T = '2026-11-06T10:00:00.000Z';
 const file = (path: string, plus: number, minus: number): ChangedFile => ({ path, shown: path, change: 'edit', plus, minus, cut: false, touches: [] });
 
-function shown(extra: Partial<Session> = {}, files: readonly ChangedFile[] = [], besideLink: Link | null = null) {
+function shown(extra: Partial<Session> = {}, files: readonly ChangedFile[] = [], besideLink: Link | null = null, more: Partial<SessionBarProps> = {}) {
   const env = fakeClient();
   const notify = vi.fn(); const onChanges = vi.fn();
   const session = fakeSession('otto', { name: 'Otto', model: 'claude-sonnet-5-5', context: { at: T, used: 84000, window: 200000 }, branch: 'feat/x', state: 'working', ...extra });
-  render(<SessionBar client={env.client} session={session} project="ledge" files={files} besideLink={besideLink} notify={notify} onChanges={onChanges} />);
+  render(<SessionBar client={env.client} session={session} project="ledge" files={files} besideLink={besideLink} notify={notify} onChanges={onChanges} {...more} />);
   return { ...env, notify, onChanges, user: userEvent.setup() };
 }
 const bar = () => document.querySelector<HTMLElement>('.ide-bar')!;
@@ -130,5 +132,103 @@ describe('the IDE session tab\'s bottom bar (lot 2, task 6)', () => {
     shown();
     expect(bar().querySelector('.ufoot, .usage-footer, .workspace-footer')).toBeNull();
     expect(bar()).not.toHaveTextContent(/limite|usage/i);
+  });
+});
+
+/** The heading's content moved into the bar (lot 3 follow-up, option A): no heading row in an IDE tab. */
+describe('the bar carries what the IDE tab\'s heading said', () => {
+  const css = readFileSync(resolve(__dirname, '../../src/styles/ide.css'), 'utf8');
+  /** The declarations of `selector` inside `@container (max-width: <w>px)`. */
+  const inStep = (w: number) => new RegExp(`@container \\(max-width: ${w}px\\) \\{([^\\n]*)\\}`).exec(css)?.[1] ?? '';
+
+  it('the terminal chip, mono and muted, right after the branch: only while the tab is on its Terminal view', () => {
+    shown({}, [], null, { terminal: 'wsl' });
+    const chip = bar().querySelector('.ide-bar-chip.tm')!;
+    expect(chip).toHaveTextContent('wsl');
+    expect(chip).toHaveClass('mono');
+    expect(chip.previousElementSibling).toHaveClass('br');
+    cleanup();
+    shown({}, [], null, { terminal: null });
+    expect(bar().querySelector('.ide-bar-chip.tm')).toBeNull();
+    cleanup();
+    shown();
+    expect(bar().querySelector('.ide-bar-chip.tm')).toBeNull();
+  });
+
+  it('« N sous-agents »: a chip on the right, before « Interrompre » and « +N −N », with the pill\'s title; a click shows them', async () => {
+    const onShowKids = vi.fn();
+    const { user } = shown({}, [file('a.ts', 1, 0)], null, { kids: 3, onShowKids });
+    const chip = screen.getByTitle('Voir les sous-agents dans la barre latérale');
+    expect(chip.closest('.ide-bar-side')).not.toBeNull();
+    expect(chip).toHaveTextContent('3 sous-agents');
+    expect(chip.querySelector('svg')).not.toBeNull();
+    // Before « Interrompre » and the changes.
+    const side = [...bar().querySelector('.ide-bar-side')!.children];
+    expect(side.indexOf(chip)).toBeLessThan(side.indexOf(screen.getByRole('button', { name: 'Interrompre' })));
+    await user.click(chip);
+    expect(onShowKids).toHaveBeenCalledTimes(1);
+    cleanup();
+    shown({}, [], null, { kids: 0, onShowKids });
+    expect(screen.queryByTitle('Voir les sous-agents dans la barre latérale')).toBeNull();
+  });
+
+  it('the browser chip beside the subagents: the live dot or the browser icon, the captures\' count, the pill\'s titles; a click opens it', async () => {
+    const onBrowser = vi.fn();
+    const { user } = shown({}, [], null, { kids: 1, onShowKids: vi.fn(), browser: { pill: 'live', captures: 2 }, onBrowser });
+    const chip = screen.getByTitle('Navigateur d’Otto, en direct · 2 captures');
+    expect(chip.querySelector('.live-dot')).not.toBeNull();
+    expect(chip).toHaveTextContent(/Navigateur/);
+    expect(chip.querySelector('.tab-count')).toHaveTextContent('2');
+    expect(chip.previousElementSibling).toHaveAttribute('title', 'Voir les sous-agents dans la barre latérale');
+    await user.click(chip);
+    expect(onBrowser).toHaveBeenCalledTimes(1);
+    cleanup();
+    shown({}, [], null, { browser: { pill: 'captures', captures: 4 }, onBrowser });
+    const caps = screen.getByRole('button', { name: 'Navigateur, 4 captures' });
+    expect(caps.querySelector('.live-dot')).toBeNull();
+    expect(caps.querySelector('svg')).not.toBeNull();
+    cleanup();
+    shown({}, [], null, { browser: null, onBrowser });
+    expect(bar().querySelector('.ide-bar-browser')).toBeNull();
+  });
+
+  it('a relief under way or failed: a status chip on the right, the handover\'s text, amber when failed; done, none', () => {
+    shown({ handover: { state: 'briefing', at: T } } as Partial<Session>);
+    const chip = bar().querySelector('.ide-bar-relief')!;
+    expect(chip).toHaveTextContent('relève : bilan demandé');
+    expect(chip).toHaveAttribute('role', 'status');
+    // On the right, just before its side (out of it: the chip that gives way when the group narrows).
+    expect(chip.nextElementSibling).toHaveClass('ide-bar-side');
+    expect(chip).not.toHaveClass('amber');
+    cleanup();
+    shown({ handover: { state: 'failed', at: T, auto: true, reason: 'pas de bilan' } } as Partial<Session>);
+    expect(bar().querySelector('.ide-bar-relief')).toHaveTextContent('relève échouée · par Ledge : pas de bilan');
+    expect(bar().querySelector('.ide-bar-relief')).toHaveClass('amber');
+    cleanup();
+    shown({ handover: { state: 'done', at: T, to: 'local:nova', toName: 'Nova' } } as Partial<Session>);
+    expect(bar().querySelector('.ide-bar-relief')).toBeNull();
+  });
+
+  it('narrow steps: under 560 px the chips keep their icon and count, no label; the terminal chip leaves with the branch at 400 px', () => {
+    expect(inStep(560)).toMatch(/\.ide-bar-kids \.lbl/);
+    expect(inStep(560)).toMatch(/\.ide-bar-browser \.lbl/);
+    expect(inStep(400)).toMatch(/\.ide-bar-chip\.tm/);
+    shown({}, [], null, { kids: 2, onShowKids: vi.fn(), browser: { pill: 'closed', captures: 1 }, onBrowser: vi.fn() });
+    expect(bar().querySelector('.ide-bar-kids .lbl')).toHaveTextContent('sous-agents');
+    expect(bar().querySelector('.ide-bar-kids .n')).toHaveTextContent('2');
+    expect(bar().querySelector('.ide-bar-browser .lbl')).toHaveTextContent(/Navigateur/);
+  });
+
+  it('review: the model\'s name, which ellipsizes under 400 px, can be read in its title', () => {
+    shown();
+    expect(bar().querySelector('.ide-bar-mdl .model-chip-text')).toHaveAttribute('title', 'Sonnet 5.5');
+  });
+
+  it('review: the browser chip is named in every state, its count alone under 560 px is not its name', () => {
+    shown({}, [], null, { browser: { pill: 'live', captures: 2 }, onBrowser: vi.fn() });
+    expect(screen.getByRole('button', { name: 'Navigateur d’Otto, en direct · 2 captures' })).toHaveClass('ide-bar-browser');
+    cleanup();
+    shown({}, [], null, { browser: { pill: 'closed', captures: 0 }, onBrowser: vi.fn() });
+    expect(screen.getByRole('button', { name: 'Navigateur d’Otto, fermé' })).toHaveClass('ide-bar-browser');
   });
 });

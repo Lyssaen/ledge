@@ -203,7 +203,7 @@ export function Sidebar(p: {
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
             onLaunch={project => p.dispatch({ type: 'modal', modal: { kind: 'launch', ...(project !== undefined ? { project } : {}) } })}
             onBroadcast={p.broadcast ? project => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project } } }) : undefined}
-            picked={picked} onPick={p.broadcast ? pick : undefined}
+            picked={picked} onPick={p.broadcast ? pick : undefined} {...(section ? { onOpenRight: (id: string) => p.dispatch({ type: 'open', id, where: 'right' }) } : {})}
             onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}

@@ -94,3 +94,40 @@ test("under 1000 px the thread's rail stays centred at 820 px at most (the mocku
   expect(rail.width).toBeLessThanOrEqual(820);
   expect(await page.locator('.session-page').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });
+
+// The page under 600 px (the interface without the IDE): session.css's narrow rules come after the base rules they override,
+// so a change's row drops its verb, shortens « View the change » to « View », and keeps its path readable, the link before
+// the duration.
+test('a session page under 600 px keeps a change\'s row readable: the path, then « View », before the duration', async ({ page }) => {
+  const changed: ThreadItem[] = [
+    { kind: 'prompt', id: 'p1', at: at(-120), turn: 1, text: 'Écris le module' },
+    tool('w1', -110, 'Write', '/w/ledge/src/module-avec-un-nom-long.ts', { turn: 1, durationMs: 200, files: [{ path: '/w/ledge/src/module-avec-un-nom-long.ts', change: 'edit', diff: '- old\n+ new' }] }),
+    { kind: 'reply', id: 'r1', at: at(-100), turn: 1, text: 'Écrit.' }
+  ];
+  await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: changed } });
+  await page.goto('/'); await openAtelier(page);
+  await open(page, 'Otto');
+  // Opened at the usual size (the tree folds away when narrow), then the window narrowed.
+  await page.setViewportSize({ width: 600, height: 900 });
+  const row = thread(page).locator('.action-row.is-change').last();
+  await expect(row).toBeVisible();
+  expect(await page.locator('.session-page').evaluate(el => el.getBoundingClientRect().width)).toBeLessThan(600);
+  const geo = await row.evaluate(r => {
+    const b = (s: string) => { const e = r.querySelector(s); if (!e) return null; const x = e.getBoundingClientRect(); return { l: x.left, r: x.right, w: x.width }; };
+    const tg = r.querySelector('.action-target') as HTMLElement;
+    const probe = document.createElement('span'); probe.style.font = getComputedStyle(tg).font; probe.textContent = 'xx'; document.body.append(probe);
+    const two = probe.getBoundingClientRect().width; probe.remove();
+    return { target: b('.action-target'), link: b('.action-link'), time: b('.action-time'), act: b('.act'), verb: getComputedStyle(r.querySelector('.action-verb')!).display, two,
+      cols: getComputedStyle(r).gridTemplateColumns, vb: r.querySelector('.vb')!.getBoundingClientRect().width, linkFont: getComputedStyle(r.querySelector('.action-link')!).fontSize };
+  });
+  // The narrow rules hold: the rail's 32 px column, no 86 px slot kept for the hidden verb, the link's long words gone.
+  expect(geo.cols.startsWith('32px')).toBe(true);
+  expect(geo.vb).toBeLessThan(86);
+  expect(geo.linkFont).toBe('0px');
+  expect(geo.verb).toBe('none');
+  expect(geo.target!.w).toBeGreaterThan(geo.two);
+  expect(geo.link!.r).toBeLessThanOrEqual(geo.time!.l);
+  expect(geo.link!.r).toBeLessThanOrEqual(geo.act!.r + 0.5);
+  await expect(row.locator('.action-link')).toHaveAttribute('data-short', 'View');
+  await row.screenshot({ path: 'e2e/.results/session-narrow-row.png' });
+});

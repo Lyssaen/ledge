@@ -12,7 +12,8 @@
 
 .ide-titlebar { display: flex; align-items: center; gap: 14px; padding: 0 0 0 14px; border-bottom: 1px solid var(--sidebar-border); background: var(--sidebar); user-select: none; }
 .ide-titlebar .titlebar-caps { align-self: stretch; margin-left: 0; }
-.ide-brand { font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.ide-brand { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+.ide-brand [data-ledge-mark] { flex-shrink: 0; pointer-events: none; }
 .ide-search { flex: 0 1 460px; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--background); color: var(--muted-foreground); font-size: 12px; text-align: left; }
 .ide-search:hover { border-color: var(--input); }
 .ide-search-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -56,13 +57,22 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 /* The editing area (mockup `editor()`): dockview's group, then the bottom panel. */
 .ide-editor { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--background); }
 .ide-dock-area { flex: 1; min-height: 0; position: relative; }
+/* R6: each group keeps 300 px (DockHost's GROUP_MIN_WIDTH); past the area's width the dock overflows and the area scrolls
+   sideways (mockup `.grow-row{overflow-x:auto}`). dockview's element fills the sized box and lays out on its resize. */
+.ide-dock-scroll { position: absolute; inset: 0; display: flex; overflow-x: auto; overflow-y: hidden; }
+.ide-dock-sized { position: relative; flex: 1 1 0; height: 100%; }
+/* While a tab is dragged, the zone at the right end that opens a new group (mockup `.dropnew`, `.dragging .dropnew`). */
+.ide-dropnew { display: none; }
+.ide-dock-scroll.tab-dragging .ide-dropnew {
+  display: grid; place-items: center; flex: 0 0 140px; padding: 10px; font-size: 12px; text-align: center;
+  background: color-mix(in srgb, var(--ide-link-violet) 8%, transparent); border: 1px dashed var(--ide-link-violet); color: var(--ide-link-violet);
+}
 .ide-dockview { position: absolute; inset: 0; }
 .ide-pane { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--ide-pane); }
 .ide-pane > * { flex: 1; min-height: 0; }
-/* A session tab's page (R4, R5): the tab names it and says its view, so what is left of its heading is a thin line, and the
-   page has no right panel to border. */
+/* A session tab's page (R4, R5, lot 3 option A): the tab names it and says its view, its bar and its menu say the rest, so it
+   has no heading; nor a right panel to border. */
 .ide-pane .session-page { border-right: 0; }
-.ide-pane .session-page > .pane-heading { height: 32px; }
 /* In a tab the thread and what it pins take the group's width, 12 px in from its sides (mockup `.pb`), not the centred
    760 px column of the classic page. The messages themselves are drawn as everywhere else. */
 .ide-pane .session-thread { --col: 100%; padding-inline: 12px; }
@@ -80,9 +90,10 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
   --dv-spacing-padding: 0px;
   --dv-sash-color: transparent;
   --dv-active-sash-color: var(--ring);
+  /* Where a dragged tab would land: a dashed violet line round it (mockup `.dragging .pane.drop-on`). */
   --dv-drag-over-background-color: transparent;
-  --dv-drag-over-border-color: transparent;
-  --dv-drag-over-border: none;
+  --dv-drag-over-border-color: var(--ide-link-violet);
+  --dv-drag-over-border: 1px dashed var(--ide-link-violet);
   --dv-overlay-z-index: 999;
   --dv-tabs-container-scrollbar-color: var(--input);
   --dv-icon-hover-background-color: var(--accent);
@@ -105,10 +116,23 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
 /* The focused group marks its tab in front with a 2 px line on top, in the links' violet (mockup `.grp.focus .tab.on::before`). */
 .ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ide-link-violet); }
-/* The strip's tools (mockup `.tabs .tools`): « + » at its right end. */
+/* The strip's tools (mockup `.tabs .tools`): « + » and the split, at its right end. */
 .ide-strip-tools { height: 100%; display: flex; align-items: center; gap: 2px; padding-right: 6px; }
 .ide-strip-tools button { height: 22px; padding: 0 7px; display: flex; align-items: center; border-radius: 5px; color: var(--muted-foreground); font-size: 11.5px; }
 .ide-strip-tools button:hover { background: var(--muted); color: var(--foreground); }
+/* The link square, left of the tabs (mockup `.lkbtn`, `.lk`): a 9 px swatch in the group's colour, dashed when unlinked. */
+.ide-lkbtn { width: 24px; height: 100%; display: grid; place-items: center; }
+.ide-lk { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+.ide-lk.violet { background: var(--ide-link-violet); }
+.ide-lk.teal { background: var(--ide-link-teal); }
+.ide-lk.none { border: 1px dashed var(--muted-foreground); }
+/* A group without tabs (mockup emptyGroup(), `.page.empty`): its title, what to do, the proposals wrapping in a narrow group. */
+.ide-empty { flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 22px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.ide-empty h3 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.ide-empty .sub { color: var(--muted-foreground); font-size: 12px; }
+.ide-empty .go { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* The mockup's `.btn`: 26 px, 12 px type, 6 px corners (Button's own inline sizes are the dialogs'). */
+.ide-empty .go .ledge-btn { white-space: nowrap; height: 26px !important; padding: 0 10px !important; font-size: 12px !important; border-radius: 6px !important; }
 .ide-dock .dv-default-tab-action { opacity: .55; }
 .ide-dock .dv-default-tab-action:hover { opacity: 1; }
 
@@ -178,9 +202,22 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-bar .lk { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 .ide-bar .lk-violet { background: var(--ide-link-violet); }
 .ide-bar .lk-teal { background: var(--ide-link-teal); }
-@container (max-width: 560px) { .ide-bar-chip.pj { display: none; } }
+/* What the session page's heading said, an IDE tab having none (lot 3 follow-up, option A): where the agent's screen runs
+   (on Terminal), a relief under way or failed, the subagents and the browser, as compact chips. */
+.ide-bar-chip.tm { min-width: 0; max-width: 140px; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.ide-bar-relief { margin-left: auto; min-width: 0; max-width: 180px; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.ide-bar-relief + .ide-bar-side { margin-left: 0; }
+.ide-bar-relief.amber { color: var(--warning); }
+.ide-bar-pill { flex: none; display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px; border-radius: 5px; color: var(--muted-foreground); font-size: 11px; }
+.ide-bar-pill:hover { background: var(--muted); color: var(--foreground); }
+.ide-bar-pill:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.ide-bar-pill .n { display: none; font-family: var(--font-mono,'Geist Mono',ui-monospace,monospace); font-variant-numeric: tabular-nums; }
+.ide-bar-pill .tab-count { font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.ide-bar-browser-live { color: var(--foreground); }
+@container (max-width: 560px) { .ide-bar-chip.pj, .ide-bar-kids .lbl, .ide-bar-browser .lbl { display: none; } .ide-bar-kids .n { display: inline; } }
 @container (max-width: 470px) { .ide-bar-ctx b, .ide-bar .model-chip .car { display: none; } }
-@container (max-width: 400px) { .ide-bar-chip.br, .ide-bar-sep { display: none; } }
+/* Under 400 px the model's name gives way too (ellipsis): a bar with every chip on its right still fits a 300 px group. */
+@container (max-width: 400px) { .ide-bar-chip.br, .ide-bar-chip.tm, .ide-bar-sep { display: none; } .ide-bar-model { flex-shrink: 1; overflow: hidden; } }
 
 /* The reply in an IDE tab (mockup `.cbox`): a box across the group, 12 px in from its sides, the field alone inside, 72 to
    240 px high as it grows with its text. What the mockup does not draw but the app needs (the pending card, OMP's queue
@@ -199,3 +236,26 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 /* An IDE « Modifications » tab: the Changes view fills it. */
 .ide-changes { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .ide-changes > .changes-view { flex: 1; min-height: 0; }
+
+/* An agent's terminal tab (mockup content() `term`): a 26 px row with the terminal's kind (`.chip-k`), then the screen. */
+.ide-term { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.ide-term-kind { flex: none; height: 26px; display: flex; align-items: center; background: var(--ide-pane, var(--card)); border-bottom: 1px solid var(--border); }
+.ide-term-kind .chip-k { margin: 0 8px; font-family: var(--font-mono, monospace); font-size: 10.5px; line-height: 16px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; }
+/* What the agent screen's footer says outside the IDE: its state and its tmux pane, on the row's right, muted, cut short. */
+.ide-term-kind { min-width: 0; gap: 8px; padding-right: 10px; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+.ide-term-kind .chip-k { margin-right: 0; flex: none; }
+.ide-term-state { margin-left: auto; flex: none; }
+.ide-term-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; }
+.ide-term-kind > .chip-k + .ide-term-where { margin-left: auto; }
+.ide-term > .agent-view { flex: 1; min-height: 0; }
+
+/* A thread in a narrow IDE group (lot 3: 300 px is a normal width): session.css's narrow rules apply; the time column takes
+   what its duration needs (« 6 min 52 s »), 44 px at least. The IDE reply shows a hint only when it has a reason to (what
+   Enter does with a note, why the field is shut, the queue): the narrow page's hiding does not apply to it. */
+@container session (max-width: 600px) {
+  .ide-pane .r { grid-template-columns: 32px minmax(0, 1fr) minmax(44px, max-content); }
+  .ide-pane .reply-hint { display: inline-flex; }
+}
+
+/* A session tab's menu (TabMenu): a relief that failed, under its name, in the bar's amber. */
+.session-menu-head small.failed { color: var(--warning); }

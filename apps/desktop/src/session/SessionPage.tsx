@@ -17,7 +17,7 @@ import { SHELL_ICONS } from '../shell/icons';
 import { findFile, type ChangedFile } from './changedFiles';
 import { focusThread } from '../nav/useKeys';
 import { TermStoreContext } from '../term/useTerms';
-import { AgentView, useAgent } from './AgentView';
+import { AgentView, useAgent, useHasBackend } from './AgentView';
 import { focusAgentView } from './agentFocus';
 import { openSessionTerminal } from './terminal';
 import { Button } from '@ledge/ui/ui/Button';
@@ -28,6 +28,8 @@ import { ArchivedBanner } from '../manage/ArchivedBanner';
 import type { SessionActions } from '../manage/useSessionActions';
 import { Reply } from './Reply';
 import { SessionBar } from './SessionBar';
+import { usePublishTabExtras } from '../ide/tabExtras';
+import { reliefText } from './relief';
 import type { Link } from '../workspace/model';
 import type { CaptureFocus } from './BrowserTab';
 import { capturesOf } from './captures';
@@ -73,7 +75,7 @@ export interface SessionPageProps {
   split: number; onSplit(v: number): void;
   /** The documents beside the thread are read through it. */
   client: DaemonClient;
-  /** In an IDE tab (R4): no Fil | Terminal switch nor meta in the heading (the tab says them), no right panel (O is not taken). */
+  /** In an IDE tab (R4, lot 3 option A): no heading (the tab, its bar and its menu say what it held), no right panel (O is not taken). */
   ide?: boolean;
   /** Read only with `ide`, for the bottom bar: the project line (projectLabel), the colour of the linked group showing this
    *  session's Changes (null: none), and « +N −N », which opens them beside. */
@@ -134,7 +136,7 @@ export function SessionPage(p: SessionPageProps): JSX.Element {
   /* Fil | Terminal. The thread stays mounted under the Terminal view (hidden), its folds and its place as the reader left them. */
   const { view, onView, files } = p;
   const store = useContext(TermStoreContext);
-  const agent = useAgent(session, helper);
+  const agent = useAgent(session, helper, false, useHasBackend(p.client, session));
   // A new object each time: the same row lit again (« dans le fil » twice) comes into view again.
   const [flash, setFlash] = useState<{ id: string } | null>(null);
   // Back on the thread: where the reader left it, or (from « tour 2 ») the action, which the flash brings into view.
@@ -487,12 +489,13 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
   const pill = pillOf(kindOf(browser, isLocal(session)), captures.length);
   const termChip = view === 'terminal' && agent.mode.kind !== 'native';
   const termExternal = view === 'terminal' && agent.mode.kind !== 'browser' && agent.mode.kind !== 'offline' && agent.mode.kind !== 'native';
-  // In an IDE tab the heading holds only what the tab does not say (R5), and is not drawn when that is nothing.
-  const heading = !p.ide || termChip || termExternal || !!session.handover || !!session.relieves || !!tags || kids.length > 0 || pill !== null;
+  // In an IDE tab there is no heading (lot 3, option A): the bar says where the screen runs, the relief under way, the
+  // subagents and the browser; the tab's menu the external terminal, the relief's sessions and the Story / Objectif.
+  usePublishTabExtras(p.ide ? { external: termExternal, tags } : null);
   return (
     <section className="conversation session-page" data-session={session.id} data-helper={helper?.id}>
-      {heading && <div className="pane-heading">
-        {!p.ide && <div className="view-switch" role="tablist" aria-label={t.session.views.label}>
+      {!p.ide && <div className="pane-heading">
+        <div className="view-switch" role="tablist" aria-label={t.session.views.label}>
           {VIEWS.map(({ view: v, icon }) => { const gone = v === 'terminal' && seat === 'stopped'; return (
             <button key={v} type="button" role="tab" id={`session-tab-${v}`} aria-selected={view === v} tabIndex={view === v ? 0 : -1}
               {...(gone ? { 'aria-disabled': true, title: t.top.terminalGone } : {})} onClick={() => { if (!gone) switchView(v, true); }} onKeyDown={onTabKey}>
@@ -502,8 +505,8 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
               {v === 'terminal' && <span className={cls('view-dot', agent.dot)} aria-hidden="true" />}
             </button>
           ); })}
-        </div>}
-        {!p.ide && <SessionMeta session={session} place={[machine, repoOf(session)].filter((x): x is string => !!x)} near={near} />}
+        </div>
+        <SessionMeta session={session} place={[machine, repoOf(session)].filter((x): x is string => !!x)} near={near} />
         {/* On Terminal, where the agent's screen runs, and « ouvrir dans un terminal externe ». */}
         {termChip && <span className="term-chip mono">{agent.remote ? t.session.terminal.remote(agent.host) : t.session.terminal.local}</span>}
         {termExternal && (
@@ -512,7 +515,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
         {/* Its relief (context handover spec §3.3): under way, done (the relief opens), or the one it relieves. */}
         {session.handover && (session.handover.state === 'done' && session.handover.to
           ? <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.handover!.to! })}>{t.handover.relievedBy(session.handover.toName ?? '')}</button>
-          : <span className={cls('pane-relief', session.handover.state === 'failed' && 'failed')} role="status">{t.handover.state[session.handover.state]}{session.handover.auto ? ` · ${t.handover.auto}` : ''}{session.handover.reason ? ` : ${session.handover.reason}` : ''}</span>)}
+          : <span className={cls('pane-relief', session.handover.state === 'failed' && 'failed')} role="status">{reliefText(session.handover, t.handover)}</span>)}
         {session.relieves && <button type="button" className="kids-pill" onClick={() => p.dispatch({ type: 'open', id: session.relieves!.id })}>{t.handover.relieves(session.relieves.name)}</button>}
         {(tags || kids.length > 0 || pill !== null) && <span className="spacer" />}
         {tags && <Tags tags={tags} />}
@@ -531,7 +534,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
         <div className="session-main" ref={main}>
           {/* On the thread, the panel keeps its lot 6a name (« Fil de la session »); on the changes, the tab names it. */}
           <div className="session-body" role="tabpanel" tabIndex={-1} {...(view === 'thread' ? { 'aria-label': th.label } : p.ide ? { 'aria-label': t.session.views.terminal } : { 'aria-labelledby': 'session-tab-terminal' })}>
-            <div className="messages session-thread" ref={scroller} data-thread-focus tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
+            <div className="messages session-thread" ref={scroller} data-thread-focus data-keep-scroll tabIndex={-1} onScroll={onScroll} hidden={view !== 'thread'}>
               {seat !== null ? <SeatNote stopped={seat === 'stopped'} onOpenRig={() => p.dispatch({ type: 'openrig', section: 'rigs', machine: session.machineId ?? 'local' })} /> : <>
               {todos && <TodoBar todos={todos} open={todoOpen} onToggle={toggleTodos} live={!offline} />}
               {offline && (
@@ -564,7 +567,9 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
           {view === 'thread' && !archived && seat === null && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
             notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} modelChip={!p.ide} ide={p.ide} />}
           {/* In an IDE tab, on the thread as on the terminal: the model, the context, where it works, and its changes. */}
-          {p.ide && <SessionBar client={p.client} session={session} project={p.project ?? ''} files={files} besideLink={p.besideLink ?? null} notify={p.notify} onChanges={p.onChanges ?? noop} />}
+          {p.ide && <SessionBar client={p.client} session={session} project={p.project ?? ''} files={files} besideLink={p.besideLink ?? null} notify={p.notify} onChanges={p.onChanges ?? noop}
+            terminal={termChip ? (agent.remote ? t.session.terminal.remote(agent.host) : t.session.terminal.local) : null}
+            kids={kids.length} onShowKids={p.onShowKids} browser={pill === null ? null : { pill, captures: captures.length }} onBrowser={() => openCapture(null)} />}
         </div>
         {paneShown && (
           <SidePane tabs={tabs} active={activeTab!} onActive={setActiveTab} onClose={closeTab} split={p.split} onSplit={onSplit}

@@ -98,6 +98,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       if (msg.type === 'island.set') { island = msg.prefs; ws.send(JSON.stringify({ type: 'island', prefs: island })); }
       if (msg.type === 'projects.set') { projects = msg.projects; ws.send(JSON.stringify({ type: 'projects', projects })); }
       if (msg.type === 'session.decide') { const s = sessions.get(msg.id); if (s) { const { pending: _p, ...rest } = s; const next = { ...rest, state: 'working' as const }; sessions.set(s.id, next); ws.send(JSON.stringify({ type: 'session.updated', session: next })); } }
+      // The control stream (a daemon whose info says `terminalStream`): a watched agent pane opens on one line naming it.
+      if (msg.type === 'term.watch') ws.send(JSON.stringify({ type: 'term.opened', id: msg.id, cols: msg.cols, rows: msg.rows, screen: `${msg.id} $ `, cursor: { x: msg.id.length + 3, y: 0 } }));
       if (msg.type === 'session.thread') { const items = threads.get(msg.id); if (items) ws.send(JSON.stringify({ type: 'session.thread', id: msg.id, items })); }
       if (msg.type === 'document.read') {
         const text = extras.documents?.[msg.path];

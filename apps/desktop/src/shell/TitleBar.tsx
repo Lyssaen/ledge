@@ -6,6 +6,7 @@ import { dotOf } from '../nav/agents';
 import type { NavAction } from '../nav/state';
 import { useDnd } from '../notify/prefs';
 import { SHELL_ICONS } from './icons';
+import { LedgeMark } from './LedgeMark';
 import { WindowCaps } from './WindowCaps';
 
 const BELL = ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'];
@@ -18,7 +19,7 @@ export function waitingSessions(sessions: readonly Session[], waits: ReadonlyMap
   return sessions.filter(s => { const d = dotOf(s); return d === 'approval' || d === 'question'; }).sort((a, b) => since(a) - since(b));
 }
 
-/** The « Commande » window bar that replaces Windows' own: the word mark, the waiting sessions' pill, « Ne pas déranger », the
+/** The « Commande » window bar that replaces Windows' own: the Ledge mark and word, the waiting sessions' pill, « Ne pas déranger », the
  *  chat, and the window buttons; Ctrl K opens the palette, no field needed (#33). The bar and its gaps are the drag region
  *  (Tauri drags and maximises on a double click from the element that carries the attribute, not from its children). */
 export function TitleBar({ dispatch, sessions, waits, blocked }: { blocked: boolean; dispatch: (a: NavAction) => void; sessions: readonly Session[]; waits: ReadonlyMap<string, Wait> }) {
@@ -29,7 +30,7 @@ export function TitleBar({ dispatch, sessions, waits, blocked }: { blocked: bool
   const drag = { 'data-tauri-drag-region': '' } as const;
   return (
     <div className="titlebar" role="group" aria-label={t.titlebar.label} {...drag}>
-      <div className="titlebar-left" {...drag}><span className="titlebar-mark" data-brand {...drag}>Ledge<span className="brand-dot">.</span></span></div>
+      <div className="titlebar-left" {...drag}><span className="titlebar-mark" data-brand {...drag}><LedgeMark size={16} />Ledge</span></div>
       <div className="titlebar-mid" {...drag} />
       <div className="titlebar-right" {...drag}>
         <div className="titlebar-tools" inert={blocked}>

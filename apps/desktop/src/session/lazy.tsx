@@ -2,6 +2,7 @@ import { lazy, Suspense, type JSX } from 'react';
 import { ChunkBoundary } from '../shell/ChunkBoundary';
 import type { WorkspaceProps } from './Workspace';
 import type { ChangesTabProps } from './ChangesTab';
+import type { AgentTerminalTabProps } from './AgentTerminalTab';
 
 type WorkspaceModule = typeof import('./Workspace');
 type Loaded = { default: WorkspaceModule['Workspace'] };
@@ -30,6 +31,16 @@ type ChangesLoaded = { default: WorkspaceModule['ChangesTab'] };
 const ChangesPage = lazy(() => (loaded
   ? { then: (ok: (m: ChangesLoaded) => void) => ok({ default: loaded!.ChangesTab }) } as PromiseLike<ChangesLoaded> as Promise<ChangesLoaded>
   : loadWorkspace().then(m => ({ default: m.ChangesTab }))));
+
+type TermTabLoaded = { default: WorkspaceModule['AgentTerminalTab'] };
+const TermTabPage = lazy(() => (loaded
+  ? { then: (ok: (m: TermTabLoaded) => void) => ok({ default: loaded!.AgentTerminalTab }) } as PromiseLike<TermTabLoaded> as Promise<TermTabLoaded>
+  : loadWorkspace().then(m => ({ default: m.AgentTerminalTab }))));
+
+/** An IDE agent's terminal tab, from the session page's chunk (its screen), behind the same sober wait. */
+export function AgentTerminalPlace(props: AgentTerminalTabProps): JSX.Element {
+  return <ChunkBoundary><Suspense fallback={<div className="ide-term" aria-busy="true" />}><TermTabPage {...props} /></Suspense></ChunkBoundary>;
+}
 
 /** An IDE « Modifications · <name> » tab, from the session page's chunk (its diffs), behind the same sober wait. */
 export function ChangesPlace(props: ChangesTabProps): JSX.Element {

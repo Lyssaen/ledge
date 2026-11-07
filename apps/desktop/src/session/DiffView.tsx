@@ -64,7 +64,7 @@ export function FileDiffs({ file }: { file: ChangedFile }): JSX.Element {
   const tc = t.session.changes;
   const many = file.touches.length > 1;
   return (
-    <div className="diff-scroll">
+    <div className="diff-scroll" data-keep-scroll>
       {file.touches.every(x => x.diff === null) ? <p className="muted" style={{ padding: 20 }}>{tc.noDiff}</p> : file.touches.map((x, i) => (
         <Fragment key={`${x.tool.id}:${i}`}>
           {many && <div className="diff-hunk touch-head mono">{x.tool.tool} · {tc.turn(x.turn)}</div>}

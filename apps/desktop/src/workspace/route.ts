@@ -1,5 +1,6 @@
 import type { NavAction, NavState } from '../nav/state';
 import type { LayoutAction } from './layout';
+import type { OpenSession } from './openPrefs';
 import { open, type Tab, type Workspace } from './model';
 import { ATELIER_TAB, SETTINGS_TAB, openrigTab } from './store';
 
@@ -8,9 +9,9 @@ export interface Routed { nav?: NavAction; ws?: (w: Workspace) => Workspace; lay
 
 const right = (on: boolean): LayoutAction => ({ type: 'show', panel: 'right', on });
 
-export function routeNav(a: NavAction, ctx: { isSeat(id: string): boolean; modalOpen: boolean }): Routed {
+export function routeNav(a: NavAction, ctx: { isSeat(id: string): boolean; modalOpen: boolean; openSession: OpenSession }): Routed {
   switch (a.type) {
-    case 'open': return { nav: a, ws: w => open(w, { kind: ctx.isSeat(a.id) ? 'seat' : 'session', ref: a.id }) };
+    case 'open': return { nav: a, ws: w => open(w, { kind: ctx.isSeat(a.id) ? 'seat' : 'session', ref: a.id }, a.where ?? ctx.openSession) };
     case 'home': return { ...(a.project !== undefined ? { nav: { type: 'filter', project: a.project } as NavAction } : {}), ws: w => open(w, ATELIER_TAB) };
     case 'ledge': return { nav: { type: 'chat', open: true }, layout: right(true) };
     case 'chat': return { nav: a, layout: right(a.open !== false) };

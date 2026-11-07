@@ -3,7 +3,7 @@ import type { Project, Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import type { NavAction } from '../nav/state';
+import { openClick, type NavAction } from '../nav/state';
 import { SHELL_ICONS } from '../shell/icons';
 import { SessionBot, StateBadge } from '../shell/SessionBot';
 import type { Filing } from './filing';
@@ -36,7 +36,7 @@ export function Unassigned({ sessions, order, focusedId, paused, dispatch, filin
             <div key={s.id} {...drag} onDragStart={e => { setAssigning(null); drag.onDragStart(e); }} title={t.filing.grip} onContextMenu={e => onMenu(s, e)}
               className={`unassigned-card ${filing.dragging?.id === s.id ? 'is-dragged' : ''} ${focusedId === s.id ? 'keyboard-selected' : ''}`}>
               <span className="drag-grip" aria-hidden="true"><i /><i /><i /><i /><i /><i /></span>
-              <button className="unassigned-open" data-agent={s.id} aria-label={`${s.name}, ${task}`} onClick={() => dispatch({ type: 'open', id: s.id })}>
+              <button className="unassigned-open" data-agent={s.id} aria-label={`${s.name}, ${task}`} onClick={e => dispatch(openClick(s.id, e))}>
                 <SessionBot session={s} size={56} paused={paused} />
                 <span className="unassigned-copy">
                   <strong>{s.name}{n >= 1 && n <= 9 && <span className="seat-shortcut">Alt {n}</span>}</strong>

@@ -11,6 +11,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
+    "icons": "node scripts/icons.mjs",
     "e2e": "playwright test",
     "test:e2e": "playwright test"
   },

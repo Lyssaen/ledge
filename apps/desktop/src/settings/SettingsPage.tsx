@@ -11,6 +11,8 @@ import type { Alerts } from '../notify/useAlerts';
 import type { DaemonUpdates } from '../update/daemon';
 import { updateReady, useUpdate } from '../update/store';
 import { General } from './General';
+import { WorkspaceSection } from './WorkspaceSection';
+import { useIdeEnabled } from '../workspace/prefs';
 import { Appearance } from './Appearance';
 import { Island } from './Island';
 import { Notifications } from './Notifications';
@@ -54,6 +56,7 @@ export interface SettingsContext {
 /** The sections' line icons, as the mockup draws them (settings.tsx, SECTIONS). */
 const SECTION_ICONS: Record<SectionId, readonly string[]> = {
   general: ['M4 21v-7', 'M4 10V3', 'M12 21v-9', 'M12 8V3', 'M20 21v-5', 'M20 12V3', 'M1 14h6', 'M9 8h6', 'M17 16h6'],
+  workspace: ['M3 4h18v16H3z', 'M12 4v16'],
   appearance: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 3v18'],
   island: ['M3 5h18v14H3z', 'M9 5h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 6.5z'],
   notifications: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'],
@@ -69,6 +72,7 @@ const SECTION_ICONS: Record<SectionId, readonly string[]> = {
 /** A section's cards. */
 function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContext }): JSX.Element {
   if (section === 'general') return <General ctx={ctx} />;
+  if (section === 'workspace') return <WorkspaceSection ctx={ctx} />;
   if (section === 'appearance') return <Appearance ctx={ctx} />;
   if (section === 'island') return <Island ctx={ctx} />;
   if (section === 'notifications') return <Notifications ctx={ctx} />;
@@ -85,12 +89,15 @@ function SectionBody({ section, ctx }: { section: SectionId; ctx: SettingsContex
  *  machine shows offline (not while it connects), on Mobile access while its link is down (and in the brand colour while a device
  *  asks for access), on About while an update of the app or of the local daemon waits), the section's title, hint and cards
  *  on the right, scrolled back to the top at each change of section. */
-export function SettingsPage({ section, ctx, noBack = false }: { section: SectionId; ctx: SettingsContext; /** The IDE's Settings tab: no « Retour », the tab is closed or left instead. */ noBack?: boolean }): JSX.Element {
+export function SettingsPage({ section: asked, ctx, noBack = false }: { section: SectionId; ctx: SettingsContext; /** The IDE's Settings tab: no « Retour », the tab is closed or left instead. */ noBack?: boolean }): JSX.Element {
   const { t } = useI18n();
   const s = t.settings;
   const update = useUpdate();
   const scroller = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Espace de travail is the IDE's: switched off, the nav is today's, and a page left on it (the switch turned off there) shows General.
+  const [ide] = useIdeEnabled();
+  const section: SectionId = !ide && asked === 'workspace' ? 'general' : asked;
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = 0; }, [section]);
   const { dispatch } = ctx;
   // As the sidebar's gear inside Settings: the chat closes, then Escape takes the place back.
@@ -111,7 +118,7 @@ export function SettingsPage({ section, ctx, noBack = false }: { section: Sectio
     <div className="settings-page">
       <nav className="settings-nav" aria-label={s.nav}>
         {!noBack && <Button variant="ghost" size="sm" className="settings-back" onClick={back}><Icon d={ICONS.chevronLeft.d} size={14} />{s.back}<Kbd>{t.crumb.escape}</Kbd></Button>}
-        {SECTIONS.map(id => {
+        {SECTIONS.filter(id => ide || id !== 'workspace').map(id => {
           const note = alert(id);
           return (
             <button key={id} type="button" className={id === section ? 'settings-tab active' : 'settings-tab'} aria-current={id === section ? 'page' : undefined}
