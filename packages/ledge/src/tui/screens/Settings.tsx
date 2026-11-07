@@ -73,9 +73,12 @@ function UsageDetail({ x, o }: { x: UsageGroup; o: { threshold: number; now: num
   const age = x.status === 'loading' ? u.reading : x.status === 'expired' ? u.expiredShort : x.status === 'unreachable' ? u.unreachable
     : x.readAt ? u.read(span(o.now - Date.parse(x.readAt), lang)) : u.never;
   const col = (pct: number) => (dim ? C.faint : pct >= 100 ? C.red : pct >= o.threshold * 100 ? C.yellow : C.dim);
+  // Cursor's windows are named « Total · mois », « Cursor », « Autres »: the label column takes the longest.
+  const cursor = x.harness === 'cursor';
+  const labelW = cursor ? Math.max(9, ...Object.values(u.cursorDetail).map(l => l.length)) : 9;
   const line = (k: string, w: UsageWindow) => (
     <Text key={`${x.key}:${k}`} wrap="truncate">
-      <Text color={C.dim}>{`  ${k.padEnd(9)}`}</Text><Text color={col(w.pct)}>{bars(w.pct, 10, g.barFull, g.barEmpty)}</Text>
+      <Text color={C.dim}>{`  ${k.padEnd(labelW)}`}</Text><Text color={col(w.pct)}>{bars(w.pct, 10, g.barFull, g.barEmpty)}</Text>
       <Text color={col(w.pct) === C.dim ? C.fg : col(w.pct)}>{` ${String(w.pct).padStart(3)} %`}</Text>
       {w.resetsAt ? <Text color={C.faint}>{`  ${w.pct >= 100 ? u.resumes(resetLong(w.resetsAt, o.now, lang)) : `${g.reset} ${resetLong(w.resetsAt, o.now, lang)}`}`}</Text> : null}
     </Text>
@@ -83,7 +86,9 @@ function UsageDetail({ x, o }: { x: UsageGroup; o: { threshold: number; now: num
   return (
     <Box flexDirection="column">
       <Text wrap="truncate"><Text color={C.fg}>{name}</Text><Text color={dim || x.status === 'expired' ? C.yellow : C.faint}>{`   ${age}`}</Text></Text>
-      {x.windows.map(w => line(w.kind === 'five_hour' ? u.five : w.kind === 'seven_day' ? u.week : w.model ?? '', w))}
+      {(cursor ? [...x.windows].sort((a, b) => Number(a.kind === 'pool') - Number(b.kind === 'pool') || Number(a.pool === 'other') - Number(b.pool === 'other')) : x.windows).map(w => line(
+        cursor ? u.cursorDetail[w.kind === 'pool' ? w.pool ?? '' : w.kind === 'month' ? 'month' : 'week'] ?? ''
+          : w.kind === 'five_hour' ? u.five : w.kind === 'seven_day' ? u.week : w.model ?? '', w))}
     </Box>
   );
 }
