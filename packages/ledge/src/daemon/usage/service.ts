@@ -10,10 +10,11 @@ import { httpsGet, httpsPost, type HttpsGet, type HttpsPost } from './net.js';
 
 /** At most one read of Anthropic's API per this long (another reader, Claude Code's own, shares the account's quota). */
 export const READ_EVERY_MS = 2 * 60_000;
-/** After a 429, the wait doubles up to this. */
-/** Cursor's dashboard RPC is read at most this often, and its values are `stale` past `CURSOR_STALE_MS` without a read. */
+/** Cursor's dashboard RPC is read at most this often. */
 export const CURSOR_READ_EVERY_MS = 5 * 60_000;
+/** Cursor's values are `stale` past this without a read that succeeded. */
 export const CURSOR_STALE_MS = 15 * 60_000;
+/** After a 429, the wait doubles up to this. */
 export const BACKOFF_MAX_MS = 15 * 60_000;
 /** The longest Retry-After waited: a longer one is waited this long, then the read is tried again. Kept on purpose (decided
  *  2026-11-05): a technical guard against a mistaken header leaving the limits unreadable for good; one try a day is negligible
@@ -104,9 +105,14 @@ export function createUsage(deps: UsageDeps): UsageService {
   let timer: ReturnType<typeof setInterval> | null = null;
   let reading: Promise<void> | null = null;
   // The login shell's environment (its proxy) is read once in a while, not on each tick: a login shell is slow to start.
-  let envCache: { env: NodeJS.ProcessEnv; at: number } | null = null;
-  const envOf = async (): Promise<NodeJS.ProcessEnv> => {
-    if (!envCache || now() - envCache.at > REREAD_MS) envCache = { env: await deps.env(), at: now() };
+  let envCache: { env: Promise<NodeJS.ProcessEnv>; at: number } | null = null;
+  const envOf = (): Promise<NodeJS.ProcessEnv> => {
+    if (!envCache || now() - envCache.at > REREAD_MS) {
+      const entry = { env: deps.env(), at: now() };
+      envCache = entry;
+      // A failed read is not kept: the next caller asks again.
+      entry.env.catch(() => { if (envCache === entry) envCache = null; });
+    }
     return envCache.env;
   };
 
@@ -136,6 +142,14 @@ export function createUsage(deps: UsageDeps): UsageService {
         windows: status === 'expired' || status === 'loading' ? [] : shown(cur.windows, cur.readAt) });
     }
     return out;
+  }
+
+  /** The ids of the alerts open now, put away or not. */
+  function openIds(hs: HarnessUsage[]): Set<string> {
+    const at = kept.prefs.alert * 100;
+    const ids = new Set<string>();
+    for (const h of hs) for (const w of h.windows) { const level = w.pct >= 100 ? 'full' : w.pct >= at ? 'threshold' : null; if (level) ids.add(usageAlertId(h.harness, h.account, w, level)); }
+    return ids;
   }
 
   function alerts(hs: HarnessUsage[]): UsageAlert[] {
@@ -229,13 +243,13 @@ export function createUsage(deps: UsageDeps): UsageService {
     const token = await readCursorToken(deps.home, env, now(), deps.read);
     cur.listed = token !== null;
     if (token === null) { cur.localExpired = false; return; }
-    if (token === 'expired') { cur.localExpired = true; return; }
-    cur.localExpired = false;
-    // Another account signed in: the previous one's windows and refusal are dropped, never shown under it.
+    // Another account signed in (an expired token included): the previous one's windows and refusal are dropped, never shown under it.
     const identity = token.account ?? `token:${createHash('sha256').update(token.token).digest('hex')}`;
     cur.account = token.account;
     if (cur.identity !== null && cur.identity !== identity) { cur.windows = []; cur.readAt = null; cur.refused = false; }
     cur.identity = identity;
+    cur.localExpired = 'expired' in token;
+    if ('expired' in token) return;
     if (now() < cur.nextAt) return;
     cur.attempted = true;
     const r = await post(CURSOR_USAGE_URL, { Authorization: `Bearer ${token.token}`, 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' }, '{}', env, HTTP_MS);
@@ -266,16 +280,20 @@ export function createUsage(deps: UsageDeps): UsageService {
 
   async function tick(): Promise<void> {
     // Each source is read on its own: one throwing never stops the other.
-    if (!reading) reading = Promise.all([
-      readClaude().catch(e => { failed = true; log(`usage: read failed: ${(e as Error).message}`); }),
-      readCursor().catch(e => { cur.failed = true; log(`usage: Cursor read failed: ${(e as Error).message}`); })
-    ]).then(() => undefined).finally(() => { reading = null; });
+    if (!reading) reading = (async () => {
+      await readClaude().catch(e => { failed = true; log(`usage: read failed: ${(e as Error).message}`); });
+      await readCursor().catch(e => { cur.failed = true; log(`usage: Cursor read failed: ${(e as Error).message}`); });
+    })().finally(() => { reading = null; });
     await reading;
     // Acks of windows that started again are no longer needed.
     const before = kept.acks.length;
     kept.acks = kept.acks.filter(id => resetOfId(id) > now());
     const seenBefore = Object.keys(kept.seen).length;
     for (const id of Object.keys(kept.seen)) if (resetOfId(id) <= now()) delete kept.seen[id];
+    // An id without a reset never ends by itself: it is dropped once its alert is no longer open.
+    const open = openIds(harnesses());
+    kept.acks = kept.acks.filter(id => resetOfId(id) !== Infinity || open.has(id));
+    for (const id of Object.keys(kept.seen)) if (resetOfId(id) === Infinity && !open.has(id)) delete kept.seen[id];
     if (kept.acks.length !== before || Object.keys(kept.seen).length !== seenBefore) save();
     emit();
   }

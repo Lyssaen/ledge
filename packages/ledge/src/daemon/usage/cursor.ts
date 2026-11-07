@@ -18,18 +18,19 @@ function jwtPayload(token: string): Json | undefined {
   try { return obj(JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))); } catch { return undefined; }
 }
 
-/** auth.json under $CURSOR_CONFIG_DIR, else ~/.config/cursor. null: absent or no accessToken; 'expired': the JWT's exp has passed.
+/** auth.json under $CURSOR_CONFIG_DIR, else ~/.config/cursor. null: absent or no accessToken; `expired`: the JWT's exp has passed (its account is still told, nothing is sent).
  *  Read only. The account is an opaque id from the JWT's `sub`, null when unreadable. */
-export async function readCursorToken(home: string, env: NodeJS.ProcessEnv, now: number, read: (p: string) => Promise<string> = p => readFile(p, 'utf8')): Promise<{ token: string; account: string | null } | 'expired' | null> {
+export async function readCursorToken(home: string, env: NodeJS.ProcessEnv, now: number, read: (p: string) => Promise<string> = p => readFile(p, 'utf8')): Promise<{ token: string; account: string | null } | { expired: true; token: string; account: string | null } | null> {
   const dir = env.CURSOR_CONFIG_DIR?.trim() || join(home, '.config', 'cursor');
   let o: Json | undefined;
   try { o = obj(JSON.parse(await read(join(dir, 'auth.json')))); } catch { return null; }
   const token = typeof o?.accessToken === 'string' ? o.accessToken.trim() : '';
   if (!token) return null;
   const payload = jwtPayload(token);
-  if (typeof payload?.exp === 'number' && payload.exp * 1000 <= now) return 'expired';
   const sub = typeof payload?.sub === 'string' && payload.sub ? payload.sub : null;
-  return { token, account: sub ? createHash('sha256').update(`ledge-usage:cursor:${sub}`).digest('hex').slice(0, 12) : null };
+  const account = sub ? createHash('sha256').update(`ledge-usage:cursor:${sub}`).digest('hex').slice(0, 12) : null;
+  if (typeof payload?.exp === 'number' && payload.exp * 1000 <= now) return { expired: true, token, account };
+  return { token, account };
 }
 
 const pctOf = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1000, Math.max(0, Math.round(v))) : undefined);

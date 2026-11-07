@@ -23,7 +23,7 @@ describe('readCursorToken', () => {
   });
   it('says expired once the JWT exp has passed', async () => {
     const token = jwt({ sub: 'auth0|u1', exp: (NOW - 1000) / 1000 });
-    expect(await readCursorToken('/h', {}, NOW, files({ '/h/.config/cursor/auth.json': auth(token) }))).toBe('expired');
+    expect(await readCursorToken('/h', {}, NOW, files({ '/h/.config/cursor/auth.json': auth(token) }))).toMatchObject({ expired: true, account: expect.stringMatching(/^[0-9a-f]{12}$/) });
   });
   it('is null when the file is absent, not JSON, or has no accessToken', async () => {
     expect(await readCursorToken('/h', {}, NOW, files({}))).toBeNull();

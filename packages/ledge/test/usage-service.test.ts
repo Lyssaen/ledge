@@ -470,4 +470,59 @@ describe('the usage service: Cursor Agent', () => {
       expect((() => { try { return readFileSync(m.file, 'utf8'); } catch { return ''; } })()).not.toContain(LEAK);
     }
   });
+
+  it('a 429 without Retry-After waits 10 minutes', async () => {
+    const m = cursorMachine({ answers: [{ status: 429 }, { status: 200, body: CURSOR_BODY }] });
+    await m.svc.tick();
+    m.advance(10 * 60_000 - 1000); await m.svc.tick();
+    expect(m.posts).toHaveLength(1);
+    m.advance(1000); await m.svc.tick();
+    expect(m.posts).toHaveLength(2);
+  });
+
+  it('a throw in Claude\'s read leaves Cursor\'s alone', async () => {
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => T0, version: async () => '1',
+      get: async () => { throw new Error('boom'); }, post: async () => ({ status: 200, body: JSON.stringify(CURSOR_BODY), headers: {} }),
+      read: async p => { if (p.endsWith('auth.json')) return JSON.stringify({ accessToken: CURSOR_TOKEN }); if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: 'tok', expiresAt: T0 + 9e9 } }); throw new Error('ENOENT'); } });
+    await svc.tick();
+    expect(svc.state().harnesses.map(h => [h.harness, h.status])).toEqual([['claude', 'unreachable'], ['cursor', 'ok']]);
+  });
+
+  it('asks the login shell for its environment once, both harnesses being there', async () => {
+    let envCalls = 0;
+    const svc = createUsage({ home: '/h', env: async () => { envCalls++; return {}; }, file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => T0, version: async () => '1',
+      get: async () => ({ status: 200, body: JSON.stringify(API), headers: {} }), post: async () => ({ status: 200, body: JSON.stringify(CURSOR_BODY), headers: {} }),
+      read: async p => { if (p.endsWith('auth.json')) return JSON.stringify({ accessToken: CURSOR_TOKEN }); if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: 'tok', expiresAt: T0 + 9e9 } }); throw new Error('ENOENT'); } });
+    await svc.tick();
+    expect(svc.state().harnesses).toHaveLength(2);
+    expect(envCalls).toBe(1);
+  });
+
+  it('an alert without a reset drops its ack and its seen entry once it is no longer open', async () => {
+    const noEnd = { planUsage: { totalPercentUsed: 90 } };
+    const m = cursorMachine({ answers: [{ status: 200, body: noEnd }, { status: 200, body: { planUsage: { totalPercentUsed: 10 } } }, { status: 200, body: noEnd }] });
+    await m.svc.tick();
+    const id = m.svc.state().alerts[0]!.id;
+    expect(id.endsWith('|-')).toBe(true);
+    expect(m.svc.ack(id)).toBe(true);
+    m.advance(CURSOR_READ_EVERY_MS); await m.svc.tick();
+    expect(m.svc.state().alerts).toEqual([]);
+    expect(JSON.parse(readFileSync(m.file, 'utf8'))).toMatchObject({ acks: [], seen: {} });
+    m.advance(CURSOR_READ_EVERY_MS); await m.svc.tick();
+    expect(m.svc.state().alerts).toHaveLength(1); // a new alert, not the one put away
+  });
+
+  it('another account\'s expired token drops the previous account\'s windows', async () => {
+    let auth = JSON.stringify({ accessToken: jwt({ sub: 'A', exp: Math.floor(T0 / 1000) + 99999 }) });
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => T0,
+      read: async p => { if (p.endsWith('auth.json')) return auth; throw new Error('ENOENT'); },
+      post: async () => ({ status: 200, body: JSON.stringify(CURSOR_BODY), headers: {} }) });
+    await svc.tick();
+    auth = JSON.stringify({ accessToken: jwt({ sub: 'B', exp: Math.floor(T0 / 1000) - 5 }) });
+    await svc.tick();
+    expect(svc.state().harnesses[0]).toMatchObject({ status: 'expired', windows: [] });
+    auth = JSON.stringify({ accessToken: jwt({ sub: 'A', exp: Math.floor(T0 / 1000) + 99999 }) });
+    await svc.tick();
+    expect(svc.state().harnesses[0]!.windows).toEqual([]); // A's old windows were dropped; B's sign-in cleared them
+  });
 });
