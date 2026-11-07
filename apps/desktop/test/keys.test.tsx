@@ -537,3 +537,48 @@ describe('N on a session page (the ide option, lot 2)', () => {
     expect(toTerminal).not.toHaveBeenCalled();
   });
 });
+
+describe('N in the IDE (lot 4, Review Focus 3)', () => {
+  const daemons: Awaited<ReturnType<typeof createMockDaemon>>[] = [];
+  afterEach(async () => { saveIdeEnabled(false); for (const d of daemons.splice(0)) await d.close(); });
+  async function ideApp(pending: boolean) {
+    localStorage.setItem('desktop.lang', 'fr');
+    saveIdeEnabled(true);
+    const d = await createMockDaemon(); daemons.push(d);
+    d.machines([{ id: 'local', label: 'Local' }]);
+    d.projects(TWO_PROJECTS);
+    d.upsert(fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: pending ? 'waiting_permission' : 'working',
+      ...(pending ? { pending: { kind: 'permission', text: 'pnpm test', tool: 'Bash', source: 'hook' } } : {}) }));
+    d.thread('otto', []);
+    render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
+    const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
+    await user_open(side);
+    return { d, user: userEvent.setup() };
+  }
+  async function user_open(side: ReturnType<typeof within>) {
+    await userEvent.click(await side.findByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(document.querySelector('.session-reply, .session-page')).not.toBeNull());
+    (document.activeElement as HTMLElement | null)?.blur();
+  }
+  const decides = (d: Awaited<ReturnType<typeof createMockDaemon>>) => d.received.filter(m => m.type === 'session.decide');
+
+  it('the active session waits on a permission: N denies, the modal stays closed', async () => {
+    const { d, user } = await ideApp(true);
+    await user.keyboard('n');
+    await waitFor(() => expect(decides(d)).toHaveLength(1));
+    expect(decides(d)[0]).toMatchObject({ id: 'otto', decision: 'deny' });
+    expect(screen.queryByRole('dialog', { name: 'Nouvelle session' })).toBeNull();
+  });
+
+  it('no permission: N opens the modal, and an N typed in its « Premier message » is a letter', async () => {
+    const { d, user } = await ideApp(false);
+    await user.keyboard('n');
+    const form = within(await screen.findByRole('dialog', { name: 'Nouvelle session' }));
+    const field = form.getByRole('textbox', { name: 'Premier message' });
+    await user.click(field);
+    await user.keyboard('nnn');
+    expect(field).toHaveValue('nnn');
+    expect(screen.getByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
+    expect(decides(d)).toHaveLength(0);
+  });
+});

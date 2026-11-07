@@ -18,7 +18,7 @@ const UNICODE = {
   /** OpenRig's blocks in a thread (docs/mockups/openrig-messages): a message, a queue row, a notice; the raw's box. */
   /** The harnesses' limits (docs/mockups/ledge-harness-usage.html): Claude Code's ✻, Codex's >_, a gauge's full and empty
    *  cells, a reset, a usage alert or a context near its limit. */
-  markClaude: '✻', markCodex: '>_', barFull: '█', barEmpty: '░', reset: '↺', gauge: '◔',
+  markClaude: '✻', markCodex: '>_', markCursor: '◇', barFull: '█', barEmpty: '░', reset: '↺', gauge: '◔',
   rigMessage: '✉', rigRow: '▤', rigNotice: '·', boxTL: '┌', boxTR: '┐', boxBL: '└', boxBR: '┘', boxH: '─', boxV: '│'
 };
 export type Glyphs = typeof UNICODE;
@@ -31,7 +31,7 @@ const ASCII: Glyphs = {
   running: '~', held: '.', stale: '!',
   task: '[=]',
   pvHere: '*', pvInh: '>', pvAbs: 'o', pvUnk: '?', rail: '|',
-  markClaude: '*', markCodex: '>_', barFull: '#', barEmpty: '.', reset: '@', gauge: '%',
+  markClaude: '*', markCodex: '>_', markCursor: '<>', barFull: '#', barEmpty: '.', reset: '@', gauge: '%',
   rigMessage: '@', rigRow: '=', rigNotice: '-', boxTL: '+', boxTR: '+', boxBL: '+', boxBR: '+', boxH: '-', boxV: '|',
   links: false
 };

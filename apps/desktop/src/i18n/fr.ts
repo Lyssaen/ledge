@@ -296,18 +296,25 @@ export const fr = {
     panelShow: 'Afficher le panneau : shells et modifications', panelHide: 'Masquer le panneau', panelShowTitle: 'Afficher le panneau : shells et modifications (O)', panelHideTitle: 'Masquer le panneau (O)', terminalGone: 'Siège arrêté : plus de terminal'
   },
   usage: {
-    harness: { claude: 'Claude Code', codex: 'Codex' } as Record<string, string>,
-    five: '5 h', week: 'Semaine', weekShort: 'Sem.',
+    harness: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' } as Record<string, string>,
+    five: '5 h', week: 'Semaine', weekShort: 'Sem.', month: 'Mois',
     session5: 'Session · 5 h', weekAll: 'Semaine · tous modèles', weekOf: (m: string) => `Semaine · ${m}`, perModel: 'Par modèle',
-    resetAt: (t: string) => `remise à ${t}`, resetIn: (t: string, d: string) => `remise à ${t} · dans ${d}`, resumes: (t: string) => `reprend à ${t}`,
+    poolShort: { cursor: 'Cursor', other: 'Autres' } as Record<string, string>,
+    pool: { cursor: 'Modèles Cursor', other: 'Autres modèles' } as Record<string, string>,
+    poolHint: { cursor: 'Composer, Grok, Auto', other: 'Claude, GPT, Gemini… au prix de l’API' } as Record<string, string>,
+    perPool: 'Par réserve', monthTotal: 'Total inclus · mois', weekCursor: 'Semaine · modèles Cursor',
+    // `date`: the moment is a date a week or more away (« 1 déc. »), not an hour or a weekday.
+    resetAt: (t: string, date = false) => `remise ${date ? 'le' : 'à'} ${t}`, resetIn: (t: string, d: string, date = false) => `remise ${date ? 'le' : 'à'} ${t} · dans ${d}`,
+    resumes: (t: string, date = false) => `reprend ${date ? 'le' : 'à'} ${t}`, resumesOn: (t: string, date = false) => `atteinte · reprend ${date ? 'le' : 'à'} ${t}`,
     ago: (a: string) => `il y a ${a}`, unreachable: 'injoignable',
-    expired: 'session expirée : reconnectez-vous dans Claude Code', expiredShort: 'reconnectez-vous',
+    expired: (h: string) => `session expirée : reconnectez-vous dans ${h}`, expiredShort: (_h: string) => 'reconnectez-vous',
+    unread: 'limite non lue', unreadMsg: 'Cursor ne donne pas à Ledge le détail de cette offre. Son usage reste lisible sur cursor.com.', dashboard: 'cursor.com/dashboard ↗',
     title: (h: string) => `Limites · ${h}`,
     signedIn: (m: string) => `Compte connecté sur ${m}`, read: (a: string) => `lu il y a ${a}`, lastRead: (a: string) => `dernière lecture il y a ${a}`,
     neverRead: 'pas encore lu', unreachHost: (h: string) => `${h} injoignable`,
-    alertFive: 'fenêtre 5 h', alertWeek: 'semaine', alertModel: (m: string) => `semaine ${m}`,
-    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · remise ${at}` : `${p} %`), alertFull: (at: string | null) => (at ? `Atteinte · reprend ${at}` : 'Atteinte'),
-    notifyTitle: (h: string) => `${h} : limite atteinte`, notifyBody: (w: string, at: string | null) => (at ? `${w} · reprend ${at}` : w),
+    alertFive: 'fenêtre 5 h', alertWeek: 'semaine', alertMonth: 'total du mois', alertWeekTotal: 'total de la semaine', alertModel: (m: string) => `semaine ${m}`,
+    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · remise ${at}` : `${p} %`), alertFull: (at: string | null, date = false) => (at ? `Atteinte · reprend ${date ? 'le ' : ''}${at}` : 'Atteinte'),
+    notifyTitle: (h: string) => `${h} : limite atteinte`, notifyBody: (w: string, at: string | null, date = false) => (at ? `${w} · reprend ${date ? 'le ' : ''}${at}` : w),
     ack: 'Compris',
     and: ' et ', alertAt: (p: number) => `Alerte à ${p} %`, settings: 'Réglages', open: (h: string) => `Limites de ${h} : détail`
   },
@@ -621,7 +628,7 @@ export const fr = {
   },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
-    browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap'
+    browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap', newSession: 'Nouvelle session'
   },
   shortcuts: {
     title: 'Raccourcis clavier',
@@ -1218,7 +1225,18 @@ export const fr = {
     effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Effort compris dans le nom du modèle', lessEffort: 'Moins d’effort', moreEffort: 'Plus d’effort',
     efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
     modelHints: { 'claude:fable': 'Le plus capable', 'claude:opus': 'Très capable, plus lent', 'claude:sonnet': 'Équilibré, usage courant', 'claude:haiku': 'Rapide et économique' } as Record<string, string>,
-    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m),
+    /** The IDE's New session modal (docs/mockups/ledge-ide-interactive.html, launchPage()). */
+    modal: {
+      opensIn: { active: 'S’ouvre dans le groupe actif.', right: 'S’ouvre dans un groupe à droite.' } as Record<'active' | 'right', string>,
+      keys: 'Ctrl+Entrée lance, Échap ferme.',
+      project: 'Projet', where: 'Où travailler', onBranch: (b: string) => `Sur ${b}, dans le dossier du projet`, inFolder: 'Dans le dossier du projet',
+      agent: 'Agent', model: 'Modèle', permissions: 'Permissions', message: 'Premier message',
+      open: 'Ouvrir', openActive: 'Dans le groupe actif', openRight: 'À droite',
+      limit: (pct: string, reset: string | null) => `Limite 5 h ${pct}${reset ? ` · réinit. ${reset}` : ''}`, limitMonth: (pct: string, reset: string | null) => `Limite du mois ${pct}${reset ? ` · réinit. ${reset}` : ''}`,
+      limitWeek: (pct: string, reset: string | null) => `Limite de la semaine ${pct}${reset ? ` · réinit. ${reset}` : ''}`, limitUnread: 'Limite non lue',
+      offline: 'hors ligne', launch: 'Lancer', launchKeys: 'Ctrl Entrée', cancel: 'Annuler'
+    }
   },
   projects: {
     titles: {

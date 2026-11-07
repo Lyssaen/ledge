@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HarnessUsage, UsageAlert, UsageStateMessage } from '@ledge/protocol';
-import { resetLong, resetShort, shownWindows, span, usageAlerts, usageGroups, usageThreshold, usageTone } from '../src/usage/model';
+import { isUnread, resetIsDate, resetLong, resetShort, shownWindows, span, usageAlerts, usageGroups, usageThreshold, usageTone } from '../src/usage/model';
 
 const NOW = Date.parse('2026-11-05T13:00:00Z');
 const ago = (min: number) => new Date(NOW - min * 60_000).toISOString();
@@ -54,4 +54,52 @@ it('times: today an hour, another day a weekday; spans', () => {
   expect(resetLong(monday, NOW, 'fr')).toBe('lun. 09:00');
   expect(resetLong(monday, NOW, 'en')).toBe('Mon 09:00');
   expect([span(40_000, 'fr'), span(12 * 60_000, 'fr'), span(130 * 60_000, 'fr'), span(4 * 86_400_000, 'fr')]).toEqual(['40 s', '12 min', '2 h 10', '4 j']);
+});
+
+const cursor = (o: Partial<HarnessUsage> = {}): HarnessUsage => ({
+  harness: 'cursor', account: '0123456789ab', status: 'ok', readAt: ago(1),
+  windows: [{ kind: 'month', pct: 81, resetsAt: null }, { kind: 'pool', pool: 'cursor', pct: 41, resetsAt: null }, { kind: 'pool', pool: 'other', pct: 100, resetsAt: null }],
+  ...o
+});
+
+it('Claude, Codex and Cursor sort in that order; two machines on one Cursor account are one group, the latest read speaking', () => {
+  const states = new Map([
+    ['local', state([cursor({ readAt: ago(5) }), { harness: 'codex', account: null, status: 'ok', readAt: ago(2), windows: [] }, claude()])],
+    ['devbox', state([cursor({ readAt: ago(1), windows: [{ kind: 'month', pct: 90, resetsAt: null }] })])]
+  ]);
+  const g = usageGroups(states, up, NOW);
+  expect(g.map(x => x.harness)).toEqual(['claude', 'codex', 'cursor']);
+  expect(g[2]!.machines).toEqual(['local', 'devbox']);
+  expect(g[2]!.windows[0]!.pct).toBe(90);
+});
+
+it('shows Cursor\'s month, its pools, and the pools past the threshold; weekly plans show the week alone', () => {
+  const g = usageGroups(new Map([['local', state([cursor()])]]), up, NOW)[0]!;
+  const s = shownWindows(g, 0.8);
+  expect([s.month?.pct, s.week, s.pools.map(w => w.pct), s.hot.map(w => w.pct)]).toEqual([81, undefined, [41, 100], [100]]);
+  const w = usageGroups(new Map([['local', state([cursor({ windows: [{ kind: 'seven_day', pct: 30, resetsAt: null }] })])]]), up, NOW)[0]!;
+  const t = shownWindows(w, 0.8);
+  expect([t.week?.pct, t.month, t.pools, t.hot]).toEqual([30, undefined, [], []]);
+  const swapped = usageGroups(new Map([['local', state([cursor({ windows: [{ kind: 'pool', pool: 'other', pct: 5, resetsAt: null }, { kind: 'pool', pool: 'cursor', pct: 9, resetsAt: null }] })])]]), up, NOW)[0]!;
+  expect(shownWindows(swapped, 0.8).pools.map(x => x.pool)).toEqual(['cursor', 'other']);
+});
+
+it('isUnread: ok, read, and nothing to show', () => {
+  expect(isUnread({ status: 'ok', readAt: ago(1), windows: [] }, NOW)).toBe(true);
+  expect(isUnread({ status: 'stale', readAt: ago(1), windows: [] }, NOW)).toBe(false);
+  expect(isUnread({ status: 'loading', readAt: null, windows: [] }, NOW)).toBe(false);
+  expect(isUnread({ status: 'ok', readAt: ago(1), windows: [{ kind: 'month', pct: 1, resetsAt: null }] }, NOW)).toBe(false);
+  expect(isUnread({ status: 'ok', readAt: ago(61), windows: [] }, NOW)).toBe(false);
+});
+
+it('a reset a week or more away is a date; closer, a weekday; a past date keeps the old rules', () => {
+  const now = new Date(2026, 10, 7, 10, 0).getTime();
+  const dec = new Date(2026, 11, 1, 13, 43).toISOString();
+  expect([resetShort(dec, now, 'fr'), resetLong(dec, now, 'fr'), resetIsDate(dec, now), resetShort(dec, now, 'en')]).toEqual(['1 déc.', '1 déc. 13:43', true, '1 Dec']);
+  const soon = new Date(2026, 10, 9, 9, 0).toISOString();
+  expect([resetShort(soon, now, 'fr'), resetIsDate(soon, now)]).toEqual(['lun.', false]);
+  const exactly = new Date(now + 7 * 86_400_000).toISOString();
+  expect(resetIsDate(exactly, now)).toBe(true);
+  const yesterday = new Date(2026, 10, 6, 9, 0).toISOString();
+  expect([resetShort(yesterday, now, 'fr'), resetIsDate(yesterday, now)]).toEqual(['ven.', false]);
 });

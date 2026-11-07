@@ -56,6 +56,8 @@ export interface ChatViewProps {
   onIgnoreCards?: (qid: string, undo: boolean) => void; onDenyAction?: (qid: string, row: number) => void;
   /** Desktop: in the flow of its parent column (no absolute positioning, no fade), no Back button; Close stays in the header. */
   docked?: boolean;
+  /** Docked and there from the start (Desktop's IDE right panel): the field does not take the focus when it mounts, only between questions. */
+  quietStart?: boolean;
   /** Hover or keyboard focus of a `ledge://session/<id>` link in an answer; null when it ends. */
   onAgentHover?: (id: string | null) => void;
   inputRef?: Ref<HTMLInputElement | HTMLTextAreaElement>;
@@ -125,8 +127,10 @@ export function ChatView(p: ChatViewProps) {
   useLayoutEffect(() => { const el = thread.current; if (visible && el) el.scrollTop = el.scrollHeight; }, [turns, live?.text]);
   // Between questions the field takes the focus back. Docked (Desktop), only from the page or from inside the chat: a dialog opened
   // meanwhile (the search palette…) keeps it.
+  const asked = useRef(false);
+  if (busy) asked.current = true;
   useEffect(() => {
-    if (!visible || busy) return;
+    if (!visible || busy || (p.quietStart && !asked.current)) return;
     const at = document.activeElement;
     if (p.docked && at && at !== document.body && !root.current?.contains(at)) return;
     field.current?.focus({ preventScroll: true });

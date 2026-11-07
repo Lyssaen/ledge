@@ -182,6 +182,12 @@ export function Sidebar(p: {
           {(['projects', 'rigs'] as const).map(g => <button key={g} type="button" role="radio" aria-checked={grouping === g} title={t.top.groupingHint[g]} onClick={() => setGrouping(g)}>{t.top.groupingBy[g]}</button>)}
         </div>
       )}
+      {section === 'projects' && (
+        <div className="ide-ex-h">
+          <span>{t.side.projects}</span>
+          <button type="button" className="ide-ex-kbd" title={t.ide.newSession} aria-label={t.ide.newSession} aria-keyshortcuts="N" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'launch' } })}>+ N</button>
+        </div>
+      )}
       <div className="st-scroll">
         {(!section || section === 'atoi') && <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
           rigAsks={p.asks ?? []} sessions={p.sessions} {...(p.onSeeAsk ? { onSeeAsk: p.onSeeAsk } : {})}

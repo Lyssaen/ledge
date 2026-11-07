@@ -6,7 +6,7 @@ import { createServer as createHttpsServer } from 'node:https';
 import { connect as netConnect, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { httpsGet } from '../src/daemon/usage/net.js';
+import { httpsGet, httpsPost } from '../src/daemon/usage/net.js';
 
 // The usage reader's GET through a corporate proxy, for real on 127.0.0.1: a CONNECT proxy, a TLS server with its own certificate
 // authority (as a TLS-inspecting proxy has), and the daemon's code between them. No outside network.
@@ -24,7 +24,9 @@ beforeAll(async () => {
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem'), '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], { stdio: 'ignore' });
   tls = createHttpsServer({ key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(join(dir, 'cert.pem')) }, (req, res) => {
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ path: req.url, auth: req.headers.authorization ?? null, ua: req.headers['user-agent'] ?? null }));
+    const chunks: Buffer[] = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => res.end(JSON.stringify({ path: req.url, auth: req.headers.authorization ?? null, ua: req.headers['user-agent'] ?? null, method: req.method, body: Buffer.concat(chunks).toString('utf8'), length: req.headers['content-length'] ?? null, ct: req.headers['content-type'] ?? null })));
   });
   await new Promise<void>(r => tls.listen(0, '127.0.0.1', () => r()));
   tlsPort = (tls.address() as AddressInfo).port;
@@ -48,7 +50,7 @@ describe.skipIf(!openssl)('httpsGet', () => {
     const r = await httpsGet(`https://localhost:${tlsPort}/api/oauth/usage`, { Authorization: 'Bearer t', 'User-Agent': 'claude-code/2.1.318' }, env, 5000);
     expect(r.error).toBeUndefined();
     expect(r.status).toBe(200);
-    expect(JSON.parse(r.body)).toEqual({ path: '/api/oauth/usage', auth: 'Bearer t', ua: 'claude-code/2.1.318' });
+    expect(JSON.parse(r.body)).toMatchObject({ path: '/api/oauth/usage', auth: 'Bearer t', ua: 'claude-code/2.1.318', method: 'GET' });
     expect(connects.at(-1)).toBe(`localhost:${tlsPort}`);
   });
 
@@ -64,5 +66,43 @@ describe.skipIf(!openssl)('httpsGet', () => {
     const untrusted = await httpsGet(`https://localhost:${tlsPort}/x`, {}, { https_proxy: `http://127.0.0.1:${proxyPort}` }, 5000);
     expect(untrusted.status).toBe(0);
     expect(untrusted.error).toMatch(/certificate/i);
+  });
+});
+
+describe.skipIf(!openssl)('a header the request refuses', () => {
+  it('through the proxy it is a failed read that says why, never a throw out of the tunnel', async () => {
+    const env = { https_proxy: `http://127.0.0.1:${proxyPort}`, NODE_EXTRA_CA_CERTS: join(dir, 'cert.pem') };
+    const r = await httpsPost(`https://localhost:${tlsPort}/rpc`, { Authorization: 'Bearer a\nb' }, '{}', env, 5000);
+    expect(r.status).toBe(0);
+    expect(r.error).toBeTruthy();
+    const g = await httpsGet(`https://localhost:${tlsPort}/rpc`, { Authorization: 'Bearer a\nb' }, env, 5000);
+    expect(g.status).toBe(0);
+    expect(g.error).toBeTruthy();
+  });
+});
+
+describe.skipIf(!openssl)('httpsPost', () => {
+  const headers = { Authorization: 'Bearer t', 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' };
+  it('sends the method, the body and its length, and the headers, directly', async () => {
+    const r = await httpsPost(`https://localhost:${tlsPort}/rpc`, headers, '{}', { NODE_EXTRA_CA_CERTS: join(dir, 'cert.pem') }, 5000);
+    expect(r.error).toBeUndefined();
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.body)).toMatchObject({ path: '/rpc', method: 'POST', body: '{}', length: '2', auth: 'Bearer t', ct: 'application/json' });
+  });
+
+  it('computes its own Content-Length, whatever case the caller gave one in', async () => {
+    const r = await httpsPost(`https://localhost:${tlsPort}/rpc`, { ...headers, 'content-length': '999' }, '{}', { NODE_EXTRA_CA_CERTS: join(dir, 'cert.pem') }, 5000);
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.body)).toMatchObject({ body: '{}', length: '2' });
+  });
+
+  it('goes through the proxy\'s CONNECT tunnel as the GET does', async () => {
+    const env = { https_proxy: `http://127.0.0.1:${proxyPort}`, NODE_EXTRA_CA_CERTS: join(dir, 'cert.pem') };
+    const before = connects.length;
+    const r = await httpsPost(`https://localhost:${tlsPort}/rpc`, headers, '{}', env, 5000);
+    expect(r.status).toBe(200);
+    expect(JSON.parse(r.body)).toMatchObject({ method: 'POST', body: '{}', length: '2' });
+    expect(connects.length).toBe(before + 1);
+    expect(connects.at(-1)).toBe(`localhost:${tlsPort}`);
   });
 });

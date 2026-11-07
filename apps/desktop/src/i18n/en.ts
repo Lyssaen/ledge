@@ -270,18 +270,27 @@ export const en: Messages = {
     panelShow: 'Show the panel: shells and changes', panelHide: 'Hide the panel', panelShowTitle: 'Show the panel: shells and changes (O)', panelHideTitle: 'Hide the panel (O)', terminalGone: 'Seat stopped: no terminal'
   },
   usage: {
-    harness: { claude: 'Claude Code', codex: 'Codex' } as Record<string, string>,
-    five: '5 h', week: 'Week', weekShort: 'Wk',
+    harness: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' } as Record<string, string>,
+    five: '5 h', week: 'Week', weekShort: 'Wk', month: 'Month',
     session5: 'Session · 5 h', weekAll: 'Week · all models', weekOf: (m: string) => `Week · ${m}`, perModel: 'By model',
-    resetAt: (t: string) => `resets at ${t}`, resetIn: (t: string, d: string) => `resets at ${t} · in ${d}`, resumes: (t: string) => `resumes at ${t}`,
+    poolShort: { cursor: 'Cursor', other: 'Others' } as Record<string, string>,
+    pool: { cursor: 'Cursor models', other: 'Other models' } as Record<string, string>,
+    poolHint: { cursor: 'Composer, Grok, Auto', other: 'Claude, GPT, Gemini… at API prices' } as Record<string, string>,
+    perPool: 'By pool', monthTotal: 'Included total · month', weekCursor: 'Week · Cursor models',
+    // `date`: the moment is a date a week or more away (« Dec 1 »), not an hour or a weekday.
+    resetAt: (t: string, date = false) => `resets ${date ? 'on' : 'at'} ${t}`, resetIn: (t: string, d: string, date = false) => `resets ${date ? 'on' : 'at'} ${t} · in ${d}`,
+    resumes: (t: string, date = false) => `resumes ${date ? 'on' : 'at'} ${t}`, resumesOn: (t: string, date = false) => `reached · resumes ${date ? 'on' : 'at'} ${t}`,
     ago: (a: string) => `${a} ago`, unreachable: 'unreachable',
-    expired: 'session expired: sign in again in Claude Code', expiredShort: 'sign in again',
+    expired: (h: string) => `session expired: sign in again in ${h}`, expiredShort: (_h: string) => 'sign in again',
+    unread: 'limit not read', unreadMsg: 'Cursor does not give Ledge the detail of this plan. Its usage is still on cursor.com.', dashboard: 'cursor.com/dashboard ↗',
     title: (h: string) => `Limits · ${h}`,
     signedIn: (m: string) => `Account signed in on ${m}`, read: (a: string) => `read ${a} ago`, lastRead: (a: string) => `last read ${a} ago`,
     neverRead: 'not read yet', unreachHost: (h: string) => `${h} unreachable`,
-    alertFive: '5 h window', alertWeek: 'week', alertModel: (m: string) => `${m} week`,
-    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · resets ${at}` : `${p} %`), alertFull: (at: string | null) => (at ? `Reached · resumes ${at}` : 'Reached'),
-    notifyTitle: (h: string) => `${h}: limit reached`, notifyBody: (w: string, at: string | null) => (at ? `${w} · resumes ${at}` : w),
+    alertFive: '5 h window', alertWeek: 'week', alertMonth: 'month total', alertWeekTotal: 'week total', alertModel: (m: string) => `${m} week`,
+    alertThreshold: (p: number, at: string | null) => (at ? `${p} % · resets ${at}` : `${p} %`),
+    // The mockup's English copy has no « on » here (« Reached · resumes 1 Dec »), so `_date` is ignored.
+    alertFull: (at: string | null, _date = false) => (at ? `Reached · resumes ${at}` : 'Reached'),
+    notifyTitle: (h: string) => `${h}: limit reached`, notifyBody: (w: string, at: string | null, _date = false) => (at ? `${w} · resumes ${at}` : w),
     ack: 'Got it',
     and: ' and ', alertAt: (p: number) => `Alert at ${p} %`, settings: 'Settings', open: (h: string) => `${h} limits: detail`
   },
@@ -591,7 +600,7 @@ export const en: Messages = {
   },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
-    browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'
+    browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc', newSession: 'New session'
   },
   shortcuts: {
     title: 'Keyboard shortcuts',
@@ -1159,7 +1168,17 @@ export const en: Messages = {
     effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'Effort is in the model name', lessEffort: 'Less effort', moreEffort: 'More effort',
     efforts: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
     modelHints: { 'claude:fable': 'The most capable', 'claude:opus': 'Very capable, slower', 'claude:sonnet': 'Balanced, everyday use', 'claude:haiku': 'Fast and economical' } as Record<string, string>,
-    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m),
+    modal: {
+      opensIn: { active: 'Opens in the active group.', right: 'Opens in a group on the right.' },
+      keys: 'Ctrl+Enter launches, Escape closes.',
+      project: 'Project', where: 'Where to work', onBranch: (b) => `On ${b}, in the project folder`, inFolder: 'In the project folder',
+      agent: 'Agent', model: 'Model', permissions: 'Permissions', message: 'First message',
+      open: 'Open', openActive: 'In the active group', openRight: 'On the right',
+      limit: (pct, reset) => `5 h limit ${pct}${reset ? ` · resets ${reset}` : ''}`, limitMonth: (pct, reset) => `Monthly limit ${pct}${reset ? ` · resets ${reset}` : ''}`,
+      limitWeek: (pct, reset) => `Weekly limit ${pct}${reset ? ` · resets ${reset}` : ''}`, limitUnread: 'Limit not read',
+      offline: 'offline', launch: 'Launch', launchKeys: 'Ctrl Enter', cancel: 'Cancel'
+    }
   },
   projects: {
     titles: {

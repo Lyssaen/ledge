@@ -1,6 +1,7 @@
 import { useState, type JSX, type MouseEvent } from 'react';
 import type { HumanAsk, Project, Session, Task, UsageAlert } from '@ledge/protocol';
-import { resetLong, resetShort } from '../../usage/model';
+import { alertWindowName } from '../../usage/alertName';
+import { resetIsDate, resetLong, resetShort } from '../../usage/model';
 import { Icon } from '@ledge/ui/ui/icons';
 import { sessionOfAsk, whoOf } from '../../asks/model';
 import { SHELL_ICONS } from '../icons';
@@ -84,10 +85,11 @@ export function Attention(p: {
         const u = t.usage;
         const full = a.level === 'full';
         const w = a.window;
-        const window = w.kind === 'five_hour' ? u.alertFive : w.kind === 'seven_day' ? u.alertWeek : u.alertModel(w.model ?? '');
+        const window = alertWindowName(u, a.harness, w);
+        const date = !!w.resetsAt && resetIsDate(w.resetsAt, Date.now());
         const when = shortWhen(a.at, units, t.list.when.now);
         const line = full
-          ? u.alertFull(w.resetsAt ? resetShort(w.resetsAt, Date.now(), lang) : null)
+          ? u.alertFull(w.resetsAt ? resetShort(w.resetsAt, Date.now(), lang) : null, date)
           : u.alertThreshold(w.pct, w.resetsAt ? resetShort(w.resetsAt, Date.now(), lang) : null);
         return (
           <div key={`usage:${a.id}`} className="st-card st-task st-usage" data-usage={a.id}>
@@ -95,7 +97,7 @@ export function Attention(p: {
             <div className="st-card-body">
               <div className="st-l1"><strong>{u.harness[a.harness] ?? a.harness}</strong><span className="st-where" title={window}>{window}</span><span className={cls('st-time', full ? 'red' : 'amber')}>{when}</span></div>
               <div className="st-l2">
-                <span className="st-req" title={w.resetsAt ? (full ? u.resumes(resetLong(w.resetsAt, Date.now(), lang)) : u.resetAt(resetLong(w.resetsAt, Date.now(), lang))) : undefined}>{line}</span>
+                <span className="st-req" title={w.resetsAt ? (full ? u.resumes(resetLong(w.resetsAt, Date.now(), lang), date) : u.resetAt(resetLong(w.resetsAt, Date.now(), lang), date)) : undefined}>{line}</span>
                 <button type="button" className="st-qa" onClick={() => p.onAckUsage?.(a.id)}>{u.ack}</button>
               </div>
             </div>

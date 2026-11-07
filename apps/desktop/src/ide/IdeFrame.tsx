@@ -18,6 +18,8 @@ export interface IdeFrameProps {
   layout: IdeLayout; onLayout(a: LayoutAction): void;
   /** The sidebar's view (Sidebar with `section`), the editing area (DockHost), the right panel's chat, the status bar's footer. */
   explorer: ReactNode; editor: ReactNode; chat: ReactNode; footer: ReactNode;
+  /** The harnesses' limits, at the status bar's far right (not inside the footer, which starts it). */
+  usage?: ReactNode;
   /** Above the editing area (« daemon outdated »). */
   notice?: ReactNode;
   onSearch(): void;
@@ -76,7 +78,7 @@ export function IdeFrame(p: IdeFrameProps): JSX.Element {
         {right && <div className="ide-right">{p.chat}</div>}
       </div>
       <div className="ide-status-row" inert={p.blocked}>
-        <IdeStatusBar footer={p.footer} waiting={p.waiting} onNextWaiting={p.onNextWaiting} />
+        <IdeStatusBar footer={p.footer} usage={p.usage} waiting={p.waiting} onNextWaiting={p.onNextWaiting} />
       </div>
     </div>
   );

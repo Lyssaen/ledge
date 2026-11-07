@@ -14,8 +14,9 @@ export const MODEL_ICONS = {
   minus: ['M5 12h14']
 } as const;
 
-/** A row of the menu: `id` null is the agent's own default (nothing passed). */
-export interface MenuModel { id: string | null; label: string; description?: string; isDefault?: boolean }
+/** A row of the menu: `id` null is the agent's own default (nothing passed); `logo`, where the caller gives one, before its name
+ *  (the IDE's New session modal: each model's provider). */
+export interface MenuModel { id: string | null; label: string; description?: string; isDefault?: boolean; logo?: ReactNode }
 /** Rows drawn at once: Cursor offers hundreds of models, the rest is reached by searching. */
 export const MENU_ROWS = 50;
 
@@ -92,6 +93,7 @@ export function ModelMenu(p: {
           return (
             <div key={m.id ?? ''} id={`${listId}-${i}`} role="option" aria-selected={on} className={cls('model-option', i === active && 'active')}
               onMouseDown={e => e.preventDefault()} onMouseEnter={() => setActive(i)} onClick={() => p.onPick(m.id)}>
+              {m.logo}
               <span className="model-name">{m.label}</span>
               {m.isDefault && <span className="model-badge">{tl.defaultBadge}</span>}
               {p.current !== undefined && m.id === p.current && <span className="model-badge">{tl.currentBadge}</span>}

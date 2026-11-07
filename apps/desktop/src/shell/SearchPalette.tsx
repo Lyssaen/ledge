@@ -2,23 +2,31 @@ import { useEffect, useState } from 'react';
 import type { Session } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { Kbd } from '@ledge/ui/ui/Kbd';
-import { Icon } from '@ledge/ui/ui/icons';
+import { ICONS, Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import { searchSessions, taskOf } from '../nav/agents';
+import { fold, searchSessions, taskOf } from '../nav/agents';
 import { SHELL_ICONS } from './icons';
 import { Modal } from './Modal';
 import { SessionBot, StateBadge } from './SessionBot';
 
 /** « Aller à une session » (Ctrl K): the search field, the matching sessions and the keys' reminder. ↑ ↓ choose, Enter opens. */
-export function SearchPalette({ sessions, projectName, order, onOpen, onClose }: {
+export function SearchPalette({ sessions, projectName, order, onOpen, onClose, onNewSession }: {
   sessions: readonly Session[]; projectName: (s: Session) => string; order: readonly Session[]; onOpen: (id: string) => void; onClose: () => void;
+  /** The IDE only (R8): a « Nouvelle session » line first when the search is empty, starts with `>` or matches its label. */
+  onNewSession?: () => void;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
-  const results = searchSessions(sessions, query, projectName);
+  const commands = !!onNewSession && query.trimStart().startsWith('>');
+  const sessionRows = commands ? [] : searchSessions(sessions, query, projectName);
+  const q = fold(query.trim());
+  const showNew = !!onNewSession && (!q || commands || fold(t.search.newSession).includes(q));
+  // The rows in the order ↑ ↓ walk them: the command, then the sessions.
+  const results: Array<Session | 'new'> = showNew ? ['new', ...sessionRows] : sessionRows;
   const current = results[Math.min(index, results.length - 1)];
-  const activeId = current ? `result-${current.id}` : undefined;
+  const activeId = current ? (current === 'new' ? 'result-new-session' : `result-${current.id}`) : undefined;
+  const choose = (row: Session | 'new') => { if (row === 'new') onNewSession?.(); else onOpen(row.id); };
   useEffect(() => { if (activeId) document.getElementById(activeId)?.scrollIntoView?.({ block: 'nearest' }); }, [activeId]);
   return (
     <Modal title={t.search.title} className="command-palette" onClose={onClose}>
@@ -30,14 +38,21 @@ export function SearchPalette({ sessions, projectName, order, onOpen, onClose }:
           onKeyDown={e => {
             if (e.nativeEvent.isComposing) return;
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setIndex(Math.max(0, Math.min(results.length - 1, index + (e.key === 'ArrowDown' ? 1 : -1)))); }
-            else if (e.key === 'Enter' && current) { e.preventDefault(); onOpen(current.id); }
+            else if (e.key === 'Enter' && current) { e.preventDefault(); choose(current); }
           }} />
       </div>
       <div id="session-results" role="listbox" aria-label={t.search.results} className="palette-results">
-        {results.map(s => {
+        {showNew && (
+          <button id="result-new-session" role="option" tabIndex={-1} aria-selected={current === 'new'} onMouseMove={() => setIndex(0)} onClick={() => onNewSession?.()}>
+            <span className="palette-new-icon" aria-hidden="true"><Icon d={ICONS.plus.d} size={16} /></span>
+            <span><strong>{t.search.newSession}</strong></span>
+            <Kbd>N</Kbd>
+          </button>
+        )}
+        {sessionRows.map(s => {
           const rank = order.indexOf(s);
           return (
-            <button key={s.id} id={`result-${s.id}`} role="option" tabIndex={-1} aria-selected={s === current} onMouseMove={() => setIndex(results.indexOf(s))} onClick={() => onOpen(s.id)}>
+            <button key={s.id} id={`result-${s.id}`} role="option" tabIndex={-1} aria-selected={s === current} onMouseMove={() => setIndex(results.indexOf(s))} onClick={() => choose(s)}>
               <SessionBot session={s} size={32} />
               <span><strong>{s.name} <small>· {projectName(s)}</small></strong><small>{[taskOf(s), s.machineName].filter(Boolean).join(' · ')}</small></span>
               <StateBadge state={botState(s)} offline={!!s.offline} />

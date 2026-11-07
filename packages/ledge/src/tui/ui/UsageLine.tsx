@@ -1,11 +1,16 @@
 import { Box, Text } from 'ink';
-import { resetShort, shownWindows, span, usageGroups, usageThreshold, useUsage, type UsageGroup } from '@ledge/fleet';
+import { isUnread, resetShort, shownWindows, span, usageGroups, usageThreshold, useUsage, type UsageGroup } from '@ledge/fleet';
 import type { UsageWindow } from '@ledge/protocol';
 import { useTui } from '../context.js';
 import { C } from '../theme.js';
 import { useNow } from './now.js';
 
-type Seg = readonly [string, string];
+type Seg = readonly [string, string, boolean?];
+
+/** Cursor's window key in the i18n tables: its pool, else `month` or `week`. */
+export const cursorKey = (w: UsageWindow): string => (w.kind === 'pool' ? w.pool ?? '' : w.kind === 'month' ? 'month' : 'week');
+/** A Cursor window's label from one of the tables, the raw key when the table does not know it (never empty). */
+export const cursorLabel = (table: Record<string, string>, w: UsageWindow): string => table[cursorKey(w)] ?? cursorKey(w);
 
 /** A gauge of `n` cells. */
 export const bars = (pct: number, n: number, full: string, empty: string): string => {
@@ -27,10 +32,11 @@ export function usageSegments(groups: readonly UsageGroup[], o: { wide: boolean;
   const col = (pct: number, dim: boolean) => (dim ? C.faint : pct >= 100 ? C.red : pct >= o.threshold * 100 ? C.yellow : C.dim);
   groups.forEach((x, i) => {
     if (i) segs.push(['  │  ', C.line]);
-    segs.push([`${x.harness === 'claude' ? g.markClaude : g.markCodex} `, x.harness === 'claude' ? C.coral : C.violet]);
+    const cursor = x.harness === 'cursor';
+    segs.push([`${x.harness === 'claude' ? g.markClaude : cursor ? g.markCursor : g.markCodex} `, x.harness === 'claude' ? C.coral : cursor ? C.fg : C.violet, cursor]);
     if (named(x)) segs.push([`${x.machines.map(o.label).join(' + ')} `, C.fg]);
     if (x.status === 'loading') { segs.push([u.reading, C.faint]); return; }
-    if (x.status === 'expired') { segs.push([o.wide ? u.expired : u.expiredShort, C.yellow]); return; }
+    if (x.status === 'expired') { segs.push([o.wide ? u.expired(u.harness[x.harness] ?? x.harness) : u.expiredShort, C.yellow]); return; }
     const dim = x.status === 'stale' || x.status === 'unreachable';
     const one = (k: string, w: UsageWindow, reset: string) => {
       const c = col(w.pct, dim);
@@ -40,11 +46,19 @@ export function usageSegments(groups: readonly UsageGroup[], o: { wide: boolean;
       if (reset) segs.push([` ${g.reset}${reset}`, C.faint]);
       segs.push(['  ', '']);
     };
+    if (cursor && isUnread(x, o.now)) { segs.push([u.unread, C.faint]); return; }
     const s = shownWindows(x, o.threshold);
     const at = (w: UsageWindow | undefined) => (w?.resetsAt ? resetShort(w.resetsAt, o.now, o.lang) : '');
-    if (s.five) one(u.five, s.five, at(s.five));
-    if (s.week) one(o.wide ? u.week : u.weekShort, s.week, o.wide ? at(s.week) : '');
-    for (const w of s.hot) one(w.model ?? '', w, '');
+    if (cursor) {
+      // Its total (month, or week on weekly plans) with its reset, then the pools past the threshold.
+      const total = s.month ?? s.week;
+      if (total) one(s.month ? (o.wide ? u.month : u.monthShort) : (o.wide ? u.week : u.weekShort), total, o.wide ? at(total) : '');
+      for (const w of s.hot) one(cursorLabel(u.cursorPool, w), w, '');
+    } else {
+      if (s.five) one(u.five, s.five, at(s.five));
+      if (s.week) one(o.wide ? u.week : u.weekShort, s.week, o.wide ? at(s.week) : '');
+      for (const w of s.hot) one(w.model ?? '', w, '');
+    }
     if (dim) segs.push([x.status === 'unreachable' ? u.unreachable : x.readAt ? u.ago(span(o.now - Date.parse(x.readAt), o.lang)) : u.never, C.yellow]);
   });
   return segs;
@@ -67,7 +81,7 @@ export function UsageLine({ columns }: { columns: number }) {
   const segs = usageSegments(groups, { wide: columns >= 120, threshold, now, lang, label, t, g });
   return (
     <Box paddingX={1} height={1} overflow="hidden">
-      <Text wrap="truncate">{segs.map(([s, c], i) => <Text key={i} color={c || undefined}>{s}</Text>)}</Text>
+      <Text wrap="truncate">{segs.map(([s, c, b], i) => <Text key={i} color={c || undefined} bold={b}>{s}</Text>)}</Text>
     </Box>
   );
 }

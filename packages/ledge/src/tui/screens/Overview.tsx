@@ -2,10 +2,11 @@ import { useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { randomUUID } from 'node:crypto';
 import { useState } from 'react';
-import { BROADCAST_SILENT, canBroadcast, isPending, resetLong, useContextNear, usageAlerts, useTasks, useUsage } from '@ledge/fleet';
+import { BROADCAST_SILENT, canBroadcast, isPending, resetIsDate, resetLong, resetShort, useContextNear, usageAlerts, useTasks, useUsage } from '@ledge/fleet';
 import { contextNear, contextShare, isOmpSeat, isStoppedOmpSeat, LEDGE_GIVER, projectOf, type Session, type Task } from '@ledge/protocol';
 import { botState } from '@ledge/ui/bots/poseFor';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
+import { cursorLabel } from '../ui/UsageLine.js';
 import { closedLedgeTasks, exchanges, helperCount, machineOf, nearContext, nextWaiting, openDecisions, overview, step } from '../model/overview.js';
 import { wrap } from '../model/thread.js';
 import { fit, machineLabel, paneName } from '../model/labels.js';
@@ -136,10 +137,14 @@ export function Overview() {
   // A harness's usage window past the threshold or reached (docs/mockups/ledge-harness-usage.html): a line each, no key of its own.
   const usageLines = usageAlerts(usage, id => tui.machines.find(m => m.id === id)?.status === 'open').map(a => {
     const w = a.window;
-    const name = w.kind === 'five_hour' ? t.usage.five5 : w.kind === 'seven_day' ? t.usage.weekAll : t.usage.weekOf(w.model ?? '');
-    const at = w.resetsAt ? resetLong(w.resetsAt, Date.now(), tui.lang) : null;
+    const cursor = a.harness === 'cursor';
+    const name = cursor ? cursorLabel(t.usage.cursorAlert, w)
+      : w.kind === 'five_hour' ? t.usage.five5 : w.kind === 'seven_day' ? t.usage.weekAll : t.usage.weekOf(w.model ?? '');
+    const date = !!w.resetsAt && resetIsDate(w.resetsAt, Date.now());
+    // A date reads without its hour (« 1 déc. », as in the mockup).
+    const at = w.resetsAt ? (date ? resetShort : resetLong)(w.resetsAt, Date.now(), tui.lang) : null;
     const harness = t.usage.harness[a.harness] ?? a.harness;
-    return { id: a.id, full: a.level === 'full', text: a.level === 'full' ? t.usage.alertFull(harness, name, at) : t.usage.alertThreshold(harness, name, w.pct, at) };
+    return { id: a.id, full: a.level === 'full', text: a.level === 'full' ? t.usage.alertFull(harness, name, at, date) : t.usage.alertThreshold(harness, name, w.pct, at, date) };
   });
   const yoursCount = view.yours.length + decisions.length + closed.length + usageLines.length + near.length;
   const yoursHeight = Math.max(1, Math.min(yoursCount, 6));

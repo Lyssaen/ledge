@@ -99,4 +99,74 @@ describe('ledge tui: usage limits', () => {
       expect(tui.daemon.received.find(m => m.type === 'usage.set')).toEqual({ type: 'usage.set', prefs: { alert: 0.85 } });
     } finally { await tui.cleanup(); }
   });
+
+  describe('Cursor Agent', () => {
+    const DEC1 = () => new Date(2026, 11, 1, 13, 43).toISOString();
+    const cursor = (o: Partial<HarnessUsage> = {}): HarnessUsage => ({
+      harness: 'cursor', account: 'c1d2e3f4a5b6', status: 'ok', readAt: at(-1),
+      windows: [{ kind: 'month', pct: 81, resetsAt: DEC1() }, { kind: 'pool', pool: 'cursor', pct: 41, resetsAt: DEC1() }, { kind: 'pool', pool: 'other', pct: 100, resetsAt: DEC1() }],
+      ...o
+    });
+    const segs = async (cols: number, h: HarnessUsage[], ascii = false) => {
+      const { usageSegments } = await import('../src/tui/ui/UsageLine.js');
+      const { glyphsFor } = await import('../src/tui/glyphs.js');
+      const { fr } = await import('../src/tui/i18n/fr.js');
+      const { usageGroups } = await import('@ledge/fleet');
+      const groups = usageGroups(new Map([['local', state(h)]]), () => true, Date.now());
+      return usageSegments(groups, { wide: cols >= 120, threshold: 0.8, now: Date.now(), lang: 'fr', label: () => 'Local', t: fr as never, g: glyphsFor(ascii ? { LEDGE_TUI_ASCII: '1' } : {}) }).map(x => x[0]).join('');
+    };
+    it('foot line: ◇ Mois, % and reset at 120 columns, the pool past the threshold, nothing below', async () => {
+      const w = await segs(120, [cursor()]);
+      expect(w).toContain('◇ Mois');
+      expect(w).toContain('81%');
+      expect(w).toContain('↺1 déc.');
+      expect(w).toContain('Autres');
+      expect(w).toContain('100%');
+      expect(w).not.toContain('Cursor');
+      const n = await segs(80, [cursor()]);
+      expect(n).toContain('mois 81%');
+      expect(n).not.toContain('↺');
+    });
+    it('foot line: weekly plan, unread, expired, ASCII mark', async () => {
+      expect(await segs(80, [cursor({ windows: [{ kind: 'seven_day', pct: 30, resetsAt: at(60 * 24 * 5) }] })])).toContain('sem 30%');
+      expect(await segs(120, [cursor({ windows: [] })])).toContain('◇ limite non lue');
+      expect(await segs(120, [cursor({ status: 'expired', windows: [] })])).toContain('session expirée : reconnectez-vous dans Cursor Agent');
+      expect(await segs(80, [cursor({ status: 'expired', windows: [] })])).toContain('reconnectez-vous');
+      expect(await segs(120, [cursor()], true)).toContain('<> Mois');
+    });
+    it('the screens: « À toi » alert lines and every window in Settings', async () => {
+      const tui = await startTui({ sessions: sessions() });
+      try {
+        await tui.resize(200, 34);
+        tui.daemon.push(state([cursor()], [
+          { id: 'cm', harness: 'cursor', account: 'c1d2e3f4a5b6', window: { kind: 'month', pct: 81, resetsAt: DEC1() }, level: 'threshold', at: at(0) },
+          { id: 'co', harness: 'cursor', account: 'c1d2e3f4a5b6', window: { kind: 'pool', pool: 'other', pct: 100, resetsAt: DEC1() }, level: 'full', at: at(-12) }
+        ]));
+        await until(() => tui.frame().includes('◇'));
+        const f = tui.frame();
+        expect(f).toContain('Cursor Agent · total du mois à 81 % · remise 1 déc.');
+        expect(f).toContain('Cursor Agent · Autres modèles atteinte · reprend le 1 déc.');
+        await tui.press('5');
+        await until(() => tui.frame().includes('LIMITES'));
+        const s = tui.frame();
+        expect(s).toMatch(/Total · mois +█+░* +81 %/);
+        expect(s).toMatch(/Cursor +█+░* +41 %/);
+        expect(s).toMatch(/Autres +█+ +100 %/);
+      } finally { await tui.cleanup(); }
+    });
+
+    it('in English: Month, ↺1 Dec, Others on the foot line and « resumes on 1 Dec » in « For you »', async () => {
+      const tui = await startTui({ sessions: sessions(), lang: 'en' });
+      try {
+        await tui.resize(200, 34);
+        tui.daemon.push(state([cursor()], [
+          { id: 'co', harness: 'cursor', account: 'c1d2e3f4a5b6', window: { kind: 'pool', pool: 'other', pct: 100, resetsAt: DEC1() }, level: 'full', at: at(-12) }
+        ]));
+        await until(() => tui.frame().includes('◇'));
+        const f = tui.frame();
+        expect(f).toMatch(/◇ Month █+░* 81% ↺1 Dec +Others █+ 100%/);
+        expect(f).toContain('Cursor Agent · Other models reached · resumes on 1 Dec');
+      } finally { await tui.cleanup(); }
+    });
+  });
 });
