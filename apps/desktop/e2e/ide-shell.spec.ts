@@ -71,3 +71,39 @@ test('two sessions are two more dockview tabs, named; a click on the first bring
   await page.screenshot({ path: info.outputPath('ide-shell.png') });
   await page.screenshot({ path: 'e2e/.results/ide-shell.png' });
 });
+
+// The status bar's usage limits (mockup `statusbar()`, `.lmt`, `.limpop`): at the bar's far right, their detail opening above it,
+// whole in the window and drawn on top (the bar does not clip it).
+test('the usage limits sit at the status bar\'s right end; each one\'s detail opens whole above it', async ({ page }) => {
+  const SHOTS = process.env.LEDGE_STATUSBAR_SHOTS;
+  const at = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
+  const usage = {
+    harnesses: [
+      { harness: 'claude' as const, account: 'a1b2c3d4e5f6', status: 'ok' as const, readAt: at(-1), windows: [{ kind: 'five_hour' as const, pct: 84, resetsAt: at(130) }, { kind: 'seven_day' as const, pct: 41, resetsAt: at(3000) }, { kind: 'model' as const, model: 'Opus', pct: 71, resetsAt: at(3000) }] },
+      { harness: 'cursor' as const, account: 'c0ffee000001', status: 'ok' as const, readAt: at(-1), windows: [{ kind: 'month' as const, pct: 81, resetsAt: at(30_000) }, { kind: 'pool' as const, pool: 'cursor' as const, pct: 41, resetsAt: at(30_000) }, { kind: 'pool' as const, pool: 'other' as const, pct: 100, resetsAt: at(30_000) }] }
+    ],
+    alerts: [], prefs: { alert: 0.8 }
+  };
+  await fakeDaemon(page, eight, { projects: twoProjects, usage });
+  await page.goto('/');
+  const bar = page.locator('.ide-status');
+  const limits = bar.locator('.usage-foot');
+  await expect(limits).toBeVisible();
+  const vw = page.viewportSize()!.width;
+  const shot = async (name: string) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, clip: { x: vw - 960, y: 1080 - 460, width: 960, height: 460 } }); };
+  await shot('bar');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/bar-full.png`, clip: { x: 0, y: 1080 - 40, width: vw, height: 40 } });
+  const edge = await box(limits);
+  expect.soft(vw - (edge.x + edge.width)).toBeLessThanOrEqual(24);
+  for (const [name, title] of [['Claude Code', 'claude'], ['Cursor Agent', 'cursor']] as const) {
+    await limits.getByRole('button', { name: new RegExp(name) }).click();
+    const pop = page.getByRole('dialog', { name: new RegExp(name) });
+    await expect(pop).toBeInViewport({ ratio: 1 });
+    const p = await box(pop);
+    const hit = await page.evaluate(([x, y]) => !!document.elementFromPoint(x!, y!)?.closest('.usage-pop'), [p.x + p.width / 2, p.y + p.height / 2]);
+    expect(hit).toBe(true);
+    await shot(`open-${title}`);
+    await page.keyboard.press('Escape');
+    await expect(pop).toHaveCount(0);
+  }
+});

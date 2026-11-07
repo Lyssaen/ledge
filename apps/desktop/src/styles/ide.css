@@ -30,9 +30,12 @@
 .ide-badge { position: absolute; top: 2px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px; display: grid; place-items: center; border-radius: 8px; background: var(--destructive); color: #fff; font-size: 10px; font-weight: 600; }
 .ide-badge.amber { background: var(--warning); color: #1d1400; }
 
-.ide-status { display: flex; align-items: center; gap: 14px; padding: 0 10px; background: var(--sidebar); border-top: 1px solid var(--sidebar-border); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; }
-.ide-status .workspace-footer { flex: 1; height: 100%; padding: 0; border-top: 0; font-size: inherit; }
+/* Left to right (mockup `statusbar()`): the footer's status, the waiting requests, a spacer, the limits at the far right. The bar
+   does not clip: the limits' detail opens above it (`.usage-pop`, right-aligned with them); the footer's status clips itself. */
+.ide-status { display: flex; align-items: center; gap: 14px; padding: 0 10px; background: var(--sidebar); border-top: 1px solid var(--sidebar-border); font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+.ide-status .workspace-footer { flex: 0 1 auto; min-width: 0; height: 100%; padding: 0; border-top: 0; font-size: inherit; overflow: hidden; }
 .ide-status-sp { flex: 1; }
+.ide-status > .usage-foot { flex: none; }
 .ide-status-wait { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: 5px; color: var(--foreground); }
 .ide-status-wait:hover { background: var(--accent); }
 

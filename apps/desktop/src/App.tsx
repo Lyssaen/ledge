@@ -627,10 +627,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
             projects={projects} notify={notify} onProposal={openProposal} />
         }
-        footer={
-          <Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines}
-            usage={<UsageFooter groups={usage.groups} threshold={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} />} />
-        } />
+        footer={<Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines} />}
+        usage={<UsageFooter groups={usage.groups} threshold={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} />} />
     );
   })();
   return (
