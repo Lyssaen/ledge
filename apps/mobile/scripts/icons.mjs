@@ -14,8 +14,8 @@ const mark = size => readFileSync(resolve(marks, size < 48 ? 'ledge-mark-16.svg'
   .replace(/width="\d+" height="\d+"/, `width="${size}" height="${size}"`);
 const BLACK = '#0A0A0A';   // the mark's own square
 
-// Favicon: the small mark, its rounded corners transparent.
-writeFileSync(resolve(out, 'favicon.svg'), `${mark(16)}\n`);
+// Favicon: the 16 mark's own file, its rounded corners transparent.
+writeFileSync(resolve(out, 'favicon.svg'), readFileSync(resolve(marks, 'ledge-mark-16.svg')));
 
 // An icon is the mark filling its canvas (the corners stay transparent; iOS fills them black, as the mark). The maskable one
 // is cropped by the launcher: a black canvas, the mark at 80 % so the L and the dot stay inside the 80 % safe circle.

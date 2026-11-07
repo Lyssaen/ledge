@@ -29,6 +29,9 @@ describe('the Ledge mark', () => {
       expect(file(f).getAttribute('viewBox'), f).toBe(box);
       expect(shapes(file(f)), f).toEqual(shapes(render(<LedgeMark size={size} />).container.querySelector('svg')!));
     }
+    // The favicons are copies of the 16 mark (written by the icon scripts).
+    for (const f of ['../../public/favicon.svg', '../../../mobile/public/favicon.svg'])
+      expect(readFileSync(resolve(icons, f), 'utf8').trim(), f).toBe(readFileSync(resolve(icons, 'ledge-mark-16.svg'), 'utf8').trim());
   });
 
   it('icon.png is no longer the robot', () => {

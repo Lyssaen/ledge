@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ import { chromium } from '@playwright/test';
  * Makes every product icon from the Ledge mark (src-tauri/icons/ledge-mark.svg, 64 viewBox, and ledge-mark-16.svg, the 16 one
  * drawn thicker for small sizes): the app's icons (`tauri icon` from the 64 mark), then the small sizes redrawn from the 16
  * mark, Playwright's Chromium rasterising: 32x32.png, the tray, icon.ico's 16/24/32 entries, and the Windows Terminal
- * profile's ledge.ico (packages/ledge). Run `pnpm --filter desktop icons`; the outputs are committed. The phone's icons have
+ * profile's ledge.ico (packages/ledge). public/favicon.svg is the 16 mark itself. Run `pnpm --filter desktop icons`; the outputs are committed. The phone's icons have
  * their own script (`pnpm --filter @ledge/mobile icons`). After a change, the Windows build needs
  * `cargo clean --release -p ledge-desktop`, or the exe keeps its old icon.
  */
@@ -18,6 +18,8 @@ const icons = join(app, 'src-tauri', 'icons');
 const mark64 = join(icons, 'ledge-mark.svg');
 const mark16 = join(icons, 'ledge-mark-16.svg');
 const terminalIco = fileURLToPath(new URL('../../../packages/ledge/assets/ledge.ico', import.meta.url));
+
+copyFileSync(mark16, join(app, 'public', 'favicon.svg'));
 
 // 1. Every size and format Tauri bundles (ico, icns, png, the Store logos), from the 64 mark. Its mobile folders are not used.
 const tauri = join(dirname(createRequire(join(app, 'package.json')).resolve('@tauri-apps/cli/package.json')), 'tauri.js');
