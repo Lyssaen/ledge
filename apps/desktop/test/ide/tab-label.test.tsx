@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { JSX } from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import type { DaemonClient } from '@ledge/fleet';
 import { LangProvider } from '../../src/i18n/lang';
 import { ChangesTabLabel, SessionTabLabel } from '../../src/ide/SessionTabLabel';
 import type { Tab } from '../../src/workspace/model';
@@ -24,6 +25,13 @@ describe('SessionTabLabel', () => {
   it('the terminal view shows >_', () => {
     draw(<SessionTabLabel session={fakeSession('otto', { name: 'Otto', tool: 'claude' })} tab={{ ...tab, view: 'terminal' }} title="Otto" />);
     expect(screen.getByTitle('Vue terminal')).toHaveTextContent('>_');
+  });
+  it('the >_ says what the agent screen\'s footer said, gone from an IDE tab: its state and its tmux target', () => {
+    const none: never[] = [];
+    const client = { send: () => {}, onMessage: () => () => {}, fleet: { machines: () => none, subscribe: () => () => {} } } as unknown as DaemonClient;
+    // No pseudo-terminal nor stream here (jsdom): the screen cannot be shown, read only.
+    draw(<SessionTabLabel client={client} session={fakeSession('otto', { name: 'Otto', tool: 'claude' })} tab={{ ...tab, view: 'terminal' }} title="Otto" />);
+    expect(screen.getByText('>_')).toHaveAttribute('title', 'Vue terminal · lecture seule');
   });
   it('a seat names its rig', () => {
     draw(<SessionTabLabel session={fakeSession('otto', { name: 'Otto', tool: 'omp', rig: { seat: 's', name: 'ledge-dev' } })} tab={{ kind: 'seat', ref: 'otto' }} title="Otto" />);

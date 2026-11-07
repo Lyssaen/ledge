@@ -57,6 +57,10 @@ describe('an agent\'s terminal tab', () => {
     await waitFor(() => expect(view()!.querySelector('[data-terminal]')).not.toBeNull());
     expect(within(view()!).getByText('attaché')).toBeInTheDocument();
     expect(view()!.querySelector('.ide-term-kind')).toBeTruthy();
+    // No footer (lot 3 follow-up): its state and tmux target sit on the kind's row, on its right, muted.
+    expect(view()!.querySelector('.terminal-footer')).toBeNull();
+    await waitFor(() => expect(view()!.querySelector('.ide-term-kind .ide-term-state')).toHaveTextContent('Attaché'));
+    expect(view()!.querySelector('.ide-term-kind .ide-term-where')).toHaveTextContent('tmux · ledge-otto');
     expect(store?.viewerOf('local:otto')).toMatch(/^terminal:agent:/);
     expect(env.readOnly).not.toContain(true);
   });

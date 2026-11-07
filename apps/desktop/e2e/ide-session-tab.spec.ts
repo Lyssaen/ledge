@@ -132,7 +132,8 @@ test('Ctrl+` puts the agent\'s screen in place of the thread and >_ on the tab; 
   await expect(pane(page, 'Nova').locator('.agent-view')).toBeVisible();
   await expect(thread(page, 'Nova')).toBeHidden();
   await expect(tabOf(page, 'Nova').locator('.tab-term')).toHaveText('>_');
-  await expect(tabOf(page, 'Nova').locator('.tab-term')).toHaveAttribute('title', 'Terminal view');
+  // What the agent screen's footer said outside the IDE (lot 3, option A): its state and its pane.
+  await expect(tabOf(page, 'Nova').locator('.tab-term')).toHaveAttribute('title', /^Terminal view · [a-z].* · tmux · /);
   await tabMenu(page, 'Nova', 'Back to the thread');
   await expect(thread(page, 'Nova')).toBeVisible();
   await expect(pane(page, 'Nova').locator('.agent-view')).toBeHidden();

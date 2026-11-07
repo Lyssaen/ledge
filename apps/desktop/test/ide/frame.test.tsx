@@ -303,11 +303,11 @@ describe('the IDE session tab (lot 2)', () => {
     // « Diviser à droite », Ctrl \ on its right (lot 3).
     expect(within(menu).getByRole('menuitem', { name: /Diviser à droite/ })).toHaveTextContent('Ctrl \\');
     await user.click(within(menu).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
-    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle(/^Vue terminal/)).toBeInTheDocument());
     expect(tabOf('Otto')).toHaveAccessibleName('Otto');
     fireEvent.contextMenu(tabOf('Otto'));
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ }));
-    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle(/^Vue terminal/)).toBeNull());
     fireEvent.contextMenu(tabOf('Otto'));
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: 'Fermer les autres' }));
     await waitFor(() => expect(tabs()).toHaveLength(1));
@@ -332,13 +332,13 @@ describe('the IDE session tab (lot 2)', () => {
     // On the terminal view, the bar stays.
     fireEvent.contextMenu(tabOf('Otto'));
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
-    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle(/^Vue terminal/)).toBeInTheDocument());
     expect(page().querySelector('.session-reply')).toBeNull();
     expect(page().querySelector('.ide-bar .model-chip')).not.toBeNull();
     expect(within(page()).getByRole('button', { name: /\+1/ })).toHaveClass('on');
     fireEvent.contextMenu(tabOf('Otto'));
     await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ }));
-    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle(/^Vue terminal/)).toBeNull());
     // R10: an action clicked in the Changes tab brings Otto's tab forward (its group focused) and lights nothing.
     const changes = await waitFor(() => { const el = document.querySelector<HTMLElement>('.ide-changes .file-touches'); expect(el).not.toBeNull(); return el!; });
     await user.click(tabOf('Modifications · Otto'));
@@ -354,7 +354,7 @@ describe('the IDE session tab (lot 2)', () => {
     const stored = localStorage.getItem('desktop.session');
     await user.click(tree.getByRole('button', { name: 'Ouvrir le terminal de Otto' }));
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
-    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle(/^Vue terminal/)).toBeInTheDocument());
     await waitFor(() => expect(document.querySelector('.ide-pane .session-page[data-session$="otto"] .agent-view')).not.toBeNull());
     expect(localStorage.getItem('desktop.session')).toBe(stored);
   });

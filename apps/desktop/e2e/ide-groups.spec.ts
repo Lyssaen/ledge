@@ -48,6 +48,13 @@ async function boot(page: Page, stream = false, threads: Record<string, ThreadIt
 }
 /** A tab whose label is its title alone (not a session's). */
 const plainTab = (page: Page, title: string) => tabs(page).filter({ hasText: title });
+/** The agent's screen in `name`'s tab is attached. An IDE tab has no footer (lot 3, option A): a session tab's `>_` says it in
+ *  its title, a terminal tab (« >_ name ») on its top row. */
+async function attached(page: Page, name: string): Promise<void> {
+  if (name.startsWith('>_')) await expect(pane(page, name).locator('.ide-term-kind .ide-term-state')).toHaveText('Attached');
+  else await expect(tabOf(page, name).locator('.tab-term')).toHaveAttribute('title', /^Terminal view · attached · tmux · /);
+  await expect(pane(page, name).locator('.terminal-footer')).toHaveCount(0);
+}
 const tabsIn = (page: Page, i: number) => groups(page).nth(i).locator('.dv-tab');
 const split = (page: Page, i: number) => groups(page).nth(i).getByRole('button', { name: 'Split right (Ctrl+\\)' }).click();
 const square = (page: Page, i: number) => groups(page).nth(i).locator('.ide-lk');
@@ -218,7 +225,7 @@ test('split from a session: the empty group, « Terminal · Otto » first, then 
   const tp = pane(page, '>_ Otto');
   await expect(tp.locator('.chip-k')).toHaveText('attached');
   await expect(tp.locator('.terminal-screen .xterm')).toBeVisible();
-  await expect(tp.locator('.terminal-footer')).toContainText('Attached');
+  await attached(page, '>_ Otto');
 
   // Otto's own tab goes to its terminal view: the screen is the session's one (R2), the Terminal tab says where it went.
   await toTerminal(page, 'Otto');
@@ -235,7 +242,7 @@ const centre = (l: Locator) => async () => { const r = await box(l); return { x:
 /** Still the one connection (one term.watch, no term.unwatch), the same xterm (its mark), attached, in `name`'s pane. */
 async function keptScreen(page: Page, received: { type: string }[], name: string, mark: string): Promise<void> {
   await expect(xtermOf(page, name)).toBeVisible();
-  await expect(pane(page, name).locator('.terminal-footer')).toContainText('Attached');
+  await attached(page, name);
   expect(await xtermOf(page, name).evaluate(el => (el as HTMLElement & { ledgeMark?: string }).ledgeMark)).toBe(mark);
   expect(watches(received, 'otto')).toBe(1);
   expect(unwatches(received)).toBe(0);
@@ -248,7 +255,7 @@ test('a session tab on its screen, dragged to another group then to « nouveau g
   await split(page, 0);
   await open(page, 'Nova');
   await expect(tabsIn(page, 1)).toHaveCount(1);
-  await expect(pane(page, 'Otto').locator('.terminal-footer')).toContainText('Attached');
+  await attached(page, 'Otto');
   await expect.poll(() => watches(daemon.received, 'otto')).toBe(1);
   await xtermOf(page, 'Otto').evaluate(el => { (el as HTMLElement & { ledgeMark?: string }).ledgeMark = 'otto'; });
 
@@ -270,7 +277,7 @@ test('« >_ Otto · tmux », dragged to another group then to « nouveau groupe 
   await groups(page).nth(1).locator('.ide-empty').getByRole('button', { name: 'Terminal · Otto' }).click();
   const term = plainTab(page, '>_ Otto · tmux');
   await expect(term).toHaveClass(/dv-active-tab/);
-  await expect(pane(page, '>_ Otto').locator('.terminal-footer')).toContainText('Attached');
+  await attached(page, '>_ Otto');
   await expect.poll(() => watches(daemon.received, 'otto')).toBe(1);
   await xtermOf(page, '>_ Otto').evaluate(el => { (el as HTMLElement & { ledgeMark?: string }).ledgeMark = 'tmux'; });
 
@@ -312,7 +319,7 @@ test('Review Focus 1: two sessions on their screens side by side stay attached w
   const screens = page.locator('.ide-dockview .agent-view .terminal-screen .xterm');
   await expect(screens).toHaveCount(2);
   for (const n of ['Otto', 'Nova']) {
-    await expect(pane(page, n).locator('.terminal-footer')).toContainText('Attached');
+    await attached(page, n);
     await pane(page, n).locator('.terminal-screen .xterm').evaluate((el, m) => { (el as HTMLElement & { ledgeMark?: string }).ledgeMark = m; }, n);
   }
   await expect.poll(() => watches(daemon.received, 'otto')).toBe(1);
@@ -320,7 +327,8 @@ test('Review Focus 1: two sessions on their screens side by side stay attached w
 
   // A click in a group's content focuses it; back and forth, then the daemon updates both sessions.
   for (const i of [0, 1, 0, 1]) {
-    await groups(page).nth(i).locator('.terminal-footer').click();
+    // On the session bar's left padding: nothing there takes the click but the group.
+    await groups(page).nth(i).locator('.ide-bar').click({ position: { x: 3, y: 14 } });
     await expect(groups(page).nth(i)).toHaveClass(/dv-active-group/);
     await expect(groups(page).nth(1 - i)).not.toHaveClass(/dv-active-group/);
   }
@@ -332,7 +340,7 @@ test('Review Focus 1: two sessions on their screens side by side stay attached w
   await expect(novaDot).toHaveClass(/d-done/);
   await frames(page);
   for (const n of ['Otto', 'Nova']) {
-    await expect(pane(page, n).locator('.terminal-footer')).toContainText('Attached');
+    await attached(page, n);
     expect(await pane(page, n).locator('.terminal-screen .xterm').evaluate(el => (el as HTMLElement & { ledgeMark?: string }).ledgeMark)).toBe(n);
   }
   expect(watches(daemon.received, 'otto')).toBe(1);

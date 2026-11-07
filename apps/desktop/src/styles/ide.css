@@ -229,6 +229,13 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-term { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .ide-term-kind { flex: none; height: 26px; display: flex; align-items: center; background: var(--ide-pane, var(--card)); border-bottom: 1px solid var(--border); }
 .ide-term-kind .chip-k { margin: 0 8px; font-family: var(--font-mono, monospace); font-size: 10.5px; line-height: 16px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; }
+/* What the agent screen's footer says outside the IDE: its state and its tmux pane, on the row's right, muted, cut short. */
+.ide-term-kind { min-width: 0; gap: 8px; padding-right: 10px; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+.ide-term-kind .chip-k { margin-right: 0; flex: none; }
+.ide-term-state { margin-left: auto; flex: none; }
+.ide-term-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; }
+.ide-term-kind > .chip-k + .ide-term-where { margin-left: auto; }
+.ide-term > .agent-view { flex: 1; min-height: 0; }
 .ide-term > .agent-view { flex: 1; min-height: 0; }
 
 /* A thread in a narrow IDE group (lot 3: 300 px is a normal width): session.css's narrow rules apply; the time column takes

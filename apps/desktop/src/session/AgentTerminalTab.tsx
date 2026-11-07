@@ -3,7 +3,8 @@ import type { DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
 import { TermStoreContext } from '../term/useTerms';
-import { AgentView, useAgent, useHasBackend } from './AgentView';
+import { AgentView, useAgent, useAgentStatus, useHasBackend } from './AgentView';
+import { useTabPlace } from '../workspace/tabPlace';
 import { useAgentScreen } from './useAgentScreen';
 
 export interface AgentTerminalTabProps {
@@ -14,17 +15,22 @@ export interface AgentTerminalTabProps {
   onOpenSession(): void;
 }
 
-/** An IDE terminal tab of an agent (mockup content() `term`): a 26 px row with the terminal's kind, then the agent's screen,
- *  attached while the tab shows. The screen is the session's one (R2): another tab holding it says so and can take it. */
+/** An IDE terminal tab of an agent (mockup content() `term`): a 26 px row with the terminal's kind and, on its right, what the
+ *  agent screen's footer said outside the IDE (its state, its tmux pane), then the agent's screen, attached while the tab shows. The screen is the session's one (R2): another tab holding it says so and can take it. */
 export function AgentTerminalTab({ client, session, notify, readOnly, onOpenSession }: AgentTerminalTabProps): JSX.Element {
   const { t } = useI18n();
   const store = useContext(TermStoreContext);
   // The one place the capture's read-only mode is made: useAgent (live becomes the store's read-only mode).
   const agent = useAgent(session, null, readOnly, useHasBackend(client, session));
   useAgentScreen(session.id, agent.mode, store !== null);
+  const { state, where } = useAgentStatus(session, agent, useTabPlace()?.key ?? 'page');
   return (
     <div className="ide-term">
-      <div className="ide-term-kind"><span className="chip-k">{readOnly ? t.ide.termReadOnly : t.ide.termAttached}</span></div>
+      <div className="ide-term-kind">
+        <span className="chip-k">{readOnly ? t.ide.termReadOnly : t.ide.termAttached}</span>
+        {state && <span className="ide-term-state">{state}</span>}
+        {where && <span className="ide-term-where mono">{where}</span>}
+      </div>
       <AgentView client={client} session={session} helper={null} agent={agent} notify={notify} onGoParent={onOpenSession} onOpenShell={undefined} />
     </div>
   );

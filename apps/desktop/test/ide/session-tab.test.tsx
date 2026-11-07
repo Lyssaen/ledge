@@ -81,7 +81,7 @@ async function twoTabs() {
 async function toTerminal(user: ReturnType<typeof userEvent.setup>, name: string) {
   fireEvent.contextMenu(tabOf(name));
   await user.click(within(await screen.findByRole('menu', { name: new RegExp(name) })).getByRole('menuitem', { name: /Basculer sur le terminal/ }));
-  await waitFor(() => expect(within(tabOf(name)).getByTitle('Vue terminal')).toBeInTheDocument());
+  await waitFor(() => expect(within(tabOf(name)).getByTitle(/^Vue terminal/)).toBeInTheDocument());
 }
 
 describe('the session page in an IDE tab', () => {
@@ -231,18 +231,18 @@ describe('the session page in an IDE tab', () => {
     await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
     (document.activeElement as HTMLElement | null)?.blur();
     ctrlBackquote();
-    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
-    expect(within(tabOf('Nova')).queryByTitle('Vue terminal')).toBeNull();
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle(/^Vue terminal/)).toBeInTheDocument());
+    expect(within(tabOf('Nova')).queryByTitle(/^Vue terminal/)).toBeNull();
     (document.activeElement as HTMLElement | null)?.blur();
     ctrlBackquote();
-    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle('Vue terminal')).toBeNull());
+    await waitFor(() => expect(within(tabOf('Otto')).queryByTitle(/^Vue terminal/)).toBeNull());
     // The Atelier in front: no tab changes.
     act(() => { tabOf('Atelier').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })); });
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
     (document.activeElement as HTMLElement | null)?.blur();
     ctrlBackquote();
     await new Promise(r => setTimeout(r, 50));
-    expect(tabs().some(t => within(t).queryByTitle('Vue terminal'))).toBe(false);
+    expect(tabs().some(t => within(t).queryByTitle(/^Vue terminal/))).toBe(false);
   });
 
   it('N denies the front session\'s waiting permission without opening the launch dialog; without one, N opens it', async () => {
@@ -337,7 +337,7 @@ describe('the session page in an IDE tab', () => {
     expect(within(menu).getByRole('menuitem', { name: /Basculer sur le terminal/ })).toBeInTheDocument();
     // The view changes while the menu is open (Ctrl + ` on the front tab): the menu follows.
     ctrlBackquote();
-    await waitFor(() => expect(within(tabOf('Otto')).getByTitle('Vue terminal')).toBeInTheDocument());
+    await waitFor(() => expect(within(tabOf('Otto')).getByTitle(/^Vue terminal/)).toBeInTheDocument());
     await waitFor(() => expect(within(screen.getByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Revenir au fil/ })).toBeInTheDocument());
     // Its tab gone (the session deleted), the menu goes and stays gone when a tab of that name comes back.
     act(() => d.remove('otto'));

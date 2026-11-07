@@ -12,6 +12,7 @@ import { agentMode, type AgentMode } from '../term/mode';
 import { agentTabId, type AgentLink } from '../term/store';
 import { TermStoreContext } from '../term/useTerms';
 import { useTabPlace } from '../workspace/tabPlace';
+import type { Messages } from '../i18n/messages';
 
 const OFF: AgentLink = { state: 'off', attempt: 0 };
 const noStore = () => () => {};
@@ -49,6 +50,45 @@ export function useAgent(session: Session, helper: { id: string } | null, readOn
   return { mode, link, remote, host: remote ? machineOf(session) : t.session.terminal.local, dot };
 }
 
+/** What the agent screen's footer says (outside the IDE), and an IDE tab says instead (the `>_`'s title, a terminal tab's top row). */
+export interface AgentStatus { state: string | null; dot: AgentDot; where: string | null }
+
+/** The footer's state and place, from the screen's mode and link, the pane's name, and where the screen is drawn: `elsewhere`,
+ *  another view holds it; `surface`, the store has made its xterm. The one source of the footer and of the IDE tab's words. */
+export function agentStatus(a: Pick<Agent, 'mode' | 'link' | 'remote' | 'host'>, tmuxSession: string | null | undefined, screen: { elsewhere: boolean; surface: boolean }, tt: Messages['session']['terminal']): AgentStatus {
+  const { mode, link, remote, host } = a;
+  const target = tmuxSession ? tt.tmuxTarget(tmuxSession, remote ? host : undefined) : tt.noTmux;
+  if (mode.kind === 'native') return { state: tt.noAgentScreen, dot: 'off', where: null };
+  if (mode.kind === 'browser') return { state: tt.readOnly, dot: 'off', where: null };
+  if (mode.kind === 'offline') return { state: tt.offline, dot: 'off', where: host };
+  if (mode.kind === 'preview') return { state: tt.preview, dot: 'off', where: target };
+  // R2: the banner says it; no state of a screen not drawn here, only the pane's name.
+  if (screen.elsewhere) return { state: null, dot: 'off', where: target };
+  if (!screen.surface) return { state: tt.readOnly, dot: 'off', where: target };
+  if (link.state === 'reconnecting') return { state: tt.reconnecting, dot: 'wait', where: target };
+  if (link.state === 'off') return { state: tt.connecting, dot: 'wait', where: target };
+  if (mode.kind === 'parent') return { state: tt.readOnly, dot: 'off', where: target };
+  return { state: remote ? tt.attachedSsh : tt.attached, dot: 'on', where: target };
+}
+
+/** The `>_`'s title on an IDE session tab: « Vue terminal · attaché · tmux · ledge-otto », what is unknown left out. */
+export function terminalViewTitle(view: string, st: AgentStatus): string {
+  const state = st.state === null ? null : st.state.charAt(0).toLocaleLowerCase() + st.state.slice(1);
+  return [view, state, st.where].filter((x): x is string => !!x).join(' · ');
+}
+
+/** What the agent screen viewed from `viewer` (an IDE tab's key) would say in its footer, read from the terminal store. */
+export function useAgentStatus(session: Session, agent: Agent, viewer: string): AgentStatus {
+  const { t } = useI18n();
+  const store = useContext(TermStoreContext);
+  const subscribe = useCallback((fn: () => void) => (store ? store.subscribe(fn) : noStore()), [store]);
+  const surface = useSyncExternalStore(subscribe, () => store?.surface(agentTabId(session.id)) !== undefined);
+  const holder = useSyncExternalStore(subscribe, () => store?.viewerOf(session.id) ?? null);
+  const { mode } = agent;
+  const screenMode = mode.kind === 'live' || mode.kind === 'parent' || mode.kind === 'offline';
+  return agentStatus(agent, session.tmuxSession, { elsewhere: screenMode && holder !== null && holder !== viewer, surface }, t.session.terminal);
+}
+
 export interface AgentViewProps {
   client: DaemonClient; session: Session; helper: { id: string; name: string } | null; agent: Agent; notify(text: string): void;
   onGoParent(): void;
@@ -60,7 +100,8 @@ export interface AgentViewProps {
 const PAGE = 'page';
 
 /** The Terminal view (Fil | Terminal v3): the agent's own screen, alone and full frame under the session's heading. A banner
- *  says why it cannot be typed into (T3, T4), the footer gives the link's state and the key back to the thread. Without a
+ *  says why it cannot be typed into (T3, T4), the footer gives the link's state and the key back to the thread (not in an IDE
+ *  tab: the tab says them, useAgentStatus). Without a
  *  screen to attach (the browser build, an offline machine, a session with no tmux pane) it shows the daemon's preview of the
  *  last lines, read only; an OMP session, which has no agent screen, offers a shell instead. In an IDE tab the view is the
  *  tab (its key): a session's one xterm sits in the tab that holds it, and another tab of the same session says so and can
@@ -128,20 +169,7 @@ export function AgentView(p: AgentViewProps): JSX.Element {
     return null;
   })();
 
-  const target = session.tmuxSession ? tt.tmuxTarget(session.tmuxSession, remote ? host : undefined) : tt.noTmux;
-  const [state, dot, where] = ((): [string | null, 'on' | 'wait' | 'off', string | null] => {
-    if (mode.kind === 'native') return [tt.noAgentScreen, 'off', null];
-    if (mode.kind === 'browser') return [tt.readOnly, 'off', null];
-    if (mode.kind === 'offline') return [tt.offline, 'off', host];
-    if (mode.kind === 'preview') return [tt.preview, 'off', target];
-    // R2: the banner says it; the footer gives no state of a screen not drawn here, only the pane's name.
-    if (elsewhere) return [null, 'off', target];
-    if (!surface) return [tt.readOnly, 'off', target];
-    if (link.state === 'reconnecting') return [tt.reconnecting, 'wait', target];
-    if (link.state === 'off') return [tt.connecting, 'wait', target];
-    if (mode.kind === 'parent') return [tt.readOnly, 'off', target];
-    return [remote ? tt.attachedSsh : tt.attached, 'on', target];
-  })();
+  const { state, dot, where } = agentStatus(agent, session.tmuxSession, { elsewhere, surface: surface !== undefined }, tt);
 
   return (
     <section className="agent-view" role="region" aria-label={tt.title} data-typeable={typeable} data-session={sid} data-elsewhere={elsewhere || undefined}>
@@ -166,12 +194,15 @@ export function AgentView(p: AgentViewProps): JSX.Element {
                 : <p className="muted">{tt.empty}</p>}
             </div>
           )}
-      <div className="terminal-footer">
-        <span className={cls('term-dot', dot)} aria-hidden="true">●</span>
-        {state && <span>{state}</span>}
-        {where && <span className="mono">{where}</span>}
-        {typing && <><span className="spacer" /><span className={cls(focused && 'footkey')}>{focused ? tt.toThread(key) : tt.toTerminal(key)}</span></>}
-      </div>
+      {/* In an IDE tab there is no footer: the tab's `>_` (a session tab) or its top row (a terminal tab) says the state and the pane (useAgentStatus). */}
+      {tabPlace === null && (
+        <div className="terminal-footer">
+          <span className={cls('term-dot', dot)} aria-hidden="true">●</span>
+          {state && <span>{state}</span>}
+          {where && <span className="mono">{where}</span>}
+          {typing && <><span className="spacer" /><span className={cls(focused && 'footkey')}>{focused ? tt.toThread(key) : tt.toTerminal(key)}</span></>}
+        </div>
+      )}
     </section>
   );
 }
