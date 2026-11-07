@@ -50,6 +50,17 @@ describe('usage.state tolerance', () => {
     expect(m.harnesses[0]!.windows).toEqual([bad[2]]);
     expect(m.alerts.map((a) => a.id)).toEqual(['b']);
   });
+  it('drops a pool window of an unknown pool, keeps the message', () => {
+    const x = { kind: 'pool', pool: 'x', pct: 5, resetsAt: R };
+    const m = parseServerMessage({
+      type: 'usage.state', prefs,
+      harnesses: [{ harness: 'cursor', account: null, status: 'ok', readAt: R, windows: [x, { kind: 'month', pct: 5, resetsAt: R }] }],
+      alerts: [{ id: 'a', harness: 'cursor', account: null, window: x, level: 'threshold', at: R }]
+    });
+    if (m.type !== 'usage.state') throw new Error('type');
+    expect(m.harnesses[0]!.windows.map((w) => w.kind)).toEqual(['month']);
+    expect(m.alerts).toEqual([]);
+  });
   it('drops an alert of an unknown harness or window kind', () => {
     const ok = { id: 'x', harness: 'cursor', account: null, window: { kind: 'month', pct: 90, resetsAt: R }, level: 'threshold', at: R };
     const m = parseServerMessage({

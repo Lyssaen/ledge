@@ -15,13 +15,15 @@ const USAGE_WINDOW_KINDS = ['five_hour', 'seven_day', 'model', 'month', 'pool'] 
  * One window of an account's limits: the 5 hours, the week, one model's own week (`model`, as the harness names it), the
  * month (`month`: Cursor's monthly cycle total) or one pool of the included usage (`pool`).
  */
-const poolMatchesKind = (w: { kind?: unknown; pool?: unknown }): boolean => (w.kind === 'pool') === (w.pool !== undefined);
+const POOLS = ['cursor', 'other'] as const;
+const poolMatchesKind = (w: { kind?: unknown; pool?: unknown }): boolean =>
+  (w.kind === 'pool') === (w.pool !== undefined) && (w.pool === undefined || (POOLS as readonly unknown[]).includes(w.pool));
 
 export const UsageWindowSchema = z.object({
   kind: z.enum(USAGE_WINDOW_KINDS),
   model: z.string().min(1).max(80).optional(),
   /** A pool of the included usage (`kind: 'pool'`): Cursor's own models (`cursor`) or the others at API prices (`other`). */
-  pool: z.enum(['cursor', 'other']).optional(),
+  pool: z.enum(POOLS).optional(),
   /** How much of it is used, in percent (rounded); 100 or more: reached. */
   pct: z.number().int().min(0).max(1000),
   /** When it starts again from zero; null when the harness does not say. */
