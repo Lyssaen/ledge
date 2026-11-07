@@ -186,7 +186,23 @@ export function moveTo(w: Workspace, key: string, to: { group: string; index?: n
   return activate(replaceGroup(moved, { ...hit.group, tabs }), hit.group.id, tabs.indexOf(hit.group.tabs[hit.index]!));
 }
 
-/** What an empty group offers: the Terminal of the session it was split from (the UI checks that session still exists).
+/** `tab` put at a place of the dock: `moveTo` when it is already open; else added in group `to.group` (at `index`, clamped,
+ *  else at the end) or in a new group right of `to.rightOf`. It becomes active, its group focused. A missing group: no change.
+ *  (A terminal brought from the bottom panel: no other group is touched, an empty focused one stays.) */
+export function place(w: Workspace, tab: Tab, to: { group: string; index?: number } | { rightOf: string }): Workspace {
+  if (find(w, keyOf(tab))) return moveTo(w, keyOf(tab), to);
+  let out = w;
+  let target: Group | undefined;
+  if ('group' in to) target = groupById(w, to.group);
+  else { const ref = groupById(w, to.rightOf); if (ref) { const r = addGroup(w, { after: ref }); out = r.w; target = r.group; } }
+  if (!target) return w;
+  const g = groupById(out, target.id)!;
+  const at = 'group' in to && to.index !== undefined ? Math.max(0, Math.min(to.index, g.tabs.length)) : g.tabs.length;
+  const tabs = [...g.tabs.slice(0, at), tab, ...g.tabs.slice(at)];
+  return activate(replaceGroup(out, { ...g, tabs }), g.id, at);
+}
+
+/** What an empty group offers:the Terminal of the session it was split from (the UI checks that session still exists).
  *  Split from the atelier or any non-session tab, nothing is proposed. */
 export function emptyProposals(w: Workspace, groupId: string): { terminalOf: string | null } {
   const g = groupById(w, groupId);

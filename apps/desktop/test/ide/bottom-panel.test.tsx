@@ -46,7 +46,7 @@ function mount(panel: Panel, extra: Partial<Parameters<typeof BottomPanel>[0]> =
   const p = {
     panel, onTab: vi.fn(), outputCount: 3, output: <pre>les sorties</pre>, menu: ROWS, onNewShell: vi.fn(),
     tile: (ref: string) => <div>écran {ref}</div>, tileTitle: (ref: string) => `>_ ${ref}`, tileKind: () => 'shell',
-    onClose: vi.fn(), onHide: vi.fn(), ...extra
+    onClose: vi.fn(), onHide: vi.fn(), onDockDrop: vi.fn(), onRefused: vi.fn(), ...extra
   };
   render(<LangProvider lang="fr"><BottomPanel {...p} /></LangProvider>);
   return { p, user: userEvent.setup(), region: within(screen.getByRole('region', { name: 'Panneau du bas' })) };

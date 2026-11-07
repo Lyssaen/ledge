@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { LangProvider } from '../../src/i18n/lang';
 import { DockviewComponent } from 'dockview-react';
 import { DockHost, GROUP_MIN_WIDTH, keepScroll } from '../../src/ide/DockHost';
+import { termDrag } from '../../src/ide/termDrag';
 import { activate, agentTerminalTab, beside, deserialize, empty, keyOf, moveTo, open, serialize, sessionOf, split as splitGroup, type Tab, type Workspace } from '../../src/workspace/model';
 import { createWorkspaceStore, useWorkspace, type WorkspaceStore } from '../../src/workspace/store';
 import { useTabPlace } from '../../src/workspace/tabPlace';
@@ -364,6 +365,19 @@ describe('dragging a tab: every arrival goes through the model, the panel is mov
       await waitFor(() => expect(root).not.toHaveClass('tab-dragging'));
     }
     expect(store.get().groups.map(g => g.tabs.map(keyOf))).toEqual([['session:local:a'], ['session:local:b']]);
+  });
+
+  it('a tab picked up tells the bottom panel which (termDrag); let go out of the dock, the dock moves nothing and forgets it', async () => {
+    const store = createWorkspaceStore(two());
+    await mounted(store);
+    const before = store.get();
+    fireEvent.dragStart(tabIn(groupviews()[0]!, 'session:local:a')!);
+    expect(termDrag.get()).toEqual({ from: 'dock', key: 'session:local:a' });
+    // Dropped on the bottom panel, whose own drop reads termDrag first; its source re-rendered away, no dragend comes.
+    fireEvent(window, new Event('drop'));
+    expect(termDrag.get()).not.toBeNull();
+    await waitFor(() => expect(termDrag.get()).toBeNull());
+    expect(store.get()).toBe(before);
   });
 
   it('a drop on the zone that is not a tab of the dock (a file, say) does nothing', async () => {

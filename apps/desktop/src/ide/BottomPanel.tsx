@@ -1,10 +1,12 @@
-import { Fragment, useState, type JSX, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type DragEvent, type JSX, type ReactNode } from 'react';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { Menu, MenuItem } from '../shell/Menu';
 import { SHELL_ICONS } from '../shell/icons';
 import type { ShellKind, ShellRow } from '../term/shells';
-import type { Panel } from '../workspace/panel';
+import { isTerminalRef, panelViewer, type Panel } from '../workspace/panel';
+import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
+import { TERM_DRAG_TYPE, termDrag } from './termDrag';
 
 export interface BottomPanelProps {
   panel: Panel; onTab(t: 'term' | 'out'): void;
@@ -16,6 +18,10 @@ export interface BottomPanelProps {
   tile(ref: string): ReactNode; tileTitle(ref: string): string; tileKind(ref: string): string;
   /** A tile's « × »; « Masquer le panneau ». */
   onClose(ref: string): void; onHide(): void;
+  /** A terminal tab of the dock (its key, `terminal:…`) dropped on the panel: it comes back as a tile. */
+  onDockDrop(key: string): void;
+  /** Any other dock tab dropped on the panel: refused (only terminals go there), said by the host. */
+  onRefused(): void;
 }
 
 const SECTIONS = ['local', 'ledge', 'machines'] as const;
@@ -27,6 +33,30 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
   const pt = t.ide.panel;
   const [menu, setMenu] = useState(false);
   const { tab, terms } = p.panel;
+  // A dock tab carried over the panel: its frame outlined (mockup `.drop-on`) until it leaves, drops, or the drag ends.
+  const [over, setOver] = useState(false);
+  useEffect(() => termDrag.subscribe(() => { if (termDrag.get()?.from !== 'dock') setOver(false); }), []);
+  const onDragOver = (e: DragEvent) => {
+    if (termDrag.get()?.from !== 'dock') return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    setOver(true);
+  };
+  const onDragLeave = (e: DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); };
+  const onDrop = (e: DragEvent) => {
+    const d = termDrag.get();
+    if (d?.from !== 'dock') return;
+    e.preventDefault();
+    setOver(false);
+    termDrag.set(null);
+    if (isTerminalRef(d.key)) p.onDockDrop(d.key); else p.onRefused();
+  };
+  // A tile picked up: the dock reads which one (the browser hides drag data until the drop).
+  const onTileDragStart = (ref: string) => (e: DragEvent) => {
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData(TERM_DRAG_TYPE, ref); } catch { /* a webview may refuse it */ } }
+    termDrag.set({ from: 'panel', ref });
+  };
+  const onTileDragEnd = () => { if (termDrag.get()?.from === 'panel') termDrag.set(null); };
   const item = (k: 'term' | 'out', d: readonly string[], label: string, tip: string, count: number) => (
     <button type="button" role="tab" aria-selected={tab === k} aria-label={label} title={tip} className={tab === k ? 'on' : undefined} onClick={() => p.onTab(k)}>
       <Icon d={d} size={15} /><span className="ide-bp-count">{count}</span>
@@ -35,7 +65,7 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
   const sectionLabel = { local: pt.shells.local, ledge: pt.shells.ledge, machines: pt.shells.machines };
   const sections = SECTIONS.filter(s => p.menu.some(r => r.section === s));
   return (
-    <section className="ide-bottom" aria-label={t.ide.bottomLabel}>
+    <section className={`ide-bottom${over ? ' drop-on' : ''}`} aria-label={t.ide.bottomLabel} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       <div className="ide-bp-tabs">
         <div role="tablist" aria-label={t.ide.bottomLabel}>
           {item('term', SHELL_ICONS.terminals, t.ide.terminals, t.ide.terminals, terms.length)}
@@ -67,17 +97,18 @@ export function BottomPanel(p: BottomPanelProps): JSX.Element {
           <div className="ide-bterms">
             {terms.length === 0 ? <span className="ide-bterms-none">{pt.noTerms}</span> : terms.map(ref => {
               const title = p.tileTitle(ref);
+              // Its own place (R2): the agent's one screen and the shown terminals' budget follow tiles as they follow tabs.
+              const place: TabPlace = { key: panelViewer(ref), group: '', visible: true, active: false };
               return (
                 <section key={ref} className="ide-btile" role="group" aria-label={title}>
                   <div className="ide-btile-bar">
-                    {/* The drag itself (to a group) is lot 5's next task. */}
-                    <div className="ide-btile-tab" draggable title={pt.drag}>{title}</div>
+                    <div className="ide-btile-tab" draggable title={pt.drag} onDragStart={onTileDragStart(ref)} onDragEnd={onTileDragEnd}>{title}</div>
                     <div className="ide-btile-tools">
                       <span className="chip-k">{p.tileKind(ref)}</span>
                       <button type="button" aria-label={pt.close} title={pt.close} onClick={() => p.onClose(ref)}>×</button>
                     </div>
                   </div>
-                  <div className="ide-btile-body">{p.tile(ref)}</div>
+                  <div className="ide-btile-body"><TabPlaceContext.Provider value={place}>{p.tile(ref)}</TabPlaceContext.Provider></div>
                 </section>
               );
             })}

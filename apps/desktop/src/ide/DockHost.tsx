@@ -8,6 +8,7 @@ import { activate, closeGroup, cycleLink, find, focusGroup, keyOf, MAIN, moveTo,
 import type { WorkspaceStore } from '../workspace/store';
 import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
 import type { TabBody } from './tabs';
+import { panelDragRef, termDrag } from './termDrag';
 import '../styles/ide.css';
 
 export interface DockHostProps {
@@ -22,6 +23,9 @@ export interface DockHostProps {
   onNewSession(groupId: string): void;
   /** What a group without tabs shows (EmptyGroup): its proposals. */
   emptyGroup(groupId: string): ReactNode;
+  /** A bottom-panel tile (its ref: `shell:<n>`, `agent:<id>`) dropped on a group, a tab of its strip, its right edge or
+   *  « nouveau groupe »: where it goes. The host moves it (the model and the panel); the dock only says where. */
+  onPanelDrop?(ref: string, to: { group: string; index?: number } | { rightOf: string }): void;
 }
 
 /** R6: a group is never narrower than this (mockup `.grow-row>.pane{min-width:300px}`); past it the editing area scrolls. */
@@ -156,14 +160,16 @@ interface DropSpot {
  *  floating group, the top, bottom and left edges (lot 3 stacks no groups). A group's centre or strip end takes the tab at
  *  its end, a tab of the strip at that tab's place, its right edge opens a new group right of it. A drop that would change
  *  nothing (a group's only tab on its own centre or right edge) is refused, so no overlay promises it. */
-export function arrivalOf(e: DropSpot, viewId: string, modelOf: (dg: DockviewGroupPanel) => Group | undefined): Arrival | null {
+export function arrivalOf(e: DropSpot, viewId: string, modelOf: (dg: DockviewGroupPanel) => Group | undefined, outside: string | null = null): Arrival | null {
   const data = e.getData();
-  if (!data || data.viewId !== viewId || !data.panelId || e.edge) return null;
+  if (e.edge) return null;
+  // `outside`: the tab key of a bottom-panel tile being dragged, which dockview knows nothing of (no data of its own).
+  if (outside !== null ? data !== undefined : !data || data.viewId !== viewId || !data.panelId) return null;
   const dg = e.group;
   if (!dg || dg.api.location.type !== 'grid') return null;
   const g = modelOf(dg);
   if (!g) return null;
-  const key = data.panelId;
+  const key = outside ?? data!.panelId!;
   const own = g.tabs.some(t => keyOf(t) === key);
   switch (e.kind) {
     // dockview's index is where the tab lands in the strip once taken out of it: the tab dropped on, or the one after it
@@ -186,7 +192,7 @@ export function arrivalOf(e: DropSpot, viewId: string, modelOf: (dg: DockviewGro
  *  its groups need and scrolls sideways in the editing area. A tab dragged goes through the model too: dockview's own move
  *  is cancelled, the model moves the tab (`moveTo`), and the sync moves its panel, whose content stays mounted. While a tab
  *  is dragged, a zone at the right end opens a new group. No floating groups, no stacked groups (lot 3). */
-export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNewSession, emptyGroup }: DockHostProps): JSX.Element {
+export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNewSession, emptyGroup, onPanelDrop }: DockHostProps): JSX.Element {
   const { t } = useI18n();
   const [api, setApi] = useState<DockviewApi | null>(null);
   // The panel (tab key) being dragged, from dockview's drag start to its drop or end; `dragging` shows the drop zone.
@@ -198,6 +204,8 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   const drawn = useRef(new Map<string, DockviewGroupPanel>());
   const latest = useRef(store);
   latest.current = store;
+  const panelDrop = useRef(onPanelDrop);
+  panelDrop.current = onPanelDrop;
   const groups = ws.groups.filter(g => g.window === MAIN);
   const tabs = new Map<string, { tab: Tab; group: Group }>();
   for (const g of groups) for (const tab of g.tabs) tabs.set(keyOf(tab), { tab, group: g });
@@ -277,8 +285,10 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   useLayoutEffect(() => {
     if (!api) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const arrival = (e: DropSpot) => arrivalOf(e, api.id, dg => latestModelOf.current(dg));
-    const endDrag = () => { clearTimeout(timer); dragged.current = null; setDragging(false); };
+    // A bottom-panel tile carried over the dock lands as its terminal tab would (`terminal:<ref>`).
+    const tile = () => { const ref = panelDragRef(); return ref === null ? null : `terminal:${ref}`; };
+    const arrival = (e: DropSpot) => arrivalOf(e, api.id, dg => latestModelOf.current(dg), tile());
+    const endDrag = () => { clearTimeout(timer); dragged.current = null; termDrag.set(null); setDragging(false); };
     const subs = [
       api.onDidActivePanelChange(ev => {
         const id = ev.panel?.id;
@@ -296,22 +306,33 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
       // The user's close (×, middle click): remembered for Ctrl+Shift+T.
       api.onDidRemovePanel(p => { if (!syncing.current) latest.current.close(p.id); }),
       // A tab picked up: the drop zone shows once the browser has its drag image (a layout change in dragstart cancels it).
-      api.onWillDragPanel(e => { dragged.current = e.panel.id; clearTimeout(timer); timer = setTimeout(() => { if (dragged.current) setDragging(true); }, 0); }),
+      // The bottom panel learns it too: it takes a terminal tab dropped on it.
+      api.onWillDragPanel(e => { dragged.current = e.panel.id; termDrag.set({ from: 'dock', key: e.panel.id }); clearTimeout(timer); timer = setTimeout(() => { if (dragged.current) setDragging(true); }, 0); }),
+      // Something dockview does not know dragged over a group: taken only when it is a bottom-panel tile, where it could land.
+      api.onUnhandledDragOver(e => { if (tile() !== null && arrival({ kind: e.target, position: e.position, group: e.group, getData: e.getData })) e.accept(); }),
       // No overlay where a drop would be refused.
       api.onWillShowOverlay(e => { if (!arrival(e)) e.preventDefault(); }),
-      // Every drop is the model's: dockview moves nothing itself.
+      // Every drop is the model's: dockview moves nothing itself. (So dockview's onDidDrop, which follows an unprevented
+      // onWillDrop, never comes: a tile's drop is read here too.)
       api.onWillDrop(e => {
         e.preventDefault();
+        const ref = panelDragRef();
         const hit = arrival(e);
         endDrag();
+        if (ref !== null) { if (hit) panelDrop.current?.(ref, hit.to); return; }
         if (hit) latest.current.update(w => moveTo(w, hit.key, hit.to));
       })
     ];
+    // A tile picked up in the bottom panel shows the drop zone too (after its dragstart, as above); let go, it hides.
+    const unwatch = termDrag.subscribe(() => {
+      if (panelDragRef() !== null) { clearTimeout(timer); timer = setTimeout(() => { if (panelDragRef() !== null) setDragging(true); }, 0); }
+      else if (!dragged.current) { clearTimeout(timer); setDragging(false); }
+    });
     // Also when the tab is let go elsewhere (or Esc): the source tab, still in place, sends dragend up. A drag can also end
     // with no dragend (its source re-rendered away, a webview that drops it): a drop anywhere, or a pointer let go while
     // dragging, ends it too, once the drop's own handlers (the zone's) have read what was dragged.
     let late: ReturnType<typeof setTimeout> | undefined;
-    const lateEnd = () => { if (dragged.current) { clearTimeout(late); late = setTimeout(endDrag, 0); } };
+    const lateEnd = () => { if (dragged.current || termDrag.get()) { clearTimeout(late); late = setTimeout(endDrag, 0); } };
     const ends = ['drop', 'pointerup', 'mouseup'] as const;
     window.addEventListener('dragend', endDrag, true);
     for (const type of ends) window.addEventListener(type, lateEnd, true);
@@ -320,17 +341,27 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
       window.removeEventListener('dragend', endDrag, true);
       for (const type of ends) window.removeEventListener(type, lateEnd, true);
       for (const s of subs) s.dispose();
+      unwatch();
     };
   }, [api]);
   const onReady = (e: DockviewReadyEvent) => setApi(e.api);
-  // The drop zone: only this dock's tab (a file dragged in finds nothing to drop on), into a new group at the right end.
-  const onZoneOver = (e: DragEvent) => { if (!dragged.current) return; e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; };
+  // The drop zone: only this dock's tab or a bottom-panel tile (a file dragged in finds nothing to drop on), into a new group
+  // at the right end.
+  const onZoneOver = (e: DragEvent) => { if (!dragged.current && panelDragRef() === null) return; e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; };
   const onZoneDrop = (e: DragEvent) => {
     const key = dragged.current;
-    if (!key) return;
+    const ref = panelDragRef();
+    if (!key && ref === null) return;
     e.preventDefault();
     dragged.current = null;
+    termDrag.set(null);
     setDragging(false);
+    if (ref !== null) {
+      const last = store.get().groups.filter(g => g.window === MAIN).at(-1);
+      if (last) onPanelDrop?.(ref, { rightOf: last.id });
+      return;
+    }
+    if (!key) return;
     store.update(w => {
       const last = w.groups.filter(g => g.window === MAIN).at(-1);
       // The last group's only tab is already there.

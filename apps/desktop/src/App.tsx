@@ -81,7 +81,7 @@ import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { agentTerminalTab, beside, changesBeside, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
+import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, place as placeTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
@@ -91,7 +91,7 @@ import { EmptyGroup, type EmptyPick } from './ide/EmptyGroup';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeBottom, IdeDock, IdeOutput, IdePlace } from './ide/lazy';
-import { addTerm, createPanelStore, removeTerm, usePanel } from './workspace/panel';
+import { addTerm, createPanelStore, isTerminalRef, panelViewer, removeTerm, usePanel } from './workspace/panel';
 
 const NO_PROJECTS: readonly Project[] = [];
 const NO_SHELLS: ShellsAvailable = { wsl: null, powershell: false, cmd: false, gitBash: false };
@@ -546,6 +546,25 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     onLayout({ type: 'show', panel: 'bottom', on: false });
     shellsNow.current.notify(t.ide.panel.lastClosed);
   }, [termStore, panelStore, onLayout, t]);
+  // A tile dragged into the dock: its terminal tab where it was dropped, the same shell or agent screen (its view moves the
+  // xterm, nothing is relaunched). The panel emptied so hides, without « Dernier terminal fermé » (nothing was closed).
+  const panelToDock = useCallback((ref: string, to: { group: string; index?: number } | { rightOf: string }) => {
+    // An agent's screen passes to its tab as it is: the tile goes before the tab mounts, which would otherwise reconnect.
+    if (ref.startsWith('agent:')) termStore.handOver(ref.slice('agent:'.length), panelViewer(ref), `terminal:${ref}`);
+    panelStore.update(p => removeTerm(p, ref));
+    wsStore.update(w => placeTab(w, { kind: 'terminal', ref }, to));
+    if (panelStore.get().terms.length === 0) onLayout({ type: 'show', panel: 'bottom', on: false });
+  }, [termStore, panelStore, wsStore, onLayout]);
+  // A dock tab dropped on the panel: a terminal leaves the model by `update`, not the store's `close` (no kill, R9; not
+  // remembered for Ctrl+Shift+T), and comes back as a tile (BottomPanel refuses any other tab).
+  const dockToPanel = useCallback((key: string) => {
+    if (!isTerminalRef(key)) return;
+    const ref = key.slice('terminal:'.length);
+    if (ref.startsWith('agent:')) termStore.handOver(ref.slice('agent:'.length), key, panelViewer(ref));
+    wsStore.update(w => dropTab(w, key));
+    panelStore.update(p => addTerm(p, ref));
+    shellsNow.current.notify(t.ide.panel.broughtBack);
+  }, [termStore, wsStore, panelStore, t]);
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
   // The tab keys (VS Code's): Ctrl W closes the focused group's active tab (remembered for Ctrl Shift T), or the group when empty.
   const ideKeys = useMemo((): IdeKeys => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }), split: () => wsStore.update(w => splitGroup(w, w.focus)), newSessionAnywhere: true as const,
@@ -733,13 +752,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             tile={ref => {
               if (ref.startsWith('shell:')) return <FreeShellPlace id={ref} claimFocus={claimFocus} />;
               const s = known.find(x => x.id === sessionOf({ kind: 'terminal', ref }));
-              return s ? <AgentTerminalPlace client={fleetClient} session={s} notify={notify} readOnly={s.rig != null} onOpenSession={() => dispatch({ type: 'open', id: s.id })} /> : null;
+              return s ? <AgentTerminalPlace client={fleetClient} session={s} notify={notify} readOnly={s.rig != null} onOpenSession={() => dispatch({ type: 'open', id: s.id })} bare /> : null;
             }}
             tileTitle={ref => title({ kind: 'terminal', ref })}
             tileKind={ref => (ref.startsWith('shell:') ? t.ide.panel.shellKind : known.find(x => x.id === sessionOf({ kind: 'terminal', ref }))?.rig != null ? t.ide.termReadOnly : t.ide.termAttached)}
-            onClose={panelClose} onHide={() => onLayout({ type: 'show', panel: 'bottom', on: false })} />
+            onClose={panelClose} onHide={() => onLayout({ type: 'show', panel: 'bottom', on: false })}
+            onDockDrop={dockToPanel} onRefused={() => notify(t.ide.panel.onlyTerms)} />
         }
-        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={gid => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); }} emptyGroup={emptyGroup} />}
+        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={gid => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); }} emptyGroup={emptyGroup} onPanelDrop={panelToDock} />}
         chat={
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus - (ideChatFrom.current ?? 0)} askedOnly
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}

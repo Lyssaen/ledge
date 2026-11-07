@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../../src/fleet/useFleet';
@@ -115,6 +115,50 @@ describe('an agent\'s terminal tab', () => {
     await waitFor(() => expect(document.querySelectorAll('.ide-dock [data-terminal]')).toHaveLength(1));
     expect(screen.getAllByText('Terminal affiché dans l’autre groupe')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Afficher ici' })).toBeInTheDocument();
+  });
+
+  it('dragged onto the bottom panel: a tile holding the same screen (its own place, no reconnect), its kind said once', async () => {
+    // jsdom has no PointerEvent, which dockview tells drags apart with.
+    const hadPointer = 'PointerEvent' in globalThis;
+    if (!hadPointer) (globalThis as { PointerEvent?: unknown }).PointerEvent = class extends MouseEvent {};
+    onTestFinished(() => { if (!hadPointer) delete (globalThis as { PointerEvent?: unknown }).PointerEvent; });
+    // Over the pseudo-terminal (no stream): each attachment is an `attach` the backend opens.
+    await mount([agentTerminalTab('local:otto'), { kind: 'settings', ref: '' } as Tab], false, true, false, false);
+    await waitFor(() => expect(tabs()).toHaveLength(2));
+    const front = tabs().find(t => /tmux$/.test(t.getAttribute('aria-label') ?? ''))!;
+    act(() => { front.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })); });
+    await waitFor(() => expect(store?.viewerOf('local:otto')).toMatch(/^terminal:agent:/));
+    const xterm = document.querySelector('.ide-dock [data-terminal]');
+    expect(xterm).not.toBeNull();
+    const attaches = () => (env.backend as ReturnType<typeof fakeBackend>).opens.filter(o => o.argv.includes('attach') && o.argv.at(-1) === 'otto').length;
+    await waitFor(() => expect(attaches()).toBeGreaterThan(0));
+    const before = attaches();
+    act(() => { fireEvent.keyDown(window, { key: 'j', ctrlKey: true }); });
+    const panel = await screen.findByRole('region', { name: 'Panneau du bas' });
+    await waitFor(() => expect(panel.querySelectorAll('.ide-btile')).toHaveLength(1));
+    fireEvent.dragStart(front.closest('.dv-tab') ?? front);
+    fireEvent.dragOver(panel);
+    fireEvent.drop(panel);
+    await waitFor(() => expect(panel.querySelectorAll('.ide-btile')).toHaveLength(2));
+    const tile = panel.querySelectorAll<HTMLElement>('.ide-btile')[1]!;
+    await waitFor(() => expect(store?.viewerOf('local:otto')).toBe('panel:agent:local:otto'));
+    await waitFor(() => expect(tile.querySelector('[data-terminal]')).toBe(xterm));
+    expect(tile.querySelector('.ide-term-kind')).toBeNull();
+    expect(within(tile).getAllByText('attaché')).toHaveLength(1);
+    expect(attaches()).toBe(before);
+    expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Réglages']);
+
+    // And back into a new group: its tab holds the same screen, still without a reconnect.
+    const tileTab = within(tile).getByText('>_ Otto · tmux');
+    fireEvent.dragStart(tileTab);
+    const zone = document.querySelector<HTMLElement>('.ide-dropnew')!;
+    fireEvent.dragOver(zone);
+    fireEvent.drop(zone);
+    await waitFor(() => expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Réglages', '>_ Otto · tmux']));
+    await waitFor(() => expect(store?.viewerOf('local:otto')).toBe('terminal:agent:local:otto'));
+    await waitFor(() => expect(document.querySelector('.ide-dock .ide-term [data-terminal]')).toBe(xterm));
+    expect(panel.querySelectorAll('.ide-btile')).toHaveLength(1);
+    expect(attaches()).toBe(before);
   });
 
   it('a hidden terminal tab releases its screen; brought back, it attaches again', async () => {

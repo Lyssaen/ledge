@@ -13,11 +13,13 @@ export interface AgentTerminalTabProps {
   readOnly: boolean;
   /** « Ouvrir la session »: a subagent-less page has no parent to go to, so this brings the session's own tab forward. */
   onOpenSession(): void;
+  /** In a bottom-panel tile: the tile's bar already says the kind, so no row of its own. */
+  bare?: boolean;
 }
 
 /** An IDE terminal tab of an agent (mockup content() `term`): a 26 px row with the terminal's kind and, on its right, what the
  *  agent screen's footer said outside the IDE (its state, its tmux pane), then the agent's screen, attached while the tab shows. The screen is the session's one (R2): another tab holding it says so and can take it. */
-export function AgentTerminalTab({ client, session, notify, readOnly, onOpenSession }: AgentTerminalTabProps): JSX.Element {
+export function AgentTerminalTab({ client, session, notify, readOnly, onOpenSession, bare = false }: AgentTerminalTabProps): JSX.Element {
   const { t } = useI18n();
   const store = useContext(TermStoreContext);
   // The one place the capture's read-only mode is made: useAgent (live becomes the store's read-only mode).
@@ -25,6 +27,8 @@ export function AgentTerminalTab({ client, session, notify, readOnly, onOpenSess
   useAgentScreen(session.id, agent.mode, store !== null);
   const kind = readOnly ? t.ide.termReadOnly : t.ide.termAttached;
   const { state, where } = useAgentStatus(session, agent, useTabPlace()?.key ?? 'page');
+  const view = <AgentView client={client} session={session} helper={null} agent={agent} notify={notify} onGoParent={onOpenSession} onOpenShell={undefined} />;
+  if (bare) return <div className="ide-term">{view}</div>;
   return (
     <div className="ide-term">
       <div className="ide-term-kind">
@@ -33,7 +37,7 @@ export function AgentTerminalTab({ client, session, notify, readOnly, onOpenSess
         {state && state.toLocaleLowerCase() !== kind.toLocaleLowerCase() && <span className="ide-term-state">{state}</span>}
         {where && <span className="ide-term-where mono">{where}</span>}
       </div>
-      <AgentView client={client} session={session} helper={null} agent={agent} notify={notify} onGoParent={onOpenSession} onOpenShell={undefined} />
+      {view}
     </div>
   );
 }

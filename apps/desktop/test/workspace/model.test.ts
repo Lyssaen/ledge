@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeGroup, closeOthers, CLOSED_MAX, cycleLink, cycleTab, deserialize, emptyProposals, empty, find, focusGroup, focusNth, focused, keyOf, MAIN, move, moveActive, moveTo, open, reconcile, remember, reopenLast, serialize, setView, split, type Closed, type Tab, type Workspace } from '../../src/workspace/model';
+import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeGroup, closeOthers, CLOSED_MAX, cycleLink, cycleTab, deserialize, emptyProposals, empty, find, focusGroup, focusNth, focused, keyOf, MAIN, move, moveActive, moveTo, open, place, reconcile, remember, reopenLast, serialize, setView, split, type Closed, type Tab, type Workspace } from '../../src/workspace/model';
 
 const S = (id: string): Tab => ({ kind: 'session', ref: id });
 const keys = (w: Workspace, groupId: string) => w.groups.find(g => g.id === groupId)!.tabs.map(keyOf);
@@ -269,6 +269,32 @@ describe('moveTo', () => {
     expect(w.groups.map(g => g.id)).toEqual(['g1', 'g3', 'g2']);
     expect(keys(w, 'g3')).toEqual(['session:c']);
     expect(w.focus).toBe('g3');
+  });
+});
+
+describe('place (a terminal brought from the bottom panel)', () => {
+  const T: Tab = { kind: 'terminal', ref: 'shell:1' };
+  const two = () => { const w = open(open(empty(), S('a')), S('b')); return move(w, 'session:b', { rightOf: 'g1' }); };
+  it('into a group: at index (clamped) or the end, active, the group focused; nothing else moves', () => {
+    const w = two();
+    const at0 = place(w, T, { group: 'g2', index: 0 });
+    expect(keys(at0, 'g2')).toEqual(['terminal:shell:1', 'session:b']);
+    expect(front(at0, 'g2')).toBe('terminal:shell:1');
+    expect(at0.focus).toBe('g2');
+    expect(keys(at0, 'g1')).toEqual(['session:a']);
+    expect(keys(place(w, T, { group: 'g2', index: 9 }), 'g2')).toEqual(['session:b', 'terminal:shell:1']);
+    expect(keys(place(w, T, { group: 'g1' }), 'g1')).toEqual(['session:a', 'terminal:shell:1']);
+  });
+  it('{rightOf}: a new group just right, holding it; an empty focused group elsewhere stays', () => {
+    const w = split(two(), 'g1');   // g1, g3 (empty, focused), g2
+    const r = place(w, T, { rightOf: 'g2' });
+    expect(r.groups.map(g => g.tabs.map(keyOf))).toEqual([['session:a'], [], ['session:b'], ['terminal:shell:1']]);
+    expect(r.focus).toBe(r.groups[3]!.id);
+  });
+  it('already open: moved there (moveTo); a missing group: no change', () => {
+    const w = open(two(), T);   // g2: b, T
+    expect(keys(place(w, T, { group: 'g1' }), 'g1')).toEqual(['session:a', 'terminal:shell:1']);
+    expect(place(two(), T, { group: 'nope' })).toEqual(two());
   });
 });
 

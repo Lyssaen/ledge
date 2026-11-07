@@ -168,6 +168,15 @@ export class TermStore {
     this.emit();
   }
 
+  /** The screen held by view `from` passes to view `to` as it is (its attachment kept, nothing reconnects): a terminal moved
+   *  between the dock and the bottom panel, whose old view goes before the new one mounts. Held by another view: no change. */
+  handOver(sessionId: string, from: string, to: string): void {
+    const s = this.shown.get(sessionId);
+    if (!s || s.viewer !== from || from === to) return;
+    s.viewer = to;
+    this.emit();
+  }
+
   /** The view that holds the session's screen, null while none shows it. */
   viewerOf(sessionId: string): string | null { return this.shown.get(sessionId)?.viewer ?? null; }
 

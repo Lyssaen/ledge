@@ -1419,7 +1419,9 @@ export const fr = {
       newTerminal: 'Nouveau terminal', newTerminalTip: 'Nouveau terminal : choisir le shell',
       /** A tile's tab: « , ou hors de la fenêtre » comes with the windows (lot 9). */ drag: 'Glisser vers un groupe', close: 'Fermer',
       shellKind: 'shell', shellTitle: (title: string) => `>_ ${title}`, noTerms: 'Aucun terminal. « + » en ouvre un.',
-      lastClosed: 'Dernier terminal fermé : le panneau du bas se masque. Ctrl+J le rouvre avec un shell.'
+      lastClosed: 'Dernier terminal fermé : le panneau du bas se masque. Ctrl+J le rouvre avec un shell.',
+      /** A dock tab dropped on the panel: a terminal comes back; anything else stays. */
+      broughtBack: 'Terminal ramené dans le panneau du bas.', onlyTerms: 'Seuls les terminaux se rangent dans le panneau du bas.'
     },
     sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
     activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
