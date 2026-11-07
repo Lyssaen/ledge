@@ -66,8 +66,10 @@ export class TermStore {
   private readonly frees = new Map<string, { shell: FreeShell; run: Run | null }>();
   private freeNext = 1;
   private readonly listeners = new Set<() => void>();
-  /** The surfaces a view shows, the latest last: the WebGL budget goes to the last `webglMax` of them. */
-  private shownSurfaces: string[] = [];
+  /** The surfaces views show, with how many views each, the latest shown last: the WebGL budget goes to the last `webglMax`. */
+  private readonly shownSurfaces = new Map<string, number>();
+  private applying = false;
+  private again = false;
   /** Shown surfaces whose WebGL context was lost: they stay on the DOM renderer until shown again. */
   private readonly webglLost = new Set<string>();
   private webglMax = WEBGL_DEFAULT;
@@ -113,6 +115,7 @@ export class TermStore {
     this.shells.delete(tabId);
     this.surfaces.get(tabId)?.dispose();
     this.surfaces.delete(tabId);
+    this.forget(tabId);
     e.tabs = e.tabs.filter(t => t.id !== tabId);
     // Its neighbour takes over (the next shell, else the one before), else Modifications.
     if (e.active === tabId) e.active = e.tabs[Math.min(at, e.tabs.length - 1)]?.id ?? changesTabId(sessionId);
@@ -203,6 +206,7 @@ export class TermStore {
     this.frees.delete(id);
     this.surfaces.get(id)?.dispose();
     this.surfaces.delete(id);
+    this.forget(id);
     this.emit();
   }
 
@@ -215,14 +219,22 @@ export class TermStore {
 
   surface(tabId: string): TermSurface | undefined { return this.surfaces.get(tabId); }
 
-  /** A view shows (or stops showing) the surface's xterm: the shown ones, the latest first-served, share the WebGL budget. */
+  /** A view shows (or stops showing) the surface's xterm: the shown ones, the latest first-served, share the WebGL budget.
+   *  Two views showing one id need two `false` to hide it. */
   setShown(surfaceId: string, shown: boolean): void {
-    const was = this.shownSurfaces.includes(surfaceId);
-    if (shown === was) return;
-    this.shownSurfaces = shown ? [...this.shownSurfaces, surfaceId] : this.shownSurfaces.filter(x => x !== surfaceId);
-    // Shown again, it may try WebGL again.
-    this.webglLost.delete(surfaceId);
-    if (!shown) this.surfaces.get(surfaceId)?.setWebgl(false);
+    const count = this.shownSurfaces.get(surfaceId) ?? 0;
+    if (shown) {
+      // Shown (again): it goes last, and may try WebGL again.
+      this.shownSurfaces.delete(surfaceId);
+      this.shownSurfaces.set(surfaceId, count + 1);
+      this.webglLost.delete(surfaceId);
+    } else {
+      if (count === 0) return;
+      if (count > 1) { this.shownSurfaces.set(surfaceId, count - 1); return; }
+      this.shownSurfaces.delete(surfaceId);
+      this.webglLost.delete(surfaceId);
+      this.surfaces.get(surfaceId)?.setWebgl(false);
+    }
     this.applyWebgl();
   }
 
@@ -281,9 +293,29 @@ export class TermStore {
 
   private setLink(sessionId: string, link: AgentLink): void { this.entry(sessionId).link = link; }
 
+  /** A surface that cannot draw with WebGL (it threw, or lost its context) leaves the count; the next shown takes its slot. */
   private applyWebgl(): void {
-    const pick = webglPick(this.shownSurfaces.filter(id => !this.webglLost.has(id)), this.webglMax);
-    for (const id of this.shownSurfaces) this.surfaces.get(id)?.setWebgl(pick.has(id));
+    // A surface that fails to load reports it while this runs: the pick is redone, never applied stale.
+    if (this.applying) { this.again = true; return; }
+    this.applying = true;
+    try {
+      do {
+        this.again = false;
+        const shown = [...this.shownSurfaces.keys()];
+        const pick = webglPick(shown.filter(id => !this.webglLost.has(id)), this.webglMax);
+        for (const id of shown) {
+          if (this.again) break;
+          this.surfaces.get(id)?.setWebgl(pick.has(id));
+        }
+      } while (this.again);
+    } finally { this.applying = false; }
+  }
+
+  /** A surface is disposed: it leaves the budget. */
+  private forget(id: string): void {
+    this.shownSurfaces.delete(id);
+    this.webglLost.delete(id);
+    this.applyWebgl();
   }
 
   /** The xterm a tab draws in, made once; its keys and size go to whatever the tab runs now. */
@@ -300,7 +332,7 @@ export class TermStore {
         this.webglLost.add(tabId);
         this.applyWebgl();
       });
-      if (this.shownSurfaces.includes(tabId)) this.applyWebgl();
+      if (this.shownSurfaces.has(tabId)) this.applyWebgl();
     }
     return s;
   }

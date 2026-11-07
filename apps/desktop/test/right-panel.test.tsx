@@ -202,3 +202,13 @@ it("an older daemon gives no home: the shell's label and first line show the raw
   expect(screen.getByRole('tab', { name: 'Shell · /home/u/soft/ledge' })).toBeInTheDocument();
   expect(surfaceOf('nova#shell-1')!.written[0]).toBe('Shell ouvert dans le dossier de Nova : /home/u/soft/ledge\r\n');
 });
+
+it('tells the store its shell is shown while mounted, and not any more once unmounted', async () => {
+  const shown = vi.spyOn(store, 'setShown');
+  const { unmount } = render(<Panel session={nova} />);
+  plus();
+  await tick();
+  expect(shown).toHaveBeenCalledWith('nova#shell-1', true);
+  unmount();
+  expect(shown).toHaveBeenLastCalledWith('nova#shell-1', false);
+});

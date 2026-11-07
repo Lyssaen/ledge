@@ -36,9 +36,9 @@ export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element
       <Row label={w.webglBefore}>
         <span className="set-step-line">
           <span className="set-step" role="group" aria-label={w.webglBefore}>
-            <button type="button" aria-label={w.webglLess} disabled={webgl <= WEBGL_MIN} onClick={() => step(-1)}>−</button>
+            <button type="button" aria-label={w.webglLess} aria-disabled={webgl <= WEBGL_MIN} onClick={() => step(-1)}>−</button>
             <output aria-live="polite">{webgl}</output>
-            <button type="button" aria-label={w.webglMore} disabled={webgl >= WEBGL_MAX} onClick={() => step(1)}>+</button>
+            <button type="button" aria-label={w.webglMore} aria-disabled={webgl >= WEBGL_MAX} onClick={() => step(1)}>+</button>
           </span>
           {w.webglAfter}
         </span>

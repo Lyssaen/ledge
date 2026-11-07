@@ -70,6 +70,42 @@ describe('the store’s WebGL budget', () => {
     expect(surf.map(s => s.webgl)).toEqual([false, true, true]);
   });
 
+  it('two views showing one id need two `false` to hide it', () => {
+    const { st, ids, surf } = setup(2);
+    st.setShown(ids[0]!, true); st.setShown(ids[0]!, true);
+    st.setShown(ids[0]!, false);
+    expect(surf[0]!.webgl).toBe(true);
+    st.setShown(ids[0]!, false);
+    expect(surf[0]!.webgl).toBe(false);
+  });
+
+  it('closing a shown shell frees its slot for the next', () => {
+    const { st, ids, surf } = setup(2);
+    for (const id of ids) st.setShown(id, true);
+    st.close('s', ids[2]!);
+    expect(surf.slice(0, 2).map(s => s.webgl)).toEqual([true, true]);
+    st.close('s', ids[1]!);
+    expect(surf[0]!.webgl).toBe(true);
+  });
+
+  it('a surface whose WebGL cannot load passes the slot on, and is not retried on each re-pick', () => {
+    const backend = { open: () => Promise.resolve({ write: () => {}, resize: () => {}, close: () => {} }) };
+    const made: Fake[] = [];
+    const st = new TermStore({ backend, surface: () => { const f = fake(); made.push(f); return f; }, agentArgv: () => null, shellArgv: () => ['sh'], shellPlace: () => ({ dir: '/', remote: false }) });
+    st.setWebglMax(1);
+    const ids = [1, 2].map(() => st.addShell('s', '/', false));
+    for (const id of ids) st.select('s', id);
+    const [a, b] = made as [Fake, Fake];
+    // The last one shown cannot load WebGL: like a loss, it is reported while the store applies the pick.
+    b.setWebgl = on => { b.calls.push(on); if (on) b.lose(); };
+    for (const id of ids) st.setShown(id, true);
+    expect(a.webgl).toBe(true);
+    const tries = b.calls.filter(Boolean).length;
+    st.setWebglMax(2);
+    expect(b.calls.filter(Boolean).length).toBe(tries);
+    expect(a.webgl).toBe(true);
+  });
+
   it('a surface made after it was shown joins the budget', () => {
     const { st } = setup(2);
     const id = st.addShell('s', '/', false);

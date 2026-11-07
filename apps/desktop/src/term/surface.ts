@@ -78,7 +78,11 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
       });
       term.loadAddon(addon);
       webgl = addon;
-    } catch { /* no WebGL here: the DOM renderer */ }
+    } catch {
+      // No WebGL here: the DOM renderer, and the store is told so, like a loss, to pass the slot on.
+      webgl = null;
+      for (const fn of lost) fn();
+    }
   };
 
   let theme = opts.theme;

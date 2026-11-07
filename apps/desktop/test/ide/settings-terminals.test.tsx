@@ -19,7 +19,12 @@ describe('Settings › Workspace › Terminals', () => {
     const more = screen.getByRole('button', { name: /de plus en WebGL/ });
     for (let i = 0; i < 6; i++) await userEvent.click(more);
     expect(screen.getByRole('status').textContent).toBe('16');
-    expect((more as HTMLButtonElement).disabled).toBe(true);
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    // The focused button stays focused at the bound.
+    more.focus();
+    await userEvent.click(more);
+    expect(document.activeElement).toBe(more);
+    expect(screen.getByRole('status').textContent).toBe('16');
     expect(saved).toHaveBeenLastCalledWith('Rendu rapide (WebGL) : 16 terminaux visibles au plus');
     expect(saved).toHaveBeenCalledTimes(4);
     expect(localStorage.getItem('ledge.ide.webgl')).toBe('16');
