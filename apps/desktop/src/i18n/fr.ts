@@ -1218,7 +1218,17 @@ export const fr = {
     effort: 'Effort', effortHint: 'Temps de réflexion par tour', cursorEffort: 'Effort compris dans le nom du modèle', lessEffort: 'Moins d’effort', moreEffort: 'Plus d’effort',
     efforts: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
     modelHints: { 'claude:fable': 'Le plus capable', 'claude:opus': 'Très capable, plus lent', 'claude:sonnet': 'Équilibré, usage courant', 'claude:haiku': 'Rapide et économique' } as Record<string, string>,
-    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m),
+    /** The IDE's New session modal (docs/mockups/ledge-ide-interactive.html, launchPage()). */
+    modal: {
+      opensIn: { active: 'S’ouvre dans le groupe actif.', right: 'S’ouvre dans un groupe à droite.' } as Record<'active' | 'right', string>,
+      keys: 'Ctrl+Entrée lance, Échap ferme.',
+      project: 'Projet', where: 'Où travailler', onBranch: (b: string) => `Sur ${b}, dans le dossier du projet`, inFolder: 'Dans le dossier du projet',
+      agent: 'Agent', model: 'Modèle', permissions: 'Permissions', message: 'Premier message',
+      open: 'Ouvrir', openActive: 'Dans le groupe actif', openRight: 'À droite',
+      limit: (pct: number, reset: string | null) => `Limite 5 h ${pct} %${reset ? ` · réinit. ${reset}` : ''}`, limitUnread: 'Limite non lue',
+      offline: 'hors ligne', launch: 'Lancer', launchKeys: 'Ctrl Entrée', cancel: 'Annuler'
+    }
   },
   projects: {
     titles: {

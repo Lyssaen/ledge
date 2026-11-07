@@ -1159,7 +1159,16 @@ export const en: Messages = {
     effort: 'Effort', effortHint: 'Thinking time per turn', cursorEffort: 'Effort is in the model name', lessEffort: 'Less effort', moreEffort: 'More effort',
     efforts: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' } as Record<string, string>,
     modelHints: { 'claude:fable': 'The most capable', 'claude:opus': 'Very capable, slower', 'claude:sonnet': 'Balanced, everyday use', 'claude:haiku': 'Fast and economical' } as Record<string, string>,
-    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m)
+    pickSummary: (m: string, e?: string) => (e ? `${m} · ${e}` : m),
+    modal: {
+      opensIn: { active: 'Opens in the active group.', right: 'Opens in a group on the right.' },
+      keys: 'Ctrl+Enter launches, Escape closes.',
+      project: 'Project', where: 'Where to work', onBranch: (b) => `On ${b}, in the project folder`, inFolder: 'In the project folder',
+      agent: 'Agent', model: 'Model', permissions: 'Permissions', message: 'First message',
+      open: 'Open', openActive: 'In the active group', openRight: 'On the right',
+      limit: (pct, reset) => `5 h limit ${pct} %${reset ? ` · resets ${reset}` : ''}`, limitUnread: 'Limit not read',
+      offline: 'offline', launch: 'Launch', launchKeys: 'Ctrl Enter', cancel: 'Cancel'
+    }
   },
   projects: {
     titles: {

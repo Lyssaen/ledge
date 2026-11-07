@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import type { OmpApproval, Project, Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
@@ -8,15 +8,18 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
-import { isUp, launchDefaults, launchMessage, missingOf, MULTI_REPO_TOOLS, NO_PICK, pastNames, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
+import { isUp, launchDefaults, missingOf, MULTI_REPO_TOOLS, pastNames, previewOf, reposOn, toggleRepo, withMachine, withPick, withProject, withTool, type LaunchForm, type LaunchMessage, type Tool } from './model';
 import { useRepoInfo } from './useRepoInfo';
 import { useModels } from './useModels';
-import { loadPick, savePick } from './modelPrefs';
+import { loadPick } from './modelPrefs';
+import { launchKeys, ompBlocked, sentMessage } from './send';
 import { effective, ModelPicker } from './ModelPicker';
 import type { LaunchState } from './useLaunch';
 import { cls } from '../shell/cls';
 import { ProjectSwatch } from '../projects/ProjectSwatch';
 import { useDefaultTool } from '../settings/tool';
+// The IDE's New session modal rides in this module's lazy chunk (launch/lazy.tsx).
+export { LaunchModal } from './LaunchModal';
 
 const TOOLS: readonly Tool[] = ['claude', 'codex', 'cursor', 'omp'];
 const APPROVALS: readonly OmpApproval[] = ['always-ask', 'write', 'yolo'];
@@ -68,9 +71,7 @@ export function LaunchComposer(p: {
   // #58: the agent's models on that machine; a daemon too old for them takes no model, so none is offered or sent.
   const models = useModels(p.client, online ? form.machine : null, form.tool);
   const outdated = models.error === 'outdated';
-  // OMP is launched by the daemon itself, with no fallback to another harness: where it cannot be reached (not installed, a daemon
-  // that does not know it, no credentials), the launch is blocked with the reason (spec 2026-10-20 §3.1).
-  const unavailable = form.tool === 'omp' && online && models.status === 'ready' && models.error ? models.error : null;
+  const unavailable = ompBlocked(form, online, models);
   const memo = loadPick(form.project, form.tool);
   const remembered = !!memo?.remembered && memo.model === form.model && memo.effort === form.effort;
 
@@ -109,16 +110,9 @@ export function LaunchComposer(p: {
   const submit = () => {
     setTried(true);
     if (missing || launching || !project || unavailable) return;
-    if (!outdated) savePick(project.id, form.tool, { model: form.model, effort: form.effort });
-    const sent = { ...(outdated ? withPick(form, NO_PICK) : form), approval: approvable ? form.approval : 'always-ask' as const };
-    p.onLaunch(launchMessage(sent, name), { name, project: project.name, projectId: project.id });
+    p.onLaunch(sentMessage(form, project.id, name, { outdated, approvable }), { name, project: project.name, projectId: project.id });
   };
-  // Only Ctrl / ⌘ ↵ and « Launch » send: a plain Enter on a tile or a chip would submit the form implicitly (the textarea keeps its newline).
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key !== 'Enter') return;
-    if (e.ctrlKey || e.metaKey) { e.preventDefault(); submit(); }
-    else if (e.target instanceof HTMLInputElement) e.preventDefault();
-  };
+  const onKeyDown = launchKeys(submit);
 
   const multi = MULTI_REPO_TOOLS.has(form.tool);
   const run = !outdated ? effective(models.models, form) : {};
