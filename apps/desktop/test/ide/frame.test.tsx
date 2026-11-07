@@ -527,3 +527,69 @@ describe('split and the empty group (lot 3)', () => {
     expect(within(groupviews()[1]!).getByRole('button', { name: 'Terminal · Otto' })).toBeVisible();
   });
 });
+
+describe('tab shortcuts and closing an empty group (lot 3 follow-up)', () => {
+  const groupviews = () => [...document.querySelectorAll<HTMLElement>('.dv-groupview')];
+  const ctrl = (key: string, more: KeyboardEventInit = {}) => fireEvent.keyDown(window, { key, ctrlKey: true, ...more });
+  const names = (g: HTMLElement) => within(g).queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).map(t => t.getAttribute('aria-label'));
+  async function withOtto() {
+    const m = await mount();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    await m.user.click(m.tree.getByRole('button', { name: /^Otto/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    return m;
+  }
+
+  it('split, then Ctrl+W on the empty group: back to one group', async () => {
+    await mount();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    ctrl('\\');
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    ctrl('w');
+    await waitFor(() => expect(groupviews()).toHaveLength(1));
+    expect(names(groupviews()[0]!)).toEqual(['Atelier']);
+  });
+
+  it('the empty group\'s « Fermer le groupe » closes it; the last group has none', async () => {
+    const { user } = await mount();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    ctrl('\\');
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    expect(within(groupviews()[0]!).queryByRole('button', { name: /Fermer le groupe/ })).toBeNull();
+    await user.click(within(groupviews()[1]!).getByRole('button', { name: 'Fermer le groupe (Ctrl+W)' }));
+    await waitFor(() => expect(groupviews()).toHaveLength(1));
+    expect(screen.queryByRole('button', { name: /Fermer le groupe/ })).toBeNull();
+  });
+
+  it('Ctrl+W closes the active tab, Ctrl+Shift+T brings it back where it was', async () => {
+    await withOtto();
+    ctrl('w');
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier']));
+    ctrl('T', { shiftKey: true });
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier', 'Otto']));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+  });
+
+  it('Ctrl+Tab cycles the focused group\'s tabs, Ctrl+Shift+Tab back', async () => {
+    await withOtto();
+    ctrl('Tab');
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    ctrl('Tab');
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    ctrl('Tab', { shiftKey: true });
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+  });
+
+  it('Ctrl+Alt+→ moves the active tab into a new group on the right; Ctrl+1 and Ctrl+2 focus the groups', async () => {
+    await withOtto();
+    ctrl('ArrowRight', { altKey: true });
+    await waitFor(() => expect(groupviews()).toHaveLength(2));
+    expect(names(groupviews()[0]!)).toEqual(['Atelier']);
+    expect(names(groupviews()[1]!)).toEqual(['Otto']);
+    await waitFor(() => expect(groupviews()[1]).toHaveClass('dv-active-group'));
+    fireEvent.keyDown(window, { key: '&', code: 'Digit1', ctrlKey: true });
+    await waitFor(() => expect(groupviews()[0]).toHaveClass('dv-active-group'));
+    fireEvent.keyDown(window, { key: 'é', code: 'Digit2', ctrlKey: true });
+    await waitFor(() => expect(groupviews()[1]).toHaveClass('dv-active-group'));
+  });
+});

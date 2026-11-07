@@ -9,9 +9,21 @@ const typing = (el: Element | null): boolean => {
   return el.matches('input, textarea, select') || el.isContentEditable || el.getAttribute('contenteditable') === 'true';
 };
 
+/** The IDE shell's keys (flag on). */
+export interface IdeKeys {
+  toggle(panel: 'side' | 'bottom' | 'right'): void;
+  /** Ctrl \: an empty group right of the focused one. */ split?(): void;
+  /** N opens the launch dialog from any tab, not only the overview (the screen's keys run first: on an approval N denies). */ newSessionAnywhere?: true;
+  /** Ctrl W: the focused group's active tab closes; an empty group, the group. */ closeTab?(): void;
+  /** Ctrl Shift T: the last tab closed comes back where it was. */ reopenTab?(): void;
+  /** Ctrl Tab / Ctrl Shift Tab, Ctrl PageDown / PageUp: next / previous tab of the focused group. */ cycleTab?(step: 1 | -1): void;
+  /** Ctrl 1…9: the Nth group of the main window. */ focusGroup?(n: number): void;
+  /** Ctrl Alt → / ←: the active tab into the group on the right / left. */ moveTab?(step: 1 | -1): void;
+}
+
 /** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Ctrl/⌘ Z too, outside a field) (Escape after the dialog and the chat, offered to the screen before navigation),
  *  except in the terminal, which keeps every key for its shell; Ctrl + the key left of 1 takes the keyboard there. The single keys stay out of the way of dialogs, fields and the chat. */
-export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean; /** The IDE shell (flag on): Ctrl B / Ctrl J / Ctrl / show or hide its panels, even in a field (never in the terminal). */ ide?: { toggle(panel: 'side' | 'bottom' | 'right'): void; /** Ctrl \: an empty group right of the focused one. */ split?(): void; /** N opens the launch dialog from any tab, not only the overview (the screen's keys run first: on an approval N denies). */ newSessionAnywhere?: true } }): void {
+export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean; /** The IDE shell (flag on): Ctrl B / Ctrl J / Ctrl / show or hide its panels, even in a field (never in the terminal). */ ide?: IdeKeys }): void {
   const latest = useRef({ dispatch, ctx });
   latest.current = { dispatch, ctx };
   useEffect(() => {
@@ -22,6 +34,8 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       const { dispatch, ctx: { state, order, screen, undo, confirming, toTerminal, ide } } = latest.current;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
+      // Ctrl W never closes the window (WebView2), whatever owns the keyboard.
+      if (ide && mod && !e.altKey && !e.shiftKey && key === 'w') e.preventDefault();
       if (confirming) { if (e.key === 'Escape') { e.preventDefault(); confirming.cancel(); } return; }
       // The same physical key as inside the terminal (`code`, so ² on AZERTY); a dialog keeps the focus.
       if (termKey(e, false) === 'thread') { if (!state.modal && toTerminal?.()) e.preventDefault(); return; }
@@ -31,6 +45,7 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       // Ctrl \ splits the focused group, as VS Code, in a field too. The key, not its place: AltGr (\ on AZERTY) reports Ctrl + Alt
       // on Windows, so Alt is allowed only as AltGr; a QWERTY Ctrl + Alt + \ is another chord.
       if (ide?.split && !state.modal && mod && e.key === '\\' && (!e.altKey || e.getModifierState('AltGraph'))) { e.preventDefault(); ide.split(); return; }
+      if (ide && tabKeys(e, ide, mod, !state.modal)) return;
       // Ctrl , opens Settings on General; inside Settings it keeps the section open (it only closes the dialog or the chat).
       // Ctrl Z takes back what the toast offers (« Annuler »); in a field it stays the field's own undo.
       if (mod && !e.altKey && !e.shiftKey && key === 'z' && !typing(document.activeElement)) { if (undo()) e.preventDefault(); return; }
@@ -73,6 +88,30 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+}
+
+/** The IDE's tab keys, VS Code's defaults, in a field too (the terminal returned before): true when the chord is one of
+ *  them (then prevented; it acts only when `free`, no dialog owning the keyboard). Letters, arrows and Tab by `key`, the
+ *  digits by `code` (Ctrl + & on AZERTY is Ctrl 1). Shift + Tab alone stays the focus's. */
+type TabKeys = Pick<IdeKeys, 'closeTab' | 'reopenTab' | 'cycleTab' | 'focusGroup' | 'moveTab'>;
+function tabKeys(e: KeyboardEvent, ide: TabKeys, mod: boolean, free: boolean): boolean {
+  if (!mod) return false;
+  const key = e.key.toLowerCase();
+  let act: (() => void) | undefined;
+  if (!e.altKey) {
+    const digit = /^Digit([1-9])$/.exec(e.code)?.[1];
+    if (key === 'w' && !e.shiftKey) act = () => ide.closeTab?.();
+    else if (key === 't' && e.shiftKey) act = () => ide.reopenTab?.();
+    else if (e.key === 'Tab') act = () => ide.cycleTab?.(e.shiftKey ? -1 : 1);
+    else if ((e.key === 'PageDown' || e.key === 'PageUp') && !e.shiftKey) act = () => ide.cycleTab?.(e.key === 'PageDown' ? 1 : -1);
+    else if (digit && !e.shiftKey) act = () => ide.focusGroup?.(Number(digit));
+  } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !e.shiftKey && !e.getModifierState('AltGraph')) {
+    act = () => ide.moveTab?.(e.key === 'ArrowRight' ? 1 : -1);
+  }
+  if (!act) return false;
+  e.preventDefault();
+  if (free) act();
+  return true;
 }
 
 /** The terminal's Ctrl + ²: the keyboard goes back to the thread's scroller, or to the page's panel while « Modifications » hides it. */

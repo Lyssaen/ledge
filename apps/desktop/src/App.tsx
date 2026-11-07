@@ -20,7 +20,7 @@ import { initialNav, navReducer, reconcile, type NavAction, type NavState, type 
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { dotOf, mainOrder } from './nav/agents';
-import { focusThread, useKeys } from './nav/useKeys';
+import { focusThread, useKeys, type IdeKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
 import { TitleBar, waitingSessions } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
@@ -75,7 +75,7 @@ import { useIdeEnabled } from './workspace/prefs';
 import { useOpenSession } from './workspace/openPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { agentTerminalTab, beside, changesBeside, close as closeTab, closeOthers, emptyProposals, find as findTab, focusGroup, focused, keyOf, open as openTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
+import { agentTerminalTab, beside, changesBeside, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
@@ -431,7 +431,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     else focusThread();
   };
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
-  const ideKeys = useMemo(() => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }), split: () => wsStore.update(w => splitGroup(w, w.focus)), newSessionAnywhere: true as const }), [onLayout, wsStore]);
+  // The tab keys (VS Code's): Ctrl W closes the focused group's active tab (remembered for Ctrl Shift T), or the group when empty.
+  const ideKeys = useMemo((): IdeKeys => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }), split: () => wsStore.update(w => splitGroup(w, w.focus)), newSessionAnywhere: true as const,
+    closeTab: () => { const g = focused(wsStore.get()); const tab = g.tabs[g.active]; if (tab) wsStore.close(keyOf(tab)); else wsStore.update(w => closeGroup(w, g.id)); },
+    reopenTab: () => wsStore.reopen(),
+    cycleTab: step => wsStore.update(w => cycleTab(w, w.focus, step)),
+    focusGroup: n => wsStore.update(w => focusNth(w, n)),
+    moveTab: step => wsStore.update(w => moveActive(w, step)) }), [onLayout, wsStore]);
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null, toTerminal, ...(ide ? { ide: ideKeys } : {}) });
   const close = () => dispatch({ type: 'modal', modal: null });
   // Bumped by each broadcast that reached someone: the sidebar's selection, kept until then, is emptied.
@@ -654,7 +660,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         return <TabMenu at={tabMenu.at} tab={tab} name={title(tab)} terminal={view === 'terminal'} others={hit.group.tabs.length > 1}
           {...(canSwitch && { onView: () => wsStore.update(w => setView(w, key, view === 'terminal' ? 'thread' : 'terminal')) })}
           onSplit={() => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; })}
-          onClose={() => wsStore.update(w => closeTab(w, key))} onCloseOthers={() => wsStore.update(w => closeOthers(w, key))} onDismiss={() => setTabMenu(null)} />;
+          onClose={() => wsStore.close(key)} onCloseOthers={() => wsStore.closeOthers(key)} onDismiss={() => setTabMenu(null)} />;
       })()}
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
