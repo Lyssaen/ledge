@@ -1166,7 +1166,7 @@ export const en: Messages = {
       project: 'Project', where: 'Where to work', onBranch: (b) => `On ${b}, in the project folder`, inFolder: 'In the project folder',
       agent: 'Agent', model: 'Model', permissions: 'Permissions', message: 'First message',
       open: 'Open', openActive: 'In the active group', openRight: 'On the right',
-      limit: (pct, reset) => `5 h limit ${pct} %${reset ? ` · resets ${reset}` : ''}`, limitUnread: 'Limit not read',
+      limit: (pct, reset) => `5 h limit ${pct}${reset ? ` · resets ${reset}` : ''}`, limitUnread: 'Limit not read',
       offline: 'offline', launch: 'Launch', launchKeys: 'Ctrl Enter', cancel: 'Cancel'
     }
   },

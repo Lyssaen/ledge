@@ -23,13 +23,18 @@ describe('launch modal model', () => {
     expect(rows[1]).toEqual({ key: 'ledge|srv|/srv/ledge', project: 'ledge', projectName: 'Ledge', machine: 'srv', machineLabel: 'Srv', path: '/srv/ledge', up: false });
     expect(rows[0]!.up).toBe(true);
   });
-  it('agentLimit: the account on that machine, else the first of the harness', () => {
+  it('agentLimit: the account on that machine; no machine chosen, the harness\'s first; a machine no account lists, not read', () => {
     const groups = [group('a', 'claude', ['local'], 84), group('b', 'claude', ['srv'], 10)];
-    expect(agentLimit(groups, 'claude', 'srv', 0.8)).toEqual({ pct: 10, resetsAt: '2026-11-07T20:00:00.000Z', warn: false });
-    expect(agentLimit(groups, 'claude', 'nas', 0.8)?.pct).toBe(84);
+    expect(agentLimit(groups, 'claude', 'srv', 0.8)).toEqual({ pct: 10, resetsAt: '2026-11-07T20:00:00.000Z', tone: '' });
+    expect(agentLimit(groups, 'claude', 'nas', 0.8)).toBeNull();
     expect(agentLimit(groups, 'claude', null, 0.8)?.pct).toBe(84);
-    expect(agentLimit(groups, 'claude', 'local', 0.8)?.warn).toBe(true);
-    expect(agentLimit([group('a', 'claude', ['local'], 79)], 'claude', 'local', 0.8)?.warn).toBe(false);
+  });
+  it('agentLimit: the usage footer\'s tone, amber from the threshold, red at 100 %', () => {
+    const at = (pct: number) => agentLimit([group('a', 'claude', ['local'], pct)], 'claude', 'local', 0.8)?.tone;
+    expect(at(79)).toBe('');
+    expect(at(80)).toBe('amber');
+    expect(at(99)).toBe('amber');
+    expect(at(100)).toBe('red');
   });
   it('agentLimit: null for omp and cursor, for no group, and for a group without a 5 h window', () => {
     const groups = [group('a', 'claude', ['local'], 50)];

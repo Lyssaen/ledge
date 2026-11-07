@@ -1,7 +1,7 @@
 // The IDE launch modal's rules, pure (no DOM): the project rows, an agent's 5 h limit, where a session opens.
 import type { MachineState } from '@ledge/fleet';
 import type { Project, UsageHarness } from '@ledge/protocol';
-import type { UsageGroup } from '../usage/model';
+import { usageTone, type UsageGroup } from '../usage/model';
 import type { OpenSession } from '../workspace/openPrefs';
 import { isUp, type Tool } from './model';
 
@@ -19,14 +19,15 @@ export function projectRows(projects: readonly Project[], machines: readonly Mac
 
 const HARNESS: Partial<Record<Tool, UsageHarness>> = { claude: 'claude', codex: 'codex' };
 
-/** The 5 h window of `tool`'s account on `machine`; null: « Limite non lue ». */
-export function agentLimit(groups: readonly UsageGroup[], tool: Tool, machine: string | null, threshold: number): { pct: number; resetsAt: string | null; warn: boolean } | null {
+/** The 5 h window of `tool`'s account on `machine`, its tone as the usage footer's (amber past the threshold, red at 100 %); null: « Limite non lue ».
+ *  No machine chosen yet: the harness's first account; a machine no account lists: not read. */
+export function agentLimit(groups: readonly UsageGroup[], tool: Tool, machine: string | null, threshold: number): { pct: number; resetsAt: string | null; tone: ReturnType<typeof usageTone> } | null {
   const harness = HARNESS[tool];
   if (!harness) return null;
   const mine = groups.filter(g => g.harness === harness);
-  const group = (machine !== null ? mine.find(g => g.machines.includes(machine)) : undefined) ?? mine[0];
+  const group = machine === null ? mine[0] : mine.find(g => g.machines.includes(machine));
   const w = group?.windows.find(x => x.kind === 'five_hour');
-  return w ? { pct: w.pct, resetsAt: w.resetsAt, warn: w.pct >= threshold * 100 } : null;
+  return w ? { pct: w.pct, resetsAt: w.resetsAt, tone: usageTone(w.pct, threshold) } : null;
 }
 
 /** The starting value of « Open »: « + » opens in the active pane, the other doors follow the setting. */

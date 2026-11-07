@@ -35,17 +35,15 @@ function takeRow(f: LaunchForm, projects: readonly Project[], r: ProjectRow): La
 /** The row to stand on when the current one is gone or offline: one online in the same project, else one online anywhere. */
 const onlineRow = (rows: readonly ProjectRow[], project: string | null) => rows.find(r => r.project === project && r.up) ?? rows.find(r => r.up);
 
-/** An agent's 5 h line: « Limite 5 h <b>84 %</b> · réinit. 14:20 », the percent amber past the threshold; none read, « Limite non lue ». */
+/** An agent's 5 h line: « Limite 5 h <b>84 %</b> · réinit. 14:20 », the percent amber past the threshold and red at 100 % (the usage
+ *  footer's tones); none read, « Limite non lue ». */
 function LimitLine({ limit, lang, m }: { limit: ReturnType<typeof agentLimit>; lang: string; m: Messages['launch']['modal'] }): JSX.Element {
   if (!limit) return <small>{m.limitUnread}</small>;
-  const text = m.limit(limit.pct, limit.resetsAt ? resetShort(limit.resetsAt, Date.now(), lang) : null);
-  const pct = `${limit.pct} %`;
-  const at = text.indexOf(pct);
-  if (at < 0) return <small>{text}</small>;
-  return <small>{text.slice(0, at)}<b className={cls(limit.warn && 'amber')}>{pct}</b>{text.slice(at + pct.length)}</small>;
+  const reset = limit.resetsAt ? resetShort(limit.resetsAt, Date.now(), lang) : null;
+  return <small>{withPart(x => m.limit(x, reset), <b className={limit.tone || undefined}>{`${limit.pct} %`}</b>)}</small>;
 }
 
-/** A sentence with one strong part (the branch), wherever the language puts it. */
+/** A sentence with one strong part (the branch, a limit's percent), wherever the language puts it. */
 function withPart(text: (x: string) => string, part: ReactNode): ReactNode {
   const [before, after] = text('\u0001').split('\u0001');
   return <>{before}{part}{after}</>;
