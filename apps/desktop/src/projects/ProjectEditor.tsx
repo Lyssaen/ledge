@@ -443,7 +443,7 @@ export function ProjectEditor(p: {
                 return (
                   <label key={s.id} className={`chip ${on ? 'selected' : ''}`}>
                     <input type="checkbox" checked={on} onChange={e => set({ file: e.target.checked ? [...d.file, s.id] : d.file.filter(x => x !== s.id) })} />
-                    <span className="pe-agent-bot" aria-hidden="true"><SessionBot session={s} size={18} paused /></span>{s.name}
+                    <span className="pe-agent-bot" aria-hidden="true"><SessionBot session={s} size={18} paused mark="logo" /></span>{s.name}
                   </label>
                 );
               })}

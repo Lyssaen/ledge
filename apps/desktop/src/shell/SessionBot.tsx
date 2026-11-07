@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { isStoppedOmpSeat, type Helper, type Session } from '@ledge/protocol';
 import { Bot } from '@ledge/ui/bots/Bot';
+import { LogoBot } from '@ledge/ui/bots/LogoBot';
 import { botState, poseFor, type BotState } from '@ledge/ui/bots/poseFor';
 import { Badge } from '@ledge/ui/ui/Badge';
 import { Icon } from '@ledge/ui/ui/icons';
@@ -10,20 +11,29 @@ import { useMotionPreferences } from '../motionPreferences';
 import { cls } from './cls';
 import { useTheme } from './theme';
 
+/** Chrome lists use the provider logo; the atelier, the thread and the notch keep the mascot. */
+type Mark = 'bot' | 'logo';
+
 /** A session's bot: frozen offline or as a stopped OMP seat (`frozen`), read-only for `hook_only`, seeded by its id. */
-export function SessionBot({ session, size, paused }: { session: Session; size: number; paused?: boolean }): JSX.Element {
+export function SessionBot({ session, size, paused, mark = 'bot' }: { session: Session; size: number; paused?: boolean; mark?: Mark }): JSX.Element {
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
-  return <Bot tool={session.tool} state={botState(session)} pose={poseFor(session.id, session.state)} size={size} theme={theme} seed={session.id} frozen={!!session.offline || isStoppedOmpSeat(session)} paused={paused} reducedMotion={reduced} readOnly={session.source === 'hook_only'} />;
+  const shared = { tool: session.tool, state: botState(session), size, theme, seed: session.id, frozen: !!session.offline || isStoppedOmpSeat(session), paused, reducedMotion: reduced, readOnly: session.source === 'hook_only' };
+  return mark === 'logo'
+    ? <LogoBot {...shared} />
+    : <Bot {...shared} pose={poseFor(session.id, session.state)} />;
 }
 
 /** A sub-agent's bot: its parent's `tool`, seed `${parent.id}:${helper.id}`, state `helperState`, frozen when the parent is offline. */
-export function HelperBot({ helper, parent, size, paused }: { helper: Helper; parent: Session; size: number; paused?: boolean }): JSX.Element {
+export function HelperBot({ helper, parent, size, paused, mark = 'bot' }: { helper: Helper; parent: Session; size: number; paused?: boolean; mark?: Mark }): JSX.Element {
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const seed = `${parent.id}:${helper.id}`;
   const state = helperState(helper);
-  return <Bot tool={parent.tool} state={state} pose={poseFor(seed, state)} size={size} theme={theme} seed={seed} frozen={!!parent.offline} paused={paused} reducedMotion={reduced} readOnly={parent.source === 'hook_only'} />;
+  const shared = { tool: parent.tool, state, size, theme, seed, frozen: !!parent.offline, paused, reducedMotion: reduced, readOnly: parent.source === 'hook_only' };
+  return mark === 'logo'
+    ? <LogoBot {...shared} />
+    : <Bot {...shared} pose={poseFor(seed, state)} />;
 }
 
 /** Offline reads « Offline » whatever the state; a stopped OMP seat « Arrêté » (docs/mockups/ledge-openrig-omp.html); otherwise the state's badge. */

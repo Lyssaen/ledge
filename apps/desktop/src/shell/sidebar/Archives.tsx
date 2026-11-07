@@ -101,7 +101,7 @@ export function Archives(p: {
             return (
               <div key={s.id} role="listitem" className={cls('st-row st-agent st-arch', selected && 'sel')} style={{ '--d': 0 } as CSSProperties}
                 onContextMenu={e => { e.preventDefault(); const main = e.currentTarget.querySelector<HTMLElement>('.st-main'); p.onMenu({ kind: 'archive', id: s.id }, menuPoint(e, e.currentTarget), main); }}>
-                <span className="st-bot"><SessionBot session={{ ...s, state: 'exited' }} size={16} paused={p.paused} /></span>
+                <span className="st-bot"><SessionBot session={{ ...s, state: 'exited' }} size={16} paused={p.paused} mark="logo" /></span>
                 <button type="button" className="st-main" data-arch-key={s.id} aria-current={selected ? 'page' : undefined}
                   aria-label={t.side.read(s.name, name, task, when)} onClick={() => p.onRead(s.id)}
                   onKeyDown={e => { if (isMenuKey(e)) { e.preventDefault(); p.onMenu({ kind: 'archive', id: s.id }, menuPoint(e, e.currentTarget), e.currentTarget); } }}>

@@ -1,5 +1,5 @@
 import { useEffect, useState, type JSX } from 'react';
-import { Bot } from '@ledge/ui/bots/Bot';
+import { LogoBot } from '@ledge/ui/bots/LogoBot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { messagesFor, useI18n, type Lang } from '../i18n/lang';
@@ -90,7 +90,7 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
           <Segmented label={g.tool} value={tool} onChange={v => { setTool(v); ctx.saved(g.toolSaved(t.launch.tools[v][0])); }}
             options={TOOLS.map(id => ({
               value: id,
-              label: <><span aria-hidden="true" style={{ display: 'inline-flex' }}><Bot tool={id} state={tool === id ? 'working' : 'idle'} pose={1} size={20} theme={theme} seed={'set-' + id} paused={ctx.paused} reducedMotion={reduced} /></span>{t.launch.tools[id][0]}</>
+              label: <><span aria-hidden="true" style={{ display: 'inline-flex' }}><LogoBot tool={id} state={tool === id ? 'working' : 'idle'} size={20} theme={theme} seed={'set-' + id} paused={ctx.paused} reducedMotion={reduced} /></span>{t.launch.tools[id][0]}</>
             }))} />
         </Row>
         <Row label={g.context} hint={known ? g.contextHint : g.contextUnknown}>

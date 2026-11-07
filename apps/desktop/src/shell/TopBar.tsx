@@ -54,17 +54,17 @@ export function TopBar({ nav, dispatch, session, helper, projects, projectIdOf, 
         <span className="muted">/</span>
         {helper ? <>
           <button className="crumb-link crumb-parent" onClick={() => dispatch({ type: 'open', id: session.id })} title={t.crumb.openParent(session.name)}>
-            <SessionBot session={session} size={18} paused={nav.paused} />{session.name}
+            <SessionBot session={session} size={18} paused={nav.paused} mark="logo" />{session.name}
           </button>
           <span className="muted">/</span>
           <span className="crumb-session">
-            <HelperBot helper={helper} parent={session} size={22} paused={nav.paused} />
+            <HelperBot helper={helper} parent={session} size={22} paused={nav.paused} mark="logo" />
             <strong>{helper.kind}</strong>
             {helper.task && <span className="crumb-task" title={helper.task}>{helper.task}</span>}
           </span>
         </> : (
           <span className="crumb-session">
-            <SessionBot session={session} size={22} paused={nav.paused} />
+            <SessionBot session={session} size={22} paused={nav.paused} mark="logo" />
             <strong>{session.name}</strong>
             {crumbTask(session) && <span className="crumb-task" title={crumbTask(session)}>{crumbTask(session)}</span>}
           </span>

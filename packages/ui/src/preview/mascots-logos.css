@@ -16,20 +16,6 @@
 .concept-copy p { font-size: 12px; min-height: 54px; }
 .concept-copy a { display: inline-block; margin-top: 12px; font-size: 10px; color: var(--muted-foreground); text-underline-offset: 3px; }
 .detail-study .section-heading label { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted-foreground); }
-.logo-bot .cube-top { fill: var(--bot-shine); opacity: .35; }
-.logo-bot .cube-side { fill: var(--bot-visor); opacity: .14; }
-.logo-bot .cube-edge { fill: none; stroke: var(--bot-shell-line); stroke-width: 1; stroke-linejoin: round; opacity: .3; }
-.logo-bot .shell { stroke-linejoin: round; }
-.logo-bot[data-simplified="true"] .cube-edge { display: none; }
-/* Brand-inspired materials stay separate from the semantic eye and halo colours. */
-.logo-bot[data-branded="true"][data-tool="claude"][data-material="signal"] { --bot-shell-top: #c78669; --bot-shell-bottom: #8c503d; --bot-shell-line: #e0ab8f; --bot-visor: #33231f; }
-.logo-bot[data-branded="true"][data-tool="claude"][data-material="pebble"] { --bot-shell-top: #eab69b; --bot-shell-bottom: #c8876a; --bot-shell-line: #f5d6c4; --bot-visor: #392824; }
-.logo-bot[data-branded="true"][data-tool="codex"][data-material="signal"] { --bot-shell-top: #7774ce; --bot-shell-bottom: #40488b; --bot-shell-line: #a9b1ee; --bot-visor: #20243f; }
-.logo-bot[data-branded="true"][data-tool="codex"][data-material="pebble"] { --bot-shell-top: #e0dffb; --bot-shell-bottom: #a5a5d8; --bot-shell-line: #eeedff; --bot-visor: #292b48; }
-.logo-bot[data-branded="true"][data-tool="cursor"][data-material="signal"] { --bot-shell-top: #656763; --bot-shell-bottom: #343733; --bot-shell-line: #bdc0b9; --bot-visor: #191d1a; }
-.logo-bot[data-branded="true"][data-tool="cursor"][data-material="pebble"] { --bot-shell-top: #faf9f3; --bot-shell-bottom: #babcb4; --bot-shell-line: #e3e4dc; --bot-visor: #232824; }
-.logo-bot[data-branded="true"][data-tool="omp"][data-material="signal"] { --bot-shell-top: #cf6bbd; --bot-shell-bottom: #6989bc; --bot-shell-line: #dba4df; --bot-visor: #2d213b; }
-.logo-bot[data-branded="true"][data-tool="omp"][data-material="pebble"] { --bot-shell-top: #f0bee3; --bot-shell-bottom: #a7c4e5; --bot-shell-line: #f8ddf4; --bot-visor: #34283e; }
 @media (max-width: 850px) {
   .comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

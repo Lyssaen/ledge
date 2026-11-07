@@ -14,7 +14,21 @@ describe('the shared session bot and badge', () => {
     </LangProvider>);
     const [a, b, c] = [...document.querySelectorAll('[data-frozen]')];
     expect(a).toHaveAttribute('data-frozen', 'true'); expect(a).toHaveAttribute('data-state', 'approval');
-    expect(b).toHaveAttribute('data-readonly', 'true');
+    expect(a).not.toHaveClass('logo-bot');
+    expect(b).toHaveAttribute('data-readonly', 'true'); expect(b).not.toHaveClass('logo-bot');
+    expect(c).toHaveAttribute('data-tool', 'codex'); expect(c).toHaveAttribute('data-state', 'question'); expect(c).toHaveAttribute('data-frozen', 'true');
+    expect(c).not.toHaveClass('logo-bot');
+  });
+  it('the logo mark keeps the same state and drops the mascot', () => {
+    const parent = fakeSession('local:otto', { tool: 'codex', offline: true, state: 'waiting_permission' });
+    render(<LangProvider lang="en">
+      <SessionBot session={parent} size={32} mark="logo" />
+      <SessionBot session={fakeSession('local:hook', { source: 'hook_only', tool: 'claude' })} size={32} mark="logo" />
+      <HelperBot helper={{ id: 'h1', kind: 'Explore', task: 'Lire', state: 'waiting_input' }} parent={parent} size={24} mark="logo" />
+    </LangProvider>);
+    const [a, b, c] = [...document.querySelectorAll('.logo-bot')];
+    expect(a).toHaveAttribute('data-tool', 'codex'); expect(a).toHaveAttribute('data-state', 'approval'); expect(a).toHaveAttribute('data-frozen', 'true');
+    expect(b).toHaveAttribute('data-tool', 'claude'); expect(b).toHaveAttribute('data-readonly', 'true');
     expect(c).toHaveAttribute('data-tool', 'codex'); expect(c).toHaveAttribute('data-state', 'question'); expect(c).toHaveAttribute('data-frozen', 'true');
   });
   it('the badge says Offline over any state', () => {

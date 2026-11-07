@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import type { OmpApproval, Project, Session } from '@ledge/protocol';
-import { Bot } from '@ledge/ui/bots/Bot';
+import { LogoBot } from '@ledge/ui/bots/LogoBot';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
@@ -163,7 +163,7 @@ export function LaunchComposer(p: {
         <section className="integrated-harness" aria-label={t.launch.agent}>
           <div className="harness-field-label"><span className="composer-label">{t.launch.agent}</span><span>{t.launch.agentHint}</span></div>
           <button type="button" className="harness-current" ref={trigger} aria-expanded={choosing} aria-controls="harness-choices" onClick={() => setChoosing(c => !c)}>
-            <span className="composer-bot" aria-hidden="true"><Bot tool={form.tool} state="working" pose={1} size={36} theme={theme} seed={'launch-' + form.tool} paused={p.paused} reducedMotion={reduced} /></span>
+            <span className="composer-bot" aria-hidden="true"><LogoBot tool={form.tool} state="working" size={36} theme={theme} seed={'launch-' + form.tool} paused={p.paused} reducedMotion={reduced} /></span>
             <span className="harness-current-copy"><strong>{label(form.tool)}</strong><small>{t.launch.tools[form.tool][1]}</small></span>
             <span className="harness-choice-tag">{form.tool === defaultTool ? t.launch.byDefaultTag : t.launch.thisSession}</span>
             <span className="harness-change">{t.launch.change}</span>
@@ -176,7 +176,7 @@ export function LaunchComposer(p: {
                 {TOOLS.map(id => (
                   <label key={id} className={cls('tool-tile', form.tool === id && 'selected')}>
                     <input type="radio" name="tool" value={id} checked={form.tool === id} onChange={() => choose(id)} />
-                    <span className="composer-bot" aria-hidden="true"><Bot tool={id} state="working" pose={1} size={36} theme={theme} seed={'pick-' + id} paused={p.paused} reducedMotion={reduced} /></span>
+                    <span className="composer-bot" aria-hidden="true"><LogoBot tool={id} state="working" size={36} theme={theme} seed={'pick-' + id} paused={p.paused} reducedMotion={reduced} /></span>
                     <span><strong>{label(id)}{defaultTool === id && <span className="harness-default-mark">{t.launch.defaultMark}</span>}</strong><small>{t.launch.tools[id][1]}</small></span>
                   </label>
                 ))}
@@ -271,7 +271,7 @@ export function LaunchComposer(p: {
 
       <footer className="composer-footer">
         <div className="composer-preview" aria-live="polite">
-          <span className="composer-bot" aria-hidden="true"><Bot tool={form.tool} state="starting" pose={1} size={30} theme={theme} seed={'preview-' + form.tool} paused={p.paused} reducedMotion={reduced} /></span>
+          <span className="composer-bot" aria-hidden="true"><LogoBot tool={form.tool} state="starting" size={30} theme={theme} seed={'preview-' + form.tool} paused={p.paused} reducedMotion={reduced} /></span>
           {project && (
             <span>
               <span className="preview-line">{emphasized(t.launch.joins, name, project.name)}</span>

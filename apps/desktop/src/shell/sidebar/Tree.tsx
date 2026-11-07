@@ -228,8 +228,8 @@ export function Tree(p: {
         onContextMenu={helper ? undefined : e => menuOn({ kind: 'session', id: s.id }, e)}>
         {toggle ? <Chevron open={open} label={open ? t.side.foldKids(name) : t.side.unfoldKids(name)} onClick={toggle} /> : <span className="st-gap" />}
         <span className="st-bot">{helper
-          ? <HelperBot helper={helper} parent={s} size={16} paused={p.paused} />
-          : <SessionBot session={s} size={18} paused={p.paused} />}</span>
+          ? <HelperBot helper={helper} parent={s} size={16} paused={p.paused} mark="logo" />
+          : <SessionBot session={s} size={18} paused={p.paused} mark="logo" />}</span>
         {/* No « Name, » label: boot() and the title bar find the atelier seat with /^Name,/. */}
         <button type="button" className="st-main" data-tree-key={treeKey} tabIndex={tabOf(treeKey)}
           onClick={e => { const mod = e.ctrlKey || e.metaKey; if (!helper && p.onOpenRight && mod) p.onOpenRight(s.id); else if (!helper && p.onPick && (p.onOpenRight ? e.shiftKey : mod)) p.onPick(s.id); else if (helper) p.onOpen(s.id, helper.id); else p.onOpen(s.id); }}>

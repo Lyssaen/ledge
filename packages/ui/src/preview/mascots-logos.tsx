@@ -7,6 +7,7 @@ import { LegacyBot } from './LegacyBot';
 import '../styles/tokens.css';
 import '../bots/bots.css';
 import './legacy-bot.css';
+import '../bots/logo.css';
 import './mascots.css';
 import './mascots-logos.css';
 

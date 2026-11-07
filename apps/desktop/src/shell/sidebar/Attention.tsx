@@ -133,8 +133,8 @@ export function Attention(p: {
           <div key={item.session.id} className={cls('st-card', p.current === item.session.id && 'sel')}
             onContextMenu={e => { e.preventDefault(); p.onMenu(item.session.id, e); }}>
             <span className="st-bot">{item.helper
-              ? <HelperBot helper={item.helper} parent={item.session} size={18} paused={p.paused} />
-              : <SessionBot session={item.session} size={18} paused={p.paused} />}</span>
+              ? <HelperBot helper={item.helper} parent={item.session} size={18} paused={p.paused} mark="logo" />
+              : <SessionBot session={item.session} size={18} paused={p.paused} mark="logo" />}</span>
             <div className="st-card-body">
               <div className="st-l1">
                 <button type="button" className="st-name" onClick={() => p.onOpen(item.session.id, item.helper?.id)}

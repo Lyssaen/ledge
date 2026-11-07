@@ -53,7 +53,7 @@ export function SearchPalette({ sessions, projectName, order, onOpen, onClose, o
           const rank = order.indexOf(s);
           return (
             <button key={s.id} id={`result-${s.id}`} role="option" tabIndex={-1} aria-selected={s === current} onMouseMove={() => setIndex(results.indexOf(s))} onClick={() => choose(s)}>
-              <SessionBot session={s} size={32} />
+              <SessionBot session={s} size={32} mark="logo" />
               <span><strong>{s.name} <small>· {projectName(s)}</small></strong><small>{[taskOf(s), s.machineName].filter(Boolean).join(' · ')}</small></span>
               <StateBadge state={botState(s)} offline={!!s.offline} />
               {rank >= 0 && rank < 9 && <Kbd>Alt {rank + 1}</Kbd>}

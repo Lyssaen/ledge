@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type JSX } from 'react';
 import { DEFAULT_ACCENT, parseAccent } from '@ledge/ui/accent';
-import { Bot } from '@ledge/ui/bots/Bot';
+import { LogoBot } from '@ledge/ui/bots/LogoBot';
 import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
 import { UI_SCALES, type UiScale } from '@ledge/ui/scale';
 import { Button } from '@ledge/ui/ui/Button';
@@ -62,7 +62,7 @@ export function Appearance({ ctx }: { ctx: SettingsContext }): JSX.Element {
             return (
               <label key={th} className={theme === th ? 'theme-pick on' : 'theme-pick'} data-preview={th}>
                 <input type="radio" name="theme" checked={theme === th} onChange={() => { setTheme(th); saved(a.themeSaved[th]); }} />
-                <span className="theme-swatch" aria-hidden="true"><Bot tool="claude" state="working" pose={1} size={34} theme={th} seed={'theme-' + th} paused={ctx.paused} reducedMotion={motion.reduced} /></span>
+                <span className="theme-swatch" aria-hidden="true"><LogoBot tool="claude" state="working" size={34} theme={th} seed={'theme-' + th} paused={ctx.paused} reducedMotion={motion.reduced} /></span>
                 <span><strong>{name}</strong><small>{material}</small></span>
               </label>
             );
