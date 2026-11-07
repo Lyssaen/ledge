@@ -455,6 +455,25 @@ describe('IDE tab shortcuts (lot 3 follow-up)', () => {
     expect(ev.defaultPrevented).toBe(true);
   });
 
+  it('with a dialog open only Ctrl+W is prevented: the other chords reach the dialog', () => {
+    const ide = make();
+    render(<Probe ide={ide} modal />);
+    for (const init of [{ key: 'Tab', ctrlKey: true }, { key: 'T', ctrlKey: true, shiftKey: true }, { key: 'PageDown', ctrlKey: true }, { key: '&', code: 'Digit1', ctrlKey: true }, { key: 'ArrowRight', ctrlKey: true, altKey: true }]) {
+      const ev = createEvent.keyDown(window, init);
+      fireEvent(window, ev);
+      expect(ev.defaultPrevented, init.key).toBe(false);
+    }
+  });
+
+  it('Ctrl+Shift+W is prevented (Chromium closes the window on it) and acts on nothing', () => {
+    const ide = make();
+    render(<Probe ide={ide} />);
+    const ev = createEvent.keyDown(window, { key: 'W', ctrlKey: true, shiftKey: true });
+    fireEvent(window, ev);
+    expect(ev.defaultPrevented).toBe(true);
+    for (const f of [ide.closeTab, ide.reopenTab, ide.cycleTab, ide.focusGroup, ide.moveTab]) expect(f).not.toHaveBeenCalled();
+  });
+
   it('without ide: nothing called, Ctrl+W and Ctrl+Tab not prevented', () => {
     const dispatch = vi.fn();
     render(<Probe dispatch={dispatch} />);

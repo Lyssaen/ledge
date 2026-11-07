@@ -48,6 +48,11 @@ function Pane({ api }: IDockviewPanelProps): JSX.Element | null {
   return <TabPlaceContext.Provider value={place}><div className="ide-pane">{c!.body(tab)}</div></TabPlaceContext.Provider>;
 }
 
+/** The « × » of a tab and of an empty group's « Fermer le groupe ». */
+function CloseGlyph({ size = 9 }: { size?: number }): JSX.Element {
+  return <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" /></svg>;
+}
+
 /** The tab of a panel: the label, the alert line (a class on dockview's own tab element, which draws the box), and the ×.
  *  The extras are aria-hidden in the label, so the tab's name (dockview's aria-label) stays the title. */
 function PanelTab({ api }: IDockviewPanelHeaderProps): JSX.Element | null {
@@ -79,7 +84,7 @@ function PanelTab({ api }: IDockviewPanelHeaderProps): JSX.Element | null {
       {c!.label(tab)}
       <button type="button" className="dv-default-tab-action" tabIndex={-1} aria-label={t.ide.closeTab(c!.title(tab))}
         onPointerDown={e => e.preventDefault()} onClick={e => { e.preventDefault(); api.close(); }}>
-        <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" /></svg>
+        <CloseGlyph />
       </button>
     </span>
   );
@@ -100,7 +105,7 @@ function StripTools({ group }: IDockviewHeaderActionsProps): JSX.Element {
       </button>
       {g && g.tabs.length === 0 && !c!.lone && (
         <button type="button" title={t.ide.closeGroupTip} aria-label={t.ide.closeGroupTip} onClick={() => c!.closeGroup(g.id)}>
-          <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" /></svg>
+          <CloseGlyph size={10} />
         </button>
       )}
     </div>

@@ -521,6 +521,7 @@ test('lot 3 follow-up: an empty group closes from its « Close group (Ctrl+W) »
 
   await page.keyboard.press('Control+w');
   await expect(tabOf(page, 'Nova')).toHaveCount(0);
+  // Chromium under Playwright only: this cannot prove WebView2 leaves the window open on Ctrl+W (to check by hand on Windows).
   expect(page.isClosed()).toBe(false);
   await expect(page.locator('.ide')).toBeVisible();
   await page.keyboard.press('Control+Shift+T');

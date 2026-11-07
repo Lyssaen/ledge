@@ -34,8 +34,8 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       const { dispatch, ctx: { state, order, screen, undo, confirming, toTerminal, ide } } = latest.current;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      // Ctrl W never closes the window (WebView2), whatever owns the keyboard.
-      if (ide && mod && !e.altKey && !e.shiftKey && key === 'w') e.preventDefault();
+      // Ctrl W never closes the window (WebView2), whatever owns the keyboard; nor Ctrl Shift W (Chromium's « close the window »).
+      if (ide && mod && !e.altKey && key === 'w') e.preventDefault();
       if (confirming) { if (e.key === 'Escape') { e.preventDefault(); confirming.cancel(); } return; }
       // The same physical key as inside the terminal (`code`, so ² on AZERTY); a dialog keeps the focus.
       if (termKey(e, false) === 'thread') { if (!state.modal && toTerminal?.()) e.preventDefault(); return; }
@@ -91,7 +91,8 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
 }
 
 /** The IDE's tab keys, VS Code's defaults, in a field too (the terminal returned before): true when the chord is one of
- *  them (then prevented; it acts only when `free`, no dialog owning the keyboard). Letters, arrows and Tab by `key`, the
+ *  them and `free` (no dialog owning the keyboard), then prevented and run. Behind a dialog they are left to it (Ctrl W
+ *  is prevented before, whatever owns the keyboard). Letters, arrows and Tab by `key`, the
  *  digits by `code` (Ctrl + & on AZERTY is Ctrl 1). Shift + Tab alone stays the focus's. */
 type TabKeys = Pick<IdeKeys, 'closeTab' | 'reopenTab' | 'cycleTab' | 'focusGroup' | 'moveTab'>;
 function tabKeys(e: KeyboardEvent, ide: TabKeys, mod: boolean, free: boolean): boolean {
@@ -108,9 +109,9 @@ function tabKeys(e: KeyboardEvent, ide: TabKeys, mod: boolean, free: boolean): b
   } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !e.shiftKey && !e.getModifierState('AltGraph')) {
     act = () => ide.moveTab?.(e.key === 'ArrowRight' ? 1 : -1);
   }
-  if (!act) return false;
+  if (!act || !free) return false;
   e.preventDefault();
-  if (free) act();
+  act();
   return true;
 }
 
