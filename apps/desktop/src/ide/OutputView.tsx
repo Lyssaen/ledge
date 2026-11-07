@@ -14,9 +14,9 @@ export function OutputView({ entries }: { entries: readonly RigOutputEntry[] }):
   useLayoutEffect(() => { const el = ref.current; if (el && atEnd.current) el.scrollTop = el.scrollHeight; }, [entries]);
   const onScroll = () => { const el = ref.current; if (el) atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4; };
   return (
-    <pre ref={ref} className="ide-output" onScroll={onScroll} aria-label={t.ide.output}>
-      {entries.length === 0 ? <span className="ide-output-dim">{t.ide.outputEmpty}</span> : entries.map((e, i) => (
-        <span key={i} className="ide-output-entry">
+    <pre ref={ref} className="ide-output" role="log" tabIndex={0} onScroll={onScroll} aria-label={t.ide.output}>
+      {entries.length === 0 ? <span className="ide-output-dim">{t.ide.outputEmpty}</span> : entries.map(e => (
+        <span key={e.seq} className="ide-output-entry">
           <span className="ide-output-dim">{`${clock(e.at)} · ${e.commands.join(' && ')}`}</span>{'\n'}
           <span className={e.ok ? 'ide-output-ok' : 'ide-output-err'}>{e.ok ? '✓' : '✗'}</span>{e.result ? ` ${e.result}` : ''}{'\n'}
         </span>

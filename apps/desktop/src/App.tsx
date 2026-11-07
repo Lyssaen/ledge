@@ -98,14 +98,9 @@ const NO_PROJECTS: readonly Project[] = [];
 const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
 
 /** One log of the `rig` commands this Desktop ran per client, made once and disposed on unmount (the bottom panel's Output reads it). */
-function useRigOutputLog(client: DaemonClient | undefined) {
-  const [log, setLog] = useState<ReturnType<typeof createRigOutput> | null>(null);
-  useEffect(() => {
-    if (!client) { setLog(null); return; }
-    const made = createRigOutput(client);
-    setLog(made);
-    return () => { made.dispose(); };
-  }, [client]);
+function useRigOutputLog(client: DaemonClient) {
+  const [log] = useState(() => createRigOutput(client));
+  useEffect(() => () => log.dispose(), [log]);
   return log;
 }
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ServerMessage } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
 import { createRigOutput, RIG_OUTPUT_MAX, useRigOutput, type RigOutputEntry } from '../src/openrig/rigOutput';
@@ -16,7 +16,7 @@ describe('the rig output log', () => {
   it('logs an openrig.done that succeeded: its last non-empty line, on the local machine', () => {
     const c = fakeClient(); const log = createRigOutput(c, () => 1000);
     c.emit({ type: 'openrig.done', requestId: 'r1', ok: true, commands: ['rig up demo --existing --yes --json'], output: 'a\nb\n' });
-    expect(log.entries()).toEqual([{ at: 1000, machine: 'local', commands: ['rig up demo --existing --yes --json'], ok: true, result: 'b' }]);
+    expect(log.entries()).toEqual([{ seq: 0, at: 1000, machine: 'local', commands: ['rig up demo --existing --yes --json'], ok: true, result: 'b' }]);
   });
   it('has no result for a success without output, and names the machine', () => {
     const c = fakeClient(); const log = createRigOutput(c);
@@ -59,8 +59,8 @@ const view = (entries: readonly RigOutputEntry[]) => render(<LangProvider lang="
 describe('OutputView', () => {
   it('shows time, joined commands and the result with its mark', () => {
     view([
-      { at: at(12, 4), machine: 'local', commands: ['rig down demo'], ok: true, result: 'demo arrêté' },
-      { at: at(12, 5), machine: 'local', commands: ['rig snapshot demo', 'rig up demo'], ok: false, result: 'busy' }
+      { seq: 0, at: at(12, 4), machine: 'local', commands: ['rig down demo'], ok: true, result: 'demo arrêté' },
+      { seq: 1, at: at(12, 5), machine: 'local', commands: ['rig snapshot demo', 'rig up demo'], ok: false, result: 'busy' }
     ]);
     expect(screen.getByText('12:04 · rig down demo')).toBeTruthy();
     expect(screen.getByText('12:05 · rig snapshot demo && rig up demo')).toBeTruthy();
@@ -69,7 +69,7 @@ describe('OutputView', () => {
   });
   it('says nothing ran yet when empty', () => {
     view([]);
-    expect(screen.getByText("Aucune commande rig lancée depuis l'ouverture de Ledge.")).toBeTruthy();
+    expect(screen.getByText('Aucune commande rig lancée depuis l’ouverture de Ledge.')).toBeTruthy();
   });
   it('useRigOutput follows the log', () => {
     const c = fakeClient(); const log = createRigOutput(c);
@@ -77,5 +77,26 @@ describe('OutputView', () => {
     render(<Probe />);
     act(() => c.emit({ type: 'openrig.done', requestId: 'r1', ok: true, commands: ['rig up x'], output: 'ok' }));
     expect(screen.getByText('ok')).toBeTruthy();
+  });
+  it('is a log reachable by keyboard', () => {
+    view([]);
+    expect(screen.getByRole('log', { name: 'Sortie' }).getAttribute('tabindex')).toBe('0');
+  });
+  it('scrolls to the end on a new entry only when it was at the end', () => {
+    const e = (n: number): RigOutputEntry => ({ seq: n, at: 0, machine: 'local', commands: [`rig n${n}`], ok: true, result: null });
+    const ui = (entries: readonly RigOutputEntry[]) => <LangProvider lang="fr"><OutputView entries={entries} /></LangProvider>;
+    const { rerender } = render(ui([e(0)]));
+    const log = screen.getByRole('log');
+    Object.defineProperty(log, 'scrollHeight', { configurable: true, value: 500 });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, value: 100 });
+    rerender(ui([e(0), e(1)]));
+    expect(log.scrollTop).toBe(500);
+    log.scrollTop = 100; fireEvent.scroll(log);
+    rerender(ui([e(0), e(1), e(2)]));
+    expect(log.scrollTop).toBe(100);
+    log.scrollTop = 400; fireEvent.scroll(log);
+    Object.defineProperty(log, 'scrollHeight', { configurable: true, value: 600 });
+    rerender(ui([e(0), e(1), e(2), e(3)]));
+    expect(log.scrollTop).toBe(600);
   });
 });
