@@ -591,7 +591,7 @@ export const en: Messages = {
   },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
-    browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc'
+    browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc', newSession: 'New session'
   },
   shortcuts: {
     title: 'Keyboard shortcuts',

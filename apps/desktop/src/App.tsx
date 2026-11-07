@@ -684,7 +684,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           onSplit={() => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; })}
           onClose={() => wsStore.close(key)} onCloseOthers={() => wsStore.closeOthers(key)} onDismiss={() => setTabMenu(null)} />;
       })()}
-      {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
+      {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close}
+        {...(ide ? { onNewSession: () => dispatch({ type: 'modal', modal: { kind: 'launch' } }) } : {})} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
       {nav.modal?.kind === 'launch' && ide && (
         // No `wide`: the modal's own width (ide.css, `.modal:has(> .launch-modal)`), not the old form's 640 px.
