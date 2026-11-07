@@ -22,8 +22,8 @@ export interface IdeKeys {
 }
 
 /** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Ctrl/⌘ Z too, outside a field) (Escape after the dialog and the chat, offered to the screen before navigation),
- *  except in the terminal, which keeps every key for its shell; Ctrl + the key left of 1 takes the keyboard there. The single keys stay out of the way of dialogs, fields and the chat. */
-export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean; /** The IDE shell (flag on): Ctrl B / Ctrl J / Ctrl / show or hide its panels, even in a field (never in the terminal). */ ide?: IdeKeys }): void {
+ *  except in the terminal, which keeps every key for its shell; Ctrl + the key left of 1 takes the keyboard there, and with the IDE on the terminal itself forwards Ctrl+J to the bottom panel. The single keys stay out of the way of dialogs, fields and the chat. */
+export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState; order: readonly Session[]; screen: ScreenKeys; undo(): boolean; /** A confirmation is open (it is no `nav.modal`): it owns the keyboard, Escape cancels it and nothing else acts. */ confirming?: { cancel(): void } | null; /** Shows the terminal if hidden and focuses its tab; false off a session page. */ toTerminal?(): boolean; /** The IDE shell (flag on): Ctrl B / Ctrl J / Ctrl / show or hide its panels, even in a field (in the terminal, Ctrl+J is forwarded by the xterm). */ ide?: IdeKeys }): void {
   const latest = useRef({ dispatch, ctx });
   latest.current = { dispatch, ctx };
   useEffect(() => {

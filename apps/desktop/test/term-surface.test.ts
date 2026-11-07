@@ -97,6 +97,19 @@ it('the focus key leaves the terminal without reaching the window', () => {
   expect(e.preventDefault).toHaveBeenCalled();
 });
 
+it('Ctrl J reaches the app only when the IDE is on', () => {
+  const onPanel = vi.fn();
+  for (const [on, taken] of [[true, true], [false, false]] as const) {
+    onPanel.mockClear();
+    createSurface({ theme: { background: '#101112' }, onThread: vi.fn(), openUrl: vi.fn(), panelKey: () => on, onPanel });
+    const t = xt.terms.at(-1)!;
+    const e = key({ ctrlKey: true, code: 'KeyJ', key: 'j' });
+    expect(t.keys(e)).toBe(!taken);
+    expect(onPanel).toHaveBeenCalledTimes(taken ? 1 : 0);
+    expect(e.stopPropagation).toHaveBeenCalledTimes(taken ? 1 : 0);
+  }
+});
+
 it('read-only drops input, pasted or typed, and hides the cursor', async () => {
   const { s, t } = surface();
   const input = vi.fn();

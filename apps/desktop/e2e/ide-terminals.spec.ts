@@ -26,6 +26,8 @@ const tilesTitles = (page: Page) => panel(page).locator('.ide-btile-tab');
 const groups = (page: Page) => page.locator('.ide-dockview .dv-groupview');
 const dockTab = (page: Page, title: string) => page.locator('.ide-dockview .dv-tab').filter({ hasText: title });
 const writes = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyWrites: string[] }).__ledgePtyWrites.join(''));
+const termText = (page: Page, nth: number) => tiles(page).nth(nth).locator('[data-terminal]').evaluate(el => (el as unknown as { __ledgeTermText?: string }).__ledgeTermText ?? '');
+const ptyOpens = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyOpens: unknown[] }).__ledgePtyOpens.length);
 const emit = (page: Page, text: string) => page.evaluate(t => (window as unknown as { __ledgePtyEmit: (s: string) => void }).__ledgePtyEmit(t), text);
 const box = async (l: Locator) => (await l.boundingBox())!;
 
@@ -82,10 +84,17 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await expect.poll(() => writes(page)).toContain('echo hi');
   const opens = await page.evaluate(() => (window as unknown as { __ledgePtyOpens: { argv: string[]; native?: string }[] }).__ledgePtyOpens);
   expect(opens.map(o => o.native ?? 'wsl')).toEqual(['wsl', expect.stringMatching(/powershell/i)]);
-  // The screen is a canvas: its pixels stand for its text.
-  // Its first line, « $ echo hi », without the cursor (focus and a toast differ).
-  const shot = async () => { const r = await box(tiles(page).nth(1).locator('.ide-btile-body')); return page.screenshot({ clip: { x: r.x + 4, y: r.y + 2, width: 76, height: 22 } }); };
-  const typed = await shot();
+  // The screen is a canvas: the buffer (not a pixel clip that can match blank-to-blank) says the line is « $ echo hi ».
+  await expect.poll(() => termText(page, 1)).toContain('$ echo hi');
+
+  // Ctrl+J while that terminal has the keyboard hides the panel; again shows the same two shells, none new.
+  const opensBefore = await ptyOpens(page);
+  await page.keyboard.press('Control+j');
+  await expect(panel(page)).toHaveCount(0);
+  await page.keyboard.press('Control+j');
+  await expect(tilesTitles(page)).toHaveText(['>_ WSL · Ubuntu 1', '>_ PowerShell 2']);
+  expect(await ptyOpens(page)).toBe(opensBefore);
+  await expect.poll(() => termText(page, 1)).toContain('$ echo hi');
 
   // The 2nd tile dragged onto the editing group: a tab « >_ PowerShell 2 » with « shell »; the panel keeps one tile.
   const group = groups(page).first();
@@ -99,8 +108,8 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await drag(page, dockTab(page, '>_ PowerShell 2'), async () => { const r = await box(panel(page).locator('.ide-bp-body')); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
   await expect(tilesTitles(page)).toHaveText(['>_ WSL · Ubuntu 1', '>_ PowerShell 2']);
   await expect(dockTab(page, '>_ PowerShell 2')).toHaveCount(0);
-  await expect.poll(async () => (await shot()).equals(typed), { message: 'the tile shows what was typed, as before' }).toBe(true);
-  expect(await page.evaluate(() => (window as unknown as { __ledgePtyOpens: unknown[] }).__ledgePtyOpens.length)).toBe(2);
+  await expect.poll(() => termText(page, 1), { message: 'the tile shows what was typed, as before' }).toContain('$ echo hi');
+  expect(await ptyOpens(page)).toBe(2);
 
   // The Output: an OpenRig action's end, an entry with « ✓ ».
   await stopStarter(page);
@@ -130,11 +139,14 @@ for (const theme of ['light', 'dark'] as const) {
     const settle = () => page.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
     const zoom = async (n: string) => { await settle(); await panel(page).screenshot({ path: info.outputPath(`ide-panel-${n}-${theme}.png`) }); };
     await zoom('terminals');
-    // The menu opens upward, over the editing area: shoot the panel and what rises above it.
+    // The menu opens upward: the shot is the menu's own box.
     await openMenu(page);
-    const pb = await box(panel(page)); const mb = await box(page.getByRole('menu'));
-    const top = Math.min(pb.y, mb.y);
-    await page.screenshot({ path: info.outputPath(`ide-panel-menu-${theme}.png`), clip: { x: pb.x + pb.width - 420, y: top - 4, width: 420, height: pb.y + pb.height - top + 4 } });
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    const mb = await box(menu);
+    expect(mb.width).toBeGreaterThan(8);
+    expect(mb.height).toBeGreaterThan(8);
+    await page.screenshot({ path: info.outputPath(`ide-panel-menu-${theme}.png`), clip: { x: mb.x, y: mb.y, width: mb.width, height: mb.height } });
     await page.keyboard.press('Escape');
     // Metrics against the mockup.
     const m = await page.evaluate(() => {
@@ -142,8 +154,8 @@ for (const theme of ['light', 'dark'] as const) {
       const h = (sel: string) => document.querySelector(sel)?.getBoundingClientRect().height;
       return { panelH: h('.ide-bottom'), tabsH: h('.ide-bp-tabs'), tileBarH: h('.ide-btile-bar'), tab: css('.ide-bp-tabs [role=tab]', ['font-size', 'text-transform', 'letter-spacing']), chip: css('.ide-btile-tools .chip-k', ['font-size', 'font-family']), gap: css('.ide-bterms', ['gap']) };
     });
-    console.log(`METRICS ${theme} ${JSON.stringify(m)}`);
-    expect(m.panelH).toBe(240); expect(m.tabsH).toBe(30);
+    expect(m.panelH).toBe(240); expect(m.tabsH).toBe(30); expect(m.tileBarH).toBe(30);
+    expect(m.gap).toMatchObject({ gap: '1px' });
     expect(m.tab).toMatchObject({ 'font-size': '11.5px', 'text-transform': 'uppercase' });
     expect(m.chip).toMatchObject({ 'font-size': '10.5px' });
     await panel(page).getByRole('tab', { name: 'Output' }).click();

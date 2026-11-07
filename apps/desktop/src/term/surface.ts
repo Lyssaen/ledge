@@ -46,7 +46,7 @@ export function osc52Text(data: string): string | null {
   }
 }
 
-export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void }): TermSurface {
+export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void; /** The IDE is on: Ctrl+J, typed here, toggles the bottom panel (`onPanel`). */ panelKey?(): boolean; onPanel?(): void }): TermSurface {
   const host = document.createElement('div');
   host.setAttribute('data-terminal', '');
   // Capped scrollback: an agent redrawing its screen emits megabytes, memory must not follow.
@@ -131,13 +131,16 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
   };
 
   term.attachCustomKeyEventHandler(e => {
-    const action = termKey(e, term.hasSelection());
+    const action = termKey(e, term.hasSelection(), opts.panelKey?.() ?? false);
     if (action === 'pass') return true;
     e.preventDefault();
     if (action === 'thread') {
       // Focus has left the terminal by the time the window sees the key, and `useKeys` would send it straight back.
       e.stopPropagation();
       opts.onThread();
+    } else if (action === 'panel') {
+      e.stopPropagation();
+      opts.onPanel?.();
     } else if (action === 'copy') {
       const text = term.getSelection();
       if (text) void navigator.clipboard.writeText(text).catch(() => undefined);
@@ -147,6 +150,21 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     }
     return false;
   });
+
+  // The e2e build only: the screen is a canvas, so Playwright reads the buffer here instead of its pixels.
+  if (import.meta.env.VITE_LEDGE_E2E) {
+    Object.defineProperty(host, '__ledgeTermText', {
+      get: () => {
+        const buf = term.buffer.active;
+        const lines: string[] = [];
+        for (let i = 0; i < buf.length; i++) {
+          const line = buf.getLine(i)?.translateToString(true);
+          if (line) lines.push(line);
+        }
+        return lines.join('\n');
+      },
+    });
+  }
 
   return {
     host,

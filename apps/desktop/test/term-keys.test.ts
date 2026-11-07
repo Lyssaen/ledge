@@ -17,6 +17,14 @@ it('Ctrl V and Ctrl Shift V paste; Ctrl K, Escape and the rest go to the termina
   expect(termKey(k({ ctrlKey: true, shiftKey: true, code: 'KeyV', key: 'V' }), false)).toBe('paste');
   for (const e of [k({ ctrlKey: true, code: 'KeyK', key: 'k' }), k({ code: 'Escape', key: 'Escape' }), k({ ctrlKey: true, code: 'KeyR', key: 'r' })]) expect(termKey(e, false)).toBe('pass');
 });
+it('Ctrl J toggles the bottom panel only with the IDE on; Ctrl B never leaves the terminal', () => {
+  const j = k({ ctrlKey: true, code: 'KeyJ', key: 'j' });
+  expect(termKey(j, false, true)).toBe('panel');
+  expect(termKey(j, false)).toBe('pass');
+  expect(termKey(k({ ctrlKey: true, shiftKey: true, code: 'KeyJ', key: 'J' }), false, true)).toBe('pass');
+  expect(termKey(k({ ctrlKey: true, code: 'KeyB', key: 'b' }), false, true)).toBe('pass');
+  expect(termKey(k({ ctrlKey: true, altKey: true, code: 'KeyJ', key: 'j' }), false, true)).toBe('pass');
+});
 it('AltGr (Ctrl Alt on Windows) and key releases go to the terminal', () => {
   expect(termKey(k({ ctrlKey: true, altKey: true, code: 'KeyV', key: 'v' }), false)).toBe('pass');
   expect(termKey(k({ ctrlKey: true, altKey: true, code: 'Backquote', key: '`' }), false)).toBe('pass');

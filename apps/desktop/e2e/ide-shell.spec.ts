@@ -49,8 +49,8 @@ test('Ctrl+J shows the bottom panel, 240 px high', async ({ page }) => {
   await page.keyboard.press('Control+j');
   await expect(bottom).toBeVisible();
   expect((await box(bottom)).height).toBe(240);
-  // A new shell takes the keyboard (lot 5), and a terminal keeps Ctrl+J for itself: the panel hides from its toggle.
-  await page.getByRole('button', { name: 'Bottom panel (Ctrl+J)' }).click();
+  // A new shell takes the keyboard; Ctrl+J still hides the panel (the terminal forwards it while the IDE is on).
+  await page.keyboard.press('Control+j');
   await expect(bottom).toHaveCount(0);
 });
 

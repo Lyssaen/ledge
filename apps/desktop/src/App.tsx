@@ -109,7 +109,7 @@ function useRigOutputLog(client: DaemonClient) {
 
 /** The app's one terminal store: its shells and the agent's screen live as long as the window, whatever the place. Its xterms
  *  follow the theme once the root has taken it (`data-theme`, set by useAppearance after this component's own effects). */
-function useTermStore(client: DaemonClient, onThread: () => void, avail: ShellsAvailable | null): TermStore {
+function useTermStore(client: DaemonClient, onThread: () => void, avail: ShellsAvailable | null, panel: { on(): boolean; toggle(): void }): TermStore {
   const { t } = useI18n();
   // The store is made once: it reads the menu's inputs as they are when a shell opens.
   const titling = useRef({ avail, t });
@@ -131,7 +131,8 @@ function useTermStore(client: DaemonClient, onThread: () => void, avail: ShellsA
     surface: () => {
       const chunk = loadedWorkspace();
       if (!chunk) throw new Error('a terminal is drawn only once the session page has loaded');
-      return chunk.createSurface({ theme: rootTermTheme(), onThread, openUrl });
+      // The callbacks are read when the key arrives: a surface outlives the render that drew it, and the IDE switch can change after that.
+      return chunk.createSurface({ theme: rootTermTheme(), onThread, openUrl, panelKey: () => panel.on(), onPanel: () => panel.toggle() });
     },
     agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
     // The harness pane, once the machine says it can stream it. Until the snapshot arrives, nothing attaches.
@@ -178,7 +179,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The shells this computer has (the bottom panel's « + ▾ », its shells' titles), asked once.
   const [avail, setAvail] = useState<ShellsAvailable | null>(null);
   useEffect(() => { void shellsAvailable().then(setAvail, () => setAvail(NO_SHELLS)); }, []);
-  const termStore = useTermStore(fleetClient, () => termThread.current(), avail);
+  // Ctrl + J inside an xterm toggles the bottom panel while the IDE is on (set below, with the layout).
+  const termPanel = useRef<{ on(): boolean; toggle(): void }>({ on: () => false, toggle: () => {} });
+  const termStore = useTermStore(fleetClient, () => termThread.current(), avail, termPanel.current);
   // The bottom panel's Sortie: the rig commands this Desktop ran.
   const rigOutput = useRigOutputLog(fleetClient);
   const projects = useProjects(fleetClient);
@@ -207,6 +210,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [layout, setLayout] = useStored(loadLayout, saveLayout);
   // Asking for the right panel folds the sidebar when that is what gives it room (layoutFor).
   const onLayout = useCallback((a: LayoutAction) => setLayout(l => layoutFor(l, a, window.innerWidth)), [setLayout]);
+  termPanel.current.on = () => ide;
+  termPanel.current.toggle = () => onLayout({ type: 'toggle', panel: 'bottom' });
   const [openSession] = useOpenSession();
   const ideNow = useRef({ ide, nav, openSession });
   ideNow.current = { ide, nav, openSession };
