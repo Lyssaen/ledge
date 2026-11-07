@@ -200,7 +200,7 @@ export function LaunchModal(p: {
         <span />
         <div className="launch-modal-go">
           <Button variant="primary" type="submit" aria-disabled={!!missing || launching || unavailable !== null}>
-            {launching ? t.launch.launching : m.launch}<Kbd>{m.launchKeys}</Kbd>
+            {launching ? t.launch.launching : m.launch}<Kbd accent>{m.launchKeys}</Kbd>
           </Button>
           <Button variant="outline" type="button" onClick={p.onCancel}>{m.cancel}</Button>
           {tried && alert ? <span className="launch-modal-alert" role="alert">{alert}</span>

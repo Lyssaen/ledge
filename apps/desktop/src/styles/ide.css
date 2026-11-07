@@ -262,7 +262,12 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 
 /* The New session modal (LaunchModal; mockup .modal, .page, .fld, .inp, .radios, .agents, .agent, .segc): one row per field, label | control. */
 .modal:has(> .launch-modal) { width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 60px); }
-.launch-modal { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 16px; }
+/* The title is the mockup's h3, in the form's padding: no rule under it, the subtitle right below. */
+.modal:has(> .launch-modal) > .modal-title { padding: 10px 12px 0 22px; align-items: flex-start; border-bottom: 0; }
+.modal:has(> .launch-modal) > .modal-title h2 { padding-top: 10px; font-size: 15px; line-height: 18px; font-weight: 600; }
+/* The mockup's .modal-x: 28 px, 10 px from the top and 12 px from the right. */
+.modal:has(> .launch-modal) > .modal-title .ledge-btn { width: 28px !important; height: 28px !important; }
+.launch-modal { padding: 0 22px 22px; display: flex; flex-direction: column; gap: 16px; }
 .launch-modal-sub { margin: 0; color: var(--muted-foreground); font-size: 12px; }
 .launch-modal-fld { display: grid; grid-template-columns: 150px 1fr; gap: 10px 16px; align-items: start; font-size: 12.5px; }
 .launch-modal-fld > .launch-modal-lbl { color: var(--muted-foreground); padding-top: 5px; }
@@ -270,11 +275,12 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .launch-modal .mut { color: var(--muted-foreground); }
 .launch-modal .mono { font-family: 'Geist Mono', monospace; font-size: 12px; }
 .launch-modal-menu { position: relative; display: block; min-width: 0; }
-.launch-modal-inp { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 8px; padding: 5px 9px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); font-size: 12.5px; text-align: left; }
+/* `.launch-modal` before each button's class: app.css's `button:not(.ledge-btn)` would take their border and background. */
+.launch-modal .launch-modal-inp { width: 100%; min-height: 30px; line-height: 18px; display: flex; align-items: center; gap: 8px; padding: 5px 9px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); font-size: 12.5px; text-align: left; }
 .launch-modal-inp b { font-weight: 500; }
 .launch-modal-inp .mut { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .launch-modal-inp .car { margin-left: auto; color: var(--muted-foreground); font-size: 10px; }
-.launch-modal-inp:hover, .launch-modal-inp[aria-expanded=true] { border-color: var(--ring); }
+.launch-modal .launch-modal-inp:hover, .launch-modal .launch-modal-inp[aria-expanded=true] { border-color: var(--ring); }
 .launch-modal-rows { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; max-height: 260px; overflow: auto; padding: 4px; display: flex; flex-direction: column; background: var(--popover); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-overlay); }
 .launch-modal-rows button { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 12.5px; text-align: left; color: var(--foreground); }
 .launch-modal-rows button:hover:not(:disabled), .launch-modal-rows button:focus-visible, .launch-modal-rows button.on { background: var(--accent); }
@@ -282,9 +288,9 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .launch-modal-rows small { margin-left: auto; font-size: 11px; color: var(--muted-foreground); }
 .launch-modal-empty { display: flex; align-items: center; gap: 12px; padding-top: 2px; }
 .launch-modal-agents { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.launch-modal-agent { min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; text-align: left; color: var(--foreground); }
-.launch-modal-agent:hover { border-color: var(--input); }
-.launch-modal-agent.on { border-color: var(--foreground); background: var(--accent); }
+.launch-modal .launch-modal-agent { min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; text-align: left; color: var(--foreground); }
+.launch-modal .launch-modal-agent:hover { border-color: var(--input); }
+.launch-modal .launch-modal-agent.on { border-color: var(--foreground); background: color-mix(in srgb, var(--foreground) 3%, transparent); }
 .launch-modal-agent .an { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .launch-modal-agent .an > span { display: inline-flex; }
 .launch-modal-agent small { color: var(--muted-foreground); font-size: 11px; }
@@ -293,6 +299,9 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 /* The model picker's own legend repeats the row's « Modèle »: kept for screen readers only. */
 .launch-modal-model .composer-models > legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .launch-modal-model .composer-models { margin: 0; padding: 0; border: 0; min-width: 0; }
+/* The model as the mockup's .inp: 30 px high, bordered like the Project field. */
+.launch-modal .model-trigger { height: 30px; padding: 0 9px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); }
+.launch-modal .model-trigger strong { font-size: 12.5px; font-weight: 500; }
 .launch-modal-segc { display: inline-flex; justify-self: start; border: 1px solid var(--input); border-radius: 7px; overflow: hidden; }
 .launch-modal-segc label { position: relative; padding: 4px 12px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; }
 .launch-modal-segc label + label { border-left: 1px solid var(--input); }
@@ -308,6 +317,9 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .launch-modal-radio input:checked::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--foreground); }
 .launch-modal-radio input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .launch-modal-go { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+/* The mockup's .btn (as .ide-empty .go): the Button's own inline size is overridden. */
+.launch-modal-go .ledge-btn { white-space: nowrap; height: 26px !important; padding: 0 10px !important; font-size: 12px !important; border-radius: 6px !important; gap: 6px !important; }
+.launch-modal-go .ledge-btn kbd { font-size: 10px !important; height: 16px !important; }
 .launch-modal-alert { margin: 6px 0 0; color: var(--danger-text, var(--destructive)); font-size: 12px; }
 .launch-modal-go .launch-modal-alert { margin: 0; }
 @media (max-width: 640px) {
