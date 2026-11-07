@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
-import type { AgentLink, Tab, TermStore } from './store';
+import type { AgentLink, FreeShell, Tab, TermStore } from './store';
 
 /** The app's one terminal store; App provides it. */
 export const TermStoreContext = createContext<TermStore | null>(null);
@@ -13,4 +13,12 @@ export function useTerms(sessionId: string): { tabs: readonly Tab[]; active: str
   const active = useSyncExternalStore(subscribe, () => store.active(sessionId));
   const link = useSyncExternalStore(subscribe, () => store.link(sessionId));
   return { tabs, active, link, store };
+}
+
+/** A bottom-panel shell (no session), re-rendered when the store changes it; undefined once closed. */
+export function useFreeShell(id: string): FreeShell | undefined {
+  const store = useContext(TermStoreContext);
+  if (!store) throw new Error('useFreeShell needs a TermStoreContext provider');
+  const subscribe = useCallback((fn: () => void) => store.subscribe(fn), [store]);
+  return useSyncExternalStore(subscribe, () => store.free(id));
 }

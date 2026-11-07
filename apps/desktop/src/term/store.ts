@@ -3,6 +3,7 @@ import type { TermSurface } from './surface';
 import type { TermTheme } from './theme';
 import { reconnectDelay, type AgentMode } from './mode';
 import type { AgentRoute, AgentStream, ShellStream } from './stream';
+import type { ShellKind } from './shells';
 
 /** A shell of the right panel (Fil | Terminal v3): the agent's screen is no tab, it is the session's Terminal view. */
 export type Tab = { kind: 'shell'; id: string; n: number; dir: string; remote: boolean; status: 'idle' | 'running' | 'ended' | 'unavailable'; end?: { code: number | null; lost: boolean } };
@@ -12,7 +13,9 @@ export type AgentLink = { state: 'attached' | 'reconnecting' | 'off'; attempt: n
 export const agentTabId = (sessionId: string): string => `${sessionId}#agent`;
 /** The right panel's first tab, « ± Modifications »: fixed, never closed, and where the panel opens while it has no shell. */
 export const changesTabId = (sessionId: string): string => `${sessionId}#changes`;
-export interface TermDeps { backend: PtyBackend | null; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout; /** Absent: the agent screen is always the pseudo-terminal, as before the control stream. */ agentRoute?: (sessionId: string) => AgentRoute; stream?: AgentStream; /** Shells born beside the daemon, when `agentRoute` says `stream`. Absent: a shell is the local pseudo-terminal. */ shellStream?: ShellStream }
+/** A shell of the bottom panel: it belongs to no session. */
+export interface FreeShell { id: string; kind: ShellKind; n: number; title: string; dir: string; status: 'running' | 'ended' | 'unavailable'; end?: { code: number | null; lost: boolean } }
+export interface TermDeps { backend: PtyBackend | null; /** What a free shell runs, null when it cannot (absent: it cannot). */ freeLaunch?(kind: ShellKind, dir: string): { argv: string[] } | { native: 'powershell' | 'cmd' | 'gitbash' } | null; freeTitle?(kind: ShellKind, n: number): string; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout; /** Absent: the agent screen is always the pseudo-terminal, as before the control stream. */ agentRoute?: (sessionId: string) => AgentRoute; stream?: AgentStream; /** Shells born beside the daemon, when `agentRoute` says `stream`. Absent: a shell is the local pseudo-terminal. */ shellStream?: ShellStream }
 
 const OFF: AgentLink = { state: 'off', attempt: 0 };
 /** `ssh`'s exit code when the connection fails or drops. */
@@ -58,6 +61,9 @@ export class TermStore {
   private readonly entries = new Map<string, Entry>();
   private readonly surfaces = new Map<string, TermSurface>();
   private readonly shells = new Map<string, Run>();
+  /** The bottom panel's shells, apart from the sessions' `entries`; `shell` is replaced, never mutated, on each change. */
+  private readonly frees = new Map<string, { shell: FreeShell; run: Run | null }>();
+  private freeNext = 1;
   private readonly listeners = new Set<() => void>();
   /** The sessions whose agent screen a view shows, each with its own attachment: two IDE groups show two agents at once. */
   private readonly shown = new Map<string, Shown>();
@@ -171,6 +177,36 @@ export class TermStore {
 
   offlineSince(sessionId: string): number | undefined { return this.entries.get(sessionId)?.offlineSince; }
 
+  /** Starts a shell with no session; id `shell:<n>`. Starts at once. */
+  openFree(kind: ShellKind, dir: string): string {
+    const n = this.freeNext++;
+    const id = `shell:${n}`;
+    this.frees.set(id, { shell: { id, kind, n, title: this.deps.freeTitle?.(kind, n) ?? `${kind} ${n}`, dir, status: 'running' }, run: null });
+    this.startFree(id);
+    this.emit();
+    return id;
+  }
+
+  free(id: string): FreeShell | undefined { return this.frees.get(id)?.shell; }
+
+  /** Kills it, disposes its xterm. A shell still opening is closed when it resolves. */
+  closeFree(id: string): void {
+    const f = this.frees.get(id);
+    if (!f) return;
+    f.run?.handle?.close();
+    this.frees.delete(id);
+    this.surfaces.get(id)?.dispose();
+    this.surfaces.delete(id);
+    this.emit();
+  }
+
+  /** An ended one: the same kind, the same dir, the same xterm. */
+  reopenFree(id: string): void {
+    if (this.frees.get(id)?.shell.status !== 'ended') return;
+    this.startFree(id);
+    this.emit();
+  }
+
   surface(tabId: string): TermSurface | undefined { return this.surfaces.get(tabId); }
 
   subscribe(fn: () => void): () => void {
@@ -265,6 +301,41 @@ export class TermStore {
         this.emit();
       }
     }).then(adopt, () => adopt(null));
+  }
+
+  private setFree(id: string, patch: Partial<FreeShell>): void {
+    const f = this.frees.get(id);
+    if (f) f.shell = { ...f.shell, ...patch };
+  }
+
+  private startFree(id: string): void {
+    const f = this.frees.get(id);
+    if (!f) return;
+    const { backend } = this.deps;
+    const launch = backend ? this.deps.freeLaunch?.(f.shell.kind, f.shell.dir) ?? null : null;
+    if (!backend || !launch) { f.run = null; this.setFree(id, { status: 'unavailable', end: undefined }); return; }
+    const surface = this.surfaceFor(id, () => this.frees.get(id)?.run ?? null);
+    const run: Run = { handle: null, typed: [] };
+    const current = () => this.frees.get(id)?.run === run;
+    f.run = run;
+    this.setFree(id, { status: 'running', end: undefined });
+    const adopt = (h: PtyHandle | null) => {
+      if (!current()) { h?.close(); return; }
+      if (h) { adoptHandle(run, h); syncSize(h, surface); return; }
+      f.run = null;
+      this.setFree(id, { status: 'unavailable' });
+      this.emit();
+    };
+    const native = 'native' in launch ? launch.native : undefined;
+    backend.open('argv' in launch ? launch.argv : [], surface.size(), {
+      data: b => { if (current()) surface.write(b); },
+      exit: code => {
+        if (!current()) return;
+        f.run = null;
+        this.setFree(id, { status: 'ended', end: { code, lost: f.shell.kind.startsWith('ssh:') && code === SSH_LOST } });
+        this.emit();
+      }
+    }, native).then(adopt, () => adopt(null));
   }
 
   /** The shell over the daemon's control stream. It is not restarted when it ends: that would hide a command that died. */

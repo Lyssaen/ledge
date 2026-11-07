@@ -13,7 +13,7 @@ import { MarkdownLinks } from '@ledge/ui/documents/links';
 // The reader's styles stay in the first bundle, before app.css (as when the reader itself was there): session.css overrides them.
 import '@ledge/ui/documents/markdown.css';
 import { DaemonOutdated } from './shell/DaemonOutdated';
-import { daemonTokenSource, onOpenTarget, onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
+import { daemonTokenSource, onOpenTarget, shellsAvailable, onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
 import { parseTarget, targetAction } from './open/target';
 import { useAppearance } from './shell/theme';
 import { initialNav, navReducer, reconcile, type NavAction, type NavState, type SectionId } from './nav/state';
@@ -72,6 +72,7 @@ import { agentRoute, createAgentStream, createShellStream } from './term/stream'
 import { focusAgentView } from './session/agentFocus';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
+import { shellLaunch, shellMenu, type ShellsAvailable } from './term/shells';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled } from './workspace/prefs';
@@ -97,8 +98,21 @@ const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement)
 /** The app's one terminal store: its shells and the agent's screen live as long as the window, whatever the place. Its xterms
  *  follow the theme once the root has taken it (`data-theme`, set by useAppearance after this component's own effects). */
 function useTermStore(client: DaemonClient, onThread: () => void): TermStore {
+  const { t } = useI18n();
+  const [avail, setAvail] = useState<ShellsAvailable | null>(null);
+  useEffect(() => { void shellsAvailable().then(setAvail, () => {}); }, []);
+  // The store is made once: it reads the menu's inputs as they are when a shell opens.
+  const titling = useRef({ avail, t });
+  titling.current = { avail, t };
   const [store] = useState(() => new TermStore({
     backend: ptyBackend(),
+    freeLaunch: (kind, dir) => shellLaunch(kind, { dir, machines: client.fleet?.machines() ?? [] }),
+    freeTitle: (kind, n) => {
+      const { avail: a, t: msgs } = titling.current;
+      const row = a ? shellMenu(a, client.fleet?.machines() ?? [], kind, msgs).find(r => r.kind === kind) : undefined;
+      const label = row?.label ?? (kind === 'wsl' ? msgs.ide.panel.shells.wsl : kind.startsWith('ssh:') ? `${msgs.ide.panel.shells.ssh} · ${kind.slice(4)}` : kind);
+      return `${label} ${n}`;
+    },
     // xterm comes with the session page's chunk (out of the first bundle): only its pane and Workspace make the store draw, so
     // the chunk is there by then. Its Ctrl + ² gives the keyboard back to the session's left view (App's termThread).
     surface: () => {
