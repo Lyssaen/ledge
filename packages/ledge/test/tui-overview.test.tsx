@@ -9,6 +9,8 @@ describe('ledge tui: overview', () => {
   it('draws who waits, the projects by branch and the selected session’s request', async () => {
     const tui = await startTui();
     try {
+      // startTui only waits for Otto: the rest of the screen draws on the next frames.
+      await until(() => tui.frame().includes('■ Ledge 3 sessions') && tui.frame().includes('Veut exécuter'));
       const f = tui.frame();
       expect(f).toContain('À TOI · 2');
       expect(f).toContain('2 t’attendent');

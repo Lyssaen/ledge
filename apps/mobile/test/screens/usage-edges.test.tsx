@@ -39,4 +39,11 @@ describe('usage edges', () => {
     expect(limits.querySelector('.opacity-50')).not.toBeNull();
     expect(region.querySelectorAll('[data-usage-over]')).toHaveLength(0);
   });
+
+  it.each([['stale', 12, copy.chat.point.stale('12 min')], ['unreachable', 25, copy.chat.point.unreach('25 min')]] as const)('Cursor %s: its rows dimmed, with the message', (status, min, text) => {
+    const usage: PhoneHarnessUsage[] = [{ harness: 'cursor', status, readAt: ago(min), windows: [{ kind: 'month', pct: 40, resetsAt: null }, { kind: 'pool', pool: 'other', pct: 20, resetsAt: null }] }];
+    const { container } = render(<Limits usage={usage} now={Date.now()} alert={0.8} />);
+    expect(container.querySelector('.opacity-50')?.textContent).toContain('Autres');
+    expect(container.textContent).toContain(text);
+  });
 });

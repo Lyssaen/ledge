@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ATTACHMENTS_MAX, ATTACHMENT_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentRefSchema, AttachmentStoredSchema, ImageUploadSchema, b64Max } from './attachments.js';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
-import { HarnessUsageSchema, UsagePrefsSchema } from './usage.js';
+import { HarnessUsageSchema, UsagePrefsSchema, dropUnknownHarnesses } from './usage.js';
 import { PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS, type CloseHow } from './chat.js';
 import { ActionRiskSchema } from './actions.js';
@@ -496,7 +496,7 @@ export type PhoneHarnessUsage = z.infer<typeof PhoneHarnessUsageSchema>;
 export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   /** This PC's harness limits (`daemon.usage`): after `snapshot.request`, then on each change, whole. `prefs.alert`: the PC's
    *  threshold, so the phone marks a window past it (amber, a line in « À toi ») and one reached (red). */
-  z.object({ type: z.literal('usage.state'), harnesses: z.array(PhoneHarnessUsageSchema).max(4), prefs: UsagePrefsSchema }),
+  z.object({ type: z.literal('usage.state'), harnesses: z.preprocess(dropUnknownHarnesses, z.array(PhoneHarnessUsageSchema).max(4)), prefs: UsagePrefsSchema }),
   z.object({ type: z.literal('snapshot'), protocol: z.literal(PHONE_PROTOCOL), sessions: z.array(PhoneSessionSchema), capabilities: CapabilitiesByToolSchema, daemon: z.object({ version: z.string(), name: z.string().max(40), boot: z.string().uuid().optional(),
     /** The daemon takes `session.model`. */ models: z.literal(true).optional(),
     /** The daemon sends `session.checklist` and a session's `checklist` summary. */ checklist: z.literal(true).optional(),

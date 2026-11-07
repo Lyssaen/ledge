@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { PhoneHarnessUsage } from '@ledge/protocol';
 import { copy } from '../../src/copy';
-import { indicators, modelName, overWindows, span, usageTone } from '../../src/model/usage';
+import { indicators, modelName, overWindows, resetLabel, span, usageTone } from '../../src/model/usage';
 import { Agents } from '../../src/screens/Agents';
 import { Chat } from '../../src/screens/Chat';
 import { session } from '../model/fixtures';
@@ -72,7 +72,7 @@ describe('« Le point »', () => {
   });
 
   it.each([
-    ['expired', copy.chat.point.notOnPc],
+    ['expired', 'Lecture impossible : reconnectez Claude Code sur le PC.'],
     ['stale', copy.chat.point.stale('12 min')],
     ['unreachable', copy.chat.point.unreach('25 min')]
   ] as const)('%s', (status, text) => {
@@ -93,4 +93,60 @@ it('Agents: one line of indicators, the context amber past « Contexte max »', 
   const line = container.querySelector('[data-indicators]')!;
   expect(line.textContent).toBe('Fable · élevé · contexte 88 % · 3 h 40');
   expect(line.querySelector('.text-attention')?.textContent).toContain('contexte 88 %');
+});
+
+describe('Cursor Agent in « Le point »', () => {
+  const reset = new Date(NOW + 24 * 86_400_000).toISOString();
+  const cursor = (o: Partial<PhoneHarnessUsage> = {}): PhoneHarnessUsage => ({
+    harness: 'cursor', status: 'ok', readAt: at(-1),
+    windows: [{ kind: 'month', pct: 81, resetsAt: reset }, { kind: 'pool', pool: 'cursor', pct: 41, resetsAt: reset }, { kind: 'pool', pool: 'other', pct: 100, resetsAt: reset }],
+    ...o
+  });
+  const date = resetLabel(reset, NOW);
+
+  it('a reset a week or more away is a date', () => {
+    expect(date).toMatch(/^\d{1,2} \S+\.?( \d{2}:\d{2})?$/);
+    expect(resetLabel(reset, NOW, true)).toMatch(/^\d{1,2} [^\d:]+$/);
+    const six = new Date(NOW + 6 * 86_400_000);
+    const wd = six.toLocaleDateString('fr-FR', { weekday: 'short' });
+    expect(resetLabel(six.toISOString(), NOW, true)).toBe(wd);
+    expect(resetLabel(six.toISOString(), NOW)).toBe(`${wd} ${String(six.getHours()).padStart(2, '0')}:${String(six.getMinutes()).padStart(2, '0')}`);
+  });
+
+  it('LIMITES: Mois, Cursor, Autres with their % and « reprend »; two lines in « À toi »', () => {
+    const region = point([claude({ windows: [] }), cursor()]);
+    const limits = within(region).getByRole('group', { name: copy.chat.point.limitsLabel });
+    const c = limits.querySelector('[data-harness="cursor"]')!;
+    expect(c.textContent).toContain('Cursor Agent');
+    expect(c.querySelector('svg.harness-cursor')).not.toBeNull();
+    expect(c.textContent).toContain('Mois');
+    expect(c.textContent).toContain('81 %');
+    expect(c.textContent).toContain('Cursor41 %');
+    expect(c.textContent).toContain('Autres');
+    expect(c.textContent).toContain(copy.chat.point.resumesOn(date));
+    expect(c.textContent).toContain(`reprend le ${date}`);
+    const yours = within(region).getByRole('group', { name: copy.chat.point.yoursLabel });
+    const lines = [...yours.querySelectorAll('[data-usage-over]')].map(e => e.textContent);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('Cursor · Mois 81 %');
+    expect(lines[1]).toContain('Cursor · Autres 100 %');
+    expect(lines[0]).toContain(`↺ ${resetLabel(reset, NOW, true)}`);
+  });
+
+  it('weekly plans say Semaine', () => {
+    const week = within(point([cursor({ windows: [{ kind: 'seven_day', pct: 30, resetsAt: reset }] })])).getByRole('group', { name: copy.chat.point.limitsLabel });
+    expect(week.textContent).toContain('Semaine');
+  });
+
+  it('unread says so', () => {
+    expect(within(point([cursor({ windows: [] })])).getByText(copy.chat.point.unread)).toBeTruthy();
+  });
+
+  it('expired says Codex', () => {
+    expect(within(point([claude({ harness: 'codex', status: 'expired', windows: [] })])).getByText('Lecture impossible : reconnectez Codex sur le PC.')).toBeTruthy();
+  });
+
+  it('expired says Cursor Agent', () => {
+    expect(within(point([cursor({ status: 'expired', windows: [] })])).getByText('Lecture impossible : reconnectez Cursor Agent sur le PC.')).toBeTruthy();
+  });
 });

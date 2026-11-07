@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { HarnessUsage, UsageStateMessage } from '@ledge/protocol';
 import { test } from './fixtures';
 import { fakeDaemon, twoProjects, openAtelier } from './daemon';
@@ -20,7 +20,20 @@ const claude = (o: Partial<HarnessUsage> = {}): HarnessUsage => ({
 });
 const over = claude({ windows: [{ kind: 'five_hour', pct: 84, resetsAt: at(65) }, { kind: 'seven_day', pct: 58, resetsAt: monday() }, { kind: 'model', model: 'Opus', pct: 100, resetsAt: monday() }, { kind: 'model', model: 'Fable', pct: 20, resetsAt: monday() }] });
 const codex: HarnessUsage = { harness: 'codex', account: null, status: 'ok', readAt: at(-2), windows: [{ kind: 'five_hour', pct: 18, resetsAt: at(170) }, { kind: 'seven_day', pct: 41, resetsAt: monday() }] };
+const inDays = (n: number) => { const d = new Date(Date.now() + n * 86_400_000); d.setHours(13, 43, 0, 0); return d.toISOString(); };
+const thursday = () => { const d = new Date(); d.setDate(d.getDate() + ((11 - d.getDay()) % 7 || 7)); d.setHours(14, 0, 0, 0); return d.toISOString(); };
+const cursor = (o: Partial<HarnessUsage> = {}): HarnessUsage => ({ harness: 'cursor', account: 'c0ffee000001', status: 'ok', readAt: at(-0.7), windows: [], ...o });
+const cursorMonth = (a: number, b: number, c: number, resetsAt = inDays(24)) => [{ kind: 'month' as const, pct: a, resetsAt }, { kind: 'pool' as const, pool: 'cursor' as const, pct: b, resetsAt }, { kind: 'pool' as const, pool: 'other' as const, pct: c, resetsAt }];
 const STATES: Record<string, HarnessUsage[]> = {
+  cursorMonth: [cursor({ windows: cursorMonth(12, 8, 56) })],
+  cursorOver: [cursor({ windows: cursorMonth(81, 41, 100) })],
+  cursorWeek: [cursor({ windows: [{ kind: 'seven_day', pct: 30, resetsAt: thursday() }] })],
+  cursorUnread: [cursor({ readAt: at(-1) })],
+  cursorExpired: [cursor({ status: 'expired' })],
+  cursorStale: [cursor({ status: 'stale', readAt: at(-22) })],
+  cursorUnreachable: [cursor({ status: 'unreachable', readAt: at(-25) })],
+  claudeCursor: [claude(), cursor({ windows: cursorMonth(12, 8, 56) })],
+  threeHarnesses: [claude(), codex, cursor({ windows: cursorMonth(81, 41, 100) })],
   ok: [claude()], over: [over], codex: [claude(), codex],
   loading: [claude({ status: 'loading', readAt: null, windows: [] })], expired: [claude({ status: 'expired', windows: [] })],
   stale: [claude({ status: 'stale', readAt: at(-12) })], unreachable: [claude({ status: 'unreachable', readAt: at(-25) })]
@@ -70,15 +83,31 @@ for (const theme of ['dark', 'light'] as const) {
     await page.screenshot({ path: info.outputPath(`usage-zoom-header-${theme}.png`), clip: { x: head.x, y: head.y, width: 900, height: 200 } });
   });
 
-  for (const st of ['over', 'codex', 'loading', 'expired', 'stale', 'unreachable'] as const) {
+  for (const st of ['over', 'codex', 'loading', 'expired', 'stale', 'unreachable', 'cursorMonth', 'cursorOver', 'cursorWeek', 'cursorUnread', 'cursorExpired', 'cursorStale', 'cursorUnreachable', 'claudeCursor'] as const) {
     test(`usage footer ${st}, ${theme}`, async ({ page }, info) => {
       await page.setViewportSize({ width: 1440, height: 860 });
       await boot(page, theme, 'fr', STATES[st]!);
       await footer(page).locator('.ugroup').first().waitFor();
       if (st === 'over') await footer(page).getByRole('button', { name: /Claude Code/ }).click();
       await zoom(page, info.outputPath(`usage-zoom-${st}-${theme}.png`));
+      // The Cursor chip's detail, for the states that have one.
+      if (['cursorMonth', 'cursorOver', 'cursorWeek', 'cursorUnread'].includes(st)) {
+        await footer(page).getByRole('button', { name: /Cursor/ }).click();
+        await zoom(page, info.outputPath(`usage-zoom-${st}-open-${theme}.png`));
+      }
     });
   }
+
+  test(`usage footer narrow, three harnesses, ${theme}`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 820, height: 700 });
+    await boot(page, theme, 'fr', STATES.threeHarnesses!);
+    await footer(page).locator('.ugroup').first().waitFor();
+    await page.screenshot({ path: info.outputPath(`usage-narrow-three-${theme}.png`) });
+    await footer(page).getByRole('button', { name: /Cursor/ }).click();
+    await page.screenshot({ path: info.outputPath(`usage-narrow-three-open-${theme}.png`) });
+    const box = (await footer(page).boundingBox())!;
+    expect(await footer(page).evaluate(el => el.scrollWidth <= el.clientWidth + 1), `footer overflows (${box.width}px)`).toBe(true);
+  });
 
   test(`usage footer narrow, ${theme}`, async ({ page }, info) => {
     await page.setViewportSize({ width: 820, height: 700 });

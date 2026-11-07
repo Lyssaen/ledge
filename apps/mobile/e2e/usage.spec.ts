@@ -64,3 +64,19 @@ for (const theme of ['dark', 'light'] as const) {
     await shot(page, `thread-${theme}`);
   });
 }
+
+test('Cursor limits on the phone: month, Cursor and others', async ({ page }) => {
+  const resetsAt = new Date(Date.now() + 24 * 86_400_000).toISOString();
+  Object.assign(h.daemon, { usage: [{ harness: 'cursor', status: 'ok', readAt: at(-1), windows: [{ kind: 'month', pct: 81, resetsAt }, { kind: 'pool', pool: 'cursor', pct: 41, resetsAt }, { kind: 'pool', pool: 'other', pct: 100, resetsAt }] }] satisfies PhoneHarnessUsage[] });
+  await pair(page, 'dark');
+  await nav(page).getByRole('link', { name: 'Ledge' }).click();
+  const limits = page.getByRole('group', { name: copy.chat.point.limitsLabel });
+  await expect(limits).toContainText('Mois');
+  await expect(limits).toContainText('Cursor Agent');
+  await expect(limits).toContainText('Autres');
+  await expect(limits).toContainText('81 %');
+  await expect(limits).toContainText('reprend le ');
+  await expect(page.getByRole('group', { name: copy.chat.point.yoursLabel })).toContainText('Cursor · Autres 100 %');
+  await limits.scrollIntoViewIfNeeded();
+  await shot(page, 'point-cursor-over');
+});

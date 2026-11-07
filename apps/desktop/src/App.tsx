@@ -27,7 +27,8 @@ import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { UsageFooter } from './usage/UsageFooter';
 import { useUsageView } from './usage/useUsageView';
-import { resetLong } from './usage/model';
+import { resetIsDate, resetLong } from './usage/model';
+import { alertWindowName } from './usage/alertName';
 import { LaunchModalPlace, LaunchPlace } from './launch/lazy';
 import type { LaunchWhere } from './launch/LaunchModal';
 import { openWhere } from './launch/modalModel';
@@ -214,8 +215,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useUsageNotify(usage.alerts, a => {
     const u = t.usage;
     const w = a.window;
-    const window = w.kind === 'five_hour' ? u.alertFive : w.kind === 'seven_day' ? u.alertWeek : u.alertModel(w.model ?? '');
-    return { title: u.notifyTitle(u.harness[a.harness] ?? a.harness), body: u.notifyBody(window, w.resetsAt ? resetLong(w.resetsAt, Date.now(), lang) : null) };
+    const window = alertWindowName(u, a.harness, w);
+    return { title: u.notifyTitle(u.harness[a.harness] ?? a.harness), body: u.notifyBody(window, w.resetsAt ? resetLong(w.resetsAt, Date.now(), lang) : null, !!w.resetsAt && resetIsDate(w.resetsAt, Date.now())) };
   });
   // Decided here, at render: the dialog and the `inert` below change in one commit, so the Modal's focus return is not refused.
   const pairing = usePairingDialogState(mobile);

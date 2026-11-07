@@ -284,13 +284,11 @@ button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
 .note-decision .decision-actions { margin-left: 14px; }
 
 /* The harnesses' limits on the footer's right (docs/mockups/ledge-harness-usage.html, v2 variant B). */
-:root { --h-claude: #b8694c; --h-codex: #5b58c2; --u-gauge: color-mix(in srgb, var(--foreground) 42%, transparent); --u-track: color-mix(in srgb, var(--foreground) 9%, transparent); }
-:root[data-theme="dark"] { --h-claude: #d4906f; --h-codex: #8f8cf0; --u-gauge: color-mix(in srgb, var(--foreground) 48%, transparent); --u-track: color-mix(in srgb, var(--foreground) 11%, transparent); }
+:root { --u-gauge: color-mix(in srgb, var(--foreground) 42%, transparent); --u-track: color-mix(in srgb, var(--foreground) 9%, transparent); }
+:root[data-theme="dark"] { --u-gauge: color-mix(in srgb, var(--foreground) 48%, transparent); --u-track: color-mix(in srgb, var(--foreground) 11%, transparent); }
 .workspace-footer { padding: 0 10px 0 24px; white-space: nowrap; overflow: visible; position: relative; }
 .footer-narrow { display: none !important; }
 .harness-logo { display: inline-block; flex: none; vertical-align: middle; }
-.harness-claude { color: var(--h-claude); }
-.harness-codex { color: var(--h-codex); }
 .usage-foot { display: flex; align-items: center; gap: 4px; min-width: 0; position: relative; }
 .ugroup-wrap { display: inline-flex; align-items: center; gap: 4px; }
 .ugroup { display: inline-flex; align-items: center; gap: 8px; padding: 3px 8px; border-radius: 6px; font: 11px 'Geist Mono', ui-monospace, monospace; color: var(--muted-foreground); white-space: nowrap; background: none; border: 0; }
@@ -300,6 +298,7 @@ button.ugroup:focus-visible { outline: 2px solid var(--ring); outline-offset: 1p
 .uhm { color: var(--foreground); }
 .ugroup.dim .umini { opacity: .45; }
 .uage { color: var(--warning); }
+.unr { font-family: 'Geist', system-ui, sans-serif; border-bottom: 1px dotted var(--muted-foreground); }
 .umsg { color: var(--warning); font-family: 'Geist', system-ui, sans-serif; }
 .umsg .narrow { display: none; }
 .umini { display: inline-flex; align-items: center; gap: 5px; }
@@ -325,6 +324,8 @@ button.ugroup:focus-visible { outline: 2px solid var(--ring); outline-offset: 1p
 .urow .ugauge { width: auto; height: 5px; }
 .usep-row { border-top: 1px solid var(--border); margin: 6px 0 4px; padding-top: 6px; font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--muted-foreground); }
 .ufoot { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; font-size: 11.5px; color: var(--muted-foreground); }
+.usage-pop .umsg2 { font-size: 12px; line-height: 1.45; padding: 4px 0 2px; color: var(--muted-foreground); }
+.ulinks { display: inline-flex; gap: 12px; }
 .ulink { color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 @media (max-width: 850px) {
   .footer-wide { display: none !important; }

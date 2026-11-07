@@ -7,6 +7,7 @@
 <!--
   Maquette : indicateurs d'usage par harnais (limites du compte, modèle, effort, contexte, durée) sur Desktop, TUI et téléphone.
   Ligne de queue qitem-20261105123910-6ccc5f2466262813. Base origin/main 535b46be (0.48.0).
+  v3 (2026-11-07) : Cursor Agent (?v=cursor&cs=month|week|over|loading|stale|unreachable|expired|unread).
   Paramètres : ?v=side|session|alert|tui|phone  &st=ok|loading|stale|expired|unreachable|codex|machines|over|none  &theme=dark|light  &lang=fr|en
 -->
 <style>
@@ -213,7 +214,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 :root[data-theme="dark"] { --h-claude: #d4906f; --h-codex: #8f8cf0; }
 .win{position:relative}
 .lg{display:inline-block;flex:none;vertical-align:middle}
-.lg-claude{color:var(--h-claude)}.lg-codex{color:var(--h-codex)}
+.lg-codex,.lg-cursor{color:var(--foreground)}
 .sbar{height:28px;flex:none;display:flex;align-items:center;gap:6px;padding:0 8px;border-top:1px solid var(--border);background:var(--sidebar);font:11px 'Geist Mono',monospace;color:var(--muted-foreground);white-space:nowrap;overflow:hidden}
 .wfoot{height:34px;flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 10px 0 24px;border-top:1px solid var(--border);font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden}
 .wfoot .fl{display:flex;align-items:center;gap:16px}
@@ -246,6 +247,27 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .rail .fillv{flex:1}
 .logos{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:6px}
 .logos span{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+
+/* ---------- v3 · Cursor Agent ---------- */
+.istat{height:26px;flex:none;display:flex;align-items:center;gap:14px;padding:0 10px;background:var(--sidebar);border-top:1px solid var(--sidebar-border);font-size:11.5px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden}
+.istat .fl{display:flex;align-items:center;gap:14px}
+.istat .fl span{display:flex;align-items:center;gap:6px}
+.istat .fl i{width:7px;height:7px;border-radius:50%;background:var(--success)}
+.istat .wait{height:20px;padding:0 8px;border-radius:5px;color:var(--foreground);display:flex;align-items:center}
+.istat .sp{flex:1}
+.hg .nr{color:var(--muted-foreground);font-family:'Geist',system-ui,sans-serif;border-bottom:1px dotted var(--muted-foreground)}
+.cgrid{display:flex;flex-direction:column;gap:8px;width:1120px;max-width:100%}
+.crow{display:grid;grid-template-columns:220px minmax(0,.75fr) minmax(0,1.25fr);align-items:stretch;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--background)}
+.crow .cl{padding:7px 14px;font-size:12px;color:var(--muted-foreground)}
+.crow .cl b{display:block;color:var(--foreground);font-weight:500;font-size:12.5px}
+.crow .istat{height:auto;border-top:0;border-left:1px solid var(--border);justify-content:flex-end}
+.crow.head{border:0;background:none}.crow.head .cl{padding:0 14px;font-size:11px;letter-spacing:.5px;text-transform:uppercase}
+.pops{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
+.pops .pop{position:static}
+.pop .pmsg{font-size:12px;line-height:1.45;padding:4px 0 2px;color:var(--muted-foreground)}
+.pop .pmsg.warn{color:var(--warning)}
+.yours-box{width:300px;background:var(--sidebar);border:1px solid var(--border);border-radius:var(--radius-lg);padding:6px 0}
+.row2{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
 
 /* ---------- TUI ---------- */
 .term{background:var(--t-bg);color:var(--t-fg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow-overlay);display:inline-block;max-width:100%;overflow:hidden}
@@ -301,7 +323,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 <div class="layout"><div class="stack" id="canvas"></div><aside class="notes" id="notes"></aside></div>
 <script>
 const Q = new URLSearchParams(location.search);
-const S = { v: Q.get('v') || 'footer', st: Q.get('st') || 'ok', theme: Q.get('theme') || 'dark', lang: Q.get('lang') || 'fr' };
+const S = { v: Q.get('v') || 'cursor', cs: Q.get('cs') || 'month', st: Q.get('st') || 'ok', theme: Q.get('theme') || 'dark', lang: Q.get('lang') || 'fr' };
 const THRESHOLD = 80;
 
 const T = {
@@ -313,7 +335,7 @@ const T = {
     aim: 'VISÉ',
     varA: 'Barre d’état sur toute la largeur de la fenêtre', varB: 'Le footer existant, étendu à tous les écrans, limites à droite', varN: 'Fenêtre étroite (rail, moins de 850 px) · variante B', rec: 'recommandée',
     footerSessions: 'Sessions locales et SSH', islandOn: 'Encoche active', expiredFoot: 'session expirée : reconnectez-vous dans Claude Code', expiredNarrow: 'reconnectez-vous',
-    staleFoot: 'il y a 12 min', unreachFoot: 'injoignable', logosCap: 'Logos des harnais (silhouettes Ledge de l’issue #61, sans les yeux)',
+    staleFoot: 'il y a 12 min', unreachFoot: 'injoignable', logosCap: 'Logos des harnais : les marques des éditeurs, comme dans les onglets de l’IDE',
     claude: 'Claude Code', codex: 'Codex', cl: 'Claude',
     h5: '5 h', week: 'Semaine', weekAll: 'Semaine · tous modèles', session5: 'Session · 5 h',
     weekOf: m => `Semaine · ${m}`,
@@ -379,7 +401,7 @@ const T = {
     aim: 'TARGET',
     varA: 'Status bar across the whole window', varB: 'The existing footer, on every screen, limits on the right', varN: 'Narrow window (rail, under 850 px) · variant B', rec: 'recommended',
     footerSessions: 'Local and SSH sessions', islandOn: 'Island active', expiredFoot: 'session expired: sign in again in Claude Code', expiredNarrow: 'sign in again',
-    staleFoot: '12 min ago', unreachFoot: 'unreachable', logosCap: 'Harness logos (Ledge silhouettes from issue #61, without eyes)',
+    staleFoot: '12 min ago', unreachFoot: 'unreachable', logosCap: 'Harness logos: the providers’ own marks, as in the IDE tabs',
     claude: 'Claude Code', codex: 'Codex', cl: 'Claude',
     h5: '5 h', week: 'Week', weekAll: 'Week · all models', session5: 'Session · 5 h',
     weekOf: m => `Week · ${m}`,
@@ -438,6 +460,7 @@ const T = {
     capOverview: w => `TUI · overview · ${w} columns`, capSession: w => `TUI · session thread · ${w} columns`, capSettings: 'TUI · Settings (,)'
   }
 };
+T.fr.views = { cursor: 'Cursor Agent', ...T.fr.views }; T.en.views = { cursor: 'Cursor Agent', ...T.en.views };
 const t = T[S.lang] || T.fr;
 document.documentElement.dataset.theme = S.theme;
 document.documentElement.lang = S.lang;
@@ -473,10 +496,11 @@ const multi = () => S.st === 'machines';
 function bar() {
   const seg = (key, opts, on) => `<div class="seg">${opts.map(([v, l, off]) => `<button ${off ? 'disabled' : ''} class="${on === v ? 'on' : ''}" onclick="go('${key}','${v}')">${l}</button>`).join('')}</div>`;
   const noStates = S.v === 'session';
+  const cur = S.v === 'cursor';
   document.getElementById('bar').innerHTML = `
     <div class="brand">Ledge<span>.</span><small>${t.title} · ${t.sub}</small></div>
     <div class="grp"><label>${t.screen}</label>${seg('v', Object.entries(t.views), S.v)}</div>
-    <div class="grp"><label>${t.state}</label>${seg('st', Object.entries(t.states).map(([k, l]) => [k, l, noStates]), S.st)}</div>
+    <div class="grp"><label>${t.state}</label>${cur ? seg('cs', Object.entries(ct.states), S.cs) : seg('st', Object.entries(t.states).map(([k, l]) => [k, l, noStates]), S.st)}</div>
     <div class="grp"><label>${t.theme}</label>${seg('theme', [['dark', t.dark], ['light', t.light]], S.theme)}</div>
     <div class="grp"><label>${t.lang}</label>${seg('lang', [['fr', 'FR'], ['en', 'EN']], S.lang)}</div>`;
 }
@@ -558,14 +582,16 @@ function sidebar({ open = false, yours = 'normal', rowSignal = false } = {}) {
 }
 
 /* ---------- footer (v2) ---------- */
-// The harness logos: the approved silhouettes of issue #61 (packages/ui/src/bots/Bot.tsx, SHELLS and HEAD_VIEWBOX), filled, no eyes.
-const SHELL = {
-  claude: { vb: [10, 18, 76, 64], d: 'M24 24H72Q75 24 75 27V43H82Q84 43 84 45V52Q84 54 82 54H75V62Q75 64 73 64H70V75Q70 77 68 77H66Q64 77 64 75V64H59V75Q59 77 57 77H55Q53 77 53 75V64H43V75Q43 77 41 77H39Q37 77 37 75V64H32V75Q32 77 30 77H28Q26 77 26 75V64H23Q21 64 21 62V54H14Q12 54 12 52V45Q12 43 14 43H21V27Q21 24 24 24Z' },
-  codex: { vb: [5, 7, 87, 82], d: 'M30 25C31 13 48 10 57 20C69 14 84 23 81 37C92 46 87 62 76 65C76 80 58 86 48 77C35 85 20 78 21 66C7 61 7 45 18 38C13 28 21 20 30 25Z' }
+// The harness logos: the providers' own marks, as the IDE's tabs draw them (apps/desktop/src/ide/ProviderLogo.tsx, path data
+// verbatim from @lobehub/icons-static-svg 1.102.0, MIT): Claude's spark in its orange, OpenAI's and Cursor's marks in the text colour.
+const MARK = {
+  claude: { title: 'Claude Code', d: 'M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z', fill: '#D97757' },
+  codex: { title: 'Codex', d: 'M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z', fill: 'currentColor' },
+  cursor: { title: 'Cursor Agent', d: 'M22.106 5.68L12.5.135a.998.998 0 00-.998 0L1.893 5.68a.84.84 0 00-.419.726v11.186c0 .3.16.577.42.727l9.607 5.547a.999.999 0 00.998 0l9.608-5.547a.84.84 0 00.42-.727V6.407a.84.84 0 00-.42-.726zm-.603 1.176L12.228 22.92c-.063.108-.228.064-.228-.061V12.34a.59.59 0 00-.295-.51l-9.11-5.26c-.107-.062-.063-.228.062-.228h18.55c.264 0 .428.286.296.514z', fill: 'currentColor' }
 };
-function logo(id, size = 15) {
-  const { vb, d } = SHELL[id];
-  return `<svg class="lg lg-${id}" width="${size}" height="${Math.round(size * vb[3] / vb[2])}" viewBox="${vb.join(' ')}" aria-label="${id === 'claude' ? 'Claude Code' : 'Codex'}"><path d="${d}" fill="currentColor"/></svg>`;
+function logo(id, size = 14) {
+  const m = MARK[id];
+  return `<svg class="lg lg-${id}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${m.fill}" fill-rule="evenodd" aria-label="${m.title}"><path d="${m.d}"/></svg>`;
 }
 const mini = (w, label) => `<span class="mg ${tone(w.pct)}"><span class="lb">${label}</span><span class="gbar"><i style="width:${Math.min(100, w.pct)}%"></i></span><b>${w.pct} %</b><span class="rs">↺ ${w.rsShort || w.rs}</span></span>`;
 function hgroup(h, { open = false, narrow = false, two = false } = {}) {
@@ -860,6 +886,208 @@ function phone3() {
   </div></div>`;
 }
 
+/* ---------- v3 · Cursor Agent ---------- */
+const CT = {
+  fr: {
+    states: { month: 'Offre mensuelle', week: 'Offre hebdomadaire', over: 'Réserve atteinte', loading: 'Lecture', stale: 'Anciennes', unreachable: 'Injoignable', expired: 'Session expirée', unread: 'Limite non lue' },
+    desc: {
+      month: 'Pro (ancienne offre) : deux réserves mensuelles et leur total', week: 'Nouvelles offres : une seule réserve, hebdomadaire',
+      over: 'Autres modèles à 100 %, total au-delà du seuil', loading: 'premier appel depuis le démarrage du daemon',
+      stale: 'plus de 15 min sans lecture réussie', unreachable: 'api2.cursor.sh ne répond pas',
+      expired: 'jeton échu ou 401 : Ledge ne le renouvelle jamais', unread: 'réponse sans le détail attendu (Enterprise, offre inconnue)'
+    },
+    name: 'Cursor Agent', month: 'Mois', week: 'Semaine',
+    poolCursor: 'Modèles Cursor', poolCursorS: 'Cursor', poolCursorH: 'Composer, Grok, Auto',
+    poolOther: 'Autres modèles', poolOtherS: 'Autres', poolOtherH: 'Claude, GPT, Gemini… au prix de l’API',
+    perPool: 'Par réserve', totalMonth: 'Total inclus · mois', weekRow: 'Semaine · modèles Cursor',
+    rs: '1 déc.', rsLong: '1 déc. 13:43', inM: '24 j', wrs: 'jeu.', wrsLong: 'jeu. 14:00', inW: '5 j',
+    resetOn: (d, i) => `remise le ${d} · dans ${i}`, resetOnShort: d => `remise le ${d}`, resumesOn: d => `atteinte · reprend le ${d}`,
+    unread: 'limite non lue', unreadMsg: 'Cursor ne donne pas à Ledge le détail de cette offre. Son usage reste lisible sur cursor.com.',
+    dash: 'cursor.com/dashboard ↗',
+    expiredFoot: 'session expirée : reconnectez-vous dans Cursor Agent', expiredNarrow: 'reconnectez-vous',
+    expiredLong: 'Session Cursor Agent expirée : reconnectez-vous dans Cursor Agent (cursor-agent login). Ledge ne renouvelle jamais la session.',
+    popSub: 'Compte connecté sur Local · lu il y a 1 min', popSubStale: 'Compte connecté sur Local · dernière lecture il y a 22 min',
+    popSubUnreach: 'Compte connecté sur Local · api2.cursor.sh injoignable · lu il y a 25 min', popSubLoading: 'Compte connecté sur Local · lecture…',
+    staleFoot: 'il y a 22 min',
+    alTotal: 'total du mois', alTotalB: '81 % · remise 1 déc.', alOther: 'Autres modèles', alOtherB: 'Atteinte · reprend le 1 déc.',
+    phUnread: 'Limite non lue : Cursor ne la donne pas pour cette offre.', phNotOnPc: 'Lecture impossible : reconnectez Cursor Agent sur le PC.',
+    phStale: 'Lu il y a 22 min.', phUnreach: 'Pas de lecture depuis 25 min.',
+    caps: {
+      ide: 'Desktop · IDE : la barre d’état, limites à l’extrémité droite, détail Cursor ouvert',
+      foot: 'Desktop · Atelier et accueil : le pied de fenêtre', narrow: 'Fenêtre étroite (moins de 850 px)',
+      states: 'Tous les états de la puce Cursor', alone: 'Cursor seul', withClaude: 'À côté de Claude Code',
+      pops: 'Le détail au clic, selon l’offre et l’état', yours: '« À toi » : alerte au seuil et réserve atteinte',
+      tui: w => `TUI · ligne de pied · ${w} colonnes · tous les états`, tuiYours: 'TUI · À TOI', phone: 'Téléphone · Le point', phoneAll: 'Téléphone · LIMITES selon l’état',
+      logos: 'Les trois logos, tels que les onglets de l’IDE les dessinent'
+    }
+  },
+  en: {
+    states: { month: 'Monthly plan', week: 'Weekly plan', over: 'Pool reached', loading: 'Reading', stale: 'Old', unreachable: 'Unreachable', expired: 'Session expired', unread: 'Limit not read' },
+    desc: {
+      month: 'Pro (legacy plan): two monthly pools and their total', week: 'New plans: a single weekly pool',
+      over: 'Other models at 100 %, total past the threshold', loading: 'first call since the daemon started',
+      stale: 'no successful read for over 15 min', unreachable: 'api2.cursor.sh does not answer',
+      expired: 'token expired or 401: Ledge never renews it', unread: 'answer without the expected detail (Enterprise, unknown plan)'
+    },
+    name: 'Cursor Agent', month: 'Month', week: 'Week',
+    poolCursor: 'Cursor models', poolCursorS: 'Cursor', poolCursorH: 'Composer, Grok, Auto',
+    poolOther: 'Other models', poolOtherS: 'Others', poolOtherH: 'Claude, GPT, Gemini… at API prices',
+    perPool: 'By pool', totalMonth: 'Included total · month', weekRow: 'Week · Cursor models',
+    rs: 'Dec 1', rsLong: 'Dec 1 13:43', inM: '24 d', wrs: 'Thu', wrsLong: 'Thu 14:00', inW: '5 d',
+    resetOn: (d, i) => `resets on ${d} · in ${i}`, resetOnShort: d => `resets on ${d}`, resumesOn: d => `reached · resumes on ${d}`,
+    unread: 'limit not read', unreadMsg: 'Cursor does not give Ledge the detail of this plan. Its usage is still on cursor.com.',
+    dash: 'cursor.com/dashboard ↗',
+    expiredFoot: 'session expired: sign in again in Cursor Agent', expiredNarrow: 'sign in again',
+    expiredLong: 'Cursor Agent session expired: sign in again in Cursor Agent (cursor-agent login). Ledge never renews the session.',
+    popSub: 'Account signed in on Local · read 1 min ago', popSubStale: 'Account signed in on Local · last read 22 min ago',
+    popSubUnreach: 'Account signed in on Local · api2.cursor.sh unreachable · read 25 min ago', popSubLoading: 'Account signed in on Local · reading…',
+    staleFoot: '22 min ago',
+    alTotal: 'month total', alTotalB: '81 % · resets Dec 1', alOther: 'Other models', alOtherB: 'Reached · resumes Dec 1',
+    phUnread: 'Limit not read: Cursor does not give it for this plan.', phNotOnPc: 'Cannot read: sign in to Cursor Agent again on the PC.',
+    phStale: 'Read 22 min ago.', phUnreach: 'Not read for 25 min.',
+    caps: {
+      ide: 'Desktop · IDE: the status bar, limits at its right end, Cursor detail open',
+      foot: 'Desktop · Workshop and home: the window footer', narrow: 'Narrow window (under 850 px)',
+      states: 'Every state of the Cursor chip', alone: 'Cursor alone', withClaude: 'Next to Claude Code',
+      pops: 'The detail on click, by plan and state', yours: '« For you »: threshold alert and pool reached',
+      tui: w => `TUI · foot line · ${w} columns · every state`, tuiYours: 'TUI · FOR YOU', phone: 'Phone · Summary', phoneAll: 'Phone · LIMITS by state',
+      logos: 'The three logos, as the IDE tabs draw them'
+    }
+  }
+};
+const ct = CT[S.lang] || CT.fr;
+const CS = Object.keys(CT.fr.states);
+
+/** What Ledge would show for Cursor in each state (percents as Cursor gives them, never recomputed). */
+function cursorH(cs) {
+  const pools = [{ k: ct.poolCursor, short: ct.poolCursorS, hint: ct.poolCursorH, pct: 8 }, { k: ct.poolOther, short: ct.poolOtherS, hint: ct.poolOtherH, pct: 56 }];
+  const h = { id: 'cursor', status: 'ok', plan: 'month', total: 12, pools, rs: ct.rs, rsLong: ct.rsLong, in: ct.inM };
+  if (cs === 'week') return { ...h, plan: 'week', total: 30, pools: [], rs: ct.wrs, rsLong: ct.wrsLong, in: ct.inW };
+  if (cs === 'over') return { ...h, total: 81, pools: [{ ...pools[0], pct: 41 }, { ...pools[1], pct: 100 }] };
+  if (cs === 'unread') return { ...h, unread: true };
+  if (['loading', 'stale', 'unreachable', 'expired'].includes(cs)) return { ...h, status: cs };
+  return h;
+}
+const claudeOk = () => limits('ok')[0];
+const cmini = (label, pct, rs) => `<span class="mg ${tone(pct)}"><span class="lb">${label}</span><span class="gbar"><i style="width:${Math.min(100, pct)}%"></i></span><b>${pct} %</b>${rs ? `<span class="rs">↺ ${rs}</span>` : ''}</span>`;
+/** The Cursor chip: the total (month or week), the pools past the threshold, and how old it is. `two`: next to another group, no reset. */
+function cursorChip(h, { two = false, narrow = false, open = false } = {}) {
+  const lb = h.plan === 'week' ? ct.week : ct.month;
+  const who = logo('cursor');
+  if (h.status === 'loading') return `<span class="hg" title="${ct.name}">${who}<span class="mg"><span class="lb">${lb}</span><span class="skel"></span></span></span>`;
+  if (h.status === 'expired') return `<span class="hg" title="${ct.name}">${who}<span class="msg">${narrow ? ct.expiredNarrow : ct.expiredFoot}</span></span>`;
+  if (h.unread) return `<span class="hg ${open ? 'open' : ''}" title="${ct.name}">${who}<span class="nr">${ct.unread}</span></span>`;
+  const dim = h.status === 'stale' || h.status === 'unreachable';
+  const age = h.status === 'stale' ? ct.staleFoot : h.status === 'unreachable' ? t.unreachFoot : '';
+  const hot = h.pools.filter(p => p.pct >= THRESHOLD);
+  return `<span class="hg ${dim ? 'dim' : ''} ${open ? 'open' : ''} ${two ? 'two' : ''}" title="${ct.name}">${who}${cmini(lb, h.total, two || narrow ? '' : h.rs)}${hot.map(p => cmini(p.short, p.pct, '')).join('')}${age ? `<span class="age">${age}</span>` : ''}</span>`;
+}
+const claudeChip = (narrow) => hgroup(claudeOk(), { two: true, narrow });
+const both = (h, o = {}) => `${claudeChip(o.narrow)}<span class="hsep"></span>${cursorChip(h, { ...o, two: true })}`;
+function istat(right, { left = true } = {}) {
+  return `<div class="istat">${left ? `<span class="fl"><span><i></i>${t.footerSessions}</span></span><span class="wait">${S.lang === 'fr' ? '2 t’attendent' : '2 waiting'}</span>` : ''}<span class="sp"></span><span class="fr">${right}</span></div>`;
+}
+function cursorPop(h) {
+  const row = (label, small, pct) => `<div class="prow ${tone(pct)}"><div class="pl">${label}${small ? `<small>${small}</small>` : ''}</div><div class="gbar ${tone(pct)}"><i style="width:${Math.min(100, pct)}%"></i></div><div class="pp">${pct} %</div></div>`;
+  const when = (pct, withIn) => (pct >= 100 ? ct.resumesOn(h.rs) : withIn ? ct.resetOn(h.rsLong, h.in) : ct.resetOnShort(h.rs));
+  const sub = h.status === 'stale' ? ct.popSubStale : h.status === 'unreachable' ? ct.popSubUnreach : h.status === 'loading' ? ct.popSubLoading : ct.popSub;
+  let body;
+  if (h.status === 'expired') body = `<div class="pmsg warn">${ct.expiredLong}</div>`;
+  else if (h.status === 'loading') body = `<div class="skel" style="margin:10px 0 6px"></div><div class="skel" style="margin:0 0 6px"></div>`;
+  else if (h.unread) body = `<div class="pmsg">${ct.unreadMsg}</div>`;
+  else if (h.plan === 'week') body = row(ct.weekRow, when(h.total, true), h.total);
+  else body = row(ct.totalMonth, when(h.total, true), h.total) + `<div class="psep">${ct.perPool}</div>` + h.pools.map(p => row(p.k, `${p.hint} · ${p.pct >= 100 ? ct.resumesOn(h.rs) : ct.resetOnShort(h.rs)}`, p.pct)).join('');
+  const dim = h.status === 'stale' || h.status === 'unreachable';
+  return `<div class="pop"><h5>${t.popTitle} · ${ct.name}</h5><div class="sub">${h.status === 'expired' ? '' : sub}</div>
+    <div style="${dim ? 'opacity:.55' : ''}">${body}</div>
+    <div class="pfoot"><span>${h.unread || h.status === 'expired' ? '' : t.alertAt(THRESHOLD)}</span><span style="display:flex;gap:12px">${h.unread ? `<a>${ct.dash}</a>` : ''}<a>${t.settings}</a></span></div></div>`;
+}
+function cursorYours() {
+  const card = (cls, where, body, time) => `<div class="st-card"><span class="st-gico ${cls}">${ICON.gauge}</span><div class="st-card-body"><div class="st-l1"><strong>${ct.name}</strong><span class="where">${where}</span><span class="st-time ${cls}">${time}</span></div><div class="st-l2"><span class="st-req">${body}</span><button class="st-qa">${t.ok}</button></div></div></div>`;
+  return `<div class="yours-box">${card('amber', ct.alTotal, ct.alTotalB, t.now)}${card('red', ct.alOther, ct.alOtherB, `12 ${t.min}`)}</div>`;
+}
+const TMARK_CURSOR = ['◇', 'fg b'];
+function cursorTuiSegs(h, wide) {
+  const segs = [[TMARK_CURSOR[0] + ' ', TMARK_CURSOR[1]]];
+  const lb = h.plan === 'week' ? ct.week : ct.month;
+  if (h.status === 'loading') return [...segs, [t.reading, 'faint']];
+  if (h.status === 'expired') return [...segs, [wide ? ct.expiredFoot : ct.expiredNarrow, 'yellow']];
+  if (h.unread) return [...segs, [ct.unread, 'faint']];
+  const dim = h.status === 'stale' || h.status === 'unreachable';
+  const one = (k, pct, rs) => {
+    const col = dim ? 'faint' : tcol(pct);
+    segs.push([k + ' ', 'faint']);
+    if (wide) segs.push([bars(pct, 6) + ' ', col]);
+    segs.push([`${pct}%`, col === 'dim' ? 'fg' : col]);
+    if (rs) segs.push([` ↺${rs}`, 'faint']);
+    segs.push(['  ', '']);
+  };
+  one(wide ? lb : lb.toLowerCase().slice(0, 4), h.total, wide ? h.rs : '');
+  h.pools.filter(p => p.pct >= THRESHOLD).forEach(p => one(p.short, p.pct, ''));
+  if (dim) segs.push([h.status === 'unreachable' ? t.unreachFoot : ct.staleFoot, 'yellow']);
+  return segs;
+}
+function cursorTui(W) {
+  const wide = W >= 120;
+  const c = claudeOk();
+  const claude = [['✻ ', 'coral b'], [`${t.h5} `, 'faint'], ...(wide ? [[bars(c.w[0].pct, 6) + ' ', 'dim']] : []), [`${c.w[0].pct}%`, 'fg'], ...(wide ? [[` ↺${c.w[0].rs}`, 'faint']] : []), ['  ', ''], [`${wide ? t.week : (S.lang === 'fr' ? 'sem' : 'wk')} `, 'faint'], ...(wide ? [[bars(c.w[1].pct, 6) + ' ', 'dim']] : []), [`${c.w[1].pct}%`, 'fg'], ['  │  ', 'line']];
+  const lines = CS.map(cs => [[` ${ct.states[cs]}`.padEnd(19), 'violet'], ['│ ', 'line'], ...claude, ...cursorTuiSegs(cursorH(cs), wide)]);
+  return renderTerm(lines, W + 21);
+}
+function cursorTuiYours() {
+  const rows = [
+    [['◔ ', 'yellow'], [`${ct.name} · ${ct.alTotal} ${S.lang === 'fr' ? 'à' : 'at'} 81 % · ${S.lang === 'fr' ? 'remise' : 'resets'} ${ct.rs}`, 'fg']],
+    [['◔ ', 'red'], [`${ct.name} · ${ct.alOther} ${S.lang === 'fr' ? 'atteinte · reprend le' : 'reached · resumes on'} ${ct.rs}`, 'fg']]
+  ];
+  return renderTerm(box(t.tuiYours(2), rows, 80, 'red', 'red'), 80);
+}
+function cursorPhoneLimits(h) {
+  const row = (k, pct, rs) => `<div class="ph-lim ${tone(pct)}"><span>${k}</span><div class="gbar ${tone(pct)}"><i style="width:${Math.min(100, pct)}%"></i></div><span class="pp"><b>${pct} %</b><small>${pct >= 100 ? t.resumes(rs) : '↺ ' + rs}</small></span></div>`;
+  const head = `<div class="ph-hn">${logo('cursor', 14)} ${ct.name}</div>`;
+  if (h.status === 'loading') return head + `<div class="ph-msg">${t.phLoading}</div>`;
+  if (h.status === 'expired') return head + `<div class="ph-msg warn">${ct.phNotOnPc}</div>`;
+  if (h.unread) return head + `<div class="ph-msg">${ct.phUnread}</div>`;
+  const dim = h.status === 'stale' || h.status === 'unreachable';
+  const note = h.status === 'stale' ? `<div class="ph-msg warn">${ct.phStale}</div>` : h.status === 'unreachable' ? `<div class="ph-msg warn">${ct.phUnreach}</div>` : '';
+  return head + `<div style="${dim ? 'opacity:.5' : ''}">${row(h.plan === 'week' ? ct.week : ct.month, h.total, h.rs)}${h.pools.map(p => row(p.short, p.pct, h.rs)).join('')}</div>` + note;
+}
+function cursorPhone(h) {
+  const c = claudeOk();
+  const row = (k, w) => `<div class="ph-lim ${tone(w.pct)}"><span>${k}</span><div class="gbar ${tone(w.pct)}"><i style="width:${Math.min(100, w.pct)}%"></i></div><span class="pp"><b>${w.pct} %</b><small>↺ ${w.rs}</small></span></div>`;
+  const over = S.cs === 'over';
+  return `<div class="phone"><div class="ph-status"><span>11:32</span><span>●●● 5G ▮</span></div>
+  <div class="ph-head"><h2>${t.phLedge}</h2></div>
+  <div class="ph-body"><div class="ph-card"><h3>${t.phPoint} <small>${t.phAgo}</small></h3>
+    <div class="ph-sec">${t.phYours.toUpperCase()} · ${over ? 3 : 1}</div>
+    <div class="ph-line"><span class="bot"></span><b>Otto</b><span class="muted">${t.npm}</span><span class="st-fill"></span><button class="ph-btn pri">${t.approve}</button><button class="ph-btn">${t.deny}</button></div>
+    ${over ? `<div class="ph-line"><span class="st-gico amber">${ICON.gauge}</span><span>Cursor · ${ct.month} <b style="color:var(--warning);font-weight:500">81 %</b></span><span class="muted">↺ ${ct.rs}</span></div>
+    <div class="ph-line"><span class="st-gico red">${ICON.gauge}</span><span>Cursor · ${ct.poolOtherS} <b style="color:var(--danger-text);font-weight:500">100 %</b></span><span class="muted" style="white-space:nowrap">↺ ${ct.rs}</span></div>` : ''}
+    <div class="ph-sec">${t.phLimits.toUpperCase()}</div>
+    <div class="ph-hn">${logo('claude', 14)} ${t.claude}</div>${row(t.h5, c.w[0])}${row(t.week, c.w[1])}
+    ${cursorPhoneLimits(h)}
+  </div></div>${phTabs('chat')}</div>`;
+}
+function cursorView() {
+  const cap = (s) => `<div class="cap"><b>${t.aim}</b>${s}</div>`;
+  const h = cursorH(S.cs);
+  const pop = cursorPop(h).replace('<div class="pop">', '<div class="pop pf" style="right:12px;bottom:32px">');
+  const ide = `<div class="win" style="--wh:560px"><div class="titlebar"><b>Ledge<i>.</i></b><span class="fill"></span><span class="dots"><span>—</span><span>▢</span><span>✕</span></span></div><div class="body">${sidebar()}${sessionMain(false)}</div>${istat(both(h, { open: true }))}${pop}</div>`;
+  const foot = `<div class="win"><footer class="wfoot"><div class="fl"><span><i></i>${t.footerSessions}</span><span class="isl">${t.islandOn}</span></div><div class="fr">${both(h)}</div></footer></div>`;
+  const narrow = `<div class="win" style="width:800px"><footer class="wfoot narrow"><div class="fl"><span><i></i>${t.local} 4</span></div><div class="fr">${both(h, { narrow: true })}</div></footer></div>`;
+  const states = `<div class="cgrid"><div class="crow head"><div class="cl"></div><div class="cl">${ct.caps.alone}</div><div class="cl">${ct.caps.withClaude}</div></div>${CS.map(cs => `<div class="crow"><div class="cl"><b>${ct.states[cs]}</b>${ct.desc[cs]}</div>${istat(cursorChip(cursorH(cs)), { left: false })}${istat(both(cursorH(cs)), { left: false })}</div>`).join('')}</div>`;
+  const pops = `<div class="pops">${['month', 'week', 'over', 'unread', 'expired', 'unreachable'].map(cs => `<div>${cap(ct.states[cs])}${cursorPop(cursorH(cs))}</div>`).join('')}</div>`;
+  return cap(`${ct.caps.ide} · ${ct.states[S.cs]}`) + ide
+    + `<div>${cap(ct.caps.foot)}${foot}</div>`
+    + `<div>${cap(ct.caps.narrow)}${narrow}</div>`
+    + `<div>${cap(ct.caps.states)}${states}</div>`
+    + `<div>${cap(ct.caps.pops)}${pops}</div>`
+    + `<div class="row2"><div>${cap(ct.caps.yours)}${cursorYours()}</div><div>${cap(ct.caps.tuiYours)}${cursorTuiYours()}</div></div>`
+    + `<div>${cap(ct.caps.tui(120))}${cursorTui(120)}</div>`
+    + `<div>${cap(ct.caps.tui(80))}${cursorTui(80)}</div>`
+    + `<div class="row2"><div>${cap(`${ct.caps.phone} · ${ct.states[S.cs]}`)}${cursorPhone(h)}</div><div style="width:330px">${cap(ct.caps.phoneAll)}${CS.map(cs => `<div class="ph-card" style="background:var(--background)"><div class="ph-sec" style="margin-top:0">${ct.states[cs]}</div>${cursorPhoneLimits(cursorH(cs))}</div>`).join('')}</div></div>`
+    + `<div>${cap(ct.caps.logos)}<div class="logos"><span>${logo('cursor', 14)} Cursor Agent · 14 px</span><span>${logo('cursor', 20)} 20 px</span><span>${logo('claude', 14)} Claude Code</span><span>${logo('codex', 14)} Codex</span></div></div>`;
+}
+
 /* ---------- notes ---------- */
 const NOTES = {
   fr: {
@@ -871,7 +1099,7 @@ const NOTES = {
       <li><b>Codex</b> sans fenêtre : rien, pas même son logo. Avec des fenêtres (état « Codex en donne ») : son logo et les mêmes jauges, après un séparateur.</li>
       <li>États : <i>Lecture</i> (barres en attente) · <i>Anciennes</i> (estompé, « il y a 12 min » en ambre) · <i>Injoignable</i> (estompé, « injoignable ») · <i>Jeton expiré</i> (« session expirée : reconnectez-vous dans Claude Code ») · <i>Deux comptes</i> (logo puis nom de la machine, un groupe par compte ; à deux groupes, « Sem. » sans heure et des barres plus courtes pour tenir ; avec les noms de machine, plus d’heure du tout : le détail au clic les donne) · <i>Aucune</i> (le footer d’aujourd’hui).</li>
       <li><b>Fenêtre étroite</b> (rail, moins de 850 px) : le footer ne garde que « Local 4 » à gauche ; à droite, logo, petites barres et %, sans libellés ni heures (le détail au clic les donne).</li>
-      <li><b>Logos</b> : les silhouettes de mascotte déjà validées pour Ledge (issue #61, <code>packages/ui/src/bots/Bot.tsx</code>, SHELLS) : le corps en pixels de Clawd pour Claude Code, le nuage pour Codex, pleines, sans les yeux, à la couleur du harnais. Ce sont des dessins de Ledge, déjà dans le dépôt : rien à télécharger, pas de logo officiel ni de licence de marque en jeu.</li>
+      <li><b>Logos</b> (v3) : les marques des éditeurs, comme dans les onglets de l’IDE (<code>apps/desktop/src/ide/ProviderLogo.tsx</code>) : l’étincelle orange de Claude, le logo OpenAI pour Codex, le cube de Cursor, ces deux-là à la couleur du texte.</li>
       <li><b>TUI</b> : une ligne de pied juste au-dessus de la barre de touches, sur tous les écrans (onglet TUI). <b>Téléphone</b> : pas de footer (la barre d’onglets occupe le bas) : la section LIMITES du Point reste, avec le logo devant chaque harnais.</li></ul></div>`,
     side: `<div class="note"><h3>Barre latérale</h3><h4>Les limites du compte, au pied, par harnais</h4><ul>
       <li>Un bloc par harnais qui donne des fenêtres, juste au-dessus de la ligne machine (« Local 4 »). Deux mini-jauges : <b>5 h</b> et <b>Semaine</b>, le % et l’heure de remise à zéro (↺).</li>
@@ -917,10 +1145,25 @@ const NOTES = {
       <li><b>« Anciennes »</b> : au bout de 5 min sans lecture réussie (dessiné) ; et au-delà d’1 h, masquer les valeurs ?</li>
       <li><b>TUI</b> : la ligne de pied ne montre les fenêtres par modèle qu’au-delà du seuil. Faut-il un détail complet (toutes les fenêtres) quelque part, par exemple dans Réglages (,) ou l’aide (?) ?</li>
       <li><b>Variante du footer</b> : B (le footer existant, étendu à tous les écrans, recommandée) ou A (barre d’état sur toute la largeur) ?</li>
-      <li><b>Logo</b> : la silhouette pleine sans les yeux (dessiné), ou la mascotte entière avec ses yeux et son état ? <span class="rec">Je recommande sans les yeux : un footer ne doit pas bouger.</span></li></ol></div>`
+      <li><b>Logo</b> : tranché en v3, les vrais logos des éditeurs (comme les onglets de l’IDE).</li></ol></div>`
   },
   en: {}
 };
+NOTES.fr.cursor = `<div class="note"><h3>v3 · Cursor Agent</h3><h4>La même puce que Claude Code, avec le mois et ses réserves</h4><ul>
+  <li><b>Source</b> : le daemon lit le jeton de Cursor Agent (<code>~/.config/cursor/auth.json</code>) en lecture seule et appelle la RPC de lecture que la commande <code>/usage</code> de Cursor Agent appelle elle-même. Jamais de renouvellement, jamais le jeton écrit ni affiché.</li>
+  <li><b>Puce</b> : <b>vrai logo</b> de Cursor (le cube, à la couleur du texte ; Claude garde son étincelle orange, Codex le logo OpenAI), le même que dans les onglets de l’IDE (<code>ProviderLogo</code>), puis <b>Mois</b> (ou <b>Semaine</b> sur les nouvelles offres) : le <b>total inclus</b>, % et ↺ date de remise (« 1 déc. » : au-delà d’une semaine, une date et non un jour). Une réserve (« Cursor », « Autres ») ne s’ajoute qu’au-delà du seuil, comme un modèle chez Claude.</li>
+  <li>À côté d’un autre harnais, la date tombe (comme la semaine de Claude aujourd’hui) : le détail la donne.</li>
+  <li><b>Détail au clic</b> : « Total inclus · mois », remise le 1 déc. 13:43 · dans 24 j ; puis « Par réserve » : Modèles Cursor (Composer, Grok, Auto) et Autres modèles (au prix de l’API). Les pourcentages sont ceux de Cursor, jamais recalculés depuis des montants ; ni dollars, ni offre, ni dépassement payant.</li>
+  <li><b>Limite non lue</b> : Cursor répond sans le détail attendu (Enterprise, offre inconnue) : la puce dit « limite non lue » et le détail renvoie à cursor.com/dashboard.</li>
+  <li><b>États</b> : Lecture · Anciennes (plus de <b>15 min</b> sans lecture : Cursor est lu toutes les 5 min au plus) · Injoignable (api2.cursor.sh) · Session expirée (« reconnectez-vous dans Cursor Agent »).</li>
+  <li><b>À toi</b> : une carte par fenêtre au seuil puis à 100 % (le total, chaque réserve), « Compris » la range jusqu’à la remise du mois.</li>
+  <li><b>TUI</b> : marque <b>◇</b> (un terminal ne dessine pas de SVG ; sans couleur, comme le logo de Cursor) ; « ◇ Mois ██░░ 12% ↺1 déc. » à 120 colonnes, « ◇ mois 12% » à 80. <b>Téléphone</b> : LIMITES montre le total et les deux réserves.</li>
+  <li><b>Nouvelle session</b> (lot 4 de l’IDE, Otto) : la limite de Cursor s’y lit comme celle de Claude et Codex, depuis le même protocole.</li></ul></div>`;
+NOTES.fr.cursorQ = `<div class="note"><h3>À trancher par l’utilisateur</h3><ol>
+  <li><b>Puce</b> : le total seul, les réserves au-delà du seuil (dessiné) ; ou toujours les deux réserves (« Cursor 8 % · Autres 56 % ») sans total ? <span class="rec">Je recommande le total : c’est ce que Cursor affiche en premier.</span></li>
+  <li><b>Alertes</b> : sur le total et sur chaque réserve (dessiné), ou sur le total seulement ?</li>
+  <li><b>Marque TUI</b> : ◇ (dessiné) ; ⬢ sert déjà aux projets.</li>
+  <li><b>« Anciennes »</b> à 15 min pour Cursor (dessiné) au lieu de 5 min : il n’est lu que toutes les 5 min.</li></ol></div>`;
 NOTES.en = NOTES.fr; // notes for the reviewer stay in French; the screens are in both languages
 
 /* ---------- render ---------- */
@@ -929,6 +1172,12 @@ function render() {
   const c = document.getElementById('canvas');
   const cap = (s) => `<div class="cap"><b>${t.aim}</b>${s}</div>`;
   let html = '';
+  if (S.v === 'cursor') {
+    c.innerHTML = cursorView();
+    const N = NOTES[S.lang] || NOTES.fr;
+    document.getElementById('notes').innerHTML = N.cursor + N.cursorQ;
+    return;
+  }
   if (S.v === 'footer') {
     const tag = (n, label, rec) => `<div class="vtag ${rec ? 'rec' : ''}" data-rec="${t.rec}"><b>${n}</b>${label}</div>`;
     html = cap(`${t.views.footer} · ${t.states[S.st]}`)
