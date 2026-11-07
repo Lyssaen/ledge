@@ -264,18 +264,20 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The IDE's tabs follow (Review Focus 1): a session tab goes with its session, an archived one stays. Only a machine that has
   // said what it holds (`ready`) can close one: a tab kept from the last run stays while its machine connects, or while it is offline.
   const readyMachines = machines.filter(m => m.ready).map(m => m.id).join('\n');
+  // Whether a tab may stay (or come back with Ctrl+Shift+T): a session's tab, its Changes and its Terminal go with it.
+  const keepTab = useCallback((tab: Tab): boolean => {
+    const sid = sessionOf(tab);
+    if (sid === null) return true;
+    const machine = splitId(sid)?.machine;
+    return !machine || !readyMachines.split('\n').includes(machine) || known.some(s => s.id === sid);
+  }, [known, readyMachines]);
+  const keepTabNow = useRef(keepTab);
+  keepTabNow.current = keepTab;
   useEffect(() => {
     if (reconcile(nav, known, projects) !== nav) navDispatch({ type: 'reconcile', sessions: known, projects });
     if (!ide) return;
-    const ready = new Set(readyMachines.split('\n'));
-    wsStore.update(w => reconcileTabs(w, tab => {
-      // A session's tab, its Changes and its Terminal go with it.
-      const sid = sessionOf(tab);
-      if (sid === null) return true;
-      const machine = splitId(sid)?.machine;
-      return !machine || !ready.has(machine) || known.some(s => s.id === sid);
-    }));
-  }, [known, projects, ide, readyMachines]);
+    wsStore.update(w => reconcileTabs(w, keepTab));
+  }, [known, projects, ide, keepTab]);
   // Turning the IDE on from a session page opens that session's tab (Review Focus 3); from Settings (where its switch is) or
   // the OpenRig page, theirs.
   useEffect(() => {
@@ -434,7 +436,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The tab keys (VS Code's): Ctrl W closes the focused group's active tab (remembered for Ctrl Shift T), or the group when empty.
   const ideKeys = useMemo((): IdeKeys => ({ toggle: (panel: 'side' | 'bottom' | 'right') => onLayout({ type: 'toggle', panel }), split: () => wsStore.update(w => splitGroup(w, w.focus)), newSessionAnywhere: true as const,
     closeTab: () => { const g = focused(wsStore.get()); const tab = g.tabs[g.active]; if (tab) wsStore.close(keyOf(tab)); else wsStore.update(w => closeGroup(w, g.id)); },
-    reopenTab: () => wsStore.reopen(),
+    reopenTab: () => wsStore.reopen(t => keepTabNow.current(t)),
     cycleTab: step => wsStore.update(w => cycleTab(w, w.focus, step)),
     focusGroup: n => wsStore.update(w => focusNth(w, n)),
     moveTab: step => wsStore.update(w => moveActive(w, step)) }), [onLayout, wsStore]);

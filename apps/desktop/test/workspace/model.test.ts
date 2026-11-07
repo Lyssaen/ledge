@@ -443,6 +443,16 @@ describe('closed tabs (Ctrl+Shift+T)', () => {
     const none = reopenLast(r.w, []);
     expect(none.w).toBe(r.w);
   });
+  it('an entry whose session is gone is discarded, the next one reopens', () => {
+    let w = open(open(open(empty(), S('a')), S('b')), S('gone'));
+    let stack = remember([], w, 'session:b');
+    w = close(w, 'session:b');
+    stack = remember(stack, w, 'session:gone');
+    w = close(w, 'session:gone');
+    const r = reopenLast(w, stack, t => t.ref !== 'gone');
+    expect(keys(r.w, 'g1')).toEqual(['session:a', 'session:b']);
+    expect(r.stack).toEqual([]);
+  });
   it('keeps the 20 last; an unknown key is not noted', () => {
     let stack: readonly Closed[] = [];
     let w = empty();

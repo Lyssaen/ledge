@@ -64,6 +64,16 @@ describe('workspace store', () => {
     s.reopen();                                                       // c went with reconcile: not on the stack
     expect(s.get()).toBe(before);
   });
+  it('reopen skips a tab its predicate refuses (its session gone) and reopens the one before', () => {
+    const S = (id: string) => ({ kind: 'session' as const, ref: id });
+    const s = createWorkspaceStore(open(open(open(empty(), S('a')), S('b')), S('gone')));
+    s.close('session:b'); s.close('session:gone');
+    s.reopen(t => t.ref !== 'gone');
+    expect(focused(s.get()).tabs.map(keyOf)).toEqual(['session:a', 'session:b']);
+    const before = s.get();
+    s.reopen();                                                       // the refused entry was dropped, not kept
+    expect(s.get()).toBe(before);
+  });
   it('closeOthers remembers each tab it closes', () => {
     const S = (id: string) => ({ kind: 'session' as const, ref: id });
     const s = createWorkspaceStore(open(open(open(empty(), S('a')), S('b')), S('c')));

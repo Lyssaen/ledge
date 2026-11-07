@@ -249,11 +249,11 @@ export function remember(stack: readonly Closed[], w: Workspace, key: string): r
   return [...stack, { tab: hit.group.tabs[hit.index]!, group: hit.group.id, index: hit.index }].slice(-CLOSED_MAX);
 }
 /** Ctrl+Shift+T: the last closed tab back where it was (its group if it still exists, at its place; else the focused
- *  group), active and focused. Tabs open again since are skipped. */
-export function reopenLast(w: Workspace, stack: readonly Closed[]): { w: Workspace; stack: readonly Closed[] } {
+ *  group), active and focused. Entries open again since, or that `keep` refuses (their session gone), are discarded. */
+export function reopenLast(w: Workspace, stack: readonly Closed[], keep: (t: Tab) => boolean = () => true): { w: Workspace; stack: readonly Closed[] } {
   const rest = [...stack];
   for (let c = rest.pop(); c; c = rest.pop()) {
-    if (find(w, keyOf(c.tab))) continue;
+    if (find(w, keyOf(c.tab)) || !keep(c.tab)) continue;
     const g = groupById(w, c.group) ?? focused(w);
     const tabs = [...g.tabs];
     const at = g.id === c.group ? Math.min(c.index, tabs.length) : tabs.length;

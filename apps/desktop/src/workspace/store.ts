@@ -15,8 +15,8 @@ export interface WorkspaceStore {
   close(key: string): void;
   /** « Fermer les autres »: each tab closed is remembered. */
   closeOthers(key: string): void;
-  /** Ctrl+Shift+T: the last tab closed back where it was. */
-  reopen(): void;
+  /** Ctrl+Shift+T: the last tab closed back where it was; those `keep` refuses (their session gone) are dropped. */
+  reopen(keep?: (t: Tab) => boolean): void;
 }
 
 export function createWorkspaceStore(initial: Workspace = loadWorkspace()): WorkspaceStore {
@@ -42,7 +42,7 @@ export function createWorkspaceStore(initial: Workspace = loadWorkspace()): Work
       for (const t of hit.group.tabs) if (keyOf(t) !== key) closed = remember(closed, state, keyOf(t));
       update(w => closeOthers(w, key));
     },
-    reopen() { const r = reopenLast(state, closed); closed = r.stack; update(() => r.w); },
+    reopen(keep) { const r = reopenLast(state, closed, keep); closed = r.stack; update(() => r.w); },
   };
 }
 

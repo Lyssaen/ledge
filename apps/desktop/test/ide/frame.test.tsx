@@ -570,6 +570,20 @@ describe('tab shortcuts and closing an empty group (lot 3 follow-up)', () => {
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
   });
 
+  it('Ctrl+Shift+T does not bring back the tab of a session deleted since: the tab closed before it comes back', async () => {
+    const { d, tree, user } = await withOtto();
+    await user.click(tree.getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Nova'));
+    ctrl('w');                                                        // Nova
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier', 'Otto']));
+    ctrl('w');                                                        // Otto
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier']));
+    act(() => d.remove('otto'));
+    await waitFor(() => expect(tree.queryByRole('button', { name: /^Otto/ })).toBeNull());
+    ctrl('T', { shiftKey: true });
+    await waitFor(() => expect(names(groupviews()[0]!)).toEqual(['Atelier', 'Nova']));
+  });
+
   it('Ctrl+Tab cycles the focused group\'s tabs, Ctrl+Shift+Tab back', async () => {
     await withOtto();
     ctrl('Tab');
