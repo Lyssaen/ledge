@@ -27,7 +27,8 @@ export type Place =
   | { kind: 'openrig'; machine?: string; section?: 'roles'; role?: string; seat?: string; open?: OpenRigOpen; view: View; project: ProjectFilter };
 export type Modal =
   | { kind: 'search' } | { kind: 'shortcuts' }
-  | { kind: 'launch'; project?: string }   // project : la table ou le projet d'où on l'a demandée (lot 7)
+  // project : la table ou le projet d'où on l'a demandée (lot 7) ; from : 'plus' quand c'est le + d'un groupe de l'IDE (ignoré hors IDE)
+  | { kind: 'launch'; project?: string; from?: 'plus' }
   // edit : id du projet à modifier ; file : id de la session à y ranger (lot 8) ; delete : ouvert sur sa vue de suppression (Réglages › Projets, lot 10) ;
   // addFolder : ouvert sur le navigateur de dossiers (« Ajouter un dossier… » du menu d'un projet) ;
   // proposal : le pid d'une proposition de Ledge retenue par rememberProposal (lot 11), ouverte pour être vérifiée

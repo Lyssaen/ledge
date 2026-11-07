@@ -28,7 +28,9 @@ import { Footer } from './shell/Footer';
 import { UsageFooter } from './usage/UsageFooter';
 import { useUsageView } from './usage/useUsageView';
 import { resetLong } from './usage/model';
-import { LaunchPlace } from './launch/lazy';
+import { LaunchModalPlace, LaunchPlace } from './launch/lazy';
+import type { LaunchWhere } from './launch/LaunchModal';
+import { openWhere } from './launch/modalModel';
 import { ChatPlace, HomePlace } from './chat/lazy';
 import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
@@ -310,14 +312,18 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useEffect(() => {
     if (!ide || !front) return;
     const p = ideNow.current.nav.place;
+    // Following the front tab never closes a dialog: a group's « + » focuses that group (its front tab changes) and opens
+    // New session in the same click.
+    const modal = ideNow.current.nav.modal;
+    const go = (a: NavAction) => { navDispatch(a); if (modal) navDispatch({ type: 'modal', modal }); };
     if (front.kind === 'session' || front.kind === 'seat') {
-      if (known.some(s => s.id === front.ref) && (p.kind !== 'session' || p.id !== front.ref)) navDispatch({ type: 'open', id: front.ref });
+      if (known.some(s => s.id === front.ref) && (p.kind !== 'session' || p.id !== front.ref)) go({ type: 'open', id: front.ref });
     } else if (front.kind === 'atelier') {
-      if (p.kind !== 'overview') navDispatch({ type: 'home', project: (p.kind === 'settings' ? p.back : p).project });
+      if (p.kind !== 'overview') go({ type: 'home', project: (p.kind === 'settings' ? p.back : p).project });
     } else if (front.kind === 'settings') {
-      if (p.kind !== 'settings') navDispatch(tabAction(front)!);
+      if (p.kind !== 'settings') go(tabAction(front)!);
     } else if (front.kind === 'openrig') {
-      if (p.kind !== 'openrig' || (p.machine ?? 'local') !== front.ref) navDispatch(tabAction(front)!);
+      if (p.kind !== 'openrig' || (p.machine ?? 'local') !== front.ref) go(tabAction(front)!);
     }
   }, [ide, frontKey, known, place, tabAction]);
 
@@ -457,7 +463,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const filter = base.project !== 'all' && base.project !== 'none' ? base.project : undefined;
   // Launching from the form: one at a time, nothing optimistic. Once the daemon says launched, the form closes, the filter
   // shows the launch's table, the seat lights and the notice names who starts where.
-  const launched = useRef<{ name: string; project: string; projectId: string } | null>(null);
+  // `where`: the IDE modal's « Ouvrir » (the old form has none).
+  const launched = useRef<{ name: string; project: string; projectId: string; where?: LaunchWhere } | null>(null);
   const launcher = useLaunch(fleetView, id => {
     const preview = launched.current;
     // The table is the launched session's own, once listed (the daemon lists it before answering), or none (« Sans projet »: the
@@ -467,8 +474,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const own = ownId ? projects?.projects.find(p => p.id === ownId) : undefined;
     const table = own ? { id: own.id, name: own.name } : s ? { id: 'none', name: null } : preview ? { id: preview.projectId, name: preview.project } : null;
     dispatch({ type: 'modal', modal: null });
+    // In the IDE the session opens where the modal's « Ouvrir » said, and the overview's filter stays.
+    if (ideNow.current.ide) dispatch({ type: 'open', id, where: preview?.where ?? ideNow.current.openSession });
     // Only the overview's filter follows; a session page (the sidebar's « New session in … ») stays where it is.
-    if (place.kind === 'overview' && place.project !== 'all' && place.project !== table?.id) dispatch({ type: 'home', project: 'all' });
+    else if (place.kind === 'overview' && place.project !== 'all' && place.project !== table?.id) dispatch({ type: 'home', project: 'all' });
     filing.markSeated(id);
     const name = s?.name ?? preview?.name ?? '';
     if (table) notify(table.name !== null ? t.launch.started(name, table.name) : t.launch.startedNoTable(name));
@@ -585,7 +594,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       const pick = (p: EmptyPick) => {
         wsStore.update(w => focusGroup(w, gid));
         if (p === 'terminal') { if (s) wsStore.update(w => openTab(w, agentTerminalTab(s.id), 'active')); return; }
-        if (p === 'launch') { dispatch({ type: 'modal', modal: { kind: 'launch' } }); return; }
+        if (p === 'launch') { dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); return; }
         dispatch(tabAction(p === 'atelier' ? ATELIER_TAB : p === 'settings' ? SETTINGS_TAB : openrigTab())!);
       };
       return <EmptyGroup terminal={s ? title({ kind: 'session', ref: s.id }) : null} seat={s?.rig != null} onPick={pick} />;
@@ -605,7 +614,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
             asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); dispatch({ type: 'ledge', tab: 'conversation' }); }} />
         }
-        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={() => dispatch({ type: 'modal', modal: { kind: 'launch' } })} emptyGroup={emptyGroup} />}
+        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={gid => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); }} emptyGroup={emptyGroup} />}
         chat={
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus}
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
@@ -677,7 +686,17 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       })()}
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
-      {nav.modal?.kind === 'launch' && (
+      {nav.modal?.kind === 'launch' && ide && (
+        // No `wide`: the modal's own width (ide.css, `.modal:has(> .launch-modal)`), not the old form's 640 px.
+        <Modal title={t.modalTitles.launch} onClose={close}>
+          <LaunchModalPlace client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
+            wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
+            usage={{ groups: usage.groups, threshold: usage.threshold }} where={openWhere(openSession, nav.modal.from === 'plus' ? 'plus' : 'other')}
+            onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
+            launch={launcher.state} onLaunch={(msg, preview, where) => { launched.current = { ...preview, where }; launcher.launch(msg); }} onCancel={close} />
+        </Modal>
+      )}
+      {nav.modal?.kind === 'launch' && !ide && (
         <Modal title={t.modalTitles.launch} wide onClose={close}>
           <LaunchPlace client={fleetClient} projects={projects?.projects ?? NO_PROJECTS} machines={machines} sessions={sessions} projectIdOf={projectIdOf}
             wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}

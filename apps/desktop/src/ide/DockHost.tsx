@@ -18,7 +18,8 @@ export interface DockHostProps {
   alert(t: Tab): 'perm' | 'ask' | null;
   onTabMenu(t: Tab, at: { x: number; y: number }): void;
   /** The « + » at the right of each tab strip: the launch dialog. */
-  onNewSession(): void;
+  /** A group's « + »: the group it was clicked in. */
+  onNewSession(groupId: string): void;
   /** What a group without tabs shows (EmptyGroup): its proposals. */
   emptyGroup(groupId: string): ReactNode;
 }
@@ -27,7 +28,7 @@ export interface DockHostProps {
 export const GROUP_MIN_WIDTH = 300;
 
 /** What a panel reads to draw its tab's content: the latest of Shell's, each render. */
-const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; title(t: Tab): string; label(t: Tab): ReactNode; alert(t: Tab): 'perm' | 'ask' | null; onTabMenu(t: Tab, at: { x: number; y: number }): void; onNewSession(): void; groupOf(id: string): string | undefined; focus: string;
+const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; title(t: Tab): string; label(t: Tab): ReactNode; alert(t: Tab): 'perm' | 'ask' | null; onTabMenu(t: Tab, at: { x: number; y: number }): void; onNewSession(groupId: string): void; groupOf(id: string): string | undefined; focus: string;
   /** The model group a dockview group draws. */ modelOf(dg: unknown): Group | undefined; emptyGroup(groupId: string): ReactNode; split(groupId: string): void; cycleLink(groupId: string): void;
   /** « Fermer le groupe »: an empty group goes; `lone` when it is the window's only group (it stays, without the button). */ closeGroup(groupId: string): void; lone: boolean } | null>(null);
 
@@ -97,7 +98,7 @@ function StripTools({ group }: IDockviewHeaderActionsProps): JSX.Element {
   const g = c?.modelOf(group);
   return (
     <div className="ide-strip-tools">
-      <button type="button" title={t.ide.newSession} aria-label={t.ide.newSession} onClick={() => c?.onNewSession()}>
+      <button type="button" title={t.ide.newSession} aria-label={t.ide.newSession} onClick={() => { if (g) c!.onNewSession(g.id); }}>
         +
       </button>
       <button type="button" title={t.ide.splitTip} aria-label={t.ide.splitTip} onClick={() => { if (g) c!.split(g.id); }}>
