@@ -302,7 +302,7 @@ export const en: Messages = {
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent, max context and updates.',
-      workspace: 'The IDE interface’s tab groups: where a session opens.',
+      workspace: 'The IDE interface: where a session opens, the status bar, the terminals.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',

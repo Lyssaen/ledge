@@ -326,7 +326,7 @@ export const fr = {
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
       general: 'Langue, démarrage, agent par défaut, contexte max et mises à jour.',
-      workspace: 'Les groupes d’onglets de l’interface IDE : où s’ouvre une session.',
+      workspace: 'L’interface IDE : où s’ouvre une session, la barre d’état, les terminaux.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
