@@ -1352,6 +1352,18 @@ export const en: Messages = {
     terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attached', termReadOnly: 'read only',
     settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
     settingOff: 'IDE interface (preview) off',
+    /** The Rigs view (IDE lot 7b): the machine menu, its rows and their actions. */
+    rigsView: {
+      launch: 'Launch', launchTitle: 'Launch a rig…', machine: (label) => `Machine: ${label}`, machines: 'Machines',
+      local: 'local', ssh: 'SSH', manage: 'Manage machines…', add: 'Add a machine',
+      runningRigs: (n) => (n === 1 ? '1 rig running' : `${n} rigs running`), openrigStopped: 'OpenRig stopped',
+      daemon: 'Daemon', fold: (name) => `Fold ${name}`, unfold: (name) => `Unfold ${name}`,
+      stoppedTitle: 'OpenRig is stopped.', stoppedBody: 'The rigs and the kernel come back with the daemon.', startOpenrig: 'Start OpenRig',
+      kernelStopped: 'Stopped with the daemon.', noOperator: 'The operator cannot help you compose a rig.',
+      whatDaemon: 'the daemon', whatKernel: 'the kernel',
+      start: (what) => `Start ${what}`, restart: (what) => `Restart ${what}`, stop: (what) => `Stop ${what}`,
+      confirmStop: 'Confirm the stop', confirmRestart: 'Confirm the restart', cancel: 'Cancel'
+    },
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
     panel: {
       shells: { title: 'New terminal', local: 'Local', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Command Prompt', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'default' },

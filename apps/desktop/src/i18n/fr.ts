@@ -1418,6 +1418,18 @@ export const fr = {
     terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attaché', termReadOnly: 'lecture seule',
     settingHint: 'Groupes d’onglets, panneaux et barre d’activité, à la manière de VS Code. L’ancienne interface reste disponible tant que l’aperçu dure.',
     settingOff: 'Interface IDE (aperçu) désactivée',
+    /** The Rigs view (IDE lot 7b): the machine menu, its rows and their actions. */
+    rigsView: {
+      launch: 'Lancer', launchTitle: 'Lancer un rig…', machine: (label: string) => `Machine : ${label}`, machines: 'Machines',
+      local: 'locale', ssh: 'SSH', manage: 'Gérer les machines…', add: 'Ajouter une machine',
+      runningRigs: (n: number) => (n === 1 ? '1 rig en marche' : `${n} rigs en marche`), openrigStopped: 'OpenRig arrêté',
+      daemon: 'Daemon', fold: (name: string) => `Replier ${name}`, unfold: (name: string) => `Déplier ${name}`,
+      stoppedTitle: 'OpenRig est arrêté.', stoppedBody: 'Les rigs et le kernel repartent avec le daemon.', startOpenrig: 'Démarrer OpenRig',
+      kernelStopped: 'Arrêté avec le daemon.', noOperator: 'L’operator ne peut pas t’aider à composer un rig.',
+      whatDaemon: 'le daemon', whatKernel: 'le kernel',
+      start: (what: string) => `Démarrer ${what}`, restart: (what: string) => `Redémarrer ${what}`, stop: (what: string) => `Arrêter ${what}`,
+      confirmStop: 'Confirmer l’arrêt', confirmRestart: 'Confirmer le redémarrage', cancel: 'Annuler'
+    },
     brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',
     /** The bottom panel's « + ▾ » menu (IDE lot 5). */
     panel: {
