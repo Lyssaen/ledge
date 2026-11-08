@@ -45,6 +45,11 @@ describe('OpenRig state', () => {
     expect(readState({ status: { daemon: STATUS.daemon }, rigs: PS.filter(r => r.name !== 'kernel'), at: AT }).kernel.state).toBe('absent');
     expect(readState({ status: STOPPED, at: AT }).kernel.state).toBe('stopped');
   });
+  it('OpenRig 0.7: `rig status` says kernel.state "skipped" while the kernel runs; the running `kernel` rig in `rig ps` wins', () => {
+    const running = PS.map(r => (r.name === 'kernel' ? { ...r, status: 'running', runningCount: 4 } : r));
+    expect(STATUS.kernel.state).toBe('skipped');
+    expect(readState({ status: STATUS, rigs: running, at: AT }).kernel.state).toBe('ready');
+  });
   it('a stopped daemon: its message, no pid, no rigs even if some were printed', () => {
     const s = readState({ status: STOPPED, rigs: PS, at: AT });
     expect(s.daemon).toEqual({ state: 'stopped', message: 'Daemon not running.' });
