@@ -1,0 +1,5 @@
+[
+  { "id": "01M6XTDQFZAA76XGBJMYCHJH62", "rigId": "01M6XTA5BQSPKWD3GXBKCRWAG7", "kind": "auto-periodic", "status": "complete", "createdAt": "2026-11-08 14:53:57", "data": {} },
+  { "id": "01M6XTDV03ZVK8BG4WYNVFRBPX", "rigId": "01M6XTA5BQSPKWD3GXBKCRWAG7", "kind": "auto-pre-down", "status": "complete", "createdAt": "2026-11-08 14:54:01", "data": {} },
+  { "id": "01M6XTAV9KM2HVRS841K1FQ6RV", "rigId": "01M6XTA5BQSPKWD3GXBKCRWAG7", "kind": "manual", "status": "complete", "createdAt": "2026-11-08 14:52:23", "data": {} }
+]

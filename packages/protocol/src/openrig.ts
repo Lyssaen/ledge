@@ -21,6 +21,9 @@ export type SeatPermissions = z.infer<typeof SeatPermissionsSchema>;
 /** The kernel's own rig, which OpenRig starts with its daemon unless told `--no-kernel`. */
 export const KERNEL_RIG = 'kernel';
 
+/** An OpenRig snapshot's id: a ULID, as `rig restore` takes it (never a leading `-`, which `rig` would read as a flag). */
+export const RigSnapshotIdSchema = z.string().regex(/^[0-9A-Z]{26}$/, 'not a snapshot id');
+
 /** A seat of a rig, as `rig ps --nodes --json` reports it. `activity`: `agentActivity.state` (running, idle, unknown…). */
 export const RigSeatSchema = z.object({
   logicalId: z.string(), session: z.string(), runtime: z.string(), model: z.string().nullable(),
@@ -60,7 +63,10 @@ export const OpenRigActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('kernel.start') }),
   z.object({ kind: z.literal('kernel.stop') }),
   z.object({ kind: z.literal('kernel.restart') }),
-  z.object({ kind: z.literal('rig.start'), rig: RigNameSchema }),
+  /** `snapshot`: brings the rig back from that snapshot (`rig restore <id> --rig <rig>`); without it, from the last usable one (`rig up --existing`). */
+  z.object({ kind: z.literal('rig.start'), rig: RigNameSchema, snapshot: RigSnapshotIdSchema.optional() }),
+  /** Takes a snapshot of the rig now (`rig snapshot <rig>`, kind `manual`). */
+  z.object({ kind: z.literal('rig.snapshot'), rig: RigNameSchema }),
   z.object({ kind: z.literal('rig.stop'), rig: RigNameSchema, snapshot: z.boolean().optional(), force: z.boolean().optional(), delete: z.boolean().optional() }),
   z.object({ kind: z.literal('rig.restart'), rig: RigNameSchema }),
   /** A seat's settings (docs/mockups/ledge-openrig-groups.html, view 2). `runtime`: moves it now to the other harness (a successor
@@ -117,6 +123,23 @@ export const OpenRigGraphStateSchema = z.object({
 export type OpenRigGraph = z.infer<typeof OpenRigGraphSchema>;
 export type OpenRigGraphState = z.infer<typeof OpenRigGraphStateSchema>;
 
+/** One snapshot of a rig, as the list tells it (never its `data`, which is heavy). `kind`: `manual`, `auto-pre-down`, `auto-periodic`,
+ *  `pre_restore`… and `createdAt`, as OpenRig writes it (`2026-11-08 14:54:01`, UTC). */
+export const RigSnapshotSchema = z.object({ id: z.string(), kind: z.string(), status: z.string(), createdAt: z.string() });
+export type RigSnapshot = z.infer<typeof RigSnapshotSchema>;
+/** How many snapshots a list carries: the most recent. */
+export const RIG_SNAPSHOTS_MAX = 20;
+
+/** A front asks a machine for a rig's snapshots. */
+export const OpenRigSnapshotsSchema = z.object({ type: z.literal('openrig.snapshots'), requestId: z.string().min(1).max(100), machineId: z.string().optional(), rig: RigNameSchema });
+/** The snapshots, newest first (`RIG_SNAPSHOTS_MAX` at most), or why not: `unknown_rig`, `not_installed`, `daemon_stopped`, what `rig` said, or the fleet's `offline` / `outdated`. */
+export const OpenRigSnapshotListSchema = z.object({
+  type: z.literal('openrig.snapshotList'), requestId: z.string(), machineId: z.string().optional(), rig: z.string(),
+  snapshots: z.array(RigSnapshotSchema), error: z.string().optional()
+});
+export type OpenRigSnapshots = z.infer<typeof OpenRigSnapshotsSchema>;
+export type OpenRigSnapshotList = z.infer<typeof OpenRigSnapshotListSchema>;
+
 export type OpenRigStatus = z.infer<typeof OpenRigStatusSchema>;
 export type OpenRigAct = z.infer<typeof OpenRigActSchema>;
 export type OpenRigStateMessage = z.infer<typeof OpenRigStateMessageSchema>;
@@ -136,7 +159,8 @@ export function rigCommands(a: OpenRigAction): string[][] {
     case 'kernel.start': return [up(KERNEL_RIG)];
     case 'kernel.stop': return [down(KERNEL_RIG)];
     case 'kernel.restart': return [down(KERNEL_RIG, { snapshot: true }), up(KERNEL_RIG)];
-    case 'rig.start': return [up(a.rig)];
+    case 'rig.start': return [a.snapshot ? ['restore', a.snapshot, '--rig', a.rig] : up(a.rig)];
+    case 'rig.snapshot': return [['snapshot', a.rig]];
     case 'rig.stop': return [down(a.rig, a)];
     case 'rig.restart': return [down(a.rig, { snapshot: true }), up(a.rig)];
     case 'seat.set': {

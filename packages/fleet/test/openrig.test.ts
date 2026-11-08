@@ -96,6 +96,29 @@ describe('useOpenRigRoles / useOpenRigRole / readRoleFile', () => {
   });
 });
 
+describe('useRigSnapshots', () => {
+  const snapshots = [{ id: '01M6XTAV9KM2HVRS841K1FQ6RV', kind: 'manual', status: 'complete', createdAt: '2026-11-08 14:52:23' }];
+  it('asks once per machine and rig, its own answer only; another rig is not shown the previous list', async () => {
+    const { useRigSnapshots } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const { result, rerender } = renderHook(({ rig }) => useRigSnapshots(client, 'server', rig), { initialProps: { rig: 'a' as string | null } });
+    expect(result.current).toMatchObject({ status: 'loading', snapshots: [] });
+    expect(sent).toEqual([{ type: 'openrig.snapshots', requestId: rid(sent[0]), machineId: 'server', rig: 'a' }]);
+    emit({ type: 'openrig.snapshotList', requestId: 'other', rig: 'a', snapshots });
+    expect(result.current.status).toBe('loading');
+    emit({ type: 'openrig.snapshotList', requestId: rid(sent[0]), machineId: 'server', rig: 'a', snapshots });
+    expect(result.current).toMatchObject({ status: 'ready', snapshots });
+    rerender({ rig: 'b' });
+    expect(result.current).toMatchObject({ status: 'loading', snapshots: [] });
+    emit({ type: 'openrig.snapshotList', requestId: rid(sent.at(-1)), rig: 'b', snapshots: [], error: 'unknown_rig' });
+    expect(result.current).toMatchObject({ status: 'ready', snapshots: [], error: 'unknown_rig' });
+    act(() => result.current.reload());
+    expect(sent).toHaveLength(3);
+    rerender({ rig: null });
+    expect(result.current.status).toBe('idle');
+  });
+});
+
 describe('useRigGraph', () => {
   const graph = { pods: [{ id: 'dev', label: 'Project' }], seats: [{ logicalId: 'dev.build', pod: 'dev', runtime: 'codex', status: 'exited', attention: false }], links: [] };
   it('asks once per machine and rig, its own answer only; another rig is not shown the previous graph', async () => {

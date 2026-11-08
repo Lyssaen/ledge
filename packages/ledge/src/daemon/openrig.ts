@@ -6,7 +6,7 @@ import { parse as parseYaml } from 'yaml';
 import { changesSpec, composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, QitemIdSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -21,7 +21,7 @@ export type RigRun = (args: string[], timeoutMs: number) => Promise<{ code: numb
 
 const STATUS_MS = 15_000;
 /** How long one command of an action may take: starting a rig waits for its agents. */
-const ACTION_MS: Record<string, number> = { start: 120_000, up: 300_000, down: 120_000, stop: 60_000, seat: 240_000 };
+const ACTION_MS: Record<string, number> = { start: 120_000, up: 300_000, restore: 300_000, snapshot: 120_000, down: 120_000, stop: 60_000, seat: 240_000 };
 /** A state read this recently is answered again, so several fronts polling do not each run `rig`. */
 export const STATE_TTL_MS = 2_000;
 /** How long the `rig --version` read stands before it is asked again. */
@@ -185,6 +185,9 @@ export interface OpenRig {
   /** A rig's topology (pods, seats, links), running or stopped, by rig name: from the daemon's `/graph`, else from `rig spec show`
    *  (no state, no context). Reused under `SEATS_TTL_MS`. `error`: `unknown_rig`, `not_installed`, `daemon_stopped`, or what `rig` said. */
   graph(rig: string): Promise<{ graph?: RigGraph; error?: string }>;
+  /** A rig's snapshots by rig name, newest first, `RIG_SNAPSHOTS_MAX` at most, never their `data`: from the daemon's `/snapshots`, else
+   *  from the text of `rig snapshot list`. Read at each ask (no cache: a snapshot just taken shows). Same `error`s as `graph`. */
+  snapshots(rig: string): Promise<{ snapshots?: RigSnapshot[]; error?: string }>;
 }
 export interface RolesResult { roles: RoleSummary[]; openrigVersion?: string; error?: string }
 export interface RoleResult { role?: RoleDetail; error?: string }
@@ -565,8 +568,48 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return read;
   }
 
-  return { state, act, specs, launch, reseat, roles, role, roleFile, row, graph };
+  async function snapshots(name: string): Promise<{ snapshots?: RigSnapshot[]; error?: string }> {
+    const st = await state();
+    if (!st.installed) return { error: 'not_installed' };
+    const known = st.rigs.find(r => r.name === name);
+    if (!known) return { error: st.daemon.state === 'running' ? 'unknown_rig' : 'daemon_stopped' };
+    const live = await http(`/api/rigs/${encodeURIComponent(known.id)}/snapshots`).then(readSnapshots, () => undefined);
+    if (live) return { snapshots: live };
+    const r = await run(['snapshot', 'list', known.name], STATUS_MS);
+    if (r.code === null) return { error: 'not_installed' };
+    return r.code === 0 ? { snapshots: readSnapshotTable(r.stdout).slice(0, RIG_SNAPSHOTS_MAX) } : { error: failure(r) };
+  }
+
+  return { state, act, specs, launch, reseat, roles, role, roleFile, row, graph, snapshots };
 }
+
+/** The snapshots of `GET /api/rigs/<id>/snapshots` (`[{ id, rigId, kind, status, createdAt, data }]`, not a contract): only
+ *  `id`, `kind`, `status` and `createdAt` are kept (`data` is heavy), the newest first, `RIG_SNAPSHOTS_MAX` of them.
+ *  Undefined when it is not an array. */
+export function readSnapshots(raw: unknown): RigSnapshot[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: RigSnapshot[] = [];
+  for (const s of raw.map(obj)) {
+    const id = str(s.id), kind = str(s.kind), status = str(s.status), createdAt = str(s.createdAt);
+    if (id && kind && status && createdAt) out.push({ id, kind, status, createdAt });
+  }
+  return newestFirst(out);
+}
+
+/** The text of `rig snapshot list <rig>` (`ID  Kind  Status  Created`, a row per snapshot, `Created` as `2026-11-08 14:54:01`):
+ *  rows that do not have that shape (the header, a « no snapshots » line) are skipped. */
+export function readSnapshotTable(text: string): RigSnapshot[] {
+  const out: RigSnapshot[] = [];
+  for (const line of text.split('\n')) {
+    const m = /^\s*([0-9A-Z]{26})\s+(\S+)\s+(\S+)\s+(\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d\S*)\s*$/.exec(line);
+    if (m) out.push({ id: m[1]!, kind: m[2]!, status: m[3]!, createdAt: m[4]! });
+  }
+  return newestFirst(out);
+}
+
+/** Newest first (`createdAt` reads in time order as text), the most recent `RIG_SNAPSHOTS_MAX`; ties keep OpenRig's order. */
+const newestFirst = (all: RigSnapshot[]): RigSnapshot[] =>
+  all.map((s, i) => ({ s, i })).sort((a, b) => (a.s.createdAt < b.s.createdAt ? 1 : a.s.createdAt > b.s.createdAt ? -1 : a.i - b.i)).map(x => x.s).slice(0, RIG_SNAPSHOTS_MAX);
 
 /** A rig's topology from the daemon's `GET /api/rigs/<id>/graph` (`{ nodes, edges }`, not a contract): the `podGroup` nodes are the
  *  pods, the `rigNode` ones the seats (`data.logicalId`), and an edge's `source` / `target` are node ids, told back as `logicalId`.

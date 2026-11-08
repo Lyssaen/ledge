@@ -678,6 +678,23 @@ describe('multi-machine connections', () => {
     expect(graphs().at(-1)).toEqual({ type: 'openrig.graphState', requestId: 'g3', machineId: 'server', rig: 'starter', error: 'offline' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('routes a rig\'s snapshots to its machine; an older daemon answers outdated, a machine that dropped offline', () => {
+    const { client, server, got } = setup();
+    const lists = () => got.filter(m => m.type === 'openrig.snapshotList');
+    const snapshots = [{ id: '01M6XTAV9KM2HVRS841K1FQ6RV', kind: 'manual', status: 'complete', createdAt: '2026-11-08 14:52:23' }];
+    client.send({ type: 'openrig.snapshots', requestId: 'n1', machineId: 'server', rig: 'kernel' });
+    expect(server.sent).toEqual([{ type: 'openrig.snapshots', requestId: 'n1', rig: 'kernel' }]);
+    server.emit({ type: 'openrig.snapshotList', requestId: 'n1', rig: 'kernel', snapshots });
+    server.emit({ type: 'openrig.snapshotList', requestId: 'n1', rig: 'kernel', snapshots }); // once only
+    expect(lists()).toEqual([{ type: 'openrig.snapshotList', requestId: 'n1', machineId: 'server', rig: 'kernel', snapshots }]);
+    client.send({ type: 'openrig.snapshots', requestId: 'n2', machineId: 'server', rig: 'kernel' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.snapshots' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.snapshotList', requestId: 'n2', machineId: 'server', rig: 'kernel', snapshots: [], error: 'outdated' });
+    server.set('unreachable');
+    client.send({ type: 'openrig.snapshots', requestId: 'n3', machineId: 'server', rig: 'starter' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.snapshotList', requestId: 'n3', machineId: 'server', rig: 'starter', snapshots: [], error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('answers a repos.scan for an offline machine, and one pending on a machine that drops, with error offline', () => {
     const { client, server, got } = setup();
     client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });
