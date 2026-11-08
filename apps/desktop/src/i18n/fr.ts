@@ -1433,7 +1433,27 @@ export const fr = {
     /** The « Rig · name » tab (IDE lot 7c). */
     rigTab: {
       topology: 'Topologie', topologyRunning: 'clic sur un siège : son fil', topologyStopped: 'les sièges démarrent avec le rig', loading: 'Lecture…',
-      legend: 'Liens', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with'
+      legend: 'Liens', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
+      running: 'en marche', stopped: 'arrêté', seatsAt: (n: number, machine: string) => `${n} ${n > 1 ? 'sièges' : 'siège'} · ${machine}`,
+      start: 'Démarrer', restart: 'Redémarrer', stop: 'Arrêter', daemonStopped: 'le daemon est arrêté',
+      settings: 'Réglages', specUnknown: 'Spec inconnue : rig lancé hors de Ledge',
+      permissions: 'Permissions', permissionsLabel: 'Niveau de permissions',
+      level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Ouvert', yolo: 'YOLO', locked: 'Verrouillé' } as Record<string, string>,
+      specPolicy: (p: string) => `Spec : ${p}`, specNoPolicy: 'La spec de ce rig ne donne aucune politique connue.',
+      nextLaunch: 'Un changement vaut au prochain lancement du rig.', mixed: 'Mixte', mixedSeat: (name: string, summary: string) => `${name} : ${summary}`,
+      policyErrors: {
+        spec_unknown: 'Ledge ne retrouve pas la spec de ce rig : « Spec » n’est pas possible.',
+        spec_no_policy: 'La spec de ce rig ne donne aucune politique de permissions : « Spec » n’est pas possible.',
+        spec_policy_unsupported: 'La politique de cette spec n’est pas l’une des cinq que Ledge sait appliquer.'
+      } as Record<string, string>,
+      seatsByRole: 'Sièges par rôle', seatsLocked: '· modifiables quand le rig tourne', apply: 'Appliquer', applying: 'En cours…', revert: 'Annuler',
+      planAdd: (ids: readonly string[]) => `Ajoute ${ids.join(', ')}`, planRemove: (ids: readonly string[]) => `Retire ${ids.join(', ')}`,
+      lastSnapshot: 'Dernier snapshot', noSnapshot: 'Aucun snapshot', snapshotNow: 'Snapshot maintenant',
+      queue: 'File OpenRig', queueTruncated: 'Les plus anciennes ne sont pas montrées', needsInput: 'À toi : cette ligne attend une réponse',
+      state: { pending: 'en attente', 'in-progress': 'en cours', blocked: 'bloquée' } as Record<string, string>,
+      age: (a: 'now' | { n: number; unit: 'min' | 'h' | 'd' }) => (a === 'now' ? '< 1 min' : `${a.n} ${a.unit === 'd' ? 'j' : a.unit}`),
+      role: 'Rôle', roleBody: ['Le rig d’OpenRig lui-même. L’', 'operator', ' t’aide à composer et lancer une équipe ; l’', 'advisor', ' relit les plans ; le ', 'queue worker', ' route les lignes de queue entre les sièges.'] as readonly string[],
+      talkToOperator: 'Parler à l’operator', rigAbsent: (rig: string) => `Le rig « ${rig} » n’existe plus sur cette machine.`, badRef: 'Cet onglet ne désigne aucun rig.'
     },
     brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',
     /** The bottom panel's « + ▾ » menu (IDE lot 5). */

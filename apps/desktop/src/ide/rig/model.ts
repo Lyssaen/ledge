@@ -1,7 +1,7 @@
 import { roleOf, seatsByRole } from '@ledge/protocol';
 import type { Rig, RigGraph, RigGraphSeat, RigPolicy, RigRow, RigSeatPermission, Session } from '@ledge/protocol';
 import { isAskSeat } from '../../asks/model';
-import { spanOf } from '../../list/time';
+import { spanOf, type Span } from '../../list/time';
 import { seatDot } from '../rigs/model';
 import type { RigDot } from '../rigs/model';
 
@@ -120,17 +120,11 @@ export function seatDraft(counts: readonly RoleCount[], draft: Readonly<Record<s
 
 // ── Queue ──
 
-export interface QueueLine { id: string; state: string; needsInput: boolean; summary: string; from: string; to: string; age: string }
-
-/** « 5 min », « 3 h », « 2 d » (language-neutral units); under a minute, « < 1 min ». */
-function ageOf(iso: string, now: number): string {
-  const span = spanOf(now - (Date.parse(iso) || now));
-  return span === 'now' ? '< 1 min' : `${span.n} ${span.unit}`;
-}
+export interface QueueLine { id: string; state: string; needsInput: boolean; summary: string; from: string; to: string; age: Span }
 
 export function queueLines(rows: readonly RigRow[], sessions: readonly Session[], machine: string, now: number): QueueLine[] {
   const nameOf = (seat: string): string => sessions.find(s => isAskSeat(s, seat, machine))?.name ?? seat;
   return rows.map(r => ({
-    id: r.id, state: r.state, needsInput: !!r.needsInput, summary: r.summary ?? '', from: nameOf(r.from), to: nameOf(r.to), age: ageOf(r.updatedAt, now)
+    id: r.id, state: r.state, needsInput: !!r.needsInput, summary: r.summary ?? '', from: nameOf(r.from), to: nameOf(r.to), age: spanOf(now - (Date.parse(r.updatedAt) || now))
   }));
 }

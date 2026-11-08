@@ -99,10 +99,13 @@ describe('queueLines', () => {
   const row = (extra: Partial<RigRow>): RigRow => ({ id: 'qitem-1', state: 'pending', summary: 'Run', from: 'operator-human@kernel', to: 'dev-build@ledge-survey', createdAt: '2026-11-08T15:00:00.000Z', updatedAt: '2026-11-08T15:00:00.000Z', at: '2026-11-08T15:05:00.000Z', ...extra });
   it('maps rows', () => {
     const [l] = queueLines([row({ needsInput: { count: 1, reason: null } })], [session({})], 'local', now);
-    expect(l).toEqual({ id: 'qitem-1', state: 'pending', needsInput: true, summary: 'Run', from: 'operator-human@kernel', to: 'Bix', age: '5 min' });
+    expect(l).toEqual({ id: 'qitem-1', state: 'pending', needsInput: true, summary: 'Run', from: 'operator-human@kernel', to: 'Bix', age: { n: 5, unit: 'min' } });
   });
   it('defaults and long ages', () => {
     const [l] = queueLines([row({ summary: undefined, updatedAt: '2026-11-08T12:00:00.000Z' })], [], 'local', now);
-    expect(l).toMatchObject({ needsInput: false, summary: '', to: 'dev-build@ledge-survey', age: '3 h' });
+    expect(l).toMatchObject({ needsInput: false, summary: '', to: 'dev-build@ledge-survey', age: { n: 3, unit: 'h' } });
+  });
+  it('an update under a minute old is now', () => {
+    expect(queueLines([row({ updatedAt: '2026-11-08T15:04:40.000Z' })], [], 'local', now)[0]!.age).toBe('now');
   });
 });
