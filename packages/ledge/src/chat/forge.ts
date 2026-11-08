@@ -1,9 +1,10 @@
-import { execFile } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatStep, Projects } from '@ledge/protocol';
-import { repositoryId } from '../daemon/git.js';
+import { execForge, forgeOf, redact, type ForgeCli, type ForgeRepo } from '../daemon/forge/run.js';
 import { log } from '../log.js';
+
+export { forgeOf, redact, type ForgeRepo };
 
 /**
  * What the chat may know of GitHub and GitLab (#23): the daemon runs a closed list of `list` commands of `gh` / `glab` for the
@@ -11,9 +12,9 @@ import { log } from '../log.js';
  * The chat keeps its read-only tools: it never runs a forge command itself, and nothing here can write to a forge.
  */
 
-export type Cli = 'gh' | 'glab';
+export type Cli = ForgeCli;
 /** Runs `file args` without a shell; `code` null when the binary could not start. Never throws. */
-export type ForgeRun = (file: string, args: string[], cwd?: string) => Promise<{ code: number | null; stdout: string; stderr: string }>;
+export type ForgeRun = (file: ForgeCli | 'git', args: string[], cwd?: string) => Promise<{ code: number | null; stdout: string; stderr: string }>;
 
 /** The only commands ever run: reads, each followed by `-R <repository>`. */
 export const FORGE_COMMANDS: Record<Cli, ReadonlyArray<{ title: string; args: readonly string[] }>> = {
@@ -34,45 +35,16 @@ export const FORGE_COMMANDS: Record<Cli, ReadonlyArray<{ title: string; args: re
 /** How long a repository's reads are reused. */
 export const FORGE_TTL_MS = 120_000;
 const TIMEOUT_MS = 15_000;
-/** A repository path a forge CLI reads as a path, never as a flag: segments that start with a letter or a digit. */
-const SAFE_PATH = /^[A-Za-z0-9][\w.-]*(?:\/[A-Za-z0-9][\w.-]*)+$/;
-
-export interface ForgeRepo { cli: Cli; host: string; path: string; repo: string }
-/** The forge of a remote URL, credentials left out: `gh` for a GitHub host, `glab` (by URL, self-hosted included) otherwise. */
-export function forgeOf(remote: string): ForgeRepo | null {
-  const id = repositoryId(remote);
-  if (!id) return null;
-  const slash = id.indexOf('/');
-  const host = id.slice(0, slash), path = id.slice(slash + 1);
-  if (!host || !SAFE_PATH.test(path)) return null;
-  if (host === 'github.com') return { cli: 'gh', host, path, repo: path };
-  if (/(^|\.)github\./.test(host)) return { cli: 'gh', host, path, repo: `${host}/${path}` };
-  return { cli: 'glab', host, path, repo: `https://${host}/${path}` };
-}
-
-/** Text without what looks like a token or a credential, for the chat's files and the logs. */
-export function redact(text: string): string {
-  return text
-    .replace(/\b(?:gh[pousr]_[A-Za-z0-9]{10,}|github_pat_[A-Za-z0-9_]{10,}|glpat-[A-Za-z0-9_-]{10,}|gl[a-z]{1,5}-[A-Za-z0-9_-]{16,})/g, '[redacted]')
-    .replace(/\b(Bearer|token|Basic)\s+[^\s'"]+/gi, '$1 [redacted]')
-    .replace(/\b((?:access_|private_)?token|password|secret)=[^\s&'"]+/gi, '$1=[redacted]')
-    .replace(/(\w+:\/\/)[^\s/@]+@/g, '$1[redacted]@');
-}
 
 /** A question the forge files can help with: issues, pull/merge requests, CI, what was merged. */
 export function asksForge(question: string): boolean {
   return /\b(?:issues?|tickets?|PRs?|pull[- ]?requests?|MRs?|merge[- ]?requests?|merg\w*|CI|pipelines?|workflows?|github|gitlab|forge|actions|builds?|checks?|releases?)\b|demandes? de fusion/i.test(question);
 }
 
-const execRun = (env: () => Promise<NodeJS.ProcessEnv>): ForgeRun => async (file, args, cwd) => {
-  // No prompt, no colour, no update notice: the CLIs print plain rows to a pipe.
-  const e = { ...(await env()), GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_PROMPT: '1', GLAB_CHECK_UPDATE: 'false', NO_COLOR: '1', CLICOLOR: '0' };
-  return new Promise(res => {
-    execFile(file, args, { cwd, env: e, timeout: TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
-      const code = !err ? 0 : (err as NodeJS.ErrnoException).code === 'ENOENT' ? null : typeof err.code === 'number' ? err.code : 1;
-      res({ code, stdout: String(stdout), stderr: String(stderr) || (err && code === null ? err.message : '') });
-    });
-  });
+/** The shared runner, with the chat's own timeout. */
+const execRun = (env: () => Promise<NodeJS.ProcessEnv>): ForgeRun => {
+  const run = execForge(env);
+  return (file, args, cwd) => run(file, args, { cwd, timeoutMs: TIMEOUT_MS });
 };
 
 export interface ForgeDeps { run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => string; ttlMs?: number }
