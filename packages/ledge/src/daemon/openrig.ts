@@ -3,10 +3,10 @@ import { get as httpGet } from 'node:http';
 import { existsSync, readdirSync } from 'node:fs';
 import { cp, copyFile, lstat, mkdir, mkdtemp, open as openFile, readdir, readFile, rm, stat as statFile, writeFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
-import { changesSpec, composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
+import { composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole, changesSpec, launchCommands } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -421,7 +421,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       if (listed.error) return { ok: false, plan, commands: [], error: listed.error };
       const spec = listed.specs.find(s => s.name === l.spec);
       if (!spec) return { ok: false, plan, commands: [], error: 'spec_not_found' };
-      let source = spec.name, yaml: string, seats: number, dir: string | undefined;
+      let yaml: string, seats: number, dir: string | undefined;
       const text = await files.read(spec.path);
       const can = await features();
       // Before 0.7 OpenRig named a rig after its spec's `name:` only (no `rig up --name`): another name was a composed copy too.
@@ -431,11 +431,10 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
         dir = join(rigsDir, l.name);
         await files.copyDir(dirname(spec.path), dir);
         await files.write(join(dir, 'rig.yaml'), composed.yaml);
-        source = join(dir, 'rig.yaml'); yaml = composed.yaml; seats = composed.seats;
+        yaml = composed.yaml; seats = composed.seats;
       } else { yaml = text; seats = specSeats(spec); }
       if (!dir && rename && !plan) await files.write(join(rigsDir, l.name, 'source.json'), JSON.stringify({ spec: spec.name, path: spec.path }));
-      const commands: string[][] = [['up', source, ...(!dir && rename ? ['--name', l.name] : []), '--cwd', cwd, ...(l.nonInterruptive ? ['--non-interruptive'] : []), ...(plan ? ['--plan'] : ['--yes']), '--json']];
-      if (!plan && l.save && dir) commands.push(['specs', 'add', dir, '--json']);
+      const commands = launchCommands({ ...l, cwd }, spec, { rigsDir, name: can.name });
       const shown = commands.map(showCommand);
       let output = '';
       for (const args of commands) {
