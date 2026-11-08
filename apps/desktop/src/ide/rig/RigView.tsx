@@ -81,6 +81,17 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
   if (error) return note(rigErrorText(t, error));
   if (!state) return note(o.loading);
   if (!state.installed) return <div className="ide-rig ide-rig-state" role="status"><b>{o.notInstalledTitle}</b> {o.notInstalled}</div>;
+  // A stopped daemon lists no rigs: the rig is not gone, its daemon is down.
+  if (!daemonUp) {
+    const failed = view.last && !view.last.ok ? view.last.error ?? '' : null;
+    return (
+      <div className="ide-rig ide-rig-state" role="status">
+        <span>{rigErrorText(t, 'daemon_stopped')}</span>{' '}
+        <button type="button" className="ide-rig-btn pri" disabled={view.pending !== null} onClick={() => void view.act({ kind: 'daemon.start' })}><Icon d={SHELL_ICONS.play} size={13} />{t.ide.rigsView.startOpenrig}</button>
+        {failed !== null && <div className="ide-rig-fail" role="alert">{rigErrorText(t, failed)}</div>}
+      </div>
+    );
+  }
   if (!rig) return note(r.rigAbsent(name));
 
   const failure = (): ReactNode => {

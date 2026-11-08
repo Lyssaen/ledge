@@ -218,6 +218,17 @@ describe('the Rig tab', () => {
     expect(await screen.findByText(/n’existe plus sur cette machine/)).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
   });
+  it('a stopped OpenRig daemon says so (not that the rig is gone) and offers « Démarrer OpenRig », which sends daemon.start', async () => {
+    const m = mount({ state: state({ daemon: { state: 'stopped' }, rigs: [] }) });
+    expect(await screen.findByText('Le daemon OpenRig est arrêté.')).toBeInTheDocument();
+    expect(screen.queryByText(/n’existe plus sur cette machine/)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Démarrer OpenRig' }));
+    expect(m.f.acts().at(-1)!.action).toEqual({ kind: 'daemon.start' });
+  });
+  it('the kernel tab of a stopped daemon says the same', async () => {
+    mount({ state: state({ daemon: { state: 'stopped' }, rigs: [] }) }, { rigName: 'kernel' });
+    expect(await screen.findByText('Le daemon OpenRig est arrêté.')).toBeInTheDocument();
+  });
   it('an offline machine says so', async () => {
     const f = fake();
     render(<LangProvider lang="fr"><RigView client={f.client} machines={[{ ...local(), ready: false }]} sessions={[]} machine="local" rig="ledge-dev" dispatch={vi.fn()} /></LangProvider>);
