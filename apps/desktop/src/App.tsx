@@ -83,7 +83,7 @@ import { useIdeEnabled, useResumeOnStart, useRigsMachine, useShowUsage } from '.
 import { liveTabs, loadLiveTabs, machineOf, nextMemo, saveLiveTabs, toResume } from './workspace/resume';
 import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
-import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
+import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, rigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
@@ -94,7 +94,7 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeRigs, IdeRigView } from './ide/lazy';
+import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -909,6 +909,15 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
             onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
+        </Modal>
+      )}
+      {nav.modal?.kind === 'rigLaunch' && ide && (
+        // No `wide`: the modal's own width (ide-launch-rig.css, `.modal:has(> .ide-rl)`, 720 px). A launch closes it and opens the
+        // rig's tab; the operator's request opens its session, or says where it went when Ledge does not follow that session yet (R6).
+        <Modal title={t.ide.launchRig.title} onClose={close}>
+          <IdeRigLaunch client={fleetClient} machines={machines} machine={nav.modal.machine ?? rigsMachine} projects={projects} sessions={sessions} onClose={close}
+            onLaunched={(machine, rig) => { close(); wsStore.update(w => openTab(w, rigTab(machine, rig))); }}
+            onOperator={id => { close(); if (id) dispatch({ type: 'open', id }); else notify(t.ide.launchRig.composing); }} />
         </Modal>
       )}
       {nav.modal?.kind === 'project' && (

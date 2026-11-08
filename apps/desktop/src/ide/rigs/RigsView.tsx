@@ -159,7 +159,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
         <button ref={trigger} type="button" className={`ide-rigs-mach${menu ? ' open' : ''}`} aria-haspopup="menu" aria-expanded={menu} title={v.machine(label)} aria-label={v.shownMachine(label)} onClick={() => setMenu(m => !m)}>
           <Dot dot={up ? 'idle' : 'off'} /><span>{label}</span><span className="car" aria-hidden="true">▾</span>
         </button>
-        <button type="button" className="ide-rigs-launch" title={v.launchTitle} onClick={() => dispatch({ type: 'openrig', machine, section: 'rigs', open: { launch: true } })}><Icon d={ICONS.plus.d} size={13} />{v.launch}</button>
+        <button type="button" className="ide-rigs-launch" title={v.launchTitle} onClick={() => dispatch({ type: 'modal', modal: { kind: 'rigLaunch', machine } })}><Icon d={ICONS.plus.d} size={13} />{v.launch}</button>
         {menu && <MachineMenu entries={entries.list} outdated={entries.outdated} current={machine} onClose={closeMenu}
           onPick={id => { setMachine(id); closeMenu(); }} onManage={() => { closeMenu(); dispatch({ type: 'settings', section: 'machines' }); }} />}
       </div>

@@ -169,7 +169,7 @@ describe('the IDE Rigs view', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Ajouter une machine' }));
     expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'settings', section: 'machines' });
     await userEvent.click(screen.getByRole('button', { name: /Lancer/ }));
-    expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'openrig', machine: 'local', section: 'rigs', open: { launch: true } });
+    expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'modal', modal: { kind: 'rigLaunch', machine: 'local' } });
     await userEvent.click(screen.getByRole('button', { name: 'ledge-dev' }));
     expect(m.onTab).toHaveBeenLastCalledWith(rigTab('local', 'ledge-dev'));
     await userEvent.click(screen.getByRole('button', { name: 'Daemon' }));

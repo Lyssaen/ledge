@@ -35,11 +35,13 @@ export type Modal =
   | { kind: 'project'; edit?: string; file?: string; delete?: true; proposal?: string; addFolder?: true }
   // to : un projet (son id) ou les sessions choisies dans la barre latérale (ids qualifiés) ; la flotte envoie à chaque machine qui en a sa part (broadcast)
   | { kind: 'broadcast'; to: { project: string } | { sessions: string[] } }
+  // IDE lot 7d (R8) : « Lancer un rig », sur `machine` (sans elle, la machine affichée de la vue Rigs) ; dessinée seulement interrupteur ouvert
+  | { kind: 'rigLaunch'; machine?: string }
   | null;
 /** Every place and dialog kind, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new kind fails to compile until it is listed here. */
 const PLACE_KIND: Record<Place['kind'], true> = { home: true, overview: true, session: true, settings: true, openrig: true };
 export const PLACE_KINDS = Object.keys(PLACE_KIND) as Place['kind'][];
-const MODAL_KIND: Record<NonNullable<Modal>['kind'], true> = { search: true, shortcuts: true, launch: true, project: true, broadcast: true };
+const MODAL_KIND: Record<NonNullable<Modal>['kind'], true> = { search: true, shortcuts: true, launch: true, project: true, broadcast: true, rigLaunch: true };
 export const MODAL_KINDS = Object.keys(MODAL_KIND) as NonNullable<Modal>['kind'][];
 /** chatFocus: bumped each time the chat is asked for (/, an open button), even already open: its field takes the focus again. */
 export interface NavState { place: Place; modal: Modal; chat: boolean; chatFocus: number; fullscreen: boolean; helpers: boolean; paused: boolean }

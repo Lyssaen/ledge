@@ -153,8 +153,8 @@ export function RigLaunchForm({ client, machine, machineLabel, projects, onClose
   );
 }
 
-/** How the last check or launch ended. */
-function Outcome({ result, name }: { result: OpenRigLaunched | null; name: string }) {
+/** How the last check or launch ended (also under the IDE launch modal's « Plus d'options »). */
+export function Outcome({ result, name }: { result: OpenRigLaunched | null; name: string }) {
   const { t } = useI18n();
   const l = t.openrig.launch;
   if (!result) return null;

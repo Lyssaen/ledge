@@ -17,6 +17,7 @@ export { OutputView } from './OutputView';
 export { AtelierBar } from './AtelierBar';
 export { RigsView } from './rigs/RigsView';
 export { RigView } from './rig/RigView';
+export { RigLaunchModal } from './launch-rig/RigLaunchModal';
 
 export interface IdeFrameProps {
   layout: IdeLayout; onLayout(a: LayoutAction): void;

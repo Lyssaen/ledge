@@ -1364,6 +1364,31 @@ export const en: Messages = {
       start: (what) => `Start ${what}`, restart: (what) => `Restart ${what}`, stop: (what) => `Stop ${what}`,
       confirmStop: 'Confirm the stop', confirmRestart: 'Confirm the restart', cancel: 'Cancel'
     },
+    /** The “Launch a rig” modal (IDE lot 7d, mockup rigLaunchModal()). */
+    launchRig: {
+      title: 'Launch a rig', sub: (machine: string) => `On ${machine}. Ctrl+Enter launches, Esc closes.`,
+      from: 'Start from', running: 'Already running · manage it in its Rig view',
+      savedSpec: (n: number, source?: 'builtin' | 'user') => `Saved spec · ${n} ${pluralEn(n, 'seat', 'seats')}${source === 'builtin' ? ' · built-in' : source === 'user' ? ' · mine' : ''}`,
+      stoppedRig: (n: number) => `Saved spec · ${n} ${pluralEn(n, 'seat', 'seats')} · stopped`,
+      empty: 'Empty rig', emptySub: 'A lead, an implementation seat, to fill in', noFactory: 'The factory spec is missing on this machine',
+      operator: 'Compose with the operator', operatorSub: 'Describe the need, it proposes the team', kernelOff: 'The kernel must be running',
+      name: 'Name', machine: 'Machine', folder: 'Folder', seats: 'Seats', toFill: 'to fill in', permissions: 'Permissions', mixed: 'Mixed: the seats do not all have the same level.',
+      resume: 'Resume', resumeLast: (date: string) => `Resume from the last snapshot (${date})`, noSnapshot: 'No snapshot',
+      command: 'Command', go: 'Launch', keys: 'Ctrl Enter', cancel: 'Cancel', opensTab: (name: string) => `Opens the Rig view of ${name}.`, more: 'More options',
+      want: 'What you want', wantPlaceholder: 'E.g.: a team to review MR !412 of synapse, a lead and two reviewers.',
+      wantHint: 'The kernel’s operator proposes a team in its thread. Nothing starts before you approve.',
+      ask: 'Ask the operator', asking: 'Sending…', composing: 'The operator is composing a team in its thread.',
+      daemonStopped: (machine: string) => `The OpenRig daemon is stopped on ${machine}.`,
+      problems: {
+        exists: (machine: string) => `A rig of this name already exists on ${machine}.`, name: 'A rig name: letters, digits, dot, - and _, no space.',
+        cwd: 'Choose the working folder.', noSeat: 'At least one seat is needed.'
+      },
+      goalErrors: {
+        no_operator: 'The kernel has no operator to take the request.', openrig_stopped: 'OpenRig is stopped on this machine.',
+        unreachable: 'The operator does not answer.', uncertain: 'The request may have gone, unconfirmed: check the operator’s thread before sending it again.',
+        refused: 'The operator refused the request.', offline: 'This machine is offline.', outdated: 'This machine’s Ledge is too old to write to the operator.'
+      } as Record<string, string>
+    },
     /** The “Rig · name” tab (IDE lot 7c). */
     rigTab: {
       title: (rig: string, machine?: string) => (machine ? `Rig · ${rig} · ${machine}` : `Rig · ${rig}`),

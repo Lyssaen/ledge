@@ -1430,6 +1430,31 @@ export const fr = {
       start: (what: string) => `Démarrer ${what}`, restart: (what: string) => `Redémarrer ${what}`, stop: (what: string) => `Arrêter ${what}`,
       confirmStop: 'Confirmer l’arrêt', confirmRestart: 'Confirmer le redémarrage', cancel: 'Annuler'
     },
+    /** The « Lancer un rig » modal (IDE lot 7d, mockup rigLaunchModal()). */
+    launchRig: {
+      title: 'Lancer un rig', sub: (machine: string) => `Sur ${machine}. Ctrl+Entrée lance, Échap ferme.`,
+      from: 'Partir de', running: 'Déjà en marche · gère-le dans sa vue Rig',
+      savedSpec: (n: number, source?: 'builtin' | 'user') => `Spec enregistrée · ${n} ${n > 1 ? 'sièges' : 'siège'}${source === 'builtin' ? ' · intégrée' : source === 'user' ? ' · à moi' : ''}`,
+      stoppedRig: (n: number) => `Spec enregistrée · ${n} ${n > 1 ? 'sièges' : 'siège'} · arrêté`,
+      empty: 'Rig vide', emptySub: 'Un lead, un siège d’implémentation, à compléter', noFactory: 'La spec factory manque sur cette machine',
+      operator: 'Composer avec l’operator', operatorSub: 'Décris le besoin, il propose l’équipe', kernelOff: 'Le kernel doit tourner',
+      name: 'Nom', machine: 'Machine', folder: 'Dossier', seats: 'Sièges', toFill: 'à compléter', permissions: 'Permissions', mixed: 'Mixte : les sièges n’ont pas tous le même niveau.',
+      resume: 'Reprise', resumeLast: (date: string) => `Reprendre le dernier snapshot (${date})`, noSnapshot: 'Aucun snapshot',
+      command: 'Commande', go: 'Lancer', keys: 'Ctrl Entrée', cancel: 'Annuler', opensTab: (name: string) => `Ouvre la vue Rig de ${name}.`, more: 'Plus d’options',
+      want: 'Ce que tu veux', wantPlaceholder: 'Ex. : une équipe pour relire la MR !412 de synapse, un lead et deux relecteurs.',
+      wantHint: 'L’operator du kernel propose une équipe dans son fil. Rien ne démarre avant que tu valides.',
+      ask: 'Demander à l’operator', asking: 'Envoi…', composing: 'L’operator compose une équipe dans son fil.',
+      daemonStopped: (machine: string) => `Le daemon OpenRig est arrêté sur ${machine}.`,
+      problems: {
+        exists: (machine: string) => `Un rig de ce nom existe déjà sur ${machine}.`, name: 'Un nom de rig : lettres, chiffres, point, - et _, sans espace.',
+        cwd: 'Choisis le dossier de travail.', noSeat: 'Il faut au moins un siège.'
+      },
+      goalErrors: {
+        no_operator: 'Le kernel n’a pas d’operator pour recevoir la demande.', openrig_stopped: 'OpenRig est arrêté sur cette machine.',
+        unreachable: 'L’operator ne répond pas.', uncertain: 'La demande est peut-être partie, sans confirmation : regarde le fil de l’operator avant de la renvoyer.',
+        refused: 'L’operator a refusé la demande.', offline: 'Cette machine est hors ligne.', outdated: 'Le Ledge de cette machine est trop ancien pour écrire à l’operator.'
+      } as Record<string, string>
+    },
     /** The « Rig · name » tab (IDE lot 7c). */
     rigTab: {
       title: (rig: string, machine?: string) => (machine ? `Rig · ${rig} · ${machine}` : `Rig · ${rig}`),
