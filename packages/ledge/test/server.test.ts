@@ -2700,7 +2700,7 @@ describe('server: models.list (#58)', () => {
 });
 
 /** An OpenRig fake's roles, when a test does not look at them. */
-const NO_ROLES = { async roles() { return { roles: [] }; }, async role() { return { error: 'role_not_found' }; }, async roleFile() { return { error: 'not_allowed' }; }, async graph() { return { error: 'unknown_rig' }; }, async snapshots() { return { error: 'unknown_rig' }; }, async permissions() { return { error: 'unknown_rig' }; }, async queue() { return { rows: [], truncated: false, error: 'unknown_rig' }; } };
+const NO_ROLES = { async roles() { return { roles: [] }; }, async role() { return { error: 'role_not_found' }; }, async roleFile() { return { error: 'not_allowed' }; }, async duplicateRole() { return { ok: false, error: 'x' }; }, async graph() { return { error: 'unknown_rig' }; }, async snapshots() { return { error: 'unknown_rig' }; }, async permissions() { return { error: 'unknown_rig' }; }, async queue() { return { rows: [], truncated: false, error: 'unknown_rig' }; } };
 
 describe('server: OpenRig', () => {
   it('answers a status under its requestId; an action answers its sender, then every front gets the fresh state', async () => {
@@ -2734,18 +2734,23 @@ describe('server: OpenRig', () => {
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; },
       async roles() { asked.push('roles'); return { roles: [summary], openrigVersion: '0.7.7' }; },
       async role(id) { asked.push(`role ${id}`); return { error: 'role_not_found' }; },
-      async roleFile(id, path) { asked.push(`file ${id} ${path}`); return { content: '# Rôle', size: 7 }; }
+      async roleFile(id, path) { asked.push(`file ${id} ${path}`); return { content: '# Rôle', size: 7 }; },
+      async duplicateRole(id, name) { asked.push(`dup ${id} ${name}`); return { ok: true, roleId: 'abc1', path: '/p/mine' }; }
     } });
     const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
     expect((await c.next('snapshot')).daemon).toMatchObject({ openrig: true, openrigRoles: true });
     await other.next('snapshot');
     c.send({ type: 'openrig.roles', requestId: 'r1' });
     expect(await c.next('openrig.roleList')).toEqual({ type: 'openrig.roleList', requestId: 'r1', roles: [summary], openrigVersion: '0.7.7' });
+    c.send({ type: 'openrig.role.duplicate', requestId: 'r9', roleId: 'f95e', name: 'mine' });
+    expect(await c.next('openrig.roleDuplicated')).toEqual({ type: 'openrig.roleDuplicated', requestId: 'r9', ok: true, roleId: 'abc1', path: '/p/mine' });
+    expect(asked).toContain('dup f95e mine');
+    await expect(other.next('openrig.roleDuplicated', 150)).rejects.toThrow();
     c.send({ type: 'openrig.role', requestId: 'r2', roleId: 'nope' });
     expect(await c.next('openrig.roleDetail')).toEqual({ type: 'openrig.roleDetail', requestId: 'r2', roleId: 'nope', error: 'role_not_found' });
     c.send({ type: 'openrig.roleFile', requestId: 'r3', roleId: 'f95e', path: '/s/lead/guidance/role.md' });
     expect(await c.next('openrig.roleFileContent')).toEqual({ type: 'openrig.roleFileContent', requestId: 'r3', roleId: 'f95e', path: '/s/lead/guidance/role.md', content: '# Rôle', size: 7 });
-    expect(asked).toEqual(['roles', 'role nope', 'file f95e /s/lead/guidance/role.md']);
+    expect(asked).toEqual(['roles', 'dup f95e mine', 'role nope', 'file f95e /s/lead/guidance/role.md']);
     await expect(other.next('openrig.roleList', 150)).rejects.toThrow();
     c.close(); other.close(); await srv2.close();
   });
@@ -2757,7 +2762,7 @@ describe('server: OpenRig', () => {
       async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; },
-      async roles() { return { roles: [] }; }, async role() { return { error: 'x' }; }, async roleFile() { return { error: 'x' }; }
+      async roles() { return { roles: [] }; }, async role() { return { error: 'x' }; }, async roleFile() { return { error: 'x' }; }, async duplicateRole() { return { ok: false, error: 'x' }; }
     } });
     const c = await connect({ port: srv2.port }), other = await connect({ port: srv2.port });
     expect((await c.next('snapshot')).daemon).toMatchObject({ openrigRows: true });

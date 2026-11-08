@@ -661,6 +661,24 @@ describe('multi-machine connections', () => {
     expect(roles().at(-1)).toEqual({ type: 'openrig.roleDetail', requestId: 'o5', machineId: 'server', roleId: 'f95e', error: 'offline' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('routes a role duplicate to its machine; an older daemon answers outdated, a machine that drops mid-write answers uncertain, an offline one offline', () => {
+    const { client, server, got } = setup();
+    const dup = () => got.filter(m => m.type === 'openrig.roleDuplicated');
+    client.send({ type: 'openrig.role.duplicate', requestId: 'd1', machineId: 'server', roleId: 'f95e', name: 'mine' });
+    expect(server.sent).toEqual([{ type: 'openrig.role.duplicate', requestId: 'd1', roleId: 'f95e', name: 'mine' }]);
+    server.emit({ type: 'openrig.roleDuplicated', requestId: 'd1', ok: true, roleId: 'abc1', path: '/h/.openrig/specs/mine' });
+    server.emit({ type: 'openrig.roleDuplicated', requestId: 'd1', ok: true }); // once only
+    expect(dup()).toEqual([{ type: 'openrig.roleDuplicated', requestId: 'd1', machineId: 'server', ok: true, roleId: 'abc1', path: '/h/.openrig/specs/mine' }]);
+    client.send({ type: 'openrig.role.duplicate', requestId: 'd2', machineId: 'server', roleId: 'f95e', name: 'mine2' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.role.duplicate' });
+    expect(dup().at(-1)).toEqual({ type: 'openrig.roleDuplicated', requestId: 'd2', machineId: 'server', ok: false, error: 'outdated' });
+    client.send({ type: 'openrig.role.duplicate', requestId: 'd3', machineId: 'server', roleId: 'f95e', name: 'mine3' });
+    server.set('unreachable');
+    expect(dup().at(-1)).toEqual({ type: 'openrig.roleDuplicated', requestId: 'd3', machineId: 'server', ok: false, error: 'uncertain' });
+    client.send({ type: 'openrig.role.duplicate', requestId: 'd4', machineId: 'server', roleId: 'f95e', name: 'mine4' });
+    expect(dup().at(-1)).toEqual({ type: 'openrig.roleDuplicated', requestId: 'd4', machineId: 'server', ok: false, error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('routes a rig graph to its machine; an older daemon answers outdated, a machine that dropped offline', () => {
     const { client, server, got } = setup();
     const graphs = () => got.filter(m => m.type === 'openrig.graphState');

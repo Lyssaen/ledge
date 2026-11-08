@@ -96,6 +96,18 @@ describe('useOpenRigRoles / useOpenRigRole / readRoleFile', () => {
   });
 });
 
+describe('duplicateRole', () => {
+  it('asks one machine to copy a role and resolves with its own answer only', async () => {
+    const { duplicateRole } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const p = duplicateRole(client, 'server', 'f95e', 'mine');
+    expect(sent.at(-1)).toMatchObject({ type: 'openrig.role.duplicate', machineId: 'server', roleId: 'f95e', name: 'mine' });
+    emit({ type: 'openrig.roleDuplicated', requestId: 'other', ok: false, error: 'x' });
+    emit({ type: 'openrig.roleDuplicated', requestId: rid(sent.at(-1)), ok: true, roleId: 'abc1', path: '/p/mine' });
+    await expect(p).resolves.toMatchObject({ ok: true, roleId: 'abc1', path: '/p/mine' });
+  });
+});
+
 describe('useRigSnapshots', () => {
   const snapshots = [{ id: '01M6XTAV9KM2HVRS841K1FQ6RV', kind: 'manual', status: 'complete', createdAt: '2026-11-08 14:52:23' }];
   it('asks once per machine and rig, its own answer only; another rig is not shown the previous list', async () => {

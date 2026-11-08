@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { RIG_QUEUE_REFRESH_MS, RIG_ROW_REFRESH_MS } from '@ledge/protocol';
-import type { RigRow, OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigGraph, RigLaunch, RigSeatPermission, RigSnapshot, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
+import type { RigRow, OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleDuplicated, OpenRigRoleFileContent, OpenRigState, RigGraph, RigLaunch, RigSeatPermission, RigSnapshot, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
 /** How often a screen that shows a machine's OpenRig asks it again. */
@@ -385,6 +385,19 @@ export function readRoleFile(client: DaemonClient, machine: string, id: string, 
       off(); resolve(m);
     });
     client.send({ type: 'openrig.roleFile', requestId, machineId: machine, roleId: id, path });
+  });
+}
+
+/** Copies a role into the person's library under `name` on a machine (never a builtin edit); resolves with its end: `ok` and the
+ *  copy's `roleId` / `path`, or `error` (`exists`, `busy`, `unknown_role`, `too_large`, `offline`, `outdated`, `uncertain`…). */
+export function duplicateRole(client: DaemonClient, machine: string, roleId: string, name: string): Promise<OpenRigRoleDuplicated> {
+  const requestId = `openrig-role-dup-${++next}`;
+  return new Promise(resolve => {
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.roleDuplicated' || m.requestId !== requestId) return;
+      off(); resolve(m);
+    });
+    client.send({ type: 'openrig.role.duplicate', requestId, machineId: machine, roleId, name });
   });
 }
 

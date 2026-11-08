@@ -10,7 +10,7 @@ import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, Ses
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { RigSeatNameSchema, OpenRigGraphSchema, OpenRigGraphStateSchema, OpenRigSnapshotsSchema, OpenRigSnapshotListSchema, OpenRigPermissionsSchema, OpenRigPermissionListSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigGoalReplySchema, OpenRigGoalSendSchema, OpenRigGoalSentSchema, OpenRigGoalsChangedSchema, OpenRigGoalsSchema, OpenRigAnswerSchema, OpenRigAnsweredSchema, OpenRigAsksChangedSchema, OpenRigAsksSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
 import { OpenRigRowSchema, OpenRigRowStateSchema, OpenRigQueueSchema, OpenRigQueueStateSchema } from './rigMessages.js';
-import { OpenRigRoleDetailSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
+import { OpenRigRoleDetailSchema, OpenRigRoleDuplicateSchema, OpenRigRoleDuplicatedSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { BrowserEnableSchema, BrowserEnabledSchema, BrowserFrameSchema, BrowserLiveSchema, BrowserUnwatchSchema, BrowserWatchSchema } from './browser.js';
 import { TermExitSchema, TermInputSchema, TermOpenedSchema, TermOutputSchema, TermResizeSchema, TermShellSchema, TermSizeSchema, TermUnwatchSchema, TermWatchSchema } from './term.js';
@@ -148,6 +148,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   OpenRigRoleListSchema,
   OpenRigRoleDetailSchema,
   OpenRigRoleFileContentSchema,
+  OpenRigRoleDuplicatedSchema,
   OpenRigAsksChangedSchema,
   OpenRigAnsweredSchema,
   OpenRigGoalSentSchema,
@@ -262,6 +263,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   OpenRigQueueSchema,
   OpenRigRoleSchema,
   OpenRigRoleFileSchema,
+  OpenRigRoleDuplicateSchema,
   OpenRigAsksSchema,
   OpenRigAnswerSchema,
   OpenRigGoalSendSchema,

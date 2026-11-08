@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ClientMessageSchema, RoleDetailSchema, RoleSummarySchema } from '@ledge/protocol';
 import { createServer } from 'node:http';
 import { createOpenRig, localGet, type RigRun } from '../src/daemon/openrig.js';
@@ -464,5 +467,115 @@ describe('OpenRig roles: the daemon HTTP read', () => {
       for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
     }
     expect(await localGet(port, '/api/x', 500)).toBeUndefined();
+  });
+});
+
+describe('OpenRig roles: duplicating one into the library (R7)', () => {
+  async function setupDup(over: { addCode?: number; addOut?: string; addErr?: string; names?: string[]; big?: number; onAdd?: (dir: string) => Promise<void> } = {}) {
+    const root = await mkdtemp(join(tmpdir(), 'ledge-dup-test-'));
+    const src = join(root, 'lib', 'agents', 'lead');
+    await mkdir(join(src, 'guidance'), { recursive: true });
+    await writeFile(join(src, 'agent.yaml'), `# my role\nname: ledge-lead   # keep\nversion: "1.0"\nimports:\n  - ref: local:../shared\n  - ref: "local:../../x"\n  - ref: path:/abs/ok\nprofiles: {}\n`);
+    await writeFile(join(src, 'guidance', 'role.md'), '# Rôle\n');
+    await symlink('/etc/passwd', join(src, 'guidance', 'link.md'));
+    if (over.big) await writeFile(join(src, 'big.bin'), Buffer.alloc(over.big));
+    const calls: string[] = [], seen: { dir?: string; yaml?: string; files?: string[] } = {};
+    const tmpBase = join(root, 'tmp');
+    await mkdir(tmpBase);
+    const entries = [{ id: 'f95e', kind: 'agent', name: 'ledge-lead', sourceType: 'user_file', sourcePath: join(src, 'agent.yaml') },
+      ...(over.names ?? []).map((n, i) => ({ id: `n${i}`, kind: 'agent', name: n, sourceType: 'user_file', sourcePath: join(root, n, 'agent.yaml') }))];
+    let release: () => void = () => {};
+    const run: RigRun = async args => {
+      const a = args.join(' ');
+      calls.push(a);
+      if (a === 'specs ls --kind agent --json') return { code: 0, stdout: JSON.stringify(entries), stderr: '' };
+      if (args[0] === 'specs' && args[1] === 'add') {
+        const dir = args[2]!;
+        seen.dir = dir; seen.yaml = await readFile(join(dir, 'agent.yaml'), 'utf8'); seen.files = (await readdir(dir, { recursive: true })).sort();
+        await over.onAdd?.(dir);
+        return { code: over.addCode ?? 0, stdout: over.addOut ?? JSON.stringify({ name: 'mine', kind: 'agent', path: '/h/.openrig/specs/mine', id: 'abc1', entry: {} }), stderr: over.addErr ?? '' };
+      }
+      return { code: 1, stdout: '', stderr: `unexpected ${a}` };
+    };
+    const rig = createOpenRig({ run, home: root, tmpDir: tmpBase, openrigHome: join(root, '.openrig') });
+    return { rig, calls, seen, root, src, tmpBase, release };
+  }
+  const left = (d: string) => readdir(d);
+
+  it('copies the folder to a temp dir named after the copy, renames it, makes relative local: refs absolute path: ones, skips symlinks, adds it, removes the temp dir', async () => {
+    const w = await setupDup();
+    const r = await w.rig.duplicateRole('f95e', 'mine');
+    expect(r).toEqual({ ok: true, roleId: 'abc1', path: '/h/.openrig/specs/mine' });
+    expect(w.seen.dir).toBe(join(w.tmpBase, (await Promise.resolve(w.seen.dir!)).split('/').at(-2)!, 'mine'));
+    expect(w.seen.files).toEqual(['agent.yaml', 'guidance', 'guidance/role.md']);
+    expect(w.seen.yaml).toBe(`# my role\nname: mine   # keep\nversion: "1.0"\nimports:\n  - ref: path:${join(w.root, 'lib', 'agents', 'shared')}\n  - ref: "path:${join(w.root, 'lib', 'x')}"\n  - ref: path:/abs/ok\nprofiles: {}\n`);
+    expect(w.calls.filter(c => c.startsWith('specs add'))).toEqual([`specs add ${w.seen.dir} --json`]);
+    expect(await left(w.tmpBase)).toEqual([]);
+    // the original is untouched
+    expect(await readFile(join(w.src, 'agent.yaml'), 'utf8')).toContain('name: ledge-lead');
+  });
+  it('an add that gives no id still succeeds, without roleId', async () => {
+    const w = await setupDup({ addOut: JSON.stringify({ name: 'mine', kind: 'agent', path: '/p/mine', id: null }) });
+    expect(await w.rig.duplicateRole('f95e', 'mine')).toEqual({ ok: true, path: '/p/mine' });
+  });
+  it('unknown role, a name a user role already has, a source file that is gone, a bad name', async () => {
+    const w = await setupDup({ names: ['taken'] });
+    expect(await w.rig.duplicateRole('nope', 'mine')).toEqual({ ok: false, error: 'unknown_role' });
+    expect(await w.rig.duplicateRole('f95e', 'taken')).toEqual({ ok: false, error: 'exists' });
+    expect(await w.rig.duplicateRole('f95e', '../evil')).toEqual({ ok: false, error: 'invalid_name' });
+    await rm(join(w.src, 'agent.yaml'));
+    expect(await w.rig.duplicateRole('f95e', 'mine')).toEqual({ ok: false, error: 'source_missing' });
+    expect(w.calls.some(c => c.startsWith('specs add'))).toBe(false);
+  });
+  it('OpenRig refusing an existing folder is told exists; any other failure says what rig said; the temp dir is removed either way', async () => {
+    const a = await setupDup({ addCode: 1, addOut: '', addErr: 'A spec directory already exists at /h/.openrig/specs/mine. Remove or rename it before adding this spec.' });
+    expect(await a.rig.duplicateRole('f95e', 'mine')).toEqual({ ok: false, error: 'exists' });
+    expect(await left(a.tmpBase)).toEqual([]);
+    const b = await setupDup({ addCode: 1, addOut: '', addErr: 'File is not a valid RigSpec or AgentSpec.\nFix validation errors before adding.' });
+    expect(await b.rig.duplicateRole('f95e', 'mine')).toEqual({ ok: false, error: 'Fix validation errors before adding.' });
+    expect(await left(b.tmpBase)).toEqual([]);
+    const c = await setupDup({ addCode: 1, addOut: '', addErr: 'daemon not running' });
+    expect(await c.rig.duplicateRole('f95e', 'mine')).toEqual({ ok: false, error: 'daemon_stopped' });
+  });
+  it('refuses a folder over 5 MB or 500 files', async () => {
+    const w = await setupDup({ big: 5 * 1024 * 1024 + 1 });
+    expect(await w.rig.duplicateRole('f95e', 'mine')).toEqual({ ok: false, error: 'too_large' });
+    expect(await left(w.tmpBase)).toEqual([]);
+    const m = await setupDup();
+    for (let i = 0; i < 501; i++) await writeFile(join(m.src, `f${i}.txt`), 'x');
+    expect(await m.rig.duplicateRole('f95e', 'mine')).toEqual({ ok: false, error: 'too_large' });
+    expect(m.calls.some(c => c.startsWith('specs add'))).toBe(false);
+  });
+  it('shares the one-write-at-a-time lock with actions: busy while an act runs, and an act is busy while a duplicate runs', async () => {
+    let gate: () => void = () => {};
+    const held = new Promise<void>(r => { gate = r; });
+    const w = await setupDup({ onAdd: () => held });
+    const first = w.rig.duplicateRole('f95e', 'mine');
+    await vi.waitFor(() => expect(w.seen.dir).toBeDefined());
+    expect(await w.rig.duplicateRole('f95e', 'other')).toEqual({ ok: false, error: 'busy' });
+    expect((await w.rig.act({ kind: 'rig.stop', rig: 'x' } as never)).error).toBe('busy');
+    gate();
+    expect((await first).ok).toBe(true);
+    // and the other way: a running act makes the duplicate busy
+    let release: () => void = () => {};
+    const gated = new Promise<void>(r => { release = r; });
+    const root2 = await setupDup();
+    const slow = createOpenRig({ run: async a => { if (a[0] === 'specs') return { code: 0, stdout: '[]', stderr: '' }; await gated; return { code: 0, stdout: '', stderr: '' }; }, home: root2.root, tmpDir: root2.tmpBase });
+    const act = slow.act({ kind: 'rig.stop', rig: 'x' } as never);
+    expect(await slow.duplicateRole('f95e', 'mine')).toEqual({ ok: false, error: 'busy' });
+    release(); await act;
+  });
+  it('the new role is listed at the next roles() (nothing is cached in between)', async () => {
+    const w = await setupDup();
+    await w.rig.duplicateRole('f95e', 'mine');
+    expect(w.calls.filter(c => c === 'specs ls --kind agent --json').length).toBeGreaterThan(0);
+    await w.rig.roles();
+    expect(w.calls.filter(c => c === 'specs ls --kind agent --json').length).toBeGreaterThan(1);
+  });
+  it('the protocol: duplicate takes a library id and a rig name only', () => {
+    const ok = (m: unknown) => ClientMessageSchema.safeParse(m).success;
+    expect(ok({ type: 'openrig.role.duplicate', requestId: 'r', roleId: 'f95e', name: 'mine' })).toBe(true);
+    expect(ok({ type: 'openrig.role.duplicate', requestId: 'r', roleId: 'f95e', name: '../x' })).toBe(false);
+    expect(ok({ type: 'openrig.role.duplicate', requestId: 'r', roleId: '../f', name: 'mine' })).toBe(false);
   });
 });

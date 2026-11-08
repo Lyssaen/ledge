@@ -1253,6 +1253,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'openrig.snapshots': return reply({ type: 'openrig.snapshotList', requestId: msg.requestId, rig: msg.rig, snapshots: [], ...await openrig.snapshots(msg.rig) });
       case 'openrig.role': return reply({ type: 'openrig.roleDetail', requestId: msg.requestId, roleId: msg.roleId, ...await openrig.role(msg.roleId) });
       case 'openrig.roleFile': return reply({ type: 'openrig.roleFileContent', requestId: msg.requestId, roleId: msg.roleId, path: msg.path, ...await openrig.roleFile(msg.roleId, msg.path) });
+      case 'openrig.role.duplicate': return reply({ type: 'openrig.roleDuplicated', requestId: msg.requestId, ...await openrig.duplicateRole(msg.roleId, msg.name) });
       case 'openrig.launch': {
         const done = await openrig.launch(msg.launch);
         reply({ type: 'openrig.launched', requestId: msg.requestId, ...done });

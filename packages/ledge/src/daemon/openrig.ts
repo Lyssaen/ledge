@@ -1,12 +1,12 @@
 import { execFile } from 'node:child_process';
 import { get as httpGet } from 'node:http';
 import { existsSync, readdirSync } from 'node:fs';
-import { cp, mkdir, open as openFile, readFile, stat as statFile, writeFile } from 'node:fs/promises';
+import { cp, copyFile, lstat, mkdir, mkdtemp, open as openFile, readdir, readFile, rm, stat as statFile, writeFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
 import { changesSpec, composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, QitemIdSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -150,6 +150,7 @@ export interface OpenRigDeps {
   /** Files the roles are read from, for tests. */ roleIo?: RoleIo & { head(p: string, max: number): Promise<string | null> };
   /** A GET on the OpenRig daemon's HTTP API (its node detail has no CLI); undefined when it does not answer. */ http?: (path: string) => Promise<unknown>;
   /** OpenRig's home (`$OPENRIG_HOME`, `~/.openrig`). */ openrigHome?: string;
+  /** Where a role duplicate is built before `rig specs add` (the system's temp folder), for tests. */ tmpDir?: string;
 }
 export interface LaunchResult { ok: boolean; plan: boolean; commands: string[]; yaml?: string; seats?: number; output?: string; error?: string; check?: { status: string; errors: string[]; warnings: string[] } }
 
@@ -177,6 +178,9 @@ export interface OpenRig {
   roles(): Promise<RolesResult>;
   /** One role by library id: from its spec and from each seat that runs it. */
   role(id: string): Promise<RoleResult>;
+  /** Copies a role into the person's own library under `name` (never writes a builtin): the folder is built in a temp dir, `name:` renamed, relative
+   *  `local:` imports made absolute `path:` ones, then `rig specs add`. Takes the lock of `act` (`busy`). `error`: `unknown_role`, `source_missing`, `exists`, `too_large`, `invalid_name`, `busy`, `not_installed`, `daemon_stopped`, or what `rig` said. */
+  duplicateRole(roleId: string, name: string): Promise<DuplicateResult>;
   /** A file of a role: only a path its detail lists (`not_allowed` otherwise), `ROLE_FILE_MAX` bytes at most. */
   roleFile(id: string, path: string): Promise<RoleFileResult>;
   /** A queue row's state (`rig queue show <id> --json`), for the OpenRig task cards of a thread: reused under `ROW_TTL_MS`,
@@ -197,6 +201,7 @@ export interface OpenRig {
 }
 export interface RolesResult { roles: RoleSummary[]; openrigVersion?: string; error?: string }
 export interface RoleResult { role?: RoleDetail; error?: string }
+export interface DuplicateResult { ok: boolean; roleId?: string; path?: string; error?: string }
 export interface RoleFileResult { content?: string; size?: number; truncated?: boolean; error?: string }
 export interface ReseatResult { ok: boolean; commands: string[]; added: string[]; removed: string[]; output?: string; error?: string; links?: number; linksUnsupported?: boolean }
 
@@ -240,6 +245,36 @@ const realFs = {
   copyDir: (from: string, to: string) => cp(from, to, { recursive: true, force: true, filter: src => basename(src) !== 'rig.yaml' }),
   write: async (p: string, text: string) => { await mkdir(dirname(p), { recursive: true }); await writeFile(p, text); }
 };
+
+/** A role folder bigger than this is not duplicated (a role is a few markdown files and a YAML). */
+export const DUPLICATE_MAX_BYTES = 5 * 1024 * 1024;
+export const DUPLICATE_MAX_FILES = 500;
+class TooLarge extends Error {}
+
+/** Copies a folder without following symlinks (they are skipped: `rig specs add` refuses a tree that has one), counting its files and bytes. */
+async function copyTree(from: string, to: string, seen = { files: 0, bytes: 0 }): Promise<void> {
+  await mkdir(to, { recursive: true });
+  for (const e of await readdir(from, { withFileTypes: true })) {
+    const src = join(from, e.name), dst = join(to, e.name);
+    const st = await lstat(src);
+    if (st.isSymbolicLink()) continue;
+    if (st.isDirectory()) { await copyTree(src, dst, seen); continue; }
+    if (!st.isFile()) continue;
+    seen.files++; seen.bytes += st.size;
+    if (seen.files > DUPLICATE_MAX_FILES || seen.bytes > DUPLICATE_MAX_BYTES) throw new TooLarge();
+    await copyFile(src, dst);
+  }
+}
+
+/** The copy's `agent.yaml`, edited line by line (comments and layout kept): the top-level `name:` is `name`, and each relative `local:` ref
+ *  (OpenRig takes `local:` relative only, and the copy lives elsewhere) becomes a `path:` one, absolute from the ORIGINAL folder. */
+export function rewriteDuplicate(yaml: string, name: string, originalDir: string): string {
+  let renamed = false;
+  return yaml.split('\n').map(line => {
+    if (!renamed && /^name:/.test(line)) { renamed = true; return line.replace(/^name:\s*("[^"]*"|'[^']*'|[^\s#]*)/, `name: ${name}`); }
+    return line.replace(/(?<=^|[\s"'\[,])local:([^\s"'#,\]]+)/g, (_m, rel: string) => `path:${resolve(originalDir, rel)}`);
+  }).join('\n');
+}
 
 export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   const run = deps.run ?? execRun(deps.env ?? (async () => process.env));
@@ -490,6 +525,45 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return { roles: out, ...(version ? { openrigVersion: version } : {}) };
   }
 
+
+  async function duplicateRole(roleId: string, name: string): Promise<DuplicateResult> {
+    if (!RigNameSchema.safeParse(name).success) return { ok: false, error: 'invalid_name' };
+    if (acting) return { ok: false, error: 'busy' };
+    acting = true;
+    let work: string | undefined;
+    try {
+      const lib = await library();
+      if (lib.error) return { ok: false, error: lib.error };
+      const entry = lib.entries.find(e => e.id === roleId);
+      if (!entry) return { ok: false, error: 'unknown_role' };
+      if (lib.entries.some(e => e.source === 'user' && e.name === name)) return { ok: false, error: 'exists' };
+      const from = dirname(resolve(entry.path));
+      if (!(await statFile(entry.path).then(st => st.isFile()).catch(() => false))) return { ok: false, error: 'source_missing' };
+      work = await mkdtemp(join(deps.tmpDir ?? tmpdir(), 'ledge-role-'));
+      const target = join(work, name);
+      if (!(resolve(target) + sep).startsWith(resolve(work) + sep)) return { ok: false, error: 'invalid_name' };
+      try { await copyTree(from, target); } catch (e) { if (e instanceof TooLarge) return { ok: false, error: 'too_large' }; throw e; }
+      const yamlFile = join(target, basename(entry.path));
+      await writeFile(yamlFile, rewriteDuplicate(await readFile(yamlFile, 'utf8'), name, from));
+      const r = await run(['specs', 'add', target, '--json'], STATUS_MS);
+      if (r.code === null) return { ok: false, error: 'not_installed' };
+      const said = `${r.stdout}${r.stderr}`;
+      if (r.code !== 0) {
+        log(`openrig: specs add ${name} failed: ${failure(r)}`);
+        return { ok: false, error: /already exists/i.test(said) ? 'exists' : /daemon not running/i.test(said) ? 'daemon_stopped' : failure(r) };
+      }
+      const added = obj(parse(r.stdout.trim().split('\n').filter(Boolean).at(-1) ?? ''));
+      const id = str(added.id), path = str(added.path);
+      log(`openrig: role ${entry.name} duplicated as ${name}`);
+      return { ok: true, ...(id ? { roleId: id } : {}), ...(path ? { path } : {}) };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'failed' };
+    } finally {
+      if (work) await rm(work, { recursive: true, force: true }).catch(() => {});
+      acting = false;
+    }
+  }
+
   const pluginCache = new Map<string, PluginInfo | null>();
   async function plugin(id: string): Promise<PluginInfo | null> {
     if (pluginCache.has(id)) return pluginCache.get(id)!;
@@ -630,7 +704,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return live ?? none('failed');
   }
 
-  return { state, act, specs, launch, reseat, roles, role, roleFile, row, graph, snapshots, permissions, queue };
+  return { state, act, specs, launch, reseat, roles, role, roleFile, duplicateRole, row, graph, snapshots, permissions, queue };
 }
 
 /** A seat's permissions from `rig seat status <session> --json` (`permissions.effective.{effectiveMode, source, launchPosture}`,
