@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatStep, Projects } from '@ledge/protocol';
 import { execForge, forgeOf, redact, type ForgeCli, type ForgeRepo } from '../daemon/forge/run.js';
+import { signedInHosts } from '../daemon/forge/hosts.js';
 import { log } from '../log.js';
 
 export { forgeOf, redact, type ForgeRepo };
@@ -47,7 +48,8 @@ const execRun = (env: () => Promise<NodeJS.ProcessEnv>): ForgeRun => {
   return (file, args, cwd) => run(file, args, { cwd, timeoutMs: TIMEOUT_MS });
 };
 
-export interface ForgeDeps { run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => string; ttlMs?: number }
+export interface ForgeDeps { run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => string; ttlMs?: number;
+  /** The hosts each CLI is signed in to (signedInHosts by default, read at each write); a test gives its own. */ signedIn?: (cli: Cli) => Promise<Set<string>> }
 export interface Forge {
   /**
    * Writes `forge.md` and a `forge-<project>.md` per project into the chat's folder and registers them as steps; nothing without
@@ -74,7 +76,9 @@ async function readRepo(run: ForgeRun, f: ForgeRepo): Promise<string[]> {
 }
 
 export function createForge(deps: ForgeDeps = {}): Forge {
-  const run = deps.run ?? execRun(deps.env ?? (async () => process.env));
+  const env = deps.env ?? (async () => process.env);
+  const run = deps.run ?? execRun(env);
+  const signedIn = deps.signedIn ?? (async (cli: Cli) => signedInHosts(cli, await env()));
   const now = deps.now ?? (() => new Date().toISOString());
   const ttl = deps.ttlMs ?? FORGE_TTL_MS;
   /** Each repository's last reads, by forge repository. */
@@ -87,10 +91,15 @@ export function createForge(deps: ForgeDeps = {}): Forge {
     cache.set(f.repo, fresh);
     return fresh;
   }
-  async function section(path: string, read: boolean): Promise<{ lines: string[]; source?: string }> {
+  async function section(path: string, read: boolean, hosts: (cli: Cli) => Promise<Set<string>>): Promise<{ lines: string[]; source?: string }> {
     const remote = await run('git', ['config', '--get', 'remote.origin.url'], path);
     const f = remote.code === 0 ? forgeOf(remote.stdout) : null;
     if (!f) return { lines: [`# ${path}`, '', 'This repository has no GitHub or GitLab remote (origin): nothing to read.', ''] };
+    // Never a host the CLI is not signed in to (as the daemon's forge service, 0ada7cd2): a repository cloned from anywhere must not
+    // make Ledge call that host with the machine's credentials. Said so, so the chat never reads it as « no issue, no PR ».
+    if (!(await hosts(f.cli)).has(f.host.toLowerCase())) {
+      return { lines: [`# ${f.host}/${f.path} — not read`, `Local repository: ${path}`, '', `\`${f.cli}\` is not signed in to ${f.host} on this machine: Ledge does not read this forge. This says nothing about its issues, pull/merge requests or CI.`, ''], source: `${f.host}/${f.path}` };
+    }
     const r = read ? await reads(f) : cache.get(f.repo);
     if (!r) return { lines: [`# ${f.host}/${f.path} — not read yet`, `Local repository: ${path}`, '', 'Ledge reads this forge when a question is about issues, pull/merge requests or CI: nothing was read for this one.', ''], source: `${f.host}/${f.path}` };
     return { lines: [`# ${f.host}/${f.path} — read at ${r.at}`, `Local repository: ${path}`, '', ...r.lines], source: `${f.host}/${f.path}` };
@@ -100,13 +109,16 @@ export function createForge(deps: ForgeDeps = {}): Forge {
     async write(ctx, projects, opts = {}) {
       const read = opts.read ?? true;
       if (projects.projects.length === 0) return;
+      // Each CLI's signed-in hosts, read once for this write.
+      const memo = new Map<Cli, Promise<Set<string>>>();
+      const hosts = (cli: Cli): Promise<Set<string>> => { let p = memo.get(cli); if (!p) { p = signedIn(cli).catch(() => new Set<string>()); memo.set(cli, p); } return p; };
       const index = ['# GitHub / GitLab', '', 'What the daemon read from the forges of each project\'s repositories on this machine (open issues, pull/merge requests, CI). Each file says when it was read.', ''];
       await Promise.all(projects.projects.map(async p => {
         const local = p.repos.filter(r => r.machine === 'local');
         const file = `forge-${p.id}.md`;
         const name = p.name.replace(/\s*[\r\n]+\s*/g, ' ').trim();
         if (local.length === 0) { index.push(`- ${name}: no repository on this machine`); return; }
-        const parts = await Promise.all(local.map(r => section(r.path, read)));
+        const parts = await Promise.all(local.map(r => section(r.path, read, hosts)));
         await writeFile(join(ctx.dir, file), parts.flatMap(s => s.lines).join('\n'));
         const sources = parts.flatMap(s => (s.source ? [s.source] : []));
         ctx.steps.set(file, { kind: 'repo', name, path: sources.join(', ') || file });
