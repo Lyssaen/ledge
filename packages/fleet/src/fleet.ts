@@ -1,7 +1,8 @@
-import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, UsagePrefsSchema, type UsagePrefs, type UsageStateMessage, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload, type BrowserLive } from '@ledge/protocol';
+import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, UsagePrefsSchema, type UsagePrefs, type UsageStateMessage, type ForgeAction, type ForgeStateMessage, type PrDetail, type RefusalCode, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload, type BrowserLive } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
+import type { FleetForgeStatus, FleetPullRequest } from './forge';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>;
@@ -156,6 +157,25 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let contextNear: number | undefined;
   /** Each machine's last `usage.state` (harness limits, alerts, threshold), by machine id; a machine that goes away takes its own. */
   let usage: ReadonlyMap<string, UsageStateMessage> = new Map();
+  /** Each machine's last `forge.state` (lot 8a), sessions qualified; a machine that falls takes its own out. */
+  let forgeStates: ReadonlyMap<string, ForgeStateMessage> = new Map();
+  const forgeListeners = new Set<() => void>();
+  type ForgeFailure = { code: RefusalCode | 'offline' | 'outdated'; message: string };
+  /** `forge.detail` / `forge.act` requestId -> the machine asked; `settle` when `prDetail` / `prAct` waits on it. */
+  const forgeAsks = new Map<string, { machine: string; kind: 'detail' | 'act'; settle?: (ok: boolean, value: unknown) => void }>();
+  let forgeSeq = 0;
+  const forgeChanged = () => { forgeListeners.forEach(fn => fn()); listeners.forEach(fn => fn()); };
+  const dropForge = (machine: string) => { if (forgeStates.has(machine)) { const next = new Map(forgeStates); next.delete(machine); forgeStates = next; forgeChanged(); } };
+  /** Each pending request of `machine` is answered `ok: false` with `code` (offline when it fell, outdated when its daemon does not know forge.*). */
+  const answerFailedForge = (machine: string, code: 'offline' | 'outdated') => {
+    const message = code === 'offline' ? 'hors ligne' : 'version trop ancienne';
+    for (const [requestId, a] of forgeAsks) if (a.machine === machine) {
+      forgeAsks.delete(requestId);
+      if (a.settle) a.settle(false, { code, message } satisfies ForgeFailure);
+      else emit(a.kind === 'detail' ? { type: 'forge.detail.reply', requestId, ok: false, message } : { type: 'forge.act.reply', requestId, ok: false, message });
+    }
+  };
+  const qualifyPrs = (machine: string, m: ForgeStateMessage): ForgeStateMessage => ({ ...m, machineId: machine, prs: m.prs.map(p => ({ ...p, sessions: p.sessions.map(id => qualify(machine, id)) })) });
   /** What a machine missed while it was away: the threshold set and the « Compris » given then, sent once it speaks again. */
   // Kept across the front's restarts (review of 975e508b): a threshold a machine has not received yet, by machine; and every
   // « Compris » given (an alert's id carries its window's reset, so an id never comes back after it): any machine that shows
@@ -274,7 +294,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
   function apply(next: MachineConfig[]) {
     configuring = true;
-    for (const [id, p] of peers) if (!next.some(c => !c.disabled && c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); if (usage.has(id)) { const next = new Map(usage); next.delete(id); usage = next; } if (owedPrefs.delete(id)) keepOwed(); }
+    for (const [id, p] of peers) if (!next.some(c => !c.disabled && c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); answerFailedForge(id, 'offline'); dropForge(id); if (usage.has(id)) { const next = new Map(usage); next.delete(id); usage = next; } if (owedPrefs.delete(id)) keepOwed(); }
     configs = next;
     for (const c of active()) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
     if (!peers.has(selected)) selected = 'local';
@@ -395,6 +415,23 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       usage = new Map(usage).set(machine, tagged); listeners.forEach(fn => fn());
       emit(tagged); return;
     }
+    // The pull and merge requests (lot 8a): kept per machine, sessions qualified; an answer goes out once, from the machine asked.
+    if (m.type === 'forge.state') {
+      const tagged = qualifyPrs(machine, m);
+      forgeStates = new Map(forgeStates).set(machine, tagged); forgeChanged();
+      emit(tagged); return;
+    }
+    if (m.type === 'forge.detail.reply' || m.type === 'forge.act.reply') {
+      const a = forgeAsks.get(m.requestId);
+      if (a?.machine !== machine) return;
+      forgeAsks.delete(m.requestId);
+      const reply = m.type === 'forge.detail.reply' && m.detail ? { ...m, detail: { ...m.detail, pr: { ...m.detail.pr, sessions: m.detail.pr.sessions.map(id => qualify(machine, id)) } } } : m;
+      if (a.settle) {
+        if (!reply.ok) a.settle(false, { code: reply.code ?? 'unavailable', message: reply.message ?? '' } satisfies ForgeFailure);
+        else a.settle(true, reply.type === 'forge.detail.reply' ? reply.detail : { command: reply.command ?? '' });
+      } else emit(reply);
+      return;
+    }
     if (m.type === 'models.listing') { if (modelLists.get(m.requestId)?.machine === machine) { modelLists.delete(m.requestId); emit(m); } return; }
     if (m.type === 'session.commands.listing') { const l = commandLists.get(m.requestId); if (l?.machine === machine) { commandLists.delete(m.requestId); emit({ ...m, id: l.id }); } return; }
     if (m.type === 'chat.routed') {
@@ -458,6 +495,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       // Likewise a daemon that predates the rows of the task cards (docs/mockups/ledge-openrig-messages.html).
       if (m.request === 'openrig.row') { answerFailedRigs(machine, 'outdated', ['row']); return; }
       if (m.request?.startsWith('openrig.')) { answerFailedRigs(machine, 'outdated'); return; }
+      if (m.request === 'forge.detail' || m.request === 'forge.act') { answerFailedForge(machine, 'outdated'); return; }
       if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
       // Only the in-flight operation's own refusal ends it: another refused command leaves it waiting for its answer or the machine's drop.
       if (m.request !== undefined && OPERATIONS.has(m.request)) endOperation(machine);
@@ -568,7 +606,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         if (endOperation(c.id)) emit({ type: 'error', message: `${c.label} is offline`, ...(op === 'launch' ? { request: 'session.launch' } : closing ? { request: 'session.close' } : {}) });
         for (const [requestId, owner] of attachmentAsks) if (owner === c.id) { attachmentAsks.delete(requestId); emit({ type: 'attachment.error', requestId, reason: 'offline' }); }
         for (const b of [...broadcasts.values()]) if (b.waiting.has(c.id)) { b.refused.push(machineRefusal(c.id, 'hors ligne')); settleBroadcast(b, c.id); }
-        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedCommands(c.id, 'offline'); answerFailedRigs(c.id, 'offline');
+        answerUnfoundInspections(c.id); answerUnfoundListings(c.id, 'offline'); answerFailedScans(c.id, 'offline'); answerFailedModels(c.id, 'offline'); answerFailedCommands(c.id, 'offline'); answerFailedRigs(c.id, 'offline'); answerFailedForge(c.id, 'offline'); dropForge(c.id);
         for (const [requestId, owner] of documents) if (owner === c.id) { documents.delete(requestId); emit({ type: 'document.error', requestId, path: '', code: 'read_failed' }); }
         if (routing?.coordinator === c.id) { const qid = routing.qid; routing = null; fail(qid, `${c.label} is offline`); }
         for (const [qid, b] of bindings) { const t = turns.get(qid); if (b.machine === c.id && t && !t.answeredAt && !t.error) fail(qid, `${c.label} is offline`); }
@@ -582,6 +620,13 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   for (const c of active()) add(c);
   function inventory(): RoutingContext {
     return { machines: state.map(m => ({ id: m.id, label: m.label, online: m.ready, local: m.id === 'local', sessions: m.sessions.slice(0, 500).map(s => ({ id: s.id, name: s.name, project: s.repo ?? s.project, cwd: s.cwd, topic: s.topic, state: s.state, readOnly: s.source === 'hook_only' })), folders: m.recents.slice(0, 100).map(r => ({ project: r.project, cwd: r.cwd })) })), history: [...turns.values()].slice(-30).map(t => ({ question: t.question.slice(0, 20000), answer: t.answer?.slice(0, 20000), machineId: t.machineId })) };
+  }
+  /** `prDetail` / `prAct`: the request sent through `send`, its answer (or « hors ligne ») settling the promise. */
+  function forgeAsk<T>(msg: Extract<ClientMessage, { type: 'forge.detail' | 'forge.act' }>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      forgeAsks.set(msg.requestId, { machine: msg.machineId ?? 'local', kind: msg.type === 'forge.detail' ? 'detail' : 'act', settle: (ok, v) => (ok ? resolve(v as T) : reject(v)) });
+      api.send(msg);
+    });
   }
   const api: DaemonClient = {
     connect() { connected = true; peers.forEach(p => p.client.connect()); publish(); history(); },
@@ -610,6 +655,16 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (msg.type === 'chat.cancel' && routing?.qid === msg.qid) { peers.get(routing.coordinator)?.client.send(msg); routing = null; fail(msg.qid, 'cancelled'); return; }
       // The usage threshold and « Compris » go to the machine named (local by default); a front sends them to each machine it
       // means. Before the session routing below: an alert's `id` is not a session's. An offline machine: nothing to send.
+      // A request's detail and actions go to the machine that read it (`machineId`, local by default); a daemon without `forge` is too old.
+      if (msg.type === 'forge.detail' || msg.type === 'forge.act') {
+        const machine = msg.machineId ?? 'local', target = peers.get(machine);
+        const kind = msg.type === 'forge.detail' ? 'detail' as const : 'act' as const;
+        forgeAsks.set(msg.requestId, { machine, kind, settle: forgeAsks.get(msg.requestId)?.settle });
+        if (!available(target)) { answerFailedForge(machine, 'offline'); return; }
+        if (!target!.snapshot?.daemon?.forge) { answerFailedForge(machine, 'outdated'); return; }
+        const { machineId: _m, ...rest } = msg;
+        target!.client.send(rest); return;
+      }
       if (msg.type === 'usage.set' || msg.type === 'usage.ack') {
         const target = peers.get(msg.machineId ?? 'local');
         if (!available(target)) return;
@@ -772,6 +827,15 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       },
       tasks: () => taskList,
       usage: () => usage,
+      prs: () => [...forgeStates].flatMap(([machine, st]) => st.prs.map(p => ({ ...p, machineId: machine }) as FleetPullRequest)),
+      forges: () => [...forgeStates].flatMap(([machine, st]) => st.forges.map(f => ({ ...f, machineId: machine }) as FleetForgeStatus)),
+      onForge(cb) { forgeListeners.add(cb); return () => { forgeListeners.delete(cb); }; },
+      prDetail(prId, machineId, opts = {}) {
+        return forgeAsk<PrDetail>({ type: 'forge.detail', requestId: `forge-${Date.now()}-${++forgeSeq}`, prId, machineId, ...(opts.log ? { log: opts.log } : {}) });
+      },
+      prAct(prId, machineId, action) {
+        return forgeAsk<{ command: string }>({ type: 'forge.act', requestId: `forge-${Date.now()}-${++forgeSeq}`, prId, machineId, action });
+      },
       setUsageAlert(alert) {
         const prefs = UsagePrefsSchema.parse({ alert });
         // One threshold for every machine (M7): each daemon keeps its own copy, so each is told.

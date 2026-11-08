@@ -9,3 +9,4 @@ export * from './proposals';
 export * from './token';
 export * from './attachments';
 export * from './usage';
+export * from './forge';
