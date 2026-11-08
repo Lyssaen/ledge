@@ -187,6 +187,22 @@ describe('useRigQueue', () => {
   });
 });
 
+describe('useRigQueue offline', () => {
+  it('keeps the last rows when a later ask answers offline, and shows the error', async () => {
+    vi.useFakeTimers();
+    try {
+      const { useRigQueue } = await import('../src/openrig');
+      const { client, sent, emit } = fake();
+      const row = { id: 'qitem-1', state: 'pending', from: 'a@k', to: 'b@a', createdAt: 'a', updatedAt: 'b', at: 'c' };
+      const { result } = renderHook(() => useRigQueue(client, 'server', 'a'));
+      emit({ type: 'openrig.queueState', requestId: rid(sent[0]), rig: 'a', rows: [row], truncated: false });
+      act(() => { vi.advanceTimersByTime(15_000); });
+      emit({ type: 'openrig.queueState', requestId: rid(sent[1]), rig: 'a', rows: [], truncated: false, error: 'offline' });
+      expect(result.current).toMatchObject({ status: 'ready', rows: [row], error: 'offline' });
+    } finally { vi.useRealTimers(); }
+  });
+});
+
 describe('useRigGraph', () => {
   const graph = { pods: [{ id: 'dev', label: 'Project' }], seats: [{ logicalId: 'dev.build', pod: 'dev', runtime: 'codex', status: 'exited', attention: false }], links: [] };
   it('asks once per machine and rig, its own answer only; another rig is not shown the previous graph', async () => {

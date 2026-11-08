@@ -30,11 +30,16 @@ describe('rowFrom: one queue record to a RigRow (shared by queue show and queue 
 });
 
 describe('readQueue: a rig\'s rows out of the list', () => {
-  it('keeps the rows whose destination OR source ends with @<rig>, in OpenRig\'s order; other rigs are out', () => {
+  it('keeps the rows whose destination OR source ends with @<rig>, other rigs are out', () => {
     const r = readQueue(LIST, 'ledge-survey', AT)!;
     expect(r.rows.map(x => x.id)).toEqual([WAITING.qitemId, SOURCE_ONLY.qitemId, WORKING.qitemId]);
     expect(r.truncated).toBe(false);
     expect(readQueue(LIST, 'kernel', AT)!.rows.map(x => x.id)).toEqual([WAITING.qitemId, OTHER_RIG.qitemId, SOURCE_ONLY.qitemId, WORKING.qitemId]);
+  });
+  it('sorts newest updatedAt first whatever order OpenRig returns; ties keep its order', () => {
+    const at = (id: string, tsUpdated: string) => ({ ...WAITING, qitemId: id, tsUpdated });
+    const shuffled = [at('qitem-old', '2026-11-08T10:00:00.000Z'), at('qitem-new', '2026-11-08T12:00:00.000Z'), at('qitem-tie1', '2026-11-08T11:00:00.000Z'), at('qitem-tie2', '2026-11-08T11:00:00.000Z')];
+    expect(readQueue(shuffled, 'ledge-survey', AT)!.rows.map(x => x.id)).toEqual(['qitem-new', 'qitem-tie1', 'qitem-tie2', 'qitem-old']);
   });
   it('matches the exact name after the last @ (not a longer rig name, not a prefix)', () => {
     expect(readQueue(LIST, 'survey', AT)!.rows).toEqual([]);

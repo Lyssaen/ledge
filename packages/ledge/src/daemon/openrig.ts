@@ -742,8 +742,8 @@ export function rowFrom(record: unknown, at: string): RigRow | undefined {
 const QUEUE_LIMIT = 100;
 const QUEUE_PATH = `/api/queue/list?state=pending,in-progress,blocked&limit=${QUEUE_LIMIT}`;
 
-/** A rig's rows out of `GET /api/queue/list` (a JSON array, newest first as OpenRig returns it; `rig=` does not filter there, so Ledge does):
- *  those whose destination or source session ends with `@<rig>`. `truncated`: the raw list had `QUEUE_LIMIT` items. Undefined when it is not a list. */
+/** A rig's rows out of `GET /api/queue/list` (a JSON array in an order OpenRig does not specify; `rig=` does not filter there, so Ledge does):
+ *  those whose destination or source session ends with `@<rig>`, newest `updatedAt` first (ties keep OpenRig's order). `truncated`: the raw list had `QUEUE_LIMIT` items. Undefined when it is not a list. */
 export function readQueue(raw: unknown, rig: string, at: string): { rows: RigRow[]; truncated: boolean } | undefined {
   if (!Array.isArray(raw)) return undefined;
   const suffix = `@${rig}`, rows: RigRow[] = [];
@@ -751,5 +751,7 @@ export function readQueue(raw: unknown, rig: string, at: string): { rows: RigRow
     const row = rowFrom(item, at);
     if (row && (row.to.endsWith(suffix) || row.from.endsWith(suffix))) rows.push(row);
   }
+  const time = (r: RigRow) => { const t = Date.parse(r.updatedAt); return Number.isNaN(t) ? -Infinity : t; };
+  rows.sort((a, b) => time(b) - time(a)); // stable: ties keep OpenRig's order
   return { rows, truncated: raw.length >= QUEUE_LIMIT };
 }
