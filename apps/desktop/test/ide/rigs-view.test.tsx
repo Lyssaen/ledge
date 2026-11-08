@@ -6,7 +6,7 @@ import type { DaemonClient, MachineState } from '@ledge/fleet';
 import type { ClientMessage, OpenRigState, Rig, RigSeat, ServerMessage, Session } from '@ledge/protocol';
 import { LangProvider } from '../../src/i18n/lang';
 import { RigsView } from '../../src/ide/rigs/RigsView';
-import { openrigTab } from '../../src/workspace/store';
+import { openrigTab, rigTab } from '../../src/workspace/store';
 import type { Tab } from '../../src/workspace/model';
 
 beforeEach(() => localStorage.clear());
@@ -160,7 +160,7 @@ describe('the IDE Rigs view', () => {
     await userEvent.click(screen.getByRole('button', { name: /Lancer/ }));
     expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'openrig', machine: 'local', section: 'rigs', open: { launch: true } });
     await userEvent.click(screen.getByRole('button', { name: 'ledge-dev' }));
-    expect(m.onTab).toHaveBeenLastCalledWith(openrigTab('local'));
+    expect(m.onTab).toHaveBeenLastCalledWith(rigTab('local', 'ledge-dev'));
     await userEvent.click(screen.getByRole('button', { name: 'Daemon' }));
     expect(m.onTab).toHaveBeenLastCalledWith(openrigTab('local'));
   });
@@ -172,6 +172,16 @@ describe('the IDE Rigs view', () => {
     await userEvent.click(screen.getByRole('button', { name: /locale/ }));
     fireEvent.mouseDown(document.body); fireEvent.click(screen.getByTestId('ide-rigs-back'));
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+  it('Ctrl+click on a rig opens its tab to the right', async () => {
+    const m = running();
+    fireEvent.click(screen.getByRole('button', { name: 'ledge-dev' }), { ctrlKey: true });
+    expect(m.onTab).toHaveBeenLastCalledWith(rigTab('local', 'ledge-dev'), 'right');
+  });
+  it('a rig row has sel when its Rig tab is the active one', () => {
+    running(mount({ activeTab: rigTab('local', 'ledge-dev') }));
+    expect(screen.getByRole('button', { name: 'ledge-dev' }).closest('.ide-rigs-row')).toHaveClass('sel');
+    expect(screen.getByRole('button', { name: 'Daemon' }).closest('.ide-rigs-row')).not.toHaveClass('sel');
   });
   it('the daemon row is highlighted while its OpenRig tab is active', () => {
     running(mount({ activeTab: openrigTab('local') }));

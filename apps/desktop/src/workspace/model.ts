@@ -8,7 +8,7 @@
  * Every function returns a new state, or the same object when nothing changed.
  */
 
-export type TabKind = 'session' | 'seat' | 'changes' | 'terminal' | 'pr' | 'topology' | 'openrig' | 'atoi' | 'atelier' | 'settings';
+export type TabKind = 'session' | 'seat' | 'changes' | 'terminal' | 'pr' | 'rig' | 'openrig' | 'atoi' | 'atelier' | 'settings';
 export type View = 'thread' | 'terminal' | 'role';
 export interface Tab { kind: TabKind; ref: string; /** session and seat tabs: the view in front. */ view?: View }
 export type Link = 'violet' | 'teal';
@@ -348,7 +348,7 @@ export function deserialize(json: string): Workspace | null {
   const o = v as Partial<Workspace>;
   if (o.version !== 1 || !Array.isArray(o.windows) || !Array.isArray(o.groups) || typeof o.focus !== 'string' || typeof o.next !== 'number') return null;
   if (!o.windows.includes(MAIN)) return null;
-  const kinds: readonly string[] = ['session', 'seat', 'changes', 'terminal', 'pr', 'topology', 'openrig', 'atoi', 'atelier', 'settings'];
+  const kinds: readonly string[] = ['session', 'seat', 'changes', 'terminal', 'pr', 'rig', 'openrig', 'atoi', 'atelier', 'settings'];
   for (const g of o.groups) {
     if (!g || typeof g.id !== 'string' || !o.windows.includes(g.window) || !Array.isArray(g.tabs) || typeof g.active !== 'number') return null;
     if (g.link !== null && !LINKS.includes(g.link)) return null;

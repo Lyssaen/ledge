@@ -1366,6 +1366,7 @@ export const en: Messages = {
     },
     /** The “Rig · name” tab (IDE lot 7c). */
     rigTab: {
+      title: (rig: string) => `Rig · ${rig}`,
       topology: 'Topology', topologyRunning: 'click a seat: its thread', topologyStopped: 'the seats start with the rig', loading: 'Reading…',
       legend: 'Links', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
       running: 'running', stopped: 'stopped', seatsAt: (n: number, machine: string) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${machine}`,

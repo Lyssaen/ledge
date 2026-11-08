@@ -1,0 +1,100 @@
+import type { Page } from '@playwright/test';
+import type { OpenRigState } from '@ledge/protocol';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, session, twoProjects } from './daemon';
+import { RIG_7A } from './openrig-fixtures';
+
+// The « Rig · name » tab (lot 7c, docs/mockups/ledge-ide-rigs.html `topoPage`): opened from the Rigs view, restored after a reload.
+test.use({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'reduce' });
+
+const seat = (logicalId: string, runtime: string) => ({ logicalId, session: `${logicalId.replace('.', '-')}@ledge-survey`, runtime, model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 });
+const rig = (id: string, name: string) => ({ id, name, status: 'running' as const, lifecycleState: 'running', seats: 2, running: 2, attention: 0, uptime: '2h', snapshot: null, nodes: [seat('dev.build', 'claude-code'), seat('dev.review', 'codex')] });
+const state = {
+  installed: true, version: '0.6.14', daemon: { state: 'running' as const, pid: 1, port: 7433 }, kernel: { state: 'ready' as const }, at: new Date().toISOString(),
+  rigs: [rig('1', 'ledge-survey'), { ...rig('k', 'kernel'), nodes: [], seats: 1, running: 1 }]
+};
+const sessions = [session('otto')];
+const rigsButton = (page: Page) => page.getByRole('navigation', { name: 'Activity bar' }).getByRole('button', { name: 'OpenRig rigs' });
+const view = (page: Page) => page.getByRole('complementary', { name: 'Rigs' });
+const tab = (page: Page) => page.locator('.dv-tab').filter({ hasText: 'Rig · ledge-survey' });
+const page$ = (page: Page) => page.locator('.ide-rig');
+
+async function boot(page: Page, opts: { ide?: boolean; layout?: object } = {}) {
+  await seedAtelier(page);
+  await page.addInitScript(({ ide, layout }) => {
+    try {
+      if (ide) localStorage.setItem('ledge.ide.enabled', 'true');
+      if (layout && !localStorage.getItem('ledge.ide.layout')) localStorage.setItem('ledge.ide.layout', JSON.stringify(layout));
+    } catch { /* ignore */ }
+  }, { ide: opts.ide !== false, layout: opts.layout ?? null });
+  const daemon = await fakeDaemon(page, sessions, {
+    projects: twoProjects, openrig: state as unknown as OpenRigState, rigCommands: ['rig down ledge-survey --snapshot'], ...RIG_7A,
+    rigPermissions: { ...RIG_7A.rigPermissions, 'ledge-survey': { policy: 'builtin:auto', seats: [] } },
+    daemon: { version: '0.53.0', install: 'npm', systemd: true, openrigRig: true, openrigPolicy: true }
+  });
+  await page.goto('/');
+  return daemon;
+}
+const openSurvey = async (page: Page) => {
+  await rigsButton(page).click();
+  await view(page).locator('.ide-rigs-row').filter({ hasText: 'ledge-survey' }).getByRole('button', { name: 'ledge-survey', exact: true }).click();
+};
+
+test('a rig opens in a « Rig · ledge-survey » tab: header, topology, settings and queue; Stop asks under the header', async ({ page }) => {
+  await boot(page);
+  await openSurvey(page);
+  await expect(tab(page)).toBeVisible();
+  await expect(view(page).locator('.ide-rigs-row.sel')).toContainText('ledge-survey');
+  const p = page$(page);
+  await expect(p.getByRole('heading', { name: 'ledge-survey' })).toBeVisible();
+  await expect(p.locator('.ide-rig-node')).toHaveCount(2);
+  await expect(p.locator('.ide-rig-link')).not.toHaveCount(0);
+  await expect(p.getByText('Settings', { exact: true })).toBeVisible();
+  await expect(p.getByText('OpenRig queue')).toBeVisible();
+  await expect(p.getByText('Run the build and report')).toBeVisible();
+
+  await p.getByRole('button', { name: /^Stop/ }).click();
+  const conf = p.locator('.ide-rig-top').getByRole('group');
+  await expect(conf).toContainText('rig down ledge-survey');
+});
+
+test('the kernel offers « Talk to the operator »', async ({ page }) => {
+  await boot(page);
+  await rigsButton(page).click();
+  await view(page).locator('.ide-rigs-row').filter({ hasText: 'kernel' }).getByRole('button', { name: 'kernel', exact: true }).click();
+  await expect(page.locator('.dv-tab').filter({ hasText: 'Rig · kernel' })).toBeVisible();
+  await expect(page$(page).getByRole('button', { name: 'Talk to the operator' })).toBeVisible();
+});
+
+test('at 480 px the settings go under the topology, and the topology scrolls inside the group', async ({ page }) => {
+  await boot(page);
+  await openSurvey(page);
+  await expect(page$(page)).toBeVisible();
+  // Three splits and no sidebar: four groups of about 470 px.
+  await page.keyboard.press('Control+b');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Control+\\');
+  await expect(page.locator('.dv-groupview')).toHaveCount(4);
+  const group = page.locator('.dv-groupview').first();
+  await expect.poll(async () => (await group.boundingBox())!.width).toBeLessThanOrEqual(520);
+  const blocks = page$(page).locator('.ide-rig-block');
+  const topo = (await blocks.nth(0).boundingBox())!, settings = (await page$(page).locator('.ide-rig-side').boundingBox())!, g = (await group.boundingBox())!;
+  expect(settings.y).toBeGreaterThanOrEqual(topo.y + topo.height - 1);
+  expect(topo.x + topo.width).toBeLessThanOrEqual(g.x + g.width + 1);
+});
+
+test('the tab is restored after a reload', async ({ page }) => {
+  await boot(page);
+  await openSurvey(page);
+  await expect(tab(page)).toBeVisible();
+  await page.reload();
+  await expect(tab(page)).toBeVisible();
+  await expect(page$(page).getByRole('heading', { name: 'ledge-survey' })).toBeVisible();
+  await expect(page$(page).locator('.ide-rig-node')).toHaveCount(2);
+});
+
+test('with the switch off nothing new shows', async ({ page }) => {
+  await boot(page, { ide: false });
+  await expect(page.locator('.ide')).toHaveCount(0);
+  await expect(page.locator('.ide-rig')).toHaveCount(0);
+  await expect(page.getByText('Rig · ledge-survey')).toHaveCount(0);
+});

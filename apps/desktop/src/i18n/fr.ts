@@ -1432,6 +1432,7 @@ export const fr = {
     },
     /** The « Rig · name » tab (IDE lot 7c). */
     rigTab: {
+      title: (rig: string) => `Rig · ${rig}`,
       topology: 'Topologie', topologyRunning: 'clic sur un siège : son fil', topologyStopped: 'les sièges démarrent avec le rig', loading: 'Lecture…',
       legend: 'Liens', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
       running: 'en marche', stopped: 'arrêté', seatsAt: (n: number, machine: string) => `${n} ${n > 1 ? 'sièges' : 'siège'} · ${machine}`,

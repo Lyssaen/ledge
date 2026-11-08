@@ -12,7 +12,7 @@ import { SHELL_ICONS } from '../../shell/icons';
 import { keyOf, type Tab } from '../../workspace/model';
 import { useRigsFold, useRigsMachine } from '../../workspace/prefs';
 import { providerOf } from '../../workspace/sessionTab';
-import { openrigTab } from '../../workspace/store';
+import { openrigTab, rigTab } from '../../workspace/store';
 import { ProviderLogo } from '../ProviderLogo';
 import { MachineMenu } from './MachineMenu';
 import { RigConfirm, useRigConfirm } from './RigConfirm';
@@ -28,7 +28,7 @@ const Dot = ({ dot }: { dot: RigDot }): JSX.Element => <i className={`ide-rigs-d
 /** The Rigs sidebar view of the IDE (docs/mockups/ledge-ide-rigs.html): one machine's kernel, rigs and daemon, and their actions. */
 export interface RigsViewProps {
   client: DaemonClient; machines: readonly MachineState[]; sessions: readonly Session[]; asks: readonly HumanAsk[]; activeTab: Tab | null;
-  dispatch(a: NavAction): void; onTab(t: Tab): void; onMenu?(id: string, at: { x: number; y: number }, opener: HTMLElement | null): void;
+  dispatch(a: NavAction): void; onTab(t: Tab, where?: 'right'): void; onMenu?(id: string, at: { x: number; y: number }, opener: HTMLElement | null): void;
 }
 
 export function RigsView({ client, machines, sessions, asks, activeTab, dispatch, onTab, onMenu }: RigsViewProps): JSX.Element {
@@ -100,11 +100,11 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     const open = r.running && r.seats.length > 0, unfolded = isKernel || fold.rig(r.name);
     return (
       <div key={r.name}>
-        <div className="ide-rigs-row rig" data-target={target}>
+        <div className={`ide-rigs-row rig${activeTab !== null && keyOf(activeTab) === keyOf(rigTab(machine, r.name)) ? ' sel' : ''}`} data-target={target}>
           {isKernel ? <span className="ide-rigs-chev">·</span>
             : <button type="button" className="ide-rigs-chev" disabled={!open} aria-label={(unfolded ? v.fold : v.unfold)(r.name)} onClick={() => fold.toggle(`r:${r.name}`)}>{open ? (unfolded ? '▾' : '▸') : '·'}</button>}
           <Dot dot={r.dot} />
-          <button type="button" className="ide-rigs-name" onClick={() => onTab(openrigTab(machine))}><b>{r.name}</b></button>
+          <button type="button" className="ide-rigs-name" onClick={e => { const t = rigTab(machine, r.name); if (e.ctrlKey || e.metaKey) onTab(t, 'right'); else onTab(t); }}><b>{r.name}</b></button>
           <span className="ide-rigs-meta">{r.running ? r.count : ''}</span>
           {power(target, r.running)}
         </div>
