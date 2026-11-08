@@ -219,7 +219,8 @@ export const RigSpecPodSchema = z.object({ id: z.string(), label: z.string().opt
 export const RigSpecSchema = z.object({
   name: z.string(), source: z.string(), summary: z.string().optional(), path: z.string(),
   /** The rig's `permission_policy`, as written (`builtin:auto`, a file…). */ policy: z.string().optional(),
-  pods: z.array(RigSpecPodSchema), edges: z.number().int().min(0)
+  pods: z.array(RigSpecPodSchema), edges: z.number().int().min(0),
+  /** The spec's links between its seats as `pod.member` (a pod's edges, then the top-level ones), `kind` as written. */ links: z.array(RigLinkSchema).optional()
 });
 export type RigSpec = z.infer<typeof RigSpecSchema>;
 

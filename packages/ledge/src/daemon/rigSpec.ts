@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from 'node:path';
 import { parse, stringify } from 'yaml';
-import type { RigLaunch, RigSpec } from '@ledge/protocol';
+import type { RigLaunch, RigLink, RigSpec } from '@ledge/protocol';
 
 /**
  * A rig spec as the launch form needs it (docs/mockups/ledge-openrig.html, view 6), and the spec a launch composes when the
@@ -24,15 +24,20 @@ export function readSpec(yaml: string, entry: { name: string; source: string; pa
   const d = obj(doc), pods = arr(d.pods);
   if (pods.length === 0) return null;
   let edges = arr(d.edges).length;
+  const links: RigLink[] = [];
+  const link = (from: string | undefined, to: string | undefined, kind: string | undefined) => { if (from && to && kind) links.push({ from, to, kind }); };
   const out = pods.map(p => {
     const pod = obj(p); edges += arr(pod.edges).length;
+    const pid = str(pod.id);
+    if (pid) for (const e of arr(pod.edges).map(obj)) link(str(e.from) && `${pid}.${str(e.from)}`, str(e.to) && `${pid}.${str(e.to)}`, str(e.kind));
     return {
       id: str(pod.id) ?? '', ...(str(pod.label) ? { label: str(pod.label)! } : {}),
       members: arr(pod.members).map(m => { const x = obj(m); return { id: str(x.id) ?? '', runtime: str(x.runtime) ?? 'unknown', ...(str(x.model) ? { model: str(x.model)! } : {}), agent: agentName(x.agent_ref), ...(str(x.permission_policy) ? { policy: str(x.permission_policy)! } : {}) }; }).filter(m => m.id)
     };
   }).filter(p => p.id);
+  for (const e of arr(d.edges).map(obj)) link(str(e.from), str(e.to), str(e.kind));
   const summary = entry.summary ?? str(d.summary)?.trim();
-  return { name: entry.name, source: entry.source, path: entry.path, ...(summary ? { summary } : {}), ...(str(d.permission_policy) ? { policy: str(d.permission_policy)! } : {}), pods: out, edges };
+  return { name: entry.name, source: entry.source, path: entry.path, ...(summary ? { summary } : {}), ...(str(d.permission_policy) ? { policy: str(d.permission_policy)! } : {}), pods: out, edges, links };
 }
 
 /** Whether the launch changes the spec (counts, harnesses or models): if not, the library spec launches as it is. */
