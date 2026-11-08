@@ -75,6 +75,9 @@ import { enableLive } from './browser/enable.js';
 import { createPaneHost, type PaneHost } from '../term/pane.js';
 import { bornShell } from '../term/shell.js';
 import type { UsageService } from './usage/service.js';
+import type { ForgeService } from './forge/service.js';
+import { ForgeError, ForgeRefusal } from './forge/types.js';
+import { redact } from './forge/run.js';
 
 /** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
 function withoutHarness(s: Session): Session {
@@ -202,7 +205,8 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  * `attach <id>` to it to open a terminal tab on a session. `home` is where `~` expands for `session.launch`.
  */
 export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; browserLive?: BrowserLiveService; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore;
-  /** Each harness's account limits (docs/mockups/ledge-harness-usage.html): the daemon's own, started with it; tests give one or none. */ usage?: UsageService }): Promise<ServerHandle> {
+  /** Each harness's account limits (docs/mockups/ledge-harness-usage.html): the daemon's own, started with it; tests give one or none. */ usage?: UsageService;
+  /** The pull and merge requests of the sessions' branches (lot 8a): the daemon's own, started with it; tests give one or none. */ forge?: ForgeService }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -433,6 +437,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const usage = opts.usage;
   const usageMsg = (): ServerMessage | null => (usage ? { type: 'usage.state', ...usage.state() } : null);
   const unsubscribeUsage = usage?.onChange(st => broadcast({ type: 'usage.state', ...st }));
+  // The pull and merge requests, after every snapshot and on each change; never to the phone (R8): the local clients only.
+  const forge = opts.forge;
+  const unsubscribeForge = forge?.onChange(() => { const m = forge.state(); for (const c of localClients) send(c, m); });
+  /** A forge request that failed: a refusal keeps its code; an error of gh or glab its (redacted) message. */
+  const forgeFailure = (e: unknown): { message: string; code?: RefusalCode } =>
+    e instanceof ForgeRefusal ? { code: e.code, message: e.message } : e instanceof ForgeError ? { message: e.message } : { message: redact(e instanceof Error ? e.message : String(e)).slice(0, 400) };
   const mobile = opts.mobile;
   /** The mobile service failed to start: fronts see « unavailable » (and its reason), not a daemon too old to know mobile access. */
   const unavailable: MobileState | undefined = !mobile && opts.mobileUnavailable !== undefined
@@ -586,7 +596,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(forge ? { forge: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -596,6 +606,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
     const u = usageMsg(); if (u) reply(u); // the harnesses' limits
+    if (forge) reply(forge.state()); // the pull and merge requests of the sessions' branches
     for (const m of browserLive.states()) reply(m); // last: the agents' browsers that are not `none`
   };
   const preview = (id: string, lines: string[]) => {
@@ -1325,6 +1336,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         usage.setPrefs(msg.prefs);
         return;
       }
+      case 'forge.detail': {
+        if (!forge) return reply({ type: 'forge.detail.reply', requestId: msg.requestId, ok: false, code: 'unavailable', message: 'pull and merge requests are not read on this machine' });
+        try { return reply({ type: 'forge.detail.reply', requestId: msg.requestId, ok: true, detail: await forge.detail(msg.prId, msg.log ? { log: msg.log } : {}) }); }
+        catch (e) { return reply({ type: 'forge.detail.reply', requestId: msg.requestId, ok: false, ...forgeFailure(e) }); }
+      }
+      case 'forge.act': {
+        if (!forge) return reply({ type: 'forge.act.reply', requestId: msg.requestId, ok: false, code: 'unavailable', message: 'pull and merge requests are not read on this machine' });
+        try { return reply({ type: 'forge.act.reply', requestId: msg.requestId, ok: true, ...await forge.act(msg.prId, msg.action) }); }
+        catch (e) { return reply({ type: 'forge.act.reply', requestId: msg.requestId, ok: false, ...forgeFailure(e) }); }
+      }
       case 'usage.ack': {
         if (!usage) return reply({ type: 'error', message: 'usage not available', request: msg.type });
         // « Compris » goes to every machine signed in to the account: one that does not have this alert ignores it.
@@ -1839,6 +1860,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); unsubscribeUsage?.(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); unsubscribeUsage?.(); unsubscribeForge?.(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

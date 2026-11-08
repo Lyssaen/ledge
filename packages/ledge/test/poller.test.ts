@@ -342,4 +342,20 @@ describe('poller rest detection', () => {
     await p.tick(); expect(calls).toHaveLength(2); // no dead check yet: no refresh
     p.stop();
   });
+  it('reads the branch in the folder the agent works in now (workdir), and again as soon as it changes (R10)', async () => {
+    store.upsert(mk('a', { tmuxSession: null, cwd: '/w', workdir: '/w-worktrees/feat-x' }));
+    const calls: string[] = [];
+    const p = startPoller({ store, tmux: fakeTmux({}), intervalMs: 1_000_000, deadCheckMs: 1_000_000, now,
+      gitInfo: async cwd => { calls.push(cwd); return { repo: 'w', repoPath: '/w', branch: cwd === '/w' ? 'main' : cwd.split('/').pop()!, worktree: cwd !== '/w' }; } });
+    try {
+      await p.tick();
+      expect(calls).toEqual(['/w-worktrees/feat-x']);
+      expect(store.get('a')?.branch).toBe('feat-x');
+      store.patch('a', { workdir: '/w-worktrees/feat-y' });
+      await p.tick();
+      expect(calls).toEqual(['/w-worktrees/feat-x', '/w-worktrees/feat-y']);
+      expect(store.get('a')?.branch).toBe('feat-y');
+      await p.tick(); expect(calls).toHaveLength(2);
+    } finally { p.stop(); }
+  });
 });

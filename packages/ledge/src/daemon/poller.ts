@@ -39,7 +39,8 @@ export function startPoller(opts: {
   /** Since when each pane has been at rest (the agent waiting for a prompt), as read on its last change. */
   const restSince = new Map<string, number>();
   /** Sessions whose repository has been read once; later refreshes ride the dead check. */
-  const gitSeen = new Set<string>();
+  /** Per session, the folder its repository fields were last read in. */
+  const gitSeen = new Map<string, string>();
   const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); titles.delete(id); gitSeen.delete(id); };
   let lastDeadCheck = 0;
   let running = false;
@@ -87,7 +88,9 @@ export function startPoller(opts: {
       return;
     }
     // The repository can change under the agent (checkout, new worktree): first sight, then every dead check.
-    if ((deadCheck || !gitSeen.has(s.id)) && s.cwd) { gitSeen.add(s.id); const g = await git(s.cwd); if (g) store.patch(s.id, { ...g, repoId: g.repoId }); }
+    // Read in the folder the agent works in now (`workdir`, a worktree it entered), not only where it started (R10).
+    const dir = s.workdir || s.cwd;
+    if ((deadCheck || gitSeen.get(s.id) !== dir) && dir) { gitSeen.set(s.id, dir); const g = await git(dir); if (g) store.patch(s.id, { ...g, repoId: g.repoId }); }
     if (!s.tmuxSession) return;
     if (deadCheck && !(await tmux.hasSession(s.tmuxSession))) {
       store.apply(s.id, { name: 'PaneGone', at: now(), source: 'daemon' });
