@@ -8,7 +8,7 @@ import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { SessionCommandsSchema, SessionCommandsListingSchema } from './commands.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
-import { RigSeatNameSchema, OpenRigGraphSchema, OpenRigGraphStateSchema, OpenRigSnapshotsSchema, OpenRigSnapshotListSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigGoalReplySchema, OpenRigGoalSendSchema, OpenRigGoalSentSchema, OpenRigGoalsChangedSchema, OpenRigGoalsSchema, OpenRigAnswerSchema, OpenRigAnsweredSchema, OpenRigAsksChangedSchema, OpenRigAsksSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
+import { RigSeatNameSchema, OpenRigGraphSchema, OpenRigGraphStateSchema, OpenRigSnapshotsSchema, OpenRigSnapshotListSchema, OpenRigPermissionsSchema, OpenRigPermissionListSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigGoalReplySchema, OpenRigGoalSendSchema, OpenRigGoalSentSchema, OpenRigGoalsChangedSchema, OpenRigGoalsSchema, OpenRigAnswerSchema, OpenRigAnsweredSchema, OpenRigAsksChangedSchema, OpenRigAsksSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
 import { OpenRigRowSchema, OpenRigRowStateSchema } from './rigMessages.js';
 import { OpenRigRoleDetailSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
@@ -139,6 +139,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   OpenRigRowStateSchema,
   OpenRigGraphStateSchema,
   OpenRigSnapshotListSchema,
+  OpenRigPermissionListSchema,
   OpenRigDoneSchema,
   OpenRigSpecListSchema,
   OpenRigLaunchedSchema,
@@ -256,6 +257,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   OpenRigRolesSchema,
   OpenRigGraphSchema,
   OpenRigSnapshotsSchema,
+  OpenRigPermissionsSchema,
   OpenRigRoleSchema,
   OpenRigRoleFileSchema,
   OpenRigAsksSchema,

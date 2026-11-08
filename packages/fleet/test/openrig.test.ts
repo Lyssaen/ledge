@@ -119,6 +119,30 @@ describe('useRigSnapshots', () => {
   });
 });
 
+describe('useRigPermissions', () => {
+  const seats = [{ logicalId: 'dev.build', session: 'dev-build@a', mode: 'acceptEdits', source: 'kernel_default', posture: 'floor', selection: 'inherit', summary: 's' }];
+  it('asks once per machine and rig, its own answer only; another rig is not shown the previous seats', async () => {
+    const { useRigPermissions } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const { result, rerender } = renderHook(({ rig }) => useRigPermissions(client, 'server', rig), { initialProps: { rig: 'a' as string | null } });
+    expect(result.current).toMatchObject({ status: 'loading', seats: [] });
+    expect(sent).toEqual([{ type: 'openrig.permissions', requestId: rid(sent[0]), machineId: 'server', rig: 'a' }]);
+    emit({ type: 'openrig.permissionList', requestId: 'other', rig: 'a', seats });
+    expect(result.current.status).toBe('loading');
+    emit({ type: 'openrig.permissionList', requestId: rid(sent[0]), machineId: 'server', rig: 'a', policy: 'builtin:auto', seats });
+    expect(result.current).toMatchObject({ status: 'ready', policy: 'builtin:auto', seats });
+    rerender({ rig: 'b' });
+    expect(result.current).toMatchObject({ status: 'loading', seats: [] });
+    emit({ type: 'openrig.permissionList', requestId: rid(sent.at(-1)), rig: 'b', seats: [], error: 'unknown_rig' });
+    expect(result.current).toMatchObject({ status: 'ready', seats: [], error: 'unknown_rig' });
+    expect(result.current.policy).toBeUndefined();
+    act(() => result.current.reload());
+    expect(sent).toHaveLength(3);
+    rerender({ rig: null });
+    expect(result.current.status).toBe('idle');
+  });
+});
+
 describe('useRigGraph', () => {
   const graph = { pods: [{ id: 'dev', label: 'Project' }], seats: [{ logicalId: 'dev.build', pod: 'dev', runtime: 'codex', status: 'exited', attention: false }], links: [] };
   it('asks once per machine and rig, its own answer only; another rig is not shown the previous graph', async () => {

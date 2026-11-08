@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { RIG_ROW_REFRESH_MS } from '@ledge/protocol';
-import type { RigRow, OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigGraph, RigLaunch, RigSnapshot, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
+import type { RigRow, OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigGraph, RigLaunch, RigSeatPermission, RigSnapshot, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
 /** How often a screen that shows a machine's OpenRig asks it again. */
@@ -318,6 +318,33 @@ export function useRigSnapshots(client: DaemonClient, machine: string | null, ri
   if (key === null) return { status: 'idle', snapshots: [], reload };
   if (!answer || answer.key !== key) return { status: 'loading', snapshots: [], reload };
   return { status: 'ready', snapshots: answer.snapshots, ...(answer.error ? { error: answer.error } : {}), reload };
+}
+
+export interface RigPermissionsView { status: 'idle' | 'loading' | 'ready'; policy?: string; seats: RigSeatPermission[]; error?: string; reload(): void }
+
+/** A rig's permissions on a machine (`rig` null: nothing asked): the spec's `policy` when the machine knows it, and each seat's effective mode
+ *  (a seat whose own `error` is set could not be read). `error`: `unknown_rig`, `not_installed`, `daemon_stopped`, what `rig` said, or the fleet's
+ *  `offline` / `outdated`. Another rig is never shown the previous one's seats; `reload` asks again (after changing them: the machine reads again). */
+export function useRigPermissions(client: DaemonClient, machine: string | null, rig: string | null): RigPermissionsView {
+  const [answer, setAnswer] = useState<{ key: string; policy?: string; seats: RigSeatPermission[]; error?: string } | null>(null);
+  const [round, setRound] = useState(0);
+  const key = machine !== null && rig !== null ? `${machine}\u0000${rig}` : null;
+  useEffect(() => {
+    if (machine === null || rig === null) return;
+    const requestId = `openrig-permissions-${++next}`;
+    const k = `${machine}\u0000${rig}`;
+    setAnswer(a => (a?.key === k ? a : null));
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.permissionList' || m.requestId !== requestId) return;
+      setAnswer({ key: k, ...(m.policy ? { policy: m.policy } : {}), seats: m.seats, ...(m.error ? { error: m.error } : {}) });
+    });
+    client.send({ type: 'openrig.permissions', requestId, machineId: machine, rig });
+    return off;
+  }, [client, machine, rig, round]);
+  const reload = useCallback(() => setRound(r => r + 1), []);
+  if (key === null) return { status: 'idle', seats: [], reload };
+  if (!answer || answer.key !== key) return { status: 'loading', seats: [], reload };
+  return { status: 'ready', ...(answer.policy ? { policy: answer.policy } : {}), seats: answer.seats, ...(answer.error ? { error: answer.error } : {}), reload };
 }
 
 /** A file of a role (one its detail lists); resolves with its content or why not (`not_allowed`, `missing`, `offline`…). */

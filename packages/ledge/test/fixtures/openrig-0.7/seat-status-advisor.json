@@ -1,0 +1,35 @@
+{
+  "seat_ref": "advisor-lead@kernel",
+  "rig_name": "kernel",
+  "logical_id": "advisor.lead",
+  "runtime": "claude-code",
+  "launch_cwd": "/home/user/.openrig/workspace",
+  "session_status": "running",
+  "permissions": {
+    "selectionState": "inherit",
+    "desired": null,
+    "lastLaunchArguments": {
+      "runtime": "claude-code",
+      "axis": "permission",
+      "state": "observed",
+      "value": "acceptEdits",
+      "reason": "emitted_launch_arguments",
+      "observedAt": "2026-11-08 14:49:17"
+    },
+    "nativeEffect": "unverified",
+    "effective": {
+      "effectiveMode": "acceptEdits",
+      "source": "kernel_default",
+      "launchPosture": "floor"
+    },
+    "account": {
+      "basis": "planned",
+      "runtime": "claude-code",
+      "source": "kernel_default",
+      "nativeArgument": "--permission-mode acceptEdits",
+      "overrides": [],
+      "notes": [],
+      "summary": "Next launch: --permission-mode acceptEdits, from the kernel's operational default; OpenRig adds 50 allowances."
+    }
+  }
+}

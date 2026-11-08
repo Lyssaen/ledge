@@ -2700,7 +2700,7 @@ describe('server: models.list (#58)', () => {
 });
 
 /** An OpenRig fake's roles, when a test does not look at them. */
-const NO_ROLES = { async roles() { return { roles: [] }; }, async role() { return { error: 'role_not_found' }; }, async roleFile() { return { error: 'not_allowed' }; }, async graph() { return { error: 'unknown_rig' }; }, async snapshots() { return { error: 'unknown_rig' }; } };
+const NO_ROLES = { async roles() { return { roles: [] }; }, async role() { return { error: 'role_not_found' }; }, async roleFile() { return { error: 'not_allowed' }; }, async graph() { return { error: 'unknown_rig' }; }, async snapshots() { return { error: 'unknown_rig' }; }, async permissions() { return { error: 'unknown_rig' }; } };
 
 describe('server: OpenRig', () => {
   it('answers a status under its requestId; an action answers its sender, then every front gets the fresh state', async () => {
@@ -2728,7 +2728,7 @@ describe('server: OpenRig', () => {
   it('roles, a role and a role file answer their asker only, under its requestId, with the id and path asked', async () => {
     const asked: string[] = [];
     const summary = { id: 'f95e', name: 'ledge-lead', source: 'user' as const, path: '/s/lead/agent.yaml', importOnly: false, seats: 1, running: 1, skills: [], startupFiles: ['guidance/role.md'], seatRefs: [{ rig: 'ledge-dev', logicalId: 'pilot.lead', session: 'pilot-lead@ledge-dev' }] };
-    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: { async graph() { return { error: 'unknown_rig' }; }, async snapshots() { return { error: 'unknown_rig' }; }, row: async () => ({ error: 'not_found' }),
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: { async graph() { return { error: 'unknown_rig' }; }, async snapshots() { return { error: 'unknown_rig' }; }, async permissions() { return { error: 'unknown_rig' }; }, row: async () => ({ error: 'not_found' }),
       async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; },
@@ -2752,7 +2752,7 @@ describe('server: OpenRig', () => {
   it('a queue row answers its asker only, under its requestId', async () => {
     const asked: string[] = [];
     const row = { id: 'qitem-20261102205801-ae61eb9d7f1f4b49', state: 'in-progress', from: 'pilot-lead@ledge-dev-2', to: 'dev-back@ledge-dev-2', createdAt: 'a', updatedAt: 'b', at: 'c' };
-    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: { async graph() { return { error: 'unknown_rig' }; }, async snapshots() { return { error: 'unknown_rig' }; },
+    const srv2 = await startServer({ store, tmux, port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, openrig: { async graph() { return { error: 'unknown_rig' }; }, async snapshots() { return { error: 'unknown_rig' }; }, async permissions() { return { error: 'unknown_rig' }; },
       async row(q) { asked.push(q); return q === row.id ? { row } : { error: 'not_found' }; },
       async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: '2026-11-02T09:00:00.000Z' }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },

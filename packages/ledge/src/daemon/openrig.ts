@@ -6,7 +6,7 @@ import { parse as parseYaml } from 'yaml';
 import { changesSpec, composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, QitemIdSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -161,7 +161,7 @@ export function readCheck(output: string): { status: string; errors: string[]; w
   const texts = (v: unknown) => (Array.isArray(v) ? v : []).map(x => (typeof x === 'string' ? x : str(obj(x).message) ?? JSON.stringify(x))).slice(0, 30);
   return { status, errors: texts(j.errors), warnings: texts(j.warnings) };
 }
-export interface ActResult { ok: boolean; commands: string[]; output?: string; error?: string }
+export interface ActResult { ok: boolean; commands: string[]; output?: string; error?: string; completed?: number }
 export interface OpenRig {
   /** This machine's OpenRig, read again unless a read is under `STATE_TTL_MS` old (`fresh` forces it). */
   state(fresh?: boolean): Promise<OpenRigState>;
@@ -188,6 +188,9 @@ export interface OpenRig {
   /** A rig's snapshots by rig name, newest first, `RIG_SNAPSHOTS_MAX` at most, never their `data`: from the daemon's `/snapshots`, else
    *  from the text of `rig snapshot list`. Read at each ask (no cache: a snapshot just taken shows). Same `error`s as `graph`. */
   snapshots(rig: string): Promise<{ snapshots?: RigSnapshot[]; error?: string }>;
+  /** A rig's permissions by rig name: its spec's `policy` when Ledge knows the spec file, and each seat's effective mode (one `rig seat status`
+   *  per seat, two at a time; a seat that fails is told with its `error`). Reused 30 s, forgotten after any action. Same `error`s as `graph`. */
+  permissions(rig: string): Promise<{ policy?: string; seats?: RigSeatPermission[]; error?: string }>;
 }
 export interface RolesResult { roles: RoleSummary[]; openrigVersion?: string; error?: string }
 export interface RoleResult { role?: RoleDetail; error?: string }
@@ -224,6 +227,9 @@ export function localGet(port: number, path: string, timeoutMs: number): Promise
 const SEATS_TTL_MS = 5_000;
 const FILES_TTL_MS = 5 * 60_000;
 const HTTP_MS = 3_000;
+/** How long a rig's permissions are reused, and how many `rig seat status` run at once. */
+const PERMISSIONS_TTL_MS = 30_000;
+const PERMISSIONS_PARALLEL = 2;
 
 const realFs = {
   read: (p: string) => readFile(p, 'utf8'),
@@ -247,6 +253,8 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   });
   let version: string | undefined, versionAt = 0, last: { at: number; state: OpenRigState } | undefined;
   let reading: Promise<OpenRigState> | undefined, acting = false;
+  /** A rig's permissions already read: any action may change them, so each one forgets all. */
+  const perms = new Map<string, { at: number; read: Promise<{ policy?: string; seats?: RigSeatPermission[]; error?: string }> }>();
   const absent = (): OpenRigState => ({ installed: false, daemon: { state: 'unknown' }, kernel: { state: 'unknown' }, rigs: [], at: new Date(now()).toISOString() });
 
   async function read(): Promise<OpenRigState> {
@@ -276,18 +284,20 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     acting = true;
     try {
       let output = '';
+      let completed = 0;
       for (const args of plan) {
         const verb = args[0] === 'daemon' ? args[1]! : args[0]!;
         const r = await run(args, ACTION_MS[verb] ?? 120_000);
         if (r.code === null) return { ok: false, commands, error: 'not_installed' };
         output = `${r.stdout}${r.stderr}`.trim().slice(-2000);
-        if (r.code !== 0) { const error = failure(r); log(`openrig: ${showCommand(args)} failed: ${error}`); return { ok: false, commands, output, error }; }
+        if (r.code !== 0) { const error = failure(r); log(`openrig: ${showCommand(args)} failed: ${error}`); return { ok: false, commands, output, error, ...(action.kind === 'rig.permissions' ? { completed } : {}) }; }
+        completed++;
       }
       log(`openrig: ${commands.join(' && ')}`);
       return { ok: true, commands, ...(output ? { output } : {}) };
     } finally {
       acting = false;
-      last = undefined;
+      last = undefined; perms.clear();
     }
   }
 
@@ -356,7 +366,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       return { ok: true, plan, commands: shown, yaml, seats, ...(output ? { output } : {}), ...(check ? { check } : {}) };
     } finally {
       acting = false;
-      if (!plan) last = undefined;
+      if (!plan) { last = undefined; perms.clear(); }
     }
   }
 
@@ -422,7 +432,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       return { ok: true, commands: shown, added, removed, ...(output ? { output } : {}), ...(plan.add.length ? (can.edge ? { links } : { linksUnsupported: true }) : {}) };
     } finally {
       acting = false;
-      last = undefined;
+      last = undefined; perms.clear();
     }
   }
 
@@ -580,7 +590,45 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return r.code === 0 ? { snapshots: readSnapshotTable(r.stdout).slice(0, RIG_SNAPSHOTS_MAX) } : { error: failure(r) };
   }
 
-  return { state, act, specs, launch, reseat, roles, role, roleFile, row, graph, snapshots };
+  async function permissions(name: string): Promise<{ policy?: string; seats?: RigSeatPermission[]; error?: string }> {
+    const st = await state();
+    if (!st.installed) return { error: 'not_installed' };
+    const known = st.rigs.find(r => r.name === name);
+    if (!known) return { error: st.daemon.state === 'running' ? 'unknown_rig' : 'daemon_stopped' };
+    const hit = perms.get(known.id);
+    if (hit && now() - hit.at < PERMISSIONS_TTL_MS) return hit.read;
+    const read = (async () => {
+      const root = await rootOf(known.name).catch(() => null);
+      const text = root ? await roleIo.read(join(root, 'rig.yaml')).catch(() => null) : null;
+      const policy = text ? readSpec(text, { name: known.name, source: 'user', path: join(root!, 'rig.yaml') })?.policy : undefined;
+      const seats: RigSeatPermission[] = new Array(known.nodes.length);
+      let next = 0;
+      const worker = async () => {
+        for (let i = next++; i < known.nodes.length; i = next++) {
+          const n = known.nodes[i]!, base = { logicalId: n.logicalId, session: n.session };
+          const r = await run(['seat', 'status', n.session, '--json'], STATUS_MS);
+          const one = r.code === 0 ? readSeatPermission(parse(r.stdout)) : undefined;
+          seats[i] = one ? { ...base, ...one } : { ...base, error: r.code === null ? 'not_installed' : r.code === 0 ? 'failed' : failure(r) };
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(PERMISSIONS_PARALLEL, known.nodes.length) }, worker));
+      return { ...(policy ? { policy } : {}), seats };
+    })();
+    perms.set(known.id, { at: now(), read });
+    return read;
+  }
+
+  return { state, act, specs, launch, reseat, roles, role, roleFile, row, graph, snapshots, permissions };
+}
+
+/** A seat's permissions from `rig seat status <session> --json` (`permissions.effective.{effectiveMode, source, launchPosture}`,
+ *  `permissions.selectionState`, `permissions.account.summary`; not a contract): what is there as text, the rest left out.
+ *  Undefined when there is no `permissions` object. */
+export function readSeatPermission(raw: unknown): Pick<RigSeatPermission, 'mode' | 'source' | 'posture' | 'selection' | 'summary'> | undefined {
+  const p = obj(obj(raw).permissions);
+  if (Object.keys(p).length === 0) return undefined;
+  const eff = obj(p.effective), mode = str(eff.effectiveMode), source = str(eff.source), posture = str(eff.launchPosture), selection = str(p.selectionState), summary = str(obj(p.account).summary);
+  return { ...(mode ? { mode } : {}), ...(source ? { source } : {}), ...(posture ? { posture } : {}), ...(selection ? { selection } : {}), ...(summary ? { summary } : {}) };
 }
 
 /** The snapshots of `GET /api/rigs/<id>/snapshots` (`[{ id, rigId, kind, status, createdAt, data }]`, not a contract): only
