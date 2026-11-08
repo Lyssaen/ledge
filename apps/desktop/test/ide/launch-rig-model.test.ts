@@ -59,13 +59,13 @@ describe('pickFrom', () => {
 
 describe('launchProblem', () => {
   const ok = { ...emptyForm(starter, '/p'), name: 'new-one' };
-  it('is null for a good form', () => { expect(launchProblem(ok, state)).toBeNull(); });
+  it('is null for a good form', () => { expect(launchProblem(ok, state, starter)).toBeNull(); });
   it('names the first problem', () => {
-    expect(launchProblem({ ...ok, name: 'ledge-survey' }, state)).toBe('exists');
-    expect(launchProblem({ ...ok, name: 'ledge-dev' }, state)).toBe('exists');
-    expect(launchProblem({ ...ok, name: 'bad name!' }, state)).toBe('name');
-    expect(launchProblem({ ...ok, cwd: ' ' }, state)).toBe('cwd');
-    expect(launchProblem({ ...ok, seats: emptySeats(starter), }, state)).toBe('noSeat');
+    expect(launchProblem({ ...ok, name: 'ledge-survey' }, state, starter)).toBe('exists');
+    expect(launchProblem({ ...ok, name: 'ledge-dev' }, state, starter)).toBe('exists');
+    expect(launchProblem({ ...ok, name: 'bad name!' }, state, starter)).toBe('name');
+    expect(launchProblem({ ...ok, cwd: ' ' }, state, starter)).toBe('cwd');
+    expect(launchProblem({ ...ok, seats: emptySeats(starter), }, state, starter)).toBe('noSeat');
   });
   it('knows an unset role still launches one seat when it has the spec', () => {
     expect(launchProblem({ ...ok, seats: { 'dev.builder': 0 } }, state, starter)).toBeNull();

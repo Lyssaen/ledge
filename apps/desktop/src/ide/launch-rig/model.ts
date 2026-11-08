@@ -47,18 +47,16 @@ export function newLaunch(spec: RigSpec, form: LaunchForm, level: PermLevel, pla
   return launchOf(spec, { ...form, policy: p === 'spec' ? null : p }, plan);
 }
 
-/** Why the form cannot launch, first one first. `spec`: lets a role the form does not mention count for its default seat. */
-export function launchProblem(form: LaunchForm, state: OpenRigState, spec?: RigSpec): 'cwd' | 'name' | 'exists' | 'noSeat' | null {
+/** Why the form cannot launch, first one first. A role the form does not mention counts for its default seat. */
+export function launchProblem(form: LaunchForm, state: OpenRigState, spec: RigSpec): 'cwd' | 'name' | 'exists' | 'noSeat' | null {
   const name = form.name.trim();
   if (!RigNameSchema.safeParse(name).success) return 'name';
   if (state.rigs.some(r => r.name === name)) return 'exists';
   if (!form.cwd.trim()) return 'cwd';
-  const seats = spec ? seatTotal(spec, form) : Object.values(form.seats).reduce((n, c) => n + c, 0);
-  const none = spec ? seats === 0 : Object.keys(form.seats).length > 0 && seats === 0;
-  return none ? 'noSeat' : null;
+  return seatTotal(spec, form) === 0 ? 'noSeat' : null;
 }
 
-/** What « Relancer » sends (R2): the permission level first when it changes, then the start (fresh seats when not resuming). `seats`: logical ids. */
+/** What « Relancer » sends (R2; a level with no seats sends no `rig.policy`): the permission level first when it changes, then the start (fresh seats when not resuming). `seats`: logical ids. */
 export function relaunchActions(rig: string, level: PermLevel | null, current: PermLevel | 'mixed' | null, seats: readonly string[], resume: boolean): OpenRigAction[] {
   return [
     ...(level && level !== current && seats.length ? [{ kind: 'rig.policy' as const, rig, policy: policyOf(level), seats: seats.map(s => `${s}@${rig}`) }] : []),
