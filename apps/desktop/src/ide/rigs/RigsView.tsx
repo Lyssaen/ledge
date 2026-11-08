@@ -50,13 +50,16 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
   const rv = rigsViewOf({ state: view.state ?? undefined, ...(error ? { error } : {}), machine, sessions, asks });
   const up = rv.status === 'running';
 
-  useEffect(() => { if (!up) setConfirm(null); }, [up]);
+  // A confirmation lives only while its action is still offered: the daemon, kernel or rig it is about must still be running.
+  const offered = confirm !== null && up && (confirm.target === 'daemon' || (confirm.target === 'kernel' ? rv.kernel?.running === true : rv.rigs.find(r => r.name === confirm.target)?.running === true));
+  useEffect(() => { if (confirm && !offered) setConfirm(null); }, [confirm, offered]);
   useEffect(() => { setConfirm(null); setLastTarget(null); }, [machine]);
   useEffect(() => {
     if (!confirm) return;
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setConfirm(null); };
-    document.addEventListener('keydown', key);
-    return () => document.removeEventListener('keydown', key);
+    // Capture phase, before the window's navigation handler: this Escape only closes the confirmation.
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setConfirm(null); } };
+    document.addEventListener('keydown', key, true);
+    return () => document.removeEventListener('keydown', key, true);
   }, [confirm]);
 
   const run = (action: OpenRigAction) => { setConfirm(null); setLastTarget(targetOf(action)); void view.act(action); };
@@ -74,7 +77,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
   );
 
   const confirmBox = (target: string): ReactNode => {
-    if (!confirm || confirm.target !== target || !view.state) return null;
+    if (!confirm || !offered || confirm.target !== target || !view.state) return null;
     const c = o.confirm, { working, commands, restart } = confirmOf(view.state, confirm.action, sessions, label);
     const w = target === 'daemon' ? c.daemon : target === 'kernel' ? c.kernel : c.rig(target);
     const title = (restart ? c.restartTitle : c.title)(w, label);
@@ -176,7 +179,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
         {pane('kernel', t.side.kernel, null, kernelBody)}
         {pane('rigs', t.side.rigs, rv.status === 'running' ? rv.rigs.length : null, rigsBody)}
       </div>
-      <div className="ide-rigs-foot">{pane('openrig', o.side, null, <>{daemonRow}{confirmBox('daemon')}{failure('daemon')}</>)}</div>
+      <div className="ide-rigs-foot">{pane('openrig', o.side, null, <>{daemonRow}{confirmBox('daemon')}{rv.status === 'stopped' ? null : failure('daemon')}</>)}</div>
     </aside>
   );
 }

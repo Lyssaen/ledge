@@ -196,4 +196,34 @@ describe('the IDE Rigs view', () => {
     expect(screen.getByRole('button', { name: /^Rigs\s*2/ })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: 'ledge-dev' })).toBeNull();
   });
+  it('Escape closes the confirmation and does not reach the window\'s navigation handler', async () => {
+    running();
+    const win = vi.fn(); window.addEventListener('keydown', win);
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    await userEvent.keyboard('{Escape}');
+    window.removeEventListener('keydown', win);
+    expect(screen.queryByRole('button', { name: /^Confirmer/ })).toBeNull();
+    expect(win.mock.calls.filter(([e]) => (e as KeyboardEvent).key === 'Escape')).toEqual([]);
+  });
+  it('a confirmation closes when its rig stops or vanishes, and does not come back', async () => {
+    const m = running();
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    m.f.state('local', state({ rigs: [rig('kernel', 'running', []), rig('ledge-dev', 'stopped', [])] }));
+    expect(screen.queryByRole('button', { name: /^Confirmer/ })).toBeNull();
+    m.f.state('local', state());
+    expect(screen.queryByRole('button', { name: /^Confirmer/ })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    m.f.state('local', state({ rigs: [rig('kernel', 'running', [])] }));
+    expect(screen.queryByRole('button', { name: /^Confirmer/ })).toBeNull();
+    m.f.state('local', state());
+    expect(screen.queryByRole('button', { name: /^Confirmer/ })).toBeNull();
+    expect(m.f.acts()).toEqual([]);
+  });
+  it('a failed Démarrer OpenRig shows its message once', async () => {
+    const m = mount();
+    m.f.state('local', state({ daemon: { state: 'stopped' }, rigs: [] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Démarrer OpenRig' }));
+    m.f.emit({ type: 'openrig.done', requestId: (m.f.acts()[0] as { requestId: string }).requestId, ok: false, commands: [], error: 'busy' });
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
 });
