@@ -326,7 +326,7 @@ export const fr = {
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
       general: 'Langue, démarrage, agent par défaut, contexte max et mises à jour.',
-      workspace: 'Les groupes d’onglets de l’interface IDE : où s’ouvre une session.',
+      workspace: 'L’interface IDE : où s’ouvre une session, la barre d’état, les terminaux.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
@@ -343,6 +343,10 @@ export const fr = {
     workspace: {
       openSession: 'Ouvrir une session',
       active: 'Dans le groupe actif', right: 'À droite', saved: (where: string) => `Ouvrir une session : ${where}`,
+      statusBar: 'Barre d’état', usage: 'Limites d’usage des comptes',
+      usageSaved: (on: boolean): string => (on ? 'Limites d’usage affichées dans la barre d’état' : 'Limites d’usage masquées de la barre d’état'),
+      alertBefore: 'Alerte à', alertAfter: '% d’une fenêtre (ambre au-delà)',
+      alertLess: 'Baisser le seuil d’alerte de 5 %', alertMore: 'Monter le seuil d’alerte de 5 %',
       terminals: 'Terminaux', webglBefore: 'Rendu rapide (WebGL) pour', webglAfter: 'terminaux visibles au plus',
       webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`
     },
@@ -1407,6 +1411,8 @@ export const fr = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'Interface IDE (aperçu)',
+    /** The Atelier tab's bar (mockup atelierPage() `.abar`): its « Détacher ». */
+    atelierDetach: 'Détacher',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal affiché dans l’autre groupe', showHere: 'Afficher ici',
     terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attaché', termReadOnly: 'lecture seule',

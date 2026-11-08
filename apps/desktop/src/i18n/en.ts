@@ -302,7 +302,7 @@ export const en: Messages = {
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent, max context and updates.',
-      workspace: 'The IDE interface’s tab groups: where a session opens.',
+      workspace: 'The IDE interface: where a session opens, the status bar, the terminals.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
@@ -319,6 +319,10 @@ export const en: Messages = {
     workspace: {
       openSession: 'Open a session',
       active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`,
+      statusBar: 'Status bar', usage: 'Accounts’ usage limits',
+      usageSaved: (on: boolean) => (on ? 'Usage limits shown in the status bar' : 'Usage limits hidden from the status bar'),
+      alertBefore: 'Alert at', alertAfter: '% of a window (amber beyond)',
+      alertLess: 'Lower the alert threshold by 5 %', alertMore: 'Raise the alert threshold by 5 %',
       terminals: 'Terminals', webglBefore: 'Fast rendering (WebGL) for', webglAfter: 'visible terminals at most',
       webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`
     },
@@ -1340,6 +1344,8 @@ export const en: Messages = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'IDE interface (preview)',
+    /** The Atelier tab's bar (mockup atelierPage() `.abar`): its « Détacher ». */
+    atelierDetach: 'Detach',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal shown in the other group', showHere: 'Show here',
     /** An agent's terminal tab: its title (mockup termFor()) and its kind chip (R3: a seat's is a read-only capture). */

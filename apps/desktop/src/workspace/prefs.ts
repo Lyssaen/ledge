@@ -3,6 +3,7 @@ import { readJson, writeJson } from '../state/storage';
 
 const KEY = 'ledge.ide.enabled';
 const RESUME_KEY = 'ledge.ide.resumeOnStart';
+const USAGE_KEY = 'ledge.ide.showUsage';
 const listeners = new Set<() => void>();
 
 /** « Interface IDE (aperçu) »: off by default; anything stored that is not a boolean reads as off. */
@@ -21,6 +22,14 @@ export function saveResumeOnStart(on: boolean): void {
   listeners.forEach(l => l());
 }
 
+/** « Limites d’usage des comptes » (Settings › Workspace › Status bar): on by default; only a stored `false` turns it off. */
+export const loadShowUsage = (): boolean => readJson(USAGE_KEY) !== false;
+
+export function saveShowUsage(on: boolean): void {
+  writeJson(USAGE_KEY, on);
+  listeners.forEach(l => l());
+}
+
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
 /** The switch's value, shared: every consumer re-renders when any one sets it, so Shell swaps interfaces without a restart. */
@@ -30,4 +39,8 @@ export function useIdeEnabled(): [boolean, (on: boolean) => void] {
 
 export function useResumeOnStart(): [boolean, (on: boolean) => void] {
   return [useSyncExternalStore(subscribe, loadResumeOnStart), saveResumeOnStart];
+}
+
+export function useShowUsage(): [boolean, (on: boolean) => void] {
+  return [useSyncExternalStore(subscribe, loadShowUsage), saveShowUsage];
 }

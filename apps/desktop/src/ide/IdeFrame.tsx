@@ -14,6 +14,7 @@ import '../styles/ide.css';
 export { DockHost } from './DockHost';
 export { BottomPanel } from './BottomPanel';
 export { OutputView } from './OutputView';
+export { AtelierBar } from './AtelierBar';
 
 export interface IdeFrameProps {
   layout: IdeLayout; onLayout(a: LayoutAction): void;

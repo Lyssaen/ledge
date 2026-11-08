@@ -10,7 +10,7 @@ import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
+import { saveIdeEnabled, saveShowUsage } from '../../src/workspace/prefs';
 import { PROJECTS } from '../helpers';
 
 // The IDE's status bar (mockup `statusbar()`): the footer's status, the waiting requests, a spacer, the usage limits at the
@@ -18,7 +18,7 @@ import { PROJECTS } from '../helpers';
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); saveShowUsage(true); localStorage.clear(); });
 
 const usage = {
   type: 'usage.state',
@@ -29,7 +29,7 @@ const usage = {
   alerts: [], prefs: { alert: 0.8 }
 } as unknown as ServerMessage;
 
-async function mount() {
+async function mount({ waitUsage = true } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
@@ -41,7 +41,7 @@ async function mount() {
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
   await side.findByRole('tree', { name: 'Projets, branches et sessions' });
   act(() => d.push(usage));
-  const bar = await waitFor(() => { const b = document.querySelector<HTMLElement>('.ide-status'); expect(b?.querySelector('.usage-foot')).not.toBeNull(); return b!; });
+  const bar = await waitFor(() => { const b = document.querySelector<HTMLElement>('.ide-status'); expect(b).not.toBeNull(); if (waitUsage) expect(b?.querySelector('.usage-foot')).not.toBeNull(); return b!; });
   return { bar, user: userEvent.setup() };
 }
 
@@ -67,5 +67,15 @@ describe('the IDE status bar', () => {
     await user.click(within(bar).getByRole('button', { name: 'Limites de Cursor Agent : détail' }));
     const pop = within(bar).getByRole('dialog', { name: 'Limites · Cursor Agent' });
     for (const t of ['Total inclus · mois', 'Modèles Cursor', 'Autres modèles']) expect(pop).toHaveTextContent(t);
+  });
+
+  it('« Limites d’usage des comptes » unchecked (Settings › Workspace): no limits in the bar; checked again, they come back', async () => {
+    saveShowUsage(false);
+    const { bar } = await mount({ waitUsage: false });
+    // The usage is in (the waiting request shows the bar is live), yet no limit is drawn.
+    await within(bar).findByRole('button', { name: '1 demande' });
+    expect(bar.querySelector('.usage-foot')).toBeNull();
+    act(() => saveShowUsage(true));
+    await waitFor(() => expect(bar.querySelector('.usage-foot')).not.toBeNull());
   });
 });

@@ -1,5 +1,9 @@
 import { useId, type JSX } from 'react';
+import { useUsage } from '@ledge/fleet';
+import { USAGE_ALERT_MAX, USAGE_ALERT_MIN } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
+import { usageThreshold } from '../usage/model';
+import { useShowUsage } from '../workspace/prefs';
 import { useOpenSession, type OpenSession } from '../workspace/openPrefs';
 import { useWebglMax } from '../term/webglPrefs';
 import { WEBGL_MAX, WEBGL_MIN } from '../term/webgl';
@@ -8,14 +12,29 @@ import type { SettingsContext } from './SettingsPage';
 
 const WHERE: readonly OpenSession[] = ['active', 'right'];
 
-/** Settings › Workspace (mockup settingsPage(), IDE only): « Ouvrir une session », in the active group or to its right, as radios.
- *  « Nouvelle fenêtre » waits for lot 9; the start-up, layouts, status bar and terminals rows for later lots. */
+const ALERT_MIN = Math.round(USAGE_ALERT_MIN * 100);
+const ALERT_MAX = Math.round(USAGE_ALERT_MAX * 100);
+
+/** Settings › Workspace (mockup settingsPage(), IDE only): « Ouvrir une session », in the active group or to its right, as radios;
+ *  the status bar (the usage limits shown or not, the alert threshold the daemons keep, General's own); the terminals' WebGL budget.
+ *  « Nouvelle fenêtre » waits for lot 9, the start-up and layouts rows for lot 10, « Ouvrir dans… » for lot 11. */
 export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const w = t.settings.workspace;
   const [where, setWhere] = useOpenSession();
   const name = useId();
   const [webgl, setWebgl] = useWebglMax();
+  const [showUsage, setShowUsage] = useShowUsage();
+  // The usage alert: the same threshold as General's (one for every window and harness, kept by each machine's daemon), by 5 %.
+  const usage = useUsage(ctx.client);
+  const alert = Math.round(usageThreshold(usage) * 100);
+  const known = usage.size > 0;
+  const stepAlert = (d: number) => {
+    const pct = Math.max(ALERT_MIN, Math.min(ALERT_MAX, alert + d));
+    if (!known || pct === alert) return;
+    try { ctx.fleet.setUsageAlert(pct / 100); ctx.saved(t.settings.general.usageAlertSaved(pct)); }
+    catch (e) { ctx.notify((e as Error).message); }
+  };
   const step = (d: number) => { const n = Math.max(WEBGL_MIN, Math.min(WEBGL_MAX, webgl + d)); if (n === webgl) return; setWebgl(n); ctx.saved(w.webglSaved(n)); };
   return (
     <>
@@ -29,6 +48,23 @@ export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element
               </label>
             ))}
           </div>
+        )}
+      </Row>
+    </Card>
+    <Card title={w.statusBar}>
+      <Row label={w.usage}>
+        <input type="checkbox" aria-label={w.usage} checked={showUsage} onChange={e => { setShowUsage(e.target.checked); ctx.saved(w.usageSaved(e.target.checked)); }} />
+      </Row>
+      <Row label={w.alertBefore} hint={known ? undefined : t.settings.general.usageAlertUnknown}>
+        {describedBy => (
+          <span className="set-step-line">
+            <span className="set-step" role="group" aria-label={w.alertBefore} aria-describedby={describedBy}>
+              <button type="button" aria-label={w.alertLess} aria-disabled={!known || alert <= ALERT_MIN} onClick={() => stepAlert(-5)}>−</button>
+              <output aria-live="polite">{alert}</output>
+              <button type="button" aria-label={w.alertMore} aria-disabled={!known || alert >= ALERT_MAX} onClick={() => stepAlert(5)}>+</button>
+            </span>
+            {w.alertAfter}
+          </span>
         )}
       </Row>
     </Card>
