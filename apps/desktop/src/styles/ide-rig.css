@@ -1,0 +1,38 @@
+/* The « Rig · name » tab (IDE lot 7c): its blocks and the topology. Loaded with the IDE's lazy chunk. */
+.ide-rig-block { border: 1px solid var(--border); border-radius: 9px; background: var(--card); font-size: 12.5px; color: var(--foreground); }
+.ide-rig-head { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.ide-rig-head b { font-weight: 600; }
+.ide-rig-sub { color: var(--muted-foreground); font-size: 11.5px; }
+.ide-rig-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ide-rig-empty { margin: 0; color: var(--muted-foreground); }
+
+.ide-rig-topo { overflow-x: auto; max-width: 100%; }
+.ide-rig-canvas { position: relative; margin: 0 auto; }
+.ide-rig-canvas > svg { position: absolute; inset: 0; pointer-events: none; }
+.ide-rig-pod { position: absolute; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 500; white-space: nowrap; }
+
+.ide-rig-link { fill: none; stroke: var(--ide-link-violet); stroke-width: 1.4; }
+.ide-rig-link.k-escalates_to { stroke: var(--warning); stroke-dasharray: 5 4; }
+.ide-rig-link.k-collaborates_with { stroke: var(--ide-link-teal); stroke-dasharray: 1.5 3.5; stroke-linecap: round; }
+.ide-rig-arrow { fill: var(--muted-foreground); }
+
+.ide-rig-block .ide-rig-node { position: absolute; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 4px 9px; background: var(--card); color: var(--foreground); border: 1.3px solid var(--border); border-radius: 7px; font: inherit; font-size: 11.5px; text-align: left; white-space: nowrap; overflow: hidden; }
+.ide-rig-block button.ide-rig-node { cursor: pointer; }
+.ide-rig-block button.ide-rig-node:hover { border-color: var(--foreground); }
+.ide-rig-block button.ide-rig-node:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.ide-rig-block .ide-rig-node.off { opacity: .45; }
+.ide-rig-block .ide-rig-node.dim { opacity: .6; }
+.ide-rig-block .ide-rig-node.off.dim { opacity: .45; }
+.ide-rig-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.ide-rig-text b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ide-rig-text small { color: var(--muted-foreground); font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+
+.ide-rig-legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted-foreground); font-size: 11px; }
+.ide-rig-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.ide-rig-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted-foreground); }
+.ide-rig-dot.d-idle { background: var(--success); }
+.ide-rig-dot.d-work { background: var(--info); }
+.ide-rig-dot.d-ask { background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent); }
+.ide-rig-dot.d-perm { background: var(--destructive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 20%, transparent); }
+.ide-rig-dot.d-off { background: none; border: 1.5px solid var(--muted-foreground); }

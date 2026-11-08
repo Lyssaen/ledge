@@ -1430,6 +1430,11 @@ export const fr = {
       start: (what: string) => `Démarrer ${what}`, restart: (what: string) => `Redémarrer ${what}`, stop: (what: string) => `Arrêter ${what}`,
       confirmStop: 'Confirmer l’arrêt', confirmRestart: 'Confirmer le redémarrage', cancel: 'Annuler'
     },
+    /** The « Rig · name » tab (IDE lot 7c). */
+    rigTab: {
+      topology: 'Topologie', topologyRunning: 'clic sur un siège : son fil', topologyStopped: 'les sièges démarrent avec le rig', loading: 'Lecture…',
+      legend: 'Liens', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with'
+    },
     brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',
     /** The bottom panel's « + ▾ » menu (IDE lot 5). */
     panel: {

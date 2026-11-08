@@ -1364,6 +1364,11 @@ export const en: Messages = {
       start: (what) => `Start ${what}`, restart: (what) => `Restart ${what}`, stop: (what) => `Stop ${what}`,
       confirmStop: 'Confirm the stop', confirmRestart: 'Confirm the restart', cancel: 'Cancel'
     },
+    /** The “Rig · name” tab (IDE lot 7c). */
+    rigTab: {
+      topology: 'Topology', topologyRunning: 'click a seat: its thread', topologyStopped: 'the seats start with the rig', loading: 'Reading…',
+      legend: 'Links', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with'
+    },
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
     panel: {
       shells: { title: 'New terminal', local: 'Local', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Command Prompt', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'default' },
