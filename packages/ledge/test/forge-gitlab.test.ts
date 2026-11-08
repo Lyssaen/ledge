@@ -15,7 +15,9 @@ type Call = { file: string; args: string[]; input?: string };
 /** A `glab api` answering from the Task 0 fixtures (gitlab.com, gitlab-org/cli, read only), recording every call. */
 function fakeGlab(over: (path: string, c: Call) => string | { code?: number; stdout?: string; stderr?: string } | undefined = () => undefined) {
   const calls: Call[] = [];
-  const list = JSON.parse(fx('gl-mr-list.json')) as Array<{ iid: number }>;
+  const list = JSON.parse(fx('gl-mr-list.json')) as Array<{ iid: number; state: string; source_branch: string; updated_at: string; project_id: number; source_project_id: number }>;
+  /** The source project of each real merge request: gitlab-org/cli itself, or the community fork (45049979). */
+  const sourceOf = (m: { project_id: number; source_project_id: number }) => (m.source_project_id === m.project_id ? 'gitlab-org/cli' : m.source_project_id === 45049979 ? 'gitlab-community/gitlab-org/cli' : `fork-${m.source_project_id}`);
   const run: ForgeRun = async (file, args, opts = {}) => {
     const c = { file, args, input: opts.input };
     calls.push(c);
@@ -25,7 +27,13 @@ function fakeGlab(over: (path: string, c: Call) => string | { code?: number; std
     if (o) return { code: o.code ?? 0, stdout: o.stdout ?? '', stderr: o.stderr ?? '' };
     const out = (s: string) => ({ code: 0, stdout: s, stderr: '' });
     const p = path.replace(/[?&]per_page=100&page=\d+$/, '');
-    if (p.startsWith(`${P}/merge_requests?state=all`)) return out(fx('gl-mr-list.json'));
+    // The list: the merge requests of the branch names asked, as the GraphQL query answers (built from the real REST list).
+    if (p === 'graphql') {
+      const b = (JSON.parse(c.input!) as { variables: { b: string[] } }).variables.b;
+      const nodes = list.filter(m => b.includes(m.source_branch)).map(m => ({ iid: String(m.iid), state: m.state, sourceBranch: m.source_branch, updatedAt: m.updated_at, sourceProject: { fullPath: sourceOf(m) } }));
+      return out(JSON.stringify({ data: { project: { mergeRequests: { nodes } } } }));
+    }
+    if (p === 'projects/45049979') return out('{"path_with_namespace":"gitlab-community/gitlab-org/cli"}');
     const m = /^projects\/gitlab-org%2Fcli\/merge_requests\/(\d+)(\/.*)?$/.exec(p);
     if (m && !m[2]) return out(m[1] === '4340' ? fx('gl-mr-4340.json') : JSON.stringify(list.find(x => String(x.iid) === m[1])));
     if (m?.[2] === '/approvals') return out(fx('gl-mr-4340-approvals.json'));
@@ -49,28 +57,62 @@ describe('GitLab statuses', () => {
 });
 
 describe('GitLab list', () => {
-  it('gives the fields from the real answers, one list call per repository', async () => {
+  const mine = (branch: string) => ({ branch, head: sourceOfBranch(branch) });
+  const sourceOfBranch = (branch: string) => {
+    const m = (JSON.parse(fx('gl-mr-list.json')) as Array<{ source_branch: string; project_id: number; source_project_id: number }>).find(x => x.source_branch === branch)!;
+    return m.source_project_id === m.project_id ? 'gitlab-org/cli' : m.source_project_id === 45049979 ? 'gitlab-community/gitlab-org/cli' : `fork-${m.source_project_id}`;
+  };
+
+  it('gives the fields from the real answers, one list query per repository', async () => {
     const { run, calls } = fakeGlab();
-    const prs = await gitlabReader(run).list(repo, ['8709-add-include-descendants-to-milestone-list', 'duo/feature/8337-8338-device-flow-enhancements', 'nobody']);
-    expect(calls.filter(c => c.args.some(a => a.includes('merge_requests?state=all')))).toHaveLength(1);
+    const prs = await gitlabReader(run).list(repo, [mine('8709-add-include-descendants-to-milestone-list'), mine('duo/feature/8337-8338-device-flow-enhancements'), { branch: 'nobody', head: 'gitlab-org/cli' }]);
+    const lists = calls.filter(c => c.args.includes('graphql'));
+    expect(lists).toHaveLength(1);
+    expect(lists[0]!.args).toEqual(['api', '--hostname', 'gitlab.com', '--method', 'POST', '-H', 'Content-Type: application/json', 'graphql', '--input', '-']);
     const by = new Map(prs.map(p => [p.number, p]));
     expect([...by.keys()].sort()).toEqual([3357, 4340]);
     expect(by.get(4340)).toMatchObject({ id: 'gitlab.com/gitlab-org/cli#4340', ref: '!4340', state: 'review', pipeline: 'ok', approvals: { given: 0, required: 2 }, openThreads: 3,
-      mergeable: false, blockers: ['approvals', 'changes_requested'], url: 'https://gitlab.com/gitlab-org/cli/-/merge_requests/4340' });
+      mergeable: false, blockers: ['approvals', 'changes_requested'], url: 'https://gitlab.com/gitlab-org/cli/-/merge_requests/4340', head: 'gitlab-community/gitlab-org/cli' });
     expect(by.get(3357)).toMatchObject({ state: 'draft', pipeline: 'none' });
     for (const p of prs) expect(PullRequestSchema.safeParse({ ...p, sessions: [] }).success).toBe(true);
   });
 
-  it('never puts a branch in the arguments', async () => {
-    const { run, calls } = fakeGlab();
-    await gitlabReader(run).list(repo, ['--exec', '$(id)']);
-    for (const c of calls) for (const a of c.args) expect(a).not.toMatch(/--exec|\$\(/);
+  it('reads the real list answer: !4340 comes from the community fork, so a session pushing to gitlab-org/cli does not get it', async () => {
+    const { run } = fakeGlab(p => (p === 'graphql' ? fx('gl-graphql-list.json') : undefined));
+    const reader = gitlabReader(run);
+    const b = '8709-add-include-descendants-to-milestone-list';
+    expect(await reader.list(repo, [{ branch: b, head: 'gitlab-org/cli' }])).toEqual([]);
+    expect((await reader.list(repo, [{ branch: b, head: 'gitlab-community/gitlab-org/cli' }])).map(p => p.number)).toEqual([4340]);
   });
 
-  it('encodes a subgroup path', async () => {
-    const { run, calls } = fakeGlab(() => '[]');
-    await gitlabReader(run).list(forgeOf('git@gitlab.example.com:a/b/c.git')!, ['x']);
-    expect(calls[0]!.args).toEqual(['api', '--hostname', 'gitlab.example.com', 'projects/a%2Fb%2Fc/merge_requests?state=all&per_page=100&order_by=updated_at']);
+  it('two forks, one branch name: each session gets its own fork\'s merge request', async () => {
+    const nodes = [{ iid: '9', state: 'opened', sourceBranch: 'fix/x', updatedAt: '2026-11-08T12:00:00Z', sourceProject: { fullPath: 'someone/cli' } },
+      { iid: '8', state: 'merged', sourceBranch: 'fix/x', updatedAt: '2026-11-01T10:00:00Z', sourceProject: { fullPath: 'gitlab-org/cli' } }];
+    const { run, calls } = fakeGlab(p => (p === 'graphql' ? JSON.stringify({ data: { project: { mergeRequests: { nodes } } } }) : p === `${P}/merge_requests/8` ? fx('gl-mr-4340.json').replace('"iid": 4340', '"iid": 8').replace('"state": "opened"', '"state": "merged"') : undefined));
+    const prs = await gitlabReader(run).list(repo, [{ branch: 'fix/x', head: 'gitlab-org/cli' }]);
+    expect(prs.map(p => [p.number, p.state, p.head])).toEqual([[8, 'merged', 'gitlab-org/cli']]);
+    expect(calls.some(c => c.args.some(a => a.includes('merge_requests/9')))).toBe(false);
+  });
+
+  it('asks for the followed branch names only, as variables on standard input', async () => {
+    const { run, calls } = fakeGlab();
+    await gitlabReader(run).list(repo, [{ branch: '--exec', head: 'gitlab-org/cli' }, { branch: '$(id)', head: 'gitlab-org/cli' }]);
+    for (const c of calls) for (const a of c.args) expect(a).not.toMatch(/--exec|\$\(/);
+    const q = JSON.parse(calls[0]!.input!) as { query: string; variables: { p: string; b: string[] } };
+    expect(q.query).toContain('mergeRequests(sourceBranches: $b');
+    expect(q.variables).toEqual({ p: 'gitlab-org/cli', b: ['--exec', '$(id)'] });
+  });
+
+  it('names a subgroup by its full path', async () => {
+    const { run, calls } = fakeGlab(() => '{"data":{"project":{"mergeRequests":{"nodes":[]}}}}');
+    await gitlabReader(run).list(forgeOf('git@gitlab.example.com:a/b/c.git')!, [{ branch: 'x', head: 'a/b/c' }]);
+    expect(calls[0]!.args).toContain('gitlab.example.com');
+    expect(JSON.parse(calls[0]!.input!).variables.p).toBe('a/b/c');
+  });
+
+  it('a project the forge does not know is an error, not an empty list', async () => {
+    const { run } = fakeGlab(() => '{"data":{"project":null}}');
+    await expect(gitlabReader(run).list(repo, [{ branch: 'x', head: 'gitlab-org/cli' }])).rejects.toMatchObject({ status: 'error' });
   });
 });
 
@@ -174,6 +216,6 @@ describe('GitLab actions', () => {
 
   it('reads a 404 answered with code 0 as an error', async () => {
     const { run } = fakeGlab(() => ({ code: 0, stdout: '{"message":"404 Project Not Found"}', stderr: 'glab: 404 Project Not Found (HTTP 404)' }));
-    await expect(gitlabReader(run).list(repo, ['x'])).rejects.toMatchObject({ status: 'error', message: expect.stringContaining('404') });
+    await expect(gitlabReader(run).list(repo, [{ branch: 'x', head: 'gitlab-org/cli' }])).rejects.toMatchObject({ status: 'error', message: expect.stringContaining('404') });
   });
 });

@@ -1,6 +1,6 @@
 import { prIdOf, type PipeStatus, type PrFile, type PrJob, type PrReviewer, type PrState, type PrThread } from '@ledge/protocol';
 import { logTail, type ForgeRepo, type ForgeRun } from './run.js';
-import { blockersOf, mergeBlockersOf, ForgeRefusal, iso, JOB_ID, ok, okJson, PATCH_BUDGET, SHA, shellJoin, THREAD_ID, type ForgeReader, type ReadDetail, type ReadPr } from './types.js';
+import { blockersOf, mergeBlockersOf, ForgeError, pickFor, ForgeRefusal, iso, JOB_ID, ok, okJson, PATCH_BUDGET, SHA, shellJoin, THREAD_ID, type ForgeReader, type ReadDetail, type ReadPr } from './types.js';
 
 /**
  * GitLab merge requests through `glab api` (REST v4, R3): `glab mr list` of glab 1.36 has no JSON output. `glab api` exits 0 on
@@ -14,7 +14,11 @@ interface GlMr {
   source_branch: string; target_branch: string; sha: string; updated_at: string; reviewers?: GlUser[]; author?: GlUser;
   description?: string | null; labels?: string[]; detailed_merge_status?: string;
   head_pipeline?: { id: number; project_id?: number; status: string } | null;
+  project_id?: number; source_project_id?: number;
 }
+/** The list's query (R1, review of d266f114): the merge requests of the followed branch names only, with their source project. */
+const LIST_QUERY = 'query($p: ID!, $b: [String!]) { project(fullPath: $p) { mergeRequests(sourceBranches: $b, first: 100, sort: UPDATED_DESC) { nodes { iid state sourceBranch updatedAt sourceProject { fullPath } } } } }';
+interface GlListNode { iid: string; state: string; sourceBranch: string; updatedAt: string; sourceProject?: { fullPath: string } | null }
 interface GlApprovals { approved?: boolean; approvals_required?: number; approvals_left?: number; approved_by?: Array<{ user?: GlUser }> }
 interface GlNote { id: number; type?: string | null; body: string; author?: GlUser; created_at: string; system?: boolean; resolvable?: boolean; resolved?: boolean;
   position?: { new_path?: string; old_path?: string; new_line?: number | null; old_line?: number | null } | null }
@@ -76,13 +80,28 @@ export function gitlabReader(run: ForgeRun): ForgeReader {
   }
   const defaults = new Map<string, Promise<string | null>>();
 
-  async function read(repo: ForgeRepo, m: GlMr, open: boolean): Promise<{ pr: ReadPr; mr: GlMr; approvals: GlApprovals; discussions: GlDiscussion[] }> {
+  const projectPaths = new Map<number, Promise<string>>();
+  /** The path of the project a merge request comes from: the listed one's, or a fork's (read once). */
+  function sourcePath(repo: ForgeRepo, mr: GlMr): Promise<string> {
+    const id = mr.source_project_id;
+    if (!id || id === mr.project_id) return Promise.resolve(repo.path);
+    let p = projectPaths.get(id);
+    if (!p) {
+      p = getJson<{ path_with_namespace?: string }>(repo, `projects/${Math.trunc(id)}`).then(j => j.path_with_namespace ?? '');
+      p.catch(() => projectPaths.delete(id));
+      projectPaths.set(id, p);
+    }
+    return p;
+  }
+
+  async function read(repo: ForgeRepo, m: GlMr, open: boolean, knownHead?: string): Promise<{ pr: ReadPr; mr: GlMr; approvals: GlApprovals; discussions: GlDiscussion[] }> {
     const base = `${project(repo)}/merge_requests/${Math.trunc(m.iid)}`;
     const [mr, approvals, discussions] = await Promise.all([
       getJson<GlMr>(repo, base),
       open ? getJson<GlApprovals>(repo, `${base}/approvals`) : Promise.resolve({} as GlApprovals),
       open ? pages<GlDiscussion>(repo, `${base}/discussions`) : Promise.resolve([] as GlDiscussion[])
     ]);
+    const head = knownHead ?? await sourcePath(repo, mr);
     const given = approvals.approved_by?.length ?? 0, required = approvals.approvals_required;
     const changesRequested = mr.detailed_merge_status === 'requested_changes';
     const draft = mr.draft ?? mr.work_in_progress ?? false;
@@ -92,7 +111,7 @@ export function gitlabReader(run: ForgeRun): ForgeReader {
       id: prIdOf(repo.host, repo.path, mr.iid), forge: 'gitlab', host: repo.host, repo: repo.path, number: mr.iid, ref: `!${mr.iid}`,
       url: mr.web_url, title: mr.title, state, branch: mr.source_branch, target: mr.target_branch, headSha: mr.sha,
       pipeline: glStatus(mr.head_pipeline?.status), approvals: { given, ...(required !== undefined ? { required } : {}) },
-      mergeable: blockers.length === 0, openThreads: discussions.filter(isOpen).length, updatedAt: iso(mr.updated_at), blockers
+      mergeable: blockers.length === 0, openThreads: discussions.filter(isOpen).length, updatedAt: iso(mr.updated_at), blockers, head
     };
     return { pr, mr, approvals, discussions };
   }
@@ -116,18 +135,18 @@ export function gitlabReader(run: ForgeRun): ForgeReader {
       return p;
     },
 
-    async list(repo, branches) {
-      const wanted = new Set(branches);
-      if (!wanted.size) return [];
-      const all = await getJson<GlMr[]>(repo, `${project(repo)}/merge_requests?state=all&per_page=100&order_by=updated_at`);
-      const pick = new Map<string, GlMr>();
-      for (const m of all) {
-        if (!wanted.has(m.source_branch)) continue;
-        const had = pick.get(m.source_branch);
-        const open = m.state === 'opened', hadOpen = had?.state === 'opened';
-        if (!had || (open && !hadOpen) || (open === hadOpen && Date.parse(m.updated_at) > Date.parse(had.updated_at))) pick.set(m.source_branch, m);
-      }
-      return Promise.all([...pick.values()].map(async m => (await read(repo, m, m.state === 'opened')).pr));
+    async list(repo, targets) {
+      const names = [...new Set(targets.map(t => t.branch))];
+      if (!names.length) return [];
+      // The branch names go as GraphQL variables on standard input; `--method POST` is needed for glab to send that body.
+      const r = await run('glab', ['api', '--hostname', repo.host, '--method', 'POST', '-H', 'Content-Type: application/json', 'graphql', '--input', '-'], { input: JSON.stringify({ query: LIST_QUERY, variables: { p: repo.path, b: names } }) });
+      const j = okJson<{ data?: { project?: { mergeRequests?: { nodes: GlListNode[] } } | null }; errors?: Array<{ message?: string }> }>(r, 'glab');
+      if (j.errors?.length) throw new ForgeError('error', j.errors.map(e => e.message ?? '').join('; ').slice(0, 400));
+      if (!j.data?.project) throw new ForgeError('error', `${repo.host}/${repo.path} not found`);
+      const all = j.data.project.mergeRequests?.nodes.map(n => ({ iid: Number(n.iid), branch: n.sourceBranch, head: n.sourceProject?.fullPath ?? '', open: n.state === 'opened', updatedAt: n.updatedAt })) ?? [];
+      const chosen = new Map<number, (typeof all)[number]>();
+      for (const t of targets) { const hit = pickFor(t, all); if (hit && Number.isInteger(hit.iid) && hit.iid > 0) chosen.set(hit.iid, hit); }
+      return Promise.all([...chosen.values()].map(async m => (await read(repo, { iid: m.iid } as GlMr, m.open, m.head)).pr));
     },
 
     async detail(repo, iid, opts) {

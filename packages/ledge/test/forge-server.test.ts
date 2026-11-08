@@ -22,18 +22,20 @@ const AT = '2026-11-08T10:00:00.000Z';
 const mk = (id: string, branch: string): Session => ({ id, name: id, tool: 'claude', cwd: '/w', project: 'w', title: id, tmuxSession: null, state: 'idle', helpers: [], startedAt: AT, lastActivityAt: AT, source: 'hook_only', repoId: 'github.com/Lyssaen/ledge', branch });
 const pr = (n: number, branch: string, extra: Partial<ReadPr> = {}): ReadPr => ({
   id: `github.com/Lyssaen/ledge#${n}`, forge: 'github', host: 'github.com', repo: 'Lyssaen/ledge', number: n, ref: `#${n}`, url: `https://github.com/Lyssaen/ledge/pull/${n}`, title: `PR ${n}`,
-  state: 'open', branch, target: 'main', headSha: 'a'.repeat(40), pipeline: 'fail', approvals: { given: 1 }, mergeable: true, openThreads: 0, updatedAt: AT, blockers: [], ...extra
+  state: 'open', branch, target: 'main', headSha: 'a'.repeat(40), pipeline: 'fail', approvals: { given: 1 }, mergeable: true, openThreads: 0, updatedAt: AT, blockers: [], head: 'Lyssaen/ledge', ...extra
 });
 /** A gh reader on doubles: the requests are those of `prs`. */
 function reader(prs: ReadPr[]): ForgeReader {
   return {
-    async list(_r, branches) { return prs.filter(p => branches.includes(p.branch)); },
+    async list(_r, targets) { return prs.filter(p => targets.some(t => t.branch === p.branch && t.head === p.head)); },
     async detail(_r, n) { const p = prs.find(x => x.number === n)!; return { pr: p, description: 'd', author: 'pim', reviewers: [], labels: [], issues: [], jobs: [], threads: [], files: [], commits: [], mergeCommand: 'gh pr merge', mergeBlockers: ['pipeline'] }; },
     async act() { return { command: 'gh pr comment 226 -R Lyssaen/ledge --body-file -' }; },
     async defaultBranch() { return 'main'; }
   };
 }
 
+/** No git configuration: every branch is taken as pushed to origin. */
+const noGit = async () => ({ code: 1, stdout: '', stderr: '' });
 let srv: Awaited<ReturnType<typeof startServer>> | undefined; let store: Store; let c: Client | undefined;
 beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-forge-srv-')); store = new Store(); });
 afterEach(async () => { await c?.close(); await srv?.close(); srv = undefined; c = undefined; });
@@ -42,7 +44,7 @@ describe('server: pull and merge requests', () => {
   it('says it serves them, sends forge.state after the snapshot, then on each change', async () => {
     store.upsert(mk('s1', 'feat/ide-shell'));
     const prs = [pr(226, 'feat/ide-shell'), pr(227, 'feat/other')];
-    const forge = createForgeService({ store, readers: { gh: reader(prs) } });
+    const forge = createForgeService({ store, run: noGit, readers: { gh: reader(prs) } });
     await forge.refresh();
     srv = await startServer({ store, tmux: fakeTmux(), port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, forge });
     c = await connect({ port: srv.port });
@@ -57,7 +59,7 @@ describe('server: pull and merge requests', () => {
 
   it('answers forge.detail and forge.act with the same requestId; a refusal carries its code; an unknown request is unavailable', async () => {
     store.upsert(mk('s1', 'feat/ide-shell'));
-    const forge = createForgeService({ store, readers: { gh: reader([pr(226, 'feat/ide-shell')]) } });
+    const forge = createForgeService({ store, run: noGit, readers: { gh: reader([pr(226, 'feat/ide-shell')]) } });
     await forge.refresh();
     srv = await startServer({ store, tmux: fakeTmux(), port: 0, forge });
     c = await connect({ port: srv.port });

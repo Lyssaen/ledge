@@ -1,6 +1,6 @@
 import { prIdOf, type ForgeAction, type PipeStatus, type PrFile, type PrJob, type PrReviewer, type PrState, type PrThread } from '@ledge/protocol';
 import { logTail, type ForgeRepo, type ForgeRun } from './run.js';
-import { blockersOf, mergeBlockersOf, ForgeError, ForgeRefusal, iso, JOB_ID, lastLine, ok, okJson, PATCH_BUDGET, seconds, SHA, shellJoin, THREAD_ID, type ForgeReader, type PrCore, type ReadDetail, type ReadPr } from './types.js';
+import { blockersOf, mergeBlockersOf, pickFor, ForgeError, ForgeRefusal, iso, JOB_ID, lastLine, ok, okJson, PATCH_BUDGET, seconds, SHA, shellJoin, THREAD_ID, type ForgeReader, type PrCore, type ReadDetail, type ReadPr } from './types.js';
 
 /**
  * GitHub pull requests through `gh` (R3): `pr list/view --json`, `run list/view`, and `gh api graphql` for the review threads
@@ -8,8 +8,27 @@ import { blockersOf, mergeBlockersOf, ForgeError, ForgeRefusal, iso, JOB_ID, las
  * log comes from `gh api …/actions/jobs/:id/logs`: `run view --log-failed` of gh 2.45 prints nothing (Task 0).
  */
 
-const LIST_FIELDS = 'number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,updatedAt,reviewDecision,reviewRequests,latestReviews,statusCheckRollup';
-const VIEW_FIELDS = `${LIST_FIELDS},body,author,labels,commits,comments,reviews`;
+const VIEW_FIELDS = 'number,title,url,state,isDraft,headRefName,headRefOid,baseRefName,updatedAt,reviewDecision,reviewRequests,latestReviews,statusCheckRollup,headRepository,headRepositoryOwner,body,author,labels,commits,comments,reviews';
+
+/**
+ * The list (R1, review of d266f114): the requests of the followed branch names only, by `pullRequests(headRefName:)`, one
+ * aliased field per branch in one query per repository. The branch names travel as GraphQL variables on standard input; only
+ * their index is written in the query. Each request carries its head repository, so two forks with the same branch are told apart.
+ */
+const LIST_NODE = `number title url state isDraft headRefName headRefOid baseRefName updatedAt reviewDecision headRepository { nameWithOwner }
+  reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } ... on Bot { login } ... on Mannequin { login } ... on Team { name slug } } } }
+  latestReviews(first: 20) { nodes { author { login } state } }
+  reviewThreads(first: 100) { nodes { isResolved } }
+  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state } } } } } } }`;
+/** Requests per branch name asked: forks pushing the same name are rare; past it, the oldest go first. */
+const PER_BRANCH = 50;
+interface GqlPr {
+  number: number; title: string; url: string; state: string; isDraft: boolean; headRefName: string; headRefOid: string; baseRefName: string; updatedAt: string;
+  reviewDecision?: string | null; headRepository?: { nameWithOwner: string } | null;
+  reviewRequests?: { nodes: Array<{ requestedReviewer?: GhReviewer | null }> }; latestReviews?: { nodes: Array<{ author?: { login?: string } | null; state?: string }> };
+  reviewThreads?: { nodes: Array<{ isResolved: boolean }> };
+  commits?: { nodes: Array<{ commit?: { statusCheckRollup?: { contexts?: { nodes: GhCheck[] } } | null } }> };
+}
 
 interface GhCheck { __typename?: string; status?: string; conclusion?: string; state?: string }
 interface GhReviewer { __typename?: string; login?: string; name?: string; slug?: string }
@@ -19,6 +38,7 @@ interface GhPr {
   statusCheckRollup?: GhCheck[];
 }
 interface GhPrView extends GhPr {
+  headRepository?: { name?: string } | null; headRepositoryOwner?: { login?: string } | null;
   body?: string; author?: { login?: string }; labels?: Array<{ name: string }>;
   commits?: Array<{ oid: string; messageHeadline: string; committedDate: string; authors?: Array<{ login?: string; name?: string }> }>;
   comments?: Array<{ id: string; author?: { login?: string }; body: string; createdAt: string }>;
@@ -80,25 +100,14 @@ export function githubReader(run: ForgeRun): ForgeReader {
     return p;
   }
 
-  function core(repo: ForgeRepo, p: GhPr, openThreads: number): ReadPr {
+  function core(repo: ForgeRepo, p: GhPr, openThreads: number, head: string): ReadPr {
     const state = stateOf(p), given = approvalsOf(p);
     const blockers = blockersOf({ state, approvals: { given }, changesRequested: p.reviewDecision === 'CHANGES_REQUESTED', approvalsMissing: p.reviewDecision === 'REVIEW_REQUIRED' });
     return {
       id: prIdOf(repo.host, repo.path, p.number), forge: 'github', host: repo.host, repo: repo.path, number: p.number, ref: `#${p.number}`,
       url: p.url, title: p.title, state, branch: p.headRefName, target: p.baseRefName, headSha: p.headRefOid,
-      pipeline: rollup(p.statusCheckRollup), approvals: { given }, mergeable: blockers.length === 0, openThreads, updatedAt: iso(p.updatedAt), blockers
+      pipeline: rollup(p.statusCheckRollup), approvals: { given }, mergeable: blockers.length === 0, openThreads, updatedAt: iso(p.updatedAt), blockers, head
     };
-  }
-
-  /** The unresolved review threads of each open request, in one GraphQL call (numbers are integers: nothing else is interpolated). */
-  async function openThreads(repo: ForgeRepo, numbers: number[]): Promise<Map<number, number>> {
-    const out = new Map<number, number>();
-    if (!numbers.length) return out;
-    const fields = numbers.map(n => `p${n}: pullRequest(number: ${Math.trunc(n)}) { reviewThreads(first: 100) { nodes { isResolved } } }`).join(' ');
-    const r = await api(repo, ['graphql', '-f', `query=query($o: String!, $r: String!) { repository(owner: $o, name: $r) { ${fields} } }`, '-f', `o=${ownerOf(repo)}`, '-f', `r=${nameOf(repo)}`]);
-    const j = okJson<{ data?: { repository?: Record<string, { reviewThreads?: { nodes?: Array<{ isResolved: boolean }> } } | null> } }>(r, 'gh');
-    for (const n of numbers) out.set(n, (j.data?.repository?.[`p${n}`]?.reviewThreads?.nodes ?? []).filter(t => !t.isResolved).length);
-    return out;
   }
 
   async function jobs(repo: ForgeRepo, headSha: string): Promise<{ jobs: PrJob[]; runs: GhRun[] }> {
@@ -135,21 +144,31 @@ export function githubReader(run: ForgeRun): ForgeReader {
   return {
     async defaultBranch(repo) { return (await info(repo)).defaultBranch; },
 
-    async list(repo, branches) {
-      const wanted = new Set(branches);
-      if (!wanted.size) return [];
-      const all = okJson<GhPr[]>(await run('gh', ['pr', 'list', '-R', repo.repo, '--state', 'all', '--limit', '100', '--json', LIST_FIELDS]), 'gh');
-      const pick = new Map<string, GhPr>();
-      for (const p of all) {
-        if (!wanted.has(p.headRefName)) continue;
-        const had = pick.get(p.headRefName);
-        const open = p.state === 'OPEN', hadOpen = had?.state === 'OPEN';
-        const better = !had || (open && !hadOpen) || (open === hadOpen && Date.parse(p.updatedAt) > Date.parse(had.updatedAt));
-        if (better) pick.set(p.headRefName, p);
+    async list(repo, targets) {
+      const names = [...new Set(targets.map(t => t.branch))];
+      if (!names.length) return [];
+      const fields = names.map((_, i) => `b${i}: pullRequests(headRefName: $b${i}, first: ${PER_BRANCH}, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${LIST_NODE} } }`).join(' ');
+      const query = `query($o: String!, $r: String!, ${names.map((_, i) => `$b${i}: String!`).join(', ')}) { repository(owner: $o, name: $r) { ${fields} } }`;
+      const variables: Record<string, string> = { o: ownerOf(repo), r: nameOf(repo) };
+      names.forEach((b, i) => { variables[`b${i}`] = b; });
+      const j = okJson<{ data?: { repository?: Record<string, { nodes: GqlPr[] } | null> | null }; errors?: Array<{ message?: string }> }>(await api(repo, ['graphql', '--input', '-'], JSON.stringify({ query, variables })), 'gh');
+      if (j.errors?.length && !j.data?.repository) throw new ForgeError('error', j.errors.map(e => e.message ?? '').join('; ').slice(0, 400));
+      const all = names.flatMap((_, i) => j.data?.repository?.[`b${i}`]?.nodes ?? []).map(n => ({
+        n, branch: n.headRefName, head: n.headRepository?.nameWithOwner ?? '', open: n.state === 'OPEN', updatedAt: n.updatedAt
+      }));
+      const out: ReadPr[] = [];
+      for (const t of targets) {
+        const hit = pickFor(t, all);
+        if (!hit) continue;
+        const n = hit.n;
+        const pr: GhPr = { ...n, reviewDecision: n.reviewDecision ?? undefined,
+          reviewRequests: (n.reviewRequests?.nodes ?? []).flatMap(r => (r.requestedReviewer ? [r.requestedReviewer] : [])),
+          latestReviews: (n.latestReviews?.nodes ?? []).map(r => ({ author: r.author ?? undefined, state: r.state })),
+          statusCheckRollup: n.commits?.nodes[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [] };
+        const open = hit.open ? (n.reviewThreads?.nodes ?? []).filter(x => !x.isResolved).length : 0;
+        if (!out.some(o => o.number === n.number)) out.push(core(repo, pr, open, hit.head));
       }
-      const chosen = [...pick.values()];
-      const threads = await openThreads(repo, chosen.filter(p => p.state === 'OPEN').map(p => p.number));
-      return chosen.map(p => core(repo, p, threads.get(p.number) ?? 0));
+      return out;
     },
 
     async detail(repo, n, opts) {
@@ -166,7 +185,8 @@ export function githubReader(run: ForgeRun): ForgeReader {
         ...(v.comments ?? []).map(c => ({ id: c.id, resolvable: false, resolved: false, comments: [{ id: c.id, author: c.author?.login ?? 'ghost', at: iso(c.createdAt), body: c.body }] })),
         ...(v.reviews ?? []).filter(r => r.body.trim()).map(r => ({ id: r.id, resolvable: false, resolved: false, comments: [{ id: r.id, author: r.author?.login ?? 'ghost', at: iso(r.submittedAt), body: r.body }] }))
       ].sort((a, b) => a.comments[0]!.at.localeCompare(b.comments[0]!.at));
-      const pr = core(repo, v, reviewThreads.filter(t => !t.resolved).length);
+      const head = v.headRepositoryOwner?.login && v.headRepository?.name ? `${v.headRepositoryOwner.login}/${v.headRepository.name}` : '';
+      const pr = core(repo, v, reviewThreads.filter(t => !t.resolved).length, head);
       const reviewers = new Map<string, PrReviewer['state']>();
       for (const r of v.latestReviews ?? []) if (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED') reviewers.set(r.author?.login ?? '?', r.state === 'APPROVED' ? 'approved' : 'changes');
       for (const r of v.reviewRequests ?? []) reviewers.set(reviewerName(r), 'pending');

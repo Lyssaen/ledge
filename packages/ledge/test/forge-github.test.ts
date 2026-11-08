@@ -21,13 +21,13 @@ function fakeGh(over: (c: Call) => { code?: number; stdout?: string; stderr?: st
     if (o) return { code: o.code ?? 0, stdout: o.stdout ?? '', stderr: o.stderr ?? '' };
     const a = args.join(' ');
     const out = (s: string) => ({ code: 0, stdout: s, stderr: '' });
-    if (a.startsWith('pr list')) return out(fx('gh-pr-list-cli.json'));
     if (a.startsWith('pr view')) return out(fx('gh-pr-view-13506.json'));
     if (a.startsWith('repo view')) return out(JSON.stringify({ defaultBranchRef: { name: 'trunk' }, mergeCommitAllowed: false, squashMergeAllowed: true, rebaseMergeAllowed: true }));
     if (a.startsWith('run list')) return out(fx('gh-run-list.json'));
     if (a.startsWith('run view')) return out(fx('gh-run-view-jobs.json'));
     if (a.startsWith('api graphql') && a.includes('closingIssuesReferences')) return out(fx('gh-graphql-13506.json'));
-    if (a.startsWith('api graphql')) return out(JSON.stringify({ data: { repository: { p14964: { reviewThreads: { nodes: [{ isResolved: false }, { isResolved: true }] } }, p14927: { reviewThreads: { nodes: [] } } } } }));
+    // The list: the real answer of cli/cli for the four branches below (Task 0 bis, read only).
+    if (a === 'api graphql --input -' && opts.input?.includes('pullRequests(headRefName')) return out(fx('gh-graphql-list-cli.json'));
     if (a.startsWith('api repos/cli/cli/pulls/13506/files')) return out(fx('gh-pr-files-13506.json'));
     if (/^api repos\/cli\/cli\/actions\/jobs\/\d+\/logs$/.test(a)) return out(fx('gh-job-log.txt'));
     return { code: 1, stdout: '', stderr: `unexpected: gh ${a}` };
@@ -35,18 +35,53 @@ function fakeGh(over: (c: Call) => { code?: number; stdout?: string; stderr?: st
   return { run, calls };
 }
 const branches = ['bagtoad/triage-ghmock-skill', 'probe', 'dependabot/github_actions/codeql-actions-92276e7fb0', 'williammartin-multiaccount-draft-08-evaluation'];
+/** Sessions whose branches are pushed to cli/cli itself. */
+const targets = branches.map(branch => ({ branch, head: 'cli/cli' }));
+type Node = Record<string, unknown>;
+const node = (n: number, branch: string, head: string, extra: Node = {}): Node => ({ number: n, title: `PR ${n}`, url: `https://github.com/o/r/pull/${n}`, state: 'OPEN', isDraft: false,
+  headRefName: branch, headRefOid: 'a'.repeat(40), baseRefName: 'main', updatedAt: '2026-11-08T10:00:00Z', reviewDecision: null, headRepository: { nameWithOwner: head },
+  reviewRequests: { nodes: [] }, latestReviews: { nodes: [{ author: { login: 'lead' }, state: 'APPROVED' }] }, reviewThreads: { nodes: [] }, commits: { nodes: [] }, ...extra });
 
 describe('GitHub list', () => {
-  it('gives the fields from the real answers, one pr list per repository', async () => {
+  it('gives the fields from the real answer, in one query per repository', async () => {
     const { run, calls } = fakeGh();
-    const prs = await githubReader(run).list(repo, branches);
-    expect(calls.filter(c => c.args[0] === 'pr' && c.args[1] === 'list')).toHaveLength(1);
+    const prs = await githubReader(run).list(repo, targets);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.args).toEqual(['api', 'graphql', '--input', '-']);
     const by = new Map(prs.map(p => [p.number, p]));
-    expect(by.get(14976)).toMatchObject({ id: 'github.com/cli/cli#14976', ref: '#14976', state: 'merged', pipeline: 'ok', approvals: { given: 1 }, forge: 'github', target: 'trunk' });
-    expect(by.get(14974)).toMatchObject({ state: 'closed' });
-    expect(by.get(14964)).toMatchObject({ state: 'review', openThreads: 1, mergeable: false, blockers: ['approvals'] });
-    expect(by.get(14927)).toMatchObject({ state: 'draft', pipeline: 'fail', blockers: ['draft', 'approvals'] });
+    expect(by.get(14976)).toMatchObject({ id: 'github.com/cli/cli#14976', ref: '#14976', state: 'merged', pipeline: 'ok', approvals: { given: 1 }, forge: 'github', target: 'trunk', head: 'cli/cli' });
+    expect(by.get(14964)).toMatchObject({ state: 'review', mergeable: false, blockers: ['approvals'] });
+    expect(by.get(14927)).toMatchObject({ state: 'draft', pipeline: 'fail', openThreads: 4, blockers: ['draft', 'approvals'] });
     for (const p of prs) expect(PullRequestSchema.safeParse({ ...p, sessions: [] }).success).toBe(true);
+  });
+
+  it('leaves out a request from another fork with the same branch (the real `probe`, from a fork of cli/cli)', async () => {
+    const { run } = fakeGh();
+    const reader = githubReader(run);
+    expect((await reader.list(repo, targets)).map(p => p.number)).not.toContain(14974);
+    // The same answer (the fixture's aliases follow the four branches), the session on `probe` pushing to that fork this time.
+    const fromFork = targets.map(t => (t.branch === 'probe' ? { ...t, head: 'escaleraalcielo/tmp-cli-fork-delete-me' } : t));
+    expect((await reader.list(repo, fromFork)).filter(p => p.branch === 'probe').map(p => [p.number, p.state])).toEqual([[14974, 'closed']]);
+  });
+
+  it('two forks, one branch name: each session gets its own fork\'s request, even when the other is open or newer', async () => {
+    const answer = { data: { repository: { b0: { nodes: [node(2, 'feat/x', 'someone/ledge', { updatedAt: '2026-11-08T12:00:00Z' }), node(1, 'feat/x', 'charles331/ledge', { state: 'MERGED', updatedAt: '2026-11-01T10:00:00Z' })] } } } };
+    const { run } = fakeGh(() => ({ stdout: JSON.stringify(answer) }));
+    const prs = await githubReader(run).list(repo, [{ branch: 'feat/x', head: 'Charles331/Ledge' }]);
+    expect(prs.map(p => [p.number, p.state, p.head])).toEqual([[1, 'merged', 'charles331/ledge']]);
+  });
+
+  it('asks the forge for the followed branch names only: a request older than any page of the whole list is still found', async () => {
+    // 300 newer requests on other branches would fill the pages of a whole list; the query never sees them.
+    const { run, calls } = fakeGh(c => {
+      const q = JSON.parse(c.input!) as { query: string; variables: Record<string, string> };
+      const nodes = q.variables.b0 === 'feat/old' ? [node(7, 'feat/old', 'cli/cli', { updatedAt: '2020-01-01T00:00:00Z' })] : [];
+      return { stdout: JSON.stringify({ data: { repository: { b0: { nodes } } } }) };
+    });
+    const prs = await githubReader(run).list(repo, [{ branch: 'feat/old', head: 'cli/cli' }]);
+    expect(prs.map(p => p.number)).toEqual([7]);
+    const q = JSON.parse(calls[0]!.input!) as { query: string };
+    expect(q.query).toContain('pullRequests(headRefName: $b0');
   });
 
   it('reads no check as pipeline none', () => {
@@ -58,10 +93,13 @@ describe('GitHub list', () => {
     expect(rollup([{ __typename: 'StatusContext', state: 'SUCCESS' }, { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SKIPPED' }])).toBe('ok');
   });
 
-  it('never puts a branch in the arguments: branches only filter, in Node', async () => {
-    const { run, calls } = fakeGh();
-    await githubReader(run).list(repo, ['--exec', '$(touch /tmp/x)', 'probe']);
-    for (const c of calls) for (const a of c.args) expect(a).not.toMatch(/--exec|\$\(/);
+  it('never puts a branch in the arguments nor in the query text: they travel as variables on standard input', async () => {
+    const { run, calls } = fakeGh(() => ({ stdout: '{"data":{"repository":{}}}' }));
+    await githubReader(run).list(repo, [{ branch: '--exec', head: 'cli/cli' }, { branch: '$(touch /tmp/x)', head: 'cli/cli' }, { branch: 'x" } } evil { "', head: 'cli/cli' }]);
+    for (const c of calls) for (const a of c.args) expect(a).not.toMatch(/--exec|\$\(|evil/);
+    const q = JSON.parse(calls[0]!.input!) as { query: string; variables: Record<string, string> };
+    expect(q.query).not.toMatch(/--exec|\$\(|evil/);
+    expect(Object.values(q.variables)).toEqual(expect.arrayContaining(['--exec', '$(touch /tmp/x)', 'x" } } evil { "']));
   });
 });
 

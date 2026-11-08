@@ -3,7 +3,23 @@ import { classify, errorText, type ForgeRepo, type ForgeRunResult } from './run.
 
 /** A request as a reader gives it: no sessions yet, and why it could not be merged apart from its pipeline (R5). */
 export type PrCore = Omit<PullRequest, 'sessions'>;
-export type ReadPr = PrCore & { blockers: MergeBlocker[] };
+/** `head`: the repository path its source branch lives in (a fork's, for a request from a fork). */
+export type ReadPr = PrCore & { blockers: MergeBlocker[]; head: string };
+/**
+ * What a session follows (R1): its branch, in the repository the branch is pushed to (`head`: the branch's push remote or
+ * upstream, `origin` by default), on the same host as the repository listed. Two forks with the same branch name are two targets.
+ */
+export interface BranchTarget { branch: string; head: string }
+export const targetKey = (t: BranchTarget): string => `${t.head.toLowerCase()}\n${t.branch}`;
+/** The request of a target among those a branch name gives: the one whose head is the target's, open first, else the latest. */
+export function pickFor<T extends { branch: string; head: string; open: boolean; updatedAt: string }>(t: BranchTarget, all: readonly T[]): T | undefined {
+  let best: T | undefined;
+  for (const p of all) {
+    if (p.branch !== t.branch || p.head.toLowerCase() !== t.head.toLowerCase()) continue;
+    if (!best || (p.open && !best.open) || (p.open === best.open && Date.parse(p.updatedAt) > Date.parse(best.updatedAt))) best = p;
+  }
+  return best;
+}
 export type ReadDetail = Omit<PrDetail, 'pr'> & { pr: ReadPr };
 
 /**
@@ -33,8 +49,11 @@ export function blockersOf(p: { state: PrState; approvals: { given: number; requ
 }
 
 export interface ForgeReader {
-  /** The requests of `branches` in `repo`: one list call for the repository, filtered here; per branch the open one, else the latest. */
-  list(repo: ForgeRepo, branches: readonly string[]): Promise<ReadPr[]>;
+  /**
+   * The requests of `targets` in `repo`: one query for the repository, asking only for the followed branch names (so none is lost
+   * past a page of the whole list); per target the request whose head repository is its own, open first, else the latest.
+   */
+  list(repo: ForgeRepo, targets: readonly BranchTarget[]): Promise<ReadPr[]>;
   /** One request in full; `log`: also that job's log. */
   detail(repo: ForgeRepo, number: number, opts: { log?: string }): Promise<ReadDetail>;
   /** Runs the action (the caller has applied R5 and R6); `command`: what ran, the body left out. Throws ForgeRefusal or ForgeError. */

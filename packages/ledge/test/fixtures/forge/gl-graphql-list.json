@@ -1,0 +1,19 @@
+{
+ "data": {
+  "project": {
+   "mergeRequests": {
+    "nodes": [
+     {
+      "iid": "4340",
+      "state": "opened",
+      "sourceBranch": "8709-add-include-descendants-to-milestone-list",
+      "updatedAt": "2026-11-08T14:55:49Z",
+      "sourceProject": {
+       "fullPath": "gitlab-community/gitlab-org/cli"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

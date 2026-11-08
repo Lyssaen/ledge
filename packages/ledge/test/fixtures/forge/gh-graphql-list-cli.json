@@ -1,0 +1,932 @@
+{
+ "data": {
+  "repository": {
+   "b0": {
+    "nodes": [
+     {
+      "number": 14976,
+      "title": "Use a synthetic namespace for triage fixtures",
+      "url": "https://github.com/cli/cli/pull/14976",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "bagtoad/triage-ghmock-skill",
+      "headRefOid": "6ceb78a575d98dbe06ac366e42501c67aee2b1c4",
+      "baseRefName": "trunk",
+      "updatedAt": "2026-11-07T01:48:49Z",
+      "reviewDecision": "APPROVED",
+      "headRepository": {
+       "nameWithOwner": "cli/cli"
+      },
+      "reviewRequests": {
+       "nodes": [
+        {
+         "requestedReviewer": {
+          "__typename": "User",
+          "login": "sergiou87"
+         }
+        },
+        {
+         "requestedReviewer": {
+          "__typename": "User",
+          "login": "babakks"
+         }
+        }
+       ]
+      },
+      "latestReviews": {
+       "nodes": [
+        {
+         "author": {
+          "login": "copilot-pull-request-reviewer"
+         },
+         "state": "COMMENTED"
+        },
+        {
+         "author": {
+          "login": "tidy-dev"
+         },
+         "state": "APPROVED"
+        }
+       ]
+      },
+      "reviewThreads": {
+       "nodes": [
+        {
+         "isResolved": true
+        }
+       ]
+      },
+      "commits": {
+       "nodes": [
+        {
+         "commit": {
+          "statusCheckRollup": {
+           "contexts": {
+            "nodes": [
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             }
+            ]
+           }
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "number": 14972,
+      "title": "Remove accidental triage model pin",
+      "url": "https://github.com/cli/cli/pull/14972",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "bagtoad/triage-ghmock-skill",
+      "headRefOid": "3e6aeafb1b796b862389c1abe4deba5e60fa0b01",
+      "baseRefName": "trunk",
+      "updatedAt": "2026-11-06T19:41:03Z",
+      "reviewDecision": "APPROVED",
+      "headRepository": {
+       "nameWithOwner": "cli/cli"
+      },
+      "reviewRequests": {
+       "nodes": []
+      },
+      "latestReviews": {
+       "nodes": [
+        {
+         "author": {
+          "login": "copilot-pull-request-reviewer"
+         },
+         "state": "COMMENTED"
+        },
+        {
+         "author": {
+          "login": "tidy-dev"
+         },
+         "state": "APPROVED"
+        }
+       ]
+      },
+      "reviewThreads": {
+       "nodes": []
+      },
+      "commits": {
+       "nodes": [
+        {
+         "commit": {
+          "statusCheckRollup": {
+           "contexts": {
+            "nodes": [
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             }
+            ]
+           }
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "number": 14960,
+      "title": "Add a ghmock usage skill",
+      "url": "https://github.com/cli/cli/pull/14960",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "bagtoad/triage-ghmock-skill",
+      "headRefOid": "810eba8083328420293efab653503c506dd76dc7",
+      "baseRefName": "bagtoad/triage-workflow-updates",
+      "updatedAt": "2026-11-06T16:33:15Z",
+      "reviewDecision": "APPROVED",
+      "headRepository": {
+       "nameWithOwner": "cli/cli"
+      },
+      "reviewRequests": {
+       "nodes": [
+        {
+         "requestedReviewer": {
+          "__typename": "User",
+          "login": "babakks"
+         }
+        }
+       ]
+      },
+      "latestReviews": {
+       "nodes": [
+        {
+         "author": {
+          "login": "copilot-pull-request-reviewer"
+         },
+         "state": "COMMENTED"
+        },
+        {
+         "author": {
+          "login": "tidy-dev"
+         },
+         "state": "APPROVED"
+        }
+       ]
+      },
+      "reviewThreads": {
+       "nodes": []
+      },
+      "commits": {
+       "nodes": [
+        {
+         "commit": {
+          "statusCheckRollup": {
+           "contexts": {
+            "nodes": [
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             }
+            ]
+           }
+          }
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "b1": {
+    "nodes": [
+     {
+      "number": 14974,
+      "title": "probe fork pr",
+      "url": "https://github.com/cli/cli/pull/14974",
+      "state": "CLOSED",
+      "isDraft": false,
+      "headRefName": "probe",
+      "headRefOid": "f74588630208e529fb09d898eccfad4fc02fc927",
+      "baseRefName": "trunk",
+      "updatedAt": "2026-11-06T20:10:07Z",
+      "reviewDecision": "REVIEW_REQUIRED",
+      "headRepository": {
+       "nameWithOwner": "escaleraalcielo/tmp-cli-fork-delete-me"
+      },
+      "reviewRequests": {
+       "nodes": [
+        {
+         "requestedReviewer": null
+        },
+        {
+         "requestedReviewer": {
+          "__typename": "User",
+          "login": "BagToad"
+         }
+        }
+       ]
+      },
+      "latestReviews": {
+       "nodes": [
+        {
+         "author": {
+          "login": "copilot-pull-request-reviewer"
+         },
+         "state": "COMMENTED"
+        }
+       ]
+      },
+      "reviewThreads": {
+       "nodes": []
+      },
+      "commits": {
+       "nodes": [
+        {
+         "commit": {
+          "statusCheckRollup": {
+           "contexts": {
+            "nodes": [
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             }
+            ]
+           }
+          }
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "b2": {
+    "nodes": [
+     {
+      "number": 14964,
+      "title": "chore(deps): Bump the codeql-actions group with 3 updates",
+      "url": "https://github.com/cli/cli/pull/14964",
+      "state": "OPEN",
+      "isDraft": false,
+      "headRefName": "dependabot/github_actions/codeql-actions-92276e7fb0",
+      "headRefOid": "dab49c4e4a2c5b75c27cd8bae26fbb0970316364",
+      "baseRefName": "trunk",
+      "updatedAt": "2026-11-08T14:47:58Z",
+      "reviewDecision": "REVIEW_REQUIRED",
+      "headRepository": {
+       "nameWithOwner": "cli/cli"
+      },
+      "reviewRequests": {
+       "nodes": [
+        {
+         "requestedReviewer": null
+        },
+        {
+         "requestedReviewer": {
+          "__typename": "User",
+          "login": "babakks"
+         }
+        }
+       ]
+      },
+      "latestReviews": {
+       "nodes": [
+        {
+         "author": {
+          "login": "copilot-pull-request-reviewer"
+         },
+         "state": "COMMENTED"
+        }
+       ]
+      },
+      "reviewThreads": {
+       "nodes": []
+      },
+      "commits": {
+       "nodes": [
+        {
+         "commit": {
+          "statusCheckRollup": {
+           "contexts": {
+            "nodes": [
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             }
+            ]
+           }
+          }
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "b3": {
+    "nodes": [
+     {
+      "number": 14927,
+      "title": "Add guided multi-account setup and evaluation",
+      "url": "https://github.com/cli/cli/pull/14927",
+      "state": "OPEN",
+      "isDraft": true,
+      "headRefName": "williammartin-multiaccount-draft-08-evaluation",
+      "headRefOid": "d43c4e3ad3c34332c803a568f85f116e3ee58f19",
+      "baseRefName": "williammartin-multiaccount-draft-07-explain",
+      "updatedAt": "2026-11-03T21:29:03Z",
+      "reviewDecision": "REVIEW_REQUIRED",
+      "headRepository": {
+       "nameWithOwner": "cli/cli"
+      },
+      "reviewRequests": {
+       "nodes": []
+      },
+      "latestReviews": {
+       "nodes": [
+        {
+         "author": {
+          "login": "copilot-pull-request-reviewer"
+         },
+         "state": "COMMENTED"
+        }
+       ]
+      },
+      "reviewThreads": {
+       "nodes": [
+        {
+         "isResolved": false
+        },
+        {
+         "isResolved": false
+        },
+        {
+         "isResolved": false
+        },
+        {
+         "isResolved": false
+        }
+       ]
+      },
+      "commits": {
+       "nodes": [
+        {
+         "commit": {
+          "statusCheckRollup": {
+           "contexts": {
+            "nodes": [
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "FAILURE"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SKIPPED"
+             },
+             {
+              "__typename": "CheckRun",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             }
+            ]
+           }
+          }
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  }
+ }
+}

@@ -5,8 +5,17 @@ import { join } from 'node:path';
 import type { ForgeAction, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
 import { createForgeService, FAST_MS, SLOW_MS } from '../src/daemon/forge/service.js';
-import { ForgeError, type ForgeReader, type PrCore, type ReadPr } from '../src/daemon/forge/types.js';
+import { ForgeError, type BranchTarget, type ForgeReader, type PrCore, type ReadPr } from '../src/daemon/forge/types.js';
+import { headOf } from '../src/daemon/forge/service.js';
+import { forgeOf, type ForgeRun } from '../src/daemon/forge/run.js';
 import type { ForgeRepo } from '../src/daemon/forge/run.js';
+/** Git configs by folder, as `git config -z --get-regexp` prints them; a folder not listed answers nothing (code 1). */
+const gitConfigs = new Map<string, string>();
+const fakeGit: ForgeRun = async (_file, _args, opts = {}) => {
+  const c = gitConfigs.get(opts.cwd ?? '');
+  return c === undefined ? { code: 1, stdout: '', stderr: '' } : { code: 0, stdout: c, stderr: '' };
+};
+const cfg = (entries: Record<string, string>) => Object.entries(entries).map(([k, v]) => `${k}\n${v}\0`).join('');
 
 const T0 = Date.parse('2026-11-08T10:00:00.000Z');
 let clock = T0;
@@ -17,17 +26,18 @@ const mk = (id: string, extra: Partial<Session> = {}): Session => ({
 });
 const pr = (n: number, branch: string, extra: Partial<ReadPr> = {}): ReadPr => ({
   id: `github.com/Lyssaen/ledge#${n}`, forge: 'github', host: 'github.com', repo: 'Lyssaen/ledge', number: n, ref: `#${n}`, url: `https://github.com/Lyssaen/ledge/pull/${n}`, title: `PR ${n}`,
-  state: 'open', branch, target: 'main', headSha: 'a'.repeat(40), pipeline: 'ok', approvals: { given: 1 }, mergeable: true, openThreads: 0, updatedAt: at(0), blockers: [], ...extra
+  state: 'open', branch, target: 'main', headSha: 'a'.repeat(40), pipeline: 'ok', approvals: { given: 1 }, mergeable: true, openThreads: 0, updatedAt: at(0), blockers: [], head: 'Lyssaen/ledge', ...extra
 });
 
-type Fake = ForgeReader & { lists: Array<{ repo: string; branches: readonly string[] }>; acts: Array<{ number: number; action: ForgeAction }>; prs: ReadPr[]; fail?: ForgeError };
+type Fake = ForgeReader & { lists: Array<{ repo: string; branches: readonly string[] }>; targets: BranchTarget[][]; acts: Array<{ number: number; action: ForgeAction }>; prs: ReadPr[]; fail?: ForgeError };
 function fakeReader(prs: ReadPr[] = []): Fake {
   const r: Fake = {
-    prs, lists: [], acts: [],
-    async list(repo: ForgeRepo, branches: readonly string[]) {
-      r.lists.push({ repo: repo.repo, branches: [...branches] });
+    prs, lists: [], acts: [], targets: [],
+    async list(repo: ForgeRepo, targets: readonly BranchTarget[]) {
+      r.lists.push({ repo: repo.repo, branches: targets.map(t => t.branch) });
+      r.targets.push([...targets]);
       if (r.fail) throw r.fail;
-      return r.prs.filter(p => branches.includes(p.branch));
+      return r.prs.filter(p => targets.some(t => t.branch === p.branch && t.head.toLowerCase() === p.head.toLowerCase()));
     },
     async detail(_repo, n) {
       const p = r.prs.find(x => x.number === n)!;
@@ -40,8 +50,46 @@ function fakeReader(prs: ReadPr[] = []): Fake {
 }
 
 let store: Store;
-beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-forge-')); store = new Store(); clock = T0; });
-const service = (gh: Fake, glab: Fake = fakeReader()) => createForgeService({ store, now: () => clock, readers: { gh, glab } });
+beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-forge-')); store = new Store(); clock = T0; gitConfigs.clear(); });
+const service = (gh: Fake, glab: Fake = fakeReader()) => createForgeService({ store, now: () => clock, run: fakeGit, readers: { gh, glab } });
+
+describe('where a branch is pushed (R1, review of d266f114)', () => {
+  const listed = forgeOf('git@github.com:Lyssaen/ledge.git')!;
+  const remotes = { 'remote.origin.url': 'git@github.com:Lyssaen/ledge.git', 'remote.fork.url': 'git@github.com:charles331/ledge.git' };
+  it('reads the push remote, then the upstream, then origin', () => {
+    expect(headOf(cfg({ ...remotes, 'branch.feat/x.pushremote': 'fork', 'branch.feat/x.remote': 'origin' }), 'feat/x', listed)).toEqual({ head: 'charles331/ledge', branch: 'feat/x' });
+    expect(headOf(cfg({ ...remotes, 'remote.pushdefault': 'fork' }), 'feat/x', listed)).toEqual({ head: 'charles331/ledge', branch: 'feat/x' });
+    expect(headOf(cfg({ ...remotes, 'branch.feat/x.remote': 'fork', 'branch.feat/x.merge': 'refs/heads/feat/other' }), 'feat/x', listed)).toEqual({ head: 'charles331/ledge', branch: 'feat/other' });
+    expect(headOf(cfg(remotes), 'feat/x', listed)).toEqual({ head: 'Lyssaen/ledge', branch: 'feat/x' });
+    expect(headOf('', 'feat/x', listed)).toEqual({ head: 'Lyssaen/ledge', branch: 'feat/x' });
+    // A remote on another host says nothing of this forge: the listed repository.
+    expect(headOf(cfg({ ...remotes, 'remote.gl.url': 'https://gitlab.com/a/b.git', 'branch.feat/x.pushremote': 'gl' }), 'feat/x', listed)).toEqual({ head: 'Lyssaen/ledge', branch: 'feat/x' });
+  });
+
+  it('two forks, one branch: the session pushing to its fork gets that fork\'s request, not the other one', async () => {
+    gitConfigs.set('/w-fork', cfg({ ...remotes, 'branch.feat/x.pushremote': 'fork' }));
+    store.upsert(mk('mine', { cwd: '/w-fork' }));
+    store.upsert(mk('upstream', { cwd: '/w' }));
+    const gh = fakeReader([pr(1, 'feat/x', { head: 'charles331/ledge' }), pr(2, 'feat/x', { head: 'someone/ledge', updatedAt: at(9000) }), pr(3, 'feat/x', { head: 'Lyssaen/ledge' })]);
+    const s = service(gh);
+    await s.refresh();
+    expect(gh.lists).toHaveLength(1);
+    expect(gh.targets[0]!.map(t => t.head).sort()).toEqual(['Lyssaen/ledge', 'charles331/ledge']);
+    expect(s.state().prs.map(p => [p.number, p.sessions])).toEqual([[1, ['mine']], [3, ['upstream']]]);
+    expect(s.state().prs[0]).not.toHaveProperty('head');
+  });
+
+  it('acts on the request of the session\'s own fork', async () => {
+    gitConfigs.set('/w-fork', cfg({ ...remotes, 'branch.feat/x.pushremote': 'fork' }));
+    store.upsert(mk('mine', { cwd: '/w-fork' }));
+    const gh = fakeReader([pr(1, 'feat/x', { head: 'charles331/ledge' }), pr(2, 'feat/x', { head: 'someone/ledge' })]);
+    const s = service(gh);
+    await s.refresh();
+    await s.act('github.com/Lyssaen/ledge#1', { kind: 'comment', body: 'ok' });
+    expect(gh.acts.map(a => a.number)).toEqual([1]);
+    await expect(s.act('github.com/Lyssaen/ledge#2', { kind: 'comment', body: 'no' })).rejects.toMatchObject({ code: 'unavailable' });
+  });
+});
 
 describe('what is followed (R1, R12)', () => {
   it('gives one request with both sessions on the same branch, most recently active first, from one list call', async () => {

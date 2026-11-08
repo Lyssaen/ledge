@@ -4,7 +4,7 @@ import { log } from '../../log.js';
 import { githubReader } from './github.js';
 import { gitlabReader } from './gitlab.js';
 import { execForge, forgeOf, type ForgeCli, type ForgeRepo, type ForgeRun } from './run.js';
-import { blockerText, mergeBlockersOf, ForgeError, ForgeRefusal, type ForgeReader, type ReadPr } from './types.js';
+import { blockerText, mergeBlockersOf, targetKey, type BranchTarget, ForgeError, ForgeRefusal, type ForgeReader, type ReadPr } from './types.js';
 
 /**
  * The pull and merge requests of the machine's sessions and OpenRig seats (lot 8a). What is followed (R1): the source branch of a
@@ -33,11 +33,34 @@ export interface ForgeService {
   act(prId: string, action: ForgeAction): Promise<{ command: string }>;
 }
 
-interface Followed { repo: ForgeRepo; branches: Map<string, Session[]> }
+interface Followed { repo: ForgeRepo; targets: Map<string, { target: BranchTarget; sessions: Session[] }> }
+/** Where a session's branch is pushed, read in its folder's git configuration (R1, review of d266f114). */
+interface Head { key: string; at: number; head: string; branch: string }
+const HEAD_TTL_MS = 5 * 60_000;
+
+/**
+ * The repository and branch name a local branch is pushed to: its push remote (`branch.<b>.pushRemote`, `remote.pushDefault`),
+ * else its upstream (`branch.<b>.remote`, the upstream's name from `branch.<b>.merge`), else `origin`. Read from
+ * `git config -z --get-regexp`. A remote on another host than the listed repository, or no answer: the listed repository.
+ */
+export function headOf(config: string, branch: string, listed: ForgeRepo): { head: string; branch: string } {
+  const cfg = new Map<string, string>();
+  for (const entry of config.split('\0')) {
+    const nl = entry.indexOf('\n');
+    if (nl > 0) cfg.set(entry.slice(0, nl), entry.slice(nl + 1));
+  }
+  const push = cfg.get(`branch.${branch}.pushremote`) ?? cfg.get('remote.pushdefault');
+  const remote = push ?? cfg.get(`branch.${branch}.remote`) ?? 'origin';
+  const merge = cfg.get(`branch.${branch}.merge`);
+  const name = !push && merge?.startsWith('refs/heads/') ? merge.slice('refs/heads/'.length) : branch;
+  const url = cfg.get(`remote.${remote}.url`);
+  const f = url ? forgeOf(url) : null;
+  return { head: f && f.host === listed.host ? f.path : listed.path, branch: name || branch };
+}
 interface Entry { pr: ReadPr; repo: ForgeRepo }
 const kindOf = (cli: ForgeCli): ForgeKind => (cli === 'gh' ? 'github' : 'gitlab');
 const hostKey = (repo: ForgeRepo): string => `${repo.cli}:${repo.host}`;
-const strip = ({ blockers: _b, ...pr }: ReadPr, sessions: string[]): PullRequest => ({ ...pr, sessions });
+const strip = ({ blockers: _b, head: _h, ...pr }: ReadPr, sessions: string[]): PullRequest => ({ ...pr, sessions });
 
 export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => number; readers?: Partial<Record<ForgeCli, ForgeReader>> }): ForgeService {
   const run = deps.run ?? execForge(deps.env ?? (async () => process.env));
@@ -58,25 +81,47 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
   let again = false;
   let started = false;
   let followedKey = '';
+  /** Per session, where its branch is pushed (read again when its folder or branch changes, or after 5 minutes). */
+  const heads = new Map<string, Head>();
 
-  /** The repositories to read, and per branch its sessions, most recently active first (R12). */
+  const candidate = (s: Session): ForgeRepo | null => {
+    if (isArchived(s) || !s.repoId || !s.branch || s.branch === 'HEAD' || DETACHED.test(s.branch) || DEFAULT_BRANCHES.has(s.branch)) return null;
+    const repo = forgeOf(`https://${s.repoId}`);
+    return repo && defaults.get(repo.repo) !== s.branch ? repo : null;
+  };
+  async function resolveHeads(): Promise<void> {
+    await Promise.all(deps.store.all().map(async s => {
+      const repo = candidate(s);
+      if (!repo) { heads.delete(s.id); return; }
+      const dir = s.workdir || s.cwd, key = `${dir}\n${s.branch}\n${s.repoId}`;
+      const had = heads.get(s.id);
+      if (had && had.key === key && now() - had.at < HEAD_TTL_MS) return;
+      const r = dir ? await run('git', ['config', '-z', '--get-regexp', '^(branch|remote)\\.'], { cwd: dir, timeoutMs: 5000 }) : null;
+      const h = headOf(r && r.code === 0 ? r.stdout : '', s.branch!, repo);
+      heads.set(s.id, { key, at: now(), ...h });
+    }));
+  }
+  /** The repositories to read, and per target (head repository, branch) its sessions, most recently active first (R12). */
   function followed(): Map<string, Followed> {
     const out = new Map<string, Followed>();
     for (const s of deps.store.all()) {
-      if (isArchived(s) || !s.repoId || !s.branch || s.branch === 'HEAD' || DETACHED.test(s.branch) || DEFAULT_BRANCHES.has(s.branch)) continue;
-      const repo = forgeOf(`https://${s.repoId}`);
+      const repo = candidate(s);
       if (!repo) continue;
-      if (defaults.get(repo.repo) === s.branch) continue;
+      const h = heads.get(s.id);
+      const target: BranchTarget = { branch: h?.branch ?? s.branch!, head: h?.head ?? repo.path };
       let f = out.get(repo.repo);
-      if (!f) out.set(repo.repo, (f = { repo, branches: new Map() }));
-      const list = f.branches.get(s.branch) ?? [];
-      list.push(s);
-      f.branches.set(s.branch, list);
+      if (!f) out.set(repo.repo, (f = { repo, targets: new Map() }));
+      const k = targetKey(target);
+      const t = f.targets.get(k) ?? { target, sessions: [] };
+      t.sessions.push(s);
+      f.targets.set(k, t);
     }
-    for (const f of out.values()) for (const l of f.branches.values()) l.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+    for (const f of out.values()) for (const t of f.targets.values()) t.sessions.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
     return out;
   }
-  const keyOf = (fl: Map<string, Followed>): string => JSON.stringify([...fl].map(([r, f]) => [r, [...f.branches].map(([b, ss]) => [b, ss.map(s => s.id)])]).sort());
+  const keyOf = (fl: Map<string, Followed>): string => JSON.stringify([...fl].map(([r, f]) => [r, [...f.targets].map(([k, t]) => [k, t.sessions.map(s => s.id)])]).sort());
+  /** What decides the targets, before their heads are read: a session's repository, branch and folder. */
+  const sourceKey = (): string => JSON.stringify(deps.store.all().flatMap(s => (candidate(s) ? [[s.id, s.repoId, s.branch, s.workdir || s.cwd]] : [])));
 
   function setStatus(repo: ForgeRepo, status: ForgeStatus['status'], message?: string): void {
     const k = hostKey(repo), had = statuses.get(k);
@@ -90,8 +135,8 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
     if (b && now() < b.until) return;
     try {
       if (!defaults.has(f.repo.repo)) defaults.set(f.repo.repo, await reader.defaultBranch(f.repo).catch(() => null));
-      const branches = [...f.branches.keys()].filter(x => x !== defaults.get(f.repo.repo));
-      byRepo.set(f.repo.repo, await reader.list(f.repo, branches));
+      const targets = [...f.targets.values()].map(t => t.target).filter(t => t.branch !== defaults.get(f.repo.repo));
+      byRepo.set(f.repo.repo, await reader.list(f.repo, targets));
       backoff.delete(k);
       setStatus(f.repo, 'ok');
     } catch (e) {
@@ -108,7 +153,7 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
     const next = new Map<string, Entry>();
     for (const [r, f] of fl) {
       for (const pr of byRepo.get(r) ?? []) {
-        if (!f.branches.has(pr.branch)) continue;
+        if (!f.targets.has(targetKey(pr))) continue;
         next.set(pr.id, { pr, repo: f.repo });
       }
     }
@@ -120,7 +165,7 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
   }
 
   function sessionsOf(pr: ReadPr, fl = followed()): string[] {
-    return (fl.get(forgeOf(`https://${pr.host}/${pr.repo}`)?.repo ?? '')?.branches.get(pr.branch) ?? []).map(s => s.id);
+    return (fl.get(forgeOf(`https://${pr.host}/${pr.repo}`)?.repo ?? '')?.targets.get(targetKey(pr))?.sessions ?? []).map(s => s.id);
   }
 
   function state(): ForgeStateMessage {
@@ -131,6 +176,7 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
   }
 
   async function refreshOnce(): Promise<void> {
+    await resolveHeads();
     const fl = followed();
     followedKey = keyOf(fl);
     await Promise.all([...fl.values()].map(readRepo));
@@ -163,7 +209,7 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
   async function fresh(prId: string): Promise<Entry> {
     const e = entries.get(prId);
     if (!e) throw new ForgeRefusal('unavailable', 'this request is not followed on this machine');
-    const read = (await readers[e.repo.cli].list(e.repo, [e.pr.branch])).find(p => p.id === prId);
+    const read = (await readers[e.repo.cli].list(e.repo, [{ branch: e.pr.branch, head: e.pr.head }])).find(p => p.id === prId);
     if (!read) throw new ForgeRefusal('unavailable', 'the request is no longer there');
     return { pr: read, repo: e.repo };
   }
@@ -176,9 +222,10 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
       if (started) return;
       started = true;
       // A session that changes branch, appears or is archived: read at once (a short pause gathers a burst of changes).
+      let sources = sourceKey();
       unsubscribe.fn = deps.store.onChange(() => {
-        const k = keyOf(followed());
-        if (k !== followedKey) { followedKey = k; rebuild(followed()); schedule(500); }
+        const k = keyOf(followed()), src = sourceKey();
+        if (k !== followedKey || src !== sources) { followedKey = k; sources = src; rebuild(followed()); schedule(500); }
       });
       void refresh().finally(() => schedule());
     },
