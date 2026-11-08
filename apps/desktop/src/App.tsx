@@ -47,6 +47,7 @@ import { OpenRigPage } from './openrig/OpenRigPage';
 import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
 import { createRigOutput, useRigOutput } from './openrig/rigOutput';
 import { useSidebarOpenRig } from './openrig/sidebarState';
+import { offersRigs, setGrouping, useGrouping } from './openrig/grouping';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
 import { Modal } from './shell/Modal';
@@ -91,7 +92,7 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeBottom, IdeDock, IdeOutput, IdePlace } from './ide/lazy';
+import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace } from './ide/lazy';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -197,6 +198,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const mobile = useMobile(fleetClient);
   const mobileError = useMobileError(fleetClient);
   const sidebarOpenRig = useSidebarOpenRig(fleetClient, machines);
+  const grouping = useGrouping();
   const tokenMissing = useTokenMissing(daemonTokenSource());
   const { t, lang } = useI18n();
   const [nav, navDispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
@@ -731,10 +733,22 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         const s = known.find(x => x.id === sessionOf(tab));
         return s ? <AgentTerminalPlace client={fleetClient} session={s} notify={notify} readOnly={s.rig != null} onOpenSession={() => dispatch({ type: 'open', id: s.id })} /> : null;
       }
+      // The atelier as it is, under the bar the old top bar gave it (lot 6): its filter, « Projets | Rigs », the subagents, the
+      // animations, « Détacher ». Detached, the tab says where it went (no bar).
       if (tab.kind === 'atelier') {
-        return detached ? <AtelierAway onShow={detach} onAttach={attach} />
-          : <Atelier nav={tnav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
-              tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />;
+        if (detached) return <AtelierAway onShow={detach} onAttach={attach} />;
+        const pf = tnav.place.kind === 'settings' ? tnav.place.back.project : tnav.place.project;
+        const fp = pf === 'all' || pf === 'none' ? null : projects?.projects.find(x => x.id === pf);
+        return (
+          <div className="ide-atelier">
+            <IdeAtelierBar filter={pf === 'all' ? null : { name: fp?.name ?? t.side.unassigned, color: fp?.color ?? null }} onClearFilter={() => dispatch({ type: 'home' })}
+              grouping={offersRigs(sessions, sidebarOpenRig?.installed) ? grouping : null} onGrouping={setGrouping}
+              helpers={nav.helpers} onHelpers={() => dispatch({ type: 'helpers' })} paused={nav.paused} onPaused={() => dispatch({ type: 'paused' })}
+              {...(canDetach() ? { onDetach: detach } : {})} />
+            <Atelier nav={tnav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
+              tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />
+          </div>
+        );
       }
       if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} noBack /> : null;
       if (tab.kind === 'openrig') {

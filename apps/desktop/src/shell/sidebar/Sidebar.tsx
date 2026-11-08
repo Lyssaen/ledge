@@ -25,7 +25,7 @@ import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
 import { RigGroups } from './RigGroups';
 import { SidebarMenuHost } from './SidebarMenus';
-import { setGrouping, useGrouping } from '../../openrig/grouping';
+import { offersRigs, setGrouping, useGrouping } from '../../openrig/grouping';
 import type { SidebarOpenRig } from '../../openrig/sidebarState';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
 
@@ -88,9 +88,8 @@ export function Sidebar(p: {
   const current = base.kind === 'session' ? base.id : null;
   // OpenRig's seats have their own groups (Rigs, Kernel), away from the projects.
   const grouping = useGrouping();
-  const hasRigs = p.sessions.some(s => s.rig && s.state !== 'exited');
   // The toggle shows once OpenRig is installed on a followed machine, even without a seat (its empty states live in « Rigs »).
-  const offerRigs = hasRigs || p.openrig?.installed === true;
+  const offerRigs = offersRigs(p.sessions, p.openrig?.installed);
   // « Projets » or « Rigs »: one or the other (while OpenRig is nowhere, the projects).
   const section = p.section;
   const byRig = section ? section === 'rigs' : offerRigs && grouping === 'rigs';

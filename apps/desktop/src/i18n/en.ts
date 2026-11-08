@@ -1340,6 +1340,8 @@ export const en: Messages = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'IDE interface (preview)',
+    /** The Atelier tab's bar (mockup atelierPage() `.abar`): its « Détacher ». */
+    atelierDetach: 'Detach',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal shown in the other group', showHere: 'Show here',
     /** An agent's terminal tab: its title (mockup termFor()) and its kind chip (R3: a seat's is a read-only capture). */

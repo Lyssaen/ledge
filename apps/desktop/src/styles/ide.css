@@ -420,3 +420,21 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
 .ide-output .ide-output-dim { color: var(--muted-foreground); }
 .ide-output .ide-output-ok { color: var(--success); }
 .ide-output .ide-output-err { color: var(--danger-text); }
+
+/* The Atelier tab (lot 6, mockup atelierPage() `.abar`): the bar above the atelier, which keeps its own zoom bar (absolute, here). */
+.ide-atelier { position: relative; display: flex; flex-direction: column; min-height: 0; }
+.ide-atelier > .overview-scroll { flex: 1; min-height: 0; }
+.ide-abar { flex: none; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); font-size: 12px; white-space: nowrap; overflow: hidden; }
+.ide-abar-title, .ide-abar-sep { color: var(--muted-foreground); }
+.ide-abar-filter { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.ide-abar-filter > span { overflow: hidden; text-overflow: ellipsis; }
+.ide-atelier .ide-abar-filter button { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--muted-foreground); }
+.ide-atelier .ide-abar-filter button:hover { background: var(--accent); color: var(--foreground); }
+.ide-abar-seg { display: inline-flex; border: 1px solid var(--input); border-radius: 7px; overflow: hidden; }
+.ide-atelier .ide-abar-seg button { padding: 2px 10px; font-size: 12px; color: var(--muted-foreground); }
+.ide-atelier .ide-abar-seg button[aria-checked=true] { background: var(--muted); color: var(--foreground); }
+.ide-abar-sp { flex: 1; }
+.ide-atelier .ide-abar-btn { height: 26px; padding: 0 10px; display: inline-flex; align-items: center; border: 1px solid var(--input); border-radius: 6px; font-size: 12px; color: var(--foreground); }
+.ide-atelier .ide-abar-btn:hover { background: var(--accent); }
+.ide-atelier .ide-abar-icon { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; color: var(--muted-foreground); }
+.ide-atelier .ide-abar-icon:hover, .ide-atelier .ide-abar-icon[aria-pressed=true] { background: var(--accent); color: var(--foreground); }

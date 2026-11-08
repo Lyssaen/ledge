@@ -1407,6 +1407,8 @@ export const fr = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'Interface IDE (aperçu)',
+    /** The Atelier tab's bar (mockup atelierPage() `.abar`): its « Détacher ». */
+    atelierDetach: 'Détacher',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal affiché dans l’autre groupe', showHere: 'Afficher ici',
     terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attaché', termReadOnly: 'lecture seule',
