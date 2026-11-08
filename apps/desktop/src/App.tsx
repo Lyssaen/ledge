@@ -46,7 +46,10 @@ import { Atelier } from './atelier/Atelier';
 import { OpenRigPage } from './openrig/OpenRigPage';
 import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
 import { createRigOutput, useRigOutput } from './openrig/rigOutput';
-import { useSidebarOpenRig } from './openrig/sidebarState';
+import { SIDEBAR_POLL_MS, useSidebarOpenRig } from './openrig/sidebarState';
+import { useOpenRig } from '@ledge/fleet/openrig';
+import { RigsView } from './ide/rigs/RigsView';
+import { rigsAlert } from './ide/rigs/model';
 import { offersRigs, setGrouping, useGrouping } from './openrig/grouping';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
@@ -77,7 +80,7 @@ import { TermStoreContext } from './term/useTerms';
 import { defaultShell, loadLastShell, saveLastShell, shellLaunch, shellMenu, type ShellKind, type ShellsAvailable } from './term/shells';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
-import { useIdeEnabled, useResumeOnStart, useShowUsage } from './workspace/prefs';
+import { useIdeEnabled, useResumeOnStart, useRigsMachine, useShowUsage } from './workspace/prefs';
 import { liveTabs, loadLiveTabs, machineOf, nextMemo, saveLiveTabs, toResume } from './workspace/resume';
 import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
@@ -204,6 +207,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [nav, navDispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
   // « Interface IDE (aperçu) » (Settings › General): its tabs (`ledge.ide.workspace`) and panels (`ledge.ide.layout`).
   const [ide] = useIdeEnabled();
+  // The amber « ! » on the activity bar's Rigs: the displayed machine's daemon is down. The same shared read as the Rigs view (one subscription); off while the old UI shows.
+  const [rigsMachine] = useRigsMachine(machines);
+  const rigsAlertOn = rigsAlert(useOpenRig(fleetClient, ide && machines.some(m => m.id === rigsMachine && m.ready) ? rigsMachine : null, SIDEBAR_POLL_MS).state ?? undefined);
   // Read (and re-rendered on) only while the IDE shows the panel's Sortie.
   const rigEntries = useRigOutput(rigOutput, ide);
   // A bottom-panel shell's tab closed by the user (its ×, middle click, Ctrl+W, the menu) kills the shell (R9); a tab the model
@@ -781,14 +787,17 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       return <IdeWelcome terminal={s ? title({ kind: 'session', ref: s.id }) : null} seat={s?.rig != null} recent={recentSessions(sessions)} waiting={waiting.length > 0}
         where={where} onPick={pick} onOpen={id => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'open', id, where: 'active' }); }} />;
     };
+    const onTab = (tab: Tab) => { const a = tabAction(tab); if (a) dispatch(a); else wsStore.update(w => openTab(w, tab)); };
     return (
       <IdePlace layout={layout} onLayout={onLayout} blocked={blocked} readOnly={localDown} dragging={!!filing.dragging}
         onSearch={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}
-        onTab={tab => { const a = tabAction(tab); if (a) dispatch(a); else wsStore.update(w => openTab(w, tab)); }} activeTab={front ?? null} badge={badge}
+        onTab={onTab} activeTab={front ?? null} badge={badge} rigsAlert={rigsAlertOn}
         waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
         notice={tokenMissing && <DaemonOutdated />}
-        explorer={
-          <Sidebar section={layout.sideView} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+        explorer={layout.sideView === 'rigs'
+          ? <RigsView client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} activeTab={front ?? null} dispatch={dispatch} onTab={onTab}
+              onMenu={(id, at, opener) => sessionMenu.open(id, at, opener)} />
+          : <Sidebar section={layout.sideView} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
             actions={actions} decisions={decisions} waits={waits} menu={sessionMenu} notify={notify}
             broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
             openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}

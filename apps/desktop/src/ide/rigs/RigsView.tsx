@@ -35,7 +35,8 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
   const fold = useRigsFold();
   const shown = machines.find(m => m.id === machine);
   const label = shown?.label ?? machine;
-  const view = useOpenRig(client, machine, SIDEBAR_POLL_MS);
+  // Nothing is asked of a machine that is not connected yet: an ask sent before the connection is lost, and the next one is a poll away.
+  const view = useOpenRig(client, shown?.ready ? machine : null, SIDEBAR_POLL_MS);
   const seen = useOpenRigStates(client, useMemo(() => machines.filter(m => m.ready).map(m => m.id), [machines]), SIDEBAR_POLL_MS);
   const entries = useMemo(() => {
     const states = new Map<string, NonNullable<typeof view.state>>(), errors = new Set<string>();
