@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { readJson, writeJson } from '../state/storage';
-import { rigTabRef } from '../ide/rig/model';
-import { close, closeOthers, deserialize, empty, find, keyOf, remember, reopenLast, serialize, type Closed, type Tab, type Workspace } from './model';
+import { close, closeOthers, deserialize, empty, find, keyOf, remember, rigTabRef, reopenLast, serialize, type Closed, type Tab, type Workspace } from './model';
 
 /** The IDE workspace, outside React: tabs survive a reload (`ledge.ide.workspace`). */
 export const WORKSPACE_KEY = 'ledge.ide.workspace';

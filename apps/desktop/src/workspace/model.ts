@@ -356,3 +356,11 @@ export function deserialize(json: string): Workspace | null {
   }
   return repair(o as Workspace);
 }
+
+/** A tab's ref: `machine:rig` (machine ids carry no `:`). */
+export const rigTabRef = (machine: string, rig: string): string => `${machine}:${rig}`;
+
+export function parseRigRef(ref: string): { machine: string; rig: string } | null {
+  const i = ref.indexOf(':');
+  return i < 0 ? null : { machine: ref.slice(0, i), rig: ref.slice(i + 1) };
+}

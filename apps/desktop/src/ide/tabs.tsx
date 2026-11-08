@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Session } from '@ledge/protocol';
 import type { Messages } from '../i18n/messages';
-import { parseRigRef } from './rig/model';
-import { sessionOf, type Tab } from '../workspace/model';
+import { parseRigRef, sessionOf, type Tab } from '../workspace/model';
 
 /** What a tab's content is: given by Shell (SessionPlace with tabNav, Atelier, SettingsPlace, OpenRigPage). */
 export type TabBody = (tab: Tab) => ReactNode;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { RigGraph, RigRow, RigSeatPermission, Session, Rig } from '@ledge/protocol';
 import { RIG_7A } from '../../e2e/openrig-fixtures';
-import { layoutOf, parseRigRef, permLevelOf, policyOf, queueLines, rigTabRef, roleCounts, seatDraft } from '../../src/ide/rig/model';
+import { layoutOf, permLevelOf, policyOf, queueLines, roleCounts, seatDraft } from '../../src/ide/rig/model';
+import { parseRigRef, rigTabRef } from '../../src/workspace/model';
 
 const survey = RIG_7A.rigGraphs['ledge-survey'] as RigGraph;
 const kernel: RigGraph = {

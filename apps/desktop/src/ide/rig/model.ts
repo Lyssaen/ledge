@@ -5,17 +5,7 @@ import { spanOf, type Span } from '../../list/time';
 import { seatDot } from '../rigs/model';
 import type { RigDot } from '../rigs/model';
 
-/** The « Rig · name » tab as pure functions: its ref, the topology's layout, the permission level, the seats draft, the queue's lines. */
-
-// ── Ref ──
-
-/** A tab's ref: `machine:rig` (machine ids carry no `:`). */
-export const rigTabRef = (machine: string, rig: string): string => `${machine}:${rig}`;
-
-export function parseRigRef(ref: string): { machine: string; rig: string } | null {
-  const i = ref.indexOf(':');
-  return i < 0 ? null : { machine: ref.slice(0, i), rig: ref.slice(i + 1) };
-}
+/** The « Rig · name » tab as pure functions: the topology's layout, the permission level, the seats draft, the queue's lines. */
 
 // ── Topology ──
 

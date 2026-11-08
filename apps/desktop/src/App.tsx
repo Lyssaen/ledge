@@ -85,7 +85,7 @@ import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
+import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
@@ -93,7 +93,6 @@ import { createTabExtras, TabExtrasContext, useTabExtras } from './ide/tabExtras
 import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
-import { parseRigRef } from './ide/rig/model';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeRigs, IdeRigView } from './ide/lazy';
 import { tileToDock } from './ide/termDrag';
