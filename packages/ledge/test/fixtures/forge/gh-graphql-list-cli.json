@@ -2,6 +2,10 @@
  "data": {
   "repository": {
    "b0": {
+    "pageInfo": {
+     "hasNextPage": false,
+     "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0xMS0wNlQxNjozMzoxNVrPAAAAATTfLqA="
+    },
     "nodes": [
      {
       "number": 14976,
@@ -61,7 +65,11 @@
         {
          "commit": {
           "statusCheckRollup": {
+           "state": "SUCCESS",
            "contexts": {
+            "pageInfo": {
+             "hasNextPage": false
+            },
             "nodes": [
              {
               "__typename": "CheckRun",
@@ -167,7 +175,11 @@
         {
          "commit": {
           "statusCheckRollup": {
+           "state": "SUCCESS",
            "contexts": {
+            "pageInfo": {
+             "hasNextPage": false
+            },
             "nodes": [
              {
               "__typename": "CheckRun",
@@ -305,7 +317,11 @@
         {
          "commit": {
           "statusCheckRollup": {
+           "state": "SUCCESS",
            "contexts": {
+            "pageInfo": {
+             "hasNextPage": false
+            },
             "nodes": [
              {
               "__typename": "CheckRun",
@@ -448,6 +464,10 @@
     ]
    },
    "b1": {
+    "pageInfo": {
+     "hasNextPage": false,
+     "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0xMS0wNlQyMDoxMDowN1rPAAAAATWUwQE="
+    },
     "nodes": [
      {
       "number": 14974,
@@ -494,7 +514,11 @@
         {
          "commit": {
           "statusCheckRollup": {
+           "state": "SUCCESS",
            "contexts": {
+            "pageInfo": {
+             "hasNextPage": false
+            },
             "nodes": [
              {
               "__typename": "CheckRun",
@@ -542,6 +566,10 @@
     ]
    },
    "b2": {
+    "pageInfo": {
+     "hasNextPage": false,
+     "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0xMS0wOFQxNToxOTo0NlrPAAAAATVJ5bw="
+    },
     "nodes": [
      {
       "number": 14964,
@@ -552,7 +580,7 @@
       "headRefName": "dependabot/github_actions/codeql-actions-92276e7fb0",
       "headRefOid": "dab49c4e4a2c5b75c27cd8bae26fbb0970316364",
       "baseRefName": "trunk",
-      "updatedAt": "2026-11-08T14:47:58Z",
+      "updatedAt": "2026-11-08T15:19:46Z",
       "reviewDecision": "REVIEW_REQUIRED",
       "headRepository": {
        "nameWithOwner": "cli/cli"
@@ -588,7 +616,11 @@
         {
          "commit": {
           "statusCheckRollup": {
+           "state": "SUCCESS",
            "contexts": {
+            "pageInfo": {
+             "hasNextPage": false
+            },
             "nodes": [
              {
               "__typename": "CheckRun",
@@ -741,6 +773,10 @@
     ]
    },
    "b3": {
+    "pageInfo": {
+     "hasNextPage": false,
+     "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0xMS0wM1QyMToyOTowM1rPAAAAATKln8U="
+    },
     "nodes": [
      {
       "number": 14927,
@@ -790,7 +826,11 @@
         {
          "commit": {
           "statusCheckRollup": {
+           "state": "FAILURE",
            "contexts": {
+            "pageInfo": {
+             "hasNextPage": false
+            },
             "nodes": [
              {
               "__typename": "CheckRun",

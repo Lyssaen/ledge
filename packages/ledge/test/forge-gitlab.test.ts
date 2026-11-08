@@ -100,7 +100,7 @@ describe('GitLab list', () => {
     for (const c of calls) for (const a of c.args) expect(a).not.toMatch(/--exec|\$\(/);
     const q = JSON.parse(calls[0]!.input!) as { query: string; variables: { p: string; b: string[] } };
     expect(q.query).toContain('mergeRequests(sourceBranches: $b');
-    expect(q.variables).toEqual({ p: 'gitlab-org/cli', b: ['--exec', '$(id)'] });
+    expect(q.variables).toEqual({ p: 'gitlab-org/cli', b: ['--exec', '$(id)'], a: null });
   });
 
   it('names a subgroup by its full path', async () => {
@@ -108,6 +108,29 @@ describe('GitLab list', () => {
     await gitlabReader(run).list(forgeOf('git@gitlab.example.com:a/b/c.git')!, [{ branch: 'x', head: 'a/b/c' }]);
     expect(calls[0]!.args).toContain('gitlab.example.com');
     expect(JSON.parse(calls[0]!.input!).variables.p).toBe('a/b/c');
+  });
+
+  it('follows the pages: a merge request past the first 100 is found; past 20 pages the list is said incomplete', async () => {
+    const other = (i: number) => ({ iid: String(1000 + i), state: 'opened', sourceBranch: 'busy', updatedAt: '2026-11-08T12:00:00Z', sourceProject: { fullPath: 'gitlab-org/cli' } });
+    const target = { iid: '8', state: 'merged', sourceBranch: 'old/x', updatedAt: '2020-01-01T00:00:00Z', sourceProject: { fullPath: 'gitlab-org/cli' } };
+    const answer = (nodes: unknown[], next: string | null) => JSON.stringify({ data: { project: { mergeRequests: { pageInfo: { hasNextPage: next !== null, endCursor: next }, nodes } } } });
+    const { run, calls } = fakeGlab((p, c) => {
+      if (p !== 'graphql') return p === `${P}/merge_requests/8` ? fx('gl-mr-4340.json').replace('"iid": 4340', '"iid": 8').replace('"state": "opened"', '"state": "merged"') : undefined;
+      const a = (JSON.parse(c.input!) as { variables: { a: string | null } }).variables.a;
+      return a === null ? answer(Array.from({ length: 100 }, (_, i) => other(i)), 'page2') : answer([target], null);
+    });
+    const prs = await gitlabReader(run).list(repo, [{ branch: 'busy', head: 'someone/else' }, { branch: 'old/x', head: 'gitlab-org/cli' }]);
+    expect(prs.map(p => p.number)).toEqual([8]);
+    expect(calls.filter(c => c.args.includes('graphql')).map(c => JSON.parse(c.input!).variables.a)).toEqual([null, 'page2']);
+    const endless = fakeGlab((p, c) => (p === 'graphql' ? answer([other(0)], `c${calls.length}${c.input!.length}`) : undefined));
+    await expect(gitlabReader(endless.run).list(repo, [{ branch: 'old/x', head: 'gitlab-org/cli' }])).rejects.toMatchObject({ status: 'error', message: expect.stringContaining('incomplete list') });
+    expect(endless.calls.filter(c => c.args.includes('graphql'))).toHaveLength(20);
+  });
+
+  it('refuses an answer with errors, even with data', async () => {
+    const { run, calls } = fakeGlab(p => (p === 'graphql' ? JSON.stringify({ data: { project: { mergeRequests: { nodes: [{ iid: '4340', state: 'opened', sourceBranch: 'b', updatedAt: '2026-11-08T12:00:00Z', sourceProject: null }] } } }, errors: [{ message: 'sourceProject: timeout' }] }) : undefined));
+    await expect(gitlabReader(run).list(repo, [{ branch: 'b', head: 'gitlab-org/cli' }])).rejects.toMatchObject({ status: 'error', message: 'sourceProject: timeout' });
+    expect(calls).toHaveLength(1);
   });
 
   it('a project the forge does not know is an error, not an empty list', async () => {

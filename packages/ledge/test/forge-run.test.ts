@@ -12,7 +12,7 @@ beforeAll(() => {
   const bin = join(dir, 'bin'); mkdirSync(bin);
   writeFileSync(join(bin, 'gh'), '#!/usr/bin/env node\nlet s = "";\nprocess.stdin.on("data", d => (s += d)).on("end", () => { process.stdout.write(s); process.stderr.write(JSON.stringify(process.argv.slice(2))); process.exit(s ? 0 : 3); });\n');
   chmodSync(join(bin, 'gh'), 0o755);
-  writeFileSync(join(bin, 'glab'), '#!/usr/bin/env node\nprocess.stdout.write("x".repeat(5 * 1024 * 1024));\n');
+  writeFileSync(join(bin, 'glab'), '#!/usr/bin/env node\nprocess.stdout.write("x".repeat(4096));\n');
   chmodSync(join(bin, 'glab'), 0o755);
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -38,10 +38,11 @@ describe('the forge runner', () => {
     expect(classify(r)).toBe('missing');
   });
 
-  it('stops an output past 4 MB', async () => {
-    const r = await execForge(withBin)('glab', ['api', 'x']);
+  it('stops an output past its bound (4 MB in use; 1 KiB here, so the test stays light)', async () => {
+    const r = await execForge(withBin, { maxOutput: 1024 })('glab', ['api', 'x']);
     expect(r.code).not.toBe(0);
-    expect(r.stderr).toMatch(/4 MB/);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toMatch(/output over 1024 bytes/);
   });
 });
 

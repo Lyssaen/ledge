@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PrDetailSchema, PullRequestSchema } from '@ledge/protocol';
-import { githubReader, rollup } from '../src/daemon/forge/github.js';
+import { githubReader, pipelineOf, rollup } from '../src/daemon/forge/github.js';
+import { createForgeService } from '../src/daemon/forge/service.js';
+import { Store } from '../src/daemon/store.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { forgeOf, type ForgeRun } from '../src/daemon/forge/run.js';
 import { ForgeRefusal } from '../src/daemon/forge/types.js';
 
@@ -84,6 +88,55 @@ describe('GitHub list', () => {
     expect(q.query).toContain('pullRequests(headRefName: $b0');
   });
 
+  it('reads the pipeline from GitHub\'s summary over every check: a failure or a wait past the first 100 is never green (R5)', () => {
+    const green = Array.from({ length: 100 }, () => ({ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' }));
+    const more = { pageInfo: { hasNextPage: true }, nodes: green };
+    expect(pipelineOf({ state: 'FAILURE', contexts: more })).toBe('fail');
+    expect(pipelineOf({ state: 'ERROR', contexts: more })).toBe('fail');
+    expect(pipelineOf({ state: 'PENDING', contexts: more })).toBe('wait');
+    expect(pipelineOf({ state: 'PENDING', contexts: { nodes: [{ __typename: 'CheckRun', status: 'IN_PROGRESS', conclusion: '' }] } })).toBe('run');
+    expect(pipelineOf({ state: 'SUCCESS', contexts: more })).toBe('ok');
+    // No summary: contexts not all read are never green.
+    expect(pipelineOf({ state: null, contexts: more })).toBe('wait');
+    expect(pipelineOf(null)).toBe('none');
+  });
+
+  it('follows each branch\'s pages: a request older than the first 50 of its name is found; past 20 pages the list is said incomplete', async () => {
+    const others = Array.from({ length: 50 }, (_, i) => node(100 + i, 'feat/x', `fork${i}/ledge`));
+    const { run, calls } = fakeGh(c => {
+      const v = (JSON.parse(c.input!) as { variables: Record<string, string | null> }).variables;
+      const conn = v.a0 === null ? { pageInfo: { hasNextPage: true, endCursor: 'p2' }, nodes: others } : { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [node(7, 'feat/x', 'cli/cli', { state: 'MERGED' })] };
+      return { stdout: JSON.stringify({ data: { repository: { b0: conn } } }) };
+    });
+    expect((await githubReader(run).list(repo, [{ branch: 'feat/x', head: 'cli/cli' }])).map(p => p.number)).toEqual([7]);
+    expect(calls.map(c => JSON.parse(c.input!).variables.a0)).toEqual([null, 'p2']);
+    const endless = fakeGh(c => ({ stdout: JSON.stringify({ data: { repository: { b0: { pageInfo: { hasNextPage: true, endCursor: `c${c.input!.length}` }, nodes: [] } } } }) }));
+    await expect(githubReader(endless.run).list(repo, [{ branch: 'feat/x', head: 'cli/cli' }])).rejects.toMatchObject({ status: 'error', message: expect.stringContaining('incomplete list') });
+    expect(endless.calls).toHaveLength(20);
+  });
+
+  it('refuses an answer with errors, even with data: no merge runs on a pipeline it could not read', async () => {
+    process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-gh-partial-'));
+    const store = new Store();
+    const at = '2026-11-08T10:00:00.000Z';
+    store.upsert({ id: 's', name: 's', tool: 'claude', cwd: '/nowhere', project: 'w', title: 's', tmuxSession: null, state: 'idle', helpers: [], startedAt: at, lastActivityAt: at, source: 'launcher', repoId: 'github.com/cli/cli', branch: 'feat/x' });
+    const greenApproved = node(9, 'feat/x', 'cli/cli', { commits: { nodes: [{ commit: { statusCheckRollup: { state: 'SUCCESS', contexts: { nodes: [] } } } }] } });
+    let partial = false;
+    const { run, calls } = fakeGh(c => {
+      if (c.file === 'git') return { code: 1 };
+      if (c.args[0] === 'repo') return { stdout: '{"defaultBranchRef":{"name":"trunk"},"mergeCommitAllowed":true}' };
+      if (c.args[1] === 'merge') return { code: 0 };
+      const n = partial ? { ...greenApproved, commits: { nodes: [{ commit: { statusCheckRollup: null } }] } } : greenApproved;
+      return { stdout: JSON.stringify({ data: { repository: { b0: { nodes: [n] } } }, ...(partial ? { errors: [{ message: 'statusCheckRollup: something went wrong' }] } : {}) }) };
+    });
+    const s = createForgeService({ store, run, readers: { gh: githubReader(run) } });
+    await s.refresh();
+    expect(s.state().prs.map(p => [p.number, p.pipeline, p.mergeable])).toEqual([[9, 'ok', true]]);
+    partial = true;
+    await expect(s.act('github.com/cli/cli#9', { kind: 'merge', headSha: 'a'.repeat(40) })).rejects.toMatchObject({ status: 'error', message: 'statusCheckRollup: something went wrong' });
+    expect(calls.some(c => c.args[1] === 'merge')).toBe(false);
+  });
+
   it('reads no check as pipeline none', () => {
     expect(rollup([])).toBe('none');
     expect(rollup(undefined)).toBe('none');
@@ -94,7 +147,7 @@ describe('GitHub list', () => {
   });
 
   it('never puts a branch in the arguments nor in the query text: they travel as variables on standard input', async () => {
-    const { run, calls } = fakeGh(() => ({ stdout: '{"data":{"repository":{}}}' }));
+    const { run, calls } = fakeGh(() => ({ stdout: '{"data":{"repository":{"b0":{"nodes":[]},"b1":{"nodes":[]},"b2":{"nodes":[]}}}}' }));
     await githubReader(run).list(repo, [{ branch: '--exec', head: 'cli/cli' }, { branch: '$(touch /tmp/x)', head: 'cli/cli' }, { branch: 'x" } } evil { "', head: 'cli/cli' }]);
     for (const c of calls) for (const a of c.args) expect(a).not.toMatch(/--exec|\$\(|evil/);
     const q = JSON.parse(calls[0]!.input!) as { query: string; variables: Record<string, string> };

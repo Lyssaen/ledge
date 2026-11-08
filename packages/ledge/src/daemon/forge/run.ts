@@ -13,7 +13,9 @@ export type ForgeRun = (file: ForgeCli | 'git', args: string[], opts?: { cwd?: s
 const MAX_OUTPUT = 4 * 1024 * 1024;
 const TIMEOUT_MS = 20_000;
 
-export function execForge(env: () => Promise<NodeJS.ProcessEnv>): ForgeRun {
+/** `maxOutput`: the bound on stdout and stderr together (4 MB; a test gives a small one). */
+export function execForge(env: () => Promise<NodeJS.ProcessEnv>, opts0: { maxOutput?: number } = {}): ForgeRun {
+  const max = opts0.maxOutput ?? MAX_OUTPUT;
   return async (file, args, opts = {}) => {
     // No prompt, no colour, no update notice: the CLIs print plain JSON to a pipe.
     const e = { ...(await env()), GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_PROMPT: '1', GLAB_CHECK_UPDATE: 'false', GLAB_SEND_TELEMETRY: 'false', NO_COLOR: '1', CLICOLOR: '0' };
@@ -27,7 +29,7 @@ export function execForge(env: () => Promise<NodeJS.ProcessEnv>): ForgeRun {
       timer.unref();
       const take = (into: Buffer[]) => (d: Buffer): void => {
         size += d.length;
-        if (size > MAX_OUTPUT) { if (!why) { why = 'output over 4 MB'; child.kill('SIGKILL'); } return; }
+        if (size > max) { if (!why) { why = `output over ${max >= 1024 * 1024 ? `${Math.round(max / 1024 / 1024)} MB` : `${max} bytes`}`; child.kill('SIGKILL'); } return; }
         into.push(d);
       };
       child.stdout.on('data', take(out));

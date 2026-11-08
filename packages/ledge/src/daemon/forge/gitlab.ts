@@ -17,7 +17,9 @@ interface GlMr {
   project_id?: number; source_project_id?: number;
 }
 /** The list's query (R1, review of d266f114): the merge requests of the followed branch names only, with their source project. */
-const LIST_QUERY = 'query($p: ID!, $b: [String!]) { project(fullPath: $p) { mergeRequests(sourceBranches: $b, first: 100, sort: UPDATED_DESC) { nodes { iid state sourceBranch updatedAt sourceProject { fullPath } } } } }';
+const LIST_QUERY = 'query($p: ID!, $b: [String!], $a: String) { project(fullPath: $p) { mergeRequests(sourceBranches: $b, first: 100, after: $a, sort: UPDATED_DESC) { pageInfo { hasNextPage endCursor } nodes { iid state sourceBranch updatedAt sourceProject { fullPath } } } } }';
+/** The pages are followed to the end (review of 190032f7); past this many, the list is reported incomplete rather than cut silently. */
+const MAX_PAGES = 20;
 interface GlListNode { iid: string; state: string; sourceBranch: string; updatedAt: string; sourceProject?: { fullPath: string } | null }
 interface GlApprovals { approved?: boolean; approvals_required?: number; approvals_left?: number; approved_by?: Array<{ user?: GlUser }> }
 interface GlNote { id: number; type?: string | null; body: string; author?: GlUser; created_at: string; system?: boolean; resolvable?: boolean; resolved?: boolean;
@@ -139,11 +141,22 @@ export function gitlabReader(run: ForgeRun): ForgeReader {
       const names = [...new Set(targets.map(t => t.branch))];
       if (!names.length) return [];
       // The branch names go as GraphQL variables on standard input; `--method POST` is needed for glab to send that body.
-      const r = await run('glab', ['api', '--hostname', repo.host, '--method', 'POST', '-H', 'Content-Type: application/json', 'graphql', '--input', '-'], { input: JSON.stringify({ query: LIST_QUERY, variables: { p: repo.path, b: names } }) });
-      const j = okJson<{ data?: { project?: { mergeRequests?: { nodes: GlListNode[] } } | null }; errors?: Array<{ message?: string }> }>(r, 'glab');
-      if (j.errors?.length) throw new ForgeError('error', j.errors.map(e => e.message ?? '').join('; ').slice(0, 400));
-      if (!j.data?.project) throw new ForgeError('error', `${repo.host}/${repo.path} not found`);
-      const all = j.data.project.mergeRequests?.nodes.map(n => ({ iid: Number(n.iid), branch: n.sourceBranch, head: n.sourceProject?.fullPath ?? '', open: n.state === 'opened', updatedAt: n.updatedAt })) ?? [];
+      const nodes: GlListNode[] = [];
+      let after: string | null = null;
+      for (let page = 0; ; page++) {
+        if (page >= MAX_PAGES) throw new ForgeError('error', `incomplete list: more than ${MAX_PAGES * 100} merge requests for the followed branches of ${repo.path}`);
+        const r = await run('glab', ['api', '--hostname', repo.host, '--method', 'POST', '-H', 'Content-Type: application/json', 'graphql', '--input', '-'], { input: JSON.stringify({ query: LIST_QUERY, variables: { p: repo.path, b: names, a: after } }) });
+        const j = okJson<{ data?: { project?: { mergeRequests?: { pageInfo?: { hasNextPage: boolean; endCursor: string | null }; nodes: GlListNode[] } | null } | null }; errors?: Array<{ message?: string }> }>(r, 'glab');
+        // An answer with errors is refused whole, even with data (a field left null by an error is never « nothing »).
+        if (j.errors?.length) throw new ForgeError('error', j.errors.map(e => e.message ?? '').join('; ').slice(0, 400) || 'GitLab answered with errors');
+        if (!j.data?.project) throw new ForgeError('error', `${repo.host}/${repo.path} not found`);
+        const conn = j.data.project.mergeRequests;
+        if (!conn) throw new ForgeError('error', `incomplete answer for ${repo.host}/${repo.path}`);
+        nodes.push(...conn.nodes);
+        if (!conn.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break;
+        after = conn.pageInfo.endCursor;
+      }
+      const all = nodes.map(n => ({ iid: Number(n.iid), branch: n.sourceBranch, head: n.sourceProject?.fullPath ?? '', open: n.state === 'opened', updatedAt: n.updatedAt }));
       const chosen = new Map<number, (typeof all)[number]>();
       for (const t of targets) { const hit = pickFor(t, all); if (hit && Number.isInteger(hit.iid) && hit.iid > 0) chosen.set(hit.iid, hit); }
       return Promise.all([...chosen.values()].map(async m => (await read(repo, { iid: m.iid } as GlMr, m.open, m.head)).pr));

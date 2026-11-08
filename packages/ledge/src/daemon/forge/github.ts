@@ -15,19 +15,27 @@ const VIEW_FIELDS = 'number,title,url,state,isDraft,headRefName,headRefOid,baseR
  * aliased field per branch in one query per repository. The branch names travel as GraphQL variables on standard input; only
  * their index is written in the query. Each request carries its head repository, so two forks with the same branch are told apart.
  */
+/**
+ * The checks of a head (R5, review of 190032f7): `state` is GitHub's own summary over every check, whatever their number; the
+ * first contexts only tell running from waiting.
+ */
+const ROLLUP = 'statusCheckRollup { state contexts(first: 100) { pageInfo { hasNextPage } nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state } } } }';
+interface GqlRollup { state?: string | null; contexts?: { pageInfo?: { hasNextPage: boolean }; nodes: GhCheck[] } | null }
 const LIST_NODE = `number title url state isDraft headRefName headRefOid baseRefName updatedAt reviewDecision headRepository { nameWithOwner }
   reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } ... on Bot { login } ... on Mannequin { login } ... on Team { name slug } } } }
   latestReviews(first: 20) { nodes { author { login } state } }
   reviewThreads(first: 100) { nodes { isResolved } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state } } } } } } }`;
-/** Requests per branch name asked: forks pushing the same name are rare; past it, the oldest go first. */
+  commits(last: 1) { nodes { commit { ${ROLLUP} } } }`;
+/** Requests per branch name and per page; the pages are followed to the end (R1, review of 190032f7). */
 const PER_BRANCH = 50;
+/** Past this many pages for one round of branch names, the list is reported incomplete rather than cut silently. */
+const MAX_PAGES = 20;
 interface GqlPr {
   number: number; title: string; url: string; state: string; isDraft: boolean; headRefName: string; headRefOid: string; baseRefName: string; updatedAt: string;
   reviewDecision?: string | null; headRepository?: { nameWithOwner: string } | null;
   reviewRequests?: { nodes: Array<{ requestedReviewer?: GhReviewer | null }> }; latestReviews?: { nodes: Array<{ author?: { login?: string } | null; state?: string }> };
   reviewThreads?: { nodes: Array<{ isResolved: boolean }> };
-  commits?: { nodes: Array<{ commit?: { statusCheckRollup?: { contexts?: { nodes: GhCheck[] } } | null } }> };
+  commits?: { nodes: Array<{ commit?: { statusCheckRollup?: GqlRollup | null } }> };
 }
 
 interface GhCheck { __typename?: string; status?: string; conclusion?: string; state?: string }
@@ -60,6 +68,25 @@ export function rollup(checks: readonly GhCheck[] | undefined): PipeStatus {
   if (st.some(c => c.status.toUpperCase() === 'IN_PROGRESS')) return 'run';
   if (st.some(c => WAITING.has(c.status.toUpperCase()))) return 'wait';
   return 'ok';
+}
+/**
+ * A head's pipeline from GitHub's summary: FAILURE or ERROR is `fail`, SUCCESS is `ok`, PENDING or EXPECTED is `run` when a
+ * check seen runs, else `wait`. No rollup at all: `none`. Without a summary, contexts that were not all read are never green.
+ */
+export function pipelineOf(r: GqlRollup | null | undefined): PipeStatus {
+  if (!r) return 'none';
+  const seen = rollup(r.contexts?.nodes);
+  switch ((r.state ?? '').toUpperCase()) {
+    case 'FAILURE': case 'ERROR': return 'fail';
+    case 'SUCCESS': return 'ok';
+    case 'PENDING': case 'EXPECTED': return seen === 'fail' ? 'fail' : seen === 'run' ? 'run' : 'wait';
+    default: return r.contexts?.pageInfo?.hasNextPage && (seen === 'ok' || seen === 'none') ? 'wait' : seen;
+  }
+}
+/** A GraphQL answer with errors is refused whole, even with data: a field left null by an error must never read as « nothing ». */
+function noErrors<T extends { errors?: Array<{ message?: string }> }>(j: T): T {
+  if (j.errors?.length) throw new ForgeError('error', j.errors.map(e => e.message ?? '').join('; ').slice(0, 400) || 'GitHub answered with errors');
+  return j;
 }
 /** A job's or a run's status for the graph. */
 export function jobStatus(status: string, conclusion: string): PipeStatus {
@@ -100,13 +127,13 @@ export function githubReader(run: ForgeRun): ForgeReader {
     return p;
   }
 
-  function core(repo: ForgeRepo, p: GhPr, openThreads: number, head: string): ReadPr {
+  function core(repo: ForgeRepo, p: GhPr, openThreads: number, head: string, pipeline: PipeStatus): ReadPr {
     const state = stateOf(p), given = approvalsOf(p);
     const blockers = blockersOf({ state, approvals: { given }, changesRequested: p.reviewDecision === 'CHANGES_REQUESTED', approvalsMissing: p.reviewDecision === 'REVIEW_REQUIRED' });
     return {
       id: prIdOf(repo.host, repo.path, p.number), forge: 'github', host: repo.host, repo: repo.path, number: p.number, ref: `#${p.number}`,
       url: p.url, title: p.title, state, branch: p.headRefName, target: p.baseRefName, headSha: p.headRefOid,
-      pipeline: rollup(p.statusCheckRollup), approvals: { given }, mergeable: blockers.length === 0, openThreads, updatedAt: iso(p.updatedAt), blockers, head
+      pipeline, approvals: { given }, mergeable: blockers.length === 0, openThreads, updatedAt: iso(p.updatedAt), blockers, head
     };
   }
 
@@ -147,15 +174,29 @@ export function githubReader(run: ForgeRun): ForgeReader {
     async list(repo, targets) {
       const names = [...new Set(targets.map(t => t.branch))];
       if (!names.length) return [];
-      const fields = names.map((_, i) => `b${i}: pullRequests(headRefName: $b${i}, first: ${PER_BRANCH}, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${LIST_NODE} } }`).join(' ');
-      const query = `query($o: String!, $r: String!, ${names.map((_, i) => `$b${i}: String!`).join(', ')}) { repository(owner: $o, name: $r) { ${fields} } }`;
-      const variables: Record<string, string> = { o: ownerOf(repo), r: nameOf(repo) };
-      names.forEach((b, i) => { variables[`b${i}`] = b; });
-      const j = okJson<{ data?: { repository?: Record<string, { nodes: GqlPr[] } | null> | null }; errors?: Array<{ message?: string }> }>(await api(repo, ['graphql', '--input', '-'], JSON.stringify({ query, variables })), 'gh');
-      if (j.errors?.length && !j.data?.repository) throw new ForgeError('error', j.errors.map(e => e.message ?? '').join('; ').slice(0, 400));
-      const all = names.flatMap((_, i) => j.data?.repository?.[`b${i}`]?.nodes ?? []).map(n => ({
-        n, branch: n.headRefName, head: n.headRepository?.nameWithOwner ?? '', open: n.state === 'OPEN', updatedAt: n.updatedAt
-      }));
+      const nodes: GqlPr[] = [];
+      // Each branch name's pages, newest first, followed to the end: a request older than any first page is still found.
+      let pending = names.map((b, i) => ({ i, b, after: null as string | null }));
+      for (let page = 0; pending.length; page++) {
+        if (page >= MAX_PAGES) throw new ForgeError('error', `incomplete list: more than ${MAX_PAGES * PER_BRANCH} pull requests for a followed branch name in ${repo.path}`);
+        const fields = pending.map(p => `b${p.i}: pullRequests(headRefName: $b${p.i}, first: ${PER_BRANCH}, after: $a${p.i}, orderBy: { field: UPDATED_AT, direction: DESC }) { pageInfo { hasNextPage endCursor } nodes { ${LIST_NODE} } }`).join(' ');
+        const query = `query($o: String!, $r: String!, ${pending.map(p => `$b${p.i}: String!, $a${p.i}: String`).join(', ')}) { repository(owner: $o, name: $r) { ${fields} } }`;
+        const variables: Record<string, string | null> = { o: ownerOf(repo), r: nameOf(repo) };
+        for (const p of pending) { variables[`b${p.i}`] = p.b; variables[`a${p.i}`] = p.after; }
+        const j = noErrors(okJson<{ data?: { repository?: Record<string, { pageInfo?: { hasNextPage: boolean; endCursor: string | null }; nodes: GqlPr[] } | null> | null }; errors?: Array<{ message?: string }> }>(
+          await api(repo, ['graphql', '--input', '-'], JSON.stringify({ query, variables })), 'gh'));
+        const r = j.data?.repository;
+        if (!r) throw new ForgeError('error', `${repo.path} not found`);
+        const next: typeof pending = [];
+        for (const p of pending) {
+          const conn = r[`b${p.i}`];
+          if (!conn) throw new ForgeError('error', `incomplete answer for ${repo.path}`);
+          nodes.push(...conn.nodes);
+          if (conn.pageInfo?.hasNextPage && conn.pageInfo.endCursor) next.push({ ...p, after: conn.pageInfo.endCursor });
+        }
+        pending = next;
+      }
+      const all = nodes.map(n => ({ n, branch: n.headRefName, head: n.headRepository?.nameWithOwner ?? '', open: n.state === 'OPEN', updatedAt: n.updatedAt }));
       const out: ReadPr[] = [];
       for (const t of targets) {
         const hit = pickFor(t, all);
@@ -163,20 +204,20 @@ export function githubReader(run: ForgeRun): ForgeReader {
         const n = hit.n;
         const pr: GhPr = { ...n, reviewDecision: n.reviewDecision ?? undefined,
           reviewRequests: (n.reviewRequests?.nodes ?? []).flatMap(r => (r.requestedReviewer ? [r.requestedReviewer] : [])),
-          latestReviews: (n.latestReviews?.nodes ?? []).map(r => ({ author: r.author ?? undefined, state: r.state })),
-          statusCheckRollup: n.commits?.nodes[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [] };
+          latestReviews: (n.latestReviews?.nodes ?? []).map(r => ({ author: r.author ?? undefined, state: r.state })) };
         const open = hit.open ? (n.reviewThreads?.nodes ?? []).filter(x => !x.isResolved).length : 0;
-        if (!out.some(o => o.number === n.number)) out.push(core(repo, pr, open, hit.head));
+        if (!out.some(o => o.number === n.number)) out.push(core(repo, pr, open, hit.head, pipelineOf(n.commits?.nodes[0]?.commit?.statusCheckRollup)));
       }
       return out;
     },
 
     async detail(repo, n, opts) {
       const v = okJson<GhPrView>(await run('gh', ['pr', 'view', String(n), '-R', repo.repo, '--json', VIEW_FIELDS]), 'gh');
-      const q = `query($o: String!, $r: String!, $n: Int!) { repository(owner: $o, name: $r) { pullRequest(number: $n) { closingIssuesReferences(first: 20) { nodes { number } } reviewThreads(first: 100) { nodes { id isResolved path line originalLine comments(first: 50) { nodes { id author { login } body createdAt diffHunk } } } } } } }`;
-      const g = okJson<{ data?: { repository?: { pullRequest?: { closingIssuesReferences?: { nodes: Array<{ number: number }> }; reviewThreads?: { nodes: GhThread[] } } } } }>(
-        await api(repo, ['graphql', '-f', `query=${q}`, '-f', `o=${ownerOf(repo)}`, '-f', `r=${nameOf(repo)}`, '-F', `n=${Math.trunc(n)}`]), 'gh');
+      const q = `query($o: String!, $r: String!, $n: Int!) { repository(owner: $o, name: $r) { pullRequest(number: $n) { commits(last: 1) { nodes { commit { ${ROLLUP} } } } closingIssuesReferences(first: 20) { nodes { number } } reviewThreads(first: 100) { nodes { id isResolved path line originalLine comments(first: 50) { nodes { id author { login } body createdAt diffHunk } } } } } } }`;
+      const g = noErrors(okJson<{ data?: { repository?: { pullRequest?: { commits?: { nodes: Array<{ commit?: { statusCheckRollup?: GqlRollup | null } }> }; closingIssuesReferences?: { nodes: Array<{ number: number }> }; reviewThreads?: { nodes: GhThread[] } } | null } | null }; errors?: Array<{ message?: string }> }>(
+        await api(repo, ['graphql', '-f', `query=${q}`, '-f', `o=${ownerOf(repo)}`, '-f', `r=${nameOf(repo)}`, '-F', `n=${Math.trunc(n)}`]), 'gh'));
       const gp = g.data?.repository?.pullRequest;
+      if (!gp) throw new ForgeError('error', `pull request ${n} not found in ${repo.path}`);
       const reviewThreads: PrThread[] = (gp?.reviewThreads?.nodes ?? []).filter(t => t.comments.nodes.length).map(t => ({
         id: t.id, resolvable: true, resolved: t.isResolved, file: t.path, line: t.line ?? t.originalLine ?? undefined, code: lastLine(t.comments.nodes[0]!.diffHunk),
         comments: t.comments.nodes.map(c => ({ id: c.id, author: c.author?.login ?? 'ghost', at: iso(c.createdAt), body: c.body }))
@@ -186,7 +227,8 @@ export function githubReader(run: ForgeRun): ForgeReader {
         ...(v.reviews ?? []).filter(r => r.body.trim()).map(r => ({ id: r.id, resolvable: false, resolved: false, comments: [{ id: r.id, author: r.author?.login ?? 'ghost', at: iso(r.submittedAt), body: r.body }] }))
       ].sort((a, b) => a.comments[0]!.at.localeCompare(b.comments[0]!.at));
       const head = v.headRepositoryOwner?.login && v.headRepository?.name ? `${v.headRepositoryOwner.login}/${v.headRepository.name}` : '';
-      const pr = core(repo, v, reviewThreads.filter(t => !t.resolved).length, head);
+      // The pipeline as the list reads it (GitHub's summary over every check), never from the first contexts of `pr view`.
+      const pr = core(repo, v, reviewThreads.filter(t => !t.resolved).length, head, pipelineOf(gp.commits?.nodes[0]?.commit?.statusCheckRollup));
       const reviewers = new Map<string, PrReviewer['state']>();
       for (const r of v.latestReviews ?? []) if (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED') reviewers.set(r.author?.login ?? '?', r.state === 'APPROVED' ? 'approved' : 'changes');
       for (const r of v.reviewRequests ?? []) reviewers.set(reviewerName(r), 'pending');

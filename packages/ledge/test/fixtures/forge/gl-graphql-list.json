@@ -2,6 +2,10 @@
  "data": {
   "project": {
    "mergeRequests": {
+    "pageInfo": {
+     "hasNextPage": false,
+     "endCursor": "eyJ1cGRhdGVkX2F0IjoiMjAyNi0xMS0wOCAxNDo1NTo0OS4yODk1NjUwMDAgKzAwMDAiLCJpZCI6IjU2MzkzNDY1NyJ9"
+    },
     "nodes": [
      {
       "iid": "4340",
