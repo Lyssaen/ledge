@@ -242,4 +242,11 @@ describe('rig.policy', () => {
     expect(await custom.rig.act({ ...a, policy: 'spec', seats: ['a@dev'] })).toMatchObject({ ok: false, error: 'spec_policy_unsupported', completed: 0 });
     for (const w of [none, bare, some, custom]) expect(w.ran).toEqual([]);
   });
+  it('spec: only builtin:auto|standard|open|yolo|locked or none reach the command line; a value that looks like a flag is refused', async () => {
+    for (const bad of ['builtin:--help', 'builtin:bogus', 'builtin:open --yes']) {
+      const w = mk(yaml(bad, null));
+      expect(await w.rig.act({ ...a, policy: 'spec', seats: ['a@dev'] })).toMatchObject({ ok: false, error: 'spec_policy_unsupported', completed: 0 });
+      expect(w.ran).toEqual([]);
+    }
+  });
 });

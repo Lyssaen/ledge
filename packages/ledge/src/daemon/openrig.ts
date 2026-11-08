@@ -354,7 +354,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
         const mine = spec.pods.find(p => p.id === pod)?.members.find(m => m.id === member || m.id === member?.replace(/-\d+$/, ''))?.policy;
         const policy = mine ?? spec.policy;
         if (!policy) return refuse('spec_no_policy');
-        if (policy !== 'none' && !policy.startsWith('builtin:')) return refuse('spec_policy_unsupported');
+        if (!/^(builtin:(auto|standard|open|yolo|locked)|none)$/.test(policy)) return refuse('spec_policy_unsupported');
         specPolicies[seat] = policy;
       }
     }
