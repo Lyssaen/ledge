@@ -29,7 +29,7 @@ import { offersRigs, setGrouping, useGrouping } from '../../openrig/grouping';
 import type { SidebarOpenRig } from '../../openrig/sidebarState';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
 
-/** The explorer shell: Ledge's entry, Atelier / OpenRig, Projets / Rigs, Your turn, the project tree or the rigs, Archives, then the foot. */
+/** The explorer shell: Ledge's entry, Atelier / OpenRig, Projets / Rigs, Your turn, the project tree or the rigs, then Archives pinned above the foot. */
 export function Sidebar(p: {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; archived: readonly Session[];
@@ -219,12 +219,12 @@ export function Sidebar(p: {
         {(!section || section === 'rigs') && byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
           dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []}
           onMenu={(id, at, opener) => p.menu.open(id, at, opener)} />}
-        {(!section || section === 'projects') && <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
-          project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
-          onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
-          onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused}
-          onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)} />}
       </div>
+      {(!section || section === 'projects') && <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
+        project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
+        onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
+        onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused}
+        onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)} />}
       <SidebarMenuHost state={p.menu} projects={p.projects} groups={groups} archived={p.archived} actions={p.actions} dispatch={p.dispatch}
         broadcast={!!p.broadcast} closed={closed} onClosed={setClosed} archivesOpen={archivesOpen} onArchivesOpen={setArchivesOpen} notify={p.notify} />
       {p.broadcast && pickedIds.length >= 2 && (

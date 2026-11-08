@@ -92,8 +92,10 @@
 .st .st-more button:hover{color:var(--sidebar-foreground)}
 /* « +N projets sans agent actif »: the tree's last row, apart from the last project (docs/mockups/ledge-projects-eye.html). */
 .st .st-more-projects{margin-top:4px;border-top:1px dashed var(--sidebar-border);border-radius:0;padding-top:2px}
-/* Archives, at the foot of the tree: folded, filterable, each session read, put back, resumed or deleted from its row. */
-.st-archives{border-top:1px solid var(--sidebar-border);padding-top:6px}
+/* Archives, pinned under the tree and above the machine foot. The line is last, so it stays at the bottom; the list scrolls above it. */
+.st-archives{flex:none;display:flex;flex-direction:column;min-height:0;max-height:40%;border-top:1px solid var(--sidebar-border);padding:0 8px}
+.st-arch-body{overflow:auto;min-height:0}
+.st-archives>.st-label{flex:none}
 .st .st-arch-toggle{display:flex;align-items:center;gap:6px;height:24px;font-size:11px;color:var(--muted-foreground)}
 .st .st-arch-toggle:hover{color:var(--sidebar-foreground)}
 .st-arch-toggle>span{display:grid;transition:transform .15s}
