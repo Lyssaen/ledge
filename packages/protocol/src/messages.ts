@@ -25,13 +25,12 @@ import { DeviceNameSchema, MobileStateSchema, RelayUrlSchema } from './mobile.js
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
 import { BrainAddSchema, BrainAnswerSchema, BrainListSchema, BrainNoteSchema, BrainResultSchema } from './brain.js';
 import { UsageAckSchema, UsageSetSchema, UsageStateMessageSchema } from './usage.js';
+import { ForgeActReplySchema, ForgeActSchema, ForgeDetailReplySchema, ForgeDetailSchema, ForgeStateMessageSchema } from './forge.js';
 import { ContextPrefsMessageSchema, ContextSetSchema, HandoverBriefSchema, HandoverResultSchema, HandoverShowSchema, SessionHandoverResultSchema, SessionHandoverSchema } from './handover.js';
 
 export const PROTOCOL_PORT = 47831;
 
-/** Why the daemon refused a front's command. Travels as the `code` of an `error`, which stays a free string so that an older front ignores a new one. */
-export const RefusalCodeSchema = z.enum(['stale', 'read_only', 'no_prompt', 'not_taken', 'busy', 'unknown_session', 'nothing_to_decide', 'not_offered', 'free_text', 'note_not_typed', 'unavailable', 'invalid', 'attachment_missing', 'attachments_not_accepted']);
-export type RefusalCode = z.infer<typeof RefusalCodeSchema>;
+export { RefusalCodeSchema, type RefusalCode } from './refusal.js';
 
 export const SessionEventSchema = z.object({
   name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed', 'NativeRequest', 'AgentMessage', 'QueueUpdate']),
@@ -110,7 +109,8 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Answers `term.watch` and `term.shell`: the pane and the shells as a tmux control stream, xterm.js the only emulator. */ terminalStream: z.boolean().optional(),
   /** Sends `usage.state` (each harness's account limits, the alerts, the threshold) and takes `usage.set` and `usage.ack`. */ usage: z.boolean().optional(),
   /** `term.watch` also streams an OpenRig seat (`@` in its tmux name), through a control client on the seat's own tmux server.
-   *  Without it, a front keeps a seat on the pseudo-terminal: an older daemon answers its watch `failed`. */ terminalStreamSeats: z.boolean().optional() });
+   *  Without it, a front keeps a seat on the pseudo-terminal: an older daemon answers its watch `failed`. */ terminalStreamSeats: z.boolean().optional(),
+  /** Sends `forge.state` and answers `forge.detail` and `forge.act`: the pull and merge requests of its sessions' branches (lot 8a). */ forge: z.boolean().optional() });
 export type DaemonInfo = z.infer<typeof DaemonInfoSchema>;
 export const UpdateFailureSchema = z.enum(['git-install', 'no-systemd', 'sessions-at-risk', 'npm-failed', 'busy']);
 export type UpdateFailure = z.infer<typeof UpdateFailureSchema>;
@@ -210,6 +210,9 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionHandoverResultSchema,
   ContextPrefsMessageSchema,
   UsageStateMessageSchema,
+  ForgeStateMessageSchema,
+  ForgeDetailReplySchema,
+  ForgeActReplySchema,
   HandoverResultSchema,
   TaskUpdatedSchema,
   BrainResultSchema,
@@ -378,6 +381,8 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ContextSetSchema,
   UsageSetSchema,
   UsageAckSchema,
+  ForgeDetailSchema,
+  ForgeActSchema,
   HandoverBriefSchema,
   HandoverShowSchema,
   BrainAnswerSchema, BrainListSchema, BrainNoteSchema, BrainAddSchema
