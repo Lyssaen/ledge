@@ -28,7 +28,8 @@ export const RigSnapshotIdSchema = z.string().regex(/^[0-9A-Z]{26}$/, 'not a sna
 export const RigSeatSchema = z.object({
   logicalId: z.string(), session: z.string(), runtime: z.string(), model: z.string().nullable(),
   sessionStatus: z.string(), lifecycleState: z.string(), activity: z.string(),
-  stopped: z.boolean(), work: z.number().int().min(0)
+  stopped: z.boolean(), work: z.number().int().min(0),
+  /** OpenRig's `needsAttention` for the seat, when it says. */ attention: z.boolean().optional()
 });
 export type RigSeat = z.infer<typeof RigSeatSchema>;
 
@@ -36,7 +37,8 @@ export type RigSeat = z.infer<typeof RigSeatSchema>;
 export const RigSchema = z.object({
   id: z.string(), name: z.string(), status: z.string(), lifecycleState: z.string(),
   seats: z.number().int().min(0), running: z.number().int().min(0), attention: z.number().int().min(0),
-  uptime: z.string().nullable(), snapshot: z.string().nullable(), nodes: z.array(RigSeatSchema)
+  uptime: z.string().nullable(), snapshot: z.string().nullable(), nodes: z.array(RigSeatSchema),
+  /** The spec file of a rig Ledge launched, when it is on the machine. */ specPath: z.string().optional()
 });
 export type Rig = z.infer<typeof RigSchema>;
 
@@ -47,7 +49,8 @@ export const RigKernelStateSchema = z.enum(['ready', 'starting', 'stopped', 'ski
 /** OpenRig on one machine. `installed` false: no `rig` command there, and nothing else is known. */
 export const OpenRigStateSchema = z.object({
   installed: z.boolean(), version: z.string().optional(),
-  daemon: z.object({ state: RigDaemonStateSchema, pid: z.number().int().optional(), port: z.number().int().optional(), message: z.string().optional() }),
+  daemon: z.object({ state: RigDaemonStateSchema, pid: z.number().int().optional(), port: z.number().int().optional(), message: z.string().optional(),
+    /** When the running daemon started (ISO), from OpenRig's `daemon.json`. */ startedAt: z.string().optional() }),
   kernel: z.object({ state: RigKernelStateSchema }),
   rigs: z.array(RigSchema),
   /** When it was read (ISO). */ at: z.string()

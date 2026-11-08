@@ -50,7 +50,7 @@ export function toSeat(raw: unknown): RigSeat | null {
     logicalId, session, runtime: str(n.runtime) ?? 'unknown', model: str(n.model),
     sessionStatus: str(n.sessionStatus) ?? 'unknown', lifecycleState: str(n.lifecycleState) ?? 'unknown',
     activity: str(obj(n.agentActivity).state) ?? 'unknown', stopped: n.intentionallyStopped === true,
-    work: int(n.assignedWorkCount)
+    work: int(n.assignedWorkCount), ...(typeof n.needsAttention === 'boolean' ? { attention: n.needsAttention } : {})
   };
 }
 
@@ -59,7 +59,7 @@ export function toSeat(raw: unknown): RigSeat | null {
  * and `nodes` (`rig ps --nodes -A --json`), the last two only while the daemon runs. Unknown fields are ignored, missing
  * ones read as nothing: OpenRig's JSON grows between versions.
  */
-export function readState(input: { status: unknown; rigs?: unknown; nodes?: unknown; version?: string; at: string }): OpenRigState {
+export function readState(input: { status: unknown; rigs?: unknown; nodes?: unknown; version?: string; startedAt?: string; at: string }): OpenRigState {
   const status = obj(input.status), daemon = obj(status.daemon);
   const raw = str(daemon.state);
   const state = raw === 'running' || raw === 'stopped' || raw === 'stale' ? raw : 'unknown';
@@ -90,7 +90,7 @@ export function readState(input: { status: unknown; rigs?: unknown; nodes?: unkn
   const message = str(daemon.message);
   return {
     installed: true, ...(input.version ? { version: input.version } : {}),
-    daemon: { state, ...(running && pid !== undefined ? { pid } : {}), ...(running && port !== undefined ? { port } : {}), ...(!running && message ? { message } : {}) },
+    daemon: { state, ...(running && pid !== undefined ? { pid } : {}), ...(running && port !== undefined ? { port } : {}), ...(running && input.startedAt ? { startedAt: input.startedAt } : {}), ...(!running && message ? { message } : {}) },
     kernel: { state: kernel }, rigs: rigs.sort((a, b) => (a.name === KERNEL_RIG ? 1 : b.name === KERNEL_RIG ? -1 : a.name.localeCompare(b.name))), at: input.at
   };
 }
@@ -150,6 +150,7 @@ export interface OpenRigDeps {
   /** Files the roles are read from, for tests. */ roleIo?: RoleIo & { head(p: string, max: number): Promise<string | null> };
   /** A GET on the OpenRig daemon's HTTP API (its node detail has no CLI); undefined when it does not answer. */ http?: (path: string) => Promise<unknown>;
   /** OpenRig's home (`$OPENRIG_HOME`, `~/.openrig`). */ openrigHome?: string;
+  /** The parsed `daemon.json` of OpenRig's home (`{ pid, port, host, db, startedAt }`, not contractual), for tests; may throw or give anything. */ daemonRecord?: () => Promise<unknown>;
   /** Where a role duplicate is built before `rig specs add` (the system's temp folder), for tests. */ tmpDir?: string;
 }
 export interface LaunchResult { ok: boolean; plan: boolean; commands: string[]; yaml?: string; seats?: number; output?: string; error?: string; check?: { status: string; errors: string[]; warnings: string[] } }
@@ -289,6 +290,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     if (!port) return undefined;
     return localGet(port, path, HTTP_MS);
   });
+  const daemonRecord = deps.daemonRecord ?? (async () => parse(await readFile(join(openrigHome, 'daemon.json'), 'utf8')));
   let version: string | undefined, versionAt = 0, last: { at: number; state: OpenRigState } | undefined;
   let reading: Promise<OpenRigState> | undefined, acting = false;
   /** A rig's permissions already read: any action may change them, so each one forgets all. */
@@ -305,8 +307,28 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     if (parsed === undefined) log(`openrig: rig status printed no JSON (${failure(status)})`);
     const daemon = obj(obj(parsed).daemon);
     if (daemon.state !== 'running' || daemon.reachable === false) return readState({ status: parsed, version, at });
-    const [rigs, nodes] = await Promise.all([run(['ps', '--json'], STATUS_MS), run(['ps', '--nodes', '-A', '--json'], STATUS_MS)]);
-    return readState({ status: parsed, rigs: parse(rigs.stdout), nodes: parse(nodes.stdout), version, at });
+    const [rigs, nodes, startedAt] = await Promise.all([run(['ps', '--json'], STATUS_MS), run(['ps', '--nodes', '-A', '--json'], STATUS_MS), startedAtOf(daemon.pid)]);
+    const st = readState({ status: parsed, rigs: parse(rigs.stdout), nodes: parse(nodes.stdout), version, ...(startedAt ? { startedAt } : {}), at });
+    for (const r of st.rigs) { const specPath = await specPathOf(r.name); if (specPath) r.specPath = specPath; }
+    return st;
+  }
+
+  /** When the running daemon started: its `daemon.json`'s `startedAt`, only when that record is the daemon `rig status` reports (same pid). */
+  async function startedAtOf(pid: unknown): Promise<string | undefined> {
+    if (typeof pid !== 'number') return undefined;
+    try { const rec = obj(await daemonRecord()); return rec.pid === pid ? str(rec.startedAt) || undefined : undefined; } catch { return undefined; }
+  }
+
+  /** The spec file of a rig Ledge launched (its composed spec, or the library spec its marker names), when the file is there: lookups
+   *  in Ledge's own folder only, no `rig` command. */
+  async function specPathOf(rig: string): Promise<string | undefined> {
+    if (rig === KERNEL_RIG) return undefined;
+    const mine = join(rigsDir, rig), composed = join(mine, 'rig.yaml');
+    if (files.exists(composed)) return composed;
+    const marker = join(mine, 'source.json');
+    if (!files.exists(marker)) return undefined;
+    const path = str(obj(parse(await files.read(marker).catch(() => 'null'))).path);
+    return path && files.exists(path) ? path : undefined;
   }
 
   function state(fresh = false): Promise<OpenRigState> {

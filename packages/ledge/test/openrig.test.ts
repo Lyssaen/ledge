@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { OpenRigActionSchema, OpenRigStateSchema, parseClientMessage } from '@ledge/protocol';
-import { createOpenRig, readRow, ROW_TTL_MS, failure, findRig, planAction, readState, showCommand, type RigRun } from '../src/daemon/openrig.js';
+import { createOpenRig, readRow, toSeat, ROW_TTL_MS, failure, findRig, planAction, readState, showCommand, type RigRun } from '../src/daemon/openrig.js';
 
 // What OpenRig 0.6.14 printed on 2026-11-02, daemon started with --no-kernel (trimmed to the fields Ledge reads, plus a few it ignores).
 const STATUS = {
@@ -233,5 +233,67 @@ describe('a queue row for an OpenRig task card', () => {
     expect(await createOpenRig({ run: fakeRig({ queue: { code: null } }).run }).row(ID)).toEqual({ error: 'not_installed' });
     expect(await createOpenRig({ run: fakeRig({ queue: { code: 1, stderr: 'Error: Daemon not running.' } }).run }).row(ID)).toEqual({ error: 'daemon_stopped' });
     expect(await createOpenRig({ run: fakeRig({ queue: { code: 0, stdout: '[]' } }).run }).row(ID)).toEqual({ error: 'failed' });
+  });
+});
+
+describe('daemon start, seat attention, spec path', () => {
+  const ok = (j: unknown) => ({ code: 0, stdout: JSON.stringify(j), stderr: '' });
+  const rigRun = (status: unknown = STATUS, nodes: unknown[] = NODES): RigRun => async args => {
+    const a = args.join(' ');
+    if (a === 'status --json') return ok(status);
+    if (a === '--version') return { code: 0, stdout: '0.7.7\n', stderr: '' };
+    if (a === 'ps --json') return ok(PS);
+    if (a === 'ps --nodes -A --json') return ok(nodes);
+    return { code: 1, stdout: '', stderr: 'unexpected' };
+  };
+  const STARTED = '2026-11-08T08:00:00.000Z';
+
+  it('readState puts the started-at it is given in the daemon, only while it runs', () => {
+    expect(readState({ status: STATUS, startedAt: STARTED, at: AT }).daemon).toEqual({ state: 'running', pid: 382882, port: 7433, startedAt: STARTED });
+    expect(readState({ status: STATUS, at: AT }).daemon).not.toHaveProperty('startedAt');
+    expect(readState({ status: STOPPED, startedAt: STARTED, at: AT }).daemon).not.toHaveProperty('startedAt');
+    const s = readState({ status: STATUS, startedAt: STARTED, at: AT });
+    expect(OpenRigStateSchema.parse(s)).toEqual(s);
+  });
+  it('state() reads startedAt from daemon.json when its pid is the running daemon\'s', async () => {
+    const rig = createOpenRig({ run: rigRun(), daemonRecord: async () => ({ pid: 382882, port: 7433, host: '127.0.0.1', db: '/x', startedAt: STARTED }) });
+    expect((await rig.state()).daemon.startedAt).toBe(STARTED);
+  });
+  it('a record of another pid (stale), without a startedAt, or unreadable, gives nothing', async () => {
+    for (const record of [{ pid: 1, startedAt: STARTED }, { pid: 382882 }, { pid: 382882, startedAt: 5 }, 'junk', null]) {
+      const rig = createOpenRig({ run: rigRun(), daemonRecord: async () => record });
+      expect((await rig.state()).daemon).not.toHaveProperty('startedAt');
+    }
+    const boom = createOpenRig({ run: rigRun(), daemonRecord: async () => { throw new Error('ENOENT'); } });
+    expect((await boom.state()).daemon).not.toHaveProperty('startedAt');
+  });
+  it('a stopped daemon never reads the record', async () => {
+    let read = 0;
+    const rig = createOpenRig({ run: rigRun(STOPPED), daemonRecord: async () => { read++; return { pid: 382882, startedAt: STARTED }; } });
+    expect((await rig.state()).daemon).not.toHaveProperty('startedAt');
+    expect(read).toBe(0);
+  });
+
+  it('toSeat: attention is needsAttention when it is a boolean', () => {
+    const base = NODES[0]!;
+    expect(toSeat({ ...base, needsAttention: true })!.attention).toBe(true);
+    expect(toSeat({ ...base, needsAttention: false })!.attention).toBe(false);
+    expect(toSeat(base)).not.toHaveProperty('attention');
+    expect(toSeat({ ...base, needsAttention: 'yes' })).not.toHaveProperty('attention');
+  });
+
+  it('specPath: the spec Ledge composed for a rig, else the folder marker of a library spec launched under another name, else nothing', async () => {
+    const files: Record<string, string> = {
+      '/h/.ledge/rigs/starter/rig.yaml': 'pods: []',
+      '/h/.ledge/rigs/epic-split/source.json': JSON.stringify({ path: '/lib/epic/rig.yaml' }),
+      '/lib/epic/rig.yaml': 'pods: []'
+    };
+    const fs = { read: async (p: string) => { if (p in files) return files[p]!; throw new Error('ENOENT'); }, exists: (p: string) => p in files, copyDir: async () => {}, write: async () => {} };
+    const rig = createOpenRig({ run: rigRun(), fs, home: '/h', rigsDir: '/h/.ledge/rigs', daemonRecord: async () => undefined, http: async () => undefined });
+    const st = await rig.state();
+    expect(st.rigs.find(r => r.name === 'starter')!.specPath).toBe('/h/.ledge/rigs/starter/rig.yaml');
+    expect(st.rigs.find(r => r.name === 'epic-split')!.specPath).toBe('/lib/epic/rig.yaml');
+    expect(st.rigs.find(r => r.name === 'kernel')).not.toHaveProperty('specPath');
+    expect(OpenRigStateSchema.parse(st)).toEqual(st);
   });
 });
