@@ -38,7 +38,7 @@
 .ide-rig-dot.d-off { background: none; border: 1.5px solid var(--muted-foreground); }
 
 /* The tab's page: header, grid, settings, queue. */
-.ide-rig { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; min-width: 0; color: var(--foreground); font-size: 12.5px; }
+.ide-rig { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; min-width: 0; overflow: auto; color: var(--foreground); font-size: 12.5px; }
 .ide-rig-state { color: var(--muted-foreground); }
 .ide-rig-top { display: flex; flex-direction: column; gap: 6px; }
 .ide-rig-title { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }

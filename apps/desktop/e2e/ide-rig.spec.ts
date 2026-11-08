@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { OpenRigState, RigGraph } from '@ledge/protocol';
+import type { OpenRigState, RigGraph, RigSeatPermission } from '@ledge/protocol';
 import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, session, twoProjects } from './daemon';
 import { RIG_7A } from './openrig-fixtures';
@@ -26,7 +26,7 @@ const WIDE: RigGraph = {
   links: [{ from: 'a.one', to: 'b.one', kind: 'delegates_to' }, { from: 'b.one', to: 'c.one', kind: 'delegates_to' }, { from: 'c.one', to: 'd.one', kind: 'escalates_to' }]
 };
 
-async function boot(page: Page, opts: { ide?: boolean; layout?: object; graph?: RigGraph } = {}) {
+async function boot(page: Page, opts: { ide?: boolean; layout?: object; graph?: RigGraph; state?: object; permissions?: { policy?: string; seats: RigSeatPermission[] } } = {}) {
   await seedAtelier(page);
   await page.addInitScript(({ ide, layout }) => {
     try {
@@ -35,9 +35,9 @@ async function boot(page: Page, opts: { ide?: boolean; layout?: object; graph?: 
     } catch { /* ignore */ }
   }, { ide: opts.ide !== false, layout: opts.layout ?? null });
   const daemon = await fakeDaemon(page, sessions, {
-    projects: twoProjects, openrig: state as unknown as OpenRigState, rigCommands: ['rig down ledge-survey --snapshot'], ...RIG_7A,
+    projects: twoProjects, openrig: (opts.state ?? state) as unknown as OpenRigState, rigCommands: ['rig down ledge-survey --snapshot'], ...RIG_7A,
     ...(opts.graph ? { rigGraphs: { 'ledge-survey': opts.graph } } : {}),
-    rigPermissions: { ...RIG_7A.rigPermissions, 'ledge-survey': { policy: 'builtin:auto', seats: [] } },
+    rigPermissions: { ...RIG_7A.rigPermissions, 'ledge-survey': opts.permissions ?? { policy: 'builtin:auto', seats: [] } },
     daemon: { version: '0.53.0', install: 'npm', systemd: true, openrigRig: true, openrigPolicy: true }
   });
   await page.goto('/');
@@ -92,6 +92,33 @@ test('at 480 px the settings go under the topology, and the topology scrolls ins
   const scroller = page$(page).locator('.ide-rig-topo');
   expect(await scroller.evaluate(el => el.scrollWidth - el.clientWidth)).toBeGreaterThan(0);
   expect(await scroller.evaluate(el => getComputedStyle(el).overflowX)).toBe('auto');
+});
+
+test('in a short window the settings and the queue scroll inside the tab; a permission level and a snapshot reach the daemon', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const ids = ['dev.b1', 'dev.b2', 'dev.b3', 'dev.b4', 'ops.c1', 'ops.c2', 'ops.c3'];
+  const seven = { ...state, rigs: [{ ...rig('1', 'ledge-survey'), seats: 7, running: 7, nodes: ids.map(id => seat(id, 'claude-code')) }, state.rigs[1]!] };
+  const graph: RigGraph = {
+    pods: [{ id: 'dev', label: 'Dev' }, { id: 'ops', label: 'Ops' }],
+    seats: ids.map(id => ({ logicalId: id, pod: id.split('.')[0]!, runtime: 'claude-code', status: 'running', session: `${id.replace('.', '-')}@ledge-survey`, attention: false })),
+    links: []
+  };
+  const seats: RigSeatPermission[] = ids.map(id => ({ logicalId: id, session: `${id.replace('.', '-')}@ledge-survey`, source: 'rig_policy', policySource: 'rig_policy', summary: `Next launch: ${id}` }));
+  const daemon = await boot(page, { state: seven, graph, permissions: { policy: 'builtin:auto', seats } });
+  await openSurvey(page);
+  await expect(page$(page).locator('.ide-rig-node')).toHaveCount(7);
+  const scroller = page$(page);
+  expect(await scroller.evaluate(el => getComputedStyle(el).overflowY)).toBe('auto');
+  expect(await scroller.evaluate(el => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0);
+  const snap = scroller.getByRole('button', { name: 'Snapshot now' });
+  await snap.scrollIntoViewIfNeeded();
+  await expect(snap).toBeInViewport();
+  await snap.click();
+  await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.act' && (m.action as { kind: string }).kind === 'rig.snapshot')).toHaveLength(1);
+  await scroller.getByRole('radio', { name: 'Standard' }).click();
+  await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.act' && (m.action as { kind: string }).kind === 'rig.policy')).toEqual([
+    expect.objectContaining({ action: { kind: 'rig.policy', rig: 'ledge-survey', policy: 'standard', seats: ids.map(id => `${id.replace('.', '-')}@ledge-survey`) } })
+  ]);
 });
 
 test('the tab is restored after a reload', async ({ page }) => {
