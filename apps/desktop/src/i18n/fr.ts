@@ -1436,7 +1436,7 @@ export const fr = {
       topology: 'Topologie', topologyRunning: 'clic sur un siège : son fil', topologyStopped: 'les sièges démarrent avec le rig', loading: 'Lecture…',
       legend: 'Liens', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
       running: 'en marche', stopped: 'arrêté', seatsAt: (n: number, machine: string) => `${n} ${n > 1 ? 'sièges' : 'siège'} · ${machine}`,
-      start: 'Démarrer', restart: 'Redémarrer', stop: 'Arrêter', daemonStopped: 'le daemon est arrêté',
+      start: 'Démarrer', restart: 'Redémarrer', stop: 'Arrêter',
       settings: 'Réglages', specUnknown: 'Spec inconnue : rig lancé hors de Ledge',
       permissions: 'Permissions', permissionsLabel: 'Niveau de permissions',
       level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Ouvert', yolo: 'YOLO', locked: 'Verrouillé' } as Record<string, string>,

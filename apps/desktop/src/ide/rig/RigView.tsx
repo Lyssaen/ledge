@@ -11,7 +11,7 @@ import { RigConfirm, useRigConfirm } from '../rigs/RigConfirm';
 import { RigQueue } from './RigQueue';
 import { RigSettings } from './RigSettings';
 import { RigTopology } from './RigTopology';
-import { actionOf } from '../rigs/model';
+import { prefAction, useDaemonPrefs } from '../openrig/prefs';
 import { rigErrorText } from './errors';
 import { policyOf, type PermLevel } from './model';
 import '../../styles/ide-rig.css';
@@ -56,7 +56,8 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
   }, [stateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const offered = (a: OpenRigAction): boolean => daemonUp && running && targetOf(a) === name;
-  const conf = useRigConfirm(view, offered);
+  const [prefs] = useDaemonPrefs(machine);
+  const conf = useRigConfirm(view, offered, { prefs, state });
   const [policyError, setPolicyError] = useState<string | null>(null);
   const opener = useRef<HTMLDivElement>(null);
   const headFocus = () => opener.current?.querySelector<HTMLElement>('button:not(:disabled)');
@@ -69,6 +70,8 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
     return d;
   };
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  // A snapshot failure is about a running rig: it goes when the rig stops.
+  useEffect(() => { if (!running) setSnapshotError(null); }, [running]);
   const seatNames = useMemo(() => rig?.nodes.map(n => n.session) ?? [], [rig]);
   const changeLevel = async (level: PermLevel) => {
     if (seatNames.length === 0) return;
@@ -87,7 +90,7 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
     return (
       <div className="ide-rig ide-rig-state" role="status">
         <span>{rigErrorText(t, 'daemon_stopped')}</span>{' '}
-        <button type="button" className="ide-rig-btn pri" disabled={view.pending !== null} onClick={() => void view.act({ kind: 'daemon.start' })}><Icon d={SHELL_ICONS.play} size={13} />{t.ide.rigsView.startOpenrig}</button>
+        <button type="button" className="ide-rig-btn pri" disabled={view.pending !== null} onClick={() => void view.act(prefAction('daemon', 'start', prefs))}><Icon d={SHELL_ICONS.play} size={13} />{t.ide.rigsView.startOpenrig}</button>
         {failed !== null && <div className="ide-rig-fail" role="alert">{rigErrorText(t, failed)}</div>}
       </div>
     );
@@ -102,7 +105,7 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
   };
   const verb = (kind: 'start' | 'restart' | 'stop', glyph: readonly string[], text: string, cls = ''): JSX.Element => (
     <button type="button" className={`ide-rig-btn ${cls}`.trim()} disabled={view.pending !== null}
-      onClick={e => conf.ask(actionOf(name, kind), e.currentTarget, headFocus)}><Icon d={glyph} size={13} />{text}</button>
+      onClick={e => conf.ask(prefAction(name, kind, prefs), e.currentTarget, headFocus)}><Icon d={glyph} size={13} />{text}</button>
   );
   const seatsCount = rig.nodes.length > 0 ? rig.nodes.length : rig.seats;
   const operator = isKernel ? operatorOf(state, sessions, machine) : undefined;
@@ -116,8 +119,7 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
           <span className={`ide-rig-pill ${running ? 'on' : 'off'}`}>{running ? r.running : r.stopped}</span>
           <span className="ide-rig-sub">{r.seatsAt(seatsCount, label)}</span>
           <span className="ide-rig-pw">
-            {!daemonUp ? <span className="ide-rig-sub">{r.daemonStopped}</span>
-              : running ? <>{verb('restart', RESTART, r.restart)}{verb('stop', SHELL_ICONS.stop, r.stop, 'stop')}</>
+            {running ? <>{verb('restart', RESTART, r.restart)}{verb('stop', SHELL_ICONS.stop, r.stop, 'stop')}</>
               : verb('start', SHELL_ICONS.play, r.start, 'pri')}
           </span>
         </div>

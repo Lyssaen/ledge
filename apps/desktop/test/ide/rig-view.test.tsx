@@ -223,7 +223,14 @@ describe('the Rig tab', () => {
     expect(await screen.findByText('Le daemon OpenRig est arrêté.')).toBeInTheDocument();
     expect(screen.queryByText(/n’existe plus sur cette machine/)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Démarrer OpenRig' }));
-    expect(m.f.acts().at(-1)!.action).toEqual({ kind: 'daemon.start' });
+    expect(m.f.acts().at(-1)!.action).toEqual({ kind: 'daemon.start', restore: 'last' });
+  });
+  it('with askAlways off, Stop runs at once when nobody works, and sends the snapshot preference', async () => {
+    localStorage.setItem('ledge.ide.daemonPrefs', JSON.stringify({ local: { askAlways: false, snapshotBeforeStop: false } }));
+    const m = mount({ state: state({ rigs: [rig('kernel', 'running', [seat('operator.agent', 'kernel')]), rig('ledge-dev', 'running', [seat('dev.build', 'ledge-dev'), seat('dev.review', 'ledge-dev')])] }) });
+    await userEvent.click(await screen.findByRole('button', { name: 'Arrêter' }));
+    expect(screen.queryByRole('group')).toBeNull();
+    expect(m.f.acts().at(-1)!.action).toEqual({ kind: 'rig.stop', rig: 'ledge-dev' });
   });
   it('the kernel tab of a stopped daemon says the same', async () => {
     mount({ state: state({ daemon: { state: 'stopped' }, rigs: [] }) }, { rigName: 'kernel' });

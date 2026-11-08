@@ -1370,7 +1370,7 @@ export const en: Messages = {
       topology: 'Topology', topologyRunning: 'click a seat: its thread', topologyStopped: 'the seats start with the rig', loading: 'Reading…',
       legend: 'Links', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
       running: 'running', stopped: 'stopped', seatsAt: (n: number, machine: string) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${machine}`,
-      start: 'Start', restart: 'Restart', stop: 'Stop', daemonStopped: 'the daemon is stopped',
+      start: 'Start', restart: 'Restart', stop: 'Stop',
       settings: 'Settings', specUnknown: 'Unknown spec: rig launched outside Ledge',
       permissions: 'Permissions', permissionsLabel: 'Permission level',
       level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked' } as Record<string, string>,

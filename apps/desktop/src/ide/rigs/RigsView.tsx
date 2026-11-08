@@ -14,9 +14,11 @@ import { useRigsFold, useRigsMachine } from '../../workspace/prefs';
 import { providerOf } from '../../workspace/sessionTab';
 import { openrigTab, rigTab } from '../../workspace/store';
 import { ProviderLogo } from '../ProviderLogo';
+import { useDaemonPrefs, prefAction } from '../openrig/prefs';
+import { rigErrorText } from '../rig/errors';
 import { MachineMenu } from './MachineMenu';
 import { RigConfirm, useRigConfirm } from './RigConfirm';
-import { actionOf, machineEntries, powerOf, rigsViewOf, type RigDot, type RigLine, type SeatLine } from './model';
+import { machineEntries, powerOf, rigsViewOf, type RigDot, type RigLine, type SeatLine } from './model';
 import '../../styles/ide-rigs.css';
 
 const RESTART = ['M20 12a8 8 0 1 1-2.3-5.7', 'M20 4v5h-5'];
@@ -59,11 +61,12 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     const target = targetOf(a);
     return up && (target === 'daemon' || (target === 'kernel' ? rv.kernel?.running === true : rv.rigs.find(r => r.name === target)?.running === true));
   };
-  const conf = useRigConfirm(view, offered);
+  const [prefs] = useDaemonPrefs(machine);
+  const conf = useRigConfirm(view, offered, { prefs, state: view.state });
   useEffect(() => { conf.reset(); }, [machine]); // eslint-disable-line react-hooks/exhaustive-deps
   const closeMenu = () => { setMenu(false); trigger.current?.focus(); };
   const pendingOn = (target: string) => view.pending !== null && targetOf(view.pending) === target;
-  const ask = (target: string, verb: Verb, button: HTMLElement | null) => conf.ask(actionOf(target, verb), button,
+  const ask = (target: string, verb: Verb, button: HTMLElement | null) => conf.ask(prefAction(target, verb, prefs), button,
     () => [...(root.current?.querySelectorAll<HTMLElement>('.ide-rigs-row.rig') ?? [])].find(r => r.dataset.target === target)?.querySelector<HTMLElement>('.ide-rigs-name'));
 
   const what = (target: string) => target === 'daemon' ? v.whatDaemon : target === 'kernel' ? v.whatKernel : target;
@@ -82,7 +85,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     const d: OpenRigDone | null = view.last;
     if (!d || d.ok || conf.lastTarget !== target) return null;
     const e = d.error;
-    return <div className="ide-rigs-err" role="alert">{e === 'busy' ? o.busy : e === 'not_installed' ? o.notInstalled : e === 'offline' ? o.offline : e === 'outdated' ? o.outdated : o.failed(e ?? '')}</div>;
+    return <div className="ide-rigs-err" role="alert">{rigErrorText(t, e ?? '')}</div>;
   };
 
   const seatRow = (s: SeatLine): JSX.Element => s.session ? (

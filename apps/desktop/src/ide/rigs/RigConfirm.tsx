@@ -3,6 +3,7 @@ import type { OpenRigAction, OpenRigState, Session } from '@ledge/protocol';
 import type { OpenRigView } from '@ledge/fleet/openrig';
 import { useI18n } from '../../i18n/lang';
 import { targetOf } from '../../openrig/model';
+import { needsConfirm, type DaemonPrefs } from '../openrig/prefs';
 import { confirmOf } from './model';
 import '../../styles/ide-rigs.css';
 
@@ -49,8 +50,8 @@ export interface RigConfirmControl {
   reset(): void;
 }
 
-/** The state of a confirmation: it closes when `offered` is no longer true of its action, and the focus returns to its opener. */
-export function useRigConfirm(view: OpenRigView, offered: (action: OpenRigAction) => boolean): RigConfirmControl {
+/** The state of a confirmation (`opts`: the machine's preferences can run a stop at once when nothing is working): it closes when `offered` is no longer true of its action, and the focus returns to its opener. */
+export function useRigConfirm(view: OpenRigView, offered: (action: OpenRigAction) => boolean, opts?: { prefs: DaemonPrefs; state: OpenRigState | null }): RigConfirmControl {
   const [confirm, setConfirm] = useState<OpenRigAction | null>(null);
   const [lastTarget, setLastTarget] = useState<string | null>(null);
   const opener = useRef<{ button: HTMLElement | null; back?: () => HTMLElement | null | undefined } | null>(null);
@@ -64,7 +65,8 @@ export function useRigConfirm(view: OpenRigView, offered: (action: OpenRigAction
   useEffect(() => { if (confirm && !stillOffered) close(); }, [confirm, stillOffered]); // eslint-disable-line react-hooks/exhaustive-deps
   const run = (action: OpenRigAction) => { close(); setLastTarget(targetOf(action)); void view.act(action); };
   const ask: RigConfirmControl['ask'] = (action, button, back) => {
-    if (action.kind.endsWith('.start')) run(action);
+    // Decided at the click, from the latest state: a seat that started working since the last render asks again.
+    if (action.kind.endsWith('.start') || (opts && opts.state && !needsConfirm(action, opts.state, opts.prefs))) run(action);
     else { opener.current = { button, ...(back ? { back } : {}) }; setConfirm(action); }
   };
   const reset = () => { opener.current = null; setConfirm(null); setLastTarget(null); };
