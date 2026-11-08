@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import type { OpenRigReseated, Rig } from '@ledge/protocol';
 import { seatPlan } from '@ledge/protocol';
 import type { RigPermissionsView, RigSnapshotsView } from '@ledge/fleet/openrig';
@@ -20,12 +20,12 @@ export interface RigSettingsProps {
   rig: Rig; running: boolean; permissions: RigPermissionsView; snapshots: RigSnapshotsView;
   /** The machine's daemon applies `rig.policy` (`openrigPolicy`). */ policyAvailable: boolean;
   /** An action runs on the machine. */ busy: boolean;
-  /** The failure of the last permission change, as an error code. */ policyError: string | null;
+  /** The failure of the last permission change, as an error code. */ policyError: string | null; /** The failure of the last snapshot, as an error code. */ snapshotError: string | null;
   onPolicy(level: PermLevel): void; onSnapshot(): void; onApply(seats: Record<string, number>): Promise<OpenRigReseated>;
 }
 
 /** The « Réglages » block of the Rig tab: spec file, permission level, seats per role, last snapshot (docs/mockups/ledge-ide-rigs.html `topoPage`). */
-export function RigSettings({ rig, running, permissions, snapshots, policyAvailable, busy, policyError, onPolicy, onSnapshot, onApply }: RigSettingsProps): JSX.Element {
+export function RigSettings({ rig, running, permissions, snapshots, policyAvailable, busy, policyError, snapshotError, onPolicy, onSnapshot, onApply }: RigSettingsProps): JSX.Element {
   const { t, lang } = useI18n();
   const r = t.ide.rigTab, o = t.openrig;
   const counts = running ? roleCounts(rig) : [];
@@ -34,6 +34,7 @@ export function RigSettings({ rig, running, permissions, snapshots, policyAvaila
   const [made, setMade] = useState<{ key: string; seats: Record<string, number> } | null>(null);
   const [applying, setApplying] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => { setMade(null); }, [key]);
   const { seats, changed } = seatDraft(counts, made?.key === key ? made.seats : {});
   const plan = changed ? seatPlan(rig.nodes, seats) : { add: [], remove: [] };
   const working = plan.remove.filter(id => { const n = rig.nodes.find(x => x.logicalId === id); return n && isWorking(n); });
@@ -47,7 +48,8 @@ export function RigSettings({ rig, running, permissions, snapshots, policyAvaila
 
   const level = permissions.status === 'ready' && !permissions.error ? permLevelOf(permissions.seats) : null;
   const specKnown = permissions.policy !== undefined;
-  const levelOff = (l: PermLevel): boolean => !policyAvailable || busy || (l === 'spec' && !specKnown);
+  const noSeats = rig.nodes.length === 0;
+  const levelOff = (l: PermLevel): boolean => !policyAvailable || noSeats || busy || (l === 'spec' && !specKnown);
   const last = snapshots.snapshots[0];
 
   return (
@@ -58,7 +60,7 @@ export function RigSettings({ rig, running, permissions, snapshots, policyAvaila
         <div className="ide-rig-seg" role="radiogroup" aria-label={r.permissionsLabel}>
           {PERM_LEVELS.map(l => (
             <button key={l} type="button" role="radio" aria-checked={level === l} disabled={levelOff(l)}
-              title={l === 'spec' && !specKnown ? r.specNoPolicy : undefined} onClick={() => onPolicy(l)}>{r.level[l]}</button>
+              title={noSeats ? r.noSeats : l === 'spec' && !specKnown ? r.specNoPolicy : undefined} onClick={() => onPolicy(l)}>{r.level[l]}</button>
           ))}
         </div>
         {!policyAvailable && <p className="ide-rig-note" role="status">{o.outdated}</p>}
@@ -101,6 +103,7 @@ export function RigSettings({ rig, running, permissions, snapshots, policyAvaila
             {running && <button type="button" className="ide-rig-btn" disabled={busy} onClick={onSnapshot}>{r.snapshotNow}</button>}
           </span>
         </div>
+        {snapshotError !== null && <p className="ide-rig-fail" role="alert">{snapshotError === 'busy' ? o.busy : snapshotError === 'offline' ? o.offline : snapshotError === 'outdated' ? o.outdated : snapshotError === 'not_installed' ? o.notInstalled : o.failed(snapshotError)}</p>}
       </div>
     </section>
   );

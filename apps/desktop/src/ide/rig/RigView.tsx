@@ -47,8 +47,10 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
   const seen = useRef(stateKey);
   const reloadAll = () => { graph.reload(); permissions.reload(); snapshots.reload(); };
   useEffect(() => {
-    if (seen.current === stateKey) return;
+    const before = seen.current;
     seen.current = stateKey;
+    // The first state (the hooks just asked for themselves) is not a change.
+    if (before === '' || before === stateKey) return;
     reloadAll();
   }, [stateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -65,11 +67,10 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
     if (!conf.confirm) conf.reset();
     return d;
   };
-  const seatNames = useMemo(() => {
-    const fromNodes = rig?.nodes.map(n => n.session) ?? [];
-    return fromNodes.length > 0 ? fromNodes : permissions.seats.map(s => s.session);
-  }, [rig, permissions.seats]);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const seatNames = useMemo(() => rig?.nodes.map(n => n.session) ?? [], [rig]);
   const changeLevel = async (level: PermLevel) => {
+    if (seatNames.length === 0) return;
     setPolicyError(null);
     const d = await own({ kind: 'rig.policy', rig: name, policy: policyOf(level), seats: seatNames });
     if (!d.ok) setPolicyError(d.error ?? '');
@@ -127,7 +128,8 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
         ) : (
           <div className="ide-rig-side">
             <RigSettings rig={rig} running={running} permissions={permissions} snapshots={snapshots} policyAvailable={policyAvailable} busy={view.pending !== null} policyError={policyError}
-              onPolicy={l => void changeLevel(l)} onSnapshot={() => void own({ kind: 'rig.snapshot', rig: name })}
+              onPolicy={l => void changeLevel(l)} snapshotError={snapshotError}
+              onSnapshot={() => { setSnapshotError(null); void own({ kind: 'rig.snapshot', rig: name }).then(d => { if (!d.ok) setSnapshotError(d.error ?? ''); }); }}
               onApply={async seats => { const res = await reseatRig(client, machine, name, seats); reloadAll(); view.refresh(); return res; }} />
             <RigQueue rows={queue.rows} truncated={queue.truncated} sessions={sessions} machine={machine} now={Date.now()} />
           </div>

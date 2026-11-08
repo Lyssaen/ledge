@@ -1373,7 +1373,7 @@ export const en: Messages = {
       settings: 'Settings', specUnknown: 'Unknown spec: rig launched outside Ledge',
       permissions: 'Permissions', permissionsLabel: 'Permission level',
       level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked' } as Record<string, string>,
-      specPolicy: (p: string) => `Spec: ${p}`, specNoPolicy: 'This rig’s spec gives no known policy.',
+      specPolicy: (p: string) => `Spec: ${p}`, noSeats: 'No known seat: nothing to set for now.', specNoPolicy: 'This rig’s spec gives no known policy.',
       nextLaunch: 'A change applies at the rig’s next launch.', mixed: 'Mixed', mixedSeat: (name: string, summary: string) => `${name}: ${summary}`,
       policyErrors: {
         spec_unknown: 'Ledge cannot find this rig’s spec: “Spec” is not possible.',

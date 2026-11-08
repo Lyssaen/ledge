@@ -218,4 +218,43 @@ describe('the Rig tab', () => {
     render(<LangProvider lang="fr"><RigView client={f.client} machines={[{ ...local(), ready: false }]} sessions={[]} machine="local" rig="ledge-dev" dispatch={vi.fn()} /></LangProvider>);
     expect(await screen.findByText('Cette machine est hors ligne.')).toBeInTheDocument();
   });
+
+  it('a failed Snapshot now shows its failure under the snapshot row', async () => {
+    const m = await ready(mount());
+    await userEvent.click(screen.getByRole('button', { name: 'Snapshot maintenant' }));
+    await m.f.done(false, 'busy');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Une autre action OpenRig est en cours');
+    expect(alert.previousElementSibling).toHaveTextContent('Snapshot maintenant');
+  });
+  it('OpenRig’s zone-less snapshot date is UTC, shown in local time', async () => {
+    await ready(mount({ snaps: [{ id: 's1', kind: 'manual', status: 'complete', createdAt: '2026-11-08 14:54:01' }] }));
+    expect(screen.getByText(new Date('2026-11-08T14:54:01Z').toLocaleString('fr', { dateStyle: 'short', timeStyle: 'short' }))).toBeInTheDocument();
+  });
+  it('a running rig without known seats has its whole permission segment disabled and sends nothing', async () => {
+    const m = await ready(mount({ state: state({ rigs: [rig('ledge-dev', 'running', [])] }) }));
+    const radios = screen.getAllByRole('radio');
+    expect(radios).toHaveLength(6);
+    for (const r of radios) expect(r).toBeDisabled();
+    expect(radios[2]).toHaveAttribute('title', 'Aucun siège connu : rien à régler pour l’instant.');
+    await userEvent.click(radios[2]!);
+    expect(m.f.acts()).toHaveLength(0);
+  });
+  it('a draft is dropped when the seats change, and does not come back when they return', async () => {
+    const m = await ready(mount());
+    const a = state(), b = state({ rigs: [rig('ledge-dev', 'running', [seat('dev.build', 'ledge-dev'), seat('dev.build-2', 'ledge-dev'), seat('dev.review', 'ledge-dev')])] });
+    await userEvent.click(screen.getByRole('button', { name: 'Un siège de plus pour dev.review' }));
+    await m.f.setState(b);
+    await m.f.setState(a);
+    expect(screen.queryByRole('button', { name: 'Appliquer' })).toBeNull();
+  });
+  it('reads the graph, permissions and snapshots once on mount, again only when the rig’s state changes', async () => {
+    const m = await ready(mount());
+    const n = () => [m.f.count('openrig.graph'), m.f.count('openrig.permissions'), m.f.count('openrig.snapshots')];
+    expect(n()).toEqual([1, 1, 1]);
+    await m.f.setState(state({ at: '2026-11-08T10:00:05.000Z' }));
+    expect(n()).toEqual([1, 1, 1]);
+    await m.f.setState(state({ rigs: [rig('ledge-dev', 'stopped', [])] }));
+    await waitFor(() => expect(n()).toEqual([2, 2, 2]));
+  });
 });
