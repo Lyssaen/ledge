@@ -1,4 +1,4 @@
-import type { NavAction, NavState } from '../nav/state';
+import type { NavAction, NavState, SectionId } from '../nav/state';
 import type { LayoutAction } from './layout';
 import type { OpenSession } from './openPrefs';
 import { open, type Tab, type Workspace } from './model';
@@ -9,13 +9,15 @@ export interface Routed { nav?: NavAction; ws?: (w: Workspace) => Workspace; lay
 
 const right = (on: boolean): LayoutAction => ({ type: 'show', panel: 'right', on });
 
-export function routeNav(a: NavAction, ctx: { isSeat(id: string): boolean; modalOpen: boolean; openSession: OpenSession }): Routed {
+/** `lastSettings`: the section the Settings tab was last left on; a `settings` action without a section (Ctrl+,, the gear) brings
+ *  the tab back there, as the activity bar does, rather than on General. */
+export function routeNav(a: NavAction, ctx: { isSeat(id: string): boolean; modalOpen: boolean; openSession: OpenSession; lastSettings?: SectionId }): Routed {
   switch (a.type) {
     case 'open': return { nav: a, ws: w => open(w, { kind: ctx.isSeat(a.id) ? 'seat' : 'session', ref: a.id }, a.where ?? ctx.openSession) };
     case 'home': return { ...(a.project !== undefined ? { nav: { type: 'filter', project: a.project } as NavAction } : {}), ws: w => open(w, ATELIER_TAB) };
     case 'ledge': return { nav: { type: 'chat', open: true }, layout: right(true) };
     case 'chat': return { nav: a, layout: right(a.open !== false) };
-    case 'settings': return { nav: a, ws: w => open(w, SETTINGS_TAB) };
+    case 'settings': return { nav: a.section === undefined && ctx.lastSettings ? { ...a, section: ctx.lastSettings } : a, ws: w => open(w, SETTINGS_TAB) };
     case 'openrig': return { nav: a, ws: w => open(w, openrigTab(a.machine)) };
     case 'escape': return ctx.modalOpen ? { nav: { type: 'modal', modal: null } } : {};
     default: return { nav: a };

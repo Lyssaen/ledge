@@ -226,9 +226,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // What every child dispatches. Switch off: the navigation reducer, as ever. On: the action routed (routeNav) to the
   // navigation, the tabs and the panels; the NavState stays up to date, so turning the IDE off lands on the same place.
   // Stable, as the reducer's own dispatch: effects that keep it from their first render see the switch as it is now.
+  // The section the Settings tab was last left on (set below, as the place changes): where Ctrl+, and the tab bring it back.
+  const lastSettings = useRef<SectionId>('general');
   const dispatch = useCallback((a: NavAction) => {
     if (!ideNow.current.ide) { navDispatch(a); return; }
-    const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null, openSession: ideNow.current.openSession });
+    const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null, openSession: ideNow.current.openSession, lastSettings: lastSettings.current });
     if (r.nav) navDispatch(r.nav);
     // The right panel is `layout.right`, never `nav.chat`: asking for the chat only bumps `chatFocus` (its field takes the
     // focus), and `nav.chat` goes straight back to false, or the single keys, Alt + 1…9 and the screen's Escape would stay off.
@@ -387,7 +389,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // kept), Settings and the OpenRig page on the section and sub-place they were last left on.
   const front: Tab | undefined = focused(ws).tabs[focused(ws).active];
   const frontKey = front ? keyOf(front) : null;
-  const lastSettings = useRef<SectionId>('general');
   const lastOpenRig = useRef(new Map<string, { section?: 'rigs' | 'roles'; role?: string; seat?: string }>());
   if (place.kind === 'settings') lastSettings.current = place.section;
   if (place.kind === 'openrig') lastOpenRig.current.set(place.machine ?? 'local', { ...(place.section ? { section: place.section } : {}), ...(place.role !== undefined ? { role: place.role } : {}), ...(place.seat !== undefined ? { seat: place.seat } : {}) });
@@ -743,7 +744,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         const fp = pf === 'all' || pf === 'none' ? null : projects?.projects.find(x => x.id === pf);
         return (
           <div className="ide-atelier">
-            <IdeAtelierBar filter={pf === 'all' ? null : { name: fp?.name ?? t.side.unassigned, color: fp?.color ?? null }} onClearFilter={() => dispatch({ type: 'home' })}
+            <IdeAtelierBar filter={pf === 'all' ? null : { name: fp?.name ?? t.side.unassigned, color: fp?.color ?? null }} onClearFilter={() => dispatch({ type: 'home', project: 'all' })}
               grouping={offersRigs(sessions, sidebarOpenRig?.installed) ? grouping : null} onGrouping={setGrouping}
               helpers={nav.helpers} onHelpers={() => dispatch({ type: 'helpers' })} paused={nav.paused} onPaused={() => dispatch({ type: 'paused' })}
               {...(canDetach() ? { onDetach: detach } : {})} />
