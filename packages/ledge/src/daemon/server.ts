@@ -586,7 +586,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRig: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -1247,6 +1247,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'openrig.row': return reply({ type: 'openrig.rowState', requestId: msg.requestId, qitem: msg.qitem, ...await openrig.row(msg.qitem) });
       // Read-only, to the asker only (docs/mockups/ledge-openrig-roles.html).
       case 'openrig.roles': return reply({ type: 'openrig.roleList', requestId: msg.requestId, ...await openrig.roles() });
+      case 'openrig.graph': return reply({ type: 'openrig.graphState', requestId: msg.requestId, rig: msg.rig, ...await openrig.graph(msg.rig) });
       case 'openrig.role': return reply({ type: 'openrig.roleDetail', requestId: msg.requestId, roleId: msg.roleId, ...await openrig.role(msg.roleId) });
       case 'openrig.roleFile': return reply({ type: 'openrig.roleFileContent', requestId: msg.requestId, roleId: msg.roleId, path: msg.path, ...await openrig.roleFile(msg.roleId, msg.path) });
       case 'openrig.launch': {

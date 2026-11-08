@@ -8,7 +8,7 @@ import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { SessionCommandsSchema, SessionCommandsListingSchema } from './commands.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
-import { RigSeatNameSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigGoalReplySchema, OpenRigGoalSendSchema, OpenRigGoalSentSchema, OpenRigGoalsChangedSchema, OpenRigGoalsSchema, OpenRigAnswerSchema, OpenRigAnsweredSchema, OpenRigAsksChangedSchema, OpenRigAsksSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
+import { RigSeatNameSchema, OpenRigGraphSchema, OpenRigGraphStateSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigGoalReplySchema, OpenRigGoalSendSchema, OpenRigGoalSentSchema, OpenRigGoalsChangedSchema, OpenRigGoalsSchema, OpenRigAnswerSchema, OpenRigAnsweredSchema, OpenRigAsksChangedSchema, OpenRigAsksSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
 import { OpenRigRowSchema, OpenRigRowStateSchema } from './rigMessages.js';
 import { OpenRigRoleDetailSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
@@ -102,6 +102,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
   /** Answers `openrig.roles`, `openrig.role` and `openrig.roleFile`: reads OpenRig's roles (agent specs). */ openrigRoles: z.boolean().optional(),
+  /** Answers `openrig.graph`: a rig's topology (pods, seats, links), running or stopped (lot 7a). */ openrigRig: z.boolean().optional(),
   /** Answers `openrig.row`: a queue row's state, for the OpenRig task cards of a thread. */ openrigRows: z.boolean().optional(),
   /** Answers `openrig.asks` and `openrig.answer`: what OpenRig asks the person, and their answers (« À toi »). */ openrigAsks: z.boolean().optional(),
   /** Answers `openrig.goal.send`, `openrig.goals` and `openrig.goal.reply`: goals given to Max (lot 2). */ openrigGoals: z.boolean().optional(),
@@ -136,6 +137,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionCommandsListingSchema,
   OpenRigStateMessageSchema,
   OpenRigRowStateSchema,
+  OpenRigGraphStateSchema,
   OpenRigDoneSchema,
   OpenRigSpecListSchema,
   OpenRigLaunchedSchema,
@@ -251,6 +253,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   OpenRigLaunchSchema,
   OpenRigSeatsSchema,
   OpenRigRolesSchema,
+  OpenRigGraphSchema,
   OpenRigRoleSchema,
   OpenRigRoleFileSchema,
   OpenRigAsksSchema,

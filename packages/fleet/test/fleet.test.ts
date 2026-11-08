@@ -661,6 +661,23 @@ describe('multi-machine connections', () => {
     expect(roles().at(-1)).toEqual({ type: 'openrig.roleDetail', requestId: 'o5', machineId: 'server', roleId: 'f95e', error: 'offline' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('routes a rig graph to its machine; an older daemon answers outdated, a machine that dropped offline', () => {
+    const { client, server, got } = setup();
+    const graphs = () => got.filter(m => m.type === 'openrig.graphState');
+    const graph = { pods: [], seats: [], links: [] };
+    client.send({ type: 'openrig.graph', requestId: 'g1', machineId: 'server', rig: 'kernel' });
+    expect(server.sent).toEqual([{ type: 'openrig.graph', requestId: 'g1', rig: 'kernel' }]);
+    server.emit({ type: 'openrig.graphState', requestId: 'g1', rig: 'kernel', graph });
+    server.emit({ type: 'openrig.graphState', requestId: 'g1', rig: 'kernel', graph }); // once only
+    expect(graphs()).toEqual([{ type: 'openrig.graphState', requestId: 'g1', machineId: 'server', rig: 'kernel', graph }]);
+    client.send({ type: 'openrig.graph', requestId: 'g2', machineId: 'server', rig: 'kernel' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.graph' });
+    expect(graphs().at(-1)).toEqual({ type: 'openrig.graphState', requestId: 'g2', machineId: 'server', rig: 'kernel', error: 'outdated' });
+    server.set('unreachable');
+    client.send({ type: 'openrig.graph', requestId: 'g3', machineId: 'server', rig: 'starter' });
+    expect(graphs().at(-1)).toEqual({ type: 'openrig.graphState', requestId: 'g3', machineId: 'server', rig: 'starter', error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('answers a repos.scan for an offline machine, and one pending on a machine that drops, with error offline', () => {
     const { client, server, got } = setup();
     client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });

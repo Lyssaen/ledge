@@ -90,6 +90,33 @@ export const OpenRigDoneSchema = z.object({
   type: z.literal('openrig.done'), requestId: z.string(), machineId: z.string().optional(), ok: z.boolean(),
   commands: z.array(z.string()), output: z.string().optional(), error: z.string().optional()
 });
+/** A rig's topology (lot 7a): one seat of a pod, keyed by `logicalId` (`dev.build`). `status` is OpenRig's own word (`running`,
+ *  `exited`…; `unknown` when only the spec could be read); `attention` is its `needsAttention`; `role` the agent spec it runs
+ *  (`resolvedSpecName`), `session` its canonical session name, `context` the used share of its context window (percent). */
+export const RigGraphSeatSchema = z.object({
+  logicalId: z.string(), pod: z.string(), role: z.string().optional(), runtime: z.string(), model: z.string().optional(),
+  status: z.string(), session: z.string().optional(), attention: z.boolean(), context: z.number().optional()
+});
+/** A typed link between two seats, both as `logicalId`; `kind` is the edge's label (`delegates_to`, `escalates_to`, `collaborates_with`…). */
+export const RigLinkSchema = z.object({ from: z.string(), to: z.string(), kind: z.string() });
+/** A rig's pods, seats and links, for a running rig and a stopped one. */
+export const RigGraphSchema = z.object({
+  pods: z.array(z.object({ id: z.string(), label: z.string() })), seats: z.array(RigGraphSeatSchema), links: z.array(RigLinkSchema)
+});
+export type RigGraphSeat = z.infer<typeof RigGraphSeatSchema>;
+export type RigLink = z.infer<typeof RigLinkSchema>;
+export type RigGraph = z.infer<typeof RigGraphSchema>;
+
+/** A front asks a machine for a rig's topology. */
+export const OpenRigGraphSchema = z.object({ type: z.literal('openrig.graph'), requestId: z.string().min(1).max(100), machineId: z.string().optional(), rig: RigNameSchema });
+/** The topology, or why not: `unknown_rig`, `not_installed`, `daemon_stopped`, or the fleet's `offline` / `outdated`. */
+export const OpenRigGraphStateSchema = z.object({
+  type: z.literal('openrig.graphState'), requestId: z.string(), machineId: z.string().optional(), rig: z.string(),
+  graph: RigGraphSchema.optional(), error: z.string().optional()
+});
+export type OpenRigGraph = z.infer<typeof OpenRigGraphSchema>;
+export type OpenRigGraphState = z.infer<typeof OpenRigGraphStateSchema>;
+
 export type OpenRigStatus = z.infer<typeof OpenRigStatusSchema>;
 export type OpenRigAct = z.infer<typeof OpenRigActSchema>;
 export type OpenRigStateMessage = z.infer<typeof OpenRigStateMessageSchema>;

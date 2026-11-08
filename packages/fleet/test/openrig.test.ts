@@ -96,6 +96,29 @@ describe('useOpenRigRoles / useOpenRigRole / readRoleFile', () => {
   });
 });
 
+describe('useRigGraph', () => {
+  const graph = { pods: [{ id: 'dev', label: 'Project' }], seats: [{ logicalId: 'dev.build', pod: 'dev', runtime: 'codex', status: 'exited', attention: false }], links: [] };
+  it('asks once per machine and rig, its own answer only; another rig is not shown the previous graph', async () => {
+    const { useRigGraph } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const { result, rerender } = renderHook(({ rig }) => useRigGraph(client, 'server', rig), { initialProps: { rig: 'a' as string | null } });
+    expect(result.current.status).toBe('loading');
+    expect(sent).toEqual([{ type: 'openrig.graph', requestId: rid(sent[0]), machineId: 'server', rig: 'a' }]);
+    emit({ type: 'openrig.graphState', requestId: 'other', rig: 'a', graph });
+    expect(result.current.status).toBe('loading');
+    emit({ type: 'openrig.graphState', requestId: rid(sent[0]), machineId: 'server', rig: 'a', graph });
+    expect(result.current).toMatchObject({ status: 'ready', graph });
+    rerender({ rig: 'b' });
+    expect(result.current).toMatchObject({ status: 'loading', graph: null });
+    emit({ type: 'openrig.graphState', requestId: rid(sent.at(-1)), rig: 'b', error: 'unknown_rig' });
+    expect(result.current).toMatchObject({ status: 'ready', graph: null, error: 'unknown_rig' });
+    act(() => result.current.reload());
+    expect(sent).toHaveLength(3);
+    rerender({ rig: null });
+    expect(result.current.status).toBe('idle');
+  });
+});
+
 describe('useRigRow', () => {
   const row = { id: 'qitem-1-a', state: 'in-progress', from: 'a@r', to: 'b@r', createdAt: 'x', updatedAt: 'y', at: 'z' };
   it('asks while the card is visible, again every 30 s, its own answer only; nothing while hidden', async () => {

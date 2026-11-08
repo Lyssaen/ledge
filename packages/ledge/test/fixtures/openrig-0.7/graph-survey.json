@@ -1,0 +1,91 @@
+{
+  "nodes": [
+    {
+      "id": "pod-01PODDEV",
+      "type": "podGroup",
+      "data": {
+        "logicalId": "dev",
+        "podLabel": "Project",
+        "podNamespace": "dev",
+        "rigId": "01RIGSURVEY",
+        "role": null,
+        "runtime": null,
+        "model": null,
+        "status": null,
+        "nodeKind": "agent",
+        "startupStatus": null,
+        "canonicalSessionName": null,
+        "podId": "01PODDEV",
+        "resumeToken": null,
+        "resolvedSpecName": null,
+        "profile": null,
+        "edgeCount": 0,
+        "contextUsedPercentage": null,
+        "pendingWorkCount": 0,
+        "heldReason": null
+      }
+    },
+    {
+      "id": "01NODEBUILD",
+      "type": "rigNode",
+      "parentId": "pod-01PODDEV",
+      "data": {
+        "logicalId": "dev.build",
+        "podLabel": "Project",
+        "podNamespace": "dev",
+        "rigId": "01RIGSURVEY",
+        "role": null,
+        "runtime": "claude-code",
+        "model": null,
+        "status": "running",
+        "nodeKind": "agent",
+        "startupStatus": "ready",
+        "canonicalSessionName": "dev-build@ledge-survey",
+        "podId": "01PODDEV",
+        "resumeToken": "00000000-fake-token",
+        "resolvedSpecName": "implementer",
+        "profile": "default",
+        "edgeCount": 1,
+        "contextUsedPercentage": null,
+        "needsAttention": false,
+        "pendingWorkCount": 0,
+        "heldReason": null
+      }
+    },
+    {
+      "id": "01NODEREVIEW",
+      "type": "rigNode",
+      "parentId": "pod-01PODDEV",
+      "data": {
+        "logicalId": "dev.review",
+        "podLabel": "Project",
+        "podNamespace": "dev",
+        "rigId": "01RIGSURVEY",
+        "role": null,
+        "runtime": "codex",
+        "model": "gpt-6-astra",
+        "status": "running",
+        "nodeKind": "agent",
+        "startupStatus": "ready",
+        "canonicalSessionName": "dev-review@ledge-survey",
+        "podId": "01PODDEV",
+        "resumeToken": "00000000-fake-token",
+        "resolvedSpecName": "qa",
+        "profile": "default",
+        "edgeCount": 1,
+        "contextUsedPercentage": null,
+        "needsAttention": false,
+        "pendingWorkCount": 0,
+        "heldReason": null
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "01EDGE1",
+      "source": "01NODEBUILD",
+      "target": "01NODEREVIEW",
+      "label": "delegates_to"
+    }
+  ]
+}

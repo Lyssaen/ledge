@@ -6,7 +6,7 @@ import { parse as parseYaml } from 'yaml';
 import { changesSpec, composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, QitemIdSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -182,6 +182,9 @@ export interface OpenRig {
   /** A queue row's state (`rig queue show <id> --json`), for the OpenRig task cards of a thread: reused under `ROW_TTL_MS`,
    *  one read at a time per row. `error`: `not_found`, `not_installed`, `daemon_stopped`, or what `rig` said. */
   row(qitem: string): Promise<{ row?: RigRow; error?: string }>;
+  /** A rig's topology (pods, seats, links), running or stopped, by rig name: from the daemon's `/graph`, else from `rig spec show`
+   *  (no state, no context). Reused under `SEATS_TTL_MS`. `error`: `unknown_rig`, `not_installed`, `daemon_stopped`, or what `rig` said. */
+  graph(rig: string): Promise<{ graph?: RigGraph; error?: string }>;
 }
 export interface RolesResult { roles: RoleSummary[]; openrigVersion?: string; error?: string }
 export interface RoleResult { role?: RoleDetail; error?: string }
@@ -539,7 +542,75 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return read;
   }
 
-  return { state, act, specs, launch, reseat, roles, role, roleFile, row };
+  const graphs = new Map<string, { at: number; read: Promise<{ graph?: RigGraph; error?: string }> }>();
+  async function graph(name: string): Promise<{ graph?: RigGraph; error?: string }> {
+    const st = await state();
+    if (!st.installed) return { error: 'not_installed' };
+    const known = st.rigs.find(r => r.name === name);
+    if (!known) return { error: st.daemon.state === 'running' ? 'unknown_rig' : 'daemon_stopped' };
+    const hit = graphs.get(known.id);
+    if (hit && now() - hit.at < SEATS_TTL_MS) return hit.read;
+    const read = (async () => {
+      const live = await http(`/api/rigs/${encodeURIComponent(known.id)}/graph`).then(readGraph, () => undefined);
+      if (live) return { graph: live };
+      const r = await run(['spec', 'show', known.id, '--json'], STATUS_MS);
+      if (r.code === null) return { error: 'not_installed' };
+      const spec = r.code === 0 ? graphFromSpec(parse(r.stdout)) : undefined;
+      return spec ? { graph: spec } : { error: r.code === 0 ? 'failed' : failure(r) };
+    })();
+    graphs.delete(known.id); graphs.set(known.id, { at: now(), read });
+    // A failure is not kept: the next ask reads again.
+    void read.then(x => { if (!x.graph && graphs.get(known.id)?.read === read) graphs.delete(known.id); });
+    while (graphs.size > ROWS_MAX) graphs.delete(graphs.keys().next().value!);
+    return read;
+  }
+
+  return { state, act, specs, launch, reseat, roles, role, roleFile, row, graph };
+}
+
+/** A rig's topology from the daemon's `GET /api/rigs/<id>/graph` (`{ nodes, edges }`, not a contract): the `podGroup` nodes are the
+ *  pods, the `rigNode` ones the seats (`data.logicalId`), and an edge's `source` / `target` are node ids, told back as `logicalId`.
+ *  Undefined when it is not that shape. */
+export function readGraph(raw: unknown): RigGraph | undefined {
+  const j = obj(raw);
+  if (!Array.isArray(j.nodes) || !Array.isArray(j.edges)) return undefined;
+  const pods: RigGraph['pods'] = [], seats: RigGraphSeat[] = [], logical = new Map<string, string>();
+  for (const n of j.nodes.map(obj)) {
+    const d = obj(n.data), id = str(n.id), lid = str(d.logicalId);
+    if (n.type === 'podGroup') { const ns = str(d.podNamespace) ?? lid; if (ns) pods.push({ id: ns, label: str(d.podLabel) ?? ns }); continue; }
+    if (n.type !== 'rigNode' || !id || !lid) continue;
+    logical.set(id, lid);
+    const pod = str(d.podNamespace) ?? lid.split('.')[0]!, role = str(d.resolvedSpecName), model = str(d.model), session = str(d.canonicalSessionName);
+    seats.push({ logicalId: lid, pod, ...(role ? { role } : {}), runtime: str(d.runtime) ?? 'unknown', ...(model ? { model } : {}), status: str(d.status) ?? 'unknown',
+      ...(session ? { session } : {}), attention: d.needsAttention === true, ...(typeof d.contextUsedPercentage === 'number' ? { context: d.contextUsedPercentage } : {}) });
+  }
+  const links: RigLink[] = [];
+  for (const e of j.edges.map(obj)) {
+    const from = logical.get(str(e.source) ?? ''), to = logical.get(str(e.target) ?? ''), kind = str(e.label);
+    if (from && to && kind) links.push({ from, to, kind });
+  }
+  return { pods, seats, links };
+}
+
+/** The same from `rig spec show <id> --json` (the fallback, where nothing is said of state or context): `pods[].members[]` as
+ *  `pod.member`, `pods[].edges[]` told with their pod's prefix, and the top-level `edges[]` (already `pod.member`). */
+export function graphFromSpec(raw: unknown): RigGraph | undefined {
+  const j = obj(raw);
+  if (!Array.isArray(j.pods)) return undefined;
+  const pods: RigGraph['pods'] = [], seats: RigGraphSeat[] = [], links: RigLink[] = [];
+  const link = (e: unknown, prefix: string) => { const x = obj(e), from = str(x.from), to = str(x.to), kind = str(x.kind); if (from && to && kind) links.push({ from: prefix + from, to: prefix + to, kind }); };
+  for (const p of j.pods.map(obj)) {
+    const id = str(p.id);
+    if (!id) continue;
+    pods.push({ id, label: str(p.label) ?? id });
+    for (const m of (Array.isArray(p.members) ? p.members : []).map(obj)) {
+      const mid = str(m.id), model = str(m.model);
+      if (mid) seats.push({ logicalId: `${id}.${mid}`, pod: id, runtime: str(m.runtime) ?? 'unknown', ...(model ? { model } : {}), status: 'unknown', attention: false });
+    }
+    for (const e of Array.isArray(p.edges) ? p.edges : []) link(e, `${id}.`);
+  }
+  for (const e of Array.isArray(j.edges) ? j.edges : []) link(e, '');
+  return { pods, seats, links };
 }
 
 /** How long a row's read is reused: under the fronts' 30 s cadence, so a card is never more than one cadence late. */

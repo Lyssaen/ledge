@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { RIG_ROW_REFRESH_MS } from '@ledge/protocol';
-import type { RigRow, OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigLaunch, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
+import type { RigRow, OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigGraph, RigLaunch, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
 /** How often a screen that shows a machine's OpenRig asks it again. */
@@ -266,6 +266,32 @@ export function useOpenRigRole(client: DaemonClient, machine: string | null, id:
   if (key === null) return { status: 'idle', role: null, reload };
   if (!answer || answer.key !== key) return { status: 'loading', role: null, reload };
   return { status: 'ready', role: answer.role, ...(answer.error ? { error: answer.error } : {}), reload };
+}
+
+export interface RigGraphView { status: 'idle' | 'loading' | 'ready'; graph: RigGraph | null; error?: string; reload(): void }
+
+/** A rig's topology on a machine (`rig` null: nothing asked), read-only, running or stopped. `error`: `unknown_rig`, `not_installed`,
+ *  `daemon_stopped`, `failed`, or the fleet's `offline` / `outdated`. A previous graph stays shown while the next one loads only if it is the same rig. */
+export function useRigGraph(client: DaemonClient, machine: string | null, rig: string | null): RigGraphView {
+  const [answer, setAnswer] = useState<{ key: string; graph: RigGraph | null; error?: string } | null>(null);
+  const [round, setRound] = useState(0);
+  const key = machine !== null && rig !== null ? `${machine}\u0000${rig}` : null;
+  useEffect(() => {
+    if (machine === null || rig === null) return;
+    const requestId = `openrig-graph-${++next}`;
+    const k = `${machine}\u0000${rig}`;
+    setAnswer(a => (a?.key === k ? a : null));
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.graphState' || m.requestId !== requestId) return;
+      setAnswer({ key: k, graph: m.graph ?? null, ...(m.error ? { error: m.error } : {}) });
+    });
+    client.send({ type: 'openrig.graph', requestId, machineId: machine, rig });
+    return off;
+  }, [client, machine, rig, round]);
+  const reload = useCallback(() => setRound(r => r + 1), []);
+  if (key === null) return { status: 'idle', graph: null, reload };
+  if (!answer || answer.key !== key) return { status: 'loading', graph: null, reload };
+  return { status: 'ready', graph: answer.graph, ...(answer.error ? { error: answer.error } : {}), reload };
 }
 
 /** A file of a role (one its detail lists); resolves with its content or why not (`not_allowed`, `missing`, `offline`…). */

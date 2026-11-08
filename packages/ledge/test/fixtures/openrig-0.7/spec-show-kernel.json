@@ -1,0 +1,83 @@
+{
+  "version": "0.2",
+  "name": "kernel",
+  "pods": [
+    {
+      "id": "advisor",
+      "label": "Advisor",
+      "members": [
+        {
+          "id": "lead",
+          "agentRef": "local:agents/advisor/lead",
+          "runtime": "claude-code",
+          "profile": "default",
+          "cwd": "/home/user/.openrig/workspace"
+        }
+      ],
+      "edges": []
+    },
+    {
+      "id": "operator",
+      "label": "Operator",
+      "members": [
+        {
+          "id": "agent",
+          "agentRef": "local:agents/operator/agent",
+          "runtime": "codex",
+          "profile": "default",
+          "cwd": "/home/user/.openrig/workspace"
+        },
+        {
+          "id": "human",
+          "agentRef": "builtin:terminal",
+          "runtime": "terminal",
+          "profile": "none",
+          "cwd": "/home/user/.openrig/workspace"
+        }
+      ],
+      "edges": [
+        {
+          "kind": "collaborates_with",
+          "from": "agent",
+          "to": "human"
+        },
+        {
+          "kind": "escalates_to",
+          "from": "agent",
+          "to": "human"
+        }
+      ]
+    },
+    {
+      "id": "queue",
+      "label": "Queue",
+      "members": [
+        {
+          "id": "worker",
+          "agentRef": "local:agents/queue/worker",
+          "runtime": "codex",
+          "profile": "default",
+          "cwd": "/home/user/.openrig/workspace"
+        }
+      ],
+      "edges": []
+    }
+  ],
+  "edges": [
+    {
+      "kind": "delegates_to",
+      "from": "advisor.lead",
+      "to": "operator.agent"
+    },
+    {
+      "kind": "delegates_to",
+      "from": "advisor.lead",
+      "to": "queue.worker"
+    },
+    {
+      "kind": "escalates_to",
+      "from": "queue.worker",
+      "to": "advisor.lead"
+    }
+  ]
+}
