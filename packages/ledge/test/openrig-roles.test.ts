@@ -508,7 +508,7 @@ describe('OpenRig roles: duplicating one into the library (R7)', () => {
     expect(r).toEqual({ ok: true, roleId: 'abc1', path: '/h/.openrig/specs/mine' });
     expect(w.seen.dir).toBe(join(w.tmpBase, (await Promise.resolve(w.seen.dir!)).split('/').at(-2)!, 'mine'));
     expect(w.seen.files).toEqual(['agent.yaml', 'guidance', 'guidance/role.md']);
-    expect(w.seen.yaml).toBe(`# my role\nname: mine   # keep\nversion: "1.0"\nimports:\n  - ref: path:${join(w.root, 'lib', 'agents', 'shared')}\n  - ref: "path:${join(w.root, 'lib', 'x')}"\n  - ref: path:/abs/ok\nprofiles: {}\n`);
+    expect(w.seen.yaml).toBe(`# my role\nname: "mine"   # keep\nversion: "1.0"\nimports:\n  - ref: path:${join(w.root, 'lib', 'agents', 'shared')}\n  - ref: "path:${join(w.root, 'lib', 'x')}"\n  - ref: path:/abs/ok\nprofiles: {}\n`);
     expect(w.calls.filter(c => c.startsWith('specs add'))).toEqual([`specs add ${w.seen.dir} --json`]);
     expect(await left(w.tmpBase)).toEqual([]);
     // the original is untouched

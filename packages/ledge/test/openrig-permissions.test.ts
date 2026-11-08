@@ -48,7 +48,7 @@ const NODES = ['pilot.lead', 'dev.front', 'dev.back', 'dev.test', 'dev.docs'].ma
   rigId: '01R', rigName: 'ledge-dev', logicalId: l, canonicalSessionName: `${l.replace('.', '-')}@ledge-dev`, runtime: 'claude-code', sessionStatus: 'running', lifecycleState: 'running', agentActivity: { state: 'idle' }
 }));
 
-function world(over: { nodes?: unknown[]; delay?: number; fail?: string[]; daemon?: 'running' | 'stopped'; spec?: string | null; installed?: boolean } = {}) {
+function world(over: { nodes?: unknown[]; delay?: number; fail?: string[]; daemon?: 'running' | 'stopped'; spec?: string | null; installed?: boolean; files?: Record<string, string>; library?: { name: string; path: string }[] } = {}) {
   const calls: string[] = [];
   let clock = 1_000_000, inFlight = 0, peak = 0;
   const ok = (j: unknown) => ({ code: 0, stdout: JSON.stringify(j), stderr: '' });
@@ -57,6 +57,7 @@ function world(over: { nodes?: unknown[]; delay?: number; fail?: string[]; daemo
     if (over.installed === false) return { code: null, stdout: '', stderr: 'rig: command not found' };
     if (a === 'status --json') return ok({ daemon: { state: over.daemon ?? 'running', reachable: (over.daemon ?? 'running') === 'running', port: 7433 }, kernel: { state: 'ready' } });
     if (a === '--version') return { code: 0, stdout: '0.7.7\n', stderr: '' };
+    if (a === 'specs ls --json') return ok((over.library ?? []).map(l => ({ kind: 'rig', name: l.name, sourceType: 'user_file', resolvedSourcePath: l.path })));
     if (a === 'ps --json') return ok([{ rigId: '01R', name: 'ledge-dev', nodeCount: 5, runningCount: 5, status: 'running', lifecycleState: 'running' }]);
     if (a === 'ps --nodes -A --json') return ok(over.nodes ?? NODES);
     if (args[0] === 'seat' && args[1] === 'status') {
@@ -69,7 +70,7 @@ function world(over: { nodes?: unknown[]; delay?: number; fail?: string[]; daemo
     if (args[0] === 'seat' && args[1] === 'set-permissions') return { code: 0, stdout: '{}', stderr: '' };
     return { code: 1, stdout: '', stderr: `unexpected ${a}` };
   };
-  const files: Record<string, string> = over.spec ? { '/h/.ledge/rigs/ledge-dev/rig.yaml': over.spec } : {};
+  const files: Record<string, string> = { ...(over.spec ? { '/h/.ledge/rigs/ledge-dev/rig.yaml': over.spec } : {}), ...over.files };
   const fs = { read: async (p: string) => { if (p in files) return files[p]!; throw new Error('ENOENT'); }, exists: (p: string) => p in files, copyDir: async () => {}, write: async () => {} };
   const roleIo = { read: async (p: string) => files[p] ?? null, stat: async () => null, head: async () => null };
   const rig = createOpenRig({ run, fs, roleIo, home: '/h', rigsDir: '/h/.ledge/rigs', openrigHome: '/h/.openrig', now: () => clock, http: async () => undefined });
@@ -126,6 +127,15 @@ describe('OpenRig permissions', () => {
     expect(none.policy).toBeUndefined();
     expect('policy' in none).toBe(false);
     expect((await world({ spec: 'name: ledge-dev\npods:\n  - id: dev\n    members:\n      - id: front\n        agent_ref: local:agents/front\n' }).rig.permissions('ledge-dev')).policy).toBeUndefined();
+  });
+  it('policy: the spec file itself, never a guessed sibling: a library folder with two spec files, a marker naming a file that is not rig.yaml', async () => {
+    const spec = (n: string, pol: string) => `name: ${n}\npermission_policy: ${pol}\npods:\n  - id: dev\n    members:\n      - id: front\n        agent_ref: local:agents/front\n`;
+    const folder = { '/lib/a.yaml': spec('other', 'builtin:yolo'), '/lib/b.yaml': spec('ledge-dev', 'builtin:auto'), '/lib/rig.yaml': spec('third', 'builtin:safe') };
+    expect((await world({ files: folder, library: [{ name: 'ledge-dev', path: '/lib/b.yaml' }] }).rig.permissions('ledge-dev')).policy).toBe('builtin:auto');
+    const marked = { ...folder, '/h/.ledge/rigs/ledge-dev/source.json': JSON.stringify({ spec: 'ledge-dev', path: '/lib/b.yaml' }) };
+    expect((await world({ files: marked }).rig.permissions('ledge-dev')).policy).toBe('builtin:auto');
+    // Not known as a spec file (the folder holds only others): absent, not a neighbour's.
+    expect((await world({ files: { '/lib/a.yaml': folder['/lib/a.yaml'] } }).rig.permissions('ledge-dev')).policy).toBeUndefined();
   });
 });
 

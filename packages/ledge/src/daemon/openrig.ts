@@ -272,7 +272,7 @@ async function copyTree(from: string, to: string, seen = { files: 0, bytes: 0 })
 export function rewriteDuplicate(yaml: string, name: string, originalDir: string): string {
   let renamed = false;
   return yaml.split('\n').map(line => {
-    if (!renamed && /^name:/.test(line)) { renamed = true; return line.replace(/^name:\s*("[^"]*"|'[^']*'|[^\s#]*)/, `name: ${name}`); }
+    if (!renamed && /^name:/.test(line)) { renamed = true; return line.replace(/^name:\s*("[^"]*"|'[^']*'|[^\s#]*)/, `name: ${JSON.stringify(name)}`); }
     return line.replace(/(?<=^|[\s"'\[,])local:([^\s"'#,\]]+)/g, (_m, rel: string) => `path:${resolve(originalDir, rel)}`);
   }).join('\n');
 }
@@ -357,7 +357,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       return { ok: true, commands, ...(output ? { output } : {}) };
     } finally {
       acting = false;
-      last = undefined; perms.clear();
+      last = undefined; perms.clear(); graphs.clear();
     }
   }
 
@@ -426,7 +426,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       return { ok: true, plan, commands: shown, yaml, seats, ...(output ? { output } : {}), ...(check ? { check } : {}) };
     } finally {
       acting = false;
-      if (!plan) { last = undefined; perms.clear(); }
+      if (!plan) { last = undefined; perms.clear(); graphs.clear(); }
     }
   }
 
@@ -492,7 +492,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       return { ok: true, commands: shown, added, removed, ...(output ? { output } : {}), ...(plan.add.length ? (can.edge ? { links } : { linksUnsupported: true }) : {}) };
     } finally {
       acting = false;
-      last = undefined; perms.clear();
+      last = undefined; perms.clear(); graphs.clear();
     }
   }
 
@@ -697,9 +697,10 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     const hit = perms.get(known.id);
     if (hit && now() - hit.at < PERMISSIONS_TTL_MS) return hit.read;
     const read = (async () => {
-      const root = await rootOf(known.name).catch(() => null);
-      const text = root ? await roleIo.read(join(root, 'rig.yaml')).catch(() => null) : null;
-      const policy = text ? readSpec(text, { name: known.name, source: 'user', path: join(root!, 'rig.yaml') })?.policy : undefined;
+      // The spec file itself: Ledge's own (composed, or a marker's), else the library spec OpenRig lists under this name. Never a sibling file of its folder.
+      const file = await specPathOf(known.name).catch(() => undefined) ?? (known.name === KERNEL_RIG ? undefined : (await specs().catch(() => undefined))?.specs.find(x => x.name === known.name)?.path);
+      const text = file ? await roleIo.read(file).catch(() => null) : null;
+      const policy = text ? readSpec(text, { name: known.name, source: 'user', path: file! })?.policy : undefined;
       const seats: RigSeatPermission[] = new Array(known.nodes.length);
       let next = 0;
       const worker = async () => {

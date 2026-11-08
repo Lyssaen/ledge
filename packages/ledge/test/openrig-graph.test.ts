@@ -93,6 +93,13 @@ describe('OpenRig graph: errors and cache', () => {
     const stopped = createOpenRig({ run: async args => (args[0] === 'status' ? { code: 0, stdout: JSON.stringify({ daemon: { state: 'stopped' } }), stderr: '' } : { code: 1, stdout: '', stderr: '' }), http: async () => undefined });
     expect(await stopped.graph('kernel')).toEqual({ error: 'daemon_stopped' });
   });
+  it('an action on a rig makes the next graph read again, though within 5 s', async () => {
+    const { rig, httpCalls } = world({ http: () => GRAPH, now: () => 1_000_000 });
+    await rig.graph('ledge-survey');
+    await rig.act({ kind: 'rig.start', rig: 'ledge-survey' }); // fails here (no such command in the fake): the cache is forgotten all the same
+    await rig.graph('ledge-survey');
+    expect(httpCalls).toHaveLength(2);
+  });
   it('is read once within 5 s per rig, again after, and a failing graph leaves state() alone', async () => {
     let t = 1_000_000;
     const { rig, httpCalls } = world({ http: () => GRAPH, now: () => t });
