@@ -689,7 +689,7 @@ describe('multi-machine connections', () => {
       { type: 'openrig.role.duplicate', requestId: 'x5', machineId: 'server', roleId: 'f95e', name: 'mine' },
       { type: 'openrig.act', requestId: 'x6', machineId: 'server', action: { kind: 'rig.snapshot', rig: 'a' } },
       { type: 'openrig.act', requestId: 'x7', machineId: 'server', action: { kind: 'rig.permissions', rig: 'a', mode: 'auto', seats: ['s'] } as never },
-      { type: 'openrig.act', requestId: 'x8', machineId: 'server', action: { kind: 'rig.start', rig: 'a', snapshot: 'snap-1' } as never }
+      { type: 'openrig.act', requestId: 'x8', machineId: 'server', action: { kind: 'rig.start', rig: 'a', snapshot: 'snap-1' } as never },
     ];
     it('answers each gated message outdated without sending it, for the remote machine and the local one', () => {
       const { client, local, server, got } = setup();
@@ -713,6 +713,18 @@ describe('multi-machine connections', () => {
       client.send({ type: 'openrig.graph', requestId: 'p4', machineId: 'server', rig: 'a' });
       expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['p1', 'p2', 'p3']);
       expect(got.filter(m => 'error' in m)).toHaveLength(1); // p4 only
+    });
+    const policy = { type: 'openrig.act', requestId: 'y1', machineId: 'server', action: { kind: 'rig.policy', rig: 'a', policy: 'standard', seats: ['s@a'] } } as ClientMessage;
+    it('rig.policy needs openrigPolicy: outdated, not sent, with openrigRig alone; sent with it', () => {
+      const { client, server, got } = setup();
+      const withRig = { type: 'snapshot', sessions: [], daemon: { version: '0.7.0', install: 'npm', systemd: true, openrig: true, openrigRig: true } } as ServerMessage;
+      server.emit({ ...withRig, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send(policy);
+      expect(server.sent).toEqual([]);
+      expect(got.at(-1)).toEqual({ type: 'openrig.done', requestId: 'y1', machineId: 'server', ok: false, commands: [], error: 'outdated' });
+      server.emit({ ...withRig, daemon: { ...(withRig as { daemon: object }).daemon, openrigPolicy: true }, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send({ ...policy, requestId: 'y2' } as ClientMessage);
+      expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['y2']);
     });
     it('sends them all when the daemon says openrigRig', () => {
       const { client, server } = setup();

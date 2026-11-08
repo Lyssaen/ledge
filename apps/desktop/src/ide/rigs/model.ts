@@ -14,13 +14,19 @@ export interface RigsView { status: 'loading' | 'offline' | 'absent' | 'stopped'
 const ORDER: readonly RigDot[] = ['perm', 'ask', 'work', 'idle', 'off'];
 const worst = (dots: readonly RigDot[]): RigDot => ORDER.find(d => dots.includes(d)) ?? 'idle';
 
-function seatLine(node: RigSeat, machine: string, sessions: readonly Session[], asks: readonly HumanAsk[]): SeatLine {
-  const session = sessions.find(s => isAskSeat(s, node.session, machine));
-  if (!session) return { logicalId: node.logicalId, name: node.logicalId, dot: node.activity === 'running' ? 'work' : node.stopped ? 'off' : 'idle' };
+/** A seat's dot. Joined to a Ledge session: its state (and the asks it has raised). Not joined: what OpenRig says of the seat (`activity` running → work, `stopped` → off). */
+export function seatDot(session: Session | undefined, node: { activity: string; stopped?: boolean }, asks: readonly HumanAsk[] = [], machine?: string): RigDot {
+  if (!session) return node.activity === 'running' ? 'work' : node.stopped ? 'off' : 'idle';
   const asking = asks.some(a => isAskSeat(session, a.from.seat, machine));
-  const dot: RigDot = session.state === 'waiting_permission' || session.state === 'error' ? 'perm'
+  return session.state === 'waiting_permission' || session.state === 'error' ? 'perm'
     : session.state === 'waiting_input' || asking ? 'ask'
     : session.state === 'working' || session.state === 'starting' ? 'work' : 'idle';
+}
+
+function seatLine(node: RigSeat, machine: string, sessions: readonly Session[], asks: readonly HumanAsk[]): SeatLine {
+  const session = sessions.find(s => isAskSeat(s, node.session, machine));
+  const dot = seatDot(session, node, asks, machine);
+  if (!session) return { logicalId: node.logicalId, name: node.logicalId, dot };
   return { logicalId: node.logicalId, name: session.name, dot, session, ...(session.context ? { ctx: Math.round(session.context.used / session.context.window * 100) } : {}) };
 }
 

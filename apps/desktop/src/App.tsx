@@ -85,7 +85,7 @@ import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
+import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
@@ -94,7 +94,7 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeRigs } from './ide/lazy';
+import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeRigs, IdeRigView } from './ide/lazy';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -763,6 +763,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         const o = place.kind === 'openrig' && (place.machine ?? 'local') === tab.ref ? place : null;
         return <OpenRigPage client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'rigs'} role={o?.role} seat={o?.seat} open={o?.open} projects={projects} sessions={sessions} dispatch={dispatch} />;
       }
+      if (tab.kind === 'rig') {
+        const r = parseRigRef(tab.ref);
+        return r ? <IdeRigView client={fleetClient} machines={machines} sessions={sessions} machine={r.machine} rig={r.rig} dispatch={dispatch} /> : <div className="ide-rigs-note" role="status">{t.ide.rigTab.badRef}</div>;
+      }
       return null;
     };
     // An empty group shows the welcome; what it opens lands in that group: it is focused first, then the tab opened « active »
@@ -786,7 +790,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       return <IdeWelcome terminal={s ? title({ kind: 'session', ref: s.id }) : null} seat={s?.rig != null} recent={recentSessions(sessions)} waiting={waiting.length > 0}
         where={where} onPick={pick} onOpen={id => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'open', id, where: 'active' }); }} />;
     };
-    const onTab = (tab: Tab) => { const a = tabAction(tab); if (a) dispatch(a); else wsStore.update(w => openTab(w, tab)); };
+    const onTab = (tab: Tab, where?: 'right') => { const a = tabAction(tab); if (a) dispatch(a); else wsStore.update(w => openTab(w, tab, where)); };
     return (
       <IdePlace layout={layout} onLayout={onLayout} blocked={blocked} readOnly={localDown} dragging={!!filing.dragging}
         onSearch={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}

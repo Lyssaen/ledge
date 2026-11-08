@@ -1,0 +1,92 @@
+/* The « Rig · name » tab (IDE lot 7c): its blocks and the topology. Loaded with the IDE's lazy chunk. */
+.ide-rig-block { border: 1px solid var(--border); border-radius: 9px; background: var(--card); font-size: 12.5px; color: var(--foreground); }
+.ide-rig-head { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.ide-rig-head b { font-weight: 600; }
+.ide-rig-sub { color: var(--muted-foreground); font-size: 11.5px; }
+.ide-rig-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ide-rig-empty { margin: 0; color: var(--muted-foreground); }
+
+.ide-rig-topo { overflow-x: auto; max-width: 100%; }
+.ide-rig-canvas { position: relative; margin: 0 auto; }
+.ide-rig-canvas > svg { position: absolute; inset: 0; pointer-events: none; }
+.ide-rig-pod { position: absolute; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 500; white-space: nowrap; }
+
+.ide-rig-link { fill: none; stroke: var(--ide-link-violet); stroke-width: 1.4; }
+.ide-rig-link.k-escalates_to { stroke: var(--warning); stroke-dasharray: 5 4; }
+.ide-rig-link.k-collaborates_with { stroke: var(--ide-link-teal); stroke-dasharray: 1.5 3.5; stroke-linecap: round; }
+.ide-rig-arrow { fill: var(--muted-foreground); }
+
+.ide-rig-block .ide-rig-node { position: absolute; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 4px 9px; background: var(--card); color: var(--foreground); border: 1.3px solid var(--border); border-radius: 7px; font: inherit; font-size: 11.5px; text-align: left; white-space: nowrap; overflow: hidden; }
+.ide-rig-block button.ide-rig-node { cursor: pointer; }
+.ide-rig-block button.ide-rig-node:hover { border-color: var(--foreground); }
+.ide-rig-block button.ide-rig-node:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.ide-rig-block .ide-rig-node.off { opacity: .45; }
+.ide-rig-block .ide-rig-node.dim { opacity: .6; }
+.ide-rig-block .ide-rig-node.off.dim { opacity: .45; }
+.ide-rig-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.ide-rig-text b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ide-rig-text small { color: var(--muted-foreground); font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+
+.ide-rig-legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted-foreground); font-size: 11px; }
+.ide-rig-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.ide-rig-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted-foreground); }
+.ide-rig-dot.d-idle { background: var(--success); }
+.ide-rig-dot.d-work { background: var(--info); }
+.ide-rig-dot.d-ask { background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent); }
+.ide-rig-dot.d-perm { background: var(--destructive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 20%, transparent); }
+.ide-rig-dot.d-off { background: none; border: 1.5px solid var(--muted-foreground); }
+
+/* The tab's page: header, grid, settings, queue. */
+.ide-rig { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; min-width: 0; overflow: auto; color: var(--foreground); font-size: 12.5px; }
+.ide-rig-state { color: var(--muted-foreground); }
+.ide-rig-top { display: flex; flex-direction: column; gap: 6px; }
+.ide-rig-title { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.ide-rig-title h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.ide-rig-pill { padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--muted-foreground); }
+.ide-rig-pill.on { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+.ide-rig-pw { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+.ide-rig .ide-rig-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border: 1px solid var(--input); border-radius: var(--radius-md); background: transparent; font: inherit; font-size: 12px; color: var(--foreground); cursor: pointer; }
+.ide-rig .ide-rig-btn:hover:not(:disabled) { background: var(--muted); }
+.ide-rig .ide-rig-btn.pri { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
+.ide-rig .ide-rig-btn:disabled { opacity: .5; cursor: default; }
+.ide-rig-top .ide-rigs-conf { margin: 0; }
+.ide-rig-fail { margin: 0; font-size: 11.5px; color: var(--destructive); }
+
+.ide-rig-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.ide-rig-grid > * { min-width: 0; }
+.ide-rig-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ide-rig .mono { font-family: 'Geist Mono', monospace; }
+
+.ide-rig-lbl { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); margin-top: 4px; }
+.ide-rig-mut { text-transform: none; letter-spacing: 0; }
+.ide-rig-note { margin: 0; font-size: 11.5px; color: var(--muted-foreground); }
+.ide-rig-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--input); border-radius: var(--radius-md); overflow: hidden; align-self: flex-start; }
+.ide-rig .ide-rig-seg button { height: 26px; padding: 0 10px; border: 0; border-right: 1px solid var(--input); background: transparent; font: inherit; font-size: 12px; color: var(--foreground); cursor: pointer; }
+.ide-rig .ide-rig-seg button:last-child { border-right: 0; }
+.ide-rig .ide-rig-seg button[aria-checked='true'] { background: var(--primary); color: var(--primary-foreground); }
+.ide-rig .ide-rig-seg button:disabled { opacity: .45; cursor: default; }
+.ide-rig-mixed { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; color: var(--muted-foreground); }
+.ide-rig-mixed b { color: var(--warning); font-weight: 600; }
+
+.ide-rig-kv { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.ide-rig-kv > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.ide-rig-step { display: inline-flex; align-items: center; gap: 6px; }
+.ide-rig .ide-rig-step button { width: 22px; height: 22px; border: 1px solid var(--input); border-radius: var(--radius-sm); background: transparent; color: var(--foreground); font: inherit; cursor: pointer; }
+.ide-rig .ide-rig-step button:disabled { opacity: .4; cursor: default; }
+.ide-rig-plan { display: flex; flex-direction: column; gap: 4px; padding: 7px 9px; border: 1px solid var(--input); border-radius: var(--radius-md); font-size: 11.5px; }
+.ide-rig-warn { color: var(--warning); }
+.ide-rig-go { display: flex; gap: 6px; }
+.ide-rig .ide-rig-go button { height: 24px; padding: 0 9px; border: 1px solid var(--input); border-radius: var(--radius-md); background: transparent; color: var(--foreground); font: inherit; font-size: 11.5px; cursor: pointer; }
+.ide-rig .ide-rig-go button.pri { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
+.ide-rig-snap { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+.ide-rig-qrow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 3px 0; }
+.ide-rig-qstate { font-size: 10.5px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); }
+.ide-rig-qstate.s-in-progress { color: var(--info); }
+.ide-rig-qstate.s-blocked { color: var(--destructive); }
+.ide-rig-ask { color: var(--warning); }
+.ide-rig-qsum { font-weight: 500; }
+.ide-rig-qwho { color: var(--muted-foreground); font-size: 11.5px; }
+.ide-rig-qage { margin-left: auto; color: var(--muted-foreground); font-size: 11px; }
+.ide-rig .ide-rig-btn.stop:hover:not(:disabled) { background: transparent; border-color: var(--destructive); color: var(--destructive); }

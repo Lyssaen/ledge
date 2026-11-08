@@ -183,6 +183,12 @@ describe('views, reconcile, layouts', () => {
     expect(deserialize(serialize(w))).toEqual(w);
   });
 
+  it('a Rig tab survives serialisation', () => {
+    const w = open(empty(), { kind: 'rig', ref: 'local:ledge-dev' });
+    expect(deserialize(serialize(w))).toEqual(w);
+    expect(deserialize(JSON.stringify(w))?.groups[0]!.tabs).toEqual([{ kind: 'rig', ref: 'local:ledge-dev' }]);
+  });
+
   it('a malformed layout is refused', () => {
     expect(deserialize('{')).toBeNull();
     expect(deserialize(JSON.stringify({ ...empty(), version: 2 }))).toBeNull();

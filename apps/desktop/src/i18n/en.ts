@@ -1364,6 +1364,33 @@ export const en: Messages = {
       start: (what) => `Start ${what}`, restart: (what) => `Restart ${what}`, stop: (what) => `Stop ${what}`,
       confirmStop: 'Confirm the stop', confirmRestart: 'Confirm the restart', cancel: 'Cancel'
     },
+    /** The “Rig · name” tab (IDE lot 7c). */
+    rigTab: {
+      title: (rig: string, machine?: string) => (machine ? `Rig · ${rig} · ${machine}` : `Rig · ${rig}`),
+      topology: 'Topology', topologyRunning: 'click a seat: its thread', topologyStopped: 'the seats start with the rig', loading: 'Reading…',
+      legend: 'Links', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
+      running: 'running', stopped: 'stopped', seatsAt: (n: number, machine: string) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${machine}`,
+      start: 'Start', restart: 'Restart', stop: 'Stop', daemonStopped: 'the daemon is stopped',
+      settings: 'Settings', specUnknown: 'Unknown spec: rig launched outside Ledge',
+      permissions: 'Permissions', permissionsLabel: 'Permission level',
+      level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked' } as Record<string, string>,
+      specPolicy: (p: string) => `Spec: ${p}`, noSeats: 'No known seat: nothing to set for now.', specNoPolicy: 'This rig’s spec gives no known policy.',
+      nextLaunch: 'A change applies at the rig’s next launch.', mixed: 'Mixed', mixedSeat: (name: string, summary: string) => `${name}: ${summary}`,
+      errors: { daemon_stopped: 'The OpenRig daemon is stopped.', unknown_rig: 'This rig no longer exists on this machine.' } as Record<string, string>,
+      policyErrors: {
+        spec_unknown: 'Ledge cannot find this rig’s spec: “Spec” is not possible.',
+        spec_no_policy: 'This rig’s spec gives no permission policy: “Spec” is not possible.',
+        spec_policy_unsupported: 'This spec’s policy is not one of the five Ledge can apply.'
+      } as Record<string, string>,
+      seatsByRole: 'Seats per role', seatsLocked: '· editable while the rig runs', apply: 'Apply', applying: 'Working…', revert: 'Cancel',
+      planAdd: (ids: readonly string[]) => `Adds ${ids.join(', ')}`, planRemove: (ids: readonly string[]) => `Removes ${ids.join(', ')}`,
+      lastSnapshot: 'Last snapshot', noSnapshot: 'No snapshot', snapshotNow: 'Snapshot now',
+      queue: 'OpenRig queue', queueTruncated: 'The oldest are not shown', needsInput: 'Your turn: this line waits for an answer',
+      state: { pending: 'pending', 'in-progress': 'in progress', blocked: 'blocked' } as Record<string, string>,
+      age: (a: 'now' | { n: number; unit: 'min' | 'h' | 'd' }) => (a === 'now' ? '< 1 min' : `${a.n} ${a.unit}`),
+      role: 'Role', roleBody: ['OpenRig’s own rig. The ', 'operator', ' helps you compose and launch a team; the ', 'advisor', ' reviews the plans; the ', 'queue worker', ' routes queue lines between the seats.'] as readonly string[],
+      talkToOperator: 'Talk to the operator', rigAbsent: (rig: string) => `The rig “${rig}” no longer exists on this machine.`, badRef: 'This tab points at no rig.'
+    },
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
     panel: {
       shells: { title: 'New terminal', local: 'Local', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Command Prompt', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'default' },

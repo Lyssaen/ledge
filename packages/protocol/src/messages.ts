@@ -104,6 +104,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Answers `openrig.roles`, `openrig.role` and `openrig.roleFile`: reads OpenRig's roles (agent specs). */ openrigRoles: z.boolean().optional(),
   /** Answers `openrig.graph`, `openrig.snapshots`, `openrig.permissions`, `openrig.queue` and `openrig.role.duplicate`, and takes the actions `rig.snapshot`, `rig.permissions` and `rig.start` with a `snapshot` (lot 7a):
    *  a client (the fleet) sends none of them to a daemon without it. */ openrigRig: z.boolean().optional(),
+  /** Takes the action `rig.policy` (lot 7c): a client (the fleet) sends it only when this is set. */ openrigPolicy: z.boolean().optional(),
   /** Answers `openrig.row`: a queue row's state, for the OpenRig task cards of a thread. */ openrigRows: z.boolean().optional(),
   /** Answers `openrig.asks` and `openrig.answer`: what OpenRig asks the person, and their answers (« À toi »). */ openrigAsks: z.boolean().optional(),
   /** Answers `openrig.goal.send`, `openrig.goals` and `openrig.goal.reply`: goals given to Max (lot 2). */ openrigGoals: z.boolean().optional(),

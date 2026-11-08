@@ -12,10 +12,11 @@ import { SHELL_ICONS } from '../../shell/icons';
 import { keyOf, type Tab } from '../../workspace/model';
 import { useRigsFold, useRigsMachine } from '../../workspace/prefs';
 import { providerOf } from '../../workspace/sessionTab';
-import { openrigTab } from '../../workspace/store';
+import { openrigTab, rigTab } from '../../workspace/store';
 import { ProviderLogo } from '../ProviderLogo';
 import { MachineMenu } from './MachineMenu';
-import { actionOf, confirmOf, machineEntries, powerOf, rigsViewOf, type RigDot, type RigLine, type SeatLine } from './model';
+import { RigConfirm, useRigConfirm } from './RigConfirm';
+import { actionOf, machineEntries, powerOf, rigsViewOf, type RigDot, type RigLine, type SeatLine } from './model';
 import '../../styles/ide-rigs.css';
 
 const RESTART = ['M20 12a8 8 0 1 1-2.3-5.7', 'M20 4v5h-5'];
@@ -27,7 +28,7 @@ const Dot = ({ dot }: { dot: RigDot }): JSX.Element => <i className={`ide-rigs-d
 /** The Rigs sidebar view of the IDE (docs/mockups/ledge-ide-rigs.html): one machine's kernel, rigs and daemon, and their actions. */
 export interface RigsViewProps {
   client: DaemonClient; machines: readonly MachineState[]; sessions: readonly Session[]; asks: readonly HumanAsk[]; activeTab: Tab | null;
-  dispatch(a: NavAction): void; onTab(t: Tab): void; onMenu?(id: string, at: { x: number; y: number }, opener: HTMLElement | null): void;
+  dispatch(a: NavAction): void; onTab(t: Tab, where?: 'right'): void; onMenu?(id: string, at: { x: number; y: number }, opener: HTMLElement | null): void;
 }
 
 export function RigsView({ client, machines, sessions, asks, activeTab, dispatch, onTab, onMenu }: RigsViewProps): JSX.Element {
@@ -46,34 +47,24 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     return { list: machineEntries(machines, states, errors), outdated: old };
   }, [machines, seen]);
   const [menu, setMenu] = useState(false);
-  const [confirm, setConfirm] = useState<{ target: string; action: OpenRigAction } | null>(null);
-  const [lastTarget, setLastTarget] = useState<string | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const root = useRef<HTMLElement>(null);
-  /** The button that opened the confirmation, where the focus goes back when it closes. */
-  const opener = useRef<{ target: string; button: HTMLElement | null } | null>(null);
-  const closeConfirm = () => {
-    const o = opener.current; opener.current = null; setConfirm(null);
-    if (!o) return;
-    // After React removed the confirmation: the action button if it is still there, else the row's name button.
-    queueMicrotask(() => {
-      const back = o.button?.isConnected ? o.button : [...(root.current?.querySelectorAll<HTMLElement>('.ide-rigs-row.rig') ?? [])].find(r => r.dataset.target === o.target)?.querySelector<HTMLElement>('.ide-rigs-name');
-      back?.focus();
-    });
-  };
 
   const error = view.error ?? (shown && !shown.ready ? 'offline' : undefined);
   const rv = rigsViewOf({ state: view.state ?? undefined, ...(error ? { error } : {}), machine, sessions, asks });
   const up = rv.status === 'running';
 
   // A confirmation lives only while its action is still offered: the daemon, kernel or rig it is about must still be running.
-  const offered = confirm !== null && up && (confirm.target === 'daemon' || (confirm.target === 'kernel' ? rv.kernel?.running === true : rv.rigs.find(r => r.name === confirm.target)?.running === true));
-  useEffect(() => { if (confirm && !offered) closeConfirm(); }, [confirm, offered]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { opener.current = null; setConfirm(null); setLastTarget(null); }, [machine]);
+  const offered = (a: OpenRigAction): boolean => {
+    const target = targetOf(a);
+    return up && (target === 'daemon' || (target === 'kernel' ? rv.kernel?.running === true : rv.rigs.find(r => r.name === target)?.running === true));
+  };
+  const conf = useRigConfirm(view, offered);
+  useEffect(() => { conf.reset(); }, [machine]); // eslint-disable-line react-hooks/exhaustive-deps
   const closeMenu = () => { setMenu(false); trigger.current?.focus(); };
-  const run = (action: OpenRigAction) => { closeConfirm(); setLastTarget(targetOf(action)); void view.act(action); };
   const pendingOn = (target: string) => view.pending !== null && targetOf(view.pending) === target;
-  const ask = (target: string, verb: Verb, button: HTMLElement | null) => { const action = actionOf(target, verb); if (verb === 'start') run(action); else { opener.current = { target, button }; setConfirm({ target, action }); } };
+  const ask = (target: string, verb: Verb, button: HTMLElement | null) => conf.ask(actionOf(target, verb), button,
+    () => [...(root.current?.querySelectorAll<HTMLElement>('.ide-rigs-row.rig') ?? [])].find(r => r.dataset.target === target)?.querySelector<HTMLElement>('.ide-rigs-name'));
 
   const what = (target: string) => target === 'daemon' ? v.whatDaemon : target === 'kernel' ? v.whatKernel : target;
   const power = (target: string, running: boolean): JSX.Element => (
@@ -85,29 +76,11 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     </span>
   );
 
-  const confirmBox = (target: string): ReactNode => {
-    if (!confirm || !offered || confirm.target !== target || !view.state) return null;
-    const c = o.confirm, { working, commands, restart } = confirmOf(view.state, confirm.action, sessions, machine);
-    const w = target === 'daemon' ? c.daemon : target === 'kernel' ? c.kernel : c.rig(target);
-    const title = (restart ? c.restartTitle : c.title)(w, label);
-    return (
-      // Escape here only closes the confirmation: it goes no further, so neither the window's navigation nor an outer layer sees it.
-      <div className="ide-rigs-conf" role="group" aria-label={title} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeConfirm(); } }}>
-        <b>{title}</b>
-        <span>{c.working(working.length)}</span>
-        {working.length > 0 && <span className="ide-rigs-seats">{working.join(', ')}</span>}
-        {restart && <p>{c.restartNote}</p>}
-        {commands.map(cmd => <code key={cmd}>{cmd}</code>)}
-        <div className="ide-rigs-go">
-          <button type="button" className="pri" onClick={() => run(confirm.action)}>{restart ? v.confirmRestart : v.confirmStop}</button>
-          <button type="button" autoFocus onClick={closeConfirm}>{v.cancel}</button>
-        </div>
-      </div>
-    );
-  };
+  const confirmBox = (target: string): ReactNode => conf.confirm && targetOf(conf.confirm) === target && view.state
+    ? <RigConfirm action={conf.confirm} state={view.state} sessions={sessions} machine={machine} label={label} onConfirm={() => conf.run(conf.confirm!)} onCancel={conf.close} /> : null;
   const failure = (target: string): ReactNode => {
     const d: OpenRigDone | null = view.last;
-    if (!d || d.ok || lastTarget !== target) return null;
+    if (!d || d.ok || conf.lastTarget !== target) return null;
     const e = d.error;
     return <div className="ide-rigs-err" role="alert">{e === 'busy' ? o.busy : e === 'not_installed' ? o.notInstalled : e === 'offline' ? o.offline : e === 'outdated' ? o.outdated : o.failed(e ?? '')}</div>;
   };
@@ -127,11 +100,11 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     const open = r.running && r.seats.length > 0, unfolded = isKernel || fold.rig(r.name);
     return (
       <div key={r.name}>
-        <div className="ide-rigs-row rig" data-target={target}>
+        <div className={`ide-rigs-row rig${activeTab !== null && keyOf(activeTab) === keyOf(rigTab(machine, r.name)) ? ' sel' : ''}`} data-target={target}>
           {isKernel ? <span className="ide-rigs-chev">·</span>
             : <button type="button" className="ide-rigs-chev" disabled={!open} aria-label={(unfolded ? v.fold : v.unfold)(r.name)} onClick={() => fold.toggle(`r:${r.name}`)}>{open ? (unfolded ? '▾' : '▸') : '·'}</button>}
           <Dot dot={r.dot} />
-          <button type="button" className="ide-rigs-name" onClick={() => onTab(openrigTab(machine))}><b>{r.name}</b></button>
+          <button type="button" className="ide-rigs-name" onClick={e => { const t = rigTab(machine, r.name); if (e.ctrlKey || e.metaKey) onTab(t, 'right'); else onTab(t); }}><b>{r.name}</b></button>
           <span className="ide-rigs-meta">{r.running ? r.count : ''}</span>
           {power(target, r.running)}
         </div>

@@ -12,7 +12,7 @@ import { openUrl } from '../tauri/bridge';
 import { RigLaunchForm } from './RigLaunchForm';
 import { SeatsDialog } from './SeatsDialog';
 import { SeatSettings } from './SeatSettings';
-import { asksFirst, commandsOf, isRunning, kernelRig, listedRigs, rigOf, targetOf, workingSeats } from './model';
+import { asksFirst, operatorOf, sessionOfSeat, commandsOf, isRunning, kernelRig, listedRigs, rigOf, targetOf, workingSeats } from './model';
 import { forgetRoleFiles } from './roles/bits';
 import { rolesBySeat } from './roles/model';
 import { RolesView } from './roles/RolesView';
@@ -268,17 +268,6 @@ function Confirm({ action, state, machine, onConfirm, onCancel }: { action: Open
     </Modal>
   );
 }
-
-/** The Ledge session of the kernel's operator seat (`operator.agent`) on that machine, once Ledge follows it. */
-export function operatorOf(state: OpenRigState | null, sessions: readonly Session[], machine: string): Session | undefined {
-  const seat = state?.rigs.find(r => r.name === 'kernel')?.nodes.find(n => n.logicalId === 'operator.agent')?.session;
-  if (!seat) return undefined;
-  return sessionOfSeat(sessions, seat, machine);
-}
-
-/** The Ledge session that follows an OpenRig seat on that machine, if any. */
-export const sessionOfSeat = (sessions: readonly Session[], seat: string, machine: string): Session | undefined =>
-  sessions.find(x => x.rig?.seat === seat && x.state !== 'exited' && (x.machineId ?? 'local') === machine);
 
 /** One seat: its role, harness and model, what it does, and « Ouvrir » once Ledge follows it (its thread, its terminal, its requests). */
 function SeatLine({ seat: n, session, onOpen, onSettings, work = false, role, onRole }: { seat: RigSeat; session: Session | undefined; onOpen: (id: string) => void; onSettings: () => void; work?: boolean; role?: RoleSummary | undefined; onRole?: (() => void) | undefined }) {

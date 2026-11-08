@@ -1,4 +1,4 @@
-import { KERNEL_RIG, RIG_POLICIES, RigNameSchema, rigCommands, showRigCommand, type OpenRigAction, type OpenRigState, type Projects, type Rig, type RigLaunch, type RigPolicy, type RigSeat, type RigSpec } from '@ledge/protocol';
+import { KERNEL_RIG, RIG_POLICIES, RigNameSchema, rigCommands, showRigCommand, type OpenRigAction, type OpenRigState, type Projects, type Rig, type RigLaunch, type RigPolicy, type RigSeat, type RigSpec, type Session } from '@ledge/protocol';
 
 /**
  * What the OpenRig page (docs/mockups/ledge-openrig.html, views 1, 2 and 5) shows and offers, as pure functions: the
@@ -75,3 +75,14 @@ export const folderChoices = (projects: Projects | null, machine: string): Array
 export const bypasses = (f: LaunchForm): boolean => f.policy === 'yolo' || Object.values(f.policies).includes('yolo');
 /** `builtin:auto` -> `auto`; null for a custom policy file or none. */
 export const builtinOf = (policy: string | undefined): RigPolicy | null => { const m = /^builtin:(\w+)$/.exec(policy ?? ''); return m && (RIG_POLICIES as readonly string[]).includes(m[1]!) ? m[1] as RigPolicy : null; };
+
+/** The Ledge session of the kernel's operator seat (`operator.agent`) on that machine, once Ledge follows it. */
+export function operatorOf(state: OpenRigState | null, sessions: readonly Session[], machine: string): Session | undefined {
+  const seat = state?.rigs.find(r => r.name === 'kernel')?.nodes.find(n => n.logicalId === 'operator.agent')?.session;
+  if (!seat) return undefined;
+  return sessionOfSeat(sessions, seat, machine);
+}
+
+/** The Ledge session that follows an OpenRig seat on that machine, if any. */
+export const sessionOfSeat = (sessions: readonly Session[], seat: string, machine: string): Session | undefined =>
+  sessions.find(x => x.rig?.seat === seat && x.state !== 'exited' && (x.machineId ?? 'local') === machine);

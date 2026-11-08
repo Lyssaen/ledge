@@ -686,6 +686,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const needsRig = msg.type === 'openrig.graph' || msg.type === 'openrig.snapshots' || msg.type === 'openrig.permissions' || msg.type === 'openrig.queue' || msg.type === 'openrig.role.duplicate'
           || (msg.type === 'openrig.act' && (msg.action.kind === 'rig.snapshot' || msg.action.kind === 'rig.permissions' || (msg.action.kind === 'rig.start' && msg.action.snapshot !== undefined)));
         if (needsRig && peers.get(machine)?.snapshot?.daemon?.openrigRig !== true) { emit(rigFailure(ask, msg.requestId, machine, 'outdated')); return; }
+        // Lot 7c: `rig.policy` has its own flag (a lot-7a daemon has `openrigRig` but would refuse the action, failing every pending ask).
+        if (msg.type === 'openrig.act' && msg.action.kind === 'rig.policy' && peers.get(machine)?.snapshot?.daemon?.openrigPolicy !== true) { emit(rigFailure(ask, msg.requestId, machine, 'outdated')); return; }
         rigAsks.set(msg.requestId, ask);
       }
       if (msg.type === 'folder.list') {
