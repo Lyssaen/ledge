@@ -3,6 +3,7 @@ import type { Store } from '../store.js';
 import { log } from '../../log.js';
 import { githubReader } from './github.js';
 import { gitlabReader } from './gitlab.js';
+import { signedInHosts } from './hosts.js';
 import { execForge, forgeOf, type ForgeCli, type ForgeRepo, type ForgeRun } from './run.js';
 import { blockerText, mergeBlockersOf, targetKey, type BranchTarget, ForgeError, ForgeRefusal, type ForgeReader, type ReadPr } from './types.js';
 
@@ -62,9 +63,21 @@ const kindOf = (cli: ForgeCli): ForgeKind => (cli === 'gh' ? 'github' : 'gitlab'
 const hostKey = (repo: ForgeRepo): string => `${repo.cli}:${repo.host}`;
 const strip = ({ blockers: _b, head: _h, ...pr }: ReadPr, sessions: string[]): PullRequest => ({ ...pr, sessions });
 
-export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => number; readers?: Partial<Record<ForgeCli, ForgeReader>> }): ForgeService {
-  const run = deps.run ?? execForge(deps.env ?? (async () => process.env));
+export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => number; readers?: Partial<Record<ForgeCli, ForgeReader>>;
+  /** The hosts each CLI is signed in to (signedInHosts by default); a test gives its own. */ signedIn?: (cli: ForgeCli) => Promise<Set<string>> }): ForgeService {
   const now = deps.now ?? Date.now;
+  const env = deps.env ?? (async () => process.env);
+  const run = deps.run ?? execForge(env);
+  const signedIn = deps.signedIn ?? (async (cli: ForgeCli) => signedInHosts(cli, await env()));
+  /** Each CLI's signed-in hosts, read again every 5 minutes (a new `gh auth login` is taken without a restart). */
+  const hostsRead = new Map<ForgeCli, { at: number; hosts: Promise<Set<string>> }>();
+  const hostsOf = (cli: ForgeCli): Promise<Set<string>> => {
+    const had = hostsRead.get(cli);
+    if (had && now() - had.at < HEAD_TTL_MS) return had.hosts;
+    const hosts = signedIn(cli).catch(() => new Set<string>());
+    hostsRead.set(cli, { at: now(), hosts });
+    return hosts;
+  };
   const readers: Record<ForgeCli, ForgeReader> = { gh: deps.readers?.gh ?? githubReader(run), glab: deps.readers?.glab ?? gitlabReader(run) };
   /** Each followed request, by id, with the repository it was read from. */
   let entries = new Map<string, Entry>();
@@ -131,6 +144,12 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
 
   async function readRepo(f: Followed): Promise<void> {
     const reader = readers[f.repo.cli], k = hostKey(f.repo);
+    // Never a host the CLI is not signed in to (a repository cloned from anywhere must not make the daemon call it).
+    if (!(await hostsOf(f.repo.cli)).has(f.repo.host.toLowerCase())) {
+      byRepo.set(f.repo.repo, []);
+      setStatus(f.repo, 'unauthenticated', `${f.repo.cli} is not signed in to ${f.repo.host} on this machine: Ledge does not read it`);
+      return;
+    }
     const b = backoff.get(k);
     if (b && now() < b.until) return;
     try {

@@ -51,7 +51,7 @@ function fakeReader(prs: ReadPr[] = []): Fake {
 
 let store: Store;
 beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-forge-')); store = new Store(); clock = T0; gitConfigs.clear(); });
-const service = (gh: Fake, glab: Fake = fakeReader()) => createForgeService({ store, now: () => clock, run: fakeGit, readers: { gh, glab } });
+const service = (gh: Fake, glab: Fake = fakeReader(), signed = ['github.com', 'gitlab.com']) => createForgeService({ store, now: () => clock, run: fakeGit, readers: { gh, glab }, signedIn: async () => new Set(signed) });
 
 describe('where a branch is pushed (R1, review of d266f114)', () => {
   const listed = forgeOf('git@github.com:Lyssaen/ledge.git')!;
@@ -149,6 +149,30 @@ describe('what is followed (R1, R12)', () => {
     s.onChange(() => changes++);
     await s.refresh(); await s.refresh(); await s.refresh();
     expect(changes).toBe(1);
+  });
+});
+
+describe('only the hosts the CLI is signed in to (security review of the push)', () => {
+  it('never reads a host gh or glab is not signed in to: a repository cloned from anywhere makes no call there', async () => {
+    store.upsert(mk('a'));
+    store.upsert(mk('evil', { repoId: 'evil.example/x/y', branch: 'feat/x' }));
+    store.upsert(mk('ghe', { repoId: 'code.github.attacker.example/x/y', branch: 'feat/x' }));
+    const gh = fakeReader([pr(226, 'feat/x')]), glab = fakeReader();
+    const s = service(gh, glab);
+    await s.refresh();
+    expect(gh.lists.map(l => l.repo)).toEqual(['Lyssaen/ledge']);
+    expect(glab.lists).toEqual([]);
+    expect(s.state().prs.map(p => p.number)).toEqual([226]);
+    expect(s.state().forges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ forge: 'gitlab', host: 'evil.example', status: 'unauthenticated', message: 'glab is not signed in to evil.example on this machine: Ledge does not read it' }),
+      expect.objectContaining({ forge: 'github', host: 'code.github.attacker.example', status: 'unauthenticated' })]));
+  });
+
+  it('reads a self-hosted host once the CLI is signed in to it', async () => {
+    store.upsert(mk('g', { repoId: 'gitlab.example.com/team/app', branch: 'fix/x' }));
+    const glab = fakeReader();
+    await service(fakeReader(), glab, ['gitlab.example.com']).refresh();
+    expect(glab.lists.map(l => l.repo)).toEqual(['https://gitlab.example.com/team/app']);
   });
 });
 

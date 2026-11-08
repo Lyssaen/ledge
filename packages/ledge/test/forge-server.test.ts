@@ -44,7 +44,7 @@ describe('server: pull and merge requests', () => {
   it('says it serves them, sends forge.state after the snapshot, then on each change', async () => {
     store.upsert(mk('s1', 'feat/ide-shell'));
     const prs = [pr(226, 'feat/ide-shell'), pr(227, 'feat/other')];
-    const forge = createForgeService({ store, run: noGit, readers: { gh: reader(prs) } });
+    const forge = createForgeService({ store, run: noGit, signedIn: async () => new Set(['github.com', 'gitlab.com']), readers: { gh: reader(prs) } });
     await forge.refresh();
     srv = await startServer({ store, tmux: fakeTmux(), port: 0, daemon: { version: '1.0.0', install: 'npm', systemd: false }, forge });
     c = await connect({ port: srv.port });
@@ -59,7 +59,7 @@ describe('server: pull and merge requests', () => {
 
   it('answers forge.detail and forge.act with the same requestId; a refusal carries its code; an unknown request is unavailable', async () => {
     store.upsert(mk('s1', 'feat/ide-shell'));
-    const forge = createForgeService({ store, run: noGit, readers: { gh: reader([pr(226, 'feat/ide-shell')]) } });
+    const forge = createForgeService({ store, run: noGit, signedIn: async () => new Set(['github.com', 'gitlab.com']), readers: { gh: reader([pr(226, 'feat/ide-shell')]) } });
     await forge.refresh();
     srv = await startServer({ store, tmux: fakeTmux(), port: 0, forge });
     c = await connect({ port: srv.port });

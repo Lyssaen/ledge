@@ -129,7 +129,7 @@ describe('GitHub list', () => {
       const n = partial ? { ...greenApproved, commits: { nodes: [{ commit: { statusCheckRollup: null } }] } } : greenApproved;
       return { stdout: JSON.stringify({ data: { repository: { b0: { nodes: [n] } } }, ...(partial ? { errors: [{ message: 'statusCheckRollup: something went wrong' }] } : {}) }) };
     });
-    const s = createForgeService({ store, run, readers: { gh: githubReader(run) } });
+    const s = createForgeService({ store, run, signedIn: async () => new Set(['github.com', 'gitlab.com']), readers: { gh: githubReader(run) } });
     await s.refresh();
     expect(s.state().prs.map(p => [p.number, p.pipeline, p.mergeable])).toEqual([[9, 'ok', true]]);
     partial = true;
