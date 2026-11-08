@@ -339,13 +339,26 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   }
 
   async function act(action: OpenRigAction): Promise<ActResult> {
-    let specPolicy: string | undefined;
+    let specPolicies: Record<string, string> | undefined;
     if (action.kind === 'rig.policy' && action.policy === 'spec') {
-      // OpenRig cannot clear a seat's stored policy: `spec` records the spec's own policy, read here (the protocol's commands are pure).
-      specPolicy = await specPolicyOf(action.rig);
-      if (specPolicy !== undefined && specPolicy !== 'none' && !specPolicy.startsWith('builtin:')) return { ok: false, commands: [], error: 'spec_policy_unsupported', completed: 0 };
+      // OpenRig cannot clear a seat's stored policy: `spec` records, per seat, what the rig's spec gives it (its member's policy, else the rig's).
+      // `rigCommands` is pure, so the daemon reads the spec. Refused before anything runs; never `none`, which would be an explicit floor.
+      const refuse = (error: string) => ({ ok: false, commands: [], error, completed: 0 });
+      const spec = await specOf(action.rig);
+      if (!spec) return refuse('spec_unknown');
+      const nodes = (await state()).rigs.find(r => r.name === action.rig)?.nodes ?? [];
+      specPolicies = {};
+      for (const seat of action.seats) {
+        const logical = nodes.find(n => n.session === seat)?.logicalId;
+        const [pod, member] = logical ? logical.split('.') : [];
+        const mine = spec.pods.find(p => p.id === pod)?.members.find(m => m.id === member || m.id === member?.replace(/-\d+$/, ''))?.policy;
+        const policy = mine ?? spec.policy;
+        if (!policy) return refuse('spec_no_policy');
+        if (policy !== 'none' && !policy.startsWith('builtin:')) return refuse('spec_policy_unsupported');
+        specPolicies[seat] = policy;
+      }
     }
-    const plan = planAction(action, specPolicy), commands = plan.map(showCommand);
+    const plan = planAction(action, specPolicies), commands = plan.map(showCommand);
     if (acting) return { ok: false, commands, error: 'busy' };
     acting = true;
     try {
@@ -699,12 +712,12 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return r.code === 0 ? { snapshots: readSnapshotTable(r.stdout).slice(0, RIG_SNAPSHOTS_MAX) } : { error: failure(r) };
   }
 
-  /** A rig spec's `permission_policy` when Ledge knows the spec file. */
-  async function specPolicyOf(name: string): Promise<string | undefined> {
+  /** A rig's spec when Ledge knows the spec file. */
+  async function specOf(name: string): Promise<RigSpec | null> {
     // The spec file itself: Ledge's own (composed, or a marker's), else the library spec OpenRig lists under this name. Never a sibling file of its folder.
     const file = await specPathOf(name).catch(() => undefined) ?? (name === KERNEL_RIG ? undefined : (await specs().catch(() => undefined))?.specs.find(x => x.name === name)?.path);
     const text = file ? await roleIo.read(file).catch(() => null) : null;
-    return text ? readSpec(text, { name, source: 'user', path: file! })?.policy : undefined;
+    return text ? readSpec(text, { name, source: 'user', path: file! }) : null;
   }
 
   async function permissions(name: string): Promise<{ policy?: string; seats?: RigSeatPermission[]; error?: string }> {
@@ -716,7 +729,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     if (hit && now() - hit.at < PERMISSIONS_TTL_MS) return hit.read;
     const read = (async () => {
       // The spec file itself: Ledge's own (composed, or a marker's), else the library spec OpenRig lists under this name. Never a sibling file of its folder.
-      const policy = await specPolicyOf(known.name);
+      const policy = (await specOf(known.name))?.policy;
       const seats: RigSeatPermission[] = new Array(known.nodes.length);
       let next = 0;
       const worker = async () => {
@@ -749,13 +762,14 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
 /** A seat's permissions from `rig seat status <session> --json` (`permissions.effective.{effectiveMode, source, launchPosture}`,
  *  `permissions.selectionState`, `permissions.account.summary`; not a contract): what is there as text, the rest left out.
  *  Undefined when there is no `permissions` object. */
-export function readSeatPermission(raw: unknown): Pick<RigSeatPermission, 'mode' | 'source' | 'posture' | 'selection' | 'summary' | 'policy'> | undefined {
+export function readSeatPermission(raw: unknown): Pick<RigSeatPermission, 'mode' | 'source' | 'posture' | 'selection' | 'summary' | 'policy' | 'policySource'> | undefined {
   const p = obj(obj(raw).permissions);
   if (Object.keys(p).length === 0) return undefined;
   const eff = obj(p.effective), mode = str(eff.effectiveMode), source = str(eff.source), posture = str(eff.launchPosture), selection = str(p.selectionState), summary = str(obj(p.account).summary);
-  // Where OpenRig names a seat's stored policy is not documented (no seat here carries one): the first of these that is text.
-  const policy = str(eff.policyRef) ?? str(eff.policy) ?? str(p.policy);
-  return { ...(mode ? { mode } : {}), ...(source ? { source } : {}), ...(posture ? { posture } : {}), ...(selection ? { selection } : {}), ...(summary ? { summary } : {}), ...(policy ? { policy } : {}) };
+  // No structured field: OpenRig's `account.source` says whose policy applies, and its summary sentence « …, from the member's policy builtin:standard… » names it.
+  const policySource = str(obj(p.account).source);
+  const policy = policySource === 'member_policy' ? /from the member's policy (builtin:[a-z]+|none)\b/.exec(summary ?? '')?.[1] : undefined;
+  return { ...(mode ? { mode } : {}), ...(source ? { source } : {}), ...(posture ? { posture } : {}), ...(selection ? { selection } : {}), ...(summary ? { summary } : {}), ...(policy ? { policy } : {}), ...(policySource ? { policySource } : {}) };
 }
 
 /** The snapshots of `GET /api/rigs/<id>/snapshots` (`[{ id, rigId, kind, status, createdAt, data }]`, not a contract): only

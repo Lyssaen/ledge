@@ -690,7 +690,6 @@ describe('multi-machine connections', () => {
       { type: 'openrig.act', requestId: 'x6', machineId: 'server', action: { kind: 'rig.snapshot', rig: 'a' } },
       { type: 'openrig.act', requestId: 'x7', machineId: 'server', action: { kind: 'rig.permissions', rig: 'a', mode: 'auto', seats: ['s'] } as never },
       { type: 'openrig.act', requestId: 'x8', machineId: 'server', action: { kind: 'rig.start', rig: 'a', snapshot: 'snap-1' } as never },
-      { type: 'openrig.act', requestId: 'x9', machineId: 'server', action: { kind: 'rig.policy', rig: 'a', policy: 'standard', seats: ['s@a'] } as never }
     ];
     it('answers each gated message outdated without sending it, for the remote machine and the local one', () => {
       const { client, local, server, got } = setup();
@@ -700,7 +699,7 @@ describe('multi-machine connections', () => {
       for (const m of gated) client.send({ ...m, requestId: `${(m as { requestId: string }).requestId}l`, machineId: undefined } as ClientMessage);
       expect(server.sent).toEqual([]); expect(local.sent).toEqual([]);
       const answers = got.filter(m => m.type.startsWith('openrig.') && 'error' in m);
-      expect(answers).toHaveLength(18);
+      expect(answers).toHaveLength(16);
       expect(answers.every(m => (m as { error?: string }).error === 'outdated')).toBe(true);
       expect(answers.find(m => (m as { requestId?: string }).requestId === 'x6')).toEqual({ type: 'openrig.done', requestId: 'x6', machineId: 'server', ok: false, commands: [], error: 'outdated' });
       expect(answers.find(m => (m as { requestId?: string }).requestId === 'x8l')).toEqual({ type: 'openrig.done', requestId: 'x8l', machineId: 'local', ok: false, commands: [], error: 'outdated' });
@@ -715,11 +714,23 @@ describe('multi-machine connections', () => {
       expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['p1', 'p2', 'p3']);
       expect(got.filter(m => 'error' in m)).toHaveLength(1); // p4 only
     });
+    const policy = { type: 'openrig.act', requestId: 'y1', machineId: 'server', action: { kind: 'rig.policy', rig: 'a', policy: 'standard', seats: ['s@a'] } } as ClientMessage;
+    it('rig.policy needs openrigPolicy: outdated, not sent, with openrigRig alone; sent with it', () => {
+      const { client, server, got } = setup();
+      const withRig = { type: 'snapshot', sessions: [], daemon: { version: '0.7.0', install: 'npm', systemd: true, openrig: true, openrigRig: true } } as ServerMessage;
+      server.emit({ ...withRig, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send(policy);
+      expect(server.sent).toEqual([]);
+      expect(got.at(-1)).toEqual({ type: 'openrig.done', requestId: 'y1', machineId: 'server', ok: false, commands: [], error: 'outdated' });
+      server.emit({ ...withRig, daemon: { ...(withRig as { daemon: object }).daemon, openrigPolicy: true }, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send({ ...policy, requestId: 'y2' } as ClientMessage);
+      expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['y2']);
+    });
     it('sends them all when the daemon says openrigRig', () => {
       const { client, server } = setup();
       server.sent.length = 0;
       for (const m of gated) client.send(m);
-      expect(server.sent).toHaveLength(9);
+      expect(server.sent).toHaveLength(8);
     });
     it('a refused role duplicate fails only the pending duplicates, not the roles asks', () => {
       const { client, server, got } = setup();

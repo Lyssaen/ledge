@@ -194,9 +194,9 @@ describe('a seat\'s settings', () => {
   });
   it('without a harness change, model, effort and permissions are saved for the next resume', () => {
     expect(cmds({ kind: 'seat.set', seat: 'dev-build@starter', model: 'sonnet', effort: 'low', permissions: 'auto' })).toEqual([
-      'rig seat set-model dev-build@starter --model sonnet --reason Ledge',
-      'rig seat set-effort dev-build@starter --effort low --reason Ledge',
-      'rig seat set-permissions dev-build@starter --mode auto --reason Ledge'
+      'rig seat set-model dev-build@starter --model sonnet --reason Ledge --operator ledge@external',
+      'rig seat set-effort dev-build@starter --effort low --reason Ledge --operator ledge@external',
+      'rig seat set-permissions dev-build@starter --mode auto --reason Ledge --operator ledge@external'
     ]);
   });
   it('a seat, a model or a mode rig would read as a flag never passes', () => {

@@ -87,8 +87,9 @@ const OpenRigActionUnion = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('rig.permissions'), rig: RigNameSchema, mode: SeatPermissionsSchema, seats: z.array(RigSeatNameSchema).min(1).max(200) }),
   /** One of the six permission levels on every listed seat, at its next launch: per seat, the explicit mode goes back to `inherit`
    *  (`rig seat set-permissions`, else it would win over the policy), then `rig policy apply <policy> --seat` stores the policy on it.
-   *  `spec`: the rig's own spec policy (OpenRig cannot clear a seat's stored policy), resolved by the daemon: `rigCommands`'s second
-   *  argument, `none` when the spec has none. Stops at the first failure. Each seat belongs to `rig`. */
+   *  `spec`: what the rig's spec gives each seat (its member's `permission_policy`, else the rig's), resolved by the daemon (OpenRig
+   *  cannot clear a seat's stored policy); refused (`spec_unknown`, `spec_no_policy`, `spec_policy_unsupported`) before anything runs.
+   *  Stops at the first failure. Each seat belongs to `rig`. */
   z.object({ kind: z.literal('rig.policy'), rig: RigNameSchema, policy: z.union([RigPolicySchema, z.literal('spec')]), seats: z.array(RigSeatNameSchema).min(1).max(200) })
 ]);
 export const OpenRigActionSchema = OpenRigActionUnion.superRefine((a, ctx) => {
@@ -115,7 +116,8 @@ export const OpenRigStateMessageSchema = z.object({
 export const OpenRigDoneSchema = z.object({
   type: z.literal('openrig.done'), requestId: z.string(), machineId: z.string().optional(), ok: z.boolean(),
   commands: z.array(z.string()), output: z.string().optional(), error: z.string().optional(),
-  /** On a failed `rig.permissions` or `rig.policy`: how many seats (in order) went through before the one that failed. */
+  /** On a failed `rig.permissions` or `rig.policy`: how many seats (in order) went through before the one that failed. For `rig.policy`,
+   *  the failed seat may already have lost its explicit selection (`--mode inherit` ran, `policy apply` did not). */
   completed: z.number().int().min(0).optional()
 });
 /** A rig's topology (lot 7a): one seat of a pod, keyed by `logicalId` (`dev.build`). `status` is OpenRig's own word (`running`,
@@ -165,8 +167,10 @@ export const OpenRigSnapshotListSchema = z.object({
 export const RigSeatPermissionSchema = z.object({
   logicalId: z.string(), session: z.string(), mode: z.string().optional(), source: z.string().optional(), posture: z.string().optional(),
   selection: z.string().optional(), summary: z.string().optional(), error: z.string().optional(),
-  /** The policy stored on the seat (`builtin:<name>` or `none`), when OpenRig's status names one. */
-  policy: z.string().optional()
+  /** The member policy OpenRig's summary names (`builtin:<name>` or `none`): read from its sentence, not a contract; absent otherwise. */
+  policy: z.string().optional(),
+  /** OpenRig's `permissions.account.source` (`member_policy`, `rig_policy`, `team_default`, `floor`, `explicit`, `kernel_default`). */
+  policySource: z.string().optional()
 });
 export type RigSeatPermission = z.infer<typeof RigSeatPermissionSchema>;
 
@@ -189,8 +193,10 @@ export type OpenRigAct = z.infer<typeof OpenRigActSchema>;
 export type OpenRigStateMessage = z.infer<typeof OpenRigStateMessageSchema>;
 export type OpenRigDone = z.infer<typeof OpenRigDoneSchema>;
 
-/** The `rig` commands an action runs, in order; the first that fails stops the rest. `specPolicy`: the rig spec's `permission_policy`, for `rig.policy` with `spec`. */
-export function rigCommands(a: OpenRigAction, specPolicy?: string): string[][] {
+/** The `rig` commands an action runs, in order; the first that fails stops the rest. `specPolicies`: per seat, the policy its spec gives it (`builtin:x`), for `rig.policy` with `spec`; without it the preview shows `<spec>`. */
+export function rigCommands(a: OpenRigAction, specPolicies?: Record<string, string>): string[][] {
+  // OpenRig 0.7 refuses a seat change from outside a managed seat without an operator (400 « Sender identity is required »).
+  const who = ['--reason', 'Ledge', '--operator', 'ledge@external'];
   const start = (restore?: 'last' | 'none', noKernel?: boolean): string[] =>
     restore === 'last' ? ['start', '--last', '--json'] : ['daemon', 'start', ...(noKernel ? ['--no-kernel'] : [])];
   const up = (rig: string) => ['up', rig, '--existing', '--yes', '--json'];
@@ -207,19 +213,20 @@ export function rigCommands(a: OpenRigAction, specPolicy?: string): string[][] {
     case 'rig.snapshot': return [['snapshot', a.rig]];
     case 'rig.stop': return [down(a.rig, a)];
     case 'rig.restart': return [down(a.rig, { snapshot: true }), up(a.rig)];
-    case 'rig.permissions': return a.seats.map(seat => ['seat', 'set-permissions', seat, '--mode', a.mode, '--reason', 'Ledge', '--json']);
-    case 'rig.policy': {
-      const name = a.policy === 'spec' ? (specPolicy?.startsWith('builtin:') ? specPolicy.slice(8) : 'none') : a.policy;
-      return a.seats.flatMap(seat => [['seat', 'set-permissions', seat, '--mode', 'inherit', '--reason', 'Ledge', '--json'], ['policy', 'apply', name, '--seat', seat, '--reason', 'Ledge', '--json']]);
-    }
+    case 'rig.permissions': return a.seats.map(seat => ['seat', 'set-permissions', seat, '--mode', a.mode, ...who, '--json']);
+    case 'rig.policy': return a.seats.flatMap(seat => {
+      const name = a.policy === 'spec' ? (specPolicies?.[seat]?.replace(/^builtin:/, '') ?? '<spec>') : a.policy;
+      return [['seat', 'set-permissions', seat, '--mode', 'inherit', ...who, '--json'], ['policy', 'apply', name, '--seat', seat, ...who, '--json']];
+    });
     case 'seat.set': {
       const why = ['--reason', 'Ledge'];
+      // `set-runtime` has no `--operator` in OpenRig 0.7; the other three do.
       if (a.runtime) return [['seat', 'set-runtime', a.seat, '--runtime', a.runtime, ...(a.model ? ['--model', a.model] : []), ...(a.effort ? ['--effort', a.effort] : []),
         ...(a.permissions && a.permissions !== 'inherit' ? ['--permission-mode', a.permissions] : []), ...(a.dryRun ? ['--dry-run'] : []), ...why]];
       return [
-        ...(a.model ? [['seat', 'set-model', a.seat, '--model', a.model, ...why, '--json']] : []),
-        ...(a.effort ? [['seat', 'set-effort', a.seat, '--effort', a.effort, ...why, '--json']] : []),
-        ...(a.permissions ? [['seat', 'set-permissions', a.seat, '--mode', a.permissions, ...why, '--json']] : [])
+        ...(a.model ? [['seat', 'set-model', a.seat, '--model', a.model, ...who, '--json']] : []),
+        ...(a.effort ? [['seat', 'set-effort', a.seat, '--effort', a.effort, ...who, '--json']] : []),
+        ...(a.permissions ? [['seat', 'set-permissions', a.seat, '--mode', a.permissions, ...who, '--json']] : [])
       ];
     }
   }
