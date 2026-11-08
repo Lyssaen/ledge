@@ -86,7 +86,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   const modelLists = new Map<string, { machine: string; tool: Tool }>();
   /** `session.commands` requestId -> the machine asked and the session's qualified id, so only its listing answers it (a drop or a refusal answers « offline » or « outdated »). */
   const commandLists = new Map<string, { machine: string; id: string }>();
-  type RigKind = 'status' | 'act' | 'specs' | 'launch' | 'seats' | 'roles' | 'role' | 'roleFile' | 'asks' | 'answer' | 'goals' | 'goalSend' | 'goalReply' | 'row' | 'graph' | 'snapshots' | 'permissions';
+  type RigKind = 'status' | 'act' | 'specs' | 'launch' | 'seats' | 'roles' | 'role' | 'roleFile' | 'asks' | 'answer' | 'goals' | 'goalSend' | 'goalReply' | 'row' | 'graph' | 'snapshots' | 'permissions' | 'queue';
   type RigAsk = { machine: string; kind: RigKind; roleId?: string; path?: string; qitemId?: string; goalId?: string; replyId?: string; qitem?: string; rig?: string };
   const rigFailure = (a: RigAsk, requestId: string, machineId: string, error: 'offline' | 'outdated'): ServerMessage =>
     a.kind === 'act' ? { type: 'openrig.done', requestId, machineId, ok: false, commands: [], error }
@@ -103,6 +103,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     : a.kind === 'goalReply' ? { type: 'openrig.goal.replied', requestId, machineId, goalId: a.goalId ?? '', replyId: a.replyId ?? '', ok: false, error }
     : a.kind === 'graph' ? { type: 'openrig.graphState', requestId, machineId, rig: a.rig ?? '', error }
     : a.kind === 'permissions' ? { type: 'openrig.permissionList', requestId, machineId, rig: a.rig ?? '', seats: [], error }
+    : a.kind === 'queue' ? { type: 'openrig.queueState', requestId, machineId, rig: a.rig ?? '', rows: [], truncated: false, error }
     : a.kind === 'snapshots' ? { type: 'openrig.snapshotList', requestId, machineId, rig: a.rig ?? '', snapshots: [], error }
     : a.kind === 'row' ? { type: 'openrig.rowState', requestId, machineId, qitem: a.qitem ?? '', error }
     : { type: 'openrig.state', requestId, machineId, error };
@@ -372,7 +373,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
     if (m.type === 'repos.found') { if (scans.get(m.requestId) === machine) { scans.delete(m.requestId); emit(m); } return; }
     if (m.type === 'openrig.state' || m.type === 'openrig.done' || m.type === 'openrig.specList' || m.type === 'openrig.launched' || m.type === 'openrig.reseated'
       || m.type === 'openrig.roleList' || m.type === 'openrig.roleDetail' || m.type === 'openrig.roleFileContent' || m.type === 'openrig.asksChanged' || m.type === 'openrig.answered'
-      || m.type === 'openrig.goalsChanged' || m.type === 'openrig.goal.sent' || m.type === 'openrig.goal.replied' || m.type === 'openrig.rowState' || m.type === 'openrig.graphState' || m.type === 'openrig.snapshotList' || m.type === 'openrig.permissionList') {
+      || m.type === 'openrig.goalsChanged' || m.type === 'openrig.goal.sent' || m.type === 'openrig.goal.replied' || m.type === 'openrig.rowState' || m.type === 'openrig.graphState' || m.type === 'openrig.snapshotList' || m.type === 'openrig.permissionList' || m.type === 'openrig.queueState') {
       // An answer goes out once, from the machine asked; a state that follows an action goes out from any machine.
       if (m.requestId !== undefined) { if (rigAsks.get(m.requestId)?.machine !== machine) return; rigAsks.delete(m.requestId); }
       emit({ ...m, machineId: machine }); return;
@@ -462,6 +463,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.request === 'openrig.graph') { answerFailedRigs(machine, 'outdated', ['graph']); return; }
       if (m.request === 'openrig.snapshots') { answerFailedRigs(machine, 'outdated', ['snapshots']); return; }
       if (m.request === 'openrig.permissions') { answerFailedRigs(machine, 'outdated', ['permissions']); return; }
+      if (m.request === 'openrig.queue') { answerFailedRigs(machine, 'outdated', ['queue']); return; }
       if (m.request === 'openrig.row') { answerFailedRigs(machine, 'outdated', ['row']); return; }
       if (m.request?.startsWith('openrig.')) { answerFailedRigs(machine, 'outdated'); return; }
       if ((m.request === 'folder.list' || m.request === 'folder.create') && [...listings.values()].some(l => l.machine === machine)) { answerUnfoundListings(machine, m.message || 'not found'); return; }
@@ -666,15 +668,15 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       }
       if (msg.type === 'openrig.status' || msg.type === 'openrig.act' || msg.type === 'openrig.specs' || msg.type === 'openrig.launch' || msg.type === 'openrig.seats'
         || msg.type === 'openrig.roles' || msg.type === 'openrig.role' || msg.type === 'openrig.roleFile' || msg.type === 'openrig.asks' || msg.type === 'openrig.answer'
-        || msg.type === 'openrig.goals' || msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply' || msg.type === 'openrig.row' || msg.type === 'openrig.graph' || msg.type === 'openrig.snapshots' || msg.type === 'openrig.permissions') {
+        || msg.type === 'openrig.goals' || msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply' || msg.type === 'openrig.row' || msg.type === 'openrig.graph' || msg.type === 'openrig.snapshots' || msg.type === 'openrig.permissions' || msg.type === 'openrig.queue') {
         machine = msg.machineId ?? 'local';
         const { machineId: _m, ...rest } = msg; outgoing = rest;
         const kind: RigKind = msg.type === 'openrig.status' ? 'status' : msg.type === 'openrig.act' ? 'act' : msg.type === 'openrig.specs' ? 'specs' : msg.type === 'openrig.seats' ? 'seats'
           : msg.type === 'openrig.roles' ? 'roles' : msg.type === 'openrig.role' ? 'role' : msg.type === 'openrig.roleFile' ? 'roleFile'
           : msg.type === 'openrig.asks' ? 'asks' : msg.type === 'openrig.answer' ? 'answer'
-          : msg.type === 'openrig.goals' ? 'goals' : msg.type === 'openrig.goal.send' ? 'goalSend' : msg.type === 'openrig.goal.reply' ? 'goalReply' : msg.type === 'openrig.row' ? 'row' : msg.type === 'openrig.graph' ? 'graph' : msg.type === 'openrig.snapshots' ? 'snapshots' : msg.type === 'openrig.permissions' ? 'permissions' : 'launch';
+          : msg.type === 'openrig.goals' ? 'goals' : msg.type === 'openrig.goal.send' ? 'goalSend' : msg.type === 'openrig.goal.reply' ? 'goalReply' : msg.type === 'openrig.row' ? 'row' : msg.type === 'openrig.graph' ? 'graph' : msg.type === 'openrig.snapshots' ? 'snapshots' : msg.type === 'openrig.permissions' ? 'permissions' : msg.type === 'openrig.queue' ? 'queue' : 'launch';
         const ask: RigAsk = { machine, kind, ...(msg.type === 'openrig.role' || msg.type === 'openrig.roleFile' ? { roleId: msg.roleId } : {}), ...(msg.type === 'openrig.roleFile' ? { path: msg.path } : {}), ...(msg.type === 'openrig.answer' ? { qitemId: msg.qitemId } : {}),
-          ...(msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply' ? { goalId: msg.goalId } : {}), ...(msg.type === 'openrig.goal.reply' ? { replyId: msg.replyId } : {}), ...(msg.type === 'openrig.row' ? { qitem: msg.qitem } : {}), ...(msg.type === 'openrig.graph' || msg.type === 'openrig.snapshots' || msg.type === 'openrig.permissions' ? { rig: msg.rig } : {}) };
+          ...(msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply' ? { goalId: msg.goalId } : {}), ...(msg.type === 'openrig.goal.reply' ? { replyId: msg.replyId } : {}), ...(msg.type === 'openrig.row' ? { qitem: msg.qitem } : {}), ...(msg.type === 'openrig.graph' || msg.type === 'openrig.snapshots' || msg.type === 'openrig.permissions' || msg.type === 'openrig.queue' ? { rig: msg.rig } : {}) };
         if (!available(peers.get(machine))) { emit(rigFailure(ask, msg.requestId, machine, 'offline')); return; }
         rigAsks.set(msg.requestId, ask);
       }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
-import { RIG_ROW_REFRESH_MS } from '@ledge/protocol';
+import { RIG_QUEUE_REFRESH_MS, RIG_ROW_REFRESH_MS } from '@ledge/protocol';
 import type { RigRow, OpenRigAction, OpenRigDone, OpenRigLaunched, OpenRigReseated, OpenRigRoleFileContent, OpenRigState, RigGraph, RigLaunch, RigSeatPermission, RigSnapshot, RigSpec, RoleDetail, RoleSummary } from '@ledge/protocol';
 import type { DaemonClient } from './client';
 
@@ -345,6 +345,35 @@ export function useRigPermissions(client: DaemonClient, machine: string | null, 
   if (key === null) return { status: 'idle', seats: [], reload };
   if (!answer || answer.key !== key) return { status: 'loading', seats: [], reload };
   return { status: 'ready', ...(answer.policy ? { policy: answer.policy } : {}), seats: answer.seats, ...(answer.error ? { error: answer.error } : {}), reload };
+}
+
+export interface RigQueueView { status: 'idle' | 'loading' | 'ready'; rows: RigRow[]; truncated: boolean; error?: string; reload(): void }
+
+/** A rig's open requests on a machine (`rig` null: nothing asked), asked now and again every `RIG_QUEUE_REFRESH_MS` while mounted. `truncated`: older
+ *  rows of the rig may be missing. `error`: `unknown_rig`, `not_installed`, `daemon_stopped`, `failed`, or the fleet's `offline` / `outdated`
+ *  (the last rows stay while it is `offline`). Another rig is never shown the previous one's rows; `reload` asks again at once. */
+export function useRigQueue(client: DaemonClient, machine: string | null, rig: string | null): RigQueueView {
+  const [answer, setAnswer] = useState<{ key: string; rows: RigRow[]; truncated: boolean; error?: string } | null>(null);
+  const [round, setRound] = useState(0);
+  const key = machine !== null && rig !== null ? `${machine}\u0000${rig}` : null;
+  useEffect(() => {
+    if (machine === null || rig === null) return;
+    const k = `${machine}\u0000${rig}`;
+    let current = '';
+    setAnswer(a => (a?.key === k ? a : null));
+    const off = client.onMessage(m => {
+      if (m.type !== 'openrig.queueState' || m.requestId !== current) return;
+      setAnswer(a => (m.error === 'offline' && a?.key === k ? { ...a, error: m.error } : { key: k, rows: m.rows, truncated: m.truncated, ...(m.error ? { error: m.error } : {}) }));
+    });
+    const ask = () => { current = `openrig-queue-${++next}`; client.send({ type: 'openrig.queue', requestId: current, machineId: machine, rig }); };
+    ask();
+    const timer = setInterval(ask, RIG_QUEUE_REFRESH_MS);
+    return () => { clearInterval(timer); off(); };
+  }, [client, machine, rig, round]);
+  const reload = useCallback(() => setRound(r => r + 1), []);
+  if (key === null) return { status: 'idle', rows: [], truncated: false, reload };
+  if (!answer || answer.key !== key) return { status: 'loading', rows: [], truncated: false, reload };
+  return { status: 'ready', rows: answer.rows, truncated: answer.truncated, ...(answer.error ? { error: answer.error } : {}), reload };
 }
 
 /** A file of a role (one its detail lists); resolves with its content or why not (`not_allowed`, `missing`, `offline`…). */

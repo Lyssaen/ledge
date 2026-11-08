@@ -143,6 +143,50 @@ describe('useRigPermissions', () => {
   });
 });
 
+describe('useRigQueue', () => {
+  const row = { id: 'qitem-1', state: 'pending', from: 'a@kernel', to: 'dev-build@a', createdAt: 'a', updatedAt: 'b', at: 'c', needsInput: { count: 1, reason: 'permission_prompt' } };
+  it('asks once per machine and rig and again every RIG_QUEUE_REFRESH_MS while mounted; its latest answer only; another rig is not shown the previous rows', async () => {
+    vi.useFakeTimers();
+    try {
+      const { useRigQueue } = await import('../src/openrig');
+      const { RIG_QUEUE_REFRESH_MS } = await import('@ledge/protocol');
+      expect(RIG_QUEUE_REFRESH_MS).toBe(15_000);
+      const { client, sent, emit, listeners } = fake();
+      const { result, rerender, unmount } = renderHook(({ rig }) => useRigQueue(client, 'server', rig), { initialProps: { rig: 'a' as string | null } });
+      expect(result.current).toMatchObject({ status: 'loading', rows: [], truncated: false });
+      expect(sent).toEqual([{ type: 'openrig.queue', requestId: rid(sent[0]), machineId: 'server', rig: 'a' }]);
+      emit({ type: 'openrig.queueState', requestId: 'other', rig: 'a', rows: [], truncated: false });
+      expect(result.current.status).toBe('loading');
+      emit({ type: 'openrig.queueState', requestId: rid(sent[0]), machineId: 'server', rig: 'a', rows: [row], truncated: true });
+      expect(result.current).toMatchObject({ status: 'ready', rows: [row], truncated: true });
+      act(() => { vi.advanceTimersByTime(RIG_QUEUE_REFRESH_MS - 1); });
+      expect(sent).toHaveLength(1);
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(sent).toHaveLength(2);
+      emit({ type: 'openrig.queueState', requestId: rid(sent[0]), rig: 'a', rows: [], truncated: false }); // superseded
+      expect(result.current.rows).toEqual([row]);
+      emit({ type: 'openrig.queueState', requestId: rid(sent[1]), rig: 'a', rows: [], truncated: false });
+      expect(result.current).toMatchObject({ status: 'ready', rows: [] });
+      rerender({ rig: 'b' });
+      expect(result.current).toMatchObject({ status: 'loading', rows: [] });
+      expect(sent).toHaveLength(3);
+      emit({ type: 'openrig.queueState', requestId: rid(sent[2]), rig: 'b', rows: [], truncated: false, error: 'unknown_rig' });
+      expect(result.current).toMatchObject({ status: 'ready', rows: [], error: 'unknown_rig' });
+      act(() => result.current.reload());
+      expect(sent).toHaveLength(4);
+      rerender({ rig: null });
+      expect(result.current.status).toBe('idle');
+      act(() => { vi.advanceTimersByTime(60_000); });
+      expect(sent).toHaveLength(4);
+      rerender({ rig: 'a' });
+      unmount();
+      expect(listeners.size).toBe(0);
+      act(() => { vi.advanceTimersByTime(60_000); });
+      expect(sent).toHaveLength(5);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
 describe('useRigGraph', () => {
   const graph = { pods: [{ id: 'dev', label: 'Project' }], seats: [{ logicalId: 'dev.build', pod: 'dev', runtime: 'codex', status: 'exited', attention: false }], links: [] };
   it('asks once per machine and rig, its own answer only; another rig is not shown the previous graph', async () => {

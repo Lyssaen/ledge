@@ -1249,6 +1249,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'openrig.roles': return reply({ type: 'openrig.roleList', requestId: msg.requestId, ...await openrig.roles() });
       case 'openrig.graph': return reply({ type: 'openrig.graphState', requestId: msg.requestId, rig: msg.rig, ...await openrig.graph(msg.rig) });
       case 'openrig.permissions': return reply({ type: 'openrig.permissionList', requestId: msg.requestId, rig: msg.rig, seats: [], ...await openrig.permissions(msg.rig) });
+      case 'openrig.queue': return reply({ type: 'openrig.queueState', requestId: msg.requestId, rig: msg.rig, ...await openrig.queue(msg.rig) });
       case 'openrig.snapshots': return reply({ type: 'openrig.snapshotList', requestId: msg.requestId, rig: msg.rig, snapshots: [], ...await openrig.snapshots(msg.rig) });
       case 'openrig.role': return reply({ type: 'openrig.roleDetail', requestId: msg.requestId, roleId: msg.roleId, ...await openrig.role(msg.roleId) });
       case 'openrig.roleFile': return reply({ type: 'openrig.roleFileContent', requestId: msg.requestId, roleId: msg.roleId, path: msg.path, ...await openrig.roleFile(msg.roleId, msg.path) });

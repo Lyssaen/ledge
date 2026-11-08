@@ -191,6 +191,9 @@ export interface OpenRig {
   /** A rig's permissions by rig name: its spec's `policy` when Ledge knows the spec file, and each seat's effective mode (one `rig seat status`
    *  per seat, two at a time; a seat that fails is told with its `error`). Reused 30 s, forgotten after any action. Same `error`s as `graph`. */
   permissions(rig: string): Promise<{ policy?: string; seats?: RigSeatPermission[]; error?: string }>;
+  /** A rig's open requests (`pending`, `in-progress`, `blocked`) naming one of its seats as destination or source, from the daemon's
+   *  `/api/queue/list` (no CLI fallback: the route is contractual), read at each ask. `truncated`: the list was full. Same `error`s as `graph`, plus `failed`. */
+  queue(rig: string): Promise<{ rows: RigRow[]; truncated: boolean; error?: string }>;
 }
 export interface RolesResult { roles: RoleSummary[]; openrigVersion?: string; error?: string }
 export interface RoleResult { role?: RoleDetail; error?: string }
@@ -618,7 +621,16 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return read;
   }
 
-  return { state, act, specs, launch, reseat, roles, role, roleFile, row, graph, snapshots, permissions };
+  async function queue(name: string): Promise<{ rows: RigRow[]; truncated: boolean; error?: string }> {
+    const none = (error: string) => ({ rows: [], truncated: false, error });
+    const st = await state();
+    if (!st.installed) return none('not_installed');
+    if (!st.rigs.some(r => r.name === name)) return none(st.daemon.state === 'running' ? 'unknown_rig' : 'daemon_stopped');
+    const live = await http(QUEUE_PATH).then(raw => readQueue(raw, name, new Date(now()).toISOString()), () => undefined);
+    return live ?? none('failed');
+  }
+
+  return { state, act, specs, launch, reseat, roles, role, roleFile, row, graph, snapshots, permissions, queue };
 }
 
 /** A seat's permissions from `rig seat status <session> --json` (`permissions.effective.{effectiveMode, source, launchPosture}`,
@@ -710,10 +722,34 @@ const ROWS_MAX = 500;
 
 /** A row from `rig queue show <id> --json`; undefined when it is not one. */
 export function readRow(output: string, at: string): RigRow | undefined {
-  const j = obj(parse(output));
+  return rowFrom(parse(output), at);
+}
+
+/** A row from one queue record (`rig queue show --json`, or an item of `GET /api/queue/list`: same fields); undefined when it is not one.
+ *  `needsInput` (`waiting.liveness.needsInput`) only when a prompt waits. */
+export function rowFrom(record: unknown, at: string): RigRow | undefined {
+  const j = obj(record);
   const id = str(j.qitemId), state = str(j.state), from = str(j.sourceSession), to = str(j.destinationSession), createdAt = str(j.tsCreated);
   if (!id || !state || from === null || to === null || !createdAt || !QitemIdSchema.safeParse(id).success) return undefined;
   const summary = str(j.summary), handedOffTo = str(j.handedOffTo), blockedOn = str(j.blockedOn), claimedAt = str(j.claimedAt);
+  const input = obj(obj(obj(j.waiting).liveness).needsInput), count = typeof input.count === 'number' && Number.isInteger(input.count) ? input.count : 0;
   return { id, state, from, to, createdAt, updatedAt: str(j.tsUpdated) ?? createdAt, at,
-    ...(summary ? { summary } : {}), ...(handedOffTo ? { handedOffTo } : {}), ...(blockedOn ? { blockedOn } : {}), ...(claimedAt ? { claimedAt } : {}) };
+    ...(summary ? { summary } : {}), ...(handedOffTo ? { handedOffTo } : {}), ...(blockedOn ? { blockedOn } : {}), ...(claimedAt ? { claimedAt } : {}),
+    ...(count > 0 ? { needsInput: { count, reason: str(input.reason) } } : {}) };
+}
+
+/** How many open rows Ledge asks OpenRig for; a list that long may have older rows left out. */
+const QUEUE_LIMIT = 100;
+const QUEUE_PATH = `/api/queue/list?state=pending,in-progress,blocked&limit=${QUEUE_LIMIT}`;
+
+/** A rig's rows out of `GET /api/queue/list` (a JSON array, newest first as OpenRig returns it; `rig=` does not filter there, so Ledge does):
+ *  those whose destination or source session ends with `@<rig>`. `truncated`: the raw list had `QUEUE_LIMIT` items. Undefined when it is not a list. */
+export function readQueue(raw: unknown, rig: string, at: string): { rows: RigRow[]; truncated: boolean } | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const suffix = `@${rig}`, rows: RigRow[] = [];
+  for (const item of raw) {
+    const row = rowFrom(item, at);
+    if (row && (row.to.endsWith(suffix) || row.from.endsWith(suffix))) rows.push(row);
+  }
+  return { rows, truncated: raw.length >= QUEUE_LIMIT };
 }

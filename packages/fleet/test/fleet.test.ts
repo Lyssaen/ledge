@@ -712,6 +712,23 @@ describe('multi-machine connections', () => {
     expect(lists().at(-1)).toEqual({ type: 'openrig.permissionList', requestId: 'p3', machineId: 'server', rig: 'starter', seats: [], error: 'offline' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('routes a rig\'s queue to its machine; an older daemon answers outdated, a machine that dropped offline', () => {
+    const { client, server, got } = setup();
+    const lists = () => got.filter(m => m.type === 'openrig.queueState');
+    const rows = [{ id: 'qitem-1', state: 'pending', from: 'a@kernel', to: 'dev-build@x', createdAt: 'a', updatedAt: 'b', at: 'c', needsInput: { count: 1, reason: 'permission_prompt' } }];
+    client.send({ type: 'openrig.queue', requestId: 'q1', machineId: 'server', rig: 'x' });
+    expect(server.sent).toEqual([{ type: 'openrig.queue', requestId: 'q1', rig: 'x' }]);
+    server.emit({ type: 'openrig.queueState', requestId: 'q1', rig: 'x', rows, truncated: false });
+    server.emit({ type: 'openrig.queueState', requestId: 'q1', rig: 'x', rows: [], truncated: false }); // once only
+    expect(lists()).toEqual([{ type: 'openrig.queueState', requestId: 'q1', machineId: 'server', rig: 'x', rows, truncated: false }]);
+    client.send({ type: 'openrig.queue', requestId: 'q2', machineId: 'server', rig: 'x' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.queue' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.queueState', requestId: 'q2', machineId: 'server', rig: 'x', rows: [], truncated: false, error: 'outdated' });
+    server.set('unreachable');
+    client.send({ type: 'openrig.queue', requestId: 'q3', machineId: 'server', rig: 'y' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.queueState', requestId: 'q3', machineId: 'server', rig: 'y', rows: [], truncated: false, error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('answers a repos.scan for an offline machine, and one pending on a machine that drops, with error offline', () => {
     const { client, server, got } = setup();
     client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });

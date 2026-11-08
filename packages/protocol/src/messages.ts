@@ -9,7 +9,7 @@ import { SessionCommandsSchema, SessionCommandsListingSchema } from './commands.
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
 import { RigSeatNameSchema, OpenRigGraphSchema, OpenRigGraphStateSchema, OpenRigSnapshotsSchema, OpenRigSnapshotListSchema, OpenRigPermissionsSchema, OpenRigPermissionListSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigGoalReplySchema, OpenRigGoalSendSchema, OpenRigGoalSentSchema, OpenRigGoalsChangedSchema, OpenRigGoalsSchema, OpenRigAnswerSchema, OpenRigAnsweredSchema, OpenRigAsksChangedSchema, OpenRigAsksSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
-import { OpenRigRowSchema, OpenRigRowStateSchema } from './rigMessages.js';
+import { OpenRigRowSchema, OpenRigRowStateSchema, OpenRigQueueSchema, OpenRigQueueStateSchema } from './rigMessages.js';
 import { OpenRigRoleDetailSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { BrowserEnableSchema, BrowserEnabledSchema, BrowserFrameSchema, BrowserLiveSchema, BrowserUnwatchSchema, BrowserWatchSchema } from './browser.js';
@@ -140,6 +140,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   OpenRigGraphStateSchema,
   OpenRigSnapshotListSchema,
   OpenRigPermissionListSchema,
+  OpenRigQueueStateSchema,
   OpenRigDoneSchema,
   OpenRigSpecListSchema,
   OpenRigLaunchedSchema,
@@ -258,6 +259,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   OpenRigGraphSchema,
   OpenRigSnapshotsSchema,
   OpenRigPermissionsSchema,
+  OpenRigQueueSchema,
   OpenRigRoleSchema,
   OpenRigRoleFileSchema,
   OpenRigAsksSchema,
