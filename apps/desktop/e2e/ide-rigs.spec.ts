@@ -37,7 +37,6 @@ test('the Rigs button opens the view: kernel, rigs and the Daemon row; a stop as
   await expect(view(page).getByText('starter')).toBeVisible();
   await expect(view(page).getByText('Daemon')).toBeVisible();
   await expect(rigsButton(page).locator('.ide-badge')).toHaveCount(0);
-  await page.screenshot({ path: '/tmp/claude-1000/-home-gch-development-ledge/31519783-bd28-4ba7-bb1a-a89564f37f66/scratchpad/ide-rigs.png' });
 
   await view(page).locator('.ide-rigs-row').filter({ hasText: 'starter' }).getByRole('button', { name: /^Stop/ }).click();
   const conf = view(page).getByRole('group', { name: /starter/ });

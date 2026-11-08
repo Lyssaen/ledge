@@ -21,7 +21,7 @@ export function ActivityBar({ layout, onLayout, onTab, activeTab, badge, rigsAle
   );
   const active = activeTab ? keyOf(activeTab) : '';
   const tab = (target: Tab, d: readonly string[], label: string) => (
-    <button className={active === keyOf(target)  ? 'on' : undefined} aria-label={label} title={label} onClick={() => onTab(target)}>
+    <button className={active === keyOf(target) ? 'on' : undefined} aria-label={label} title={label} onClick={() => onTab(target)}>
       <Icon d={d} size={18} />
     </button>
   );

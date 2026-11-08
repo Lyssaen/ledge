@@ -1420,7 +1420,7 @@ export const fr = {
     settingOff: 'Interface IDE (aperçu) désactivée',
     /** The Rigs view (IDE lot 7b): the machine menu, its rows and their actions. */
     rigsView: {
-      launch: 'Lancer', launchTitle: 'Lancer un rig…', machine: (label: string) => `Machine : ${label}`, machines: 'Machines',
+      launch: 'Lancer', launchTitle: 'Lancer un rig…', shownMachine: (label: string) => `Machine affichée : ${label}`, machine: (label: string) => `Machine : ${label}`, machines: 'Machines',
       local: 'locale', ssh: 'SSH', manage: 'Gérer les machines…', add: 'Ajouter une machine',
       runningRigs: (n: number) => (n === 1 ? '1 rig en marche' : `${n} rigs en marche`), openrigStopped: 'OpenRig arrêté',
       daemon: 'Daemon', fold: (name: string) => `Replier ${name}`, unfold: (name: string) => `Déplier ${name}`,
@@ -1443,7 +1443,7 @@ export const fr = {
     },
     sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
     activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
-    openrigTab: 'OpenRig (onglet)', atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
+    atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
     resizeEdge: 'Glisser pour redimensionner · double-clic : largeur par défaut', resizeBottom: 'Glisser pour redimensionner · double-clic : hauteur par défaut', collapse: '« Réduire', collapseTip: 'Réduire la barre latérale (Ctrl+B)',
     waiting: (n: number) => (n === 1 ? '1 demande' : `${n} demandes`),
     tabTerminalView: 'Vue terminal', tagLine: (label: string, value: string) => `${label} : ${value}`, toTerminal: 'Basculer sur le terminal', toThread: 'Revenir au fil', viewKey: (key: string) => `Ctrl ${key}`, relievedByEntry: (name: string) => `Relevée par ${name}`, relievesEntry: (name: string) => `Relève de ${name}`,

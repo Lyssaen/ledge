@@ -48,7 +48,6 @@ import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
 import { createRigOutput, useRigOutput } from './openrig/rigOutput';
 import { SIDEBAR_POLL_MS, useSidebarOpenRig } from './openrig/sidebarState';
 import { useOpenRig } from '@ledge/fleet/openrig';
-import { RigsView } from './ide/rigs/RigsView';
 import { rigsAlert } from './ide/rigs/model';
 import { offersRigs, setGrouping, useGrouping } from './openrig/grouping';
 import { AtelierAway } from './atelier/Away';
@@ -95,7 +94,7 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace } from './ide/lazy';
+import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeRigs } from './ide/lazy';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -795,7 +794,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
         notice={tokenMissing && <DaemonOutdated />}
         explorer={layout.sideView === 'rigs'
-          ? <RigsView client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} activeTab={front ?? null} dispatch={dispatch} onTab={onTab}
+          ? <IdeRigs client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} activeTab={front ?? null} dispatch={dispatch} onTab={onTab}
               onMenu={(id, at, opener) => sessionMenu.open(id, at, opener)} />
           : <Sidebar section={layout.sideView} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
             actions={actions} decisions={decisions} waits={waits} menu={sessionMenu} notify={notify}

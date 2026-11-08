@@ -15,6 +15,7 @@ export { DockHost } from './DockHost';
 export { BottomPanel } from './BottomPanel';
 export { OutputView } from './OutputView';
 export { AtelierBar } from './AtelierBar';
+export { RigsView } from './rigs/RigsView';
 
 export interface IdeFrameProps {
   layout: IdeLayout; onLayout(a: LayoutAction): void;

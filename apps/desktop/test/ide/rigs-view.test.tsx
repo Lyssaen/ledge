@@ -219,6 +219,80 @@ describe('the IDE Rigs view', () => {
     expect(screen.queryByRole('button', { name: /^Confirmer/ })).toBeNull();
     expect(m.f.acts()).toEqual([]);
   });
+  it('a confirmation names a working seat by its Ledge session (the machine id, not its label, joins them)', async () => {
+    running(mount({ sessions: [bix()] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    const conf = screen.getByRole('group', { name: /ledge-dev/ });
+    expect(conf).toHaveTextContent('Bix');
+    expect(conf).not.toHaveTextContent('dev.build');
+  });
+  it('R4: with srv displayed (ssh), confirming a stop sends the act on machineId srv', async () => {
+    const m = mount({ machines: [machine('local', 'locale'), machine('srv', 'serveur', 'srv')] });
+    m.f.state('local', state());
+    await userEvent.click(screen.getByRole('button', { name: /locale/, expanded: false }));
+    await userEvent.click(screen.getAllByRole('menuitemradio')[1]!);
+    m.f.state('srv', state());
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmer l’arrêt' }));
+    expect(m.f.acts()).toMatchObject([{ action: { kind: 'rig.stop', rig: 'ledge-dev' }, machineId: 'srv' }]);
+  });
+  it('an Escape from a field outside the Rigs view reaches that field and leaves the confirmation open', async () => {
+    running();
+    const ta = document.createElement('textarea'); document.body.appendChild(ta);
+    const own = vi.fn(); ta.addEventListener('keydown', own);
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    ta.focus();
+    await userEvent.keyboard('{Escape}');
+    ta.remove();
+    expect(own.mock.calls.filter(([e]) => (e as KeyboardEvent).key === 'Escape')).toHaveLength(1);
+    expect((own.mock.calls[0]![0] as KeyboardEvent).defaultPrevented).toBe(false);
+    expect(screen.getByRole('button', { name: 'Confirmer l’arrêt' })).toBeInTheDocument();
+  });
+  it('Cancel gives the focus back to the button that opened the confirmation', async () => {
+    running();
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(screen.getByRole('button', { name: 'Arrêter ledge-dev' })).toHaveFocus();
+  });
+  it('the machine menu: opening focuses the checked item, the arrows move, Escape and a choice give the focus back to the button', async () => {
+    const m = mount({ machines: [machine('local', 'locale'), machine('srv', 'srv', 'srv')] });
+    m.f.state('local', state());
+    const trigger = screen.getByRole('button', { name: 'Machine affichée : locale' });
+    await userEvent.click(trigger);
+    const items = screen.getAllByRole('menuitemradio');
+    expect(items[0]).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(items[1]).toHaveFocus();
+    await userEvent.keyboard('{End}');
+    expect(screen.getByRole('menuitem', { name: 'Ajouter une machine' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(trigger).toHaveFocus();
+    await userEvent.click(trigger);
+    await userEvent.click(screen.getAllByRole('menuitemradio')[1]!);
+    expect(screen.getByRole('button', { name: 'Machine affichée : srv' })).toHaveFocus();
+  });
+  it('an outdated machine is labelled so in the menu, not offline', async () => {
+    const m = mount({ machines: [machine('local', 'locale'), machine('srv', 'srv', 'srv')] });
+    m.f.state('local', state());
+    await userEvent.click(screen.getByRole('button', { name: /locale/, expanded: false }));
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getAllByRole('button', { name: /locale/ })[0]!);
+    m.f.error('srv', 'outdated');
+    expect(screen.getAllByRole('menuitemradio')[1]).toHaveTextContent('Le Ledge de cette machine est trop ancien.');
+  });
+  it('a stopped daemon shows no version on its row', () => {
+    const m = mount();
+    m.f.state('local', state({ daemon: { state: 'stopped' }, rigs: [] }));
+    expect(within(screen.getByRole('button', { name: 'Daemon' }).closest('.ide-rigs-row') as HTMLElement).queryByText('0.7.10')).toBeNull();
+  });
+  it('the confirmation puts the seat names on their own line and the restart note in its own paragraph', async () => {
+    running(mount({ sessions: [bix()] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Redémarrer ledge-dev' }));
+    const conf = screen.getByRole('group', { name: /ledge-dev/ });
+    expect(within(conf).getByText('Bix').closest('.ide-rigs-seats')).not.toBeNull();
+    expect(within(conf).getByText(/Un snapshot est pris d’abord/).tagName).toBe('P');
+  });
   it('a failed Démarrer OpenRig shows its message once', async () => {
     const m = mount();
     m.f.state('local', state({ daemon: { state: 'stopped' }, rigs: [] }));

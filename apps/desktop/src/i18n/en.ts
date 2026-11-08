@@ -1354,7 +1354,7 @@ export const en: Messages = {
     settingOff: 'IDE interface (preview) off',
     /** The Rigs view (IDE lot 7b): the machine menu, its rows and their actions. */
     rigsView: {
-      launch: 'Launch', launchTitle: 'Launch a rig…', machine: (label) => `Machine: ${label}`, machines: 'Machines',
+      launch: 'Launch', launchTitle: 'Launch a rig…', shownMachine: (label: string) => `Shown machine: ${label}`, machine: (label) => `Machine: ${label}`, machines: 'Machines',
       local: 'local', ssh: 'SSH', manage: 'Manage machines…', add: 'Add a machine',
       runningRigs: (n) => (n === 1 ? '1 rig running' : `${n} rigs running`), openrigStopped: 'OpenRig stopped',
       daemon: 'Daemon', fold: (name) => `Fold ${name}`, unfold: (name) => `Unfold ${name}`,
@@ -1375,7 +1375,7 @@ export const en: Messages = {
     },
     sideToggle: 'Sidebar (Ctrl+B)', bottomToggle: 'Bottom panel (Ctrl+J)', rightToggle: 'Right panel (Ctrl+/)',
     activityLabel: 'Activity bar', projects: 'Projects', rigs: 'OpenRig rigs', atoi: 'For you',
-    openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
+    atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
     resizeEdge: 'Drag to resize · double-click: default width', resizeBottom: 'Drag to resize · double-click: default height', collapse: '« Collapse', collapseTip: 'Collapse the sidebar (Ctrl+B)',
     waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`),
     tabTerminalView: 'Terminal view', tagLine: (label, value) => `${label}: ${value}`, toTerminal: 'Switch to the terminal', toThread: 'Back to the thread', viewKey: (key) => `Ctrl ${key}`, relievedByEntry: (name) => `Relieved by ${name}`, relievesEntry: (name) => `Relieves ${name}`,
