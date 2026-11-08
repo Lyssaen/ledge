@@ -1,6 +1,6 @@
 # Refonte IDE, lot 7a : relevé OpenRig et protocole, plan d'implémentation
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal :** chaque daemon Ledge donne au front, pour l'OpenRig de sa machine, ce que la vue Rig (7c) et la page OpenRig (7d) vont montrer et qu'il ne donne pas encore : la topologie d'un rig (même arrêté) et celle d'une spec, les snapshots et « Snapshot maintenant », la reprise d'un snapshot précis, les permissions effectives de chaque siège, la file d'un rig, la duplication d'un rôle, l'heure de départ du daemon. **Aucun écran ne change** : 7a s'arrête aux hooks de `packages/fleet`.
 
@@ -56,55 +56,55 @@ Les lectures HTTP passent par `localGet` (déjà là : 127.0.0.1, port de `rig s
 
 ### Task 0 : base et compatibilité 0.7
 
-- [ ] Sur 71b50f49 : `corepack pnpm install --frozen-lockfile`, puis `corepack pnpm --filter @paradow/ledge test`, `--filter @ledge/fleet test`, `--filter @ledge/protocol test`. Noter les échecs déjà là.
-- [ ] Contre l'OpenRig 0.7.10 du laptop : script jetable (scratchpad) qui appelle `createOpenRig().state()`, `specs()` et `roles()`, et vérifie qu'ils ne renvoient pas d'erreur. Corriger ce que 0.7 aurait cassé, test d'abord.
-- [ ] `readState` : test qui fixe le piège du relevé §1. Avec `kernel.state: "skipped"` dans `rig status` et un rig `kernel` qui tourne, l'état du kernel doit être `ready`.
+- [x] Sur 71b50f49 : `corepack pnpm install --frozen-lockfile`, puis `corepack pnpm --filter @paradow/ledge test`, `--filter @ledge/fleet test`, `--filter @ledge/protocol test`. Noter les échecs déjà là.
+- [x] Contre l'OpenRig 0.7.10 du laptop : script jetable (scratchpad) qui appelle `createOpenRig().state()`, `specs()` et `roles()`, et vérifie qu'ils ne renvoient pas d'erreur. Corriger ce que 0.7 aurait cassé, test d'abord.
+- [x] `readState` : test qui fixe le piège du relevé §1. Avec `kernel.state: "skipped"` dans `rig status` et un rig `kernel` qui tourne, l'état du kernel doit être `ready`.
 
 ### Task 1 : topologie d'un rig (R1)
 
-- [ ] Protocole : `RigLinkSchema { from, to, kind }`, `RigGraphSchema`, `openrig.graph { requestId, machineId?, rig }` → `openrig.graphState { requestId, machineId?, rig, graph?, error? }`.
-- [ ] Daemon : `graph(rig)` résout l'id par `state()`, lit `/graph` et traduit les ids de nœud en `logicalId` (`data.logicalId` des `rigNode`, pods par `parentId`). Si ça échoue : `rig spec show <id> --json` (`pods[].edges` en `pod.member`, plus `edges`). Cache 5 s par rig.
-- [ ] Tests (vitest, `RigRun` et `localGet` simulés) sur les deux formes relevées : le graphe de `ledge-survey` et l'export du kernel (fixtures tirées du relevé, sans token ni chemin perso). Cas : rig arrêté, route en 404, rig inconnu.
-- [ ] Fleet : `useRigGraph(machineId, rig)`.
+- [x] Protocole : `RigLinkSchema { from, to, kind }`, `RigGraphSchema`, `openrig.graph { requestId, machineId?, rig }` → `openrig.graphState { requestId, machineId?, rig, graph?, error? }`.
+- [x] Daemon : `graph(rig)` résout l'id par `state()`, lit `/graph` et traduit les ids de nœud en `logicalId` (`data.logicalId` des `rigNode`, pods par `parentId`). Si ça échoue : `rig spec show <id> --json` (`pods[].edges` en `pod.member`, plus `edges`). Cache 5 s par rig.
+- [x] Tests (vitest, `RigRun` et `localGet` simulés) sur les deux formes relevées : le graphe de `ledge-survey` et l'export du kernel (fixtures tirées du relevé, sans token ni chemin perso). Cas : rig arrêté, route en 404, rig inconnu.
+- [x] Fleet : `useRigGraph(machineId, rig)`.
 
 ### Task 2 : topologie d'une spec (R2)
 
-- [ ] `RigSpec.links?: RigLink[]` dans `rigSpec.ts` (`readSpec`) : les liens de pod préfixés `pod.`, plus les liens entre pods. Test sur la spec `starter` et sur une spec composée par Ledge.
+- [x] `RigSpec.links?: RigLink[]` dans `rigSpec.ts` (`readSpec`) : les liens de pod préfixés `pod.`, plus les liens entre pods. Test sur la spec `starter` et sur une spec composée par Ledge.
 
 ### Task 3 : snapshots (R4, R5)
 
-- [ ] Action `rig.snapshot { rig }` → `[['snapshot', rig]]` dans `rigCommands`. Timeout 120 s.
-- [ ] `rig.start` gagne `snapshot?` → `[['restore', snapshot, '--rig', <id>]]`. Le daemon résout l'id, car `rigCommands` n'a que le nom. Vérifier d'abord la sortie de `rig restore` (a-t-il un `--json` ?) sur `ledge-survey`, et l'écrire dans le relevé.
-- [ ] `openrig.snapshots { rig }` → `openrig.snapshotList { rig, snapshots[{id, kind, status, createdAt}], error? }`. HTTP, puis repli texte. Tests sur les deux.
-- [ ] Fleet : `useRigSnapshots`.
+- [x] Action `rig.snapshot { rig }` → `[['snapshot', rig]]` dans `rigCommands`. Timeout 120 s.
+- [x] `rig.start` gagne `snapshot?` → `[['restore', snapshot, '--rig', <id>]]`. Le daemon résout l'id, car `rigCommands` n'a que le nom. Vérifier d'abord la sortie de `rig restore` (a-t-il un `--json` ?) sur `ledge-survey`, et l'écrire dans le relevé.
+- [x] `openrig.snapshots { rig }` → `openrig.snapshotList { rig, snapshots[{id, kind, status, createdAt}], error? }`. HTTP, puis repli texte. Tests sur les deux.
+- [x] Fleet : `useRigSnapshots`.
 
 ### Task 4 : permissions effectives (R3)
 
-- [ ] `openrig.permissions { rig }` → `openrig.permissionList { rig, policy?, seats[{logicalId, session, mode, source, posture, selection, summary}], error? }`. Un `rig seat status <session> --json` par siège, deux à la fois au plus. Cache 30 s, vidé après toute action sur le rig. `policy` vient de la spec du rig quand Ledge la connaît.
-- [ ] Action `rig.permissions { rig, mode: SeatPermissions }` → un `seat set-permissions` par siège, `--reason Ledge`. On s'arrête à la première erreur et on dit quels sièges ont changé.
-- [ ] Tests sur la sortie relevée (`advisor-lead@kernel` : `acceptEdits`, `kernel_default`, `floor`).
+- [x] `openrig.permissions { rig }` → `openrig.permissionList { rig, policy?, seats[{logicalId, session, mode, source, posture, selection, summary}], error? }`. Un `rig seat status <session> --json` par siège, deux à la fois au plus. Cache 30 s, vidé après toute action sur le rig. `policy` vient de la spec du rig quand Ledge la connaît.
+- [x] Action `rig.permissions { rig, mode: SeatPermissions }` → un `seat set-permissions` par siège, `--reason Ledge`. On s'arrête à la première erreur et on dit quels sièges ont changé.
+- [x] Tests sur la sortie relevée (`advisor-lead@kernel` : `acceptEdits`, `kernel_default`, `floor`).
 
 ### Task 5 : file d'un rig (R6)
 
-- [ ] `openrig.queue { rig }` → `openrig.queueState { rig, rows: RigRow[], truncated, error? }`. `RigRow` gagne `needsInput?: { count, reason }`, tiré de `waiting.liveness.needsInput`.
-- [ ] Le filtre `@<rig>` porte sur la destination **ou** la source. Test avec la ligne relevée : une demande `pending` refusée sur `selection_prompt`.
-- [ ] Fleet : `useRigQueue`, relu toutes les 15 s tant qu'il est monté.
+- [x] `openrig.queue { rig }` → `openrig.queueState { rig, rows: RigRow[], truncated, error? }`. `RigRow` gagne `needsInput?: { count, reason }`, tiré de `waiting.liveness.needsInput`.
+- [x] Le filtre `@<rig>` porte sur la destination **ou** la source. Test avec la ligne relevée : une demande `pending` refusée sur `selection_prompt`.
+- [x] Fleet : `useRigQueue`, relu toutes les 15 s tant qu'il est monté.
 
 ### Task 6 : rôles (R7)
 
-- [ ] `openrig.role.duplicate { roleId, name }` → `openrig.roleDuplicated { ok, roleId?, path?, error? }`. Lit `rig config get workspace.specs_root`, refuse un `name` qui existe déjà ou qui n'est pas un `RigNameSchema`, copie le dossier (sans suivre les liens symboliques), réécrit `name:`, lance `rig specs add <dossier> --json`, puis vide le cache des rôles.
-- [ ] Tests sur un dossier temporaire (pas sur le vrai `~/.openrig`).
+- [x] `openrig.role.duplicate { roleId, name }` → `openrig.roleDuplicated { ok, roleId?, path?, error? }`. Lit `rig config get workspace.specs_root`, refuse un `name` qui existe déjà ou qui n'est pas un `RigNameSchema`, copie le dossier (sans suivre les liens symboliques), réécrit `name:`, lance `rig specs add <dossier> --json`, puis vide le cache des rôles.
+- [x] Tests sur un dossier temporaire (pas sur le vrai `~/.openrig`).
 
 ### Task 7 : daemon et sièges (R9)
 
-- [ ] `daemon.startedAt?` dans `readState` (lecture de `daemon.json` injectée pour les tests).
-- [ ] `RigSeat.attention?: boolean` (`needsAttention`) et `Rig.specPath?` (le `rootOf` que Ledge connaît pour les rigs qu'il a lancés).
+- [x] `daemon.startedAt?` dans `readState` (lecture de `daemon.json` injectée pour les tests).
+- [x] `RigSeat.attention?: boolean` (`needsAttention`) et `Rig.specPath?` (le `rootOf` que Ledge connaît pour les rigs qu'il a lancés).
 
 ### Task 8 : câblage, e2e, doc
 
-- [ ] Drapeau `openrigRig: true` ; `fleet.ts` répond `outdated` sans lui. Tests fleet sur les nouveaux types.
-- [ ] `apps/desktop/e2e/daemon.ts` répond aux nouveaux messages avec les fixtures du relevé, pour que 7b à 7d aient de quoi tester.
-- [ ] Relevé : y ajouter la sortie de `rig restore` (Task 3). Plan : y reporter les écarts.
+- [x] Drapeau `openrigRig: true` ; `fleet.ts` répond `outdated` sans lui. Tests fleet sur les nouveaux types.
+- [x] `apps/desktop/e2e/daemon.ts` répond aux nouveaux messages avec les fixtures du relevé, pour que 7b à 7d aient de quoi tester.
+- [x] Relevé : y ajouter la sortie de `rig restore` (Task 3). Plan : y reporter les écarts.
 - [ ] Tests complets (ledge, fleet, protocol, desktop typecheck) ; relecture indépendante (superpowers:requesting-code-review) ; PR avec, dans la description, **la liste de ce qu'OpenRig ne fournit pas** (R3, R5, R7, R10, R11) pour l'utilisateur avant 7b.
 
 ## Review Focus
@@ -112,3 +112,15 @@ Les lectures HTTP passent par `localGet` (déjà là : 127.0.0.1, port de `rig s
 1. **Aucune régression sur `openrig.status`** : une route HTTP qui tombe ou un OpenRig 0.6 ne doit rien changer à l'état ni à sa cadence.
 2. **Ce qui s'exécute** : toute nouvelle commande passe par `execFile` avec des arguments validés, et la duplication ne peut écrire que dans `workspace.specs_root`.
 3. **Le coût** : `permissions` lance un `rig seat status` par siège (environ 1 s chacun sur le laptop) ; vérifier le cache et la concurrence sur un rig de 7 sièges.
+
+## Écarts
+
+| # | Écart | Pourquoi |
+|---|---|---|
+| E1 | Le drapeau `openrigRig` est posé dès la Task 1, et chaque message est câblé de bout en bout dans sa tâche. `outdated` vient du refus du message par un vieux daemon, comme pour les rôles. | Un câblage final aurait laissé les tâches 1 à 7 sans test de bout en bout. |
+| E2 | Les hooks prennent `client` en premier : `useRigGraph(client, machine, rig)`. | Ils suivent leurs voisins. |
+| E3 | `rig restore` reçoit le nom du rig, pas son id. Il n'a pas de `--json`. `ok` veut dire « reprise lancée » (HTTP 202). Un rig qui tourne est refusé (409) : le front l'arrête d'abord. | C'est ce que la CLI 0.7 fait pour une reprise directe (relevé §5). |
+| E4 | `rig.permissions` porte la liste `seats`. `openrig.done.completed` dit combien de sièges ont changé avant l'échec. | Sans la liste, `rigCommands` ne peut pas écrire les commandes. Un échec à mi-chemin laisse un rig mixte. |
+| E5 | La file d'un rig est triée par `updatedAt`, du plus récent au plus ancien. | OpenRig ne garantit aucun ordre. |
+| E6 | Dupliquer un rôle : la copie se prépare dans un dossier temporaire, puis `rig specs add` la range dans `~/.openrig/specs/<nom>`, pas dans `workspace.specs_root`. Les `local:` relatifs deviennent `path:<absolu>`. La duplication prend le verrou des actions (`busy`). | OpenRig refuse un `local:` absolu et range lui-même la spec. Deux écritures en parallèle se marcheraient dessus. |
+| E7 | `Rig.specPath` ne regarde que le dossier de Ledge (`~/.ledge/rigs/<rig>`), sans lancer `rig specs ls` à chaque lecture. | `readState` garde sa cadence et son coût. |
