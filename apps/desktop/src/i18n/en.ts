@@ -319,6 +319,10 @@ export const en: Messages = {
     workspace: {
       openSession: 'Open a session',
       active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`,
+      statusBar: 'Status bar', usage: 'Accounts’ usage limits',
+      usageSaved: (on: boolean) => (on ? 'Usage limits shown in the status bar' : 'Usage limits hidden from the status bar'),
+      alertBefore: 'Alert at', alertAfter: '% of a window (amber beyond)',
+      alertLess: 'Lower the alert threshold by 5 %', alertMore: 'Raise the alert threshold by 5 %',
       terminals: 'Terminals', webglBefore: 'Fast rendering (WebGL) for', webglAfter: 'visible terminals at most',
       webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`
     },

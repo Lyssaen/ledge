@@ -77,7 +77,7 @@ import { TermStoreContext } from './term/useTerms';
 import { defaultShell, loadLastShell, saveLastShell, shellLaunch, shellMenu, type ShellKind, type ShellsAvailable } from './term/shells';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
-import { useIdeEnabled, useResumeOnStart } from './workspace/prefs';
+import { useIdeEnabled, useResumeOnStart, useShowUsage } from './workspace/prefs';
 import { liveTabs, loadLiveTabs, machineOf, nextMemo, saveLiveTabs, toResume } from './workspace/resume';
 import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
@@ -349,6 +349,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The sessions whose tab was open, alive (ledge.ide.liveTabs): the memo follows the run; the one read at start says what a stop
   // killed. Once a session's machine is ready, each one now ended is resumed in its tab, once per run (the setting can turn it off).
   const [resumeOnStart] = useResumeOnStart();
+  // Settings › Workspace › « Limites d’usage des comptes »: the IDE's status bar only (the old interface and New session keep theirs).
+  const [showUsage] = useShowUsage();
   const bootMemo = useRef<readonly string[] | null>(null);
   if (bootMemo.current === null) bootMemo.current = loadLiveTabs();
   const resumeSeen = useRef(new Set<string>());
@@ -814,7 +816,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             projects={projects} notify={notify} onProposal={openProposal} />
         }
         footer={<Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines} />}
-        usage={<UsageFooter groups={usage.groups} threshold={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} />} />
+        usage={showUsage ? <UsageFooter groups={usage.groups} threshold={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} /> : undefined} />
     );
   })();
   return (

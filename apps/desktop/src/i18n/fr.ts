@@ -343,6 +343,10 @@ export const fr = {
     workspace: {
       openSession: 'Ouvrir une session',
       active: 'Dans le groupe actif', right: 'À droite', saved: (where: string) => `Ouvrir une session : ${where}`,
+      statusBar: 'Barre d’état', usage: 'Limites d’usage des comptes',
+      usageSaved: (on: boolean): string => (on ? 'Limites d’usage affichées dans la barre d’état' : 'Limites d’usage masquées de la barre d’état'),
+      alertBefore: 'Alerte à', alertAfter: '% d’une fenêtre (ambre au-delà)',
+      alertLess: 'Baisser le seuil d’alerte de 5 %', alertMore: 'Monter le seuil d’alerte de 5 %',
       terminals: 'Terminaux', webglBefore: 'Rendu rapide (WebGL) pour', webglAfter: 'terminaux visibles au plus',
       webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`
     },
