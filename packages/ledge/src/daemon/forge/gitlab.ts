@@ -1,6 +1,6 @@
 import { prIdOf, type PipeStatus, type PrFile, type PrJob, type PrReviewer, type PrState, type PrThread } from '@ledge/protocol';
 import { logTail, type ForgeRepo, type ForgeRun } from './run.js';
-import { blockersOf, ForgeRefusal, iso, JOB_ID, ok, okJson, PATCH_BUDGET, SHA, shellJoin, THREAD_ID, type ForgeReader, type ReadDetail, type ReadPr } from './types.js';
+import { blockersOf, mergeBlockersOf, ForgeRefusal, iso, JOB_ID, ok, okJson, PATCH_BUDGET, SHA, shellJoin, THREAD_ID, type ForgeReader, type ReadDetail, type ReadPr } from './types.js';
 
 /**
  * GitLab merge requests through `glab api` (REST v4, R3): `glab mr list` of glab 1.36 has no JSON output. `glab api` exits 0 on
@@ -178,7 +178,7 @@ export function gitlabReader(run: ForgeRun): ForgeReader {
         commits: commits.map(c => ({ sha: c.id, title: c.title, author: c.author_name ?? '?', at: iso(c.committed_date ?? c.created_at) })),
         // The head comes from the forge: shown only when it is a commit id, so the line stays one shell command.
         mergeCommand: shellJoin('glab', ['api', '--hostname', repo.host, '--method', 'PUT', mergePath(repo, iid), '-H', 'Content-Type: application/json', '--input', '-']) + (SHA.test(mr.sha) ? `  # {"sha":"${mr.sha}"}` : ''),
-        mergeBlockers: [...pr.blockers, ...(pr.pipeline === 'ok' ? [] : ['pipeline' as const])]
+        mergeBlockers: mergeBlockersOf(pr)
       };
     },
 

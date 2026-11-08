@@ -178,6 +178,20 @@ describe('actions (R5, R6)', () => {
     expect(gh.acts).toEqual([]);
   });
 
+  it('merges a request without CI (pipeline none), refuses one that runs or waits (R5)', async () => {
+    store.upsert(mk('a'));
+    const gh = fakeReader([pr(226, 'feat/x', { pipeline: 'none' })]);
+    const s = service(gh);
+    await s.refresh();
+    await s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) });
+    expect(gh.acts.map(a => a.action.kind)).toEqual(['merge']);
+    for (const pipeline of ['run', 'wait'] as const) {
+      gh.prs = [pr(226, 'feat/x', { pipeline })];
+      await expect(s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) })).rejects.toMatchObject({ code: 'not_offered', message: 'the pipeline is not green' });
+    }
+    expect(gh.acts).toHaveLength(1);
+  });
+
   it('refuses a merge with stale when the head moved, and runs no merge', async () => {
     store.upsert(mk('a'));
     const gh = fakeReader([pr(226, 'feat/x')]);

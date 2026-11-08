@@ -1,4 +1,4 @@
-import type { ForgeAction, PrDetail, PrState, PullRequest, RefusalCode } from '@ledge/protocol';
+import type { ForgeAction, PipeStatus, PrDetail, PrState, PullRequest, RefusalCode } from '@ledge/protocol';
 import { classify, errorText, type ForgeRepo, type ForgeRunResult } from './run.js';
 
 /** A request as a reader gives it: no sessions yet, and why it could not be merged apart from its pipeline (R5). */
@@ -16,6 +16,10 @@ const BLOCKER_TEXT: Record<MergeBlocker, string> = {
   not_open: 'the request is not open', draft: 'the request is a draft', pipeline: 'the pipeline is not green',
   approvals: 'an approval is missing', changes_requested: 'changes are requested'
 };
+/** R5 as decided on 2026-11-08: a pipeline that failed, runs or waits blocks a merge; none at all (a repository without CI) does not. */
+export const pipelineBlocks = (p: PipeStatus): boolean => p !== 'ok' && p !== 'none';
+/** Every reason a merge is refused now: the request's own, then its pipeline. */
+export const mergeBlockersOf = (pr: Pick<ReadPr, 'blockers' | 'pipeline'>): MergeBlocker[] => [...pr.blockers, ...(pipelineBlocks(pr.pipeline) ? ['pipeline' as const] : [])];
 export const blockerText = (b: readonly MergeBlocker[]): string => b.map(x => BLOCKER_TEXT[x]).join('; ');
 
 /** R5 apart from the pipeline: what `mergeable` sums up. */

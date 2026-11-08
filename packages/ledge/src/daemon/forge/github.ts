@@ -1,6 +1,6 @@
 import { prIdOf, type ForgeAction, type PipeStatus, type PrFile, type PrJob, type PrReviewer, type PrState, type PrThread } from '@ledge/protocol';
 import { logTail, type ForgeRepo, type ForgeRun } from './run.js';
-import { blockersOf, ForgeError, ForgeRefusal, iso, JOB_ID, lastLine, ok, okJson, PATCH_BUDGET, seconds, SHA, shellJoin, THREAD_ID, type ForgeReader, type PrCore, type ReadDetail, type ReadPr } from './types.js';
+import { blockersOf, mergeBlockersOf, ForgeError, ForgeRefusal, iso, JOB_ID, lastLine, ok, okJson, PATCH_BUDGET, seconds, SHA, shellJoin, THREAD_ID, type ForgeReader, type PrCore, type ReadDetail, type ReadPr } from './types.js';
 
 /**
  * GitHub pull requests through `gh` (R3): `pr list/view --json`, `run list/view`, and `gh api graphql` for the review threads
@@ -183,7 +183,7 @@ export function githubReader(run: ForgeRun): ForgeReader {
         jobs: js, ...(log ? { log } : {}), threads: [...reviewThreads, ...talk], files: fs,
         commits: (v.commits ?? []).map(c => ({ sha: c.oid, title: c.messageHeadline, author: c.authors?.[0]?.login || c.authors?.[0]?.name || '?', at: iso(c.committedDate) })),
         mergeCommand: shellJoin('gh', mergeArgs(repo, n, inf.method, SHA.test(v.headRefOid) ? v.headRefOid : '<head>')),
-        mergeBlockers: [...pr.blockers, ...(pr.pipeline === 'ok' ? [] : ['pipeline' as const])]
+        mergeBlockers: mergeBlockersOf(pr)
       };
     },
 

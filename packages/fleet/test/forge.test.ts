@@ -20,6 +20,8 @@ describe('the view of the requests', () => {
   });
   it('waits for you: failed, or green and mergeable', () => {
     expect(prsWaitingForYou(MOCKUP).map(p => p.number)).toEqual([5, 1]);
+    // R5: no CI at all and mergeable is ready to merge too; running is not.
+    expect(prsWaitingForYou([pr(7, { pipeline: 'none' }), pr(8, { pipeline: 'run' }), pr(4, { pipeline: 'none', mergeable: false })]).map(p => p.number)).toEqual([7]);
   });
   it('finds a session\'s request, the open one first', () => {
     expect(prOfSession(MOCKUP, 'server:tom')?.number).toBe(1);

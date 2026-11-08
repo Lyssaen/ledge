@@ -14,8 +14,8 @@ export const openPrs = <T extends PullRequest>(prs: readonly T[]): T[] => prs.fi
 export const mergedPrs = <T extends PullRequest>(prs: readonly T[]): T[] => prs.filter(p => p.state === 'merged').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 /** The badge of the activity bar: open requests whose pipeline failed. */
 export const prsFailing = (prs: readonly PullRequest[]): number => prs.filter(p => isOpen(p) && p.pipeline === 'fail').length;
-/** « À toi »: an open request whose pipeline failed, or green and ready to merge. */
-export const prsWaitingForYou = <T extends PullRequest>(prs: readonly T[]): T[] => openPrs(prs).filter(p => p.pipeline === 'fail' || (p.pipeline === 'ok' && p.mergeable));
+/** « À toi »: an open request whose pipeline failed, or ready to merge (green, or no CI at all: R5). */
+export const prsWaitingForYou = <T extends PullRequest>(prs: readonly T[]): T[] => openPrs(prs).filter(p => p.pipeline === 'fail' || ((p.pipeline === 'ok' || p.pipeline === 'none') && p.mergeable));
 /** A session's request (its id qualified): the open one first, else the latest. */
 export const prOfSession = <T extends PullRequest>(prs: readonly T[], sessionId: string): T | undefined => {
   const mine = prs.filter(p => p.sessions.includes(sessionId));

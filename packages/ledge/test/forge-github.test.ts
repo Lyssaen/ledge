@@ -88,8 +88,9 @@ describe('GitHub detail', () => {
     expect(d.jobs.map(j => [j.columnName, j.name, j.status])).toContainEqual(['Release', 'production', 'fail']);
     expect(d.log?.text.split('\n').length).toBeLessThanOrEqual(60);
     expect(d.log?.text).not.toMatch(/##\[debug\]|\d{4}-\d\d-\d\dT\d\d:\d\d/);
-    // R5 taken as written: no pipeline at all (none) is not green either.
-    expect(d.mergeBlockers).toEqual(['approvals', 'changes_requested', 'pipeline']);
+    // R5: no pipeline at all (none, this request has no check) does not block a merge.
+    expect(d.pr.pipeline).toBe('none');
+    expect(d.mergeBlockers).toEqual(['approvals', 'changes_requested']);
     // R5: the repository's default method (here merge commits are off: squash).
     expect(d.mergeCommand).toBe('gh pr merge 13506 -R cli/cli --squash --match-head-commit fdb4e47437a3140146e76d12c0f3b5dd23df34a1');
   });

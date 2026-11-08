@@ -4,7 +4,7 @@ import { log } from '../../log.js';
 import { githubReader } from './github.js';
 import { gitlabReader } from './gitlab.js';
 import { execForge, forgeOf, type ForgeCli, type ForgeRepo, type ForgeRun } from './run.js';
-import { blockerText, ForgeError, ForgeRefusal, type ForgeReader, type ReadPr } from './types.js';
+import { blockerText, mergeBlockersOf, ForgeError, ForgeRefusal, type ForgeReader, type ReadPr } from './types.js';
 
 /**
  * The pull and merge requests of the machine's sessions and OpenRig seats (lot 8a). What is followed (R1): the source branch of a
@@ -206,7 +206,7 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
       const pr = e.pr;
       if (action.kind === 'merge') {
         if (pr.headSha !== action.headSha) throw new ForgeRefusal('stale', 'the request has new commits since you saw it');
-        const blockers = [...pr.blockers, ...(pr.pipeline === 'ok' ? [] : ['pipeline' as const])];
+        const blockers = mergeBlockersOf(pr);
         if (blockers.length) throw new ForgeRefusal('not_offered', blockerText(blockers));
       }
       if (action.kind === 'rerun' && (pr.pipeline === 'run' || pr.pipeline === 'wait')) throw new ForgeRefusal('busy', 'the pipeline is still running');
