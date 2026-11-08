@@ -457,7 +457,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       if (m.request === 'models.list') { answerFailedModels(machine, 'outdated'); return; }
       // A daemon that drives OpenRig but predates its roles refuses only those: its other pending OpenRig asks stay.
       if (m.request === 'session.commands') { answerFailedCommands(machine, 'outdated'); return; }
-      if (m.request === 'openrig.roles' || m.request === 'openrig.role' || m.request === 'openrig.roleFile' || m.request === 'openrig.role.duplicate') { answerFailedRigs(machine, 'outdated', ['roles', 'role', 'roleFile', 'roleDuplicate']); return; }
+      if (m.request === 'openrig.roles' || m.request === 'openrig.role' || m.request === 'openrig.roleFile') { answerFailedRigs(machine, 'outdated', ['roles', 'role', 'roleFile']); return; }
+      if (m.request === 'openrig.role.duplicate') { answerFailedRigs(machine, 'outdated', ['roleDuplicate']); return; }
       // Likewise a daemon that predates « À toi » refuses only its asks and answers.
       if (m.request === 'openrig.asks' || m.request === 'openrig.answer') { answerFailedRigs(machine, 'outdated', ['asks', 'answer']); return; }
       if (m.request === 'openrig.goals' || m.request === 'openrig.goal.send' || m.request === 'openrig.goal.reply') { answerFailedRigs(machine, 'outdated', ['goals', 'goalSend', 'goalReply']); return; }
@@ -680,6 +681,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
         const ask: RigAsk = { machine, kind, ...(msg.type === 'openrig.role' || msg.type === 'openrig.roleFile' || msg.type === 'openrig.role.duplicate' ? { roleId: msg.roleId } : {}), ...(msg.type === 'openrig.roleFile' ? { path: msg.path } : {}), ...(msg.type === 'openrig.answer' ? { qitemId: msg.qitemId } : {}),
           ...(msg.type === 'openrig.goal.send' || msg.type === 'openrig.goal.reply' ? { goalId: msg.goalId } : {}), ...(msg.type === 'openrig.goal.reply' ? { replyId: msg.replyId } : {}), ...(msg.type === 'openrig.row' ? { qitem: msg.qitem } : {}), ...(msg.type === 'openrig.graph' || msg.type === 'openrig.snapshots' || msg.type === 'openrig.permissions' || msg.type === 'openrig.queue' ? { rig: msg.rig } : {}) };
         if (!available(peers.get(machine))) { emit(rigFailure(ask, msg.requestId, machine, 'offline')); return; }
+        // What lot 7a added: a daemon without `openrigRig` would strip `rig.start`'s snapshot (and restore the wrong one), refuse the others, and
+        // its refusal would fail every pending OpenRig ask of the machine. Answered here, outdated, nothing sent.
+        const needsRig = msg.type === 'openrig.graph' || msg.type === 'openrig.snapshots' || msg.type === 'openrig.permissions' || msg.type === 'openrig.queue' || msg.type === 'openrig.role.duplicate'
+          || (msg.type === 'openrig.act' && (msg.action.kind === 'rig.snapshot' || msg.action.kind === 'rig.permissions' || (msg.action.kind === 'rig.start' && msg.action.snapshot !== undefined)));
+        if (needsRig && peers.get(machine)?.snapshot?.daemon?.openrigRig !== true) { emit(rigFailure(ask, msg.requestId, machine, 'outdated')); return; }
         rigAsks.set(msg.requestId, ask);
       }
       if (msg.type === 'folder.list') {
