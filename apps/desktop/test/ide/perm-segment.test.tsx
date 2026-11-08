@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LangProvider } from '../../src/i18n/lang';
 import { PermSegment } from '../../src/ide/PermSegment';
@@ -30,27 +30,54 @@ describe('PermSegment', () => {
     expect(screen.getByRole('radio', { name: 'YOLO' })).toHaveClass('risky');
   });
 
-  it('the right arrow from Spec chooses Auto and moves the focus there; End chooses Verrouillé, Home Spec', async () => {
+  it('the arrows, Home and End only move the focus; Enter and Space choose the focused level', async () => {
     const onChange = mount('spec');
     screen.getByRole('radio', { name: 'Spec' }).focus();
     await userEvent.keyboard('{ArrowRight}');
-    expect(onChange).toHaveBeenLastCalledWith('auto');
     expect(screen.getByRole('radio', { name: 'Auto' })).toHaveFocus();
     await userEvent.keyboard('{End}');
-    expect(onChange).toHaveBeenLastCalledWith('locked');
     expect(screen.getByRole('radio', { name: 'Verrouillé' })).toHaveFocus();
     await userEvent.keyboard('{Home}');
-    expect(onChange).toHaveBeenLastCalledWith('spec');
+    expect(screen.getByRole('radio', { name: 'Spec' })).toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('radio', { name: 'Spec' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('standard');
+    expect(screen.getByRole('radio', { name: 'Standard' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.keyboard('{ArrowLeft} ');
+    expect(onChange).toHaveBeenLastCalledWith('auto');
+    expect(onChange).toHaveBeenCalledTimes(2);
   });
 
   it('the arrows wrap and skip a level that is off', async () => {
     const onChange = mount('auto', l => l === 'spec');
     screen.getByRole('radio', { name: 'Auto' }).focus();
     await userEvent.keyboard('{ArrowLeft}');
-    expect(onChange).toHaveBeenLastCalledWith('locked');
+    expect(screen.getByRole('radio', { name: 'Verrouillé' })).toHaveFocus();
     await userEvent.keyboard('{ArrowRight}');
-    expect(onChange).toHaveBeenLastCalledWith('auto');
+    expect(screen.getByRole('radio', { name: 'Auto' })).toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByRole('radio', { name: 'Spec' })).toBeDisabled();
+  });
+
+  it('a choice that turns the levels off while it runs gets the focus back on the segment once it ends', async () => {
+    function Busy() {
+      const [v, setV] = useState<PermLevel | null>('spec');
+      const [busy, setBusy] = useState(false);
+      return <>
+        <PermSegment value={v} label="Permissions" disabled={busy} onChange={l => { setV(l); setBusy(true); }} />
+        <button type="button" onClick={() => setBusy(false)}>fin</button>
+      </>;
+    }
+    render(<LangProvider lang="fr"><Busy /></LangProvider>);
+    screen.getByRole('radio', { name: 'Spec' }).focus();
+    await userEvent.keyboard('{ArrowRight}{Enter}');
+    expect(screen.getByRole('radio', { name: 'Auto' })).toBeDisabled();
+    expect(document.activeElement === document.body || document.activeElement === null || screen.getByRole('radio', { name: 'Auto' }) === document.activeElement).toBe(true);
+    (document.activeElement as HTMLElement | null)?.blur();
+    // The run ends without anything else taking the focus (a click would): the segment takes it back.
+    act(() => { screen.getByRole('button', { name: 'fin' }).click(); });
+    expect(screen.getByRole('radio', { name: 'Auto' })).toHaveFocus();
   });
 
   it('with no level known, the first level is the one in the tab order', () => {

@@ -49,11 +49,12 @@ export function RigLaunchModal({ client, machines, machine: first, projects, ses
   const choices = useMemo(() => (state && daemonUp && specs.status === 'ready' && !specs.error ? fromChoices(specs.specs, state, kernelReady) : []),
     [state, daemonUp, kernelReady, specs.status, specs.error, specs.specs]);
   const [from, setFrom] = useState<LaunchFrom | null>(null);
-  // A choice greyed since it was made stays chosen, its button off: Ctrl+Enter never runs another card's action unasked. A choice
-  // gone (another machine) gives way to the first active card.
+  // The first active card is chosen at opening and on another machine (the choice is reset). Once made, a choice is never swapped
+  // for another card behind the person's back: greyed since, it stays chosen with its button off; gone (a rig of that name appeared),
+  // nothing is chosen. Either way Ctrl+Enter never runs an action that was not picked.
   const kept = from ? choices.find(c => fromKey(c.from) === fromKey(from)) : undefined;
   const firstActive = pickFrom(choices, null);
-  const chosen = kept ?? choices.find(c => fromKey(c.from) === fromKey(firstActive));
+  const chosen = from ? kept : choices.find(c => fromKey(c.from) === fromKey(firstActive));
   useEffect(() => { if (chosen && fromKey(chosen.from) !== fromKey(from)) setFrom(chosen.from); }, [chosen, from]);
 
   const go: GoRef = useRef(null);
@@ -67,7 +68,10 @@ export function RigLaunchModal({ client, machines, machine: first, projects, ses
   }, []);
   const pick = (id: string) => { setMachine(id); setFrom(null); };
   const folders = useMemo(() => folderChoices(projects, machine), [projects, machine]);
-  const machineRow = <MachineSeg machines={offered} current={machine} onPick={pick} />;
+  // A launch, relaunch or goal in flight, or the daemon starting: the cards and the machines wait, so nothing is left without its mode.
+  const [modeBusy, setModeBusy] = useState(false);
+  const busy = modeBusy || view.pending !== null;
+  const machineRow = <MachineSeg machines={offered} current={machine} disabled={busy} onPick={pick} />;
 
   const note = (text: ReactNode, role: 'status' | 'alert' = 'status') => <><span /><div className="ide-rl-state" role={role}>{text}</div></>;
   const body = (): ReactNode => {
@@ -92,26 +96,26 @@ export function RigLaunchModal({ client, machines, machine: first, projects, ses
     }
     if (specs.status !== 'ready') return <>{machineRow}{note(o.launch.loadingSpecs)}</>;
     if (specs.error) return <>{machineRow}{note(o.launch.errors[specs.error] ?? rigErrorText(t, specs.error), 'alert')}</>;
-    if (!chosen) return null;
+    if (!chosen) return from ? note(L.gone) : null;
     const key = `${machine}|${fromKey(chosen.from)}`;
     const off = chosen.disabled !== false;
     const c = chosen.from;
-    if (c.kind === 'operator') return <OperatorFields key={key} client={client} machine={machine} state={state} sessions={sessions} off={off} go={go} onOperator={onOperator} onClose={onClose} />;
+    if (c.kind === 'operator') return <OperatorFields key={key} client={client} machine={machine} state={state} sessions={sessions} off={off} go={go} onBusy={setModeBusy} onOperator={onOperator} onClose={onClose} />;
     if (c.kind === 'rig') {
       const rig = state.rigs.find(r => r.name === c.rig);
-      return rig ? <RelaunchFields key={key} client={client} machine={machine} rig={rig} off={off} policyAvailable={shown?.daemon?.openrigPolicy === true} startAction={startAction}
-        act={view.act} busy={view.pending !== null} machineRow={machineRow} go={go} onLaunched={onLaunched} onClose={onClose} /> : null;
+      return rig ? <RelaunchFields key={key} client={client} machine={machine} machineLabel={label} rig={rig} off={off} policyAvailable={shown?.daemon?.openrigPolicy === true}
+        freshAvailable={shown?.daemon?.openrigFresh === true} startAction={startAction} act={view.act} busy={view.pending !== null} go={go} onBusy={setModeBusy} onLaunched={onLaunched} onClose={onClose} /> : null;
     }
     const spec = specs.specs.find(s => s.name === (c.kind === 'spec' ? c.spec : EMPTY_SPEC));
     return spec ? <NewRigFields key={key} client={client} machine={machine} machineLabel={label} state={state} spec={spec} empty={c.kind === 'empty'} folders={folders}
-      level={prefs.perm} startAction={startAction} machineRow={machineRow} go={go} onLaunched={onLaunched} onClose={onClose} /> : null;
+      level={prefs.perm} startAction={startAction} machineRow={machineRow} go={go} onBusy={setModeBusy} onLaunched={onLaunched} onClose={onClose} /> : null;
   };
 
   return (
     <div ref={root} className="ide-rl">
       <p className="ide-rl-sub">{L.sub(label)}</p>
       <div className="ide-rl-fld">
-        {choices.length > 0 && daemonUp && <FromCards choices={choices} chosen={chosen?.from ?? null} onPick={setFrom} />}
+        {choices.length > 0 && daemonUp && <FromCards choices={choices} chosen={chosen?.from ?? null} disabled={busy} onPick={setFrom} />}
         {body()}
       </div>
     </div>

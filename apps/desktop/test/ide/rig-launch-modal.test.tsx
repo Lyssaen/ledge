@@ -39,6 +39,8 @@ function fake(over: Partial<Data> = {}) {
   const data: Data = { states: { local: up(), srv: up({ rigs: [kernel()] }) }, specs: { local: [starter, factory, spec('ledge-survey', [['dev', 'builder']], 'user')], srv: [reviewTeam] }, launch: { ok: true }, goal: { ok: true }, ...over };
   const listeners = new Set<(m: ServerMessage) => void>(), sent: ClientMessage[] = [];
   const held = new Map<string, ServerMessage[]>();
+  const launches: ServerMessage[] = [];
+  let holdLaunch = false;
   const emit = (m: ServerMessage) => act(() => listeners.forEach(f => f(m)));
   const reply = (m: ClientMessage): ServerMessage | null => {
     const machineId = (m as { machineId?: string }).machineId ?? 'local';
@@ -63,6 +65,7 @@ function fake(over: Partial<Data> = {}) {
       if (!r) return;
       const machineId = (m as { machineId?: string }).machineId ?? 'local';
       if (m.type === 'openrig.specs' && held.has(machineId)) { held.get(machineId)!.push(r); return; }
+      if (m.type === 'openrig.launch' && holdLaunch) { launches.push(r); return; }
       queueMicrotask(() => emit(r));
     },
     onMessage: (f: (m: ServerMessage) => void) => { listeners.add(f); return () => { listeners.delete(f); }; },
@@ -73,18 +76,20 @@ function fake(over: Partial<Data> = {}) {
   return {
     data, client, sent, acts, done, emit,
     hold: (machine: string) => held.set(machine, []),
+    holdLaunches: () => { holdLaunch = true; },
+    releaseLaunches: async () => { holdLaunch = false; for (const r of launches.splice(0)) await emit(r); },
     release: async (machine: string) => { const rs = held.get(machine) ?? []; held.delete(machine); for (const r of rs) await emit(r); },
     setState: (machine: string, s: OpenRigState) => { data.states[machine] = s; return emit({ type: 'openrig.state', machineId: machine, state: s }); }
   };
 }
-const machine = (id: string, label: string): MachineState => ({ id, label, ready: true, status: 'open', recents: [], sessions: [], launcher: null, daemon: { version: '0.60.0', install: 'npm', systemd: true, openrigPolicy: true, openrigFresh: true } }) as unknown as MachineState;
+const machine = (id: string, label: string, flags: Record<string, boolean> = { openrigPolicy: true, openrigFresh: true }): MachineState => ({ id, label, ready: true, status: 'open', recents: [], sessions: [], launcher: null, daemon: { version: '0.60.0', install: 'npm', systemd: true, ...flags } }) as unknown as MachineState;
 const MACHINES = [machine('local', 'WSL'), machine('srv', 'srv-build')];
 const operator = (): Session => fakeSession('op1', { name: 'Op', state: 'waiting_input', machineId: 'local', rig: { seat: 'operator-agent@kernel', name: 'kernel' } });
 
-function mount(over: Partial<Data> = {}, o: { sessions?: Session[] } = {}) {
+function mount(over: Partial<Data> = {}, o: { sessions?: Session[]; machines?: MachineState[] } = {}) {
   const f = fake(over);
   const onLaunched = vi.fn(), onOperator = vi.fn(), onClose = vi.fn();
-  render(<LangProvider lang="fr"><RigLaunchModal client={f.client} machines={MACHINES} machine="local" projects={projects} sessions={o.sessions ?? []} onLaunched={onLaunched} onOperator={onOperator} onClose={onClose} /></LangProvider>);
+  render(<LangProvider lang="fr"><RigLaunchModal client={f.client} machines={o.machines ?? MACHINES} machine="local" projects={projects} sessions={o.sessions ?? []} onLaunched={onLaunched} onOperator={onOperator} onClose={onClose} /></LangProvider>);
   return { f, onLaunched, onOperator, onClose };
 }
 const card = (name: RegExp) => screen.getByRole('button', { name });
@@ -224,6 +229,81 @@ describe('the « Lancer un rig » modal', () => {
     await waitFor(() => expect(m.f.sent.find(x => x.type === 'openrig.launch')).toMatchObject({ machineId: 'srv', launch: { spec: 'review-team', cwd: '/srv/w', name: 'review-team' } }));
   });
 
+  it('a relaunch shows the machine as fixed text, not the segment (R2)', async () => {
+    mount();
+    await screen.findByText('ledge-survey', { selector: '.ide-rl-fixed b' });
+    expect(screen.queryByRole('radiogroup', { name: 'Machine' })).toBeNull();
+    expect(screen.getByText('WSL', { selector: '.ide-rl-fixed' })).toBeInTheDocument();
+  });
+
+  it('a daemon without openrigFresh keeps the resume box ticked and greyed, and says why', async () => {
+    mount({}, { machines: [machine('local', 'WSL', { openrigPolicy: true }), machine('srv', 'srv-build')] });
+    const resume = await screen.findByRole('checkbox', { name: /^Reprendre le dernier snapshot \(\d/ });
+    await waitFor(() => expect(resume).toBeChecked());
+    expect(resume).toBeDisabled();
+    expect(screen.getByText('Le Ledge de cette machine est trop ancien pour relancer les sièges à neuf.')).toBeInTheDocument();
+    expect(screen.getByText('rig up ledge-survey --existing --yes')).toBeInTheDocument();
+  });
+
+  it('the chosen card gone (a rig of that name appeared): no other card is taken, nothing to launch', async () => {
+    const m = mount();
+    await pickStarter();
+    await m.f.setState('local', up({ rigs: [kernel(), rig('ledge-dev', 'running', 2), rig('ledge-survey', 'stopped', 0), rig('starter', 'running', 2)] }));
+    expect(await screen.findByText('Ce choix n’est plus proposé : choisis une carte.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Lancer/ })).toBeNull();
+    expect(within(screen.getByRole('group', { name: 'Partir de' })).getAllByRole('button').filter(b => b.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
+    await userEvent.keyboard('{Control>}{Enter}{/Control}');
+    expect(m.f.sent.filter(x => x.type === 'openrig.launch' || x.type === 'openrig.act')).toHaveLength(0);
+  });
+
+  it('while a launch is in flight the cards and the machines are off', async () => {
+    const m = mount();
+    await pickStarter();
+    m.f.holdLaunches();
+    await userEvent.click(launchButton());
+    for (const c of within(screen.getByRole('group', { name: 'Partir de' })).getAllByRole('button')) expect(c).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'srv-build' })).toBeDisabled();
+    await m.f.releaseLaunches();
+    await waitFor(() => expect(m.onLaunched).toHaveBeenCalledWith('local', 'starter'));
+  });
+
+  it('while a relaunch runs the cards are off', async () => {
+    const m = mount();
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /^Reprendre le dernier snapshot/ })).toBeChecked());
+    await userEvent.click(launchButton());
+    expect(card(/^starter/)).toBeDisabled();
+    await m.f.done(true);
+    await waitFor(() => expect(m.onLaunched).toHaveBeenCalled());
+  });
+
+  it('Ctrl+Enter sends nothing while « Lancer » is off: a taken name, an empty folder', async () => {
+    const m = mount();
+    await pickStarter();
+    const name = screen.getByRole('textbox', { name: 'Nom' });
+    await userEvent.clear(name);
+    await userEvent.type(name, 'ledge-dev');
+    await userEvent.keyboard('{Control>}{Enter}{/Control}');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'other');
+    await userEvent.clear(screen.getByRole('combobox', { name: 'Dossier' }));
+    expect(launchButton()).toBeDisabled();
+    expect(screen.getByText('Choisis le dossier de travail.')).toBeInTheDocument();
+    await userEvent.keyboard('{Control>}{Enter}{/Control}');
+    expect(m.f.sent.filter(x => x.type === 'openrig.launch')).toHaveLength(0);
+  });
+
+  it('a relaunch whose rig.policy fails sends no rig.start and shows the error', async () => {
+    const m = mount();
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /^Reprendre le dernier snapshot/ })).toBeChecked());
+    await userEvent.click(screen.getByRole('radio', { name: 'Standard' }));
+    await userEvent.click(launchButton());
+    expect(m.f.acts()).toHaveLength(1);
+    await m.f.done(false, 'busy');
+    expect(await screen.findByText('Une autre action OpenRig est en cours sur cette machine.')).toBeInTheDocument();
+    expect(m.f.acts().map(a => a.action.kind)).toEqual(['rig.policy']);
+    expect(m.onLaunched).not.toHaveBeenCalled();
+  });
+
   it('a stopped daemon: the notice, its command and « Démarrer OpenRig », which sends the preferred start; the cards come once it runs', async () => {
     const m = mount({ states: { local: down(), srv: up() } });
     expect(await screen.findByText('Le daemon OpenRig est arrêté sur WSL.')).toBeInTheDocument();
@@ -264,7 +344,7 @@ describe('the « Lancer un rig » modal', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Composer avec/ }));
     await userEvent.type(screen.getByRole('textbox', { name: 'Ce que tu veux' }), 'x');
     await userEvent.click(screen.getByRole('button', { name: /^Demander à l’operator/ }));
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Le kernel n’a pas d’operator pour recevoir la demande.');
     expect(m.onOperator).not.toHaveBeenCalled();
   });
 });

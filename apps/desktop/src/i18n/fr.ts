@@ -1440,6 +1440,7 @@ export const fr = {
       operator: 'Composer avec l’operator', operatorSub: 'Décris le besoin, il propose l’équipe', kernelOff: 'Le kernel doit tourner',
       name: 'Nom', machine: 'Machine', folder: 'Dossier', seats: 'Sièges', toFill: 'à compléter', permissions: 'Permissions', mixed: 'Mixte : les sièges n’ont pas tous le même niveau.',
       resume: 'Reprise', resumeLast: (date: string) => `Reprendre le dernier snapshot (${date})`, noSnapshot: 'Aucun snapshot',
+      noFresh: 'Le Ledge de cette machine est trop ancien pour relancer les sièges à neuf.', gone: 'Ce choix n’est plus proposé : choisis une carte.',
       command: 'Commande', go: 'Lancer', keys: 'Ctrl Entrée', cancel: 'Annuler', opensTab: (name: string) => `Ouvre la vue Rig de ${name}.`, more: 'Plus d’options',
       want: 'Ce que tu veux', wantPlaceholder: 'Ex. : une équipe pour relire la MR !412 de synapse, un lead et deux relecteurs.',
       wantHint: 'L’operator du kernel propose une équipe dans son fil. Rien ne démarre avant que tu valides.',

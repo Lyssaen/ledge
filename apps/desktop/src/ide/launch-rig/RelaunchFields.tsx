@@ -1,4 +1,4 @@
-import { useState, type JSX, type ReactNode } from 'react';
+import { useState, type JSX } from 'react';
 import type { DaemonClient } from '@ledge/fleet';
 import { useRigGraph, useRigPermissions, useRigSnapshots } from '@ledge/fleet/openrig';
 import { seatsByRole, type OpenRigAction, type OpenRigDone, type Rig } from '@ledge/protocol';
@@ -9,19 +9,20 @@ import { rigErrorText } from '../rig/errors';
 import { permLevelOf, type PermLevel } from '../rig/model';
 import { snapshotAt } from '../rig/RigSettings';
 import { liveCommand, relaunchActions } from './model';
-import { Command, GoRow, Row, useGo, type GoRef } from './parts';
+import { Command, GoRow, Row, useBusy, useGo, type GoRef } from './parts';
 
 export interface RelaunchFieldsProps {
-  client: DaemonClient; machine: string; rig: Rig;
+  client: DaemonClient; machine: string; machineLabel: string; rig: Rig;
   /** The card is greyed now (the rig started elsewhere): nothing to send. */ off: boolean;
   /** The machine's daemon applies `rig.policy` (`openrigPolicy`). */ policyAvailable: boolean;
+  /** The machine's daemon starts seats fresh (`openrigFresh`): without it the relaunch always resumes. */ freshAvailable: boolean;
   startAction: OpenRigAction; act(a: OpenRigAction): Promise<OpenRigDone>; busy: boolean;
-  machineRow: ReactNode; go: GoRef; onLaunched(machine: string, rig: string): void; onClose(): void;
+  go: GoRef; onBusy(busy: boolean): void; onLaunched(machine: string, rig: string): void; onClose(): void;
 }
 
 /** A stopped rig started again (R2): its name, its seats as role chips, its permission level (another one is set before the start),
  *  and whether it resumes from its last snapshot or starts its seats fresh. */
-export function RelaunchFields({ client, machine, rig, off, policyAvailable, startAction, act, busy, machineRow, go, onLaunched, onClose }: RelaunchFieldsProps): JSX.Element {
+export function RelaunchFields({ client, machine, machineLabel, rig, off, policyAvailable, freshAvailable, startAction, act, busy, go, onBusy, onLaunched, onClose }: RelaunchFieldsProps): JSX.Element {
   const { t, lang } = useI18n();
   const L = t.ide.launchRig;
   const graph = useRigGraph(client, machine, rig.name);
@@ -37,7 +38,8 @@ export function RelaunchFields({ client, machine, rig, off, policyAvailable, sta
   const last = snaps.snapshots[0];
   const read = graph.status === 'ready' && perms.status === 'ready' && snaps.status === 'ready';
   // Without a snapshot there is nothing to resume: `rig up --existing` starts every seat fresh by itself.
-  const actions = relaunchActions(rig.name, level, current, seats, last ? resume : true);
+  // Without `openrigFresh` the box stays ticked: the fleet would refuse `fresh` (`outdated`).
+  const actions = relaunchActions(rig.name, level, current, seats, last && freshAvailable ? resume : true);
   const blocked = off || !read || busy || running;
   const send = async () => {
     if (blocked) return;
@@ -50,11 +52,12 @@ export function RelaunchFields({ client, machine, rig, off, policyAvailable, sta
     onLaunched(machine, rig.name);
   };
   useGo(go, blocked ? null : () => void send());
+  useBusy(onBusy, running);
 
   const roles = [...seatsByRole(graph.graph?.seats ?? [])];
   return <>
     <Row label={L.name}><span className="ide-rl-fixed mono"><b>{rig.name}</b>{rig.specPath && <span className="ide-rl-mut">· {tilde(rig.specPath)}</span>}</span></Row>
-    {machineRow}
+    <Row label={L.machine}><span className="ide-rl-fixed">{machineLabel}</span></Row>
     <Row label={<>{L.seats} <span className="mono">{seats.length || rig.seats}</span></>}>
       <div className="ide-rl-chips">{roles.map(([role, ids]) => <span key={role} className="ide-rl-chip"><span className="mono">{role}</span>{ids.length > 1 && <b>{ids.length}</b>}</span>)}</div>
     </Row>
@@ -67,10 +70,13 @@ export function RelaunchFields({ client, machine, rig, off, policyAvailable, sta
       </div>
     </Row>
     <Row label={L.resume}>
-      <label className="ide-rl-check">
-        <input type="checkbox" checked={!!last && resume} disabled={!last || blocked} onChange={e => { setResume(e.target.checked); setFailed(null); }} />
-        {last ? L.resumeLast(snapshotAt(last.createdAt, lang)) : snaps.status === 'ready' ? L.noSnapshot : L.resumeLast('…')}
-      </label>
+      <div className="ide-rl-perm">
+        <label className="ide-rl-check">
+          <input type="checkbox" checked={!!last && (resume || !freshAvailable)} disabled={!last || !freshAvailable || blocked} onChange={e => { setResume(e.target.checked); setFailed(null); }} />
+          {last ? L.resumeLast(snapshotAt(last.createdAt, lang)) : snaps.status === 'ready' ? L.noSnapshot : L.resumeLast('…')}
+        </label>
+        {last && !freshAvailable && <span className="ide-rl-mut">{L.noFresh}</span>}
+      </div>
     </Row>
     <Command text={liveCommand({ daemonUp: true, startAction, actions })} />
     <GoRow text={running ? t.openrig.launch.launching : L.go} disabled={blocked} onGo={() => void send()} onClose={onClose}

@@ -89,6 +89,18 @@ describe('the Rig tab', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Spec' }));
     expect(m.f.acts().at(-1)!.action).toMatchObject({ kind: 'rig.policy', policy: 'spec' });
   });
+  it('the arrows walk the levels without sending rig.policy; Enter sends the focused one, and the focus comes back after the run', async () => {
+    const m = await ready(mount({ perms: [perm('dev.build', 'builtin:open'), perm('dev.review', 'builtin:open')] }));
+    screen.getByRole('radio', { name: 'Ouvert' }).focus();
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}');
+    expect(screen.getByRole('radio', { name: 'Verrouillé' })).toHaveFocus();
+    expect(m.f.acts().filter(a => a.action.kind === 'rig.policy')).toHaveLength(0);
+    await userEvent.keyboard('{Enter}');
+    expect(m.f.acts().filter(a => a.action.kind === 'rig.policy').map(a => a.action.policy)).toEqual(['locked']);
+    (document.activeElement as HTMLElement | null)?.blur();
+    await m.f.done();
+    await waitFor(() => expect(screen.getByRole('radiogroup', { name: 'Niveau de permissions' })).toContainElement(document.activeElement as HTMLElement));
+  });
   it('shows the current level, the spec policy and the next-launch line', async () => {
     await ready(mount({ perms: [perm('dev.build', 'builtin:yolo'), perm('dev.review', 'builtin:yolo')] }));
     expect(screen.getByRole('radio', { name: 'YOLO' })).toHaveAttribute('aria-checked', 'true');

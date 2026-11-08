@@ -1374,6 +1374,7 @@ export const en: Messages = {
       operator: 'Compose with the operator', operatorSub: 'Describe the need, it proposes the team', kernelOff: 'The kernel must be running',
       name: 'Name', machine: 'Machine', folder: 'Folder', seats: 'Seats', toFill: 'to fill in', permissions: 'Permissions', mixed: 'Mixed: the seats do not all have the same level.',
       resume: 'Resume', resumeLast: (date: string) => `Resume from the last snapshot (${date})`, noSnapshot: 'No snapshot',
+      noFresh: 'This machine’s Ledge is too old to start the seats fresh.', gone: 'This choice is no longer offered: pick a card.',
       command: 'Command', go: 'Launch', keys: 'Ctrl Enter', cancel: 'Cancel', opensTab: (name: string) => `Opens the Rig view of ${name}.`, more: 'More options',
       want: 'What you want', wantPlaceholder: 'E.g.: a team to review MR !412 of synapse, a lead and two reviewers.',
       wantHint: 'The kernel’s operator proposes a team in its thread. Nothing starts before you approve.',

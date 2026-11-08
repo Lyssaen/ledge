@@ -1,4 +1,4 @@
-import { useLayoutEffect, type JSX, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, type JSX, type ReactNode } from 'react';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { useI18n } from '../../i18n/lang';
@@ -12,6 +12,12 @@ export type GoRef = { current: (() => void) | null };
 /** Hands the mode's main action to the modal's Ctrl+Enter, only while the button would take a click. */
 export function useGo(ref: GoRef, go: (() => void) | null): void {
   useLayoutEffect(() => { ref.current = go; return () => { ref.current = null; }; });
+}
+
+/** Tells the modal a request of the mode is in flight (a launch, a relaunch, a goal): the cards and the machines wait for it. */
+export function useBusy(onBusy: (busy: boolean) => void, busy: boolean): void {
+  useEffect(() => { onBusy(busy); }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onBusy(false), []); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** One row of the mockup's `.fld` grid: the label, then the field. `htmlFor` ties a label to its input. */
@@ -33,12 +39,12 @@ export const Command = ({ text }: { text: string }): JSX.Element => {
 };
 
 /** The machines a launch can go to: the one shown, and every other connected one where OpenRig is installed. */
-export function MachineSeg({ machines, current, onPick }: { machines: ReadonlyArray<{ id: string; label: string }>; current: string; onPick(id: string): void }): JSX.Element {
+export function MachineSeg({ machines, current, disabled, onPick }: { machines: ReadonlyArray<{ id: string; label: string }>; current: string; disabled: boolean; onPick(id: string): void }): JSX.Element {
   const { t } = useI18n();
   return (
     <Row label={t.ide.launchRig.machine}>
       <div className="ide-rl-seg" role="radiogroup" aria-label={t.ide.launchRig.machine}>
-        {machines.map(m => <button key={m.id} type="button" role="radio" aria-checked={m.id === current} className={cls(m.id === current && 'on')} onClick={() => { if (m.id !== current) onPick(m.id); }}>{m.label}</button>)}
+        {machines.map(m => <button key={m.id} type="button" role="radio" aria-checked={m.id === current} className={cls(m.id === current && 'on')} disabled={disabled} onClick={() => { if (m.id !== current) onPick(m.id); }}>{m.label}</button>)}
       </div>
     </Row>
   );

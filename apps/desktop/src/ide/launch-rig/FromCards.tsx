@@ -10,7 +10,7 @@ import { Row } from './parts';
 export const fromKey = (f: LaunchFrom | null): string => (f === null ? '' : f.kind === 'rig' ? `rig:${f.rig}` : f.kind === 'spec' ? `spec:${f.spec}` : f.kind);
 
 /** « Partir de » (R1, mockup `.agents.rl-from`): one card per choice, a greyed one saying why. */
-export function FromCards({ choices, chosen, onPick }: { choices: readonly FromChoice[]; chosen: LaunchFrom | null; onPick(f: LaunchFrom): void }): JSX.Element {
+export function FromCards({ choices, chosen, disabled, onPick }: { choices: readonly FromChoice[]; chosen: LaunchFrom | null; disabled: boolean; onPick(f: LaunchFrom): void }): JSX.Element {
   const { t } = useI18n();
   const L = t.ide.launchRig;
   const id = useId();
@@ -28,7 +28,7 @@ export function FromCards({ choices, chosen, onPick }: { choices: readonly FromC
         {choices.map(c => {
           const f = face(c), on = fromKey(c.from) === fromKey(chosen);
           return (
-            <button key={fromKey(c.from)} type="button" className={cls('ide-rl-card', on && 'on')} aria-pressed={on} disabled={c.disabled !== false} onClick={() => onPick(c.from)}>
+            <button key={fromKey(c.from)} type="button" className={cls('ide-rl-card', on && 'on')} aria-pressed={on} disabled={disabled || c.disabled !== false} onClick={() => onPick(c.from)}>
               <span className="an">{f.icon}{f.title}</span><small>{f.sub}</small>
             </button>
           );

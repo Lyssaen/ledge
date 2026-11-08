@@ -11,18 +11,18 @@ import { PermSegment } from '../PermSegment';
 import { rigErrorText } from '../rig/errors';
 import type { PermLevel } from '../rig/model';
 import { emptySeats, launchProblem, liveCommand, newLaunch } from './model';
-import { Command, GoRow, Row, RuntimeLogo, useGo, type GoRef } from './parts';
+import { Command, GoRow, Row, RuntimeLogo, useBusy, useGo, type GoRef } from './parts';
 
 export interface NewRigFieldsProps {
   client: DaemonClient; machine: string; machineLabel: string; state: OpenRigState;
   /** The spec the rig is made from; `empty`: the empty rig (R4), made from `factory`. */ spec: RigSpec; empty: boolean;
   folders: ReadonlyArray<{ label: string; path: string }>; level: PermLevel; startAction: OpenRigAction;
-  machineRow: ReactNode; go: GoRef; onLaunched(machine: string, rig: string): void; onClose(): void;
+  machineRow: ReactNode; go: GoRef; onBusy(busy: boolean): void; onLaunched(machine: string, rig: string): void; onClose(): void;
 }
 
 /** A new rig (R3): from a library spec or the empty rig. The command follows the form live; « Lancer » launches it, « Vérifier » (under
  *  « Plus d'options ») runs its plan. Mounted per machine and card, so nothing of another machine's form is ever sent (Review Focus 1). */
-export function NewRigFields({ client, machine, machineLabel, state, spec, empty, folders, level: start, startAction, machineRow, go, onLaunched, onClose }: NewRigFieldsProps): JSX.Element {
+export function NewRigFields({ client, machine, machineLabel, state, spec, empty, folders, level: start, startAction, machineRow, go, onBusy, onLaunched, onClose }: NewRigFieldsProps): JSX.Element {
   const { t } = useI18n();
   const L = t.ide.launchRig, l = t.openrig.launch;
   const id = useId();
@@ -48,6 +48,7 @@ export function NewRigFields({ client, machine, machineLabel, state, spec, empty
     else setFailed(r.error ?? '');
   };
   useGo(go, problem || busy ? null : () => void send(false));
+  useBusy(onBusy, busy !== null);
 
   const roles = rolesOf(spec);
   const stepper = (role: string, n: number) => (
