@@ -1,0 +1,156 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { OpenRigActionSchema, OpenRigPermissionListSchema, OpenRigPermissionsSchema, rigCommands, showRigCommand } from '@ledge/protocol';
+import { createOpenRig, readSeatPermission, type RigRun } from '../src/daemon/openrig.js';
+
+const read = (f: string) => readFileSync(new URL(`./fixtures/openrig-0.7/${f}`, import.meta.url), 'utf8');
+const ADVISOR = JSON.parse(read('seat-status-advisor.json')) as unknown;
+
+describe('readSeatPermission', () => {
+  it('reads the effective mode, its source, the launch posture, the selection and the summary of advisor-lead@kernel', () => {
+    expect(readSeatPermission(ADVISOR)).toEqual({
+      mode: 'acceptEdits', source: 'kernel_default', posture: 'floor', selection: 'inherit',
+      summary: 'Next launch: --permission-mode acceptEdits, from the kernel\'s operational default; OpenRig adds 50 allowances.'
+    });
+  });
+  it('leaves out what OpenRig does not say, and is undefined for what is not a status', () => {
+    expect(readSeatPermission({ permissions: { selectionState: 'seat', effective: { effectiveMode: null, source: 'seat' } } })).toEqual({ source: 'seat', selection: 'seat' });
+    expect(readSeatPermission({})).toBeUndefined();
+    expect(readSeatPermission('nope')).toBeUndefined();
+    expect(readSeatPermission(null)).toBeUndefined();
+  });
+});
+
+describe('rig.permissions in rigCommands and its schema', () => {
+  const a = { kind: 'rig.permissions' as const, rig: 'ledge-dev', mode: 'floor' as const, seats: ['pilot-lead@ledge-dev', 'dev-front@ledge-dev'] };
+  it('one seat set-permissions per seat, in order, with the reason Ledge', () => {
+    expect(rigCommands(a)).toEqual([
+      ['seat', 'set-permissions', 'pilot-lead@ledge-dev', '--mode', 'floor', '--reason', 'Ledge', '--json'],
+      ['seat', 'set-permissions', 'dev-front@ledge-dev', '--mode', 'floor', '--reason', 'Ledge', '--json']
+    ]);
+    expect(showRigCommand(rigCommands(a)[0]!)).toBe('rig seat set-permissions pilot-lead@ledge-dev --mode floor --reason Ledge');
+  });
+  it('refuses a seat of another rig, an empty list, a bad mode', () => {
+    expect(OpenRigActionSchema.safeParse(a).success).toBe(true);
+    expect(OpenRigActionSchema.safeParse({ ...a, seats: ['pilot-lead@ledge-dev', 'dev-front@other'] }).success).toBe(false);
+    expect(OpenRigActionSchema.safeParse({ ...a, seats: [] }).success).toBe(false);
+    expect(OpenRigActionSchema.safeParse({ ...a, mode: 'yolo' }).success).toBe(false);
+    expect(OpenRigActionSchema.safeParse({ kind: 'rig.start', rig: 'x' }).success).toBe(true);
+  });
+  it('the messages parse', () => {
+    expect(OpenRigPermissionsSchema.safeParse({ type: 'openrig.permissions', requestId: 'p', rig: 'a' }).success).toBe(true);
+    expect(OpenRigPermissionListSchema.safeParse({ type: 'openrig.permissionList', requestId: 'p', rig: 'a', policy: 'builtin:auto',
+      seats: [{ logicalId: 'dev.build', session: 'dev-build@a', mode: 'acceptEdits', source: 'seat', posture: 'floor', selection: 'inherit', summary: 's' }, { logicalId: 'dev.x', session: 'dev-x@a', error: 'boom' }] }).success).toBe(true);
+  });
+});
+
+const NODES = ['pilot.lead', 'dev.front', 'dev.back', 'dev.test', 'dev.docs'].map(l => ({
+  rigId: '01R', rigName: 'ledge-dev', logicalId: l, canonicalSessionName: `${l.replace('.', '-')}@ledge-dev`, runtime: 'claude-code', sessionStatus: 'running', lifecycleState: 'running', agentActivity: { state: 'idle' }
+}));
+
+function world(over: { nodes?: unknown[]; delay?: number; fail?: string[]; daemon?: 'running' | 'stopped'; spec?: string | null; installed?: boolean; files?: Record<string, string>; library?: { name: string; path: string }[] } = {}) {
+  const calls: string[] = [];
+  let clock = 1_000_000, inFlight = 0, peak = 0;
+  const ok = (j: unknown) => ({ code: 0, stdout: JSON.stringify(j), stderr: '' });
+  const run: RigRun = async args => {
+    const a = args.join(' '); calls.push(a);
+    if (over.installed === false) return { code: null, stdout: '', stderr: 'rig: command not found' };
+    if (a === 'status --json') return ok({ daemon: { state: over.daemon ?? 'running', reachable: (over.daemon ?? 'running') === 'running', port: 7433 }, kernel: { state: 'ready' } });
+    if (a === '--version') return { code: 0, stdout: '0.7.7\n', stderr: '' };
+    if (a === 'specs ls --json') return ok((over.library ?? []).map(l => ({ kind: 'rig', name: l.name, sourceType: 'user_file', resolvedSourcePath: l.path })));
+    if (a === 'ps --json') return ok([{ rigId: '01R', name: 'ledge-dev', nodeCount: 5, runningCount: 5, status: 'running', lifecycleState: 'running' }]);
+    if (a === 'ps --nodes -A --json') return ok(over.nodes ?? NODES);
+    if (args[0] === 'seat' && args[1] === 'status') {
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise(r => setTimeout(r, over.delay ?? 5));
+      inFlight--;
+      if (over.fail?.includes(args[2]!)) return { code: 1, stdout: '', stderr: `seat ${args[2]} not found\n` };
+      return { code: 0, stdout: JSON.stringify(ADVISOR), stderr: '' };
+    }
+    if (args[0] === 'seat' && args[1] === 'set-permissions') return { code: 0, stdout: '{}', stderr: '' };
+    return { code: 1, stdout: '', stderr: `unexpected ${a}` };
+  };
+  const files: Record<string, string> = { ...(over.spec ? { '/h/.ledge/rigs/ledge-dev/rig.yaml': over.spec } : {}), ...over.files };
+  const fs = { read: async (p: string) => { if (p in files) return files[p]!; throw new Error('ENOENT'); }, exists: (p: string) => p in files, copyDir: async () => {}, write: async () => {} };
+  const roleIo = { read: async (p: string) => files[p] ?? null, stat: async () => null, head: async () => null };
+  const rig = createOpenRig({ run, fs, roleIo, home: '/h', rigsDir: '/h/.ledge/rigs', openrigHome: '/h/.openrig', now: () => clock, http: async () => undefined });
+  const statuses = () => calls.filter(c => c.startsWith('seat status'));
+  return { rig, calls, statuses, peak: () => peak, tick: (ms: number) => { clock += ms; } };
+}
+
+describe('OpenRig permissions', () => {
+  it('one rig seat status per seat, two at a time at most, in the seats\' order', async () => {
+    const w = world({ delay: 15 });
+    const r = await w.rig.permissions('ledge-dev');
+    expect(r.error).toBeUndefined();
+    expect(w.statuses()).toEqual(NODES.map(n => `seat status ${n.canonicalSessionName} --json`));
+    expect(w.peak()).toBe(2);
+    expect(r.seats!.map(s => s.session)).toEqual(NODES.map(n => n.canonicalSessionName));
+    expect(r.seats![0]).toEqual({ logicalId: 'pilot.lead', session: 'pilot-lead@ledge-dev', mode: 'acceptEdits', source: 'kernel_default', posture: 'floor', selection: 'inherit', summary: expect.stringContaining('acceptEdits') });
+    expect(OpenRigPermissionListSchema.safeParse({ type: 'openrig.permissionList', requestId: 'p', rig: 'ledge-dev', seats: r.seats }).success).toBe(true);
+  });
+  it('a seat whose status fails is told with what is known and its error; the others are read', async () => {
+    const w = world({ fail: ['dev-back@ledge-dev'] });
+    const r = await w.rig.permissions('ledge-dev');
+    expect(r.error).toBeUndefined();
+    expect(r.seats).toHaveLength(5);
+    expect(r.seats![2]).toEqual({ logicalId: 'dev.back', session: 'dev-back@ledge-dev', error: 'seat dev-back@ledge-dev not found' });
+    expect(r.seats![3]!.mode).toBe('acceptEdits');
+  });
+  it('error vocabulary: unknown_rig, daemon_stopped, not_installed', async () => {
+    expect(await world().rig.permissions('nope')).toEqual({ error: 'unknown_rig' });
+    expect(await world({ daemon: 'stopped' }).rig.permissions('ledge-dev')).toEqual({ error: 'daemon_stopped' });
+    expect(await world({ installed: false }).rig.permissions('ledge-dev')).toEqual({ error: 'not_installed' });
+  });
+  it('is read once for 30 s, and again after an action on the rig, or after 30 s', async () => {
+    const w = world();
+    await w.rig.permissions('ledge-dev');
+    w.tick(29_000);
+    await w.rig.permissions('ledge-dev');
+    expect(w.statuses()).toHaveLength(5);
+    expect(await w.rig.act({ kind: 'rig.permissions', rig: 'ledge-dev', mode: 'auto', seats: ['pilot-lead@ledge-dev'] })).toMatchObject({ ok: true });
+    await w.rig.permissions('ledge-dev');
+    expect(w.statuses()).toHaveLength(10);
+    w.tick(31_000);
+    await w.rig.permissions('ledge-dev');
+    expect(w.statuses()).toHaveLength(15);
+  });
+  it('a failed read is not kept', async () => {
+    const w = world({ daemon: 'stopped' });
+    await w.rig.permissions('ledge-dev'); await w.rig.permissions('ledge-dev');
+    expect(w.statuses()).toEqual([]);
+  });
+  it('policy: the rig\'s permission_policy when Ledge knows its spec, absent otherwise', async () => {
+    const yaml = 'name: ledge-dev\npermission_policy: builtin:auto\npods:\n  - id: dev\n    members:\n      - id: front\n        agent_ref: local:agents/front\n';
+    expect((await world({ spec: yaml }).rig.permissions('ledge-dev')).policy).toBe('builtin:auto');
+    const none = await world().rig.permissions('ledge-dev');
+    expect(none.policy).toBeUndefined();
+    expect('policy' in none).toBe(false);
+    expect((await world({ spec: 'name: ledge-dev\npods:\n  - id: dev\n    members:\n      - id: front\n        agent_ref: local:agents/front\n' }).rig.permissions('ledge-dev')).policy).toBeUndefined();
+  });
+  it('policy: the spec file itself, never a guessed sibling: a library folder with two spec files, a marker naming a file that is not rig.yaml', async () => {
+    const spec = (n: string, pol: string) => `name: ${n}\npermission_policy: ${pol}\npods:\n  - id: dev\n    members:\n      - id: front\n        agent_ref: local:agents/front\n`;
+    const folder = { '/lib/a.yaml': spec('other', 'builtin:yolo'), '/lib/b.yaml': spec('ledge-dev', 'builtin:auto'), '/lib/rig.yaml': spec('third', 'builtin:safe') };
+    expect((await world({ files: folder, library: [{ name: 'ledge-dev', path: '/lib/b.yaml' }] }).rig.permissions('ledge-dev')).policy).toBe('builtin:auto');
+    const marked = { ...folder, '/h/.ledge/rigs/ledge-dev/source.json': JSON.stringify({ spec: 'ledge-dev', path: '/lib/b.yaml' }) };
+    expect((await world({ files: marked }).rig.permissions('ledge-dev')).policy).toBe('builtin:auto');
+    // Not known as a spec file (the folder holds only others): absent, not a neighbour's.
+    expect((await world({ files: { '/lib/a.yaml': folder['/lib/a.yaml'] } }).rig.permissions('ledge-dev')).policy).toBeUndefined();
+  });
+});
+
+describe('rig.permissions act', () => {
+  it('stops at the first seat that fails and says how many went through', async () => {
+    const ran: string[] = [];
+    const run: RigRun = async args => {
+      const a = args.join(' ');
+      if (args[0] === 'seat') { ran.push(a); return args[2] === 'b-x@r' ? { code: 1, stdout: '', stderr: 'seat b-x@r: no such seat\n' } : { code: 0, stdout: '{}', stderr: '' }; }
+      return { code: 1, stdout: '', stderr: '' };
+    };
+    const rig = createOpenRig({ run });
+    const r = await rig.act({ kind: 'rig.permissions', rig: 'r', mode: 'floor', seats: ['a-x@r', 'b-x@r', 'c-x@r'] });
+    expect(ran).toHaveLength(2);
+    expect(r).toMatchObject({ ok: false, error: 'seat b-x@r: no such seat', completed: 1 });
+    expect(r.commands).toEqual(['a-x@r', 'b-x@r', 'c-x@r'].map(s => `rig seat set-permissions ${s} --mode floor --reason Ledge`));
+  });
+});

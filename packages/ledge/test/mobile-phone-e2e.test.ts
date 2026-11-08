@@ -386,7 +386,7 @@ describe('phone protocol end to end', () => {
       async state() { return { installed: true, daemon: { state: 'running' as const }, kernel: { state: 'ready' as const }, rigs: [], at: T0 }; },
       async act() { return { ok: true, commands: [] }; }, async specs() { return { specs: [] }; },
       async launch() { return { ok: true, plan: true, commands: [] }; }, async reseat() { return { ok: true, commands: [], added: [], removed: [] }; },
-      async roles() { return { roles: [] }; }, async role() { return { error: 'x' }; }, async roleFile() { return { error: 'x' }; }
+      async roles() { return { roles: [] }; }, async role() { return { error: 'x' }; }, async roleFile() { return { error: 'x' }; }, async duplicateRole() { return { ok: false, error: 'x' }; }, async graph() { return { error: 'x' }; }, async snapshots() { return { error: 'x' }; }, async permissions() { return { error: 'x' }; }, async queue() { return { rows: [], truncated: false, error: 'x' }; }
     };
     const { phone } = await linked({ server: { openrig } });
     await phone.send(JSON.stringify({ type: 'snapshot.request' }));
