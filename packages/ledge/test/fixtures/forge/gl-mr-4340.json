@@ -1,0 +1,180 @@
+{
+ "id": 563934657,
+ "iid": 4340,
+ "project_id": 34675721,
+ "title": "feat(milestone): add --include-descendants to milestone list",
+ "description": "## Description\n\nRunning `glab milestone list --group` only listed milestones defined directly on that group.\nThere was no way to view milestones from subgroups or descendant projects.\n\nI added the `--include-descendants` flag to `glab milestone list`.\nWhen used with `--group`, glab now fetches milestones from all subgroups and descendant projects.\n\nBecause results can now span multiple namespaces, I added an Owner column to the table output when `--include-descendants` is enabled.\nThis column helps users see which subgroup or project owns each milestone.\n\nA few decisions on the behavior:\n1. `--include-descendants` is mutually exclusive with `--project`. Project milestones do not have descendants, so combining them returns an error.\n2. The Owner column appears only when `--include-descendants` is set. Standard group and project listings keep their original table format.\n3. The Owner column shows the subgroup or project path from the milestone web URL. It falls back to `group/<id>` or `project/<id>` if the URL is unavailable.\n4. JSON output includes `group_id` and `project_id` fields for scripting.\n\n## Related Issues\n\nCloses #8709\n\n## How has this been tested?\n\nI tested the mutual exclusivity check by hand using a built `glab` binary:\n\n```shell\n$ glab milestone list --project 123 --include-descendants\n   ERROR  \n  if any flags in the group [project include-descendants] are set none of the \n  others can be; [include-descendants project] were all set.                  \n```\n\nI added unit tests covering flag wiring, mock verification for `IncludeDescendents`, table output with the Owner column, and `--show-id`.\nI also added tests for mutual exclusivity with `--project`, JSON output, and milestone owner parsing edge cases.\n\nChecks I ran locally on the changed package:\n\n```shell\n$ go test -count=1 ./internal/commands/milestone/list/...\nok  \tgitlab.com/gitlab-org/cli/internal/commands/milestone/list\t0.023s\n```\n\n```shell\n$ go run ./scripts/comment-overlap -threshold 1.0 -max-findings 0 internal/commands/milestone/list/list.go internal/commands/milestone/list/list_test.go\n# 0 findings across 2 files\n```\n\nI also regenerated the command documentation with `make gen-docs`.\n\nThe rest runs in the pipeline.\n\nImplemented with AI assistance; I reviewed and tested the changes.",
+ "state": "opened",
+ "created_at": "2026-11-08T01:07:37.006Z",
+ "updated_at": "2026-11-08T01:29:03.615Z",
+ "merged_by": null,
+ "merge_user": null,
+ "merged_at": null,
+ "closed_by": null,
+ "closed_at": null,
+ "target_branch": "main",
+ "source_branch": "8709-add-include-descendants-to-milestone-list",
+ "user_notes_count": 7,
+ "upvotes": 0,
+ "downvotes": 0,
+ "author": {
+  "id": 42139186,
+  "username": "amegahed12",
+  "state": "active",
+  "locked": false,
+  "web_url": "https://gitlab.com/amegahed12",
+  "bot": false
+ },
+ "assignees": [
+  {
+   "id": 42139186,
+   "username": "amegahed12",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/amegahed12"
+  }
+ ],
+ "assignee": {
+  "id": 42139186,
+  "username": "amegahed12",
+  "state": "active",
+  "locked": false,
+  "web_url": "https://gitlab.com/amegahed12"
+ },
+ "reviewers": [
+  {
+   "id": 11809982,
+   "username": "jay_mccure",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/jay_mccure"
+  },
+  {
+   "id": 21826781,
+   "username": "GitLabDuo",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/GitLabDuo"
+  }
+ ],
+ "source_project_id": 45049979,
+ "target_project_id": 34675721,
+ "labels": [
+  "Community contribution",
+  "devops::ai clients",
+  "documentation",
+  "group::developer clients",
+  "linked-issue",
+  "section::ai",
+  "tw::triaged",
+  "type::feature",
+  "workflow::ready for review"
+ ],
+ "draft": false,
+ "imported": false,
+ "imported_from": "none",
+ "work_in_progress": false,
+ "milestone": null,
+ "merge_when_pipeline_succeeds": false,
+ "merge_status": "can_be_merged",
+ "detailed_merge_status": "requested_changes",
+ "merge_after": null,
+ "sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+ "merge_commit_sha": null,
+ "squash_commit_sha": null,
+ "discussion_locked": null,
+ "should_remove_source_branch": null,
+ "force_remove_source_branch": true,
+ "prepared_at": "2026-11-08T01:07:39.987Z",
+ "allow_collaboration": true,
+ "allow_maintainer_to_push": true,
+ "reference": "!4340",
+ "references": {
+  "short": "!4340",
+  "relative": "!4340",
+  "full": "gitlab-org/cli!4340"
+ },
+ "web_url": "https://gitlab.com/gitlab-org/cli/-/merge_requests/4340",
+ "time_stats": {
+  "time_estimate": 0,
+  "total_time_spent": 0,
+  "human_time_estimate": null,
+  "human_total_time_spent": null
+ },
+ "squash": true,
+ "squash_on_merge": true,
+ "task_completion_status": {
+  "count": 0,
+  "completed_count": 0
+ },
+ "has_conflicts": false,
+ "blocking_discussions_resolved": false,
+ "approvals_before_merge": null,
+ "subscribed": false,
+ "changes_count": "3",
+ "latest_build_started_at": "2026-11-08T01:07:41.802Z",
+ "latest_build_finished_at": "2026-11-08T01:19:53.333Z",
+ "first_deployed_to_production_at": null,
+ "pipeline": {
+  "id": 3041001851,
+  "iid": 1817,
+  "project_id": 45049979,
+  "sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+  "ref": "8709-add-include-descendants-to-milestone-list",
+  "status": "success",
+  "source": "merge_request_event",
+  "created_at": "2026-11-08T01:07:40.120Z",
+  "updated_at": "2026-11-08T01:19:53.344Z",
+  "web_url": "https://gitlab.com/gitlab-community/gitlab-org/cli/-/pipelines/3041001851"
+ },
+ "head_pipeline": {
+  "id": 3041001851,
+  "iid": 1817,
+  "project_id": 45049979,
+  "sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+  "ref": "8709-add-include-descendants-to-milestone-list",
+  "status": "success",
+  "source": "merge_request_event",
+  "created_at": "2026-11-08T01:07:40.120Z",
+  "updated_at": "2026-11-08T01:19:53.344Z",
+  "web_url": "https://gitlab.com/gitlab-community/gitlab-org/cli/-/pipelines/3041001851",
+  "before_sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+  "tag": false,
+  "yaml_errors": null,
+  "user": {
+   "id": 42139186,
+   "username": "amegahed12",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/amegahed12"
+  },
+  "started_at": "2026-11-08T01:07:41.802Z",
+  "finished_at": "2026-11-08T01:19:53.333Z",
+  "committed_at": null,
+  "duration": 728,
+  "queued_duration": 1,
+  "coverage": "75.20",
+  "detailed_status": {
+   "icon": "status_success",
+   "text": "Passed",
+   "label": "passed",
+   "group": "success",
+   "tooltip": "passed",
+   "has_details": true,
+   "details_path": "/gitlab-community/gitlab-org/cli/-/pipelines/3041001851",
+   "illustration": null,
+   "favicon": "/assets/ci_favicons/favicon_status_success-8451333011eee8ce9f2ab25dc487fe24a8758c694827a582f17f42b0a90446a2.png"
+  },
+  "archived": false
+ },
+ "diff_refs": {
+  "base_sha": "c298159b72a6d1d888a635a8c1e5fc4952d12983",
+  "head_sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+  "start_sha": "c298159b72a6d1d888a635a8c1e5fc4952d12983"
+ },
+ "merge_error": null,
+ "first_contribution": false,
+ "user": {
+  "can_merge": false
+ }
+}

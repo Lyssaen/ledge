@@ -1,0 +1,184 @@
+{
+ "author": {
+  "id": "MDQ6VXNlcjYzNTUyMjU=",
+  "is_bot": false,
+  "login": "kilasuit"
+ },
+ "baseRefName": "trunk",
+ "body": "fixes #13079 ",
+ "comments": [
+  {
+   "id": "IC_kwDODKw3uc8AAAABDeJseQ",
+   "author": {
+    "login": "github-actions"
+   },
+   "authorAssociation": "CONTRIBUTOR",
+   "body": "Thanks for your pull request! Unfortunately, it doesn't meet the requirements for review:\n\n\n- None of the referenced issues have the `help wanted` label\n\n**Please update your PR to address the above.** This PR will be automatically closed in **4 days** if these requirements are not met.\n\n<details>\n<summary>Full contribution requirements</summary>\n\n1. Include a detailed description of what this PR does\n2. Link to an issue with the `help wanted` label (use `Fixes #123` or `Closes #123`)\n</details>",
+   "createdAt": "2026-05-24T09:01:30Z",
+   "includesCreatedEdit": false,
+   "isMinimized": false,
+   "minimizedReason": "",
+   "reactionGroups": [],
+   "url": "https://github.com/cli/cli/pull/13506#issuecomment-4527910009",
+   "viewerDidAuthor": false
+  },
+  {
+   "id": "IC_kwDODKw3uc8AAAABDePPhA",
+   "author": {
+    "login": "kilasuit"
+   },
+   "authorAssociation": "NONE",
+   "body": "@babakks I am not gonna be able to spend any more time back and forth on this so i hope that this is good enough start",
+   "createdAt": "2026-05-24T09:43:02Z",
+   "includesCreatedEdit": false,
+   "isMinimized": false,
+   "minimizedReason": "",
+   "reactionGroups": [
+    {
+     "content": "THUMBS_UP",
+     "users": {
+      "totalCount": 1
+     }
+    }
+   ],
+   "url": "https://github.com/cli/cli/pull/13506#issuecomment-4528000900",
+   "viewerDidAuthor": false
+  }
+ ],
+ "commits": [
+  {
+   "authoredDate": "2026-05-24T08:16:03Z",
+   "authors": [
+    {
+     "id": "BOT_kgDOC9w8XQ",
+     "login": "Copilot"
+    }
+   ],
+   "committedDate": "2026-05-24T08:16:03Z",
+   "messageBody": "",
+   "messageHeadline": "Initial plan",
+   "oid": "17e1722aad86024a35f1f62627569a2e8e3b8cf7"
+  },
+  {
+   "authoredDate": "2026-05-24T08:21:48Z",
+   "authors": [
+    {
+     "id": "BOT_kgDOC9w8XQ",
+     "login": "Copilot"
+    },
+    {
+     "id": "MDQ6VXNlcjYzNTUyMjU=",
+     "login": "kilasuit"
+    }
+   ],
+   "committedDate": "2026-05-24T08:21:48Z",
+   "messageBody": "…adata\n\nAgent-Logs-Url: https://github.com/kilasuit/cli/sessions/2fa3166e-24be-468c-a3be-a2b14932712f\n\nCo-authored-by: kilasuit <someone@example.invalid>",
+   "messageHeadline": "fix(windows): populate fixed file version and copyright in winres met…",
+   "oid": "c4a7f85591222e9d6cf849b5a0e0f7b9b86b7873"
+  },
+  {
+   "authoredDate": "2026-05-24T08:22:18Z",
+   "authors": [
+    {
+     "id": "BOT_kgDOC9w8XQ",
+     "login": "Copilot"
+    },
+    {
+     "id": "MDQ6VXNlcjYzNTUyMjU=",
+     "login": "kilasuit"
+    }
+   ],
+   "committedDate": "2026-05-24T08:22:18Z",
+   "messageBody": "Agent-Logs-Url: https://github.com/kilasuit/cli/sessions/2fa3166e-24be-468c-a3be-a2b14932712f\n\nCo-authored-by: kilasuit <someone@example.invalid>",
+   "messageHeadline": "test(script): add regression checks for winres metadata inputs",
+   "oid": "0a718221ba348647524dcfe982a55570ccf002f0"
+  },
+  {
+   "authoredDate": "2026-08-30T22:36:36Z",
+   "authors": [
+    {
+     "id": "MDQ6VXNlcjYzNTUyMjU=",
+     "login": "kilasuit"
+    }
+   ],
+   "committedDate": "2026-08-30T22:36:36Z",
+   "messageBody": "",
+   "messageHeadline": "Merge branch 'cli:trunk' into copilot/add-file-version-copyright-info",
+   "oid": "fdb4e47437a3140146e76d12c0f3b5dd23df34a1"
+  }
+ ],
+ "files": [
+  {
+   "path": "script/gen-winres.ps1",
+   "additions": 23,
+   "deletions": 0
+  },
+  {
+   "path": "script/versioninfo.template.json",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "path": "script/winres_test.go",
+   "additions": 43,
+   "deletions": 0
+  }
+ ],
+ "headRefName": "copilot/add-file-version-copyright-info",
+ "headRefOid": "fdb4e47437a3140146e76d12c0f3b5dd23df34a1",
+ "isDraft": false,
+ "labels": [
+  {
+   "id": "LA_kwDODKw3uc7Vepyn",
+   "name": "external",
+   "description": "pull request originating outside of the CLI core team",
+   "color": "2700AF"
+  },
+  {
+   "id": "LA_kwDODKw3uc8AAAACX8pa3w",
+   "name": "ready-for-review",
+   "description": "",
+   "color": "39d965"
+  }
+ ],
+ "latestReviews": [
+  {
+   "id": "",
+   "author": {
+    "login": "copilot-pull-request-reviewer"
+   },
+   "authorAssociation": "CONTRIBUTOR",
+   "body": "## Pull request overview\n\n> [!NOTE]\n> Copilot was unable to run its full agentic suite in this review.\n\nAdds guardrails around Windows resource/version metadata by enforcing a non-empty legal copyright string and ensuring the winres generation script passes explicit version components to `goversioninfo`.\n\n**Changes:**\n- Added Go tests validating `versioninfo.template.json` and presence of fixed version flags in `gen-winres.ps1`.\n- Populated `LegalCopyright` in `versioninfo.template.json`.\n- Updated `gen-winres.ps1` to parse product version components and pass `-ver-*` / `-product-ver-*` flags  [trimmed for the fixture]",
+   "submittedAt": "2026-05-24T09:02:28Z",
+   "includesCreatedEdit": false,
+   "reactionGroups": [],
+   "state": "COMMENTED",
+   "commit": {
+    "oid": ""
+   }
+  },
+  {
+   "id": "",
+   "author": {
+    "login": "babakks"
+   },
+   "authorAssociation": "MEMBER",
+   "body": "Thanks for the PR! I haven't yet tried it, and here are some comments.\n\nI'll check this out later and if no progress I'll wrap it up. So, no worries.",
+   "submittedAt": "2026-05-24T10:30:43Z",
+   "includesCreatedEdit": false,
+   "reactionGroups": [],
+   "state": "CHANGES_REQUESTED",
+   "commit": {
+    "oid": ""
+   }
+  }
+ ],
+ "number": 13506,
+ "reviewDecision": "CHANGES_REQUESTED",
+ "reviewRequests": [],
+ "state": "OPEN",
+ "statusCheckRollup": [],
+ "title": "Add file version & copyright info to windows package",
+ "updatedAt": "2026-08-30T22:36:37Z",
+ "url": "https://github.com/cli/cli/pull/13506"
+}

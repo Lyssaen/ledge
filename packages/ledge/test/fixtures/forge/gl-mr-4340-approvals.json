@@ -1,0 +1,37 @@
+{
+ "id": 563934657,
+ "iid": 4340,
+ "project_id": 34675721,
+ "title": "feat(milestone): add --include-descendants to milestone list",
+ "description": "## Description\n\nRunning `glab milestone list --group` only listed milestones defined directly on that group.\nThere was no way to view milestones from subgroups or descendant projects.\n\nI added the `--include-descendants` flag to `glab milestone list`.\nWhen used with `--group`, glab now fetches milestones from all subgroups and descendant projects.\n\nBecause results can now span multiple namespaces, I added an Owner column to the table output when `--include-descendants` is enabled.\nThis column helps users see which subgroup or project owns each milestone.\n\nA few decisions on the behavior:\n1. `--include-descendants` is mutually exclusive with `--project`. Project milestones do not have descendants, so combining them returns an error.\n2. The Owner column appears only when `--include-descendants` is set. Standard group and project listings keep their original table format.\n3. The Owner column shows the subgroup or project path from the milestone web URL. It falls back to `group/<id>` or `project/<id>` if the URL is unavailable.\n4. JSON output includes `group_id` and `project_id` fields for scripting.\n\n## Related Issues\n\nCloses #8709\n\n## How has this been tested?\n\nI tested the mutual exclusivity check by hand using a built `glab` binary:\n\n```shell\n$ glab milestone list --project 123 --include-descendants\n   ERROR  \n  if any flags in the group [project include-descendants] are set none of the \n  others can be; [include-descendants project] were all set.                  \n```\n\nI added unit tests covering flag wiring, mock verification for `IncludeDescendents`, table output with the Owner column, and `--show-id`.\nI also added tests for mutual exclusivity with `--project`, JSON output, and milestone owner parsing edge cases.\n\nChecks I ran locally on the changed package:\n\n```shell\n$ go test -count=1 ./internal/commands/milestone/list/...\nok  \tgitlab.com/gitlab-org/cli/internal/commands/milestone/list\t0.023s\n```\n\n```shell\n$ go run ./scripts/comment-overlap -threshold 1.0 -max-findings 0 internal/commands/milestone/list/list.go internal/commands/milestone/list/list_test.go\n# 0 findings across 2 files\n```\n\nI also regenerated the command documentation with `make gen-docs`.\n\nThe rest runs in the pipeline.\n\nImplemented with AI assistance; I reviewed and tested the changes.",
+ "state": "opened",
+ "created_at": "2026-11-08T01:07:37.006Z",
+ "updated_at": "2026-11-08T01:29:03.615Z",
+ "merge_status": "can_be_merged",
+ "approved": false,
+ "approvals_required": 2,
+ "approvals_left": 2,
+ "require_password_to_approve": false,
+ "approved_by": [],
+ "suggested_approvers": [],
+ "approvers": [],
+ "approver_groups": [],
+ "user_has_approved": false,
+ "user_can_approve": false,
+ "approval_rules_left": [
+  {
+   "id": 404093434,
+   "name": "/docs/",
+   "rule_type": "code_owner"
+  },
+  {
+   "id": 404093435,
+   "name": "/internal/",
+   "rule_type": "code_owner"
+  }
+ ],
+ "has_approval_rules": true,
+ "merge_request_approvers_available": true,
+ "multiple_approval_rules_available": true,
+ "invalid_approvers_rules": []
+}

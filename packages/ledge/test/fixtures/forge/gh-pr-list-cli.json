@@ -1,0 +1,2354 @@
+[
+ {
+  "author": {
+   "id": "MDQ6VXNlcjQ3Mzk0MjAw",
+   "is_bot": false,
+   "login": "BagToad"
+  },
+  "baseRefName": "trunk",
+  "comments": [],
+  "headRefName": "bagtoad/triage-ghmock-skill",
+  "headRefOid": "6ceb78a575d98dbe06ac366e42501c67aee2b1c4",
+  "isDraft": false,
+  "labels": [],
+  "latestReviews": [
+   {
+    "id": "",
+    "author": {
+     "login": "copilot-pull-request-reviewer"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "body": "<!-- ccr-overview-v2 -->\n\n### 🟡 Changes recommended\n\nFixture URL validation captures adjacent non-URL content, incorrectly blocking publication for valid URLs in compact JSON and adjacent Markdown links.\n\n<details open>\n<summary><strong>1 open issue</strong></summary>\n\n- <picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://github.githubassets.com/static/images/icons/copilot-code-review/medium-v2-dark.svg\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://github.githubassets.com/static/images/icons/copilot-code-review/medium-v2-light.svg\"><img src=\"https://github.gi [trimmed for the fixture]",
+    "submittedAt": "2026-11-07T00:23:11Z",
+    "includesCreatedEdit": false,
+    "reactionGroups": [],
+    "state": "COMMENTED",
+    "commit": {
+     "oid": ""
+    }
+   },
+   {
+    "id": "",
+    "author": {
+     "login": "tidy-dev"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "body": "",
+    "submittedAt": "2026-11-07T01:27:26Z",
+    "includesCreatedEdit": false,
+    "reactionGroups": [],
+    "state": "APPROVED",
+    "commit": {
+     "oid": ""
+    }
+   }
+  ],
+  "number": 14976,
+  "reviewDecision": "APPROVED",
+  "reviewRequests": [
+   {
+    "__typename": "User",
+    "login": "sergiou87"
+   },
+   {
+    "__typename": "User",
+    "login": "babakks"
+   }
+  ],
+  "state": "MERGED",
+  "statusCheckRollup": [
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:44:07Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466453/job/128259599242",
+    "name": "CodeQL-Build (go, manual, ./.github/codeql/codeql-config.yml)",
+    "startedAt": "2026-11-07T01:42:06Z",
+    "status": "COMPLETED",
+    "workflowName": "Code Scanning"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:44:36Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466445/job/128259599765",
+    "name": "lint",
+    "startedAt": "2026-11-07T01:42:06Z",
+    "status": "COMPLETED",
+    "workflowName": "Lint"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:44:49Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466444/job/128259599513",
+    "name": "build (ubuntu-latest)",
+    "startedAt": "2026-11-07T01:42:06Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:42:51Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466453/job/128259599567",
+    "name": "CodeQL-Build (actions, none, security-and-quality)",
+    "startedAt": "2026-11-07T01:42:06Z",
+    "status": "COMPLETED",
+    "workflowName": "Code Scanning"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:48:05Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466444/job/128259599299",
+    "name": "build (windows-latest)",
+    "startedAt": "2026-11-07T01:42:08Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:46:31Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466444/job/128259599597",
+    "name": "build (macos-latest)",
+    "startedAt": "2026-11-07T01:42:08Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:42:34Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466445/job/128259599355",
+    "name": "govulncheck",
+    "startedAt": "2026-11-07T01:42:06Z",
+    "status": "COMPLETED",
+    "workflowName": "Lint"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:42:53Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466444/job/128259599389",
+    "name": "integration-tests (ubuntu-latest)",
+    "startedAt": "2026-11-07T01:42:06Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:43:49Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466444/job/128259599554",
+    "name": "integration-tests (windows-latest)",
+    "startedAt": "2026-11-07T01:42:07Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:43:46Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42325466444/job/128259599542",
+    "name": "integration-tests (macos-latest)",
+    "startedAt": "2026-11-07T01:42:08Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-07T01:42:44Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/runs/128259773225",
+    "name": "CodeQL",
+    "startedAt": "2026-11-07T01:42:41Z",
+    "status": "COMPLETED",
+    "workflowName": ""
+   }
+  ],
+  "title": "Use a synthetic namespace for triage fixtures",
+  "updatedAt": "2026-11-07T01:48:49Z",
+  "url": "https://github.com/cli/cli/pull/14976"
+ },
+ {
+  "author": {
+   "id": "MDQ6VXNlcjkxMjQ3Mzg=",
+   "is_bot": false,
+   "login": "escaleraalcielo"
+  },
+  "baseRefName": "trunk",
+  "comments": [
+   {
+    "id": "IC_kwDODKw3uc8AAAABjwOZxg",
+    "author": {
+     "login": "github-actions"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "body": "Thanks for your pull request! Unfortunately, it doesn't meet the requirements for review:\n\n- PR description is missing or too short — please provide a detailed description\n- No linked `help wanted` issue found in PR description\n\n**Please update your PR to address the above.** This PR will be automatically closed in **4 days** if these requirements are not met.\n\n<details>\n<summary>Full contribution requirements</summary>\n\n1. Include a detailed description of what this PR does\n2. Link to an issue with the `help wanted` label (use `Fixes #123` or `Closes #123`)\n</details>",
+    "createdAt": "2026-11-06T20:08:31Z",
+    "includesCreatedEdit": false,
+    "isMinimized": false,
+    "minimizedReason": "",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14974#issuecomment-6694345158",
+    "viewerDidAuthor": false
+   }
+  ],
+  "headRefName": "probe",
+  "headRefOid": "f74588630208e529fb09d898eccfad4fc02fc927",
+  "isDraft": false,
+  "labels": [
+   {
+    "id": "LA_kwDODKw3uc7Vepyn",
+    "name": "external",
+    "description": "pull request originating outside of the CLI core team",
+    "color": "2700AF"
+   },
+   {
+    "id": "LA_kwDODKw3uc8AAAACX8pd_A",
+    "name": "unmet-requirements",
+    "description": "",
+    "color": "ee2329"
+   }
+  ],
+  "latestReviews": [
+   {
+    "id": "",
+    "author": {
+     "login": "copilot-pull-request-reviewer"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "body": "<!-- ccr-overview-v2 -->\n\n### 🔵 Needs a closer look\n\nHuman confirmation of scope and contribution eligibility is needed because the PR lacks explicit acceptance criteria, a linked eligible issue, and trusted maintainer authorization.\n\n**No open issues** 🎉\n\n<details>\n<summary><strong>What changed in this PR</strong></summary>\n\nThis probe PR adds a single line to the GitHub CLI README without changing application behavior.\n\n**Changes:**\n- Appends the standalone text `probe` after the releases-page link definition.\n\n| File | Description |\r\n| ---- | ----------- |\r\n| README.md | Adds the probe text [trimmed for the fixture]",
+    "submittedAt": "2026-11-06T20:10:07Z",
+    "includesCreatedEdit": false,
+    "reactionGroups": [],
+    "state": "COMMENTED",
+    "commit": {
+     "oid": ""
+    }
+   }
+  ],
+  "number": 14974,
+  "reviewDecision": "REVIEW_REQUIRED",
+  "reviewRequests": [
+   {
+    "__typename": "User",
+    "login": "BagToad"
+   }
+  ],
+  "state": "CLOSED",
+  "statusCheckRollup": [
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T20:08:29Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42285752600/job/128125994379",
+    "name": "label-external / label_issues",
+    "startedAt": "2026-11-06T20:08:23Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T20:08:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42285752600/job/128125997428",
+    "name": "close-from-default-branch / close-from-default-branch",
+    "startedAt": "2026-11-06T20:08:21Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T20:08:33Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42285752600/job/128125994968",
+    "name": "check-requirements / check-requirements",
+    "startedAt": "2026-11-06T20:08:24Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T20:08:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42285752600/job/128125997033",
+    "name": "check-requirements / close-unmet-requirements",
+    "startedAt": "2026-11-06T20:08:21Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T20:08:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42285752600/job/128126060446",
+    "name": "close-unmet-requirements",
+    "startedAt": "2026-11-06T20:08:29Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T20:08:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42285752600/job/128125996537",
+    "name": "close-no-help-wanted",
+    "startedAt": "2026-11-06T20:08:21Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T20:08:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42285752600/job/128125996938",
+    "name": "ready-for-review",
+    "startedAt": "2026-11-06T20:08:21Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   }
+  ],
+  "title": "probe fork pr",
+  "updatedAt": "2026-11-06T20:10:07Z",
+  "url": "https://github.com/cli/cli/pull/14974"
+ },
+ {
+  "author": {
+   "is_bot": true,
+   "login": "app/dependabot"
+  },
+  "baseRefName": "trunk",
+  "comments": [
+   {
+    "id": "IC_kwDODKw3uc8AAAABjpRcBQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThis bumps `github/codeql-action/init`, `/analyze`, and `/upload-sarif` from 4.39.1 to 4.39.2 in [`codeql.yml`](https://github.com/cli/cli/blob/trunk/.github/workflows/codeql.yml) (all three) and [`govulncheck.yml`](https://github.com/cli/cli/blob/trunk/.github/workflows/govulncheck.yml) (`upload-sarif` only), with no other files touched. Upstream [v4.39.2](https://github.com/github/codeql-action/releases/tag/v4.39.2) only updates the default bundled CodeQL version and adds deprecation warnings for old CodeQL/macOS/Xcode versions; none of these call [trimmed for the fixture]",
+    "createdAt": "2026-11-06T14:22:24Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6687054853",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjp03cw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe three pins move from v4.39.1 to the same [v4.39.2 tag](https://github.com/github/codeql-action/releases/tag/v4.39.2), used verbatim in `github/codeql-action/init`, `analyze`, and `upload-sarif` across [`.github/workflows/codeql.yml`](https://github.com/cli/cli/blob/dab49c4e4a2c5b75c27cd8bae26fbb0970316364/.github/workflows/codeql.yml) and [`.github/workflows/govulncheck.yml`](https://github.com/cli/cli/blob/dab49c4e4a2c5b75c27cd8bae26fbb0970316364/.github/workflows/govulncheck.yml), and upstream's changelog describes only a default CodeQL bundle [trimmed for the fixture]",
+    "createdAt": "2026-11-06T14:49:01Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6687635315",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjqfmIA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThis is a coordinated patch bump of all three `github/codeql-action` sub-actions used in this repo (`init`, `analyze`, `upload-sarif`), used identically in [`codeql.yml`](https://github.com/cli/cli/blob/dab49c4e4a2c5b75c27cd8bae26fbb0970316364/.github/workflows/codeql.yml) and [`govulncheck.yml`](https://github.com/cli/cli/blob/dab49c4e4a2c5b75c27cd8bae26fbb0970316364/.github/workflows/govulncheck.yml), and the diff only updates the pinned SHA/version comment consistently across both call sites with no other workflow edits. The [v4.39.2 release](htt [trimmed for the fixture]",
+    "createdAt": "2026-11-06T15:21:00Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6688335392",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjrFAyw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThis bumps the three `github/codeql-action` sub-actions (`init`, `analyze`, `upload-sarif`) used in `.github/workflows/codeql.yml` and `.github/workflows/govulncheck.yml` from `v4.39.1` to `v4.39.2`, a first-party, grouped patch update; the diff only rewrites the four pinned-SHA/version-comment lines across those two files, consistent with the claimed bump. The [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds a deprecation warning for pre-2.22.3 CodeQL/GHES 3.18, and removes the  [trimmed for the fixture]",
+    "createdAt": "2026-11-06T15:48:02Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6688948427",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjr0RIQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThis bumps all three `github/codeql-action/*` actions (`init`, `analyze`, `upload-sarif`), used in [`.github/workflows/codeql.yml`](https://github.com/cli/cli/blob/eeb44bc432c0107de002dadd34a61b4e2bd15882/.github/workflows/codeql.yml) and [`.github/workflows/govulncheck.yml`](https://github.com/cli/cli/blob/eeb44bc432c0107de002dadd34a61b4e2bd15882/.github/workflows/govulncheck.yml), from 4.39.1 to the [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2), a patch consistent with its scope: a default CodeQL bundle bump to 2. [trimmed for the fixture]",
+    "createdAt": "2026-11-06T16:22:32Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6689722657",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjsUisg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe upstream diff for `v4.39.2` only updates the default CodeQL bundle version, adds a deprecation warning for CodeQL ≤2.22.3, a new macOS/Xcode 27 traced-analysis warning, and removal of the already-deprecated `CODEQL_ACTION_CLEANUP_TRAP_CACHES` env var handling — see the [release notes](https://github.com/github/codeql-action/releases/tag/v4.39.2). None of these touch inputs or outputs our workflows rely on: `.github/workflows/codeql.yml` pins `init`, `analyze`, and `upload-sarif`, and `.github/workflows/govulncheck.yml` pins `upload-sarif`, none  [trimmed for the fixture]",
+    "createdAt": "2026-11-06T16:47:45Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6690251442",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjs_E4A",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nAll three `init`, `analyze`, and `upload-sarif` call sites in `.github/workflows/codeql.yml` and `.github/workflows/govulncheck.yml` move together from `v4.39.1` to `v4.39.2`, consistent with the group bump, and no `uses:` reference is left on the old SHA. Upstream's [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2) only updates the default CodeQL bundle version and adds warnings for upcoming deprecations (old CodeQL versions, macOS/Xcode 27 traced analyses, and the already-removed `CODEQL_ACTION_CLEANUP_TRAP_CACHES` va [trimmed for the fixture]",
+    "createdAt": "2026-11-06T17:20:44Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6690948320",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjtiQlw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThis bumps `github/codeql-action/init`, `/analyze`, and `/upload-sarif` together from v4.39.1 to v4.39.2, the three call sites in [`.github/workflows/codeql.yml`](https://github.com/cli/cli/blob/dab49c4e4a2c5b75c27cd8bae26fbb0970316364/.github/workflows/codeql.yml#L49-L70) and [`.github/workflows/govulncheck.yml`](https://github.com/cli/cli/blob/dab49c4e4a2c5b75c27cd8bae26fbb0970316364/.github/workflows/govulncheck.yml#L30), each moving its pinned SHA/version comment in lockstep. The [v4.39.2 release](https://github.com/github/codeql-action/releases [trimmed for the fixture]",
+    "createdAt": "2026-11-06T17:48:37Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6691524759",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjuOQlQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThis is a patch bump of `github/codeql-action` (`init`/`analyze`/`upload-sarif`) pinned in [`.github/workflows/codeql.yml`](https://github.com/cli/cli/blob/eeb44bc432c0107de002dadd34a61b4e2bd15882/.github/workflows/codeql.yml#L49-L70) and [`.github/workflows/govulncheck.yml`](https://github.com/cli/cli/blob/eeb44bc432c0107de002dadd34a61b4e2bd15882/.github/workflows/govulncheck.yml#L30), the only `uses:` call sites for this action in the repo. The [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2) bumps the default CodeQL [trimmed for the fixture]",
+    "createdAt": "2026-11-06T18:24:33Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6692245653",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjuqBzw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThis bumps `github/codeql-action/{init,analyze,upload-sarif}` from `v4.39.1` to `v4.39.2` ([release notes](https://github.com/github/codeql-action/releases/tag/v4.39.2)), used by all three steps in [`codeql.yml`](https://github.com/cli/cli/blob/eeb44bc432c0107de002dadd34a61b4e2bd15882/.github/workflows/codeql.yml#L49-L70) and by `upload-sarif` in [`govulncheck.yml`](https://github.com/cli/cli/blob/eeb44bc432c0107de002dadd34a61b4e2bd15882/.github/workflows/govulncheck.yml#L30). Upstream changes are an updated default CodeQL bundle version, a new depr [trimmed for the fixture]",
+    "createdAt": "2026-11-06T18:47:17Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6692700623",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjvSH4w",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle and adds warning-only handling for obsolete CodeQL versions, macOS/Xcode 27 traced analysis, and a removed undocumented TRAP-cache cleanup flag. The repository uses the actions directly for Linux CodeQL analysis and SARIF uploads, does not set that cleanup flag, and the PR consistently updates every call site to the same pinned commit, so the changes are compatible with the claimed patch bump.\n\n*Assessed at head commit `dab49c4e4a2c [trimmed for the fixture]",
+    "createdAt": "2026-11-06T19:19:22Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6693357539",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjv2lGg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe upstream [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for deprecated CodeQL versions and unsupported macOS/Xcode traced analysis, and removes an undocumented TRAP-cache cleanup environment switch; the bundle update itself is a focused metadata change in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), consistent with a patch release. This repository directly invokes `init`, `analyze`, and `upl [trimmed for the fixture]",
+    "createdAt": "2026-11-06T19:48:35Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6693954842",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjweu7w",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default bundle to [2.27.4](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; the directly inspected [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) changes only the bundled default-version metadata, which is consistent with a patch update. The act [trimmed for the fixture]",
+    "createdAt": "2026-11-06T20:22:05Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6694612719",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjxAjMw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is consistent with a patch release. The action manifests and entrypoints used by this repository are unchanged across the two tags, while the reachable call sites in [`codeql.yml`](https://github.com/cli/cli/blob/dab49c4e4a2c5b75c27cd8bae26fbb0970316364/.github/workflows/codeql.yml#L49-L73) and [`govul [trimmed for the fixture]",
+    "createdAt": "2026-11-06T20:49:28Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6695166771",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjxqiHg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe upstream [target release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and warns when the removed undocumented TRAP-cache cleanup environment variable is used; that scope is consistent with a patch release. The actions are reached by CodeQL initialization, analysis, and SARIF-upload jobs in this repository, but those workflows run the traced analysis on Ubuntu and do not set that environment variable, so no incompatibi [trimmed for the fixture]",
+    "createdAt": "2026-11-06T21:18:19Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6695854622",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjyai-A",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for discontinued CodeQL versions and unsupported macOS/Xcode traced analysis, and removes an undocumented TRAP-cache cleanup switch, which is consistent with a patch release. All three actions are directly reachable in this repository's CodeQL and SARIF-upload workflows, but those call sites run on Ubuntu, do not pin a CodeQL bundle, and do not use the removed environment switch. GitHub's integrity f [trimmed for the fixture]",
+    "createdAt": "2026-11-06T21:49:00Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6696641272",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjzA-Wg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes the undocumented TRAP-cache cleanup flag; the bundle change itself is the narrow defaults update in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), and the overall scope is consistent with a patch release. This repository reaches all three updated action entry points in Ubuntu jobs, does not [trimmed for the fixture]",
+    "createdAt": "2026-11-06T22:19:59Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6697270874",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjzdcoQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode compatibility warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is consistent with a patch release. The repository directly runs the three updated actions in its CodeQL and vulnerability-report workflows; those call sites do not set the removed environment switch or override the CodeQL bundle, use Ubuntu runners for analysis, and the actions' input/output definitions [trimmed for the fixture]",
+    "createdAt": "2026-11-06T22:48:35Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6697737377",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABjz9ikw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe repository diff consistently updates all four direct call sites in the two changed workflows to the same pinned commit, with no stale action pins or inputs. [The upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default [CodeQL bundle to 2.27.4](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds deprecation and macOS/Xcode warnings, and removes the undocumented TRAP-cache cleanup switch; this repository runs these actions on Ubuntu and does not set that sw [trimmed for the fixture]",
+    "createdAt": "2026-11-06T23:18:11Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6698263187",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj0ldgA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe upstream release advances the default CodeQL bundle, adds deprecation and macOS/Xcode warnings, and removes an undocumented TRAP-cache cleanup toggle; the concrete bundle update is in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), with the other behavior changes documented in the [release](https://github.com/github/codeql-action/releases/tag/v4.39.2). This repository directly invokes all three updated actions, but its jobs run on Ubuntu and set neither the removed environment toggle nor a cu [trimmed for the fixture]",
+    "createdAt": "2026-11-06T23:48:55Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6698917248",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj1XMlA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes the undocumented `CODEQL_ACTION_CLEANUP_TRAP_CACHES` behavior, which is consistent with a patch release but includes observable warning and cleanup changes. This repository reaches all three updated action entrypoints in Ubuntu workflows, does not set that cleanup variable, and exercises the updated initialization, analysis, and SARIF upload pa [trimmed for the fixture]",
+    "createdAt": "2026-11-07T00:39:44Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6699732116",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj1iYbw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default bundle to [CodeQL 2.27.4](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds warnings for discontinued CodeQL versions and unsupported traced analysis on newer macOS/Xcode, and removes an undocumented TRAP-cache cleanup flag; that scope is consistent with a patch release. This repository directly invokes the affected init, analyze, and upload-sarif actions, but the PR diff and head-file content wer [trimmed for the fixture]",
+    "createdAt": "2026-11-07T00:53:15Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6699915375",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj126Bg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [target release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup feature; those changes are consistent with a patch release and the affected init, analyze, and SARIF-upload actions are directly used by this repository's security workflows. The required PR diff and upstream commit patches were unavailable because the read-only integrity filter withheld them, so I could not ver [trimmed for the fixture]",
+    "createdAt": "2026-11-07T01:20:36Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6700251654",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj2K4Eg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default bundle to [CodeQL bundle 2.27.4](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment-variable path; that scope is consistent with a patch release. The action is reached through this repository's `init`, `analyze`, and `upload-sarif` workflow steps, but those call sites do not set the remo [trimmed for the fixture]",
+    "createdAt": "2026-11-07T01:48:17Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6700578834",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj2jjmg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe upstream [release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup feature, which is consistent with a patch release. This repository’s four call sites use `init`, `analyze`, and `upload-sarif` on Ubuntu, do not set the removed cleanup environment variable, and do not pin an affected legacy CodeQL bundle. The PR’s diff and head file contents were unavailable through the read  [trimmed for the fixture]",
+    "createdAt": "2026-11-07T02:24:41Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6700983194",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj2y14Q",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) refreshes the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup behavior; the bundle portion is a narrow generated-code update in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), consistent with the patch bump. This repository directly invokes all three updated action entry points, but its CodeQL job runs on Ubuntu and [trimmed for the fixture]",
+    "createdAt": "2026-11-07T02:48:00Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6701233633",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj3IjAw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is consistent with a patch release. This repository’s four call sites use the standard init, analyze, and SARIF-upload paths on Ubuntu without the removed environment switch or a pinned legacy CodeQL bundle, and the PR updates every SHA and version annotation coherently.\n\n*Assessed at head commit `dab4 [trimmed for the fixture]",
+    "createdAt": "2026-11-07T03:22:28Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6701589251",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj3Y3AA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is consistent with a patch release. All three actions are directly used by this repository's Ubuntu CodeQL workflow, and `upload-sarif` is also used by the vulnerability-report workflow; neither workflow uses the removed environment switch or the affected macOS behavior. The PR's own  [trimmed for the fixture]",
+    "createdAt": "2026-11-07T03:48:27Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6701856512",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj3tCAA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; these changes are consistent with a patch release, and this repository does not set that switch or run these call sites on macOS. All three action entry points are directly used by the Code Scanning workflow, while SARIF upload is also used by the scheduled vulnerability workflow, so the update reaches [trimmed for the fixture]",
+    "createdAt": "2026-11-07T04:22:03Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6702187008",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj38Krw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch; that scope is consistent with a patch release. This repository’s call sites run CodeQL on Ubuntu and do not set that environment switch, so the only material reachable change is the default bundle update. The required PR diff was unavailable through the read-integrity filter, so I could not [trimmed for the fixture]",
+    "createdAt": "2026-11-07T04:48:09Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6702434991",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj4O-zQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\n[The upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) advances the default CodeQL bundle, adds targeted warnings for obsolete custom CodeQL versions and macOS/Xcode traced analysis, and removes an undocumented opt-in cache-cleanup path; the [bundle update commit](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) changes only the bundled default metadata and generated entry point. This repository directly invokes the updated init, analyze, and upload actions on Ubuntu, does not set [trimmed for the fixture]",
+    "createdAt": "2026-11-07T05:20:24Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6702743245",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj4eH4w",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch, which is a broader but still patch-compatible change. This repository directly invokes the init, analyze, and upload-sarif actions in Ubuntu jobs, does not set the removed cleanup environment variable, and does not exercise the macOS 27 warning path, so the material behavior changes do not appear to af [trimmed for the fixture]",
+    "createdAt": "2026-11-07T05:48:04Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6702991331",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj40rww",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for soon-unsupported older CodeQL versions and macOS/Xcode 27 traced analysis, and removes an undocumented TRAP-cache cleanup switch. The four local call sites run on Ubuntu and do not set that switch, so those warning and cleanup changes do not affect current inputs; the main reachable behavior change is the scanner bundle used by the CodeQL jobs. The release/tag metadata is consistent with a patch  [trimmed for the fixture]",
+    "createdAt": "2026-11-07T06:27:11Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6703360963",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj5A5pQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe upstream [release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle to [2.27.4](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds warnings for discontinued CodeQL versions and unsupported traced analysis on newer macOS/Xcode, and removes an undocumented TRAP-cache cleanup environment switch. All four direct call sites run on Ubuntu without a pinned CodeQL tool version, the removed environment switch, or the related caching input, so only the default bundle update mate [trimmed for the fixture]",
+    "createdAt": "2026-11-07T06:49:22Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6703561125",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj5SIbA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) refreshes the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented cache-cleanup environment switch; this repository’s observed `init`, `analyze`, and `upload-sarif` call sites do not use that switch or macOS runners, so the upstream scope is consistent with a patch update. The required PR diff was unavailable because the read endpoint was access-filtered, so I could not independently verify  [trimmed for the fixture]",
+    "createdAt": "2026-11-07T07:19:42Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6703843436",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj5h20g",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode compatibility warnings, and removes an undocumented TRAP-cache cleanup switch; the bundle update is represented by [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), which is consistent with a patch release. The action is directly used for initialization, analysis, and SARIF upload in the repository's Ubuntu workflows, while those  [trimmed for the fixture]",
+    "createdAt": "2026-11-07T07:48:19Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6704101074",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj522fQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; the bundle update is a focused metadata and bundled-entrypoint change in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), consistent with a patch bump. This repository uses the default bundle on Ubuntu, does not set the removed environment switch or a legacy CodeQL ve [trimmed for the fixture]",
+    "createdAt": "2026-11-07T08:23:06Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6704445053",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj6FXeg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode compatibility warnings, and removes an undocumented TRAP-cache cleanup environment switch; the bundle change itself is the focused [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) update, consistent with a patch release. This repository directly invokes the updated init, analyze, and SARIF-upload entry points on Ubuntu, does not configure the remov [trimmed for the fixture]",
+    "createdAt": "2026-11-07T08:48:44Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6704682874",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj6Ygaw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; this is consistent with a patch release. The published [`init`](https://github.com/github/codeql-action/blob/v4.39.2/init/action.yml), [`analyze`](https://github.com/github/codeql-action/blob/v4.39.2/analyze/action.yml), and [`upload-sarif`](https://github.com/github/codeql-action/blob/v4.39.2/upload-sarif/action.yml) i [trimmed for the fixture]",
+    "createdAt": "2026-11-07T09:21:34Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6704996459",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj6nCZg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment-variable feature, which is consistent with a bounded patch release. This repository directly invokes the three updated actions at four call sites; those jobs run on Ubuntu, do not pin an affected old CodeQL bundle, and do not set the removed environment variable, so the changed behavior does not require workflow adj [trimmed for the fixture]",
+    "createdAt": "2026-11-07T09:47:41Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6705234534",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj65iEw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe upstream [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; those changes are consistent with a patch release, and this repository's Ubuntu call sites do not set that switch. However, [v4.39.3](https://github.com/github/codeql-action/releases/tag/v4.39.3) was released the next day to fix diff-informed filtering that could omit alerts for changed paths c [trimmed for the fixture]",
+    "createdAt": "2026-11-07T10:19:00Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6705537555",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj7KgeA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup behavior; this repository invokes the updated init, analyze, and upload-sarif actions, but runs analysis on Ubuntu and does not configure the removed cleanup feature. Those changes are consistent with a patch release and the directly relevant behavior is the default bundle update, but the PR's own file-level d [trimmed for the fixture]",
+    "createdAt": "2026-11-07T10:47:56Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6705815672",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj7dq9g",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\n[The upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch. The repository diff only moves the four existing `init`, `analyze`, and `upload-sarif` call sites to the fetched upstream commit [`1fc58d0`](https://github.com/github/codeql-action/commit/1fc58d04a4d4374f921bdac573c3811c240f9c26), which is consistent with the release scope. These workflows run on Ubuntu and  [trimmed for the fixture]",
+    "createdAt": "2026-11-07T11:18:18Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6706129654",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj72TEw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes the undocumented TRAP-cache cleanup behavior, which is consistent with a patch release. These actions reach this repository's CodeQL initialization, analysis, and SARIF-upload jobs, but those jobs run on Ubuntu, do not set the removed environment variable, and do not pin a custom bundle, so no direct incompatibility is apparent. The exact pull- [trimmed for the fixture]",
+    "createdAt": "2026-11-07T11:47:10Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6706533139",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj8NDng",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup feature, which is consistent with a patch release. This repository reaches the init, analyze, and upload-sarif actions in Ubuntu workflows, and the observed call sites do not use the removed environment variable or the affected macOS behavior. The PR's own diff was unavailable through the read-integrity filter [trimmed for the fixture]",
+    "createdAt": "2026-11-07T12:24:52Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6706906014",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj8bGBQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup behavior; that scope is plausible for the patch bump, and this repository does not set the removed environment variable or run these workflows on macOS. The repository diff coherently advances every direct `init`, `analyze`, and `upload-sarif` use across CodeQL analysis and vulnerability-report upload to the s [trimmed for the fixture]",
+    "createdAt": "2026-11-07T12:47:42Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6707136005",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj9A3Kw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; the directly inspected [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) changes only the bundled default-version metadata. This repository reaches the updated actions through its Code Scanning workflow and SARIF upload in the Go vulnerability workflow [trimmed for the fixture]",
+    "createdAt": "2026-11-07T13:48:22Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6707754795",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj9Uh3A",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Do not merge, Confidence: Medium**\n\n[The target release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode warnings, and removes an undocumented TRAP-cache cleanup switch; the repository does not configure the removed switch or run this workflow on macOS, and the PR consistently updates all four pinned call sites. However, [the immediate follow-up release](https://github.com/github/codeql-action/releases/tag/v4.39.3) fixes diff-informed alert filtering that could incorrectly remove alerts for chan [trimmed for the fixture]",
+    "createdAt": "2026-11-07T14:18:36Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6708077020",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj9pqig",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Do not merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for obsolete CodeQL and macOS/Xcode traced-analysis configurations, and removes an undocumented cache-cleanup environment-variable behavior; the repository's direct call sites run on Ubuntu and do not use the affected legacy settings. The pin-only repository diff is coherent with that scope, but [the next patch release](https://github.com/github/codeql-action/releases/tag/v4.39.3) fixes diff-informed alert filt [trimmed for the fixture]",
+    "createdAt": "2026-11-07T14:47:52Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6708423306",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj-Fa3Q",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode warnings, and removes an undocumented TRAP-cache cleanup environment toggle, which is consistent with a patch release. This repository directly invokes all three updated entry points; its scanning job runs on Ubuntu, does not set the removed environment toggle, and exercises each entry point. The pin-and-comment-only diff updates all four call sites consistently, with no generated metadata or embedd [trimmed for the fixture]",
+    "createdAt": "2026-11-07T15:18:51Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6708878045",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj-emSw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default bundle to [CodeQL Bundle 2.27.4](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds warnings for obsolete CodeQL versions and unsupported macOS/Xcode traced analyses, and removes an undocumented TRAP-cache cleanup switch. This repository’s four direct call sites use the default tooling on Ubuntu without that environment switch, and the PR coherently updates every pin and version comment to the same action commit, so [trimmed for the fixture]",
+    "createdAt": "2026-11-07T15:48:00Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6709290571",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj-52kw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle to [2.27.4](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented cache-cleanup environment switch while warning if it is still set; that scope is consistent with a patch release. All four direct call sites are pinned coherently to the release commit, run on Ubuntu, do not set the removed environment switch or a custom CodeQ [trimmed for the fixture]",
+    "createdAt": "2026-11-07T16:20:55Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6709737107",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj_Smlw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode warnings, and removes an undocumented TRAP-cache cleanup flag; the bundle portion is a focused generated-code update in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), consistent with a patch release. All three action entry points are directly used by this repository, but its four call sites run on Ubuntu, do not pin an old CodeQL version, and do [trimmed for the fixture]",
+    "createdAt": "2026-11-07T16:48:59Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6710142615",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABj_ryWg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for discontinued CodeQL versions and macOS/Xcode traced analysis, and removes an undocumented TRAP-cache cleanup environment switch, which is consistent with a patch release. This repository reaches the updated init, analyze, and upload-sarif actions from two Ubuntu workflows, without pinning a custom CodeQL version or setting the removed environment variable, so no incompatibility is evident at thos [trimmed for the fixture]",
+    "createdAt": "2026-11-07T17:18:06Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6710555226",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkAASwg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: High**\n\nThe repository patch consistently updates all four reachable `init`, `analyze`, and `upload-sarif` pins, while the [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds compatibility warnings, and removes an undocumented cleanup environment switch that this repository does not use; that scope is consistent with a patch bump. However, the immediately following [v4.39.3 release](https://github.com/github/codeql-action/releases/tag/v4.39.3) fixes diff-informed alert filt [trimmed for the fixture]",
+    "createdAt": "2026-11-07T17:48:38Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6710891202",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkAWWJw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; that scope is consistent with a patch release. The updated actions directly run initialization and analysis in the Code Scanning workflow and SARIF uploads there and in the Go vulnerability workflow, and none of those call sites sets the removed environment variable. The PR's own patch was unavailable  [trimmed for the fixture]",
+    "createdAt": "2026-11-07T18:20:51Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6711252519",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkApD_Q",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) advances the default CodeQL bundle, adds deprecation and unsupported-platform warnings, and removes an undocumented cache-cleanup environment switch; the directly inspected [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) source change updates the bundled defaults consistently with a patch release. This repository invokes all three updated entry points directly, only on Ubuntu runners, does not set the removed envi [trimmed for the fixture]",
+    "createdAt": "2026-11-07T18:48:43Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6711559165",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkA8Juw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch; those maintenance changes are consistent with a patch release. This repository directly invokes all three bumped entrypoints on Ubuntu, does not set the removed environment switch, and does not exercise the affected macOS/Xcode mode. I could not obtain the PR's own diff through the availabl [trimmed for the fixture]",
+    "createdAt": "2026-11-07T19:17:56Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6711871931",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkBPTNA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes the undocumented TRAP-cache cleanup environment-variable behavior; the bundle change itself is the focused [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) metadata and bundled-entry-point update expected for a patch release. This repository invokes `init`, `analyze`, and `upload-sarif` in its [trimmed for the fixture]",
+    "createdAt": "2026-11-07T19:47:25Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6712185652",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkBkLmA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream action release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default bundle through [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), adds compatibility warnings, and removes an undocumented trap-cache cleanup switch, which is consistent with a patch release. The [bundled CLI release](https://github.com/github/codeql-cli-binaries/releases/tag/v2.27.4) fixes pack-archive symlink containment and JVM message routing, while the shipped Go and Actions query pac [trimmed for the fixture]",
+    "createdAt": "2026-11-07T20:19:47Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6712527768",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkB2Ghg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented cache-cleanup environment switch; those changes are consistent with a patch release. This repository invokes `init`, `analyze`, and `upload-sarif` from Ubuntu jobs, does not set the removed environment switch or pin a CodeQL bundle, and uses `upload-sarif` in the separate vulnerability-report workflow, so no usage incompatibilit [trimmed for the fixture]",
+    "createdAt": "2026-11-07T20:47:40Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6712821382",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkCJfzA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe upstream [release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle to [2.27.4](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is consistent with a patch release. The repository's four observed call sites run on Ubuntu, do not pin an older CodeQL bundle or set the removed environment switch, and the PR updates every grouped action reference [trimmed for the fixture]",
+    "createdAt": "2026-11-07T21:18:07Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6713139148",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkCcP9w",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe upstream [release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle through [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), adds deprecation and macOS/Xcode compatibility warnings, and removes an undocumented cleanup behavior that had already been announced for removal; these are consistent with a patch release. This repository directly invokes all three updated entrypoints on Ubuntu, does not set the removed cleanup environment variable or pin a [trimmed for the fixture]",
+    "createdAt": "2026-11-07T21:48:00Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6713446391",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkCvyVw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\n[The upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) advances the default CodeQL bundle through [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), adds deprecation and macOS/Xcode warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is a contained change consistent with the patch bump. This repository invokes the three actions directly on Ubuntu, does not set the removed environment switch or pin a discontinued CodeQL bundle, and the PR u [trimmed for the fixture]",
+    "createdAt": "2026-11-07T22:18:56Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6713766487",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkDBT-w",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is consistent with a patch release. These behaviors directly reach the repository's `init`, `analyze`, and `upload-sarif` workflow steps, but the observed Ubuntu call sites do not set the removed environment switch or use the affected macOS tracing scenario. The required PR diff was u [trimmed for the fixture]",
+    "createdAt": "2026-11-07T22:47:12Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6714053627",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkDUckQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe upstream [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode tracing warnings, and removes an undocumented TRAP-cache cleanup feature, which is consistent with a patch release. The action is directly reached through four `init`, `analyze`, and `upload-sarif` uses in the CodeQL and vulnerability-report workflows; those Ubuntu jobs neither set the removed cleanup variable nor exercise the macOS warning path, so no incompatibility is ev [trimmed for the fixture]",
+    "createdAt": "2026-11-07T23:18:38Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6714367121",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkDmKyw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and unsupported macOS/Xcode warnings, and removes an undocumented TRAP-cache cleanup flag; this repository's direct call sites run on Ubuntu and do not set that flag, so the reachable behavior appears compatible. The bundle update is a narrow metadata change in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa), consistent with a patch release. The [trimmed for the fixture]",
+    "createdAt": "2026-11-07T23:48:47Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6714657483",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkEHopg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup toggle; this scope is consistent with a patch update. This repository’s four call sites use the standard init, analyze, and SARIF-upload paths on Ubuntu, do not configure the removed toggle, and are coherently pinned to the release tag’s exact [`1fc58d0`](https://github.com/github/codeql-action/commit/1fc58d04a4d4374f921bdac573 [trimmed for the fixture]",
+    "createdAt": "2026-11-08T00:44:33Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6715205798",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkEP2zg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for discontinued CodeQL versions and unsupported traced analyses on future macOS/Xcode versions, and removes the previously deprecated `CODEQL_ACTION_CLEANUP_TRAP_CACHES` behavior. The affected actions are used by this repository for CodeQL initialization and analysis and for SARIF uploads, although the removed environment-variable feature is not configured at those call sites. The PR's own diff was  [trimmed for the fixture]",
+    "createdAt": "2026-11-08T00:58:34Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6715340494",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkEc1UA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented cleanup environment-variable behavior, which is consistent with a patch release. The changed direct action references are limited to the CodeQL workflow and SARIF upload workflow; this repository does not set the removed environment variable, pin a custom CodeQL version, or run the CodeQL workflow on macOS, and the affected CodeQL jobs completed  [trimmed for the fixture]",
+    "createdAt": "2026-11-08T01:20:51Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6715553104",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkEsj9Q",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch. This repository directly invokes all three updated action entrypoints, but its CodeQL job runs on Ubuntu and neither affected workflow sets that environment switch; the action inputs, outputs, permissions, and generated metadata remain coherent, so the changes are consistent with a patch update and require n [trimmed for the fixture]",
+    "createdAt": "2026-11-08T01:48:16Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6715810805",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkFBRbA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch. This repository directly invokes the updated actions in four Ubuntu workflow steps and does not configure the removed switch, so the observed usage shows no incompatibility. However, the required pull-request diff and head-file contents were blocked by the GitHub integrity and secrecy filte [trimmed for the fixture]",
+    "createdAt": "2026-11-08T02:25:16Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6716150124",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkFN5kA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) advances the default CodeQL bundle, adds deprecation and macOS/Xcode warnings, and removes an undocumented cache-cleanup environment feature; the [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) source change updates the source and bundled defaults consistently, matching a patch update. The repository reaches these entrypoints directly from its [Code scanning workflow](https://github.com/cli/cli/blob/eeb44bc432c010 [trimmed for the fixture]",
+    "createdAt": "2026-11-08T02:48:44Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6716357008",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkFhavQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for obsolete CodeQL and macOS/Xcode configurations, and removes an undocumented TRAP-cache cleanup switch; these are consistent with a patch release, and the three actions' input, output, and entrypoint metadata are unchanged. The PR coherently updates all four direct workflow call sites to the release tag's exact SHA, while this repository's Ubuntu-based jobs do not set the removed environment switch or an affected C [trimmed for the fixture]",
+    "createdAt": "2026-11-08T03:24:04Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6716676797",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkFuYkA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; that scope is consistent with a patch release. This repository invokes the updated actions in Ubuntu-based CodeQL analysis and SARIF-upload jobs, does not set the removed environment switch, and therefore primarily receives the bundle update. I could not inspect the PR's own diff because it was unavail [trimmed for the fixture]",
+    "createdAt": "2026-11-08T03:48:30Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6716889232",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkGAVxA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe upstream [v4.39.2 release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes the undocumented TRAP-cache cleanup behavior, which is a plausible patch-release scope. The checked-out workflows invoke the updated actions on Ubuntu, do not set the removed cleanup environment variable, and do not pin a custom CodeQL version, so the observed upstream changes do not expose an incompatibility in those call sites. Howeve [trimmed for the fixture]",
+    "createdAt": "2026-11-08T04:22:29Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6717183428",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkGNcgQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; the bundle change is confirmed by [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) and is consistent with a patch release. This repository directly invokes the init, analyze, and upload-sarif actions on Ubuntu, does not set the removed environment swi [trimmed for the fixture]",
+    "createdAt": "2026-11-08T04:48:05Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6717398145",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkGd99A",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for obsolete CodeQL versions and unsupported macOS/Xcode traced analyses, and removes an undocumented cache-cleanup environment-variable path; the concrete bundle change is the focused [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) defaults update, consistent with a patch release. This repository invokes the three updated entry points only in Ubuntu jobs, does not  [trimmed for the fixture]",
+    "createdAt": "2026-11-08T05:20:28Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6717668852",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkGsJ6A",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds compatibility warnings for older CodeQL and macOS/Xcode traced analysis, and removes an undocumented environment-controlled cleanup feature; the bundle update itself is the focused metadata change in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa). This repository runs the analysis on Ubuntu, does not set the removed environment variable, and the PR coherently updates all fo [trimmed for the fixture]",
+    "createdAt": "2026-11-08T05:48:48Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6717901288",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkG__4A",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode compatibility warnings, and removes an undocumented TRAP-cache cleanup path; the bundle change is the focused [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) update, consistent with a patch release. This repository reaches all three action entry points only in Ubuntu jobs, does not select an old CodeQL version or enable the removed cleanup path, a [trimmed for the fixture]",
+    "createdAt": "2026-11-08T06:27:31Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6718226400",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkHKxOA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default [CodeQL bundle](https://github.com/github/codeql-action/releases/tag/codeql-bundle-v2.27.4), adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; the direct [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa) source change confirms the default bundle/CLI update. This is consistent with a patch update, and the repository's Ubuntu CodeQL an [trimmed for the fixture]",
+    "createdAt": "2026-11-08T06:48:30Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6718402872",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkHcS7g",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes the undocumented TRAP-cache cleanup environment behavior; that scope is consistent with a patch release and does not conflict with this repository’s Ubuntu-based `init`, `analyze`, and `upload-sarif` call sites. The PR’s own diff was unavailable through the read tooling, so I could not directly verify that all action pins and any associated met [trimmed for the fixture]",
+    "createdAt": "2026-11-08T07:22:14Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6718690030",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkHqKpg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and platform warnings, and removes an undocumented TRAP-cache cleanup switch; the concrete bundle change is limited to version defaults in [`2ef3b62`](https://github.com/github/codeql-action/commit/2ef3b622017573270975effb6820567f855245aa). That scope is consistent with a patch update, and this repository runs the action on Ubuntu without the removed environment switch or a pinned older CodeQL bundle. The PR update [trimmed for the fixture]",
+    "createdAt": "2026-11-08T07:48:28Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6718917286",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkH8_Hw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [target release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch, which is consistent with a patch update. The actions are called directly by the CodeQL and vulnerability-scanning jobs; both run on Ubuntu, do not set the removed environment switch, and do not pin an obsolete bundle, so the bundle update is the material reachable change. Review is warranted because the  [trimmed for the fixture]",
+    "createdAt": "2026-11-08T08:23:23Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6719225631",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkIOmVw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "> [!WARNING]\n> threat detection engine error\n> The threat detection engine encountered an error and could not complete analysis. This is a tooling failure, not a security finding.\n>\n> <!-- gh-aw-threat-engine-error -->\n>\n> <details>\n> <summary>What happened</summary>\n>\n> The threat detection engine failed to produce results.\n>\n> Review the [workflow run logs](https://github.com/cli/cli/actions/runs/42464127931) for details.\n>\n> </details>\n\n**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates  [trimmed for the fixture]",
+    "createdAt": "2026-11-08T08:55:30Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6719514199",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkIycqw",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe upstream [release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds compatibility and deprecation warnings, and removes an undocumented TRAP-cache cleanup switch; these are consistent with a backward-compatible patch. All bumped entrypoints are directly used by Ubuntu workflows here, which neither pin an obsolete CodeQL bundle nor enable the removed switch, and the PR changes only the matching action SHAs and version comments without altering inputs, outputs, permissions, or generated metadata [trimmed for the fixture]",
+    "createdAt": "2026-11-08T10:00:05Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6720101547",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkJFp4g",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch; the repository’s observed call sites use `init`, `analyze`, and `upload-sarif` on Ubuntu and do not set that switch, so no compatibility issue is apparent. However, the PR’s own diff was unavailable through the approved GitHub read path, so I could not directly verify that the reported two-file, four-l [trimmed for the fixture]",
+    "createdAt": "2026-11-08T10:34:51Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6720416226",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkJPfVA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented, previously deprecated TRAP-cache cleanup switch; these are compatible with a patch release. This repository invokes the init, analyze, and upload-sarif actions only in Ubuntu jobs, does not set the removed environment switch, and therefore has no evident usage conflict. However, the PR's own diff was unavailable because the rea [trimmed for the fixture]",
+    "createdAt": "2026-11-08T10:52:25Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6720577364",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkJeKBQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for obsolete custom CodeQL versions and unsupported macOS/Xcode traced analysis, and removes an undocumented opt-in cache-cleanup path; that scope is consistent with a patch release. All three actions are direct workflow dependencies, the repository does not configure the affected custom version or cache-cleanup behavior, and the PR consistently updates all four pinned `uses:` lines to the release commit without leavi [trimmed for the fixture]",
+    "createdAt": "2026-11-08T11:18:07Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6720817669",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkKFKFA",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is consistent with a patch release. The actions are directly used by the repository's CodeQL and vulnerability-report workflows; those call sites run on Linux and do not set the removed environment switch, so no incompatibility is apparent. However, the required PR diff and upstream c [trimmed for the fixture]",
+    "createdAt": "2026-11-08T12:25:03Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6721456660",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkKTMOQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup environment switch, which is broader than a bundle-only refresh but remains consistent with a patch release. All three updated entry points are directly reached by the repository's CodeQL scanning workflow, while upload-sarif is also used by the Go vulnerability workflow; neither observed call site sets the re [trimmed for the fixture]",
+    "createdAt": "2026-11-08T12:48:23Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6721686585",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkKmLLg",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe upstream [release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds deprecation and macOS/Xcode traced-analysis warnings, and removes an undocumented TRAP-cache cleanup switch, which is consistent with a patch release. This repository reaches the actions through Ubuntu jobs using `init`, `analyze`, and `upload-sarif`; those call sites do not select an old CodeQL version, use the removed environment switch, or run the affected macOS traced analysis. However, the PR patch was u [trimmed for the fixture]",
+    "createdAt": "2026-11-08T13:19:30Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6721997614",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkK4KyQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Merge, Confidence: High**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle and adds deprecation or compatibility warnings for retired CodeQL versions, macOS/Xcode traced analysis, and the removed TRAP-cache cleanup environment variable, which is consistent with a patch release. This repository reaches all three actions in its Ubuntu CodeQL and SARIF-upload workflows, does not configure the affected legacy behaviors, and the pinned [`init`](https://github.com/github/codeql-action/blob/1fc58d04a4d4374f921bda [trimmed for the fixture]",
+    "createdAt": "2026-11-08T13:48:29Z",
+    "includesCreatedEdit": false,
+    "isMinimized": true,
+    "minimizedReason": "outdated",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6722292425",
+    "viewerDidAuthor": false
+   },
+   {
+    "id": "IC_kwDODKw3uc8AAAABkLLiOQ",
+    "author": {
+     "login": "cli-triage"
+    },
+    "authorAssociation": "NONE",
+    "body": "**Recommendation: Review before merging, Confidence: Medium**\n\nThe [upstream release](https://github.com/github/codeql-action/releases/tag/v4.39.2) updates the default CodeQL bundle, adds warnings for discontinued CodeQL versions and traced macOS/Xcode 27 analyses, and removes an undocumented TRAP-cache cleanup environment behavior; that scope is consistent with a patch release. This repository invokes `init`, `analyze`, and `upload-sarif` on Ubuntu without the affected old-version pin, macOS runner, or cleanup environment variable, so no material behavior change appears reachable. However, th [trimmed for the fixture]",
+    "createdAt": "2026-11-08T14:18:47Z",
+    "includesCreatedEdit": false,
+    "isMinimized": false,
+    "minimizedReason": "",
+    "reactionGroups": [],
+    "url": "https://github.com/cli/cli/pull/14964#issuecomment-6722609721",
+    "viewerDidAuthor": false
+   }
+  ],
+  "headRefName": "dependabot/github_actions/codeql-actions-92276e7fb0",
+  "headRefOid": "dab49c4e4a2c5b75c27cd8bae26fbb0970316364",
+  "isDraft": false,
+  "labels": [
+   {
+    "id": "LA_kwDODKw3uc8AAAABYP6ixA",
+    "name": "dependencies",
+    "description": "Pull requests that update a dependency file",
+    "color": "0366d6"
+   },
+   {
+    "id": "LA_kwDODKw3uc8AAAABYP6iyg",
+    "name": "github_actions",
+    "description": "Pull requests that update GitHub Actions code",
+    "color": "000000"
+   }
+  ],
+  "latestReviews": [
+   {
+    "id": "",
+    "author": {
+     "login": "copilot-pull-request-reviewer"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "body": "<!-- ccr-overview-v2 -->\n\n### 🟢 Approval recommended\n\nThere are no active review issues for the CodeQL Action dependency update from v4.39.1 to v4.39.2.\n\n**No open issues** 🎉\n\n<details>\n<summary><strong>What changed in this PR</strong></summary>\n\nUpdates the CodeQL Action dependencies used by GitHub CLI’s security-scanning workflows from v4.39.1 to v4.39.2.\n\n**Changes:**\n- Updates `init`, `analyze`, and `upload-sarif` to the same pinned commit.\n- Updates version comments while leaving workflow configuration unchanged.\n\n| File | Description |\r\n| ---- | ----------- |\r\n| `.github/​workflows/​govu [trimmed for the fixture]",
+    "submittedAt": "2026-11-06T14:04:52Z",
+    "includesCreatedEdit": false,
+    "reactionGroups": [],
+    "state": "COMMENTED",
+    "commit": {
+     "oid": ""
+    }
+   }
+  ],
+  "number": 14964,
+  "reviewDecision": "REVIEW_REQUIRED",
+  "reviewRequests": [
+   {
+    "__typename": "User",
+    "login": "babakks"
+   }
+  ],
+  "state": "OPEN",
+  "statusCheckRollup": [
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230521101/job/127934928212",
+    "name": "label-external",
+    "startedAt": "2026-11-06T14:03:21Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230522203/job/127934930325",
+    "name": "label-external",
+    "startedAt": "2026-11-06T14:03:22Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:06:40Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230519580/job/127934916796",
+    "name": "CodeQL-Build (go, manual, ./.github/codeql/codeql-config.yml)",
+    "startedAt": "2026-11-06T14:03:23Z",
+    "status": "COMPLETED",
+    "workflowName": "Code Scanning"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:35Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230516639/job/127934910476",
+    "name": "label-external / label_issues",
+    "startedAt": "2026-11-06T14:03:32Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:06:11Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230519488/job/127934916165",
+    "name": "build (ubuntu-latest)",
+    "startedAt": "2026-11-06T14:03:22Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:04:05Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230519580/job/127934917064",
+    "name": "CodeQL-Build (actions, none, security-and-quality)",
+    "startedAt": "2026-11-06T14:03:23Z",
+    "status": "COMPLETED",
+    "workflowName": "Code Scanning"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:09:31Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230519488/job/127934916392",
+    "name": "build (windows-latest)",
+    "startedAt": "2026-11-06T14:03:22Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:07:26Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230519488/job/127934916710",
+    "name": "build (macos-latest)",
+    "startedAt": "2026-11-06T14:03:23Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230521101/job/127935002225",
+    "name": "close-from-default-branch",
+    "startedAt": "2026-11-06T14:03:31Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230522203/job/127934930277",
+    "name": "close-from-default-branch",
+    "startedAt": "2026-11-06T14:03:22Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:19Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230516639/job/127934912634",
+    "name": "close-from-default-branch / close-from-default-branch",
+    "startedAt": "2026-11-06T14:03:19Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:04:17Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230519488/job/127934916736",
+    "name": "integration-tests (ubuntu-latest)",
+    "startedAt": "2026-11-06T14:03:23Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:05:26Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230519488/job/127934916681",
+    "name": "integration-tests (windows-latest)",
+    "startedAt": "2026-11-06T14:03:23Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:04:44Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230519488/job/127934916582",
+    "name": "integration-tests (macos-latest)",
+    "startedAt": "2026-11-06T14:03:23Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230521101/job/127934927528",
+    "name": "check-requirements",
+    "startedAt": "2026-11-06T14:03:21Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230522203/job/127934979869",
+    "name": "check-requirements",
+    "startedAt": "2026-11-06T14:03:28Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:19Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230516639/job/127934912723",
+    "name": "check-requirements / check-requirements",
+    "startedAt": "2026-11-06T14:03:19Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:19Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230516639/job/127934913403",
+    "name": "check-requirements / close-unmet-requirements",
+    "startedAt": "2026-11-06T14:03:19Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:19Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230516639/job/127934912026",
+    "name": "close-unmet-requirements",
+    "startedAt": "2026-11-06T14:03:19Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230521101/job/127934993929",
+    "name": "close-unmet-requirements",
+    "startedAt": "2026-11-06T14:03:30Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230522203/job/127935005940",
+    "name": "close-unmet-requirements",
+    "startedAt": "2026-11-06T14:03:31Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:19Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230516639/job/127934987630",
+    "name": "close-no-help-wanted",
+    "startedAt": "2026-11-06T14:03:29Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230521101/job/127934927027",
+    "name": "close-no-help-wanted / close-no-help-wanted",
+    "startedAt": "2026-11-06T14:03:21Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230522203/job/127934985119",
+    "name": "close-no-help-wanted / close-no-help-wanted",
+    "startedAt": "2026-11-06T14:03:28Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:19Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230516639/job/127934972277",
+    "name": "ready-for-review",
+    "startedAt": "2026-11-06T14:03:27Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230521101/job/127935001240",
+    "name": "ready-for-review / ready-for-review",
+    "startedAt": "2026-11-06T14:03:31Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:21Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/42230522203/job/127934931247",
+    "name": "ready-for-review / ready-for-review",
+    "startedAt": "2026-11-06T14:03:22Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-06T14:03:59Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/runs/127935203732",
+    "name": "CodeQL",
+    "startedAt": "2026-11-06T14:03:55Z",
+    "status": "COMPLETED",
+    "workflowName": ""
+   }
+  ],
+  "title": "chore(deps): Bump the codeql-actions group with 3 updates",
+  "updatedAt": "2026-11-08T14:18:48Z",
+  "url": "https://github.com/cli/cli/pull/14964"
+ },
+ {
+  "author": {
+   "id": "MDQ6VXNlcjE2MTE1MTA=",
+   "is_bot": false,
+   "login": "williammartin"
+  },
+  "baseRefName": "williammartin-multiaccount-draft-07-explain",
+  "comments": [],
+  "headRefName": "williammartin-multiaccount-draft-08-evaluation",
+  "headRefOid": "d43c4e3ad3c34332c803a568f85f116e3ee58f19",
+  "isDraft": true,
+  "labels": [],
+  "latestReviews": [
+   {
+    "id": "",
+    "author": {
+     "login": "copilot-pull-request-reviewer"
+    },
+    "authorAssociation": "CONTRIBUTOR",
+    "body": "<!-- ccr-overview-v2 -->\n\n### 🟡 Changes recommended\n\nOffline fixtures still access the operator’s native keyring, while other active findings identify broken standard acceptance runs, lost API gateway routing, and missing direct capability-output coverage.\n\n<details open>\n<summary><strong>4 open issues</strong></summary>\n\n- <picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://github.githubassets.com/static/images/icons/copilot-code-review/high-v2-dark.svg\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://github.githubassets.com/static/images/icons/copilot-code-rev [trimmed for the fixture]",
+    "submittedAt": "2026-11-03T21:27:59Z",
+    "includesCreatedEdit": false,
+    "reactionGroups": [],
+    "state": "COMMENTED",
+    "commit": {
+     "oid": ""
+    }
+   }
+  ],
+  "number": 14927,
+  "reviewDecision": "REVIEW_REQUIRED",
+  "reviewRequests": [],
+  "state": "OPEN",
+  "statusCheckRollup": [
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:29:08Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41722208901/job/126217657403",
+    "name": "label-external",
+    "startedAt": "2026-11-03T21:29:09Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:23:31Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41721000240/job/126213408501",
+    "name": "CodeQL-Build (go, manual, ./.github/codeql/codeql-config.yml)",
+    "startedAt": "2026-11-03T21:21:08Z",
+    "status": "COMPLETED",
+    "workflowName": "Code Scanning"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:22:59Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720843855/job/126212878043",
+    "name": "lint",
+    "startedAt": "2026-11-03T21:20:09Z",
+    "status": "COMPLETED",
+    "workflowName": "Lint"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:20:13Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720845088/job/126212885818",
+    "name": "label-external / label_issues",
+    "startedAt": "2026-11-03T21:20:09Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:24:48Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720844033/job/126212878347",
+    "name": "build (ubuntu-latest)",
+    "startedAt": "2026-11-03T21:20:09Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:27:04Z",
+    "conclusion": "FAILURE",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720844033/job/126212878432",
+    "name": "build (windows-latest)",
+    "startedAt": "2026-11-03T21:20:11Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:22:18Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41721000240/job/126213408141",
+    "name": "CodeQL-Build (actions, none, security-and-quality)",
+    "startedAt": "2026-11-03T21:21:07Z",
+    "status": "COMPLETED",
+    "workflowName": "Code Scanning"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:28:23Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720844033/job/126212877913",
+    "name": "build (macos-latest)",
+    "startedAt": "2026-11-03T21:20:12Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:29:08Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41722208901/job/126217658515",
+    "name": "close-from-default-branch",
+    "startedAt": "2026-11-03T21:29:09Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:20:06Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720845088/job/126212888648",
+    "name": "close-from-default-branch / close-from-default-branch",
+    "startedAt": "2026-11-03T21:20:07Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:21:05Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720843855/job/126212877473",
+    "name": "govulncheck",
+    "startedAt": "2026-11-03T21:20:08Z",
+    "status": "COMPLETED",
+    "workflowName": "Lint"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:21:16Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720844033/job/126212878283",
+    "name": "integration-tests (ubuntu-latest)",
+    "startedAt": "2026-11-03T21:20:09Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:22:44Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720844033/job/126212878343",
+    "name": "integration-tests (windows-latest)",
+    "startedAt": "2026-11-03T21:20:08Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:21:31Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720844033/job/126212878267",
+    "name": "integration-tests (macos-latest)",
+    "startedAt": "2026-11-03T21:20:08Z",
+    "status": "COMPLETED",
+    "workflowName": "Unit and Integration Tests"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:20:06Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720845088/job/126212888046",
+    "name": "check-requirements / check-requirements",
+    "startedAt": "2026-11-03T21:20:07Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:29:08Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41722208901/job/126217709553",
+    "name": "check-requirements / check-requirements",
+    "startedAt": "2026-11-03T21:29:15Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:20:06Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720845088/job/126212888094",
+    "name": "check-requirements / close-unmet-requirements",
+    "startedAt": "2026-11-03T21:20:07Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:29:08Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41722208901/job/126217723786",
+    "name": "check-requirements / close-unmet-requirements",
+    "startedAt": "2026-11-03T21:29:17Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:20:06Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720845088/job/126212888523",
+    "name": "close-unmet-requirements",
+    "startedAt": "2026-11-03T21:20:07Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:29:08Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41722208901/job/126217704899",
+    "name": "close-unmet-requirements",
+    "startedAt": "2026-11-03T21:29:14Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:20:06Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720845088/job/126212888516",
+    "name": "close-no-help-wanted",
+    "startedAt": "2026-11-03T21:20:07Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:29:08Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41722208901/job/126217658068",
+    "name": "close-no-help-wanted",
+    "startedAt": "2026-11-03T21:29:09Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:20:06Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41720845088/job/126212888831",
+    "name": "ready-for-review",
+    "startedAt": "2026-11-03T21:20:07Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:29:08Z",
+    "conclusion": "SKIPPED",
+    "detailsUrl": "https://github.com/cli/cli/actions/runs/41722208901/job/126217716143",
+    "name": "ready-for-review",
+    "startedAt": "2026-11-03T21:29:16Z",
+    "status": "COMPLETED",
+    "workflowName": "PR Triaging"
+   },
+   {
+    "__typename": "CheckRun",
+    "completedAt": "2026-11-03T21:22:11Z",
+    "conclusion": "SUCCESS",
+    "detailsUrl": "https://github.com/cli/cli/runs/126213975170",
+    "name": "CodeQL",
+    "startedAt": "2026-11-03T21:22:08Z",
+    "status": "COMPLETED",
+    "workflowName": ""
+   }
+  ],
+  "title": "Add guided multi-account setup and evaluation",
+  "updatedAt": "2026-11-03T21:29:03Z",
+  "url": "https://github.com/cli/cli/pull/14927"
+ }
+]

@@ -1,0 +1,608 @@
+﻿2026-11-08T07:47:17.1901456Z ##[debug]Starting: production
+2026-11-08T07:47:17.1924134Z ##[debug]Cleaning runner temp folder: /home/runner/work/_temp
+2026-11-08T07:47:17.2070874Z ##[debug]Starting: Set up job
+2026-11-08T07:47:17.2072366Z Current runner version: '2.338.2'
+2026-11-08T07:47:17.2095061Z ##[group]Runner Image Provisioner
+2026-11-08T07:47:17.2095973Z Hosted Compute Agent
+2026-11-08T07:47:17.2096597Z Version: 20261028.624
+2026-11-08T07:47:17.2097314Z Commit: 54898b74c23fde5556c9b3c3a2290865feef0dfe
+2026-11-08T07:47:17.2098088Z Build Date: 2026-10-28T21:51:42Z
+2026-11-08T07:47:17.2098742Z Worker ID: {4109f86b-8804-444e-87d7-576e2b837381}
+2026-11-08T07:47:17.2099521Z Region: southcentralus
+2026-11-08T07:47:17.2100103Z Cloud: Azure
+2026-11-08T07:47:17.2100762Z ##[endgroup]
+2026-11-08T07:47:17.2102643Z ##[group]Operating System
+2026-11-08T07:47:17.2103611Z Ubuntu
+2026-11-08T07:47:17.2104252Z 26.04.1
+2026-11-08T07:47:17.2104768Z LTS
+2026-11-08T07:47:17.2105314Z ##[endgroup]
+2026-11-08T07:47:17.2105920Z ##[group]Runner Image
+2026-11-08T07:47:17.2106783Z Image: ubuntu-26.04
+2026-11-08T07:47:17.2107413Z Version: 20261101.186.1
+2026-11-08T07:47:17.2108994Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261101.186/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-08T07:47:17.2110548Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261101.186
+2026-11-08T07:47:17.2111497Z ##[endgroup]
+2026-11-08T07:47:17.2113223Z ##[group]GITHUB_TOKEN Permissions
+2026-11-08T07:47:17.2115803Z Contents: read
+2026-11-08T07:47:17.2116805Z Metadata: read
+2026-11-08T07:47:17.2117428Z ##[endgroup]
+2026-11-08T07:47:17.2120224Z Secret source: Actions
+2026-11-08T07:47:17.2121485Z Cache mode: write
+2026-11-08T07:47:17.2123089Z ##[debug]Primary repository: Lyssaen/ledge
+2026-11-08T07:47:17.2124735Z Prepare workflow directory
+2026-11-08T07:47:17.2199924Z ##[debug]Creating pipeline directory: '/home/runner/work/ledge'
+2026-11-08T07:47:17.2203999Z ##[debug]Creating workspace directory: '/home/runner/work/ledge/ledge'
+2026-11-08T07:47:17.2205672Z ##[debug]Update context data
+2026-11-08T07:47:17.2209269Z ##[debug]Evaluating job-level environment variables
+2026-11-08T07:47:17.2587661Z ##[debug]Evaluating: (github.event_name == 'push')
+2026-11-08T07:47:17.2594790Z ##[debug]Evaluating Equal:
+2026-11-08T07:47:17.2596788Z ##[debug]..Evaluating Index:
+2026-11-08T07:47:17.2599785Z ##[debug]....Evaluating github:
+2026-11-08T07:47:17.2608862Z ##[debug]....=> Object
+2026-11-08T07:47:17.2618516Z ##[debug]....Evaluating String:
+2026-11-08T07:47:17.2620312Z ##[debug]....=> 'event_name'
+2026-11-08T07:47:17.2625184Z ##[debug]..=> 'push'
+2026-11-08T07:47:17.2626168Z ##[debug]..Evaluating String:
+2026-11-08T07:47:17.2626840Z ##[debug]..=> 'push'
+2026-11-08T07:47:17.2630714Z ##[debug]=> true
+2026-11-08T07:47:17.2635653Z ##[debug]Expanded: ('push' == 'push')
+2026-11-08T07:47:17.2636418Z ##[debug]Result: true
+2026-11-08T07:47:17.2667253Z ##[debug]Evaluating: (((github.event_name == 'push') && github.ref_name) || format('v{0}', inputs.version))
+2026-11-08T07:47:17.2668441Z ##[debug]Evaluating Or:
+2026-11-08T07:47:17.2670894Z ##[debug]..Evaluating And:
+2026-11-08T07:47:17.2673655Z ##[debug]....Evaluating Equal:
+2026-11-08T07:47:17.2674429Z ##[debug]......Evaluating Index:
+2026-11-08T07:47:17.2675185Z ##[debug]........Evaluating github:
+2026-11-08T07:47:17.2675971Z ##[debug]........=> Object
+2026-11-08T07:47:17.2676671Z ##[debug]........Evaluating String:
+2026-11-08T07:47:17.2677423Z ##[debug]........=> 'event_name'
+2026-11-08T07:47:17.2678544Z ##[debug]......=> 'push'
+2026-11-08T07:47:17.2679253Z ##[debug]......Evaluating String:
+2026-11-08T07:47:17.2679920Z ##[debug]......=> 'push'
+2026-11-08T07:47:17.2680612Z ##[debug]....=> true
+2026-11-08T07:47:17.2682552Z ##[debug]....Evaluating Index:
+2026-11-08T07:47:17.2683434Z ##[debug]......Evaluating github:
+2026-11-08T07:47:17.2684312Z ##[debug]......=> Object
+2026-11-08T07:47:17.2684965Z ##[debug]......Evaluating String:
+2026-11-08T07:47:17.2685685Z ##[debug]......=> 'ref_name'
+2026-11-08T07:47:17.2686752Z ##[debug]....=> 'v0.53.0'
+2026-11-08T07:47:17.2687382Z ##[debug]..=> 'v0.53.0'
+2026-11-08T07:47:17.2688985Z ##[debug]=> 'v0.53.0'
+2026-11-08T07:47:17.2696168Z ##[debug]Expanded: ((('push' == 'push') && 'v0.53.0') || format('v{0}', inputs['version']))
+2026-11-08T07:47:17.2697234Z ##[debug]Result: 'v0.53.0'
+2026-11-08T07:47:17.2709783Z ##[debug]Evaluating job container
+2026-11-08T07:47:17.2713454Z ##[debug]Evaluating job service containers
+2026-11-08T07:47:17.2716259Z ##[debug]Evaluating job defaults
+2026-11-08T07:47:17.2747223Z Prepare all required actions
+2026-11-08T07:47:17.2797464Z Getting action download info
+2026-11-08T07:47:17.5120120Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-08T07:47:17.5150080Z ##[debug]Copied action archive '/opt/actionarchivecache/actions_checkout/11d5960a326750d5838078e36cf38b85af677262.tar.gz' to '/home/runner/work/_actions/_temp_8d052347-5f87-4eab-92df-c2a7680e2167/6e870436-6b41-4120-9409-861dd0c9b42d.tar.gz'
+2026-11-08T07:47:17.6017039Z ##[debug]Unwrap 'actions-checkout-11d5960' to '/home/runner/work/_actions/actions/checkout/v4'
+2026-11-08T07:47:17.6155957Z ##[debug]Archive '/home/runner/work/_actions/_temp_8d052347-5f87-4eab-92df-c2a7680e2167/6e870436-6b41-4120-9409-861dd0c9b42d.tar.gz' has been unzipped into '/home/runner/work/_actions/actions/checkout/v4'.
+2026-11-08T07:47:17.6264727Z ##[debug]action.yml for action: '/home/runner/work/_actions/actions/checkout/v4/action.yml'.
+2026-11-08T07:47:17.7126275Z ##[debug]Set step '__run' display name to: 'Check the push token'
+2026-11-08T07:47:17.7130572Z ##[debug]Set step '__actions_checkout' display name to: 'Run actions/checkout@v4'
+2026-11-08T07:47:17.7133511Z ##[debug]Set step '__run_2' display name to: 'Fast-forward production to the release commit'
+2026-11-08T07:47:17.7134644Z Complete job name: production
+2026-11-08T07:47:17.7155122Z ##[debug]Collect running processes for tracking orphan processes.
+2026-11-08T07:47:17.7486697Z ##[debug]Finishing: Set up job
+2026-11-08T07:47:17.7622571Z ##[debug]Evaluating: secrets.PRODUCTION_PUSH_TOKEN
+2026-11-08T07:47:17.7623667Z ##[debug]Evaluating Index:
+2026-11-08T07:47:17.7624207Z ##[debug]..Evaluating secrets:
+2026-11-08T07:47:17.7624770Z ##[debug]..=> Object
+2026-11-08T07:47:17.7625278Z ##[debug]..Evaluating String:
+2026-11-08T07:47:17.7625837Z ##[debug]..=> 'PRODUCTION_PUSH_TOKEN'
+2026-11-08T07:47:17.7627034Z ##[debug]=> '***'
+2026-11-08T07:47:17.7627993Z ##[debug]Result: '***'
+2026-11-08T07:47:17.7629276Z ##[debug]Evaluating condition for step: 'Check the push token'
+2026-11-08T07:47:17.7642094Z ##[debug]Evaluating: success()
+2026-11-08T07:47:17.7643665Z ##[debug]Evaluating success:
+2026-11-08T07:47:17.7650808Z ##[debug]=> true
+2026-11-08T07:47:17.7651984Z ##[debug]Result: true
+2026-11-08T07:47:17.7670399Z ##[debug]Starting: Check the push token
+2026-11-08T07:47:17.7785904Z ##[debug]Loading inputs
+2026-11-08T07:47:17.7791794Z ##[debug]Loading env
+2026-11-08T07:47:17.7869938Z ##[group]Run if [ -z "$PRODUCTION_PUSH_TOKEN" ]; then
+2026-11-08T07:47:17.7870722Z [36;1mif [ -z "$PRODUCTION_PUSH_TOKEN" ]; then[0m
+2026-11-08T07:47:17.7872075Z [36;1m  echo "::error::secret PRODUCTION_PUSH_TOKEN is missing (fine-grained PAT on this repository, Contents and Workflows read and write): production left alone"; exit 1[0m
+2026-11-08T07:47:17.7873500Z [36;1mfi[0m
+2026-11-08T07:47:17.7926346Z shell: /usr/bin/bash -e {0}
+2026-11-08T07:47:17.7927146Z env:
+2026-11-08T07:47:17.7927571Z   PUBLISH: true
+2026-11-08T07:47:17.7928027Z   VERSION_TAG: v0.53.0
+2026-11-08T07:47:17.7929095Z   PRODUCTION_PUSH_TOKEN: ***
+2026-11-08T07:47:17.7929607Z ##[endgroup]
+2026-11-08T07:47:17.8016031Z ##[debug]/usr/bin/bash -e /home/runner/work/_temp/e9d42e86-c049-4f30-bd20-69d8595f6576.sh
+2026-11-08T07:47:17.8124120Z ##[debug]Finishing: Check the push token
+2026-11-08T07:47:17.8143149Z ##[debug]Evaluating condition for step: 'Run actions/checkout@v4'
+2026-11-08T07:47:17.8146146Z ##[debug]Evaluating: success()
+2026-11-08T07:47:17.8146902Z ##[debug]Evaluating success:
+2026-11-08T07:47:17.8147841Z ##[debug]=> true
+2026-11-08T07:47:17.8148538Z ##[debug]Result: true
+2026-11-08T07:47:17.8149558Z ##[debug]Starting: Run actions/checkout@v4
+2026-11-08T07:47:17.8204863Z ##[debug]Register post job cleanup for action: actions/checkout@v4
+2026-11-08T07:47:17.8236601Z ##[debug]Loading inputs
+2026-11-08T07:47:17.8238837Z ##[debug]Evaluating: secrets.PRODUCTION_PUSH_TOKEN
+2026-11-08T07:47:17.8239473Z ##[debug]Evaluating Index:
+2026-11-08T07:47:17.8239978Z ##[debug]..Evaluating secrets:
+2026-11-08T07:47:17.8240511Z ##[debug]..=> Object
+2026-11-08T07:47:17.8240996Z ##[debug]..Evaluating String:
+2026-11-08T07:47:17.8241541Z ##[debug]..=> 'PRODUCTION_PUSH_TOKEN'
+2026-11-08T07:47:17.8242644Z ##[debug]=> '***'
+2026-11-08T07:47:17.8243805Z ##[debug]Result: '***'
+2026-11-08T07:47:17.8250235Z ##[debug]Evaluating: github.repository
+2026-11-08T07:47:17.8250846Z ##[debug]Evaluating Index:
+2026-11-08T07:47:17.8251351Z ##[debug]..Evaluating github:
+2026-11-08T07:47:17.8251873Z ##[debug]..=> Object
+2026-11-08T07:47:17.8252365Z ##[debug]..Evaluating String:
+2026-11-08T07:47:17.8252869Z ##[debug]..=> 'repository'
+2026-11-08T07:47:17.8253588Z ##[debug]=> 'Lyssaen/ledge'
+2026-11-08T07:47:17.8254108Z ##[debug]Result: 'Lyssaen/ledge'
+2026-11-08T07:47:17.8274923Z ##[debug]Loading env
+2026-11-08T07:47:17.8297297Z ##[group]Run actions/checkout@v4
+2026-11-08T07:47:17.8297844Z with:
+2026-11-08T07:47:17.8298253Z   fetch-depth: 0
+2026-11-08T07:47:17.8299183Z   token: ***
+2026-11-08T07:47:17.8299624Z   repository: Lyssaen/ledge
+2026-11-08T07:47:17.8300104Z   ssh-strict: true
+2026-11-08T07:47:17.8300593Z   ssh-user: git
+2026-11-08T07:47:17.8301040Z   persist-credentials: true
+2026-11-08T07:47:17.8301522Z   clean: true
+2026-11-08T07:47:17.8301959Z   sparse-checkout-cone-mode: true
+2026-11-08T07:47:17.8302501Z   fetch-tags: false
+2026-11-08T07:47:17.8303114Z   show-progress: true
+2026-11-08T07:47:17.8303753Z   lfs: false
+2026-11-08T07:47:17.8304179Z   submodules: false
+2026-11-08T07:47:17.8304640Z   set-safe-directory: true
+2026-11-08T07:47:17.8305172Z   allow-unsafe-pr-checkout: false
+2026-11-08T07:47:17.8305680Z env:
+2026-11-08T07:47:17.8306077Z   PUBLISH: true
+2026-11-08T07:47:17.8306505Z   VERSION_TAG: v0.53.0
+2026-11-08T07:47:17.8306950Z ##[endgroup]
+2026-11-08T07:47:18.0877771Z ##[debug]GITHUB_WORKSPACE = '/home/runner/work/ledge/ledge'
+2026-11-08T07:47:18.0880079Z ##[debug]qualified repository = 'Lyssaen/ledge'
+2026-11-08T07:47:18.0881476Z ##[debug]ref = 'refs/tags/v0.53.0'
+2026-11-08T07:47:18.0883243Z ##[debug]commit = '055a347f107fc03c08b0dd07176f88921f1fef5c'
+2026-11-08T07:47:18.0884552Z ##[debug]clean = true
+2026-11-08T07:47:18.0885759Z ##[debug]filter = undefined
+2026-11-08T07:47:18.0886830Z ##[debug]fetch depth = 0
+2026-11-08T07:47:18.0887907Z ##[debug]fetch tags = false
+2026-11-08T07:47:18.0889422Z ##[debug]show progress = true
+2026-11-08T07:47:18.0890570Z ##[debug]lfs = false
+2026-11-08T07:47:18.0891733Z ##[debug]submodules = false
+2026-11-08T07:47:18.0892841Z ##[debug]recursive submodules = false
+2026-11-08T07:47:18.0894253Z ##[debug]GitHub Host URL = 
+2026-11-08T07:47:18.0895353Z ##[debug]allow unsafe PR checkout = false
+2026-11-08T07:47:18.0897655Z ::add-matcher::/home/runner/work/_actions/actions/checkout/v4/dist/problem-matcher.json
+2026-11-08T07:47:18.1020513Z ##[debug]Added matchers: 'checkout-git'. Problem matchers scan action output for known warning or error strings and report these inline.
+2026-11-08T07:47:18.1028522Z Syncing repository: Lyssaen/ledge
+2026-11-08T07:47:18.1031229Z ::group::Getting Git version info
+2026-11-08T07:47:18.1035682Z ##[group]Getting Git version info
+2026-11-08T07:47:18.1037200Z Working directory is '/home/runner/work/ledge/ledge'
+2026-11-08T07:47:18.1039336Z ##[debug]Getting git version
+2026-11-08T07:47:18.1040513Z [command]/usr/bin/git version
+2026-11-08T07:47:18.1043452Z git version 2.56.0
+2026-11-08T07:47:18.1064431Z ##[debug]0
+2026-11-08T07:47:18.1066165Z ##[debug]git version 2.56.0
+2026-11-08T07:47:18.1067209Z ##[debug]
+2026-11-08T07:47:18.1069122Z ##[debug]Set git useragent to: git/2.56.0 (github-actions-checkout)
+2026-11-08T07:47:18.1071791Z ::endgroup::
+2026-11-08T07:47:18.1072807Z ##[endgroup]
+2026-11-08T07:47:18.1079117Z ::add-mask::***
+2026-11-08T07:47:18.1086445Z Temporarily overriding HOME='/home/runner/work/_temp/106aa449-923f-4502-8209-18f926abcdf0' before making global git config changes
+2026-11-08T07:47:18.1089573Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-08T07:47:18.1092318Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/ledge/ledge
+2026-11-08T07:47:18.1166082Z ##[debug]0
+2026-11-08T07:47:18.1168436Z ##[debug]
+2026-11-08T07:47:18.1174774Z Deleting the contents of '/home/runner/work/ledge/ledge'
+2026-11-08T07:47:18.1178138Z ::group::Initializing the repository
+2026-11-08T07:47:18.1179452Z ##[group]Initializing the repository
+2026-11-08T07:47:18.1183228Z [command]/usr/bin/git init /home/runner/work/ledge/ledge
+2026-11-08T07:47:18.1298954Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-08T07:47:18.1300938Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-08T07:47:18.1302102Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-08T07:47:18.1303323Z hint: call:
+2026-11-08T07:47:18.1304176Z hint:
+2026-11-08T07:47:18.1304948Z hint: 	git config --global init.defaultBranch <name>
+2026-11-08T07:47:18.1305727Z hint:
+2026-11-08T07:47:18.1306583Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-08T07:47:18.1307747Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-08T07:47:18.1308753Z hint:
+2026-11-08T07:47:18.1309317Z hint: 	git branch -m <name>
+2026-11-08T07:47:18.1309929Z hint:
+2026-11-08T07:47:18.1310809Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-08T07:47:18.1316111Z Initialized empty Git repository in /home/runner/work/ledge/ledge/.git/
+2026-11-08T07:47:18.1325402Z ##[debug]0
+2026-11-08T07:47:18.1327228Z ##[debug]Initialized empty Git repository in /home/runner/work/ledge/ledge/.git/
+2026-11-08T07:47:18.1328645Z ##[debug]
+2026-11-08T07:47:18.1330388Z [command]/usr/bin/git remote add origin https://github.com/Lyssaen/ledge
+2026-11-08T07:47:18.1385578Z ##[debug]0
+2026-11-08T07:47:18.1386992Z ##[debug]
+2026-11-08T07:47:18.1388508Z ::endgroup::
+2026-11-08T07:47:18.1389366Z ##[endgroup]
+2026-11-08T07:47:18.1390773Z ::group::Disabling automatic garbage collection
+2026-11-08T07:47:18.1392002Z ##[group]Disabling automatic garbage collection
+2026-11-08T07:47:18.1396086Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-08T07:47:18.1433745Z ##[debug]0
+2026-11-08T07:47:18.1435318Z ##[debug]
+2026-11-08T07:47:18.1436852Z ::endgroup::
+2026-11-08T07:47:18.1437681Z ##[endgroup]
+2026-11-08T07:47:18.1439262Z ::group::Setting up auth
+2026-11-08T07:47:18.1440139Z ##[group]Setting up auth
+2026-11-08T07:47:18.1443644Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-08T07:47:18.1476179Z ##[debug]1
+2026-11-08T07:47:18.1477556Z ##[debug]
+2026-11-08T07:47:18.1483543Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-08T07:47:18.2009992Z ##[debug]0
+2026-11-08T07:47:18.2010979Z ##[debug]
+2026-11-08T07:47:18.2018286Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-08T07:47:18.2047323Z ##[debug]1
+2026-11-08T07:47:18.2048520Z ##[debug]
+2026-11-08T07:47:18.2053772Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-08T07:47:18.2323770Z ##[debug]0
+2026-11-08T07:47:18.2325055Z ##[debug]
+2026-11-08T07:47:18.2331217Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-08T07:47:18.2362650Z ##[debug]1
+2026-11-08T07:47:18.2364463Z ##[debug]
+2026-11-08T07:47:18.2370817Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-08T07:47:18.2657391Z ##[debug]0
+2026-11-08T07:47:18.2658977Z ##[debug]
+2026-11-08T07:47:18.2669315Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-08T07:47:18.2703881Z ##[debug]0
+2026-11-08T07:47:18.2705563Z ##[debug]
+2026-11-08T07:47:18.2714833Z ::endgroup::
+2026-11-08T07:47:18.2715841Z ##[endgroup]
+2026-11-08T07:47:18.2717565Z ::group::Fetching the repository
+2026-11-08T07:47:18.2718839Z ##[group]Fetching the repository
+2026-11-08T07:47:18.2728227Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+2026-11-08T07:47:22.5072448Z From https://github.com/Lyssaen/ledge
+2026-11-08T07:47:22.5074841Z  * [new branch]        ci/release-push-production -> origin/ci/release-push-production
+2026-11-08T07:47:22.5076170Z  * [new branch]        ci/snapshot-workflow    -> origin/ci/snapshot-workflow
+2026-11-08T07:47:22.5077345Z  * [new branch]        cursor/desktop-control-terminal-af3a -> origin/cursor/desktop-control-terminal-af3a
+2026-11-08T07:47:22.5078295Z  * [new branch]        design/approved-logo-mascots -> origin/design/approved-logo-mascots
+2026-11-08T07:47:22.5079094Z  * [new branch]        docs/ide-workspace-mockup -> origin/docs/ide-workspace-mockup
+2026-11-08T07:47:22.5079896Z  * [new branch]        docs/ide-workspace-plan -> origin/docs/ide-workspace-plan
+2026-11-08T07:47:22.5080926Z  * [new branch]        docs/ledge-human-operator -> origin/docs/ledge-human-operator
+2026-11-08T07:47:22.5082024Z  * [new branch]        docs/tour-and-link-route -> origin/docs/tour-and-link-route
+2026-11-08T07:47:22.5082777Z  * [new branch]        docs/windows-native-study -> origin/docs/windows-native-study
+2026-11-08T07:47:22.5083917Z  * [new branch]        feat/a-toi              -> origin/feat/a-toi
+2026-11-08T07:47:22.5084597Z  * [new branch]        feat/broadcast          -> origin/feat/broadcast
+2026-11-08T07:47:22.5085296Z  * [new branch]        feat/browser-captures   -> origin/feat/browser-captures
+2026-11-08T07:47:22.5086041Z  * [new branch]        feat/browser-live-front -> origin/feat/browser-live-front
+2026-11-08T07:47:22.5086869Z  * [new branch]        feat/chat-context-guide -> origin/feat/chat-context-guide
+2026-11-08T07:47:22.5087690Z  * [new branch]        feat/context-menus      -> origin/feat/context-menus
+2026-11-08T07:47:22.5088578Z  * [new branch]        feat/decided-by-answers -> origin/feat/decided-by-answers
+2026-11-08T07:47:22.5089388Z  * [new branch]        feat/goal-to-max        -> origin/feat/goal-to-max
+2026-11-08T07:47:22.5090326Z  * [new branch]        feat/harness-usage-front -> origin/feat/harness-usage-front
+2026-11-08T07:47:22.5091604Z  * [new branch]        feat/human-multi        -> origin/feat/human-multi
+2026-11-08T07:47:22.5092416Z  * [new branch]        feat/ide-lot-1          -> origin/feat/ide-lot-1
+2026-11-08T07:47:22.5093562Z  * [new branch]        feat/ide-lot-2          -> origin/feat/ide-lot-2
+2026-11-08T07:47:22.5094410Z  * [new branch]        feat/ide-lot-3          -> origin/feat/ide-lot-3
+2026-11-08T07:47:22.5095231Z  * [new branch]        feat/ide-lot-4          -> origin/feat/ide-lot-4
+2026-11-08T07:47:22.5096119Z  * [new branch]        feat/ipad-atelier-front -> origin/feat/ipad-atelier-front
+2026-11-08T07:47:22.5097018Z  * [new branch]        feat/machine-disable    -> origin/feat/machine-disable
+2026-11-08T07:47:22.5097990Z  * [new branch]        feat/mobile-project-folders -> origin/feat/mobile-project-folders
+2026-11-08T07:47:22.5099473Z  * [new branch]        feat/mobile-projects    -> origin/feat/mobile-projects
+2026-11-08T07:47:22.5100458Z  * [new branch]        feat/mobile-relay-align -> origin/feat/mobile-relay-align
+2026-11-08T07:47:22.5101456Z  * [new branch]        feat/notch-activity     -> origin/feat/notch-activity
+2026-11-08T07:47:22.5102704Z  * [new branch]        feat/omp-seats-front    -> origin/feat/omp-seats-front
+2026-11-08T07:47:22.5103848Z  * [new branch]        feat/openrig            -> origin/feat/openrig
+2026-11-08T07:47:22.5104711Z  * [new branch]        feat/openrig-messages   -> origin/feat/openrig-messages
+2026-11-08T07:47:22.5105743Z  * [new branch]        feat/openrig-projects-without-seats -> origin/feat/openrig-projects-without-seats
+2026-11-08T07:47:22.5107052Z  * [new branch]        feat/openrig-roles      -> origin/feat/openrig-roles
+2026-11-08T07:47:22.5107923Z  * [new branch]        feat/projects-eye       -> origin/feat/projects-eye
+2026-11-08T07:47:22.5108821Z  * [new branch]        feat/seat-terminal-copy -> origin/feat/seat-terminal-copy
+2026-11-08T07:47:22.5109767Z  * [new branch]        feat/session-view-toggle -> origin/feat/session-view-toggle
+2026-11-08T07:47:22.5110635Z  * [new branch]        feat/sidebar-tidy       -> origin/feat/sidebar-tidy
+2026-11-08T07:47:22.5111583Z  * [new branch]        feat/snapshot-update-channel -> origin/feat/snapshot-update-channel
+2026-11-08T07:47:22.5112525Z  * [new branch]        feat/teams-two-engines  -> origin/feat/teams-two-engines
+2026-11-08T07:47:22.5113737Z  * [new branch]        feat/windows-agents     -> origin/feat/windows-agents
+2026-11-08T07:47:22.5114900Z  * [new branch]        feat/windows-daemon-setup -> origin/feat/windows-daemon-setup
+2026-11-08T07:47:22.5115821Z  * [new branch]        feat/windows-desktop-native -> origin/feat/windows-desktop-native
+2026-11-08T07:47:22.5116713Z  * [new branch]        feat/windows-installer  -> origin/feat/windows-installer
+2026-11-08T07:47:22.5201915Z  * [new branch]        feat/windows-pane-host  -> origin/feat/windows-pane-host
+2026-11-08T07:47:22.5204223Z  * [new branch]        feat/windows-project-paths -> origin/feat/windows-project-paths
+2026-11-08T07:47:22.5205259Z  * [new branch]        feat/windows-ssh        -> origin/feat/windows-ssh
+2026-11-08T07:47:22.5206206Z  * [new branch]        fix/atelier-empty       -> origin/fix/atelier-empty
+2026-11-08T07:47:22.5207165Z  * [new branch]        fix/atelier-ledge-corner-spacing -> origin/fix/atelier-ledge-corner-spacing
+2026-11-08T07:47:22.5208147Z  * [new branch]        fix/chat-dropped-note   -> origin/fix/chat-dropped-note
+2026-11-08T07:47:22.5209021Z  * [new branch]        fix/claude-context-window -> origin/fix/claude-context-window
+2026-11-08T07:47:22.5209881Z  * [new branch]        fix/e2e-port            -> origin/fix/e2e-port
+2026-11-08T07:47:22.5210891Z  * [new branch]        fix/ipad-atelier-unassigned-spacing -> origin/fix/ipad-atelier-unassigned-spacing
+2026-11-08T07:47:22.5212438Z  * [new branch]        fix/mobile-build-tsc    -> origin/fix/mobile-build-tsc
+2026-11-08T07:47:22.5214196Z  * [new branch]        fix/mobile-close-while-starting -> origin/fix/mobile-close-while-starting
+2026-11-08T07:47:22.5215618Z  * [new branch]        fix/mobile-connection   -> origin/fix/mobile-connection
+2026-11-08T07:47:22.5216538Z  * [new branch]        fix/openrig-user-specs  -> origin/fix/openrig-user-specs
+2026-11-08T07:47:22.5217583Z  * [new branch]        fix/panes-tests-without-node-pty -> origin/fix/panes-tests-without-node-pty
+2026-11-08T07:47:22.5218600Z  * [new branch]        fix/sidebar-compact-align -> origin/fix/sidebar-compact-align
+2026-11-08T07:47:22.5219747Z  * [new branch]        fix/ssh-bridge-unknown-frames -> origin/fix/ssh-bridge-unknown-frames
+2026-11-08T07:47:22.5220694Z  * [new branch]        fix/stale-request       -> origin/fix/stale-request
+2026-11-08T07:47:22.5221608Z  * [new branch]        fix/task-cmd-session-key -> origin/fix/task-cmd-session-key
+2026-11-08T07:47:22.5222557Z  * [new branch]        fix/team-dissolve-plan  -> origin/fix/team-dissolve-plan
+2026-11-08T07:47:22.5224044Z  * [new branch]        fix/terminal-slash      -> origin/fix/terminal-slash
+2026-11-08T07:47:22.5224964Z  * [new branch]        fix/terminal-slash-trace -> origin/fix/terminal-slash-trace
+2026-11-08T07:47:22.5226010Z  * [new branch]        main                    -> origin/main
+2026-11-08T07:47:22.5226765Z  * [new branch]        poc/ide-l0              -> origin/poc/ide-l0
+2026-11-08T07:47:22.5227551Z  * [new branch]        production              -> origin/production
+2026-11-08T07:47:22.5228310Z  * [new branch]        snapshot                -> origin/snapshot
+2026-11-08T07:47:22.5229113Z  * [new branch]        spike/windows-conpty    -> origin/spike/windows-conpty
+2026-11-08T07:47:22.5229885Z  * [new tag]           snapshot                -> snapshot
+2026-11-08T07:47:22.5230569Z  * [new tag]           v0.1.0                  -> v0.1.0
+2026-11-08T07:47:22.5231263Z  * [new tag]           v0.1.1                  -> v0.1.1
+2026-11-08T07:47:22.5231942Z  * [new tag]           v0.1.2                  -> v0.1.2
+2026-11-08T07:47:22.5232621Z  * [new tag]           v0.10.0                 -> v0.10.0
+2026-11-08T07:47:22.5233534Z  * [new tag]           v0.11.0                 -> v0.11.0
+2026-11-08T07:47:22.5234214Z  * [new tag]           v0.12.0                 -> v0.12.0
+2026-11-08T07:47:22.5234894Z  * [new tag]           v0.12.1                 -> v0.12.1
+2026-11-08T07:47:22.5235560Z  * [new tag]           v0.13.0                 -> v0.13.0
+2026-11-08T07:47:22.5236234Z  * [new tag]           v0.14.0                 -> v0.14.0
+2026-11-08T07:47:22.5236902Z  * [new tag]           v0.15.0                 -> v0.15.0
+2026-11-08T07:47:22.5237560Z  * [new tag]           v0.15.1                 -> v0.15.1
+2026-11-08T07:47:22.5238211Z  * [new tag]           v0.16.0                 -> v0.16.0
+2026-11-08T07:47:22.5238866Z  * [new tag]           v0.16.1                 -> v0.16.1
+2026-11-08T07:47:22.5239531Z  * [new tag]           v0.17.0                 -> v0.17.0
+2026-11-08T07:47:22.5240184Z  * [new tag]           v0.18.0                 -> v0.18.0
+2026-11-08T07:47:22.5240839Z  * [new tag]           v0.19.0                 -> v0.19.0
+2026-11-08T07:47:22.5241492Z  * [new tag]           v0.19.1                 -> v0.19.1
+2026-11-08T07:47:22.5242147Z  * [new tag]           v0.2.0                  -> v0.2.0
+2026-11-08T07:47:22.5242788Z  * [new tag]           v0.2.1                  -> v0.2.1
+2026-11-08T07:47:22.5243757Z  * [new tag]           v0.2.2                  -> v0.2.2
+2026-11-08T07:47:22.5244410Z  * [new tag]           v0.20.0                 -> v0.20.0
+2026-11-08T07:47:22.5245066Z  * [new tag]           v0.21.0                 -> v0.21.0
+2026-11-08T07:47:22.5245711Z  * [new tag]           v0.22.0                 -> v0.22.0
+2026-11-08T07:47:22.5246353Z  * [new tag]           v0.22.1                 -> v0.22.1
+2026-11-08T07:47:22.5247008Z  * [new tag]           v0.23.0                 -> v0.23.0
+2026-11-08T07:47:22.5247664Z  * [new tag]           v0.24.0                 -> v0.24.0
+2026-11-08T07:47:22.5248321Z  * [new tag]           v0.25.0                 -> v0.25.0
+2026-11-08T07:47:22.5248985Z  * [new tag]           v0.25.1                 -> v0.25.1
+2026-11-08T07:47:22.5249619Z  * [new tag]           v0.26.0                 -> v0.26.0
+2026-11-08T07:47:22.5250270Z  * [new tag]           v0.27.0                 -> v0.27.0
+2026-11-08T07:47:22.5250911Z  * [new tag]           v0.28.0                 -> v0.28.0
+2026-11-08T07:47:22.5251555Z  * [new tag]           v0.29.0                 -> v0.29.0
+2026-11-08T07:47:22.5252202Z  * [new tag]           v0.3.0                  -> v0.3.0
+2026-11-08T07:47:22.5252859Z  * [new tag]           v0.3.1                  -> v0.3.1
+2026-11-08T07:47:22.5253758Z  * [new tag]           v0.3.2                  -> v0.3.2
+2026-11-08T07:47:22.5254404Z  * [new tag]           v0.3.3                  -> v0.3.3
+2026-11-08T07:47:22.5255039Z  * [new tag]           v0.30.0                 -> v0.30.0
+2026-11-08T07:47:22.5255688Z  * [new tag]           v0.31.0                 -> v0.31.0
+2026-11-08T07:47:22.5256512Z  * [new tag]           v0.32.0                 -> v0.32.0
+2026-11-08T07:47:22.5257170Z  * [new tag]           v0.33.0                 -> v0.33.0
+2026-11-08T07:47:22.5257816Z  * [new tag]           v0.34.0                 -> v0.34.0
+2026-11-08T07:47:22.5258583Z  * [new tag]           v0.35.0                 -> v0.35.0
+2026-11-08T07:47:22.5259237Z  * [new tag]           v0.36.0                 -> v0.36.0
+2026-11-08T07:47:22.5259867Z  * [new tag]           v0.37.0                 -> v0.37.0
+2026-11-08T07:47:22.5260506Z  * [new tag]           v0.38.0                 -> v0.38.0
+2026-11-08T07:47:22.5261146Z  * [new tag]           v0.39.0                 -> v0.39.0
+2026-11-08T07:47:22.5261790Z  * [new tag]           v0.39.1                 -> v0.39.1
+2026-11-08T07:47:22.5262434Z  * [new tag]           v0.4.0                  -> v0.4.0
+2026-11-08T07:47:22.5263251Z  * [new tag]           v0.40.0                 -> v0.40.0
+2026-11-08T07:47:22.5263904Z  * [new tag]           v0.41.0                 -> v0.41.0
+2026-11-08T07:47:22.5264567Z  * [new tag]           v0.42.0                 -> v0.42.0
+2026-11-08T07:47:22.5265202Z  * [new tag]           v0.43.0                 -> v0.43.0
+2026-11-08T07:47:22.5265847Z  * [new tag]           v0.44.0                 -> v0.44.0
+2026-11-08T07:47:22.5266491Z  * [new tag]           v0.45.0                 -> v0.45.0
+2026-11-08T07:47:22.5267129Z  * [new tag]           v0.45.1                 -> v0.45.1
+2026-11-08T07:47:22.5267768Z  * [new tag]           v0.46.0                 -> v0.46.0
+2026-11-08T07:47:22.5268405Z  * [new tag]           v0.47.0                 -> v0.47.0
+2026-11-08T07:47:22.5269100Z  * [new tag]           v0.48.0                 -> v0.48.0
+2026-11-08T07:47:22.5269802Z  * [new tag]           v0.49.0                 -> v0.49.0
+2026-11-08T07:47:22.5270445Z  * [new tag]           v0.5.0                  -> v0.5.0
+2026-11-08T07:47:22.5271084Z  * [new tag]           v0.5.1                  -> v0.5.1
+2026-11-08T07:47:22.5271734Z  * [new tag]           v0.5.2                  -> v0.5.2
+2026-11-08T07:47:22.5272382Z  * [new tag]           v0.5.3                  -> v0.5.3
+2026-11-08T07:47:22.5273184Z  * [new tag]           v0.5.4                  -> v0.5.4
+2026-11-08T07:47:22.5273848Z  * [new tag]           v0.50.0                 -> v0.50.0
+2026-11-08T07:47:22.5274505Z  * [new tag]           v0.51.0                 -> v0.51.0
+2026-11-08T07:47:22.5275156Z  * [new tag]           v0.52.0                 -> v0.52.0
+2026-11-08T07:47:22.5275806Z  * [new tag]           v0.53.0                 -> v0.53.0
+2026-11-08T07:47:22.5276434Z  * [new tag]           v0.6.0                  -> v0.6.0
+2026-11-08T07:47:22.5277068Z  * [new tag]           v0.7.0                  -> v0.7.0
+2026-11-08T07:47:22.5277701Z  * [new tag]           v0.8.0                  -> v0.8.0
+2026-11-08T07:47:22.5278332Z  * [new tag]           v0.8.1                  -> v0.8.1
+2026-11-08T07:47:22.5278976Z  * [new tag]           v0.9.0                  -> v0.9.0
+2026-11-08T07:47:22.5279611Z  * [new tag]           v0.9.1                  -> v0.9.1
+2026-11-08T07:47:22.5280797Z ##[debug]0
+2026-11-08T07:47:22.5281403Z ##[debug]
+2026-11-08T07:47:22.5281915Z [command]/usr/bin/git tag --list v0.53.0
+2026-11-08T07:47:22.5282583Z v0.53.0
+2026-11-08T07:47:22.5283455Z ##[debug]0
+2026-11-08T07:47:22.5284100Z ##[debug]v0.53.0
+2026-11-08T07:47:22.5284466Z ##[debug]
+2026-11-08T07:47:22.5285012Z [command]/usr/bin/git rev-parse refs/tags/v0.53.0
+2026-11-08T07:47:22.5285647Z b5a5273892b0d84f0978532f43284da72fcadd0a
+2026-11-08T07:47:22.5286327Z ##[debug]0
+2026-11-08T07:47:22.5286964Z ##[debug]b5a5273892b0d84f0978532f43284da72fcadd0a
+2026-11-08T07:47:22.5287439Z ##[debug]
+2026-11-08T07:47:22.5288421Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules origin +055a347f107fc03c08b0dd07176f88921f1fef5c:refs/tags/v0.53.0
+2026-11-08T07:47:22.5323908Z From https://github.com/Lyssaen/ledge
+2026-11-08T07:47:22.5325039Z  t [tag update]        055a347f107fc03c08b0dd07176f88921f1fef5c -> v0.53.0
+2026-11-08T07:47:22.5330708Z ##[debug]0
+2026-11-08T07:47:22.5331412Z ##[debug]
+2026-11-08T07:47:22.5332029Z ::endgroup::
+2026-11-08T07:47:22.5332607Z ##[endgroup]
+2026-11-08T07:47:22.5334009Z ::group::Determining the checkout info
+2026-11-08T07:47:22.5334782Z ##[group]Determining the checkout info
+2026-11-08T07:47:22.5335512Z ::endgroup::
+2026-11-08T07:47:22.5335891Z ##[endgroup]
+2026-11-08T07:47:22.5338978Z [command]/usr/bin/git sparse-checkout disable
+2026-11-08T07:47:22.5394049Z ##[debug]0
+2026-11-08T07:47:22.5395080Z ##[debug]
+2026-11-08T07:47:22.5398544Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-08T07:47:22.5429600Z ##[debug]0
+2026-11-08T07:47:22.5430470Z ##[debug]
+2026-11-08T07:47:22.5431118Z ::group::Checking out the ref
+2026-11-08T07:47:22.5431607Z ##[group]Checking out the ref
+2026-11-08T07:47:22.5434255Z [command]/usr/bin/git checkout --progress --force refs/tags/v0.53.0
+2026-11-08T07:47:23.1919818Z Note: switching to 'refs/tags/v0.53.0'.
+2026-11-08T07:47:23.1920352Z 
+2026-11-08T07:47:23.1920740Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-08T07:47:23.1921383Z changes and commit them, and you can discard any commits you make in this
+2026-11-08T07:47:23.1922086Z state without impacting any branches by switching back to a branch.
+2026-11-08T07:47:23.1922445Z 
+2026-11-08T07:47:23.1922673Z If you want to create a new branch to retain commits you create, you may
+2026-11-08T07:47:23.1923455Z do so (now or later) by using -c with the switch command. Example:
+2026-11-08T07:47:23.1923773Z 
+2026-11-08T07:47:23.1923907Z   git switch -c <new-branch-name>
+2026-11-08T07:47:23.1924112Z 
+2026-11-08T07:47:23.1924298Z Or undo this operation with:
+2026-11-08T07:47:23.1924487Z 
+2026-11-08T07:47:23.1924595Z   git switch -
+2026-11-08T07:47:23.1924741Z 
+2026-11-08T07:47:23.1925011Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-08T07:47:23.1925392Z 
+2026-11-08T07:47:23.1925652Z HEAD is now at 055a347f Merge pull request #227 from Lyssaen/feat/ide-welcome
+2026-11-08T07:47:23.1966098Z ##[debug]0
+2026-11-08T07:47:23.1966776Z ##[debug]
+2026-11-08T07:47:23.1967262Z ::endgroup::
+2026-11-08T07:47:23.1967520Z ##[endgroup]
+2026-11-08T07:47:23.2012410Z ##[debug]0
+2026-11-08T07:47:23.2013758Z ##[debug]commit 055a347f107fc03c08b0dd07176f88921f1fef5c
+2026-11-08T07:47:23.2014294Z ##[debug]Merge: c7f58733 3b582859
+2026-11-08T07:47:23.2014837Z ##[debug]Author: Lyssaën <someone@example.invalid>
+2026-11-08T07:47:23.2015442Z ##[debug]Date:   Sun Nov 8 00:33:03 2026 +0100
+2026-11-08T07:47:23.2015909Z ##[debug]
+2026-11-08T07:47:23.2016220Z ##[debug]    Merge pull request #227 from Lyssaen/feat/ide-welcome
+2026-11-08T07:47:23.2016722Z ##[debug]    
+2026-11-08T07:47:23.2017224Z ##[debug]    feat(desktop): welcome IDE + reprise des sessions au démarrage
+2026-11-08T07:47:23.2017850Z ##[debug]
+2026-11-08T07:47:23.2018262Z [command]/usr/bin/git log -1 --format=%H
+2026-11-08T07:47:23.2044777Z 055a347f107fc03c08b0dd07176f88921f1fef5c
+2026-11-08T07:47:23.2049920Z ##[debug]0
+2026-11-08T07:47:23.2050342Z ##[debug]055a347f107fc03c08b0dd07176f88921f1fef5c
+2026-11-08T07:47:23.2050648Z ##[debug]
+2026-11-08T07:47:23.2058220Z ##[debug]Unsetting HOME override
+2026-11-08T07:47:23.2064516Z ::remove-matcher owner=checkout-git::
+2026-11-08T07:47:23.2078267Z ##[debug]Removed matchers: 'checkout-git'
+2026-11-08T07:47:23.2156906Z ##[debug]Node Action run completed with exit code 0
+2026-11-08T07:47:23.2160091Z ##[debug]Save intra-action state isPost = true
+2026-11-08T07:47:23.2160541Z ##[debug]Save intra-action state setSafeDirectory = true
+2026-11-08T07:47:23.2161013Z ##[debug]Save intra-action state repositoryPath = /home/runner/work/ledge/ledge
+2026-11-08T07:47:23.2163213Z ##[debug]Set output commit = 055a347f107fc03c08b0dd07176f88921f1fef5c
+2026-11-08T07:47:23.2163807Z ##[debug]Set output ref = refs/tags/v0.53.0
+2026-11-08T07:47:23.2165732Z ##[debug]Finishing: Run actions/checkout@v4
+2026-11-08T07:47:23.2178438Z ##[debug]Evaluating: github.ref_name
+2026-11-08T07:47:23.2178837Z ##[debug]Evaluating Index:
+2026-11-08T07:47:23.2179120Z ##[debug]..Evaluating github:
+2026-11-08T07:47:23.2179430Z ##[debug]..=> Object
+2026-11-08T07:47:23.2179753Z ##[debug]..Evaluating String:
+2026-11-08T07:47:23.2180227Z ##[debug]..=> 'ref_name'
+2026-11-08T07:47:23.2180523Z ##[debug]=> 'v0.53.0'
+2026-11-08T07:47:23.2180833Z ##[debug]Result: 'v0.53.0'
+2026-11-08T07:47:23.2181549Z ##[debug]Evaluating condition for step: 'Fast-forward production to the release commit'
+2026-11-08T07:47:23.2183923Z ##[debug]Evaluating: success()
+2026-11-08T07:47:23.2184313Z ##[debug]Evaluating success:
+2026-11-08T07:47:23.2184791Z ##[debug]=> true
+2026-11-08T07:47:23.2185172Z ##[debug]Result: true
+2026-11-08T07:47:23.2185844Z ##[debug]Starting: Fast-forward production to the release commit
+2026-11-08T07:47:23.2199612Z ##[debug]Loading inputs
+2026-11-08T07:47:23.2200811Z ##[debug]Loading env
+2026-11-08T07:47:23.2205617Z ##[group]Run set -euo pipefail
+2026-11-08T07:47:23.2205925Z [36;1mset -euo pipefail[0m
+2026-11-08T07:47:23.2206222Z [36;1msha="$(git rev-parse "refs/tags/$TAG^{commit}")"[0m
+2026-11-08T07:47:23.2206778Z [36;1m# Railway builds the phone app from the repository, unstamped: only the `chore: X.Y.Z` commit serves the[0m
+2026-11-08T07:47:23.2207306Z [36;1m# release's fingerprint.[0m
+2026-11-08T07:47:23.2207666Z [36;1mv="$(node -p "require('./packages/ledge/package.json').version")"[0m
+2026-11-08T07:47:23.2208045Z [36;1mif [ "v$v" != "$TAG" ]; then[0m
+2026-11-08T07:47:23.2208536Z [36;1m  echo "::error::packages/ledge/package.json says $v at $TAG, not ${TAG#v}: production left alone"; exit 1[0m
+2026-11-08T07:47:23.2209020Z [36;1mfi[0m
+2026-11-08T07:47:23.2209356Z [36;1mif git ls-remote --exit-code --heads origin production >/dev/null; then[0m
+2026-11-08T07:47:23.2209911Z [36;1m  git fetch --no-tags origin +refs/heads/production:refs/remotes/origin/production[0m
+2026-11-08T07:47:23.2210412Z [36;1m  prod="$(git rev-parse refs/remotes/origin/production)"[0m
+2026-11-08T07:47:23.2210810Z [36;1m  if ! git merge-base --is-ancestor "$prod" "$sha"; then[0m
+2026-11-08T07:47:23.2211419Z [36;1m    echo "::error::production (${prod:0:8}) is not an ancestor of $TAG (${sha:0:8}): not a fast-forward, production left alone"; exit 1[0m
+2026-11-08T07:47:23.2211956Z [36;1m  fi[0m
+2026-11-08T07:47:23.2212269Z [36;1m  if [ "$prod" = "$sha" ]; then echo "production is already at $TAG"; exit 0; fi[0m
+2026-11-08T07:47:23.2212651Z [36;1mfi[0m
+2026-11-08T07:47:23.2213131Z [36;1mif ! git push origin "$sha:refs/heads/production"; then[0m
+2026-11-08T07:47:23.2213909Z [36;1m  echo "::error::push to production refused (see above): check PRODUCTION_PUSH_TOKEN (expiry, Contents and Workflows write on this repository)"; exit 1[0m
+2026-11-08T07:47:23.2214547Z [36;1mfi[0m
+2026-11-08T07:47:23.2214771Z [36;1mecho "production -> $TAG (${sha:0:8})"[0m
+2026-11-08T07:47:23.2266018Z shell: /usr/bin/bash -e {0}
+2026-11-08T07:47:23.2266277Z env:
+2026-11-08T07:47:23.2266467Z   PUBLISH: true
+2026-11-08T07:47:23.2266686Z   VERSION_TAG: v0.53.0
+2026-11-08T07:47:23.2266906Z   TAG: v0.53.0
+2026-11-08T07:47:23.2267097Z ##[endgroup]
+2026-11-08T07:47:23.2314736Z ##[debug]/usr/bin/bash -e /home/runner/work/_temp/608c5e2e-6817-4cc4-9610-21546867ca97.sh
+2026-11-08T07:47:23.4027030Z ##[error]packages/ledge/package.json says 0.52.0 at v0.53.0, not 0.53.0: production left alone
+2026-11-08T07:47:23.4035932Z ##[error]Process completed with exit code 1.
+2026-11-08T07:47:23.4042419Z ##[debug]Finishing: Fast-forward production to the release commit
+2026-11-08T07:47:23.4093814Z ##[debug]Evaluating condition for step: 'Post Run actions/checkout@v4'
+2026-11-08T07:47:23.4096571Z ##[debug]Evaluating: always()
+2026-11-08T07:47:23.4096965Z ##[debug]Evaluating always:
+2026-11-08T07:47:23.4097731Z ##[debug]=> true
+2026-11-08T07:47:23.4098135Z ##[debug]Result: true
+2026-11-08T07:47:23.4098808Z ##[debug]Starting: Post Run actions/checkout@v4
+2026-11-08T07:47:23.4153363Z ##[debug]Loading inputs
+2026-11-08T07:47:23.4154975Z ##[debug]Evaluating: secrets.PRODUCTION_PUSH_TOKEN
+2026-11-08T07:47:23.4155309Z ##[debug]Evaluating Index:
+2026-11-08T07:47:23.4155566Z ##[debug]..Evaluating secrets:
+2026-11-08T07:47:23.4155850Z ##[debug]..=> Object
+2026-11-08T07:47:23.4156097Z ##[debug]..Evaluating String:
+2026-11-08T07:47:23.4156584Z ##[debug]..=> 'PRODUCTION_PUSH_TOKEN'
+2026-11-08T07:47:23.4157399Z ##[debug]=> '***'
+2026-11-08T07:47:23.4157947Z ##[debug]Result: '***'
+2026-11-08T07:47:23.4159016Z ##[debug]Evaluating: github.repository
+2026-11-08T07:47:23.4159361Z ##[debug]Evaluating Index:
+2026-11-08T07:47:23.4159611Z ##[debug]..Evaluating github:
+2026-11-08T07:47:23.4159872Z ##[debug]..=> Object
+2026-11-08T07:47:23.4160119Z ##[debug]..Evaluating String:
+2026-11-08T07:47:23.4160375Z ##[debug]..=> 'repository'
+2026-11-08T07:47:23.4160649Z ##[debug]=> 'Lyssaen/ledge'
+2026-11-08T07:47:23.4160916Z ##[debug]Result: 'Lyssaen/ledge'
+2026-11-08T07:47:23.4175677Z ##[debug]Loading env
+2026-11-08T07:47:23.4180531Z Post job cleanup.
+2026-11-08T07:47:23.5056850Z ##[debug]Getting git version
+2026-11-08T07:47:23.5073283Z [command]/usr/bin/git version
+2026-11-08T07:47:23.5121280Z git version 2.56.0
+2026-11-08T07:47:23.5140758Z ##[debug]0
+2026-11-08T07:47:23.5141547Z ##[debug]git version 2.56.0
+2026-11-08T07:47:23.5141963Z ##[debug]
+2026-11-08T07:47:23.5142834Z ##[debug]Set git useragent to: git/2.56.0 (github-actions-checkout)
+2026-11-08T07:47:23.5145778Z ::add-mask::***
+2026-11-08T07:47:23.5162133Z Temporarily overriding HOME='/home/runner/work/_temp/9d4c093b-41a4-4c45-a9e9-9c3574d939d6' before making global git config changes
+2026-11-08T07:47:23.5163862Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-08T07:47:23.5167864Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/ledge/ledge
+2026-11-08T07:47:23.5205173Z ##[debug]0
+2026-11-08T07:47:23.5205888Z ##[debug]
+2026-11-08T07:47:23.5213880Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-08T07:47:23.5251615Z ##[debug]1
+2026-11-08T07:47:23.5252657Z ##[debug]
+2026-11-08T07:47:23.5264213Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-08T07:47:23.5569395Z ##[debug]0
+2026-11-08T07:47:23.5569794Z ##[debug]
+2026-11-08T07:47:23.5578328Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-08T07:47:23.5606731Z http.https://github.com/.extraheader
+2026-11-08T07:47:23.5630227Z ##[debug]0
+2026-11-08T07:47:23.5631170Z ##[debug]http.https://github.com/.extraheader
+2026-11-08T07:47:23.5631654Z ##[debug]
+2026-11-08T07:47:23.5643817Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-08T07:47:23.5668466Z ##[debug]0
+2026-11-08T07:47:23.5668832Z ##[debug]
+2026-11-08T07:47:23.5677294Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-08T07:47:23.5968974Z ##[debug]0
+2026-11-08T07:47:23.5969393Z ##[debug]
+2026-11-08T07:47:23.5977058Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-08T07:47:23.6005749Z ##[debug]1
+2026-11-08T07:47:23.6006507Z ##[debug]
+2026-11-08T07:47:23.6013144Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-08T07:47:23.6305087Z ##[debug]0
+2026-11-08T07:47:23.6306183Z ##[debug]
+2026-11-08T07:47:23.6307560Z ##[debug]Unsetting HOME override
+2026-11-08T07:47:23.6406973Z ##[debug]Node Action run completed with exit code 0
+2026-11-08T07:47:23.6410351Z ##[debug]Finishing: Post Run actions/checkout@v4
+2026-11-08T07:47:23.6460889Z ##[debug]Starting: Complete job
+2026-11-08T07:47:23.6463766Z Uploading runner diagnostic logs
+2026-11-08T07:47:23.6475468Z ##[debug]Starting diagnostic file upload.
+2026-11-08T07:47:23.6475812Z ##[debug]Setting up diagnostic log folders.
+2026-11-08T07:47:23.6477695Z ##[debug]Creating diagnostic log files folder.
+2026-11-08T07:47:23.6486117Z ##[debug]Copying 1 worker diagnostic logs.
+2026-11-08T07:47:23.6494079Z ##[debug]Copying 1 runner diagnostic logs.
+2026-11-08T07:47:23.6495548Z ##[debug]Zipping diagnostic files.
+2026-11-08T07:47:23.6563694Z ##[debug]Uploading diagnostic metadata file.
+2026-11-08T07:47:23.6594997Z ##[debug]Diagnostic file upload complete.
+2026-11-08T07:47:23.6595618Z Completed runner diagnostic log upload
+2026-11-08T07:47:23.6595908Z Cleaning up orphan processes
+2026-11-08T07:47:23.7022201Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-11-08T07:47:23.7024546Z ##[debug]Finishing: Complete job
+2026-11-08T07:47:23.7055184Z ##[debug]Finishing: production

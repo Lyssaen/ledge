@@ -1,0 +1,9 @@
+{
+ "id": 34675721,
+ "path_with_namespace": "gitlab-org/cli",
+ "default_branch": "main",
+ "merge_method": "merge",
+ "squash_option": "default_on",
+ "only_allow_merge_if_pipeline_succeeds": true,
+ "web_url": "https://gitlab.com/gitlab-org/cli"
+}
