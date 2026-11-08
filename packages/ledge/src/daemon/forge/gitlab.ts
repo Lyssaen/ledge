@@ -176,7 +176,8 @@ export function gitlabReader(run: ForgeRun): ForgeReader {
         pr, description: mr.description ?? '', author: mr.author?.username ?? '?', reviewers: rv, labels: mr.labels ?? [],
         issues: closes.map(i => `#${i.iid}`), jobs, ...(log ? { log } : {}), threads, files,
         commits: commits.map(c => ({ sha: c.id, title: c.title, author: c.author_name ?? '?', at: iso(c.committed_date ?? c.created_at) })),
-        mergeCommand: shellJoin('glab', ['api', '--hostname', repo.host, '--method', 'PUT', mergePath(repo, iid), '-H', 'Content-Type: application/json', '--input', '-']) + `  # {"sha":"${mr.sha}"}`,
+        // The head comes from the forge: shown only when it is a commit id, so the line stays one shell command.
+        mergeCommand: shellJoin('glab', ['api', '--hostname', repo.host, '--method', 'PUT', mergePath(repo, iid), '-H', 'Content-Type: application/json', '--input', '-']) + (SHA.test(mr.sha) ? `  # {"sha":"${mr.sha}"}` : ''),
         mergeBlockers: [...pr.blockers, ...(pr.pipeline === 'ok' ? [] : ['pipeline' as const])]
       };
     },

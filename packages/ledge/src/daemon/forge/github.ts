@@ -182,7 +182,7 @@ export function githubReader(run: ForgeRun): ForgeReader {
         labels: (v.labels ?? []).map(l => l.name), issues: (gp?.closingIssuesReferences?.nodes ?? []).map(i => `#${i.number}`),
         jobs: js, ...(log ? { log } : {}), threads: [...reviewThreads, ...talk], files: fs,
         commits: (v.commits ?? []).map(c => ({ sha: c.oid, title: c.messageHeadline, author: c.authors?.[0]?.login || c.authors?.[0]?.name || '?', at: iso(c.committedDate) })),
-        mergeCommand: shellJoin('gh', mergeArgs(repo, n, inf.method, v.headRefOid)),
+        mergeCommand: shellJoin('gh', mergeArgs(repo, n, inf.method, SHA.test(v.headRefOid) ? v.headRefOid : '<head>')),
         mergeBlockers: [...pr.blockers, ...(pr.pipeline === 'ok' ? [] : ['pipeline' as const])]
       };
     },

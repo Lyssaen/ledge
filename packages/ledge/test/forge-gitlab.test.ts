@@ -108,6 +108,16 @@ describe('GitLab detail', () => {
   });
 });
 
+describe('the merge command shown', () => {
+  it('leaves out a head that is not a commit id (it comes from the forge)', async () => {
+    const evil = { ...JSON.parse(fx('gl-mr-4340.json')), sha: 'abc"}\nrm -rf ~ #' };
+    const { run } = fakeGlab(p => (p === `${P}/merge_requests/4340` ? JSON.stringify(evil) : undefined));
+    const d = await gitlabReader(run).detail(repo, 4340, {});
+    expect(d.mergeCommand).not.toMatch(/rm -rf|\n/);
+    expect(d.mergeCommand).toBe(`glab api --hostname gitlab.com --method PUT ${P}/merge_requests/4340/merge -H 'Content-Type: application/json' --input -`);
+  });
+});
+
 describe('diffLine', () => {
   it('finds a new line and an old line', () => {
     const diff = '@@ -10,3 +10,4 @@\n a\n-b\n+c\n+d\n e\n';
