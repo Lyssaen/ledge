@@ -46,5 +46,9 @@ describe('RigTopology', () => {
     cleanup();
     render(ui({ graph: null, status: 'idle', error: 'offline' }));
     expect(screen.getByText('Cette machine est hors ligne.')).toBeTruthy();
+    cleanup();
+    render(ui({ graph: null, status: 'idle', error: 'daemon_stopped' }));
+    expect(screen.getByText('Le daemon OpenRig est arrêté.')).toBeTruthy();
+    expect(screen.queryByText(/daemon_stopped/)).toBeNull();
   });
 });

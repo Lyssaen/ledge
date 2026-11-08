@@ -1366,7 +1366,7 @@ export const en: Messages = {
     },
     /** The “Rig · name” tab (IDE lot 7c). */
     rigTab: {
-      title: (rig: string) => `Rig · ${rig}`,
+      title: (rig: string, machine?: string) => (machine ? `Rig · ${rig} · ${machine}` : `Rig · ${rig}`),
       topology: 'Topology', topologyRunning: 'click a seat: its thread', topologyStopped: 'the seats start with the rig', loading: 'Reading…',
       legend: 'Links', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
       running: 'running', stopped: 'stopped', seatsAt: (n: number, machine: string) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${machine}`,
@@ -1376,6 +1376,7 @@ export const en: Messages = {
       level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked' } as Record<string, string>,
       specPolicy: (p: string) => `Spec: ${p}`, noSeats: 'No known seat: nothing to set for now.', specNoPolicy: 'This rig’s spec gives no known policy.',
       nextLaunch: 'A change applies at the rig’s next launch.', mixed: 'Mixed', mixedSeat: (name: string, summary: string) => `${name}: ${summary}`,
+      errors: { daemon_stopped: 'The OpenRig daemon is stopped.', unknown_rig: 'This rig no longer exists on this machine.' } as Record<string, string>,
       policyErrors: {
         spec_unknown: 'Ledge cannot find this rig’s spec: “Spec” is not possible.',
         spec_no_policy: 'This rig’s spec gives no permission policy: “Spec” is not possible.',

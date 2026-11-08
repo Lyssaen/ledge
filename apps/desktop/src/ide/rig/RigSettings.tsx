@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n/lang';
 import { isWorking } from '../../openrig/model';
 import { ProviderLogo } from '../ProviderLogo';
 import { providerOf } from '../../workspace/sessionTab';
+import { rigErrorText } from './errors';
 import { PERM_LEVELS, permLevelOf, roleCounts, seatDraft, type PermLevel } from './model';
 import '../../styles/ide-rig.css';
 
@@ -64,8 +65,8 @@ export function RigSettings({ rig, running, permissions, snapshots, policyAvaila
           ))}
         </div>
         {!policyAvailable && <p className="ide-rig-note" role="status">{o.outdated}</p>}
-        {permissions.error && <p className="ide-rig-note" role="status">{permissions.error === 'offline' ? o.offline : permissions.error === 'outdated' ? o.outdated : o.failed(permissions.error)}</p>}
-        {policyError !== null && <p className="ide-rig-fail" role="alert">{r.policyErrors[policyError] ?? (policyError === 'busy' ? o.busy : policyError === 'offline' ? o.offline : policyError === 'outdated' ? o.outdated : o.failed(policyError))}</p>}
+        {permissions.error && <p className="ide-rig-note" role="status">{rigErrorText(t, permissions.error)}</p>}
+        {policyError !== null && <p className="ide-rig-fail" role="alert">{rigErrorText(t, policyError)}</p>}
         {level === 'mixed' && (
           <div className="ide-rig-mixed"><b>{r.mixed}</b>{permissions.seats.map(s => <span key={s.logicalId}>{r.mixedSeat(s.logicalId, s.summary ?? s.error ?? '')}</span>)}</div>
         )}
@@ -95,7 +96,7 @@ export function RigSettings({ rig, running, permissions, snapshots, policyAvaila
             </span>
           </div>
         )}
-        {failed !== null && <p className="ide-rig-fail" role="alert">{o.reseat.errors[failed] ?? o.launch.errors[failed] ?? o.failed(failed)}</p>}
+        {failed !== null && <p className="ide-rig-fail" role="alert">{o.reseat.errors[failed] ?? rigErrorText(t, failed)}</p>}
 
         <div className="ide-rig-kv">
           <span>{r.lastSnapshot}</span>
@@ -103,7 +104,7 @@ export function RigSettings({ rig, running, permissions, snapshots, policyAvaila
             {running && <button type="button" className="ide-rig-btn" disabled={busy} onClick={onSnapshot}>{r.snapshotNow}</button>}
           </span>
         </div>
-        {snapshotError !== null && <p className="ide-rig-fail" role="alert">{snapshotError === 'busy' ? o.busy : snapshotError === 'offline' ? o.offline : snapshotError === 'outdated' ? o.outdated : snapshotError === 'not_installed' ? o.notInstalled : o.failed(snapshotError)}</p>}
+        {snapshotError !== null && <p className="ide-rig-fail" role="alert">{rigErrorText(t, snapshotError)}</p>}
       </div>
     </section>
   );

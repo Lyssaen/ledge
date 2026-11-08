@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import type { RigGraph, Session } from '@ledge/protocol';
 import { useI18n } from '../../i18n/lang';
+import { rigErrorText } from './errors';
 import { openClick, type NavAction } from '../../nav/state';
 import { providerOf } from '../../workspace/sessionTab';
 import { ProviderLogo } from '../ProviderLogo';
@@ -57,7 +58,7 @@ export function RigTopology({ graph, status, error, sessions, machine, running, 
             </div>
           </>
         ) : status === 'loading' ? <p className="ide-rig-empty" role="status">{r.loading}</p>
-          : error ? <p className="ide-rig-empty" role="status">{error === 'offline' ? o.offline : error === 'outdated' ? o.outdated : o.failed(error)}</p>
+          : error ? <p className="ide-rig-empty" role="status">{rigErrorText(t, error)}</p>
           : <p className="ide-rig-empty" role="status">{r.loading}</p>}
       </div>
     </section>

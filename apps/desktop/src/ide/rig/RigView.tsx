@@ -12,6 +12,7 @@ import { RigQueue } from './RigQueue';
 import { RigSettings } from './RigSettings';
 import { RigTopology } from './RigTopology';
 import { actionOf } from '../rigs/model';
+import { rigErrorText } from './errors';
 import { policyOf, type PermLevel } from './model';
 import '../../styles/ide-rig.css';
 
@@ -77,7 +78,7 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
   };
 
   const note = (text: string): JSX.Element => <div className="ide-rig ide-rig-state" role="status">{text}</div>;
-  if (error) return note(error === 'outdated' ? o.outdated : o.offline);
+  if (error) return note(rigErrorText(t, error));
   if (!state) return note(o.loading);
   if (!state.installed) return <div className="ide-rig ide-rig-state" role="status"><b>{o.notInstalledTitle}</b> {o.notInstalled}</div>;
   if (!rig) return note(r.rigAbsent(name));
@@ -86,7 +87,7 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
     const d = view.last;
     if (!d || d.ok || conf.lastTarget !== name) return null;
     const e = d.error;
-    return <div className="ide-rig-fail" role="alert">{e === 'busy' ? o.busy : e === 'not_installed' ? o.notInstalled : e === 'offline' ? o.offline : e === 'outdated' ? o.outdated : o.failed(e ?? '')}</div>;
+    return <div className="ide-rig-fail" role="alert">{rigErrorText(t, e ?? '')}</div>;
   };
   const verb = (kind: 'start' | 'restart' | 'stop', glyph: readonly string[], text: string, cls = ''): JSX.Element => (
     <button type="button" className={`ide-rig-btn ${cls}`.trim()} disabled={view.pending !== null}

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { OpenRigState } from '@ledge/protocol';
+import type { OpenRigState, RigGraph } from '@ledge/protocol';
 import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, session, twoProjects } from './daemon';
 import { RIG_7A } from './openrig-fixtures';
@@ -19,7 +19,14 @@ const view = (page: Page) => page.getByRole('complementary', { name: 'Rigs' });
 const tab = (page: Page) => page.locator('.dv-tab').filter({ hasText: 'Rig · ledge-survey' });
 const page$ = (page: Page) => page.locator('.ide-rig');
 
-async function boot(page: Page, opts: { ide?: boolean; layout?: object } = {}) {
+/** Four pods in a row: wider than a 470 px group, so the topology has to scroll. */
+const WIDE: RigGraph = {
+  pods: ['a', 'b', 'c', 'd'].map(id => ({ id, label: `Pod ${id}` })),
+  seats: ['a', 'b', 'c', 'd'].map(id => ({ logicalId: `${id}.one`, pod: id, role: 'implementer', runtime: 'claude-code', status: 'running', session: `${id}-one@ledge-survey`, attention: false })),
+  links: [{ from: 'a.one', to: 'b.one', kind: 'delegates_to' }, { from: 'b.one', to: 'c.one', kind: 'delegates_to' }, { from: 'c.one', to: 'd.one', kind: 'escalates_to' }]
+};
+
+async function boot(page: Page, opts: { ide?: boolean; layout?: object; graph?: RigGraph } = {}) {
   await seedAtelier(page);
   await page.addInitScript(({ ide, layout }) => {
     try {
@@ -29,6 +36,7 @@ async function boot(page: Page, opts: { ide?: boolean; layout?: object } = {}) {
   }, { ide: opts.ide !== false, layout: opts.layout ?? null });
   const daemon = await fakeDaemon(page, sessions, {
     projects: twoProjects, openrig: state as unknown as OpenRigState, rigCommands: ['rig down ledge-survey --snapshot'], ...RIG_7A,
+    ...(opts.graph ? { rigGraphs: { 'ledge-survey': opts.graph } } : {}),
     rigPermissions: { ...RIG_7A.rigPermissions, 'ledge-survey': { policy: 'builtin:auto', seats: [] } },
     daemon: { version: '0.53.0', install: 'npm', systemd: true, openrigRig: true, openrigPolicy: true }
   });
@@ -67,9 +75,9 @@ test('the kernel offers « Talk to the operator »', async ({ page }) => {
 });
 
 test('at 480 px the settings go under the topology, and the topology scrolls inside the group', async ({ page }) => {
-  await boot(page);
+  await boot(page, { graph: WIDE });
   await openSurvey(page);
-  await expect(page$(page)).toBeVisible();
+  await expect(page$(page).locator('.ide-rig-node')).toHaveCount(4);
   // Three splits and no sidebar: four groups of about 470 px.
   await page.keyboard.press('Control+b');
   for (let i = 0; i < 3; i++) await page.keyboard.press('Control+\\');
@@ -80,6 +88,10 @@ test('at 480 px the settings go under the topology, and the topology scrolls ins
   const topo = (await blocks.nth(0).boundingBox())!, settings = (await page$(page).locator('.ide-rig-side').boundingBox())!, g = (await group.boundingBox())!;
   expect(settings.y).toBeGreaterThanOrEqual(topo.y + topo.height - 1);
   expect(topo.x + topo.width).toBeLessThanOrEqual(g.x + g.width + 1);
+  // The canvas is wider than its scroller: it scrolls inside the block instead of pushing the group.
+  const scroller = page$(page).locator('.ide-rig-topo');
+  expect(await scroller.evaluate(el => el.scrollWidth - el.clientWidth)).toBeGreaterThan(0);
+  expect(await scroller.evaluate(el => getComputedStyle(el).overflowX)).toBe('auto');
 });
 
 test('the tab is restored after a reload', async ({ page }) => {

@@ -15,7 +15,7 @@ export function tabTitle(t: Tab, ctx: { session(id: string): Session | undefined
     case 'atelier': return ctx.t.side.atelier;
     case 'settings': return ctx.t.side.settings;
     case 'openrig': return ctx.t.ide.openrigTitle(ctx.machine?.(t.ref) ?? t.ref);
-    case 'rig': { const r = parseRigRef(t.ref); return r ? ctx.t.ide.rigTab.title(r.rig) : t.ref; }
+    case 'rig': { const r = parseRigRef(t.ref); return r ? ctx.t.ide.rigTab.title(r.rig, r.machine === 'local' ? undefined : ctx.machine?.(r.machine) ?? r.machine) : t.ref; }
     case 'changes': return ctx.t.ide.changesTitle(ctx.session(t.ref)?.name ?? t.ref);
     case 'terminal': {
       // A bottom-panel shell's: « >_ WSL 1 » (the store's title, its id once closed).

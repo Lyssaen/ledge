@@ -26,7 +26,7 @@ const perm = (id: string, policy: string | undefined, source = 'member_policy'):
 const NOW = new Date().toISOString();
 const rowOf = (id: string, o: Partial<RigRow> = {}): RigRow => ({ id, state: 'pending', summary: 'Run the build', from: 'operator-human@kernel', to: 'dev-build@ledge-dev', createdAt: NOW, updatedAt: NOW, at: NOW, ...o });
 
-interface Data { state: OpenRigState; graph: RigGraph; policy?: string; perms: RigSeatPermission[]; snaps: RigSnapshot[]; rows: RigRow[]; truncated: boolean; seatsResult: { ok: boolean; error?: string } }
+interface Data { state: OpenRigState; graph: RigGraph; policy?: string; perms: RigSeatPermission[]; snaps: RigSnapshot[]; rows: RigRow[]; truncated: boolean; seatsResult: { ok: boolean; error?: string }; permError?: string }
 function fake(over: Partial<Data> = {}) {
   const data: Data = { state: state(), graph: graphOf('ledge-dev', ['dev.build', 'dev.review']), policy: 'builtin:auto', perms: [perm('dev.build', undefined, 'rig_policy'), perm('dev.review', undefined, 'rig_policy')], snaps: [], rows: [], truncated: false, seatsResult: { ok: true }, ...over };
   const listeners = new Set<(m: ServerMessage) => void>(), sent: ClientMessage[] = [];
@@ -36,7 +36,7 @@ function fake(over: Partial<Data> = {}) {
     switch (m.type) {
       case 'openrig.status': return { type: 'openrig.state', ...base, state: data.state };
       case 'openrig.graph': return { type: 'openrig.graphState', ...base, rig: m.rig, graph: data.graph };
-      case 'openrig.permissions': return { type: 'openrig.permissionList', ...base, rig: m.rig, ...(data.policy ? { policy: data.policy } : {}), seats: data.perms };
+      case 'openrig.permissions': return { type: 'openrig.permissionList', ...base, rig: m.rig, ...(data.policy ? { policy: data.policy } : {}), seats: data.perms, ...(data.permError ? { error: data.permError } : {}) } as ServerMessage;
       case 'openrig.snapshots': return { type: 'openrig.snapshotList', ...base, rig: m.rig, snapshots: data.snaps };
       case 'openrig.queue': return { type: 'openrig.queueState', ...base, rig: m.rig, rows: data.rows, truncated: data.truncated } as ServerMessage;
       case 'openrig.seats': return { type: 'openrig.reseated', ...base, ok: data.seatsResult.ok, commands: [], added: [], removed: [], ...(data.seatsResult.error ? { error: data.seatsResult.error } : {}) } as ServerMessage;
@@ -112,6 +112,11 @@ describe('the Rig tab', () => {
     expect(screen.getByText('Mixte')).toBeInTheDocument();
     expect(screen.getByText(/Next launch: dev.build builtin:yolo/)).toBeInTheDocument();
     expect(screen.getAllByRole('radio').filter(r => r.getAttribute('aria-checked') === 'true')).toHaveLength(0);
+  });
+  it('a permissions error shows its text, never the raw code', async () => {
+    await ready(mount({ permError: 'unknown_rig' }));
+    expect(await screen.findByText('Ce rig n’existe plus sur cette machine.')).toBeInTheDocument();
+    expect(screen.queryByText(/unknown_rig/)).toBeNull();
   });
   it('a daemon refusal shows under the segment', async () => {
     const m = await ready(mount());

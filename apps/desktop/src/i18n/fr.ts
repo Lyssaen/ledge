@@ -1432,7 +1432,7 @@ export const fr = {
     },
     /** The « Rig · name » tab (IDE lot 7c). */
     rigTab: {
-      title: (rig: string) => `Rig · ${rig}`,
+      title: (rig: string, machine?: string) => (machine ? `Rig · ${rig} · ${machine}` : `Rig · ${rig}`),
       topology: 'Topologie', topologyRunning: 'clic sur un siège : son fil', topologyStopped: 'les sièges démarrent avec le rig', loading: 'Lecture…',
       legend: 'Liens', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
       running: 'en marche', stopped: 'arrêté', seatsAt: (n: number, machine: string) => `${n} ${n > 1 ? 'sièges' : 'siège'} · ${machine}`,
@@ -1442,6 +1442,7 @@ export const fr = {
       level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Ouvert', yolo: 'YOLO', locked: 'Verrouillé' } as Record<string, string>,
       specPolicy: (p: string) => `Spec : ${p}`, noSeats: 'Aucun siège connu : rien à régler pour l’instant.', specNoPolicy: 'La spec de ce rig ne donne aucune politique connue.',
       nextLaunch: 'Un changement vaut au prochain lancement du rig.', mixed: 'Mixte', mixedSeat: (name: string, summary: string) => `${name} : ${summary}`,
+      errors: { daemon_stopped: 'Le daemon OpenRig est arrêté.', unknown_rig: 'Ce rig n’existe plus sur cette machine.' } as Record<string, string>,
       policyErrors: {
         spec_unknown: 'Ledge ne retrouve pas la spec de ce rig : « Spec » n’est pas possible.',
         spec_no_policy: 'La spec de ce rig ne donne aucune politique de permissions : « Spec » n’est pas possible.',
