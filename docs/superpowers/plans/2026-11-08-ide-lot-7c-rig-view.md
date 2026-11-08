@@ -49,7 +49,7 @@ Le kernel a sa propre vue, sans réglages, avec « Parler à l'operator ». Dans
 
 - Branche `feat/ide-lot-7c` (worktree `../ledge-ide-lot-7c`), partie de `origin/main` 20e17aed. Une PR vers `main` (`Lyssaen/ledge`), seulement avec l'accord de l'utilisateur.
 - Interrupteur coupé, l'interface actuelle est **inchangée**. `Sidebar`, `RigGroups`, `TopBar`, `OpenRigPage`, `SeatsDialog`, `SeatSettings` et leurs tests restent verts sans retouche.
-- Le daemon (`packages/ledge`), le protocole (`packages/protocol`) et `packages/fleet` ne changent pas, sauf si l'utilisateur choisit l'option B de R2.
+- Le daemon (`packages/ledge`), le protocole (`packages/protocol`) et `packages/fleet` ne changent que dans la Task 0 (option B de R2, choisie par l'utilisateur le 2026-11-08) : le protocole ne fait qu'ajouter, toute commande `rig` passe par `execFile`, la flotte répond `outdated` sans rien envoyer à un daemon sans `openrigRig`.
 - Une commande montrée est toujours celle que Ledge lance (`commandsOf(action)`), jamais le texte de la maquette.
 - Toute nouvelle vue IDE passe par le chunk paresseux de l'IDE (`ide/lazy.tsx`) : ses styles ne se chargent jamais interrupteur coupé.
 - Textes en français et en anglais, sous `t.ide.rigTab`. On reprend les textes existants (`t.openrig.confirm.*`, `t.openrig.policy.*`, `t.ide.rigsView.*`, `o.talkToOperator`, `o.operatorNotYet`). Les textes nouveaux de la maquette sont cités mot pour mot.
@@ -64,8 +64,8 @@ Le kernel a sa propre vue, sans réglages, avec « Parler à l'operator ». Dans
 | # | Choix | Si c'est faux |
 |---|---|---|
 | R1 | **L'onglet** est du type `rig`, de réf. `<machine>:<rig>` (le kernel : `<machine>:kernel`), et il remplace le type `'topology'` resté inutilisé. Titre « Rig · nom » ; l'infobulle donne la machine. Le clic sur un rig ou le kernel dans la vue Rigs l'ouvre (`Ctrl`+clic : à droite), et la ligne est surlignée tant que son onglet est actif. | — |
-| R2 | **Les six niveaux de permission** (`Spec`, `Auto`, `Standard`, `Ouvert`, `YOLO`, `Verrouillé`). Le protocole du 7a n'écrit que les modes de siège : `Spec` → `inherit`, `Auto` → `auto`, `YOLO` → `full_bypass`. **Option A (recommandée pour 7c)** : ces trois-là sont actifs, et `Standard`, `Ouvert` et `Verrouillé` sont grisés, avec en infobulle « Pas encore réglable depuis Ledge ». **Option B** : une petite tâche côté daemon ajoute `rig.policy { rig, policy, seats }` → `rig policy apply <politique> --seat <siège> --reason Ledge`, et les six niveaux sont actifs (environ ½ jour de plus, et le protocole change). | A : trois niveaux grisés jusqu'à un lot suivant. B : un aller-retour daemon de plus dans ce lot. |
-| R3 | **Le niveau affiché.** `Spec` est actif quand tous les sièges héritent (`selection === 'inherit'`). `Auto` ou `YOLO` est actif quand la posture de tous les sièges vaut `auto` ou `full_bypass`. Sinon, aucun segment n'est actif et une ligne dit « Mixte » avec le résumé de chaque siège. La politique de la spec s'affiche à côté (`Spec : builtin:auto`). Un changement vaut **au prochain lancement**, et la ligne le dit. Il n'y a pas de confirmation, comme dans la maquette. | Demander une confirmation. |
+| R2 | **Les six niveaux de permission** (`Spec`, `Auto`, `Standard`, `Ouvert`, `YOLO`, `Verrouillé`) sont **tous actifs** (option B, choisie par l'utilisateur). La Task 0 ajoute l'action `rig.policy { rig, policy: RigPolicy \| 'spec', seats }`. Pour chaque siège, elle lève d'abord la sélection native explicite (`rig seat set-permissions <siège> --mode inherit`), qui primerait sinon sur la politique enregistrée. Puis elle enregistre la politique (`rig policy apply <politique> --seat <siège>`). `spec` revient à la politique de la spec : la façon exacte d'effacer une politique enregistrée se lit dans la source de la CLI (Task 0, étape 1). | Option A : trois niveaux grisés jusqu'à un lot suivant. |
+| R3 | **Le niveau affiché.** Un niveau est actif quand tous les sièges ont cette politique enregistrée (`RigSeatPermission.policy`, ajouté par la Task 0 s'il est lisible dans `rig seat status --json`), ou héritent tous de la spec (`Spec`). Sinon, aucun segment n'est actif et une ligne dit « Mixte » avec le résumé de chaque siège. La politique de la spec s'affiche à côté (`Spec : builtin:auto`). Un changement vaut **au prochain lancement**, et la ligne le dit. Il n'y a pas de confirmation, comme dans la maquette. | Demander une confirmation. |
 | R4 | **Sièges par rôle ±**, seulement quand le rig tourne. Les rôles sont des `pod.member` (`seatsByRole(rig.nodes)`). + et − modifient un **brouillon**, avec au moins 1 siège par rôle, comme dans la maquette. Une barre « Appliquer » montre alors le plan (`seatPlan` : sièges ajoutés, sièges retirés, ceux qui travaillent signalés) et envoie `reseatRig`. La maquette applique tout de suite, mais retirer un siège arrête sa session : on demande donc d'appliquer. | Appliquer à chaque clic, comme la maquette. |
 | R5 | **La topologie**, à partir de `useRigGraph` :<br>- une colonne par pod, dans l'ordre du graphe, avec le libellé du pod en tête ; les sièges empilés dans leur colonne ;<br>- les liens en courbes SVG fléchées, selon leur type : `delegates_to` plein, `escalates_to` tirets, `collaborates_with` pointillé, avec une petite légende ;<br>- un nœud montre la pastille (la session Ledge jointe, comme `seatLine` du 7b), le logo du harnais, le nom (de la session, sinon le `logicalId`) et le rôle en petit ;<br>- un clic ouvre le fil (`openClick`, `Ctrl`+clic à droite) ; un siège sans session n'est pas cliquable ;<br>- un rig arrêté a tous ses nœuds grisés (`.off`).<br>La maquette place ses nœuds à la main ; le protocole donne des pods et des liens typés, d'où cette disposition. | Une autre disposition : seule `layoutOf` change. |
 | R6 | **Le fichier de spec** : `Rig.specPath` quand Ledge le connaît, sinon « Spec inconnue : rig lancé hors de Ledge ». Le chemin de la maquette (`~/.openrig/rigs/X.yaml`) n'existe pas. | — |
@@ -86,6 +86,33 @@ Le kernel a sa propre vue, sans réglages, avec « Parler à l'operator ». Dans
 
 ---
 
+### Task 0 : l'action `rig.policy` (daemon et protocole, option B de R2)
+
+**Files :**
+- Modify : `packages/protocol/src/openrig.ts` (`OpenRigActionSchema`, `rigCommands`, `RigSeatPermissionSchema`) ; `packages/ledge/src/daemon/openrig.ts` (lecture de `policy` dans `readSeatPermission`, délai de l'action) ; `packages/fleet/src/fleet.ts` (la porte `openrigRig`) ; `docs/openrig-releve-0.7.md` §4 (ce que dit la source)
+- Test : `packages/protocol/test/` (le fichier qui couvre `rigCommands`), `packages/ledge/test/openrig-permissions.test.ts`, `packages/fleet/test/fleet.test.ts`
+
+**Interfaces :**
+- Produit :
+  - l'action `{ kind: 'rig.policy'; rig: RigName; policy: RigPolicy | 'spec'; seats: RigSeatName[] }` (1 à 200 sièges, chacun finissant par `@<rig>`, comme `rig.permissions`) ;
+  - `RigSeatPermission.policy?: string` (la politique enregistrée sur le siège, telle qu'OpenRig la nomme).
+
+- [ ] **Step 1 : lire la source de la CLI**, en lecture seule (`~/.local/share/nvm/v24.10.0/lib/node_modules/@openrig/cli/dist`, commandes `policy apply` et `seat set-permissions`), et `rig policy apply --help`. Relever :
+  - comment effacer une politique enregistrée sur un siège, pour revenir à la spec. Si rien n'existe, `spec` applique la politique de la spec elle-même (`permissions.policy`), et sans politique de spec, `none` ;
+  - si `rig seat status --json` expose la politique enregistrée, et sous quel champ ;
+  - si `policy apply --seat` accepte `--json`.
+
+  L'écrire en 3 ou 4 lignes dans le relevé §4. **Ne lancer aucune commande qui modifie un siège réel.**
+- [ ] **Step 2 : écrire les tests qui échouent.**
+  - `rigCommands({ kind: 'rig.policy', rig: 'dev', policy: 'standard', seats: ['a@dev','b@dev'] })` donne, dans l'ordre, pour chaque siège : `['seat','set-permissions','a@dev','--mode','inherit','--reason','Ledge','--json']`, puis `['policy','apply','standard','--seat','a@dev','--reason','Ledge', …]` (avec `--json` si l'étape 1 l'a confirmé).
+  - `policy: 'spec'` donne la commande relevée à l'étape 1.
+  - Le schéma refuse un siège d'un autre rig, une liste vide et une politique inconnue.
+  - `readSeatPermission` lit `policy` depuis la fixture quand le champ existe, et l'omet sinon.
+  - La flotte répond `outdated` sans envoyer `rig.policy` à un daemon sans `openrigRig`.
+- [ ] **Step 3 : implémenter.** Le délai est celui de `rig.permissions`. L'échec s'arrête à la première commande, comme `rig.permissions`. `openrig.done.completed` compte aussi les sièges déjà changés pour `rig.policy`. Le cache des permissions se vide après l'action (c'est déjà le cas pour tout `act`).
+- [ ] **Step 4 : lancer les suites de `@ledge/protocol`, `@ledge/fleet` et `@paradow/ledge`, et le typecheck.** Attendu : vertes, hors échecs connus de ledge (`capture-reducer` « real worker », `server-attachments` ×3, `tui-screens` et `mobile-phone-e2e` « À toi » instables).
+- [ ] **Step 5 : commit** `feat(openrig): rig.policy records one of the six policies on every seat of a rig (next launch)`.
+
 ### Task 1 : le modèle de l'onglet
 
 **Files :**
@@ -100,8 +127,8 @@ Le kernel a sa propre vue, sans réglages, avec « Parler à l'operator ». Dans
   - `interface TopoEdge { from: string; to: string; kind: string; path: string }` (un `d` de chemin SVG)
   - `layoutOf(graph: RigGraph, sessions: readonly Session[], machine: string, running: boolean): { nodes: TopoNode[]; edges: TopoEdge[]; pods: { id: string; label: string; x: number }[]; width: number; height: number }`
   - `type PermLevel = 'spec' | 'auto' | 'standard' | 'open' | 'yolo' | 'locked'` et `PERM_LEVELS: readonly PermLevel[]` dans l'ordre de la maquette
-  - `writableMode(level: PermLevel): SeatPermissions | null` (`spec` → `inherit`, `auto` → `auto`, `yolo` → `full_bypass`, les autres → `null` en option A)
-  - `permLevelOf(seats: readonly RigSeatPermission[]): PermLevel | 'mixed' | null` (R3 ; `null` sans siège)
+  - `policyOf(level: PermLevel): RigPolicy | 'spec'` (`spec` → `'spec'`, `open` → `'open'`, `locked` → `'locked'`, etc.)
+  - `permLevelOf(seats: readonly RigSeatPermission[]): PermLevel | 'mixed' | null` (R3, sur `seat.policy` de la Task 0 ; `null` sans siège)
   - `interface RoleCount { role: string; runtime: string; count: number }`
   - `roleCounts(rig: Rig): RoleCount[]`
   - `seatDraft(counts: readonly RoleCount[], draft: Readonly<Record<string, number>>): { seats: Record<string, number>; changed: boolean }` (les rôles absents de `counts` sont retirés du brouillon ; le minimum est 1)
@@ -117,11 +144,11 @@ Le kernel a sa propre vue, sans réglages, avec « Parler à l'operator ». Dans
     - `running: false` → tous les `dot` valent `'off'` ;
     - un siège joint prend le nom de sa session ;
     - `width` et `height` contiennent tous les nœuds.
-  - `writableMode('standard') === null`, `writableMode('yolo') === 'full_bypass'`.
+  - `policyOf('open') === 'open'`, `policyOf('spec') === 'spec'`.
   - `permLevelOf` :
-    - tous les sièges `selection: 'inherit'` → `'spec'` ;
-    - tous `posture: 'full_bypass'` → `'yolo'` ;
-    - un siège `auto` et un siège `inherit` → `'mixed'` ;
+    - aucun siège avec `policy` → `'spec'` ;
+    - tous `policy: 'builtin:yolo'` ou `'yolo'` (la forme relevée à la Task 0) → `'yolo'` ;
+    - un siège `standard` et un siège sans politique → `'mixed'` ;
     - `[]` → `null`.
   - `roleCounts` sur un rig dont les nœuds sont `dev.build`, `dev.build-2` et `dev.review` → `[{ role: 'dev.build', count: 2, … }, { role: 'dev.review', count: 1, … }]`.
   - `seatDraft` :
@@ -212,8 +239,7 @@ La page `.ide-rig` :
 - [ ] **Step 1 : écrire les tests**, avec le faux client (`test/openrig-page.test.tsx:12-16`) qui répond `openrig.state`, `openrig.graphState`, `openrig.permissionList`, `openrig.snapshotList` et `openrig.queueState`.
   - **En-tête** : `ledge-dev` en marche affiche « en marche », « 2 sièges · Local », « Redémarrer » et « Arrêter ». « Arrêter » ouvre la confirmation sous l'en-tête, avec `rig down ledge-dev`, et Confirmer envoie `rig.stop`.
   - **Permissions** :
-    - « YOLO » envoie `openrig.act { kind: 'rig.permissions', rig: 'ledge-dev', mode: 'full_bypass', seats: [les 2 sièges] }`, puis relit les permissions ;
-    - « Standard » est désactivé, avec son infobulle (option A) ;
+    - « Standard » envoie `openrig.act { kind: 'rig.policy', rig: 'ledge-dev', policy: 'standard', seats: [les 2 sièges] }`, puis relit les permissions ; « Spec » envoie `policy: 'spec'` ;
     - des sièges mixtes affichent « Mixte ».
   - **Sièges par rôle** :
     - + sur `dev.build` montre « Appliquer » et le plan (un siège ajouté) ;
