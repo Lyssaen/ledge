@@ -33,6 +33,14 @@ async function mount({ ide = true, seat = false, broadcast = false, extra = [] }
   d.upsert(fakeSession('nova', { name: 'Nova', cwd: '/w/ledge', state: 'working' }));
   for (const x of extra) d.upsert(x);
   if (seat) d.upsert(fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working', rig: { seat: 'dev@r', name: 'ledge-dev' } }));
+  // The Rigs view reads the rig from OpenRig: the daemon answers its status with ledge-dev and Pim's seat.
+  if (seat) d.onMessage(m => {
+    if (m.type !== 'openrig.status') return;
+    const state = { installed: true, version: '0.6.14', daemon: { state: 'running', pid: 1, port: 7433 }, kernel: { state: 'ready' }, at: new Date().toISOString(),
+      rigs: [{ id: '1', name: 'ledge-dev', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: '1h', snapshot: null,
+        nodes: [{ logicalId: 'dev', session: 'dev@r', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'running', stopped: false, work: 1 }] }] };
+    d.push({ type: 'openrig.state', requestId: m.requestId, state } as never);
+  });
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
   const tree = within(await side.findByRole('tree', { name: 'Projets, branches et sessions' }));
@@ -45,7 +53,7 @@ const refs = (w: Workspace) => w.groups.map(g => g.tabs.map(t => `${t.kind}:${t.
 /** The rigs view of the explorer, where the seats are. */
 async function rigsView(side: ReturnType<typeof within>) {
   fireEvent.click(screen.getByRole('button', { name: 'Rigs OpenRig' }));
-  return side.findByRole('button', { name: /^Pim/ });
+  return within(await screen.findByRole('complementary', { name: 'Rigs' })).findByRole('button', { name: /^Pim/ });
 }
 const menu = () => within(screen.getByRole('menu'));
 const labels = () => menu().getAllByRole('menuitem').map(i => i.getAttribute('aria-label'));

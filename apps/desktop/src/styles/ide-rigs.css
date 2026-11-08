@@ -1,0 +1,80 @@
+/* The IDE's Rigs view (docs/mockups/ledge-ide-rigs.html, `.rx-*`). Buttons are prefixed `.ide-rigs`: app.css resets `button:not(.ledge-btn)`. */
+.ide-rigs { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; font-size: 12.5px; color: var(--foreground); }
+.ide-rigs-h { position: relative; flex: none; display: flex; align-items: center; gap: 6px; padding: 9px 12px 6px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.ide-rigs button { cursor: pointer; }
+.ide-rigs button:disabled { cursor: default; }
+.ide-rigs-main { flex: 1; min-height: 0; overflow: auto; }
+.ide-rigs-foot { flex: none; max-height: 45%; overflow: auto; box-shadow: 0 -1px 0 var(--sidebar-border); }
+.ide-rigs-foot .ide-rigs-pane { border-top: 0; }
+
+.ide-rigs-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted-foreground); }
+.ide-rigs-dot.d-idle { background: var(--success); }
+.ide-rigs-dot.d-work { background: var(--info); }
+.ide-rigs-dot.d-ask { background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent); }
+.ide-rigs-dot.d-perm { background: var(--destructive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 20%, transparent); }
+.ide-rigs-dot.d-off { background: none; border: 1.5px solid var(--muted-foreground); }
+
+.ide-rigs .ide-rigs-mach { display: inline-flex; align-items: center; gap: 5px; height: 20px; max-width: 110px; padding: 0 6px; border-radius: var(--radius-sm); font: 11px 'Geist Mono', monospace; text-transform: none; letter-spacing: 0; color: var(--foreground); }
+.ide-rigs-mach span:not(.car) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ide-rigs-mach .car { font-size: 9px; color: var(--muted-foreground); }
+.ide-rigs .ide-rigs-mach:hover, .ide-rigs .ide-rigs-mach.open { background: var(--muted); }
+.ide-rigs .ide-rigs-launch { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 11px; text-transform: none; letter-spacing: 0; color: var(--muted-foreground); }
+.ide-rigs .ide-rigs-launch:hover { background: var(--muted); color: var(--foreground); }
+
+.ide-rigs-back { position: fixed; inset: 0; z-index: 20; }
+.ide-rigs-menu { position: absolute; z-index: 21; top: 30px; left: 8px; width: 232px; padding: 5px; background: var(--popover, var(--card)); color: var(--foreground); border: 1px solid var(--input); border-radius: var(--radius-lg); box-shadow: 0 16px 40px color-mix(in srgb, #000 35%, transparent); text-transform: none; letter-spacing: 0; font-weight: 400; }
+.ide-rigs-menu-h { padding: 4px 8px 6px; font-size: 11px; color: var(--muted-foreground); }
+.ide-rigs .ide-rigs-menu button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-md); text-align: left; color: var(--foreground); }
+.ide-rigs .ide-rigs-menu button:hover, .ide-rigs .ide-rigs-menu button.on { background: var(--muted); }
+.ide-rigs-menu-t { display: flex; flex-direction: column; min-width: 0; }
+.ide-rigs-menu-t b { font: 500 12.5px 'Geist Mono', monospace; }
+.ide-rigs-menu-t small { font-size: 11px; color: var(--muted-foreground); }
+.ide-rigs-menu-ck { margin-left: auto; font-size: 12px; }
+.ide-rigs-menu-sep { height: 1px; background: var(--border); margin: 5px 2px; }
+.ide-rigs .ide-rigs-menu button.a { gap: 7px; font-size: 12px; color: var(--muted-foreground); }
+.ide-rigs .ide-rigs-menu button.a:hover { color: var(--foreground); }
+
+.ide-rigs-pane { border-top: 1px solid var(--sidebar-border); }
+.ide-rigs-ph { display: flex; align-items: center; height: 26px; padding: 0 6px 0 4px; }
+.ide-rigs .ide-rigs-ptog { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 4px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); text-align: left; }
+.ide-rigs .ide-rigs-ptog:hover { color: var(--foreground); }
+.ide-rigs-pchev { width: 10px; font-size: 10px; }
+.ide-rigs-n { font-family: 'Geist Mono', monospace; font-weight: 400; letter-spacing: 0; }
+.ide-rigs-pb { padding: 0 6px 10px; }
+
+.ide-rigs-row { display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 4px; border-radius: var(--radius-sm); }
+.ide-rigs-row:hover { background: var(--accent); }
+.ide-rigs-row.sel { background: var(--muted); }
+.ide-rigs-row.seat { padding-left: 22px; }
+.ide-rigs-row.seat.off { opacity: .5; }
+.ide-rigs .ide-rigs-chev { flex: none; width: 12px; font-size: 10px; color: var(--muted-foreground); text-align: center; }
+.ide-rigs .ide-rigs-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: inherit; }
+.ide-rigs .ide-rigs-name:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.ide-rigs-row.rig .ide-rigs-name b { font-weight: 600; }
+.ide-rigs-row.seat .ide-rigs-name b { font-weight: 400; }
+.ide-rigs-meta { flex: none; font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); }
+.ide-rigs-pw { flex: none; width: 46px; display: flex; justify-content: flex-end; gap: 2px; }
+.ide-rigs-row.seat .ide-rigs-pw { display: none; }
+.ide-rigs-row.daemon .ide-rigs-meta { margin-right: 4px; }
+
+.ide-rigs .ide-rigs-ib { width: 22px; height: 22px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--muted-foreground); }
+.ide-rigs .ide-rigs-ib:hover:not(:disabled) { background: var(--muted); color: var(--foreground); }
+.ide-rigs .ide-rigs-ib.stop:hover:not(:disabled) { color: var(--destructive); }
+.ide-rigs .ide-rigs-ib.start { color: var(--success); }
+.ide-rigs .ide-rigs-ib:disabled { opacity: .45; }
+
+.ide-rigs-note { padding: 4px 8px; font-size: 11.5px; color: var(--muted-foreground); }
+.ide-rigs-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 4px 2px; padding: 10px; border: 1px dashed var(--input); border-radius: var(--radius-lg); font-size: 12px; }
+.ide-rigs-empty span { color: var(--muted-foreground); }
+.ide-rigs .ide-rigs-empty button.pri { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: var(--radius-md); font-size: 11.5px; background: var(--primary); color: var(--primary-foreground); }
+.ide-rigs .ide-rigs-empty button.pri:disabled { opacity: .5; }
+
+.ide-rigs-conf { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; padding: 8px 9px; border: 1px solid var(--input); border-radius: var(--radius-lg); background: var(--card); font-size: 12px; }
+.ide-rigs-conf span, .ide-rigs-conf p { margin: 0; color: var(--muted-foreground); }
+.ide-rigs-conf .ide-rigs-seats { color: var(--foreground); }
+.ide-rigs-conf code { white-space: normal; word-break: break-word; font: 11px 'Geist Mono', monospace; padding: 3px 6px; border-radius: var(--radius-sm); background: var(--muted); }
+.ide-rigs-go { display: flex; gap: 6px; }
+.ide-rigs .ide-rigs-go button { height: 24px; padding: 0 8px; border: 1px solid var(--input); border-radius: var(--radius-md); font-size: 11.5px; color: var(--foreground); }
+.ide-rigs .ide-rigs-go button:hover { background: var(--muted); }
+.ide-rigs .ide-rigs-go button.pri { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
+.ide-rigs-err { margin: 2px 4px 4px 22px; font-size: 11.5px; color: var(--destructive); }
