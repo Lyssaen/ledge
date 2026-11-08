@@ -26,7 +26,8 @@ const activity = (page: Page, name: string) => page.getByRole('navigation', { na
 async function boot(page: Page): Promise<void> {
   await fakeDaemon(page, [...WITH_HELPERS, SEAT], { projects: twoProjects, usage: USAGE } as never);
   await page.goto('/');
-  await expect(page.locator('.ide')).toBeVisible();
+  // The IDE's chunk loads on the first visit: under a parallel run it can take more than the default 5 s.
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 20_000 });
   await expect(abar(page)).toBeVisible();
 }
 
@@ -125,4 +126,32 @@ test('captures: the Atelier bar, and the Atelier and Settings in narrow groups (
   }
   // Nothing scrolls the page sideways.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('in a narrow group, the Atelier bar keeps every control within reach', async ({ page }) => {
+  await boot(page);
+  await page.keyboard.press('Control+\\');
+  await expect(groups(page)).toHaveCount(2);
+  // Two groups near 330 px each, just over the 300 px minimum; a filter set, the longest bar.
+  await page.setViewportSize({ width: 48 + 248 + 300 + 660, height: 1080 });
+  await page.locator('.ide-explorer').getByTitle('Show only Website in the atelier').click();
+  const group = (await groups(page).nth(0).boundingBox())!;
+  for (const name of ['Remove the filter: show every project', 'Projects', 'Rigs', 'Hide subagents', 'Freeze animations']) {
+    const b = (await abar(page).getByRole(/^(Projects|Rigs)$/.test(name) ? 'radio' : 'button', { name, exact: true }).boundingBox())!;
+    expect(b.x, name).toBeGreaterThanOrEqual(group.x);
+    expect(b.x + b.width, name).toBeLessThanOrEqual(group.x + group.width + 1);
+  }
+  // Nothing is cut or squeezed: no control (nor the bar) hides part of itself, none overlaps the next, the project's name reads.
+  const cut = await abar(page).evaluate(bar => {
+    const out: string[] = [];
+    const els = [bar, ...bar.querySelectorAll<HTMLElement>('button, .ide-abar-seg, .ide-abar-filter > span')];
+    for (const el of els) if (el.scrollWidth > el.clientWidth + 1 && !el.matches('.ide-abar-filter > span')) out.push(`overflow: ${el.textContent || el.getAttribute('aria-label')}`);
+    const items = [...bar.children].map(c => c.getBoundingClientRect()).filter(r => r.width > 0);
+    for (let i = 1; i < items.length; i++) if (items[i]!.top < items[i - 1]!.bottom - 1 && items[i]!.left < items[i - 1]!.right - 1) out.push(`overlap at item ${i}`);
+    const name = bar.querySelector('.ide-abar-filter > span');
+    if (name && name.getBoundingClientRect().width < 30) out.push('project name squeezed');
+    return out;
+  });
+  expect(cut).toEqual([]);
+  await abar(page).screenshot({ path: 'e2e/.results/ide-lot6-abar-narrow.png' });
 });

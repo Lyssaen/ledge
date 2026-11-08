@@ -3,6 +3,7 @@
 Fichier de travail du lot 6 (plan `docs/superpowers/plans/2026-11-08-ide-lot-6-settings-atelier.md`), à supprimer avant la PR. Les captures viennent de `apps/desktop/e2e/ide-settings-atelier.spec.ts` (`e2e/.results/ide-lot6-*.png`).
 
 1. **L'atelier dans un groupe étroit (R8).** À 480 px, la barre de zoom de l'atelier (`.zoom-controls`, en position absolue) déborde à gauche du groupe : « − » et le pourcentage sont coupés. Les salles se lisent encore, en une colonne. À 720 px, l'atelier tient. Faut-il une règle pour la barre de zoom dans un groupe étroit, par exemple sans l'indice « Ctrl + molette… », ou rien ?
+   La barre de l'onglet (« Atelier / filtre », « Projets | Rigs », « Masquer les sous-agents », pause, « Détacher ») passe sur deux lignes en dessous d'environ 480 px, au lieu de couper ses boutons (capture `ide-lot6-abar-narrow.png`, groupe de 330 px). Ce choix convient-il ?
 
 2. **Les Réglages dans un groupe étroit.** À 480 px, la colonne des sections prend la moitié de la largeur. Dans Général, les libellés passent un mot par ligne et « English » déborde à droite. La page OpenRig a une règle pour ce cas (« la colonne de gauche devient une rangée d'onglets au-dessus du contenu »). Faut-il la même règle pour les Réglages ?
 

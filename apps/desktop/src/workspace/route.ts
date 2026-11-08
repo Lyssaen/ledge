@@ -24,13 +24,14 @@ export function routeNav(a: NavAction, ctx: { isSeat(id: string): boolean; modal
   }
 }
 
-/** The NavState seen by a tab's content: the real one when it speaks of that tab, else a synthetic place. */
-export function tabNav(nav: NavState, tab: Tab): NavState {
+/** The NavState seen by a tab's content: the real one when it speaks of that tab, else a synthetic place. A Settings tab out of
+ *  the place (another group focused) stays on `lastSettings`, the section it was left on. */
+export function tabNav(nav: NavState, tab: Tab, lastSettings: SectionId = 'general'): NavState {
   if (tab.kind === 'session' || tab.kind === 'seat') {
     return nav.place.kind === 'session' && nav.place.id === tab.ref ? nav : { ...nav, place: { kind: 'session', id: tab.ref, view: 'atelier', project: 'all' } };
   }
   if (tab.kind === 'settings' && nav.place.kind !== 'settings') {
-    return { ...nav, place: { kind: 'settings', section: 'general', back: { kind: 'overview', view: 'atelier', project: 'all' } } };
+    return { ...nav, place: { kind: 'settings', section: lastSettings, back: { kind: 'overview', view: 'atelier', project: 'all' } } };
   }
   return nav;
 }

@@ -101,6 +101,10 @@ describe('tabNav', () => {
     const o = nav({ kind: 'overview', view: 'atelier', project: 'all' });
     expect(tabNav(o, SETTINGS_TAB).place).toEqual({ kind: 'settings', section: 'general', back: { kind: 'overview', view: 'atelier', project: 'all' } });
   });
+  it('a Settings tab out of the place (another group focused) keeps the section it was left on', () => {
+    const o = nav({ kind: 'overview', view: 'atelier', project: 'p1' });
+    expect(tabNav(o, SETTINGS_TAB, 'workspace').place).toEqual({ kind: 'settings', section: 'workspace', back: { kind: 'overview', view: 'atelier', project: 'all' } });
+  });
   it('atelier and openrig get the nav', () => {
     const o = nav({ kind: 'overview', view: 'atelier', project: 'all' });
     expect(tabNav(o, ATELIER_TAB)).toBe(o); expect(tabNav(o, openrigTab())).toBe(o);

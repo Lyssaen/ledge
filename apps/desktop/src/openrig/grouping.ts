@@ -17,4 +17,4 @@ export function setGrouping(g: Grouping): void {
  *  live in « Rigs »). Shared by the sidebar and the IDE's Atelier bar. */
 export const offersRigs = (sessions: readonly Pick<Session, 'rig' | 'state'>[], installed: boolean | undefined): boolean =>
   sessions.some(s => s.rig && s.state !== 'exited') || installed === true;
-export const useGrouping =(): Grouping => useSyncExternalStore(f => { subscribers.add(f); return () => { subscribers.delete(f); }; }, () => value);
+export const useGrouping = (): Grouping => useSyncExternalStore(f => { subscribers.add(f); return () => { subscribers.delete(f); }; }, () => value);

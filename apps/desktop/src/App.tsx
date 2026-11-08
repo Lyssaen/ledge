@@ -710,7 +710,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} /> : title(tab));
     const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {
-      const tnav = tabNav(nav, tab);
+      const tnav = tabNav(nav, tab, lastSettings.current);
       if (tab.kind === 'session' || tab.kind === 'seat') {
         const s = known.find(x => x.id === tab.ref);
         if (!s) return null;
