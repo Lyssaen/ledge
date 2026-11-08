@@ -13,6 +13,11 @@ describe('readSeatPermission', () => {
       summary: 'Next launch: --permission-mode acceptEdits, from the kernel\'s operational default; OpenRig adds 50 allowances.'
     });
   });
+  it('reads the stored policy when OpenRig names one, and omits it otherwise', () => {
+    expect(readSeatPermission(ADVISOR)).not.toHaveProperty('policy');
+    expect(readSeatPermission({ permissions: { selectionState: 'inherit', effective: { effectiveMode: 'floor', source: 'seat', policyRef: 'builtin:standard' } } })).toMatchObject({ policy: 'builtin:standard' });
+    expect(readSeatPermission({ permissions: { selectionState: 'inherit', policy: 'none' } })).toEqual({ selection: 'inherit', policy: 'none' });
+  });
   it('leaves out what OpenRig does not say, and is undefined for what is not a status', () => {
     expect(readSeatPermission({ permissions: { selectionState: 'seat', effective: { effectiveMode: null, source: 'seat' } } })).toEqual({ source: 'seat', selection: 'seat' });
     expect(readSeatPermission({})).toBeUndefined();
@@ -152,5 +157,62 @@ describe('rig.permissions act', () => {
     expect(ran).toHaveLength(2);
     expect(r).toMatchObject({ ok: false, error: 'seat b-x@r: no such seat', completed: 1 });
     expect(r.commands).toEqual(['a-x@r', 'b-x@r', 'c-x@r'].map(s => `rig seat set-permissions ${s} --mode floor --reason Ledge`));
+  });
+});
+
+describe('rig.policy', () => {
+  const a = { kind: 'rig.policy' as const, rig: 'dev', policy: 'standard' as const, seats: ['a@dev', 'b@dev'] };
+  it('per seat: inherit the explicit mode, then record the policy', () => {
+    expect(rigCommands(a)).toEqual([
+      ['seat', 'set-permissions', 'a@dev', '--mode', 'inherit', '--reason', 'Ledge', '--json'],
+      ['policy', 'apply', 'standard', '--seat', 'a@dev', '--reason', 'Ledge', '--json'],
+      ['seat', 'set-permissions', 'b@dev', '--mode', 'inherit', '--reason', 'Ledge', '--json'],
+      ['policy', 'apply', 'standard', '--seat', 'b@dev', '--reason', 'Ledge', '--json']
+    ]);
+    expect(showRigCommand(rigCommands(a)[1]!)).toBe('rig policy apply standard --seat a@dev --reason Ledge');
+  });
+  it('spec: the spec\'s own policy, builtin: stripped, none without one', () => {
+    const s = { ...a, policy: 'spec' as const, seats: ['a@dev'] };
+    expect(rigCommands(s, 'builtin:yolo')[1]).toEqual(['policy', 'apply', 'yolo', '--seat', 'a@dev', '--reason', 'Ledge', '--json']);
+    expect(rigCommands(s, 'none')[1]).toEqual(['policy', 'apply', 'none', '--seat', 'a@dev', '--reason', 'Ledge', '--json']);
+    expect(rigCommands(s)[1]).toEqual(['policy', 'apply', 'none', '--seat', 'a@dev', '--reason', 'Ledge', '--json']);
+  });
+  it('the schema refuses a seat of another rig, an empty list, an unknown policy', () => {
+    expect(OpenRigActionSchema.safeParse(a).success).toBe(true);
+    expect(OpenRigActionSchema.safeParse({ ...a, policy: 'spec' }).success).toBe(true);
+    expect(OpenRigActionSchema.safeParse({ ...a, seats: ['a@dev', 'b@other'] }).success).toBe(false);
+    expect(OpenRigActionSchema.safeParse({ ...a, seats: [] }).success).toBe(false);
+    expect(OpenRigActionSchema.safeParse({ ...a, policy: 'none' }).success).toBe(false);
+    expect(OpenRigActionSchema.safeParse({ ...a, policy: 'loose' }).success).toBe(false);
+  });
+  const mk = (spec: string | null, failOn?: string) => {
+    const ran: string[] = [];
+    const files: Record<string, string> = spec ? { '/h/.ledge/rigs/dev/rig.yaml': spec } : {};
+    const run: RigRun = async args => {
+      const x = args.join(' ');
+      if (args[0] === 'seat' || args[0] === 'policy') { ran.push(x); return failOn && x.includes(failOn) ? { code: 1, stdout: '', stderr: 'boom\n' } : { code: 0, stdout: '{}', stderr: '' }; }
+      return { code: 1, stdout: '', stderr: '' };
+    };
+    const fs = { read: async (p: string) => { if (p in files) return files[p]!; throw new Error('ENOENT'); }, exists: (p: string) => p in files, copyDir: async () => {}, write: async () => {} };
+    const roleIo = { read: async (p: string) => files[p] ?? null, stat: async () => null, head: async () => null };
+    return { ran, rig: createOpenRig({ run, fs, roleIo, home: '/h', rigsDir: '/h/.ledge/rigs', openrigHome: '/h/.openrig', http: async () => undefined }) };
+  };
+  it('stops at the first failure and counts the seats already changed', async () => {
+    const { ran, rig } = mk(null, 'policy apply standard --seat b@dev');
+    const r = await rig.act({ ...a, seats: ['a@dev', 'b@dev', 'c@dev'] });
+    expect(ran).toHaveLength(4);
+    expect(r).toMatchObject({ ok: false, error: 'boom', completed: 1 });
+    expect(r.commands).toHaveLength(6);
+  });
+  it('spec: the daemon resolves the spec\'s policy; none when the spec has none', async () => {
+    const withPolicy = mk('name: dev\npermission_policy: builtin:locked\npods:\n  - id: dev\n    members:\n      - id: front\n        agent_ref: local:agents/front\n');
+    expect(await withPolicy.rig.act({ ...a, policy: 'spec', seats: ['a@dev'] })).toMatchObject({ ok: true, commands: ['rig seat set-permissions a@dev --mode inherit --reason Ledge', 'rig policy apply locked --seat a@dev --reason Ledge'] });
+    const without = mk('name: dev\npods:\n  - id: dev\n    members:\n      - id: front\n        agent_ref: local:agents/front\n');
+    expect((await without.rig.act({ ...a, policy: 'spec', seats: ['a@dev'] })).commands[1]).toBe('rig policy apply none --seat a@dev --reason Ledge');
+  });
+  it('spec with a custom policy file cannot be recorded on a seat: refused, nothing run', async () => {
+    const w = mk('name: dev\npermission_policy: policies/mine.yaml\npods:\n  - id: dev\n    members:\n      - id: front\n        agent_ref: local:agents/front\n');
+    expect(await w.rig.act({ ...a, policy: 'spec', seats: ['a@dev'] })).toMatchObject({ ok: false, error: 'spec_policy_unsupported', completed: 0 });
+    expect(w.ran).toEqual([]);
   });
 });

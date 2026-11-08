@@ -689,7 +689,8 @@ describe('multi-machine connections', () => {
       { type: 'openrig.role.duplicate', requestId: 'x5', machineId: 'server', roleId: 'f95e', name: 'mine' },
       { type: 'openrig.act', requestId: 'x6', machineId: 'server', action: { kind: 'rig.snapshot', rig: 'a' } },
       { type: 'openrig.act', requestId: 'x7', machineId: 'server', action: { kind: 'rig.permissions', rig: 'a', mode: 'auto', seats: ['s'] } as never },
-      { type: 'openrig.act', requestId: 'x8', machineId: 'server', action: { kind: 'rig.start', rig: 'a', snapshot: 'snap-1' } as never }
+      { type: 'openrig.act', requestId: 'x8', machineId: 'server', action: { kind: 'rig.start', rig: 'a', snapshot: 'snap-1' } as never },
+      { type: 'openrig.act', requestId: 'x9', machineId: 'server', action: { kind: 'rig.policy', rig: 'a', policy: 'standard', seats: ['s@a'] } as never }
     ];
     it('answers each gated message outdated without sending it, for the remote machine and the local one', () => {
       const { client, local, server, got } = setup();
@@ -699,7 +700,7 @@ describe('multi-machine connections', () => {
       for (const m of gated) client.send({ ...m, requestId: `${(m as { requestId: string }).requestId}l`, machineId: undefined } as ClientMessage);
       expect(server.sent).toEqual([]); expect(local.sent).toEqual([]);
       const answers = got.filter(m => m.type.startsWith('openrig.') && 'error' in m);
-      expect(answers).toHaveLength(16);
+      expect(answers).toHaveLength(18);
       expect(answers.every(m => (m as { error?: string }).error === 'outdated')).toBe(true);
       expect(answers.find(m => (m as { requestId?: string }).requestId === 'x6')).toEqual({ type: 'openrig.done', requestId: 'x6', machineId: 'server', ok: false, commands: [], error: 'outdated' });
       expect(answers.find(m => (m as { requestId?: string }).requestId === 'x8l')).toEqual({ type: 'openrig.done', requestId: 'x8l', machineId: 'local', ok: false, commands: [], error: 'outdated' });
@@ -718,7 +719,7 @@ describe('multi-machine connections', () => {
       const { client, server } = setup();
       server.sent.length = 0;
       for (const m of gated) client.send(m);
-      expect(server.sent).toHaveLength(8);
+      expect(server.sent).toHaveLength(9);
     });
     it('a refused role duplicate fails only the pending duplicates, not the roles asks', () => {
       const { client, server, got } = setup();

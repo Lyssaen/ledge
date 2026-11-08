@@ -56,6 +56,9 @@ OpenRig ne fait pas respecter les permissions lui-même : il les **enregistre**,
 
 Politiques intégrées (`rig policy list --json`) : `locked`, `standard`, `open`, `yolo`, `auto`, `none`. Sans politique, la spec `starter` lance ses sièges au « floor » : `permission_policy absent; launch_posture=floor`.
 
+**Relevé de la source de la CLI (lot 7c).** `rig policy apply <nom> --seat <siège> --reason <texte> [--json]` accepte `--json` et enregistre `builtin:<nom>` (ou `none`, plancher explicite) sur le siège ; `--reason` est obligatoire. Rien n'efface une politique de siège : `policy apply` n'accepte que `locked|standard|open|yolo|auto|none`, donc « revenir à la spec » = appliquer la politique de la spec elle-même (`none` si elle n'en a pas). Un mode explicite (`seat set-permissions --mode`) l'emporte sur la politique : Ledge le remet d'abord à `inherit`.
+`rig seat status --json` n'a aucun champ dédié à la politique enregistrée : seuls `permissions.effective.source` (`member_spec`, `rig_spec`…) et `selectionState` bougent. Aucun siège de cette machine n'en porte une, donc le champ n'a pas pu être observé : Ledge lit, dans l'ordre, `effective.policyRef`, `effective.policy`, `permissions.policy`.
+
 **Ce qui n'existe pas :** une permission « du rig » qu'on lirait ou changerait sur un rig qui tourne. Ce qu'on peut faire : montrer la politique de la spec, plus le mode effectif de chaque siège, et changer les sièges un par un.
 
 ## 5. Le snapshot à la demande, et sa reprise

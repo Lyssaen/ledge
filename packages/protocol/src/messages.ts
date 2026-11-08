@@ -102,7 +102,7 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
   /** Answers `openrig.roles`, `openrig.role` and `openrig.roleFile`: reads OpenRig's roles (agent specs). */ openrigRoles: z.boolean().optional(),
-  /** Answers `openrig.graph`, `openrig.snapshots`, `openrig.permissions`, `openrig.queue` and `openrig.role.duplicate`, and takes the actions `rig.snapshot`, `rig.permissions` and `rig.start` with a `snapshot` (lot 7a):
+  /** Answers `openrig.graph`, `openrig.snapshots`, `openrig.permissions`, `openrig.queue` and `openrig.role.duplicate`, and takes the actions `rig.snapshot`, `rig.permissions`, `rig.policy` and `rig.start` with a `snapshot` (lot 7a):
    *  a client (the fleet) sends none of them to a daemon without it. */ openrigRig: z.boolean().optional(),
   /** Answers `openrig.row`: a queue row's state, for the OpenRig task cards of a thread. */ openrigRows: z.boolean().optional(),
   /** Answers `openrig.asks` and `openrig.answer`: what OpenRig asks the person, and their answers (« À toi »). */ openrigAsks: z.boolean().optional(),
