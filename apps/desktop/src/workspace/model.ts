@@ -210,7 +210,7 @@ export function windowOf(w: Workspace, key: string): string | null { return find
 
 /** A secondary window closed by the user (its ×, Alt+F4): its tabs come back to the main window in one group right of
  *  its last, keeping the window's link colour, the front tab kept; the group focused. Nothing else is closed. The main
- *  window is never closed this way. PROVISIONAL (lot 9, v27): design-ux's proposal, awaiting jde. */
+ *  window is never closed this way (v27, validated by jde on 2026-11-09). */
 export function closeWindow(w: Workspace, win: string): Workspace {
   if (win === MAIN || !w.windows.includes(win)) return w;
   const leaving = w.groups.filter(g => g.window === win);

@@ -66,3 +66,51 @@ test('a tab torn out of the window opens alone in a new window, which takes the 
   expect(m.groups.find(g => g.tabs.includes('session:local:nova'))!.window).toBe(m.windows[1]);
   await pop.screenshot({ path: 'e2e/.results/lot9-popout.png' });
 });
+
+/** A tab of a detached window dragged onto the main window's group `into` (its centre). The mouse cannot cross pages here:
+ *  the drag is the browser's events, dispatched where each would fire (dockview reads the panel from its own transfer). */
+async function bringBack(pop: Page, page: Page, name: string, into: Locator): Promise<void> {
+  const tab = tabOf(pop, name);
+  const t = await box(tab);
+  await tab.dispatchEvent('dragstart', { clientX: t.x + 5, clientY: t.y + 5, dataTransfer: await pop.evaluateHandle(() => new DataTransfer()) });
+  const r = await box(into);
+  const at = { clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+  const dt = await page.evaluateHandle(() => new DataTransfer());
+  await into.dispatchEvent('dragenter', { ...at, dataTransfer: dt });
+  await into.dispatchEvent('dragover', { ...at, dataTransfer: dt });
+  // The window closes once the tab has left it: its dragend never comes, as when a webview drops it.
+  await into.dispatchEvent('drop', { ...at, dataTransfer: dt });
+}
+
+test('dropped on a group of the main window, the tab comes back and its window, emptied, closes', async ({ page }) => {
+  await boot(page);
+  await open(page, 'Otto');
+  await open(page, 'Nova');
+  const popped = page.context().waitForEvent('page');
+  await tearOut(page, tabOf(page, 'Nova'));
+  const pop = await popped;
+  await expect(tabOf(pop, 'Nova')).toBeVisible();
+  const closed = pop.waitForEvent('close');
+  await bringBack(pop, page, 'Nova', page.locator('.ide-dockview .dv-content-container').first());
+  await closed;
+  await expect(tabOf(page, 'Nova')).toBeVisible();
+  const m = await model(page);
+  expect(m.windows).toEqual(['main']);
+  expect(m.groups.map(g => g.tabs)).toEqual([['atelier:main', 'session:local:otto', 'session:local:nova']]);
+});
+
+test('a detached window closed by the user: its tabs come back to the main window in a group on the right', async ({ page }) => {
+  await boot(page);
+  await open(page, 'Otto');
+  await open(page, 'Nova');
+  const popped = page.context().waitForEvent('page');
+  await tearOut(page, tabOf(page, 'Nova'));
+  const pop = await popped;
+  await expect(tabOf(pop, 'Nova')).toBeVisible();
+  await pop.close();
+  await expect(tabOf(page, 'Nova')).toBeVisible();
+  const m = await model(page);
+  expect(m.windows).toEqual(['main']);
+  expect(m.groups.map(g => g.tabs)).toEqual([['atelier:main', 'session:local:otto'], ['session:local:nova']]);
+  await expect(page.locator('.ide-dockview .dv-groupview')).toHaveCount(2);
+});

@@ -522,7 +522,7 @@ describe('a bottom-panel terminal torn out of the window', () => {
   });
 });
 
-describe('closeWindow (provisional, v27 proposal: the tabs come back to the main window in a group on the right)', () => {
+describe('closeWindow (v27: the tabs come back to the main window in a group on the right)', () => {
   const torn = () => {
     const w = move(open(open(open(empty(), S('a')), S('b')), S('c')), 'session:b', { window: 'new' });
     const win = windowOf(w, 'session:b')!;
