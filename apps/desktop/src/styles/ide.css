@@ -487,3 +487,28 @@ body.ide-popout > .dv-popout-window { flex: 1 1 auto; min-height: 0; position: r
 .ide-ex-tools { display: flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; }
 .ide-ex-btn { height: 20px; padding: 0 7px; border: 1px solid var(--input); border-radius: 5px; font-size: 11px; color: var(--foreground); }
 .ide-ex-btn:hover { background: var(--muted); }
+
+/* « Dispositions » in the status bar (mockup statusbar() `.lay`, menuHtml() `layout`, `.save-in`): it opens upward, right-aligned. */
+.ide-lay-wrap { position: relative; display: flex; flex: none; }
+.ide-lay { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: 5px; color: var(--muted-foreground); }
+.ide-lay:hover, .ide-lay.open { background: var(--accent); color: var(--foreground); }
+.ide-lay-caret { font-size: 9px; }
+.ide-lay-menu { position: absolute; z-index: 40; right: 0; top: calc(100% + 4px); width: 280px; min-width: 0; }
+.ide-lay-menu.up { top: auto; bottom: calc(100% + 4px); }
+.ide-lay-h { padding: 4px 9px 2px; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.ide-lay-menu [role=menuitem] { height: 30px; font-size: 12.5px; }
+.ide-lay-menu [role=menuitem].sel { background: var(--accent); }
+.ide-lay-menu [role=menuitem] .r { margin-left: auto; font-size: 11px; color: var(--muted-foreground); }
+.ide-lay-save { margin: 4px 6px; height: 26px; border: 1px solid var(--input); border-radius: 6px; background: var(--background); color: var(--foreground); padding: 0 8px; font: inherit; font-size: 12px; outline: none; }
+
+/* The IDE palette (mockup `.palette`, opened at top 90px): no backdrop, the shell stays visible around it. */
+.ide-palette { position: fixed; z-index: 70; left: 50%; top: 90px; transform: translateX(-50%); width: min(600px, calc(100vw - 32px)); background: var(--card); border: 1px solid var(--input); border-radius: 10px; box-shadow: 0 20px 60px #000c; overflow: hidden; }
+.ide-pal-pin { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ide-pal-mark { color: var(--muted-foreground); }
+.ide-pal-pin input { flex: 1; min-width: 0; background: none; border: 0; color: var(--foreground); font: inherit; font-size: 13px; outline: none; }
+.ide-pal-it { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+.ide-pal-it.sel { background: var(--accent); }
+.ide-pal-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ide-pal-r { margin-left: auto; flex: none; color: var(--muted-foreground); font-size: 11px; }
+.ide-pal-none { color: var(--muted-foreground); cursor: default; }
+.ide-pal-foot { display: flex; gap: 14px; padding: 7px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted-foreground); }

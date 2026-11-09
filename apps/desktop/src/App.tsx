@@ -80,7 +80,8 @@ import { useIdeEnabled, useResumeOnStart, useRigsMachine, useShowUsage } from '.
 import { liveTabs, loadLiveTabs, machineOf, nextMemo, saveLiveTabs, toResume } from './workspace/resume';
 import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
-import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, rigTab, useWorkspace } from './workspace/store';
+import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, loadWorkspace as loadIdeWorkspace, openrigTab, rigTab, useWorkspace } from './workspace/store';
+import { bootWorkspace, capture, loadBoot, loadDispositions, saveCurrent, saveDispositions, upsert, useCurrentDisposition, useDispositions } from './workspace/dispositions';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, MAIN, move as moveTab, moveActive, moveTo as moveTabTo, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, windowOf, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, providerOf, tabAlert, tabView } from './workspace/sessionTab';
@@ -92,10 +93,11 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeAtoi, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
+import { IdeAtelierBar, IdeAtoi, IdeBottom, IdeDock, IdeOutput, IdePaletteHost, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
 import { useForge } from './forge/useForge';
 import { AtoiTabLabel } from './ide/atoi/AtoiTabLabel';
 import { forgeLines, noForgeReadable, reachOf } from './forge/states';
+import type { PaletteCommand, PaletteSession } from './ide/palette/model';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -224,9 +226,27 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const rigEntries = useRigOutput(rigOutput, ide);
   // A bottom-panel shell's tab closed by the user (its ×, middle click, Ctrl+W, the menu) kills the shell (R9); a tab the model
   // drops by itself (reconcile, a move) does not.
-  const [wsStore] = useState(() => createWorkspaceStore(undefined, { closed: key => { if (key.startsWith('terminal:shell:')) termStore.closeFree(key.slice('terminal:'.length)); } }));
+  // « Au démarrage » (Settings › Workspace): the last workspace, a fixed disposition (its panels too), or the atelier alone.
+  const [boot] = useState(() => bootWorkspace(loadBoot(), loadIdeWorkspace(), loadDispositions(), ATELIER_TAB));
+  const [wsStore] = useState(() => createWorkspaceStore(boot.ws, { closed: key => { if (key.startsWith('terminal:shell:')) termStore.closeFree(key.slice('terminal:'.length)); } }));
   const ws = useWorkspace(wsStore);
-  const [layout, setLayout] = useStored(loadLayout, saveLayout);
+  const [layout, setLayout] = useStored(() => ({ ...loadLayout(), ...boot.panels }), saveLayout);
+  useEffect(() => { if (boot.current !== undefined) saveCurrent(boot.current); }, [boot]);
+  // « Dispositions »: the status bar's menu, the palette, Settings › Workspace.
+  const dispositions = useDispositions();
+  const [saveAsk, setSaveAsk] = useState(0);
+  const currentDisposition = useCurrentDisposition();
+  const applyDisposition = useCallback((name: string) => {
+    const d = loadDispositions().find(x => x.name === name);
+    if (!d) return;
+    wsStore.update(() => d.ws);
+    setLayout(l => ({ ...l, bottom: d.bottom, right: d.right }));
+    saveCurrent(d.name);
+  }, [wsStore, setLayout]);
+  const saveDisposition = useCallback((name: string) => {
+    saveDispositions(upsert(loadDispositions(), capture(name, wsStore.get(), layout)));
+    saveCurrent(name);
+  }, [wsStore, layout]);
   // Asking for the right panel folds the sidebar when that is what gives it room (layoutFor).
   const onLayout = useCallback((a: LayoutAction) => setLayout(l => layoutFor(l, a, window.innerWidth)), [setLayout]);
   termPanel.current.on = () => ide;
@@ -876,6 +896,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         onSearch={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}
         onTab={onTab} activeTab={front ?? null} badge={badge}
         waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
+        dispositions={{ list: dispositions, current: currentDisposition,
+          onApply: name => { applyDisposition(name); notify(t.ide.dispositions.applied(name)); },
+          onSave: name => { saveDisposition(name); notify(t.ide.dispositions.saved(name)); },
+          onManage: () => dispatch({ type: 'settings', section: 'workspace' }), saveAsk }}
         notice={tokenMissing && <DaemonOutdated />}
         prsFailing={prsFailing(forge.prs)} prsStatus={<IdePrsStatus prs={forge.prs} onShow={() => { if (!(layout.sideOpen && layout.sideView === 'prs')) onLayout({ type: 'view', view: 'prs' }); }} />}
         explorer={layout.sideView === 'prs'
@@ -976,8 +1000,28 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           {...(hit.group.window === MAIN && { onSplit: () => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; }) })}
           onClose={() => wsStore.close(key)} onCloseOthers={() => wsStore.closeOthers(key)} onDismiss={() => setTabMenu(null)} />;
       })()}
-      {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close}
-        {...(ide ? { onNewSession: () => dispatch({ type: 'modal', modal: { kind: 'launch' } }) } : {})} />}
+      {nav.modal?.kind === 'search' && !ide && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
+      {nav.modal?.kind === 'search' && ide && (() => {
+        // The IDE palette (lot 10, mockup `palItems`): the sessions and seats (`@`), the commands (`>`).
+        const p = t.ide.palette.commands;
+        const waitingIds = new Set(waitingSessions(sessions, waits).map(s => s.id));
+        const rows = known.map((s): PaletteSession => ({ kind: 'session', id: s.id, label: s.name, waiting: waitingIds.has(s.id), run: () => dispatch({ type: 'open', id: s.id }),
+          hint: s.rig ? s.rig.name : fleetView.archived.includes(s) ? t.ide.palette.archived(projectName(s)) : projectName(s) }));
+        const cmd = (id: string, label: string, run: () => void, hint?: string): PaletteCommand => ({ kind: 'command', id, label, run, ...(hint ? { hint } : {}) });
+        const commands: PaletteCommand[] = [
+          cmd('new-session', p.newSession, () => dispatch({ type: 'modal', modal: { kind: 'launch' } })),
+          cmd('openrig', p.openrig, () => dispatch(tabAction(openrigTab())!)),
+          cmd('atelier', p.atelier, () => dispatch(tabAction(ATELIER_TAB)!)),
+          cmd('settings', p.settings, () => dispatch(tabAction(SETTINGS_TAB)!)),
+          cmd('terminal', p.terminal, () => openShell(pickDefault(), shellDir(), id => wsStore.update(w => openTab(w, { kind: 'terminal', ref: id }, 'active')))),
+          cmd('split', p.split, () => wsStore.update(w => splitGroup(w, w.focus))),
+          cmd('bottom', p.bottom, () => onLayout({ type: 'toggle', panel: 'bottom' })),
+          cmd('save-disposition', p.saveDisposition, () => setSaveAsk(n => n + 1)),
+          ...dispositions.map(d => cmd(`disposition:${d.name}`, p.disposition(d.name), () => { applyDisposition(d.name); notify(t.ide.dispositions.applied(d.name)); },
+            d.name === currentDisposition ? t.ide.dispositions.current : undefined))
+        ];
+        return <IdePaletteHost sessions={rows} commands={commands} sessionOf={id => known.find(s => s.id === id)} onClose={close} />;
+      })()}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
       {nav.modal?.kind === 'launch' && ide && (
         // No `wide`: the modal's own width (ide.css, `.modal:has(> .launch-modal)`), not the old form's 640 px.

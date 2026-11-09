@@ -1549,6 +1549,24 @@ export const fr = {
       tearTerm: "Lâchez le terminal hors de la fenêtre pour l'ouvrir dans une nouvelle fenêtre",
       tearOut: 'Lâchez : nouvelle fenêtre'
     },
+    /** « Dispositions » (mockup menuHtml() `layout`): the status bar's menu, the palette's commands, Settings › Workspace. */
+    dispositions: {
+      title: 'Dispositions', tip: 'Dispositions : appliquer, enregistrer',
+      groups: (n: number) => (n > 1 ? `${n} groupes` : '1 groupe'), current: 'actuelle',
+      save: 'Enregistrer la disposition actuelle…', namePlaceholder: 'Nom, puis Entrée', nameLabel: 'Nom de la disposition',
+      manage: 'Gérer les dispositions', manageHint: 'Réglages',
+      applied: (name: string) => `Disposition « ${name} »`, saved: (name: string) => `Disposition « ${name} » enregistrée`
+    },
+    /** The IDE palette (Ctrl+K; mockup `palItems`): `@` the sessions and seats, `>` the commands. */
+    palette: {
+      label: 'Palette', placeholder: 'Session (@), commande (>), ou un mot…', results: 'Résultats', empty: 'Rien ne correspond.',
+      browse: '↑↓ choisir', open: 'Entrée ouvrir', close: 'Échap fermer', archived: (project: string) => `${project} · archivée`,
+      commands: {
+        newSession: 'Nouvelle session', openrig: 'Ouvrir OpenRig', atelier: 'Ouvrir l’atelier', settings: 'Ouvrir les réglages', prs: 'MR et PR',
+        atoi: 'Page À toi (nouvelle fenêtre)', terminal: 'Nouveau terminal', split: 'Diviser le groupe à droite', bottom: 'Afficher ou masquer le panneau du bas',
+        saveDisposition: 'Enregistrer la disposition', disposition: (name: string) => `Disposition : ${name}`
+      }
+    },
     /** The explorer's session menu, IDE only (mockup menuHtml() `ctx`): where to open, and the agent's terminal tab. */
     menu: {
       open: 'Ouvrir', openKey: 'Entrée', openRight: 'Ouvrir à droite', openRightKey: 'Ctrl clic',

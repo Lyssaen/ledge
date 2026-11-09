@@ -1478,6 +1478,22 @@ export const en: Messages = {
       tearTerm: 'Drop the terminal outside the window to open it in a new window',
       tearOut: 'Drop: new window'
     },
+    dispositions: {
+      title: 'Layouts', tip: 'Layouts: apply, save',
+      groups: (n: number) => (n > 1 ? `${n} groups` : '1 group'), current: 'current',
+      save: 'Save the current layout…', namePlaceholder: 'Name, then Enter', nameLabel: 'Layout name',
+      manage: 'Manage layouts', manageHint: 'Settings',
+      applied: (name: string) => `Layout “${name}”`, saved: (name: string) => `Layout “${name}” saved`
+    },
+    palette: {
+      label: 'Palette', placeholder: 'Session (@), command (>), or a word…', results: 'Results', empty: 'Nothing matches.',
+      browse: '↑↓ choose', open: 'Enter open', close: 'Esc close', archived: (project: string) => `${project} · archived`,
+      commands: {
+        newSession: 'New session', openrig: 'Open OpenRig', atelier: 'Open the atelier', settings: 'Open settings', prs: 'MRs and PRs',
+        atoi: 'For you page (new window)', terminal: 'New terminal', split: 'Split the group to the right', bottom: 'Show or hide the bottom panel',
+        saveDisposition: 'Save the layout', disposition: (name: string) => `Layout: ${name}`
+      }
+    },
     menu: {
       open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',
       terminal: 'Its terminal', capture: 'Capture in a terminal', message: 'Send a message…'

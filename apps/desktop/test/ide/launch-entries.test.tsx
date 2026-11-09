@@ -35,8 +35,10 @@ async function mount({ ide = true }: { ide?: boolean } = {}) {
 }
 
 const dialog = () => screen.queryByRole('dialog', { name: 'Nouvelle session' });
-const palette = () => screen.getByRole('dialog', { name: 'Aller à une session' });
-const options = () => within(screen.getByRole('listbox', { name: 'Sessions' })).getAllByRole('option');
+// The IDE's palette (lot 10) or, switch off, « Aller à une session ».
+const PALETTE = /^(Palette|Aller à une session)$/;
+const palette = () => screen.getByRole('dialog', { name: PALETTE });
+const options = () => within(screen.getByRole('listbox', { name: /^(Résultats|Sessions)$/ })).getAllByRole('option');
 const NEW = /^Nouvelle session/;
 
 describe('the Projects view’s « + N » header (R9)', () => {
@@ -58,28 +60,27 @@ describe('the Projects view’s « + N » header (R9)', () => {
   });
 });
 
-describe('the palette’s « Nouvelle session » line (R8)', () => {
-  it('empty search: it is the first option', async () => {
+describe('the palette’s « Nouvelle session » line (R8, the lot 10 palette)', () => {
+  it('empty search, nothing waiting: it is the first option', async () => {
     const { user } = await mount();
     await user.keyboard('{Control>}k{/Control}');
     palette();
     expect(options()[0]).toHaveAccessibleName(NEW);
     expect(options()[0]).toHaveAttribute('aria-selected', 'true');
-    expect(within(options()[0]!).getByText('N')).toBeVisible();
     expect(options().length).toBeGreaterThan(1);
   });
 
-  it('« nouv » (and « NOUVELLE ») keeps it; « > » shows it alone; « otto » drops it', async () => {
+  it('« nouv » (and « NOUVELLE ») keeps it; « > » shows the commands, it first; « otto » drops it', async () => {
     const { user } = await mount();
     await user.keyboard('{Control>}k{/Control}');
     const input = within(palette()).getByRole('combobox');
     await user.type(input, 'nouv');
     expect(options()[0]).toHaveAccessibleName(NEW);
     await user.clear(input); await user.type(input, 'NOUVÉLLE');
-    expect(options().map(o => o.getAttribute('aria-label') ?? o.textContent)[0]).toMatch(NEW);
-    await user.clear(input); await user.type(input, '>');
-    expect(options()).toHaveLength(1);
     expect(options()[0]).toHaveAccessibleName(NEW);
+    await user.clear(input); await user.type(input, '>');
+    expect(options()[0]).toHaveAccessibleName(NEW);
+    expect(screen.queryByRole('option', { name: /Otto/ })).toBeNull();
     await user.clear(input); await user.type(input, 'otto');
     expect(screen.queryByRole('option', { name: NEW })).toBeNull();
     expect(options()[0]).toHaveTextContent('Otto');
@@ -90,7 +91,7 @@ describe('the palette’s « Nouvelle session » line (R8)', () => {
     await user.keyboard('{Control>}k{/Control}');
     await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
     await screen.findByRole('dialog', { name: 'Nouvelle session' });
-    expect(screen.queryByRole('dialog', { name: 'Aller à une session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: PALETTE })).toBeNull();
     expect(dialog()!.querySelector('.launch-modal')).not.toBeNull();
   });
 

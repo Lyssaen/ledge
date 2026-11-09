@@ -8,6 +8,7 @@ import type { RigsViewProps } from './rigs/RigsView';
 import type { RigViewProps } from './rig/RigView';
 import type { OpenRigViewProps } from './openrig/OpenRigView';
 import type { RigLaunchModalProps } from './launch-rig/RigLaunchModal';
+import type { IdePaletteProps } from './palette/IdePalette';
 import type { RigOutputEntry } from '../openrig/rigOutput';
 import type { PrsViewProps } from '../forge/PrsView';
 import type { PrPageProps } from '../forge/PrPage';
@@ -22,7 +23,7 @@ export function loadIde(): Promise<IdeModule> {
 }
 
 // A chunk already loaded is handed over synchronously: React.lazy then resolves within the same render, without suspending.
-function fromChunk<K extends 'IdeFrame' | 'DockHost' | 'BottomPanel' | 'OutputView' | 'AtelierBar' | 'RigsView' | 'RigView' | 'RigLaunchModal' | 'OpenRigView' | 'PrsView' | 'PrPage' | 'PrsStatus' | 'PrTabLabel' | 'AtoiPage'>(key: K) {
+function fromChunk<K extends 'IdeFrame' | 'DockHost' | 'BottomPanel' | 'OutputView' | 'AtelierBar' | 'RigsView' | 'RigView' | 'RigLaunchModal' | 'OpenRigView' | 'PrsView' | 'PrPage' | 'PrsStatus' | 'PrTabLabel' | 'AtoiPage' | 'IdePalette'>(key: K) {
   type Loaded = { default: IdeModule[K] };
   return lazy(() => (loaded
     ? { then: (ok: (m: Loaded) => void) => ok({ default: loaded![key] }) } as PromiseLike<Loaded> as Promise<Loaded>
@@ -36,6 +37,7 @@ const ABar = fromChunk('AtelierBar');
 const Rigs = fromChunk('RigsView');
 const RigTab = fromChunk('RigView');
 const RigLaunch = fromChunk('RigLaunchModal');
+const Palette = fromChunk('IdePalette');
 const OpenRig = fromChunk('OpenRigView');
 const Prs = fromChunk('PrsView');
 const Pr = fromChunk('PrPage');
@@ -98,3 +100,8 @@ export function IdePrTabLabel(props: { pr: PrPageProps['pr'] | undefined; title:
 
 /** The page « À toi » in its tab (D3): inside the frame, its chunk is already there. */
 export function IdeAtoi(props: AtoiPageProps): JSX.Element { return <Atoi {...props} />; }
+
+/** The IDE palette (Ctrl+K): App.tsx draws it over the frame, whose chunk is there by then. */
+export function IdePaletteHost(props: IdePaletteProps): JSX.Element {
+  return <ChunkBoundary><Suspense fallback={null}><Palette {...props} /></Suspense></ChunkBoundary>;
+}

@@ -7,6 +7,7 @@ import { ActivityBar } from './ActivityBar';
 import { BottomEdge } from './BottomEdge';
 import { IdeExplorer } from './IdeExplorer';
 import { IdeStatusBar } from './IdeStatusBar';
+import { DispositionsMenu, type DispositionsProps } from './DispositionsMenu';
 import { IdeTitleBar } from './IdeTitleBar';
 import '../styles/ide.css';
 
@@ -18,6 +19,7 @@ export { AtelierBar } from './AtelierBar';
 export { RigsView } from './rigs/RigsView';
 export { RigView } from './rig/RigView';
 export { RigLaunchModal } from './launch-rig/RigLaunchModal';
+export { IdePalette } from './palette/IdePalette';
 export { OpenRigView } from './openrig/OpenRigView';
 export { PrsView } from '../forge/PrsView';
 export { PrPage } from '../forge/PrPage';
@@ -44,6 +46,8 @@ export interface IdeFrameProps {
   waiting: readonly Session[]; onNextWaiting(): void;
   /** Lot 8b: the activity bar's badge (open requests whose pipeline failed) and the status bar's count. */
   prsFailing?: number; prsStatus?: ReactNode;
+  /** « Dispositions », at the status bar's far right (DispositionsMenu). */
+  dispositions: DispositionsProps;
 }
 
 const onResize = (cb: () => void) => { window.addEventListener('resize', cb); return () => window.removeEventListener('resize', cb); };
@@ -75,7 +79,7 @@ export function IdeFrame(p: IdeFrameProps): JSX.Element {
         {right && <div className="ide-right">{p.chat}</div>}
       </div>
       <div className="ide-status-row" inert={p.blocked}>
-        <IdeStatusBar footer={p.footer} usage={p.usage} waiting={p.waiting} onNextWaiting={p.onNextWaiting} prs={p.prsStatus} />
+        <IdeStatusBar footer={p.footer} usage={p.usage} waiting={p.waiting} onNextWaiting={p.onNextWaiting} prs={p.prsStatus} disposition={<DispositionsMenu {...p.dispositions} />} />
       </div>
     </div>
   );
