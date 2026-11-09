@@ -7,6 +7,10 @@ summary: >
 
 culture_file: CULTURE.md
 
+# Claude seats get OpenRig's guidance blocks in CLAUDE.local.md (ignored by git), not in the tracked CLAUDE.md.
+managed_blocks:
+  claude-code: CLAUDE.local.md
+
 docs:
   - path: README.md
 

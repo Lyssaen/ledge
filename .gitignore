@@ -11,3 +11,6 @@ target/
 # Local state of the oh-my-claudecode tool
 .omc/
 .playwright-mcp/
+
+# Claude Code local guidance (OpenRig writes its seats' blocks there)
+CLAUDE.local.md
