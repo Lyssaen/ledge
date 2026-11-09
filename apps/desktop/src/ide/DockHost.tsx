@@ -445,9 +445,10 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
         const w = e.window;
         if (!w) return;
         unmirror.set(w, mirrorRoot(w.document));
-        // Its body takes the IDE's tokens; its bar goes above dockview's container, its drag banner after it.
+        // Its body takes the IDE's tokens and the main dock's skin (`.ide-dock`: 12 px tabs, the tab in front on the pane's
+        // colour), so its tabs look like the main window's; its bar goes above dockview's container, its drag banner after it.
         const doc = w.document;
-        doc.body.classList.add('ide', 'ide-popout');
+        doc.body.classList.add('ide', 'ide-popout', 'ide-dock');
         const bar = doc.createElement('div');
         bar.className = 'ide-popout-bar-host';
         doc.body.prepend(bar);

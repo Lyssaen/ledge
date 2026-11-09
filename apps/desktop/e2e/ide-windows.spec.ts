@@ -146,8 +146,19 @@ for (const theme of ['dark', 'light'] as const) {
     const page0 = pop.viewportSize()!;
     const content = await box(pop.locator('.dv-groupview').first());
     expect(Math.round(content.y + content.height)).toBe(page0.height);
+    // Its tabs wear the main window's skin (jde under Windows: the titles were 14 px there, 12 px here).
+    const look = (l: Locator) => l.evaluate(el => {
+      const s = getComputedStyle(el);
+      return { size: getComputedStyle(el.querySelector('.tab-name')!).fontSize, height: s.height, background: s.backgroundColor, color: s.color };
+    });
+    await tabOf(page, 'Otto').click();
+    await tabOf(pop, 'Nova').click();
+    expect(await look(tabOf(pop, 'Nova'))).toEqual(await look(tabOf(page, 'Otto')));
+    expect((await look(tabOf(pop, 'Nova'))).size).toBe('12px');
     await pop.screenshot({ path: shot(`lot9-window-${theme}.png`) });
     await bar.screenshot({ path: shot(`lot9-window-bar-${theme}.png`) });
+    await page.locator('.dv-tabs-and-actions-container').first().screenshot({ path: shot(`lot9-strip-main-${theme}.png`), scale: 'device' });
+    await pop.locator('.dv-tabs-and-actions-container').first().screenshot({ path: shot(`lot9-strip-popout-${theme}.png`), scale: 'device' });
     const closed = pop.waitForEvent('close');
     await bar.getByRole('button', { name: 'Close' }).click();
     await closed;
