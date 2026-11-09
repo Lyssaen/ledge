@@ -118,13 +118,13 @@ const T = {
     ext:'Hors de Ledge', extOpen:e=>`${e} s’ouvre sur le worktree de la session.`, extSsh:'Zed s’ouvre sur ssh://srv-build/…', extOff:'L’éditeur tente sa propre connexion SSH, et affiche lui-même son erreur.',
     nothing:'Rien ne s’affiche dans Ledge.',
     c:[
-      ['Succès','same','Le clic ouvre l’éditeur ; <b>Ledge n’affiche rien</b>. Le toast de la v26 (la commande) n’était que la démo. Un éditeur déjà ouvert sur ce worktree est réutilisé (<code>--reuse-window</code>), donc un double clic ne fait pas de doublon.'],
+      ['Succès','same','Le clic ouvre l’éditeur ; <b>Ledge n’affiche rien</b>. Le toast de la v26 (la commande) n’était que la démo. Si ce dossier est déjà ouvert dans l’éditeur, c’est sa fenêtre qui revient au premier plan (le comportement normal de Cursor, VS Code et Zed) : Ledge ne passe pas <code>--reuse-window</code>, pour ne jamais remplacer le dossier d’une autre fenêtre.'],
       ['Éditeur non installé · au clic','new','L’entrée du menu reste active (Ledge ne sait pas d’avance si l’exe a disparu). Au clic : toast avec le bouton <b>Réglages</b>, qui ouvre Réglages › Espace de travail. Pas de <kbd>Ctrl Z</kbd> sur ce bouton : ce n’est pas une annulation.'],
       ['Éditeur non installé · dans Réglages','new','« non installé » en gris après le nom ; le radio reste sélectionnable (on peut l’installer après). Rien tant que la détection n’a pas répondu : pas d’état de chargement.'],
       ['Zed et un worktree WSL · au clic','new','<b>Recommandé : l’entrée reste active</b>, le clic explique et mène aux Réglages. Une entrée grisée cacherait son explication dans une infobulle, et l’infobulle d’un bouton désactivé ne s’affiche pas de façon fiable.'],
       ['Zed · dans Réglages','new','Le réglage prévient avant le choix : « pas les dossiers WSL » sous Zed, toujours (c’est une limite de Zed, pas de ce PC). Les deux mentions se suivent quand Zed est aussi absent (texte long).'],
       ['Zed et une machine SSH','same','Autorisé comme Cursor et VS Code : même entrée, aucun texte de Ledge. Zed ouvre <code>ssh://&lt;alias&gt;/&lt;chemin&gt;</code>.'],
-      ['Le lancement échoue','new','Toast simple (pas de bouton : Réglages ne répare rien ici), 6 s comme les autres toasts. La raison est courte, une phrase, traduite côté front. Trois raisons connues ; une raison inconnue retombe sur « le programme ne démarre pas ».'],
+      ['Le lancement échoue','new','Toast simple (pas de bouton : Réglages ne répare rien ici), 6 s comme les autres toasts. La raison est courte, une phrase, traduite côté front. Quatre raisons connues ; une raison inconnue retombe sur « le programme ne démarre pas ».'],
       ['Machine distante hors ligne','same','L’entrée reste active, Ledge n’affiche rien : l’éditeur fait sa propre connexion SSH et affiche son erreur. Même chose pour un alias connu seulement du <code>~/.ssh/config</code> de WSL.'],
       ['Clic droit dans l’explorateur','same','Comme la v26 : l’entrée en dernier, après « Redémarrer le siège… » pour un siège, après les « Ouvrir… » pour une session. Les états ci-dessus s’appliquent pareil.']
     ],
