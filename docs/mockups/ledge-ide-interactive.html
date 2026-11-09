@@ -159,8 +159,9 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .sfoot .side .lk{width:8px;height:8px}
 .sfoot .side .btn.ib{width:auto;min-width:26px;padding:0 6px;justify-content:center;gap:4px;color:var(--muted-foreground)}
 .sfoot .side .btn.ib:hover,.sfoot .side .btn.ib.on{color:var(--foreground)}
-body.tearing::after{content:"Lâche l'onglet hors de la fenêtre pour l'ouvrir dans une nouvelle fenêtre";position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:80;background:var(--card);border:1px dashed var(--link1);color:var(--link1);border-radius:9px;padding:8px 14px;font-size:12.5px;pointer-events:none}
-body.tear-out::after{background:#1e1b2e;border-style:solid;content:"Nouvelle fenêtre"}
+body.tearing::after{content:"Lâchez l'onglet hors de la fenêtre pour l'ouvrir dans une nouvelle fenêtre";position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:80;background:var(--card);border:1px dashed var(--link1);color:var(--link1);border-radius:9px;padding:8px 14px;font-size:12.5px;pointer-events:none}
+body.tearing.tterm::after{content:"Lâchez le terminal hors de la fenêtre pour l'ouvrir dans une nouvelle fenêtre"}
+body.tear-out::after,body.tearing.tterm.tear-out::after{background:#1e1b2e;border-style:solid;content:"Lâchez : nouvelle fenêtre"}
 .stages{display:flex;flex-wrap:wrap;gap:6px}
 .stg{display:flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:7px;padding:4px 9px;font-size:12px}
 .stg.fail{border-color:#f8717188}.stg.run{border-color:#60a5fa88}
@@ -394,6 +395,16 @@ body.tear-out::after{background:#1e1b2e;border-style:solid;content:"Nouvelle fen
 .win.small{width:1480px;height:880px}
 .win2{width:1100px;height:520px;margin:28px 0 0 380px;grid-template-rows:34px 1fr}
 #win2:empty{display:none}
+/* v27 (lot 9, option A) : une fenêtre détachée = un seul groupe. Barre de titre : marque, onglet actif, boutons de fenêtre. */
+.win2 .titlebar{padding-right:0}
+.win2 .wtitle{flex:1;min-width:0;text-align:center;font-size:12px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wcaps{display:flex;align-self:stretch}
+.wcaps button{width:46px;display:grid;place-items:center;color:var(--muted-foreground)}
+.wcaps button:hover{background:#ffffff14;color:var(--foreground)}
+.wcaps button.x:hover{background:#c42b1c;color:#fff}
+.win2 .grow-row>.grp{flex:1}
+.wlabel{margin:22px 0 0 380px;font-size:11.5px;color:var(--muted-foreground)}
+.wlabel+.win2{margin-top:6px}
 
 /* ---- Interactive prototype additions ---- */
 .win{transition:none}
@@ -495,7 +506,7 @@ body.tear-out::after{background:#1e1b2e;border-style:solid;content:"Nouvelle fen
     <span><kbd>+</kbd> d'un groupe ou <kbd>N</kbd> : Nouvelle session (fenêtre modale)</span>
     <span>Vue Rigs › kernel : operator, advisor, queue worker</span>
     <span>Vue Rigs : clic sur un rig = sa topologie en onglet</span>
-    <span>Glisser un onglet hors de la fenêtre : nouvelle fenêtre ; le glisser dans un groupe le ramène</span>
+    <span>Glisser un onglet hors de la fenêtre : nouvelle fenêtre, avec un seul groupe ; le glisser dans un groupe le ramène ; fermer la fenêtre ramène ses onglets</span>
     <span><kbd>Y</kbd> / <kbd>N</kbd> sur Pim, répondre à dev-front</span>
     <span>Barre d'activité › MR et PR : pipelines GitHub et GitLab, relancer, fusionner, faire corriger par l'agent</span>
     <span>Clic droit sur un onglet (ou <kbd>Ctrl</kbd>+<kbd>`</kbd>) : basculer fil ⇄ terminal, role.md, Cursor, fermer</span>
@@ -718,6 +729,8 @@ function tabLabel(t){
     topo:`${I(ic.rig)}Topologie · ${t.ref||'ledge-dev'}`})[t.type] || t.type;
 }
 function findTab(k){ for (const g of st.groups) { const i = g.tabs.findIndex(t => keyOf(t)===k); if (i>=0) return {g,i}; } return null; }
+const newWin = () => Math.max(1, ...st.groups.map(g => g.win)) + 1;
+const mainLast = () => { const f = gById(st.focus); return f && f.win===1 ? f : st.groups.filter(g=>g.win===1).pop(); };
 function newGroup(win=1, after){
   const g = G([], null, win); const i = after ? st.groups.indexOf(after) : -1;
   if (i>=0) st.groups.splice(i+1, 0, g); else st.groups.push(g);
@@ -739,8 +752,8 @@ function openTab(tab, where){
   const f = findTab(keyOf(tab));
   if (f) { f.g.active = f.i; st.focus = f.g.id; afterActivate(f.g); st.menu=null; return render(); }
   let g = focusG();
-  if (where==='right' || !g) g = newGroup(g ? g.win : 1, g);
-  else if (where==='window') g = newGroup(2);
+  if (where==='right' || !g) g = (g && g.win===1) ? newGroup(1, g) : newGroup(1, mainLast());
+  else if (where==='window') { g = newGroup(newWin()); later(50, showWin(g.win)); }
   g.tabs.push(tab); g.active = g.tabs.length-1; st.focus = g.id; afterActivate(g); st.menu = null; render();
 }
 const openAgent = (a, where) => openTab(S(a), where);
@@ -749,7 +762,7 @@ function closeTab(g, i){
   if (g.active >= g.tabs.length) g.active = Math.max(0, g.tabs.length-1);
   if (!g.tabs.length) {
     const same = st.groups.filter(h => h.win===g.win);
-    if (g.win===2 || same.length>1) { st.groups.splice(st.groups.indexOf(g),1); if (st.focus===g.id) st.focus = (st.groups.find(h=>h.win===1)||{}).id; }
+    if (g.win>1 || same.length>1) { st.groups.splice(st.groups.indexOf(g),1); if (st.focus===g.id) st.focus = (st.groups.find(h=>h.win===1)||{}).id; }
   }
   if (!st.groups.some(h=>h.win===1)) { const n = newGroup(1); st.focus = n.id; }
 }
@@ -757,7 +770,7 @@ function moveTab(from, i, to){
   const t = from.tabs.splice(i,1)[0]; if (!t) return;
   if (from.active >= from.tabs.length) from.active = Math.max(0, from.tabs.length-1);
   to.tabs.push(t); to.active = to.tabs.length-1; st.focus = to.id;
-  if (!from.tabs.length && (from.win===2 || st.groups.filter(h=>h.win===from.win).length>1)) st.groups.splice(st.groups.indexOf(from),1);
+  if (!from.tabs.length && (from.win>1 || st.groups.filter(h=>h.win===from.win).length>1)) st.groups.splice(st.groups.indexOf(from),1);
   if (!st.groups.some(h=>h.win===1)) newGroup(1);
   afterActivate(to);
 }
@@ -883,7 +896,7 @@ function groupHtml(g){
         return `<div class="tab ${i===g.active?'on':''} ${al}" draggable="true" data-act="tab" data-g="${g.id}" data-i="${i}">${tabLabel(x)}<button class="x" data-act="close" data-g="${g.id}" data-i="${i}" title="Fermer">×</button></div>`; }).join('')}</div>
       <div class="tools">
         <button data-act="plus" data-g="${g.id}" title="Nouvelle session (N)">+</button>
-        <button data-act="split" data-g="${g.id}" title="Diviser à droite">${ic.split}</button>
+        ${g.win===1 ? `<button data-act="split" data-g="${g.id}" title="Diviser à droite">${ic.split}</button>` : ''}
       </div></div>
     ${t ? content(t, g) : emptyGroup(g)}
   </section>`;
@@ -1069,7 +1082,7 @@ function atelierPage(g){
     : `<div class="room rig"><div class="rt">ledge-dev</div><div class="table">${rigSeats('ledge-dev').map(bot).join('')}</div></div><div class="room rig"><div class="rt">kernel</div><div class="table">${bot('op')}</div></div>`;
   return `<div class="atelier">
     <div class="abar"><span class="mut">Atelier</span><span class="seg2"><span class="${A.mode==='projets'?'on':''}" data-act="amode" data-arg="projets" style="cursor:pointer">Projets</span><span class="${A.mode==='rigs'?'on':''}" data-act="amode" data-arg="rigs" style="cursor:pointer">Rigs</span></span><span style="flex:1"></span>
-      <button class="btn" data-act="asub">${A.hideSub?'Montrer':'Masquer'} les sous-agents</button><button class="btn" data-act="${g.win===2?'undock':'detach'}" data-g="${g.id}">${g.win===2?'Ramener':'Détacher'}</button></div>
+      <button class="btn" data-act="asub">${A.hideSub?'Montrer':'Masquer'} les sous-agents</button><button class="btn" data-act="${g.win>1?'undock':'detach'}" data-g="${g.id}">${g.win>1?'Ramener':'Détacher'}</button></div>
     <div class="floor">${rooms}<div class="room ledge"><div class="rt">Bureau de Ledge</div><div class="table one" data-act="right-on" style="cursor:pointer"><span class="mut">Parler à Ledge</span><span class="kbd">Ctrl /</span></div></div></div>
     <div class="ahint mut">L'atelier validé (open-space en quinconce) s'affiche tel quel dans cet onglet ; ce dessin le résume. Clic sur un agent : sa session · Ctrl+clic : à droite.</div></div>`;
 }
@@ -1116,10 +1129,20 @@ function editor(){
   const gs = st.groups.filter(g=>g.win===1);
   return `<main class="editor"><div class="grow-row">${gs.map(groupHtml).join('')}<div class="dropnew" data-dropnew="1">Déposer ici :<br>nouveau groupe</div></div>${st.bottom?bottomPanel():''}</main>`;
 }
-function win2(gs){
-  return `<div class="win win2" style="height:560px;width:${st.big?1300:1100}px">
-    <div class="titlebar"><span class="brand">${ledgeMark(16)}Ledge</span><span class="mut" style="font-size:12px">Fenêtre 2 · sur l'écran 2</span><span style="flex:1"></span></div>
-    <div class="grow-row">${gs.map(groupHtml).join('')}</div></div>`;
+const winTitle = g => { const t = g.tabs[g.active]; if (t && t.type==='atoi') return 'À toi'; if (t && isAgentTab(t)) { const A = AG[t.ref]; return A.kind==='seat' ? `${A.name} · ${A.rig}` : `${A.name} · ${A.proj}`; } return t ? tabLabel(t).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim() : ''; };
+function win2(g){
+  return `<div class="wlabel" data-win="${g.win}">Fenêtre détachée · barre des tâches Windows : « ${esc(winTitle(g))} — Ledge »</div>
+  <div class="win win2" data-win="${g.win}" style="height:560px;width:${st.big?1300:1100}px">
+    <div class="titlebar"><span class="brand">${ledgeMark(16)}Ledge</span><span class="wtitle">${esc(winTitle(g))}</span>
+      <span class="wcaps"><button data-act="wmin" title="Réduire">─</button><button data-act="wmax" title="Agrandir">□</button><button class="x" data-act="wclose" data-arg="${g.win}" title="Fermer : les onglets reviennent dans la fenêtre principale">✕</button></span></div>
+    <div class="grow-row">${groupHtml(g)}</div></div>`;
+}
+const showWin = w => () => { const el = document.querySelector(`.wlabel[data-win="${w}"]`); if (el) el.scrollIntoView({behavior:'smooth', block:'start'}); };
+/* Fermer une fenêtre détachée : ses onglets reviennent dans la fenêtre principale, en un groupe à droite qui garde sa couleur de lien. Rien n'est fermé ni tué. */
+function closeWin(w){
+  const g = st.groups.find(x => x.win===w); if (!g) return;
+  const n = g.tabs.length; g.win = 1; st.groups.splice(st.groups.indexOf(g),1); const i = st.groups.indexOf(mainLast()); st.groups.splice(i+1, 0, g); st.focus = g.id;
+  toast(n>1 ? `Fenêtre fermée : ses ${n} onglets reviennent dans la fenêtre principale.` : 'Fenêtre fermée : son onglet revient dans la fenêtre principale.');
 }
 
 /* ---------- Menus and palette ---------- */
@@ -1134,7 +1157,7 @@ function menuHtml(){
       <button data-act="seg" data-g="${g.id}" data-arg="${t.view==='term'?'fil':'term'}">${ic.term}${t.view==='term'?'Revenir au fil':'Basculer sur le terminal'}<span class="r">Ctrl \`</span></button>
       ${A.kind==='seat' ? `<button data-act="seg" data-g="${g.id}" data-arg="${t.view==='role'?'fil':'role'}">${ic.brain.replace(/18/g,'14')}${t.view==='role'?'Revenir au fil':'Lire role.md'}</button>` : ''}
       <button data-act="cursor" data-arg="${a}">${ic.pop}Ouvrir dans ${st.set.ext}</button><div class="sep"></div>` : '')
-      + `<button data-act="split" data-g="${g.id}">${ic.split}Diviser à droite<span class="r">Ctrl \\</span></button><button data-act="close" data-g="${g.id}" data-i="${m.i}">Fermer l'onglet</button>${g.tabs.length>1 ? `<button data-act="closeothers" data-g="${g.id}" data-i="${m.i}">Fermer les autres</button>` : ''}`; } }
+      + (g.win===1 ? `<button data-act="split" data-g="${g.id}">${ic.split}Diviser à droite<span class="r">Ctrl \\</span></button>` : '') + `<button data-act="close" data-g="${g.id}" data-i="${m.i}">Fermer l'onglet</button>${g.tabs.length>1 ? `<button data-act="closeothers" data-g="${g.id}" data-i="${m.i}">Fermer les autres</button>` : ''}`; } }
   else if (m.kind==='layout') items = `<div class="mh">Dispositions</div>` + Object.keys(st.layouts).map(n=>`<button data-act="layout" data-arg="${esc(n)}" class="${st.layoutName===n?'sel':''}"><span class="lk ${n==='Terminaux'?'l2':'l1'}"></span>${esc(n)}<span class="r">${st.layouts[n].groups.length} groupes${st.layoutName===n?' · actuelle':''}</span></button>`).join('')
     + `<div class="sep"></div>` + (st.saving ? `<input class="save-in" id="save-in" style="width:calc(100% - 12px)" placeholder="Nom, puis Entrée">` : `<button data-act="savelayout">Enregistrer la disposition actuelle…</button>`)
     + `<button data-act="settings-sec" data-arg="Espace de travail">Gérer les dispositions<span class="r">Réglages</span></button>`;
@@ -1288,13 +1311,13 @@ function prRerun(id){
 function openBeside(g, kind, a){
   if (!g.link) { const used = st.groups.filter(h => h!==g && h.link).map(h => h.link); g.link = ['l1','l2'].find(c => !used.includes(c)) || 'l1'; }
   const nt = kind==='diff' ? {type:'diff', ref:a} : {type:'term', ref:termFor(a)};
-  let h = st.groups.find(x => x!==g && x.win===g.win && x.link===g.link);
-  if (!h) { h = newGroup(g.win, g); h.link = g.link; }
+  let h = st.groups.find(x => x!==g && x.win===g.win && x.link===g.link) || st.groups.find(x => x!==g && x.link===g.link);
+  if (!h) { h = g.win===1 ? newGroup(1, g) : newGroup(1, mainLast()); h.link = g.link; }
   const j = h.tabs.findIndex(x => keyOf(x)===keyOf(nt));
   if (j>=0) h.active = j; else { h.tabs.push(nt); h.active = h.tabs.length-1; }
   st.focus = g.id; render();
 }
-function doSplit(g){ if (!g) return; const a = tabAgent(g.tabs[g.active]); const n = newGroup(g.win, g); n.from = a; st.focus = n.id; render(); }
+function doSplit(g){ if (!g || g.win>1) return; const a = tabAgent(g.tabs[g.active]); const n = newGroup(g.win, g); n.from = a; st.focus = n.id; render(); }
 function toolTab(kind, ref){
   if (kind==='diff') return {type:'diff', ref};
   if (kind==='term') return {type:'term', ref: termFor(ref)};
@@ -1358,8 +1381,11 @@ document.addEventListener('click', e => {
     case 'plus': st.focus = g.id; st.launchOpen = true; st.launch.where = 'active'; break;
     case 'newsession': st.launchOpen = true; break;
     case 'split': doSplit(g); return;
-    case 'detach': g.win = 2; if (!st.groups.some(h=>h.win===1)) newGroup(1); toast('Groupe ouvert dans une nouvelle fenêtre (plus bas sur la page).'); break;
-    case 'undock': g.win = 1; break;
+    case 'detach': { const w = newWin(), to = newGroup(w); moveTab(g, g.active, to); later(50, showWin(w)); break; }
+    case 'undock': { const to = mainLast() || newGroup(1); moveTab(g, g.active, to); break; }
+    case 'wclose': { closeWin(+arg); break; }
+    case 'wmin': toast('Prototype : réduire, la fenêtre passe dans la barre des tâches.'); break;
+    case 'wmax': toast('Prototype : agrandir, la fenêtre occupe son écran.'); break;
     case 'link': g.link = g.link===null ? 'l1' : g.link==='l1' ? 'l2' : null; st.focus = g.id; afterActivate(g); break;
     case 'topo': return openTab({type:'topo', ref:arg}, e.ctrlKey||e.metaKey ? 'right' : undefined);
     case 'open': return openAgent(arg, e.ctrlKey||e.metaKey ? 'right' : undefined);
@@ -1497,9 +1523,9 @@ document.addEventListener('dblclick', e => { if (e.target.closest('.sresize')) {
 /* Drag a tab onto another group, or onto the drop zone for a new group */
 document.addEventListener('dragstart', e => { const t = e.target.closest('.tab[draggable]'); if (!t) return;
   st.drag = t.dataset.term ? {term:t.dataset.term} : {g:t.dataset.g, i:+t.dataset.i}; e.dataTransfer.effectAllowed='move'; try { e.dataTransfer.setData('text/plain','tab'); } catch(_){}
-  setTimeout(()=>{ document.querySelectorAll('.win').forEach(w=>w.classList.add('dragging')); document.body.classList.add('tearing'); }, 0); });
+  setTimeout(()=>{ document.querySelectorAll('.win').forEach(w=>w.classList.add('dragging')); document.body.classList.add('tearing'); document.body.classList.toggle('tterm', !!st.drag.term || (()=>{ const g = gById(st.drag.g), t = g && g.tabs[st.drag.i]; return !!t && t.type==='term'; })()); }, 0); });
 /* Hors de la fenêtre principale : l'onglet part dans une nouvelle fenêtre */
-const outside = el => !el.closest('#win') && !el.closest('.grp');
+const outside = el => !el.closest('.win') && !el.closest('.grp');
 document.addEventListener('dragover', e => { if (!st.drag) return; const z = e.target.closest('.grp,[data-dropnew],.bpanel');
   document.body.classList.toggle('tear-out', !z && outside(e.target));
   if (!z) { if (outside(e.target)) e.preventDefault(); return; } e.preventDefault();
@@ -1510,11 +1536,13 @@ document.addEventListener('drop', e => { if (!st.drag) return; e.preventDefault(
     if (from) { const tb = from.tabs[d.i]; if (tb && tb.type==='term') { closeTab(from, d.i); st.terms.push(tb.ref); st.btab = 'term'; toast('Terminal ramené dans le panneau du bas.'); } else toast('Seuls les terminaux se rangent dans le panneau du bas.'); }
     st.drag = null; return render(); }
   if (z && z.dataset.dropnew) to = newGroup(1); else if (z) to = gById(z.dataset.g);
-  else if (outside(e.target)) { to = newGroup(2); toast(`${d.term?'Terminal':'Onglet'} ouvert dans une nouvelle fenêtre (plus bas sur la page). Glisse-le dans un groupe pour le ramener.`); }
+  else if (outside(e.target)) {
+    if (from && from.win>1 && from.tabs.length===1) { toast('Prototype : son seul onglet, la fenêtre se déplace simplement là où on le lâche.'); st.drag = null; return render(); }
+    to = newGroup(newWin()); later(50, showWin(to.win)); }
   if (to && d.term) { st.terms = st.terms.filter(x => x!==d.term); if (!st.terms.length) st.bottom = false; to.tabs.push({type:'term', ref:d.term}); to.active = to.tabs.length-1; st.focus = to.id; }
   else if (to && from && to!==from) moveTab(from, d.i, to);
   st.drag = null; render(); });
-document.addEventListener('dragend', () => { st.drag = null; document.body.classList.remove('tearing','tear-out'); document.querySelectorAll('.win').forEach(w=>w.classList.remove('dragging')); document.querySelectorAll('.drop-on').forEach(x=>x.classList.remove('drop-on')); });
+document.addEventListener('dragend', () => { st.drag = null; document.body.classList.remove('tearing','tear-out','tterm'); document.querySelectorAll('.win').forEach(w=>w.classList.remove('dragging')); document.querySelectorAll('.drop-on').forEach(x=>x.classList.remove('drop-on')); });
 
 /* ---------- Render ---------- */
 function render(){
@@ -1525,8 +1553,8 @@ function render(){
   w.innerHTML = titlebar()
     + `<div class="body" style="grid-template-columns:48px ${st.sideOpen?(st.sideW||248)+'px ':''}1fr${st.right?' 300px':''}">${activity()}${st.sideOpen?sidebar().replace('<aside class="explorer">', `<aside class="explorer"><div class="sresize" title="Glisser pour redimensionner · double-clic : largeur par défaut"></div>`).replace(/<\/aside>$/, `<button class="scollapse" data-act="side-toggle" title="Réduire la barre latérale (Ctrl+B)">« Réduire</button></aside>`):''}${editor()}${st.right?rightPanel():''}</div>`
     + statusbar() + (st.lim?limPop():'');
-  const w2 = st.groups.filter(g=>g.win===2);
-  $('#win2').innerHTML = w2.length ? win2(w2) : '';
+  const w2 = st.groups.filter(g=>g.win>1).sort((a,b)=>a.win-b.win);
+  $('#win2').innerHTML = w2.map(win2).join('');
   $('#overlay').innerHTML = launchModal() + menuHtml() + (st.toast?`<div class="toast">${st.toast}</div>`:'');
   document.querySelectorAll('.pb').forEach(p => p.scrollTop = p.scrollHeight);
   $('#t-size').textContent = st.big ? '1920 × 1080' : '1480 × 880';
