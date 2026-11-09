@@ -25,21 +25,19 @@ async function boot(page: Page) {
   await page.goto('/'); await ideReady(page);
   await expect(ledgeTable(page)).toBeVisible();
 }
-/** Ctrl+/ opens the chat docked over the atelier (`/` alone goes to Ledge's home view); Enter with text sends the question. */
+/** The IDE's right panel is the chat with Ledge, docked beside the editor from the start (Ctrl+/ hides it); Enter sends the question. */
 async function ask(page: Page, question: string) {
-  await page.keyboard.press('Control+/');
+  await expect(panel(page)).toBeVisible();
   const askField = field(page);
-  await expect(askField).toBeFocused();
+  await askField.click();
   await askField.fill(question);
   await askField.press('Enter');
-  await expect(panel(page)).toBeVisible();
 }
 
-test('/, a question, the answer: hovering Otto lights him at his table; the atelier stays in view and narrows, with no side scroll', async ({ page }) => {
+test('a question, the answer: hovering Otto lights him at his table; the atelier stays in view beside the chat, with no side scroll', async ({ page }) => {
   const chat: ChatReply = { steps: [{ kind: 'sessions' }, { kind: 'pane', id: 'otto', name: 'Otto' }], text: '**Otto** is waiting for your approval to run npm test.' };
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, chat });
   await boot(page);
-  const before = await scroll(page).evaluate(e => e.clientWidth);
   await ask(page, 'Who needs me?');
   // The question goes to the daemon with Claude, once.
   await expect.poll(() => sent(daemon.received, 'chat.ask').length).toBe(1);
@@ -47,9 +45,9 @@ test('/, a question, the answer: hovering Otto lights him at his table; the atel
   const otto = panel(page).getByRole('link', { name: 'Otto' });
   await expect(otto).toBeVisible();
   await expect(panel(page)).toContainText('is waiting for your approval to run npm test.');
-  // The panel is docked beside the atelier: the atelier narrows by its width and nothing scrolls sideways.
-  const after = await scroll(page).evaluate(e => e.clientWidth);
-  expect(after).toBeLessThan(before);
+  // The panel is docked beside the atelier: the atelier stays in view, ending where the chat starts, and nothing scrolls sideways.
+  const atelier = (await scroll(page).boundingBox())!, side = (await panel(page).boundingBox())!;
+  expect(atelier.x + atelier.width).toBeLessThanOrEqual(side.x + 1);
   await expect(ledgeTable(page)).toBeVisible();
   expect(await pageNoSideScroll(page)).toBe(true);
   expect(await scrollNoSideScroll(page)).toBe(true);
@@ -95,23 +93,13 @@ test('a session card: one click, the agent sits at the Ledge table with its seat
   expect(sent(daemon.received, 'session.launch')).toHaveLength(1);
 });
 
-test('a 900 px window: the chat opens over the atelier, Escape closes it, and the focus is back on the page', async ({ page }) => {
-  await page.setViewportSize({ width: 900, height: 760 });
+test('Escape in the chat\'s field gives the keyboard back to the page: the window\'s single keys answer again', async ({ page }) => {
+  // Under 1280 px the IDE's states are still to be drawn (plan 4.1 point 5): the old chat over the atelier at 900 px is not checked.
   await fakeDaemon(page, fleet, { projects: twoProjects });
   await boot(page);
-  const before = await scroll(page).evaluate(e => e.clientWidth);
-  await page.getByRole('button', { name: 'Chat Ledge', exact: true }).click();
-  await expect(panel(page)).toBeVisible();
+  await field(page).click();
   await expect(field(page)).toBeFocused();
-  // Over the atelier (the mockup's ≤ 900 px rule): fixed on the right edge, the atelier keeps its width, nothing scrolls sideways.
-  await expect(panel(page)).toHaveCSS('position', 'fixed');
-  const box = (await panel(page).boundingBox())!;
-  expect(Math.round(box.x + box.width)).toBe(900);
-  expect(box.width).toBeLessThanOrEqual(400);
-  expect(await scroll(page).evaluate(e => e.clientWidth)).toBe(before);
-  expect(await pageNoSideScroll(page)).toBe(true);
   await page.keyboard.press('Escape');
-  await expect(panel(page)).toHaveCount(0);
   // The focus is back on the page, in no field, so the window's single keys answer again.
   expect(await page.evaluate(() => document.activeElement?.matches('input, textarea, select, [contenteditable="true"]') ?? false)).toBe(false);
   await page.keyboard.press('n');
