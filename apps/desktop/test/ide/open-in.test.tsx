@@ -15,7 +15,7 @@ import { TabMenu } from '../../src/ide/TabMenu';
 import { Toast, useToast } from '../../src/shell/Toast';
 import { WorkspaceSection } from '../../src/settings/WorkspaceSection';
 import type { SettingsContext } from '../../src/settings/SettingsPage';
-import { editorTarget, loadEditor, noticeFor } from '../../src/ide/openIn';
+import { editorTarget, loadEditor, noticeFor, openSessionInEditor, resetEditorsForTests } from '../../src/ide/openIn';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { PROJECTS, seedAtelier } from '../helpers';
 import type { EditorOutcome, EditorsInstalled } from '../../src/tauri/bridge';
@@ -24,7 +24,7 @@ import type { EditorOutcome, EditorsInstalled } from '../../src/tauri/bridge';
 
 type Win = { __ledgeEditors?: EditorsInstalled; __ledgeOpenInEditor?: (a: { editor: string; path: string; ssh?: string }) => EditorOutcome };
 const win = window as unknown as Win;
-beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
+beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); resetEditorsForTests(); });
 afterEach(() => { cleanup(); delete win.__ledgeEditors; delete win.__ledgeOpenInEditor; });
 
 const c = fr.ide.openIn;
@@ -53,6 +53,13 @@ describe('what Ledge shows once the editor answered (planche states 1, 2, 4, 7)'
     expect(noticeFor({ kind: 'failed', reason: 'distro' }, 'vscode', c)!.text).toBe('VS Code n’a pas pu s’ouvrir : la distribution WSL ne répond pas.');
     expect(noticeFor({ kind: 'failed', reason: 'path' }, 'cursor', c)!.text).toBe('Cursor n’a pas pu s’ouvrir : WSL ne peut pas recevoir ce chemin.');
     expect(noticeFor({ kind: 'failed', reason: 'other' } as unknown as EditorOutcome, 'zed', c)!.text).toBe('Zed n’a pas pu s’ouvrir : le programme ne démarre pas.');
+  });
+  it('a session whose machine is no longer listed says so, without asking the editor', async () => {
+    const open = vi.fn();
+    win.__ledgeOpenInEditor = open;
+    const n = await openSessionInEditor(fakeSession('gone:a', { cwd: '/srv/app', machineId: 'gone' }), [{ id: 'local', label: 'Local' }], 'cursor', c);
+    expect(n).toEqual({ text: 'Cursor n’a pas pu s’ouvrir : la machine de cette session ne fait plus partie de vos machines.', settings: false });
+    expect(open).not.toHaveBeenCalled();
   });
 });
 
@@ -85,6 +92,21 @@ describe('Settings › Workspace › « Ouvrir dans… » (states 3 and 5)', () 
     await waitFor(() => expect(group().getByText('non installé')).toBeTruthy());
     const notes = [...document.querySelectorAll('.set-radio-note')].map(n => [n.parentElement!.textContent, n.textContent]);
     expect(notes).toEqual([['Cursornon installé', 'non installé'], ['Zednon installé · pas les dossiers WSL', 'non installé · pas les dossiers WSL']]);
+  });
+  it('a detection that failed is asked again when Settings opens again', async () => {
+    // No answer from the native side (outside Tauri, nothing faked): nothing shows.
+    view();
+    await act(async () => { await Promise.resolve(); });
+    expect(document.querySelectorAll('.set-radio-note')).toHaveLength(1);
+    cleanup();
+    win.__ledgeEditors = { cursor: false, vscode: true, zed: true };
+    view();
+    await waitFor(() => expect(group().getByText('non installé')).toBeTruthy());
+    // Known now: a later opening shows it at once, without asking again.
+    cleanup();
+    win.__ledgeEditors = { cursor: true, vscode: true, zed: true };
+    view();
+    expect(group().getByText('non installé')).toBeTruthy();
   });
   it('choosing VS Code keeps it, says so, and the menus read it', async () => {
     const saved = vi.fn();

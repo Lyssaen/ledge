@@ -21,15 +21,18 @@ export function saveEditor(e: EditorId): void { writeJson(KEY, e); notify(); }
 /** The setting's value, shared: every consumer (menus, Settings) re-renders when one sets it. */
 export function useEditor(): [EditorId, (e: EditorId) => void] { return [useSyncExternalStore(subscribe, loadEditor), saveEditor]; }
 
-// The editors installed on this PC, asked once: null until the native side answers (Settings then shows nothing, no loading state).
+// The editors installed on this PC: null until the native side answers (Settings then shows nothing, no loading state).
+// Asked once it answers; a failed ask (null) is asked again by the next consumer that mounts (Settings opened again).
 let installed: EditorsInstalled | null = null;
-let asked = false;
+let asking = false;
 function ask(): void {
-  if (asked) return;
-  asked = true;
-  void editorsAvailable().then(found => { installed = found; notify(); });
+  if (asking || installed !== null) return;
+  asking = true;
+  void editorsAvailable().then(found => { asking = false; installed = found; notify(); }, () => { asking = false; });
 }
-/** Which editors this PC has; null while unknown. Asks the native side on first use. */
+/** For tests: forget what was found, as a new start of Ledge would. */
+export function resetEditorsForTests(): void { installed = null; asking = false; }
+/** Which editors this PC has; null while unknown. Asks the native side when it does not know yet. */
 export function useEditorsInstalled(): EditorsInstalled | null {
   return useSyncExternalStore(l => { ask(); return subscribe(l); }, () => installed);
 }
@@ -51,7 +54,7 @@ export type OpenInNotice = null | { text: string; settings: boolean };
 
 export interface OpenInCopy {
   missing(editor: string): string; zedWsl: string; failed(editor: string, reason: string): string;
-  reason: { exe: string; distro: string; path: string };
+  reason: { exe: string; distro: string; path: string; machine: string };
 }
 
 export function noticeFor(outcome: EditorOutcome, editor: EditorId, c: OpenInCopy): OpenInNotice {
@@ -65,10 +68,10 @@ export function noticeFor(outcome: EditorOutcome, editor: EditorId, c: OpenInCop
   }
 }
 
-/** Opens the session's worktree in `editor` and says what to show. A session whose place cannot be said fails as a path
- *  the editor cannot receive. */
+/** Opens the session's worktree in `editor` and says what to show. A remote session whose machine is no longer in the list
+ *  has nowhere to open: it says so (docs/mockups/ledge-ide-open-in.html, state 7, reason « machine »). */
 export async function openSessionInEditor(s: Session, machines: readonly Machine[], editor: EditorId, c: OpenInCopy): Promise<OpenInNotice> {
   const target = editorTarget(s, machines);
-  if (!target) return noticeFor({ kind: 'failed', reason: 'path' }, editor, c);
+  if (!target) return { text: c.failed(EDITOR_NAMES[editor], c.reason.machine), settings: false };
   return noticeFor(await openInEditor(editor, target.path, target.ssh), editor, c);
 }

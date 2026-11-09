@@ -1478,7 +1478,7 @@ export const en: Messages = {
       zedWsl: 'Zed can’t open WSL folders: choose Cursor or VS Code.',
       settings: 'Settings',
       failed: (editor: string, reason: string) => `${editor} couldn’t open: ${reason}`,
-      reason: { exe: 'the program won’t start.', distro: 'the WSL distribution isn’t answering.', path: 'WSL can’t receive this path.' }
+      reason: { exe: 'the program won’t start.', distro: 'the WSL distribution isn’t answering.', path: 'WSL can’t receive this path.', machine: 'this session’s machine is no longer one of your machines.' }
     },
     welcome: {
       brand: 'Ledge', start: 'Start', recent: 'Recent', terminal: (name) => `Terminal · ${name}`, capture: (name) => `Capture · ${name}`,

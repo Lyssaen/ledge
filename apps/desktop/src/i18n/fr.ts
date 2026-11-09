@@ -1551,7 +1551,7 @@ export const fr = {
       zedWsl: 'Zed n’ouvre pas les dossiers WSL : choisissez Cursor ou VS Code.',
       settings: 'Réglages',
       failed: (editor: string, reason: string) => `${editor} n’a pas pu s’ouvrir : ${reason}`,
-      reason: { exe: 'le programme ne démarre pas.', distro: 'la distribution WSL ne répond pas.', path: 'WSL ne peut pas recevoir ce chemin.' }
+      reason: { exe: 'le programme ne démarre pas.', distro: 'la distribution WSL ne répond pas.', path: 'WSL ne peut pas recevoir ce chemin.', machine: 'la machine de cette session ne fait plus partie de vos machines.' }
     },
     /** A group without tabs (mockup docs/mockups/accueil-vide): the welcome, in the window's only group as in a split. */
     welcome: {
