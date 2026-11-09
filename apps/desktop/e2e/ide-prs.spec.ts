@@ -183,3 +183,19 @@ test('state 2: the chip « PR ? » when the session\'s forge cannot be read; sta
   await expect(view.locator('.fg-side-h small').first()).toHaveText(`relevé ${t('2026-11-09T10:42:00.000Z')}`);
   await page.screenshot({ path: 'e2e/.results/lot8b-chip-error.png' });
 });
+
+test.describe('state 11: under 1280 px', () => {
+  test.use({ viewport: { width: 1100, height: 800 } });
+  test('Description and Détails stack, the four views and the review\'s buttons wrap, nothing is hidden', async ({ page }) => {
+    await boot(page);
+    await activity(page).getByRole('button', { name: 'MR et PR', exact: true }).click();
+    await page.getByRole('region', { name: 'MR et PR' }).locator('.fg-row').first().click();
+    const tab = page.getByRole('tabpanel', { name: /^!41/ });
+    await expect(tab.locator('.fg-graph .fg-node')).toHaveCount(3);
+    const [d, k] = await Promise.all([tab.locator('.fg-grid > .fg-blk').nth(0).boundingBox(), tab.locator('.fg-grid > .fg-blk').nth(1).boundingBox()]);
+    expect(k!.y).toBeGreaterThan(d!.y + d!.height - 1);
+    for (const name of ['Relancer', 'Demander à Tom de corriger', 'Voir la discussion', 'Fusionner']) await expect(tab.getByRole('button', { name })).toBeVisible();
+    for (const name of [/^Vue d'ensemble/, /^Discussion/, /^Modifications/, /^Commits/]) expect((await tab.getByRole('tab', { name }).boundingBox())!.height).toBeGreaterThan(20);
+    await page.screenshot({ path: 'e2e/.results/lot8b-narrow.png' });
+  });
+});

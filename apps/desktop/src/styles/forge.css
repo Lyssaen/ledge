@@ -125,3 +125,5 @@
 .fg-page .fg-cin:disabled { opacity: .5; }
 /* State 2: « PR ? », the forge of the session's repository unreadable on its machine. */
 .ide-bar .fg-chip-unknown, .fg-chip-unknown { border: 1px dashed var(--input); border-radius: 5px; padding: 0 5px; color: var(--muted-foreground); }
+/* The tab scrolls as a whole: its blocks keep their height (a flex column would squeeze them, the view switch first). */
+.fg-page > * { flex-shrink: 0; }
