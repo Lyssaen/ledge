@@ -1,0 +1,19 @@
+[
+ {
+  "id": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+  "short_id": "68f7d609",
+  "created_at": "2026-11-08T02:39:05.000+02:00",
+  "parent_ids": [
+   "c298159b72a6d1d888a635a8c1e5fc4952d12983"
+  ],
+  "title": "feat(milestone): add --include-descendants to milestone list",
+  "message": "feat(milestone): add --include-descendants to milestone list\n\nSupport listing milestones across descendant projects and subgroups when\nlisting group milestones with glab milestone list --group. Render an\nOwner column in table output to identify where each milestone belongs.\n\nCloses #8709\n",
+  "author_name": "author",
+  "authored_date": "2026-11-08T02:39:05.000+02:00",
+  "committer_name": "author",
+  "committed_date": "2026-11-08T02:39:05.000+02:00",
+  "trailers": {},
+  "extended_trailers": {},
+  "web_url": "https://gitlab.com/gitlab-org/cli/-/commit/68f7d609d53c29b92e9a7905d63ab5efc96080d4"
+ }
+]

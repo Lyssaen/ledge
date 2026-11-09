@@ -366,6 +366,59 @@ describe('multi-machine connections', () => {
     expect(got.filter(m => m.type === 'models.listing').at(-1)).toMatchObject({ requestId: 'm2' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  describe('pull and merge requests (lot 8a)', () => {
+    const AT = '2026-11-08T10:00:00.000Z';
+    const pr = (n: number, sessions: string[], extra = {}) => ({ id: `github.com/Lyssaen/ledge#${n}`, forge: 'github' as const, host: 'github.com', repo: 'Lyssaen/ledge', number: n, ref: `#${n}`,
+      url: `https://github.com/Lyssaen/ledge/pull/${n}`, title: 't', state: 'open' as const, branch: `b${n}`, target: 'main', headSha: 'a'.repeat(40), pipeline: 'ok' as const,
+      approvals: { given: 1 }, mergeable: true, openThreads: 0, updatedAt: AT, sessions, ...extra });
+    const forgeSetup = () => {
+      const s = setup();
+      const withForge = { ...s.snapshot, daemon: { version: '0.54.0', install: 'npm' as const, systemd: true, routing: true, forge: true } };
+      s.local.emit(withForge); s.server.emit({ ...withForge, sshAlias: remote.ssh });
+      return s;
+    };
+    it('sums two machines, sessions qualified, each request with its machine', () => {
+      const { client, local, server, got } = forgeSetup();
+      let changes = 0;
+      client.fleet!.onForge(() => changes++);
+      local.emit({ type: 'forge.state', prs: [pr(226, ['same'])], forges: [{ forge: 'github', host: 'github.com', status: 'ok', at: AT }] });
+      server.emit({ type: 'forge.state', prs: [pr(41, ['same', 'other'], { forge: 'gitlab', host: 'gitlab.com', ref: '!41' })], forges: [{ forge: 'gitlab', host: 'gitlab.com', status: 'missing', message: 'glab is not installed', at: AT }] });
+      expect(client.fleet!.prs().map(p => [p.ref, p.machineId, p.sessions])).toEqual([['#226', 'local', ['local:same']], ['!41', 'server', ['server:same', 'server:other']]]);
+      expect(client.fleet!.forges().map(f => [f.machineId, f.status])).toEqual([['local', 'ok'], ['server', 'missing']]);
+      expect(changes).toBe(2);
+      expect(got.filter(m => m.type === 'forge.state').map(m => m.type === 'forge.state' && m.machineId)).toEqual(['local', 'server']);
+    });
+    it('a machine that falls takes its requests out and rejects its request in flight « hors ligne »', async () => {
+      const { client, server } = forgeSetup();
+      server.emit({ type: 'forge.state', prs: [pr(41, ['same'])], forges: [] });
+      const asked = client.fleet!.prDetail('github.com/Lyssaen/ledge#41', 'server');
+      const sent = server.sent.at(-1) as Extract<ClientMessage, { type: 'forge.detail' }>;
+      expect(sent).toMatchObject({ type: 'forge.detail', prId: 'github.com/Lyssaen/ledge#41' });
+      expect(sent).not.toHaveProperty('machineId');
+      server.set('unreachable');
+      await expect(asked).rejects.toEqual({ code: 'offline', message: 'hors ligne' });
+      expect(client.fleet!.prs()).toEqual([]);
+      await expect(client.fleet!.prAct('github.com/Lyssaen/ledge#41', 'server', { kind: 'rerun' })).rejects.toMatchObject({ code: 'offline' });
+    });
+    it('routes to the machine asked and answers once, from it; a refusal rejects with its code', async () => {
+      const { client, local, server } = forgeSetup();
+      const act = client.fleet!.prAct('github.com/Lyssaen/ledge#226', 'local', { kind: 'merge', headSha: 'a'.repeat(40) });
+      const sent = local.sent.at(-1) as Extract<ClientMessage, { type: 'forge.act' }>;
+      server.emit({ type: 'forge.act.reply', requestId: sent.requestId, ok: true, command: 'from the wrong machine' });
+      local.emit({ type: 'forge.act.reply', requestId: sent.requestId, ok: false, code: 'not_offered', message: 'the pipeline is not green' });
+      await expect(act).rejects.toEqual({ code: 'not_offered', message: 'the pipeline is not green' });
+      const detail = client.fleet!.prDetail('github.com/Lyssaen/ledge#226', 'local', { log: '42' });
+      const d = local.sent.at(-1) as Extract<ClientMessage, { type: 'forge.detail' }>;
+      expect(d.log).toBe('42');
+      local.emit({ type: 'forge.detail.reply', requestId: d.requestId, ok: true, detail: { pr: pr(226, ['same']), description: '', author: 'pim', reviewers: [], labels: [], issues: [], jobs: [], threads: [], files: [], commits: [], mergeCommand: 'gh pr merge', mergeBlockers: [] } });
+      expect((await detail).pr.sessions).toEqual(['local:same']);
+    });
+    it('a daemon without forge: true does not count: its request is « version trop ancienne »', async () => {
+      const { client, server } = setup();
+      await expect(client.fleet!.prDetail('github.com/x/y#1', 'server')).rejects.toMatchObject({ code: 'outdated' });
+      expect(server.sent.filter(m => m.type === 'forge.detail')).toEqual([]);
+    });
+  });
   it('keeps each machine\'s usage; the threshold goes to every machine, « Compris » to those that hold the alert', () => {
     const { client, local, server } = setup();
     const alert = { id: 'claude|a1b2c3d4e5f6|five_hour|-|threshold|-', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: { kind: 'five_hour' as const, pct: 84, resetsAt: null }, level: 'threshold' as const, at: '2026-11-05T14:00:00.000Z' };

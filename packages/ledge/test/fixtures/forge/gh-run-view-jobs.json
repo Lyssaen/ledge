@@ -1,0 +1,306 @@
+{
+ "conclusion": "failure",
+ "databaseId": 42425772473,
+ "headSha": "055a347f107fc03c08b0dd07176f88921f1fef5c",
+ "jobs": [
+  {
+   "completedAt": "2026-11-08T07:47:25Z",
+   "conclusion": "failure",
+   "databaseId": 128667644610,
+   "name": "production",
+   "startedAt": "2026-11-08T07:47:16Z",
+   "status": "completed",
+   "steps": [
+    {
+     "conclusion": "success",
+     "name": "Set up job",
+     "number": 1,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Check the push token",
+     "number": 2,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run actions/checkout@v4",
+     "number": 3,
+     "status": "completed"
+    },
+    {
+     "conclusion": "failure",
+     "name": "Fast-forward production to the release commit",
+     "number": 4,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Post Run actions/checkout@v4",
+     "number": 8,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Complete job",
+     "number": 9,
+     "status": "completed"
+    }
+   ],
+   "url": "https://github.com/Lyssaen/ledge/actions/runs/42425772473/job/128667644610"
+  },
+  {
+   "completedAt": "2026-11-07T23:41:31Z",
+   "conclusion": "success",
+   "databaseId": 128667645308,
+   "name": "windows-installer",
+   "startedAt": "2026-11-07T23:35:35Z",
+   "status": "completed",
+   "steps": [
+    {
+     "conclusion": "success",
+     "name": "Set up job",
+     "number": 1,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run actions/checkout@v4",
+     "number": 2,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run pnpm/action-setup@v4",
+     "number": 3,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run actions/setup-node@v4",
+     "number": 4,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run dtolnay/rust-toolchain@stable",
+     "number": 5,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run Swatinem/rust-cache@v2",
+     "number": 6,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run pnpm install --frozen-lockfile",
+     "number": 7,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run actions/download-artifact@v4",
+     "number": 8,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Stamp the version from the tag",
+     "number": 9,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Typecheck the notch and Ledge Desktop",
+     "number": 10,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Build Ledge Desktop",
+     "number": 11,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Rust tests",
+     "number": 12,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Publish",
+     "number": 13,
+     "status": "completed"
+    },
+    {
+     "conclusion": "skipped",
+     "name": "Show the updater manifest",
+     "number": 14,
+     "status": "completed"
+    },
+    {
+     "conclusion": "skipped",
+     "name": "Keep the installer of a dry run",
+     "number": 15,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Post Run Swatinem/rust-cache@v2",
+     "number": 27,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Post Run actions/setup-node@v4",
+     "number": 28,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Post Run pnpm/action-setup@v4",
+     "number": 29,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Post Run actions/checkout@v4",
+     "number": 30,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Complete job",
+     "number": 31,
+     "status": "completed"
+    }
+   ],
+   "url": "https://github.com/Lyssaen/ledge/actions/runs/42425772473/job/128667645308"
+  },
+  {
+   "completedAt": "2026-11-07T23:35:32Z",
+   "conclusion": "success",
+   "databaseId": 128667645533,
+   "name": "npm",
+   "startedAt": "2026-11-07T23:33:18Z",
+   "status": "completed",
+   "steps": [
+    {
+     "conclusion": "success",
+     "name": "Set up job",
+     "number": 1,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run actions/checkout@v4",
+     "number": 2,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run pnpm/action-setup@v4",
+     "number": 3,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run actions/setup-node@v4",
+     "number": 4,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run sudo apt-get install -y tmux",
+     "number": 5,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run pnpm install --frozen-lockfile",
+     "number": 6,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Stamp the version from the tag",
+     "number": 7,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run pnpm --filter @ledge/protocol test",
+     "number": 8,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run pnpm --filter @paradow/ledge test",
+     "number": 9,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run pnpm --filter @paradow/ledge build",
+     "number": 10,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run pnpm --filter @ledge/mobile build",
+     "number": 11,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Run actions/upload-artifact@v4",
+     "number": 12,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Publish to npm",
+     "number": 13,
+     "status": "completed"
+    },
+    {
+     "conclusion": "skipped",
+     "name": "Check the package without publishing",
+     "number": 14,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Post Run actions/setup-node@v4",
+     "number": 26,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Post Run pnpm/action-setup@v4",
+     "number": 27,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Post Run actions/checkout@v4",
+     "number": 28,
+     "status": "completed"
+    },
+    {
+     "conclusion": "success",
+     "name": "Complete job",
+     "number": 29,
+     "status": "completed"
+    }
+   ],
+   "url": "https://github.com/Lyssaen/ledge/actions/runs/42425772473/job/128667645533"
+  }
+ ],
+ "status": "completed",
+ "workflowName": "Release"
+}

@@ -1,0 +1,38 @@
+[
+ {
+  "sha": "6bc4800d18dad0b325b6b70052904bec5140e20a",
+  "filename": "script/gen-winres.ps1",
+  "status": "modified",
+  "additions": 23,
+  "deletions": 0,
+  "changes": 23,
+  "blob_url": "https://github.com/cli/cli/blob/fdb4e47437a3140146e76d12c0f3b5dd23df34a1/script%2Fgen-winres.ps1",
+  "raw_url": "https://github.com/cli/cli/raw/fdb4e47437a3140146e76d12c0f3b5dd23df34a1/script%2Fgen-winres.ps1",
+  "contents_url": "https://api.github.com/repos/cli/cli/contents/script%2Fgen-winres.ps1?ref=fdb4e47437a3140146e76d12c0f3b5dd23df34a1",
+  "patch": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")\n+if (-not $_product_version_components.Success) {\n+    Write-Host \"error: product-version argument '$_product_version' must include semantic version numbers\"\n+    Write-Host $_usage\n+    exit 1\n+}\n+\n+$_version_major = [int]$_product_version_components.Groups[1].Value\n+$_version_minor = [int]$_product_version_components.Groups[2].Value\n+$_version_patch = [int]$_product_version_components.Groups[3].Value\n+$_version_build = 0\n+if (-not [string]::IsNullOrEmpty($_product_version_components.Groups[4].Value)) {\n+    $_version_build = [int]$_product_version_components.Groups[4].Value\n+}\n+\n $_versioninfo_path = $args[2]\n if ([string]::IsNullOrEmpty($_versioninfo_path)) {\n     Write-Host \"error: path to versioninfo.json is missing\"\n@@ -65,6 +80,14 @@ goversioninfo `\n     -64 -arm -platform-specific `\n     -file-version \"$_file_version\" `\n     -product-version \"$_product_version\" `\n+    -ver-major \"$_version_major\" `\n+    -ver-minor \"$_version_minor\" `\n+    -ver-patch \"$_version_patch\" `\n+    -ver-build \"$_version_build\" `\n+    -product-ver-major \"$_version_major\" `\n+    -product-ver-minor \"$_version_minor\" `\n+    -product-ver-patch \"$_version_patch\" `\n+    -product-ver-build \"$_version_build\" `\n     \"$_versioninfo_path\"\n \n Move-Item -Path \"resource_windows_*.syso\" -Destination \"$_output\" -Force"
+ },
+ {
+  "sha": "6ffba57d065b3dd5b7732604d5895c223cd535e1",
+  "filename": "script/versioninfo.template.json",
+  "status": "modified",
+  "additions": 1,
+  "deletions": 1,
+  "changes": 2,
+  "blob_url": "https://github.com/cli/cli/blob/fdb4e47437a3140146e76d12c0f3b5dd23df34a1/script%2Fversioninfo.template.json",
+  "raw_url": "https://github.com/cli/cli/raw/fdb4e47437a3140146e76d12c0f3b5dd23df34a1/script%2Fversioninfo.template.json",
+  "contents_url": "https://api.github.com/repos/cli/cli/contents/script%2Fversioninfo.template.json?ref=fdb4e47437a3140146e76d12c0f3b5dd23df34a1",
+  "patch": "@@ -24,7 +24,7 @@\n         \"FileDescription\": \"GitHub CLI\",\n         \"FileVersion\": \"\",\n         \"InternalName\": \"gh\",\n-        \"LegalCopyright\": \"\",\n+        \"LegalCopyright\": \"Copyright (C) GitHub, Inc. All rights reserved.\",\n         \"LegalTrademarks\": \"\",\n         \"OriginalFilename\": \"gh.exe\",\n         \"PrivateBuild\": \"\","
+ },
+ {
+  "sha": "a62cde1fa524b099a5f3536f6eb1d04fa0a49501",
+  "filename": "script/winres_test.go",
+  "status": "added",
+  "additions": 43,
+  "deletions": 0,
+  "changes": 43,
+  "blob_url": "https://github.com/cli/cli/blob/fdb4e47437a3140146e76d12c0f3b5dd23df34a1/script%2Fwinres_test.go",
+  "raw_url": "https://github.com/cli/cli/raw/fdb4e47437a3140146e76d12c0f3b5dd23df34a1/script%2Fwinres_test.go",
+  "contents_url": "https://api.github.com/repos/cli/cli/contents/script%2Fwinres_test.go?ref=fdb4e47437a3140146e76d12c0f3b5dd23df34a1",
+  "patch": "@@ -0,0 +1,43 @@\n+package main\n+\n+import (\n+\t\"encoding/json\"\n+\t\"os\"\n+\t\"path/filepath\"\n+\t\"testing\"\n+\n+\t\"github.com/stretchr/testify/assert\"\n+\t\"github.com/stretchr/testify/require\"\n+)\n+\n+type versionInfoTemplate struct {\n+\tStringFileInfo struct {\n+\t\tLegalCopyright string `json:\"LegalCopyright\"`\n+\t} `json:\"StringFileInfo\"`\n+}\n+\n+func TestVersionInfoTemplateIncludesLegalCopyright(t *testing.T) {\n+\tcontent, err := os.ReadFile(filepath.Join(\"versioninfo.template.json\"))\n+\trequire.NoError(t, err)\n+\n+\tvar template versionInfoTemplate\n+\terr = json.Unmarshal(content, &template)\n+\trequire.NoError(t, err)\n+\n+\tassert.NotEmpty(t, template.StringFileInfo.LegalCopyright)\n+}\n+\n+func TestGenWinresScriptSetsFixedFileVersionFields(t *testing.T) {\n+\tcontent, err := os.ReadFile(filepath.Join(\"gen-winres.ps1\"))\n+\trequire.NoError(t, err)\n+\n+\tscript := string(content)\n+\tassert.Contains(t, script, \"-ver-major\")\n+\tassert.Contains(t, script, \"-ver-minor\")\n+\tassert.Contains(t, script, \"-ver-patch\")\n+\tassert.Contains(t, script, \"-ver-build\")\n+\tassert.Contains(t, script, \"-product-ver-major\")\n+\tassert.Contains(t, script, \"-product-ver-minor\")\n+\tassert.Contains(t, script, \"-product-ver-patch\")\n+\tassert.Contains(t, script, \"-product-ver-build\")\n+}"
+ }
+]

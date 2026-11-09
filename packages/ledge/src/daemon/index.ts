@@ -17,6 +17,7 @@ import { createMobileService, type MobileService } from '../mobile/service.js';
 import { fileJournal } from './mailbox.js';
 import { tasksJournal } from './tasks.js';
 import { createUsage } from './usage/service.js';
+import { createForgeService } from './forge/service.js';
 import { homedir } from 'node:os';
 import { loginShellEnv } from '../shell-path.js';
 import { NO_SIZE, SIZE_MARK, keptOf } from '../term/windowSize.js';
@@ -98,8 +99,17 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   const taskJournal = tasksJournal(paths().tasks);
   // Each harness's account limits: Claude Code's from Anthropic's usage API (read-only token, the login shell's proxy), Codex's from its transcripts.
   const usage = createUsage({ home: homedir(), env: async () => ({ ...process.env, ...(await loginShellEnv()) }), file: join(paths().dir, 'usage.json') });
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, attachments, usage });
+  // The pull and merge requests of the sessions' branches (lot 8a): gh and glab with the login shell's sign-in and proxy, no token through Ledge.
+  // The login shell's environment is read once per 5 minutes: a refresh runs several gh / glab calls.
+  let shellEnv: { at: number; env: Promise<Record<string, string>> } | null = null;
+  const forgeEnv = async (): Promise<NodeJS.ProcessEnv> => {
+    if (!shellEnv || Date.now() - shellEnv.at > 300_000) shellEnv = { at: Date.now(), env: loginShellEnv() };
+    return { ...process.env, ...(await shellEnv.env) };
+  };
+  const forge = createForgeService({ store, env: forgeEnv });
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, attachments, usage, forge });
   usage.start();
+  forge.start();
   ompLive = () => server.omp.liveCount();
   const poller = startPoller({ store, tmux, broadcastPreview: server.preview, labelExited: server.labelExited });
   await writeFile(paths().pid, String(process.pid));
@@ -107,7 +117,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
     process.off('SIGTERM', onSignal); process.off('SIGINT', onSignal);
-    poller.stop(); usage.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await taskJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
+    poller.stop(); usage.stop(); forge.stop(); await server.close(); await mobile?.stop(); await store.save(); await history.flush(); await mail.flush(); await taskJournal.flush(); await rm(paths().pid, { force: true }); log('daemon stopped');
   })();
   const onSignal = () => { stop().finally(() => process.exit(0)); };
   process.once('SIGTERM', onSignal);

@@ -21,6 +21,8 @@ function fakeRun(remotes: Record<string, string>, answer: (file: string, args: s
   return { run, calls };
 }
 const ctx = () => ({ dir: mkdtempSync(join(tmpdir(), 'ctx-')), steps: new Map() });
+/** gh and glab signed in to the public hosts, as on the user's machine; never the real config files in a test. */
+const signedIn = async (cli: 'gh' | 'glab') => new Set(cli === 'gh' ? ['github.com'] : ['gitlab.com']);
 
 describe('forgeOf', () => {
   it('github.com goes to gh as owner/repo, another GitHub host as host/owner/repo, the rest to glab by URL', () => {
@@ -46,7 +48,7 @@ describe('the commands are a closed list of reads', () => {
   });
   it('the runner receives only those commands, with the repository after -R', async () => {
     const { run, calls } = fakeRun({ '/w/ledge': 'git@github.com:Lyssaen/ledge.git\n' });
-    await createForge({ run, now: () => T }).write(ctx(), projects([{ machine: 'local', path: '/w/ledge' }]));
+    await createForge({ signedIn, run, now: () => T }).write(ctx(), projects([{ machine: 'local', path: '/w/ledge' }]));
     expect(calls.map(c => [c.file, ...c.args])).toEqual(FORGE_COMMANDS.gh.map(c => ['gh', ...c.args, '-R', 'Lyssaen/ledge']));
   });
 });
@@ -55,7 +57,7 @@ describe('forge files', () => {
   it('writes a dated forge-<project>.md per project and an index, and registers them as steps', async () => {
     const { run } = fakeRun({ '/w/ledge': 'https://github.com/Lyssaen/ledge\n' }, (_f, args) => ({ code: 0, stdout: `${args[0]} ${args.slice(2).join(' ')} → 42\tOPEN\tFix it\n` }));
     const c = ctx();
-    await createForge({ run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/ledge' }, { machine: 'nas', path: '/srv/other' }]));
+    await createForge({ signedIn, run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/ledge' }, { machine: 'nas', path: '/srv/other' }]));
     const file = readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8');
     expect(file).toContain(`read at ${T}`);
     expect(file).toContain('github.com/Lyssaen/ledge');
@@ -66,21 +68,21 @@ describe('forge files', () => {
   });
   it('says when gh is missing, not logged in, or the repository has no forge remote', async () => {
     const missing = fakeRun({ '/w/a': 'git@github.com:o/a.git' }, () => ({ code: null, stderr: 'spawn gh ENOENT' }));
-    let c = ctx(); await createForge({ run: missing.run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/a' }]));
+    let c = ctx(); await createForge({ signedIn, run: missing.run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/a' }]));
     expect(readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8')).toContain('`gh` is not installed');
     expect(missing.calls).toHaveLength(1);
 
     const logged = fakeRun({ '/w/a': 'git@gitlab.com:g/a.git' }, () => ({ code: 1, stderr: 'glab: 401 Unauthorized. Run glab auth login' }));
-    c = ctx(); await createForge({ run: logged.run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/a' }]));
+    c = ctx(); await createForge({ signedIn, run: logged.run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/a' }]));
     expect(readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8')).toContain('`glab` is not logged in to gitlab.com');
 
     const none = fakeRun({});
-    c = ctx(); await createForge({ run: none.run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/plain' }]));
+    c = ctx(); await createForge({ signedIn, run: none.run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/plain' }]));
     expect(readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8')).toContain('no GitHub or GitLab remote');
   });
   it('a failing command keeps its short reason, tokens removed', async () => {
     const { run } = fakeRun({ '/w/a': 'git@github.com:o/a.git' }, (_f, args) => args[0] === 'run' ? { code: 1, stderr: 'HTTP 502 for https://x:ghp_abcdefghijklmnopqrstuvwxyz0123456789@api.github.com' } : { code: 0, stdout: 'ok\n' });
-    const c = ctx(); await createForge({ run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/a' }]));
+    const c = ctx(); await createForge({ signedIn, run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/a' }]));
     const file = readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8');
     expect(file).toContain('HTTP 502');
     expect(file).not.toContain('ghp_');
@@ -88,7 +90,7 @@ describe('forge files', () => {
   it('keeps what it read for 2 minutes, then reads again', async () => {
     let now = Date.parse(T);
     const { run, calls } = fakeRun({ '/w/a': 'git@github.com:o/a.git' });
-    const forge = createForge({ run, now: () => new Date(now).toISOString() });
+    const forge = createForge({ signedIn, run, now: () => new Date(now).toISOString() });
     const p = projects([{ machine: 'local', path: '/w/a' }]);
     await forge.write(ctx(), p); const first = calls.length;
     now += 119_000; const c = ctx(); await forge.write(c, p);
@@ -100,7 +102,7 @@ describe('forge files', () => {
   it('read: false runs no forge command: what was read before, dated whatever its age, and « not read yet » otherwise', async () => {
     let now = Date.parse(T);
     const { run, calls } = fakeRun({ '/w/a': 'git@github.com:o/a.git' });
-    const forge = createForge({ run, now: () => new Date(now).toISOString() });
+    const forge = createForge({ signedIn, run, now: () => new Date(now).toISOString() });
     const p = projects([{ machine: 'local', path: '/w/a' }]);
     let c = ctx(); await forge.write(c, p, { read: false });
     expect(calls).toHaveLength(0);
@@ -111,8 +113,37 @@ describe('forge files', () => {
     expect(calls).toHaveLength(read);
     expect(readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8')).toContain(`read at ${T}`);
   });
+  it('never calls a host gh or glab is not signed in to, and says why in the file (not « no PR »)', async () => {
+    const { run, calls } = fakeRun({ '/w/evil': 'https://evil.example/x/y.git', '/w/ghe': 'git@code.github.attacker.example:x/y.git', '/w/ledge': 'git@github.com:Lyssaen/ledge.git' });
+    const c = ctx();
+    await createForge({ signedIn, run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/evil' }, { machine: 'local', path: '/w/ghe' }, { machine: 'local', path: '/w/ledge' }]));
+    // Only github.com was read: no gh / glab call carries another host.
+    expect(calls.length).toBe(FORGE_COMMANDS.gh.length);
+    for (const call of calls) expect(call.args.join(' ')).not.toMatch(/evil\.example|attacker/);
+    const text = readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8');
+    expect(text).toContain('`glab` is not signed in to evil.example on this machine: Ledge does not read this forge. This says nothing about its issues, pull/merge requests or CI.');
+    expect(text).toContain('`gh` is not signed in to code.github.attacker.example on this machine');
+    expect(text).toContain('# github.com/Lyssaen/ledge — read at');
+  });
+
+  it('a host the CLI is signed in to is read as before, self-hosted included', async () => {
+    const { run, calls } = fakeRun({ '/w/lan': 'https://gitlab.speos.lan/group/sub/proj.git' });
+    const c = ctx();
+    await createForge({ signedIn: async () => new Set(['gitlab.speos.lan']), run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/lan' }]));
+    expect(calls.map(x => x.args.at(-1))).toEqual(FORGE_COMMANDS.glab.map(() => 'https://gitlab.speos.lan/group/sub/proj'));
+    expect(readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8')).toContain('# gitlab.speos.lan/group/sub/proj — read at');
+  });
+
+  it('read: false says the same for a host not signed in to, with no call', async () => {
+    const { run, calls } = fakeRun({ '/w/evil': 'https://evil.example/x/y.git' });
+    const c = ctx();
+    await createForge({ signedIn, run, now: () => T }).write(c, projects([{ machine: 'local', path: '/w/evil' }]), { read: false });
+    expect(calls).toEqual([]);
+    expect(readFileSync(join(c.dir, 'forge-ledge.md'), 'utf8')).toContain('is not signed in to evil.example');
+  });
+
   it('without projects, no file', async () => {
-    const c = ctx(); await createForge({ run: fakeRun({}).run, now: () => T }).write(c, { projects: [], rules: [] });
+    const c = ctx(); await createForge({ signedIn, run: fakeRun({}).run, now: () => T }).write(c, { projects: [], rules: [] });
     expect(existsSync(join(c.dir, 'forge.md'))).toBe(false);
   });
 });

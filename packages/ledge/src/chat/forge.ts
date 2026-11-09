@@ -1,9 +1,11 @@
-import { execFile } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatStep, Projects } from '@ledge/protocol';
-import { repositoryId } from '../daemon/git.js';
+import { execForge, forgeOf, redact, type ForgeCli, type ForgeRepo } from '../daemon/forge/run.js';
+import { signedInHosts } from '../daemon/forge/hosts.js';
 import { log } from '../log.js';
+
+export { forgeOf, redact, type ForgeRepo };
 
 /**
  * What the chat may know of GitHub and GitLab (#23): the daemon runs a closed list of `list` commands of `gh` / `glab` for the
@@ -11,9 +13,9 @@ import { log } from '../log.js';
  * The chat keeps its read-only tools: it never runs a forge command itself, and nothing here can write to a forge.
  */
 
-export type Cli = 'gh' | 'glab';
+export type Cli = ForgeCli;
 /** Runs `file args` without a shell; `code` null when the binary could not start. Never throws. */
-export type ForgeRun = (file: string, args: string[], cwd?: string) => Promise<{ code: number | null; stdout: string; stderr: string }>;
+export type ForgeRun = (file: ForgeCli | 'git', args: string[], cwd?: string) => Promise<{ code: number | null; stdout: string; stderr: string }>;
 
 /** The only commands ever run: reads, each followed by `-R <repository>`. */
 export const FORGE_COMMANDS: Record<Cli, ReadonlyArray<{ title: string; args: readonly string[] }>> = {
@@ -34,48 +36,20 @@ export const FORGE_COMMANDS: Record<Cli, ReadonlyArray<{ title: string; args: re
 /** How long a repository's reads are reused. */
 export const FORGE_TTL_MS = 120_000;
 const TIMEOUT_MS = 15_000;
-/** A repository path a forge CLI reads as a path, never as a flag: segments that start with a letter or a digit. */
-const SAFE_PATH = /^[A-Za-z0-9][\w.-]*(?:\/[A-Za-z0-9][\w.-]*)+$/;
-
-export interface ForgeRepo { cli: Cli; host: string; path: string; repo: string }
-/** The forge of a remote URL, credentials left out: `gh` for a GitHub host, `glab` (by URL, self-hosted included) otherwise. */
-export function forgeOf(remote: string): ForgeRepo | null {
-  const id = repositoryId(remote);
-  if (!id) return null;
-  const slash = id.indexOf('/');
-  const host = id.slice(0, slash), path = id.slice(slash + 1);
-  if (!host || !SAFE_PATH.test(path)) return null;
-  if (host === 'github.com') return { cli: 'gh', host, path, repo: path };
-  if (/(^|\.)github\./.test(host)) return { cli: 'gh', host, path, repo: `${host}/${path}` };
-  return { cli: 'glab', host, path, repo: `https://${host}/${path}` };
-}
-
-/** Text without what looks like a token or a credential, for the chat's files and the logs. */
-export function redact(text: string): string {
-  return text
-    .replace(/\b(?:gh[pousr]_[A-Za-z0-9]{10,}|github_pat_[A-Za-z0-9_]{10,}|glpat-[A-Za-z0-9_-]{10,}|gl[a-z]{1,5}-[A-Za-z0-9_-]{16,})/g, '[redacted]')
-    .replace(/\b(Bearer|token|Basic)\s+[^\s'"]+/gi, '$1 [redacted]')
-    .replace(/\b((?:access_|private_)?token|password|secret)=[^\s&'"]+/gi, '$1=[redacted]')
-    .replace(/(\w+:\/\/)[^\s/@]+@/g, '$1[redacted]@');
-}
 
 /** A question the forge files can help with: issues, pull/merge requests, CI, what was merged. */
 export function asksForge(question: string): boolean {
   return /\b(?:issues?|tickets?|PRs?|pull[- ]?requests?|MRs?|merge[- ]?requests?|merg\w*|CI|pipelines?|workflows?|github|gitlab|forge|actions|builds?|checks?|releases?)\b|demandes? de fusion/i.test(question);
 }
 
-const execRun = (env: () => Promise<NodeJS.ProcessEnv>): ForgeRun => async (file, args, cwd) => {
-  // No prompt, no colour, no update notice: the CLIs print plain rows to a pipe.
-  const e = { ...(await env()), GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_PROMPT: '1', GLAB_CHECK_UPDATE: 'false', NO_COLOR: '1', CLICOLOR: '0' };
-  return new Promise(res => {
-    execFile(file, args, { cwd, env: e, timeout: TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
-      const code = !err ? 0 : (err as NodeJS.ErrnoException).code === 'ENOENT' ? null : typeof err.code === 'number' ? err.code : 1;
-      res({ code, stdout: String(stdout), stderr: String(stderr) || (err && code === null ? err.message : '') });
-    });
-  });
+/** The shared runner, with the chat's own timeout. */
+const execRun = (env: () => Promise<NodeJS.ProcessEnv>): ForgeRun => {
+  const run = execForge(env);
+  return (file, args, cwd) => run(file, args, { cwd, timeoutMs: TIMEOUT_MS });
 };
 
-export interface ForgeDeps { run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => string; ttlMs?: number }
+export interface ForgeDeps { run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => string; ttlMs?: number;
+  /** The hosts each CLI is signed in to (signedInHosts by default, read at each write); a test gives its own. */ signedIn?: (cli: Cli) => Promise<Set<string>> }
 export interface Forge {
   /**
    * Writes `forge.md` and a `forge-<project>.md` per project into the chat's folder and registers them as steps; nothing without
@@ -102,7 +76,9 @@ async function readRepo(run: ForgeRun, f: ForgeRepo): Promise<string[]> {
 }
 
 export function createForge(deps: ForgeDeps = {}): Forge {
-  const run = deps.run ?? execRun(deps.env ?? (async () => process.env));
+  const env = deps.env ?? (async () => process.env);
+  const run = deps.run ?? execRun(env);
+  const signedIn = deps.signedIn ?? (async (cli: Cli) => signedInHosts(cli, await env()));
   const now = deps.now ?? (() => new Date().toISOString());
   const ttl = deps.ttlMs ?? FORGE_TTL_MS;
   /** Each repository's last reads, by forge repository. */
@@ -115,10 +91,15 @@ export function createForge(deps: ForgeDeps = {}): Forge {
     cache.set(f.repo, fresh);
     return fresh;
   }
-  async function section(path: string, read: boolean): Promise<{ lines: string[]; source?: string }> {
+  async function section(path: string, read: boolean, hosts: (cli: Cli) => Promise<Set<string>>): Promise<{ lines: string[]; source?: string }> {
     const remote = await run('git', ['config', '--get', 'remote.origin.url'], path);
     const f = remote.code === 0 ? forgeOf(remote.stdout) : null;
     if (!f) return { lines: [`# ${path}`, '', 'This repository has no GitHub or GitLab remote (origin): nothing to read.', ''] };
+    // Never a host the CLI is not signed in to (as the daemon's forge service, 0ada7cd2): a repository cloned from anywhere must not
+    // make Ledge call that host with the machine's credentials. Said so, so the chat never reads it as « no issue, no PR ».
+    if (!(await hosts(f.cli)).has(f.host.toLowerCase())) {
+      return { lines: [`# ${f.host}/${f.path} — not read`, `Local repository: ${path}`, '', `\`${f.cli}\` is not signed in to ${f.host} on this machine: Ledge does not read this forge. This says nothing about its issues, pull/merge requests or CI.`, ''], source: `${f.host}/${f.path}` };
+    }
     const r = read ? await reads(f) : cache.get(f.repo);
     if (!r) return { lines: [`# ${f.host}/${f.path} — not read yet`, `Local repository: ${path}`, '', 'Ledge reads this forge when a question is about issues, pull/merge requests or CI: nothing was read for this one.', ''], source: `${f.host}/${f.path}` };
     return { lines: [`# ${f.host}/${f.path} — read at ${r.at}`, `Local repository: ${path}`, '', ...r.lines], source: `${f.host}/${f.path}` };
@@ -128,13 +109,16 @@ export function createForge(deps: ForgeDeps = {}): Forge {
     async write(ctx, projects, opts = {}) {
       const read = opts.read ?? true;
       if (projects.projects.length === 0) return;
+      // Each CLI's signed-in hosts, read once for this write.
+      const memo = new Map<Cli, Promise<Set<string>>>();
+      const hosts = (cli: Cli): Promise<Set<string>> => { let p = memo.get(cli); if (!p) { p = signedIn(cli).catch(() => new Set<string>()); memo.set(cli, p); } return p; };
       const index = ['# GitHub / GitLab', '', 'What the daemon read from the forges of each project\'s repositories on this machine (open issues, pull/merge requests, CI). Each file says when it was read.', ''];
       await Promise.all(projects.projects.map(async p => {
         const local = p.repos.filter(r => r.machine === 'local');
         const file = `forge-${p.id}.md`;
         const name = p.name.replace(/\s*[\r\n]+\s*/g, ' ').trim();
         if (local.length === 0) { index.push(`- ${name}: no repository on this machine`); return; }
-        const parts = await Promise.all(local.map(r => section(r.path, read)));
+        const parts = await Promise.all(local.map(r => section(r.path, read, hosts)));
         await writeFile(join(ctx.dir, file), parts.flatMap(s => s.lines).join('\n'));
         const sources = parts.flatMap(s => (s.source ? [s.source] : []));
         ctx.steps.set(file, { kind: 'repo', name, path: sources.join(', ') || file });

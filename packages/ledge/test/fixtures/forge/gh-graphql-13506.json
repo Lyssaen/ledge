@@ -1,0 +1,180 @@
+{
+ "data": {
+  "repository": {
+   "pullRequest": {
+    "closingIssuesReferences": {
+     "nodes": [
+      {
+       "number": 13079,
+       "url": "https://github.com/cli/cli/issues/13079"
+      }
+     ]
+    },
+    "reviewThreads": {
+     "nodes": [
+      {
+       "id": "PRRT_kwDODKw3uc6EXf8h",
+       "isResolved": true,
+       "path": "script/gen-winres.ps1",
+       "line": 36,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_kwDODKw3uc7EWPr8",
+          "author": {
+           "login": "copilot-pull-request-reviewer"
+          },
+          "body": "`-ver-*` flags typically represent the **file** version fields, but they’re derived from `$_product_version` here and then reused for `-product-ver-*`. If `$_file_version` and `$_product_version` can differ, this will produce inconsistent/incorrect fixed file version fields in the generated resources. Consider parsing `$_file_version` separately for `-ver-*` and using the existing parsing only for `-product-ver-*`.",
+          "createdAt": "2026-05-24T09:02:27Z",
+          "diffHunk": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")"
+         },
+         {
+          "id": "PRRC_kwDODKw3uc7EWRau",
+          "author": {
+           "login": "babakks"
+          },
+          "body": "It's okay. We don't have different version at the moment.",
+          "createdAt": "2026-05-24T09:09:10Z",
+          "diffHunk": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_kwDODKw3uc6EXf8k",
+       "isResolved": true,
+       "path": "script/gen-winres.ps1",
+       "line": 49,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_kwDODKw3uc7EWPsB",
+          "author": {
+           "login": "copilot-pull-request-reviewer"
+          },
+          "body": "`-ver-*` flags typically represent the **file** version fields, but they’re derived from `$_product_version` here and then reused for `-product-ver-*`. If `$_file_version` and `$_product_version` can differ, this will produce inconsistent/incorrect fixed file version fields in the generated resources. Consider parsing `$_file_version` separately for `-ver-*` and using the existing parsing only for `-product-ver-*`.",
+          "createdAt": "2026-05-24T09:02:28Z",
+          "diffHunk": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")\n+if (-not $_product_version_components.Success) {\n+    Write-Host \"error: product-version argument '$_product_version' must include semantic version numbers\"\n+    Write-Host $_usage\n+    exit 1\n+}\n+\n+$_version_major = [int]$_product_version_components.Groups[1].Value\n+$_version_minor = [int]$_product_version_components.Groups[2].Value\n+$_version_patch = [int]$_product_version_components.Groups[3].Value\n+$_version_build = 0\n+if (-not [string]::IsNullOrEmpty($_product_version_components.Groups[4].Value)) {\n+    $_version_build = [int]$_product_version_components.Groups[4].Value\n+}"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_kwDODKw3uc6EXf8o",
+       "isResolved": true,
+       "path": "script/gen-winres.ps1",
+       "line": 90,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_kwDODKw3uc7EWPsG",
+          "author": {
+           "login": "copilot-pull-request-reviewer"
+          },
+          "body": "`-ver-*` flags typically represent the **file** version fields, but they’re derived from `$_product_version` here and then reused for `-product-ver-*`. If `$_file_version` and `$_product_version` can differ, this will produce inconsistent/incorrect fixed file version fields in the generated resources. Consider parsing `$_file_version` separately for `-ver-*` and using the existing parsing only for `-product-ver-*`.",
+          "createdAt": "2026-05-24T09:02:28Z",
+          "diffHunk": "@@ -65,6 +80,14 @@ goversioninfo `\n     -64 -arm -platform-specific `\n     -file-version \"$_file_version\" `\n     -product-version \"$_product_version\" `\n+    -ver-major \"$_version_major\" `\n+    -ver-minor \"$_version_minor\" `\n+    -ver-patch \"$_version_patch\" `\n+    -ver-build \"$_version_build\" `\n+    -product-ver-major \"$_version_major\" `\n+    -product-ver-minor \"$_version_minor\" `\n+    -product-ver-patch \"$_version_patch\" `\n+    -product-ver-build \"$_version_build\" `"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_kwDODKw3uc6EXf8r",
+       "isResolved": false,
+       "path": "script/gen-winres.ps1",
+       "line": 48,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_kwDODKw3uc7EWPsL",
+          "author": {
+           "login": "copilot-pull-request-reviewer"
+          },
+          "body": "Windows version resource fields are commonly constrained to 16-bit components (0–65535). Casting to `[int]` without range checks can generate version resources that overflow/truncate or cause tool failures for large versions. Add explicit validation that each parsed component is within 0–65535 (and error out with a clear message if not).",
+          "createdAt": "2026-05-24T09:02:28Z",
+          "diffHunk": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")\n+if (-not $_product_version_components.Success) {\n+    Write-Host \"error: product-version argument '$_product_version' must include semantic version numbers\"\n+    Write-Host $_usage\n+    exit 1\n+}\n+\n+$_version_major = [int]$_product_version_components.Groups[1].Value\n+$_version_minor = [int]$_product_version_components.Groups[2].Value\n+$_version_patch = [int]$_product_version_components.Groups[3].Value\n+$_version_build = 0\n+if (-not [string]::IsNullOrEmpty($_product_version_components.Groups[4].Value)) {\n+    $_version_build = [int]$_product_version_components.Groups[4].Value"
+         },
+         {
+          "id": "PRRC_kwDODKw3uc7EWSUq",
+          "author": {
+           "login": "babakks"
+          },
+          "body": "Not needed.",
+          "createdAt": "2026-05-24T09:12:27Z",
+          "diffHunk": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")\n+if (-not $_product_version_components.Success) {\n+    Write-Host \"error: product-version argument '$_product_version' must include semantic version numbers\"\n+    Write-Host $_usage\n+    exit 1\n+}\n+\n+$_version_major = [int]$_product_version_components.Groups[1].Value\n+$_version_minor = [int]$_product_version_components.Groups[2].Value\n+$_version_patch = [int]$_product_version_components.Groups[3].Value\n+$_version_build = 0\n+if (-not [string]::IsNullOrEmpty($_product_version_components.Groups[4].Value)) {\n+    $_version_build = [int]$_product_version_components.Groups[4].Value"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_kwDODKw3uc6EXf8u",
+       "isResolved": false,
+       "path": "script/gen-winres.ps1",
+       "line": 38,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_kwDODKw3uc7EWPsR",
+          "author": {
+           "login": "copilot-pull-request-reviewer"
+          },
+          "body": "This error doesn’t state what format is accepted by the parser. Consider including the expected pattern in the message (e.g., `MAJOR.MINOR.PATCH[.BUILD]`, optionally with a leading `v`) so callers can correct the input quickly.\n",
+          "createdAt": "2026-05-24T09:02:28Z",
+          "diffHunk": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")\n+if (-not $_product_version_components.Success) {\n+    Write-Host \"error: product-version argument '$_product_version' must include semantic version numbers\""
+         },
+         {
+          "id": "PRRC_kwDODKw3uc7EWR-R",
+          "author": {
+           "login": "babakks"
+          },
+          "body": "Good point. We should add an example. Also the input must not include the `v` prefix.",
+          "createdAt": "2026-05-24T09:11:23Z",
+          "diffHunk": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")\n+if (-not $_product_version_components.Success) {\n+    Write-Host \"error: product-version argument '$_product_version' must include semantic version numbers\""
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_kwDODKw3uc6EXiTZ",
+       "isResolved": false,
+       "path": "script/gen-winres.ps1",
+       "line": 48,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_kwDODKw3uc7EWSqK",
+          "author": {
+           "login": "babakks"
+          },
+          "body": "We don't have _build_ number in our version, so let's get rid of these and populate the flags with zero.",
+          "createdAt": "2026-05-24T09:13:20Z",
+          "diffHunk": "@@ -33,6 +33,21 @@ if ([string]::IsNullOrEmpty($_product_version)) {\n     exit 1\n }\n \n+$_product_version_components = [regex]::Match($_product_version, \"^[^0-9]*([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?\")\n+if (-not $_product_version_components.Success) {\n+    Write-Host \"error: product-version argument '$_product_version' must include semantic version numbers\"\n+    Write-Host $_usage\n+    exit 1\n+}\n+\n+$_version_major = [int]$_product_version_components.Groups[1].Value\n+$_version_minor = [int]$_product_version_components.Groups[2].Value\n+$_version_patch = [int]$_product_version_components.Groups[3].Value\n+$_version_build = 0\n+if (-not [string]::IsNullOrEmpty($_product_version_components.Groups[4].Value)) {\n+    $_version_build = [int]$_product_version_components.Groups[4].Value"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_kwDODKw3uc6EXklZ",
+       "isResolved": false,
+       "path": "script/winres_test.go",
+       "line": 1,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_kwDODKw3uc7EWVwR",
+          "author": {
+           "login": "babakks"
+          },
+          "body": "This is not a reliable test. Let's remove it all.",
+          "createdAt": "2026-05-24T09:20:13Z",
+          "diffHunk": "@@ -0,0 +1,43 @@\n+package main"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}
