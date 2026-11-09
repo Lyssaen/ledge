@@ -2,6 +2,7 @@
 
 mod media;
 mod notch;
+mod popout;
 mod pty;
 
 use serde::Serialize;
@@ -17,10 +18,8 @@ const TRAY_DND: &str = "dnd";
 const TRAY_QUIT: &str = "quit";
 /// Passed by the login item: the app starts in the tray, its window hidden.
 const MINIMIZED: &str = "--minimized";
-/// The Ledge Desktop window; the notch is the other one.
+/// The Ledge Desktop window; the notch and the IDE's popouts (`ide-*`) are the others.
 const MAIN: &str = "main";
-/// The detached Atelier (#21), declared in tauri.conf.json but made only when asked.
-const ATELIER: &str = "atelier";
 
 #[derive(Clone, Serialize)]
 struct TrayPayload { action: String }
@@ -77,27 +76,6 @@ fn open_in_ledge(app: AppHandle, target: String) -> Result<(), String> {
     show_main(&app);
     deliver_open(&app, target);
     Ok(())
-}
-/// « Détacher l'Atelier »: makes its window from its declaration (the same WebView2 flags as the others, or it fails to open),
-/// or brings it forward when it is already there. An ordinary window: neither the notch's placement nor its focus.
-/// Async: making a window in a sync command deadlocks on Windows.
-#[tauri::command]
-async fn open_atelier(app: AppHandle) -> Result<(), String> {
-    let window = match app.get_webview_window(ATELIER) {
-        Some(w) => w,
-        None => {
-            let config = app.config().app.windows.iter().find(|w| w.label == ATELIER).cloned().ok_or("no atelier window")?;
-            let w = tauri::WebviewWindowBuilder::from_config(&app, &config).map_err(|e| e.to_string())?.build().map_err(|e| e.to_string())?;
-            // A new Atelier opens out of full screen (#41): the window-state plugin keeps one left by Alt+F4, and the page
-            // starts with its window bar.
-            let _ = w.set_fullscreen(false);
-            w
-        }
-    };
-    // Created hidden: the window-state plugin has put it back where it was, show it now.
-    let _ = window.unminimize();
-    window.show().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())
 }
 #[tauri::command]
 fn get_autostart(app: AppHandle) -> Option<bool> {
@@ -212,10 +190,17 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             focus_terminal, foreground_is_terminal, open_terminal, open_url, daemon_token, get_autostart, set_autostart, set_tray_labels, take_open_target,
             open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
-            notch::list_monitors, notch::set_monitor, open_atelier, pty::pty_open, pty::shells_available, pty::pty_write, pty::pty_resize, pty::pty_close,
+            notch::list_monitors, notch::set_monitor, popout::close_window, pty::pty_open, pty::shells_available, pty::pty_write, pty::pty_resize, pty::pty_close,
             media::now_playing, media::media_command,
         ])
         .setup(|app| {
+            // The main window, from its declaration in tauri.conf.json (`create: false`: decorations, hidden until shown below,
+            // WebView2 flags, drag-drop off, minimum size), made here to take the IDE's `window.open` (popout windows).
+            let config = app.config().app.windows.iter().find(|w| w.label == MAIN).cloned().ok_or("no main window in tauri.conf.json")?;
+            let handle = app.handle().clone();
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+                .on_new_window(move |url, features| popout::on_new_window(&handle, url, features))
+                .build()?;
             // WSL stops once no `wsl.exe` holds it: Ledge holds one from login until it quits, so the daemon stays reachable.
             // After the single-instance plugin, so a second launch never starts a second one.
             ledge_native::wsl_keepalive::start();
@@ -236,14 +221,15 @@ fn main() {
             if let Some(target) = ledge_native::desktop::open_target(std::env::args()) { deliver_open(app.handle(), target); }
             Ok(())
         })
-        .on_window_event(|w, e| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = e {
-                match on_close(w.label()) {
-                    CloseAction::Hide => { api.prevent_close(); let _ = w.hide(); }
-                    CloseAction::Ignore => api.prevent_close(),
-                    CloseAction::Close => {}
-                }
-            }
+        .on_window_event(|w, e| match e {
+            tauri::WindowEvent::CloseRequested { api, .. } => match on_close(w.label()) {
+                CloseAction::Hide => { api.prevent_close(); let _ = w.hide(); }
+                CloseAction::Ignore => api.prevent_close(),
+                CloseAction::Close => {}
+            },
+            // A popout closed by Ledge, by the OS or Alt+F4: the main page takes its tabs back.
+            tauri::WindowEvent::Destroyed => popout::on_destroyed(w.app_handle(), w.label()),
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building Ledge Desktop")
@@ -279,8 +265,8 @@ mod tests {
         assert_eq!(on_close("main"), CloseAction::Hide);
         assert_eq!(on_close("notch"), CloseAction::Ignore);
         assert_eq!(on_close("other"), CloseAction::Close);
-        // the detached Atelier really closes: the main window takes the Atelier back
-        assert_eq!(on_close("atelier"), CloseAction::Close);
+        // a popout really closes: the main page takes its tabs back
+        assert_eq!(on_close("ide-w5"), CloseAction::Close);
     }
 
     #[test]
