@@ -48,12 +48,12 @@ function App() {
           <div className="mk-app"><DesktopView state={desk} /></div>
         </div>
         <Notes title="Un siège OMP sous son rig, comme les autres" open={<ul>
-          <li><b>Siège arrêté</b> (complément) : gardé sous son rig, mascotte figée, nom en gris, « arrêté » à droite. Il ne compte dans aucun chiffre du rig. Seuls les sièges OMP sont concernés.</li>
+          <li><b>Siège arrêté</b> (complément) : gardé sous son rig, son logo, son nom en gris, « arrêté » à droite. Il ne compte dans aucun chiffre du rig. Seuls les sièges OMP sont concernés.</li>
           <li><b>Clic sur un siège arrêté</b> : sa page s’ouvre, mais son terminal n’existe plus. À la place, « Siège arrêté. Son terminal n’existe plus : la page OpenRig montre son rig. » et un lien « Ouvrir la page OpenRig » qui ouvre la section Rigs sur sa machine, comme le lien vide de la sidebar. Pas de panneau terminal et pas de relance depuis cette page.</li>
         </ul>}>
           <ul>
-            <li><b>Sidebar</b> : sous son rig, la mascotte OMP, le nom donné par Ledge, puis <code>rôle · omp</code>. C’est le format actuel des sièges Claude et Codex : aucun changement d’écran, seulement les données.</li>
-            <li><b>États</b> : au travail (pose « travail », compté dans le chiffre bleu du rig) et inactif (pose « disponible »). Une fin de tour en erreur compte comme inactive. Pas d’attente d’accord ni de question : un siège OMP n’en pose jamais sous OpenRig.</li>
+            <li><b>Sidebar</b> : sous son rig, le logo de son fournisseur (le π d’OMP), le nom donné par Ledge, puis <code>rôle · omp</code>. C’est le format des sièges Claude et Codex : depuis d036a563, les lignes de la sidebar portent le logo du fournisseur, plus la mascotte. La page d’un siège garde sa mascotte.</li>
+            <li><b>États</b> : au travail (compté dans le chiffre bleu du rig) et inactif. Une fin de tour en erreur compte comme inactive. Pas d’attente d’accord ni de question : un siège OMP n’en pose jamais sous OpenRig.</li>
             <li><b>Clic ou ouverture (le point à trancher)</b> : je recommande d’ouvrir sa page comme pour tout siège, mais <b>sur son terminal</b>. Le pane tmux du siège est attaché dans l’onglet « Ivo · agent » du panneau terminal, le même que pour un siège Claude. On y voit le miroir texte du runner OpenRig (réponses, lignes d’outil, <code>you &gt; …</code>), et ce qu’on y tape part à l’agent. À la place du fil, une ligne dit pourquoi il n’y en a pas. Pas de champ de réponse ni de bouton d’interruption Ledge.</li>
             <li>Pourquoi pas « rien » : la ligne serait alors la seule de la sidebar qui ne s’ouvre pas, et la personne n’aurait aucun moyen de parler au siège depuis Ledge. Pourquoi pas une fenêtre externe : Desktop a déjà ce terminal intégré, sans rien à installer.</li>
           </ul>

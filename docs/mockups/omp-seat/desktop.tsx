@@ -2,6 +2,7 @@ import React, { type CSSProperties } from 'react';
 import { Bot } from '../../../packages/ui/src/bots/Bot';
 import { Icon, ICONS } from '../../../packages/ui/src/ui/icons';
 import type { BotState } from '../../../packages/ui/src/bots/poseFor';
+import { ProviderLogo } from '../../../apps/desktop/src/ide/ProviderLogo';
 
 /* Desktop: the « Rigs » section of the sidebar (RigGroups, its own classes) and what opening an OMP seat shows. */
 
@@ -14,13 +15,15 @@ interface Seat { id: string; name: string; tool: 'claude' | 'codex' | 'omp'; rol
 /** The mascots follow the page's theme, as SessionBot passes it in the app. */
 const theme = (): 'light' | 'dark' => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
 const roleWord = (r: string) => r.replace(/\.agent$|\.lead$|\.worker$/, '');
+/** The provider of a seat's tool, as `providerOf` in apps/desktop/src/workspace/sessionTab.ts. */
+const PROVIDER = { claude: 'anthropic', codex: 'openai', omp: 'omp' } as const;
 
 function SeatRow({ s, depth }: { s: Seat; depth: number }) {
   const stopped = s.state === 'stopped';
   return (
     <div role="treeitem" aria-level={depth + 1} aria-selected={!!s.sel} className={'st-row st-agent' + (s.sel ? ' sel' : '') + (stopped ? ' off' : '')} style={{ '--d': depth } as CSSProperties}>
       <span className="st-gap" />
-      <span className="st-bot"><Bot theme={theme()} tool={s.tool} state={stopped ? 'done' : s.state} size={18} seed={s.name} frozen={stopped} /></span>
+      <span className="st-bot"><ProviderLogo provider={PROVIDER[s.tool]} size={14} /></span>
       <button type="button" className="st-main"><strong>{s.name}</strong><span className="mono">{[roleWord(s.role), s.tool].join(' · ')}</span></button>
       <span className="st-time">{stopped ? 'arrêté' : ''}</span>
     </div>
