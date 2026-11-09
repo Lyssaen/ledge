@@ -316,4 +316,35 @@ describe('actions (R5, R6)', () => {
     clock += 2_000; await s.detail('github.com/Lyssaen/ledge#226', {});
     expect(reads).toBe(2);
   });
+
+  // Review of #230, finding 4: neither cache grows without bound on a long-running daemon.
+  it('drops the detail of a request no longer followed: followed again, it is read again', async () => {
+    store.upsert(mk('a'));
+    const gh = fakeReader([pr(226, 'feat/x')]);
+    let reads = 0;
+    const detail = gh.detail.bind(gh);
+    gh.detail = async (...a) => { reads++; return detail(...a); };
+    const s = service(gh);
+    await s.refresh();
+    await s.detail('github.com/Lyssaen/ledge#226', {});
+    store.remove('a');
+    await s.refresh();
+    store.upsert(mk('a'));
+    await s.refresh();
+    clock += 1_000; await s.detail('github.com/Lyssaen/ledge#226', {});
+    expect(reads).toBe(2);
+  });
+
+  it('forgets where a session gone from the store pushes: back, its git config is read again', async () => {
+    let gitReads = 0;
+    const s = createForgeService({ store, now: () => clock, run: async (...a) => { gitReads++; return fakeGit(...a); }, readers: { gh: fakeReader(), glab: fakeReader() }, signedIn: async () => new Set(['github.com']) });
+    store.upsert(mk('a'));
+    await s.refresh();
+    expect(gitReads).toBe(1);
+    store.remove('a');
+    await s.refresh();
+    store.upsert(mk('a'));
+    await s.refresh();
+    expect(gitReads).toBe(2);
+  });
 });

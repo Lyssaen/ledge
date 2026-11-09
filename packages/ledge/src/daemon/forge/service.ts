@@ -103,6 +103,9 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
     return repo && defaults.get(repo.repo) !== s.branch ? repo : null;
   };
   async function resolveHeads(): Promise<void> {
+    // A session gone from the store leaves no head behind (a long-running daemon sees many come and go).
+    const live = new Set(deps.store.all().map(s => s.id));
+    for (const id of [...heads.keys()]) if (!live.has(id)) heads.delete(id);
     await Promise.all(deps.store.all().map(async s => {
       const repo = candidate(s);
       if (!repo) { heads.delete(s.id); return; }
@@ -178,6 +181,8 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
     }
     for (const r of [...byRepo.keys()]) if (!fl.has(r)) byRepo.delete(r);
     entries = next;
+    // Details (one per request and job log asked) go once expired or once their request is no longer followed.
+    for (const [k, d] of [...details]) if (now() - d.at >= DETAIL_TTL_MS || !entries.has(k.slice(0, k.lastIndexOf('|')))) details.delete(k);
     const msg = state();
     const s = JSON.stringify(msg);
     if (s !== last) { last = s; for (const cb of listeners) cb(); }
