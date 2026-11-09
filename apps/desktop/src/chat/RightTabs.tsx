@@ -29,7 +29,8 @@ type StateFilter = 'all' | 'open' | 'closed';
 type GiverFilter = 'all' | 'ledge' | 'sessions' | 'decisions';
 /** Who a task comes from: Ledge, a session for another, or a session asking the user (a decision, owner Ledge). */
 const giverOf = (x: Task): Exclude<GiverFilter, 'all'> => x.owner === LEDGE_GIVER ? 'decisions' : x.giver === LEDGE_GIVER ? 'ledge' : 'sessions';
-const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// « 13:58 » in both languages, as the mockup: a 12-hour « 01:58 PM » would not fit the history's 40 px column.
+const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 /** A row's mark: a decision awaited from the user, then done, refused or dropped, else open. */
 const markOf = (x: Task): ['asked' | 'done' | 'bad' | 'open', string] =>
   openDecision(x) ? ['asked', '?'] : x.state === 'done' ? ['done', '✓'] : x.state === 'refused' || x.state === 'dropped' ? ['bad', '!'] : ['open', '○'];
@@ -74,6 +75,9 @@ export function TasksPane({ api, task, seen, state, onShow }: { api: TasksApi; t
   const detail = task ? api.tasks.find(x => x.id === task) : undefined;
   useLayoutEffect(() => { if (!detail && listRef.current) listRef.current.scrollTop = scroll.current; }, [detail]);
   useEffect(() => { setAnswering(null); }, [task]);
+  // The detail takes the focus on its way back (the row clicked is gone with the list): Escape, in the panel, brings the list back.
+  const backRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (detail) backRef.current?.focus({ preventScroll: true }); }, [detail?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const offline = state === 'offline';
   if (state === 'connecting') return <Connecting />;
 
@@ -82,7 +86,7 @@ export function TasksPane({ api, task, seen, state, onShow }: { api: TasksApi; t
     return (
       <section className="rt-detail" aria-label={detail.title}>
         {offline && <OfflineBanner />}
-        <button type="button" className="rt-back" onClick={() => onShow(null)}>‹ {c.back}</button>
+        <button ref={backRef} type="button" className="rt-back" onClick={() => onShow(null)}>‹ {c.back}</button>
         <h3><code>{detail.id}</code> · {detail.title}</h3>
         <span className="rt-meta">{asked ? t.decision.asks(detail.giverName) : `${c.from(detail.giverName, detail.ownerName)} · ${t.chat.task.state[detail.state]}`}</span>
         {detail.text && <div className="rt-txt">{detail.text}</div>}

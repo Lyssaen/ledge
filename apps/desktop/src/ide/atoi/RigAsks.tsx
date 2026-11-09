@@ -72,7 +72,7 @@ export function RigAsks({ view, sessions, machineLabel, focus, sourceOf, onOpenS
               </div>
               {d ? <AskDone end={d.end} name={who.name} role={who.role} />
                 : unfolded && (
-                  <div className={`atoi-askc${lit === ask.id ? ' lit' : ''}`}>
+                  <div className={`ask-col atoi-askc${lit === ask.id ? ' lit' : ''}`}>
                     <AskCard ask={ask} session={session} answer={view.answer} onDone={end => finish(ask, end)} focus={focus?.id === ask.id ? focus.n : 0}
                       {...(() => { const src = sourceOf?.(ask); return src ? { onSource: src } : {}; })()}
                       {...(onOpenSeat ? { onOpenSeat } : {})} />

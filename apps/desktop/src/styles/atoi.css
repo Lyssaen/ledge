@@ -27,5 +27,5 @@
 .atoi-pill { flex-shrink: 0; padding: 0 6px; border: 1px solid var(--input); border-radius: 8px; font-size: 10.5px; color: var(--muted-foreground); }
 .atoi-pill.urgent { color: var(--danger-text); border-color: color-mix(in srgb, var(--danger-text) 50%, transparent); }
 .atoi-partial { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted-foreground); }
-.atoi-askc { margin: 2px 0 4px 22px; border-radius: var(--radius-lg); transition: box-shadow .2s; }
+.atoi-askc.ask-col { margin: 2px 0 4px 22px; border-radius: var(--radius-lg); transition: box-shadow .2s; }
 .atoi-askc.lit { box-shadow: 0 0 0 2px var(--ide-link-violet, #a78bfa); }

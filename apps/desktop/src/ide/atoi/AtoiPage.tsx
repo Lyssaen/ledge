@@ -75,7 +75,8 @@ export function AtoiPage(p: AtoiPageProps): JSX.Element {
   const perm = p.waiting.some(s => s.pending?.kind === 'permission');
   const api = p.tasks;
   const asked = api ? openDecisions(api.tasks) : [];
-  const closed = api ? closedLedgeTasks(api.tasks) : [];
+  // The closed tasks Ledge gave, the latest first as the sessions above them.
+  const closed = api ? closedLedgeTasks(api.tasks).slice().sort((x, y) => y.updatedAt.localeCompare(x.updatedAt)) : [];
   const near = api ? nearLimit(p.sessions, api.later, api.near) : [];
   const [answering, setAnswering] = useState<string | null>(null);
   const pt = t.home.point;
