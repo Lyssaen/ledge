@@ -2,6 +2,7 @@
 
 mod media;
 mod notch;
+mod editor;
 mod pty;
 
 use serde::Serialize;
@@ -213,7 +214,7 @@ fn main() {
             focus_terminal, foreground_is_terminal, open_terminal, open_url, daemon_token, get_autostart, set_autostart, set_tray_labels, take_open_target,
             open_in_ledge, notch::set_frame, notch::set_hot_zone, notch::set_outside_watch, notch::focus_overlay, notch::release_focus,
             notch::list_monitors, notch::set_monitor, open_atelier, pty::pty_open, pty::shells_available, pty::pty_write, pty::pty_resize, pty::pty_close,
-            media::now_playing, media::media_command,
+            media::now_playing, media::media_command, editor::editors_available, editor::open_in_editor,
         ])
         .setup(|app| {
             // WSL stops once no `wsl.exe` holds it: Ledge holds one from login until it quits, so the daemon stays reachable.

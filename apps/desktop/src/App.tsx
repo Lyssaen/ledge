@@ -88,6 +88,7 @@ import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, 
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
+import { EDITOR_NAMES, openSessionInEditor, useEditor } from './ide/openIn';
 import { createTabExtras, TabExtrasContext, useTabExtras } from './ide/tabExtras';
 import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
@@ -436,7 +437,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const waits = useWaits(sessions);
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
-  const { notice, action: noticeAction, notify, undo } = useToast();
+  const { notice, action: noticeAction, notify, act: toastAct, undo } = useToast();
   // The IDE's « À toi » has no usage card: each alert is told once, in a toast (the user, 2026-11-09).
   useUsageTold(ide, usage.alerts, notify, a => {
     const u = t.usage, w = a.window;
@@ -724,6 +725,16 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
 
   // The explorer's session menu in the IDE: open to the right, the agent's terminal tab beside the group that holds the session's
   // tab (linked; R3 for a seat; the session opened first where the setting says if it is not), a seat's message (the reply focused, R4).
+  // « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html): success shows nothing; the editor missing and Zed on a WSL
+  // folder say so with a « Réglages » button (not an undo: no Ctrl Z); a failed launch says why.
+  const [editor] = useEditor();
+  const openInEditor = (s: Session) => {
+    void openSessionInEditor(s, machines, editor, t.ide.openIn).then(n => {
+      if (!n) return;
+      notify(n.text, n.settings ? { label: t.ide.openIn.settings, run: () => dispatch({ type: 'settings', section: 'workspace' }), undo: false } : undefined);
+    });
+  };
+  const editorEntry = { name: EDITOR_NAMES[editor], open: openInEditor };
   const ideSessionMenu: SessionMenuIde = {
     openRight: s => dispatch({ type: 'open', id: s.id, where: 'right' }),
     terminal: s => {
@@ -732,7 +743,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       wsStore.update(w => { const hit = findTab(w, key); return hit ? beside(w, hit.group.id, 'terminal', s.id) : w; });
     },
     hasTerminal: s => hasTerminal({ kind: s.rig != null ? 'seat' : 'session', ref: s.id }, s),
-    message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' })
+    message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' }),
+    editor: editorEntry
   };
   const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title });
   // The IDE shell (switch on): the same pieces, in tabs and panels. Its chunk is fetched only then.
@@ -917,7 +929,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           ? () => { void openSessionTerminal(fleetClient, session).then(ok => { if (!ok) notify(t.session.terminal.openFailed(session.name)); }); }
           : undefined;
         return <TabMenu at={tabMenu.at} tab={tab} name={title(tab)} terminal={view === 'terminal'} others={hit.group.tabs.length > 1}
-          {...(session && { session })} tags={menuExtras?.tags ?? null} {...(external && { onExternal: external })} onOpenSession={id => dispatch({ type: 'open', id })}
+          {...(session && { session, editor: { name: editorEntry.name, open: () => openInEditor(session) } })} tags={menuExtras?.tags ?? null} {...(external && { onExternal: external })} onOpenSession={id => dispatch({ type: 'open', id })}
           {...(canSwitch && { onView: () => wsStore.update(w => setView(w, key, view === 'terminal' ? 'thread' : 'terminal')) })}
           onSplit={() => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; })}
           onClose={() => wsStore.close(key)} onCloseOthers={() => wsStore.closeOthers(key)} onDismiss={() => setTabMenu(null)} />;
@@ -966,7 +978,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />
-      <Toast notice={notice} action={noticeAction} onAction={undo} />
+      <Toast notice={notice} action={noticeAction} onAction={toastAct} />
     </TabExtrasContext.Provider></TermStoreContext.Provider></ScreenKeysContext.Provider>
   );
 }
