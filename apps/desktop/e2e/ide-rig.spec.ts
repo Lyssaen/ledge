@@ -81,6 +81,11 @@ test('one column: the topology on top, the settings and the queue under it; a se
   const row = view(page).locator('.ide-rigs-row.seat').filter({ hasText: 'Bix' });
   await expect(row.locator('.ide-rigs-role')).toHaveText('dev.build');
   await expect(view(page).locator('.ide-rigs-row.seat.off')).toHaveText('dev.review');
+  // − / +: the same square, the glyph at its centre.
+  const minus = p.getByRole('button', { name: /^One seat fewer/ }).first(), plus = p.getByRole('button', { name: /^One more seat/ }).first();
+  const centred = (b: typeof minus) => b.evaluate(el => { const r = el.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(el); const g = range.getBoundingClientRect(); return Math.abs((g.left + g.right) / 2 - (r.left + r.right) / 2); });
+  for (const b of [minus, plus]) { expect((await b.boundingBox())!.width).toBe(22); expect(await centred(b)).toBeLessThanOrEqual(1); }
+  await p.locator('.ide-rig-step').first().screenshot({ path: 'e2e/.results/rig-step.png' });
   await view(page).screenshot({ path: 'e2e/.results/rig-roles-sidebar.png' });
   await page.screenshot({ path: 'e2e/.results/rig-one-column.png' });
 });
