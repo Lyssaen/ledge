@@ -31,6 +31,8 @@ export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper
   prefs: SessionPrefs; setPrefs(fn: (p: SessionPrefs) => SessionPrefs): void;
   /** « N sous-agents »: the sidebar tree unfolds this session and scrolls to it. */
   onRevealCurrent(): void;
+  /** In an IDE tab, where there is no right panel: a shell in the bottom panel, shown, the keyboard in it (OMP's « Ouvrir un shell »). */
+  onShell?(): void;
 }
 
 /** The session place (Fil | Terminal v3): the page, whose left view is the thread or the agent's screen, and the right panel
@@ -38,7 +40,7 @@ export interface WorkspaceProps extends Omit<SessionPageProps, 'items' | 'helper
  *  thread and finds the subagent of the place: live in session.helpers, else its thread row; a subagent known by neither (its
  *  thread not there yet, or gone) still gets its page, named by what is known. It lives as long as the session place:
  *  switching agent changes its props (useThread follows the id) and mounts a new SessionPage only. */
-export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: WorkspaceProps): JSX.Element {
+export function Workspace({ client, prefs, setPrefs, onRevealCurrent, onShell, ...p }: WorkspaceProps): JSX.Element {
   const items = useThread(client, p.session);
   const { t } = useI18n();
   const unnamed = t.session.subagent;
@@ -92,8 +94,9 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, ...p }: Wo
   // « Edit · tour 2 »: the page lights the action in the thread (it owns the thread).
   const api = useRef<PageApi | null>(null);
   const intro = useShellIntro(client, p.session);
-  // OMP's « Ouvrir un shell »: a shell in the right panel, shown, and the keyboard in it.
+  // OMP's « Ouvrir un shell »: a shell in the right panel, shown, and the keyboard in it; in the IDE, the bottom panel's.
   const onOpenShell = () => {
+    if (p.ide) { onShell?.(); return; }
     if (!store) return;
     const shellId = openShell(store, p.session, intro);
     if (!prefs.terminal) setPrefs(x => ({ ...x, terminal: true }));

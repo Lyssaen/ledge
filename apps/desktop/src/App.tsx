@@ -846,7 +846,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         if (!s) return null;
         const tp = prefsOfTab(tab, s);
         return <SessionPlace client={fleetClient} session={s} nav={tnav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
-          prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide
+          prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide onShell={() => panelShell(pickDefault())}
           project={projectLabel(s, projectName)} besideLink={changesBeside(ws, keyOf(tab))}
           pr={prOfSession(forge.prs, s.id) ?? null} onPr={() => { const p = prOfSession(forge.prs, s.id); if (p) onTab({ kind: 'pr', ref: p.id }); }}
           prUnknown={sessionForge(forge.prs, forge.forges, forge.followed, s.id) ?? null} prMachine={machineLabel(s.machineId ?? 'local')}
