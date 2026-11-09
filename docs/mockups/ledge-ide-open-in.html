@@ -114,7 +114,7 @@ const T = {
     zedWsl:'Zed n’ouvre pas les dossiers WSL : choisissez Cursor ou VS Code.',
     settings:'Réglages',
     failed:(e,r)=>`${e} n’a pas pu s’ouvrir : ${r}`,
-    r_exe:'le programme ne démarre pas.', r_distro:()=>'la distribution WSL ne répond pas.', r_path:'WSL ne peut pas recevoir ce chemin.',
+    r_exe:'le programme ne démarre pas.', r_distro:()=>'la distribution WSL ne répond pas.', r_path:'WSL ne peut pas recevoir ce chemin.', r_machine:'la machine de cette session ne fait plus partie de vos machines.',
     ext:'Hors de Ledge', extOpen:e=>`${e} s’ouvre sur le worktree de la session.`, extSsh:'Zed s’ouvre sur ssh://srv-build/…', extOff:'L’éditeur tente sa propre connexion SSH, et affiche lui-même son erreur.',
     nothing:'Rien ne s’affiche dans Ledge.',
     c:[
@@ -140,7 +140,7 @@ const T = {
     zedWsl:'Zed can’t open WSL folders: choose Cursor or VS Code.',
     settings:'Settings',
     failed:(e,r)=>`${e} couldn’t open: ${r}`,
-    r_exe:'the program won’t start.', r_distro:()=>'the WSL distribution isn’t answering.', r_path:'WSL can’t receive this path.',
+    r_exe:'the program won’t start.', r_distro:()=>'the WSL distribution isn’t answering.', r_path:'WSL can’t receive this path.', r_machine:'this session’s machine is no longer one of your machines.',
     ext:'Outside Ledge', extOpen:e=>`${e} opens on the session’s worktree.`, extSsh:'Zed opens on ssh://srv-build/…', extOff:'The editor tries its own SSH connection and shows its own error.',
     nothing:'Nothing shows in Ledge.',
     c:null, fiche:'Handoff sheet', fh:['State','Trigger','Display','Proposed keys'],
@@ -181,7 +181,7 @@ const KEYS = [
   'ide.openIn.zedWsl · ide.openIn.settings',
   'settings.workspace.zedNoWsl',
   '—',
-  'ide.openIn.failed(editor, reason) · ide.openIn.reason.{exe, distro, path}',
+  'ide.openIn.failed(editor, reason) · ide.openIn.reason.{exe, distro, path, machine}',
   '—',
   'ide.openIn.menu(editor)'
 ];
@@ -203,9 +203,10 @@ function render(){
     ['Éditeur absent (Réglages)','détection côté Windows', `« ${fr.notInstalled} » / “${en.notInstalled}”`,'settings.workspace.notInstalled'],
     ['Zed + WSL','clic, Zed choisi, worktree WSL', `toast + bouton : « ${fr.zedWsl} » / “${en.zedWsl}”`,'ide.openIn.zedWsl'],
     ['Zed (Réglages)','toujours sous Zed', `« ${fr.noWsl} » / “${en.noWsl}”`,'settings.workspace.zedNoWsl'],
-    ['Échec du lancement','l’exe ne démarre pas, WSL ne répond pas, chemin refusé', `« ${fr.failed('{editor}','{raison}')} » / “${en.failed('{editor}','{reason}')}” · raisons : « ${fr.r_exe} » « ${fr.r_distro()} » « ${fr.r_path} » / “${en.r_exe}” “${en.r_distro()}” “${en.r_path}”`,'ide.openIn.failed, ide.openIn.reason.*'],
+    ['Échec du lancement','l’exe ne démarre pas, WSL ne répond pas, chemin refusé, machine retirée de la liste', `« ${fr.failed('{editor}','{raison}')} » / “${en.failed('{editor}','{reason}')}” · raisons : « ${fr.r_exe} » « ${fr.r_distro()} » « ${fr.r_path} » « ${fr.r_machine} » / “${en.r_exe}” “${en.r_distro()}” “${en.r_path}” “${en.r_machine}”`,'ide.openIn.failed, ide.openIn.reason.*'],
     ['Zed + SSH, machine hors ligne','—','rien (l’éditeur gère)','—'],
     ['Entrée du menu','—', `« ${fr.openIn('{editor}')} » / “${en.openIn('{editor}')}”, « ${fr.fieldOpenIn} » / “${en.fieldOpenIn}”`,'ide.openIn.menu, settings.workspace.openIn'],
+    ['Réglage enregistré','choix d’un éditeur dans Réglages › Espace de travail', '« Ouvrir dans… : {éditeur} » / “Open in…: {editor}”, la confirmation habituelle de la section','settings.workspace.openInSaved'],
   ];
   const fiche = `<section class="fiche"><h2>${t.fiche}</h2><table><tr>${t.fh.map(h=>`<th>${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table></section>`;
   document.getElementById('main').innerHTML = cards + fiche;
