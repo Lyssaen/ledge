@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { canBroadcast, daemonStore, prOfSession, prsFailing, projectOf, splitId, useDaemon, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { canBroadcast, daemonStore, prOfSession, prsFailing, sessionForge, projectOf, splitId, useDaemon, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -764,6 +764,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide
           project={projectLabel(s, projectName)} besideLink={changesBeside(ws, keyOf(tab))}
           pr={prOfSession(forge.prs, s.id) ?? null} onPr={() => { const p = prOfSession(forge.prs, s.id); if (p) onTab({ kind: 'pr', ref: p.id }); }}
+          prUnknown={sessionForge(forge.prs, forge.forges, forge.followed, s.id) ?? null} prMachine={machineLabel(s.machineId ?? 'local')}
+          onPrUnknown={() => { if (!(layout.sideOpen && layout.sideView === 'prs')) onLayout({ type: 'view', view: 'prs' }); }}
           onChanges={() => wsStore.update(w => { const hit = findTab(w, keyOf(tab)); return hit ? beside(w, hit.group.id, 'changes', s.id) : w; })} />;
       }
       // « +N −N »'s tab: an action clicked there brings the session's tab forward (R10).

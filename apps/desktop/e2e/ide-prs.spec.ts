@@ -163,3 +163,23 @@ test('state 1: glab not signed in, the exact command with « Copier »; state 10
   await expect(page.locator('.ide-status-prs')).toHaveCount(0);
   await page.screenshot({ path: 'e2e/.results/lot8b-unauth-empty.png' });
 });
+
+test('state 2: the chip « PR ? » when the session\'s forge cannot be read; state 3: a forge in error, its next try, its last read', async ({ page }) => {
+  await boot(page, 'dark', {
+    prs: [], followed: [{ session: 'front', forge: 'github', host: 'github.com', repo: 'ledge' }],
+    forges: [{ forge: 'github', host: 'github.com', status: 'error', at: AT, since: '2026-11-09T10:42:00.000Z', retryAt: '2026-11-09T10:50:00.000Z', readAt: '2026-11-09T10:42:00.000Z', message: 'HTTP 502: Bad Gateway (api.github.com)' }]
+  });
+  const projects = activity(page).getByRole('button', { name: 'Projets', exact: true });
+  if (!(await projects.getAttribute('class'))?.includes('on')) await projects.click();
+  await page.getByRole('tree').getByRole('button', { name: /^dev-front/ }).first().click();
+  const chip = page.getByRole('tabpanel', { name: /^dev-front/ }).locator('.fg-chip-unknown');
+  await expect(chip).toHaveText('PR ?');
+  await expect(chip).toHaveAttribute('title', 'github.com ne se lit pas sur Local : Ledge ne sait pas si cette branche a une PR.');
+  await chip.click();
+  const view = page.getByRole('region', { name: 'MR et PR' });
+  const t = (iso: string) => new Date(iso).toTimeString().slice(0, 5);
+  await expect(view.locator('.fg-line.err')).toContainText(`GitHub sur Local : le relevé échoue depuis ${t('2026-11-09T10:42:00.000Z')}. Nouvel essai à ${t('2026-11-09T10:50:00.000Z')}.`);
+  await expect(view.locator('.fg-line.err small')).toHaveText('HTTP 502: Bad Gateway (api.github.com)');
+  await expect(view.locator('.fg-side-h small').first()).toHaveText(`relevé ${t('2026-11-09T10:42:00.000Z')}`);
+  await page.screenshot({ path: 'e2e/.results/lot8b-chip-error.png' });
+});

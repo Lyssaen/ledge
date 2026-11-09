@@ -42,7 +42,7 @@ export function PrsView({ prs, agentOf, current, onOpen, lines = [], noneReadabl
         );
       }
       case 'error': return (
-        <div key={i} className="fg-line err"><div className="h"><span className="fg-dot fail" aria-hidden="true" /><span>{f.error(f.host[l.forge], m, time(l.since))}</span></div>
+        <div key={i} className="fg-line err"><div className="h"><span className="fg-dot fail" aria-hidden="true" /><span>{f.error(f.host[l.forge], m, time(l.since))}{l.retryAt && ` ${f.retry_at(time(l.retryAt))}`}</span></div>
           {l.message && <small>{l.message}</small>}</div>
       );
       case 'offline': case 'daemonDown': return <div key={i} className="fg-line off"><div className="h"><span className="fg-dot" aria-hidden="true" /><span>{(l.kind === 'offline' ? f.offline : f.daemonDown)(m, l.at === null ? '' : time(l.at))}</span></div></div>;
@@ -65,7 +65,7 @@ export function PrsView({ prs, agentOf, current, onOpen, lines = [], noneReadabl
   const merged = mergedPrs(prs);
   return (
     <div className="fg-side" role="region" aria-label={f.view}>
-      <div className="fg-side-h"><span>{f.view}</span><small>{errorAt?.kind === 'error' ? f.asOf(time(errorAt.since)) : f.hosts}</small></div>
+      <div className="fg-side-h"><span>{f.view}</span><small>{errorAt?.kind === 'error' && errorAt.readAt ? f.asOf(time(errorAt.readAt)) : f.hosts}</small></div>
       {lines.length > 0 && <div className="fg-strip">{lines.map(line)}</div>}
       {open.length ? <div className="fg-tree">{open.map(row)}</div> : (
         <div className="fg-empty"><b>{f.emptyTitle}</b><span>{noneReadable ? f.emptyUnread : f.emptyBody}</span></div>

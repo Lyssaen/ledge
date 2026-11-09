@@ -20,7 +20,7 @@ export function reachOf(m: MachineLike | undefined): MachineReach {
 export type ForgeLine =
   | { kind: 'missing'; machine: string; forge: FleetForgeStatus['forge']; host: string }
   | { kind: 'unauthenticated'; machine: string; forge: FleetForgeStatus['forge']; host: string }
-  | { kind: 'error'; machine: string; forge: FleetForgeStatus['forge']; host: string; since: string; message?: string }
+  | { kind: 'error'; machine: string; forge: FleetForgeStatus['forge']; host: string; since: string; retryAt?: string; readAt?: string; message?: string }
   | { kind: 'offline' | 'daemonDown'; machine: string; at: number | null }
   | { kind: 'outdated'; machine: string };
 
@@ -36,7 +36,7 @@ export function forgeLines(forges: readonly FleetForgeStatus[], machines: readon
   }
   for (const f of forges) {
     if (reach.get(f.machineId) !== 'ok' || f.status === 'ok') continue;
-    if (f.status === 'error') out.push({ kind: 'error', machine: f.machineId, forge: f.forge, host: f.host, since: f.at, ...(f.message ? { message: f.message } : {}) });
+    if (f.status === 'error') out.push({ kind: 'error', machine: f.machineId, forge: f.forge, host: f.host, since: f.since ?? f.at, ...(f.retryAt ? { retryAt: f.retryAt } : {}), ...(f.readAt ? { readAt: f.readAt } : {}), ...(f.message ? { message: f.message } : {}) });
     else out.push({ kind: f.status, machine: f.machineId, forge: f.forge, host: f.host });
   }
   return out;
@@ -49,11 +49,14 @@ export const loginCommand = (forge: FleetForgeStatus['forge'], host: string): st
 /** Whether no forge at all can be read now (state 10's second text). */
 export const noForgeReadable = (forges: readonly FleetForgeStatus[]): boolean => forges.length > 0 && forges.every(f => f.status !== 'ok');
 
+const KNOWN = new Set(['draft', 'not_open', 'approvals', 'changes_requested', 'pipeline', 'pipeline_not_started']);
 /** A condition of a merge (state 6), met or not. */
 export type MergeCondition =
   | { ok: true; key: 'pipeline' | 'noCi' | 'noChanges' }
   | { ok: true; key: 'approved'; given: number; required: number }
-  | { ok: false; key: 'draft' | 'not_open' | 'pipeline_fail' | 'pipeline_run' | 'pipeline_wait' | 'pipeline_skip' }
+  | { ok: false; key: 'draft' | 'not_open' | 'pipeline_fail' | 'pipeline_run' | 'pipeline_wait' | 'pipeline_skip' | 'pipeline_not_started' }
+  /** A code this front does not know: shown as is (the contract). */
+  | { ok: false; key: 'raw'; code: string }
   | { ok: false; key: 'approvals'; given: number; required: number }
   | { ok: false; key: 'changes_requested'; who: string };
 
@@ -68,10 +71,12 @@ export function mergeConditions(pr: Pick<FleetPullRequest, 'pipeline' | 'approva
   if (b.has('approvals')) out.push({ ok: false, key: 'approvals', given: pr.approvals.given, required });
   const asking = detail.reviewers.filter(r => r.state === 'changes').map(r => r.name);
   if (b.has('changes_requested')) out.push({ ok: false, key: 'changes_requested', who: asking.join(', ') });
-  if (b.has('pipeline') || (pr.pipeline !== 'ok' && pr.pipeline !== 'none')) {
+  if (b.has('pipeline_not_started')) out.push({ ok: false, key: 'pipeline_not_started' });
+  else if (b.has('pipeline') || (pr.pipeline !== 'ok' && pr.pipeline !== 'none')) {
     const p = pr.pipeline === 'run' ? 'pipeline_run' : pr.pipeline === 'wait' ? 'pipeline_wait' : pr.pipeline === 'skip' ? 'pipeline_skip' : 'pipeline_fail';
     out.push({ ok: false, key: p });
   } else out.push({ ok: true, key: pr.pipeline === 'none' ? 'noCi' : 'pipeline' });
+  for (const code of b) if (!KNOWN.has(code)) out.push({ ok: false, key: 'raw', code });
   if (!b.has('approvals')) out.push({ ok: true, key: 'approved', given: pr.approvals.given, required });
   if (!b.has('changes_requested')) out.push({ ok: true, key: 'noChanges' });
   return out;

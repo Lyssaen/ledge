@@ -88,3 +88,14 @@ describe('foldForge: a machine that falls keeps its last read', () => {
     expect(two.get('srv-build')).toEqual({ prs: [b], at: 100 });
   });
 });
+
+describe('the lot 8b contract (dev-back, 31194680)', () => {
+  it('no pipeline started yet, and a code this front does not know, shown as is', () => {
+    const c = mergeConditions(pr({ pipeline: 'wait' }), { mergeBlockers: ['pipeline_not_started', 'locked_by_admin'], reviewers: [] });
+    expect(c.slice(0, 2)).toEqual([{ ok: false, key: 'pipeline_not_started' }, { ok: false, key: 'raw', code: 'locked_by_admin' }]);
+  });
+  it('a forge in error: since when, its next try and its last read', () => {
+    const lines = forgeLines([fs({ status: 'error', since: '2026-11-09T10:42:00.000Z', retryAt: '2026-11-09T10:50:00.000Z', readAt: '2026-11-09T10:40:00.000Z' })], [{ id: 'local', status: 'open', daemon: { forge: true } }], () => null);
+    expect(lines).toEqual([{ kind: 'error', machine: 'local', forge: 'github', host: 'github.com', since: '2026-11-09T10:42:00.000Z', retryAt: '2026-11-09T10:50:00.000Z', readAt: '2026-11-09T10:40:00.000Z' }]);
+  });
+});

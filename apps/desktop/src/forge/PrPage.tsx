@@ -139,6 +139,7 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
       case 'draft': return f.blocker.draft(f.host[pr.forge]);
       case 'approvals': return f.blocker.approvals(c.given, c.required);
       case 'changes_requested': return f.blocker.changes_requested(c.who);
+      case 'raw': return c.code;
       default: return f.blocker[c.key];
     }
   };

@@ -123,3 +123,5 @@
 .fg-ferr { font-size: 11.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .fg-cin.bad { border-color: color-mix(in srgb, var(--destructive) 45%, transparent); }
 .fg-page .fg-cin:disabled { opacity: .5; }
+/* State 2: « PR ? », the forge of the session's repository unreadable on its machine. */
+.ide-bar .fg-chip-unknown, .fg-chip-unknown { border: 1px dashed var(--input); border-radius: 5px; padding: 0 5px; color: var(--muted-foreground); }

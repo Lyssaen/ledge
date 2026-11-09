@@ -14,7 +14,7 @@ import { Icon } from '@ledge/ui/ui/icons';
 import { SHELL_ICONS } from '../shell/icons';
 import type { PillLook } from './browserLive';
 import { reliefDone, reliefText } from './relief';
-import type { FleetPullRequest } from '@ledge/fleet';
+import type { FleetForgeStatus, FleetPullRequest } from '@ledge/fleet';
 import { PipeDot } from '../forge/PipeGraph';
 import '../styles/forge.css';
 
@@ -37,6 +37,9 @@ export interface SessionBarProps {
   browser?: { pill: PillLook; captures: number } | null; onBrowser?(): void;
   /** Its request (lot 8b, mockup agentView `.chip`): the pipeline's dot and its ref, after the project; a click opens it. */
   pr?: FleetPullRequest | null; onPr?(): void;
+  /** No request known and its repository's forge unreadable on its machine (state 2): the chip « PR ? », its reason in the tip,
+   *  a click shows the MR and PR view (`onPrUnknown`); `machine` names that machine. */
+  prUnknown?: FleetForgeStatus | null; prMachine?: string; onPrUnknown?(): void;
 }
 
 /** The mockup's `ic.diff` at 13 px: a plus, a minus and the slash between them. */
@@ -56,7 +59,7 @@ const k = (n: number) => `${Math.round(n / 1000)}k`;
  * (what the session page's heading said: an IDE tab has none), « Interrompre » while the agent works, and « +N −N », which
  * opens the Changes beside. Never a usage limit: the status bar says those. It narrows with its group (ide.css @container).
  */
-export function SessionBar({ client, session, project, files, besideLink, notify, onChanges, terminal = null, kids = 0, onShowKids, browser = null, onBrowser, pr = null, onPr }: SessionBarProps): JSX.Element {
+export function SessionBar({ client, session, project, files, besideLink, notify, onChanges, terminal = null, kids = 0, onShowKids, browser = null, onBrowser, pr = null, onPr, prUnknown = null, prMachine = '', onPrUnknown }: SessionBarProps): JSX.Element {
   const { t } = useI18n();
   const tb = t.session.browser;
   const relief = session.handover && !reliefDone(session.handover) ? session.handover : null;
@@ -95,6 +98,12 @@ export function SessionBar({ client, session, project, files, besideLink, notify
       {pr && (
         <button type="button" className="ide-bar-chip fg-chip mono" title={`${t.forge.host[pr.forge]} · pipeline ${t.forge.pipe[pr.pipeline]}`} onClick={onPr}>
           <PipeDot status={pr.pipeline} />{pr.ref}
+        </button>
+      )}
+      {!pr && prUnknown && prUnknown.status !== 'ok' && (
+        <button type="button" className="ide-bar-chip fg-chip fg-chip-unknown mono" onClick={onPrUnknown}
+          title={t.forge.chipTip(prUnknown.status, prUnknown.forge === 'github' ? 'gh' : 'glab', prUnknown.host, prMachine, t.forge.prKind[prUnknown.forge])}>
+          {t.forge.chipUnknown(t.forge.prKind[prUnknown.forge])}
         </button>
       )}
       {/* Before the right side, out of it: the one chip there that gives way (ellipsis) when the group narrows. */}

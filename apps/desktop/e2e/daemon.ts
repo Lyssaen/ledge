@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { RigGraph, RigRow, RigSeatPermission, RigSnapshot, BrowserLive, HumanAsk, HumanChannel, OpenRigAnswered, OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool, UsageStateMessage, PullRequest, ForgeStatus, PrDetail, ForgeAction } from '@ledge/protocol';
+import type { RigGraph, RigRow, RigSeatPermission, RigSnapshot, BrowserLive, HumanAsk, HumanChannel, OpenRigAnswered, OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool, UsageStateMessage, PullRequest, ForgeStatus, PrDetail, ForgeAction, FollowedSession } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -46,7 +46,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
   usage?: Omit<UsageStateMessage, 'type' | 'machineId'>;
   /** Lot 8b: the requests and forges (`forge.state`, sent after the usage), each request's detail and failed job's log, and
    *  the command a `forge.act` reports (by action). Nothing reaches a real forge. Give `daemon.forge` too, or the fleet refuses. */
-  forge?: { prs: PullRequest[]; forges?: ForgeStatus[]; details?: Record<string, Omit<PrDetail, 'pr'>>; logs?: Record<string, string>; commands?: Partial<Record<ForgeAction['kind'], string>>; /** An action refused, by kind: its code and message. */ actFails?: Partial<Record<ForgeAction['kind'], { code?: string; message: string }>> } } = {}) {
+  forge?: { prs: PullRequest[]; forges?: ForgeStatus[]; followed?: FollowedSession[]; details?: Record<string, Omit<PrDetail, 'pr'>>; logs?: Record<string, string>; commands?: Partial<Record<ForgeAction['kind'], string>>; /** An action refused, by kind: its code and message. */ actFails?: Partial<Record<ForgeAction['kind'], { code?: string; message: string }>> } } = {}) {
   const threads = new Map(Object.entries(extras.threads ?? {}).map(([id, items]) => [id, [...items]]));
   const sessions = new Map(initial.map(s => [s.id, s]));
   const received: ClientMessage[] = [];
@@ -68,7 +68,7 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
     if (projects) ws.send(JSON.stringify({ type: 'projects', projects }));
     if (island !== 'unknown') ws.send(JSON.stringify({ type: 'island', prefs: island }));
     if (usage) ws.send(JSON.stringify({ type: 'usage.state', ...usage }));
-    if (extras.forge) ws.send(JSON.stringify({ type: 'forge.state', prs: extras.forge.prs, forges: extras.forge.forges ?? [] }));
+    if (extras.forge) ws.send(JSON.stringify({ type: 'forge.state', prs: extras.forge.prs, forges: extras.forge.forges ?? [], ...(extras.forge.followed ? { followed: extras.forge.followed } : {}) }));
     for (const b of browsers.values()) if (b.live.state !== 'none') ws.send(JSON.stringify({ type: 'browser.live', ...b.live }));
     ws.onMessage(m => {
       let msg: ClientMessage;

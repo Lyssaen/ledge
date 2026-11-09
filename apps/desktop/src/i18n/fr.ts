@@ -1598,6 +1598,10 @@ export const fr = {
     unauth: (cli: string, host: string, machine: string) => `${cli} n’est pas connecté à ${host} sur ${machine}. Dans un terminal de ${machine} :`,
     copy: 'Copier', copied: 'Commande copiée',
     error: (forge: string, machine: string, since: string) => `${forge} sur ${machine} : le relevé échoue depuis ${since}.`,
+    retry_at: (time: string) => `Nouvel essai à ${time}.`,
+    chipUnknown: (kind: string) => `${kind} ?`,
+    chipTip: (status: 'missing' | 'unauthenticated' | 'error', cli: string, host: string, machine: string, kind: string) =>
+      `${status === 'missing' ? `${cli} n’est pas installé sur ${machine}` : status === 'unauthenticated' ? `${cli} n’est pas connecté à ${host} sur ${machine}` : `${host} ne se lit pas sur ${machine}`} : Ledge ne sait pas si cette branche a une ${kind}.`,
     asOf: (time: string) => `relevé ${time}`,
     offline: (machine: string, time: string) => `${machine} est hors ligne : MR et PR au relevé de ${time}, sans action possible.`,
     daemonDown: (machine: string, time: string) => `Le daemon de ${machine} ne répond pas : MR et PR au relevé de ${time}. Les actions reviennent avec lui.`,
@@ -1607,7 +1611,7 @@ export const fr = {
     blocker: {
       draft: (host: string) => `C’est un brouillon : marquez-la prête sur ${host}.`, not_open: 'Elle est fermée.',
       approvals: (g: number, r: number) => `Il manque une approbation (${g}/${r}).`, changes_requested: (who: string) => `${who} demande des changements.`,
-      pipeline_fail: 'Le pipeline a échoué.', pipeline_run: 'Le pipeline tourne encore.', pipeline_wait: 'Le pipeline est en attente.', pipeline_skip: 'Le pipeline a été sauté.'
+      pipeline_fail: 'Le pipeline a échoué.', pipeline_run: 'Le pipeline tourne encore.', pipeline_wait: 'Le pipeline est en attente.', pipeline_skip: 'Le pipeline a été sauté.', pipeline_not_started: 'Aucun pipeline n’a encore démarré sur le dernier commit.'
     },
     confirm: (ref: string, target: string) => `Fusionner ${ref} dans ${target} ?`, runsOn: (machine: string) => `Ledge lance, sur ${machine} :`,
     merging: 'Fusion…', mergedToast: (ref: string) => `${ref} fusionnée`, cancel: 'Annuler',

@@ -1521,6 +1521,10 @@ export const en: Messages = {
     unauth: (cli, host, machine) => `${cli} isn’t signed in to ${host} on ${machine}. In a ${machine} terminal:`,
     copy: 'Copy', copied: 'Command copied',
     error: (forge, machine, since) => `${forge} on ${machine}: reading has failed since ${since}.`,
+    retry_at: (time) => `Next try at ${time}.`,
+    chipUnknown: (kind) => `${kind} ?`,
+    chipTip: (status, cli, host, machine, kind) =>
+      `${status === 'missing' ? `${cli} isn’t installed on ${machine}` : status === 'unauthenticated' ? `${cli} isn’t signed in to ${host} on ${machine}` : `${host} can’t be read on ${machine}`}: Ledge can’t tell whether this branch has a ${kind}.`,
     asOf: (time) => `read ${time}`,
     offline: (machine, time) => `${machine} is offline: MRs and PRs as of ${time}, no actions.`,
     daemonDown: (machine, time) => `${machine}’s daemon isn’t answering: MRs and PRs as of ${time}. Actions come back with it.`,
@@ -1530,7 +1534,7 @@ export const en: Messages = {
     blocker: {
       draft: (host) => `It’s a draft: mark it ready on ${host}.`, not_open: 'It’s closed.',
       approvals: (g, r) => `An approval is missing (${g}/${r}).`, changes_requested: (who) => `${who} requested changes.`,
-      pipeline_fail: 'The pipeline failed.', pipeline_run: 'The pipeline is still running.', pipeline_wait: 'The pipeline is pending.', pipeline_skip: 'The pipeline was skipped.'
+      pipeline_fail: 'The pipeline failed.', pipeline_run: 'The pipeline is still running.', pipeline_wait: 'The pipeline is pending.', pipeline_skip: 'The pipeline was skipped.', pipeline_not_started: 'No pipeline has started on the latest commit yet.'
     },
     confirm: (ref, target) => `Merge ${ref} into ${target}?`, runsOn: (machine) => `Ledge runs, on ${machine}:`,
     merging: 'Merging…', mergedToast: (ref) => `${ref} merged`, cancel: 'Cancel',

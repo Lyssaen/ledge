@@ -1,11 +1,13 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react';
-import type { Fleet, FleetForgeStatus, FleetPullRequest } from '@ledge/fleet';
+import type { Fleet, FleetFollowedSession, FleetForgeStatus, FleetPullRequest } from '@ledge/fleet';
 
-type ForgeSource = Pick<Fleet, 'prs' | 'forges' | 'onForge'>;
+type ForgeSource = Pick<Fleet, 'prs' | 'forges' | 'onForge'> & Partial<Pick<Fleet, 'followed'>>;
 /** A request, `stale` when its machine has fallen: shown as last read, dimmed, without actions (state 4). */
 export type ShownPr = FleetPullRequest & { stale?: boolean };
 export interface ForgeSnapshot {
   prs: readonly ShownPr[]; forges: readonly FleetForgeStatus[];
+  /** The sessions each daemon follows, and their repository's forge (the chip « PR ? »). */
+  followed: readonly FleetFollowedSession[];
   /** When each machine's requests were last read (ms), null for a machine never read. */
   readAt(machine: string): number | null;
 }
@@ -38,10 +40,10 @@ export function useForge(fleet: ForgeSource | null | undefined, now: () => numbe
     const heard = new Set([...live.map(p => p.machineId), ...forges.map(f => f.machineId)]);
     const stale: ShownPr[] = [...last.current].filter(([m]) => !heard.has(m)).flatMap(([, v]) => v.prs.map(p => ({ ...p, stale: true })));
     const times = new Map([...last.current].map(([m, v]) => [m, v.at]));
-    const snap: ForgeSnapshot = { prs: [...live, ...stale], forges, readAt: m => times.get(m) ?? null };
+    const snap: ForgeSnapshot = { prs: [...live, ...stale], forges, followed: fleet.followed?.() ?? [], readAt: m => times.get(m) ?? null };
     cache.current = { from: fleet, snap };
     return snap;
   }, [fleet, now]);
   return useSyncExternalStore(subscribe, get, get);
 }
-const EMPTY: ForgeSnapshot = { prs: [], forges: [], readAt: () => null };
+const EMPTY: ForgeSnapshot = { prs: [], forges: [], followed: [], readAt: () => null };
