@@ -1516,6 +1516,32 @@ export const en: Messages = {
     sentTo: (name) => `Comment sent to ${name}`,
     status: (n) => `${n} ${pluralEn(n, 'MR/PR', 'MRs/PRs')}`, statusFail: (n) => `${n} ${pluralEn(n, 'failed pipeline', 'failed pipelines')}`, statusRun: (n) => `${n} running`,
     statusTip: 'Followed MRs and PRs',
-    loading: 'Loading…'
+    loading: 'Loading…',
+    missing: (cli, machine, host, kind) => `${cli} isn’t installed on ${machine}: Ledge can’t see the ${kind}s on ${host}.`,
+    unauth: (cli, host, machine) => `${cli} isn’t signed in to ${host} on ${machine}. In a ${machine} terminal:`,
+    copy: 'Copy', copied: 'Command copied',
+    error: (forge, machine, since) => `${forge} on ${machine}: reading has failed since ${since}.`,
+    asOf: (time) => `read ${time}`,
+    offline: (machine, time) => `${machine} is offline: MRs and PRs as of ${time}, no actions.`,
+    daemonDown: (machine, time) => `${machine}’s daemon isn’t answering: MRs and PRs as of ${time}. Actions come back with it.`,
+    outdated: (machine) => `${machine}’s Ledge is too old to read MRs and PRs. Update it.`,
+    toMerge: 'To merge',
+    ok: { pipeline: 'Pipeline passed', noCi: 'No CI on this repository', approved: (g, r) => `Approved (${g}/${r})`, noChanges: 'No changes requested' },
+    blocker: {
+      draft: (host) => `It’s a draft: mark it ready on ${host}.`, not_open: 'It’s closed.',
+      approvals: (g, r) => `An approval is missing (${g}/${r}).`, changes_requested: (who) => `${who} requested changes.`,
+      pipeline_fail: 'The pipeline failed.', pipeline_run: 'The pipeline is still running.', pipeline_wait: 'The pipeline is pending.', pipeline_skip: 'The pipeline was skipped.'
+    },
+    confirm: (ref, target) => `Merge ${ref} into ${target}?`, runsOn: (machine) => `Ledge runs, on ${machine}:`,
+    merging: 'Merging…', mergedToast: (ref) => `${ref} merged`, cancel: 'Cancel',
+    stale: (sha) => `The branch moved since you read it (new commit ${sha}). Read it again before merging.`, reload: 'Reload',
+    forgeRefused: (forge, reason) => `${forge} refused the merge: ${reason}`,
+    notPosted: (reason) => `Not posted: ${reason}. Your text is kept.`, retry: 'Retry',
+    resolveFailed: (reason) => `Thread not resolved: ${reason}`, rerunFailed: (reason) => `Rerun refused: ${reason}`,
+    busy: 'another action is running on this MR or PR', machineOffline: (machine) => `${machine} is offline`,
+    emptyTitle: 'No open MR or PR',
+    emptyBody: 'Ledge follows the branches of sessions and seats. An MR or PR opened from one of them shows up here.',
+    emptyUnread: 'Ledge can’t read any forge for now: see above.',
+    prKind: { github: 'PR', gitlab: 'MR' }
   }
 };

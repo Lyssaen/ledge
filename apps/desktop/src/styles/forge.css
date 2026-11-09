@@ -93,3 +93,33 @@
 .fg-chip { display: inline-flex; align-items: center; gap: 5px; }
 .ide-status-prs { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: 5px; color: var(--foreground); white-space: nowrap; }
 .ide-status-prs:hover { background: var(--accent); }
+
+/* The states (docs/mockups/ledge-ide-prs-states.html): the head's lines, a stale request, the empty view. */
+.fg-strip { display: flex; flex-direction: column; gap: 6px; padding: 0 8px 8px; }
+.fg-line { border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); background: color-mix(in srgb, var(--warning) 9%, transparent); border-radius: 7px; padding: 7px 9px; font-size: 12px; display: flex; flex-direction: column; gap: 5px; }
+.fg-line.err { border-color: color-mix(in srgb, var(--destructive) 40%, transparent); background: color-mix(in srgb, var(--destructive) 9%, transparent); }
+.fg-line.off { border-color: var(--border); background: var(--muted); }
+.fg-line .h { display: flex; gap: 7px; align-items: flex-start; }
+.fg-line .h .fg-dot { margin-top: 5px; }
+.fg-line .cmd { display: flex; gap: 6px; align-items: center; }
+.fg-line .cmd code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--background); border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; font-family: 'Geist Mono', monospace; font-size: 11.5px; }
+.fg-line small { color: var(--muted-foreground); font-size: 11px; word-break: break-word; }
+.fg-btn.sm, .fg-page .fg-btn.sm { height: 22px; font-size: 11.5px; padding: 0 8px; flex-shrink: 0; }
+.fg-row.stale { opacity: .6; }
+.fg-empty { display: flex; flex-direction: column; gap: 4px; padding: 6px 14px 4px; font-size: 12.5px; }
+.fg-empty span { color: var(--muted-foreground); font-size: 12px; }
+.fg-dot.wait { background: var(--warning); }
+.fg-banner { border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); background: color-mix(in srgb, var(--warning) 9%, transparent); border-radius: 8px; padding: 8px 11px; font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
+.fg-banner.off { border-color: var(--border); background: var(--muted); }
+.fg-banner .fg-dot { margin-top: 5px; }
+.fg-check { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.fg-check > div { display: flex; gap: 8px; align-items: baseline; }
+.fg-check > div > span { width: 12px; flex-shrink: 0; }
+.fg-check .y > span { color: var(--success); }
+.fg-check .n > span { color: var(--destructive); }
+.fg-confirm { display: flex; flex-direction: column; gap: 7px; border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent); background: color-mix(in srgb, var(--destructive) 9%, transparent); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; }
+.fg-confirm code { color: var(--muted-foreground); word-break: break-all; font-family: 'Geist Mono', monospace; font-size: 11.5px; }
+.fg-confirm .e, .fg-ferr { color: var(--danger-text, var(--destructive)); }
+.fg-ferr { font-size: 11.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fg-cin.bad { border-color: color-mix(in srgb, var(--destructive) 45%, transparent); }
+.fg-page .fg-cin:disabled { opacity: .5; }

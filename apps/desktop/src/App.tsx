@@ -95,6 +95,7 @@ import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
 import { useForge } from './forge/useForge';
+import { forgeLines, noForgeReadable, reachOf } from './forge/states';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -738,6 +739,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // Lot 8b: every machine's pull and merge requests.
   const forge = useForge(fleet);
   const prOf = (id: string) => forge.prs.find(p => p.id === id);
+  const machineLabel = (id: string) => machines.find(m => m.id === id)?.label ?? id;
   /** A request's agent: the session or seat on its branch (the most recently active). */
   const prAgentOf = (p: FleetPullRequest) => p.sessions.map(id => known.find(s => s.id === id)).find((s): s is Session => !!s);
   const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title, pr: id => prOf(id)?.ref });
@@ -803,6 +805,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         if (!p) return null;
         const a = prAgentOf(p);
         return <IdePr pr={p} fleet={fleet} notify={notify} onOpenUrl={openUrl}
+          reach={reachOf(machines.find(m => m.id === p.machineId))} machine={machineLabel(p.machineId)} readAt={forge.readAt(p.machineId)}
           agent={a ? { name: a.name, provider: providerOf(a.tool) } : null}
           onAskAgent={text => (a ? decisions.reply(a, text) : false)}
           onOpenAgent={() => { if (a) dispatch({ type: 'open', id: a.id, where: 'right' }); }} />;
@@ -848,6 +851,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         prsFailing={prsFailing(forge.prs)} prsStatus={<IdePrsStatus prs={forge.prs} onShow={() => { if (!(layout.sideOpen && layout.sideView === 'prs')) onLayout({ type: 'view', view: 'prs' }); }} />}
         explorer={layout.sideView === 'prs'
           ? <IdePrs prs={forge.prs} agentOf={p => prAgentOf(p)?.name ?? null} current={front?.kind === 'pr' ? front.ref : null}
+              lines={forgeLines(forge.forges, machines, forge.readAt)} noneReadable={noForgeReadable(forge.forges)} machineLabel={machineLabel}
+              onCopy={cmd => { void navigator.clipboard.writeText(cmd).then(() => notify(t.forge.copied), () => {}); }}
               onOpen={(p, right) => onTab({ kind: 'pr', ref: p.id }, right ? 'right' : undefined)} />
           : layout.sideView === 'rigs'
           ? <IdeRigs client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} activeTab={front ?? null} dispatch={dispatch} onTab={onTab}

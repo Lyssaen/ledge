@@ -6,11 +6,12 @@ import { PrIcon } from './PrIcon';
 import '../styles/forge.css';
 
 /** The status bar's count (mockup statusbar): the open requests, the failed pipelines, those running; a click shows the
- *  sidebar's « MR et PR ». */
-export function PrsStatus({ prs, onShow }: { prs: readonly FleetPullRequest[]; onShow(): void }): JSX.Element {
+ *  sidebar's « MR et PR ». Nothing at zero (docs/mockups/ledge-ide-prs-states.html, state 10). */
+export function PrsStatus({ prs, onShow }: { prs: readonly FleetPullRequest[]; onShow(): void }): JSX.Element | null {
   const { t } = useI18n();
   const f = t.forge;
   const open = openPrs(prs);
+  if (!open.length) return null;
   const fail = open.filter(p => p.pipeline === 'fail').length;
   const run = open.filter(p => p.pipeline === 'run').length;
   return (

@@ -1592,6 +1592,33 @@ export const fr = {
     sentTo: (name: string) => `Commentaire envoyé à ${name}`,
     status: (n: number) => `${n} MR/PR`, statusFail: (n: number) => plural(n, `${n} pipeline échoué`, `${n} pipelines échoués`), statusRun: (n: number) => `${n} en cours`,
     statusTip: 'MR et PR suivies',
-    loading: 'Chargement…'
+    loading: 'Chargement…',
+    // The states (docs/mockups/ledge-ide-prs-states.html, validated by jde on 2026-11-09).
+    missing: (cli: string, machine: string, host: string, kind: string) => `${cli} n’est pas installé sur ${machine} : Ledge ne voit pas les ${kind} de ${host}.`,
+    unauth: (cli: string, host: string, machine: string) => `${cli} n’est pas connecté à ${host} sur ${machine}. Dans un terminal de ${machine} :`,
+    copy: 'Copier', copied: 'Commande copiée',
+    error: (forge: string, machine: string, since: string) => `${forge} sur ${machine} : le relevé échoue depuis ${since}.`,
+    asOf: (time: string) => `relevé ${time}`,
+    offline: (machine: string, time: string) => `${machine} est hors ligne : MR et PR au relevé de ${time}, sans action possible.`,
+    daemonDown: (machine: string, time: string) => `Le daemon de ${machine} ne répond pas : MR et PR au relevé de ${time}. Les actions reviennent avec lui.`,
+    outdated: (machine: string) => `Le Ledge de ${machine} est trop ancien pour lire les MR et PR. Mettez-le à jour.`,
+    toMerge: 'Pour fusionner',
+    ok: { pipeline: 'Pipeline réussi', noCi: 'Pas de CI sur ce dépôt', approved: (g: number, r: number) => `Approuvée (${g}/${r})`, noChanges: 'Aucun changement demandé' },
+    blocker: {
+      draft: (host: string) => `C’est un brouillon : marquez-la prête sur ${host}.`, not_open: 'Elle est fermée.',
+      approvals: (g: number, r: number) => `Il manque une approbation (${g}/${r}).`, changes_requested: (who: string) => `${who} demande des changements.`,
+      pipeline_fail: 'Le pipeline a échoué.', pipeline_run: 'Le pipeline tourne encore.', pipeline_wait: 'Le pipeline est en attente.', pipeline_skip: 'Le pipeline a été sauté.'
+    },
+    confirm: (ref: string, target: string) => `Fusionner ${ref} dans ${target} ?`, runsOn: (machine: string) => `Ledge lance, sur ${machine} :`,
+    merging: 'Fusion…', mergedToast: (ref: string) => `${ref} fusionnée`, cancel: 'Annuler',
+    stale: (sha: string) => `La branche a bougé depuis votre lecture (nouveau commit ${sha}). Relisez avant de fusionner.`, reload: 'Relire',
+    forgeRefused: (forge: string, reason: string) => `${forge} a refusé la fusion : ${reason}`,
+    notPosted: (reason: string) => `Non publié : ${reason}. Votre texte est gardé.`, retry: 'Réessayer',
+    resolveFailed: (reason: string) => `Fil non résolu : ${reason}`, rerunFailed: (reason: string) => `Relance refusée : ${reason}`,
+    busy: 'une autre action est en cours sur cette MR ou PR', machineOffline: (machine: string) => `${machine} est hors ligne`,
+    emptyTitle: 'Aucune MR ni PR ouverte',
+    emptyBody: 'Ledge suit les branches des sessions et des sièges. Une MR ou PR ouverte depuis l’une d’elles apparaît ici.',
+    emptyUnread: 'Ledge ne peut lire aucune forge pour l’instant : voir ci-dessus.',
+    prKind: { github: 'PR', gitlab: 'MR' } as Record<'github' | 'gitlab', string>
   }
 };

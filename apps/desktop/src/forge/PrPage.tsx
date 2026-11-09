@@ -5,6 +5,7 @@ import { useI18n } from '../i18n/lang';
 import { PipeDot, PipeGraph } from './PipeGraph';
 import { ProviderLogo } from '../ide/ProviderLogo';
 import type { Provider } from '../workspace/sessionTab';
+import { canMerge, mergeConditions, type MachineReach, type MergeCondition } from './states';
 import '../styles/forge.css';
 
 export type PrView = 'pipe' | 'disc' | 'diff' | 'commits';
@@ -13,7 +14,9 @@ export type PrView = 'pipe' | 'disc' | 'diff' | 'commits';
 export interface PrAgent { name: string; provider: Provider }
 
 export interface PrPageProps {
-  pr: FleetPullRequest;
+  pr: FleetPullRequest & { stale?: boolean };
+  /** Its machine: whether it can be acted on (states 4, 5), its name, when its requests were last read. */
+  reach?: MachineReach; machine?: string; readAt?: number | null;
   fleet: Pick<Fleet, 'prDetail' | 'prAct'>;
   agent: PrAgent | null;
   /** Sends `text` to the agent (a message to the session, a `rig send` to a seat); false when it was refused. */
@@ -23,6 +26,12 @@ export interface PrPageProps {
   /** « Ouvrir sur GitHub / GitLab »: the system browser. */
   onOpenUrl(url: string): void;
   notify(text: string): void;
+}
+
+/** A comment or a reply not posted (state 9): the reason under its field, the text kept, « Réessayer ». */
+function NotPosted({ reason, onRetry }: { reason: string; onRetry(): void }): JSX.Element {
+  const { t } = useI18n();
+  return <div className="fg-ferr" role="alert"><span>{t.forge.notPosted(reason)}</span><button type="button" className="fg-btn sm" onClick={onRetry}>{t.forge.retry}</button></div>;
 }
 
 /** The mockup's `md`: paragraphs, and blocks whose every line starts with « - » as lists. Text only, never HTML. */
@@ -52,9 +61,19 @@ function Patch({ file, empty }: { file: PrFile; empty: string }): JSX.Element {
  *  X de corriger », the review with « Fusionner ». « Discussion »: the threads (reply, resolve, send one to the agent), « Tout
  *  envoyer à X », a new comment. « Modifications »: the files and the chosen one's patch with its threads. « Commits ». The
  *  detail is asked of the machine that read the request, again when it changes. */
-export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, notify }: PrPageProps): JSX.Element {
+type Failure = { code?: string; message?: string };
+/** A merge being confirmed (states 7, 8): open, sending, or refused (`stale`: the head moved; else the forge's reason). */
+type Merge = { state: 'open' | 'sending' } | { state: 'stale'; sha: string } | { state: 'refused'; reason: string };
+
+export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, notify, reach = 'ok', machine = pr.machineId, readAt = null }: PrPageProps): JSX.Element {
   const { t } = useI18n();
   const f = t.forge;
+  const [merge, setMerge] = useState<Merge | null>(null);
+  const [failed_, setFailed] = useState<Record<string, string>>({});
+  // Its machine down, offline, or the request as last read: every action off, its reason in the tip; « Ouvrir sur … » stays.
+  const down = !!pr.stale || reach === 'offline' || reach === 'daemonDown';
+  const why = down ? f.machineOffline(machine) : undefined;
+  const reason = (e: Failure) => (e?.code === 'busy' ? f.busy : e?.code === 'offline' ? f.machineOffline(machine) : e?.message || '');
   const [view, setView] = useState<PrView>('pipe');
   const [detail, setDetail] = useState<PrDetail | null>(null);
   const [log, setLog] = useState<PrDetail['log'] | null>(null);
@@ -76,9 +95,24 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
     return () => { live = false; };
   }, [fleet, pr.id, pr.machineId, pr.updatedAt, pr.headSha, pr.pipeline, n]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const act = (action: ForgeAction, then?: () => void) => {
+  /** An action; its failure where the user looks (state 9): under its field for a comment or a reply (`field`, the text
+   *  kept), else a toast. */
+  const act = (action: ForgeAction, then?: () => void, field?: string) => {
+    if (field) setFailed(x => { const { [field]: _, ...rest } = x; return rest; });
     fleet.prAct(pr.id, pr.machineId, action).then(r => { then?.(); if (action.kind === 'rerun' && r.command) notify(r.command); reload(); },
-      (e: { message?: string }) => { if (e?.message) notify(e.message); });
+      (e: Failure) => {
+        const r = reason(e);
+        if (field) setFailed(x => ({ ...x, [field]: r }));
+        else if (action.kind === 'resolve') notify(f.resolveFailed(r));
+        else if (action.kind === 'rerun') notify(f.rerunFailed(r));
+        else if (r) notify(r);
+      });
+  };
+  const doMerge = () => {
+    setMerge({ state: 'sending' });
+    fleet.prAct(pr.id, pr.machineId, { kind: 'merge', headSha: pr.headSha }).then(
+      () => { setMerge(null); notify(f.mergedToast(pr.ref)); reload(); },
+      (e: Failure) => setMerge(e?.code === 'stale' ? { state: 'stale', sha: pr.headSha.slice(0, 7) } : { state: 'refused', reason: reason(e) }));
   };
   const draft = (k: string) => drafts[k] ?? '';
   const setDraft = (k: string, v: string) => setDrafts(d => ({ ...d, [k]: v }));
@@ -97,6 +131,17 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
   const where = (x: PrThread) => (x.file && x.line !== undefined ? `${base(x.file)}:${x.line}` : null);
   const appr = `${pr.approvals.given}${pr.approvals.required !== undefined ? `/${pr.approvals.required}` : ''}`;
 
+  const conditions: MergeCondition[] = detail ? mergeConditions(pr, detail) : [];
+  const ready = detail !== null && canMerge(conditions);
+  const conditionText = (c: MergeCondition): string => {
+    if (c.ok) return c.key === 'approved' ? f.ok.approved(c.given, c.required) : f.ok[c.key];
+    switch (c.key) {
+      case 'draft': return f.blocker.draft(f.host[pr.forge]);
+      case 'approvals': return f.blocker.approvals(c.given, c.required);
+      case 'changes_requested': return f.blocker.changes_requested(c.who);
+      default: return f.blocker[c.key];
+    }
+  };
   const askFix = () => { if (failed && onAskAgent(f.fixText(pr.ref, failed.name))) onOpenAgent(); };
   const sendAll = () => {
     if (onAskAgent(f.notesText(pr.ref, unresolved.map(x => f.note(x.comments[0]!.author, where(x), x.comments[0]!.body))))) onOpenAgent();
@@ -119,10 +164,11 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
       {x.comments.map(comment)}
       {x.resolved ? <span className="fg-mut" style={{ fontSize: 11.5 }}>{f.resolved}</span> : (
         <div className="fg-go">
-          <input className="fg-cin small" aria-label={f.replyPh} placeholder={f.replyPh} value={draft(`r:${x.id}`)} onChange={e => setDraft(`r:${x.id}`, e.target.value)}
-            onKeyDown={onEnter(`r:${x.id}`, body => act({ kind: 'reply', threadId: x.id, body }, () => setDraft(`r:${x.id}`, '')))} />
-          {x.resolvable && <button type="button" className="fg-btn" onClick={() => act({ kind: 'resolve', threadId: x.id })}>{f.resolve}</button>}
-          {agent && <button type="button" className="fg-btn" title={f.sendThreadTip} onClick={() => sendThread(x)}><ProviderLogo provider={agent.provider} size={12} />{agent.name}</button>}
+          <input className={`fg-cin small${failed_[`r:${x.id}`] !== undefined ? ' bad' : ''}`} aria-label={f.replyPh} placeholder={f.replyPh} value={draft(`r:${x.id}`)} onChange={e => setDraft(`r:${x.id}`, e.target.value)}
+            disabled={down} title={why} onKeyDown={onEnter(`r:${x.id}`, body => act({ kind: 'reply', threadId: x.id, body }, () => setDraft(`r:${x.id}`, ''), `r:${x.id}`))} />
+          {x.resolvable && <button type="button" className="fg-btn" disabled={down} title={why} onClick={() => act({ kind: 'resolve', threadId: x.id })}>{f.resolve}</button>}
+          {agent && <button type="button" className="fg-btn" disabled={down} title={why ?? f.sendThreadTip} onClick={() => sendThread(x)}><ProviderLogo provider={agent.provider} size={12} />{agent.name}</button>}
+          {failed_[`r:${x.id}`] !== undefined && <NotPosted reason={failed_[`r:${x.id}`]!} onRetry={() => { const body = draft(`r:${x.id}`).trim(); if (body) act({ kind: 'reply', threadId: x.id, body }, () => setDraft(`r:${x.id}`, ''), `r:${x.id}`); }} />}
         </div>
       )}
     </div>
@@ -162,13 +208,14 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
     body = (
       <div className="fg-blk">
         <div className="fg-blk-h"><b>{f.discussion}</b><span className="fg-sub">{f.discSub(unresolved.length, threads.length - unresolved.length)}</span><span className="fg-sp" />
-          {unresolved.length > 0 && agent && !merged && <button type="button" className="fg-btn" onClick={sendAll}>{f.sendAll(agent.name)}</button>}</div>
+          {unresolved.length > 0 && agent && !merged && <button type="button" className="fg-btn" disabled={down} title={why} onClick={sendAll}>{f.sendAll(agent.name)}</button>}</div>
         <div className="fg-blk-b">
           {threads.length ? threads.map(x => thread(x)) : <span className="fg-mut">{f.noComment}</span>}
           <div className="fg-go">
-            <input className="fg-cin" aria-label={f.addComment} placeholder={f.addComment} value={draft('c')} onChange={e => setDraft('c', e.target.value)}
-              onKeyDown={onEnter('c', body => act({ kind: 'comment', body }, () => setDraft('c', '')))} />
+            <input className={`fg-cin${failed_.c !== undefined ? ' bad' : ''}`} aria-label={f.addComment} placeholder={f.addComment} value={draft('c')} onChange={e => setDraft('c', e.target.value)}
+              disabled={down} title={why} onKeyDown={onEnter('c', body => act({ kind: 'comment', body }, () => setDraft('c', ''), 'c'))} />
           </div>
+          {failed_.c !== undefined && <NotPosted reason={failed_.c} onRetry={() => { const body = draft('c').trim(); if (body) act({ kind: 'comment', body }, () => setDraft('c', ''), 'c'); }} />}
         </div>
       </div>
     );
@@ -192,12 +239,12 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
       </div>
       <div className="fg-blk">
         <div className="fg-blk-h"><PipeDot status={pr.pipeline} /><b>{f.pipeline}</b><span className="fg-pill">{f.pipe[pr.pipeline]}</span><span className="fg-sp" />
-          {pr.pipeline !== 'run' && !merged && <button type="button" className="fg-btn" onClick={() => act({ kind: 'rerun' })}>{f.rerun}</button>}</div>
+          {pr.pipeline !== 'run' && !merged && <button type="button" className="fg-btn" disabled={down} title={why} onClick={() => act({ kind: 'rerun' })}>{f.rerun}</button>}</div>
         <div className="fg-blk-b">
           <div className="fg-graph-wrap"><PipeGraph jobs={detail.jobs} /></div>
           {failed && log && log.jobId === failed.id && <div className="fg-log" data-keep-scroll>{log.text}</div>}
           {failed && agent && <div className="fg-go">
-            <button type="button" className="fg-btn pri" onClick={askFix}>{f.askFix(agent.name)}</button>
+            <button type="button" className="fg-btn pri" disabled={down} title={why} onClick={askFix}>{f.askFix(agent.name)}</button>
             <button type="button" className="fg-btn" onClick={onOpenAgent}>{f.openAgent(agent.name)}</button>
           </div>}
         </div>
@@ -205,10 +252,28 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
       <div className="fg-blk">
         <div className="fg-blk-h"><b>{f.review}</b><span className="fg-sub">{f.reviewSub(appr, unresolved.length)}</span><span className="fg-sp" />
           <button type="button" className="fg-btn" onClick={() => setView('disc')}>{f.seeDiscussion}</button>
-          {/* Inert until its confirmation (the exact command, docs/ide-workspace-plan.md 8) is drawn and validated: the lead, 2026-11-09. */}
-          {!merged && <button type="button" className={`fg-btn${pr.pipeline === 'ok' && pr.mergeable ? ' pri' : ''}`} data-merge-inert="">{f.merge}</button>}
+          {/* State 6: visible, off while a condition is missing; state 7: the main button once they all are met. */}
+          {!merged && <button type="button" className={`fg-btn${ready ? ' pri' : ''}`} disabled={!ready || down || merge !== null} title={why}
+            aria-expanded={merge !== null} onClick={() => setMerge({ state: 'open' })}>{f.merge}</button>}
         </div>
         <div className="fg-blk-b">
+          {!merged && <div className="fg-check" role="list" aria-label={f.toMerge}>
+            <span className="fg-sub">{f.toMerge}</span>
+            {conditions.map((c, i) => <div key={i} role="listitem" className={c.ok ? 'y' : 'n'}><span aria-hidden="true">{c.ok ? '✓' : '✕'}</span>{conditionText(c)}</div>)}
+          </div>}
+          {merge && detail && <div className="fg-confirm" role="group" aria-label={f.confirm(pr.ref, pr.target)}>
+            <b>{f.confirm(pr.ref, pr.target)}</b>
+            <span>{f.runsOn(machine)}</span>
+            <code>{detail.mergeCommand}</code>
+            {merge.state === 'stale' && <span className="e">{f.stale(merge.sha)}</span>}
+            {merge.state === 'refused' && <span className="e">{f.forgeRefused(f.host[pr.forge], merge.reason)}</span>}
+            <div className="fg-go">
+              {merge.state === 'stale'
+                ? <button type="button" className="fg-btn pri" onClick={() => { setMerge(null); reload(); }}>{f.reload}</button>
+                : <button type="button" className="fg-btn pri" disabled={merge.state === 'sending'} onClick={doMerge}>{merge.state === 'sending' ? f.merging : f.merge}</button>}
+              <button type="button" className="fg-btn" disabled={merge.state === 'sending'} onClick={() => setMerge(null)}>{f.cancel}</button>
+            </div>
+          </div>}
           {unresolved.length ? unresolved.slice(-2).map(x => comment(x.comments[0]!)) : <span className="fg-mut">{f.nothing}</span>}
         </div>
       </div>
@@ -217,6 +282,8 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
 
   return (
     <div className="fg-page" data-keep-scroll>
+      {down && <div className="fg-banner off" role="status"><span className="fg-dot" aria-hidden="true" />
+        <span>{(reach === 'daemonDown' ? f.daemonDown : f.offline)(machine, readAt === null ? '' : hm(new Date(readAt).toISOString()))}</span></div>}
       <div className="fg-head">
         <span className="fg-pill">{f.kind[pr.forge]}</span><h3>{pr.ref} {pr.title}</h3>
         <span className={`fg-pill${merged ? ' run' : ''}`}>{f.state[pr.state]}</span><span className="fg-sp" />
