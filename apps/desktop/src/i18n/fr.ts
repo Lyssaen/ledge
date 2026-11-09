@@ -1561,7 +1561,7 @@ export const fr = {
     title: 'À toi', sub: 'Ce qui attend ta décision ou ton regard, toutes sessions et tous rigs confondus. Le chat de Ledge reste dans le panneau de droite.',
     requests: 'Demandes', keysBefore: 'ou ', keysAfter: ' sur la session active', open: 'Ouvrir',
     allowCommand: 'Autoriser une commande', allow: 'Autoriser', deny: 'Refuser', noRequest: 'Rien ne t’attend.',
-    prsSub: 'pipelines échoués, prêtes à fusionner', prFailed: 'pipeline échoué', prReady: 'pipeline réussi, approuvée', noPr: 'Aucune MR ni PR ne t’attend.',
+    prsSub: 'pipelines échoués, prêtes à fusionner', prFailed: 'pipeline échoué', prReady: 'pipeline réussi, approuvée', prReadyNoCi: 'sans CI, approuvée', noPr: 'Aucune MR ni PR ne t’attend.',
     finished: 'Terminé depuis ton passage', noFinished: 'Aucune session n’a fini.',
     pageButton: 'Page', pageTip: 'La page À toi'
   },

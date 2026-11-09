@@ -1486,7 +1486,7 @@ export const en: Messages = {
     title: 'For you', sub: 'What waits for your decision or your eye, across every session and rig. Ledge’s chat stays in the right panel.',
     requests: 'Requests', keysBefore: 'or ', keysAfter: ' on the active session', open: 'Open',
     allowCommand: 'Allow a command', allow: 'Allow', deny: 'Deny', noRequest: 'Nothing waits for you.',
-    prsSub: 'failed pipelines, ready to merge', prFailed: 'pipeline failed', prReady: 'pipeline passed, approved', noPr: 'No MR or PR waits for you.',
+    prsSub: 'failed pipelines, ready to merge', prFailed: 'pipeline failed', prReady: 'pipeline passed, approved', prReadyNoCi: 'no CI, approved', noPr: 'No MR or PR waits for you.',
     finished: 'Finished since your last visit', noFinished: 'No session has finished.',
     pageButton: 'Page', pageTip: 'The For you page'
   },

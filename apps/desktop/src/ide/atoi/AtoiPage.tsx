@@ -90,7 +90,7 @@ export function AtoiPage(p: AtoiPageProps): JSX.Element {
       <div key={pr.id} className={`atoi-pr${down ? ' stale' : ''}`}>
         <div className="atoi-line">
           <PipeDot status={pr.pipeline} />
-          <span className="grow"><b>{pr.ref}</b> {pr.title} <span className="fg-mut">· {f.host[pr.forge]} · {fail ? a.prFailed : a.prReady}</span></span>
+          <span className="grow"><b>{pr.ref}</b> {pr.title} <span className="fg-mut">· {f.host[pr.forge]} · {fail ? a.prFailed : pr.pipeline === 'none' ? a.prReadyNoCi : a.prReady}</span></span>
           <button type="button" className="fg-btn" onClick={() => p.onOpenPr(pr)}>{a.open}</button>
           {fail && agent && <button type="button" className="fg-btn pri" disabled={down} title={why} onClick={() => p.onAskFix(pr)}>{f.askFix(agent.name)}</button>}
           {!fail && <button type="button" className="fg-btn pri" disabled={down} title={why} aria-expanded={merging?.id === pr.id} onClick={() => merge(pr)}>{f.merge}</button>}

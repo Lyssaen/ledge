@@ -39,3 +39,10 @@ it('P2: the detail read at the click refuses the merge: its confirmation\'s Merg
   fireEvent.click(row);
   expect(fleet.prDetail).toHaveBeenCalledTimes(1);
 });
+
+it('a repository without any CI (design-ux, 2026-11-09): « no CI, approved », a grey dot, « Merge » kept', () => {
+  show([pr({ pipeline: 'none' })], { prDetail: vi.fn(), prAct: vi.fn() });
+  expect(screen.getByText(/no CI, approved/)).toBeInTheDocument();
+  expect(document.querySelector('.atoi-pr .fg-dot')!.className).toBe('fg-dot none');
+  expect(screen.getByRole('button', { name: 'Merge' })).toBeEnabled();
+});
