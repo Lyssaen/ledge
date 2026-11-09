@@ -6,7 +6,8 @@ import { commandsOf, isRunning, kernelRig, listedRigs, workingSeats } from '../.
 /** The IDE's Rigs view (docs/mockups/ledge-ide-rigs.html) as pure functions: one machine's rows, the machine menu, a confirmation. */
 
 export type RigDot = 'perm' | 'ask' | 'work' | 'idle' | 'off';
-export interface SeatLine { logicalId: string; name: string; dot: RigDot; session?: Session; ctx?: number }
+/** `role`: the seat's role (its logicalId, « dev.agent »), shown beside the session's name; none when the name is already it. */
+export interface SeatLine { logicalId: string; name: string; role?: string; dot: RigDot; session?: Session; ctx?: number }
 export interface RigLine { name: string; running: boolean; dot: RigDot; count: number; seats: SeatLine[] }
 export interface RigsView { status: 'loading' | 'offline' | 'absent' | 'stopped' | 'running'; version?: string; kernel: RigLine | null; rigs: RigLine[] }
 
@@ -27,7 +28,7 @@ export function seatLine(node: RigSeat, machine: string, sessions: readonly Sess
   const session = sessions.find(s => isAskSeat(s, node.session, machine));
   const dot = seatDot(session, node, asks, machine);
   if (!session) return { logicalId: node.logicalId, name: node.logicalId, dot };
-  return { logicalId: node.logicalId, name: session.name, dot, session, ...(session.context ? { ctx: Math.round(session.context.used / session.context.window * 100) } : {}) };
+  return { logicalId: node.logicalId, name: session.name, ...(session.name !== node.logicalId ? { role: node.logicalId } : {}), dot, session, ...(session.context ? { ctx: Math.round(session.context.used / session.context.window * 100) } : {}) };
 }
 
 function rigLine(r: Rig, machine: string, sessions: readonly Session[], asks: readonly HumanAsk[]): RigLine {
