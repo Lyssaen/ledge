@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge IDE — Onglet devant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Complement to the IDE prototype v27 (ledge-ide-interactive.html, f98b710b): the mark of the tab in front.
+   v27 drew a 2 px violet line on top (`.grp.focus .tab.on::before`); the owner asked on 2026-11-09 for it to be
+   underlined in Ledge's coral. Tokens: packages/ui tokens.css, the coral is accentTokens('#e85d4a').sidebarPrimary. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--border:#ffffff1a;--input:#ffffff26;
+  --shell:#0d0d0d;--pane:#111112;--page:#000;--note:#a78bfa;--link1:#a78bfa;
+  --st-idle:#34d399;--st-work:#60a5fa;--st-off:#71717a;
+  --destructive:oklch(0.704 0.191 22.216);--warning:#fbbf24;
+  --sidebar-primary-factory:oklch(0.637 0.237 25.331);
+  --coral:#ea6a58;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(1 0 0);--muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.556 0 0);--border:oklch(0.922 0 0);--input:oklch(0.922 0 0);
+  --shell:oklch(0.985 0 0);--pane:#fff;--page:oklch(0.96 0 0);--note:#7c3aed;--link1:#7c3aed;
+  --st-idle:#059669;--st-work:#2563eb;--st-off:#a1a1aa;
+  --destructive:oklch(0.577 0.245 27.325);--warning:#b45309;
+  --sidebar-primary-factory:oklch(0.577 0.245 27.325);
+  --coral:#cc5241;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Geist','Segoe UI',system-ui,sans-serif;background:var(--page);color:var(--foreground);font-size:13px;line-height:18px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+code{font-family:'Geist Mono',ui-monospace,Consolas,monospace;font-size:11.5px}
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 20px;background:var(--shell);border-bottom:1px solid var(--border)}
+header h1{font-size:14px;font-weight:600;margin:0}
+header .sub{color:var(--muted-foreground);font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--input);border-radius:7px;overflow:hidden}
+.seg button{padding:3px 10px;font-size:12px;color:var(--muted-foreground)}
+.seg button.on{background:var(--muted);color:var(--foreground)}
+main{padding:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:18px;max-width:1500px;align-items:start}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.card h2{font-size:12.5px;font-weight:600;margin:0;padding:10px 14px 0;display:flex;gap:8px;align-items:baseline}
+.card h2 .n{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted-foreground)}
+.card .why{padding:4px 14px 10px;color:var(--muted-foreground);font-size:12px}
+.card .why b{color:var(--foreground);font-weight:500}
+.tag{font-size:10.5px;border-radius:8px;padding:0 6px;border:1px solid}
+.tag.rec{color:var(--note);border-color:color-mix(in srgb,var(--note) 45%,transparent)}
+.tag.alt{color:var(--muted-foreground);border-color:var(--input)}
+.tag.bug{color:var(--destructive);border-color:color-mix(in srgb,var(--destructive) 45%,transparent)}
+/* A scene: one or two dock groups side by side, as in the IDE (each with its own strip). */
+.scene{display:flex;gap:1px;background:var(--border);border-top:1px solid var(--border)}
+.grp{flex:1;min-width:0;background:var(--pane);display:flex;flex-direction:column}
+.grp .body{height:46px;padding:8px 10px;font:11px 'Geist Mono',monospace;color:var(--muted-foreground)}
+.grp .lbl{font:10.5px 'Geist',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-foreground);padding:6px 10px 0}
+.tabs{display:flex;height:30px;background:var(--shell);border-bottom:1px solid var(--border)}
+.tab{position:relative;display:flex;align-items:center;gap:7px;padding:0 10px;font-size:12px;color:var(--muted-foreground);border-right:1px solid var(--border);white-space:nowrap}
+.tab.on{background:var(--pane);color:var(--foreground)}
+.tab .x{opacity:.5;font-size:11px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--st-off);flex-shrink:0}
+.dot.idle{background:var(--st-idle)}.dot.work{background:var(--st-work)}.dot.perm{background:var(--destructive)}.dot.ask{background:var(--warning)}
+/* The rule this sheet proposes: the tab in front of the focused group is underlined in coral; an alert keeps its own
+   underline and replaces the coral, because both sit in the same 2 px. */
+.grp.focus .tab.on{box-shadow:inset 0 -2px 0 var(--front, var(--coral))}
+.tab.alert,.grp.focus .tab.on.alert{box-shadow:inset 0 -2px 0 var(--destructive)}
+.tab.alert-a,.grp.focus .tab.on.alert-a{box-shadow:inset 0 -2px 0 var(--warning)}
+/* Earlier marks, for the comparison card only. */
+.grp.v27 .tab.on{box-shadow:none}.grp.v27 .tab.on::before{content:"";position:absolute;inset:0 0 auto;height:2px;background:var(--link1)}
+.grp.shipped .tab.on{box-shadow:none}.grp.shipped .tab.on::before{content:"";position:absolute;inset:0 0 auto;height:2px;background:var(--sidebar-primary-factory)}
+.grp.shipped .tab.on.alert{box-shadow:inset 0 -2px 0 var(--destructive)}
+.grp.altb .tab.on{box-shadow:none}.grp.altb .tab.on::before{content:"";position:absolute;inset:0 0 auto;height:2px;background:var(--coral)}
+.grp.altb .tab.on.alert{box-shadow:inset 0 -2px 0 var(--destructive)}
+.zoom{display:flex;gap:18px;flex-wrap:wrap;padding:14px;border-top:1px solid var(--border);background:var(--pane)}
+.zoom .z{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--muted-foreground)}
+.zoom .z .tabs{transform:scale(2);transform-origin:top left;margin:0 0 30px 0;width:max-content}
+.zoom .z{width:calc(50% - 9px)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid var(--input)}
+section.fiche{grid-column:1/-1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;font-size:12.5px}
+section.fiche h2{font-size:13px;margin:0 0 6px}
+section.fiche table{border-collapse:collapse;width:100%;font-size:12px}
+section.fiche td,section.fiche th{border-top:1px solid var(--border);padding:5px 8px;text-align:left;vertical-align:top}
+section.fiche th{color:var(--muted-foreground);font-weight:500}
+section.fiche ol{margin:6px 0 0;padding-left:20px}
+section.fiche li{margin:4px 0}
+@media (max-width:560px){main{grid-template-columns:1fr;padding:12px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ledge IDE — l'onglet devant, souligné en corail</h1>
+  <span class="sub">Complément de la v27 (f98b710b), lot 9. Aucun texte nouveau dans l'app.</span>
+  <span style="flex:1"></span>
+  <span class="seg" id="theme"><button data-v="dark">Sombre</button><button data-v="light">Clair</button></span>
+</header>
+<main id="main"></main>
+<script>
+const logo = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#e85d4a"><path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19"/></svg>';
+const tab = (name, o = {}) => `<div class="tab${o.on ? ' on' : ''}${o.alert ? ' ' + o.alert : ''}">${o.logo === false ? '' : logo}${name}${o.dot ? `<span class="dot ${o.dot}"></span>` : ''}<span class="x">✕</span></div>`;
+const grp = (cls, tabs, label, body = '$ _') => `<div class="grp ${cls}"><div class="tabs">${tabs.join('')}</div>${label ? `<div class="lbl">${label}</div>` : ''}<div class="body">${body}</div></div>`;
+
+const cards = [
+  ['Proposé : souligné en corail, en bas', 'rec',
+   '<b>L’onglet devant du groupe qui a le focus</b> porte un trait de 2 px <b>sous</b> l’onglet, en corail. Les autres groupes : l’onglet devant garde seulement le fond du panneau, sans trait. Comme jde l’a demandé : « souligné en corail ». Le trait suit le focus d’un groupe à l’autre.',
+   `<div class="scene">${grp('focus', [tab('Atelier', { logo: false }), tab('Otto', { on: true, dot: 'work' }), tab('Nova', { dot: 'idle' })], 'groupe qui a le focus')}${grp('', [tab('Pim', { on: true, dot: 'idle' }), tab('dev-front', { dot: 'idle' })], 'autre groupe')}</div>`],
+  ['L’onglet devant est en alerte', 'rec',
+   '<b>L’alerte remplace le corail</b> : les deux occupent les mêmes 2 px sous l’onglet, et l’alerte (permission en rouge, question en ambre) compte plus. L’onglet reste reconnaissable comme l’onglet devant à son fond, qui se fond dans le panneau. Le trait corail revient dès que l’alerte est levée. Un onglet derrière en alerte ne change pas. À noter en sombre : le corail (#ea6a58) et le rouge d’alerte sont proches (zoom) ; c’est une raison de plus pour ne jamais les montrer ensemble, et la pastille de l’onglet dit l’état.',
+   `<div class="scene">${grp('focus', [tab('Atelier', { logo: false }), tab('Otto', { on: true, dot: 'perm', alert: 'alert' }), tab('Nova', { dot: 'ask', alert: 'alert-a' })], 'devant + permission')}${grp('focus', [tab('Pim', { on: true, dot: 'ask', alert: 'alert-a' }), tab('dev-front', { dot: 'idle' })], 'devant + question')}</div>`],
+  ['Une couleur de Ledge choisie', 'rec',
+   'Le trait est <b>la couleur de Ledge</b> : le corail d’usine, ou la couleur choisie dans Réglages › Apparence (ici un bleu #2563eb). Même jeton que le reste de la marque (<code>--sidebar-primary</code> quand une couleur est choisie).',
+   `<div class="scene" style="--front:#2563eb">${grp('focus', [tab('Atelier', { logo: false }), tab('Otto', { on: true, dot: 'work' }), tab('Nova', { dot: 'idle' })], 'couleur choisie : #2563eb')}</div>`],
+  ['Fenêtre détachée', 'rec',
+   'La fenêtre détachée (un seul groupe, v27) suit la même règle : son groupe a le focus dans sa fenêtre, donc son onglet devant est souligné en corail, même quand une autre fenêtre est au premier plan. Pas d’état « fenêtre inactive » ajouté.',
+   `<div class="scene">${grp('focus', [tab('Nova', { on: true, dot: 'idle' }), tab('Pim', { dot: 'idle' })], 'fenêtre détachée')}</div>`],
+  ['Avant / après', 'bug',
+   'De gauche à droite : la v27 (violet, en haut), ce qui est livré dans 49d67b25 (un trait <b>en haut</b>, en <code>--sidebar-primary</code> d’usine, qui est un rouge et non le corail : en clair, c’est exactement le rouge d’alerte <code>--destructive</code>), et la proposition.',
+   `<div class="scene">${grp('focus v27', [tab('Otto', { on: true, dot: 'work' }), tab('Nova', { dot: 'idle' })], 'v27')}${grp('focus shipped', [tab('Otto', { on: true, dot: 'work' }), tab('Nova', { dot: 'idle' })], 'livré (49d67b25)')}${grp('focus', [tab('Otto', { on: true, dot: 'work' }), tab('Nova', { dot: 'idle' })], 'proposé')}</div>`],
+  ['Alternative B : le corail en haut, l’alerte en bas', 'alt',
+   'Garde les deux signaux visibles à la fois sur un onglet devant en alerte. <b>Non recommandée</b> : ce n’est plus un soulignement, et c’est justement un trait en haut que jde a vu comme un défaut.',
+   `<div class="scene">${grp('focus altb', [tab('Otto', { on: true, dot: 'perm', alert: 'alert' }), tab('Nova', { dot: 'idle' })], 'devant + permission')}${grp('focus altb', [tab('Pim', { on: true, dot: 'idle' }), tab('dev-front', { dot: 'idle' })], 'devant')}</div>`],
+];
+
+function render() {
+  const zoom = `<div class="zoom">
+    <div class="z">zoom ×2 : devant, corail<div class="grp focus" style="background:none"><div class="tabs">${tab('Otto', { on: true, dot: 'work' })}</div></div></div>
+    <div class="z">zoom ×2 : devant + permission (rouge)<div class="grp focus" style="background:none"><div class="tabs">${tab('Otto', { on: true, dot: 'perm', alert: 'alert' })}</div></div></div>
+    <div class="z">zoom ×2 : devant + question (ambre)<div class="grp focus" style="background:none"><div class="tabs">${tab('Otto', { on: true, dot: 'ask', alert: 'alert-a' })}</div></div></div>
+  </div>`;
+  const html = cards.map(([title, tag, why, scene], i) => `<article class="card" id="s${i + 1}"><h2><span class="n">${i + 1}</span>${title}<span class="tag ${tag}">${tag === 'rec' ? 'recommandé' : tag === 'alt' ? 'alternative' : 'constat'}</span></h2><div class="why">${why}</div>${scene}${i === 1 ? zoom : ''}</article>`).join('');
+  const fiche = `<section class="fiche"><h2>Fiche de transmission (dev-front)</h2><table>
+    <tr><th>Point</th><th>Règle</th></tr>
+    <tr><td>Où</td><td>L’onglet devant (<code>.dv-active-tab</code>) du groupe qui a le focus (<code>.dv-active-group</code>), dans la fenêtre principale comme dans une fenêtre détachée. Aucun trait dans les autres groupes.</td></tr>
+    <tr><td>Forme</td><td>2 px <b>sous</b> l’onglet : <code>box-shadow: inset 0 -2px 0 var(--ide-tab-front)</code>, à la place du <code>::before</code> en haut (ide.css:121).</td></tr>
+    <tr><td>Couleur</td><td>Nouveau jeton <code>--ide-tab-front</code> = la couleur de Ledge. Sans couleur choisie : le corail d’usine, <code>accentTokens('#e85d4a', theme).sidebarPrimary</code>, soit <span class="sw" style="background:#cc5241"></span><code>#cc5241</code> en clair et <span class="sw" style="background:#ea6a58"></span><code>#ea6a58</code> en sombre. Avec une couleur choisie (Réglages › Apparence) : <code>--sidebar-primary</code>, que <code>applyAccent</code> peint déjà. Ne pas prendre <code>--sidebar-primary</code> d’usine : c’est un rouge (égal à <code>--destructive</code> en clair).</td></tr>
+    <tr><td>Alerte</td><td><code>.alert</code> (rouge) et <code>.alert-a</code> (ambre) gardent leur trait et l’emportent sur le corail : même emplacement, sélecteur plus fort ou déclaré après. Rien d’autre ne change sur l’onglet.</td></tr>
+    <tr><td>Clavier</td><td>L’anneau de focus du clavier (<code>:focus-visible</code>, <code>--ring</code>) ne change pas.</td></tr>
+    <tr><td>Textes</td><td>Aucun.</td></tr>
+  </table>
+  <h2 style="margin-top:14px">Questions pour jde</h2>
+  <ol>
+    <li><b>Position et alerte</b> : le corail sous l’onglet, l’alerte le remplace quand l’onglet devant est en alerte (cartes 1 et 2, recommandé), ou l’alternative B (corail en haut, alerte en bas, carte 6) ?</li>
+    <li><b>Le corail</b> : le trait prend la couleur de Ledge, corail d’usine <code>#e85d4a</code> ou la couleur choisie dans Apparence (carte 3, recommandé) ?</li>
+    <li><b>Hors de ce lot, à signaler</b> : sans couleur choisie, toute l’app peint sa marque avec le <code>--sidebar-primary</code> d’usine de tokens.css, un rouge, et non le corail <code>#e85d4a</code> que le bouton « Corail » des réglages annonce. Faut-il que le corail d’usine devienne la vraie couleur de marque partout ? Ce serait un changement visible sur tout Desktop, donc un lot à part.</li>
+  </ol></section>`;
+  document.getElementById('main').innerHTML = html + fiche;
+}
+function setTheme(v) {
+  document.documentElement.dataset.theme = v;
+  document.querySelectorAll('#theme button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+}
+document.getElementById('theme').addEventListener('click', e => { const v = e.target.dataset?.v; if (v) setTheme(v); });
+const q = new URLSearchParams(location.search);
+setTheme(q.get('theme') === 'light' ? 'light' : 'dark');
+render();
+</script>
+</body>
+</html>
