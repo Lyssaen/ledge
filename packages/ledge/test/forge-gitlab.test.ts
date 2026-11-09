@@ -257,6 +257,11 @@ describe('GitLab: whether the project has CI', () => {
     expect(await gitlabReader(f.run).hasCi(repo)).toBe(true);
     expect(f.calls).toHaveLength(1);
   });
+  it('true with Auto DevOps on, without any CI file (second review, N1)', async () => {
+    const f = fakeGlab(p => (p === P ? '{"default_branch":"main","ci_config_path":"","auto_devops_enabled":true}' : p.includes('/repository/files/') ? NF : undefined));
+    expect(await gitlabReader(f.run).hasCi(repo)).toBe(true);
+    expect(f.calls).toHaveLength(1);
+  });
   it('an error other than 404 throws: the caller assumes CI', async () => {
     const f = fakeGlab(p => (p === P ? '{"default_branch":"main"}' : p.includes('/repository/files/') ? { code: 0, stdout: '', stderr: 'glab: 500 Internal Server Error (HTTP 500)' } : undefined));
     await expect(gitlabReader(f.run).hasCi(repo)).rejects.toThrow();

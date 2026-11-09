@@ -138,8 +138,9 @@ export function gitlabReader(run: ForgeRun): ForgeReader {
     },
 
     async hasCi(repo) {
-      const p = await getJson<{ default_branch?: string | null; ci_config_path?: string | null }>(repo, project(repo));
-      if (p.ci_config_path) return true;
+      const p = await getJson<{ default_branch?: string | null; ci_config_path?: string | null; auto_devops_enabled?: boolean | null }>(repo, project(repo));
+      // Auto DevOps runs pipelines without any file in the repository (it can be on by default for the whole instance).
+      if (p.ci_config_path || p.auto_devops_enabled) return true;
       if (!p.default_branch) return false;
       const r = await get(repo, `${project(repo)}/repository/files/.gitlab-ci.yml?ref=${encodeURIComponent(p.default_branch)}`);
       if (notFound(r)) return false;
