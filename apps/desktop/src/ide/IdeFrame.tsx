@@ -19,6 +19,11 @@ export { RigsView } from './rigs/RigsView';
 export { RigView } from './rig/RigView';
 export { RigLaunchModal } from './launch-rig/RigLaunchModal';
 export { OpenRigView } from './openrig/OpenRigView';
+export { PrsView } from '../forge/PrsView';
+export { PrPage } from '../forge/PrPage';
+export { PrsStatus } from '../forge/PrsStatus';
+export { PrTabLabel } from '../forge/PrTabLabel';
+export { AtoiPage } from './atoi/AtoiPage';
 
 export interface IdeFrameProps {
   layout: IdeLayout; onLayout(a: LayoutAction): void;
@@ -37,6 +42,8 @@ export interface IdeFrameProps {
   readOnly: boolean; dragging: boolean;
   onTab(t: Tab): void; activeTab: Tab | null; badge: { perm: number; ask: number };
   waiting: readonly Session[]; onNextWaiting(): void;
+  /** Lot 8b: the activity bar's badge (open requests whose pipeline failed) and the status bar's count. */
+  prsFailing?: number; prsStatus?: ReactNode;
 }
 
 const onResize = (cb: () => void) => { window.addEventListener('resize', cb); return () => window.removeEventListener('resize', cb); };
@@ -58,7 +65,7 @@ export function IdeFrame(p: IdeFrameProps): JSX.Element {
     <div className={`ide${p.dragging ? ' is-dragging' : ''}`} data-readonly={p.readOnly ? 'true' : undefined}>
       <IdeTitleBar layout={layout} onLayout={onLayout} onSearch={p.onSearch} blocked={p.blocked} rightShown={right} />
       <div className="ide-body" style={columns} inert={p.blocked}>
-        <ActivityBar layout={layout} onLayout={onLayout} onTab={p.onTab} activeTab={p.activeTab} badge={p.badge} />
+        <ActivityBar layout={layout} onLayout={onLayout} onTab={p.onTab} activeTab={p.activeTab} badge={p.badge} prsFailing={p.prsFailing} />
         {layout.sideOpen && <IdeExplorer width={layout.sideWidth} onLayout={onLayout}>{p.explorer}</IdeExplorer>}
         <section className="ide-editor" aria-label={t.ide.editorLabel}>
           {p.notice}
@@ -68,7 +75,7 @@ export function IdeFrame(p: IdeFrameProps): JSX.Element {
         {right && <div className="ide-right">{p.chat}</div>}
       </div>
       <div className="ide-status-row" inert={p.blocked}>
-        <IdeStatusBar footer={p.footer} usage={p.usage} waiting={p.waiting} onNextWaiting={p.onNextWaiting} />
+        <IdeStatusBar footer={p.footer} usage={p.usage} waiting={p.waiting} onNextWaiting={p.onNextWaiting} prs={p.prsStatus} />
       </div>
     </div>
   );

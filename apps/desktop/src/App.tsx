@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { canBroadcast, daemonStore, projectOf, splitId, useDaemon, type BroadcastTo, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { canBroadcast, daemonStore, prOfSession, prsFailing, prsWaitingForYou, sessionForge, projectOf, splitId, useDaemon, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -85,7 +85,7 @@ import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, rigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, MAIN, moveActive, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
-import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
+import { hasTerminal, projectLabel, providerOf, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
 import { EDITOR_NAMES, openSessionInEditor, useEditor } from './ide/openIn';
@@ -94,7 +94,10 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
+import { IdeAtelierBar, IdeAtoi, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
+import { useForge } from './forge/useForge';
+import { AtoiTabLabel } from './ide/atoi/AtoiTabLabel';
+import { forgeLines, noForgeReadable, reachOf } from './forge/states';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -746,7 +749,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' }),
     editor: editorEntry
   };
-  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title });
+  // Lot 8b: every machine's pull and merge requests.
+  // A machine down keeps its last read, dimmed; a reachable one shows what it sends (review P2, useForge).
+  const forge = useForge(fleet);
+  const prOf = (id: string) => forge.prs.find(p => p.id === id);
+  const machineLabel = (id: string) => machines.find(m => m.id === id)?.label ?? id;
+  /** A request's agent: the session or seat on its branch (the most recently active). */
+  const prAgentOf = (p: FleetPullRequest) => p.sessions.map(id => known.find(s => s.id === id)).find((s): s is Session => !!s);
+  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title, pr: id => prOf(id)?.ref });
   // The IDE shell (switch on): the same pieces, in tabs and panels. Its chunk is fetched only then.
   const ideShell = (() => {
     if (!ide) return null;
@@ -755,7 +765,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const label = (tab: Tab): ReactNode => (tab.kind === 'session' || tab.kind === 'seat'
       ? <SessionTabLabel session={known.find(s => s.id === tab.ref)} tab={tab} title={title(tab)} client={fleetClient}
         helper={nav.place.kind === 'session' && nav.place.id === tab.ref && nav.place.helper ? { id: nav.place.helper } : null} />
-      : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} /> : title(tab));
+      : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} />
+      : tab.kind === 'pr' ? <IdePrTabLabel pr={prOf(tab.ref)} title={title(tab)} />
+      // « À toi 2 » (mockup v27): the requests waiting, the tab's name staying its title.
+      : tab.kind === 'atoi' ? <AtoiTabLabel title={title(tab)} waiting={waitingSessions(sessions, waits).length} /> : title(tab));
     const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {
       const tnav = tabNav(nav, tab, lastSettings.current);
@@ -766,6 +779,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         return <SessionPlace client={fleetClient} session={s} nav={tnav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
           prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide
           project={projectLabel(s, projectName)} besideLink={changesBeside(ws, keyOf(tab))}
+          pr={prOfSession(forge.prs, s.id) ?? null} onPr={() => { const p = prOfSession(forge.prs, s.id); if (p) onTab({ kind: 'pr', ref: p.id }); }}
+          prUnknown={sessionForge(forge.prs, forge.forges, forge.followed, s.id) ?? null} prMachine={machineLabel(s.machineId ?? 'local')}
+          onPrUnknown={() => { if (!(layout.sideOpen && layout.sideView === 'prs')) onLayout({ type: 'view', view: 'prs' }); }}
           onChanges={() => wsStore.update(w => { const hit = findTab(w, keyOf(tab)); return hit ? beside(w, hit.group.id, 'changes', s.id) : w; })} />;
       }
       // « +N −N »'s tab: an action clicked there brings the session's tab forward (R10).
@@ -802,6 +818,23 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         );
       }
       if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} noBack /> : null;
+      if (tab.kind === 'atoi') {
+        return <IdeAtoi waiting={waitingSessions(sessions, waits)} sessions={sessions} where={s => (s.rig ? projectLabel(s, projectName) : [projectName(s), s.branch].filter(Boolean).join(' · '))}
+          onOpen={id => dispatch({ type: 'open', id })} onDecide={(s, ok) => { decisions.decide(s, ok ? 'accept' : 'deny'); }} onAnswer={(s, o) => { decisions.reply(s, o); }}
+          prs={prsWaitingForYou(forge.prs)} agentOf={p => prAgentOf(p) ?? null} onOpenPr={p => onTab({ kind: 'pr', ref: p.id })}
+          onAskFix={p => { const a = prAgentOf(p); if (!a) return; fleet.prDetail(p.id, p.machineId).then(d => { const j = d.jobs.find(x => x.status === 'fail'); if (j && decisions.reply(a, t.forge.fixText(p.ref, j.name))) dispatch({ type: 'open', id: a.id, where: 'right' }); }, () => {}); }}
+          fleet={fleet} machineLabel={machineLabel} notify={notify} />;
+      }
+      if (tab.kind === 'pr') {
+        const p = prOf(tab.ref);
+        if (!p) return null;
+        const a = prAgentOf(p);
+        return <IdePr pr={p} fleet={fleet} notify={notify} onOpenUrl={openUrl}
+          reach={reachOf(machines.find(m => m.id === p.machineId))} machine={machineLabel(p.machineId)} readAt={forge.readAt(p.machineId)}
+          agent={a ? { name: a.name, provider: providerOf(a.tool) } : null}
+          onAskAgent={text => (a ? decisions.reply(a, text) : false)}
+          onOpenAgent={() => { if (a) dispatch({ type: 'open', id: a.id, where: 'right' }); }} />;
+      }
       if (tab.kind === 'openrig') {
         const o = place.kind === 'openrig' && (place.machine ?? 'local') === tab.ref ? place : null;
         return <IdeOpenRig client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'overview'} role={o?.role} seat={o?.seat} sessions={sessions} asks={asks.asks} output={rigEntries} dispatch={dispatch} onTab={onTab} onLaunch={m => dispatch({ type: 'modal', modal: { kind: 'rigLaunch', machine: m } })} />;
@@ -840,10 +873,16 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         onTab={onTab} activeTab={front ?? null} badge={badge}
         waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
         notice={tokenMissing && <DaemonOutdated />}
-        explorer={layout.sideView === 'rigs'
+        prsFailing={prsFailing(forge.prs)} prsStatus={<IdePrsStatus prs={forge.prs} onShow={() => { if (!(layout.sideOpen && layout.sideView === 'prs')) onLayout({ type: 'view', view: 'prs' }); }} />}
+        explorer={layout.sideView === 'prs'
+          ? <IdePrs prs={forge.prs} agentOf={p => prAgentOf(p)?.name ?? null} current={front?.kind === 'pr' ? front.ref : null}
+              lines={forgeLines(forge.forges, machines, forge.readAt)} noneReadable={noForgeReadable(forge.forges)} machineLabel={machineLabel}
+              onCopy={cmd => { void navigator.clipboard.writeText(cmd).then(() => notify(t.forge.copied), () => {}); }}
+              onOpen={(p, right) => onTab({ kind: 'pr', ref: p.id }, right ? 'right' : undefined)} />
+          : layout.sideView === 'rigs'
           ? <IdeRigs client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} activeTab={front ?? null} dispatch={dispatch} onTab={onTab}
               onMenu={(id, at, opener) => sessionMenu.open(id, at, opener)} />
-          : <Sidebar section={layout.sideView} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+          : <Sidebar section={layout.sideView} onAtoiPage={() => onTab({ kind: 'atoi', ref: 'main' })} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
             actions={actions} decisions={decisions} waits={waits} menu={sessionMenu} notify={notify}
             broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
             openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}

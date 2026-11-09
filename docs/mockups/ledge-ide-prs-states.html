@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge IDE — MR et PR, états</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Complement to the IDE prototype v27 (ledge-ide-interactive.html), lot 8b « MR et PR ». Only the states v26/v27 lack.
+   Tokens: packages/ui tokens.css (light + dark); blocks, rows and chips as in the prototype. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--popover:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--accent:oklch(0.269 0 0);--primary:oklch(0.444 0.177 26.899);--primary-hover:oklch(0.396 0.141 25.723);
+  --border:#ffffff1a;--input:#ffffff26;--shadow-overlay:0 20px 40px -12px rgba(0,0,0,0.7);
+  --shell:#0d0d0d;--side:#141414;--pane:#111112;--page:#000;--hover:#ffffff14;--note:#a78bfa;
+  --st-perm:#f87171;--st-ask:#fbbf24;--st-work:#60a5fa;--st-idle:#34d399;--st-off:#71717a;
+  --warn-bg:#2a2006;--warn-bd:#fbbf2455;--err-bg:#2a1212;--err-bd:#f8717166;--off-bg:#18181b;--danger-text:oklch(0.704 0.191 22.216);
+  --t-green:#4ade80;--t-red:#f87171;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(1 0 0);--popover:oklch(1 0 0);--muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.556 0 0);--accent:oklch(0.97 0 0);--primary:oklch(0.505 0.213 27.518);--primary-hover:oklch(0.444 0.177 26.899);
+  --border:oklch(0.922 0 0);--input:oklch(0.922 0 0);--shadow-overlay:0 20px 40px -12px rgba(0,0,0,0.25);
+  --shell:oklch(0.985 0 0);--side:oklch(0.985 0 0);--pane:#fff;--page:oklch(0.96 0 0);--hover:#0000000d;--note:#7c3aed;
+  --st-perm:#dc2626;--st-ask:#b45309;--st-work:#2563eb;--st-idle:#059669;--st-off:#a1a1aa;
+  --warn-bg:#fffbeb;--warn-bd:#f59e0b66;--err-bg:#fef2f2;--err-bd:#ef444466;--off-bg:oklch(0.97 0 0);--danger-text:oklch(0.505 0.213 27.518);
+  --t-green:#047857;--t-red:#b91c1c;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Geist','Segoe UI',system-ui,sans-serif;background:var(--page);color:var(--foreground);font-size:13px;line-height:18px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+code,.mono{font-family:'Geist Mono',ui-monospace,Consolas,monospace;font-size:11.5px}
+.mut{color:var(--muted-foreground)}
+header{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 20px;background:var(--shell);border-bottom:1px solid var(--border)}
+header h1{font-size:14px;font-weight:600;margin:0}
+header .sub{color:var(--muted-foreground);font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--input);border-radius:7px;overflow:hidden}
+.seg button{padding:3px 10px;font-size:12px;color:var(--muted-foreground)}
+.seg button.on{background:var(--muted);color:var(--foreground)}
+main{padding:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(460px,1fr));gap:18px;max-width:1560px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.card.wide{grid-column:span 2}
+@media (max-width:1000px){.card.wide{grid-column:auto}}
+.card h2{font-size:12.5px;font-weight:600;margin:0;padding:10px 14px 0;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.card h2 .n{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted-foreground)}
+.card .why{padding:4px 14px 8px;color:var(--muted-foreground);font-size:12px}
+.card .why b{color:var(--foreground);font-weight:500}
+.keys{padding:0 14px 10px;font-size:10.5px;color:var(--muted-foreground);font-family:'Geist Mono',monospace;word-break:break-word}
+.tag{font-size:10.5px;border-radius:8px;padding:0 6px;border:1px solid;font-weight:400}
+.tag.new{color:var(--note);border-color:color-mix(in srgb,var(--note) 45%,transparent)}
+.tag.q{color:var(--st-ask);border-color:color-mix(in srgb,var(--st-ask) 45%,transparent)}
+.scene{position:relative;background:var(--pane);border-top:1px solid var(--border);display:flex;gap:0;overflow:hidden;flex:1}
+/* Sidebar, as in the prototype */
+.explorer{width:300px;flex-shrink:0;background:var(--side);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:260px}
+.ex-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);font-weight:500}
+.ex-h .r{text-transform:none;letter-spacing:0;font-weight:400}
+.tree{padding:0 6px 8px}
+.row{display:flex;gap:7px;padding:5px 6px;border-radius:5px;align-items:flex-start}
+.row:hover{background:var(--hover)}
+.row small{display:block;font-size:11px;color:var(--muted-foreground)}
+.row.stale{opacity:.6}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--st-off);flex-shrink:0;margin-top:5px;display:inline-block}
+.dot.idle{background:var(--st-idle)}.dot.work{background:var(--st-work)}.dot.perm{background:var(--st-perm)}.dot.ask{background:var(--st-ask)}
+.ex-foot{margin-top:auto;font-size:11.5px;padding:8px 14px;color:var(--muted-foreground)}
+/* The forge strip: one line per machine × forge that cannot be read */
+.fstrip{display:flex;flex-direction:column;gap:6px;padding:0 8px 8px}
+.fl{border:1px solid var(--warn-bd);background:var(--warn-bg);border-radius:7px;padding:7px 9px;font-size:12px;display:flex;flex-direction:column;gap:5px}
+.fl.err{border-color:var(--err-bd);background:var(--err-bg)}
+.fl.off{border-color:var(--border);background:var(--off-bg)}
+.fl .h{display:flex;gap:7px;align-items:flex-start}
+.fl .h .dot{margin-top:5px}
+.fl .cmd{display:flex;gap:6px;align-items:center}
+.fl .cmd code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--background);border:1px solid var(--border);border-radius:5px;padding:2px 6px}
+.fl small{color:var(--muted-foreground);font-size:11px;word-break:break-word}
+.btn{height:26px;padding:0 10px;border-radius:6px;border:1px solid var(--input);font-size:12px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0}
+.btn.sm{height:22px;font-size:11.5px;padding:0 8px}
+.btn.pri{background:var(--primary);border-color:transparent;color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+/* PR tab */
+.page{flex:1;min-width:0;padding:14px 16px 18px;display:flex;flex-direction:column;gap:12px}
+.page h3{margin:0;font-size:15px;font-weight:600}
+.pill{font-size:11px;border-radius:10px;padding:1px 8px;border:1px solid var(--border);color:var(--muted-foreground);white-space:nowrap}
+.blk{border:1px solid var(--border);border-radius:9px;background:var(--pane)}
+.blk-h{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.blk-h b{font-weight:600}.blk-h .sp{flex:1}
+.blk-b{padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+.banner{border:1px solid var(--warn-bd);background:var(--warn-bg);border-radius:8px;padding:8px 11px;font-size:12px;display:flex;gap:8px;align-items:flex-start}
+.banner.off{border-color:var(--border);background:var(--off-bg)}
+.banner .dot{margin-top:5px}
+.check{display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.check div{display:flex;gap:8px;align-items:baseline}
+.check .y{color:var(--st-idle);width:12px;flex-shrink:0}.check .n{color:var(--st-perm);width:12px;flex-shrink:0}
+.confirm{display:flex;flex-direction:column;gap:7px;border:1px solid var(--err-bd);background:var(--err-bg);border-radius:8px;padding:9px 11px;font-size:12.5px}
+.confirm code{color:var(--muted-foreground);word-break:break-all}
+.confirm .go{display:flex;gap:8px;flex-wrap:wrap}
+.confirm .e{color:var(--danger-text)}
+.go{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cin{flex:1;min-width:120px;height:28px;border:1px solid var(--border);border-radius:7px;background:var(--background);color:var(--foreground);padding:0 10px;font:inherit;font-size:12.5px}
+.cin.bad{border-color:var(--err-bd)}
+.ferr{font-size:11.5px;color:var(--danger-text);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pc{display:grid;grid-template-columns:22px auto 1fr;gap:2px 8px;align-items:baseline;font-size:12.5px}
+.pc .av{grid-row:span 2;width:22px;height:22px;border-radius:50%;background:var(--muted);display:grid;place-items:center;font-size:11px}
+.pc div{grid-column:2/4}
+.pnodes{display:flex;gap:10px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
+.pnode{display:flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:8px;background:var(--card);padding:6px 9px;font-size:12px;white-space:nowrap}
+.pnode .dot{margin-top:0}
+.pnode.fail{border-color:var(--err-bd);background:var(--err-bg)}
+.segc{display:inline-flex;border:1px solid var(--input);border-radius:7px;overflow:hidden;flex-wrap:wrap;align-self:flex-start}
+.segc span{padding:4px 10px;font-size:12px;color:var(--muted-foreground);border-right:1px solid var(--input);white-space:nowrap}
+.segc span:last-child{border-right:0}.segc span.on{background:var(--muted);color:var(--foreground)}
+.segc span.dot{padding:0;border:0;display:inline-block;margin:0 6px 0 0;vertical-align:0}
+.prgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.kv2{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:12px}
+.kv2>span:nth-child(odd){color:var(--muted-foreground)}
+/* Session footer chip */
+.sfoot{display:flex;align-items:center;gap:10px;height:28px;padding:0 10px;border-top:1px solid var(--border);background:var(--shell);font-size:11.5px;color:var(--muted-foreground);white-space:nowrap;width:100%}
+.chip{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted-foreground);border-radius:5px;padding:0 4px;display:inline-flex;align-items:center;gap:5px}
+.chip .dot{margin-top:0}
+.chip.unk{border:1px dashed var(--input);padding:0 5px}
+.tip{position:absolute;z-index:4;max-width:320px;background:var(--popover);border:1px solid var(--input);border-radius:6px;padding:6px 9px;font-size:11.5px;box-shadow:var(--shadow-overlay);white-space:normal;color:var(--foreground)}
+.toast{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:5;padding:12px 18px;background:var(--popover);border:1px solid var(--input);box-shadow:var(--shadow-overlay);border-radius:8px;font-size:12px;width:max-content;max-width:calc(100% - 28px)}
+.empty{padding:18px 14px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.empty b{font-weight:500}
+.frame{border:1px dashed var(--input);border-radius:6px;margin:10px auto;overflow:hidden;display:flex}
+section.fiche{grid-column:1/-1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;font-size:12.5px}
+section.fiche h2{font-size:13px;margin:0 0 6px}
+section.fiche table{border-collapse:collapse;width:100%;font-size:12px}
+section.fiche td,section.fiche th{border-top:1px solid var(--border);padding:5px 8px;text-align:left;vertical-align:top}
+section.fiche th{color:var(--muted-foreground);font-weight:500}
+section.fiche td:last-child{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted-foreground)}
+@media (max-width:620px){main{grid-template-columns:1fr;padding:12px}.scene{flex-direction:column}.explorer{width:100%}}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="h1"></h1><span class="sub" id="hsub"></span><span style="flex:1"></span>
+  <span class="seg" id="theme"><button data-v="dark"></button><button data-v="light"></button></span>
+  <span class="seg" id="lang"><button data-v="fr">FR</button><button data-v="en">EN</button></span>
+</header>
+<main id="main"></main>
+<script>
+const logoA = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><g stroke="#d97757" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="3" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="21" transform="rotate(60 12 12)"/><line x1="12" y1="3" x2="12" y2="21" transform="rotate(120 12 12)"/></g></svg>';
+const pop = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6"/></svg>';
+const diffI = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3v12M18 9v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>';
+const dot = c => `<span class="dot ${c||''}"></span>`;
+const pipeDot = s => dot({ok:'idle', run:'work', fail:'perm', wait:'', skip:'', none:''}[s]);
+
+/* The app's texts (vous, as apps/desktop/src/i18n). Keys under ide.prs.* unless noted. */
+const T = {
+  fr:{
+    h1:'MR et PR — états du lot 8b', hsub:'Complément de la maquette IDE v27 · seuls les états absents', theme:['Sombre','Clair'],
+    view:'MR et PR', merged:'Fusionnées', foot:'Suivies : les branches des sessions et des sièges, via gh et glab.',
+    host:{github:'GitHub', gitlab:'GitLab'}, kind:{github:'PR', gitlab:'MR'},
+    st:{draft:'brouillon', open:'ouverte', review:'en revue', merged:'fusionnée', closed:'fermée'},
+    pst:{ok:'réussi', run:'en cours', fail:'échoué', wait:'en attente', skip:'sauté', none:'aucun'},
+    comm:n=>`${n} comm.`,
+    missing:(cli,m,h,k)=>`${cli} n’est pas installé sur ${m} : Ledge ne voit pas les ${k} de ${h}.`,
+    unauth:(cli,m,h)=>`${cli} n’est pas connecté à ${h} sur ${m}. Dans un terminal de ${m} :`,
+    copy:'Copier', copied:'Commande copiée',
+    error:(f,m,since,next)=>`${f} sur ${m} : le relevé échoue depuis ${since}. Nouvel essai à ${next}.`,
+    asOf:t=>`relevé ${t}`,
+    daemonDown:(m,t)=>`Le daemon de ${m} ne répond pas : MR et PR au relevé de ${t}. Les actions reviennent avec lui.`,
+    offline:(m,t)=>`${m} est hors ligne : MR et PR au relevé de ${t}, sans action possible.`,
+    outdated:m=>`Le Ledge de ${m} est trop ancien pour lire les MR et PR. Mettez-le à jour.`,
+    whyOff:m=>`${m} est hors ligne`,
+    empty:'Aucune MR ni PR ouverte', emptyBody:'Ledge suit les branches des sessions et des sièges. Une MR ou PR ouverte depuis l’une d’elles apparaît ici.',
+    emptyUnread:'Ledge ne peut lire aucune forge pour l’instant : voir ci-dessus.',
+    chipUnk:k=>`${k} ?`, chipTip:(cli,h,m,k)=>`${cli} n’est pas connecté à ${h} sur ${m} : Ledge ne sait pas si cette branche a une ${k}.`,
+    overview:'Vue d’ensemble', disc:n=>`Discussion · ${n}`, files:n=>`Modifications · ${n}`, commits:n=>`Commits · ${n}`,
+    openOn:h=>`Ouvrir sur ${h}`, desc:'Description', details:'Détails', author:'Auteur', approvals:'Approbations', pipeline:'Pipeline', rerun:'Relancer',
+    review:'Revue', seeDisc:'Voir la discussion', merge:'Fusionner', cancel:'Annuler', merging:'Fusion…', askFix:n=>`Demander à ${n} de corriger`,
+    toMerge:'Pour fusionner',
+    ok_pipe:'Pipeline réussi', ok_noci:'Pas de CI sur ce dépôt', ok_appr:(g,r)=>`Approuvée (${g}/${r})`, ok_noChanges:'Aucun changement demandé',
+    b:{
+      draft:h=>`C’est un brouillon : marquez-la prête sur ${h}.`, not_open:'Elle est fermée.',
+      approvals:(g,r)=>`Il manque une approbation (${g}/${r}).`, changes_requested:w=>`${w} demande des changements.`,
+      fail:'Le pipeline a échoué.', run:'Le pipeline tourne encore.', wait:'Le pipeline est en attente.', skip:'Le pipeline a été sauté.',
+      not_started:'Aucun pipeline n’a encore démarré sur le dernier commit.'
+    },
+    confirmQ:(r,t)=>`Fusionner ${r} dans ${t} ?`, runsOn:m=>`Ledge lance, sur ${m} :`,
+    stale:sha=>`La branche a bougé depuis votre lecture (nouveau commit ${sha}). Relisez avant de fusionner.`, reload:'Relire',
+    forgeRefused:(f,r)=>`${f} a refusé la fusion : ${r}`,
+    notPosted:r=>`Non publié : ${r}. Votre texte est gardé.`, retry:'Réessayer', reply:'Répondre…  (Entrée)', resolve:'Résoudre',
+    resolveFail:r=>`Fil non résolu : ${r}`, rerunFail:r=>`Relance refusée : ${r}`, mergedToast:r=>`${r} fusionnée`,
+    busy:'une autre action est en cours sur cette MR ou PR', offlineReason:m=>`${m} est hors ligne`,
+    fiche:'Fiche de passation', fh:['État','Où','Affichage (FR)','Clés']
+  },
+  en:{
+    h1:'MRs and PRs — lot 8b states', hsub:'Complement to the IDE mockup v27 · only the missing states', theme:['Dark','Light'],
+    view:'MRs and PRs', merged:'Merged', foot:'Followed: the branches of sessions and seats, through gh and glab.',
+    host:{github:'GitHub', gitlab:'GitLab'}, kind:{github:'PR', gitlab:'MR'},
+    st:{draft:'draft', open:'open', review:'in review', merged:'merged', closed:'closed'},
+    pst:{ok:'passed', run:'running', fail:'failed', wait:'pending', skip:'skipped', none:'none'},
+    comm:n=>`${n} comm.`,
+    missing:(cli,m,h,k)=>`${cli} isn’t installed on ${m}: Ledge can’t see the ${k}s on ${h}.`,
+    unauth:(cli,m,h)=>`${cli} isn’t signed in to ${h} on ${m}. In a ${m} terminal:`,
+    copy:'Copy', copied:'Command copied',
+    error:(f,m,since,next)=>`${f} on ${m}: reading has failed since ${since}. Next try at ${next}.`,
+    asOf:t=>`read ${t}`,
+    daemonDown:(m,t)=>`${m}’s daemon isn’t answering: MRs and PRs as of ${t}. Actions come back with it.`,
+    offline:(m,t)=>`${m} is offline: MRs and PRs as of ${t}, no actions.`,
+    outdated:m=>`${m}’s Ledge is too old to read MRs and PRs. Update it.`,
+    whyOff:m=>`${m} is offline`,
+    empty:'No open MR or PR', emptyBody:'Ledge follows the branches of sessions and seats. An MR or PR opened from one of them shows up here.',
+    emptyUnread:'Ledge can’t read any forge for now: see above.',
+    chipUnk:k=>`${k} ?`, chipTip:(cli,h,m,k)=>`${cli} isn’t signed in to ${h} on ${m}: Ledge can’t tell whether this branch has a ${k}.`,
+    overview:'Overview', disc:n=>`Discussion · ${n}`, files:n=>`Changes · ${n}`, commits:n=>`Commits · ${n}`,
+    openOn:h=>`Open on ${h}`, desc:'Description', details:'Details', author:'Author', approvals:'Approvals', pipeline:'Pipeline', rerun:'Rerun',
+    review:'Review', seeDisc:'See the discussion', merge:'Merge', cancel:'Cancel', merging:'Merging…', askFix:n=>`Ask ${n} to fix it`,
+    toMerge:'To merge',
+    ok_pipe:'Pipeline passed', ok_noci:'No CI on this repository', ok_appr:(g,r)=>`Approved (${g}/${r})`, ok_noChanges:'No changes requested',
+    b:{
+      draft:h=>`It’s a draft: mark it ready on ${h}.`, not_open:'It’s closed.',
+      approvals:(g,r)=>`An approval is missing (${g}/${r}).`, changes_requested:w=>`${w} requested changes.`,
+      fail:'The pipeline failed.', run:'The pipeline is still running.', wait:'The pipeline is pending.', skip:'The pipeline was skipped.',
+      not_started:'No pipeline has started on the latest commit yet.'
+    },
+    confirmQ:(r,t)=>`Merge ${r} into ${t}?`, runsOn:m=>`Ledge runs, on ${m}:`,
+    stale:sha=>`The branch moved since you read it (new commit ${sha}). Read it again before merging.`, reload:'Reload',
+    forgeRefused:(f,r)=>`${f} refused the merge: ${r}`,
+    notPosted:r=>`Not posted: ${r}. Your text is kept.`, retry:'Retry', reply:'Reply…  (Enter)', resolve:'Resolve',
+    resolveFail:r=>`Thread not resolved: ${r}`, rerunFail:r=>`Rerun refused: ${r}`, mergedToast:r=>`${r} merged`,
+    busy:'another action is running on this MR or PR', offlineReason:m=>`${m} is offline`,
+    fiche:'Handoff sheet', fh:['State','Where','Display (EN)','Keys']
+  }
+};
+
+let lang = 'fr', theme = 'dark';
+try { lang = localStorage.getItem('prs-lang') || lang; theme = localStorage.getItem('prs-theme') || theme; } catch(e) {}
+const q = new URLSearchParams(location.search); if (q.get('theme')) theme = q.get('theme'); if (q.get('lang')) lang = q.get('lang');
+
+/* Sample requests */
+const P = {
+  p226:{forge:'github', ref:'#226', title:'Coque IDE : WorkspaceShell', repo:'ledge', st:'draft', pipe:'run', agent:'Pim', n:0, m:'WSL'},
+  p222:{forge:'github', ref:'#222', title:'Terminal de siège : capture et copie', repo:'ledge', st:'review', pipe:'ok', agent:'dev-front', n:1, m:'WSL'},
+  p225:{forge:'github', ref:'#225', title:'layout.ts : sérialiser les dispositions', repo:'ledge', st:'open', pipe:'ok', agent:'dev-back', n:0, m:'WSL'},
+  p41:{forge:'gitlab', ref:'!41', title:'Worker : relance sur délai S3', repo:'synapse', st:'open', pipe:'fail', agent:'Tom', n:0, m:'srv-build'},
+  p219:{forge:'github', ref:'#219', title:'Fil : rendu des sous-agents', repo:'ledge', st:'merged', pipe:'ok', agent:'Ida', n:0, m:'WSL'},
+};
+const row = (t, p, stale) => `<div class="row ${stale?'stale':''}">${pipeDot(p.pipe)}<span style="min-width:0;flex:1"><b>${p.ref}</b> ${p.title}<small>${t.host[p.forge]} · ${p.repo} · ${t.st[p.st]} · ${p.agent} · pipeline ${t.pst[p.pipe]} · ${t.comm(p.n)}</small></span></div>`;
+const side = (t, {strip='', rows=null, merged=true, right=null, stale=false, empty=''}={}) => {
+  const rs = rows || [P.p226, P.p222, P.p225, P.p41];
+  return `<aside class="explorer"><div class="ex-h"><span>${t.view}</span><span class="r">${right || 'GitHub · GitLab'}</span></div>
+    ${strip ? `<div class="fstrip">${strip}</div>` : ''}
+    ${empty || `<div class="tree">${rs.map(p => row(t, p, stale && (stale===true || stale===p.m))).join('')}</div>`}
+    ${merged && !empty ? `<div class="ex-h"><span>${t.merged}</span></div><div class="tree">${row(t, P.p219, stale===true)}</div>` : ''}
+    <div class="ex-foot">${t.foot}</div></aside>`;
+};
+const fl = (cls, dotc, text, extra='') => `<div class="fl ${cls}"><div class="h">${dot(dotc)}<span>${text}</span></div>${extra}</div>`;
+const cmd = (t, c) => `<div class="cmd"><code>${c}</code><button class="btn sm">${t.copy}</button></div>`;
+
+/* A PR tab (overview), with hooks for the review block and a banner */
+function prTab(t, p, {banner='', review='', actions=true, pipeNodes=null, offM=''}={}){
+  const dis = actions ? '' : ` disabled title="${t.whyOff(offM)}"`;
+  const nodes = pipeNodes || [['lint','ok','0:41'],['typecheck','ok','1:12'],['test', p.pipe==='fail'?'fail':p.pipe==='run'?'run':'ok', p.pipe==='run'?'':'2:47']];
+  return `<div class="page">
+    ${banner}
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="pill">${t.host[p.forge]} · ${t.kind[p.forge]}</span><h3>${p.ref} ${p.title}</h3><span class="pill">${t.st[p.st]}</span><span style="flex:1"></span><button class="btn">${t.openOn(t.host[p.forge])} ${pop}</button></div>
+    <span class="mut mono" style="font-size:11.5px">${p.repo} · feat/layout-225 → main · ${p.agent}</span>
+    <span class="segc"><span class="on">${pipeDot(p.pipe)} ${t.overview}</span><span>${t.disc(3)}</span><span>${t.files(4)}</span><span>${t.commits(5)}</span></span>
+    <div class="blk"><div class="blk-h">${pipeDot(p.pipe)}<b>${t.pipeline}</b><span class="pill">${t.pst[p.pipe]}</span><span class="sp"></span><button class="btn"${dis}>${t.rerun}</button></div>
+      <div class="blk-b"><div class="pnodes">${nodes.map(n=>`<span class="pnode ${n[1]==='fail'?'fail':''}">${pipeDot(n[1])}${n[0]}<span class="mono mut" style="font-size:10.5px">${n[2]}</span></span>`).join('')}</div>
+      ${p.pipe==='fail' ? `<div class="go"><button class="btn pri"${dis}>${t.askFix(p.agent)}</button></div>` : ''}</div></div>
+    ${review}
+  </div>`;
+}
+const reviewBlk = (t, {check='', mergeOn=false, confirm='', dis=''}={}) => `<div class="blk"><div class="blk-h"><b>${t.review}</b><span class="mut" style="font-size:12px">1/1 · 0</span><span class="sp"></span><button class="btn">${t.seeDisc}</button><button class="btn ${mergeOn?'pri':''}" ${mergeOn&&!dis?'':'disabled'} ${dis}>${t.merge}</button></div>
+  <div class="blk-b">${check}${confirm}</div></div>`;
+const checklist = (t, items) => `<div class="check"><span class="mut" style="font-size:11.5px">${t.toMerge}</span>${items.map(([ok, txt]) => `<div><span class="${ok?'y':'n'}">${ok?'✓':'✕'}</span><span>${txt}</span></div>`).join('')}</div>`;
+const confirmBox = (t, p, {err='', busy=false, m='WSL'}={}) => `<div class="confirm"><b>${t.confirmQ(p.ref, 'main')}</b><span class="mut" style="font-size:12px">${t.runsOn(m)}</span><code>gh pr merge 225 --squash --match-head-commit 3f9c2ab</code>${err?`<span class="e">${err}</span>`:''}<div class="go">${err && err.includes('3f9')||err.includes('a71')?`<button class="btn">${t.reload}</button>`:`<button class="btn pri" ${busy?'disabled':''}>${busy?t.merging:t.merge}</button>`}<button class="btn">${t.cancel}</button></div></div>`;
+const banner = (cls, text) => `<div class="banner ${cls}">${dot(cls==='off'?'':'ask')}<span>${text}</span></div>`;
+
+function cards(t){
+  const gh = 'gh', gl = 'glab', ghH = 'github.com', glH = 'gitlab.corp.lan';
+  const C = [];
+  // 1. CLI missing / not signed in
+  C.push({title:'gh / glab absent ou non connecté · vue MR et PR', tag:'new', wide:false,
+    why:'Une ligne par <b>machine × forge</b> qui ne peut pas être lue, en tête de la vue, au-dessus des MR et PR qu’on voit quand même. « Non connecté » donne la commande exacte à lancer sur cette machine, avec <b>Copier</b> (toast « Commande copiée »). Ledge ne lance pas la connexion lui-même : elle demande un navigateur ou un jeton, sur la machine du dépôt.',
+    keys:'ide.prs.forge.missing(cli, machine, host, kind) · ide.prs.forge.unauth(cli, machine, host) · ide.prs.copy · ide.prs.copied',
+    scene: side(t, {strip: fl('', 'ask', t.unauth(gl, 'srv-build', glH), cmd(t, `glab auth login --hostname ${glH}`)) + fl('', 'ask', t.missing(gh, 'srv-build', ghH, t.kind.github)), rows:[P.p226,P.p222,P.p225]})});
+  // 2. Session chip
+  C.push({title:'Puce de la session sous la réponse', tag:'q', wide:false,
+    why:'Avec une PR, la puce reste celle de la v27 (pastille du pipeline + numéro). Quand la forge de son dépôt <b>ne peut pas être lue</b> sur sa machine, la puce devient <b>« PR ? »</b> en pointillé ; le survol dit pourquoi, le clic ouvre la vue MR et PR. Sans PR et forge lisible : pas de puce, comme aujourd’hui. <b>Dépend du daemon</b> : il doit dire quelle forge vise le dépôt de la session (question pour dev-back).',
+    keys:'ide.prs.chipUnknown(kind) · ide.prs.chipTip(cli, host, machine, kind)',
+    scene: `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;min-height:200px;position:relative">
+      <div class="tip" style="left:200px;bottom:70px">${t.chipTip(gh, ghH, 'WSL', t.kind.github)}</div>
+      <div class="sfoot">${logoA}<span style="color:var(--foreground)">Opus 5.5</span><span class="mono">feat/term-copy</span><span class="mono">ledge</span><span class="chip unk" style="color:var(--foreground)">${t.chipUnk('PR')}</span><span style="flex:1"></span></div>
+      <div class="sfoot">${logoA}<span style="color:var(--foreground)">Opus 5.5</span><span class="mono">feat/layout-225</span><span class="mono">ledge</span><span class="chip">${dot('idle')}#225</span><span style="flex:1"></span><span class="mut">v27</span></div></div>`});
+  // 3. Forge error / backoff
+  C.push({title:'Forge en erreur, relevé en recul', tag:'new',
+    why:'Le dernier relevé reste affiché ; l’en-tête dit son heure. La ligne d’erreur donne l’heure du premier échec, le prochain essai (le recul de 2 à 10 min du daemon) et, en petit, le message de la CLI (déjà caviardé par le daemon). Pas de bouton « Réessayer » : le protocole n’en a pas. Les actions restent possibles, elles ne dépendent pas du relevé.',
+    keys:'ide.prs.forge.error(forge, machine, since, next) · ide.prs.asOf(time)',
+    scene: side(t, {right:t.asOf('10:42'), strip: fl('err', 'perm', t.error('GitHub', 'WSL', '10:42', '10:50'), `<small>HTTP 502: Bad Gateway (api.github.com)</small>`), rows:[P.p226,P.p222,P.p225,P.p41]})});
+  // 4. Daemon down / offline / outdated — sidebar
+  C.push({title:'Daemon coupé, machine hors ligne ou trop ancienne · vue', tag:'new',
+    why:'<b>Hors ligne</b> ou <b>daemon coupé</b> : les MR et PR de cette machine restent, estompées, telles qu’au dernier relevé. <b>Trop ancienne</b> : rien n’a jamais été lu, une seule ligne le dit. Les MR et PR des autres machines sont normales.',
+    keys:'ide.prs.machine.daemonDown(machine, time) · ide.prs.machine.offline(machine, time) · ide.prs.machine.outdated(machine)',
+    scene: side(t, {strip: fl('off', '', t.offline('srv-build', '10:31')) + fl('off', '', t.outdated('build-02')), rows:[P.p226,P.p222,P.p225,P.p41], stale:'srv-build'})});
+  // 5. Same, in the PR tab
+  C.push({title:'… et dans l’onglet MR ou PR', tag:'new', wide:true,
+    why:'Un bandeau en tête de l’onglet ; <b>toutes les actions sont désactivées</b> (Relancer, Fusionner, Demander à X de corriger, Répondre, Résoudre, commenter), avec la raison en infobulle. « Ouvrir sur GitLab » reste actif : c’est le navigateur. Le daemon local coupé : même chose pour toutes les MR et PR, avec « Le daemon de WSL ne répond pas… ».',
+    keys:'ide.prs.machine.offline · ide.prs.machine.daemonDown · ide.prs.disabledWhy(machine)',
+    scene: prTab(t, P.p41, {banner: banner('off', t.offline('srv-build','10:31')), actions:false, offM:'srv-build', review: reviewBlk(t, {dis:`title="${t.whyOff('srv-build')}"`, check: checklist(t, [[false, t.b.fail],[true, t.ok_appr(1,1)]])})})});
+  // 6. Merge blocked: checklist
+  C.push({title:'Fusion refusée · la liste des conditions', tag:'q', wide:true,
+    why:'<b>Recommandé : le bouton Fusionner reste visible, désactivé</b>, et le bloc Revue liste les conditions : ✓ remplie, ✕ manquante, chacune en une phrase. Toutes les raisons à la fois (le daemon les envoie toutes). L’exemple montre chaque raison possible ; en vrai, seules les vraies apparaissent. Avec un dépôt sans CI : « Pas de CI sur ce dépôt » en ✓. Un pipeline pas encore démarré sur le dernier commit n’est jamais fusionnable (décision de jde, 09:22Z).',
+    keys:'ide.prs.toMerge · ide.prs.ok.{pipeline, noCi, approved(g,r), noChanges} · ide.prs.blocker.{draft(host), not_open, approvals(g,r), changes_requested(who), pipeline.{fail, run, wait, skip, not_started}}',
+    scene: prTab(t, {...P.p225, st:'draft', pipe:'fail'}, {review: reviewBlk(t, {check: checklist(t, [[false, t.b.draft('GitHub')],[false, t.b.approvals(0,1)],[false, t.b.changes_requested('reviewer')],[false, t.b.fail]]) + `<div class="check" style="margin-top:6px"><span class="mut" style="font-size:11.5px">${lang==='fr'?'Les autres raisons, mêmes formes :':'The other reasons, same form:'}</span>${[t.b.not_open, t.b.run, t.b.wait, t.b.skip, t.b.not_started].map(x=>`<div><span class="n">✕</span><span>${x}</span></div>`).join('')}</div>`})})});
+  // 7. Merge allowed: confirmation with the exact command
+  C.push({title:'Fusion possible · confirmation avec la commande', tag:'new', wide:false,
+    why:'Toutes les conditions sont ✓ : Fusionner devient le bouton principal. Le clic ouvre la <b>confirmation sur place</b> (le motif d’OpenRig) avec la machine et la <b>commande exacte</b> (`mergeCommand` du daemon). Pendant l’envoi : « Fusion… ». Réussite : toast « #225 fusionnée », la PR passe dans Fusionnées. Même confirmation depuis la page À toi.',
+    keys:'ide.prs.merge · ide.prs.confirm(ref, target) · ide.prs.runsOn(machine) · ide.prs.merging · ide.prs.merged(ref)',
+    scene: `<div class="page">${reviewBlk(t, {mergeOn:true, check: checklist(t, [[true, t.ok_pipe],[true, t.ok_appr(1,1)],[true, t.ok_noChanges]]), confirm: confirmBox(t, P.p225)})}</div>`});
+  // 8. Merge refused at the last moment
+  C.push({title:'Fusion refusée au dernier moment', tag:'new', wide:false,
+    why:'Dans la même confirmation. <b>stale</b> : la tête a bougé entre la lecture et le clic ; le bouton devient « Relire » (recharge le détail, la liste des conditions se met à jour). <b>Refus de la forge</b> : son message tel quel, la confirmation reste ouverte pour réessayer ou annuler.',
+    keys:'ide.prs.stale(sha) · ide.prs.reload · ide.prs.forgeRefused(forge, reason)',
+    scene: `<div class="page">${confirmBox(t, P.p225, {err:t.stale('a71e0d4')})}${confirmBox(t, P.p225, {err:t.forgeRefused('GitHub', 'Required status check "e2e" is expected.')}).replace(t.reload, t.merge)}</div>`});
+  // 9. Action failures
+  C.push({title:'Échec d’une action', tag:'new', wide:true,
+    why:'<b>Commenter, répondre</b> : l’erreur sous le champ, le texte reste dedans, « Réessayer ». <b>Résoudre, relancer</b> : un toast simple (6 s) avec la raison. La raison est le message de la forge, ou une raison connue de Ledge (« srv-build est hors ligne », « une autre action est en cours sur cette MR ou PR »).',
+    keys:'ide.prs.fail.notPosted(reason) · ide.prs.retry · ide.prs.fail.resolve(reason) · ide.prs.fail.rerun(reason) · ide.prs.reason.{busy, offline(machine)}',
+    scene: `<div class="page" style="padding-bottom:70px"><div class="blk"><div class="blk-h"><b>${t.disc(3).split(' · ')[0]}</b></div><div class="blk-b">
+      <div class="pc"><span class="av">R</span><b>reviewer</b><span class="mut" style="font-size:11px">10:12</span><div>Le WebglAddon n’est pas libéré quand l’onglet se ferme (ligne 88).</div></div>
+      <div class="go"><input class="cin bad" value="${lang==='fr'?'Corrigé dans 3f9c2ab, merci.':'Fixed in 3f9c2ab, thanks.'}"><button class="btn">${t.resolve}</button></div>
+      <div class="ferr">${t.notPosted('GraphQL: Resource not accessible by integration')}<button class="btn sm">${t.retry}</button></div></div></div>
+      <div class="toast">${t.rerunFail(t.busy)}</div></div>`});
+  // 10. Empty
+  C.push({title:'Aucune MR ni PR', tag:'new', wide:true,
+    why:'La vue vide explique ce que Ledge suit. Pas de section « Fusionnées » vide. Le compteur MR/PR de la barre d’état disparaît à zéro. Si aucune forge n’est lisible, la ligne de la forge reste en tête et le texte change.',
+    keys:'ide.prs.empty.title · ide.prs.empty.body · ide.prs.empty.unread',
+    scene: side(t, {empty:`<div class="empty"><b>${t.empty}</b><span class="mut">${t.emptyBody}</span></div>`}) + side(t, {strip: fl('', 'ask', t.unauth('gh','WSL','github.com'), cmd(t,'gh auth login --hostname github.com')), empty:`<div class="empty"><b>${t.empty}</b><span class="mut">${t.emptyUnread}</span></div>`})});
+  // 11. Under 1280 px
+  C.push({title:'Sous 1280 px', tag:'new', wide:true,
+    why:'Fenêtre de 1100 px, barre latérale et panneau de droite ouverts : l’onglet a ~500 px. Description et Détails passent l’un sous l’autre (grille auto-fit, minimum 260 px), les quatre vues passent à la ligne, les boutons de Revue aussi, le graphe du pipeline défile à l’horizontale. Rien n’est masqué. La vue MR et PR (300 px) ne change pas ; elle se replie avec la barre latérale sous 150 px comme les autres vues.',
+    keys:'— (mise en page seulement)',
+    scene: `<div class="frame" style="width:520px">${prTab(t, P.p41, {pipeNodes:[['build','ok','2:02'],['test','fail','1:31'],['deploy:staging','skip','']], review: `<div class="prgrid"><div class="blk"><div class="blk-h"><b>${t.desc}</b></div><div class="blk-b">${lang==='fr'?'Relance après trois délais S3.':'Retry after three S3 timeouts.'}</div></div><div class="blk"><div class="blk-h"><b>${t.details}</b></div><div class="blk-b"><div class="kv2"><span>${t.author}</span><span>Tom</span><span>${t.approvals}</span><span>1/1</span></div></div></div></div>` + reviewBlk(t, {check: checklist(t, [[false, t.b.fail],[true, t.ok_appr(1,1)]])})})}</div>`});
+  return C;
+}
+
+function fiche(t){
+  const fr = T.fr, L = T[lang];
+  const rows = [
+    ['gh / glab absent', 'vue MR et PR, en tête', L.missing('gh','srv-build','github.com', L.kind.github), 'ide.prs.forge.missing'],
+    ['gh / glab non connecté', 'vue MR et PR, en tête', L.unauth('glab','srv-build','gitlab.corp.lan') + ' [' + L.copy + ']', 'ide.prs.forge.unauth, ide.prs.copy, ide.prs.copied'],
+    ['Forge illisible pour une session', 'puce sous la réponse', L.chipUnk('PR') + ' — ' + L.chipTip('gh','github.com','WSL', L.kind.github), 'ide.prs.chipUnknown, ide.prs.chipTip'],
+    ['Forge en erreur, recul', 'vue, en tête', L.error('GitHub','WSL','10:42','10:50') + ' · ' + L.asOf('10:42'), 'ide.prs.forge.error, ide.prs.asOf'],
+    ['Machine hors ligne', 'vue + onglet (bandeau), actions désactivées', L.offline('srv-build','10:31'), 'ide.prs.machine.offline, ide.prs.disabledWhy'],
+    ['Daemon coupé', 'vue + onglet (bandeau), actions désactivées', L.daemonDown('WSL','10:42'), 'ide.prs.machine.daemonDown'],
+    ['Machine trop ancienne', 'vue, en tête', L.outdated('build-02'), 'ide.prs.machine.outdated'],
+    ['Fusion : conditions', 'onglet › Revue', [L.b.draft('GitHub'), L.b.not_open, L.b.approvals(0,1), L.b.changes_requested('reviewer'), L.b.fail, L.b.run, L.b.wait, L.b.skip, L.b.not_started].join(' / ') + ' · ✓ ' + [L.ok_pipe, L.ok_noci, L.ok_appr(1,1), L.ok_noChanges].join(' / '), 'ide.prs.toMerge, ide.prs.blocker.*, ide.prs.ok.*'],
+    ['Fusion : confirmation', 'onglet › Revue, page À toi', L.confirmQ('#225','main') + ' ' + L.runsOn('WSL') + ' <code>gh pr merge 225 --squash --match-head-commit 3f9c2ab</code> [' + L.merge + '] [' + L.cancel + '] · ' + L.merging + ' · ' + L.mergedToast('#225'), 'ide.prs.confirm, ide.prs.runsOn, ide.prs.merging, ide.prs.merged'],
+    ['Fusion : tête qui a bougé', 'confirmation', L.stale('a71e0d4') + ' [' + L.reload + ']', 'ide.prs.stale, ide.prs.reload'],
+    ['Fusion : refus de la forge', 'confirmation', L.forgeRefused('GitHub','{message}'), 'ide.prs.forgeRefused'],
+    ['Commentaire, réponse non publiés', 'sous le champ', L.notPosted('{raison}') + ' [' + L.retry + ']', 'ide.prs.fail.notPosted, ide.prs.retry'],
+    ['Résoudre, relancer refusés', 'toast', L.resolveFail('{raison}') + ' / ' + L.rerunFail('{raison}'), 'ide.prs.fail.resolve, ide.prs.fail.rerun'],
+    ['Raisons connues de Ledge', 'dans les messages ci-dessus', L.busy + ' / ' + L.offlineReason('srv-build'), 'ide.prs.reason.busy, ide.prs.reason.offline'],
+    ['Vide', 'vue MR et PR', L.empty + ' — ' + L.emptyBody + ' / ' + L.emptyUnread, 'ide.prs.empty.*'],
+    ['Sous 1280 px', 'onglet', '—', '—'],
+  ];
+  return `<section class="fiche"><h2>${L.fiche}</h2><table><tr>${L.fh.map(h=>`<th>${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table></section>`;
+}
+
+function render(){
+  document.documentElement.dataset.theme = theme; document.documentElement.lang = lang;
+  const t = T[lang];
+  document.getElementById('h1').textContent = t.h1; document.getElementById('hsub').textContent = t.hsub;
+  const th = document.querySelectorAll('#theme button'); th[0].textContent = t.theme[0]; th[1].textContent = t.theme[1];
+  th.forEach(b=>b.classList.toggle('on', b.dataset.v===theme));
+  document.querySelectorAll('#lang button').forEach(b=>b.classList.toggle('on', b.dataset.v===lang));
+  document.getElementById('main').innerHTML = cards(t).map((c,i) => `<article class="card ${c.wide?'wide':''}" id="s${i+1}"><h2><span class="n">${i+1}</span>${c.title}<span class="tag ${c.tag}">${c.tag==='q'?'question pour jde':'nouveau'}</span></h2><div class="why">${c.why}</div><div class="keys">${c.keys}</div><div class="scene">${c.scene}</div></article>`).join('') + fiche(t);
+}
+document.getElementById('theme').onclick = e => { const v = e.target.dataset.v; if (!v) return; theme = v; try{localStorage.setItem('prs-theme',v)}catch(_){} render(); };
+document.getElementById('lang').onclick = e => { const v = e.target.dataset.v; if (!v) return; lang = v; try{localStorage.setItem('prs-lang',v)}catch(_){} render(); };
+render();
+</script>
+</body>
+</html>

@@ -61,6 +61,8 @@ export function Sidebar(p: {
   /** The harnesses' usage alerts (docs/mockups/ledge-harness-usage.html), first in « À toi »; « Compris » acks one. */
   usageAlerts?: readonly UsageAlert[];
   onAckUsage?(id: string): void;
+  /** The IDE's « À toi » view: « Page » opens the page « À toi ». */
+  onAtoiPage?(): void;
   /** The IDE's sidebar: only this view's content, without Ledge's entry, the views, the grouping or the foot. */
   section?: SideView;
 }): JSX.Element {
@@ -185,6 +187,14 @@ export function Sidebar(p: {
         <div className="ide-ex-h">
           {/* No « + N » beside it (the user, 2026-11-09): N still opens Nouvelle session. */}
           <span>{t.side.projects}</span>
+        </div>
+      )}
+      {section === 'atoi' && (
+        <div className="ide-ex-h">
+          <span>{t.side.yours}</span>
+          {/* Mockup explorer `atoi`: the keys, and « Page », the page « À toi » (a tab until the IDE has its own windows). */}
+          <span className="ide-ex-tools"><Kbd>Y / N</Kbd>
+            {p.onAtoiPage && <button type="button" className="ide-ex-btn" title={t.atoiPage.pageTip} onClick={p.onAtoiPage}>{t.atoiPage.pageButton}</button>}</span>
         </div>
       )}
       <div className={cls('st-scroll', section === 'atoi' && 'st-scroll-atoi')}>

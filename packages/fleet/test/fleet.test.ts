@@ -385,8 +385,11 @@ describe('multi-machine connections', () => {
       server.emit({ type: 'forge.state', prs: [pr(41, ['same', 'other'], { forge: 'gitlab', host: 'gitlab.com', ref: '!41' })], forges: [{ forge: 'gitlab', host: 'gitlab.com', status: 'missing', message: 'glab is not installed', at: AT }] });
       expect(client.fleet!.prs().map(p => [p.ref, p.machineId, p.sessions])).toEqual([['#226', 'local', ['local:same']], ['!41', 'server', ['server:same', 'server:other']]]);
       expect(client.fleet!.forges().map(f => [f.machineId, f.status])).toEqual([['local', 'ok'], ['server', 'missing']]);
+      expect(client.fleet!.followed()).toEqual([]);
       expect(changes).toBe(2);
       expect(got.filter(m => m.type === 'forge.state').map(m => m.type === 'forge.state' && m.machineId)).toEqual(['local', 'server']);
+      server.emit({ type: 'forge.state', prs: [], forges: [], followed: [{ session: 'same', forge: 'gitlab', host: 'gitlab.com', repo: 'synapse/synapse' }] });
+      expect(client.fleet!.followed()).toEqual([{ session: 'server:same', forge: 'gitlab', host: 'gitlab.com', repo: 'synapse/synapse', machineId: 'server' }]);
     });
     it('a machine that falls takes its requests out and rejects its request in flight « hors ligne »', async () => {
       const { client, server } = forgeSetup();

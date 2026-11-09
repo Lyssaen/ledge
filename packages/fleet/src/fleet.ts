@@ -2,7 +2,7 @@ import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESS
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
-import type { FleetForgeStatus, FleetPullRequest } from './forge';
+import type { FleetFollowedSession, FleetForgeStatus, FleetPullRequest } from './forge';
 
 type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 type Peer = { config: MachineConfig; client: DaemonClient; status: DaemonStatus; fresh: boolean; snapshot: Snapshot | null; previews: Map<string, string[]>;
@@ -182,7 +182,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       else emit(a.kind === 'detail' ? { type: 'forge.detail.reply', requestId, ok: false, message } : { type: 'forge.act.reply', requestId, ok: false, message });
     }
   };
-  const qualifyPrs = (machine: string, m: ForgeStateMessage): ForgeStateMessage => ({ ...m, machineId: machine, prs: m.prs.map(p => ({ ...p, sessions: p.sessions.map(id => qualify(machine, id)) })) });
+  const qualifyPrs = (machine: string, m: ForgeStateMessage): ForgeStateMessage => ({ ...m, machineId: machine, prs: m.prs.map(p => ({ ...p, sessions: p.sessions.map(id => qualify(machine, id)) })),
+    ...(m.followed ? { followed: m.followed.map(f => ({ ...f, session: qualify(machine, f.session) })) } : {}) });
   /** What a machine missed while it was away: the threshold set and the « Compris » given then, sent once it speaks again. */
   // Kept across the front's restarts (review of 975e508b): a threshold a machine has not received yet, by machine; and every
   // « Compris » given (an alert's id carries its window's reset, so an id never comes back after it): any machine that shows
@@ -851,6 +852,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       usage: () => usage,
       prs: () => [...forgeStates].flatMap(([machine, st]) => st.prs.map(p => ({ ...p, machineId: machine }) as FleetPullRequest)),
       forges: () => [...forgeStates].flatMap(([machine, st]) => st.forges.map(f => ({ ...f, machineId: machine }) as FleetForgeStatus)),
+      followed: () => [...forgeStates].flatMap(([machine, st]) => (st.followed ?? []).map(f => ({ ...f, machineId: machine }) as FleetFollowedSession)),
       onForge(cb) { forgeListeners.add(cb); return () => { forgeListeners.delete(cb); }; },
       prDetail(prId, machineId, opts = {}) {
         return forgeAsk<PrDetail>({ type: 'forge.detail', requestId: `forge-${Date.now()}-${++forgeSeq}`, prId, machineId, ...(opts.log ? { log: opts.log } : {}) });

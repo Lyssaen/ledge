@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PullRequest } from '@ledge/protocol';
-import { mergedPrs, openPrs, prOfSession, prsFailing, prsWaitingForYou } from '../src/forge';
+import { mergedPrs, openPrs, prOfSession, prsFailing, prsWaitingForYou, sessionForge, type FleetFollowedSession, type FleetForgeStatus } from '../src/forge';
 
 const pr = (n: number, extra: Partial<PullRequest> = {}): PullRequest => ({ id: `github.com/o/r#${n}`, forge: 'github', host: 'github.com', repo: 'o/r', number: n, ref: `#${n}`,
   url: `https://github.com/o/r/pull/${n}`, title: 't', state: 'open', branch: `b${n}`, target: 'main', headSha: 'a'.repeat(40), pipeline: 'ok', approvals: { given: 1 },
@@ -28,5 +28,20 @@ describe('the view of the requests', () => {
     expect(prOfSession(MOCKUP, 'local:ida')?.number).toBe(9);
     expect(prOfSession([pr(9, { state: 'merged', sessions: ['s'] }), pr(4, { sessions: ['s'] })], 's')?.number).toBe(4);
     expect(prOfSession(MOCKUP, 'nobody')).toBeUndefined();
+  });
+});
+
+// Lot 8b, state 2: the chip « PR ? » for a session followed on a forge that cannot be read on its machine.
+describe('sessionForge', () => {
+  const st = (machineId: string, status: FleetForgeStatus['status'], host = 'github.com'): FleetForgeStatus => ({ forge: 'github', host, status, at: '2026-11-08T10:00:00.000Z', machineId });
+  const fol = (session: string, machineId: string, host = 'github.com'): FleetFollowedSession => ({ session, forge: 'github', host, repo: 'o/r', machineId });
+  it('gives the unreadable forge of a followed session without request, nothing otherwise', () => {
+    const forges = [st('local', 'unauthenticated'), st('server', 'ok'), st('local', 'ok', 'gitlab.com')];
+    const followed = [fol('local:a', 'local'), fol('server:b', 'server'), fol('local:c', 'local', 'gitlab.com'), fol('local:d', 'local')];
+    expect(sessionForge([], forges, followed, 'local:a')).toMatchObject({ status: 'unauthenticated', host: 'github.com', machineId: 'local' });
+    expect(sessionForge([], forges, followed, 'server:b')).toBeUndefined();
+    expect(sessionForge([], forges, followed, 'local:c')).toBeUndefined();
+    expect(sessionForge([pr(4, { sessions: ['local:d'] })], forges, followed, 'local:d')).toBeUndefined();
+    expect(sessionForge([], forges, followed, 'local:nobody')).toBeUndefined();
   });
 });

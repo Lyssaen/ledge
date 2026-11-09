@@ -1567,5 +1567,83 @@ export const fr = {
     resumeHint: 'Les sessions qui avaient un onglet ouvert à la fermeture de Ledge reprennent dans leur onglet. Une session que tu as terminée ne repart pas.',
     resumeOff: 'Reprise des sessions au démarrage désactivée',
     resumed: (n: number) => plural(n, `${n} session reprise`, `${n} sessions reprises`)
+  },
+  // The page « À toi » (D3, docs/ide-workspace-plan.md 4.1 point 3; mockup atoiPage).
+  atoiPage: {
+    title: 'À toi', sub: 'Ce qui attend ta décision ou ton regard, toutes sessions et tous rigs confondus. Le chat de Ledge reste dans le panneau de droite.',
+    requests: 'Demandes', keysBefore: 'ou ', keysAfter: ' sur la session active', open: 'Ouvrir',
+    allowCommand: 'Autoriser une commande', allow: 'Autoriser', deny: 'Refuser', noRequest: 'Rien ne t’attend.',
+    prsSub: 'pipelines échoués, prêtes à fusionner', prFailed: 'pipeline échoué', prReady: 'pipeline réussi, approuvée', prReadyNoCi: 'sans CI, approuvée', noPr: 'Aucune MR ni PR ne t’attend.',
+    finished: 'Terminé depuis ton passage', noFinished: 'Aucune session n’a fini.',
+    pageButton: 'Page', pageTip: 'La page À toi'
+  },
+  // MR et PR (lot 8b, docs/mockups/ledge-ide-interactive.html : explorer `prs`, prPage, pipeGraph, statusbar).
+  forge: {
+    view: 'MR et PR', hosts: 'GitHub · GitLab', merged: 'Fusionnées',
+    foot: 'Suivies : les branches des sessions et des sièges, via gh et glab. Clic : la MR ou PR dans un onglet.',
+    rowTip: 'Clic : ouvrir · Ctrl+clic : à droite',
+    host: { github: 'GitHub', gitlab: 'GitLab' } as Record<'github' | 'gitlab', string>,
+    kind: { github: 'GitHub · PR', gitlab: 'GitLab · MR' } as Record<'github' | 'gitlab', string>,
+    state: { draft: 'brouillon', open: 'ouverte', review: 'en revue', merged: 'fusionnée', closed: 'fermée' } as Record<'draft' | 'open' | 'review' | 'merged' | 'closed', string>,
+    pipe: { ok: 'réussi', run: 'en cours', fail: 'échoué', wait: 'en attente', skip: 'ignoré', none: 'aucun' } as Record<'ok' | 'run' | 'fail' | 'wait' | 'skip' | 'none', string>,
+    rowMeta: (host: string, repo: string, state: string, agent: string | null, pipe: string, comments: number) =>
+      [host, repo, state, ...(agent ? [agent] : []), `pipeline ${pipe}`, `${comments} comm.`].join(' · '),
+    openOn: (host: string) => `Ouvrir sur ${host}`,
+    tabs: { pipe: "Vue d'ensemble", disc: (n: number) => `Discussion · ${n}`, diff: (n: number) => `Modifications · ${n}`, commits: (n: number) => `Commits · ${n}` },
+    description: 'Description', details: 'Détails', author: 'Auteur', reviewers: 'Relecteurs', labels: 'Étiquettes', issue: 'Ticket', approvals: 'Approbations',
+    reviewer: { approved: 'approuvé', changes: 'changements demandés', pending: 'attendu' } as Record<'approved' | 'changes' | 'pending', string>,
+    pipeline: 'Pipeline', rerun: 'Relancer',
+    askFix: (name: string) => `Demander à ${name} de corriger`, openAgent: (name: string) => `Ouvrir ${name}`,
+    review: 'Revue',
+    reviewSub: (appr: string, open: number) => `${appr} approbation · ${plural(open, `${open} discussion ouverte`, `${open} discussions ouvertes`)}`,
+    seeDiscussion: 'Voir la discussion', merge: 'Fusionner', nothing: 'Rien à traiter.',
+    discussion: 'Discussion',
+    discSub: (open: number, resolved: number) => `${plural(open, `${open} ouvert`, `${open} ouverts`)} · ${plural(resolved, `${resolved} résolu`, `${resolved} résolus`)}`,
+    sendAll: (name: string) => `Tout envoyer à ${name}`, noComment: 'Aucun commentaire.',
+    addComment: 'Ajouter un commentaire…  (Entrée)', replyPh: 'Répondre…  (Entrée)', resolve: 'Résoudre', resolved: '✓ Résolu',
+    line: (n: number) => `ligne ${n}`, fileLine: (file: string, n: number) => `${file} · ligne ${n}`,
+    sendThreadTip: "Envoyer ce commentaire à l'agent de la branche",
+    files: 'Fichiers', fileCount: (n: number) => plural(n, `${n} fichier`, `${n} fichiers`), noChange: 'Aucune modification.',
+    step: (n: number) => `étape ${n}`,
+    // What goes to the agent (mockup prfix, prnotes, prask).
+    fixText: (ref: string, job: string) => `Le pipeline de ${ref} échoue sur « ${job} ». Lis le job, corrige et pousse.`,
+    notesText: (ref: string, notes: readonly string[]) => `Commentaires sur ${ref} : ${notes.join(' / ')}`,
+    note: (who: string, where: string | null, text: string) => `${who}${where ? ` (${where})` : ''} : ${text}`,
+    threadText: (ref: string, who: string, where: string | null, text: string) => `${ref} · ${who}${where ? ` sur ${where}` : ''} : ${text}`,
+    sentTo: (name: string) => `Commentaire envoyé à ${name}`,
+    status: (n: number) => `${n} MR/PR`, statusFail: (n: number) => plural(n, `${n} pipeline échoué`, `${n} pipelines échoués`), statusRun: (n: number) => `${n} en cours`,
+    statusTip: 'MR et PR suivies',
+    loading: 'Chargement…',
+    // The states (docs/mockups/ledge-ide-prs-states.html, validated by jde on 2026-11-09).
+    missing: (cli: string, machine: string, host: string, kind: string) => `${cli} n’est pas installé sur ${machine} : Ledge ne voit pas les ${kind} de ${host}.`,
+    unauth: (cli: string, host: string, machine: string) => `${cli} n’est pas connecté à ${host} sur ${machine}. Dans un terminal de ${machine} :`,
+    copy: 'Copier', copied: 'Commande copiée',
+    error: (forge: string, machine: string, since: string) => `${forge} sur ${machine} : le relevé échoue depuis ${since}.`,
+    retry_at: (time: string) => `Nouvel essai à ${time}.`,
+    chipUnknown: (kind: string) => `${kind} ?`,
+    chipTip: (status: 'missing' | 'unauthenticated' | 'error', cli: string, host: string, machine: string, kind: string) =>
+      `${status === 'missing' ? `${cli} n’est pas installé sur ${machine}` : status === 'unauthenticated' ? `${cli} n’est pas connecté à ${host} sur ${machine}` : `${host} ne se lit pas sur ${machine}`} : Ledge ne sait pas si cette branche a une ${kind}.`,
+    asOf: (time: string) => `relevé ${time}`,
+    offline: (machine: string, time: string) => `${machine} est hors ligne : MR et PR au relevé de ${time}, sans action possible.`,
+    daemonDown: (machine: string, time: string) => `Le daemon de ${machine} ne répond pas : MR et PR au relevé de ${time}. Les actions reviennent avec lui.`,
+    outdated: (machine: string) => `Le Ledge de ${machine} est trop ancien pour lire les MR et PR. Mettez-le à jour.`,
+    toMerge: 'Pour fusionner',
+    ok: { pipeline: 'Pipeline réussi', noCi: 'Pas de CI sur ce dépôt', approved: (g: number, r: number) => `Approuvée (${g}/${r})`, noChanges: 'Aucun changement demandé' },
+    blocker: {
+      draft: (host: string) => `C’est un brouillon : marquez-la prête sur ${host}.`, not_open: 'Elle est fermée.',
+      approvals: (g: number, r: number) => `Il manque une approbation (${g}/${r}).`, changes_requested: (who: string) => `${who} demande des changements.`,
+      pipeline_fail: 'Le pipeline a échoué.', pipeline_run: 'Le pipeline tourne encore.', pipeline_wait: 'Le pipeline est en attente.', pipeline_skip: 'Le pipeline a été sauté.', pipeline_not_started: 'Aucun pipeline n’a encore démarré sur le dernier commit.'
+    },
+    confirm: (ref: string, target: string) => `Fusionner ${ref} dans ${target} ?`, runsOn: (machine: string) => `Ledge lance, sur ${machine} :`,
+    merging: 'Fusion…', mergedToast: (ref: string) => `${ref} fusionnée`, cancel: 'Annuler',
+    stale: (sha: string) => `La branche a bougé depuis votre lecture (nouveau commit ${sha}). Relisez avant de fusionner.`, reload: 'Relire',
+    forgeRefused: (forge: string, reason: string) => `${forge} a refusé la fusion : ${reason}`,
+    notPosted: (reason: string) => `Non publié : ${reason}. Votre texte est gardé.`, retry: 'Réessayer',
+    resolveFailed: (reason: string) => `Fil non résolu : ${reason}`, rerunFailed: (reason: string) => `Relance refusée : ${reason}`,
+    busy: 'une autre action est en cours sur cette MR ou PR', machineOffline: (machine: string) => `${machine} est hors ligne`,
+    emptyTitle: 'Aucune MR ni PR ouverte',
+    emptyBody: 'Ledge suit les branches des sessions et des sièges. Une MR ou PR ouverte depuis l’une d’elles apparaît ici.',
+    emptyUnread: 'Ledge ne peut lire aucune forge pour l’instant : voir ci-dessus.',
+    prKind: { github: 'PR', gitlab: 'MR' } as Record<'github' | 'gitlab', string>
   }
 };
