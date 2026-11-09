@@ -16,6 +16,8 @@ import { useChatCards } from './useChatCards';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
 import { useTaskCards } from './useTaskCards';
+import { HistoryPane, RightTabStrip, TasksPane, type ListState, type RightTabs } from './RightTabs';
+import { taskClosed } from '@ledge/protocol';
 
 export interface ChatPanelProps {
   client: DaemonClient; view: FleetView;
@@ -35,13 +37,18 @@ export interface ChatPanelProps {
   notify(text: string): void;
   /** A project card's proposal, kept by rememberProposal: the app opens the editor on its pid. */
   onProposal(pid: string): void;
+  /** The IDE's right panel (lot 12, docs/mockups/ledge-ide-tasks-history.html): Conversation · Tâches · Historique, as the app keeps them. */
+  tabs?: RightTabs;
 }
+
+/** How long a question reopened from « Historique » stays lit. */
+export const FLASH_MS = 1500;
 
 /** Desktop's Ledge chat, docked on the right (observatory.tsx, `ledge-chat-panel`): the island's ChatView in its docked mode, on
  *  the real fleet. Questions go to the daemon with the default agent (Settings › General); nothing is sent while the local daemon is offline. A name hovered or
  *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island; a project card's « Review the proposal »
  *  opens the project editor prefilled (nothing is created before its button). */
-export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal, tabs }: ChatPanelProps): JSX.Element {
   const { t } = useI18n();
   const copy = useMemo(() => chatCopy(t), [t]);
   const theme = useTheme();
@@ -76,6 +83,36 @@ export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onO
     send({ type: 'chat.ask', qid, text, ...(uploads.length ? { images: uploads } : {}), tool });
     if (withImages) images.clear();
   };
+  // A question asked from elsewhere (« Résumer la journée » of « À toi »): whatever is pending is sent, on mounting too (the
+  // panel was hidden), then the app forgets it. The ref keeps a re-run of the effect (StrictMode) from sending it twice.
+  const sent = useRef<number | null>(null);
+  useEffect(() => {
+    const a = tabs?.ask;
+    if (!a || a.n === sent.current) return;
+    sent.current = a.n;
+    ask(a.text);
+    tabs.onAsked();
+  }, [tabs?.ask]); // eslint-disable-line react-hooks/exhaustive-deps
+  // « Historique »: back on Conversation, the question scrolled into view and lit for a moment.
+  const panelRef = useRef<HTMLElement>(null);
+  const reopen = (qid: string) => {
+    tabs?.onTab('conversation');
+    const at = chat.findIndex(x => x.qid === qid);
+    requestAnimationFrame(() => {
+      const turn = panelRef.current?.querySelectorAll<HTMLElement>('[data-turn]')[at];
+      if (!turn) return;
+      turn.scrollIntoView({ block: 'start' });
+      const q = turn.querySelector<HTMLElement>('[data-question]');
+      if (!q) return;
+      q.classList.add('rt-flash');
+      setTimeout(() => q.classList.remove('rt-flash'), FLASH_MS);
+    });
+  };
+  // The lists only come from the local daemon's state: before its first one, « Connexion… »; gone, the last list, dimmed.
+  const listState: ListState = view.fleet.localSnapshot() === null ? 'connecting' : offline ? 'offline' : 'ready';
+  const tabBody = tabs?.tab === 'tasks' ? <TasksPane api={tabs.tasks} task={tabs.task} seen={tabs.seen} state={listState} onShow={id => tabs.onTab('tasks', id)} />
+    : tabs?.tab === 'history' ? <HistoryPane chat={chat} state={listState} onOpen={reopen} /> : undefined;
+
   // Opening a name opens the agent's page, which closes the chat (the mockup's `open`); the light goes out first.
   const open = (id: string) => { setHovered(null); onOpenSession(id); };
   const terminal = (id: string) => { setHovered(null); onTerminal(id); };
@@ -83,9 +120,11 @@ export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onO
   return (
     // Escape anywhere in the panel, its field included (which keeps Escape from the window's shortcuts, as in the island), closes
     // the chat and nothing else: the window's Escape (leave the page, clear the filter, leave full screen) does not hear it.
-    <aside className="ledge-chat-panel" aria-label={t.side.chat} onKeyDownCapture={e => {
+    <aside ref={panelRef} className="ledge-chat-panel" aria-label={t.side.chat} onKeyDownCapture={e => {
       if (e.key !== 'Escape' || e.nativeEvent.isComposing) return;
       e.preventDefault(); e.stopPropagation();
+      // A task's detail: Escape brings the list back first.
+      if (tabs?.tab === 'tasks' && tabs.task) { tabs.onTab('tasks', null); return; }
       // The IDE's right panel stays (Ctrl+/ hides it): Escape leaves its field, the window's single keys work again.
       if (onClose) onClose(); else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     }}>
@@ -101,6 +140,7 @@ export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onO
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed}
             onGiveTask={taskCards.giveTask} taskBusy={taskCards.taskBusy}
+            belowHeader={tabs && <RightTabStrip tab={tabs.tab} open={tabs.tasks.tasks.filter(x => !taskClosed(x)).length} onTab={tab => tabs.onTab(tab)} />} body={tabBody}
             onAgentHover={setHovered} inputRef={inputRef} attach={{ items: images.items, onFiles: images.add, onRemove: images.remove, ready: images.ready, error: images.error }}
             theme={theme} frozen={offline !== null} reducedMotion={paused || reduced} />
         </ChatCopyProvider>

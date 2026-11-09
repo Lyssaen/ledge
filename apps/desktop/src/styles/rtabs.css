@@ -1,0 +1,57 @@
+/* The IDE's right panel tabs (lot 12, docs/mockups/ledge-ide-tasks-history.html): Conversation · Tâches · Historique under the
+   chat's header, then « Tâches » (list, detail) and « Historique ». The active tab's line is the text's colour: coral stays the
+   editor's front tab. */
+.rt-tabs { display: flex; height: 30px; flex-shrink: 0; padding: 0 6px; border-bottom: 1px solid var(--sidebar-border); }
+.rt-tabs button { position: relative; display: flex; align-items: center; gap: 5px; padding: 0 8px; border: 0; background: none; font: inherit; font-size: 12px; color: var(--muted-foreground); cursor: pointer; }
+.rt-tabs button:hover { color: var(--foreground); }
+.rt-tabs button.on { color: var(--foreground); }
+.rt-tabs button.on::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: -1px; height: 2px; border-radius: 1px; background: var(--foreground); }
+.rt-tabs .n { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 10.5px; color: var(--muted-foreground); }
+
+.rt-pane { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.rt-filters { display: flex; gap: 6px; flex-shrink: 0; padding: 8px 10px; border-bottom: 1px solid var(--sidebar-border); }
+.rt-filters select { height: 24px; padding: 0 6px; border: 1px solid var(--input); border-radius: 6px; background: var(--well, var(--background)); color: var(--foreground); font: inherit; font-size: 11.5px; }
+.rt-list { display: flex; flex-direction: column; padding: 4px; overflow-y: auto; min-height: 0; }
+.rt-list.dim { opacity: .55; }
+.rt-trow, .rt-hrow { border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 6px; padding: 6px; font-size: 12px; line-height: 17px; }
+.rt-trow:hover, .rt-hrow:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
+.rt-trow { display: grid; grid-template-columns: 14px 1fr; gap: 2px 7px; }
+.rt-trow .mk { grid-row: 1 / 3; font-size: 11px; line-height: 17px; text-align: center; color: var(--muted-foreground); }
+.rt-trow .mk.open { color: var(--info); }
+.rt-trow .mk.done { color: var(--success); }
+.rt-trow .mk.bad { color: var(--danger-text); }
+.rt-trow .mk.asked { color: var(--warning); font-weight: 600; }
+.rt-trow b { font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.rt-trow small { font-size: 11px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-trow code, .rt-detail h3 code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; }
+.rt-hrow { display: grid; grid-template-columns: 40px 1fr; gap: 8px; }
+.rt-hrow small { padding-top: 1px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 10.5px; color: var(--muted-foreground); }
+.rt-hrow span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+.rt-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 18px; text-align: center; font-size: 12px; color: var(--muted-foreground); }
+.rt-banner { display: flex; align-items: center; gap: 7px; flex-shrink: 0; margin: 8px 10px 0; padding: 6px 9px; border: 1px solid var(--input); border-radius: 7px; background: var(--well, var(--background)); font-size: 11.5px; color: var(--muted-foreground); }
+.rt-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--muted-foreground); }
+.rt-spin { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--muted-foreground); border-top-color: transparent; animation: rt-spin 0.9s linear infinite; }
+@keyframes rt-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .rt-spin { animation: none; } }
+
+.rt-btn { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 24px; padding: 0 9px; border: 1px solid var(--input); border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 11.5px; white-space: nowrap; cursor: pointer; }
+.rt-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
+.rt-btn.pri { align-self: flex-start; border-color: transparent; background: var(--primary); color: var(--primary-foreground, #fff); }
+.rt-btn.pri:hover:not(:disabled) { background: var(--primary-hover, var(--primary)); }
+.rt-btn:disabled { opacity: .5; cursor: default; }
+
+.rt-detail { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px 12px; font-size: 12px; line-height: 17px; }
+.rt-detail .rt-banner { margin: 0; }
+.rt-back { align-self: flex-start; margin-left: -4px; height: 24px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: var(--muted-foreground); font: inherit; font-size: 11.5px; cursor: pointer; }
+.rt-back:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); color: var(--foreground); }
+.rt-detail h3 { margin: 0; font-size: 13px; font-weight: 600; line-height: 18px; }
+.rt-detail h3 code { color: var(--muted-foreground); font-weight: 400; }
+.rt-meta { font-size: 11.5px; color: var(--muted-foreground); }
+.rt-txt { padding: 7px 9px; border: 1px solid var(--sidebar-border); border-radius: 7px; background: var(--well, var(--background)); }
+.rt-detail h4 { margin: 4px 0 0; font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.rt-log { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; font-size: 11.5px; }
+.rt-log small { margin-right: 6px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 10.5px; color: var(--muted-foreground); }
+
+/* A question reopened from « Historique »: lit 1.5 s in the link violet (mockup --link1 at 15 %), not coral. */
+.ledge-chat-panel [data-question].rt-flash { box-shadow: 0 0 0 2px var(--ide-link-violet, #a78bfa); background: color-mix(in srgb, var(--ide-link-violet, #a78bfa) 15%, var(--secondary)) !important; }
