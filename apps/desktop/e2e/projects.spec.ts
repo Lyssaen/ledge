@@ -1,12 +1,27 @@
 import type { Locator, Page } from '@playwright/test';
 import type { ClientMessage, Projects } from '@ledge/protocol';
-import { test, expect, openNewProject } from './fixtures';
-import { eight, fakeDaemon, session, twoProjects, type Folder, openAtelier } from './daemon';
+import { test, expect, openNewProject, seedAtelier } from './fixtures';
+import { eight, fakeDaemon, session, twoProjects, type Folder } from './daemon';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
+
+// The first tests of a run pay Vite's first compile of the IDE chunk: on a loaded machine that is past 20 s.
+test.setTimeout(60_000);
+/** The IDE is up on its Atelier tab, the agents seated. */
+async function booted(page: Page) {
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator('.ide-atelier button[data-agent]').first()).toBeVisible({ timeout: 15_000 });
+}
 
 type ProjectsSet = Extract<ClientMessage, { type: 'projects.set' }>;
 const sets = (received: ClientMessage[]) => received.filter((m): m is ProjectsSet => m.type === 'projects.set');
 const noSideScroll = (el: Locator) => el.evaluate(e => e.scrollWidth <= e.clientWidth + 1);
 const pageNoSideScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
+const atelierTab = (page: Page) => page.locator('.ide-dockview .dv-tab').filter({ hasText: /^Atelier/ });
+const atelierBar = (page: Page) => page.getByRole('toolbar', { name: 'Atelier', exact: true });
 const sidebarProjects = (page: Page) => page.getByRole('tree', { name: 'Projects, branches and sessions' });
 
 /** The home on Local: a Workspace with one Git repository on `main` and a plain folder. */
@@ -16,7 +31,7 @@ const folders: Record<string, Folder> = {
 };
 test('« New folder » in the folder browser: the folder is made on Local, listed ready to add, and the project is created with it (#32)', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects, folders: structuredClone(folders) });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
@@ -49,7 +64,7 @@ const kit = session('kit', { name: 'Kit', cwd: '/tmp/scratch', project: 'scratch
 
 test('+ Projects, a name, Workspace › paper-fonts on main from the folder browser, Create: the project is in the sidebar with its colour', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects, folders });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
@@ -85,7 +100,7 @@ test('+ Projects, a name, Workspace › paper-fonts on main from the folder brow
 
 test('Move to… › New project… on an agent with no project: the project is created with its folder, the agent leaves « No project » for the new table', async ({ page }) => {
   const daemon = await fakeDaemon(page, [...eight, kit], { projects: twoProjects, folders });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   const card = page.locator('.unassigned-card', { hasText: 'Kit' });
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Move to…' }).click();
@@ -114,15 +129,16 @@ test('Move to… › New project… on an agent with no project: the project is 
 
 test('Edit project › Delete the project › Move to… Website: its agents join the Website table and the filter goes back to All', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   // The filter on Ledge: only its table is shown.
   await sidebarProjects(page).getByRole('button', { name: /^Ledge/ }).click();
   const ledge = page.getByRole('region', { name: 'Ledge table' });
   await expect(ledge).toBeVisible();
   await expect(page.getByRole('region', { name: 'Website table' })).toHaveCount(0);
-  // Filtered: the Ledge row is selected. Atelier stays the current view.
+  // Filtered: the Ledge row is selected. The Atelier tab stays in front, its bar says the filter.
   await expect(sidebarProjects(page).getByRole('button', { name: /^Ledge/ }).locator('xpath=ancestor::*[@role="treeitem"][1]')).toHaveClass(/sel/);
-  await expect(page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: /Atelier/ })).toHaveAttribute('aria-current', 'page');
+  await expect(atelierTab(page)).toHaveClass(/dv-active-tab/);
+  await expect(atelierBar(page).locator('.ide-abar-filter')).toHaveText('Ledge');
   await ledge.getByRole('button', { name: 'Actions of project Ledge' }).click();
   await page.getByRole('menu', { name: 'Actions of project Ledge' }).getByRole('menuitem', { name: 'Edit project' }).click();
   await expect(page.getByRole('dialog', { name: 'Edit Ledge' })).toBeVisible();
@@ -146,8 +162,9 @@ test('Edit project › Delete the project › Move to… Website: its agents joi
   expect(state.projects.map(p => p.id)).toEqual(['website']);
   expect(state.projects[0]!.repos).toEqual(expect.arrayContaining([{ machine: 'local', path: '/w/website' }, { machine: 'local', path: '/w/ledge' }]));
   await expect(page.locator('.toast')).toHaveText('Ledge deleted. 5 agents join Website.');
-  // Back to All: the Atelier row is the active one, Ledge is gone from the sidebar and the floor.
-  await expect(page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: /Atelier/ })).toHaveAttribute('aria-current', 'page');
+  // Back to All: the Atelier tab in front with no filter, Ledge gone from the sidebar and the floor.
+  await expect(atelierTab(page)).toHaveClass(/dv-active-tab/);
+  await expect(atelierBar(page).locator('.ide-abar-filter')).toHaveCount(0);
   await expect(sidebarProjects(page).getByRole('button', { name: /^Ledge/ })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toHaveCount(0);
   // Eight agents at Website now: six seats and +2.
@@ -164,7 +181,7 @@ test('a 900 px window: the editor and the folder browser fit without a side scro
     projects: twoProjects,
     folders: { '/home/me': { parent: '/home', entries: many, repos: many.filter((_, i) => i % 2 === 0).map(name => ({ name, branch: 'feature/a-very-long-branch-name-for-the-layout' })) } }
   });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await openNewProject(page);
   const editor = page.getByRole('dialog', { name: 'New project' });
