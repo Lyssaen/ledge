@@ -146,7 +146,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
   const daemonRow = (
     <div className={`ide-rigs-row rig daemon${daemonOn ? ' sel' : ''}`} data-target="daemon">
       <span className="ide-rigs-chev">·</span><Dot dot={up ? 'idle' : 'off'} />
-      <button type="button" className="ide-rigs-name" onClick={() => onTab(openrigTab(machine))}><b>{v.daemon}</b></button>
+      <button type="button" className="ide-rigs-name" onClick={() => dispatch({ type: 'openrig', machine, section: 'overview' })}><b>{v.daemon}</b></button>
       <span className="ide-rigs-meta">{up ? rv.version ?? '' : ''}</span>
       {rv.status === 'running' || rv.status === 'stopped' ? power('daemon', up) : <span className="ide-rigs-pw" />}
     </div>
@@ -161,7 +161,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
         </button>
         <button type="button" className="ide-rigs-launch" title={v.launchTitle} onClick={() => dispatch({ type: 'modal', modal: { kind: 'rigLaunch', machine } })}><Icon d={ICONS.plus.d} size={13} />{v.launch}</button>
         {menu && <MachineMenu entries={entries.list} outdated={entries.outdated} current={machine} onClose={closeMenu}
-          onPick={id => { setMachine(id); closeMenu(); }} onManage={() => { closeMenu(); dispatch({ type: 'settings', section: 'machines' }); }} />}
+          onPick={id => { setMachine(id); closeMenu(); }} onManage={() => { closeMenu(); dispatch({ type: 'openrig', machine, section: 'machines' }); }} onAdd={() => { closeMenu(); dispatch({ type: 'settings', section: 'machines' }); }} />}
       </div>
       <div className="ide-rigs-main">
         {pane('kernel', t.side.kernel, null, kernelBody)}

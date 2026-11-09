@@ -164,7 +164,7 @@ describe('the IDE Rigs view', () => {
     const m = running();
     await userEvent.click(screen.getByRole('button', { name: /locale/ }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Gérer les machines…' }));
-    expect(m.dispatch).toHaveBeenCalledWith({ type: 'settings', section: 'machines' });
+    expect(m.dispatch).toHaveBeenCalledWith({ type: 'openrig', machine: 'local', section: 'machines' });
     await userEvent.click(screen.getByRole('button', { name: /locale/ }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Ajouter une machine' }));
     expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'settings', section: 'machines' });
@@ -173,7 +173,7 @@ describe('the IDE Rigs view', () => {
     await userEvent.click(screen.getByRole('button', { name: 'ledge-dev' }));
     expect(m.onTab).toHaveBeenLastCalledWith(rigTab('local', 'ledge-dev'));
     await userEvent.click(screen.getByRole('button', { name: 'Daemon' }));
-    expect(m.onTab).toHaveBeenLastCalledWith(openrigTab('local'));
+    expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'openrig', machine: 'local', section: 'overview' });
   });
   it('Escape and an outside click close the menu', async () => {
     running();

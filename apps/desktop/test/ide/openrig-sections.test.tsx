@@ -205,6 +205,14 @@ describe('the page’s one confirmation (rail and cards)', () => {
     expect(screen.getAllByRole('group', { name: /Arrêter/ })).toHaveLength(1);
     expect(within(rail()).getByRole('group')).toHaveTextContent('rig daemon stop');
   });
+  it('a confirmation opened in Rigs does not survive a switch to Daemon and back', async () => {
+    const m = mount({ section: 'rigs' }); m.f.state('local', state());
+    await userEvent.click(within(card('ledge-dev')).getByRole('button', { name: 'Arrêter ledge-dev' }));
+    expect(within(card('ledge-dev')).getByRole('group')).toBeInTheDocument();
+    m.rerender('daemon');
+    m.rerender('rigs');
+    expect(screen.queryByRole('group')).toBeNull();
+  });
 });
 
 describe('Machines (R15)', () => {

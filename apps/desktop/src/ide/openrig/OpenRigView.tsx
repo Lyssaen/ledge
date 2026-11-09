@@ -57,7 +57,7 @@ export function OpenRigView({ client, machines, machine, section, role, seat, se
     return !!r && isRunning(r);
   };
   const conf = useRigConfirm(view, offered, { prefs, state });
-  useEffect(() => { conf.reset(); }, [machine]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { conf.reset(); }, [machine, section]); // eslint-disable-line react-hooks/exhaustive-deps
   const pending = view.pending !== null && targetOf(view.pending) === 'daemon';
 
   const counts = useMemo(() => navCounts(state, roles.status === 'ready' && !roles.error ? roles.roles.length : null, machines.length, output.length), [state, roles.status, roles.error, roles.roles, machines.length, output.length]);
