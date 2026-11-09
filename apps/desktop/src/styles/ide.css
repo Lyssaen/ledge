@@ -3,9 +3,11 @@
 /* The IDE's own tokens. The links' colours (mockup --link1, --link2): the mockup's on dark, darker ones that read on white.
    The surfaces (mockup --shell under --pane): the tab strip and the session bar on --well, the darkest surface in both
    themes (dark 0.145, under the title and activity bars' 0.205; light 0.97, under their 0.985); the editor, and the tab in
-   front, on --sidebar, the session page's own background, so the tab in front is lighter than the strip and opens onto it. */
-:root, :root[data-theme="light"] { --ide-link-violet: #6d28d9; --ide-link-teal: #0f766e; --ide-link-rose: #be185d; --ide-link-lime: #4d7c0f; --ide-link-fuchsia: #a21caf; --ide-link-sand: #92400e; }
-:root[data-theme="dark"] { --ide-link-violet: #a78bfa; --ide-link-teal: #2dd4bf; --ide-link-rose: #f472b6; --ide-link-lime: #a3e635; --ide-link-fuchsia: #d946ef; --ide-link-sand: #e2b07a; }
+   front, on --sidebar, the session page's own background, so the tab in front is lighter than the strip and opens onto it.
+   --ide-tab-front, the line under the focused group's tab in front: Ledge's factory coral (accentTokens('#e85d4a').sidebarPrimary),
+   or the colour chosen in Settings › Appearance (applyAccent paints it). Not the factory --sidebar-primary, which is a red. */
+:root, :root[data-theme="light"] { --ide-tab-front: #cc5241; --ide-link-violet: #6d28d9; --ide-link-teal: #0f766e; --ide-link-rose: #be185d; --ide-link-lime: #4d7c0f; --ide-link-fuchsia: #a21caf; --ide-link-sand: #92400e; }
+:root[data-theme="dark"] { --ide-tab-front: #ea6a58; --ide-link-violet: #a78bfa; --ide-link-teal: #2dd4bf; --ide-link-rose: #f472b6; --ide-link-lime: #a3e635; --ide-link-fuchsia: #d946ef; --ide-link-sand: #e2b07a; }
 .ide { --ide-strip: var(--well); --ide-pane: var(--sidebar); }
 .ide { height: 100vh; display: grid; grid-template-rows: 34px 1fr 24px; background: var(--background); color: var(--foreground); overflow: hidden; }
 .ide-body { display: grid; grid-template-columns: 48px var(--ide-side, 248px) 1fr var(--ide-right, 300px); min-height: 0; }
@@ -116,9 +118,9 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
 /* The keyboard on a tab (Ctrl+Shift+² out of a terminal, Ctrl+1…9, ← / →): Ledge's focus ring, not dockview's 1px divider. */
 .ide-dock .dv-tab:focus-visible::after { outline: 2px solid var(--ring) !important; outline-offset: -2px; }
-/* The focused group marks its tab in front with a 2 px line on top, in the links' violet (mockup `.grp.focus .tab.on::before`). */
-/* The tab in front, underlined in Ledge's coral (the user, 2026-11-09). */
-.ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--sidebar-primary); }
+/* The focused group's tab in front, underlined in Ledge's coral (docs/mockups/ledge-ide-tab-front.html, jde 2026-11-09), in the
+   main window as in a detached one; an alert's own line (`.alert`, `.alert-a`) takes its place. */
+.ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab:not(.alert):not(.alert-a) { box-shadow: inset 0 -2px 0 var(--ide-tab-front); }
 /* The strip's tools (mockup `.tabs .tools`): « + » and the split, at its right end. */
 .ide-strip-tools { height: 100%; display: flex; align-items: center; gap: 2px; padding-right: 6px; }
 .ide-strip-tools button { height: 22px; padding: 0 7px; display: flex; align-items: center; border-radius: 5px; color: var(--muted-foreground); font-size: 11.5px; }

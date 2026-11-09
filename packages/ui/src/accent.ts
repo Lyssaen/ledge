@@ -62,7 +62,8 @@ export function accentTokens(hex: string, theme: 'dark' | 'light'): AccentTokens
   };
 }
 
-const VARS = ['--primary', '--primary-hover', '--primary-foreground', '--sidebar-primary', '--ledge-glow', '--ledge-glow-soft', '--ledge-eye'] as const;
+// `--ide-tab-front` (Desktop's IDE, the line under the tab in front): the chosen colour as the sidebar's; unset, ide.css's factory coral.
+const VARS = ['--primary', '--primary-hover', '--primary-foreground', '--sidebar-primary', '--ide-tab-front', '--ledge-glow', '--ledge-glow-soft', '--ledge-eye'] as const;
 
 /** Paint the derived tokens on an element; `null` or garbage removes them so the factory CSS wins. */
 export function applyAccent(hex: string | null, theme: 'dark' | 'light', el: HTMLElement = document.documentElement): void {
@@ -76,6 +77,7 @@ export function applyAccent(hex: string | null, theme: 'dark' | 'light', el: HTM
   el.style.setProperty('--primary-hover', t.primaryHover);
   el.style.setProperty('--primary-foreground', t.primaryForeground);
   el.style.setProperty('--sidebar-primary', t.sidebarPrimary);
+  el.style.setProperty('--ide-tab-front', t.sidebarPrimary);
   el.style.setProperty('--ledge-glow', t.residentGlow);
   el.style.setProperty('--ledge-glow-soft', t.residentGlowSoft);
   el.style.setProperty('--ledge-eye', t.residentEye);

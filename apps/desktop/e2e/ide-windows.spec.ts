@@ -155,6 +155,10 @@ for (const theme of ['dark', 'light'] as const) {
     await tabOf(pop, 'Nova').click();
     expect(await look(tabOf(pop, 'Nova'))).toEqual(await look(tabOf(page, 'Otto')));
     expect((await look(tabOf(pop, 'Nova'))).size).toBe('12px');
+    // Its group has the focus: its tab in front is underlined in Ledge's coral, nothing on top (ledge-ide-tab-front.html).
+    const coral = theme === 'dark' ? 'rgb(234, 106, 88)' : 'rgb(204, 82, 65)';
+    await expect.poll(() => tabOf(pop, 'Nova').evaluate(el => getComputedStyle(el).boxShadow)).toBe(`${coral} 0px -2px 0px 0px inset`);
+    expect(await tabOf(pop, 'Nova').evaluate(el => getComputedStyle(el, '::before').content)).toBe('none');
     await pop.screenshot({ path: shot(`lot9-window-${theme}.png`) });
     await bar.screenshot({ path: shot(`lot9-window-bar-${theme}.png`) });
     await page.locator('.dv-tabs-and-actions-container').first().screenshot({ path: shot(`lot9-strip-main-${theme}.png`), scale: 'device' });
