@@ -334,6 +334,6 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .set-boot{flex-direction:column;gap:8px}
 .set-boot label.off{opacity:.5;cursor:default}
 .set-boot select{height:26px;padding:0 8px;font-size:12px;width:auto;max-width:220px}
-.set-dispositions{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.set-dispositions li{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+.set-dispositions{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,max-content);align-items:center;gap:8px 10px}
+.set-dispositions li{display:contents;font-size:13px}
 .set-disp-shape{color:var(--muted-foreground);font-size:12px}

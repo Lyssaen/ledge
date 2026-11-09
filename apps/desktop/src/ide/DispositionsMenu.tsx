@@ -52,7 +52,7 @@ export function DispositionsMenu({ list, current, onApply, onSave, onManage, sav
         return (
           <MenuItem key={x.name} className={on ? 'sel' : undefined} onSelect={() => onApply(x.name)}>
             <span className="ide-lay-n">{x.name}</span>
-            <small className="r">{shape(x)}{on ? ` · ${d.current}${current!.modified ? ` · ${d.modified}` : ''}` : ''}</small>
+            <small className="ide-lay-r">{shape(x)}{on ? ` · ${d.current}${current!.modified ? ` · ${d.modified}` : ''}` : ''}</small>
           </MenuItem>
         );
       })}
@@ -83,7 +83,7 @@ export function DispositionsMenu({ list, current, onApply, onSave, onManage, sav
       ) : (
         <button type="button" role="menuitem" onClick={() => setSaving(true)}>{d.saveCurrent}</button>
       )}
-      <MenuItem onSelect={onManage}><span>{d.manage}</span><small className="r">{d.manageHint}</small></MenuItem>
+      <MenuItem onSelect={onManage}><span>{d.manage}</span><small className="ide-lay-r">{d.manageHint}</small></MenuItem>
     </Menu>
   );
 }
