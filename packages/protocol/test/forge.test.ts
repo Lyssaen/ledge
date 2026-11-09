@@ -44,6 +44,18 @@ describe('pull and merge requests', () => {
     expect(m.type === 'forge.state' && m.prs.map(p => p.ref)).toEqual(['#226', '!41']);
   });
 
+  // Lot 8b contract (N2): the forge of each followed session, and when a forge in error failed first, is read again, was last read.
+  it('takes the followed sessions and the times of a forge in error; a daemon without them still parses', () => {
+    const m = parseServerMessage({ type: 'forge.state', prs: [gh226],
+      forges: [{ forge: 'github', host: 'github.com', status: 'error', message: 'HTTP 502', at: AT, since: AT, retryAt: '2026-11-08T10:50:00.000Z', readAt: '2026-11-08T10:42:00.000Z' }],
+      followed: [{ session: 's1', forge: 'github', host: 'github.com', repo: 'Lyssaen/ledge' }, { session: 's2', forge: 'gitea', host: 'x', repo: 'y' }] });
+    expect(m.type === 'forge.state' && m.forges[0]).toMatchObject({ since: AT, retryAt: '2026-11-08T10:50:00.000Z', readAt: '2026-11-08T10:42:00.000Z' });
+    expect(m.type === 'forge.state' && m.followed?.map(f => f.session)).toEqual(['s1']);
+    const old = parseServerMessage({ type: 'forge.state', prs: [], forges: [{ forge: 'github', host: 'github.com', status: 'ok', at: AT }] });
+    expect(old.type === 'forge.state' && old.followed).toBeUndefined();
+    expect(PrDetailSchema.safeParse({ ...gl41Detail, mergeBlockers: ['pipeline_not_started', 'approvals'] }).success).toBe(true);
+  });
+
   it('drops a pull request with an unknown state, pipeline or forge, keeps the others', () => {
     const m = parseServerMessage({ type: 'forge.state', prs: [{ ...gh226, state: 'archived' }, gl41, { ...gl41, pipeline: 'paused' }, { ...gl41, forge: 'gitea' }],
       forges: [{ forge: 'gitea', host: 'x', status: 'ok', at: AT }, { forge: 'gitlab', host: 'gitlab.com', status: 'missing', message: 'glab is not installed', at: AT }] });
