@@ -191,7 +191,12 @@ async function appWindow(label?: string) {
   return (await import('@tauri-apps/api/window')).getCurrentWindow();
 }
 export function minimizeWindow(label?: string): void { if (isTauri()) void appWindow(label).then(w => w.minimize()).catch(() => {}); }
-export function toggleMaximizeWindow(label?: string): void { if (isTauri()) void appWindow(label).then(w => w.toggleMaximize()).catch(() => {}); }
+/** Outside Tauri, the e2e build's `window.__ledgeWindowCall` records what a window bar asked (nothing happens otherwise). */
+const fakeWindowCall = (op: 'drag' | 'maximize', label: string | undefined) => (window as unknown as { __ledgeWindowCall?: (op: string, label?: string) => void }).__ledgeWindowCall?.(op, label);
+export function toggleMaximizeWindow(label?: string): void { if (isTauri()) void appWindow(label).then(w => w.toggleMaximize()).catch(() => {}); else fakeWindowCall('maximize', label); }
+/** Moves the window with the pointer held (a press on its bar). For a detached IDE window (`label`), called from the main page:
+ *  Tauri's drag.js only ran in that window's initial about:blank document, so its `data-tauri-drag-region` does nothing there. */
+export function startDraggingWindow(label: string): void { if (isTauri()) void appWindow(label).then(w => w.startDragging()).catch(() => {}); else fakeWindowCall('drag', label); }
 export function closeWindow(): void { if (isTauri()) void appWindow().then(w => w.close()).catch(() => {}); }
 /** A window's title in the taskbar (lot 9: a detached window's « {tab} — Ledge »). */
 export function setWindowTitle(label: string, title: string): void { if (isTauri()) void appWindow(label).then(w => w.setTitle(title)).catch(() => {}); }
