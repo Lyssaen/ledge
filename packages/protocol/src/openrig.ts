@@ -287,12 +287,16 @@ export function changesSpec(l: RigLaunch): boolean {
     || l.policy !== undefined || Object.keys(l.policies ?? {}).length > 0;
 }
 
+/** Whether a launch runs a composed spec (`<rigsDir>/<name>/rig.yaml`) rather than the library's: it changes the spec, keeps it, or is renamed on a
+ *  `rig` without `--name` (`o.name`: before 0.7 another name was a composed copy too). The daemon and the front both decide by this. */
+export const composes = (l: RigLaunch, spec: RigSpec, o: { name: boolean }): boolean => changesSpec(l) || l.save === true || (l.name !== spec.name && !o.name);
+
 /** The `rig` commands a launch runs (the daemon runs exactly these; a front shows them). `rigsDir`: where Ledge keeps the specs it composes;
  *  `name`: whether this `rig` knows `rig up --name` (0.7). A composed spec (changed, kept, or renamed on a `rig` without `--name`) launches from
  *  `<rigsDir>/<name>/rig.yaml`; `save` then adds it to the library. */
 export function launchCommands(l: RigLaunch, spec: RigSpec, o: { rigsDir: string; name: boolean }): string[][] {
   const rename = l.name !== spec.name;
-  const composed = changesSpec(l) || l.save === true || (rename && !o.name);
+  const composed = composes(l, spec, o);
   const dir = `${o.rigsDir.replace(/\/$/, '')}/${l.name}`;
   const commands: string[][] = [['up', composed ? `${dir}/rig.yaml` : spec.name, ...(!composed && rename ? ['--name', l.name] : []), '--cwd', l.cwd, ...(l.nonInterruptive ? ['--non-interruptive'] : []), ...(l.plan ? ['--plan'] : ['--yes']), '--json']];
   if (!l.plan && l.save && composed) commands.push(['specs', 'add', dir, '--json']);

@@ -40,8 +40,6 @@ export function readSpec(yaml: string, entry: { name: string; source: string; pa
   return { name: entry.name, source: entry.source, path: entry.path, ...(summary ? { summary } : {}), ...(str(d.permission_policy) ? { policy: str(d.permission_policy)! } : {}), pods: out, edges, links };
 }
 
-export { changesSpec } from '@ledge/protocol';
-
 /** `build`, `build-2`, `build-3`: the ids of a role's `n` seats. */
 export const seatIds = (id: string, n: number): string[] => Array.from({ length: n }, (_, i) => (i === 0 ? id : `${id}-${i + 1}`));
 

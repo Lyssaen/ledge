@@ -6,7 +6,7 @@ import { parse as parseYaml } from 'yaml';
 import { composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole, changesSpec, launchCommands } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole, composes, launchCommands } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -424,9 +424,8 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
       let yaml: string, seats: number, dir: string | undefined;
       const text = await files.read(spec.path);
       const can = await features();
-      // Before 0.7 OpenRig named a rig after its spec's `name:` only (no `rig up --name`): another name was a composed copy too.
       const rename = l.name !== spec.name;
-      if (changesSpec(l) || l.save || (rename && !can.name)) {
+      if (composes(l, spec, can)) {
         const composed = composeSpec(parseYaml(text), dirname(spec.path), l);
         dir = join(rigsDir, l.name);
         await files.copyDir(dirname(spec.path), dir);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { OpenRigActionSchema, PingSchema, PongSchema, RigLaunchSchema, changesSpec, launchCommands, rigCommands, type RigSpec } from '../src/index.js';
+import { OpenRigActionSchema, PingSchema, PongSchema, RigLaunchSchema, changesSpec, composes, launchCommands, rigCommands, type RigSpec } from '../src/index.js';
 
 const spec: RigSpec = { name: 'starter', source: 'builtin', path: '/s/starter/rig.yaml', pods: [], edges: 0 };
 const launch = (l: object = {}) => RigLaunchSchema.parse({ spec: 'starter', cwd: '/w', name: 'starter', ...l });
@@ -51,5 +51,20 @@ describe('ping and pong', () => {
     expect(PingSchema.safeParse({ type: 'ping' }).success).toBe(false);
     expect(PongSchema.safeParse({ type: 'pong', requestId: 'a' }).success).toBe(true);
     expect(PongSchema.safeParse({ type: 'pong', requestId: 'a', error: 'outdated' }).success).toBe(true);
+  });
+});
+
+describe('composes', () => {
+  it('is true when the launch changes the spec, keeps it, or renames it on a rig without --name', () => {
+    expect(composes(launch(), spec, o)).toBe(false);
+    expect(composes(launch({ name: 'x' }), spec, o)).toBe(false);
+    expect(composes(launch({ seats: { 'dev.build': 2 } }), spec, o)).toBe(true);
+    expect(composes(launch({ save: true }), spec, o)).toBe(true);
+    expect(composes(launch({ name: 'x' }), spec, { ...o, name: false })).toBe(true);
+    expect(composes(launch(), spec, { ...o, name: false })).toBe(false);
+  });
+  it('launchCommands follows it', () => {
+    for (const l of [launch(), launch({ name: 'x' }), launch({ save: true })]) for (const name of [true, false])
+      expect(launchCommands(l, spec, { ...o, name })[0]![1] === `${o.rigsDir}/${l.name}/rig.yaml`).toBe(composes(l, spec, { ...o, name }));
   });
 });
