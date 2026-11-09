@@ -114,7 +114,7 @@ const T = {
     zedWsl:'Zed n’ouvre pas les dossiers WSL : choisissez Cursor ou VS Code.',
     settings:'Réglages',
     failed:(e,r)=>`${e} n’a pas pu s’ouvrir : ${r}`,
-    r_exe:'le programme ne démarre pas.', r_distro:d=>`la distribution WSL « ${d} » est introuvable.`, r_path:'WSL ne peut pas recevoir ce chemin.',
+    r_exe:'le programme ne démarre pas.', r_distro:()=>'la distribution WSL ne répond pas.', r_path:'WSL ne peut pas recevoir ce chemin.',
     ext:'Hors de Ledge', extOpen:e=>`${e} s’ouvre sur le worktree de la session.`, extSsh:'Zed s’ouvre sur ssh://srv-build/…', extOff:'L’éditeur tente sa propre connexion SSH, et affiche lui-même son erreur.',
     nothing:'Rien ne s’affiche dans Ledge.',
     c:[
@@ -140,7 +140,7 @@ const T = {
     zedWsl:'Zed can’t open WSL folders: choose Cursor or VS Code.',
     settings:'Settings',
     failed:(e,r)=>`${e} couldn’t open: ${r}`,
-    r_exe:'the program won’t start.', r_distro:d=>`WSL distribution “${d}” not found.`, r_path:'WSL can’t receive this path.',
+    r_exe:'the program won’t start.', r_distro:()=>'the WSL distribution isn’t answering.', r_path:'WSL can’t receive this path.',
     ext:'Outside Ledge', extOpen:e=>`${e} opens on the session’s worktree.`, extSsh:'Zed opens on ssh://srv-build/…', extOff:'The editor tries its own SSH connection and shows its own error.',
     nothing:'Nothing shows in Ledge.',
     c:null, fiche:'Handoff sheet', fh:['State','Trigger','Display','Proposed keys'],
@@ -169,7 +169,7 @@ function scenes(t){
     tabs()+toastAct(t.zedWsl, t),
     fld(t,'Zed',{Zed:`${t.notInstalled} · ${t.noWsl}`})+`<div style="border-top:1px solid var(--border)"></div>`+fld(t,'Cursor',{Zed:t.noWsl}),
     tabs()+tabMenu(t,'Zed',true)+`<div class="ext"><b>${t.ext}</b>${t.extSsh}<i>${t.nothing}</i></div>`,
-    tabs()+`<div class="stack">`+toast(t.failed('Cursor', t.r_exe))+toast(t.failed('VS Code', t.r_distro('Ubuntu-24.04')))+toast(t.failed('Cursor', t.r_path))+`</div>`,
+    tabs()+`<div class="stack">`+toast(t.failed('Cursor', t.r_exe))+toast(t.failed('VS Code', t.r_distro()))+toast(t.failed('Cursor', t.r_path))+`</div>`,
     tabs()+tabMenu(t,'VS Code',true)+`<div class="ext"><b>${t.ext}</b>${t.extOff}<i>${t.nothing}</i></div>`,
     `<div class="menu" style="left:24px;top:14px"><div class="mh">dev-front</div><button>${t.open}<span class="r">${t.enter}</span></button><button>${t.openRight}<span class="r">${t.ctrlClick}</span></button><button>${t.openWin}</button><div class="sep"></div><button>${t.msg}</button><button>${t.restart}</button><button class="hov">${ic.pop}${t.openIn('Cursor')}</button></div>`
   ];
@@ -181,7 +181,7 @@ const KEYS = [
   'ide.openIn.zedWsl · ide.openIn.settings',
   'settings.workspace.zedNoWsl',
   '—',
-  'ide.openIn.failed(editor, reason) · ide.openIn.reason.{exe, distro(name), path}',
+  'ide.openIn.failed(editor, reason) · ide.openIn.reason.{exe, distro, path}',
   '—',
   'ide.openIn.menu(editor)'
 ];
@@ -203,7 +203,7 @@ function render(){
     ['Éditeur absent (Réglages)','détection côté Windows', `« ${fr.notInstalled} » / “${en.notInstalled}”`,'settings.workspace.notInstalled'],
     ['Zed + WSL','clic, Zed choisi, worktree WSL', `toast + bouton : « ${fr.zedWsl} » / “${en.zedWsl}”`,'ide.openIn.zedWsl'],
     ['Zed (Réglages)','toujours sous Zed', `« ${fr.noWsl} » / “${en.noWsl}”`,'settings.workspace.zedNoWsl'],
-    ['Échec du lancement','l’exe ne démarre pas, distro introuvable, chemin refusé', `« ${fr.failed('{editor}','{raison}')} » / “${en.failed('{editor}','{reason}')}” · raisons : « ${fr.r_exe} » « ${fr.r_distro('{nom}')} » « ${fr.r_path} » / “${en.r_exe}” “${en.r_distro('{name}')}” “${en.r_path}”`,'ide.openIn.failed, ide.openIn.reason.*'],
+    ['Échec du lancement','l’exe ne démarre pas, WSL ne répond pas, chemin refusé', `« ${fr.failed('{editor}','{raison}')} » / “${en.failed('{editor}','{reason}')}” · raisons : « ${fr.r_exe} » « ${fr.r_distro()} » « ${fr.r_path} » / “${en.r_exe}” “${en.r_distro()}” “${en.r_path}”`,'ide.openIn.failed, ide.openIn.reason.*'],
     ['Zed + SSH, machine hors ligne','—','rien (l’éditeur gère)','—'],
     ['Entrée du menu','—', `« ${fr.openIn('{editor}')} » / “${en.openIn('{editor}')}”, « ${fr.fieldOpenIn} » / “${en.fieldOpenIn}”`,'ide.openIn.menu, settings.workspace.openIn'],
   ];
