@@ -28,7 +28,11 @@ const model = (page: Page) => page.evaluate(() => {
   return { windows: w.windows, groups: w.groups.map(g => ({ window: g.window, tabs: g.tabs.map(t => `${t.kind}:${t.ref}`), link: g.link })) };
 });
 
-async function boot(page: Page) {
+async function boot(page: Page, theme: 'light' | 'dark' = 'dark') {
+  await page.addInitScript(t => {
+    try { localStorage.setItem('desktop.lang', 'en'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ }
+    (window as unknown as { __ledgeShells: unknown }).__ledgeShells = { wsl: 'Ubuntu', powershell: false, cmd: false, gitBash: false };
+  }, theme);
   await fakeDaemon(page, sessions, { projects: twoProjects });
   await page.goto('/');
   await expect(page.locator('.ide')).toBeVisible({ timeout: 30_000 });
@@ -64,7 +68,7 @@ test('a tab torn out of the window opens alone in a new window, which takes the 
   const m = await model(page);
   expect(m.windows).toHaveLength(2);
   expect(m.groups.find(g => g.tabs.includes('session:local:nova'))!.window).toBe(m.windows[1]);
-  await pop.screenshot({ path: 'e2e/.results/lot9-popout.png' });
+  await pop.screenshot({ path: shot('lot9-popout.png') });
 });
 
 /** A tab of a detached window dragged onto the main window's group `into` (its centre). The mouse cannot cross pages here:
@@ -113,4 +117,100 @@ test('a detached window closed by the user: its tabs come back to the main windo
   expect(m.windows).toEqual(['main']);
   expect(m.groups.map(g => g.tabs)).toEqual([['atelier:main', 'session:local:otto'], ['session:local:nova']]);
   await expect(page.locator('.ide-dockview .dv-groupview')).toHaveCount(2);
+});
+
+/** Where a capture goes: LEDGE_SHOTS when set (Playwright empties its own output folder at each run), else this test's output. */
+const shot = (name: string) => (process.env.LEDGE_SHOTS ? `${process.env.LEDGE_SHOTS}/${name}` : test.info().outputPath(name));
+const said = (page: Page) => page.evaluate(() => [...((window as unknown as { __ledgeToasts?: string[] }).__ledgeToasts ?? [])]);
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`v27 (${theme}): a detached window's bar names its tab, offers no split; its ✕ gives the tab back and says so`, async ({ page }) => {
+    await boot(page, theme);
+    await open(page, 'Otto');
+    await open(page, 'Nova');
+    const popped = page.context().waitForEvent('page');
+    await tearOut(page, tabOf(page, 'Nova'));
+    const pop = await popped;
+    const bar = pop.locator('.ide-popout-bar');
+    await expect(bar.locator('.ide-wtitle')).toHaveText(/^Nova · /);
+    await expect(bar.locator('.ide-brand')).toHaveText('Ledge');
+    await expect.poll(() => pop.title()).toMatch(/^Nova · .* — Ledge$/);
+    await expect(pop.getByRole('button', { name: 'Split right (Ctrl+\\)' })).toHaveCount(0);
+    await expect(pop.getByRole('button', { name: 'New session' })).toHaveCount(1);
+    // The bar is 34 px, as the main window's, the group right under it, the whole window filled.
+    const b = await box(bar);
+    expect(b.y).toBe(0);
+    expect(b.height).toBe(34);
+    const strip = await box(pop.locator('.dv-tabs-and-actions-container').first());
+    expect(strip.y).toBe(34);
+    const page0 = pop.viewportSize()!;
+    const content = await box(pop.locator('.dv-groupview').first());
+    expect(Math.round(content.y + content.height)).toBe(page0.height);
+    await pop.screenshot({ path: shot(`lot9-window-${theme}.png`) });
+    await bar.screenshot({ path: shot(`lot9-window-bar-${theme}.png`) });
+    const closed = pop.waitForEvent('close');
+    await bar.getByRole('button', { name: 'Close' }).click();
+    await closed;
+    await expect(tabOf(page, 'Nova')).toBeVisible();
+    expect(await said(page)).toContain('Window closed: its tab is back in the main window.');
+  });
+}
+
+test('while a tab is dragged, a banner at the bottom of its window; let go outside, a new window', async ({ page }) => {
+  await boot(page);
+  await open(page, 'Otto');
+  await open(page, 'Nova');
+  const from = await box(tabOf(page, 'Nova'));
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 20, from.y + from.height / 2 + 300, { steps: 8 });
+  const banner = page.locator('.ide-tear-banner');
+  await expect(banner).toHaveText('Drop the tab outside the window to open it in a new window');
+  const r = await box(banner);
+  // Centred at the bottom of the window, 18 px above its edge.
+  expect(Math.abs(r.x + r.width / 2 - 960)).toBeLessThanOrEqual(1);
+  expect(Math.round(1080 - (r.y + r.height))).toBe(18);
+  await page.screenshot({ path: shot('lot9-banner.png'), clip: { x: r.x - 40, y: r.y - 30, width: r.width + 80, height: r.height + 48 } });
+  const popped = page.context().waitForEvent('page');
+  await page.mouse.move(-40, 300, { steps: 10 });
+  await page.mouse.up();
+  await popped;
+  await expect(banner).toHaveCount(0);
+});
+
+test('a bottom-panel terminal let go outside the window opens alone in a new window', async ({ page }) => {
+  await boot(page);
+  await page.keyboard.press('Control+j');
+  const tile = page.locator('.ide-btile-tab').first();
+  await expect(tile).toBeVisible();
+  const f = await box(tile);
+  await page.mouse.move(f.x + f.width / 2, f.y + f.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(f.x + f.width / 2 + 20, f.y + f.height / 2 - 200, { steps: 8 });
+  await expect(page.locator('.ide-tear-banner')).toHaveText('Drop the terminal outside the window to open it in a new window');
+  const popped = page.context().waitForEvent('page');
+  await page.mouse.move(-40, 300, { steps: 10 });
+  await page.mouse.up();
+  const pop = await popped;
+  await expect(pop.locator('.dv-tab').filter({ hasText: /WSL/ })).toBeVisible();
+  // The terminal is made again in that window, with what it had printed.
+  await expect.poll(() => pop.locator('[data-terminal]').first().evaluate(el => (el as unknown as { __ledgeTermText?: string }).__ledgeTermText ?? '')).toContain('$');
+  const m = await model(page);
+  expect(m.groups.find(g => g.window !== 'main')!.tabs[0]).toMatch(/^terminal:shell:/);
+});
+
+test('the atelier: « Detach » sends its tab alone to a new window, « Bring back » gives it back to the main window', async ({ page }) => {
+  await boot(page);
+  await open(page, 'Otto');
+  await tabs(page).filter({ hasText: 'Atelier' }).click();
+  const popped = page.context().waitForEvent('page');
+  await page.locator('.ide-abar').getByRole('button', { name: 'Detach' }).click();
+  const pop = await popped;
+  await expect(pop.locator('.ide-popout-bar .ide-wtitle')).toHaveText('Atelier');
+  const closed = pop.waitForEvent('close');
+  await pop.locator('.ide-abar').getByRole('button', { name: 'Bring back' }).click();
+  await closed;
+  const m = await model(page);
+  expect(m.windows).toEqual(['main']);
+  expect(m.groups[0]!.tabs).toContain('atelier:main');
 });
