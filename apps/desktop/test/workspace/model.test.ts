@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeGroup, closeOthers, CLOSED_MAX, cycleLink, cycleTab, deserialize, emptyProposals, empty, find, focusGroup, focusNth, focused, keyOf, MAIN, move, moveActive, moveTo, open, place, reconcile, remember, reopenLast, serialize, setView, split, type Closed, type Tab, type Workspace } from '../../src/workspace/model';
+import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeGroup, closeOthers, CLOSED_MAX, cycleLink, setLink, cycleTab, deserialize, emptyProposals, empty, find, focusGroup, focusNth, focused, keyOf, MAIN, move, moveActive, moveTo, open, place, reconcile, remember, reopenLast, serialize, setView, split, type Closed, type Tab, type Workspace } from '../../src/workspace/model';
 
 const S = (id: string): Tab => ({ kind: 'session', ref: id });
 const keys = (w: Workspace, groupId: string) => w.groups.find(g => g.id === groupId)!.tabs.map(keyOf);
@@ -150,11 +150,13 @@ describe('linked groups', () => {
     expect(keys(w, 'g1')).toContain('terminal:shell:1');
   });
 
-  it('the link square cycles none → violet → teal → none', () => {
+  it('six link colours: cycleLink goes through them, then none; setLink picks one', () => {
     let w = open(empty(), S('pim'));
     const seen = [w.groups[0]!.link];
-    for (let i = 0; i < 3; i++) { w = cycleLink(w, 'g1'); seen.push(w.groups[0]!.link); }
-    expect(seen).toEqual([null, 'violet', 'teal', null]);
+    for (let i = 0; i < 7; i++) { w = cycleLink(w, 'g1'); seen.push(w.groups[0]!.link); }
+    expect(seen).toEqual([null, 'violet', 'teal', 'rose', 'lime', 'fuchsia', 'sand', null]);
+    expect(setLink(w, 'g1', 'lime').groups[0]!.link).toBe('lime');
+    expect(setLink(setLink(w, 'g1', 'lime'), 'g1', null).groups[0]!.link).toBeNull();
   });
 
   it('« +N −N » again focuses the existing changes, never a second copy', () => {
@@ -181,6 +183,12 @@ describe('views, reconcile, layouts', () => {
     let w = open(open(empty(), S('pim')), S('nova'), 'window');
     w = beside(w, 'g1', 'changes', 'pim');
     expect(deserialize(serialize(w))).toEqual(w);
+  });
+
+  it('a Rig tab survives serialisation', () => {
+    const w = open(empty(), { kind: 'rig', ref: 'local:ledge-dev' });
+    expect(deserialize(serialize(w))).toEqual(w);
+    expect(deserialize(JSON.stringify(w))?.groups[0]!.tabs).toEqual([{ kind: 'rig', ref: 'local:ledge-dev' }]);
   });
 
   it('a malformed layout is refused', () => {

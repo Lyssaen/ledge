@@ -21,11 +21,15 @@ export type SeatPermissions = z.infer<typeof SeatPermissionsSchema>;
 /** The kernel's own rig, which OpenRig starts with its daemon unless told `--no-kernel`. */
 export const KERNEL_RIG = 'kernel';
 
+/** An OpenRig snapshot's id: a ULID, as `rig restore` takes it (never a leading `-`, which `rig` would read as a flag). */
+export const RigSnapshotIdSchema = z.string().regex(/^[0-9A-Z]{26}$/, 'not a snapshot id');
+
 /** A seat of a rig, as `rig ps --nodes --json` reports it. `activity`: `agentActivity.state` (running, idle, unknown…). */
 export const RigSeatSchema = z.object({
   logicalId: z.string(), session: z.string(), runtime: z.string(), model: z.string().nullable(),
   sessionStatus: z.string(), lifecycleState: z.string(), activity: z.string(),
-  stopped: z.boolean(), work: z.number().int().min(0)
+  stopped: z.boolean(), work: z.number().int().min(0),
+  /** OpenRig's `needsAttention` for the seat, when it says. */ attention: z.boolean().optional()
 });
 export type RigSeat = z.infer<typeof RigSeatSchema>;
 
@@ -33,7 +37,8 @@ export type RigSeat = z.infer<typeof RigSeatSchema>;
 export const RigSchema = z.object({
   id: z.string(), name: z.string(), status: z.string(), lifecycleState: z.string(),
   seats: z.number().int().min(0), running: z.number().int().min(0), attention: z.number().int().min(0),
-  uptime: z.string().nullable(), snapshot: z.string().nullable(), nodes: z.array(RigSeatSchema)
+  uptime: z.string().nullable(), snapshot: z.string().nullable(), nodes: z.array(RigSeatSchema),
+  /** The spec file of a rig Ledge launched, when it is on the machine. */ specPath: z.string().optional()
 });
 export type Rig = z.infer<typeof RigSchema>;
 
@@ -44,7 +49,8 @@ export const RigKernelStateSchema = z.enum(['ready', 'starting', 'stopped', 'ski
 /** OpenRig on one machine. `installed` false: no `rig` command there, and nothing else is known. */
 export const OpenRigStateSchema = z.object({
   installed: z.boolean(), version: z.string().optional(),
-  daemon: z.object({ state: RigDaemonStateSchema, pid: z.number().int().optional(), port: z.number().int().optional(), message: z.string().optional() }),
+  daemon: z.object({ state: RigDaemonStateSchema, pid: z.number().int().optional(), port: z.number().int().optional(), message: z.string().optional(),
+    /** When the running daemon started (ISO), from OpenRig's `daemon.json`. */ startedAt: z.string().optional() }),
   kernel: z.object({ state: RigKernelStateSchema }),
   rigs: z.array(RigSchema),
   /** When it was read (ISO). */ at: z.string()
@@ -52,7 +58,14 @@ export const OpenRigStateSchema = z.object({
 export type OpenRigState = z.infer<typeof OpenRigStateSchema>;
 
 /** What Ledge can do to OpenRig on a machine. The rig ones name it in `rig`. */
-export const OpenRigActionSchema = z.discriminatedUnion('kind', [
+/** OpenRig's built-in permission policies (`builtin:<name>`): `auto` Claude's auto mode, `yolo` no prompt at all, `open` / `standard`
+ *  / `locked` recorded rules (applied once translated into the harness's settings). */
+export const RigPolicySchema = z.enum(['auto', 'standard', 'open', 'yolo', 'locked']);
+export type RigPolicy = z.infer<typeof RigPolicySchema>;
+export const RIG_POLICIES: readonly RigPolicy[] = RigPolicySchema.options;
+/** A seat's logical id as `rig up --fresh` takes it: `pod.member` (never a leading `-`, which `rig` would read as a flag). */
+const RigLogicalIdSchema = z.string().min(3).max(201).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/, 'not a seat logical id');
+const OpenRigActionUnion = z.discriminatedUnion('kind', [
   /** `restore` `last`: `rig start --last` (the rigs that were running come back); `none`: `rig daemon start`. */
   z.object({ kind: z.literal('daemon.start'), restore: z.enum(['last', 'none']).optional(), noKernel: z.boolean().optional() }),
   z.object({ kind: z.literal('daemon.stop') }),
@@ -60,15 +73,34 @@ export const OpenRigActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('kernel.start') }),
   z.object({ kind: z.literal('kernel.stop') }),
   z.object({ kind: z.literal('kernel.restart') }),
-  z.object({ kind: z.literal('rig.start'), rig: RigNameSchema }),
+  /** `snapshot`: brings the rig back from that snapshot (`rig restore <id> --rig <rig>`); without it, from the last usable one (`rig up --existing`). */
+  z.object({ kind: z.literal('rig.start'), rig: RigNameSchema, snapshot: RigSnapshotIdSchema.optional(),
+    /** Seats (`pod.member`, logical ids) that start fresh instead of resuming their session (`rig up --existing --fresh …`, lot 7d); not with `snapshot`. */
+    fresh: z.array(RigLogicalIdSchema).min(1).max(200).optional() }),
+  /** Takes a snapshot of the rig now (`rig snapshot <rig>`, kind `manual`). */
+  z.object({ kind: z.literal('rig.snapshot'), rig: RigNameSchema }),
   z.object({ kind: z.literal('rig.stop'), rig: RigNameSchema, snapshot: z.boolean().optional(), force: z.boolean().optional(), delete: z.boolean().optional() }),
   z.object({ kind: z.literal('rig.restart'), rig: RigNameSchema }),
   /** A seat's settings (docs/mockups/ledge-openrig-groups.html, view 2). `runtime`: moves it now to the other harness (a successor
    *  takes its context, `rig seat set-runtime`), `model` and `effort` going with it; without it, `model`, `effort` and `permissions`
    *  apply at its next resume. `dryRun`: the move's plan only. */
   z.object({ kind: z.literal('seat.set'), seat: RigSeatNameSchema, runtime: z.enum(['claude-code', 'codex']).optional(), model: ModelIdSchema.optional(),
-    effort: EffortSchema.optional(), permissions: SeatPermissionsSchema.optional(), dryRun: z.boolean().optional() })
+    effort: EffortSchema.optional(), permissions: SeatPermissionsSchema.optional(), dryRun: z.boolean().optional() }),
+  /** Every listed seat's permissions, at its next launch (`rig seat set-permissions` one by one, stopping at the first failure): OpenRig
+   *  has no permission of the rig itself to change. Each seat belongs to `rig` (`...@<rig>`: checked below). */
+  z.object({ kind: z.literal('rig.permissions'), rig: RigNameSchema, mode: SeatPermissionsSchema, seats: z.array(RigSeatNameSchema).min(1).max(200) }),
+  /** One of the six permission levels on every listed seat, at its next launch: per seat, the explicit mode goes back to `inherit`
+   *  (`rig seat set-permissions`, else it would win over the policy), then `rig policy apply <policy> --seat` stores the policy on it.
+   *  `spec`: what the rig's spec gives each seat (its member's `permission_policy`, else the rig's), resolved by the daemon (OpenRig
+   *  cannot clear a seat's stored policy); refused (`spec_unknown`, `spec_no_policy`, `spec_policy_unsupported`) before anything runs.
+   *  Stops at the first failure. Each seat belongs to `rig`. */
+  z.object({ kind: z.literal('rig.policy'), rig: RigNameSchema, policy: z.union([RigPolicySchema, z.literal('spec')]), seats: z.array(RigSeatNameSchema).min(1).max(200) })
 ]);
+export const OpenRigActionSchema = OpenRigActionUnion.superRefine((a, ctx) => {
+  if (a.kind === 'rig.start' && a.fresh && a.snapshot) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fresh'], message: 'fresh and snapshot are exclusive' });
+  if (a.kind !== 'rig.permissions' && a.kind !== 'rig.policy') return;
+  a.seats.forEach((s, i) => { if (!s.endsWith(`@${a.rig}`)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['seats', i], message: `not a seat of ${a.rig}` }); });
+});
 export type OpenRigAction = z.infer<typeof OpenRigActionSchema>;
 
 /** A front asks a machine for its OpenRig. */
@@ -88,15 +120,88 @@ export const OpenRigStateMessageSchema = z.object({
  *  another action runs on that machine, `not_installed`), plus the fleet's `offline` / `outdated`. */
 export const OpenRigDoneSchema = z.object({
   type: z.literal('openrig.done'), requestId: z.string(), machineId: z.string().optional(), ok: z.boolean(),
-  commands: z.array(z.string()), output: z.string().optional(), error: z.string().optional()
+  commands: z.array(z.string()), output: z.string().optional(), error: z.string().optional(),
+  /** On a failed `rig.permissions` or `rig.policy`: how many seats (in order) went through before the one that failed. For `rig.policy`,
+   *  the failed seat may already have lost its explicit selection (`--mode inherit` ran, `policy apply` did not). */
+  completed: z.number().int().min(0).optional()
 });
+/** A rig's topology (lot 7a): one seat of a pod, keyed by `logicalId` (`dev.build`). `status` is OpenRig's own word (`running`,
+ *  `exited`…; `unknown` when only the spec could be read); `attention` is its `needsAttention`; `role` the agent spec it runs
+ *  (`resolvedSpecName`), `session` its canonical session name, `context` the used share of its context window (percent). */
+export const RigGraphSeatSchema = z.object({
+  logicalId: z.string(), pod: z.string(), role: z.string().optional(), runtime: z.string(), model: z.string().optional(),
+  status: z.string(), session: z.string().optional(), attention: z.boolean(), context: z.number().optional()
+});
+/** A typed link between two seats, both as `logicalId`; `kind` is the edge's label (`delegates_to`, `escalates_to`, `collaborates_with`…). */
+export const RigLinkSchema = z.object({ from: z.string(), to: z.string(), kind: z.string() });
+/** A rig's pods, seats and links, for a running rig and a stopped one. */
+export const RigGraphSchema = z.object({
+  pods: z.array(z.object({ id: z.string(), label: z.string() })), seats: z.array(RigGraphSeatSchema), links: z.array(RigLinkSchema)
+});
+export type RigGraphSeat = z.infer<typeof RigGraphSeatSchema>;
+export type RigLink = z.infer<typeof RigLinkSchema>;
+export type RigGraph = z.infer<typeof RigGraphSchema>;
+
+/** A front asks a machine for a rig's topology. */
+export const OpenRigGraphSchema = z.object({ type: z.literal('openrig.graph'), requestId: z.string().min(1).max(100), machineId: z.string().optional(), rig: RigNameSchema });
+/** The topology, or why not: `unknown_rig`, `not_installed`, `daemon_stopped`, or the fleet's `offline` / `outdated`. */
+export const OpenRigGraphStateSchema = z.object({
+  type: z.literal('openrig.graphState'), requestId: z.string(), machineId: z.string().optional(), rig: z.string(),
+  graph: RigGraphSchema.optional(), error: z.string().optional()
+});
+export type OpenRigGraph = z.infer<typeof OpenRigGraphSchema>;
+export type OpenRigGraphState = z.infer<typeof OpenRigGraphStateSchema>;
+
+/** One snapshot of a rig, as the list tells it (never its `data`, which is heavy). `kind`: `manual`, `auto-pre-down`, `auto-periodic`,
+ *  `pre_restore`… and `createdAt`, as OpenRig writes it (`2026-11-08 14:54:01`, UTC). */
+export const RigSnapshotSchema = z.object({ id: z.string(), kind: z.string(), status: z.string(), createdAt: z.string() });
+export type RigSnapshot = z.infer<typeof RigSnapshotSchema>;
+/** How many snapshots a list carries: the most recent. */
+export const RIG_SNAPSHOTS_MAX = 20;
+
+/** A front asks a machine for a rig's snapshots. */
+export const OpenRigSnapshotsSchema = z.object({ type: z.literal('openrig.snapshots'), requestId: z.string().min(1).max(100), machineId: z.string().optional(), rig: RigNameSchema });
+/** The snapshots, newest first (`RIG_SNAPSHOTS_MAX` at most), or why not: `unknown_rig`, `not_installed`, `daemon_stopped`, what `rig` said, or the fleet's `offline` / `outdated`. */
+export const OpenRigSnapshotListSchema = z.object({
+  type: z.literal('openrig.snapshotList'), requestId: z.string(), machineId: z.string().optional(), rig: z.string(),
+  snapshots: z.array(RigSnapshotSchema), error: z.string().optional()
+});
+/** One seat's permissions as OpenRig tells them (`rig seat status`): `mode` the effective mode (`acceptEdits`…), `source` where it comes from
+ *  (`kernel_default`, `team_default`, `seat`…), `posture` the launch posture (`floor`…), `selection` the seat's own choice (`inherit`…),
+ *  `summary` one sentence. What OpenRig does not say is absent; `error`: this seat's status could not be read (the others are). */
+export const RigSeatPermissionSchema = z.object({
+  logicalId: z.string(), session: z.string(), mode: z.string().optional(), source: z.string().optional(), posture: z.string().optional(),
+  selection: z.string().optional(), summary: z.string().optional(), error: z.string().optional(),
+  /** The member policy OpenRig's summary names (`builtin:<name>` or `none`): read from its sentence, not a contract; absent otherwise. */
+  policy: z.string().optional(),
+  /** OpenRig's `permissions.account.source` (`member_policy`, `rig_policy`, `team_default`, `floor`, `explicit`, `kernel_default`). */
+  policySource: z.string().optional()
+});
+export type RigSeatPermission = z.infer<typeof RigSeatPermissionSchema>;
+
+/** A front asks a machine for a rig's permissions: the spec's policy and each seat's effective mode. */
+export const OpenRigPermissionsSchema = z.object({ type: z.literal('openrig.permissions'), requestId: z.string().min(1).max(100), machineId: z.string().optional(), rig: RigNameSchema });
+/** `policy`: the rig's `permission_policy` when its spec is known to the machine's Ledge; absent otherwise. `error`: `unknown_rig`, `not_installed`,
+ *  `daemon_stopped`, what `rig` said, or the fleet's `offline` / `outdated`. */
+export const OpenRigPermissionListSchema = z.object({
+  type: z.literal('openrig.permissionList'), requestId: z.string(), machineId: z.string().optional(), rig: z.string(),
+  policy: z.string().optional(), seats: z.array(RigSeatPermissionSchema), error: z.string().optional()
+});
+export type OpenRigPermissions = z.infer<typeof OpenRigPermissionsSchema>;
+export type OpenRigPermissionList = z.infer<typeof OpenRigPermissionListSchema>;
+
+export type OpenRigSnapshots = z.infer<typeof OpenRigSnapshotsSchema>;
+export type OpenRigSnapshotList = z.infer<typeof OpenRigSnapshotListSchema>;
+
 export type OpenRigStatus = z.infer<typeof OpenRigStatusSchema>;
 export type OpenRigAct = z.infer<typeof OpenRigActSchema>;
 export type OpenRigStateMessage = z.infer<typeof OpenRigStateMessageSchema>;
 export type OpenRigDone = z.infer<typeof OpenRigDoneSchema>;
 
-/** The `rig` commands an action runs, in order; the first that fails stops the rest. */
-export function rigCommands(a: OpenRigAction): string[][] {
+/** The `rig` commands an action runs, in order; the first that fails stops the rest. `specPolicies`: per seat, the policy its spec gives it (`builtin:x`), for `rig.policy` with `spec`; without it the preview shows `<spec>`. */
+export function rigCommands(a: OpenRigAction, specPolicies?: Record<string, string>): string[][] {
+  // OpenRig 0.7 refuses a seat change from outside a managed seat without an operator (400 « Sender identity is required »).
+  const who = ['--reason', 'Ledge', '--operator', 'ledge@external'];
   const start = (restore?: 'last' | 'none', noKernel?: boolean): string[] =>
     restore === 'last' ? ['start', '--last', '--json'] : ['daemon', 'start', ...(noKernel ? ['--no-kernel'] : [])];
   const up = (rig: string) => ['up', rig, '--existing', '--yes', '--json'];
@@ -109,17 +214,24 @@ export function rigCommands(a: OpenRigAction): string[][] {
     case 'kernel.start': return [up(KERNEL_RIG)];
     case 'kernel.stop': return [down(KERNEL_RIG)];
     case 'kernel.restart': return [down(KERNEL_RIG, { snapshot: true }), up(KERNEL_RIG)];
-    case 'rig.start': return [up(a.rig)];
+    case 'rig.start': return [a.snapshot ? ['restore', a.snapshot, '--rig', a.rig] : a.fresh ? ['up', a.rig, '--existing', '--fresh', ...a.fresh, '--yes', '--json'] : up(a.rig)];
+    case 'rig.snapshot': return [['snapshot', a.rig]];
     case 'rig.stop': return [down(a.rig, a)];
     case 'rig.restart': return [down(a.rig, { snapshot: true }), up(a.rig)];
+    case 'rig.permissions': return a.seats.map(seat => ['seat', 'set-permissions', seat, '--mode', a.mode, ...who, '--json']);
+    case 'rig.policy': return a.seats.flatMap(seat => {
+      const name = a.policy === 'spec' ? (specPolicies?.[seat]?.replace(/^builtin:/, '') ?? '<spec>') : a.policy;
+      return [['seat', 'set-permissions', seat, '--mode', 'inherit', ...who, '--json'], ['policy', 'apply', name, '--seat', seat, ...who, '--json']];
+    });
     case 'seat.set': {
       const why = ['--reason', 'Ledge'];
+      // `set-runtime` has no `--operator` in OpenRig 0.7; the other three do.
       if (a.runtime) return [['seat', 'set-runtime', a.seat, '--runtime', a.runtime, ...(a.model ? ['--model', a.model] : []), ...(a.effort ? ['--effort', a.effort] : []),
         ...(a.permissions && a.permissions !== 'inherit' ? ['--permission-mode', a.permissions] : []), ...(a.dryRun ? ['--dry-run'] : []), ...why]];
       return [
-        ...(a.model ? [['seat', 'set-model', a.seat, '--model', a.model, ...why, '--json']] : []),
-        ...(a.effort ? [['seat', 'set-effort', a.seat, '--effort', a.effort, ...why, '--json']] : []),
-        ...(a.permissions ? [['seat', 'set-permissions', a.seat, '--mode', a.permissions, ...why, '--json']] : [])
+        ...(a.model ? [['seat', 'set-model', a.seat, '--model', a.model, ...who, '--json']] : []),
+        ...(a.effort ? [['seat', 'set-effort', a.seat, '--effort', a.effort, ...who, '--json']] : []),
+        ...(a.permissions ? [['seat', 'set-permissions', a.seat, '--mode', a.permissions, ...who, '--json']] : [])
       ];
     }
   }
@@ -138,7 +250,8 @@ export const RigSpecPodSchema = z.object({ id: z.string(), label: z.string().opt
 export const RigSpecSchema = z.object({
   name: z.string(), source: z.string(), summary: z.string().optional(), path: z.string(),
   /** The rig's `permission_policy`, as written (`builtin:auto`, a file…). */ policy: z.string().optional(),
-  pods: z.array(RigSpecPodSchema), edges: z.number().int().min(0)
+  pods: z.array(RigSpecPodSchema), edges: z.number().int().min(0),
+  /** The spec's links between its seats as `pod.member` (a pod's edges, then the top-level ones), `kind` as written. */ links: z.array(RigLinkSchema).optional()
 });
 export type RigSpec = z.infer<typeof RigSpecSchema>;
 
@@ -155,11 +268,6 @@ const RuntimeSchema = z.enum(['claude-code', 'codex']);
 /** What the launch form asks for. `seats`: how many of each role (1 when absent, 0 drops it); `runtimes` / `models` replace the spec's
  *  for a role; `delegation`: how added seats delegate (`pairs`: build-2 → review-2, `all`: each to each); `save`: keep the composed
  *  spec in the person's OpenRig library; `plan`: check only (`rig up --plan`). */
-/** OpenRig's built-in permission policies (`builtin:<name>`): `auto` Claude's auto mode, `yolo` no prompt at all, `open` / `standard`
- *  / `locked` recorded rules (applied once translated into the harness's settings). */
-export const RigPolicySchema = z.enum(['auto', 'standard', 'open', 'yolo', 'locked']);
-export type RigPolicy = z.infer<typeof RigPolicySchema>;
-export const RIG_POLICIES: readonly RigPolicy[] = RigPolicySchema.options;
 export const RigLaunchSchema = z.object({
   spec: RigNameSchema, cwd: z.string().min(1).max(4096), name: RigNameSchema,
   seats: z.record(RigRoleSchema, z.number().int().min(0).max(9)).optional(),
@@ -172,6 +280,28 @@ export const RigLaunchSchema = z.object({
   nonInterruptive: z.boolean().optional()
 });
 export type RigLaunch = z.infer<typeof RigLaunchSchema>;
+
+/** Whether the launch changes the spec (counts, harnesses, models or permissions): if not, the library spec launches as it is. */
+export function changesSpec(l: RigLaunch): boolean {
+  return Object.values(l.seats ?? {}).some(n => n !== 1) || Object.keys(l.runtimes ?? {}).length > 0 || Object.keys(l.models ?? {}).length > 0
+    || l.policy !== undefined || Object.keys(l.policies ?? {}).length > 0;
+}
+
+/** Whether a launch runs a composed spec (`<rigsDir>/<name>/rig.yaml`) rather than the library's: it changes the spec, keeps it, or is renamed on a
+ *  `rig` without `--name` (`o.name`: before 0.7 another name was a composed copy too). The daemon and the front both decide by this. */
+export const composes = (l: RigLaunch, spec: RigSpec, o: { name: boolean }): boolean => changesSpec(l) || l.save === true || (l.name !== spec.name && !o.name);
+
+/** The `rig` commands a launch runs (the daemon runs exactly these; a front shows them). `rigsDir`: where Ledge keeps the specs it composes;
+ *  `name`: whether this `rig` knows `rig up --name` (0.7). A composed spec (changed, kept, or renamed on a `rig` without `--name`) launches from
+ *  `<rigsDir>/<name>/rig.yaml`; `save` then adds it to the library. */
+export function launchCommands(l: RigLaunch, spec: RigSpec, o: { rigsDir: string; name: boolean }): string[][] {
+  const rename = l.name !== spec.name;
+  const composed = composes(l, spec, o);
+  const dir = `${o.rigsDir.replace(/\/$/, '')}/${l.name}`;
+  const commands: string[][] = [['up', composed ? `${dir}/rig.yaml` : spec.name, ...(!composed && rename ? ['--name', l.name] : []), '--cwd', l.cwd, ...(l.nonInterruptive ? ['--non-interruptive'] : []), ...(l.plan ? ['--plan'] : ['--yes']), '--json']];
+  if (!l.plan && l.save && composed) commands.push(['specs', 'add', dir, '--json']);
+  return commands;
+}
 export const OpenRigLaunchSchema = z.object({ type: z.literal('openrig.launch'), requestId: z.string().min(1).max(100), launch: RigLaunchSchema, machineId: z.string().optional() });
 /** A launch (or its check) ended. `yaml`: the spec launched (composed or the library's); `seats`: how many; `output`: what `rig` printed
  *  (the plan, for a check); `commands`: what was run; `error`: why it failed. */

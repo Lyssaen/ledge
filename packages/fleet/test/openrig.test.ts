@@ -96,6 +96,148 @@ describe('useOpenRigRoles / useOpenRigRole / readRoleFile', () => {
   });
 });
 
+describe('duplicateRole', () => {
+  it('asks one machine to copy a role and resolves with its own answer only', async () => {
+    const { duplicateRole } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const p = duplicateRole(client, 'server', 'f95e', 'mine');
+    expect(sent.at(-1)).toMatchObject({ type: 'openrig.role.duplicate', machineId: 'server', roleId: 'f95e', name: 'mine' });
+    emit({ type: 'openrig.roleDuplicated', requestId: 'other', ok: false, error: 'x' });
+    emit({ type: 'openrig.roleDuplicated', requestId: rid(sent.at(-1)), ok: true, roleId: 'abc1', path: '/p/mine' });
+    await expect(p).resolves.toMatchObject({ ok: true, roleId: 'abc1', path: '/p/mine' });
+  });
+});
+
+describe('useRigSnapshots', () => {
+  const snapshots = [{ id: '01M6XTAV9KM2HVRS841K1FQ6RV', kind: 'manual', status: 'complete', createdAt: '2026-11-08 14:52:23' }];
+  it('asks once per machine and rig, its own answer only; another rig is not shown the previous list', async () => {
+    const { useRigSnapshots } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const { result, rerender } = renderHook(({ rig }) => useRigSnapshots(client, 'server', rig), { initialProps: { rig: 'a' as string | null } });
+    expect(result.current).toMatchObject({ status: 'loading', snapshots: [] });
+    expect(sent).toEqual([{ type: 'openrig.snapshots', requestId: rid(sent[0]), machineId: 'server', rig: 'a' }]);
+    emit({ type: 'openrig.snapshotList', requestId: 'other', rig: 'a', snapshots });
+    expect(result.current.status).toBe('loading');
+    emit({ type: 'openrig.snapshotList', requestId: rid(sent[0]), machineId: 'server', rig: 'a', snapshots });
+    expect(result.current).toMatchObject({ status: 'ready', snapshots });
+    rerender({ rig: 'b' });
+    expect(result.current).toMatchObject({ status: 'loading', snapshots: [] });
+    emit({ type: 'openrig.snapshotList', requestId: rid(sent.at(-1)), rig: 'b', snapshots: [], error: 'unknown_rig' });
+    expect(result.current).toMatchObject({ status: 'ready', snapshots: [], error: 'unknown_rig' });
+    act(() => result.current.reload());
+    expect(sent).toHaveLength(3);
+    rerender({ rig: null });
+    expect(result.current.status).toBe('idle');
+  });
+});
+
+describe('useRigPermissions', () => {
+  const seats = [{ logicalId: 'dev.build', session: 'dev-build@a', mode: 'acceptEdits', source: 'kernel_default', posture: 'floor', selection: 'inherit', summary: 's' }];
+  it('asks once per machine and rig, its own answer only; another rig is not shown the previous seats', async () => {
+    const { useRigPermissions } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const { result, rerender } = renderHook(({ rig }) => useRigPermissions(client, 'server', rig), { initialProps: { rig: 'a' as string | null } });
+    expect(result.current).toMatchObject({ status: 'loading', seats: [] });
+    expect(sent).toEqual([{ type: 'openrig.permissions', requestId: rid(sent[0]), machineId: 'server', rig: 'a' }]);
+    emit({ type: 'openrig.permissionList', requestId: 'other', rig: 'a', seats });
+    expect(result.current.status).toBe('loading');
+    emit({ type: 'openrig.permissionList', requestId: rid(sent[0]), machineId: 'server', rig: 'a', policy: 'builtin:auto', seats });
+    expect(result.current).toMatchObject({ status: 'ready', policy: 'builtin:auto', seats });
+    rerender({ rig: 'b' });
+    expect(result.current).toMatchObject({ status: 'loading', seats: [] });
+    emit({ type: 'openrig.permissionList', requestId: rid(sent.at(-1)), rig: 'b', seats: [], error: 'unknown_rig' });
+    expect(result.current).toMatchObject({ status: 'ready', seats: [], error: 'unknown_rig' });
+    expect(result.current.policy).toBeUndefined();
+    act(() => result.current.reload());
+    expect(sent).toHaveLength(3);
+    rerender({ rig: null });
+    expect(result.current.status).toBe('idle');
+  });
+});
+
+describe('useRigQueue', () => {
+  const row = { id: 'qitem-1', state: 'pending', from: 'a@kernel', to: 'dev-build@a', createdAt: 'a', updatedAt: 'b', at: 'c', needsInput: { count: 1, reason: 'permission_prompt' } };
+  it('asks once per machine and rig and again every RIG_QUEUE_REFRESH_MS while mounted; its latest answer only; another rig is not shown the previous rows', async () => {
+    vi.useFakeTimers();
+    try {
+      const { useRigQueue } = await import('../src/openrig');
+      const { RIG_QUEUE_REFRESH_MS } = await import('@ledge/protocol');
+      expect(RIG_QUEUE_REFRESH_MS).toBe(15_000);
+      const { client, sent, emit, listeners } = fake();
+      const { result, rerender, unmount } = renderHook(({ rig }) => useRigQueue(client, 'server', rig), { initialProps: { rig: 'a' as string | null } });
+      expect(result.current).toMatchObject({ status: 'loading', rows: [], truncated: false });
+      expect(sent).toEqual([{ type: 'openrig.queue', requestId: rid(sent[0]), machineId: 'server', rig: 'a' }]);
+      emit({ type: 'openrig.queueState', requestId: 'other', rig: 'a', rows: [], truncated: false });
+      expect(result.current.status).toBe('loading');
+      emit({ type: 'openrig.queueState', requestId: rid(sent[0]), machineId: 'server', rig: 'a', rows: [row], truncated: true });
+      expect(result.current).toMatchObject({ status: 'ready', rows: [row], truncated: true });
+      act(() => { vi.advanceTimersByTime(RIG_QUEUE_REFRESH_MS - 1); });
+      expect(sent).toHaveLength(1);
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(sent).toHaveLength(2);
+      emit({ type: 'openrig.queueState', requestId: rid(sent[0]), rig: 'a', rows: [], truncated: false }); // superseded
+      expect(result.current.rows).toEqual([row]);
+      emit({ type: 'openrig.queueState', requestId: rid(sent[1]), rig: 'a', rows: [], truncated: false });
+      expect(result.current).toMatchObject({ status: 'ready', rows: [] });
+      rerender({ rig: 'b' });
+      expect(result.current).toMatchObject({ status: 'loading', rows: [] });
+      expect(sent).toHaveLength(3);
+      emit({ type: 'openrig.queueState', requestId: rid(sent[2]), rig: 'b', rows: [], truncated: false, error: 'unknown_rig' });
+      expect(result.current).toMatchObject({ status: 'ready', rows: [], error: 'unknown_rig' });
+      act(() => result.current.reload());
+      expect(sent).toHaveLength(4);
+      rerender({ rig: null });
+      expect(result.current.status).toBe('idle');
+      act(() => { vi.advanceTimersByTime(60_000); });
+      expect(sent).toHaveLength(4);
+      rerender({ rig: 'a' });
+      unmount();
+      expect(listeners.size).toBe(0);
+      act(() => { vi.advanceTimersByTime(60_000); });
+      expect(sent).toHaveLength(5);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('useRigQueue offline', () => {
+  it('keeps the last rows when a later ask answers offline, and shows the error', async () => {
+    vi.useFakeTimers();
+    try {
+      const { useRigQueue } = await import('../src/openrig');
+      const { client, sent, emit } = fake();
+      const row = { id: 'qitem-1', state: 'pending', from: 'a@k', to: 'b@a', createdAt: 'a', updatedAt: 'b', at: 'c' };
+      const { result } = renderHook(() => useRigQueue(client, 'server', 'a'));
+      emit({ type: 'openrig.queueState', requestId: rid(sent[0]), rig: 'a', rows: [row], truncated: false });
+      act(() => { vi.advanceTimersByTime(15_000); });
+      emit({ type: 'openrig.queueState', requestId: rid(sent[1]), rig: 'a', rows: [], truncated: false, error: 'offline' });
+      expect(result.current).toMatchObject({ status: 'ready', rows: [row], error: 'offline' });
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('useRigGraph', () => {
+  const graph = { pods: [{ id: 'dev', label: 'Project' }], seats: [{ logicalId: 'dev.build', pod: 'dev', runtime: 'codex', status: 'exited', attention: false }], links: [] };
+  it('asks once per machine and rig, its own answer only; another rig is not shown the previous graph', async () => {
+    const { useRigGraph } = await import('../src/openrig');
+    const { client, sent, emit } = fake();
+    const { result, rerender } = renderHook(({ rig }) => useRigGraph(client, 'server', rig), { initialProps: { rig: 'a' as string | null } });
+    expect(result.current.status).toBe('loading');
+    expect(sent).toEqual([{ type: 'openrig.graph', requestId: rid(sent[0]), machineId: 'server', rig: 'a' }]);
+    emit({ type: 'openrig.graphState', requestId: 'other', rig: 'a', graph });
+    expect(result.current.status).toBe('loading');
+    emit({ type: 'openrig.graphState', requestId: rid(sent[0]), machineId: 'server', rig: 'a', graph });
+    expect(result.current).toMatchObject({ status: 'ready', graph });
+    rerender({ rig: 'b' });
+    expect(result.current).toMatchObject({ status: 'loading', graph: null });
+    emit({ type: 'openrig.graphState', requestId: rid(sent.at(-1)), rig: 'b', error: 'unknown_rig' });
+    expect(result.current).toMatchObject({ status: 'ready', graph: null, error: 'unknown_rig' });
+    act(() => result.current.reload());
+    expect(sent).toHaveLength(3);
+    rerender({ rig: null });
+    expect(result.current.status).toBe('idle');
+  });
+});
+
 describe('useRigRow', () => {
   const row = { id: 'qitem-1-a', state: 'in-progress', from: 'a@r', to: 'b@r', createdAt: 'x', updatedAt: 'y', at: 'z' };
   it('asks while the card is visible, again every 30 s, its own answer only; nothing while hidden', async () => {

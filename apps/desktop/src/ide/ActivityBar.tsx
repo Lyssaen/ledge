@@ -3,7 +3,7 @@ import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
 import type { IdeLayout, LayoutAction, SideView } from '../workspace/layout';
 import { keyOf, type Tab } from '../workspace/model';
-import { ATELIER_TAB, openrigTab, SETTINGS_TAB } from '../workspace/store';
+import { ATELIER_TAB, SETTINGS_TAB } from '../workspace/store';
 import '../styles/ide.css';
 
 /** The IDE's activity bar (mockup `activity()`): the three sidebar views, then the tabs that open in the workspace.
@@ -19,7 +19,7 @@ export function ActivityBar({ layout, onLayout, onTab, activeTab, badge }: {
   );
   const active = activeTab ? keyOf(activeTab) : '';
   const tab = (target: Tab, d: readonly string[], label: string) => (
-    <button className={active === keyOf(target) || (target.kind === 'openrig' && active.startsWith('openrig:')) ? 'on' : undefined} aria-label={label} title={label} onClick={() => onTab(target)}>
+    <button className={active === keyOf(target) ? 'on' : undefined} aria-label={label} title={label} onClick={() => onTab(target)}>
       <Icon d={d} size={18} />
     </button>
   );
@@ -29,7 +29,6 @@ export function ActivityBar({ layout, onLayout, onTab, activeTab, badge }: {
       {view('projects', SHELL_ICONS.files, t.ide.projects)}
       {view('rigs', SHELL_ICONS.rig, t.ide.rigs)}
       {view('atoi', SHELL_ICONS.inbox, t.ide.atoi, mark)}
-      {tab(openrigTab(), SHELL_ICONS.machine, t.ide.openrigTab)}
       {tab(ATELIER_TAB, SHELL_ICONS.grid, t.ide.atelierTab)}
       <span className="grow" />
       {tab(SETTINGS_TAB, SHELL_ICONS.gear, t.ide.settingsTab)}

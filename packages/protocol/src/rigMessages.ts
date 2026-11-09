@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RigNameSchema } from './openrig.js';
 
 /**
  * OpenRig's messages in a seat's thread (docs/mockups/ledge-openrig-messages.html, validated 2026-11-02).
@@ -329,6 +330,8 @@ export function rigCommandResult(cmd: RigCommand, output: string, failed: boolea
 
 /** How often a front asks again for a visible card's row; the daemon answers from what it read less than that ago. */
 export const RIG_ROW_REFRESH_MS = 30_000;
+/** How often a screen that shows a rig's queue asks for it again while it is mounted. */
+export const RIG_QUEUE_REFRESH_MS = 15_000;
 
 /** A queue row as OpenRig reports it (`rig queue show <id> --json`). `state`: OpenRig's own word (`pending`,
  *  `in-progress`, `handed-off`, `blocked`, `done`…), shown as is when the front does not know it. */
@@ -338,7 +341,9 @@ export const RigRowSchema = z.object({
   /** `handed-off`: the seat it went to. */ handedOffTo: z.string().optional(),
   /** `blocked`: the row it waits on. */ blockedOn: z.string().optional(),
   createdAt: z.string(), claimedAt: z.string().optional(), updatedAt: z.string(),
-  /** When Ledge read it. */ at: z.string()
+  /** When Ledge read it. */ at: z.string(),
+  /** The request waits on a prompt (`waiting.liveness.needsInput`): how many, and why (`permission_prompt`…). Only set when `count` > 0. */
+  needsInput: z.object({ count: z.number().int().min(1), reason: z.string().nullable() }).optional()
 });
 export type RigRow = z.infer<typeof RigRowSchema>;
 
@@ -352,3 +357,14 @@ export const OpenRigRowStateSchema = z.object({
 });
 export type OpenRigRow = z.infer<typeof OpenRigRowSchema>;
 export type OpenRigRowState = z.infer<typeof OpenRigRowStateSchema>;
+
+/** A front asks a machine for a rig's open requests (`pending`, `in-progress`, `blocked`) that name one of its seats, as destination or source. */
+export const OpenRigQueueSchema = z.object({ type: z.literal('openrig.queue'), requestId: z.string().min(1).max(100), machineId: z.string().optional(), rig: RigNameSchema });
+/** The rows as OpenRig lists them; `truncated`: OpenRig's list was full (100), so older rows of this rig may be missing. `error`: `unknown_rig`,
+ *  `not_installed`, `daemon_stopped`, `failed`, the fleet's `offline` / `outdated`. */
+export const OpenRigQueueStateSchema = z.object({
+  type: z.literal('openrig.queueState'), requestId: z.string(), machineId: z.string().optional(), rig: z.string(),
+  rows: z.array(RigRowSchema), truncated: z.boolean(), error: z.string().optional()
+});
+export type OpenRigQueue = z.infer<typeof OpenRigQueueSchema>;
+export type OpenRigQueueState = z.infer<typeof OpenRigQueueStateSchema>;

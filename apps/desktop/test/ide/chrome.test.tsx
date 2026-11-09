@@ -42,10 +42,9 @@ describe('the IDE chrome', () => {
     expect(onLayout).toHaveBeenCalledWith({ type: 'view', view: 'rigs' });
     fireEvent.click(screen.getByRole('button', { name: 'Atelier (onglet)' }));
     expect(keyOf(onTab.mock.calls[0]![0])).toBe('atelier:main');
-    fireEvent.click(screen.getByRole('button', { name: 'OpenRig (onglet)' }));
-    expect(keyOf(onTab.mock.calls[1]![0])).toBe('openrig:local');
+    expect(screen.queryByRole('button', { name: 'OpenRig (onglet)' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Réglages (onglet)' }));
-    expect(keyOf(onTab.mock.calls[2]![0])).toBe('settings:main');
+    expect(keyOf(onTab.mock.calls[1]![0])).toBe('settings:main');
     fireEvent.click(screen.getByRole('button', { name: /À toi/ }));
     expect(onLayout).toHaveBeenLastCalledWith({ type: 'view', view: 'atoi' });
   });
@@ -74,11 +73,16 @@ describe('the IDE chrome', () => {
     expect(document.querySelector('.ide-badge')).toBeNull();
   });
 
-  it('activity order: views, OpenRig and Atelier, the grow zone, then Réglages alone', () => {
+  it('activity order: views, Atelier, the grow zone, then Réglages alone', () => {
     activity();
     const nav = screen.getByRole('navigation');
     const names = Array.from(nav.children).map(e => e.classList.contains('grow') ? 'grow' : e.getAttribute('aria-label'));
-    expect(names).toEqual(['Projets', 'Rigs OpenRig', 'À toi', 'OpenRig (onglet)', 'Atelier (onglet)', 'grow', 'Réglages (onglet)']);
+    expect(names).toEqual(['Projets', 'Rigs OpenRig', 'À toi', 'Atelier (onglet)', 'grow', 'Réglages (onglet)']);
+  });
+
+  it('no « ! » on Rigs (the user, 2026-11-09)', () => {
+    activity();
+    expect(screen.getByRole('button', { name: 'Rigs OpenRig' }).querySelector('.ide-badge')).toBeNull();
   });
 
   it('no MR et PR yet', () => {

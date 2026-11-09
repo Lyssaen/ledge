@@ -8,9 +8,9 @@ import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
 import { SessionCommandsSchema, SessionCommandsListingSchema } from './commands.js';
 import { ModelsListSchema, ModelsListingSchema, ModelIdSchema, EffortSchema, SessionModelAcceptedSchema } from './models.js';
 import { ReposScanSchema, ReposFoundSchema } from './scan.js';
-import { RigSeatNameSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigGoalReplySchema, OpenRigGoalSendSchema, OpenRigGoalSentSchema, OpenRigGoalsChangedSchema, OpenRigGoalsSchema, OpenRigAnswerSchema, OpenRigAnsweredSchema, OpenRigAsksChangedSchema, OpenRigAsksSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
-import { OpenRigRowSchema, OpenRigRowStateSchema } from './rigMessages.js';
-import { OpenRigRoleDetailSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
+import { RigSeatNameSchema, OpenRigGraphSchema, OpenRigGraphStateSchema, OpenRigSnapshotsSchema, OpenRigSnapshotListSchema, OpenRigPermissionsSchema, OpenRigPermissionListSchema, OpenRigActSchema, OpenRigGoalRepliedSchema, OpenRigGoalReplySchema, OpenRigGoalSendSchema, OpenRigGoalSentSchema, OpenRigGoalsChangedSchema, OpenRigGoalsSchema, OpenRigAnswerSchema, OpenRigAnsweredSchema, OpenRigAsksChangedSchema, OpenRigAsksSchema, OpenRigDoneSchema, OpenRigLaunchedSchema, OpenRigLaunchSchema, OpenRigReseatedSchema, OpenRigSeatsSchema, OpenRigSpecListSchema, OpenRigSpecsSchema, OpenRigStateMessageSchema, OpenRigStatusSchema } from './openrig.js';
+import { OpenRigRowSchema, OpenRigRowStateSchema, OpenRigQueueSchema, OpenRigQueueStateSchema } from './rigMessages.js';
+import { OpenRigRoleDetailSchema, OpenRigRoleDuplicateSchema, OpenRigRoleDuplicatedSchema, OpenRigRoleFileContentSchema, OpenRigRoleFileSchema, OpenRigRoleListSchema, OpenRigRoleSchema, OpenRigRolesSchema } from './openrigRoles.js';
 import { DocumentReadSchema, DocumentContentSchema, DocumentErrorSchema } from './documents.js';
 import { BrowserEnableSchema, BrowserEnabledSchema, BrowserFrameSchema, BrowserLiveSchema, BrowserUnwatchSchema, BrowserWatchSchema } from './browser.js';
 import { TermExitSchema, TermInputSchema, TermOpenedSchema, TermOutputSchema, TermResizeSchema, TermShellSchema, TermSizeSchema, TermUnwatchSchema, TermWatchSchema } from './term.js';
@@ -90,6 +90,13 @@ export type Recent = z.infer<typeof RecentSchema>;
 
 /** A release version as the tag gives it, without the `v` and without a pre-release suffix. */
 export const SEMVER = /^\d+\.\d+\.\d+$/;
+/** A front asks a machine's daemon to answer at once (lot 7d): the round trip is the machine's latency. */
+export const PingSchema = z.object({ type: z.literal('ping'), requestId: z.string().min(1).max(100), machineId: z.string().optional() });
+/** The answer, with the same `requestId`; `machineId` is set by the fleet. `error`: the fleet's `offline` (it dropped) or `outdated` (its daemon has no `ping`), nothing sent. */
+export const PongSchema = z.object({ type: z.literal('pong'), requestId: z.string(), machineId: z.string().optional(), error: z.enum(['offline', 'outdated']).optional() });
+export type Ping = z.infer<typeof PingSchema>;
+export type Pong = z.infer<typeof PongSchema>;
+
 /** What the daemon knows of itself (spec 2026-10-12 auto-update §6): its version, how it was installed, whether it runs
  *  as the systemd service, and the command a person runs by hand when it cannot update itself. */
 export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(['npm', 'git', 'unknown']), systemd: z.boolean(), manual: z.string().optional(), routing: z.boolean().optional(), archive: z.boolean().optional(),
@@ -101,6 +108,11 @@ export const DaemonInfoSchema = z.object({ version: z.string(), install: z.enum(
   /** Its home folder, so a client shows the folders under it as `~` (absent from older daemons). */ home: z.string().optional(), mobile: z.boolean().optional(),
   /** Answers `openrig.status` and `openrig.act`: drives OpenRig on its machine. */ openrig: z.boolean().optional(),
   /** Answers `openrig.roles`, `openrig.role` and `openrig.roleFile`: reads OpenRig's roles (agent specs). */ openrigRoles: z.boolean().optional(),
+  /** Answers `openrig.graph`, `openrig.snapshots`, `openrig.permissions`, `openrig.queue` and `openrig.role.duplicate`, and takes the actions `rig.snapshot`, `rig.permissions` and `rig.start` with a `snapshot` (lot 7a):
+   *  a client (the fleet) sends none of them to a daemon without it. */ openrigRig: z.boolean().optional(),
+  /** Takes the action `rig.policy` (lot 7c): a client (the fleet) sends it only when this is set. */ openrigPolicy: z.boolean().optional(),
+  /** Takes `rig.start` with `fresh` (lot 7d): a client (the fleet) sends it only when this is set. */ openrigFresh: z.boolean().optional(),
+  /** Answers `ping` with `pong`: a client measures the round trip to this machine (lot 7d). */ ping: z.boolean().optional(),
   /** Answers `openrig.row`: a queue row's state, for the OpenRig task cards of a thread. */ openrigRows: z.boolean().optional(),
   /** Answers `openrig.asks` and `openrig.answer`: what OpenRig asks the person, and their answers (« À toi »). */ openrigAsks: z.boolean().optional(),
   /** Answers `openrig.goal.send`, `openrig.goals` and `openrig.goal.reply`: goals given to Max (lot 2). */ openrigGoals: z.boolean().optional(),
@@ -134,8 +146,13 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ReposFoundSchema,
   ModelsListingSchema,
   SessionCommandsListingSchema,
+  PongSchema,
   OpenRigStateMessageSchema,
   OpenRigRowStateSchema,
+  OpenRigGraphStateSchema,
+  OpenRigSnapshotListSchema,
+  OpenRigPermissionListSchema,
+  OpenRigQueueStateSchema,
   OpenRigDoneSchema,
   OpenRigSpecListSchema,
   OpenRigLaunchedSchema,
@@ -143,6 +160,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   OpenRigRoleListSchema,
   OpenRigRoleDetailSchema,
   OpenRigRoleFileContentSchema,
+  OpenRigRoleDuplicatedSchema,
   OpenRigAsksChangedSchema,
   OpenRigAnsweredSchema,
   OpenRigGoalSentSchema,
@@ -247,6 +265,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ReposScanSchema,
   ModelsListSchema,
   SessionCommandsSchema,
+  PingSchema,
   OpenRigStatusSchema,
   OpenRigRowSchema,
   OpenRigActSchema,
@@ -254,8 +273,13 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   OpenRigLaunchSchema,
   OpenRigSeatsSchema,
   OpenRigRolesSchema,
+  OpenRigGraphSchema,
+  OpenRigSnapshotsSchema,
+  OpenRigPermissionsSchema,
+  OpenRigQueueSchema,
   OpenRigRoleSchema,
   OpenRigRoleFileSchema,
+  OpenRigRoleDuplicateSchema,
   OpenRigAsksSchema,
   OpenRigAnswerSchema,
   OpenRigGoalSendSchema,

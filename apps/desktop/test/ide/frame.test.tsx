@@ -435,7 +435,6 @@ describe('the IDE bundle', () => {
     const { tree, user } = await mount();
     await user.click(tree.getByRole('button', { name: /^Otto/ }));
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
-    // The sidebar's « + N » header has the same name (lot 4): the tab strip's is the one inside the dock.
     const plus = within(document.querySelector<HTMLElement>('.ide-dock')!).getByRole('button', { name: 'Nouvelle session (N)' });
     expect(plus.closest('.dv-right-actions-container')).not.toBeNull();
     await user.click(plus);

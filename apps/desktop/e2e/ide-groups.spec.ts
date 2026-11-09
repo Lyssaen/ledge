@@ -365,17 +365,19 @@ test('Review Focus 4: a group linked with Changes in front follows the session c
   await expect(plainTab(page, 'Changes · Nova')).toBeVisible();
   await expect(square(page, 0)).toHaveClass(/\bviolet\b/);
   await expect(square(page, 1)).toHaveClass(/\bviolet\b/);
-  await expect(groups(page).nth(0).locator('.ide-lkbtn')).toHaveAttribute('title', 'Link this group (violet, teal, none)');
+  await expect(groups(page).nth(0).locator('.ide-lkbtn')).toHaveAttribute('title', 'Link this group: pick a colour');
 
   await tabOf(page, 'Otto').click();
   await expect(tabsIn(page, 1)).toHaveCount(1);
   await expect(tabsIn(page, 1).first()).toContainText('Changes · Otto');
   await page.screenshot({ path: 'e2e/.results/ide-groups-linked.png' });
 
-  // Violet → teal → none: no longer linked to the session's group.
+  // The square's menu: another colour, then none: no longer linked to the session's group.
   await groups(page).nth(1).locator('.ide-lkbtn').click();
+  await page.getByRole('menu', { name: 'Link this group' }).getByRole('menuitem', { name: 'Teal' }).click();
   await expect(square(page, 1)).toHaveClass(/\bteal\b/);
   await groups(page).nth(1).locator('.ide-lkbtn').click();
+  await page.getByRole('menu', { name: 'Link this group' }).getByRole('menuitem', { name: 'No link' }).click();
   await expect(square(page, 1)).toHaveClass(/\bnone\b/);
   expect((await model(page))[1]!.link).toBeNull();
   await tabOf(page, 'Nova').click();

@@ -4,8 +4,8 @@
    The surfaces (mockup --shell under --pane): the tab strip and the session bar on --well, the darkest surface in both
    themes (dark 0.145, under the title and activity bars' 0.205; light 0.97, under their 0.985); the editor, and the tab in
    front, on --sidebar, the session page's own background, so the tab in front is lighter than the strip and opens onto it. */
-:root, :root[data-theme="light"] { --ide-link-violet: #6d28d9; --ide-link-teal: #0f766e; }
-:root[data-theme="dark"] { --ide-link-violet: #a78bfa; --ide-link-teal: #2dd4bf; }
+:root, :root[data-theme="light"] { --ide-link-violet: #6d28d9; --ide-link-teal: #0f766e; --ide-link-rose: #be185d; --ide-link-lime: #4d7c0f; --ide-link-fuchsia: #a21caf; --ide-link-sand: #92400e; }
+:root[data-theme="dark"] { --ide-link-violet: #a78bfa; --ide-link-teal: #2dd4bf; --ide-link-rose: #f472b6; --ide-link-lime: #a3e635; --ide-link-fuchsia: #d946ef; --ide-link-sand: #e2b07a; }
 .ide { --ide-strip: var(--well); --ide-pane: var(--sidebar); }
 .ide { height: 100vh; display: grid; grid-template-rows: 34px 1fr 24px; background: var(--background); color: var(--foreground); overflow: hidden; }
 .ide-body { display: grid; grid-template-columns: 48px var(--ide-side, 248px) 1fr var(--ide-right, 300px); min-height: 0; }
@@ -43,9 +43,6 @@
 .ide-explorer { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); }
 .ide-explorer-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .ide-explorer-body > .sidebar { width: auto; flex: 1; min-height: 0; border-right: 0; }
-.ide-explorer-foot { flex: none; display: flex; padding: 4px 8px; border-top: 1px solid var(--sidebar-border); }
-.ide-explorer-foot button { height: 24px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 12px; color: var(--muted-foreground); }
-.ide-explorer-foot button:hover { background: var(--accent); color: var(--foreground); }
 .ide-resize { position: absolute; top: 0; right: -3px; bottom: 0; width: 5px; cursor: col-resize; z-index: 5; }
 .ide-resize:hover, body.ide-resizing .ide-resize { background: var(--ring); opacity: .5; }
 body.ide-resizing { cursor: col-resize; user-select: none; }
@@ -118,7 +115,8 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }
 .ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
 /* The focused group marks its tab in front with a 2 px line on top, in the links' violet (mockup `.grp.focus .tab.on::before`). */
-.ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ide-link-violet); }
+/* The tab in front, underlined in Ledge's coral (the user, 2026-11-09). */
+.ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--sidebar-primary); }
 /* The strip's tools (mockup `.tabs .tools`): « + » and the split, at its right end. */
 .ide-strip-tools { height: 100%; display: flex; align-items: center; gap: 2px; padding-right: 6px; }
 .ide-strip-tools button { height: 22px; padding: 0 7px; display: flex; align-items: center; border-radius: 5px; color: var(--muted-foreground); font-size: 11.5px; }
@@ -128,6 +126,19 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 .ide-lk { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
 .ide-lk.violet { background: var(--ide-link-violet); }
 .ide-lk.teal { background: var(--ide-link-teal); }
+.ide-lk.rose { background: var(--ide-link-rose); }
+.ide-lk.lime { background: var(--ide-link-lime); }
+.ide-lk.fuchsia { background: var(--ide-link-fuchsia); }
+.ide-lk.sand { background: var(--ide-link-sand); }
+/* « Lier ce groupe »: the six colours, then none (docs/mockups/ledge-ide-interactive.html). */
+.ide-lk-wrap { position: relative; height: 100%; display: flex; }
+.ide-lk-menu { position: absolute; top: calc(100% + 2px); left: 0; z-index: 40; min-width: 210px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--popover, var(--background)); box-shadow: 0 6px 20px #0006; }
+.ide-lk-menu.up { top: auto; bottom: calc(100% + 2px); }
+.ide-lk-menu button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: var(--foreground); text-align: left; }
+.ide-lk-menu button > span { display: flex; align-items: center; gap: 8px; }
+.ide-lk-menu button small { font-size: 11px; color: var(--muted-foreground); }
+.ide-lk-menu button:hover, .ide-lk-menu button:focus-visible, .ide-lk-menu button.on { background: var(--muted); outline: none; }
+.ide-lk-menu hr { margin: 4px 2px; border: 0; border-top: 1px solid var(--border); }
 .ide-lk.none { border: 1px dashed var(--muted-foreground); }
 /* A group without tabs (mockup docs/mockups/accueil-vide, `.welcome`): Ledge's mark, « Démarrer » and « Récentes » side by side,
    centred; a group narrower than 620 px (down to GROUP_MIN_WIDTH) stacks them, top aligned, its mark smaller. */
@@ -198,7 +209,7 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
 .ide-btile-tabs { display: flex; align-items: stretch; min-width: 0; overflow: auto; }
 .ide-btile-tab { position: relative; display: flex; align-items: center; gap: 7px; min-width: 0; padding: 0 10px; font-size: 12px; color: var(--muted-foreground); background: var(--ide-strip); border-right: 1px solid var(--border); cursor: grab; user-select: none; }
 .ide-btile-tab.on { color: var(--foreground); background: var(--ide-pane); }
-.ide-btile-tab.on::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--ide-link-violet); }
+.ide-btile-tab.on::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--sidebar-primary); }
 .ide-btile-tab.drop-on { outline: 1px dashed var(--ide-link-violet); outline-offset: -2px; }
 .ide-btile.drop-beside { box-shadow: inset -2px 0 0 var(--ide-link-violet); }
 .ide-btile-tab .ide-tab { min-width: 0; }
@@ -272,6 +283,10 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
 .ide-bar .lk { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 .ide-bar .lk-violet { background: var(--ide-link-violet); }
 .ide-bar .lk-teal { background: var(--ide-link-teal); }
+.ide-bar .lk-rose { background: var(--ide-link-rose); }
+.ide-bar .lk-lime { background: var(--ide-link-lime); }
+.ide-bar .lk-fuchsia { background: var(--ide-link-fuchsia); }
+.ide-bar .lk-sand { background: var(--ide-link-sand); }
 /* What the session page's heading said, an IDE tab having none (lot 3 follow-up, option A): where the agent's screen runs
    (on Terminal), a relief under way or failed, the subagents and the browser, as compact chips. */
 .ide-bar-chip.tm { min-width: 0; max-width: 140px; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
@@ -410,13 +425,35 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
   .launch-modal-agents { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* Lot 4 (R9): the Projects view's header (mockup .ex-h) with its « + N » (mockup .kbd as a button), by theme tokens. */
+/* Lot 4 (R9): the Projects view's header (mockup .ex-h), by theme tokens; its « + N » removed on 2026-11-09. */
 .ide-ex-h { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px 6px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
-.ide-ex-kbd { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0; text-transform: none; border: 1px solid var(--input); border-radius: 4px; padding: 0 4px; color: var(--muted-foreground); }
-.ide-ex-kbd:hover { color: var(--foreground); background: var(--muted); }
 
 /* The bottom panel's Output (mockup .term): the app's terminal colours, the dim of a secondary text. */
 .ide-output { flex: 1; min-height: 0; margin: 0; overflow: auto; background: var(--term-bg); color: var(--term-fg); font: 11.5px/17px 'Geist Mono', monospace; padding: 8px 10px; white-space: pre; }
 .ide-output .ide-output-dim { color: var(--muted-foreground); }
 .ide-output .ide-output-ok { color: var(--success); }
 .ide-output .ide-output-err { color: var(--danger-text); }
+
+/* The Atelier tab (lot 6, mockup atelierPage() `.abar`): the bar above the atelier, which keeps its own zoom bar (absolute, here). */
+.ide-atelier { position: relative; display: flex; flex-direction: column; min-height: 0; }
+.ide-atelier > .overview-scroll { flex: 1; min-height: 0; }
+/* 34 px on one line; in a narrow group the controls wrap to a second line rather than being cut or squeezed. */
+.ide-abar { flex: none; min-height: 34px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 12px; border-bottom: 1px solid var(--border); font-size: 12px; white-space: nowrap; }
+.ide-abar > * { flex: none; }
+.ide-abar-title, .ide-abar-sep { color: var(--muted-foreground); }
+.ide-abar .ide-abar-filter { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.ide-abar-filter > span { overflow: hidden; text-overflow: ellipsis; }
+.ide-atelier .ide-abar-filter button { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--muted-foreground); }
+.ide-atelier .ide-abar-filter button:hover { background: var(--accent); color: var(--foreground); }
+.ide-abar-seg { display: inline-flex; border: 1px solid var(--input); border-radius: 7px; overflow: hidden; }
+.ide-atelier .ide-abar-seg button { padding: 2px 10px; font-size: 12px; color: var(--muted-foreground); }
+.ide-atelier .ide-abar-seg button[aria-checked=true] { background: var(--muted); color: var(--foreground); }
+.ide-abar .ide-abar-sp { flex: 1 0 0; }
+.ide-atelier .ide-abar-btn { height: 26px; padding: 0 10px; display: inline-flex; align-items: center; border: 1px solid var(--input); border-radius: 6px; font-size: 12px; color: var(--foreground); }
+.ide-atelier .ide-abar-btn:hover { background: var(--accent); }
+.ide-atelier .ide-abar-icon { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; color: var(--muted-foreground); }
+.ide-atelier .ide-abar-icon:hover, .ide-atelier .ide-abar-icon[aria-pressed=true] { background: var(--accent); color: var(--foreground); }
+
+/* « À toi » with nothing waiting (the user, 2026-11-09): one line in the middle of the sidebar. */
+.st-scroll-atoi { display: flex; flex-direction: column; }
+.st-attn-none { flex: 1; display: grid; place-items: center; margin: 0; padding: 16px; text-align: center; font-size: 12.5px; color: var(--muted-foreground); }

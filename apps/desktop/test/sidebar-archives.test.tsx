@@ -23,6 +23,10 @@ describe('archives in the sidebar', () => {
   it('archives fold away; opening one reads it and unfolds the section', async () => {
     const { d, side, user } = await boot({ sessions: [otto] });
     act(() => d.upsert(archived('old', 'Nova')));
+    const region = side.getByRole('region', { name: 'Archives' });
+    expect(region.closest('.st-scroll')).toBeNull();
+    expect(region.compareDocumentPosition(side.getByRole('button', { name: /^Settings/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(region.lastElementChild).toContainElement(archivesOf(side).getByRole('button', { name: /Archives/ }));
     await waitFor(() => expect(archivesOf(side).getByRole('button', { name: /Archives/ })).toHaveTextContent('1'));
     const toggle = archivesOf(side).getByRole('button', { name: /Archives/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');

@@ -27,7 +27,8 @@ function scrollArchive(id: string) {
   }));
 }
 
-/** Archives, folded until one is opened or the header pill asks: archiving the session being read leaves them as they are. Past four, a filter; each row reads, puts back, resumes or deletes. No auto-archive delay. */
+/** Archives, pinned at the bottom of the sidebar. The line stays last; the list, when open, sits above it.
+ *  Folded until one is opened or the header pill asks: archiving the session being read leaves them as they are. Past four, a filter; each row reads, puts back, resumes or deletes. */
 export function Archives(p: {
   archived: readonly Session[];
   current: string | null;
@@ -74,15 +75,7 @@ export function Archives(p: {
 
   return (
     <section ref={sectionRef} className="st-archives" aria-label={t.side.archives}>
-      <div className="st-label">
-        <button type="button" className="st-arch-toggle" aria-expanded={open} onClick={() => setOpen(!open)}
-          onContextMenu={e => { e.preventDefault(); p.onMenu({ kind: 'archives' }, menuPoint(e, e.currentTarget), e.currentTarget); }}
-          onKeyDown={e => { if (isMenuKey(e)) { e.preventDefault(); p.onMenu({ kind: 'archives' }, menuPoint(e, e.currentTarget), e.currentTarget); } }}>
-          <span className={open ? 'open' : undefined}><Icon d={ICONS.chevronRight.d} size={12} /></span>
-          <Icon d={SHELL_ICONS.archive} size={13} />{t.side.archives}{p.archived.length > 0 && <small>{p.archived.length}</small>}
-        </button>
-      </div>
-      {open && <>
+      {open && <div className="st-arch-body">
         {showFilter && (
           <label className="st-arch-q">
             <Icon d={SHELL_ICONS.search} size={12} />
@@ -120,7 +113,15 @@ export function Archives(p: {
           })}
           {shown.length === 0 && <p className="st-help">{p.archived.length ? t.side.archiveNone : t.side.archiveEmpty}</p>}
         </div>
-      </>}
+      </div>}
+      <div className="st-label">
+        <button type="button" className="st-arch-toggle" aria-expanded={open} onClick={() => setOpen(!open)}
+          onContextMenu={e => { e.preventDefault(); p.onMenu({ kind: 'archives' }, menuPoint(e, e.currentTarget), e.currentTarget); }}
+          onKeyDown={e => { if (isMenuKey(e)) { e.preventDefault(); p.onMenu({ kind: 'archives' }, menuPoint(e, e.currentTarget), e.currentTarget); } }}>
+          <span className={open ? 'open' : undefined}><Icon d={ICONS.chevronRight.d} size={12} /></span>
+          <Icon d={SHELL_ICONS.archive} size={13} />{t.side.archives}{p.archived.length > 0 && <small>{p.archived.length}</small>}
+        </button>
+      </div>
     </section>
   );
 }

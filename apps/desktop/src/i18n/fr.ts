@@ -326,7 +326,7 @@ export const fr = {
     saved: (what: string) => `Réglage enregistré · ${what}`,
     hints: {
       general: 'Langue, démarrage, agent par défaut, contexte max et mises à jour.',
-      workspace: 'Les groupes d’onglets de l’interface IDE : où s’ouvre une session.',
+      workspace: 'L’interface IDE : où s’ouvre une session, la barre d’état, les terminaux.',
       appearance: 'Thème, couleur de Ledge, échelle et mouvements.',
       island: 'L’encoche en haut de l’écran : où elle se pose et ce qu’elle signale.',
       notifications: 'Qui vous prévient, et quand vous laisser tranquille.',
@@ -343,6 +343,10 @@ export const fr = {
     workspace: {
       openSession: 'Ouvrir une session',
       active: 'Dans le groupe actif', right: 'À droite', saved: (where: string) => `Ouvrir une session : ${where}`,
+      statusBar: 'Barre d’état', usage: 'Limites d’usage des comptes',
+      usageSaved: (on: boolean): string => (on ? 'Limites d’usage affichées dans la barre d’état' : 'Limites d’usage masquées de la barre d’état'),
+      alertBefore: 'Alerte à', alertAfter: '% d’une fenêtre (ambre au-delà)',
+      alertLess: 'Baisser le seuil d’alerte de 5 %', alertMore: 'Monter le seuil d’alerte de 5 %',
       terminals: 'Terminaux', webglBefore: 'Rendu rapide (WebGL) pour', webglAfter: 'terminaux visibles au plus',
       webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`
     },
@@ -1407,11 +1411,98 @@ export const fr = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'Interface IDE (aperçu)',
+    /** The Atelier tab's bar (mockup atelierPage() `.abar`): its « Détacher ». */
+    atelierDetach: 'Détacher',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal affiché dans l’autre groupe', showHere: 'Afficher ici',
     terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attaché', termReadOnly: 'lecture seule',
     settingHint: 'Groupes d’onglets, panneaux et barre d’activité, à la manière de VS Code. L’ancienne interface reste disponible tant que l’aperçu dure.',
     settingOff: 'Interface IDE (aperçu) désactivée',
+    /** The Rigs view (IDE lot 7b): the machine menu, its rows and their actions. */
+    rigsView: {
+      launch: 'Lancer', launchTitle: 'Lancer un rig…', shownMachine: (label: string) => `Machine affichée : ${label}`, machine: (label: string) => `Machine : ${label}`, machines: 'Machines',
+      local: 'locale', ssh: 'SSH', manage: 'Gérer les machines…', add: 'Ajouter une machine',
+      runningRigs: (n: number) => (n === 1 ? '1 rig en marche' : `${n} rigs en marche`), openrigStopped: 'OpenRig arrêté',
+      daemon: 'Daemon', fold: (name: string) => `Replier ${name}`, unfold: (name: string) => `Déplier ${name}`,
+      stoppedTitle: 'OpenRig est arrêté.', stoppedBody: 'Les rigs et le kernel repartent avec le daemon.', startOpenrig: 'Démarrer OpenRig',
+      kernelStopped: 'Arrêté avec le daemon.', noOperator: 'L’operator ne peut pas t’aider à composer un rig.',
+      whatDaemon: 'le daemon', whatKernel: 'le kernel',
+      start: (what: string) => `Démarrer ${what}`, restart: (what: string) => `Redémarrer ${what}`, stop: (what: string) => `Arrêter ${what}`,
+      confirmStop: 'Confirmer l’arrêt', confirmRestart: 'Confirmer le redémarrage', cancel: 'Annuler'
+    },
+    /** The OpenRig page of the IDE (lot 7d, mockup orPageB()). */
+    openrigPage: {
+      sections: { overview: 'Vue d’ensemble', rigs: 'Rigs', roles: 'Rôles', machines: 'Machines', daemon: 'Daemon', output: 'Sortie' } as Record<'overview' | 'rigs' | 'roles' | 'machines' | 'daemon' | 'output', string>,
+      nav: 'Sections d’OpenRig', rail: (machine: string) => `OpenRig sur ${machine}`,
+      unknownMachine: 'Machine inconnue : elle ne fait plus partie de tes machines.',
+      running: 'en marche', stopped: 'arrêté', since: (version: string, time: string) => `${version} · depuis ${time}`,
+      seats: (n: number) => `${n} ${n > 1 ? 'sièges' : 'siège'}`, rigsOf: (running: number, total: number) => `${running} sur ${total}`, runningOn: (machine: string) => `en marche sur ${machine}`,
+      active: (n: number) => `${n} ${n > 1 ? 'actifs' : 'actif'}`, waiting: (n: number) => (n === 0 ? 'personne n’attend' : `${n} t’attend${n > 1 ? 'ent' : ''}`),
+      waitingTitle: 'T’attendent', kind: { perm: 'permission', ask: 'question' } as Record<'perm' | 'ask', string>,
+      recent: 'Dernières commandes', seeAll: 'Tout voir',
+      system: 'système', kernelSub: 'Le rig d’OpenRig lui-même', openRig: 'Ouvrir la vue Rig →', newSub: 'Depuis une spec, un rig vide ou avec l’operator',
+      local: 'local', ssh: (alias: string) => `ssh · ${alias}`, notInstalled: 'non installé', rigs: (n: number) => `${n} ${n > 1 ? 'rigs' : 'rig'}`,
+      latency: (ms: number) => `${ms} ms`, measuring: '…', shown: 'affichée', show: 'Afficher', showLabel: (machine: string) => `Afficher ${machine}`,
+      addNote: 'La machine affichée pilote l’explorateur Rigs, cette page et la fenêtre de lancement.',
+      address: (port: number | undefined, pid: number | undefined) => [port !== undefined ? `127.0.0.1:${port}` : '', pid !== undefined ? `pid ${pid}` : ''].filter(Boolean).join(' · '),
+      onStart: 'Au démarrage', relaunch: 'Relancer les rigs qui tournaient', noKernel: 'Démarrer sans le kernel',
+      perm: 'Permissions au lancement', permHint: 'Valeur proposée quand tu lances un rig. Chaque rig garde la sienne.',
+      beforeStop: 'Avant un arrêt', snapshot: 'Prendre un snapshot du rig', askBusy: 'Demander confirmation si un siège travaille',
+      outputSub: 'les commandes rig lancées depuis Ledge'
+    },
+    /** The « Lancer un rig » modal (IDE lot 7d, mockup rigLaunchModal()). */
+    launchRig: {
+      title: 'Lancer un rig', sub: (machine: string) => `Sur ${machine}. Ctrl+Entrée lance, Échap ferme.`,
+      from: 'Partir de', running: 'Déjà en marche · gère-le dans sa vue Rig',
+      savedSpec: (n: number, source?: 'builtin' | 'user') => `Spec enregistrée · ${n} ${n > 1 ? 'sièges' : 'siège'}${source === 'builtin' ? ' · intégrée' : source === 'user' ? ' · à moi' : ''}`,
+      stoppedRig: (n: number) => `Spec enregistrée · ${n} ${n > 1 ? 'sièges' : 'siège'} · arrêté`,
+      empty: 'Rig vide', emptySub: 'Un lead, un siège d’implémentation, à compléter', noFactory: 'La spec factory manque sur cette machine',
+      operator: 'Composer avec l’operator', operatorSub: 'Décris le besoin, il propose l’équipe', kernelOff: 'Le kernel doit tourner',
+      name: 'Nom', machine: 'Machine', folder: 'Dossier', seats: 'Sièges', toFill: 'à compléter', permissions: 'Permissions', mixed: 'Mixte : les sièges n’ont pas tous le même niveau.',
+      resume: 'Reprise', resumeLast: (date: string) => `Reprendre le dernier snapshot (${date})`, noSnapshot: 'Aucun snapshot',
+      noFresh: 'Le Ledge de cette machine est trop ancien pour relancer les sièges à neuf.', gone: 'Ce choix n’est plus proposé : choisis une carte.',
+      command: 'Commande', go: 'Lancer', keys: 'Ctrl Entrée', cancel: 'Annuler', opensTab: (name: string) => `Ouvre la vue Rig de ${name}.`, more: 'Plus d’options',
+      want: 'Ce que tu veux', wantPlaceholder: 'Ex. : une équipe pour relire la MR !412 de synapse, un lead et deux relecteurs.',
+      wantHint: 'L’operator du kernel propose une équipe dans son fil. Rien ne démarre avant que tu valides.',
+      ask: 'Demander à l’operator', asking: 'Envoi…', composing: 'L’operator compose une équipe dans son fil.',
+      daemonStopped: (machine: string) => `Le daemon OpenRig est arrêté sur ${machine}.`,
+      problems: {
+        exists: (machine: string) => `Un rig de ce nom existe déjà sur ${machine}.`, name: 'Un nom de rig : lettres, chiffres, point, - et _, sans espace.',
+        cwd: 'Choisis le dossier de travail.', noSeat: 'Il faut au moins un siège.'
+      },
+      goalErrors: {
+        no_operator: 'Le kernel n’a pas d’operator pour recevoir la demande.', openrig_stopped: 'OpenRig est arrêté sur cette machine.',
+        unreachable: 'L’operator ne répond pas.', uncertain: 'La demande est peut-être partie, sans confirmation : regarde le fil de l’operator avant de la renvoyer.',
+        refused: 'L’operator a refusé la demande.', offline: 'Cette machine est hors ligne.', outdated: 'Le Ledge de cette machine est trop ancien pour écrire à l’operator.'
+      } as Record<string, string>
+    },
+    /** The « Rig · name » tab (IDE lot 7c). */
+    rigTab: {
+      title: (rig: string, machine?: string) => (machine ? `Rig · ${rig} · ${machine}` : `Rig · ${rig}`),
+      topology: 'Topologie', topologyRunning: 'clic sur un siège : son fil', topologyStopped: 'les sièges démarrent avec le rig', loading: 'Lecture…',
+      legend: 'Liens', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
+      running: 'en marche', stopped: 'arrêté', seatsAt: (n: number, machine: string) => `${n} ${n > 1 ? 'sièges' : 'siège'} · ${machine}`,
+      start: 'Démarrer', restart: 'Redémarrer', stop: 'Arrêter',
+      settings: 'Réglages', specUnknown: 'Spec inconnue : rig lancé hors de Ledge',
+      permissions: 'Permissions', permissionsLabel: 'Niveau de permissions',
+      level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Ouvert', yolo: 'YOLO', locked: 'Verrouillé' } as Record<string, string>,
+      specPolicy: (p: string) => `Spec : ${p}`, noSeats: 'Aucun siège connu : rien à régler pour l’instant.', specNoPolicy: 'La spec de ce rig ne donne aucune politique connue.',
+      nextLaunch: 'Un changement vaut au prochain lancement du rig.', mixed: 'Mixte', mixedSeat: (name: string, summary: string) => `${name} : ${summary}`,
+      errors: { daemon_stopped: 'Le daemon OpenRig est arrêté.', unknown_rig: 'Ce rig n’existe plus sur cette machine.' } as Record<string, string>,
+      policyErrors: {
+        spec_unknown: 'Ledge ne retrouve pas la spec de ce rig : « Spec » n’est pas possible.',
+        spec_no_policy: 'La spec de ce rig ne donne aucune politique de permissions : « Spec » n’est pas possible.',
+        spec_policy_unsupported: 'La politique de cette spec n’est pas l’une des cinq que Ledge sait appliquer.'
+      } as Record<string, string>,
+      seatsByRole: 'Sièges par rôle', seatsLocked: '· modifiables quand le rig tourne', apply: 'Appliquer', applying: 'En cours…', revert: 'Annuler',
+      planAdd: (ids: readonly string[]) => `Ajoute ${ids.join(', ')}`, planRemove: (ids: readonly string[]) => `Retire ${ids.join(', ')}`,
+      lastSnapshot: 'Dernier snapshot', noSnapshot: 'Aucun snapshot', snapshotNow: 'Snapshot maintenant',
+      queue: 'File OpenRig', queueTruncated: 'Les plus anciennes ne sont pas montrées', needsInput: 'À toi : cette ligne attend une réponse',
+      state: { pending: 'en attente', 'in-progress': 'en cours', blocked: 'bloquée' } as Record<string, string>,
+      age: (a: 'now' | { n: number; unit: 'min' | 'h' | 'd' }) => (a === 'now' ? '< 1 min' : `${a.n} ${a.unit === 'd' ? 'j' : a.unit}`),
+      role: 'Rôle', roleBody: ['Le rig d’OpenRig lui-même. L’', 'operator', ' t’aide à composer et lancer une équipe ; l’', 'advisor', ' relit les plans ; le ', 'queue worker', ' route les lignes de queue entre les sièges.'] as readonly string[],
+      talkToOperator: 'Parler à l’operator', rigAbsent: (rig: string) => `Le rig « ${rig} » n’existe plus sur cette machine.`, badRef: 'Cet onglet ne désigne aucun rig.'
+    },
     brand: 'Ledge', searchPlaceholder: 'Session, commande, tâche, rig…', searchKey: 'Ctrl K',
     /** The bottom panel's « + ▾ » menu (IDE lot 5). */
     panel: {
@@ -1425,8 +1516,8 @@ export const fr = {
     },
     sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
     activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
-    openrigTab: 'OpenRig (onglet)', atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
-    resizeEdge: 'Glisser pour redimensionner · double-clic : largeur par défaut', resizeBottom: 'Glisser pour redimensionner · double-clic : hauteur par défaut', collapse: '« Réduire', collapseTip: 'Réduire la barre latérale (Ctrl+B)',
+    atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
+    resizeEdge: 'Glisser pour redimensionner · double-clic : largeur par défaut', resizeBottom: 'Glisser pour redimensionner · double-clic : hauteur par défaut',
     waiting: (n: number) => (n === 1 ? '1 demande' : `${n} demandes`),
     tabTerminalView: 'Vue terminal', tagLine: (label: string, value: string) => `${label} : ${value}`, toTerminal: 'Basculer sur le terminal', toThread: 'Revenir au fil', viewKey: (key: string) => `Ctrl ${key}`, relievedByEntry: (name: string) => `Relevée par ${name}`, relievesEntry: (name: string) => `Relève de ${name}`,
     closeThisTab: 'Fermer l’onglet', closeOthers: 'Fermer les autres', tabMenu: 'Onglet', changesTitle: (name: string) => `Modifications · ${name}`,
@@ -1439,7 +1530,9 @@ export const fr = {
     replyPlaceholderSeat: (name: string) => `Répondre à ${name} (rig send)…  Entrée envoie, Maj+Entrée passe à la ligne`,
     newSession: 'Nouvelle session (N)',
     // Lot 3: split (Ctrl+\), the empty group (mockup emptyGroup()), the link square (mockup .lkbtn).
-    split: 'Diviser à droite', splitTip: 'Diviser à droite (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Lier ce groupe (violet, vert d’eau, aucun)',
+    split: 'Diviser à droite', splitTip: 'Diviser à droite (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Lier ce groupe : choisir une couleur', linkMenu: 'Lier ce groupe', linkNone: 'Aucune liaison', linkCurrent: 'actuelle', linkGroups: (n: number) => (n > 1 ? `${n} groupes` : '1 groupe'),
+    links: { violet: 'Violet', teal: 'Vert d’eau', rose: 'Rose', lime: 'Citron vert', fuchsia: 'Fuchsia', sand: 'Sable' } as Record<'violet' | 'teal' | 'rose' | 'lime' | 'fuchsia' | 'sand', string>,
+    atoiNone: 'Rien ne t’attend.', operations: 'Opérations', usageOnce: (harness: string, window: string, line: string) => `${harness} · ${window} : ${line}`,
     closeGroupTip: 'Fermer le groupe (Ctrl+W)',
     /** The zone at the right end of the editing area while a tab is dragged (mockup `.dropnew`), on two lines. */
     dropNew: ['Déposer ici :', 'nouveau groupe'],

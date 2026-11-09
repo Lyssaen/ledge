@@ -208,6 +208,15 @@ S'ouvre par « Écrire à tout le projet… » dans le menu de la plaque d'un pr
 
 Y renvoyer l'utilisateur pour donner la même consigne à toutes les sessions d'un projet ou à quelques-unes d'un coup.
 
+#### Lancer un rig (`rigLaunch`)
+
+Interface IDE seulement. S'ouvre par « + Lancer » de la vue Rigs, sur la machine qu'elle affiche. `Ctrl+Entrée` lance, `Échap` ferme.
+- **Partir de :** un rig arrêté de la machine (relance, depuis son dernier snapshot ou à neuf), une spec de la bibliothèque, un rig vide (la spec `factory` avec un lead et un siège d'implémentation), ou « Composer avec l'operator » (le kernel doit tourner). Un rig en marche est grisé.
+- **Champs :** nom, machine, dossier de travail, sièges par rôle, permissions (Spec, Auto, Standard, Ouvert, YOLO, Verrouillé) ; « Plus d'options » : harnais, modèle et permission par rôle, délégation, garder la spec, « Vérifier ». La commande `rig` exacte est affichée et suit les champs.
+- « Lancer » ouvre l'onglet Rig du rig. Daemon arrêté : la fenêtre propose « Démarrer OpenRig ».
+
+Y renvoyer l'utilisateur pour lancer ou relancer une équipe OpenRig avec des réglages précis.
+
 ### Chat ancré
 
 `Ctrl+/` ouvre le chat de Ledge à droite de la vue courante. On y pose les mêmes questions et on y valide les mêmes cartes que dans la conversation de l'accueil. « Nouvelle conversation » repart de zéro. Les conversations sont quotidiennes.

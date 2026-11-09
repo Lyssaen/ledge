@@ -60,6 +60,12 @@ describe('routeNav', () => {
     const { r, tab } = applied(a);
     expect(r.nav).toBe(a); expect(tab).toEqual(SETTINGS_TAB);
   });
+  it('settings without a section (Ctrl+,, the gear): the tab comes back on the section it was left on', () => {
+    expect(routeNav({ type: 'settings' }, { ...ctx(), lastSettings: 'workspace' }).nav).toEqual({ type: 'settings', section: 'workspace' });
+    expect(routeNav({ type: 'settings' }, ctx()).nav).toEqual({ type: 'settings' });
+    const asked: NavAction = { type: 'settings', section: 'sounds' };
+    expect(routeNav(asked, { ...ctx(), lastSettings: 'workspace' }).nav).toBe(asked);
+  });
   it('openrig', () => {
     const a: NavAction = { type: 'openrig', machine: 'm2' };
     const { r, tab } = applied(a);
@@ -94,6 +100,10 @@ describe('tabNav', () => {
     expect(tabNav(s, SETTINGS_TAB)).toBe(s);
     const o = nav({ kind: 'overview', view: 'atelier', project: 'all' });
     expect(tabNav(o, SETTINGS_TAB).place).toEqual({ kind: 'settings', section: 'general', back: { kind: 'overview', view: 'atelier', project: 'all' } });
+  });
+  it('a Settings tab out of the place (another group focused) keeps the section it was left on', () => {
+    const o = nav({ kind: 'overview', view: 'atelier', project: 'p1' });
+    expect(tabNav(o, SETTINGS_TAB, 'workspace').place).toEqual({ kind: 'settings', section: 'workspace', back: { kind: 'overview', view: 'atelier', project: 'all' } });
   });
   it('atelier and openrig get the nav', () => {
     const o = nav({ kind: 'overview', view: 'atelier', project: 'all' });

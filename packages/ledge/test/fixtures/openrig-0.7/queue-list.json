@@ -1,0 +1,54 @@
+[
+  {
+    "qitemId": "qitem-20261108150012-1a2b3c4d5e6f7a8b",
+    "state": "pending",
+    "sourceSession": "operator-human@kernel",
+    "destinationSession": "dev-build@ledge-survey",
+    "summary": "Run the build and report",
+    "handedOffTo": null,
+    "blockedOn": null,
+    "tsCreated": "2026-11-08T15:00:12.101Z",
+    "tsUpdated": "2026-11-08T15:00:12.101Z",
+    "claimedAt": null,
+    "waiting": { "state": "pending", "liveness": { "subject": "dev-build@ledge-survey", "activity": "unknown", "needsInput": { "count": 1, "reason": "permission_prompt" }, "confidence": "unknown" } }
+  },
+  {
+    "qitemId": "qitem-20261108145243-b603ef4261429be6",
+    "state": "pending",
+    "sourceSession": "operator-human@kernel",
+    "destinationSession": "advisor-lead@kernel",
+    "summary": "Review the kernel notes",
+    "handedOffTo": null,
+    "blockedOn": null,
+    "tsCreated": "2026-11-08T14:52:43.201Z",
+    "tsUpdated": "2026-11-08T14:52:43.201Z",
+    "claimedAt": null,
+    "waiting": { "state": "pending", "liveness": { "subject": "advisor-lead@kernel", "activity": "unknown", "needsInput": { "count": 0, "reason": null }, "confidence": "unknown" } }
+  },
+  {
+    "qitemId": "qitem-20261108143000-0f0e0d0c0b0a0908",
+    "state": "blocked",
+    "sourceSession": "dev-build@ledge-survey",
+    "destinationSession": "operator-agent@kernel",
+    "summary": "Which branch should the build use?",
+    "handedOffTo": null,
+    "blockedOn": "qitem-20261108150012-1a2b3c4d5e6f7a8b",
+    "tsCreated": "2026-11-08T14:30:00.000Z",
+    "tsUpdated": "2026-11-08T14:40:00.000Z",
+    "claimedAt": "2026-11-08T14:31:00.000Z",
+    "waiting": { "state": "blocked", "liveness": { "subject": "operator-agent@kernel", "activity": "unknown", "needsInput": { "count": 0, "reason": null }, "confidence": "unknown" } }
+  },
+  {
+    "qitemId": "qitem-20261108141500-1111222233334444",
+    "state": "in-progress",
+    "sourceSession": "operator-human@kernel",
+    "destinationSession": "dev-build@ledge-survey",
+    "summary": "Tidy the survey rig",
+    "handedOffTo": null,
+    "blockedOn": null,
+    "tsCreated": "2026-11-08T14:15:00.000Z",
+    "tsUpdated": "2026-11-08T14:20:00.000Z",
+    "claimedAt": "2026-11-08T14:16:00.000Z",
+    "waiting": { "state": "in-progress", "liveness": { "subject": "dev-build@ledge-survey", "activity": "working", "needsInput": { "count": 0, "reason": null }, "confidence": "high" } }
+  }
+]

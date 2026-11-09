@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
-import { RigLaunchSchema, type RigLaunch } from '@ledge/protocol';
-import { changesSpec, composeSpec, expandEdge, readSpec, seatIds } from '../src/daemon/rigSpec.js';
+import { changesSpec, RigLaunchSchema, RigSpecSchema, type RigLaunch } from '@ledge/protocol';
+import { composeSpec, expandEdge, readSpec, seatIds } from '../src/daemon/rigSpec.js';
 import { createOpenRig, readCheck, type RigRun } from '../src/daemon/openrig.js';
 
 // OpenRig 0.6.14's shipped starter (daemon/specs/rigs/launch/starter/rig.yaml).
@@ -45,7 +45,7 @@ const launch = (l: Partial<RigLaunch>): RigLaunch => RigLaunchSchema.parse({ spe
 describe('rig specs', () => {
   it('reads a spec\'s roles, harnesses, models and links', () => {
     expect(readSpec(STARTER, { name: 'starter', source: 'builtin', path: `${DIR}/rig.yaml` })).toEqual({
-      name: 'starter', source: 'builtin', path: `${DIR}/rig.yaml`, summary: 'A Claude Code builder and a Codex reviewer in your repository.', edges: 1,
+      name: 'starter', source: 'builtin', path: `${DIR}/rig.yaml`, summary: 'A Claude Code builder and a Codex reviewer in your repository.', edges: 1, links: [{ from: 'dev.build', to: 'dev.review', kind: 'delegates_to' }],
       pods: [{ id: 'dev', label: 'Project', members: [{ id: 'build', runtime: 'claude-code', agent: 'implementer' }, { id: 'review', runtime: 'codex', model: 'gpt-6-astra', agent: 'qa' }] }]
     });
     expect(readSpec('name: x\n', { name: 'x', source: 'user', path: '/x' })).toBeNull();
@@ -295,5 +295,42 @@ describe('where a spec comes from', () => {
   it('builtin and builtin_* are OpenRig’s, every other kind (user, user_file, a new one) the person’s', async () => {
     const { specSource } = await import('../src/daemon/openrig.js');
     expect(['builtin', 'builtin_pack', 'user', 'user_file', 'shared_dir', undefined, 42].map(specSource)).toEqual(['builtin', 'builtin', 'user', 'user', 'user', 'user', 'user']);
+  });
+});
+
+describe('a spec\'s links', () => {
+  const entry = { name: 'x', source: 'user', path: '/x/rig.yaml' };
+  it('starter: a pod\'s edge becomes a link between its members, prefixed with the pod', () => {
+    const spec = readSpec(STARTER, { name: 'starter', source: 'builtin', path: `${DIR}/rig.yaml` })!;
+    expect(spec.links).toEqual([{ from: 'dev.build', to: 'dev.review', kind: 'delegates_to' }]);
+    expect(spec.edges).toBe(1);
+  });
+  it('a kernel-like spec: pod edges first, then the top-level ones as written; malformed entries skipped', () => {
+    const yaml = `pods:
+  - id: advisor
+    members: [{ id: lead, runtime: claude-code, agent_ref: "builtin:x/advisor" }]
+  - id: queue
+    members: [{ id: worker, runtime: codex, agent_ref: "builtin:x/worker" }, { id: other, runtime: codex, agent_ref: "builtin:x/o" }]
+    edges:
+      - { kind: collaborates_with, from: worker, to: other }
+      - { kind: delegates_to, from: worker }
+edges:
+  - { kind: delegates_to, from: advisor.lead, to: queue.worker }
+  - { kind: escalates_to, from: queue.worker, to: advisor.lead }
+  - 42
+`;
+    const spec = readSpec(yaml, entry)!;
+    expect(spec.links).toEqual([
+      { from: 'queue.worker', to: 'queue.other', kind: 'collaborates_with' },
+      { from: 'advisor.lead', to: 'queue.worker', kind: 'delegates_to' },
+      { from: 'queue.worker', to: 'advisor.lead', kind: 'escalates_to' }
+    ]);
+    expect(RigSpecSchema.parse(spec)).toEqual(spec);
+  });
+  it('a spec Ledge composed keeps its links, expanded', () => {
+    const { yaml } = composeSpec(parse(STARTER), DIR, launch({ seats: { 'dev.build': 2, 'dev.review': 2 } }));
+    expect(readSpec(yaml, entry)!.links).toEqual([
+      { from: 'dev.build', to: 'dev.review', kind: 'delegates_to' }, { from: 'dev.build-2', to: 'dev.review-2', kind: 'delegates_to' }
+    ]);
   });
 });

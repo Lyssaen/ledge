@@ -302,7 +302,7 @@ export const en: Messages = {
     saved: (what) => `Setting saved · ${what}`,
     hints: {
       general: 'Language, start-up, default agent, max context and updates.',
-      workspace: 'The IDE interface’s tab groups: where a session opens.',
+      workspace: 'The IDE interface: where a session opens, the status bar, the terminals.',
       appearance: 'Theme, Ledge’s color, scale and motion.',
       island: 'The notch at the top of the screen: where it sits and what it signals.',
       notifications: 'Who lets you know, and when to leave you alone.',
@@ -319,6 +319,10 @@ export const en: Messages = {
     workspace: {
       openSession: 'Open a session',
       active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`,
+      statusBar: 'Status bar', usage: 'Accounts’ usage limits',
+      usageSaved: (on: boolean) => (on ? 'Usage limits shown in the status bar' : 'Usage limits hidden from the status bar'),
+      alertBefore: 'Alert at', alertAfter: '% of a window (amber beyond)',
+      alertLess: 'Lower the alert threshold by 5 %', alertMore: 'Raise the alert threshold by 5 %',
       terminals: 'Terminals', webglBefore: 'Fast rendering (WebGL) for', webglAfter: 'visible terminals at most',
       webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`
     },
@@ -1340,12 +1344,99 @@ export const en: Messages = {
   /** The IDE interface (preview): its switch in Settings › General, then each lot's own copy. */
   ide: {
     setting: 'IDE interface (preview)',
+    /** The Atelier tab's bar (mockup atelierPage() `.abar`): its « Détacher ». */
+    atelierDetach: 'Detach',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal shown in the other group', showHere: 'Show here',
     /** An agent's terminal tab: its title (mockup termFor()) and its kind chip (R3: a seat's is a read-only capture). */
     terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attached', termReadOnly: 'read only',
     settingHint: 'Tab groups, panels and an activity bar, the VS Code way. The current interface stays available while the preview lasts.',
     settingOff: 'IDE interface (preview) off',
+    /** The Rigs view (IDE lot 7b): the machine menu, its rows and their actions. */
+    rigsView: {
+      launch: 'Launch', launchTitle: 'Launch a rig…', shownMachine: (label: string) => `Shown machine: ${label}`, machine: (label) => `Machine: ${label}`, machines: 'Machines',
+      local: 'local', ssh: 'SSH', manage: 'Manage machines…', add: 'Add a machine',
+      runningRigs: (n) => (n === 1 ? '1 rig running' : `${n} rigs running`), openrigStopped: 'OpenRig stopped',
+      daemon: 'Daemon', fold: (name) => `Fold ${name}`, unfold: (name) => `Unfold ${name}`,
+      stoppedTitle: 'OpenRig is stopped.', stoppedBody: 'The rigs and the kernel come back with the daemon.', startOpenrig: 'Start OpenRig',
+      kernelStopped: 'Stopped with the daemon.', noOperator: 'The operator cannot help you compose a rig.',
+      whatDaemon: 'the daemon', whatKernel: 'the kernel',
+      start: (what) => `Start ${what}`, restart: (what) => `Restart ${what}`, stop: (what) => `Stop ${what}`,
+      confirmStop: 'Confirm the stop', confirmRestart: 'Confirm the restart', cancel: 'Cancel'
+    },
+    /** The IDE's OpenRig page (lot 7d, mockup orPageB()). */
+    openrigPage: {
+      sections: { overview: 'Overview', rigs: 'Rigs', roles: 'Roles', machines: 'Machines', daemon: 'Daemon', output: 'Output' } as Record<'overview' | 'rigs' | 'roles' | 'machines' | 'daemon' | 'output', string>,
+      nav: 'OpenRig sections', rail: (machine: string) => `OpenRig on ${machine}`,
+      unknownMachine: 'Unknown machine: it is no longer one of your machines.',
+      running: 'running', stopped: 'stopped', since: (version: string, time: string) => `${version} · since ${time}`,
+      seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`, rigsOf: (running: number, total: number) => `${running} of ${total}`, runningOn: (machine: string) => `running on ${machine}`,
+      active: (n: number) => `${n} active`, waiting: (n: number) => (n === 0 ? 'nobody waiting' : `${n} waiting for you`),
+      waitingTitle: 'Waiting for you', kind: { perm: 'permission', ask: 'question' } as Record<'perm' | 'ask', string>,
+      recent: 'Recent commands', seeAll: 'See all',
+      system: 'system', kernelSub: 'OpenRig’s own rig', openRig: 'Open the Rig view →', newSub: 'From a spec, an empty rig or with the operator',
+      local: 'local', ssh: (alias: string) => `ssh · ${alias}`, notInstalled: 'not installed', rigs: (n: number) => `${n} ${n === 1 ? 'rig' : 'rigs'}`,
+      latency: (ms: number) => `${ms} ms`, measuring: '…', shown: 'shown', show: 'Show', showLabel: (machine: string) => `Show ${machine}`,
+      addNote: 'The shown machine drives the Rigs explorer, this page and the launch window.',
+      address: (port: number | undefined, pid: number | undefined) => [port !== undefined ? `127.0.0.1:${port}` : '', pid !== undefined ? `pid ${pid}` : ''].filter(Boolean).join(' · '),
+      onStart: 'On start', relaunch: 'Relaunch the rigs that were running', noKernel: 'Start without the kernel',
+      perm: 'Permissions at launch', permHint: 'The level offered when you launch a rig. Each rig keeps its own.',
+      beforeStop: 'Before a stop', snapshot: 'Take a snapshot of the rig', askBusy: 'Ask for confirmation if a seat is working',
+      outputSub: 'the rig commands run from Ledge'
+    },
+    /** The “Launch a rig” modal (IDE lot 7d, mockup rigLaunchModal()). */
+    launchRig: {
+      title: 'Launch a rig', sub: (machine: string) => `On ${machine}. Ctrl+Enter launches, Esc closes.`,
+      from: 'Start from', running: 'Already running · manage it in its Rig view',
+      savedSpec: (n: number, source?: 'builtin' | 'user') => `Saved spec · ${n} ${pluralEn(n, 'seat', 'seats')}${source === 'builtin' ? ' · built-in' : source === 'user' ? ' · mine' : ''}`,
+      stoppedRig: (n: number) => `Saved spec · ${n} ${pluralEn(n, 'seat', 'seats')} · stopped`,
+      empty: 'Empty rig', emptySub: 'A lead, an implementation seat, to fill in', noFactory: 'The factory spec is missing on this machine',
+      operator: 'Compose with the operator', operatorSub: 'Describe the need, it proposes the team', kernelOff: 'The kernel must be running',
+      name: 'Name', machine: 'Machine', folder: 'Folder', seats: 'Seats', toFill: 'to fill in', permissions: 'Permissions', mixed: 'Mixed: the seats do not all have the same level.',
+      resume: 'Resume', resumeLast: (date: string) => `Resume from the last snapshot (${date})`, noSnapshot: 'No snapshot',
+      noFresh: 'This machine’s Ledge is too old to start the seats fresh.', gone: 'This choice is no longer offered: pick a card.',
+      command: 'Command', go: 'Launch', keys: 'Ctrl Enter', cancel: 'Cancel', opensTab: (name: string) => `Opens the Rig view of ${name}.`, more: 'More options',
+      want: 'What you want', wantPlaceholder: 'E.g.: a team to review MR !412 of synapse, a lead and two reviewers.',
+      wantHint: 'The kernel’s operator proposes a team in its thread. Nothing starts before you approve.',
+      ask: 'Ask the operator', asking: 'Sending…', composing: 'The operator is composing a team in its thread.',
+      daemonStopped: (machine: string) => `The OpenRig daemon is stopped on ${machine}.`,
+      problems: {
+        exists: (machine: string) => `A rig of this name already exists on ${machine}.`, name: 'A rig name: letters, digits, dot, - and _, no space.',
+        cwd: 'Choose the working folder.', noSeat: 'At least one seat is needed.'
+      },
+      goalErrors: {
+        no_operator: 'The kernel has no operator to take the request.', openrig_stopped: 'OpenRig is stopped on this machine.',
+        unreachable: 'The operator does not answer.', uncertain: 'The request may have gone, unconfirmed: check the operator’s thread before sending it again.',
+        refused: 'The operator refused the request.', offline: 'This machine is offline.', outdated: 'This machine’s Ledge is too old to write to the operator.'
+      } as Record<string, string>
+    },
+    /** The “Rig · name” tab (IDE lot 7c). */
+    rigTab: {
+      title: (rig: string, machine?: string) => (machine ? `Rig · ${rig} · ${machine}` : `Rig · ${rig}`),
+      topology: 'Topology', topologyRunning: 'click a seat: its thread', topologyStopped: 'the seats start with the rig', loading: 'Reading…',
+      legend: 'Links', delegates_to: 'delegates_to', escalates_to: 'escalates_to', collaborates_with: 'collaborates_with',
+      running: 'running', stopped: 'stopped', seatsAt: (n: number, machine: string) => `${n} ${pluralEn(n, 'seat', 'seats')} · ${machine}`,
+      start: 'Start', restart: 'Restart', stop: 'Stop',
+      settings: 'Settings', specUnknown: 'Unknown spec: rig launched outside Ledge',
+      permissions: 'Permissions', permissionsLabel: 'Permission level',
+      level: { spec: 'Spec', auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked' } as Record<string, string>,
+      specPolicy: (p: string) => `Spec: ${p}`, noSeats: 'No known seat: nothing to set for now.', specNoPolicy: 'This rig’s spec gives no known policy.',
+      nextLaunch: 'A change applies at the rig’s next launch.', mixed: 'Mixed', mixedSeat: (name: string, summary: string) => `${name}: ${summary}`,
+      errors: { daemon_stopped: 'The OpenRig daemon is stopped.', unknown_rig: 'This rig no longer exists on this machine.' } as Record<string, string>,
+      policyErrors: {
+        spec_unknown: 'Ledge cannot find this rig’s spec: “Spec” is not possible.',
+        spec_no_policy: 'This rig’s spec gives no permission policy: “Spec” is not possible.',
+        spec_policy_unsupported: 'This spec’s policy is not one of the five Ledge can apply.'
+      } as Record<string, string>,
+      seatsByRole: 'Seats per role', seatsLocked: '· editable while the rig runs', apply: 'Apply', applying: 'Working…', revert: 'Cancel',
+      planAdd: (ids: readonly string[]) => `Adds ${ids.join(', ')}`, planRemove: (ids: readonly string[]) => `Removes ${ids.join(', ')}`,
+      lastSnapshot: 'Last snapshot', noSnapshot: 'No snapshot', snapshotNow: 'Snapshot now',
+      queue: 'OpenRig queue', queueTruncated: 'The oldest are not shown', needsInput: 'Your turn: this line waits for an answer',
+      state: { pending: 'pending', 'in-progress': 'in progress', blocked: 'blocked' } as Record<string, string>,
+      age: (a: 'now' | { n: number; unit: 'min' | 'h' | 'd' }) => (a === 'now' ? '< 1 min' : `${a.n} ${a.unit}`),
+      role: 'Role', roleBody: ['OpenRig’s own rig. The ', 'operator', ' helps you compose and launch a team; the ', 'advisor', ' reviews the plans; the ', 'queue worker', ' routes queue lines between the seats.'] as readonly string[],
+      talkToOperator: 'Talk to the operator', rigAbsent: (rig: string) => `The rig “${rig}” no longer exists on this machine.`, badRef: 'This tab points at no rig.'
+    },
     brand: 'Ledge', searchPlaceholder: 'Session, command, task, rig…', searchKey: 'Ctrl K',
     panel: {
       shells: { title: 'New terminal', local: 'Local', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Command Prompt', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'default' },
@@ -1357,8 +1448,8 @@ export const en: Messages = {
     },
     sideToggle: 'Sidebar (Ctrl+B)', bottomToggle: 'Bottom panel (Ctrl+J)', rightToggle: 'Right panel (Ctrl+/)',
     activityLabel: 'Activity bar', projects: 'Projects', rigs: 'OpenRig rigs', atoi: 'For you',
-    openrigTab: 'OpenRig (tab)', atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
-    resizeEdge: 'Drag to resize · double-click: default width', resizeBottom: 'Drag to resize · double-click: default height', collapse: '« Collapse', collapseTip: 'Collapse the sidebar (Ctrl+B)',
+    atelierTab: 'Atelier (tab)', settingsTab: 'Settings (tab)',
+    resizeEdge: 'Drag to resize · double-click: default width', resizeBottom: 'Drag to resize · double-click: default height',
     waiting: (n: number) => (n === 1 ? '1 request' : `${n} requests`),
     tabTerminalView: 'Terminal view', tagLine: (label, value) => `${label}: ${value}`, toTerminal: 'Switch to the terminal', toThread: 'Back to the thread', viewKey: (key) => `Ctrl ${key}`, relievedByEntry: (name) => `Relieved by ${name}`, relievesEntry: (name) => `Relieves ${name}`,
     closeThisTab: 'Close tab', closeOthers: 'Close others', tabMenu: 'Tab', changesTitle: (name: string) => `Changes · ${name}`,
@@ -1370,7 +1461,9 @@ export const en: Messages = {
     replyPlaceholder: (name) => `Reply to ${name}…  Enter sends, Shift+Enter adds a line`,
     replyPlaceholderSeat: (name) => `Reply to ${name} (rig send)…  Enter sends, Shift+Enter adds a line`,
     newSession: 'New session (N)',
-    split: 'Split right', splitTip: 'Split right (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Link this group (violet, teal, none)',
+    split: 'Split right', splitTip: 'Split right (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Link this group: pick a colour', linkMenu: 'Link this group', linkNone: 'No link', linkCurrent: 'current', linkGroups: n => (n > 1 ? `${n} groups` : '1 group'),
+    links: { violet: 'Violet', teal: 'Teal', rose: 'Rose', lime: 'Lime', fuchsia: 'Fuchsia', sand: 'Sand' },
+    atoiNone: 'Nothing waits for you.', operations: 'Operations', usageOnce: (harness, window, line) => `${harness} · ${window}: ${line}`,
     closeGroupTip: 'Close group (Ctrl+W)',
     dropNew: ['Drop here:', 'new group'],
     menu: {

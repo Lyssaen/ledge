@@ -4,7 +4,8 @@ import 'dockview-react/dist/styles/dockview.css';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
 import { SHELL_ICONS } from '../shell/icons';
-import { activate, closeGroup, cycleLink, find, focusGroup, keyOf, MAIN, moveTo, split, type Group, type Tab, type Workspace } from '../workspace/model';
+import { activate, closeGroup, find, focusGroup, keyOf, LINKS, MAIN, moveTo, setLink, split, type Group, type Link, type Tab, type Workspace } from '../workspace/model';
+import { Menu, MenuItem } from '../shell/Menu';
 import type { WorkspaceStore } from '../workspace/store';
 import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
 import type { TabBody } from './tabs';
@@ -33,7 +34,8 @@ export const GROUP_MIN_WIDTH = 300;
 
 /** What a panel reads to draw its tab's content: the latest of Shell's, each render. */
 const Content = createContext<{ tabOf(id: string): Tab | undefined; body: TabBody; title(t: Tab): string; label(t: Tab): ReactNode; alert(t: Tab): 'perm' | 'ask' | null; onTabMenu(t: Tab, at: { x: number; y: number }): void; onNewSession(groupId: string): void; groupOf(id: string): string | undefined; focus: string;
-  /** The model group a dockview group draws. */ modelOf(dg: unknown): Group | undefined; emptyGroup(groupId: string): ReactNode; split(groupId: string): void; cycleLink(groupId: string): void;
+  /** The model group a dockview group draws. */ modelOf(dg: unknown): Group | undefined; emptyGroup(groupId: string): ReactNode; split(groupId: string): void; setLink(groupId: string, link: Link | null): void;
+  /** How many other groups of the window carry `link`. */ linkUse(groupId: string, link: Link): number;
   /** « Fermer le groupe »: an empty group goes; `lone` when it is the window's only group (it stays, without the button). */ closeGroup(groupId: string): void; lone: boolean } | null>(null);
 
 /** One panel = one tab of the model (`id = keyOf(tab)`). dockview draws only the visible one (`onlyWhenVisible`, its default). */
@@ -116,15 +118,35 @@ function StripTools({ group }: IDockviewHeaderActionsProps): JSX.Element {
     </div>
   );
 }
-/** The link square left of the tabs (mockup `.lkbtn`): the group's colour, dashed when it has none; a click cycles it. */
+/** The link square left of the tabs (mockup `.lkbtn`): the group's colour, dashed when it has none. A click opens the
+ *  colours (docs/mockups/ledge-ide-interactive.html, « Lier ce groupe »): six, the one in use and how many groups share each, then none. */
 function LinkSquare({ group }: IDockviewHeaderActionsProps): JSX.Element {
   const c = useContext(Content);
   const { t } = useI18n();
+  const [open, setOpen] = useState(false);
   const g = c?.modelOf(group);
+  const choose = (link: Link | null) => { if (g) c!.setLink(g.id, link); };
   return (
-    <button type="button" className="ide-lkbtn" title={t.ide.linkTip} aria-label={t.ide.linkTip} onClick={() => { if (g) c!.cycleLink(g.id); }}>
-      <span className={`ide-lk ${g?.link ?? 'none'}`} aria-hidden="true" />
-    </button>
+    <Menu open={open} onOpenChange={setOpen} label={t.ide.linkMenu} className="ide-lk-wrap" menuClassName="ide-lk-menu" flip
+      trigger={tr => (
+        <button type="button" className="ide-lkbtn" title={t.ide.linkTip} aria-label={t.ide.linkTip} {...tr}>
+          <span className={`ide-lk ${g?.link ?? 'none'}`} aria-hidden="true" />
+        </button>
+      )}>
+      {LINKS.map(l => {
+        const n = g ? c!.linkUse(g.id, l) : 0;
+        return (
+          <MenuItem key={l} onSelect={() => choose(l)} className={g?.link === l ? 'on' : undefined}>
+            <span><span className={`ide-lk ${l}`} aria-hidden="true" />{t.ide.links[l]}</span>
+            <small>{g?.link === l ? t.ide.linkCurrent : n > 0 ? t.ide.linkGroups(n) : ''}</small>
+          </MenuItem>
+        );
+      })}
+      <hr />
+      <MenuItem onSelect={() => choose(null)} className={g?.link ? undefined : 'on'}>
+        <span><span className="ide-lk none" aria-hidden="true" />{t.ide.linkNone}</span>
+      </MenuItem>
+    </Menu>
   );
 }
 /** dockview's watermark, shown by a group without a panel: a model group without tabs gets its proposals (EmptyGroup).
@@ -215,7 +237,8 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   const latestModelOf = useRef(modelOf);
   latestModelOf.current = modelOf;
   const content = { tabOf: (id: string) => tabs.get(id)?.tab, body, title, label, alert, onTabMenu, onNewSession, groupOf: (id: string) => tabs.get(id)?.group.id, focus: ws.focus,
-    modelOf, emptyGroup, split: (id: string) => store.update(w => split(w, id)), cycleLink: (id: string) => store.update(w => cycleLink(w, id)),
+    modelOf, emptyGroup, split: (id: string) => store.update(w => split(w, id)), setLink: (id: string, link: Link | null) => store.update(w => setLink(w, id, link)),
+    linkUse: (id: string, link: Link) => groups.filter(g => g.id !== id && g.link === link).length,
     closeGroup: (id: string) => store.update(w => closeGroup(w, id)), lone: groups.length === 1 };
 
   /** Draws each model group, left to right: its dockview group (made where it belongs if it has none) and its panels at

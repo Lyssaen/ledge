@@ -124,6 +124,8 @@ export function Tree(p: {
   onToggleDense(): void;
   onToggleBranches(): void;
   onNewProject(): void;
+  /** The IDE's Projects view: no « +N projets sans agent actif » row (the user, 2026-11-09: a project without a live session stays out). */
+  ide?: boolean;
   paused: boolean;
 }): JSX.Element {
   const { t } = useI18n();
@@ -347,7 +349,7 @@ export function Tree(p: {
   // The pressed eye hides projects: a last row says how many, and opens them all (the eye released). Alone under the
   // « Aucune session » box, it is the tree's only tab stop.
   const moreKey = 'more-projects';
-  const moreRow = p.hideDone && p.hiddenProjects > 0 ? (
+  const moreRow = p.hideDone && p.hiddenProjects > 0 && !p.ide ? (
     <div key={moreKey} className="st-row st-more st-more-projects" style={{ '--d': 0 } as CSSProperties}>
       <span className="st-gap" />
       <button type="button" data-tree-key={moreKey} tabIndex={p.groups.length === 0 ? 0 : tabOf(moreKey)} aria-expanded={false} onClick={p.onToggleHide}>{t.side.moreProjects(p.hiddenProjects)}</button>
@@ -382,7 +384,8 @@ export function Tree(p: {
     </div>
   );
   // Projects, no session at all, the eye pressed: the header whole, the box that offers a session, and what the eye hides.
-  if (p.groups.length === 0 && moreRow && !p.anySession) return (
+  const hides = p.hideDone && p.hiddenProjects > 0;
+  if (p.groups.length === 0 && hides && !p.anySession) return (
     <>
       {header}
       <div className="st-empty" role="status" onKeyDown={headKeys}>
@@ -394,7 +397,7 @@ export function Tree(p: {
     </>
   );
   // Sessions, but none live and the eye pressed: the header, and a box that releases the eye.
-  if (p.groups.length === 0 && moreRow) return (
+  if (p.groups.length === 0 && hides) return (
     <>
       {header}
       <div className="st-empty" role="status" onKeyDown={headKeys}>

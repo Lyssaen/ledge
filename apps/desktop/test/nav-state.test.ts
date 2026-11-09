@@ -129,3 +129,13 @@ describe('nav state', () => {
     expect(navReducer(s0, { type: 'fullscreen', on: false })).toBe(s0);
   });
 });
+
+describe('the OpenRig page sections travel in the navigation', () => {
+  it('keeps every section, and the one shown before', () => {
+    const t0 = navReducer(s0, { type: 'openrig', machine: 'local', section: 'daemon' });
+    expect(t0.place).toMatchObject({ kind: 'openrig', machine: 'local', section: 'daemon' });
+    expect(navReducer(t0, { type: 'openrig' }).place).toMatchObject({ section: 'daemon' });
+    expect(navReducer(t0, { type: 'openrig', section: 'overview' }).place).toMatchObject({ section: 'overview' });
+    expect(navReducer(t0, { type: 'openrig', section: 'roles' }).place).toMatchObject({ section: 'roles' });
+  });
+});

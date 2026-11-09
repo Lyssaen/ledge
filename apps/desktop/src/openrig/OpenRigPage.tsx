@@ -5,14 +5,14 @@ import type { OpenRigAction, OpenRigState, Projects, Rig, RigSeat, RoleSummary, 
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
-import type { NavAction, OpenRigOpen } from '../nav/state';
+import type { NavAction, OpenRigOpen, OpenRigSection } from '../nav/state';
 import { cls } from '../shell/cls';
 import { Modal } from '../shell/Modal';
 import { openUrl } from '../tauri/bridge';
 import { RigLaunchForm } from './RigLaunchForm';
 import { SeatsDialog } from './SeatsDialog';
 import { SeatSettings } from './SeatSettings';
-import { asksFirst, commandsOf, isRunning, kernelRig, listedRigs, rigOf, targetOf, workingSeats } from './model';
+import { asksFirst, operatorOf, sessionOfSeat, commandsOf, isRunning, kernelRig, listedRigs, rigOf, targetOf, workingSeats } from './model';
 import { forgetRoleFiles } from './roles/bits';
 import { rolesBySeat } from './roles/model';
 import { RolesView } from './roles/RolesView';
@@ -27,7 +27,7 @@ const Dot = ({ tone }: { tone: Tone }) => <span className={`or-dot or-${tone}`} 
  * OpenRig on a machine (docs/mockups/ledge-openrig.html, view 1): the machines on top, the daemon and the kernel, then
  * the rigs, each unfolding its seats. A stop or a restart asks first (view 2); every action shows the `rig` command it runs.
  */
-export function OpenRigPage({ client, machines, machine, section = 'rigs', role, seat, open, projects = null, sessions = [], dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; section?: 'rigs' | 'roles'; role?: string; seat?: string; open?: OpenRigOpen | undefined; projects?: Projects | null; sessions?: readonly Session[]; dispatch: (a: NavAction) => void }) {
+export function OpenRigPage({ client, machines, machine, section = 'rigs', role, seat, open, projects = null, sessions = [], dispatch }: { client: DaemonClient; machines: readonly MachineState[]; machine?: string; section?: OpenRigSection; role?: string; seat?: string; open?: OpenRigOpen | undefined; projects?: Projects | null; sessions?: readonly Session[]; dispatch: (a: NavAction) => void }) {
   const { t, lang } = useI18n();
   const o = t.openrig;
   const shown = machines.find(m => m.id === machine) ?? machines.find(m => m.id === 'local') ?? machines[0];
@@ -268,17 +268,6 @@ function Confirm({ action, state, machine, onConfirm, onCancel }: { action: Open
     </Modal>
   );
 }
-
-/** The Ledge session of the kernel's operator seat (`operator.agent`) on that machine, once Ledge follows it. */
-export function operatorOf(state: OpenRigState | null, sessions: readonly Session[], machine: string): Session | undefined {
-  const seat = state?.rigs.find(r => r.name === 'kernel')?.nodes.find(n => n.logicalId === 'operator.agent')?.session;
-  if (!seat) return undefined;
-  return sessionOfSeat(sessions, seat, machine);
-}
-
-/** The Ledge session that follows an OpenRig seat on that machine, if any. */
-export const sessionOfSeat = (sessions: readonly Session[], seat: string, machine: string): Session | undefined =>
-  sessions.find(x => x.rig?.seat === seat && x.state !== 'exited' && (x.machineId ?? 'local') === machine);
 
 /** One seat: its role, harness and model, what it does, and « Ouvrir » once Ledge follows it (its thread, its terminal, its requests). */
 function SeatLine({ seat: n, session, onOpen, onSettings, work = false, role, onRole }: { seat: RigSeat; session: Session | undefined; onOpen: (id: string) => void; onSettings: () => void; work?: boolean; role?: RoleSummary | undefined; onRole?: (() => void) | undefined }) {

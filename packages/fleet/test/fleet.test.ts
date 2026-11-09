@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useOpenRigAsksAll } from '../src/openrigAsks';
+import { useLatency } from '../src/latency';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
@@ -23,7 +24,7 @@ function setup() {
   const local = peer(), server = peer(), extra = peer();
   const client = createFleetClient([LOCAL_MACHINE, remote], o => o.url === LOCAL_MACHINE.url ? local.client : o.url.endsWith('/ssh/dev-server') ? server.client : extra.client);
   const got: ServerMessage[] = []; client.onMessage(m => got.push(m)); client.connect();
-  const snapshot: ServerMessage = { type: 'snapshot', sessions: [fakeSession('same')], launcher: ['node', '/opt/ledge/cli.js'], daemon: { version: '0.4.0', install: 'npm', systemd: true, routing: true } };
+  const snapshot: ServerMessage = { type: 'snapshot', sessions: [fakeSession('same')], launcher: ['node', '/opt/ledge/cli.js'], daemon: { version: '0.4.0', install: 'npm', systemd: true, routing: true, openrigRig: true } };
   local.emit(snapshot); server.emit({ ...snapshot, sshAlias: remote.ssh });
   return { client, local, server, extra, got, snapshot };
 }
@@ -714,6 +715,168 @@ describe('multi-machine connections', () => {
     expect(roles().at(-1)).toEqual({ type: 'openrig.roleDetail', requestId: 'o5', machineId: 'server', roleId: 'f95e', error: 'offline' });
     expect(got.filter(m => m.type === 'error')).toEqual([]);
   });
+  it('routes a role duplicate to its machine; an older daemon answers outdated, a machine that drops mid-write answers uncertain, an offline one offline', () => {
+    const { client, server, got } = setup();
+    const dup = () => got.filter(m => m.type === 'openrig.roleDuplicated');
+    client.send({ type: 'openrig.role.duplicate', requestId: 'd1', machineId: 'server', roleId: 'f95e', name: 'mine' });
+    expect(server.sent).toEqual([{ type: 'openrig.role.duplicate', requestId: 'd1', roleId: 'f95e', name: 'mine' }]);
+    server.emit({ type: 'openrig.roleDuplicated', requestId: 'd1', ok: true, roleId: 'abc1', path: '/h/.openrig/specs/mine' });
+    server.emit({ type: 'openrig.roleDuplicated', requestId: 'd1', ok: true }); // once only
+    expect(dup()).toEqual([{ type: 'openrig.roleDuplicated', requestId: 'd1', machineId: 'server', ok: true, roleId: 'abc1', path: '/h/.openrig/specs/mine' }]);
+    client.send({ type: 'openrig.role.duplicate', requestId: 'd2', machineId: 'server', roleId: 'f95e', name: 'mine2' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.role.duplicate' });
+    expect(dup().at(-1)).toEqual({ type: 'openrig.roleDuplicated', requestId: 'd2', machineId: 'server', ok: false, error: 'outdated' });
+    client.send({ type: 'openrig.role.duplicate', requestId: 'd3', machineId: 'server', roleId: 'f95e', name: 'mine3' });
+    server.set('unreachable');
+    expect(dup().at(-1)).toEqual({ type: 'openrig.roleDuplicated', requestId: 'd3', machineId: 'server', ok: false, error: 'uncertain' });
+    client.send({ type: 'openrig.role.duplicate', requestId: 'd4', machineId: 'server', roleId: 'f95e', name: 'mine4' });
+    expect(dup().at(-1)).toEqual({ type: 'openrig.roleDuplicated', requestId: 'd4', machineId: 'server', ok: false, error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
+  describe('a daemon without openrigRig (lot 7a)', () => {
+    const old = { type: 'snapshot', sessions: [], daemon: { version: '0.4.0', install: 'npm', systemd: true, openrig: true } } as ServerMessage;
+    const gated: ClientMessage[] = [
+      { type: 'openrig.graph', requestId: 'x1', machineId: 'server', rig: 'a' },
+      { type: 'openrig.snapshots', requestId: 'x2', machineId: 'server', rig: 'a' },
+      { type: 'openrig.permissions', requestId: 'x3', machineId: 'server', rig: 'a' },
+      { type: 'openrig.queue', requestId: 'x4', machineId: 'server', rig: 'a' },
+      { type: 'openrig.role.duplicate', requestId: 'x5', machineId: 'server', roleId: 'f95e', name: 'mine' },
+      { type: 'openrig.act', requestId: 'x6', machineId: 'server', action: { kind: 'rig.snapshot', rig: 'a' } },
+      { type: 'openrig.act', requestId: 'x7', machineId: 'server', action: { kind: 'rig.permissions', rig: 'a', mode: 'auto', seats: ['s'] } as never },
+      { type: 'openrig.act', requestId: 'x8', machineId: 'server', action: { kind: 'rig.start', rig: 'a', snapshot: 'snap-1' } as never },
+    ];
+    it('answers each gated message outdated without sending it, for the remote machine and the local one', () => {
+      const { client, local, server, got } = setup();
+      server.emit({ ...old, sshAlias: remote.ssh } as ServerMessage); local.emit(old);
+      server.sent.length = 0; local.sent.length = 0;
+      for (const m of gated) client.send(m);
+      for (const m of gated) client.send({ ...m, requestId: `${(m as { requestId: string }).requestId}l`, machineId: undefined } as ClientMessage);
+      expect(server.sent).toEqual([]); expect(local.sent).toEqual([]);
+      const answers = got.filter(m => m.type.startsWith('openrig.') && 'error' in m);
+      expect(answers).toHaveLength(16);
+      expect(answers.every(m => (m as { error?: string }).error === 'outdated')).toBe(true);
+      expect(answers.find(m => (m as { requestId?: string }).requestId === 'x6')).toEqual({ type: 'openrig.done', requestId: 'x6', machineId: 'server', ok: false, commands: [], error: 'outdated' });
+      expect(answers.find(m => (m as { requestId?: string }).requestId === 'x8l')).toEqual({ type: 'openrig.done', requestId: 'x8l', machineId: 'local', ok: false, commands: [], error: 'outdated' });
+    });
+    it('still sends what it knows (status poll, a plain rig.start, other actions) and fails no pending ask', () => {
+      const { client, server, got } = setup();
+      server.emit({ ...old, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send({ type: 'openrig.status', requestId: 'p1', machineId: 'server' });
+      client.send({ type: 'openrig.act', requestId: 'p2', machineId: 'server', action: { kind: 'rig.start', rig: 'a' } });
+      client.send({ type: 'openrig.act', requestId: 'p3', machineId: 'server', action: { kind: 'rig.stop', rig: 'a', snapshot: true } });
+      client.send({ type: 'openrig.graph', requestId: 'p4', machineId: 'server', rig: 'a' });
+      expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['p1', 'p2', 'p3']);
+      expect(got.filter(m => 'error' in m)).toHaveLength(1); // p4 only
+    });
+    const policy = { type: 'openrig.act', requestId: 'y1', machineId: 'server', action: { kind: 'rig.policy', rig: 'a', policy: 'standard', seats: ['s@a'] } } as ClientMessage;
+    it('rig.policy needs openrigPolicy: outdated, not sent, with openrigRig alone; sent with it', () => {
+      const { client, server, got } = setup();
+      const withRig = { type: 'snapshot', sessions: [], daemon: { version: '0.7.0', install: 'npm', systemd: true, openrig: true, openrigRig: true } } as ServerMessage;
+      server.emit({ ...withRig, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send(policy);
+      expect(server.sent).toEqual([]);
+      expect(got.at(-1)).toEqual({ type: 'openrig.done', requestId: 'y1', machineId: 'server', ok: false, commands: [], error: 'outdated' });
+      server.emit({ ...withRig, daemon: { ...(withRig as { daemon: object }).daemon, openrigPolicy: true }, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send({ ...policy, requestId: 'y2' } as ClientMessage);
+      expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['y2']);
+    });
+    it('rig.start with fresh needs openrigFresh: outdated, not sent, without it; sent with it; a plain rig.start is not gated', () => {
+      const { client, server, got } = setup();
+      const base = { type: 'snapshot', sessions: [], daemon: { version: '0.7.0', install: 'npm', systemd: true, openrig: true, openrigRig: true, openrigPolicy: true } } as ServerMessage;
+      server.emit({ ...base, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      const fresh = { type: 'openrig.act', requestId: 'f1', machineId: 'server', action: { kind: 'rig.start', rig: 'a', fresh: ['dev.build'] } } as ClientMessage;
+      client.send(fresh);
+      expect(server.sent).toEqual([]);
+      expect(got.at(-1)).toEqual({ type: 'openrig.done', requestId: 'f1', machineId: 'server', ok: false, commands: [], error: 'outdated' });
+      client.send({ type: 'openrig.act', requestId: 'f0', machineId: 'server', action: { kind: 'rig.start', rig: 'a' } });
+      expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['f0']);
+      server.emit({ ...base, daemon: { ...(base as { daemon: object }).daemon, openrigFresh: true }, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send({ ...fresh, requestId: 'f2' } as ClientMessage);
+      expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['f2']);
+    });
+    it('sends them all when the daemon says openrigRig', () => {
+      const { client, server } = setup();
+      server.sent.length = 0;
+      for (const m of gated) client.send(m);
+      expect(server.sent).toHaveLength(8);
+    });
+    it('a refused role duplicate fails only the pending duplicates, not the roles asks', () => {
+      const { client, server, got } = setup();
+      client.send({ type: 'openrig.roles', requestId: 'r1', machineId: 'server' });
+      client.send({ type: 'openrig.role', requestId: 'r2', machineId: 'server', roleId: 'f95e' });
+      client.send({ type: 'openrig.role.duplicate', requestId: 'r3', machineId: 'server', roleId: 'f95e', name: 'mine' });
+      server.emit({ type: 'error', message: 'invalid message', request: 'openrig.role.duplicate' });
+      expect(got.filter(m => m.type.startsWith('openrig.role') && 'error' in m).map(m => (m as { requestId: string }).requestId)).toEqual(['r3']);
+    });
+  });
+  it('routes a rig graph to its machine; an older daemon answers outdated, a machine that dropped offline', () => {
+    const { client, server, got } = setup();
+    const graphs = () => got.filter(m => m.type === 'openrig.graphState');
+    const graph = { pods: [], seats: [], links: [] };
+    client.send({ type: 'openrig.graph', requestId: 'g1', machineId: 'server', rig: 'kernel' });
+    expect(server.sent).toEqual([{ type: 'openrig.graph', requestId: 'g1', rig: 'kernel' }]);
+    server.emit({ type: 'openrig.graphState', requestId: 'g1', rig: 'kernel', graph });
+    server.emit({ type: 'openrig.graphState', requestId: 'g1', rig: 'kernel', graph }); // once only
+    expect(graphs()).toEqual([{ type: 'openrig.graphState', requestId: 'g1', machineId: 'server', rig: 'kernel', graph }]);
+    client.send({ type: 'openrig.graph', requestId: 'g2', machineId: 'server', rig: 'kernel' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.graph' });
+    expect(graphs().at(-1)).toEqual({ type: 'openrig.graphState', requestId: 'g2', machineId: 'server', rig: 'kernel', error: 'outdated' });
+    server.set('unreachable');
+    client.send({ type: 'openrig.graph', requestId: 'g3', machineId: 'server', rig: 'starter' });
+    expect(graphs().at(-1)).toEqual({ type: 'openrig.graphState', requestId: 'g3', machineId: 'server', rig: 'starter', error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
+  it('routes a rig\'s snapshots to its machine; an older daemon answers outdated, a machine that dropped offline', () => {
+    const { client, server, got } = setup();
+    const lists = () => got.filter(m => m.type === 'openrig.snapshotList');
+    const snapshots = [{ id: '01M6XTAV9KM2HVRS841K1FQ6RV', kind: 'manual', status: 'complete', createdAt: '2026-11-08 14:52:23' }];
+    client.send({ type: 'openrig.snapshots', requestId: 'n1', machineId: 'server', rig: 'kernel' });
+    expect(server.sent).toEqual([{ type: 'openrig.snapshots', requestId: 'n1', rig: 'kernel' }]);
+    server.emit({ type: 'openrig.snapshotList', requestId: 'n1', rig: 'kernel', snapshots });
+    server.emit({ type: 'openrig.snapshotList', requestId: 'n1', rig: 'kernel', snapshots }); // once only
+    expect(lists()).toEqual([{ type: 'openrig.snapshotList', requestId: 'n1', machineId: 'server', rig: 'kernel', snapshots }]);
+    client.send({ type: 'openrig.snapshots', requestId: 'n2', machineId: 'server', rig: 'kernel' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.snapshots' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.snapshotList', requestId: 'n2', machineId: 'server', rig: 'kernel', snapshots: [], error: 'outdated' });
+    server.set('unreachable');
+    client.send({ type: 'openrig.snapshots', requestId: 'n3', machineId: 'server', rig: 'starter' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.snapshotList', requestId: 'n3', machineId: 'server', rig: 'starter', snapshots: [], error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
+  it('routes a rig\'s permissions to its machine; an older daemon answers outdated, a machine that dropped offline', () => {
+    const { client, server, got } = setup();
+    const lists = () => got.filter(m => m.type === 'openrig.permissionList');
+    const seats = [{ logicalId: 'advisor.lead', session: 'advisor-lead@kernel', mode: 'acceptEdits', source: 'kernel_default', posture: 'floor', selection: 'inherit', summary: 's' }];
+    client.send({ type: 'openrig.permissions', requestId: 'p1', machineId: 'server', rig: 'kernel' });
+    expect(server.sent).toEqual([{ type: 'openrig.permissions', requestId: 'p1', rig: 'kernel' }]);
+    server.emit({ type: 'openrig.permissionList', requestId: 'p1', rig: 'kernel', policy: 'builtin:auto', seats });
+    server.emit({ type: 'openrig.permissionList', requestId: 'p1', rig: 'kernel', seats }); // once only
+    expect(lists()).toEqual([{ type: 'openrig.permissionList', requestId: 'p1', machineId: 'server', rig: 'kernel', policy: 'builtin:auto', seats }]);
+    client.send({ type: 'openrig.permissions', requestId: 'p2', machineId: 'server', rig: 'kernel' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.permissions' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.permissionList', requestId: 'p2', machineId: 'server', rig: 'kernel', seats: [], error: 'outdated' });
+    server.set('unreachable');
+    client.send({ type: 'openrig.permissions', requestId: 'p3', machineId: 'server', rig: 'starter' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.permissionList', requestId: 'p3', machineId: 'server', rig: 'starter', seats: [], error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
+  it('routes a rig\'s queue to its machine; an older daemon answers outdated, a machine that dropped offline', () => {
+    const { client, server, got } = setup();
+    const lists = () => got.filter(m => m.type === 'openrig.queueState');
+    const rows = [{ id: 'qitem-1', state: 'pending', from: 'a@kernel', to: 'dev-build@x', createdAt: 'a', updatedAt: 'b', at: 'c', needsInput: { count: 1, reason: 'permission_prompt' } }];
+    client.send({ type: 'openrig.queue', requestId: 'q1', machineId: 'server', rig: 'x' });
+    expect(server.sent).toEqual([{ type: 'openrig.queue', requestId: 'q1', rig: 'x' }]);
+    server.emit({ type: 'openrig.queueState', requestId: 'q1', rig: 'x', rows, truncated: false });
+    server.emit({ type: 'openrig.queueState', requestId: 'q1', rig: 'x', rows: [], truncated: false }); // once only
+    expect(lists()).toEqual([{ type: 'openrig.queueState', requestId: 'q1', machineId: 'server', rig: 'x', rows, truncated: false }]);
+    client.send({ type: 'openrig.queue', requestId: 'q2', machineId: 'server', rig: 'x' });
+    server.emit({ type: 'error', message: 'invalid message', request: 'openrig.queue' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.queueState', requestId: 'q2', machineId: 'server', rig: 'x', rows: [], truncated: false, error: 'outdated' });
+    server.set('unreachable');
+    client.send({ type: 'openrig.queue', requestId: 'q3', machineId: 'server', rig: 'y' });
+    expect(lists().at(-1)).toEqual({ type: 'openrig.queueState', requestId: 'q3', machineId: 'server', rig: 'y', rows: [], truncated: false, error: 'offline' });
+    expect(got.filter(m => m.type === 'error')).toEqual([]);
+  });
   it('answers a repos.scan for an offline machine, and one pending on a machine that drops, with error offline', () => {
     const { client, server, got } = setup();
     client.send({ type: 'repos.scan', requestId: 's1', machineId: 'server' });
@@ -1199,5 +1362,52 @@ describe('attachments', () => {
     client.send({ type: 'chat.ask', qid: 'q2', text: 'Autre' });
     expect(got.some(m => m.type === 'chat.error' && m.message === 'one question at a time')).toBe(false);
     expect(local.sent.at(-1)).toMatchObject({ type: 'chat.route', qid: 'q2' });
+  });
+});
+
+describe('ping and useLatency (lot 7d)', () => {
+  const withPing = (ping: boolean) => ({ type: 'snapshot', sessions: [], daemon: { version: '0.7.0', install: 'npm', systemd: true, ...(ping ? { ping: true } : {}) } }) as ServerMessage;
+  it('answers a ping outdated without sending it to a daemon without ping; sends it with ping, and the pong comes back tagged with the machine', () => {
+    const { client, server, got } = setup();
+    server.emit({ ...withPing(false), sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+    client.send({ type: 'ping', requestId: 'g1', machineId: 'server' });
+    expect(server.sent).toEqual([]);
+    expect(got.at(-1)).toEqual({ type: 'pong', requestId: 'g1', machineId: 'server', error: 'outdated' });
+    server.emit({ ...withPing(true), sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+    client.send({ type: 'ping', requestId: 'g2', machineId: 'server' });
+    expect(server.sent).toEqual([{ type: 'ping', requestId: 'g2' }]);
+    server.emit({ type: 'pong', requestId: 'g2' });
+    expect(got.at(-1)).toEqual({ type: 'pong', requestId: 'g2', machineId: 'server' });
+    server.set('unreachable');
+    client.send({ type: 'ping', requestId: 'g3', machineId: 'server' });
+    expect(got.at(-1)).toEqual({ type: 'pong', requestId: 'g3', machineId: 'server', error: 'offline' });
+  });
+  it('useLatency measures the round trip per machine, one ping at a time, again every round; null without ping, never sending to that daemon', () => {
+    vi.useFakeTimers();
+    try {
+      const { client, server, local } = setup();
+      local.emit(withPing(true)); server.emit({ ...withPing(false), sshAlias: remote.ssh } as ServerMessage);
+      local.sent.length = 0; server.sent.length = 0;
+      const { result, unmount } = renderHook(() => useLatency(client, ['local', 'server'], 1000));
+      expect(local.sent).toHaveLength(1);
+      expect(server.sent).toEqual([]);
+      expect(result.current.get('server')).toBeNull();
+      expect(result.current.has('local')).toBe(false);
+      act(() => { vi.advanceTimersByTime(40); });
+      act(() => local.emit({ type: 'pong', requestId: (local.sent[0] as { requestId: string }).requestId }));
+      expect(result.current.get('local')).toBe(40);
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(local.sent).toHaveLength(2);
+      // The round before is still unanswered at the next round: given up (null), and a stale pong changes nothing.
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(local.sent).toHaveLength(3);
+      expect(result.current.get('local')).toBeNull();
+      act(() => local.emit({ type: 'pong', requestId: (local.sent[1] as { requestId: string }).requestId }));
+      expect(result.current.get('local')).toBeNull();
+      unmount();
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(local.sent).toHaveLength(3);
+      expect(server.sent).toEqual([]);
+    } finally { vi.useRealTimers(); }
   });
 });

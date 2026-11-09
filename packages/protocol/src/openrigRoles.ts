@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RigNameSchema } from './openrig.js';
 
 /**
  * OpenRig roles (agent specs) of a machine, read-only (docs/mockups/ledge-openrig-roles.html, contract
@@ -190,6 +191,19 @@ export const OpenRigRoleFileContentSchema = z.object({
   type: z.literal('openrig.roleFileContent'), requestId: z.string(), machineId: z.string().optional(), roleId: z.string(), path: z.string(),
   content: z.string().optional(), size: z.number().int().min(0).optional(), truncated: z.boolean().optional(), error: RoleErrorSchema.optional()
 });
+/** A front asks a machine to copy a role into the person's own library under a new `name` (OpenRig's `rig specs add`; the
+ *  copy's `name:` is renamed and its relative `local:` imports are made absolute `path:` ones). Never a `builtin` edit. */
+export const OpenRigRoleDuplicateSchema = z.object({
+  type: z.literal('openrig.role.duplicate'), requestId: z.string().min(1).max(100), machineId: z.string().optional(),
+  roleId: LibraryIdSchema, name: RigNameSchema
+});
+/** The end of a duplicate. `roleId`: the copy's library id, `path`: its folder in the library. `error`: `unknown_role`,
+ *  `source_missing`, `exists`, `too_large`, `busy`, `invalid_name`, `daemon_stopped`, `not_installed`, the fleet's `offline` /
+ *  `outdated` / `uncertain`, or what `rig` said. */
+export const OpenRigRoleDuplicatedSchema = z.object({
+  type: z.literal('openrig.roleDuplicated'), requestId: z.string(), machineId: z.string().optional(),
+  ok: z.boolean(), roleId: z.string().optional(), path: z.string().optional(), error: RoleErrorSchema.optional()
+});
 export const ROLE_FILE_MAX = 512 * 1024;
 
 export type OpenRigRoles = z.infer<typeof OpenRigRolesSchema>;
@@ -198,3 +212,5 @@ export type OpenRigRole = z.infer<typeof OpenRigRoleSchema>;
 export type OpenRigRoleDetail = z.infer<typeof OpenRigRoleDetailSchema>;
 export type OpenRigRoleFile = z.infer<typeof OpenRigRoleFileSchema>;
 export type OpenRigRoleFileContent = z.infer<typeof OpenRigRoleFileContentSchema>;
+export type OpenRigRoleDuplicate = z.infer<typeof OpenRigRoleDuplicateSchema>;
+export type OpenRigRoleDuplicated = z.infer<typeof OpenRigRoleDuplicatedSchema>;

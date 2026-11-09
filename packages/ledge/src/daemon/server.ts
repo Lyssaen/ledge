@@ -596,7 +596,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(forge ? { forge: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRig: true, openrigPolicy: true, openrigFresh: true, ping: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(forge ? { forge: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -1253,13 +1253,19 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         void discoverSeats(state).catch(e => log(`openrig: seats not followed: ${(e as Error).message}`));
         return reply({ type: 'openrig.state', requestId: msg.requestId, state });
       }
+      case 'ping': return reply({ type: 'pong', requestId: msg.requestId });
       case 'openrig.specs': return reply({ type: 'openrig.specList', requestId: msg.requestId, ...await openrig.specs() });
       // A row's state for an OpenRig task card, to the asker only (docs/mockups/ledge-openrig-messages.html, decision 2).
       case 'openrig.row': return reply({ type: 'openrig.rowState', requestId: msg.requestId, qitem: msg.qitem, ...await openrig.row(msg.qitem) });
       // Read-only, to the asker only (docs/mockups/ledge-openrig-roles.html).
       case 'openrig.roles': return reply({ type: 'openrig.roleList', requestId: msg.requestId, ...await openrig.roles() });
+      case 'openrig.graph': return reply({ type: 'openrig.graphState', requestId: msg.requestId, rig: msg.rig, ...await openrig.graph(msg.rig) });
+      case 'openrig.permissions': return reply({ type: 'openrig.permissionList', requestId: msg.requestId, rig: msg.rig, seats: [], ...await openrig.permissions(msg.rig) });
+      case 'openrig.queue': return reply({ type: 'openrig.queueState', requestId: msg.requestId, rig: msg.rig, ...await openrig.queue(msg.rig) });
+      case 'openrig.snapshots': return reply({ type: 'openrig.snapshotList', requestId: msg.requestId, rig: msg.rig, snapshots: [], ...await openrig.snapshots(msg.rig) });
       case 'openrig.role': return reply({ type: 'openrig.roleDetail', requestId: msg.requestId, roleId: msg.roleId, ...await openrig.role(msg.roleId) });
       case 'openrig.roleFile': return reply({ type: 'openrig.roleFileContent', requestId: msg.requestId, roleId: msg.roleId, path: msg.path, ...await openrig.roleFile(msg.roleId, msg.path) });
+      case 'openrig.role.duplicate': return reply({ type: 'openrig.roleDuplicated', requestId: msg.requestId, ...await openrig.duplicateRole(msg.roleId, msg.name) });
       case 'openrig.launch': {
         const done = await openrig.launch(msg.launch);
         reply({ type: 'openrig.launched', requestId: msg.requestId, ...done });

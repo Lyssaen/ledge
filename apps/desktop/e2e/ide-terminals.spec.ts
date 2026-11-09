@@ -15,9 +15,9 @@ const STATE: OpenRigState = {
 };
 /** A real OpenRig action from the page (Stop, confirmed): the fake daemon ends it with a command, and the log notes it. */
 async function stopStarter(page: Page) {
-  await page.getByRole('navigation', { name: 'Activity bar' }).getByRole('button', { name: 'OpenRig (tab)' }).click();
-  await page.getByRole('listitem').filter({ hasText: 'starter' }).getByRole('button', { name: 'Stop', exact: true }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: /^Stop the rig/ }).click();
+  await page.getByRole('navigation', { name: 'Activity bar' }).getByRole('button', { name: 'OpenRig rigs' }).click();
+  await page.locator('.ide-rigs-row').filter({ hasText: 'starter' }).getByRole('button', { name: /^Stop/ }).click();
+  await page.getByRole('group', { name: /^Stop the rig/ }).getByRole('button', { name: 'Confirm the stop' }).click();
 }
 const sessions = [fleet.find(s => s.id === 'otto')!, session('nova', { name: 'Nova', project: 'ledge', cwd: '/w/ledge', state: 'working' })];
 const panel = (page: Page) => page.getByRole('region', { name: 'Bottom panel' });

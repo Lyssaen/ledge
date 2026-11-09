@@ -51,7 +51,7 @@ async function open(page: Page, name: string, view: 'Projects' | 'OpenRig rigs' 
   // The explorer shows the projects' sessions or the rigs' seats (activity bar).
   const button = page.getByRole('navigation', { name: 'Activity bar' }).getByRole('button', { name: view, exact: true });
   if (!(await button.getAttribute('class'))?.includes('on')) await button.click();
-  await page.getByRole('tree').getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
+  await page.locator('.ide-explorer').getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
   await expect(tabOf(page, name)).toHaveClass(/dv-active-tab/);
   // The session page's chunk loads on the first visit: under load it can take a while.
   await expect(pane(page, name).locator('.session-page')).toBeVisible({ timeout: 20_000 });
@@ -73,7 +73,10 @@ async function tabMenu(page: Page, name: string, item: string): Promise<void> {
 }
 
 test('a session tab shows its logo, dot and name; approval is underlined red; a seat carries its rig', async ({ page }) => {
-  await boot(page);
+  // The Rigs view lists the rig from OpenRig: ledge-dev, with Ivo's seat.
+  await boot(page, { openrig: { installed: true, version: '0.6.14', daemon: { state: 'running', pid: 1, port: 7433 }, kernel: { state: 'ready' }, at: new Date().toISOString(),
+    rigs: [{ id: '1', name: 'ledge-dev', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: '1h', snapshot: null,
+      nodes: [{ logicalId: 'dev.agent', session: 'dev-agent@ledge-dev', runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'running', stopped: false, work: 1 }] }] } });
   await open(page, 'Otto');
   await open(page, 'Nova');
   await open(page, 'Ivo', 'OpenRig rigs');
@@ -280,7 +283,7 @@ const token = (page: Page, v: string) => page.evaluate(name => {
 }, v);
 const bg = (l: Locator) => l.evaluate(el => getComputedStyle(el).backgroundColor);
 
-test('the mockup\'s look: 8 px dots with a halo on a request, the tab in front on the page\'s colour above a darker strip, the violet focus stripe, the reply box and thread across the group, « + »', async ({ page }) => {
+test('the mockup\'s look: 8 px dots with a halo on a request, the tab in front on the page\'s colour above a darker strip, the coral focus stripe, the reply box and thread across the group, « + »', async ({ page }) => {
   await boot(page);
   await open(page, 'Otto');
   await open(page, 'Nova');
@@ -297,9 +300,9 @@ test('the mockup\'s look: 8 px dots with a halo on a request, the tab in front o
   expect(await bg(strip)).not.toBe(await bg(front));
   expect(await bg(behind)).toBe(await bg(strip));
   expect(await bg(bar(page, 'Nova'))).toBe(await bg(strip));
-  // The focused group's stripe: 2 px in the links' violet.
+  // The focused group's stripe: 2 px in Ledge's coral (the user, 2026-11-09).
   const stripe = await front.evaluate(el => { const s = getComputedStyle(el, '::before'); return { h: s.height, c: s.backgroundColor }; });
-  expect(stripe).toEqual({ h: '2px', c: await token(page, '--ide-link-violet') });
+  expect(stripe).toEqual({ h: '2px', c: await token(page, '--sidebar-primary') });
   // The reply box and the thread span the group, 12 px in from each side.
   const group = await box(page.locator('.ide-dockview .dv-groupview').first());
   const form = await box(pane(page, 'Nova').locator('.session-reply form'));

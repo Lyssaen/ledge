@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Session } from '@ledge/protocol';
 import type { Messages } from '../i18n/messages';
-import { sessionOf, type Tab } from '../workspace/model';
+import { parseRigRef, sessionOf, type Tab } from '../workspace/model';
 
 /** What a tab's content is: given by Shell (SessionPlace with tabNav, Atelier, SettingsPlace, OpenRigPage). */
 export type TabBody = (tab: Tab) => ReactNode;
@@ -14,6 +14,7 @@ export function tabTitle(t: Tab, ctx: { session(id: string): Session | undefined
     case 'atelier': return ctx.t.side.atelier;
     case 'settings': return ctx.t.side.settings;
     case 'openrig': return ctx.t.ide.openrigTitle(ctx.machine?.(t.ref) ?? t.ref);
+    case 'rig': { const r = parseRigRef(t.ref); return r ? ctx.t.ide.rigTab.title(r.rig, r.machine === 'local' ? undefined : ctx.machine?.(r.machine) ?? r.machine) : t.ref; }
     case 'changes': return ctx.t.ide.changesTitle(ctx.session(t.ref)?.name ?? t.ref);
     case 'terminal': {
       // A bottom-panel shell's: « >_ WSL 1 » (the store's title, its id once closed).
