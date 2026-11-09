@@ -1,0 +1,459 @@
+[
+ {
+  "id": "c6e4ba55c7041442d03d1aedd2e72ce0c6d82ec0",
+  "individual_note": true,
+  "resolvable": false,
+  "notes": [
+   {
+    "id": 4185617009,
+    "type": null,
+    "body": "assigned to @amegahed12",
+    "author": {
+     "id": 1786152,
+     "username": "gitlab-bot",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/gitlab-bot"
+    },
+    "created_at": "2026-11-08T01:07:45.796Z",
+    "updated_at": "2026-11-08T01:07:45.797Z",
+    "system": true,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "0dbebba2d8937580d53f5d746096dd0b138184bd",
+  "individual_note": true,
+  "resolvable": false,
+  "notes": [
+   {
+    "id": 4185617030,
+    "type": null,
+    "body": "<!-- triage-serverless ThankContribution -->\nThanks for your contribution to GitLab @amegahed12! :tada:\n\n* Request a review, help or apply labels by [clicking here](https://contributors.gitlab.com/manage-merge-request?projectId=34675721&mergeRequestIid=4340) or come say hi on [Discord](https://discord.gg/gitlab).\n* We welcome AI-generated contributions and offer [complimentary access to GitLab Duo](https://gitlab.com/gitlab-community/meta#gitlab-duo)!\n\n*This message was [generated automatically](https://handbook.gitlab.com/handbook/engineering/infrastructure/engineering-productivity/triage-ope [trimmed for the fixture]",
+    "author": {
+     "id": 1786152,
+     "username": "gitlab-bot",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/gitlab-bot"
+    },
+    "created_at": "2026-11-08T01:07:46.404Z",
+    "updated_at": "2026-11-08T01:07:46.404Z",
+    "system": false,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "96bcf47744ab62eef8edfe99f31c86dc3aa74987",
+  "individual_note": false,
+  "resolvable": true,
+  "resolved": true,
+  "notes": [
+   {
+    "id": 4185652063,
+    "type": "DiscussionNote",
+    "body": "Hey @amegahed12, thanks for requesting a review!\n\nPlease review all feedback from `@GitLabDuo`: apply the suggestions you're confident about, and leave a note on any you are unsure or disagree with. Then, request a review from the suggested reviewer.\n\nHey @jay_mccure :wave:\n\n- Do you have capacity and domain expertise to review this? If not, find one or more [reviewers](https://gitlab-org.gitlab.io/gitlab-roulette/) and assign to them.\n- If you've reviewed it, add the ~\"workflow::in dev\" label if these changes need more work before the next review.\n- Please ensure the group's Product Manager h [trimmed for the fixture]",
+    "author": {
+     "id": 31177744,
+     "username": "contributors.gitlab.com",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/contributors.gitlab.com"
+    },
+    "created_at": "2026-11-08T01:26:18.526Z",
+    "updated_at": "2026-11-08T01:26:33.948Z",
+    "system": false,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": true,
+    "resolved": true,
+    "resolved_by": {
+     "id": 42139186,
+     "username": "amegahed12",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/amegahed12"
+    },
+    "resolved_at": "2026-11-08T01:26:33.948Z",
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   },
+   {
+    "id": 4185652224,
+    "type": "DiscussionNote",
+    "body": "`@GitLabDuo`, this ~\"Community contribution\" is ready for review.\n\n- Do you have capacity and domain expertise to review this? If not, find one or more [reviewers](https://gitlab-org.gitlab.io/gitlab-roulette/) and assign to them.\n- If you've reviewed it, add the ~\"workflow::in dev\" label if these changes need more work before the next review.\n- Please ensure the group's Product Manager has validated the linked issue.\n\n*This message was [generated automatically](https://handbook.gitlab.com/handbook/engineering/infrastructure/engineering-productivity/triage-operations).\n[Improve it](https://git [trimmed for the fixture]",
+    "author": {
+     "id": 1786152,
+     "username": "gitlab-bot",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/gitlab-bot"
+    },
+    "created_at": "2026-11-08T01:26:25.416Z",
+    "updated_at": "2026-11-08T01:26:33.948Z",
+    "system": false,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": true,
+    "resolved": true,
+    "resolved_by": {
+     "id": 42139186,
+     "username": "amegahed12",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/amegahed12"
+    },
+    "resolved_at": "2026-11-08T01:26:33.948Z",
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "811e853f8909c5f10a62c8cb193a4cb5986d7b85",
+  "individual_note": true,
+  "resolvable": false,
+  "notes": [
+   {
+    "id": 4185652080,
+    "type": null,
+    "body": "requested review from @jay_mccure",
+    "author": {
+     "id": 31177744,
+     "username": "contributors.gitlab.com",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/contributors.gitlab.com"
+    },
+    "created_at": "2026-11-08T01:26:19.019Z",
+    "updated_at": "2026-11-08T01:26:19.020Z",
+    "system": true,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "887369ec22cee12b0588a5d0008af1bc714129e1",
+  "individual_note": true,
+  "resolvable": false,
+  "notes": [
+   {
+    "id": 4185652164,
+    "type": null,
+    "body": "requested review from @GitLabDuo",
+    "author": {
+     "id": 1786152,
+     "username": "gitlab-bot",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/gitlab-bot"
+    },
+    "created_at": "2026-11-08T01:26:23.488Z",
+    "updated_at": "2026-11-08T01:26:23.489Z",
+    "system": true,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "3e32c6ad5a410da0ca154aeb7e0d7bdf10e418bf",
+  "individual_note": true,
+  "resolvable": false,
+  "notes": [
+   {
+    "id": 4185652408,
+    "type": null,
+    "body": "resolved all threads",
+    "author": {
+     "id": 42139186,
+     "username": "amegahed12",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/amegahed12"
+    },
+    "created_at": "2026-11-08T01:26:33.973Z",
+    "updated_at": "2026-11-08T01:26:33.979Z",
+    "system": true,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "a7c6e370de9f525b9982f66bc3dc1fc4d8fbac88",
+  "individual_note": true,
+  "resolvable": false,
+  "notes": [
+   {
+    "id": 4185658950,
+    "type": null,
+    "body": "The feature is correct for the paths I traced. The mutual-exclusion check, the option wiring and the Owner column parsing all hold for the cases I checked. The fixes are small: drop a redundant condition, tighten one JSON test, and optionally simplify the table-building code and `milestoneOwner`.",
+    "author": {
+     "id": 21826781,
+     "username": "GitLabDuo",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/GitLabDuo"
+    },
+    "created_at": "2026-11-08T01:29:02.979Z",
+    "updated_at": "2026-11-08T01:29:04.728Z",
+    "system": false,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "6ac7ce837a42afdbe033e1b012278ef1dcfece64",
+  "individual_note": false,
+  "resolvable": true,
+  "resolved": false,
+  "notes": [
+   {
+    "id": 4185658890,
+    "type": "DiffNote",
+    "body": "The `|| o.includeDescendants` term never changes the result. The flag defaults to false, so `o.includeDescendants` can only be true after cobra parses `--include-descendants`, and then `Changed` is already true. The `--include-ancestors` check just above uses `Changed` alone. Match it so the next reader does not hunt for a second way the field can be set.\n```suggestion:-0+0\n\t\tif cmd.Flags().Changed(\"include-descendants\") {\n```",
+    "author": {
+     "id": 21826781,
+     "username": "GitLabDuo",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/GitLabDuo"
+    },
+    "created_at": "2026-11-08T01:29:03.121Z",
+    "updated_at": "2026-11-08T01:29:03.121Z",
+    "system": false,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "commit_id": null,
+    "position": {
+     "base_sha": "c298159b72a6d1d888a635a8c1e5fc4952d12983",
+     "start_sha": "c298159b72a6d1d888a635a8c1e5fc4952d12983",
+     "head_sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+     "old_path": "internal/commands/milestone/list/list.go",
+     "new_path": "internal/commands/milestone/list/list.go",
+     "position_type": "text",
+     "old_line": null,
+     "new_line": 188,
+     "line_range": null
+    },
+    "resolvable": true,
+    "resolved": false,
+    "resolved_by": null,
+    "resolved_at": null,
+    "suggestions": [
+     {
+      "id": 24540753,
+      "from_line": 188,
+      "to_line": 188,
+      "appliable": true,
+      "applied": false,
+      "from_content": "\t\tif cmd.Flags().Changed(\"include-descendants\") || o.includeDescendants {\n",
+      "to_content": "\t\tif cmd.Flags().Changed(\"include-descendants\") {\n"
+     }
+    ],
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "fa0861ac84f43dba84488e8c9d574a4afc43faba",
+  "individual_note": false,
+  "resolvable": true,
+  "resolved": false,
+  "notes": [
+   {
+    "id": 4185658913,
+    "type": "DiffNote",
+    "body": "The table-building block now has four near-identical branches (descendants × show-id), each with its own header and row loop. Adding another column means editing four places. Build the header and each row once, with the Owner cell inserted conditionally, instead of repeating the loop four times. That also removes the second copy of the old group branch that this change left in place.",
+    "author": {
+     "id": 21826781,
+     "username": "GitLabDuo",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/GitLabDuo"
+    },
+    "created_at": "2026-11-08T01:29:03.590Z",
+    "updated_at": "2026-11-08T01:29:03.590Z",
+    "system": false,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "commit_id": null,
+    "position": {
+     "base_sha": "c298159b72a6d1d888a635a8c1e5fc4952d12983",
+     "start_sha": "c298159b72a6d1d888a635a8c1e5fc4952d12983",
+     "head_sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+     "old_path": "internal/commands/milestone/list/list.go",
+     "new_path": "internal/commands/milestone/list/list.go",
+     "position_type": "text",
+     "old_line": null,
+     "new_line": 207,
+     "line_range": null
+    },
+    "resolvable": true,
+    "resolved": false,
+    "resolved_by": null,
+    "resolved_at": null,
+    "suggestions": [],
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "2b7fc79776172e954ed2ce074ecb5d4e8e7d5458",
+  "individual_note": false,
+  "resolvable": true,
+  "resolved": false,
+  "notes": [
+   {
+    "id": 4185658933,
+    "type": "DiffNote",
+    "body": "This JSON test substring-matches the raw output (lines 331-334). The project test rules say to `json.Unmarshal` into a typed struct and assert on fields. A substring check cannot tell which milestone carries `group_id` or `project_id`. It also breaks if the encoder changes spacing or field order. Unmarshal into `[]gitlab.GroupMilestone`, then assert `GroupID`, `ProjectID` and `Title` per element. The older `TestMilestoneList_JSON` does the same substring match, but new tests should not copy it.",
+    "author": {
+     "id": 21826781,
+     "username": "GitLabDuo",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/GitLabDuo"
+    },
+    "created_at": "2026-11-08T01:29:04.065Z",
+    "updated_at": "2026-11-08T01:29:04.065Z",
+    "system": false,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "commit_id": null,
+    "position": {
+     "base_sha": "c298159b72a6d1d888a635a8c1e5fc4952d12983",
+     "start_sha": "c298159b72a6d1d888a635a8c1e5fc4952d12983",
+     "head_sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+     "old_path": "internal/commands/milestone/list/list_test.go",
+     "new_path": "internal/commands/milestone/list/list_test.go",
+     "position_type": "text",
+     "old_line": null,
+     "new_line": 331,
+     "line_range": null
+    },
+    "resolvable": true,
+    "resolved": false,
+    "resolved_by": null,
+    "resolved_at": null,
+    "suggestions": [],
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ },
+ {
+  "id": "f02ee59ce7b07178d214933881e3f851a7ad4ffd",
+  "individual_note": true,
+  "resolvable": false,
+  "notes": [
+   {
+    "id": 4185658957,
+    "type": null,
+    "body": "requested changes",
+    "author": {
+     "id": 21826781,
+     "username": "GitLabDuo",
+     "state": "active",
+     "locked": false,
+     "web_url": "https://gitlab.com/GitLabDuo"
+    },
+    "created_at": "2026-11-08T01:29:05.104Z",
+    "updated_at": "2026-11-08T01:29:05.106Z",
+    "system": true,
+    "noteable_id": 563934657,
+    "noteable_type": "MergeRequest",
+    "project_id": 34675721,
+    "resolvable": false,
+    "confidential": false,
+    "internal": false,
+    "imported": false,
+    "imported_from": "none",
+    "noteable_iid": 4340,
+    "commands_changes": {}
+   }
+  ]
+ }
+]

@@ -324,7 +324,9 @@ export const en: Messages = {
       alertBefore: 'Alert at', alertAfter: '% of a window (amber beyond)',
       alertLess: 'Lower the alert threshold by 5 %', alertMore: 'Raise the alert threshold by 5 %',
       terminals: 'Terminals', webglBefore: 'Fast rendering (WebGL) for', webglAfter: 'visible terminals at most',
-      webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`
+      webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`,
+      openIn: 'Open in…', notInstalled: 'not installed', zedNoWsl: 'no WSL folders',
+      openInSaved: (editor: string) => `Open in…: ${editor}`
     },
     general: {
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.',
@@ -613,7 +615,7 @@ export const en: Messages = {
     intro: 'Active while the window has focus. Navigation keys stay available for typing and the terminal when they have focus.',
     outro: 'Ctrl / ⌘ K opens the search from any view. Y and N only act on the pinned request of the open session, never while typing.',
     rows: [['Ctrl / ⌘ K','Search and open a session'],['Ctrl ,','Open the settings'],['Alt 1…9','Jump to the main sessions'],['Alt ← / →','Previous / next session'],['J / K or ↓ / ↑','Walk through the sessions (atelier)'],['Enter','Open the selected session'],['← / →','Fold / unfold a project (sidebar)'],['E','Archive the selected session'],['H','Show / hide the finished sessions'],['Ctrl ⇧ E','Focus the sidebar'],['N','New session'],['+ / −','Zoom the atelier in / out'],['0','Fit the atelier to the screen'],['Ctrl + wheel / pinch','Zoom under the pointer or the fingers'],['Space + drag','Pan the view'],['/','Focus Ask Ledge'],['R','Write a reply to the agent'],['Y / N','Allow / deny the pending request'],['1…9','Pick a suggested answer'],['J / K','Next / previous file (Changes tab)'],['O','Show or hide the panel: shells and changes'],['Ctrl `','Switch between the thread and the agent’s screen, the keyboard follows'],['Shift + drag, then Ctrl C','Copy from a terminal'],['Esc','Close the panel or go back to the atelier'],['?','Show these shortcuts']],
-    ide: { title: 'Tabs and groups', rows: [['Ctrl W','Close the tab, or the empty group'],['Ctrl ⇧ T','Reopen the last closed tab'],['Ctrl Tab / Ctrl ⇧ Tab','Next / previous tab of the group'],['Ctrl PgDn / PgUp','Next / previous tab of the group'],['Ctrl 1…9','Go to group N'],['Ctrl Alt ← / →','Move the tab to the group on the left / right'],['Ctrl \\','Split right']] }
+    ide: { title: 'Tabs and groups', rows: [['Ctrl W','Close the tab, or the empty group'],['Ctrl ⇧ T','Reopen the last closed tab'],['Ctrl Tab / Ctrl ⇧ Tab','Next / previous tab of the group'],['Ctrl PgDn / PgUp','Next / previous tab of the group'],['Ctrl 1…9','Go to group N, from a terminal too'],['Ctrl ⇧ `','Leave the terminal for its tab (← / → walk the tabs), or go back into it'],['Ctrl Alt ← / →','Move the tab to the group on the left / right'],['Ctrl \\','Split right']] }
   },
   tray: { open: 'Open Ledge Desktop', newSession: 'New session', dnd: 'Do not disturb', dndOff: 'Resume alerts', quit: 'Quit Ledge Desktop' },
   notify: {
@@ -1479,6 +1481,14 @@ export const en: Messages = {
     menu: {
       open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',
       terminal: 'Its terminal', capture: 'Capture in a terminal', message: 'Send a message…'
+    },
+    openIn: {
+      menu: (editor: string) => `Open in ${editor}`,
+      missing: (editor: string) => `${editor} isn’t installed on this PC: choose another editor.`,
+      zedWsl: 'Zed can’t open WSL folders: choose Cursor or VS Code.',
+      settings: 'Settings',
+      failed: (editor: string, reason: string) => `${editor} couldn’t open: ${reason}`,
+      reason: { exe: 'the program won’t start.', distro: 'the WSL distribution isn’t answering.', path: 'WSL can’t receive this path.', machine: 'this session’s machine is no longer one of your machines.' }
     },
     welcome: {
       brand: 'Ledge', start: 'Start', recent: 'Recent', terminal: (name) => `Terminal · ${name}`, capture: (name) => `Capture · ${name}`,

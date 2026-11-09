@@ -26,7 +26,7 @@ const WIDE: RigGraph = {
   links: [{ from: 'a.one', to: 'b.one', kind: 'delegates_to' }, { from: 'b.one', to: 'c.one', kind: 'delegates_to' }, { from: 'c.one', to: 'd.one', kind: 'escalates_to' }]
 };
 
-async function boot(page: Page, opts: { ide?: boolean; layout?: object; graph?: RigGraph; state?: object; permissions?: { policy?: string; seats: RigSeatPermission[] } } = {}) {
+async function boot(page: Page, opts: { ide?: boolean; layout?: object; graph?: RigGraph; state?: object; permissions?: { policy?: string; seats: RigSeatPermission[] }; sessions?: ReturnType<typeof session>[] } = {}) {
   await seedAtelier(page);
   await page.addInitScript(({ ide, layout }) => {
     try {
@@ -34,7 +34,7 @@ async function boot(page: Page, opts: { ide?: boolean; layout?: object; graph?: 
       if (layout && !localStorage.getItem('ledge.ide.layout')) localStorage.setItem('ledge.ide.layout', JSON.stringify(layout));
     } catch { /* ignore */ }
   }, { ide: opts.ide !== false, layout: opts.layout ?? null });
-  const daemon = await fakeDaemon(page, sessions, {
+  const daemon = await fakeDaemon(page, opts.sessions ?? sessions, {
     projects: twoProjects, openrig: (opts.state ?? state) as unknown as OpenRigState, rigCommands: ['rig down ledge-survey --snapshot'], ...RIG_7A,
     ...(opts.graph ? { rigGraphs: { 'ledge-survey': opts.graph } } : {}),
     rigPermissions: { ...RIG_7A.rigPermissions, 'ledge-survey': opts.permissions ?? { policy: 'builtin:auto', seats: [] } },
@@ -64,6 +64,30 @@ test('a rig opens in a « Rig · ledge-survey » tab: header, topology, settings
   await p.getByRole('button', { name: /^Stop/ }).click();
   const conf = p.locator('.ide-rig-top').getByRole('group');
   await expect(conf).toContainText('rig down ledge-survey');
+});
+
+test('one column: the topology on top, the settings and the queue under it; a seat says its role in the Rigs view (the user, 2026-11-09)', async ({ page }) => {
+  test.setTimeout(90_000);
+  const bix = session('bix', { name: 'Bix', rig: { seat: 'dev-build@ledge-survey', name: 'ledge-survey', role: 'dev.build' } });
+  await boot(page, { sessions: [session('otto'), bix] });
+  await openSurvey(page);
+  const p = page$(page);
+  await expect(p.locator('.ide-rig-node')).toHaveCount(2);
+  const topo = (await p.locator('.ide-rig-block').first().boundingBox())!, side = (await p.locator('.ide-rig-side').boundingBox())!;
+  expect(side.y).toBeGreaterThanOrEqual(topo.y + topo.height - 1);
+  expect(Math.abs(side.x - topo.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(side.width - topo.width)).toBeLessThanOrEqual(1);
+  // Under the rig (opening its tab unfolded it), Bix's row: its name, then its role; a seat with no session is already named by its role.
+  const row = view(page).locator('.ide-rigs-row.seat').filter({ hasText: 'Bix' });
+  await expect(row.locator('.ide-rigs-role')).toHaveText('dev.build');
+  await expect(view(page).locator('.ide-rigs-row.seat.off')).toHaveText('dev.review');
+  // − / +: the same square, the glyph at its centre.
+  const minus = p.getByRole('button', { name: /^One seat fewer/ }).first(), plus = p.getByRole('button', { name: /^One more seat/ }).first();
+  const centred = (b: typeof minus) => b.evaluate(el => { const r = el.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(el); const g = range.getBoundingClientRect(); return Math.abs((g.left + g.right) / 2 - (r.left + r.right) / 2); });
+  for (const b of [minus, plus]) { expect((await b.boundingBox())!.width).toBe(22); expect(await centred(b)).toBeLessThanOrEqual(1); }
+  await p.locator('.ide-rig-step').first().screenshot({ path: 'e2e/.results/rig-step.png' });
+  await view(page).screenshot({ path: 'e2e/.results/rig-roles-sidebar.png' });
+  await page.screenshot({ path: 'e2e/.results/rig-one-column.png' });
 });
 
 test('the kernel offers « Talk to the operator »', async ({ page }) => {

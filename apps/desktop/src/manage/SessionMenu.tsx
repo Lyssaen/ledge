@@ -30,6 +30,8 @@ export interface SessionMenuIde {
   hasTerminal(s: Session): boolean;
   /** A seat: its tab, the reply focused (R4). */
   message(s: Session): void;
+  /** « Ouvrir dans {éditeur} » (lot 11): the editor the setting names, and opening the session's worktree in it. */
+  editor?: { name: string; open(s: Session): void };
 }
 
 export interface SessionMenuProps {
@@ -77,6 +79,7 @@ export function SessionMenu({ session: s, at, actions, filing, projects, current
         <hr />
         {ide.hasTerminal(s) && item(s.rig ? t.ide.menu.capture : t.ide.menu.terminal, SHELL_ICONS.terminal, () => ide.terminal(s))}
         {s.rig && item(t.ide.menu.message, SHELL_ICONS.mail, () => ide.message(s))}
+        {ide.editor && item(t.ide.openIn.menu(ide.editor.name), SHELL_ICONS.detach, () => ide.editor!.open(s))}
       </>) : item(m.open, ICONS.external.d, () => onOpen(s), { hint: '↵' })}
       {/* The IDE has one terminal entry, as in the mockup: « Son terminal » above stands for lot 2's « Terminal ». */}
       {!ide && item(m.terminal, SHELL_ICONS.terminal, () => onTerminal(s), { hint: 'T', key: 't' })}

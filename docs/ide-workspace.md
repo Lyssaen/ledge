@@ -228,6 +228,8 @@ Les réglages s'ouvrent en onglet (`Ctrl+,`). Les sections actuelles ne changent
 | `N` | Nouvelle session (fenêtre modale). |
 | `Y` / `N` | Autoriser ou refuser la demande de la session active. |
 | `Ctrl+`` | Basculer fil ⇄ terminal sur l'onglet actif. |
+| `Ctrl+Shift+`` | Sortir du terminal sans changer de vue : le clavier va sur l'onglet du groupe (`←` / `→` parcourent les onglets, `Entrée` en affiche un). Tous les raccourcis de Ledge refonctionnent. Depuis l'onglet, la même touche remet le clavier dans le terminal affiché. |
+| `Ctrl+1…9` | Aller au groupe N, le clavier sur son onglet ; marche aussi depuis un terminal. |
 | `Ctrl+\` | Diviser le groupe à droite. |
 | `Ctrl+B` | Replier ou déplier la barre latérale. |
 | `Ctrl+J` | Afficher ou masquer le panneau du bas. |

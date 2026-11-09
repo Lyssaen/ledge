@@ -1,4 +1,5 @@
-import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState, type UsageStateMessage } from '@ledge/protocol';
+import type { FleetForgeStatus, FleetPullRequest } from './forge';
+import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState, type UsageStateMessage, type ForgeAction, type PrDetail } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage, type Task } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
@@ -65,6 +66,17 @@ export interface Fleet {
   setUsageAlert(alert: number): void;
   /** « Compris » on an alert: sent to each machine that holds it. */
   ackUsage(id: string): void;
+  /** Every machine's pull and merge requests (lot 8a), sessions qualified, each with the machine that read it. */
+  prs(): FleetPullRequest[];
+  /** Each machine's forges (`gh` / `glab` missing, not signed in, in error), with the machine. */
+  forges(): FleetForgeStatus[];
+  /** Called when a machine's requests or forges change, or a machine falls. */
+  onForge(cb: () => void): () => void;
+  /** A request's detail, from the machine that read it (`log`: a job's log too). Rejects with `{ code, message }`: `offline`
+   *  (« hors ligne ») when the machine is down or falls, `outdated` when its daemon does not serve requests, else the daemon's code. */
+  prDetail(prId: string, machineId: string, opts?: { log?: string }): Promise<PrDetail>;
+  /** An action on a request, on the machine that read it; resolves with the command run. Rejects as `prDetail`. */
+  prAct(prId: string, machineId: string, action: ForgeAction): Promise<{ command: string }>;
   /** The context threshold the local daemon keeps (context handover spec §3.2): undefined until it speaks of it. */
   contextNear(): number | undefined;
   /** Sets it on the local daemon; the effect arrives on its broadcast. Throws `DaemonOffline` / `DaemonOutdated` as `setIsland`. */

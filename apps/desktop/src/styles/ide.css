@@ -114,6 +114,8 @@ body.ide-resizing { cursor: col-resize; user-select: none; }
 }
 .ide-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--border); }
 .ide-dock .dv-tab { border-right: 1px solid var(--border); padding: 0 10px; position: relative; }
+/* The keyboard on a tab (Ctrl+Shift+² out of a terminal, Ctrl+1…9, ← / →): Ledge's focus ring, not dockview's 1px divider. */
+.ide-dock .dv-tab:focus-visible::after { outline: 2px solid var(--ring) !important; outline-offset: -2px; }
 /* The focused group marks its tab in front with a 2 px line on top, in the links' violet (mockup `.grp.focus .tab.on::before`). */
 /* The tab in front, underlined in Ledge's coral (the user, 2026-11-09). */
 .ide-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--sidebar-primary); }

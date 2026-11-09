@@ -14,6 +14,8 @@
  *   pty_open { argv, cols, rows, onData, onExit } → id   a pseudo-terminal running argv; bytes stream back on onData, the exit code on onExit
  *   pty_write { id, data } / pty_resize { id, cols, rows } / pty_close { id }   ids start at 0: never test one for truthiness
  *   window minimize / toggleMaximize / close / isMaximized / onResized   the title bar's buttons (decorations are off)
+ *   editors_available → { cursor, vscode, zed }    the editors installed on this PC (« Ouvrir dans… », lot 11)
+ *   open_in_editor { editor, path, ssh? } → EditorOutcome   opens a WSL folder, or one on the machine Windows reaches as `ssh`
  */
 import { listen } from '@tauri-apps/api/event';
 import type { NativeShell, PtyEvents, PtyHandle } from '../term/backend';
@@ -150,6 +152,35 @@ export async function shellsAvailable(): Promise<ShellsAvailable> {
     core ??= import('@tauri-apps/api/core');
     return { ...none, ...await (await core).invoke<ShellsAvailable>('shells_available') };
   } catch { return none; }
+}
+
+/** « Ouvrir dans… » (lot 11): the editors the setting offers, as the page and the native side name them. */
+export type EditorId = 'cursor' | 'vscode' | 'zed';
+export type EditorsInstalled = Record<EditorId, boolean>;
+/** What opening a folder in an editor did: opened (nothing to show), not installed, Zed asked for a WSL folder, or failed. */
+export type EditorOutcome = { kind: 'opened' } | { kind: 'missing' } | { kind: 'zedWsl' } | { kind: 'failed'; reason: 'exe' | 'distro' | 'path' };
+
+/** The editors installed on this PC; null until known, and outside Tauri (nothing to say then). */
+export async function editorsAvailable(): Promise<EditorsInstalled | null> {
+  if (!isTauri()) return (window as unknown as { __ledgeEditors?: EditorsInstalled }).__ledgeEditors ?? null;
+  try {
+    core ??= import('@tauri-apps/api/core');
+    return await (await core).invoke<EditorsInstalled>('editors_available');
+  } catch { return null; }
+}
+
+/** Opens `path` in `editor`: in WSL, or on the machine Windows reaches as `ssh` (its alias). A failed call is « the program
+ *  won't start »; outside Tauri the e2e build's `window.__ledgeOpenInEditor` answers (it records the call). */
+export async function openInEditor(editor: EditorId, path: string, ssh?: string): Promise<EditorOutcome> {
+  const args = { editor, path, ...(ssh !== undefined && { ssh }) };
+  if (!isTauri()) {
+    const fake = (window as unknown as { __ledgeOpenInEditor?: (a: typeof args) => EditorOutcome }).__ledgeOpenInEditor;
+    return fake ? fake(args) : { kind: 'failed', reason: 'exe' };
+  }
+  try {
+    core ??= import('@tauri-apps/api/core');
+    return await (await core).invoke<EditorOutcome>('open_in_editor', args);
+  } catch { return { kind: 'failed', reason: 'exe' }; }
 }
 
 /** The title bar's window buttons (the native bar is off: `decorations: false`). Without Tauri they do nothing. `label`

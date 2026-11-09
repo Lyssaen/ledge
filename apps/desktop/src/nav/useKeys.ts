@@ -19,6 +19,7 @@ export interface IdeKeys {
   /** Ctrl Tab / Ctrl Shift Tab, Ctrl PageDown / PageUp: next / previous tab of the focused group. */ cycleTab?(step: 1 | -1): void;
   /** Ctrl 1…9: the Nth group of the main window. */ focusGroup?(n: number): void;
   /** Ctrl Alt → / ←: the active tab into the group on the right / left. */ moveTab?(step: 1 | -1): void;
+  /** Ctrl Shift ²: the keyboard back into the front tab's terminal, without changing its view; false if it shows none. */ enterTerminal?(): boolean;
 }
 
 /** The window's keyboard shortcuts (the mockup's `onKey`): one `keydown` listener. Ctrl/⌘ K, Ctrl , and Escape always work (Ctrl/⌘ Z too, outside a field) (Escape after the dialog and the chat, offered to the screen before navigation),
@@ -38,7 +39,10 @@ export function useKeys(dispatch: (a: NavAction) => void, ctx: { state: NavState
       if (ide && mod && !e.altKey && key === 'w') e.preventDefault();
       if (confirming) { if (e.key === 'Escape') { e.preventDefault(); confirming.cancel(); } return; }
       // The same physical key as inside the terminal (`code`, so ² on AZERTY); a dialog keeps the focus.
-      if (termKey(e, false) === 'thread') { if (!state.modal && toTerminal?.()) e.preventDefault(); return; }
+      // With the IDE, Ctrl Shift + that key goes back into the terminal Ctrl Shift + it left (inside, the xterm handles it).
+      const tk = termKey(e, false, !!ide);
+      if (tk === 'leave') { if (!state.modal && ide?.enterTerminal?.()) e.preventDefault(); return; }
+      if (tk === 'thread') { if (!state.modal && toTerminal?.()) e.preventDefault(); return; }
       if (mod && !e.altKey && key === 'k') { e.preventDefault(); dispatch({ type: 'modal', modal: { kind: 'search' } }); return; }
       // The IDE's panels, VS Code's keys: they act inside a field too (the terminal returned above).
       if (ide && !state.modal && mod && !e.altKey && (key === 'b' || key === 'j' || e.key === '/')) { e.preventDefault(); ide.toggle(key === 'b' ? 'side' : key === 'j' ? 'bottom' : 'right'); return; }
@@ -119,4 +123,16 @@ function tabKeys(e: KeyboardEvent, ide: TabKeys, mod: boolean, free: boolean): b
 export function focusThread(): void {
   const to = document.querySelector<HTMLElement>('[data-thread-focus]:not([hidden])') ?? document.querySelector<HTMLElement>('.session-body');
   to?.focus({ preventScroll: true });
+}
+
+/** The IDE's keyboard out of a terminal (Ctrl+Shift+²) and Ctrl+1…9's landing: a group's front tab, dockview's tablist (← / →
+ *  walk its tabs, Entrée shows one). From there every Ledge key works again, and no view has changed. The group is the one
+ *  holding `from` (a tab's terminal, in its own window too), else the focused one (dockview's active group: a shell of the
+ *  bottom panel, Ctrl+1…9). False when there is no tab to take the keyboard (an empty group). */
+export function focusFrontTab(from?: Element | null): boolean {
+  const group = from?.closest('.dv-groupview') ?? (from?.ownerDocument ?? document).querySelector('.dv-groupview.dv-active-group');
+  const tab = group?.querySelector<HTMLElement>('.dv-tab.dv-active-tab');
+  if (!tab) return false;
+  tab.focus({ preventScroll: true });
+  return true;
 }

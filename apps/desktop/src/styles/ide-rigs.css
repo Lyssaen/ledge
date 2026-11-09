@@ -52,6 +52,8 @@
 .ide-rigs .ide-rigs-name:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .ide-rigs-row.rig .ide-rigs-name b { font-weight: 600; }
 .ide-rigs-row.seat .ide-rigs-name b { font-weight: 400; }
+/* The seat's role after its session's name (the user, 2026-11-09), quieter. */
+.ide-rigs .ide-rigs-role { margin-left: 6px; font-size: 11px; color: var(--muted-foreground); }
 .ide-rigs-meta { flex: none; font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); }
 .ide-rigs-pw { flex: none; width: 46px; display: flex; justify-content: flex-end; gap: 2px; }
 .ide-rigs-row.seat .ide-rigs-pw { display: none; }

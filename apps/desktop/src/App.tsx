@@ -20,7 +20,7 @@ import { initialNav, navReducer, reconcile, type NavAction, type NavState, type 
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { dotOf, mainOrder } from './nav/agents';
-import { focusThread, useKeys, type IdeKeys } from './nav/useKeys';
+import { focusFrontTab, focusThread, useKeys, type IdeKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
 import { TitleBar, waitingSessions } from './shell/TitleBar';
 import { TopBar } from './shell/TopBar';
@@ -86,6 +86,7 @@ import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, 
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
+import { EDITOR_NAMES, openSessionInEditor, useEditor } from './ide/openIn';
 import { createTabExtras, TabExtrasContext, useTabExtras } from './ide/tabExtras';
 import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
@@ -108,9 +109,20 @@ function useRigOutputLog(client: DaemonClient) {
   return log;
 }
 
+/** The IDE's keys typed inside an xterm (set by Shell once the layout is known): whether the IDE is on, Ctrl+J, Ctrl+1…9. */
+type TermIdeKeys = { on(): boolean; toggle(): void; group(n: number): void };
+
+/** Ctrl+Shift+² inside a terminal: the keyboard goes to its group's front tab, no view changing; with no tab to take it (an
+ *  empty group), the terminal only lets it go. */
+function leaveTerminal(from: HTMLElement): void {
+  if (focusFrontTab(from)) return;
+  const at = from.ownerDocument.activeElement;
+  if (at instanceof HTMLElement && from.contains(at)) at.blur();
+}
+
 /** The app's one terminal store: its shells and the agent's screen live as long as the window, whatever the place. Its xterms
  *  follow the theme once the root has taken it (`data-theme`, set by useAppearance after this component's own effects). */
-function useTermStore(client: DaemonClient, onThread: () => void, avail: ShellsAvailable | null, panel: { on(): boolean; toggle(): void }): TermStore {
+function useTermStore(client: DaemonClient, onThread: () => void, avail: ShellsAvailable | null, panel: TermIdeKeys): TermStore {
   const { t } = useI18n();
   // The store is made once: it reads the menu's inputs as they are when a shell opens.
   const titling = useRef({ avail, t });
@@ -133,7 +145,7 @@ function useTermStore(client: DaemonClient, onThread: () => void, avail: ShellsA
       const chunk = loadedWorkspace();
       if (!chunk) throw new Error('a terminal is drawn only once the session page has loaded');
       // The callbacks are read when the key arrives: a surface outlives the render that drew it, and the IDE switch can change after that.
-      return chunk.createSurface({ theme: rootTermTheme(), onThread, openUrl, panelKey: () => panel.on(), onPanel: () => panel.toggle() });
+      return chunk.createSurface({ theme: rootTermTheme(), onThread, openUrl, panelKey: () => panel.on(), onPanel: () => panel.toggle(), onLeave: from => leaveTerminal(from), onGroup: n => panel.group(n) });
     },
     agentArgv: (id, readOnly) => client.fleet?.terminal(id, { readOnly }) ?? null,
     // The harness pane, once the machine says it can stream it. Until the snapshot arrives, nothing attaches.
@@ -181,7 +193,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [avail, setAvail] = useState<ShellsAvailable | null>(null);
   useEffect(() => { void shellsAvailable().then(setAvail, () => setAvail(NO_SHELLS)); }, []);
   // Ctrl + J inside an xterm toggles the bottom panel while the IDE is on (set below, with the layout).
-  const termPanel = useRef<{ on(): boolean; toggle(): void }>({ on: () => false, toggle: () => {} });
+  const termPanel = useRef<TermIdeKeys>({ on: () => false, toggle: () => {}, group: () => {} });
   const termStore = useTermStore(fleetClient, () => termThread.current(), avail, termPanel.current);
   // The bottom panel's Sortie: the rig commands this Desktop ran.
   const rigOutput = useRigOutputLog(fleetClient);
@@ -416,7 +428,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const waits = useWaits(sessions);
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
-  const { notice, action: noticeAction, notify, undo } = useToast();
+  const { notice, action: noticeAction, notify, act: toastAct, undo } = useToast();
   // The IDE's « À toi » has no usage card: each alert is told once, in a toast (the user, 2026-11-09).
   useUsageTold(ide, usage.alerts, notify, a => {
     const u = t.usage, w = a.window;
@@ -605,8 +617,23 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     closeTab: () => { const g = focused(wsStore.get()); const tab = g.tabs[g.active]; if (tab) wsStore.close(keyOf(tab)); else wsStore.update(w => closeGroup(w, g.id)); },
     reopenTab: () => wsStore.reopen(t => keepTabNow.current(t)),
     cycleTab: step => wsStore.update(w => cycleTab(w, w.focus, step)),
-    focusGroup: n => wsStore.update(w => focusNth(w, n)),
-    moveTab: step => wsStore.update(w => moveActive(w, step)) }), [onLayout, wsStore]);
+    // Ctrl+Shift+² outside a terminal: back into the front tab's terminal, if it shows one (Ctrl+Shift+² inside left it).
+    enterTerminal: () => {
+      const g = focused(wsStore.get());
+      const tab = g.tabs[g.active];
+      const s = tab && knownNow.current.find(x => x.id === tab.ref);
+      if (!tab || !s || !hasTerminal(tab, s) || tabView(tab, s) !== 'terminal') return false;
+      focusAgentView(termStore, s.id);
+      return true;
+    },
+    // The keyboard follows, onto the group's front tab: out of a terminal too (Ctrl+1…9 typed in one, `termPanel.group`).
+    focusGroup: n => {
+      if (!wsStore.get().groups.filter(g => g.window === MAIN)[n - 1]) return;
+      wsStore.update(w => focusNth(w, n));
+      requestAnimationFrame(() => focusFrontTab());
+    },
+    moveTab: step => wsStore.update(w => moveActive(w, step)) }), [onLayout, wsStore, termStore]);
+  termPanel.current.group = n => ideKeys.focusGroup?.(n);
   useKeys(dispatch, { state: nav, order, screen: screenKeys, undo, confirming: actions.pending ? { cancel: actions.cancel } : pairing ? { cancel: pairing.dismiss } : null, toTerminal, ...(ide ? { ide: ideKeys } : {}) });
   const close = () => dispatch({ type: 'modal', modal: null });
   // Bumped by each broadcast that reached someone: the sidebar's selection, kept until then, is emptied.
@@ -689,6 +716,16 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
 
   // The explorer's session menu in the IDE: open to the right, the agent's terminal tab beside the group that holds the session's
   // tab (linked; R3 for a seat; the session opened first where the setting says if it is not), a seat's message (the reply focused, R4).
+  // « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html): success shows nothing; the editor missing and Zed on a WSL
+  // folder say so with a « Réglages » button (not an undo: no Ctrl Z); a failed launch says why.
+  const [editor] = useEditor();
+  const openInEditor = (s: Session) => {
+    void openSessionInEditor(s, machines, editor, t.ide.openIn).then(n => {
+      if (!n) return;
+      notify(n.text, n.settings ? { label: t.ide.openIn.settings, run: () => dispatch({ type: 'settings', section: 'workspace' }), undo: false } : undefined);
+    });
+  };
+  const editorEntry = { name: EDITOR_NAMES[editor], open: openInEditor };
   const ideSessionMenu: SessionMenuIde = {
     openRight: s => dispatch({ type: 'open', id: s.id, where: 'right' }),
     terminal: s => {
@@ -697,7 +734,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       wsStore.update(w => { const hit = findTab(w, key); return hit ? beside(w, hit.group.id, 'terminal', s.id) : w; });
     },
     hasTerminal: s => hasTerminal({ kind: s.rig != null ? 'seat' : 'session', ref: s.id }, s),
-    message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' })
+    message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' }),
+    editor: editorEntry
   };
   const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title });
   // The main window's active group, kept while the focus is in a detached window: where « Ramener » gives the atelier back.
@@ -894,7 +932,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           ? () => { void openSessionTerminal(fleetClient, session).then(ok => { if (!ok) notify(t.session.terminal.openFailed(session.name)); }); }
           : undefined;
         return <TabMenu at={tabMenu.at} tab={tab} name={title(tab)} terminal={view === 'terminal'} others={hit.group.tabs.length > 1}
-          {...(session && { session })} tags={menuExtras?.tags ?? null} {...(external && { onExternal: external })} onOpenSession={id => dispatch({ type: 'open', id })}
+          {...(session && { session, editor: { name: editorEntry.name, open: () => openInEditor(session) } })} tags={menuExtras?.tags ?? null} {...(external && { onExternal: external })} onOpenSession={id => dispatch({ type: 'open', id })}
           {...(canSwitch && { onView: () => wsStore.update(w => setView(w, key, view === 'terminal' ? 'thread' : 'terminal')) })}
           {...(hit.group.window === MAIN && { onSplit: () => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; }) })}
           onClose={() => wsStore.close(key)} onCloseOthers={() => wsStore.closeOthers(key)} onDismiss={() => setTabMenu(null)} />;
@@ -943,7 +981,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       <WhatsNew />
       {actions.pending && <ConfirmDialog c={actions.pending} onConfirm={actions.confirm} onCancel={actions.cancel} />}
       <PairingDialog shown={pairing} mobile={mobile} fleet={fleet} notify={notify} />
-      <Toast notice={notice} action={noticeAction} onAction={undo} />
+      <Toast notice={notice} action={noticeAction} onAction={toastAct} />
     </TabExtrasContext.Provider></TermStoreContext.Provider></ScreenKeysContext.Provider>
   );
 }

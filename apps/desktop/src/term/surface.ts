@@ -51,7 +51,9 @@ export function osc52Text(data: string): string | null {
 /** The end of a terminal's output kept for a replay (lot 0, point 1): an xterm moved to another window is made again there. */
 export const REPLAY_MAX = 256 * 1024;
 
-export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void; /** The IDE is on: Ctrl+J, typed here, toggles the bottom panel (`onPanel`). */ panelKey?(): boolean; onPanel?(): void }): TermSurface {
+export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void; /** The IDE is on: Ctrl+J, typed here, toggles the bottom panel (`onPanel`). */ panelKey?(): boolean; onPanel?(): void;
+  /** The IDE is on: Ctrl+Shift+², typed here, gives the keyboard back to Ledge (`from` is this terminal's element). */ onLeave?(from: HTMLElement): void;
+  /** The IDE is on: Ctrl+1…9, typed here, go to the group N. */ onGroup?(n: number): void }): TermSurface {
   const host = document.createElement('div');
   host.setAttribute('data-terminal', '');
   let theme = opts.theme;
@@ -100,6 +102,13 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
       } else if (action === 'panel') {
         e.stopPropagation();
         opts.onPanel?.();
+      } else if (action === 'leave') {
+        // The host, wherever it lives now: adopted by a popout, its ownerDocument is that window's.
+        e.stopPropagation();
+        opts.onLeave?.(host);
+      } else if (action === 'group') {
+        e.stopPropagation();
+        opts.onGroup?.(Number(e.code.slice(5)));
       } else if (action === 'copy') {
         const text = t.getSelection();
         if (text) void navigator.clipboard.writeText(text).catch(() => undefined);

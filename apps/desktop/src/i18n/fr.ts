@@ -348,7 +348,10 @@ export const fr = {
       alertBefore: 'Alerte à', alertAfter: '% d’une fenêtre (ambre au-delà)',
       alertLess: 'Baisser le seuil d’alerte de 5 %', alertMore: 'Monter le seuil d’alerte de 5 %',
       terminals: 'Terminaux', webglBefore: 'Rendu rapide (WebGL) pour', webglAfter: 'terminaux visibles au plus',
-      webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`
+      webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`,
+      /** « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html): the editor, what this PC lacks, Zed's limit. */
+      openIn: 'Ouvrir dans…', notInstalled: 'non installé', zedNoWsl: 'pas les dossiers WSL',
+      openInSaved: (editor: string) => `Ouvrir dans… : ${editor}`
     },
     general: {
       lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.',
@@ -642,7 +645,7 @@ export const fr = {
     outro: 'Ctrl / ⌘ K ouvre la recherche depuis n’importe quelle vue. Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.',
     rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (onglet Modifications)'],['O','Afficher ou masquer le panneau : shells et modifications'],['Ctrl `','Basculer entre le fil et l’écran de l’agent, le clavier suit'],['Maj + glisser, puis Ctrl C','Copier depuis un terminal'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>,
     /** Interface IDE only: the tab keys (VS Code's), after the others. */
-    ide: { title: 'Onglets et groupes', rows: [['Ctrl W','Fermer l’onglet, ou le groupe vide'],['Ctrl ⇧ T','Rouvrir le dernier onglet fermé'],['Ctrl Tab / Ctrl ⇧ Tab','Onglet suivant / précédent du groupe'],['Ctrl Pg↓ / Pg↑','Onglet suivant / précédent du groupe'],['Ctrl 1…9','Aller au groupe N'],['Ctrl Alt ← / →','Déplacer l’onglet vers le groupe de gauche / de droite'],['Ctrl \\','Diviser à droite']] as ReadonlyArray<readonly [string, string]> }
+    ide: { title: 'Onglets et groupes', rows: [['Ctrl W','Fermer l’onglet, ou le groupe vide'],['Ctrl ⇧ T','Rouvrir le dernier onglet fermé'],['Ctrl Tab / Ctrl ⇧ Tab','Onglet suivant / précédent du groupe'],['Ctrl Pg↓ / Pg↑','Onglet suivant / précédent du groupe'],['Ctrl 1…9','Aller au groupe N, depuis un terminal aussi'],['Ctrl ⇧ `','Sortir du terminal vers son onglet (← / → parcourent les onglets), ou y revenir'],['Ctrl Alt ← / →','Déplacer l’onglet vers le groupe de gauche / de droite'],['Ctrl \\','Diviser à droite']] as ReadonlyArray<readonly [string, string]> }
   },
   tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
   notify: {
@@ -1550,6 +1553,15 @@ export const fr = {
     menu: {
       open: 'Ouvrir', openKey: 'Entrée', openRight: 'Ouvrir à droite', openRightKey: 'Ctrl clic',
       terminal: 'Son terminal', capture: 'Capture dans un terminal', message: 'Envoyer un message…'
+    },
+    /** « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html): the entry, and the toasts when the editor does not open. */
+    openIn: {
+      menu: (editor: string) => `Ouvrir dans ${editor}`,
+      missing: (editor: string) => `${editor} n’est pas installé sur ce PC : choisissez un autre éditeur.`,
+      zedWsl: 'Zed n’ouvre pas les dossiers WSL : choisissez Cursor ou VS Code.',
+      settings: 'Réglages',
+      failed: (editor: string, reason: string) => `${editor} n’a pas pu s’ouvrir : ${reason}`,
+      reason: { exe: 'le programme ne démarre pas.', distro: 'la distribution WSL ne répond pas.', path: 'WSL ne peut pas recevoir ce chemin.', machine: 'la machine de cette session ne fait plus partie de vos machines.' }
     },
     /** A group without tabs (mockup docs/mockups/accueil-vide): the welcome, in the window's only group as in a split. */
     welcome: {

@@ -20,6 +20,8 @@ export interface TabMenuProps {
   onView?: () => void;
   /** « Ouvrir dans un terminal externe », present when the external terminal applies (the page's condition). */
   onExternal?: () => void;
+  /** « Ouvrir dans {éditeur} » (lot 11): the editor's name and opening the session's worktree in it; absent when it does not apply. */
+  editor?: { name: string; open(): void };
   /** Opens another session: the relief, or the one relieved. */
   onOpenSession?(id: string): void;
   /** « Diviser à droite »; absent in a detached window (v27: one group there). */
@@ -40,7 +42,7 @@ export function TabMenu(p: TabMenuProps): JSX.Element {
   const relieves = agent ? p.session?.relieves : undefined;
   const tags = agent ? p.tags ?? null : null;
   const open = (id: string) => () => p.onOpenSession?.(id);
-  const entries = agent && (!!p.onExternal || (h && reliefDone(h)) || !!relieves);
+  const entries = agent && (!!p.editor || !!p.onExternal || (h && reliefDone(h)) || !!relieves);
   return (
     <Menu open onOpenChange={o => { if (!o) p.onDismiss(); }} label={`${t.ide.tabMenu} · ${p.name}`} className="session-menu-wrap" menuClassName="session-menu" at={p.at} trigger={() => null}>
       {agent && (
@@ -57,6 +59,7 @@ export function TabMenu(p: TabMenuProps): JSX.Element {
           <small aria-hidden="true"><Kbd>{t.ide.viewKey(backquote)}</Kbd></small>
         </MenuItem>
       )}
+      {agent && p.editor && <MenuItem onSelect={p.editor.open}><span><Icon d={SHELL_ICONS.detach} size={14} />{t.ide.openIn.menu(p.editor.name)}</span></MenuItem>}
       {agent && p.onExternal && <MenuItem onSelect={p.onExternal}><span><Icon d={ICONS.external.d} size={14} />{t.session.terminal.external}</span></MenuItem>}
       {agent && h && reliefDone(h) && <MenuItem onSelect={open(h.to)}><span>{t.ide.relievedByEntry(h.toName ?? '')}</span></MenuItem>}
       {agent && relieves && <MenuItem onSelect={open(relieves.id)}><span>{t.ide.relievesEntry(relieves.name)}</span></MenuItem>}

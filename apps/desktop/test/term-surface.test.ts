@@ -264,6 +264,25 @@ it('adopt: another document makes a new xterm there, fed the output, with the sa
   expect(xt.terms.at(-1)).toBe(n);
 });
 
+it('Ctrl+Shift+` and Ctrl+1…9 work in an xterm made again in a popout, `from` being the terminal in its new document', () => {
+  const onLeave = vi.fn(); const onGroup = vi.fn();
+  const s = createSurface({ theme: { background: '#101112' }, onThread: vi.fn(), openUrl: vi.fn(), panelKey: () => true, onLeave, onGroup });
+  const other = document.implementation.createHTMLDocument('popout');
+  other.body.append(other.adoptNode(s.host));
+  s.adopt!(other);
+  const n = xt.terms.at(-1)!;
+  expect(xt.terms).toHaveLength(2);
+  const leave = key({ ctrlKey: true, shiftKey: true, code: 'Backquote', key: '`' });
+  expect(n.keys(leave)).toBe(false);
+  expect(onLeave).toHaveBeenCalledWith(s.host);
+  expect((onLeave.mock.calls[0]![0] as HTMLElement).ownerDocument).toBe(other);
+  expect(leave.stopPropagation).toHaveBeenCalled();
+  const group = key({ ctrlKey: true, code: 'Digit3', key: '3' });
+  expect(n.keys(group)).toBe(false);
+  expect(onGroup).toHaveBeenCalledWith(3);
+  expect(group.stopPropagation).toHaveBeenCalled();
+});
+
 it('adopt replays only the last REPLAY_MAX bytes of the output', () => {
   const { s } = surface();
   const chunk = 'x'.repeat(64 * 1024);

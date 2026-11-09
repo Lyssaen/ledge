@@ -1,0 +1,526 @@
+[
+ {
+  "id": 559053875,
+  "iid": 4265,
+  "project_id": 34675721,
+  "title": "feat(auth): add --client-id flag to glab auth login",
+  "description": "## Description\n\nOn self-managed and Dedicated GitLab instances, users authenticating with OAuth currently have to configure `client_id` with `glab config set client_id <id> --host <host>` before logging in, or respond to an interactive paste prompt. Passing a one-off `GITLAB_CLIENT_ID` environment variable is not persisted, which causes subsequent token refreshes to fail once the variable is unset.\n\nThis MR adds a `--client-id` flag to `glab auth login`. It allows users and setup scripts to supply the OAuth application client ID in a single command, such as:\n\n```shell\nglab auth login --hostname gitlab.example.com --client-id <CLIENT_ID> --web\n```\n\nDecisions:\n1. When `--client-id` is provided on a self-managed instance, it takes precedence over `GITLAB_CLIENT_ID` and saved config. It is saved to the host configuration together with OAuth tokens when authentication succeeds.\n2. If authentication fails, `--client-id` is not saved to disk and existing credentials remain untouched.\n3. Passing an empty or whitespace `--client-id` flag is rejected with an error rather than falling back to defaults.\n4. `--client-id` is rejected with an error if used against `gitlab.com`, which uses a fixed built-in application ID.\n5. `--client-id` is marked mutually exclusive with `--token`, `--stdin`, and `--job-token`. In interactive mode, the token option is omitted from the sign-in menu when `--client-id` is passed.\n\n## Related Issues\n\nCloses #8699\n\n## How has this been tested?\n\nI added unit tests in `internal/commands/auth/login/login_test.go` covering:\n- Flag parsing and mutual exclusivity with token flags.\n- Rejection of empty or whitespace values for `--client-id`.\n- Rejection on `gitlab.com` in both non-interactive and interactive flows.\n- Omission of the token option from the interactive sign-in menu.\n- Successful device flow persisting both `client_id` and OAuth tokens to disk.\n- Failed device flow leaving disk configuration and existing credentials untouched.\n\nThe rest runs in the pipeline.\n\nImplemented with AI assistance; I reviewed and tested the changes.",
+  "state": "opened",
+  "created_at": "2026-10-31T02:34:00.747Z",
+  "updated_at": "2026-11-08T13:33:57.317Z",
+  "merged_by": null,
+  "merge_user": null,
+  "merged_at": null,
+  "closed_by": null,
+  "closed_at": null,
+  "target_branch": "main",
+  "source_branch": "8699-set-oauth-client-id-flag",
+  "user_notes_count": 23,
+  "upvotes": 0,
+  "downvotes": 0,
+  "author": {
+   "id": 42139186,
+   "username": "amegahed12",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/amegahed12",
+   "bot": false
+  },
+  "assignees": [
+   {
+    "id": 42139186,
+    "username": "amegahed12",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/amegahed12"
+   }
+  ],
+  "assignee": {
+   "id": 42139186,
+   "username": "amegahed12",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/amegahed12"
+  },
+  "reviewers": [
+   {
+    "id": 11809982,
+    "username": "jay_mccure",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/jay_mccure"
+   },
+   {
+    "id": 21826781,
+    "username": "GitLabDuo",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/GitLabDuo"
+   }
+  ],
+  "source_project_id": 45049979,
+  "target_project_id": 34675721,
+  "labels": [
+   "1st contribution",
+   "Community contribution",
+   "devops::ai clients",
+   "documentation",
+   "group::developer clients",
+   "linked-issue",
+   "section::ai",
+   "tw::triaged",
+   "type::feature",
+   "workflow::ready for review"
+  ],
+  "draft": false,
+  "imported": false,
+  "imported_from": "none",
+  "work_in_progress": false,
+  "milestone": null,
+  "merge_when_pipeline_succeeds": false,
+  "merge_status": "can_be_merged",
+  "detailed_merge_status": "requested_changes",
+  "merge_after": null,
+  "sha": "95a5d84e56b789ea2676e3d0ac9a50133ff42102",
+  "merge_commit_sha": null,
+  "squash_commit_sha": null,
+  "discussion_locked": null,
+  "should_remove_source_branch": null,
+  "force_remove_source_branch": true,
+  "prepared_at": "2026-10-31T02:34:03.699Z",
+  "allow_collaboration": true,
+  "allow_maintainer_to_push": true,
+  "reference": "!4265",
+  "references": {
+   "short": "!4265",
+   "relative": "!4265",
+   "full": "gitlab-org/cli!4265"
+  },
+  "web_url": "https://gitlab.com/gitlab-org/cli/-/merge_requests/4265",
+  "time_stats": {
+   "time_estimate": 0,
+   "total_time_spent": 0,
+   "human_time_estimate": null,
+   "human_total_time_spent": null
+  },
+  "squash": true,
+  "squash_on_merge": true,
+  "task_completion_status": {
+   "count": 0,
+   "completed_count": 0
+  },
+  "has_conflicts": false,
+  "blocking_discussions_resolved": false,
+  "approvals_before_merge": null
+ },
+ {
+  "id": 564023333,
+  "iid": 4341,
+  "project_id": 34675721,
+  "title": "docs(work-items): add tester guide for the experimental REST get command",
+  "description": "Related to #8586.\n\nAdds `docs/work_items_experimental_tester_guide.md`, a tester guide for the experimental work items REST mode on this branch. It covers:\n\n- What exists today: `glab work-items get <iid>` in REST mode.\n- Getting access: the `work_item_rest_api` feature flag, building glab from this branch, and turning on REST mode with `GLAB_WORK_ITEMS_API_MODE` or the `work_items_api_mode` config key.\n- Example commands with sample text and JSON output, and the exact error messages for REST mode off and for a missing work item or disabled flag.\n- Cases worth trying, known limitations, and where to report problems.\n\nThe guide sits in `docs/` outside the generated docs, as the issue suggests. It targets this feature branch so it lands with the command it documents; happy to retarget to `main` if you prefer.\n\nVerified: `markdownlint-cli2` with the project config reports 0 issues.\n\nOne checklist item from #8586 is not in this MR: linking the guide from the two epics needs a maintainer, since I cannot edit group epics.",
+  "state": "opened",
+  "created_at": "2026-11-08T11:55:51.350Z",
+  "updated_at": "2026-11-08T13:11:55.642Z",
+  "merged_by": null,
+  "merge_user": null,
+  "merged_at": null,
+  "closed_by": null,
+  "closed_at": null,
+  "target_branch": "work-items-experimental-get",
+  "source_branch": "docs/8586-work-items-tester-guide",
+  "user_notes_count": 2,
+  "upvotes": 0,
+  "downvotes": 0,
+  "author": {
+   "id": 7442764,
+   "username": "benjaminkincses",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/benjaminkincses",
+   "bot": false
+  },
+  "assignees": [
+   {
+    "id": 7442764,
+    "username": "benjaminkincses",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/benjaminkincses"
+   }
+  ],
+  "assignee": {
+   "id": 7442764,
+   "username": "benjaminkincses",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/benjaminkincses"
+  },
+  "reviewers": [],
+  "source_project_id": 88551333,
+  "target_project_id": 34675721,
+  "labels": [
+   "1st contribution",
+   "Community contribution",
+   "devops::ai clients",
+   "group::developer clients",
+   "section::ai",
+   "type::maintenance",
+   "workflow::in dev"
+  ],
+  "draft": false,
+  "imported": false,
+  "imported_from": "none",
+  "work_in_progress": false,
+  "milestone": null,
+  "merge_when_pipeline_succeeds": false,
+  "merge_status": "can_be_merged",
+  "detailed_merge_status": "mergeable",
+  "merge_after": null,
+  "sha": "9ded2843edd825985019daed13d74062966d46fe",
+  "merge_commit_sha": null,
+  "squash_commit_sha": null,
+  "discussion_locked": null,
+  "should_remove_source_branch": null,
+  "force_remove_source_branch": true,
+  "prepared_at": "2026-11-08T11:55:53.942Z",
+  "allow_collaboration": true,
+  "allow_maintainer_to_push": true,
+  "reference": "!4341",
+  "references": {
+   "short": "!4341",
+   "relative": "!4341",
+   "full": "gitlab-org/cli!4341"
+  },
+  "web_url": "https://gitlab.com/gitlab-org/cli/-/merge_requests/4341",
+  "time_stats": {
+   "time_estimate": 0,
+   "total_time_spent": 0,
+   "human_time_estimate": null,
+   "human_total_time_spent": null
+  },
+  "squash": true,
+  "squash_on_merge": true,
+  "task_completion_status": {
+   "count": 0,
+   "completed_count": 0
+  },
+  "has_conflicts": false,
+  "blocking_discussions_resolved": true,
+  "approvals_before_merge": null
+ },
+ {
+  "id": 563934657,
+  "iid": 4340,
+  "project_id": 34675721,
+  "title": "feat(milestone): add --include-descendants to milestone list",
+  "description": "## Description\n\nRunning `glab milestone list --group` only listed milestones defined directly on that group.\nThere was no way to view milestones from subgroups or descendant projects.\n\nI added the `--include-descendants` flag to `glab milestone list`.\nWhen used with `--group`, glab now fetches milestones from all subgroups and descendant projects.\n\nBecause results can now span multiple namespaces, I added an Owner column to the table output when `--include-descendants` is enabled.\nThis column helps users see which subgroup or project owns each milestone.\n\nA few decisions on the behavior:\n1. `--include-descendants` is mutually exclusive with `--project`. Project milestones do not have descendants, so combining them returns an error.\n2. The Owner column appears only when `--include-descendants` is set. Standard group and project listings keep their original table format.\n3. The Owner column shows the subgroup or project path from the milestone web URL. It falls back to `group/<id>` or `project/<id>` if the URL is unavailable.\n4. JSON output includes `group_id` and `project_id` fields for scripting.\n\n## Related Issues\n\nCloses #8709\n\n## How has this been tested?\n\nI tested the mutual exclusivity check by hand using a built `glab` binary:\n\n```shell\n$ glab milestone list --project 123 --include-descendants\n   ERROR  \n  if any flags in the group [project include-descendants] are set none of the \n  others can be; [include-descendants project] were all set.                  \n```\n\nI added unit tests covering flag wiring, mock verification for `IncludeDescendents`, table output with the Owner column, and `--show-id`.\nI also added tests for mutual exclusivity with `--project`, JSON output, and milestone owner parsing edge cases.\n\nChecks I ran locally on the changed package:\n\n```shell\n$ go test -count=1 ./internal/commands/milestone/list/...\nok  \tgitlab.com/gitlab-org/cli/internal/commands/milestone/list\t0.023s\n```\n\n```shell\n$ go run ./scripts/comment-overlap -threshold 1.0 -max-findings 0 internal/commands/milestone/list/list.go internal/commands/milestone/list/list_test.go\n# 0 findings across 2 files\n```\n\nI also regenerated the command documentation with `make gen-docs`.\n\nThe rest runs in the pipeline.\n\nImplemented with AI assistance; I reviewed and tested the changes.",
+  "state": "opened",
+  "created_at": "2026-11-08T01:07:37.006Z",
+  "updated_at": "2026-11-08T01:29:03.615Z",
+  "merged_by": null,
+  "merge_user": null,
+  "merged_at": null,
+  "closed_by": null,
+  "closed_at": null,
+  "target_branch": "main",
+  "source_branch": "8709-add-include-descendants-to-milestone-list",
+  "user_notes_count": 7,
+  "upvotes": 0,
+  "downvotes": 0,
+  "author": {
+   "id": 42139186,
+   "username": "amegahed12",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/amegahed12",
+   "bot": false
+  },
+  "assignees": [
+   {
+    "id": 42139186,
+    "username": "amegahed12",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/amegahed12"
+   }
+  ],
+  "assignee": {
+   "id": 42139186,
+   "username": "amegahed12",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/amegahed12"
+  },
+  "reviewers": [
+   {
+    "id": 11809982,
+    "username": "jay_mccure",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/jay_mccure"
+   },
+   {
+    "id": 21826781,
+    "username": "GitLabDuo",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/GitLabDuo"
+   }
+  ],
+  "source_project_id": 45049979,
+  "target_project_id": 34675721,
+  "labels": [
+   "Community contribution",
+   "devops::ai clients",
+   "documentation",
+   "group::developer clients",
+   "linked-issue",
+   "section::ai",
+   "tw::triaged",
+   "type::feature",
+   "workflow::ready for review"
+  ],
+  "draft": false,
+  "imported": false,
+  "imported_from": "none",
+  "work_in_progress": false,
+  "milestone": null,
+  "merge_when_pipeline_succeeds": false,
+  "merge_status": "can_be_merged",
+  "detailed_merge_status": "requested_changes",
+  "merge_after": null,
+  "sha": "68f7d609d53c29b92e9a7905d63ab5efc96080d4",
+  "merge_commit_sha": null,
+  "squash_commit_sha": null,
+  "discussion_locked": null,
+  "should_remove_source_branch": null,
+  "force_remove_source_branch": true,
+  "prepared_at": "2026-11-08T01:07:39.987Z",
+  "allow_collaboration": true,
+  "allow_maintainer_to_push": true,
+  "reference": "!4340",
+  "references": {
+   "short": "!4340",
+   "relative": "!4340",
+   "full": "gitlab-org/cli!4340"
+  },
+  "web_url": "https://gitlab.com/gitlab-org/cli/-/merge_requests/4340",
+  "time_stats": {
+   "time_estimate": 0,
+   "total_time_spent": 0,
+   "human_time_estimate": null,
+   "human_total_time_spent": null
+  },
+  "squash": true,
+  "squash_on_merge": true,
+  "task_completion_status": {
+   "count": 0,
+   "completed_count": 0
+  },
+  "has_conflicts": false,
+  "blocking_discussions_resolved": false,
+  "approvals_before_merge": null
+ },
+ {
+  "id": 491140176,
+  "iid": 3357,
+  "project_id": 34675721,
+  "title": "Draft: feat(auth): show one-click verification link and add --open-browser flag to device login",
+  "description": "## What this changes\n\nTwo improvements to signing in with `glab auth login --device`, so the device flow is faster and less error-prone, especially in environments like GitLab Workspaces where terminal links are clickable.\n\n### A clickable link that already includes your code\n\nToday the device flow asks you to copy a one-time code and then separately open a verification URL and type that code in by hand:\n\n```\nFirst copy your one-time code: L20016PN\nThen open this URL on any device to authorize: https://gitlab.com/oauth/device\n```\n\nNow, when the GitLab server provides it, the URL shown already has the code filled in (`https://gitlab.com/oauth/device?user_code=L20016PN`). In terminals where links are clickable, you click once and land on a page that is ready to approve, with no copying required. The plain one-time code is still shown for terminals where the link is not clickable, and the flow falls back to the plain URL if the server does not return the pre-filled form.\n\n### Optionally open the browser for you\n\nA new opt-in `--open-browser` flag lets `glab` open the verification URL automatically instead of making you do it:\n\n```shell\nglab auth login --hostname gitlab.com --device --open-browser\n```\n\nIt uses your configured browser (the `$BROWSER` environment variable or the `browser` config setting) and opens the pre-filled URL so the code is already entered. If opening the browser fails, you are told to open the URL manually. The flag is off by default, so nothing changes for headless setups that rely on copy/paste. It only affects the device flow; the `--web` login already opens a browser.\n\n## Related issues\n\nCloses https://gitlab.com/gitlab-org/cli/-/work_items/8337\nCloses https://gitlab.com/gitlab-org/cli/-/work_items/8338\n\nFollow-up to https://gitlab.com/gitlab-org/cli/-/merge_requests/3234.\n\n## Implementation notes\n\n- `internal/oauth2/device.go`: `StartDeviceFlow` gains an `openBrowser bool` parameter, prefers `VerificationURIComplete` over `VerificationURI` (RFC 8628 §3.3 makes the complete form optional), and calls `utils.OpenInBrowser` when requested.\n- `internal/commands/auth/login/login.go`: new `--open-browser` flag on `LoginOptions`, passed through to `StartDeviceFlow`.\n- `docs/source/auth/login.md`: regenerated with `make gen-docs`.\n\n## Testing\n\n- `internal/oauth2/device_test.go`: new `httptest` TLS server stub for the device authorization and token endpoints; tests cover showing the pre-filled URL when the server returns it and falling back to the plain URL when it does not.\n- `internal/commands/auth/login/login_test.go`: new cases assert `--open-browser` parses to `true` and defaults to `false`.\n- `make build`, `go vet`, and the affected test packages pass locally.",
+  "state": "opened",
+  "created_at": "2026-06-01T21:33:45.596Z",
+  "updated_at": "2026-11-08T00:37:31.993Z",
+  "merged_by": null,
+  "merge_user": null,
+  "merged_at": null,
+  "closed_by": null,
+  "closed_at": null,
+  "target_branch": "main",
+  "source_branch": "duo/feature/8337-8338-device-flow-enhancements",
+  "user_notes_count": 21,
+  "upvotes": 0,
+  "downvotes": 0,
+  "author": {
+   "id": 5332,
+   "username": "bbodenmiller",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/bbodenmiller",
+   "bot": false
+  },
+  "assignees": [
+   {
+    "id": 5332,
+    "username": "bbodenmiller",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/bbodenmiller"
+   }
+  ],
+  "assignee": {
+   "id": 5332,
+   "username": "bbodenmiller",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/bbodenmiller"
+  },
+  "reviewers": [],
+  "source_project_id": 34675721,
+  "target_project_id": 34675721,
+  "labels": [
+   "1st contribution",
+   "Community contribution",
+   "automation:author-reminded",
+   "automation:ml",
+   "category:gitlab cli",
+   "devops::ai clients",
+   "feature::enhancement",
+   "group::developer clients",
+   "idle",
+   "linked-issue",
+   "section::ai",
+   "type::feature",
+   "workflow::in dev"
+  ],
+  "draft": true,
+  "imported": false,
+  "imported_from": "none",
+  "work_in_progress": true,
+  "milestone": null,
+  "merge_when_pipeline_succeeds": false,
+  "merge_status": "cannot_be_merged",
+  "detailed_merge_status": "draft_status",
+  "merge_after": null,
+  "sha": "6cb5353e31e9960f8c948d27a4ad9691218119d3",
+  "merge_commit_sha": null,
+  "squash_commit_sha": null,
+  "discussion_locked": null,
+  "should_remove_source_branch": null,
+  "force_remove_source_branch": true,
+  "prepared_at": "2026-06-01T21:33:51.416Z",
+  "reference": "!3357",
+  "references": {
+   "short": "!3357",
+   "relative": "!3357",
+   "full": "gitlab-org/cli!3357"
+  },
+  "web_url": "https://gitlab.com/gitlab-org/cli/-/merge_requests/3357",
+  "time_stats": {
+   "time_estimate": 0,
+   "total_time_spent": 0,
+   "human_time_estimate": null,
+   "human_total_time_spent": null
+  },
+  "squash": true,
+  "squash_on_merge": true,
+  "task_completion_status": {
+   "count": 0,
+   "completed_count": 0
+  },
+  "has_conflicts": true,
+  "blocking_discussions_resolved": false,
+  "approvals_before_merge": null
+ },
+ {
+  "id": 547213181,
+  "iid": 4091,
+  "project_id": 34675721,
+  "title": "feat(runner): add runner create command",
+  "description": "## Description\n\nThis MR introduces the create runner command ,\n\nThis MR picks up from where MR https://gitlab.com/gitlab-org/cli/-/merge_requests/3028 left off , huge thanks to @Aayush-Saini for laying the foundation for it!\n\n* feat(runner): add runner create command\n\nCo-authored-by: Aayush Saini\n\n## Related Issues\n\n<!--- This project only accepts merge requests related to open issues-->\n\n<!--- If suggesting a new feature or change, please discuss it in an issue first-->\n\n<!--- If fixing a bug, there should be an issue describing it with steps to reproduce-->\n\nResolves https://gitlab.com/gitlab-org/cli/-/work_items/8180+\n\n## How has this been tested?\n\n<!--- Please describe in detail how you tested your changes.-->\n\n<!--- Include details of your testing environment, and the tests you ran to-->\n\n<!--- see how your change affects other areas of the code, etc.-->\n\n## Screenshots (if appropriate):",
+  "state": "opened",
+  "created_at": "2026-10-12T14:37:13.017Z",
+  "updated_at": "2026-11-08T00:36:16.915Z",
+  "merged_by": null,
+  "merge_user": null,
+  "merged_at": null,
+  "closed_by": null,
+  "closed_at": null,
+  "target_branch": "main",
+  "source_branch": "create-runner-command",
+  "user_notes_count": 8,
+  "upvotes": 0,
+  "downvotes": 0,
+  "author": {
+   "id": 31784485,
+   "username": "dankparth",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/dankparth",
+   "bot": false
+  },
+  "assignees": [
+   {
+    "id": 31784485,
+    "username": "dankparth",
+    "state": "active",
+    "locked": false,
+    "web_url": "https://gitlab.com/dankparth"
+   }
+  ],
+  "assignee": {
+   "id": 31784485,
+   "username": "dankparth",
+   "state": "active",
+   "locked": false,
+   "web_url": "https://gitlab.com/dankparth"
+  },
+  "reviewers": [],
+  "source_project_id": 45049979,
+  "target_project_id": 34675721,
+  "labels": [
+   "Community contribution",
+   "Hackathon",
+   "automation:ml",
+   "backend",
+   "devops::ai clients",
+   "feature::addition",
+   "group::developer clients",
+   "idle",
+   "linked-issue",
+   "section::ai",
+   "type::feature",
+   "workflow::in dev"
+  ],
+  "draft": false,
+  "imported": false,
+  "imported_from": "none",
+  "work_in_progress": false,
+  "milestone": null,
+  "merge_when_pipeline_succeeds": false,
+  "merge_status": "can_be_merged",
+  "detailed_merge_status": "discussions_not_resolved",
+  "merge_after": null,
+  "sha": "f76fd94b642321fd9b6e1bc860332eab8d76a3d1",
+  "merge_commit_sha": null,
+  "squash_commit_sha": null,
+  "discussion_locked": null,
+  "should_remove_source_branch": null,
+  "force_remove_source_branch": true,
+  "prepared_at": "2026-10-12T14:37:16.981Z",
+  "allow_collaboration": true,
+  "allow_maintainer_to_push": true,
+  "reference": "!4091",
+  "references": {
+   "short": "!4091",
+   "relative": "!4091",
+   "full": "gitlab-org/cli!4091"
+  },
+  "web_url": "https://gitlab.com/gitlab-org/cli/-/merge_requests/4091",
+  "time_stats": {
+   "time_estimate": 0,
+   "total_time_spent": 0,
+   "human_time_estimate": null,
+   "human_total_time_spent": null
+  },
+  "squash": true,
+  "squash_on_merge": true,
+  "task_completion_status": {
+   "count": 0,
+   "completed_count": 0
+  },
+  "has_conflicts": false,
+  "blocking_discussions_resolved": false,
+  "approvals_before_merge": null
+ }
+]

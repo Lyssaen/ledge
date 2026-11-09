@@ -1,0 +1,30 @@
+{
+ "data": {
+  "repository": {
+   "pullRequest": {
+    "closingIssuesReferences": {
+     "nodes": [
+      {
+       "number": 145,
+       "url": "https://github.com/Lyssaen/ledge/issues/145",
+       "title": "Équipes : un identifiant de modèle tiré du nom de fichier n'est pas validé"
+      },
+      {
+       "number": 146,
+       "url": "https://github.com/Lyssaen/ledge/issues/146",
+       "title": "Équipes : les tâches d'une équipe dissoute pointent vers une équipe purgée"
+      },
+      {
+       "number": 147,
+       "url": "https://github.com/Lyssaen/ledge/issues/147",
+       "title": "Rôles : un changement d'autonomie ne s'applique qu'au redémarrage du siège"
+      }
+     ]
+    },
+    "reviewThreads": {
+     "nodes": []
+    }
+   }
+  }
+ }
+}

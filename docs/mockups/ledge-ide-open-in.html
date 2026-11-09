@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge IDE — Ouvrir dans…</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Complement to the validated IDE prototype v26 (ledge-ide-interactive.html), lot 11 « Ouvrir dans… ».
+   Only the states v26 does not show. Tokens: packages/ui tokens.css (light + dark), the toast is shell.css `.toast` / `.undo-toast`. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--popover:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--accent:oklch(0.269 0 0);--primary:oklch(0.444 0.177 26.899);
+  --border:#ffffff1a;--input:#ffffff26;--shadow-overlay:0 20px 40px -12px rgba(0,0,0,0.7);
+  --shell:#0d0d0d;--pane:#111112;--page:#000;--hover:#ffffff14;--note:#a78bfa;
+  --st-idle:#34d399;--st-work:#60a5fa;--st-off:#71717a;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(1 0 0);--popover:oklch(1 0 0);--muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.556 0 0);--accent:oklch(0.97 0 0);--primary:oklch(0.505 0.213 27.518);
+  --border:oklch(0.922 0 0);--input:oklch(0.922 0 0);--shadow-overlay:0 20px 40px -12px rgba(0,0,0,0.25);
+  --shell:oklch(0.985 0 0);--pane:#fff;--page:oklch(0.96 0 0);--hover:#0000000d;--note:#7c3aed;
+  --st-idle:#059669;--st-work:#2563eb;--st-off:#a1a1aa;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Geist','Segoe UI',system-ui,sans-serif;background:var(--page);color:var(--foreground);font-size:13px;line-height:18px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+code,.mono{font-family:'Geist Mono',ui-monospace,Consolas,monospace;font-size:11.5px}
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 20px;background:var(--shell);border-bottom:1px solid var(--border)}
+header h1{font-size:14px;font-weight:600;margin:0}
+header .sub{color:var(--muted-foreground);font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--input);border-radius:7px;overflow:hidden}
+.seg button{padding:3px 10px;font-size:12px;color:var(--muted-foreground)}
+.seg button.on{background:var(--muted);color:var(--foreground)}
+main{padding:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:18px;max-width:1500px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.card h2{font-size:12.5px;font-weight:600;margin:0;padding:10px 14px 0;display:flex;gap:8px;align-items:baseline}
+.card h2 .n{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted-foreground)}
+.card .why{padding:4px 14px 10px;color:var(--muted-foreground);font-size:12px}
+.card .why b{color:var(--foreground);font-weight:500}
+.tag{font-size:10.5px;border-radius:8px;padding:0 6px;border:1px solid}
+.tag.new{color:var(--note);border-color:color-mix(in srgb,var(--note) 45%,transparent)}
+.tag.same{color:var(--muted-foreground);border-color:var(--input)}
+/* A scene: a slice of the IDE window. */
+.scene{position:relative;background:var(--pane);border-top:1px solid var(--border);min-height:210px;overflow:hidden}
+.tabs{display:flex;height:30px;background:var(--shell);border-bottom:1px solid var(--border)}
+.tab{display:flex;align-items:center;gap:7px;padding:0 10px;font-size:12px;color:var(--muted-foreground);border-right:1px solid var(--border);white-space:nowrap}
+.tab.on{background:var(--pane);color:var(--foreground)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--st-off);flex-shrink:0}.dot.idle{background:var(--st-idle)}.dot.work{background:var(--st-work)}
+.menu{position:absolute;z-index:3;min-width:236px;background:var(--popover);border:1px solid var(--input);border-radius:8px;padding:4px;box-shadow:var(--shadow-overlay);font-size:12.5px}
+.menu button{display:flex;width:100%;align-items:center;gap:8px;padding:6px 9px;border-radius:5px;text-align:left}
+.menu button.hov{background:var(--hover)}
+.menu button .r{margin-left:auto;font-size:11px;color:var(--muted-foreground)}
+.menu .sep{height:1px;background:var(--border);margin:4px 2px}
+.menu .mh{padding:4px 9px 2px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground)}
+.cursorptr{position:absolute;z-index:4;width:14px;height:14px;pointer-events:none}
+/* shell.css .toast / .undo-toast, positioned in the scene instead of the window. */
+.toast{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:5;padding:12px 18px;background:var(--popover);border:1px solid var(--input);box-shadow:var(--shadow-overlay);border-radius:8px;font-size:12px;width:max-content;max-width:calc(100% - 28px)}
+.undo-toast{display:flex;align-items:center;gap:14px;padding:10px 10px 10px 16px;overflow:hidden}
+.undo-toast button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;white-space:nowrap;flex-shrink:0}
+.undo-toast button:hover,.undo-toast button.hov{background:var(--accent)}
+.undo-toast>i{position:absolute;left:0;bottom:0;height:2px;width:62%;background:var(--primary)}
+/* Settings › Espace de travail, the « Ouvrir dans… » row. */
+.fld{display:grid;grid-template-columns:96px 1fr;gap:10px 16px;align-items:start;font-size:12.5px;padding:18px 18px}
+.fld>label{color:var(--muted-foreground);padding-top:1px}
+.radios{display:flex;flex-wrap:wrap;gap:8px 18px}
+.radio{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.radio i{width:14px;height:14px;border-radius:50%;border:1px solid var(--input);display:grid;place-items:center;flex-shrink:0}
+.radio i.on::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--foreground)}
+.radio .hint{color:var(--muted-foreground);font-size:11.5px}
+.ext i{display:block;margin-top:8px;color:var(--foreground)}
+.stack{position:absolute;inset:30px 0 0 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px}
+.stack .toast{position:static;transform:none}
+.ext{position:absolute;right:14px;top:44px;width:160px;border:1px dashed var(--input);border-radius:8px;padding:10px;font-size:11.5px;color:var(--muted-foreground);background:var(--shell)}
+.ext b{color:var(--foreground);font-weight:500;display:block;margin-bottom:2px}
+.keys{padding:0 14px 12px;font-size:11px;color:var(--muted-foreground)}
+.keys code{font-size:10.5px}
+section.fiche{grid-column:1/-1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;font-size:12.5px}
+section.fiche h2{font-size:13px;margin:0 0 6px}
+section.fiche table{border-collapse:collapse;width:100%;font-size:12px}
+section.fiche td,section.fiche th{border-top:1px solid var(--border);padding:5px 8px;text-align:left;vertical-align:top}
+section.fiche th{color:var(--muted-foreground);font-weight:500}
+@media (max-width:520px){main{grid-template-columns:1fr;padding:12px}.ext{display:none}.fld{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="h1"></h1><span class="sub" id="hsub"></span><span style="flex:1"></span>
+  <span class="seg" id="theme"><button data-v="dark">Sombre</button><button data-v="light">Clair</button></span>
+  <span class="seg" id="lang"><button data-v="fr">FR</button><button data-v="en">EN</button></span>
+</header>
+<main id="main"></main>
+<script>
+const ic = {
+  pop:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6"/></svg>',
+  term:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg>',
+  split:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 4v16"/></svg>',
+  ptr:'<svg class="cursorptr" viewBox="0 0 16 16"><path d="M2 1l11 7-5 1-2 5z" fill="#fff" stroke="#000" stroke-width="1"/></svg>'
+};
+const logo = '<svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><g stroke="#d97757" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="3" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="21" transform="rotate(60 12 12)"/><line x1="12" y1="3" x2="12" y2="21" transform="rotate(120 12 12)"/></g></svg>';
+
+// The app's texts (vous, as in apps/desktop/src/i18n). Proposed keys are in each card.
+const T = {
+  fr:{
+    h1:'Ouvrir dans… — états du lot 11', hsub:'Complément de la maquette IDE v26 · seuls les états absents de la v26',
+    theme:['Sombre','Clair'],
+    openIn:e=>`Ouvrir dans ${e}`, toTerm:'Basculer sur le terminal', split:'Diviser à droite', close:'Fermer l’onglet',
+    open:'Ouvrir', openRight:'Ouvrir à droite', openWin:'Ouvrir dans une nouvelle fenêtre', msg:'Envoyer un message…', restart:'Redémarrer le siège…', enter:'Entrée', ctrlClick:'Ctrl clic',
+    fieldOpenIn:'Ouvrir dans…', notInstalled:'non installé', noWsl:'pas les dossiers WSL',
+    missing:e=>`${e} n’est pas installé sur ce PC : choisissez un autre éditeur.`,
+    zedWsl:'Zed n’ouvre pas les dossiers WSL : choisissez Cursor ou VS Code.',
+    settings:'Réglages',
+    failed:(e,r)=>`${e} n’a pas pu s’ouvrir : ${r}`,
+    r_exe:'le programme ne démarre pas.', r_distro:()=>'la distribution WSL ne répond pas.', r_path:'WSL ne peut pas recevoir ce chemin.', r_machine:'la machine de cette session ne fait plus partie de vos machines.',
+    ext:'Hors de Ledge', extOpen:e=>`${e} s’ouvre sur le worktree de la session.`, extSsh:'Zed s’ouvre sur ssh://srv-build/…', extOff:'L’éditeur tente sa propre connexion SSH, et affiche lui-même son erreur.',
+    nothing:'Rien ne s’affiche dans Ledge.',
+    c:[
+      ['Succès','same','Le clic ouvre l’éditeur ; <b>Ledge n’affiche rien</b>. Le toast de la v26 (la commande) n’était que la démo. Si ce dossier est déjà ouvert dans l’éditeur, c’est sa fenêtre qui revient au premier plan (le comportement normal de Cursor, VS Code et Zed) : Ledge ne passe pas <code>--reuse-window</code>, pour ne jamais remplacer le dossier d’une autre fenêtre.'],
+      ['Éditeur non installé · au clic','new','L’entrée du menu reste active (Ledge ne sait pas d’avance si l’exe a disparu). Au clic : toast avec le bouton <b>Réglages</b>, qui ouvre Réglages › Espace de travail. Pas de <kbd>Ctrl Z</kbd> sur ce bouton : ce n’est pas une annulation.'],
+      ['Éditeur non installé · dans Réglages','new','« non installé » en gris après le nom ; le radio reste sélectionnable (on peut l’installer après). Rien tant que la détection n’a pas répondu : pas d’état de chargement.'],
+      ['Zed et un worktree WSL · au clic','new','<b>Recommandé : l’entrée reste active</b>, le clic explique et mène aux Réglages. Une entrée grisée cacherait son explication dans une infobulle, et l’infobulle d’un bouton désactivé ne s’affiche pas de façon fiable.'],
+      ['Zed · dans Réglages','new','Le réglage prévient avant le choix : « pas les dossiers WSL » sous Zed, toujours (c’est une limite de Zed, pas de ce PC). Les deux mentions se suivent quand Zed est aussi absent (texte long).'],
+      ['Zed et une machine SSH','same','Autorisé comme Cursor et VS Code : même entrée, aucun texte de Ledge. Zed ouvre <code>ssh://&lt;alias&gt;/&lt;chemin&gt;</code>.'],
+      ['Le lancement échoue','new','Toast simple (pas de bouton : Réglages ne répare rien ici), 6 s comme les autres toasts. La raison est courte, une phrase, traduite côté front. Quatre raisons connues ; une raison inconnue retombe sur « le programme ne démarre pas ».'],
+      ['Machine distante hors ligne','same','L’entrée reste active, Ledge n’affiche rien : l’éditeur fait sa propre connexion SSH et affiche son erreur. Même chose pour un alias connu seulement du <code>~/.ssh/config</code> de WSL.'],
+      ['Clic droit dans l’explorateur','same','Comme la v26 : l’entrée en dernier, après « Redémarrer le siège… » pour un siège, après les « Ouvrir… » pour une session. Les états ci-dessus s’appliquent pareil.']
+    ],
+    fiche:'Fiche de passation', fh:['État','Déclencheur','Affichage','Clés proposées'],
+  },
+  en:{
+    h1:'Open in… — lot 11 states', hsub:'Complement to the IDE mockup v26 · only the states v26 lacks',
+    theme:['Dark','Light'],
+    openIn:e=>`Open in ${e}`, toTerm:'Switch to the terminal', split:'Split right', close:'Close tab',
+    open:'Open', openRight:'Open to the right', openWin:'Open in a new window', msg:'Send a message…', restart:'Restart the seat…', enter:'Enter', ctrlClick:'Ctrl click',
+    fieldOpenIn:'Open in…', notInstalled:'not installed', noWsl:'no WSL folders',
+    missing:e=>`${e} isn’t installed on this PC: choose another editor.`,
+    zedWsl:'Zed can’t open WSL folders: choose Cursor or VS Code.',
+    settings:'Settings',
+    failed:(e,r)=>`${e} couldn’t open: ${r}`,
+    r_exe:'the program won’t start.', r_distro:()=>'the WSL distribution isn’t answering.', r_path:'WSL can’t receive this path.', r_machine:'this session’s machine is no longer one of your machines.',
+    ext:'Outside Ledge', extOpen:e=>`${e} opens on the session’s worktree.`, extSsh:'Zed opens on ssh://srv-build/…', extOff:'The editor tries its own SSH connection and shows its own error.',
+    nothing:'Nothing shows in Ledge.',
+    c:null, fiche:'Handoff sheet', fh:['State','Trigger','Display','Proposed keys'],
+  }
+};
+T.en.c = T.fr.c; // design notes stay in French (they are for the team); the UI texts switch.
+
+let lang = 'fr', theme = 'dark';
+try { lang = localStorage.getItem('oi-lang') || lang; theme = localStorage.getItem('oi-theme') || theme; } catch(e) {}
+
+const tabs = t => `<div class="tabs"><div class="tab on">${logo}Nova<span class="dot work"></span></div><div class="tab">${logo}Pim<span class="dot idle"></span></div><div class="tab">${logo}dev-front<span style="font-size:11px">ledge-dev</span><span class="dot idle"></span></div></div>`;
+const tabMenu = (t, e, hov=true, x=14, y=28) => `<div class="menu" style="left:${x}px;top:${y}px"><div class="mh">Nova</div>
+  <button>${ic.term}${t.toTerm}<span class="r">Ctrl \`</span></button>
+  <button class="${hov?'hov':''}">${ic.pop}${t.openIn(e)}</button><div class="sep"></div>
+  <button>${ic.split}${t.split}<span class="r">Ctrl \\</span></button><button>${t.close}</button></div>${hov?`<span style="position:absolute;left:${x+150}px;top:${y+66}px">${ic.ptr}</span>`:''}`;
+const toastAct = (msg, t) => `<div class="toast undo-toast"><span>${msg}</span><button class="hov">${t.settings}</button><i></i></div>`;
+const toast = msg => `<div class="toast">${msg}</div>`;
+const radio = (v, on, hint='') => `<span class="radio"><i class="${on?'on':''}"></i>${v}${hint?`<span class="hint">${hint}</span>`:''}</span>`;
+const fld = (t, sel, hints) => `<div class="fld"><label>${t.fieldOpenIn}</label><div class="radios">${['Cursor','VS Code','Zed'].map(v=>radio(v, v===sel, hints[v]||'')).join('')}</div></div>`;
+
+function scenes(t){
+  return [
+    tabs()+tabMenu(t,'Cursor',true)+`<div class="ext"><b>${t.ext}</b>${t.extOpen('Cursor')}<i>${t.nothing}</i></div>`,
+    tabs()+toastAct(t.missing('Cursor'), t),
+    fld(t,'Cursor',{Cursor:t.notInstalled}),
+    tabs()+toastAct(t.zedWsl, t),
+    fld(t,'Zed',{Zed:`${t.notInstalled} · ${t.noWsl}`})+`<div style="border-top:1px solid var(--border)"></div>`+fld(t,'Cursor',{Zed:t.noWsl}),
+    tabs()+tabMenu(t,'Zed',true)+`<div class="ext"><b>${t.ext}</b>${t.extSsh}<i>${t.nothing}</i></div>`,
+    tabs()+`<div class="stack">`+toast(t.failed('Cursor', t.r_exe))+toast(t.failed('VS Code', t.r_distro()))+toast(t.failed('Cursor', t.r_path))+`</div>`,
+    tabs()+tabMenu(t,'VS Code',true)+`<div class="ext"><b>${t.ext}</b>${t.extOff}<i>${t.nothing}</i></div>`,
+    `<div class="menu" style="left:24px;top:14px"><div class="mh">dev-front</div><button>${t.open}<span class="r">${t.enter}</span></button><button>${t.openRight}<span class="r">${t.ctrlClick}</span></button><button>${t.openWin}</button><div class="sep"></div><button>${t.msg}</button><button>${t.restart}</button><button class="hov">${ic.pop}${t.openIn('Cursor')}</button></div>`
+  ];
+}
+const KEYS = [
+  'ide.openIn.menu(editor)',
+  'ide.openIn.missing(editor) · ide.openIn.settings',
+  'settings.workspace.openIn · settings.workspace.notInstalled',
+  'ide.openIn.zedWsl · ide.openIn.settings',
+  'settings.workspace.zedNoWsl',
+  '—',
+  'ide.openIn.failed(editor, reason) · ide.openIn.reason.{exe, distro, path, machine}',
+  '—',
+  'ide.openIn.menu(editor)'
+];
+const HEIGHTS = [210,150,80,150,140,210,200,210,250];
+
+function render(){
+  document.documentElement.dataset.theme = theme; document.documentElement.lang = lang;
+  const t = T[lang];
+  document.getElementById('h1').textContent = t.h1; document.getElementById('hsub').textContent = t.hsub;
+  const th = document.querySelectorAll('#theme button'); th[0].textContent = t.theme[0]; th[1].textContent = t.theme[1];
+  document.querySelectorAll('#theme button').forEach(b=>b.classList.toggle('on', b.dataset.v===theme));
+  document.querySelectorAll('#lang button').forEach(b=>b.classList.toggle('on', b.dataset.v===lang));
+  const sc = scenes(t);
+  const cards = T.fr.c.map(([title, tag, why], i) => `<article class="card" id="s${i+1}"><h2><span class="n">${i+1}</span>${title}<span class="tag ${tag}">${tag==='new'?'nouveau':'comme la v26'}</span></h2><div class="why">${why}</div><div class="keys">${KEYS[i]!=='—'?'<code>'+KEYS[i]+'</code>':''}</div><div class="scene" style="min-height:${HEIGHTS[i]}px">${sc[i]}</div></article>`).join('');
+  const fr = T.fr, en = T.en;
+  const rows = [
+    ['Succès','clic sur l’entrée, l’éditeur démarre','rien','—'],
+    ['Éditeur absent','clic, l’exe introuvable', `toast + bouton : « ${fr.missing('{editor}')} » [${fr.settings}] / “${en.missing('{editor}')}” [${en.settings}]`,'ide.openIn.missing, ide.openIn.settings'],
+    ['Éditeur absent (Réglages)','détection côté Windows', `« ${fr.notInstalled} » / “${en.notInstalled}”`,'settings.workspace.notInstalled'],
+    ['Zed + WSL','clic, Zed choisi, worktree WSL', `toast + bouton : « ${fr.zedWsl} » / “${en.zedWsl}”`,'ide.openIn.zedWsl'],
+    ['Zed (Réglages)','toujours sous Zed', `« ${fr.noWsl} » / “${en.noWsl}”`,'settings.workspace.zedNoWsl'],
+    ['Échec du lancement','l’exe ne démarre pas, WSL ne répond pas, chemin refusé, machine retirée de la liste', `« ${fr.failed('{editor}','{raison}')} » / “${en.failed('{editor}','{reason}')}” · raisons : « ${fr.r_exe} » « ${fr.r_distro()} » « ${fr.r_path} » « ${fr.r_machine} » / “${en.r_exe}” “${en.r_distro()}” “${en.r_path}” “${en.r_machine}”`,'ide.openIn.failed, ide.openIn.reason.*'],
+    ['Zed + SSH, machine hors ligne','—','rien (l’éditeur gère)','—'],
+    ['Entrée du menu','—', `« ${fr.openIn('{editor}')} » / “${en.openIn('{editor}')}”, « ${fr.fieldOpenIn} » / “${en.fieldOpenIn}”`,'ide.openIn.menu, settings.workspace.openIn'],
+    ['Réglage enregistré','choix d’un éditeur dans Réglages › Espace de travail', '« Ouvrir dans… : {éditeur} » / “Open in…: {editor}”, la confirmation habituelle de la section','settings.workspace.openInSaved'],
+  ];
+  const fiche = `<section class="fiche"><h2>${t.fiche}</h2><table><tr>${t.fh.map(h=>`<th>${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table></section>`;
+  document.getElementById('main').innerHTML = cards + fiche;
+}
+document.getElementById('theme').onclick = e => { const v = e.target.dataset.v; if (!v) return; theme = v; try{localStorage.setItem('oi-theme',v)}catch(_){} render(); };
+document.getElementById('lang').onclick = e => { const v = e.target.dataset.v; if (!v) return; lang = v; try{localStorage.setItem('oi-lang',v)}catch(_){} render(); };
+const q = new URLSearchParams(location.search); if (q.get('theme')) theme = q.get('theme'); if (q.get('lang')) lang = q.get('lang');
+render();
+</script>
+</body>
+</html>
