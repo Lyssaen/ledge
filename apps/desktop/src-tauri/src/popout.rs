@@ -90,6 +90,35 @@ pub fn close_window(app: AppHandle, label: String) -> Result<(), String> {
     match app.get_webview_window(&label) { Some(w) => w.close().map_err(|e| e.to_string()), None => Ok(()) }
 }
 
+/// The popouts hidden with the main window (its ✕ hides it to the tray), to show again with it, where they were.
+#[derive(Default)]
+pub struct HiddenWithMain(std::sync::Mutex<Vec<String>>);
+
+/// `had` plus `more`, each label once, in order.
+pub fn with_hidden(mut had: Vec<String>, more: Vec<String>) -> Vec<String> {
+    for l in more { if !had.contains(&l) { had.push(l); } }
+    had
+}
+
+/// The main window hides (docs/ide-workspace.md, « Fenêtres détachées », v27): the visible popouts hide with it. Minimising the
+/// main window does not come here; quitting closes every window anyway.
+pub fn hide_with_main(app: &AppHandle) {
+    let mut hidden = Vec::new();
+    for (label, w) in app.webview_windows() {
+        if is_popout(&label) && w.is_visible().unwrap_or(false) && w.hide().is_ok() { hidden.push(label); }
+    }
+    if let Some(state) = app.try_state::<HiddenWithMain>() {
+        let mut list = state.0.lock().unwrap();
+        *list = with_hidden(std::mem::take(&mut *list), hidden);
+    }
+}
+
+/// The main window shows again (tray, second launch, the island): the popouts hidden with it come back, at their place.
+pub fn show_with_main(app: &AppHandle) {
+    let labels = app.try_state::<HiddenWithMain>().map(|s| std::mem::take(&mut *s.0.lock().unwrap())).unwrap_or_default();
+    for label in labels { if let Some(w) = app.get_webview_window(&label) { let _ = w.show(); } }
+}
+
 /// Tells the main page a popout is gone, however it was closed.
 pub fn on_destroyed(app: &AppHandle, label: &str) {
     if is_popout(label) { let _ = app.emit_to(crate::MAIN, CLOSED_EVENT, label.to_string()); }
@@ -116,6 +145,11 @@ mod tests {
     #[test] fn only_popouts_can_be_closed_by_the_command() {
         assert!(is_popout("ide-w5"));
         for l in ["main", "notch", "atelier", "", "ide"] { assert!(!is_popout(l), "{l}"); }
+    }
+    #[test] fn the_popouts_hidden_with_the_main_window_are_kept_once_each() {
+        let l = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(with_hidden(l(&["ide-w2"]), l(&["ide-w5", "ide-w2"])), l(&["ide-w2", "ide-w5"]));
+        assert_eq!(with_hidden(vec![], vec![]), Vec::<String>::new());
     }
     #[test] fn a_window_on_a_screen_stays_where_it_is() {
         let screens = [(0, 0, 1920, 1080), (1920, 0, 2560, 1440)];
