@@ -1,0 +1,41 @@
+/* The IDE's OpenRig page (docs/mockups/ledge-ide-rigs.html orPageB: .orb-*, here .ide-orp-*). Loaded only with the IDE. */
+.ide-orp { container-type: inline-size; display: flex; height: 100%; min-height: 0; font-size: 12.5px; color: var(--foreground); background: var(--background); }
+.ide-orp-rail { flex: none; width: 220px; display: flex; flex-direction: column; gap: 8px; padding: 12px 10px; border-right: 1px solid var(--border); overflow: auto; }
+.ide-orp-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 2px 4px 8px; }
+.ide-orp-status b { font-weight: 600; }
+.ide-orp-mach { font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); }
+.ide-orp-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.ide-orp-dot.on { background: var(--success); }
+.ide-orp-dot.off { border: 1.5px solid var(--muted-foreground); }
+.ide-orp-pw { display: flex; gap: 6px; flex-basis: 100%; }
+.ide-orp .ide-orp-ib { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 1px solid var(--input); border-radius: var(--radius-md); font-size: 11.5px; color: var(--foreground); }
+.ide-orp .ide-orp-ib:hover:not(:disabled) { background: var(--muted); }
+.ide-orp .ide-orp-ib.start { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
+.ide-orp .ide-orp-ib:disabled { opacity: .5; }
+.ide-orp-err { margin: 0 4px; font-size: 11.5px; color: var(--destructive); }
+.ide-orp-rail nav { display: flex; flex-direction: column; gap: 1px; }
+.ide-orp .ide-orp-rail nav button { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: var(--radius-md); text-align: left; color: var(--muted-foreground); }
+.ide-orp .ide-orp-rail nav button:hover { background: var(--muted); color: var(--foreground); }
+.ide-orp .ide-orp-rail nav button.on { background: var(--muted); color: var(--foreground); font-weight: 500; }
+.ide-orp-n { font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); }
+.ide-orp .ide-orp-launch { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; margin-top: auto; padding: 0 10px; border-radius: var(--radius-md); background: var(--primary); color: var(--primary-foreground); font-size: 12px; }
+.ide-orp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: auto; }
+.ide-orp-top { flex: none; padding: 14px 18px 8px; }
+.ide-orp-top h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.ide-orp-body { padding: 0 18px 18px; }
+.ide-orp-note { margin: 0; padding: 0 18px; color: var(--muted-foreground); }
+.ide-orp-absent { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 18px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.ide-orp-absent p { margin: 0; color: var(--muted-foreground); }
+.ide-orp .ide-orp-absent button { height: 26px; padding: 0 10px; border: 1px solid var(--input); border-radius: var(--radius-md); color: var(--foreground); }
+
+/* A narrow group (R18): the rail becomes a row of tabs above the body, the launch button an icon on the right. */
+@container (max-width: 640px) {
+  .ide-orp { flex-direction: column; }
+  .ide-orp-rail { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .ide-orp-status { flex-wrap: nowrap; padding: 0; }
+  .ide-orp-pw { flex-basis: auto; }
+  .ide-orp-rail nav { flex-direction: row; flex-wrap: wrap; }
+  .ide-orp-rail .ide-rigs-conf { flex-basis: 100%; order: 3; }
+  .ide-orp .ide-orp-launch { margin: 0 0 0 auto; width: 28px; padding: 0; }
+  .ide-orp .ide-orp-launch span { display: none; }
+}

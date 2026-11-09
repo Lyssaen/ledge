@@ -1430,6 +1430,11 @@ export const fr = {
       start: (what: string) => `Démarrer ${what}`, restart: (what: string) => `Redémarrer ${what}`, stop: (what: string) => `Arrêter ${what}`,
       confirmStop: 'Confirmer l’arrêt', confirmRestart: 'Confirmer le redémarrage', cancel: 'Annuler'
     },
+    /** The OpenRig page of the IDE (lot 7d, mockup orPageB()). */
+    openrigPage: {
+      sections: { overview: 'Vue d’ensemble', rigs: 'Rigs', roles: 'Rôles', machines: 'Machines', daemon: 'Daemon', output: 'Sortie' } as Record<'overview' | 'rigs' | 'roles' | 'machines' | 'daemon' | 'output', string>,
+      nav: 'Sections d’OpenRig', rail: (machine: string) => `OpenRig sur ${machine}`
+    },
     /** The « Lancer un rig » modal (IDE lot 7d, mockup rigLaunchModal()). */
     launchRig: {
       title: 'Lancer un rig', sub: (machine: string) => `Sur ${machine}. Ctrl+Entrée lance, Échap ferme.`,

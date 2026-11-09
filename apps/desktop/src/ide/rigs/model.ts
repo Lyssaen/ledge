@@ -23,7 +23,7 @@ export function seatDot(session: Session | undefined, node: { activity: string; 
     : session.state === 'working' || session.state === 'starting' ? 'work' : 'idle';
 }
 
-function seatLine(node: RigSeat, machine: string, sessions: readonly Session[], asks: readonly HumanAsk[]): SeatLine {
+export function seatLine(node: RigSeat, machine: string, sessions: readonly Session[], asks: readonly HumanAsk[]): SeatLine {
   const session = sessions.find(s => isAskSeat(s, node.session, machine));
   const dot = seatDot(session, node, asks, machine);
   if (!session) return { logicalId: node.logicalId, name: node.logicalId, dot };

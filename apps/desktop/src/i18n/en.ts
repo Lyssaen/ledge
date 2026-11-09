@@ -1364,6 +1364,11 @@ export const en: Messages = {
       start: (what) => `Start ${what}`, restart: (what) => `Restart ${what}`, stop: (what) => `Stop ${what}`,
       confirmStop: 'Confirm the stop', confirmRestart: 'Confirm the restart', cancel: 'Cancel'
     },
+    /** The IDE's OpenRig page (lot 7d, mockup orPageB()). */
+    openrigPage: {
+      sections: { overview: 'Overview', rigs: 'Rigs', roles: 'Roles', machines: 'Machines', daemon: 'Daemon', output: 'Output' } as Record<'overview' | 'rigs' | 'roles' | 'machines' | 'daemon' | 'output', string>,
+      nav: 'OpenRig sections', rail: (machine: string) => `OpenRig on ${machine}`
+    },
     /** The “Launch a rig” modal (IDE lot 7d, mockup rigLaunchModal()). */
     launchRig: {
       title: 'Launch a rig', sub: (machine: string) => `On ${machine}. Ctrl+Enter launches, Esc closes.`,

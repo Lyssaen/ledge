@@ -6,6 +6,7 @@ import type { IdeFrameProps } from './IdeFrame';
 import type { AtelierBarProps } from './AtelierBar';
 import type { RigsViewProps } from './rigs/RigsView';
 import type { RigViewProps } from './rig/RigView';
+import type { OpenRigViewProps } from './openrig/OpenRigView';
 import type { RigLaunchModalProps } from './launch-rig/RigLaunchModal';
 import type { RigOutputEntry } from '../openrig/rigOutput';
 
@@ -18,7 +19,7 @@ export function loadIde(): Promise<IdeModule> {
 }
 
 // A chunk already loaded is handed over synchronously: React.lazy then resolves within the same render, without suspending.
-function fromChunk<K extends 'IdeFrame' | 'DockHost' | 'BottomPanel' | 'OutputView' | 'AtelierBar' | 'RigsView' | 'RigView' | 'RigLaunchModal'>(key: K) {
+function fromChunk<K extends 'IdeFrame' | 'DockHost' | 'BottomPanel' | 'OutputView' | 'AtelierBar' | 'RigsView' | 'RigView' | 'RigLaunchModal' | 'OpenRigView'>(key: K) {
   type Loaded = { default: IdeModule[K] };
   return lazy(() => (loaded
     ? { then: (ok: (m: Loaded) => void) => ok({ default: loaded![key] }) } as PromiseLike<Loaded> as Promise<Loaded>
@@ -32,6 +33,7 @@ const ABar = fromChunk('AtelierBar');
 const Rigs = fromChunk('RigsView');
 const RigTab = fromChunk('RigView');
 const RigLaunch = fromChunk('RigLaunchModal');
+const OpenRig = fromChunk('OpenRigView');
 
 /** The IDE shell, behind a sober wait (an empty window) the first time its chunk is fetched; a chunk that fails to load leaves a note (ChunkBoundary). */
 export function IdePlace(props: IdeFrameProps): JSX.Element {
@@ -66,6 +68,11 @@ export function IdeRigs(props: RigsViewProps): JSX.Element {
 /** The « Rig · name » tab's body: it renders inside the frame, so its chunk (and ide-rig.css) is already there. */
 export function IdeRigView(props: RigViewProps): JSX.Element {
   return <RigTab {...props} />;
+}
+
+/** The « OpenRig · machine » tab's body: it renders inside the frame, so its chunk (and ide-openrig.css) is already there. */
+export function IdeOpenRig(props: OpenRigViewProps): JSX.Element {
+  return <OpenRig {...props} />;
 }
 
 /** The « Lancer un rig » modal's content (and ide-launch-rig.css): App.tsx draws it in a Modal, outside the frame, so its first
