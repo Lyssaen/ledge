@@ -15,3 +15,17 @@
 .atoi-pr.stale .atoi-line { opacity: .6; }
 .atoi-tab { display: inline-flex; align-items: center; gap: 6px; }
 .atoi-tab-n { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--muted-foreground); }
+/* Lot 12 (docs/mockups/ledge-ide-tasks-history.html): « Résumer la journée », and the blocks « Le point » showed. */
+.atoi-top { display: flex; align-items: flex-start; gap: 12px; }
+.atoi-top .grow { flex: 1; min-width: 0; }
+.atoi-mk { width: 14px; flex-shrink: 0; text-align: center; font-size: 11px; }
+.atoi-mk.asked { color: var(--warning); font-weight: 600; }
+.atoi-mk.near { color: var(--warning); }
+.atoi-mk.done { color: var(--success); }
+.atoi-mk.bad { color: var(--danger-text); }
+.atoi-dec, .atoi-ask { display: flex; flex-direction: column; gap: 6px; }
+.atoi-pill { flex-shrink: 0; padding: 0 6px; border: 1px solid var(--input); border-radius: 8px; font-size: 10.5px; color: var(--muted-foreground); }
+.atoi-pill.urgent { color: var(--danger-text); border-color: color-mix(in srgb, var(--danger-text) 50%, transparent); }
+.atoi-partial { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted-foreground); }
+.atoi-askc { margin: 2px 0 4px 22px; border-radius: var(--radius-lg); transition: box-shadow .2s; }
+.atoi-askc.lit { box-shadow: 0 0 0 2px var(--ide-link-violet, #a78bfa); }
