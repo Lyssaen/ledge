@@ -1,6 +1,23 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './fixtures';
-import { eight, fakeDaemon, session, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { eight, fakeDaemon, session, twoProjects } from './daemon';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
+
+// The IDE's Atelier tab sits between the sidebar and the chat: at 1280 × 800 its floor no longer fits at the 40 % floor of the
+// zoom (it did in the old interface). The IDE's size, as its mockups and the ide-* specs.
+test.use({ viewport: { width: 1920, height: 1080 } });
+// The first tests of a run pay Vite's first compile of the IDE chunk: on a loaded machine that is past 20 s.
+test.setTimeout(60_000);
+
+/** The IDE is up on its Atelier tab, the agents seated (its chunk loads on the first visit: it can take more than 5 s). */
+async function booted(page: Page) {
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator('.ide-atelier button[data-agent]').first()).toBeVisible({ timeout: 15_000 });
+}
 
 const kit = session('kit', { name: 'Kit', cwd: '/tmp/scratch', project: 'scratch' });
 const helper = (id: string) => ({ id, kind: 'Explore', task: `Task ${id}`, state: 'working' as const });
@@ -17,7 +34,7 @@ const center = (b: { x: number; y: number; width: number; height: number }) => (
 
 test('at fit nothing scrolls; Ctrl + wheel zooms under the pointer; + - 0', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   const ledge = page.getByRole('region', { name: 'Ledge table' });
   await expect(ledge).toBeVisible();
   expect(await noScroll(page)).toBe(true);
@@ -50,7 +67,7 @@ test('at fit nothing scrolls; Ctrl + wheel zooms under the pointer; + - 0', asyn
 
 test('two fingers pinch the floor, not the window: the zoom follows them, the page stays at scale 1', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   const ledge = page.getByRole('region', { name: 'Ledge table' });
   await expect(ledge).toBeVisible();
   const fit = await pct(page);
@@ -78,7 +95,7 @@ test('two fingers pinch the floor, not the window: the zoom follows them, the pa
 
 test('double-click frames a table, the floor fits again; legend and zoom bar stay put; dragging the floor pans', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   const legend = page.locator('.workspace-legend');
   await expect(legend).toBeVisible();
   const before = await legend.boundingBox();
@@ -112,7 +129,7 @@ test('double-click frames a table, the floor fits again; legend and zoom bar sta
 
 test('dezoomed, dragging the floor carries the whole group to any edge, and part of it always stays in sight (#42)', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   for (let i = 0; i < 3; i++) await page.keyboard.press('-');
   await expect(page.getByRole('button', { name: /Fit/ })).toHaveAttribute('aria-pressed', 'false');
@@ -158,22 +175,23 @@ test('dezoomed, dragging the floor carries the whole group to any edge, and part
   expect(await noScroll(page)).toBe(true);
 });
 
-test('a resize and full screen refit without scrollbars', async ({ page }) => {
+// Full screen is gone with the old interface (jde, 2026-11-09): only the resize is left.
+test('a resize refits without scrollbars', async ({ page }) => {
   await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
-  await page.setViewportSize({ width: 1000, height: 700 });
+  const wide = await pct(page);
+  await page.setViewportSize({ width: 1600, height: 960 });
+  await expect.poll(() => pct(page)).toBeLessThan(wide);
   await expect.poll(() => noScroll(page)).toBe(true);
-  const narrow = await pct(page);
-  await page.getByRole('button', { name: 'Full screen' }).click();
-  await expect(page.locator('aside.sidebar')).toBeHidden();
-  await expect.poll(() => pct(page)).toBeGreaterThanOrEqual(narrow);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await expect.poll(() => pct(page)).toBe(wide);
   expect(await noScroll(page)).toBe(true);
 });
 
 test('drag Kit from Sans projet onto a table: the daemon gets the rule, Kit sits there', async ({ page }) => {
   const daemon = await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await page.locator('.unassigned-card', { hasText: 'Kit' }).dragTo(page.getByRole('region', { name: 'Ledge table' }));
   await expect(page.getByRole('region', { name: 'Ledge table' }).getByRole('button', { name: /^Kit,/ })).toBeVisible();
   expect(daemon.received).toContainEqual(expect.objectContaining({ type: 'projects.set', projects: expect.objectContaining({ rules: [{ machine: 'local', path: '/tmp/scratch', project: 'ledge' }] }) }));
@@ -182,21 +200,23 @@ test('drag Kit from Sans projet onto a table: the daemon gets the rule, Kit sits
 
 test('a crowded table: six seats, four at the ends, +N filters the atelier on the project', async ({ page }) => {
   await fakeDaemon(page, crowd, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   const table = page.getByRole('region', { name: 'Ledge table' });
   await expect(table.locator('.agent-seat:not(.helper-seat)')).toHaveCount(6);
   await expect(table.locator('.helper-seat')).toHaveCount(4);
   await table.getByRole('button', { name: /\+3 at this table/ }).click();
   await expect(page.getByRole('tab', { name: 'List' })).toHaveCount(0);
-  await expect(page.getByRole('banner').getByText('Ledge')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
+  // The filter reads in the Atelier tab's bar, as the old top bar's breadcrumb did.
+  const bar = page.getByRole('toolbar', { name: 'Atelier', exact: true });
+  await expect(bar.locator('.ide-abar-filter')).toHaveText('Ledge');
+  await expect(bar.getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
 });
 
 test('a long project name on the rug is cut with an ellipsis and stays inside the rug', async ({ page }) => {
   const long = { projects: [{ ...twoProjects.projects[0]!, name: 'Payment Service Platform Migration Europe' }, twoProjects.projects[1]!], rules: [] };
   await fakeDaemon(page, eight, { projects: long });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   const table = page.getByRole('region', { name: 'Payment Service Platform Migration Europe table' });
   const name = table.getByRole('button', { name: /^Conversations of project/ });
   await expect(name).toHaveAttribute('title', 'Payment Service Platform Migration Europe');
@@ -207,20 +227,27 @@ test('a long project name on the rug is cut with an ellipsis and stays inside th
 
 test('a message between agents: the bubble over Otto, an upright envelope flying to Nova\'s seat, which rings; no tag on the seats; reduced motion, no envelope (#27)', async ({ page }) => {
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   const otto = eight.find(s => s.id === 'otto')!;
   daemon.upsert({ ...otto, lastMessage: { id: 'sent-1', to: 'Nova', peer: 'nova', summary: 'The tests pass', at: new Date().toISOString() } });
   await expect(page.getByRole('button', { name: 'Otto writes to Nova: The tests pass. Open the conversation' })).toBeVisible();
   const envelope = page.locator('.exchange-layer .exchange-envelope');
   await expect(envelope).toHaveCount(1);
+  const landedOff = envelope.evaluate(el => new Promise<number>(done => el.addEventListener('animationend', e => {
+    if (e.animationName !== 'envelope-fly') return;
+    const seat = document.querySelector('.agent-seat[data-agent="local:nova"]')!.getBoundingClientRect(), b = el.getBoundingClientRect();
+    done(Math.abs(b.x + b.width / 2 - (seat.x + seat.width / 2)));
+  })));
   await expect(envelope).toHaveAttribute('aria-hidden', 'true');
   expect(await envelope.evaluate(el => { const s = getComputedStyle(el); return [s.offsetRotate, s.animationName]; })).toEqual(['0deg', 'envelope-fly, envelope-out']);
   // It lands on Nova's seat, which rings; then it fades out.
   const nova = page.locator('.agent-seat[data-agent="local:nova"]');
   await expect(nova).toHaveClass(/exchange-arrived/);
-  const landed = await envelope.boundingBox(), seat = await nova.boundingBox();
-  expect(Math.abs(landed!.x + landed!.width / 2 - (seat!.x + seat!.width / 2)), 'the envelope sits over the receiver').toBeLessThan(20);
+  // Where the flight ends, read when it ends: the ring is a timer and the fade-out moves it, so a later look can be off by tens
+  // of pixels on a loaded machine.
+  const off = await landedOff;
+  expect(off, 'the envelope sits over the receiver').toBeLessThan(20);
   await expect.poll(() => envelope.evaluate(el => getComputedStyle(el).opacity)).toBe('0');
   await expect(page.locator('.peer-tag')).toHaveCount(0);
   // Reduced motion: the bubble and the wire, no envelope.
@@ -232,6 +259,7 @@ test('a message between agents: the bubble over Otto, an upright envelope flying
 });
 
 test('the tiles start under Ledge\'s corner at every width, however tall its label grows (iPad, chat open)', async ({ page }) => {
+  test.setTimeout(90_000);   // five widths, each a fresh load of the IDE
   const loose = ['ua', 'ub', 'uc'].map(id => session(id, { name: id.toUpperCase(), cwd: `/tmp/${id}`, project: `x-${id}` }));
   await fakeDaemon(page, [eight[0]!, eight[4]!, kit, ...loose], { projects: twoProjects });
   // A taller desk than Chromium's own fonts give, as Safari's do on an iPad: the mosaic must make room for it, not run into it.
@@ -240,7 +268,7 @@ test('the tiles start under Ledge\'s corner at every width, however tall its lab
   }));
   for (const [width, height, chat] of [[1600, 1000, true], [1600, 1000, false], [1180, 820, true], [820, 1180, false], [390, 844, false]] as const) {
     await page.setViewportSize({ width, height });
-    await page.goto('/'); await openAtelier(page);
+    await page.goto('/'); await booted(page);
     await expect(page.locator('.unassigned-zone')).toBeVisible();
     if (chat) await page.keyboard.press('Control+/');
     await expect.poll(async () => page.evaluate(() => {
