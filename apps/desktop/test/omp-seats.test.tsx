@@ -28,23 +28,23 @@ function mount(sessions: readonly Session[], lang: 'fr' | 'en' = 'fr') {
 const rowOf = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) }).closest('[role="treeitem"]') as HTMLElement;
 
 describe('OMP seats in the sidebar', () => {
-  it('a running OMP seat is a seat row like the others: its mascot, its name, « rôle · omp », counted while it works', () => {
+  it('a running OMP seat is a seat row like the others: the omp logo, its name, « rôle · omp », counted while it works', () => {
     mount([IVO, PIA]);
     expect(rowOf('Ivo')).toHaveTextContent('dev · omp');
     expect(rowOf('Pia')).toHaveTextContent('review.reviewer · omp');
-    expect(rowOf('Ivo').querySelector('.bot')).toHaveAttribute('data-tool', 'omp');
+    // Sidebar rows wear their provider's logo, not a mascot (d036a563).
+    expect(rowOf('Ivo').querySelector('.st-bot .logo')).toHaveAttribute('title', 'omp');
     expect(rowOf('Ivo')).not.toHaveClass('off');
     const head = screen.getByRole('button', { name: /^dev-omp/ }).closest('[role="treeitem"]')!;
     expect(head.querySelector('.t-work')).toHaveTextContent('1');
   });
 
-  it('a stopped OMP seat stays under its rig, greyed « arrêté », its mascot frozen, out of the rig’s count', () => {
+  it('a stopped OMP seat stays under its rig, greyed « arrêté », with its omp logo, out of the rig’s count', () => {
     mount([ANA, TOM, { ...ANA, id: 'rig-sol', name: 'Sol', state: 'working', rig: { ...ANA.rig!, seat: 'review-reviewer@split-omp', role: 'review.reviewer' } }]);
     const tom = rowOf('Tom');
     expect(tom).toHaveClass('off');
     expect(tom.querySelector('.st-time')).toHaveTextContent('arrêté');
-    expect(tom.querySelector('.bot')).toHaveAttribute('data-frozen', 'true');
-    expect(tom.querySelector('.bot')).toHaveAttribute('data-state', 'done');
+    expect(tom.querySelector('.st-bot .logo')).toHaveAttribute('title', 'omp');
     const head = screen.getByRole('button', { name: /^split-omp/ }).closest('[role="treeitem"]')!;
     expect(head.querySelector('.t-work')).toHaveTextContent('1');
     cleanup();

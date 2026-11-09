@@ -232,6 +232,9 @@ export class TermStore {
 
   free(id: string): FreeShell | undefined { return this.frees.get(id)?.shell; }
 
+  /** The shells with no session, in the order they were opened. */
+  freeIds(): string[] { return [...this.frees.keys()]; }
+
   /** Kills it, disposes its xterm. A shell still opening is closed when it resolves. */
   closeFree(id: string): void {
     const f = this.frees.get(id);

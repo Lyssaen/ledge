@@ -326,7 +326,12 @@ export const en: Messages = {
       terminals: 'Terminals', webglBefore: 'Fast rendering (WebGL) for', webglAfter: 'visible terminals at most',
       webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`,
       openIn: 'Open in…', notInstalled: 'not installed', zedNoWsl: 'no WSL folders',
-      openInSaved: (editor: string) => `Open in…: ${editor}`
+      openInSaved: (editor: string) => `Open in…: ${editor}`,
+      boot: 'At startup', bootLast: 'The last layout', bootFixed: 'The layout', bootAtelier: 'The atelier only',
+      bootNone: 'Save a layout first.', bootDeleted: (name: string) => `“${name}” was deleted: Ledge reopens the last layout.`,
+      bootList: 'Layout opened at startup',
+      bootSaved: (choice: string) => `At startup: ${choice}`,
+      dispositions: 'Layouts', apply: 'Apply', del: 'Delete'
     },
     general: {
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.',
@@ -1477,6 +1482,28 @@ export const en: Messages = {
       tearTab: 'Drop the tab outside the window to open it in a new window',
       tearTerm: 'Drop the terminal outside the window to open it in a new window',
       tearOut: 'Drop: new window'
+    },
+    dispositions: {
+      title: 'Layouts', tip: 'Layouts: apply, save',
+      none: 'Layout', noneTip: 'No saved layout', empty: 'No saved layout.',
+      current: 'current', modified: 'modified', modTip: 'Changed since it was applied',
+      shape: (g: number, w: number): string => `${g} group${g > 1 ? 's' : ''}${w ? ` · ${w} window${w > 1 ? 's' : ''}` : ''}`,
+      saveCurrent: 'Save the current layout…', saveInto: (name: string) => `Save into “${name}”`, saveAs: 'Save under a new name…',
+      namePlaceholder: 'Name, then Enter', nameLabel: 'Layout name', taken: (name: string) => `“${name}” already exists: Enter to replace it.`,
+      manage: 'Manage layouts', manageHint: 'Settings',
+      applied: (name: string) => `Layout “${name}”`, saved: (name: string) => `Layout “${name}” saved`, replaced: (name: string) => `Layout “${name}” replaced`,
+      gone: (name: string, n: number): string => (n > 1 ? `“${name}”: ${n} tabs were not reopened, their session or rig no longer exists.` : `“${name}”: 1 tab was not reopened, its session or rig no longer exists.`)
+    },
+    palette: {
+      label: 'Palette', placeholder: 'Session (@), command (>), or a word…', results: 'Results', empty: 'Nothing matches.',
+      browse: '↑↓ choose', open: 'Enter open', close: 'Esc close', archived: (project: string) => `${project} · archived`,
+      current: 'current', stopped: 'stopped',
+      commands: {
+        newSession: 'New session', atelier: 'Open the atelier', settings: 'Open settings', prs: 'MRs and PRs',
+        terminal: 'New terminal', split: 'Split the group to the right', bottom: 'Show or hide the bottom panel',
+        launchRig: 'Launch a rig…', rigView: (rig: string) => `Rig view: ${rig}`, orSection: (section: string) => `OpenRig: ${section}`, showMachine: (machine: string) => `Show machine: ${machine}`,
+        saveDisposition: 'Save the layout…', disposition: (name: string) => `Layout: ${name}`
+      }
     },
     menu: {
       open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',

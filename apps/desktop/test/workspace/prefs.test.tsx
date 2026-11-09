@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, renderHook, screen } from '@testing-library/react';
 import { loadSettings } from '../../src/settings/lazy';
 import { loadChat } from '../../src/chat/lazy';
+import { loadIde } from '../../src/ide/lazy';
 import { loadIdeEnabled, saveIdeEnabled, useIdeEnabled } from '../../src/workspace/prefs';
 import { boot, closeDaemons, recordToasts, savedNotices, TWO_PROJECTS } from '../helpers';
 
@@ -31,7 +32,8 @@ describe('the IDE preference', () => {
 
 describe('Settings › General: the IDE interface switch', () => {
   it('toggles the preference and says so through « Setting saved »', async () => {
-    await loadSettings();
+    // The switch swaps the shell to the IDE: its chunk is loaded first, or a cold import outlasts findByRole's wait.
+    await Promise.all([loadSettings(), loadIde()]);
     const env = await boot({ projects: TWO_PROJECTS, machines: [{ id: 'local', label: 'Local' }] });
     await env.user.keyboard('{Control>},{/Control}');
     await screen.findByRole('heading', { level: 1, name: 'General' });

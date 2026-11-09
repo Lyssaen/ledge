@@ -46,6 +46,7 @@ import { closedLedgeTasks, useTasksApi } from './tasks/useTasksApi';
 import { Atelier } from './atelier/Atelier';
 import { OpenRigPage } from './openrig/OpenRigPage';
 import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
+import { readOpenRigOnce, rigGone } from '@ledge/fleet/openrig';
 import { createRigOutput, useRigOutput } from './openrig/rigOutput';
 import { useSidebarOpenRig } from './openrig/sidebarState';
 import { offersRigs, setGrouping, useGrouping } from './openrig/grouping';
@@ -80,7 +81,8 @@ import { useIdeEnabled, useResumeOnStart, useRigsMachine, useShowUsage } from '.
 import { liveTabs, loadLiveTabs, machineOf, nextMemo, saveLiveTabs, toResume } from './workspace/resume';
 import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
-import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, rigTab, useWorkspace } from './workspace/store';
+import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, loadWorkspace as loadIdeWorkspace, openrigTab, rigTab, useWorkspace } from './workspace/store';
+import { bootWorkspace, capture, loadBoot, loadDispositions, plan, saveCurrent, saveDispositions, signature, upsert, useCurrentDisposition, useDispositions } from './workspace/dispositions';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, MAIN, move as moveTab, moveActive, moveTo as moveTabTo, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, windowOf, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, providerOf, tabAlert, tabView } from './workspace/sessionTab';
@@ -92,10 +94,11 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeAtoi, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
+import { IdeAtelierBar, IdeAtoi, IdeBottom, IdeDock, IdeOutput, IdePaletteHost, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
 import { useForge } from './forge/useForge';
 import { AtoiTabLabel } from './ide/atoi/AtoiTabLabel';
 import { forgeLines, noForgeReadable, reachOf } from './forge/states';
+import type { PaletteCommand, PaletteSession } from './ide/palette/model';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -106,6 +109,9 @@ const NO_SHELLS: ShellsAvailable = { wsl: null, powershell: false, cmd: false, g
 const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
 
 /** One log of the `rig` commands this Desktop ran per client, made once and disposed on unmount (the bottom panel's Output reads it). */
+/** How long applying a disposition waits for a machine's OpenRig to say which rigs it still has. */
+const RIG_READ_MS = 3_000;
+
 function useRigOutputLog(client: DaemonClient) {
   const [log] = useState(() => createRigOutput(client));
   useEffect(() => () => log.dispose(), [log]);
@@ -219,14 +225,21 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // « Interface IDE (aperçu) » (Settings › General): its tabs (`ledge.ide.workspace`) and panels (`ledge.ide.layout`).
   const [ide] = useIdeEnabled();
   // The machine the Rigs view shows (the rig launch modal opens on it). No « ! » on Rigs any more (the user, 2026-11-09).
-  const [rigsMachine] = useRigsMachine(machines);
+  const [rigsMachine, setRigsMachine] = useRigsMachine(machines);
   // Read (and re-rendered on) only while the IDE shows the panel's Sortie.
   const rigEntries = useRigOutput(rigOutput, ide);
+  // « Au démarrage » (Settings › Workspace): the last workspace, a fixed disposition (its panels too; App applies it below, which
+  // opens its shells again), or the atelier alone.
+  const [boot] = useState(() => bootWorkspace(loadBoot(), loadIdeWorkspace(), loadDispositions(), ATELIER_TAB));
   // A bottom-panel shell's tab closed by the user (its ×, middle click, Ctrl+W, the menu) kills the shell (R9); a tab the model
-  // drops by itself (reconcile, a move) does not.
-  const [wsStore] = useState(() => createWorkspaceStore(undefined, { closed: key => { if (key.startsWith('terminal:shell:')) termStore.closeFree(key.slice('terminal:'.length)); } }));
+  // drops by itself (reconcile, a move, a disposition applied) does not.
+  const [wsStore] = useState(() => createWorkspaceStore(boot.ws, { closed: key => { if (key.startsWith('terminal:shell:')) termStore.closeFree(key.slice('terminal:'.length)); } }));
   const ws = useWorkspace(wsStore);
-  const [layout, setLayout] = useStored(loadLayout, saveLayout);
+  const [layout, setLayout] = useStored(() => ({ ...loadLayout(), ...boot.panels }), saveLayout);
+  // « Dispositions »: the status bar's menu, the palette, Settings › Workspace (applied and saved below, once the panel is known).
+  const dispositions = useDispositions();
+  const [saveAsk, setSaveAsk] = useState(0);
+  const currentDisposition = useCurrentDisposition();
   // Asking for the right panel folds the sidebar when that is what gives it room (layoutFor).
   const onLayout = useCallback((a: LayoutAction) => setLayout(l => layoutFor(l, a, window.innerWidth)), [setLayout]);
   termPanel.current.on = () => ide;
@@ -432,6 +445,57 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
   const { notice, action: noticeAction, notify, act: toastAct, undo } = useToast();
+  // Applying a disposition (docs/mockups/ledge-ide-layouts-palette.html, « Appliquer »): its tabs whose session, rig or machine is
+  // gone are left out and counted, its shells gone open again (same type, same folder), the shells open that it does not hold go
+  // to the bottom panel (none is killed). Its name is shown from then on, with a « • » once the workspace changes.
+  const machinesNow = useRef(machines);
+  machinesNow.current = machines;
+  const applyDisposition = useCallback(async (name: string): Promise<number | null> => {
+    const d = loadDispositions().find(x => x.name === name);
+    if (!d) return null;
+    // A shell needs the terminals' chunk (openShell waits for it the same way).
+    if (!loadedWorkspace()) { try { await loadWorkspace(); } catch { /* No shell then: ChunkBoundary says so where it is drawn. */ } }
+    const machineIds = machinesNow.current.map(m => m.id);
+    // A rig deleted on a machine still there is gone too (the board): each machine with a rig tab is read once, a few seconds at
+    // most; one that does not answer, or whose OpenRig is stopped, keeps its tabs (nobody knows).
+    const rigMachines = [...new Set(d.ws.groups.flatMap(g => g.tabs).filter(t => t.kind === 'rig').map(t => parseRigRef(t.ref)?.machine).filter((m): m is string => m !== undefined && machineIds.includes(m)))];
+    const rigsSeen = new Map(await Promise.all(rigMachines.map(async m => [m, await readOpenRigOnce(fleetClient, m, RIG_READ_MS)] as const)));
+    const keep = (tab: Tab) => {
+      if (!keepTabNow.current(tab)) return false;
+      // A rig or OpenRig tab of a machine removed (the machines known, it is not among them): gone.
+      const rig = tab.kind === 'rig' ? parseRigRef(tab.ref) : null;
+      const machine = rig ? rig.machine : tab.kind === 'openrig' ? tab.ref : undefined;
+      if (machine !== undefined && machineIds.length > 0 && !machineIds.includes(machine)) return false;
+      const seen = rig && rigsSeen.get(rig.machine);
+      return !(rig && seen && rigGone(seen, rig.rig));
+    };
+    const r = plan(d, { keep, live: ref => { const f = termStore.free(ref); return f && { kind: f.kind, dir: f.dir }; }, spawn: spec => termStore.openFree(spec.kind, spec.dir), open: termStore.freeIds() });
+    wsStore.update(() => r.ws);
+    panelStore.update(p => ({ tab: p.tab, terms: r.panel }));
+    const panels = { bottom: d.bottom, right: d.right };
+    setLayout(l => ({ ...l, ...panels }));
+    saveCurrent({ name: d.name, sig: signature(r.ws, panels) });
+    return r.dropped;
+  }, [wsStore, panelStore, termStore, setLayout, fleetClient]);
+  const applyAndTell = useCallback((name: string) => {
+    void applyDisposition(name).then(n => { if (n !== null) notify(n > 0 ? t.ide.dispositions.gone(name, n) : t.ide.dispositions.applied(name)); });
+  }, [applyDisposition, notify, t]);
+  // A fixed disposition at start: applied once, quietly (its shells open again).
+  const bootApplied = useRef(false);
+  useEffect(() => {
+    if (bootApplied.current || !ide) return;
+    bootApplied.current = true;
+    if (boot.current === null) saveCurrent(null);
+    else if (boot.current !== undefined) void applyDisposition(boot.current);
+  }, [ide, boot, applyDisposition]);
+  const saveDisposition = useCallback((name: string) => {
+    const list = loadDispositions();
+    const panels = { bottom: layout.bottom, right: layout.right };
+    const shellOf = (ref: string) => { const f = termStore.free(ref); return f && { kind: f.kind, dir: f.dir }; };
+    saveDispositions(upsert(list, capture(name, wsStore.get(), panels, panelStore.get().terms, shellOf)));
+    saveCurrent({ name, sig: signature(wsStore.get(), panels) });
+    notify(list.some(x => x.name === name) ? t.ide.dispositions.replaced(name) : t.ide.dispositions.saved(name));
+  }, [wsStore, panelStore, termStore, layout.bottom, layout.right, notify, t]);
   // The IDE's « À toi » has no usage card: each alert is told once, in a toast (the user, 2026-11-09).
   useUsageTold(ide, usage.alerts, notify, a => {
     const u = t.usage, w = a.window;
@@ -710,7 +774,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // (in the language just chosen, for the language itself: the render that speaks it has not happened yet).
   const settings: SettingsContext = {
     notify, saved: (what, l) => notify((l ? messagesFor(l) : t).settings.saved(what)), fleet, client: fleetClient, machines, projects, island, mobile, mobileError, projectIdOf, sessions, dispatch, alerts, daemonUpdates,
-    lang, setLang, paused: nav.paused
+    lang, setLang, paused: nav.paused, ...(ide ? { applyDisposition: applyAndTell } : {})
   };
 
   // A dialog over the application (a modal, a confirmation, the rename dialog): what lies behind it, the title bar's controls
@@ -876,6 +940,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         onSearch={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}
         onTab={onTab} activeTab={front ?? null} badge={badge}
         waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
+        dispositions={{ list: dispositions,
+          current: currentDisposition && { name: currentDisposition.name, modified: currentDisposition.sig !== signature(ws, { bottom: layout.bottom, right: layout.right }) },
+          onApply: applyAndTell, onSave: saveDisposition,
+          onManage: () => dispatch({ type: 'settings', section: 'workspace' }), saveAsk }}
         notice={tokenMissing && <DaemonOutdated />}
         prsFailing={prsFailing(forge.prs)} prsStatus={<IdePrsStatus prs={forge.prs} onShow={() => { if (!(layout.sideOpen && layout.sideView === 'prs')) onLayout({ type: 'view', view: 'prs' }); }} />}
         explorer={layout.sideView === 'prs'
@@ -976,8 +1044,35 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           {...(hit.group.window === MAIN && { onSplit: () => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; }) })}
           onClose={() => wsStore.close(key)} onCloseOthers={() => wsStore.closeOthers(key)} onDismiss={() => setTabMenu(null)} />;
       })()}
-      {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close}
-        {...(ide ? { onNewSession: () => dispatch({ type: 'modal', modal: { kind: 'launch' } }) } : {})} />}
+      {nav.modal?.kind === 'search' && !ide && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close} />}
+      {nav.modal?.kind === 'search' && ide && (() => {
+        // The IDE palette (lot 10, mockup `palItems`): the sessions and seats (`@`), the commands (`>`).
+        const p = t.ide.palette.commands;
+        const waitingIds = new Set(waitingSessions(sessions, waits).map(s => s.id));
+        const rows = known.map((s): PaletteSession => ({ kind: 'session', id: s.id, label: s.name, waiting: waitingIds.has(s.id), run: () => dispatch({ type: 'open', id: s.id }),
+          hint: s.rig ? s.rig.name : fleetView.archived.includes(s) ? t.ide.palette.archived(projectName(s)) : projectName(s) }));
+        const cmd = (id: string, label: string, run: () => void, hint?: string): PaletteCommand => ({ kind: 'command', id, label, run, ...(hint ? { hint } : {}) });
+        // Around OpenRig's (the palette makes them): « Nouvelle session » first; the dispositions, then « Enregistrer… », last.
+        const before = [cmd('new-session', p.newSession, () => dispatch({ type: 'modal', modal: { kind: 'launch' } }))];
+        const after: PaletteCommand[] = [
+          cmd('atelier', p.atelier, () => dispatch(tabAction(ATELIER_TAB)!)),
+          cmd('settings', p.settings, () => dispatch(tabAction(SETTINGS_TAB)!)),
+          cmd('terminal', p.terminal, () => openShell(pickDefault(), shellDir(), id => wsStore.update(w => openTab(w, { kind: 'terminal', ref: id }, 'active')))),
+          cmd('split', p.split, () => wsStore.update(w => splitGroup(w, w.focus))),
+          cmd('bottom', p.bottom, () => onLayout({ type: 'toggle', panel: 'bottom' })),
+          ...dispositions.map(d => cmd(`disposition:${d.name}`, p.disposition(d.name), () => applyAndTell(d.name), d.name === currentDisposition?.name ? t.ide.palette.current : undefined)),
+          cmd('save-disposition', p.saveDisposition, () => setSaveAsk(n => n + 1))
+        ];
+        // « MR et PR » and one row per open MR or PR come with the MR/PR view (lot 8b): `prs` is where they go.
+        const rigs = { client: fleetClient, machines, shown: rigsMachine, act: {
+          launch: () => dispatch({ type: 'modal', modal: { kind: 'rigLaunch', machine: rigsMachine } }),
+          rigView: (m: string, rig: string) => wsStore.update(w => openTab(w, rigTab(m, rig))),
+          section: (section: OpenRigSection) => dispatch({ type: 'openrig', machine: rigsMachine, section }),
+          // The machine the Rigs view shows: the view comes forward with it.
+          showMachine: (id: string) => { setRigsMachine(id); if (!layout.sideOpen || layout.sideView !== 'rigs') onLayout({ type: 'view', view: 'rigs' }); }
+        } };
+        return <IdePaletteHost sessions={rows} commands={{ before, after }} rigs={rigs} prs={[]} sessionOf={id => known.find(s => s.id === id)} onClose={close} />;
+      })()}
       {nav.modal?.kind === 'shortcuts' && <ShortcutsHelp onClose={close} />}
       {nav.modal?.kind === 'launch' && ide && (
         // No `wide`: the modal's own width (ide.css, `.modal:has(> .launch-modal)`), not the old form's 640 px.

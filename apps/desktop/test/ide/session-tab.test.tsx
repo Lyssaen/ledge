@@ -325,11 +325,12 @@ describe('the session page in an IDE tab', () => {
     front('Otto');
     await waitFor(() => expect(holder('otto')).not.toBeNull());
     expect(holder('nova')).toBeNull();
-    expect(unwatched()).toEqual(['nova']);
+    // The detach waits a tick (a moved tab cancels it), so the daemon hears it a moment later.
+    await waitFor(() => expect(unwatched()).toEqual(['nova']));
     front('Nova');
     await waitFor(() => expect(holder('nova')).not.toBeNull());
     expect(holder('otto')).toBeNull();
-    expect(unwatched()).toEqual(['nova', 'otto']);
+    await waitFor(() => expect(unwatched()).toEqual(['nova', 'otto']));
     expect(watched()).toEqual(['nova', 'otto', 'nova']);
   });
 
