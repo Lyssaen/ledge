@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { canBroadcast, daemonStore, prOfSession, prsFailing, sessionForge, projectOf, splitId, useDaemon, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { canBroadcast, daemonStore, prOfSession, prsFailing, prsWaitingForYou, sessionForge, projectOf, splitId, useDaemon, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -93,7 +93,7 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
+import { IdeAtelierBar, IdeAtoi, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
 import { useForge } from './forge/useForge';
 import { forgeLines, noForgeReadable, reachOf } from './forge/states';
 import { tileToDock } from './ide/termDrag';
@@ -803,6 +803,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         );
       }
       if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} noBack /> : null;
+      if (tab.kind === 'atoi') {
+        return <IdeAtoi waiting={waitingSessions(sessions, waits)} sessions={sessions} where={s => (s.rig ? projectLabel(s, projectName) : [projectName(s), s.branch].filter(Boolean).join(' · '))}
+          onOpen={id => dispatch({ type: 'open', id })} onDecide={(s, ok) => { decisions.decide(s, ok ? 'accept' : 'deny'); }} onAnswer={(s, o) => { decisions.reply(s, o); }}
+          prs={prsWaitingForYou(forge.prs)} agentOf={p => prAgentOf(p) ?? null} onOpenPr={p => onTab({ kind: 'pr', ref: p.id })}
+          onAskFix={p => { const a = prAgentOf(p); if (!a) return; fleet.prDetail(p.id, p.machineId).then(d => { const j = d.jobs.find(x => x.status === 'fail'); if (j && decisions.reply(a, t.forge.fixText(p.ref, j.name))) dispatch({ type: 'open', id: a.id, where: 'right' }); }, () => {}); }}
+          fleet={fleet} machineLabel={machineLabel} notify={notify} />;
+      }
       if (tab.kind === 'pr') {
         const p = prOf(tab.ref);
         if (!p) return null;
@@ -860,7 +867,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           : layout.sideView === 'rigs'
           ? <IdeRigs client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} activeTab={front ?? null} dispatch={dispatch} onTab={onTab}
               onMenu={(id, at, opener) => sessionMenu.open(id, at, opener)} />
-          : <Sidebar section={layout.sideView} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+          : <Sidebar section={layout.sideView} onAtoiPage={() => onTab({ kind: 'atoi', ref: 'main' })} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
             actions={actions} decisions={decisions} waits={waits} menu={sessionMenu} notify={notify}
             broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
             openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}

@@ -1556,6 +1556,15 @@ export const fr = {
     resumeOff: 'Reprise des sessions au démarrage désactivée',
     resumed: (n: number) => plural(n, `${n} session reprise`, `${n} sessions reprises`)
   },
+  // The page « À toi » (D3, docs/ide-workspace-plan.md 4.1 point 3; mockup atoiPage).
+  atoiPage: {
+    title: 'À toi', sub: 'Ce qui attend ta décision ou ton regard, toutes sessions et tous rigs confondus. Le chat de Ledge reste dans le panneau de droite.',
+    requests: 'Demandes', keysBefore: 'ou ', keysAfter: ' sur la session active', open: 'Ouvrir',
+    allowCommand: 'Autoriser une commande', allow: 'Autoriser', deny: 'Refuser', noRequest: 'Rien ne t’attend.',
+    prsSub: 'pipelines échoués, prêtes à fusionner', prFailed: 'pipeline échoué', prReady: 'pipeline réussi, approuvée', noPr: 'Aucune MR ni PR ne t’attend.',
+    finished: 'Terminé depuis ton passage', noFinished: 'Aucune session n’a fini.',
+    pageButton: 'Page', pageTip: 'La page À toi'
+  },
   // MR et PR (lot 8b, docs/mockups/ledge-ide-interactive.html : explorer `prs`, prPage, pipeGraph, statusbar).
   forge: {
     view: 'MR et PR', hosts: 'GitHub · GitLab', merged: 'Fusionnées',

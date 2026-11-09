@@ -23,6 +23,7 @@ export { PrsView } from '../forge/PrsView';
 export { PrPage } from '../forge/PrPage';
 export { PrsStatus } from '../forge/PrsStatus';
 export { PrTabLabel } from '../forge/PrTabLabel';
+export { AtoiPage } from './atoi/AtoiPage';
 
 export interface IdeFrameProps {
   layout: IdeLayout; onLayout(a: LayoutAction): void;
