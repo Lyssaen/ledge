@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type JSX, type ReactNode } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import { useOpenRig, useOpenRigRoles } from '@ledge/fleet/openrig';
-import type { HumanAsk, OpenRigAction, OpenRigDone, Projects, Session } from '@ledge/protocol';
+import type { HumanAsk, OpenRigAction, OpenRigDone, Session } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
 import { OPENRIG_SECTIONS, type NavAction, type OpenRigSection } from '../../nav/state';
@@ -17,7 +17,7 @@ import { rigErrorText } from '../rig/errors';
 import { RigConfirm, useRigConfirm } from '../rigs/RigConfirm';
 import { powerOf } from '../rigs/model';
 import { POWER_GLYPH } from './glyphs';
-import { prefAction, useDaemonPrefs } from './prefs';
+import { DAEMON, isAbout, prefAction, useDaemonPrefs } from './prefs';
 import { navCounts } from './model';
 import { Daemon } from './sections/Daemon';
 import { Machines } from './sections/Machines';
@@ -28,7 +28,7 @@ import '../../styles/ide-openrig.css';
 /** The OpenRig page of the IDE (docs/mockups/ledge-ide-rigs.html `orPageB`): a rail (daemon, sections, launch) and the section's body. */
 export interface OpenRigViewProps {
   client: DaemonClient; machines: readonly MachineState[]; machine: string; section: OpenRigSection; role?: string | undefined; seat?: string | undefined;
-  projects: Projects | null; sessions: readonly Session[]; asks: readonly HumanAsk[]; output: readonly RigOutputEntry[];
+  sessions: readonly Session[]; asks: readonly HumanAsk[]; output: readonly RigOutputEntry[];
   dispatch(a: NavAction): void; onTab(tab: Tab): void; onLaunch(machine: string): void;
 }
 
@@ -56,7 +56,7 @@ export function OpenRigView({ client, machines, machine, section, role, seat, se
     const r = target === 'kernel' ? kernelRig(state) : listedRigs(state).find(x => x.name === target);
     return !!r && isRunning(r);
   };
-  const conf = useRigConfirm(view, offered, { prefs, state });
+  const conf = useRigConfirm(view, offered, { prefs, state, sessions, asks, machine });
   useEffect(() => { conf.reset(); }, [machine, section]); // eslint-disable-line react-hooks/exhaustive-deps
   const pending = view.pending !== null && targetOf(view.pending) === 'daemon';
 
@@ -68,13 +68,13 @@ export function OpenRigView({ client, machines, machine, section, role, seat, se
         const name = v[verb](v.whatDaemon);
         // The decision (confirm or send) is made at the click, from the latest state of useOpenRig.
         return <button key={verb} type="button" className={`ide-orp-ib ${verb}`} title={name} aria-label={name} disabled={pending}
-          onClick={e => conf.ask(prefAction('daemon', verb, prefs), e.currentTarget)}><Icon d={POWER_GLYPH[verb]} size={13} />{t.ide.rigTab[verb]}</button>;
+          onClick={e => conf.ask(prefAction(DAEMON, verb, prefs), e.currentTarget)}><Icon d={POWER_GLYPH[verb]} size={13} />{t.ide.rigTab[verb]}</button>;
       })}
     </span>
   );
   const failure = (): ReactNode => {
     const d: OpenRigDone | null = view.last;
-    return !d || d.ok || conf.lastTarget !== 'daemon' ? null : <div className="ide-orp-err" role="alert">{rigErrorText(t, d.error ?? '')}</div>;
+    return !d || d.ok || !conf.lastAction || !isAbout(conf.lastAction, DAEMON) ? null : <div className="ide-orp-err" role="alert">{rigErrorText(t, d.error ?? '')}</div>;
   };
 
   const absent = (
@@ -121,7 +121,7 @@ export function OpenRigView({ client, machines, machine, section, role, seat, se
           <i className={`ide-orp-dot ${up ? 'on' : 'off'}`} aria-hidden="true" /><b>OpenRig</b><span className="ide-orp-mach">{label}</span>
           {power()}
         </div>
-        {conf.confirm && targetOf(conf.confirm) === 'daemon' && state && <RigConfirm action={conf.confirm} state={state} sessions={sessions} machine={machine} label={label} onConfirm={() => conf.run(conf.confirm!)} onCancel={conf.close} />}
+        {conf.confirm && isAbout(conf.confirm, DAEMON) && state && <RigConfirm action={conf.confirm} state={state} sessions={sessions} machine={machine} label={label} onConfirm={() => conf.run(conf.confirm!)} onCancel={conf.close} />}
         {failure()}
         <nav aria-label={p.nav}>
           {OPENRIG_SECTIONS.map(k => (

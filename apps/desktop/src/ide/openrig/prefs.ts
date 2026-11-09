@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
-import type { OpenRigAction, OpenRigState } from '@ledge/protocol';
-import { workingSeats } from '../../openrig/model';
+import { KERNEL_RIG, type HumanAsk, type OpenRigAction, type OpenRigState, type Session } from '@ledge/protocol';
+import { isWorking } from '../../openrig/model';
+import { isAskSeat } from '../../asks/model';
+import { seatDot } from '../rigs/model';
 import { isRecord, readJson, writeJson } from '../../state/storage';
 import { PERM_LEVELS, type PermLevel } from '../rig/model';
 
@@ -57,21 +59,42 @@ export function useDaemonPrefs(machine: string): [DaemonPrefs, (patch: Partial<D
   return [prefs, save];
 }
 
+/** What a power button is about. Tagged, so a rig named `daemon` or `kernel` is never taken for the daemon or the kernel. */
+export type PowerTarget = { kind: 'daemon' } | { kind: 'kernel' } | { kind: 'rig'; name: string };
+
+export const DAEMON: PowerTarget = { kind: 'daemon' };
+
+/** Whether an action is about this target (the daemon's, the kernel's, or that rig's). */
+export const isAbout = (a: OpenRigAction, t: PowerTarget): boolean =>
+  t.kind === 'daemon' ? a.kind.startsWith('daemon.') : t.kind === 'kernel' ? a.kind.startsWith('kernel.') : a.kind.startsWith('rig.') && (a as { rig: string }).rig === t.name;
+
 /** The action a button sends, with the machine's preferences applied (R9). */
-export function prefAction(target: 'daemon' | 'kernel' | string, verb: 'start' | 'restart' | 'stop', p: DaemonPrefs): OpenRigAction {
+export function prefAction(target: PowerTarget, verb: 'start' | 'restart' | 'stop', p: DaemonPrefs): OpenRigAction {
   const restore = p.relaunch ? 'last' as const : 'none' as const;
-  if (target === 'daemon') {
+  if (target.kind === 'daemon') {
     if (verb === 'start') return { kind: 'daemon.start', restore, ...(p.noKernel && !p.relaunch ? { noKernel: true } : {}) };
     if (verb === 'restart') return { kind: 'daemon.restart', restore };
     return { kind: 'daemon.stop' };
   }
-  if (target === 'kernel') return { kind: `kernel.${verb}` };
-  if (verb === 'stop') return { kind: 'rig.stop', rig: target, ...(p.snapshotBeforeStop ? { snapshot: true } : {}) };
-  return { kind: `rig.${verb}`, rig: target };
+  if (target.kind === 'kernel') return { kind: `kernel.${verb}` };
+  if (verb === 'stop') return { kind: 'rig.stop', rig: target.name, ...(p.snapshotBeforeStop ? { snapshot: true } : {}) };
+  return { kind: `rig.${verb}`, rig: target.name };
 }
 
-/** Whether an action asks first: never a start; always when `askAlways`; else only when a seat is working. */
-export function needsConfirm(action: OpenRigAction, state: OpenRigState, p: DaemonPrefs): boolean {
+/** What Ledge itself sees of the seats: its sessions and the asks they raised. OpenRig's polled activity can be 5 to 15 s behind it. */
+export interface LiveSeats { sessions: readonly Session[]; asks: readonly HumanAsk[]; machine: string }
+
+/** Whether an action asks first: never a start; always when `askAlways`; else when a seat of its targets is working in OpenRig's eyes
+ *  or in Ledge's (`live`: a session working, waiting on a permission or an ask, as the screens draw it). */
+export function needsConfirm(action: OpenRigAction, state: OpenRigState, p: DaemonPrefs, live?: LiveSeats): boolean {
   if (action.kind.endsWith('.start')) return false;
-  return p.askAlways || workingSeats(state, action).length > 0;
+  if (p.askAlways) return true;
+  const rigs = action.kind.startsWith('daemon.') ? state.rigs
+    : action.kind.startsWith('kernel.') ? state.rigs.filter(r => r.name === KERNEL_RIG)
+    : state.rigs.filter(r => r.name === (action as { rig: string }).rig);
+  return rigs.some(r => r.nodes.some(n => {
+    const session = live?.sessions.find(s => isAskSeat(s, n.session, live.machine));
+    const dot = seatDot(session, n, live?.asks ?? [], live?.machine);
+    return isWorking(n) || dot === 'work' || dot === 'perm' || dot === 'ask';
+  }));
 }

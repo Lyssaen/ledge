@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { DaemonClient, MachineState } from '@ledge/fleet';
 import { reseatRig, useOpenRig, useRigGraph, useRigPermissions, useRigQueue, useRigSnapshots } from '@ledge/fleet/openrig';
-import { KERNEL_RIG, type OpenRigAction, type OpenRigDone, type Session } from '@ledge/protocol';
+import { KERNEL_RIG, type HumanAsk, type OpenRigAction, type OpenRigDone, type Session } from '@ledge/protocol';
 import { Icon } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
 import { openClick, type NavAction } from '../../nav/state';
@@ -11,7 +11,7 @@ import { RigConfirm, useRigConfirm } from '../rigs/RigConfirm';
 import { RigQueue } from './RigQueue';
 import { RigSettings } from './RigSettings';
 import { RigTopology } from './RigTopology';
-import { prefAction, useDaemonPrefs } from '../openrig/prefs';
+import { isAbout, prefAction, useDaemonPrefs, type PowerTarget } from '../openrig/prefs';
 import { rigErrorText } from './errors';
 import { policyOf, type PermLevel } from './model';
 import '../../styles/ide-rig.css';
@@ -19,11 +19,13 @@ import '../../styles/ide-rig.css';
 const RESTART = ['M20 12a8 8 0 1 1-2.3-5.7', 'M20 4v5h-5'];
 
 export interface RigViewProps {
-  client: DaemonClient; machines: readonly MachineState[]; sessions: readonly Session[]; machine: string; rig: string; dispatch(a: NavAction): void;
+  client: DaemonClient; machines: readonly MachineState[]; sessions: readonly Session[]; asks?: readonly HumanAsk[]; machine: string; rig: string; dispatch(a: NavAction): void;
 }
 
 /** The « Rig · name » tab (docs/mockups/ledge-ide-rigs.html `topoPage`): header and confirmation, topology, settings, queue; the kernel has its own variant. */
-export function RigView({ client, machines, sessions, machine, rig: name, dispatch }: RigViewProps): JSX.Element {
+const NO_ASKS: readonly HumanAsk[] = [];
+
+export function RigView({ client, machines, sessions, asks = NO_ASKS, machine, rig: name, dispatch }: RigViewProps): JSX.Element {
   const { t } = useI18n();
   const r = t.ide.rigTab, o = t.openrig;
   const shown = machines.find(m => m.id === machine);
@@ -55,9 +57,10 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
     reloadAll();
   }, [stateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const target: PowerTarget = isKernel ? { kind: 'kernel' } : { kind: 'rig', name };
   const offered = (a: OpenRigAction): boolean => daemonUp && running && targetOf(a) === name;
   const [prefs] = useDaemonPrefs(machine);
-  const conf = useRigConfirm(view, offered, { prefs, state });
+  const conf = useRigConfirm(view, offered, { prefs, state, sessions, asks, machine });
   const [policyError, setPolicyError] = useState<string | null>(null);
   const opener = useRef<HTMLDivElement>(null);
   const headFocus = () => opener.current?.querySelector<HTMLElement>('button:not(:disabled)');
@@ -90,7 +93,7 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
     return (
       <div className="ide-rig ide-rig-state" role="status">
         <span>{rigErrorText(t, 'daemon_stopped')}</span>{' '}
-        <button type="button" className="ide-rig-btn pri" disabled={view.pending !== null} onClick={() => void view.act(prefAction('daemon', 'start', prefs))}><Icon d={SHELL_ICONS.play} size={13} />{t.ide.rigsView.startOpenrig}</button>
+        <button type="button" className="ide-rig-btn pri" disabled={view.pending !== null} onClick={() => void view.act(prefAction({ kind: 'daemon' }, 'start', prefs))}><Icon d={SHELL_ICONS.play} size={13} />{t.ide.rigsView.startOpenrig}</button>
         {failed !== null && <div className="ide-rig-fail" role="alert">{rigErrorText(t, failed)}</div>}
       </div>
     );
@@ -99,13 +102,13 @@ export function RigView({ client, machines, sessions, machine, rig: name, dispat
 
   const failure = (): ReactNode => {
     const d = view.last;
-    if (!d || d.ok || conf.lastTarget !== name) return null;
+    if (!d || d.ok || !conf.lastAction || !isAbout(conf.lastAction, target)) return null;
     const e = d.error;
     return <div className="ide-rig-fail" role="alert">{rigErrorText(t, e ?? '')}</div>;
   };
   const verb = (kind: 'start' | 'restart' | 'stop', glyph: readonly string[], text: string, cls = ''): JSX.Element => (
     <button type="button" className={`ide-rig-btn ${cls}`.trim()} disabled={view.pending !== null}
-      onClick={e => conf.ask(prefAction(name, kind, prefs), e.currentTarget, headFocus)}><Icon d={glyph} size={13} />{text}</button>
+      onClick={e => conf.ask(prefAction(target, kind, prefs), e.currentTarget, headFocus)}><Icon d={glyph} size={13} />{text}</button>
   );
   const seatsCount = rig.nodes.length > 0 ? rig.nodes.length : rig.seats;
   const operator = isKernel ? operatorOf(state, sessions, machine) : undefined;

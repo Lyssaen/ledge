@@ -81,6 +81,21 @@ describe('the IDE Rigs view', () => {
     expect(m.f.acts()).toHaveLength(1);
     expect(screen.getByRole('group')).toHaveTextContent('rig down busy');
   });
+  it('with askAlways off, a stop still asks when a Ledge session of the rig works though OpenRig says idle', async () => {
+    localStorage.setItem('ledge.ide.daemonPrefs', JSON.stringify({ local: { askAlways: false } }));
+    const m = mount({ sessions: [bix()] });
+    m.f.state('local', state({ rigs: [rig('kernel', 'running', [seat('a.one', 'kernel')]), rig('ledge-dev', 'running', [seat('dev.build', 'ledge-dev'), seat('dev.review', 'ledge-dev')])] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    expect(m.f.acts()).toEqual([]);
+    expect(screen.getByRole('group')).toBeInTheDocument();
+  });
+  it('a rig named daemon stops as a rig', async () => {
+    localStorage.setItem('ledge.ide.daemonPrefs', JSON.stringify({ local: { askAlways: false } }));
+    const m = mount();
+    m.f.state('local', state({ rigs: [rig('daemon', 'running', [seat('d.one', 'daemon')])] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter daemon' }));
+    expect(m.f.acts()).toMatchObject([{ action: { kind: 'rig.stop', rig: 'daemon', snapshot: true } }]);
+  });
   it('a restart asks too, with its note; Cancel and Escape close without sending; one confirmation at a time', async () => {
     const m = running();
     await userEvent.click(screen.getByRole('button', { name: 'Redémarrer ledge-dev' }));

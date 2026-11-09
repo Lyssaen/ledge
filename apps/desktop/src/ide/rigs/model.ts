@@ -67,12 +67,6 @@ export const displayedMachine = (saved: string | null, machines: readonly Machin
 
 export const powerOf = (running: boolean): readonly ('start' | 'restart' | 'stop')[] => (running ? ['restart', 'stop'] : ['start']);
 
-export function actionOf(target: 'daemon' | 'kernel' | string, verb: 'start' | 'restart' | 'stop'): OpenRigAction {
-  if (target === 'daemon') return { kind: `daemon.${verb}` };
-  if (target === 'kernel') return { kind: `kernel.${verb}` };
-  return { kind: `rig.${verb}`, rig: target };
-}
-
 /** What a stop or restart would interrupt (Ledge session names, else the seat's id) and the commands it runs. */
 export function confirmOf(state: OpenRigState, action: OpenRigAction, sessions: readonly Session[], machine: string): { working: string[]; commands: string[]; restart: boolean } {
   const working = workingSeats(state, action).map(({ seat }) => sessions.find(s => isAskSeat(s, seat.session, machine))?.name ?? seat.logicalId);

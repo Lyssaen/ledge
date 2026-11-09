@@ -4,14 +4,14 @@ import type { OpenRigView } from '@ledge/fleet/openrig';
 import type { HumanAsk, OpenRigState, Session } from '@ledge/protocol';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../../i18n/lang';
-import { isRunning, kernelRig, listedRigs, targetOf } from '../../../openrig/model';
+import { isRunning, kernelRig, listedRigs } from '../../../openrig/model';
 import type { Tab } from '../../../workspace/model';
 import { rigTab } from '../../../workspace/store';
 import { rigErrorText } from '../../rig/errors';
 import { RigConfirm, type RigConfirmControl } from '../../rigs/RigConfirm';
 import { powerOf, rigsViewOf } from '../../rigs/model';
 import { POWER_GLYPH } from '../glyphs';
-import { prefAction, type DaemonPrefs } from '../prefs';
+import { isAbout, prefAction, type DaemonPrefs, type PowerTarget } from '../prefs';
 import { RigCard } from './RigCard';
 
 export interface RigsProps {
@@ -30,10 +30,11 @@ export function Rigs({ client, view, conf, state, machine, label, prefs, session
   const dotOf = (name: string) => (name === kernel?.name ? lines.kernel : lines.rigs.find(r => r.name === name))?.dot ?? 'off';
 
   const root = useRef<HTMLDivElement>(null);
-  const nameOf = (target: string) => [...(root.current?.querySelectorAll<HTMLElement>('.ide-orp-card') ?? [])].find(c => c.dataset.target === target)?.querySelector<HTMLElement>('.ide-orp-name');
-  const pendingOn = (target: string) => view.pending !== null && targetOf(view.pending) === target;
+  const keyOf = (t: PowerTarget) => (t.kind === 'rig' ? t.name : t.kind);
+  const nameOf = (target: PowerTarget) => [...(root.current?.querySelectorAll<HTMLElement>('.ide-orp-card') ?? [])].find(c => c.dataset.target === keyOf(target))?.querySelector<HTMLElement>('.ide-orp-name');
+  const pendingOn = (target: PowerTarget) => view.pending !== null && isAbout(view.pending, target);
 
-  const power = (target: string, what: string, running: boolean): ReactNode => !up ? null : (
+  const power = (target: PowerTarget, what: string, running: boolean): ReactNode => !up ? null : (
     <span className="ide-orp-pw ide-orp-cpw">
       {powerOf(running).map(verb => {
         const name = v[verb](what);
@@ -42,12 +43,12 @@ export function Rigs({ client, view, conf, state, machine, label, prefs, session
       })}
     </span>
   );
-  const under = (target: string): ReactNode => {
+  const under = (target: PowerTarget): ReactNode => {
     const d = view.last;
     return (
       <>
-        {conf.confirm && targetOf(conf.confirm) === target && <RigConfirm action={conf.confirm} state={state} sessions={sessions} machine={machine} label={label} onConfirm={() => conf.run(conf.confirm!)} onCancel={conf.close} />}
-        {d && !d.ok && conf.lastTarget === target && <div className="ide-orp-err" role="alert">{rigErrorText(t, d.error ?? '')}</div>}
+        {conf.confirm && isAbout(conf.confirm, target) && <RigConfirm action={conf.confirm} state={state} sessions={sessions} machine={machine} label={label} onConfirm={() => conf.run(conf.confirm!)} onCancel={conf.close} />}
+        {d && !d.ok && conf.lastAction && isAbout(conf.lastAction, target) && <div className="ide-orp-err" role="alert">{rigErrorText(t, d.error ?? '')}</div>}
       </>
     );
   };
@@ -57,10 +58,10 @@ export function Rigs({ client, view, conf, state, machine, label, prefs, session
       {!up && <p className="ide-orp-note flat" role="status"><b>{v.stoppedTitle}</b> {v.stoppedBody}</p>}
       <div ref={root} className="ide-orp-cards">
         {kernel && <RigCard client={client} machine={machine} rig={kernel} kernel running={isRunning(kernel)} dot={dotOf(kernel.name)}
-          power={power('kernel', v.whatKernel, isRunning(kernel))} under={under('kernel')} onOpen={() => onTab(rigTab(machine, kernel.name))} />}
+          power={power({ kind: 'kernel' }, v.whatKernel, isRunning(kernel))} under={under({ kind: 'kernel' })} onOpen={() => onTab(rigTab(machine, kernel.name))} />}
         {rigs.map(r => (
           <RigCard key={r.name} client={client} machine={machine} rig={r} kernel={false} running={isRunning(r)} dot={dotOf(r.name)}
-            power={power(r.name, r.name, isRunning(r))} under={under(r.name)} onOpen={() => onTab(rigTab(machine, r.name))} />
+            power={power({ kind: 'rig', name: r.name }, r.name, isRunning(r))} under={under({ kind: 'rig', name: r.name })} onOpen={() => onTab(rigTab(machine, r.name))} />
         ))}
         <button type="button" className="ide-orp-card ide-orp-new" onClick={() => onLaunch(machine)}>
           <Icon d={ICONS.plus.d} size={14} /><b>{v.launchTitle}</b><span>{p.newSub}</span>

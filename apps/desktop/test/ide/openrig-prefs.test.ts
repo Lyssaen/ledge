@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OpenRigState, Rig, RigSeat } from '@ledge/protocol';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import type { HumanAsk, OpenRigState, Rig, RigSeat, Session } from '@ledge/protocol';
 import { DAEMON_PREFS_DEFAULT, loadDaemonPrefs, needsConfirm, prefAction, saveDaemonPrefs } from '../../src/ide/openrig/prefs';
 
 const KEY = 'ledge.ide.daemonPrefs';
@@ -35,17 +36,21 @@ describe('daemon preferences storage', () => {
 describe('prefAction', () => {
   const d = DAEMON_PREFS_DEFAULT;
   it('starts and restarts the daemon with the relaunch preference', () => {
-    expect(prefAction('daemon', 'start', d)).toEqual({ kind: 'daemon.start', restore: 'last' });
-    expect(prefAction('daemon', 'start', { ...d, relaunch: false, noKernel: true })).toEqual({ kind: 'daemon.start', restore: 'none', noKernel: true });
-    expect(prefAction('daemon', 'start', { ...d, noKernel: true })).toEqual({ kind: 'daemon.start', restore: 'last' });
-    expect(prefAction('daemon', 'restart', { ...d, relaunch: false })).toEqual({ kind: 'daemon.restart', restore: 'none' });
-    expect(prefAction('daemon', 'stop', d)).toEqual({ kind: 'daemon.stop' });
+    expect(prefAction({ kind: 'daemon' }, 'start', d)).toEqual({ kind: 'daemon.start', restore: 'last' });
+    expect(prefAction({ kind: 'daemon' }, 'start', { ...d, relaunch: false, noKernel: true })).toEqual({ kind: 'daemon.start', restore: 'none', noKernel: true });
+    expect(prefAction({ kind: 'daemon' }, 'start', { ...d, noKernel: true })).toEqual({ kind: 'daemon.start', restore: 'last' });
+    expect(prefAction({ kind: 'daemon' }, 'restart', { ...d, relaunch: false })).toEqual({ kind: 'daemon.restart', restore: 'none' });
+    expect(prefAction({ kind: 'daemon' }, 'stop', d)).toEqual({ kind: 'daemon.stop' });
   });
   it('snapshots a rig before it stops, unless told not to', () => {
-    expect(prefAction('dev', 'stop', d)).toEqual({ kind: 'rig.stop', rig: 'dev', snapshot: true });
-    expect(prefAction('dev', 'stop', { ...d, snapshotBeforeStop: false })).toEqual({ kind: 'rig.stop', rig: 'dev' });
-    expect(prefAction('dev', 'start', d)).toEqual({ kind: 'rig.start', rig: 'dev' });
-    expect(prefAction('kernel', 'stop', d)).toEqual({ kind: 'kernel.stop' });
+    expect(prefAction({ kind: 'rig', name: 'dev' }, 'stop', d)).toEqual({ kind: 'rig.stop', rig: 'dev', snapshot: true });
+    expect(prefAction({ kind: 'rig', name: 'dev' }, 'stop', { ...d, snapshotBeforeStop: false })).toEqual({ kind: 'rig.stop', rig: 'dev' });
+    expect(prefAction({ kind: 'rig', name: 'dev' }, 'start', d)).toEqual({ kind: 'rig.start', rig: 'dev' });
+    expect(prefAction({ kind: 'kernel' }, 'stop', d)).toEqual({ kind: 'kernel.stop' });
+  });
+  it('a rig named like the daemon or the kernel is still a rig', () => {
+    expect(prefAction({ kind: 'rig', name: 'daemon' }, 'stop', d)).toEqual({ kind: 'rig.stop', rig: 'daemon', snapshot: true });
+    expect(prefAction({ kind: 'rig', name: 'kernel' }, 'restart', d)).toEqual({ kind: 'rig.restart', rig: 'kernel' });
   });
 });
 
@@ -54,7 +59,7 @@ const stateOf = (working: boolean): OpenRigState => ({ installed: true, version:
   rigs: [{ id: 'dev', name: 'dev', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [seat('dev.build', working)] } as Rig] });
 
 describe('needsConfirm', () => {
-  const stop = prefAction('dev', 'stop', DAEMON_PREFS_DEFAULT);
+  const stop = prefAction({ kind: 'rig', name: 'dev' }, 'stop', DAEMON_PREFS_DEFAULT);
   it('never asks for a start', () => {
     expect(needsConfirm({ kind: 'daemon.start' }, stateOf(true), DAEMON_PREFS_DEFAULT)).toBe(false);
   });
@@ -65,5 +70,41 @@ describe('needsConfirm', () => {
     const p = { ...DAEMON_PREFS_DEFAULT, askAlways: false };
     expect(needsConfirm(stop, stateOf(false), p)).toBe(false);
     expect(needsConfirm(stop, stateOf(true), p)).toBe(true);
+  });
+});
+
+describe('needsConfirm with the live Ledge sessions', () => {
+  const p = { ...DAEMON_PREFS_DEFAULT, askAlways: false };
+  const live = (state: Session['state']): { sessions: Session[]; asks: HumanAsk[]; machine: string } =>
+    ({ sessions: [fakeSession('s1', { state, machineId: 'local', rig: { seat: 'dev-build@dev', name: 'dev' } })], asks: [], machine: 'local' });
+  const stop = prefAction({ kind: 'rig', name: 'dev' }, 'stop', p);
+  it('asks when a Ledge session of the rig works or waits on a permission, though OpenRig says idle', () => {
+    expect(needsConfirm(stop, stateOf(false), p, live('working'))).toBe(true);
+    expect(needsConfirm(stop, stateOf(false), p, live('starting'))).toBe(true);
+    expect(needsConfirm(stop, stateOf(false), p, live('waiting_permission'))).toBe(true);
+    expect(needsConfirm(stop, stateOf(false), p, live('waiting_input'))).toBe(true);
+  });
+  it('asks when the seat has raised an ask', () => {
+    const l = live('idle');
+    const ask = { from: { seat: 'dev-build@dev', machineId: 'local' } } as unknown as HumanAsk;
+    expect(needsConfirm(stop, stateOf(false), p, { ...l, asks: [ask] })).toBe(true);
+  });
+  it('does not ask for an idle session, nor for the work of another rig', () => {
+    expect(needsConfirm(stop, stateOf(false), p, live('idle'))).toBe(false);
+    const other = prefAction({ kind: 'rig', name: 'other' }, 'stop', p);
+    expect(needsConfirm(other, stateOf(false), p, live('working'))).toBe(false);
+  });
+  it('a kernel action looks at the kernel seats, a daemon action at every rig', () => {
+    const st = stateOf(false);
+    st.rigs.push({ ...st.rigs[0]!, id: 'kernel', name: 'kernel', nodes: [{ ...seat('orch.lead', false), session: 'orch-lead@kernel' }] } as Rig);
+    const kernelLive = { sessions: [fakeSession('k1', { state: 'working', machineId: 'local', rig: { seat: 'orch-lead@kernel', name: 'kernel' } })], asks: [], machine: 'local' };
+    expect(needsConfirm(prefAction({ kind: 'daemon' }, 'stop', p), st, p, live('working'))).toBe(true);
+    expect(needsConfirm(prefAction({ kind: 'kernel' }, 'stop', p), st, p, live('working'))).toBe(false);
+    expect(needsConfirm(prefAction({ kind: 'kernel' }, 'stop', p), st, p, kernelLive)).toBe(true);
+    expect(needsConfirm(prefAction({ kind: 'rig', name: 'dev' }, 'stop', p), st, p, kernelLive)).toBe(false);
+    expect(needsConfirm(prefAction({ kind: 'daemon' }, 'restart', p), st, p, kernelLive)).toBe(true);
+  });
+  it('askAlways still asks, whatever the sessions', () => {
+    expect(needsConfirm(stop, stateOf(false), DAEMON_PREFS_DEFAULT, live('idle'))).toBe(true);
   });
 });

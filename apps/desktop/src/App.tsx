@@ -761,11 +761,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} noBack /> : null;
       if (tab.kind === 'openrig') {
         const o = place.kind === 'openrig' && (place.machine ?? 'local') === tab.ref ? place : null;
-        return <IdeOpenRig client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'overview'} role={o?.role} seat={o?.seat} projects={projects} sessions={sessions} asks={asks.asks} output={rigEntries} dispatch={dispatch} onTab={onTab} onLaunch={m => dispatch({ type: 'modal', modal: { kind: 'rigLaunch', machine: m } })} />;
+        return <IdeOpenRig client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'overview'} role={o?.role} seat={o?.seat} sessions={sessions} asks={asks.asks} output={rigEntries} dispatch={dispatch} onTab={onTab} onLaunch={m => dispatch({ type: 'modal', modal: { kind: 'rigLaunch', machine: m } })} />;
       }
       if (tab.kind === 'rig') {
         const r = parseRigRef(tab.ref);
-        return r ? <IdeRigView client={fleetClient} machines={machines} sessions={sessions} machine={r.machine} rig={r.rig} dispatch={dispatch} /> : <div className="ide-rigs-note" role="status">{t.ide.rigTab.badRef}</div>;
+        return r ? <IdeRigView client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} machine={r.machine} rig={r.rig} dispatch={dispatch} /> : <div className="ide-rigs-note" role="status">{t.ide.rigTab.badRef}</div>;
       }
       return null;
     };

@@ -39,7 +39,7 @@ function mount(o: { section?: OpenRigSection; output?: number } = {}) {
   const f = fake(), dispatch = vi.fn(), onTab = vi.fn(), onLaunch = vi.fn();
   const output = Array.from({ length: o.output ?? 3 }, (_, i) => ({ seq: i, at: i, machine: 'local', commands: ['rig x'], ok: true, result: null }));
   render(<LangProvider lang="fr"><OpenRigView client={f.client} machines={[machine('local', 'locale'), machine('srv', 'legion')]} machine="local" section={o.section ?? 'overview'}
-    projects={null} sessions={[]} asks={[]} output={output} dispatch={dispatch} onTab={onTab} onLaunch={onLaunch} /></LangProvider>);
+    sessions={[]} asks={[]} output={output} dispatch={dispatch} onTab={onTab} onLaunch={onLaunch} /></LangProvider>);
   return { f, dispatch, onTab, onLaunch };
 }
 

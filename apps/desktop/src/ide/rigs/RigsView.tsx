@@ -14,7 +14,7 @@ import { useRigsFold, useRigsMachine } from '../../workspace/prefs';
 import { providerOf } from '../../workspace/sessionTab';
 import { openrigTab, rigTab } from '../../workspace/store';
 import { ProviderLogo } from '../ProviderLogo';
-import { useDaemonPrefs, prefAction } from '../openrig/prefs';
+import { useDaemonPrefs, DAEMON, prefAction, isAbout, type PowerTarget } from '../openrig/prefs';
 import { rigErrorText } from '../rig/errors';
 import { MachineMenu } from './MachineMenu';
 import { RigConfirm, useRigConfirm } from './RigConfirm';
@@ -62,15 +62,15 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     return up && (target === 'daemon' || (target === 'kernel' ? rv.kernel?.running === true : rv.rigs.find(r => r.name === target)?.running === true));
   };
   const [prefs] = useDaemonPrefs(machine);
-  const conf = useRigConfirm(view, offered, { prefs, state: view.state });
+  const conf = useRigConfirm(view, offered, { prefs, state: view.state, sessions, asks, machine });
   useEffect(() => { conf.reset(); }, [machine]); // eslint-disable-line react-hooks/exhaustive-deps
   const closeMenu = () => { setMenu(false); trigger.current?.focus(); };
-  const pendingOn = (target: string) => view.pending !== null && targetOf(view.pending) === target;
-  const ask = (target: string, verb: Verb, button: HTMLElement | null) => conf.ask(prefAction(target, verb, prefs), button,
-    () => [...(root.current?.querySelectorAll<HTMLElement>('.ide-rigs-row.rig') ?? [])].find(r => r.dataset.target === target)?.querySelector<HTMLElement>('.ide-rigs-name'));
+  const pendingOn = (target: PowerTarget) => view.pending !== null && isAbout(view.pending, target);
+  const ask = (target: PowerTarget, verb: Verb, button: HTMLElement | null) => conf.ask(prefAction(target, verb, prefs), button,
+    () => [...(root.current?.querySelectorAll<HTMLElement>('.ide-rigs-row.rig') ?? [])].find(r => r.dataset.target === (target.kind === 'rig' ? target.name : target.kind))?.querySelector<HTMLElement>('.ide-rigs-name'));
 
-  const what = (target: string) => target === 'daemon' ? v.whatDaemon : target === 'kernel' ? v.whatKernel : target;
-  const power = (target: string, running: boolean): JSX.Element => (
+  const what = (target: PowerTarget) => target.kind === 'daemon' ? v.whatDaemon : target.kind === 'kernel' ? v.whatKernel : target.name;
+  const power = (target: PowerTarget, running: boolean): JSX.Element => (
     <span className="ide-rigs-pw">
       {powerOf(running).map(verb => {
         const name = v[verb](what(target));
@@ -79,11 +79,11 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     </span>
   );
 
-  const confirmBox = (target: string): ReactNode => conf.confirm && targetOf(conf.confirm) === target && view.state
+  const confirmBox = (target: PowerTarget): ReactNode => conf.confirm && isAbout(conf.confirm, target) && view.state
     ? <RigConfirm action={conf.confirm} state={view.state} sessions={sessions} machine={machine} label={label} onConfirm={() => conf.run(conf.confirm!)} onCancel={conf.close} /> : null;
-  const failure = (target: string): ReactNode => {
+  const failure = (target: PowerTarget): ReactNode => {
     const d: OpenRigDone | null = view.last;
-    if (!d || d.ok || conf.lastTarget !== target) return null;
+    if (!d || d.ok || !conf.lastAction || !isAbout(conf.lastAction, target)) return null;
     const e = d.error;
     return <div className="ide-rigs-err" role="alert">{rigErrorText(t, e ?? '')}</div>;
   };
@@ -99,11 +99,11 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
   );
 
   const rigRow = (r: RigLine, isKernel: boolean): JSX.Element => {
-    const target = isKernel ? 'kernel' : r.name;
+    const target: PowerTarget = isKernel ? { kind: 'kernel' } : { kind: 'rig', name: r.name };
     const open = r.running && r.seats.length > 0, unfolded = isKernel || fold.rig(r.name);
     return (
       <div key={r.name}>
-        <div className={`ide-rigs-row rig${activeTab !== null && keyOf(activeTab) === keyOf(rigTab(machine, r.name)) ? ' sel' : ''}`} data-target={target}>
+        <div className={`ide-rigs-row rig${activeTab !== null && keyOf(activeTab) === keyOf(rigTab(machine, r.name)) ? ' sel' : ''}`} data-target={isKernel ? 'kernel' : r.name}>
           {isKernel ? <span className="ide-rigs-chev">·</span>
             : <button type="button" className="ide-rigs-chev" disabled={!open} aria-label={(unfolded ? v.fold : v.unfold)(r.name)} onClick={() => fold.toggle(`r:${r.name}`)}>{open ? (unfolded ? '▾' : '▸') : '·'}</button>}
           <Dot dot={r.dot} />
@@ -138,7 +138,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
 
   const rigsBody = unavailable ?? (rv.status === 'stopped'
     ? <div className="ide-rigs-empty"><b>{v.stoppedTitle}</b><span>{v.stoppedBody}</span>
-        <button type="button" className="pri" disabled={pendingOn('daemon')} onClick={e => ask('daemon', 'start', e.currentTarget)}><Icon d={SHELL_ICONS.play} size={13} />{v.startOpenrig}</button>{failure('daemon')}</div>
+        <button type="button" className="pri" disabled={pendingOn(DAEMON)} onClick={e => ask(DAEMON, 'start', e.currentTarget)}><Icon d={SHELL_ICONS.play} size={13} />{v.startOpenrig}</button>{failure(DAEMON)}</div>
     : rv.rigs.map(r => rigRow(r, false)));
   const kernelBody = rv.status === 'stopped' ? note(v.kernelStopped)
     : rv.status === 'running' ? (rv.kernel ? <>{rigRow(rv.kernel, true)}{!rv.kernel.running && note(v.noOperator)}</> : note(o.kernelState.absent)) : null;
@@ -148,7 +148,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
       <span className="ide-rigs-chev">·</span><Dot dot={up ? 'idle' : 'off'} />
       <button type="button" className="ide-rigs-name" onClick={() => dispatch({ type: 'openrig', machine, section: 'overview' })}><b>{v.daemon}</b></button>
       <span className="ide-rigs-meta">{up ? rv.version ?? '' : ''}</span>
-      {rv.status === 'running' || rv.status === 'stopped' ? power('daemon', up) : <span className="ide-rigs-pw" />}
+      {rv.status === 'running' || rv.status === 'stopped' ? power(DAEMON, up) : <span className="ide-rigs-pw" />}
     </div>
   );
 
@@ -167,7 +167,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
         {pane('kernel', t.side.kernel, null, kernelBody)}
         {pane('rigs', t.side.rigs, rv.status === 'running' ? rv.rigs.length : null, rigsBody)}
       </div>
-      <div className="ide-rigs-foot">{pane('openrig', o.side, null, <>{daemonRow}{confirmBox('daemon')}{rv.status === 'stopped' ? null : failure('daemon')}</>)}</div>
+      <div className="ide-rigs-foot">{pane('openrig', o.side, null, <>{daemonRow}{confirmBox(DAEMON)}{rv.status === 'stopped' ? null : failure(DAEMON)}</>)}</div>
     </aside>
   );
 }

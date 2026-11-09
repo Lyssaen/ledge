@@ -40,7 +40,7 @@ export function RigLaunchModal({ client, machines, machine: first, projects, ses
   // Nothing is asked of a stopped daemon (`daemon_stopped`): the specs are read once it runs.
   const specs = useRigSpecs(client, ready && daemonUp ? machine : null);
   const [prefs] = useDaemonPrefs(machine);
-  const startAction = prefAction('daemon', 'start', prefs);
+  const startAction = prefAction({ kind: 'daemon' }, 'start', prefs);
 
   // The machines to launch on: the one shown, and every connected one where OpenRig is installed.
   const seen = useOpenRigStates(client, useMemo(() => machines.filter(m => m.ready).map(m => m.id), [machines]));
