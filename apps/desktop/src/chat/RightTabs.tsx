@@ -20,8 +20,11 @@ export interface RightTabs {
   task: string | null;
   /** Bumped by each « Voir » from elsewhere: the filters go back to All / Anyone, so the task is in the list on the way back. */
   seen: number;
-  /** A question asked from elsewhere (« Résumer la journée »): sent once per `n`, on Conversation. */
+  /** A question asked from elsewhere (« Résumer la journée »), kept until the panel sends it, on Conversation: the panel may
+   *  only be mounting (shown in the same render, or hidden by a narrow window until it fits). */
   ask?: { text: string; n: number };
+  /** The panel sent `ask`: the app forgets it. */
+  onAsked(): void;
   onTab(tab: HomeTab, task?: string | null): void;
 }
 

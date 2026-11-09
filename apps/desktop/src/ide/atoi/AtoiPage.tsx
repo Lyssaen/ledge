@@ -55,6 +55,8 @@ export interface AtoiPageProps {
   onSummarize?(): void; summarizeOff?: boolean;
   /** What OpenRig's rigs ask the person, the card the sidebar's « Voir » unfolds, and the local machine's name for the banner. */
   asks?: OpenRigAsksView; askFocus?: { id: string; n: number } | null; asksMachine?: string;
+  /** The page took `askFocus` in: the app forgets it, so reopening the page does not unfold that card again. */
+  onAskFocused?(): void;
   askSourceOf?(ask: HumanAsk): ((path: string) => void) | null;
   onOpenSeat?(sessionId: string): void;
 }
@@ -152,7 +154,7 @@ export function AtoiPage(p: AtoiPageProps): JSX.Element {
         </div>
       )}
       {p.asks && rigAsksShown(p.asks) && <RigAsks view={p.asks} sessions={p.sessions} machineLabel={p.asksMachine ?? 'local'} focus={p.askFocus ?? null}
-        {...(p.askSourceOf ? { sourceOf: p.askSourceOf } : {})} {...(p.onOpenSeat ? { onOpenSeat: p.onOpenSeat } : {})} />}
+        {...(p.askSourceOf ? { sourceOf: p.askSourceOf } : {})} {...(p.onAskFocused ? { onFocused: p.onAskFocused } : {})} {...(p.onOpenSeat ? { onOpenSeat: p.onOpenSeat } : {})} />}
       <div className="fg-blk">
         <div className="fg-blk-h"><PrIcon size={14} /><b>{f.view}</b><span className="fg-sub">{a.prsSub}</span></div>
         <div className="fg-blk-b">{p.prs.length ? p.prs.map(prRow) : <span className="fg-mut">{a.noPr}</span>}</div>

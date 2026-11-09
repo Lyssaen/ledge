@@ -213,6 +213,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const localMachine = machines.find(m => m.id === 'local');
   const asks = useOpenRigAsks(fleetClient, localMachine?.ready && localMachine.daemon?.openrigAsks ? 'local' : null);
   const [askFocus, setAskFocus] = useState<{ id: string; n: number } | null>(null);
+  // Never counts down: « À toi » forgets `askFocus` once taken in, and the next « Voir » must still be new to it.
+  const askSeq = useRef(0);
   const island = useIsland(fleetClient);
   const usage = useUsageView(fleetClient, machines);
   const footMachines = useMemo(() => machines.map(m => ({ id: m.id, label: m.label, offline: m.status === 'unreachable', count: sessions.filter(s => (s.machineId ?? 'local') === m.id).length })), [machines, sessions]);
@@ -899,7 +901,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           fleet={fleet} machineLabel={machineLabel} notify={notify}
           tasks={tasksApi} onSeeTask={id => dispatch({ type: 'ledge', tab: 'tasks', task: id })} onHandover={id => { void tasksApi.handover(id); }} onLater={s => tasksApi.putLater(s)}
           onSummarize={() => { setRightTab(x => ({ ...x, tab: 'conversation', ask: { text: t.home.point.summarizeQuestion, n: (x.ask?.n ?? 0) + 1 } })); onLayout({ type: 'show', panel: 'right', on: true }); }}
-          summarizeOff={!localMachine?.ready} asks={asks} askFocus={askFocus} asksMachine={localMachine?.label ?? 'local'}
+          summarizeOff={!localMachine?.ready} asks={asks} askFocus={askFocus} onAskFocused={() => setAskFocus(null)} asksMachine={localMachine?.label ?? 'local'}
           askSourceOf={ask => { const s = sessionOfAsk(ask, sessions); return s ? (path: string) => dispatch({ type: 'open', id: s.id, doc: path }) : null; }}
           onOpenSeat={id => dispatch({ type: 'open', id })} />;
       }
@@ -971,7 +973,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
             usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
             // A rig's request is read and answered on the page « À toi » (lot 12, card 12): its card unfolded there, ringed a moment.
-            asks={asks.asks} onSeeAsk={id => { setAskFocus(f => ({ id, n: (f?.n ?? 0) + 1 })); onTab({ kind: 'atoi', ref: 'main' }); }} />
+            asks={asks.asks} onSeeAsk={id => { setAskFocus({ id, n: ++askSeq.current }); onTab({ kind: 'atoi', ref: 'main' }); }} />
         }
         bottom={
           <IdeBottom panel={panel} onTab={tab => panelStore.update(p => (p.tab === tab ? p : { ...p, tab }))}
@@ -992,7 +994,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus - (ideChatFrom.current ?? 0)} askedOnly
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
             projects={projects} notify={notify} onProposal={openProposal}
-            tabs={{ tasks: tasksApi, ...rightTab, onTab: (tab, task) => setRightTab(x => ({ ...x, tab, ...(task !== undefined ? { task } : {}) })) }} />
+            tabs={{ tasks: tasksApi, ...rightTab, onAsked: () => setRightTab(({ ask: _, ...x }) => x), onTab: (tab, task) => setRightTab(x => ({ ...x, tab, ...(task !== undefined ? { task } : {}) })) }} />
         }
         footer={<Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines} />}
         // No amber in the IDE's status bar: the alert is told once, in a toast (red stays at 100 %).

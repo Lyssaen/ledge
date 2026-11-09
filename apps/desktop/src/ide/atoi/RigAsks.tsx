@@ -19,9 +19,11 @@ export const rigAsksShown = (view: OpenRigAsksView | undefined): boolean =>
  *  daemon's order; « Ouvrir » unfolds its whole card (AskCard) under it, one at a time, « Replier » folds it. The sidebar's « Voir »
  *  (`focus`) unfolds that card, brings it into view with the focus, ringed a moment. Once answered, the card shows its end, then the
  *  line goes. */
-export function RigAsks({ view, sessions, machineLabel, focus, sourceOf, onOpenSeat }: {
+export function RigAsks({ view, sessions, machineLabel, focus, sourceOf, onOpenSeat, onFocused }: {
   view: OpenRigAsksView; sessions: readonly Session[]; machineLabel: string;
   focus: { id: string; n: number } | null;
+  /** `focus` was taken in (kept here for its card): the app forgets it, so a later mount does not unfold that card again. */
+  onFocused?(): void;
   sourceOf?(ask: HumanAsk): ((path: string) => void) | null;
   onOpenSeat?(sessionId: string): void;
 }): JSX.Element {
@@ -33,14 +35,18 @@ export function RigAsks({ view, sessions, machineLabel, focus, sourceOf, onOpenS
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
-  // The sidebar's « Voir »: that card unfolded and ringed; AskCard itself scrolls to it and gives it the focus.
+  // The sidebar's « Voir »: that card unfolded and ringed; AskCard itself scrolls to it and gives it the focus (`brought`, kept
+  // here once the app has forgotten the request).
+  const [brought, setBrought] = useState<{ id: string; n: number } | null>(null);
   const seen = useRef(0);
   useEffect(() => {
     if (!focus || focus.n === seen.current) return;
     seen.current = focus.n;
     setOpen(focus.id);
     setLit(focus.id);
+    setBrought(focus);
     later(() => setLit(l => (l === focus.id ? null : l)), LIT_MS);
+    onFocused?.();
   }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
   const finish = (ask: HumanAsk, end: 'sent' | 'already') => {
     setDone(d => new Map(d).set(ask.id, { ask, end }));
@@ -73,7 +79,7 @@ export function RigAsks({ view, sessions, machineLabel, focus, sourceOf, onOpenS
               {d ? <AskDone end={d.end} name={who.name} role={who.role} />
                 : unfolded && (
                   <div className={`ask-col atoi-askc${lit === ask.id ? ' lit' : ''}`}>
-                    <AskCard ask={ask} session={session} answer={view.answer} onDone={end => finish(ask, end)} focus={focus?.id === ask.id ? focus.n : 0}
+                    <AskCard ask={ask} session={session} answer={view.answer} onDone={end => finish(ask, end)} focus={brought?.id === ask.id ? brought.n : 0}
                       {...(() => { const src = sourceOf?.(ask); return src ? { onSource: src } : {}; })()}
                       {...(onOpenSeat ? { onOpenSeat } : {})} />
                   </div>

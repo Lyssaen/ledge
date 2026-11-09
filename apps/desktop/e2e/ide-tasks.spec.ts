@@ -183,3 +183,46 @@ test('« Voir » of a rig\'s request in the sidebar: the page « À toi », its 
   await shot(page, 'atoi-rigask-see-dark', tab.locator('[data-block="rigs"]'));
   await expect(card).not.toHaveClass(/lit/, { timeout: 4000 });
 });
+
+// Review of lot 12 (review-qa2, P2): a hidden right panel is unmounted; the question waits for it and goes once it is there.
+test('« Résumer la journée » with the right panel hidden (Ctrl+/): the panel comes back on Conversation and the question goes, once', async ({ page }) => {
+  const daemon = await boot(page);
+  await expect(panel(page)).toBeVisible();
+  await page.locator('body').click({ position: { x: 900, y: 500 } });
+  await page.keyboard.press('Control+/');
+  await expect(panel(page)).toHaveCount(0);
+  await page.getByRole('navigation', { name: /activité/ }).getByRole('button', { name: 'À toi', exact: true }).click();
+  await page.getByRole('button', { name: 'Page', exact: true }).click();
+  await page.getByRole('tabpanel', { name: /^À toi/ }).getByRole('button', { name: 'Résumer la journée' }).click();
+  await expect(panel(page)).toBeVisible();
+  await expect(rtab(page, /^Conversation$/)).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(() => daemon.received.filter(m => m.type === 'chat.ask').length).toBe(1);
+  // Hidden and shown again: nothing is asked twice.
+  await page.keyboard.press('Control+/');
+  await page.keyboard.press('Control+/');
+  await expect(panel(page)).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(daemon.received.filter(m => m.type === 'chat.ask')).toHaveLength(1);
+});
+
+// Review of lot 12 (review-qa2, R1): the card brought by « Voir » is taken in once; reopening the page does not unfold it again.
+test('after a sidebar « Voir », « À toi » closed and opened again: the card stays folded; a new « Voir » unfolds it again', async ({ page }) => {
+  await boot(page);
+  await page.getByRole('navigation', { name: /activité/ }).getByRole('button', { name: 'À toi', exact: true }).click();
+  const see = page.locator('.st-rig-ask[data-ask="qitem-merge"]').getByRole('button', { name: 'Voir' });
+  await see.click();
+  const tab = page.getByRole('tabpanel', { name: /^À toi/ });
+  const card = tab.locator('[data-ask="qitem-merge"] .atoi-askc');
+  await expect(card).toBeVisible();
+  await tab.locator('[data-ask="qitem-merge"]').getByRole('button', { name: 'Replier' }).click();
+  await expect(card).toHaveCount(0);
+  await page.locator('.dv-tab', { hasText: 'À toi' }).getByRole('button', { name: /Fermer/ }).click();
+  await expect(tab).toHaveCount(0);
+  await page.getByRole('button', { name: 'Page', exact: true }).click();
+  await expect(tab.locator('[data-block="rigs"]')).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(card).toHaveCount(0);
+  await see.click();
+  await expect(card).toBeVisible();
+  await expect(card).toHaveClass(/lit/);
+});

@@ -83,13 +83,15 @@ export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onO
     send({ type: 'chat.ask', qid, text, ...(uploads.length ? { images: uploads } : {}), tool });
     if (withImages) images.clear();
   };
-  // A question asked from elsewhere (« Résumer la journée » of « À toi »): sent once per request, the panel on Conversation.
-  const askedFrom = useRef(tabs?.ask?.n ?? 0);
+  // A question asked from elsewhere (« Résumer la journée » of « À toi »): whatever is pending is sent, on mounting too (the
+  // panel was hidden), then the app forgets it. The ref keeps a re-run of the effect (StrictMode) from sending it twice.
+  const sent = useRef<number | null>(null);
   useEffect(() => {
     const a = tabs?.ask;
-    if (!a || a.n === askedFrom.current) return;
-    askedFrom.current = a.n;
+    if (!a || a.n === sent.current) return;
+    sent.current = a.n;
     ask(a.text);
+    tabs.onAsked();
   }, [tabs?.ask]); // eslint-disable-line react-hooks/exhaustive-deps
   // « Historique »: back on Conversation, the question scrolled into view and lit for a moment.
   const panelRef = useRef<HTMLElement>(null);
