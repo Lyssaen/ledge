@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { delimiter } from 'node:path';
 import { OpenRigActionSchema, OpenRigStateSchema, parseClientMessage } from '@ledge/protocol';
-import { createOpenRig, readRow, toSeat, ROW_TTL_MS, failure, findRig, planAction, readState, showCommand, type RigRun } from '../src/daemon/openrig.js';
+import { createOpenRig, readRow, toSeat, ROW_TTL_MS, failure, findRig, rigEnv, stripAnsi, planAction, readState, showCommand, type RigRun } from '../src/daemon/openrig.js';
 
 // What OpenRig 0.6.14 printed on 2026-11-02, daemon started with --no-kernel (trimmed to the fields Ledge reads, plus a few it ignores).
 const STATUS = {
@@ -157,6 +158,19 @@ describe('findRig', () => {
     expect(findRig({ HOME: home, PATH: '/usr/bin' }, at('/h/.nvm/versions/node/v24.0.0/bin/rig'), list)).toBe('/h/.nvm/versions/node/v24.0.0/bin');
     expect(findRig({ HOME: home, PATH: '' }, at('/h/.volta/bin/rig'), () => [])).toBe('/h/.volta/bin');
     expect(findRig({ HOME: home, PATH: '/usr/bin' }, at(), list)).toBeNull();
+  });
+});
+
+describe('rigEnv and stripAnsi', () => {
+  it('rig gets no colour-off variable: the daemon it may start hands its environment to every seat', () => {
+    const e = rigEnv({ HOME: '/h', PATH: '/usr/bin', COLORTERM: 'truecolor' }, '/opt/rig');
+    expect(e.PATH).toBe(`/opt/rig${delimiter}/usr/bin`);
+    expect(e.COLORTERM).toBe('truecolor');
+    for (const k of ['NO_COLOR', 'CLICOLOR', 'FORCE_COLOR']) expect(e).not.toHaveProperty(k);
+  });
+  it('its output loses colours, styles, titles and links', () => {
+    expect(stripAnsi('\u001b[1;32mok\u001b[0m \u001b]0;title\u0007\u001b]8;;https://x\u001b\\link\u001b]8;;\u001b\\ {"a":1}')).toBe('ok link {"a":1}');
+    expect(stripAnsi('plain')).toBe('plain');
   });
 });
 
