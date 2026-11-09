@@ -53,7 +53,8 @@
 .ide-rig-top .ide-rigs-conf { margin: 0; }
 .ide-rig-fail { margin: 0; font-size: 11.5px; color: var(--destructive); }
 
-.ide-rig-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+/* One column (the user, 2026-11-09): the topology on top, the roles and settings, then the queue, under it. */
+.ide-rig-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
 .ide-rig-grid > * { min-width: 0; }
 .ide-rig-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ide-rig .mono { font-family: 'Geist Mono', monospace; }

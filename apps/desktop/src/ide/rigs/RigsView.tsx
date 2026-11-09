@@ -91,7 +91,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
   const seatRow = (s: SeatLine): JSX.Element => s.session ? (
     <div key={s.logicalId} className="ide-rigs-row seat" onContextMenu={onMenu ? e => { e.preventDefault(); onMenu(s.session!.id, menuPoint(e, e.currentTarget), e.currentTarget.querySelector<HTMLElement>('.ide-rigs-name')); } : undefined}>
       <Dot dot={s.dot} /><ProviderLogo provider={providerOf(s.session.tool)} size={12} />
-      <button type="button" className="ide-rigs-name" onClick={e => dispatch(openClick(s.session!.id, e))}><b>{s.name}</b></button>
+      <button type="button" className="ide-rigs-name" onClick={e => dispatch(openClick(s.session!.id, e))}><b>{s.name}</b>{s.role && <span className="ide-rigs-role">{s.role}</span>}</button>
       <span className="ide-rigs-meta">{s.ctx !== undefined ? `${s.ctx} %` : ''}</span>
     </div>
   ) : (
