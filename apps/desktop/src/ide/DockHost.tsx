@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type DragEvent, type JSX, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type DragEvent, type JSX, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { DockviewReact, type DockviewApi, type DockviewGroupDropLocation, type DockviewGroupPanel, type DockviewReadyEvent, type DockviewTheme, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps, type IWatermarkPanelProps, type PanelTransfer, type Position } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import { Icon } from '@ledge/ui/ui/icons';
@@ -10,7 +11,9 @@ import type { WorkspaceStore } from '../workspace/store';
 import { TabPlaceContext, type TabPlace } from '../workspace/tabPlace';
 import type { TabBody } from './tabs';
 import { panelDragRef, termDrag } from './termDrag';
-import { boxAt, closeNative, mirrorRoot, outsideWindow, popoutUrl, POPOUT_SIZE, type Box } from './popout';
+import { boxAt, closeNative, mirrorRoot, outsideWindow, popoutLabel, popoutUrl, POPOUT_SIZE, type Box } from './popout';
+import { PopoutTitleBar } from './PopoutTitleBar';
+import { isTauri, setWindowTitle } from '../tauri/bridge';
 import '../styles/ide.css';
 
 export interface DockHostProps {
@@ -28,6 +31,10 @@ export interface DockHostProps {
   /** A bottom-panel tile (its ref: `shell:<n>`, `agent:<id>`) dropped on a group, a tab of its strip, its right edge or
    *  « nouveau groupe »: where it goes. The host moves it (the model and the panel); the dock only says where. */
   onPanelDrop?(ref: string, to: { group: string; index?: number } | { rightOf: string } | { window: 'new' }): void;
+  /** A detached window's name, from its active tab (v27: « Pim · ledge », « dev-front · ledge-dev », « À toi »). Absent: its title. */
+  windowTitle?(t: Tab): string;
+  /** A detached window closed by the user: `n` tabs came back to the main window (the toast). */
+  onWindowClosed?(n: number): void;
 }
 
 /** R6: a group is never narrower than this (mockup `.grow-row>.pane{min-width:300px}`); past it the editing area scrolls. */
@@ -108,9 +115,12 @@ function StripTools({ group }: IDockviewHeaderActionsProps): JSX.Element {
       <button type="button" title={t.ide.newSession} aria-label={t.ide.newSession} aria-keyshortcuts="N" onClick={() => { if (g) c!.onNewSession(g.id); }}>
         +
       </button>
-      <button type="button" title={t.ide.splitTip} aria-label={t.ide.splitTip} onClick={() => { if (g) c!.split(g.id); }}>
-        <Icon d={SHELL_ICONS.split} size={14} />
-      </button>
+      {/* No split in a detached window (v27: one group there). */}
+      {g?.window === MAIN && (
+        <button type="button" title={t.ide.splitTip} aria-label={t.ide.splitTip} onClick={() => c!.split(g.id)}>
+          <Icon d={SHELL_ICONS.split} size={14} />
+        </button>
+      )}
       {g && g.tabs.length === 0 && !c!.lone && (
         <button type="button" title={t.ide.closeGroupTip} aria-label={t.ide.closeGroupTip} onClick={() => c!.closeGroup(g.id)}>
           <CloseGlyph size={10} />
@@ -217,7 +227,10 @@ export function arrivalOf(e: DropSpot, viewId: string, modelOf: (dg: DockviewGro
  *  its groups need and scrolls sideways in the editing area. A tab dragged goes through the model too: dockview's own move
  *  is cancelled, the model moves the tab (`moveTo`), and the sync moves its panel, whose content stays mounted. While a tab
  *  is dragged, a zone at the right end opens a new group. No floating groups, no stacked groups (lot 3). */
-export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNewSession, emptyGroup, onPanelDrop }: DockHostProps): JSX.Element {
+/** An open detached window: its dockview group, its page, and where its bar is drawn. */
+interface Popped { dg: DockviewGroupPanel; win: Window; bar: HTMLElement; banner: HTMLElement }
+
+export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNewSession, emptyGroup, onPanelDrop, windowTitle = title, onWindowClosed }: DockHostProps): JSX.Element {
   const { t } = useI18n();
   const [api, setApi] = useState<DockviewApi | null>(null);
   // The panel (tab key) being dragged, from dockview's drag start to its drop or end; `dragging` shows the drop zone.
@@ -236,6 +249,17 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   const opening = useRef(new Map<string, string>());
   const boxes = useRef(new Map<string, Box>());
   const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const [popped, setPopped] = useState<readonly Popped[]>([]);
+  const windowClosed = useRef(onWindowClosed);
+  windowClosed.current = onWindowClosed;
+  /** A detached window closed by the user (its ✕, Alt+F4): its tabs come back to the main window, told by a toast. */
+  const closeByUser = (win: string) => {
+    const n = latest.current.get().groups.filter(g => g.window === win).reduce((a, g) => a + g.tabs.length, 0);
+    latest.current.update(w => closeWindow(w, win));
+    if (n) windowClosed.current?.(n);
+  };
+  // The drag under way, for its banner: the window it started in, a terminal or a tab, the pointer out of that window.
+  const [tear, setTear] = useState<{ from: Window; term: boolean; out: boolean } | null>(null);
   const groups = ws.groups.filter(g => g.window === MAIN);
   // A secondary window holds one group (option A): its first.
   const popouts = ws.windows.filter(w => w !== MAIN).map(w => ws.groups.find(g => g.window === w)).filter((g): g is Group => !!g);
@@ -370,7 +394,9 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
     // A bottom-panel tile carried over the dock lands as its terminal tab would (`terminal:<ref>`).
     const tile = () => { const ref = panelDragRef(); return ref === null ? null : `terminal:${ref}`; };
     const arrival = (e: DropSpot) => arrivalOf(e, api.id, dg => latestModelOf.current(dg), tile());
-    const endDrag = () => { clearTimeout(timer); dragged.current = null; termDrag.set(null); setDragging(false); };
+    const endDrag = () => { clearTimeout(timer); dragged.current = null; termDrag.set(null); setDragging(false); setTear(null); };
+    /** The window a dockview group is drawn in: a popout's, else this page's. */
+    const windowOfDg = (dg: DockviewGroupPanel | undefined): Window => (dg?.api.location.type === 'popout' ? dg.api.location.getWindow() : window);
     const subs = [
       api.onDidActivePanelChange(ev => {
         const id = ev.panel?.id;
@@ -389,7 +415,11 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
       api.onDidRemovePanel(p => { if (!syncing.current) latest.current.close(p.id); }),
       // A tab picked up: the drop zone shows once the browser has its drag image (a layout change in dragstart cancels it).
       // The bottom panel learns it too: it takes a terminal tab dropped on it.
-      api.onWillDragPanel(e => { dragged.current = e.panel.id; termDrag.set({ from: 'dock', key: e.panel.id }); clearTimeout(timer); timer = setTimeout(() => { if (dragged.current) setDragging(true); }, 0); }),
+      api.onWillDragPanel(e => {
+        dragged.current = e.panel.id; termDrag.set({ from: 'dock', key: e.panel.id }); clearTimeout(timer);
+        const from = windowOfDg(e.panel.group);
+        timer = setTimeout(() => { if (dragged.current) { setDragging(true); setTear({ from, term: e.panel.id.startsWith('terminal:'), out: false }); } }, 0);
+      }),
       // Something dockview does not know dragged over a group: taken only when it is a bottom-panel tile, where it could land.
       api.onUnhandledDragOver(e => { if (tile() !== null && arrival({ kind: e.target, position: e.position, group: e.group, getData: e.getData })) e.accept(); }),
       // No overlay where a drop would be refused.
@@ -415,17 +445,45 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
         const w = e.window;
         if (!w) return;
         unmirror.set(w, mirrorRoot(w.document));
+        // Its body takes the IDE's tokens; its bar goes above dockview's container, its drag banner after it.
+        const doc = w.document;
+        doc.body.classList.add('ide', 'ide-popout');
+        const bar = doc.createElement('div');
+        bar.className = 'ide-popout-bar-host';
+        doc.body.prepend(bar);
+        const banner = doc.createElement('div');
+        doc.body.append(banner);
+        setPopped(p => [...p.filter(x => x.win !== w), { dg: e.group, win: w, bar, banner }]);
         w.addEventListener('dragend', ev => { tearOut(ev, w); endDrag(); }, true);
         for (const type of ends) w.addEventListener(type, lateEnd, true);
+        watchLeave(w);
       }),
-      api.onWillClosePopoutWindow(e => { const w = e.window; if (!w) return; unmirror.get(w)?.(); unmirror.delete(w); closeNative(w); }),
+      api.onWillClosePopoutWindow(e => { const w = e.window; if (!w) return; unmirror.get(w)?.(); unmirror.delete(w); setPopped(p => p.filter(x => x.win !== w)); closeNative(w); }),
       api.onDidRemovePopoutGroup(e => {
         const win = windowOfGroup(e.group);
         if (!win) return;
         drawn.current.forEach((d, id) => { if (d === e.group) drawn.current.delete(id); });
-        latest.current.update(w => closeWindow(w, win));
+        closeByUser(win);
       })
     );
+    /** The pointer leaving `w` while dragging: the banner of the window the drag started in turns solid; back in, dashed. */
+    function watchLeave(w: Window): () => void {
+      const doc = w.document;
+      const leave = (ev: globalThis.DragEvent) => { if (!ev.relatedTarget && outsideWindow(ev, w)) setTear(t => (t && t.from === w && !t.out ? { ...t, out: true } : t)); };
+      const enter = () => setTear(t => (t && t.from === w && t.out ? { ...t, out: false } : t));
+      doc.addEventListener('dragleave', leave, true);
+      doc.addEventListener('dragenter', enter, true);
+      return () => { doc.removeEventListener('dragleave', leave, true); doc.removeEventListener('dragenter', enter, true); };
+    }
+    const unwatchMain = watchLeave(window);
+    // Tauri tells the main window of each detached window destroyed (its ✕ by the OS, Alt+F4), by its label `ide-<id>`
+    // (dev-back's contract, lot 9): the same as dockview noticing it, whichever comes first (the second finds nothing).
+    let offClosed = () => {};
+    let gone = false;
+    if (isTauri()) void import('@tauri-apps/api/event').then(e => e.listen<string>('ledge://popout-closed', m => {
+      const label = m.payload;
+      if (typeof label === 'string' && label.startsWith('ide-')) closeByUser(label.slice(4));
+    })).then(un => { if (gone) un(); else offClosed = un; }).catch(() => {});
     /** A drag let go outside the window it started in: the tab (or the bottom-panel terminal) opens in a new window there.
      *  The only tab of a secondary window moves its window instead (v27). Read before `endDrag` forgets what was dragged. */
     const tearOut = (e: globalThis.DragEvent, from: Window) => {
@@ -454,7 +512,7 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
     const onMainDragEnd = (e: globalThis.DragEvent) => tearOut(e, window);
     // A tile picked up in the bottom panel shows the drop zone too (after its dragstart, as above); let go, it hides.
     const unwatch = termDrag.subscribe(() => {
-      if (panelDragRef() !== null) { clearTimeout(timer); timer = setTimeout(() => { if (panelDragRef() !== null) setDragging(true); }, 0); }
+      if (panelDragRef() !== null) { clearTimeout(timer); timer = setTimeout(() => { if (panelDragRef() !== null) { setDragging(true); setTear({ from: window, term: true, out: false }); } }, 0); }
       else if (!dragged.current) { clearTimeout(timer); setDragging(false); }
     });
     // Also when the tab is let go elsewhere (or Esc): the source tab, still in place, sends dragend up. A drag can also end
@@ -472,6 +530,8 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
       window.removeEventListener('dragend', onMainDragEnd, true);
       window.removeEventListener('dragend', endDrag, true);
       for (const off of unmirror.values()) off();
+      unwatchMain();
+      gone = true; offClosed();
       for (const type of ends) window.removeEventListener(type, lateEnd, true);
       for (const s of subs) s.dispose();
       unwatch();
@@ -504,6 +564,27 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
   };
   const messages = useMemo(() => ({ closeTab: (name: string) => t.ide.closeTab(name) }), [t]);
 
+  // Each detached window: the model window its group draws, and its name (its active tab's).
+  const detached = popped.map(p => {
+    const g = modelOf(p.dg);
+    const front = g?.tabs[g.active];
+    return { ...p, win: p.win, model: g?.window ?? null, name: front ? windowTitle(front) : '' };
+  });
+  // Its page title, and its taskbar title in Tauri (« {tab} — Ledge »).
+  const names = detached.map(d => `${d.model}\u0000${d.name}`).join('\u0001');
+  useEffect(() => {
+    for (const d of detached) {
+      if (!d.name) continue;
+      const text = t.ide.windows.taskbar(d.name);
+      if (d.win.document.title !== text) d.win.document.title = text;
+      const label = popoutLabel(d.win);
+      if (label) setWindowTitle(label, text);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [names, t]);
+  const tearText = tear ? (tear.out ? t.ide.windows.tearOut : tear.term ? t.ide.windows.tearTerm : t.ide.windows.tearTab) : '';
+  const banner = tear ? <div className={`ide-tear-banner${tear.out ? ' out' : ''}`} role="status">{tearText}</div> : null;
+
   return (
     <Content.Provider value={content}>
       {/* R6: the box is as wide as its groups need; dockview's element fills it (and lays out on its resize), the scroller
@@ -516,6 +597,13 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
         </div>
         <div className="ide-dropnew" onDragOver={onZoneOver} onDrop={onZoneDrop}><span>{t.ide.dropNew[0]}<br />{t.ide.dropNew[1]}</span></div>
       </div>
+      {tear?.from === window && banner}
+      {detached.map(d => (
+        <Fragment key={d.dg.id}>
+          {d.model && createPortal(<PopoutTitleBar name={d.name} label={popoutLabel(d.win)} onClose={() => closeByUser(d.model!)} />, d.bar)}
+          {tear?.from === d.win && createPortal(banner, d.banner)}
+        </Fragment>
+      ))}
     </Content.Provider>
   );
 }

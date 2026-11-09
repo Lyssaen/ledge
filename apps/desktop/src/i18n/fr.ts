@@ -1413,6 +1413,7 @@ export const fr = {
     setting: 'Interface IDE (aperçu)',
     /** The Atelier tab's bar (mockup atelierPage() `.abar`): its « Détacher ». */
     atelierDetach: 'Détacher',
+    atelierBack: 'Ramener',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal affiché dans l’autre groupe', showHere: 'Afficher ici',
     terminalTitle: (name: string) => `>_ ${name} · tmux`, termAttached: 'attaché', termReadOnly: 'lecture seule',
@@ -1536,6 +1537,15 @@ export const fr = {
     closeGroupTip: 'Fermer le groupe (Ctrl+W)',
     /** The zone at the right end of the editing area while a tab is dragged (mockup `.dropnew`), on two lines. */
     dropNew: ['Déposer ici :', 'nouveau groupe'],
+    // Lot 9, v27 (docs/ide-workspace.md, « Fenêtres détachées »).
+    windows: {
+      taskbar: (tab: string) => `${tab} — Ledge`,
+      closeTip: 'Fermer : les onglets reviennent dans la fenêtre principale',
+      closed: (n: number) => (n > 1 ? `Fenêtre fermée : ses ${n} onglets reviennent dans la fenêtre principale.` : 'Fenêtre fermée : son onglet revient dans la fenêtre principale.'),
+      tearTab: "Lâchez l'onglet hors de la fenêtre pour l'ouvrir dans une nouvelle fenêtre",
+      tearTerm: "Lâchez le terminal hors de la fenêtre pour l'ouvrir dans une nouvelle fenêtre",
+      tearOut: 'Lâchez : nouvelle fenêtre'
+    },
     /** The explorer's session menu, IDE only (mockup menuHtml() `ctx`): where to open, and the agent's terminal tab. */
     menu: {
       open: 'Ouvrir', openKey: 'Entrée', openRight: 'Ouvrir à droite', openRightKey: 'Ctrl clic',

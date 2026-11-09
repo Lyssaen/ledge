@@ -556,3 +556,35 @@ describe('closeWindow (v27: the tabs come back to the main window in a group on 
     expect(find(w, keyOf(changesTab('b')))!.group.window).toBe(g2.window);
   });
 });
+
+describe('a detached window holds one group (v27)', () => {
+  /** a and c in the main window, b alone in a detached one, focused. */
+  const detached = () => {
+    const w = move(open(open(open(empty(), S('a')), S('b')), S('c')), 'session:b', { window: 'new' });
+    return { w, g: find(w, 'session:b')!.group };
+  };
+  it('split and Ctrl+Alt+→ do nothing there', () => {
+    const { w, g } = detached();
+    expect(split(w, g.id)).toBe(w);
+    expect(w.focus).toBe(g.id);
+    expect(moveActive(w, 1)).toBe(w);
+  });
+  it('« à droite » from it opens in the main window, right of its last group', () => {
+    const { w, g } = detached();
+    const r = open(w, S('d'), 'right');
+    const d = find(r, 'session:d')!.group;
+    expect(d.window).toBe(MAIN);
+    expect(r.groups.filter(x => x.window === MAIN).at(-1)!.id).toBe(d.id);
+    expect(r.groups.filter(x => x.window === g.window)).toHaveLength(1);
+  });
+  it('« +N −N » from it: a linked group found in another window; none, one in the main window', () => {
+    const { w, g } = detached();
+    const r = beside(w, g.id, 'changes', 'b');
+    const c = find(r, keyOf(changesTab('b')))!.group;
+    expect(c.window).toBe(MAIN);
+    expect(c.link).toBe(r.groups.find(x => x.id === g.id)!.link);
+    // A second session's Changes from the same window go to that same group.
+    const r2 = beside(place(r, S('e'), { group: g.id }), g.id, 'changes', 'e');
+    expect(find(r2, keyOf(changesTab('e')))!.group.id).toBe(c.id);
+  });
+});

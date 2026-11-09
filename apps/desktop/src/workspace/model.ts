@@ -46,12 +46,14 @@ export function find(w: Workspace, key: string): { group: Group; index: number }
 
 function replaceGroup(w: Workspace, g: Group): Workspace { return { ...w, groups: w.groups.map(x => (x.id === g.id ? g : x)) }; }
 
-/** A new empty group right after `after` (same window), or at the end of a new window. */
+/** A new empty group right after `after` (same window), or at the end of a new window. A detached window holds one group
+ *  (lot 9, option A): a group asked right of one of its groups opens in the main window, after its last (v27). */
 function addGroup(w: Workspace, place: { after: Group } | { window: 'new' }): { w: Workspace; group: Group } {
   const id = `g${w.next}`;
   if ('after' in place) {
-    const group: Group = { id, window: place.after.window, tabs: [], active: 0, link: null };
-    const i = w.groups.indexOf(place.after);
+    const after = place.after.window === MAIN ? place.after : w.groups.filter(g => g.window === MAIN).at(-1)!;
+    const group: Group = { id, window: MAIN, tabs: [], active: 0, link: null };
+    const i = w.groups.indexOf(after);
     return { w: { ...w, next: w.next + 1, groups: [...w.groups.slice(0, i + 1), group, ...w.groups.slice(i + 1)] }, group };
   }
   const win = `w${w.next}`;
@@ -269,7 +271,8 @@ export function focusNth(w: Workspace, n: number): Workspace {
 export function moveActive(w: Workspace, step: 1 | -1): Workspace {
   const g = focused(w);
   const tab = g.tabs[g.active];
-  if (!tab) return w;
+  // A detached window has one group: nothing on its left or right (v27).
+  if (!tab || g.window !== MAIN) return w;
   const siblings = w.groups.filter(x => x.window === g.window);
   const next = siblings[siblings.indexOf(g) + step];
   if (next) return moveTo(w, keyOf(tab), { group: next.id });
@@ -301,10 +304,11 @@ export function reopenLast(w: Workspace, stack: readonly Closed[], keep: (t: Tab
   return { w, stack: rest };
 }
 
-/** Ctrl+\: an empty group right of `groupId`, remembering the session left (its Changes and Terminal are offered). */
+/** Ctrl+\: an empty group right of `groupId`, remembering the session left (its Changes and Terminal are offered). Not in a
+ *  detached window (v27: one group there). */
 export function split(w: Workspace, groupId: string): Workspace {
   const g = groupById(w, groupId);
-  if (!g) return w;
+  if (!g || g.window !== MAIN) return w;
   const { w: w1, group } = addGroup(w, { after: g });
   const from = sessionOf(g.tabs[g.active]);
   return { ...replaceGroup(w1, from ? { ...group, from } : group), focus: group.id };
@@ -344,7 +348,9 @@ export function beside(w: Workspace, groupId: string, kind: 'changes' | 'termina
   if (hit && hit.group.link === g.link) return { ...activate(out, hit.group.id, hit.index), focus: g.id };
   if (hit) out = close(out, keyOf(want));
   g = groupById(out, g.id)!;
-  let peer = out.groups.find(x => x.id !== g!.id && x.window === g!.window && x.link === g!.link);
+  // The linked group is looked for in every window (v27); none, it opens right of this one, in the main window when this
+  // one is detached (addGroup).
+  let peer = out.groups.find(x => x.id !== g!.id && x.link === g!.link);
   if (!peer) { const r = addGroup(out, { after: g }); out = replaceGroup(r.w, { ...r.group, link: g.link }); peer = groupById(out, r.group.id)!; }
   const tabs = [...peer.tabs, want];
   out = replaceGroup(out, { ...peer, tabs, active: tabs.length - 1 });

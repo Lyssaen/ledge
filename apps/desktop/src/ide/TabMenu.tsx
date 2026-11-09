@@ -22,7 +22,8 @@ export interface TabMenuProps {
   onExternal?: () => void;
   /** Opens another session: the relief, or the one relieved. */
   onOpenSession?(id: string): void;
-  onSplit(): void; onClose(): void; onCloseOthers(): void; onDismiss(): void;
+  /** « Diviser à droite »; absent in a detached window (v27: one group there). */
+  onSplit?(): void; onClose(): void; onCloseOthers(): void; onDismiss(): void;
 }
 
 /** A tab's right-click menu (mockup `tabctx`). A session or seat names itself and offers the view toggle (`onView` absent
@@ -60,10 +61,12 @@ export function TabMenu(p: TabMenuProps): JSX.Element {
       {agent && h && reliefDone(h) && <MenuItem onSelect={open(h.to)}><span>{t.ide.relievedByEntry(h.toName ?? '')}</span></MenuItem>}
       {agent && relieves && <MenuItem onSelect={open(relieves.id)}><span>{t.ide.relievesEntry(relieves.name)}</span></MenuItem>}
       {agent && (p.onView || entries) && <hr />}
-      <MenuItem onSelect={p.onSplit}>
-        <span><Icon d={SHELL_ICONS.split} size={14} />{t.ide.split}</span>
-        <small aria-hidden="true"><Kbd>{t.ide.splitKey}</Kbd></small>
-      </MenuItem>
+      {p.onSplit && (
+        <MenuItem onSelect={p.onSplit}>
+          <span><Icon d={SHELL_ICONS.split} size={14} />{t.ide.split}</span>
+          <small aria-hidden="true"><Kbd>{t.ide.splitKey}</Kbd></small>
+        </MenuItem>
+      )}
       <MenuItem onSelect={p.onClose}><span>{t.ide.closeThisTab}</span></MenuItem>
       {p.others && <MenuItem onSelect={p.onCloseOthers}><span>{t.ide.closeOthers}</span></MenuItem>}
     </Menu>
