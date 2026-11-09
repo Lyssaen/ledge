@@ -114,6 +114,21 @@ for (const theme of ['dark', 'light'] as const) {
       expect(bx).toHaveLength(2);
       expect(new Set(bx).size).toBe(1);
     }
+    // The current one deleted (design-ux, card 1): « Disposition » in grey, still a button, the open tabs unchanged; no tip
+    // while another one is left, its tip once none is.
+    const tabsBefore = await page.locator('.ide-dock [role="tab"]').count();
+    await page.getByRole('button', { name: 'Supprimer « Terminaux »' }).click();
+    await expect(lay(page)).toHaveClass(/\bnone\b/);
+    await expect(lay(page).locator('.ide-lay-name')).toHaveText('Disposition');
+    expect(await lay(page).getAttribute('title')).toBeNull();
+    expect(await page.locator('.ide-dock [role="tab"]').count()).toBe(tabsBefore);
+    await corner(page, `lot10-${theme}-7-supprimee-reste-une.png`);
+    await page.getByRole('button', { name: 'Supprimer « Revue Pim + Nova »' }).click();
+    await expect(lay(page)).toHaveAttribute('title', /.+/);
+    await expect(lay(page).locator('.ide-lay-name')).toHaveText('Disposition');
+    await corner(page, `lot10-${theme}-8-supprimee-aucune.png`);
+    await lay(page).click();
+    await expect(menu(page)).toBeVisible();
   });
 
   test(`lot 10 (${theme}): the palette — rigs and OpenRig, dispositions`, async ({ page }) => {

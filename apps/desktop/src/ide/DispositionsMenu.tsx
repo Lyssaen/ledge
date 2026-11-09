@@ -36,7 +36,9 @@ export function DispositionsMenu({ list, current, onApply, onSave, onManage, sav
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open && saving) field.current?.focus(); }, [open, saving]);
   const shape = (x: Disposition) => { const s = shapeOf(x); return d.shape(s.groups, s.windows); };
-  const tip = !current ? d.noneTip : current.modified ? d.modTip : d.tip;
+  // No disposition shown (none saved, or the current one deleted): « Disposition » in grey; its tip only when none is left
+  // (ledge-ide-layouts-palette.html, card 1; design-ux, 2026-11-09).
+  const tip = !current ? (list.length === 0 ? d.noneTip : undefined) : current.modified ? d.modTip : d.tip;
   return (
     <Menu open={open} onOpenChange={change} label={d.title} className="ide-lay-wrap" menuClassName="session-menu ide-lay-menu" flip
       trigger={tr => (
