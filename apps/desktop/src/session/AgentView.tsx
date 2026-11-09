@@ -1,3 +1,4 @@
+import { placeSurface } from '../term/place';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FocusEvent, type JSX, type ReactNode } from 'react';
 import { useDaemon, useMachines, useTerminalHolders, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
@@ -138,8 +139,7 @@ export function AgentView(p: AgentViewProps): JSX.Element {
     const el = body.current;
     if (!el || !screen) return;
     // The xterm moves in, never re-made: its screen and scrollback stay.
-    for (const c of [...el.children]) if (c !== screen.host) c.remove();
-    if (screen.host.parentElement !== el) el.appendChild(screen.host);
+    placeSurface(screen, el);
     screen.fit();
     setFocused(el.contains(document.activeElement));
     if (typeof ResizeObserver === 'undefined') return;

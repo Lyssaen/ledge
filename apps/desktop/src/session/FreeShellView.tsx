@@ -1,3 +1,4 @@
+import { placeSurface } from '../term/place';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type JSX } from 'react';
 import { Button } from '@ledge/ui/ui/Button';
 import { useI18n } from '../i18n/lang';
@@ -28,8 +29,7 @@ export function FreeShellView({ id, claimFocus }: FreeShellViewProps): JSX.Eleme
   useLayoutEffect(() => {
     const el = body.current;
     if (!el || !surface) return;
-    for (const c of [...el.children]) if (c !== surface.host) c.remove();
-    if (surface.host.parentElement !== el) el.appendChild(surface.host);
+    placeSurface(surface, el);
     surface.fit();
     if (claim.current?.(id)) surface.focus();
     if (typeof ResizeObserver === 'undefined') return;

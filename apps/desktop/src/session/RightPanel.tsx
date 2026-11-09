@@ -1,3 +1,4 @@
+import { placeSurface } from '../term/place';
 import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { useMachines, type DaemonClient } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
@@ -67,8 +68,7 @@ export function RightPanel(p: RightPanelProps): JSX.Element {
     const el = body.current;
     if (!el || !surface) return;
     // The xterm moves in, never re-made: its screen and scrollback stay.
-    for (const c of [...el.children]) if (c !== surface.host) c.remove();
-    if (surface.host.parentElement !== el) el.appendChild(surface.host);
+    placeSurface(surface, el);
     surface.fit();
     if (want) surface.focus();
     if (typeof ResizeObserver === 'undefined') return;
