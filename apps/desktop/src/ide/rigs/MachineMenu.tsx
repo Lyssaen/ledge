@@ -4,7 +4,7 @@ import { useI18n } from '../../i18n/lang';
 import type { MachineEntry } from './model';
 
 /** The machine menu of the Rigs view: one radio per machine, then the two links to Settings. Escape and a click outside close it; the arrows, Home and End move between the items (the checked one has the focus on opening). */
-export function MachineMenu({ entries, current, outdated, onPick, onManage, onClose }: { entries: readonly MachineEntry[]; current: string; /** The machines whose Ledge is too old: shown as such, not offline. */ outdated: ReadonlySet<string>; onPick(id: string): void; onManage(): void; onClose(): void }): JSX.Element {
+export function MachineMenu({ entries, current, outdated, onPick, onManage, onAdd, onClose }: { entries: readonly MachineEntry[]; current: string; /** The machines whose Ledge is too old: shown as such, not offline. */ outdated: ReadonlySet<string>; onPick(id: string): void; onManage(): void; /** Adding a machine is a setting (Settings › Machines), managing the shown ones is the OpenRig page's section. */ onAdd(): void; onClose(): void }): JSX.Element {
   const { t } = useI18n();
   const v = t.ide.rigsView;
   useEffect(() => {
@@ -44,7 +44,7 @@ export function MachineMenu({ entries, current, outdated, onPick, onManage, onCl
         ))}
         <div className="ide-rigs-menu-sep" />
         <button type="button" role="menuitem" className="a" onClick={onManage}>{v.manage}</button>
-        <button type="button" role="menuitem" className="a" onClick={onManage}><Icon d={ICONS.plus.d} size={13} />{v.add}</button>
+        <button type="button" role="menuitem" className="a" onClick={onAdd}><Icon d={ICONS.plus.d} size={13} />{v.add}</button>
       </div>
     </>
   );

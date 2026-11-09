@@ -7,11 +7,12 @@ import { isWorking } from '../../openrig/model';
 import { ProviderLogo } from '../ProviderLogo';
 import { providerOf } from '../../workspace/sessionTab';
 import { rigErrorText } from './errors';
-import { PERM_LEVELS, permLevelOf, roleCounts, seatDraft, type PermLevel } from './model';
+import { permLevelOf, roleCounts, seatDraft, type PermLevel } from './model';
+import { PermSegment } from '../PermSegment';
 import '../../styles/ide-rig.css';
 
 /** A snapshot's date in local time. OpenRig writes it without a zone (`2026-11-08 14:54:01`): that is UTC. */
-function snapshotAt(createdAt: string, lang: string): string {
+export function snapshotAt(createdAt: string, lang: string): string {
   const iso = /[zZ]$|[+-]\d\d:?\d\d$/.test(createdAt) ? createdAt : `${createdAt.replace(' ', 'T')}Z`;
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? createdAt : d.toLocaleString(lang, { dateStyle: 'short', timeStyle: 'short' });
@@ -58,12 +59,8 @@ export function RigSettings({ rig, running, permissions, snapshots, policyAvaila
       <header className="ide-rig-head"><b>{r.settings}</b><span className="ide-rig-sub mono">{rig.specPath ?? r.specUnknown}</span></header>
       <div className="ide-rig-body">
         <div className="ide-rig-lbl">{r.permissions}</div>
-        <div className="ide-rig-seg" role="radiogroup" aria-label={r.permissionsLabel}>
-          {PERM_LEVELS.map(l => (
-            <button key={l} type="button" role="radio" aria-checked={level === l} disabled={levelOff(l)}
-              title={noSeats ? r.noSeats : l === 'spec' && !specKnown ? r.specNoPolicy : undefined} onClick={() => onPolicy(l)}>{r.level[l]}</button>
-          ))}
-        </div>
+        <PermSegment className="ide-rig-seg" label={r.permissionsLabel} value={level === 'mixed' ? null : level} levelOff={levelOff} onChange={onPolicy}
+          titleOf={l => (noSeats ? r.noSeats : l === 'spec' && !specKnown ? r.specNoPolicy : undefined)} />
         {!policyAvailable && <p className="ide-rig-note" role="status">{o.outdated}</p>}
         {permissions.error && <p className="ide-rig-note" role="status">{rigErrorText(t, permissions.error)}</p>}
         {policyError !== null && <p className="ide-rig-fail" role="alert">{rigErrorText(t, policyError)}</p>}

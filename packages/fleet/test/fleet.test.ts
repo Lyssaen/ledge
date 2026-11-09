@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useOpenRigAsksAll } from '../src/openrigAsks';
+import { useLatency } from '../src/latency';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@ledge/protocol';
 import { createFleetClient } from '../src/fleet';
@@ -726,6 +727,20 @@ describe('multi-machine connections', () => {
       client.send({ ...policy, requestId: 'y2' } as ClientMessage);
       expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['y2']);
     });
+    it('rig.start with fresh needs openrigFresh: outdated, not sent, without it; sent with it; a plain rig.start is not gated', () => {
+      const { client, server, got } = setup();
+      const base = { type: 'snapshot', sessions: [], daemon: { version: '0.7.0', install: 'npm', systemd: true, openrig: true, openrigRig: true, openrigPolicy: true } } as ServerMessage;
+      server.emit({ ...base, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      const fresh = { type: 'openrig.act', requestId: 'f1', machineId: 'server', action: { kind: 'rig.start', rig: 'a', fresh: ['dev.build'] } } as ClientMessage;
+      client.send(fresh);
+      expect(server.sent).toEqual([]);
+      expect(got.at(-1)).toEqual({ type: 'openrig.done', requestId: 'f1', machineId: 'server', ok: false, commands: [], error: 'outdated' });
+      client.send({ type: 'openrig.act', requestId: 'f0', machineId: 'server', action: { kind: 'rig.start', rig: 'a' } });
+      expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['f0']);
+      server.emit({ ...base, daemon: { ...(base as { daemon: object }).daemon, openrigFresh: true }, sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+      client.send({ ...fresh, requestId: 'f2' } as ClientMessage);
+      expect(server.sent.map(m => (m as { requestId: string }).requestId)).toEqual(['f2']);
+    });
     it('sends them all when the daemon says openrigRig', () => {
       const { client, server } = setup();
       server.sent.length = 0;
@@ -1294,5 +1309,52 @@ describe('attachments', () => {
     client.send({ type: 'chat.ask', qid: 'q2', text: 'Autre' });
     expect(got.some(m => m.type === 'chat.error' && m.message === 'one question at a time')).toBe(false);
     expect(local.sent.at(-1)).toMatchObject({ type: 'chat.route', qid: 'q2' });
+  });
+});
+
+describe('ping and useLatency (lot 7d)', () => {
+  const withPing = (ping: boolean) => ({ type: 'snapshot', sessions: [], daemon: { version: '0.7.0', install: 'npm', systemd: true, ...(ping ? { ping: true } : {}) } }) as ServerMessage;
+  it('answers a ping outdated without sending it to a daemon without ping; sends it with ping, and the pong comes back tagged with the machine', () => {
+    const { client, server, got } = setup();
+    server.emit({ ...withPing(false), sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+    client.send({ type: 'ping', requestId: 'g1', machineId: 'server' });
+    expect(server.sent).toEqual([]);
+    expect(got.at(-1)).toEqual({ type: 'pong', requestId: 'g1', machineId: 'server', error: 'outdated' });
+    server.emit({ ...withPing(true), sshAlias: remote.ssh } as ServerMessage); server.sent.length = 0;
+    client.send({ type: 'ping', requestId: 'g2', machineId: 'server' });
+    expect(server.sent).toEqual([{ type: 'ping', requestId: 'g2' }]);
+    server.emit({ type: 'pong', requestId: 'g2' });
+    expect(got.at(-1)).toEqual({ type: 'pong', requestId: 'g2', machineId: 'server' });
+    server.set('unreachable');
+    client.send({ type: 'ping', requestId: 'g3', machineId: 'server' });
+    expect(got.at(-1)).toEqual({ type: 'pong', requestId: 'g3', machineId: 'server', error: 'offline' });
+  });
+  it('useLatency measures the round trip per machine, one ping at a time, again every round; null without ping, never sending to that daemon', () => {
+    vi.useFakeTimers();
+    try {
+      const { client, server, local } = setup();
+      local.emit(withPing(true)); server.emit({ ...withPing(false), sshAlias: remote.ssh } as ServerMessage);
+      local.sent.length = 0; server.sent.length = 0;
+      const { result, unmount } = renderHook(() => useLatency(client, ['local', 'server'], 1000));
+      expect(local.sent).toHaveLength(1);
+      expect(server.sent).toEqual([]);
+      expect(result.current.get('server')).toBeNull();
+      expect(result.current.has('local')).toBe(false);
+      act(() => { vi.advanceTimersByTime(40); });
+      act(() => local.emit({ type: 'pong', requestId: (local.sent[0] as { requestId: string }).requestId }));
+      expect(result.current.get('local')).toBe(40);
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(local.sent).toHaveLength(2);
+      // The round before is still unanswered at the next round: given up (null), and a stale pong changes nothing.
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(local.sent).toHaveLength(3);
+      expect(result.current.get('local')).toBeNull();
+      act(() => local.emit({ type: 'pong', requestId: (local.sent[1] as { requestId: string }).requestId }));
+      expect(result.current.get('local')).toBeNull();
+      unmount();
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(local.sent).toHaveLength(3);
+      expect(server.sent).toEqual([]);
+    } finally { vi.useRealTimers(); }
   });
 });

@@ -63,6 +63,8 @@ export type OpenRigState = z.infer<typeof OpenRigStateSchema>;
 export const RigPolicySchema = z.enum(['auto', 'standard', 'open', 'yolo', 'locked']);
 export type RigPolicy = z.infer<typeof RigPolicySchema>;
 export const RIG_POLICIES: readonly RigPolicy[] = RigPolicySchema.options;
+/** A seat's logical id as `rig up --fresh` takes it: `pod.member` (never a leading `-`, which `rig` would read as a flag). */
+const RigLogicalIdSchema = z.string().min(3).max(201).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/, 'not a seat logical id');
 const OpenRigActionUnion = z.discriminatedUnion('kind', [
   /** `restore` `last`: `rig start --last` (the rigs that were running come back); `none`: `rig daemon start`. */
   z.object({ kind: z.literal('daemon.start'), restore: z.enum(['last', 'none']).optional(), noKernel: z.boolean().optional() }),
@@ -72,7 +74,9 @@ const OpenRigActionUnion = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('kernel.stop') }),
   z.object({ kind: z.literal('kernel.restart') }),
   /** `snapshot`: brings the rig back from that snapshot (`rig restore <id> --rig <rig>`); without it, from the last usable one (`rig up --existing`). */
-  z.object({ kind: z.literal('rig.start'), rig: RigNameSchema, snapshot: RigSnapshotIdSchema.optional() }),
+  z.object({ kind: z.literal('rig.start'), rig: RigNameSchema, snapshot: RigSnapshotIdSchema.optional(),
+    /** Seats (`pod.member`, logical ids) that start fresh instead of resuming their session (`rig up --existing --fresh …`, lot 7d); not with `snapshot`. */
+    fresh: z.array(RigLogicalIdSchema).min(1).max(200).optional() }),
   /** Takes a snapshot of the rig now (`rig snapshot <rig>`, kind `manual`). */
   z.object({ kind: z.literal('rig.snapshot'), rig: RigNameSchema }),
   z.object({ kind: z.literal('rig.stop'), rig: RigNameSchema, snapshot: z.boolean().optional(), force: z.boolean().optional(), delete: z.boolean().optional() }),
@@ -93,6 +97,7 @@ const OpenRigActionUnion = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('rig.policy'), rig: RigNameSchema, policy: z.union([RigPolicySchema, z.literal('spec')]), seats: z.array(RigSeatNameSchema).min(1).max(200) })
 ]);
 export const OpenRigActionSchema = OpenRigActionUnion.superRefine((a, ctx) => {
+  if (a.kind === 'rig.start' && a.fresh && a.snapshot) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fresh'], message: 'fresh and snapshot are exclusive' });
   if (a.kind !== 'rig.permissions' && a.kind !== 'rig.policy') return;
   a.seats.forEach((s, i) => { if (!s.endsWith(`@${a.rig}`)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['seats', i], message: `not a seat of ${a.rig}` }); });
 });
@@ -209,7 +214,7 @@ export function rigCommands(a: OpenRigAction, specPolicies?: Record<string, stri
     case 'kernel.start': return [up(KERNEL_RIG)];
     case 'kernel.stop': return [down(KERNEL_RIG)];
     case 'kernel.restart': return [down(KERNEL_RIG, { snapshot: true }), up(KERNEL_RIG)];
-    case 'rig.start': return [a.snapshot ? ['restore', a.snapshot, '--rig', a.rig] : up(a.rig)];
+    case 'rig.start': return [a.snapshot ? ['restore', a.snapshot, '--rig', a.rig] : a.fresh ? ['up', a.rig, '--existing', '--fresh', ...a.fresh, '--yes', '--json'] : up(a.rig)];
     case 'rig.snapshot': return [['snapshot', a.rig]];
     case 'rig.stop': return [down(a.rig, a)];
     case 'rig.restart': return [down(a.rig, { snapshot: true }), up(a.rig)];
@@ -275,6 +280,28 @@ export const RigLaunchSchema = z.object({
   nonInterruptive: z.boolean().optional()
 });
 export type RigLaunch = z.infer<typeof RigLaunchSchema>;
+
+/** Whether the launch changes the spec (counts, harnesses, models or permissions): if not, the library spec launches as it is. */
+export function changesSpec(l: RigLaunch): boolean {
+  return Object.values(l.seats ?? {}).some(n => n !== 1) || Object.keys(l.runtimes ?? {}).length > 0 || Object.keys(l.models ?? {}).length > 0
+    || l.policy !== undefined || Object.keys(l.policies ?? {}).length > 0;
+}
+
+/** Whether a launch runs a composed spec (`<rigsDir>/<name>/rig.yaml`) rather than the library's: it changes the spec, keeps it, or is renamed on a
+ *  `rig` without `--name` (`o.name`: before 0.7 another name was a composed copy too). The daemon and the front both decide by this. */
+export const composes = (l: RigLaunch, spec: RigSpec, o: { name: boolean }): boolean => changesSpec(l) || l.save === true || (l.name !== spec.name && !o.name);
+
+/** The `rig` commands a launch runs (the daemon runs exactly these; a front shows them). `rigsDir`: where Ledge keeps the specs it composes;
+ *  `name`: whether this `rig` knows `rig up --name` (0.7). A composed spec (changed, kept, or renamed on a `rig` without `--name`) launches from
+ *  `<rigsDir>/<name>/rig.yaml`; `save` then adds it to the library. */
+export function launchCommands(l: RigLaunch, spec: RigSpec, o: { rigsDir: string; name: boolean }): string[][] {
+  const rename = l.name !== spec.name;
+  const composed = composes(l, spec, o);
+  const dir = `${o.rigsDir.replace(/\/$/, '')}/${l.name}`;
+  const commands: string[][] = [['up', composed ? `${dir}/rig.yaml` : spec.name, ...(!composed && rename ? ['--name', l.name] : []), '--cwd', l.cwd, ...(l.nonInterruptive ? ['--non-interruptive'] : []), ...(l.plan ? ['--plan'] : ['--yes']), '--json']];
+  if (!l.plan && l.save && composed) commands.push(['specs', 'add', dir, '--json']);
+  return commands;
+}
 export const OpenRigLaunchSchema = z.object({ type: z.literal('openrig.launch'), requestId: z.string().min(1).max(100), launch: RigLaunchSchema, machineId: z.string().optional() });
 /** A launch (or its check) ended. `yaml`: the spec launched (composed or the library's); `seats`: how many; `output`: what `rig` printed
  *  (the plan, for a check); `commands`: what was run; `error`: why it failed. */

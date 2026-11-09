@@ -586,7 +586,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRig: true, openrigPolicy: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRig: true, openrigPolicy: true, openrigFresh: true, ping: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -1242,6 +1242,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         void discoverSeats(state).catch(e => log(`openrig: seats not followed: ${(e as Error).message}`));
         return reply({ type: 'openrig.state', requestId: msg.requestId, state });
       }
+      case 'ping': return reply({ type: 'pong', requestId: msg.requestId });
       case 'openrig.specs': return reply({ type: 'openrig.specList', requestId: msg.requestId, ...await openrig.specs() });
       // A row's state for an OpenRig task card, to the asker only (docs/mockups/ledge-openrig-messages.html, decision 2).
       case 'openrig.row': return reply({ type: 'openrig.rowState', requestId: msg.requestId, qitem: msg.qitem, ...await openrig.row(msg.qitem) });

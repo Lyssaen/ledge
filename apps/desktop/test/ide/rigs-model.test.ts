@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { HumanAsk, OpenRigState, Rig, RigSeat, Session } from '@ledge/protocol';
+import type { HumanAsk, OpenRigAction, OpenRigState, Rig, RigSeat, Session } from '@ledge/protocol';
 import type { MachineState } from '@ledge/fleet';
-import { actionOf, confirmOf, displayedMachine, machineEntries, powerOf, rigsAlert, rigsViewOf } from '../../src/ide/rigs/model';
+import { confirmOf, displayedMachine, machineEntries, powerOf, rigsAlert, rigsViewOf } from '../../src/ide/rigs/model';
 import { commandsOf } from '../../src/openrig/model';
 
 const seat = (logicalId: string, rig: string, o: Partial<RigSeat> = {}): RigSeat => ({ logicalId, session: `${logicalId.replace('.', '-')}@${rig}`, runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0, ...o });
@@ -78,17 +78,11 @@ describe('machines', () => {
 
 describe('power and actions', () => {
   it('powerOf', () => { expect(powerOf(true)).toEqual(['restart', 'stop']); expect(powerOf(false)).toEqual(['start']); });
-  it('actionOf', () => {
-    expect(actionOf('daemon', 'start')).toEqual({ kind: 'daemon.start' });
-    expect(actionOf('daemon', 'restart')).toEqual({ kind: 'daemon.restart' });
-    expect(actionOf('kernel', 'stop')).toEqual({ kind: 'kernel.stop' });
-    expect(actionOf('ledge-dev', 'restart')).toEqual({ kind: 'rig.restart', rig: 'ledge-dev' });
-  });
   it('confirmOf names who works', () => {
-    const a = actionOf('ledge-dev', 'stop');
+    const a: OpenRigAction = { kind: 'rig.stop', rig: 'ledge-dev' };
     expect(confirmOf(state(), a, [build({ name: 'Bix' })], 'local')).toEqual({ working: ['Bix'], commands: commandsOf(a), restart: false });
     expect(confirmOf(state(), a, [], 'local').working).toEqual(['dev.build']);
-    expect(confirmOf(state(), actionOf('ledge-dev', 'restart'), [], 'local').restart).toBe(true);
+    expect(confirmOf(state(), { kind: 'rig.restart', rig: 'ledge-dev' }, [], 'local').restart).toBe(true);
   });
   it('rigsAlert', () => {
     expect(rigsAlert(state({ daemon: { state: 'stopped' } }))).toBe(true);

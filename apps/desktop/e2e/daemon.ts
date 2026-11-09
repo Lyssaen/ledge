@@ -90,6 +90,8 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
       if (msg.type === 'openrig.role.duplicate' && extras.roles) ws.send(JSON.stringify({ type: 'openrig.roleDuplicated', requestId: msg.requestId, ok: true, roleId: `dup-${msg.name}`, path: `/home/me/.openrig/specs/${msg.name}` }));
       if (msg.type === 'openrig.asks' && extras.asks) ws.send(JSON.stringify({ type: 'openrig.asksChanged', requestId: msg.requestId, channel: extras.asks.channel, asks: extras.asks.asks }));
       if (msg.type === 'openrig.answer' && extras.asks) ws.send(JSON.stringify({ type: 'openrig.answered', requestId: msg.requestId, qitemId: msg.qitemId, ok: true, outcome: 'answered', ...extras.asks.answered }));
+      // Lot 7d: a machine's latency. A test that wants `pong` gives `extras.daemon` `ping: true` (the fleet sends no ping otherwise); `rig.start` with `fresh` needs `openrigFresh: true`.
+      if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong', requestId: msg.requestId }));
       if (msg.type === 'openrig.specs') ws.send(JSON.stringify({ type: 'openrig.specList', requestId: msg.requestId, specs: extras.rigSpecs ?? [] }));
       // A launch's check answers a plan and a composed spec; a launch succeeds.
       if (msg.type === 'openrig.launch') {

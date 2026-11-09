@@ -40,12 +40,6 @@ export function readSpec(yaml: string, entry: { name: string; source: string; pa
   return { name: entry.name, source: entry.source, path: entry.path, ...(summary ? { summary } : {}), ...(str(d.permission_policy) ? { policy: str(d.permission_policy)! } : {}), pods: out, edges, links };
 }
 
-/** Whether the launch changes the spec (counts, harnesses or models): if not, the library spec launches as it is. */
-export function changesSpec(l: RigLaunch): boolean {
-  return Object.values(l.seats ?? {}).some(n => n !== 1) || Object.keys(l.runtimes ?? {}).length > 0 || Object.keys(l.models ?? {}).length > 0
-    || l.policy !== undefined || Object.keys(l.policies ?? {}).length > 0;
-}
-
 /** `build`, `build-2`, `build-3`: the ids of a role's `n` seats. */
 export const seatIds = (id: string, n: number): string[] => Array.from({ length: n }, (_, i) => (i === 0 ? id : `${id}-${i + 1}`));
 

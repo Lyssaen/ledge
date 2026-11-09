@@ -70,6 +70,32 @@ describe('the IDE Rigs view', () => {
     await userEvent.click(within(conf).getByRole('button', { name: 'Confirmer l’arrêt' }));
     expect(m.f.acts()).toMatchObject([{ action: { kind: 'rig.stop', rig: 'ledge-dev' }, machineId: 'local' }]);
   });
+  it('with askAlways off, a stop where nobody works runs at once with a snapshot; where a seat works it still asks', async () => {
+    localStorage.setItem('ledge.ide.daemonPrefs', JSON.stringify({ local: { askAlways: false } }));
+    const m = mount();
+    m.f.state('local', state({ rigs: [rig('kernel', 'running', [seat('a.one', 'kernel')]), rig('ledge-dev', 'running', [seat('dev.build', 'ledge-dev'), seat('dev.review', 'ledge-dev')]), rig('busy', 'running', [seat('b.one', 'busy', { activity: 'running' })])] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    expect(m.f.acts()).toMatchObject([{ action: { kind: 'rig.stop', rig: 'ledge-dev', snapshot: true }, machineId: 'local' }]);
+    expect(screen.queryByRole('group')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter busy' }));
+    expect(m.f.acts()).toHaveLength(1);
+    expect(screen.getByRole('group')).toHaveTextContent('rig down busy');
+  });
+  it('with askAlways off, a stop still asks when a Ledge session of the rig works though OpenRig says idle', async () => {
+    localStorage.setItem('ledge.ide.daemonPrefs', JSON.stringify({ local: { askAlways: false } }));
+    const m = mount({ sessions: [bix()] });
+    m.f.state('local', state({ rigs: [rig('kernel', 'running', [seat('a.one', 'kernel')]), rig('ledge-dev', 'running', [seat('dev.build', 'ledge-dev'), seat('dev.review', 'ledge-dev')])] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));
+    expect(m.f.acts()).toEqual([]);
+    expect(screen.getByRole('group')).toBeInTheDocument();
+  });
+  it('a rig named daemon stops as a rig', async () => {
+    localStorage.setItem('ledge.ide.daemonPrefs', JSON.stringify({ local: { askAlways: false } }));
+    const m = mount();
+    m.f.state('local', state({ rigs: [rig('daemon', 'running', [seat('d.one', 'daemon')])] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter daemon' }));
+    expect(m.f.acts()).toMatchObject([{ action: { kind: 'rig.stop', rig: 'daemon', snapshot: true } }]);
+  });
   it('a restart asks too, with its note; Cancel and Escape close without sending; one confirmation at a time', async () => {
     const m = running();
     await userEvent.click(screen.getByRole('button', { name: 'Redémarrer ledge-dev' }));
@@ -153,16 +179,16 @@ describe('the IDE Rigs view', () => {
     const m = running();
     await userEvent.click(screen.getByRole('button', { name: /locale/ }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Gérer les machines…' }));
-    expect(m.dispatch).toHaveBeenCalledWith({ type: 'settings', section: 'machines' });
+    expect(m.dispatch).toHaveBeenCalledWith({ type: 'openrig', machine: 'local', section: 'machines' });
     await userEvent.click(screen.getByRole('button', { name: /locale/ }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Ajouter une machine' }));
     expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'settings', section: 'machines' });
     await userEvent.click(screen.getByRole('button', { name: /Lancer/ }));
-    expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'openrig', machine: 'local', section: 'rigs', open: { launch: true } });
+    expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'modal', modal: { kind: 'rigLaunch', machine: 'local' } });
     await userEvent.click(screen.getByRole('button', { name: 'ledge-dev' }));
     expect(m.onTab).toHaveBeenLastCalledWith(rigTab('local', 'ledge-dev'));
     await userEvent.click(screen.getByRole('button', { name: 'Daemon' }));
-    expect(m.onTab).toHaveBeenLastCalledWith(openrigTab('local'));
+    expect(m.dispatch).toHaveBeenLastCalledWith({ type: 'openrig', machine: 'local', section: 'overview' });
   });
   it('Escape and an outside click close the menu', async () => {
     running();

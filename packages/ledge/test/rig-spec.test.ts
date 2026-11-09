@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
-import { RigLaunchSchema, RigSpecSchema, type RigLaunch } from '@ledge/protocol';
-import { changesSpec, composeSpec, expandEdge, readSpec, seatIds } from '../src/daemon/rigSpec.js';
+import { changesSpec, RigLaunchSchema, RigSpecSchema, type RigLaunch } from '@ledge/protocol';
+import { composeSpec, expandEdge, readSpec, seatIds } from '../src/daemon/rigSpec.js';
 import { createOpenRig, readCheck, type RigRun } from '../src/daemon/openrig.js';
 
 // OpenRig 0.6.14's shipped starter (daemon/specs/rigs/launch/starter/rig.yaml).

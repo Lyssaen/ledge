@@ -2253,7 +2253,7 @@ describe('update.daemon', () => {
       updater: { running: () => false, update: async (v, send) => { seen.push(v); send({ type: 'update.progress', version: v, step: 'installing' }); }, restart: async () => {} } });
     const c = await connect({ port: srv.port });
     const snap = await c.next('snapshot');
-    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRig: true, openrigPolicy: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true });
+    expect(snap.daemon).toEqual({ version: '0.2.2', install: 'npm', systemd: true, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRig: true, openrigPolicy: true, openrigFresh: true, ping: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true });
     c.send({ type: 'update.daemon', version: '0.3.0' });
     expect(await c.next('update.progress')).toMatchObject({ step: 'installing' });
     expect(seen).toEqual(['0.3.0']);
@@ -2724,6 +2724,13 @@ describe('server: OpenRig', () => {
     expect(acts).toEqual([{ kind: 'daemon.stop' }]);
     expect(fresh).toBe(1);
     c.close(); other.close(); await srv2.close();
+  });
+  it('a ping answers a pong with the same requestId, to its sender only', async () => {
+    const c = await connect({ port: srv.port }), other = await connect({ port: srv.port });
+    await c.next('snapshot'); await other.next('snapshot');
+    c.send({ type: 'ping', requestId: 'p1', machineId: 'server' } as never);
+    expect(await c.next('pong')).toEqual({ type: 'pong', requestId: 'p1' });
+    c.close(); other.close();
   });
   it('roles, a role and a role file answer their asker only, under its requestId, with the id and path asked', async () => {
     const asked: string[] = [];

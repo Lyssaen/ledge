@@ -16,7 +16,7 @@ import { DaemonOutdated } from './shell/DaemonOutdated';
 import { daemonTokenSource, onOpenTarget, shellsAvailable, onTrayAction, openUrl, setTrayLabels } from './tauri/bridge';
 import { parseTarget, targetAction } from './open/target';
 import { useAppearance } from './shell/theme';
-import { initialNav, navReducer, reconcile, type NavAction, type NavState, type SectionId } from './nav/state';
+import { initialNav, navReducer, reconcile, type NavAction, type NavState, type OpenRigSection, type SectionId } from './nav/state';
 import { loadOverview, saveOverview } from './nav/overview';
 import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { dotOf, mainOrder } from './nav/agents';
@@ -83,7 +83,7 @@ import { useIdeEnabled, useResumeOnStart, useRigsMachine, useShowUsage } from '.
 import { liveTabs, loadLiveTabs, machineOf, nextMemo, saveLiveTabs, toResume } from './workspace/resume';
 import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
-import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, useWorkspace } from './workspace/store';
+import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, rigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, moveActive, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
@@ -94,7 +94,7 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeRigs, IdeRigView } from './ide/lazy';
+import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -394,13 +394,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // kept), Settings and the OpenRig page on the section and sub-place they were last left on.
   const front: Tab | undefined = focused(ws).tabs[focused(ws).active];
   const frontKey = front ? keyOf(front) : null;
-  const lastOpenRig = useRef(new Map<string, { section?: 'rigs' | 'roles'; role?: string; seat?: string }>());
+  const lastOpenRig = useRef(new Map<string, { section?: OpenRigSection; role?: string; seat?: string }>());
   if (place.kind === 'settings') lastSettings.current = place.section;
   if (place.kind === 'openrig') lastOpenRig.current.set(place.machine ?? 'local', { ...(place.section ? { section: place.section } : {}), ...(place.role !== undefined ? { role: place.role } : {}), ...(place.seat !== undefined ? { seat: place.seat } : {}) });
   /** The NavAction that shows a non-agent tab where it was left. */
   const tabAction = useCallback((tab: Tab): NavAction | null => tab.kind === 'atelier' ? { type: 'home' }
     : tab.kind === 'settings' ? { type: 'settings', section: lastSettings.current }
-    : tab.kind === 'openrig' ? { type: 'openrig', machine: tab.ref, section: 'rigs', ...lastOpenRig.current.get(tab.ref) } : null, []);
+    : tab.kind === 'openrig' ? { type: 'openrig', machine: tab.ref, section: 'overview', ...lastOpenRig.current.get(tab.ref) } : null, []);
   useEffect(() => {
     if (!ide || !front) return;
     const p = ideNow.current.nav.place;
@@ -761,11 +761,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} noBack /> : null;
       if (tab.kind === 'openrig') {
         const o = place.kind === 'openrig' && (place.machine ?? 'local') === tab.ref ? place : null;
-        return <OpenRigPage client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'rigs'} role={o?.role} seat={o?.seat} open={o?.open} projects={projects} sessions={sessions} dispatch={dispatch} />;
+        return <IdeOpenRig client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'overview'} role={o?.role} seat={o?.seat} sessions={sessions} asks={asks.asks} output={rigEntries} dispatch={dispatch} onTab={onTab} onLaunch={m => dispatch({ type: 'modal', modal: { kind: 'rigLaunch', machine: m } })} />;
       }
       if (tab.kind === 'rig') {
         const r = parseRigRef(tab.ref);
-        return r ? <IdeRigView client={fleetClient} machines={machines} sessions={sessions} machine={r.machine} rig={r.rig} dispatch={dispatch} /> : <div className="ide-rigs-note" role="status">{t.ide.rigTab.badRef}</div>;
+        return r ? <IdeRigView client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} machine={r.machine} rig={r.rig} dispatch={dispatch} /> : <div className="ide-rigs-note" role="status">{t.ide.rigTab.badRef}</div>;
       }
       return null;
     };
@@ -909,6 +909,15 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             wanted={{ ...(nav.modal.project !== undefined && { project: nav.modal.project }), ...(filter && { filter }) }}
             onEditProject={id => dispatch({ type: 'modal', modal: { kind: 'project', edit: id } })} onNewProject={() => dispatch({ type: 'modal', modal: { kind: 'project' } })}
             launch={launcher.state} onLaunch={(msg, preview) => { launched.current = preview; launcher.launch(msg); }} onCancel={close} paused={nav.paused} />
+        </Modal>
+      )}
+      {nav.modal?.kind === 'rigLaunch' && ide && (
+        // No `wide`: the modal's own width (ide-launch-rig.css, `.modal:has(> .ide-rl)`, 720 px). A launch closes it and opens the
+        // rig's tab; the operator's request opens its session, or says where it went when Ledge does not follow that session yet (R6).
+        <Modal title={t.ide.launchRig.title} onClose={close}>
+          <IdeRigLaunch client={fleetClient} machines={machines} machine={nav.modal.machine ?? rigsMachine} projects={projects} sessions={sessions} onClose={close}
+            onLaunched={(machine, rig) => { close(); wsStore.update(w => openTab(w, rigTab(machine, rig))); }}
+            onOperator={id => { close(); if (id) dispatch({ type: 'open', id }); else notify(t.ide.launchRig.composing); }} />
         </Modal>
       )}
       {nav.modal?.kind === 'project' && (
